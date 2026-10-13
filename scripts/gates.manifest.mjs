@@ -142,10 +142,10 @@ export function browsersFor(names) {
 /**
  * The gate matrix's total shard count in `.github/workflows/ci.yml` (the `gates` job). Keep this in
  * step with the workflow's shard count — scripts/__tests__/ci-plan.test.mjs checks the matrix against it.
- * SEVEN, down from eight: the two CI_ISOLATED_GATES used to hold a runner each (35-39s and 21s of gate
- * work beside ~60s of setup), and now share one, serially; the other six bins pack the rest.
+ * NINE: the isolated pair shares one runner, serially; editor-path and offline-file hold one each
+ * (CI_ISOLATED_GATE_GROUPS); the other six bins pack the rest.
  */
-export const CI_GATE_SHARDS = 7;
+export const CI_GATE_SHARDS = 9;
 
 /**
  * Gates that run on a CI runner with no other gate. Both FAIL under a neighbour's browser load and then
@@ -156,7 +156,18 @@ export const CI_GATE_SHARDS = 7;
  * another gate's load, so there is no race to lose and no retry to pad for — and with one server there is
  * no retry at all, so a failure there is a failure.
  */
-export const CI_ISOLATED_GATES = Object.freeze(['inplace-edit', 'collab-roles']);
+export const CI_ISOLATED_GATE_GROUPS = Object.freeze([
+  Object.freeze(['inplace-edit', 'collab-roles']),
+  // Alone: it lost its first attempt beside neighbours on consecutive runs (PR #632's and #633's: "editor-path
+  // passed alone in 46-49s", dragging kit-and-fonts into a retry on the second), taking shard 5/7 to 177s and
+  // 221s, each run's critical path, while the isolated pair's shard finished in 83-95s. Its 53s does not fit
+  // beside the pair on one server (75s a shard), so it holds a runner of its own.
+  Object.freeze(['editor-path']),
+  // Alone for the same reason: the cross-browser gate lost its first attempt on two of ten PR runs
+  // (38362345174 "offline-file passed alone in 64s", taking shard 3/8 to 227s; 38187881246).
+  Object.freeze(['offline-file']),
+]);
+export const CI_ISOLATED_GATES = Object.freeze(CI_ISOLATED_GATE_GROUPS.flat());
 
 /**
  * How CI's gate shards are packed (scripts/gates.shard.mjs `shardOf`): the isolated pair alone, and the
@@ -164,7 +175,7 @@ export const CI_ISOLATED_GATES = Object.freeze(['inplace-edit', 'collab-roles'])
  * the planning tests pass these same options, so a shard index means one set of gates everywhere.
  */
 export const CI_SHARD_OPTIONS = Object.freeze({
-  isolated: CI_ISOLATED_GATES,
+  isolated: CI_ISOLATED_GATE_GROUPS,
   serialGroup: (name) => specFor(name).serialGroup,
 });
 

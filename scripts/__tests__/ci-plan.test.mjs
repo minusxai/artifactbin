@@ -845,7 +845,7 @@ describe('CI job shape', () => {
     expect(jobs.cli.steps.find((step) => step.run === 'node scripts/ci/link-npm-acceptance.mjs').if).toBe("matrix.phase != 'native'");
   });
 
-  it('fans the gate set over seven runners, none of which pulls Postgres', () => {
+  it('fans the gate set over nine runners, none of which pulls Postgres', () => {
     const { jobs } = ci();
     expect(jobs.gates.strategy.matrix.shard).toEqual(Array.from({ length: CI_GATE_SHARDS }, (_, index) => index + 1));
     const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
