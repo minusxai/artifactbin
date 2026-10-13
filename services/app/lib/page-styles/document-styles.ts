@@ -23,6 +23,15 @@ export const DOCUMENT_ROOT_CSS = ':root { --mx-vh: 100vh; } body { margin: 0; }'
 export const DOMAIN_FOOTER_CSS = '[data-mx-domain-footer]{box-sizing:border-box;max-width:100%;margin:0;padding:40px 16px 48px;text-align:center;font-size:13px;line-height:1.5;opacity:.65}'
   + '[data-mx-domain-footer] a{color:inherit;text-decoration:underline;text-underline-offset:2px}';
 
+/**
+ * The notice a page whose script did not build carries before its story (lib/compiled-page/assembler): one quiet
+ * line in the document's own kit tokens (`--muted`, `--muted-foreground`, `--border`, on `:root` and `.dark`), with
+ * fallbacks for a page drawn without them. Its own sheet, so a page whose script builds carries none of it.
+ */
+export const SCRIPT_FAILURE_CSS = '[data-mx-script-failure]{box-sizing:border-box;max-width:100%;margin:0;padding:8px 16px;'
+  + 'border-bottom:1px solid var(--border,rgba(127,127,127,.35));background:var(--muted,transparent);color:var(--muted-foreground,inherit);'
+  + 'font:13px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;text-align:center}';
+
 interface DocumentStylesInput {
   /** The version's compiled Tailwind (lib/data/story/story-css.server currentStoryCss), or none. */
   compiledCss: string | null;

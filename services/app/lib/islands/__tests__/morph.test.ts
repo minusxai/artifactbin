@@ -530,6 +530,24 @@ describe('the live morph', () => {
     expect($('lede')!.textContent).toBe('changed');
   });
 
+  it('keeps the notice of a version whose script did not build in step with the version it draws', async () => {
+    const failing = (html: string) => html
+      .replace('</head>', '<style data-mx-script-failure-css>[data-mx-script-failure]{}</style></head>')
+      .replace('<div id="mx-story-root"', '<div data-mx-script-failure="" role="status" aria-label="Page script unavailable">no script</div><div id="mx-story-root"');
+    load(served({ edit: 'e1' }));
+    start();
+    const root = $('mx-story-root');
+    await morph(window, { fetch: answer(failing(served({ edit: 'e2' }))) });
+    expect(document.querySelector('[data-mx-script-failure]')?.nextElementSibling).toBe(root);
+    expect(document.head.querySelector('style[data-mx-script-failure-css]')).not.toBeNull();
+    // The author republishes with a fixed script: the reader holding the page loses the notice with the version.
+    await morph(window, { fetch: answer(served({ edit: 'e3', lede: 'fixed' })) });
+    expect(document.querySelector('[data-mx-script-failure]')).toBeNull();
+    expect(document.head.querySelector('style[data-mx-script-failure-css]')).toBeNull();
+    expect($('mx-story-root')).toBe(root);
+    expect($('lede')!.textContent).toBe('fixed');
+  });
+
   it('uses the raw copy\'s existing key without cookies for its opaque-origin fragment fetch', async () => {
     load(served({ edit: 'e1' }));
     start();

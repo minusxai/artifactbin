@@ -430,9 +430,13 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     // What the editor's door will cost, so the page prefetches it on idle only when it is cheap (solid/pages/Document).
     ...(isDoc && !at && canEdit(role) ? { sourceLength: (row.source ?? '').length } : {}),
   };
+  // Why the head runs without its script (prepared-page.server authorScriptErrors), for someone who can republish it
+  // (solid/document/ScriptFailureNotice). A reader has the framed document's own notice and never the builder's words.
+  const scriptErrors = isDoc && !at && canEdit(role) ? prepared?.page.authorScriptErrors : undefined;
   const body = {
     canonical: canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : authorUsername),
     ...(cspRequest ? { cspRequest } : {}),
+    ...(scriptErrors?.length ? { scriptFailure: { errors: scriptErrors } } : {}),
     description: row.description,
     role,
     kind,

@@ -126,7 +126,8 @@ export async function documentEtag(input: DocumentEtagInput): Promise<string | n
     v: 1,
     facts: input.facts,
     row: [row.id, row.version, row.title, row.description, row.visibility, artifact.edit_id, artifact.updated_at, artifact.link_role, at?.version ?? null],
-    page: [page.cssVersion ?? null, page.pageFormat, page.handoverContract, !!input.stale],
+    // A version whose script does not build serves its notice (lib/compiled-page/assembler): named only then, so every other tag is unchanged.
+    page: [page.cssVersion ?? null, page.pageFormat, page.handoverContract, !!input.stale, ...(page.authorScriptErrors ? ['script-failed'] : [])],
     compile: [stored.build, stored.module?.sha ?? null, stored.ssr?.sha ?? null, stored.sharedBuild?.id ?? null],
     code: codeFingerprint(),
     data: [snapshot, mermaid, hold],
