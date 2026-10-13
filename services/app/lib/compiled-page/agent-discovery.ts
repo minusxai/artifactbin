@@ -6,6 +6,11 @@ export { AGENT_HELP_TITLE, agentDiscovery, type AgentDiscovery } from '../platfo
 export function agentDiscoveryHead(help:AgentDiscovery):string{
  return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="agents" content="${escapeHtml(help.instruction)}"><meta name="cli" content="${escapeHtml(help.cliInstruction)}">`;
 }
+/** Readable startup help, replaced when the app mounts. Padding keeps it below
+ * the app bar and behind a server-drawn document frame during startup. */
+export function agentDiscoveryBody(help:AgentDiscovery):string{
+ return `<main data-app-startup class="px-6 pt-16"><p>${escapeHtml(help.instruction)}</p><a href="${escapeHtml(help.url)}">${escapeHtml(AGENT_HELP_TITLE)}</a></main>`;
+}
 /** The pointer again, as the page's last line: what a tail-keeping reader sees. */
 export function agentDiscoveryTail(help:AgentDiscovery):string{
  return `<!-- ${AGENT_HELP_TITLE}: ${escapeHtml(help.url)}. ${escapeHtml(help.instruction)} ${escapeHtml(help.cliInstruction)} -->`;

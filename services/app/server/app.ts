@@ -20,7 +20,7 @@ import { loginRedirectTarget } from '@/lib/http';
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
 import {
-  agentDiscovery, agentDiscoveryHead, archiveSharedBuild, bindModule, createModuleStore,
+  agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, archiveSharedBuild, bindModule, createModuleStore,
   createSpeculationRulesStore, createTemplateResourceStore, loadCompilerBuild, READER_MODE_HEADER,
   retainedBuild, retainedIslandFile, SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH,
   STYLESHEET_PATH, stylesheetStore, TEMPLATE_RESOURCE_PATH, withAgentDiscoveryTail,
@@ -67,13 +67,17 @@ import { fontPreloadTags } from '@/lib/page-styles';
 import { DOCUMENT_MODULE_PATH, ISLANDS_PATH } from '@/lib/story-runtime/contract';
 
 /**
- * The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's
+ * The `<link rel="help">` and agent metadata an agent that fetched any page reads, on the caller's
  * base — FIRST in the head, ahead of every preload and stylesheet link Vite stamps into the shell, so a
  * shell tool that keeps only the first few kilobytes of a page still sees them. A page with no `<head>`
  * at all gets them before `</head>`.
  */
 function withAgentDiscovery(html: string, origin: string): string {
-  const tags = agentDiscoveryHead(agentDiscovery(origin));
+  const help = agentDiscovery(origin);
+  const tags = agentDiscoveryHead(help);
+  // Real body text survives readers that discard metadata and comments. The app
+  // replaces this startup fallback when it mounts; it contains no document data.
+  html = html.replace(/<div id="root">/i, (open) => `${open}${agentDiscoveryBody(help)}`);
   const open = /<head(?:\s[^>]*)?>/i.exec(html);
   if (open) return `${html.slice(0, open.index + open[0].length)}${tags}${html.slice(open.index + open[0].length)}`;
   return html.replace('</head>', () => `${tags}</head>`);
