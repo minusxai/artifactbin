@@ -138,7 +138,7 @@ describe('every agent-facing starter says the same thing', () => {
     const all = await surfaces();
     const [, started] = all.find(([name]) => name === 'POST /api/start prompt')!;
     const [, handed] = all.find(([name]) => name.includes('agent-prompt'))!;
-    expect(started).toContain("\n\nAsk the user what artifact they'd like to build." );
+    expect(started).toContain("\n\nIf the user hasn't specified a task, ask what artifact they'd like to build." );
     expect(handed.replace(/\/a\/[A-Za-z0-9]+/g, '/a/<id>')).toBe(started.replace(/\/a\/[A-Za-z0-9]+/g, '/a/<id>'));
     expect(started.replace(/\/a\/[A-Za-z0-9]+/g, '/a/<id>')).toBe(existingPaste(BASE, '<id>'));
   });

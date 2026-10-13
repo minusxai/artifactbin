@@ -132,7 +132,7 @@ describe('POST /api/start', () => {
     expect(body.prompt).not.toContain('npx --yes');
     expect(body.prompt).not.toContain('mx_');
     expect(body.prompt).not.toContain('/tokens/new');
-    expect(body.prompt).toContain("\n\nAsk the user what artifact they'd like to build." );
+    expect(body.prompt).toContain("\n\nIf the user hasn't specified a task, ask what artifact they'd like to build." );
     expect(body.prompt.length).toBeLessThan(600); // instructions plus a short question for the user
   });
 

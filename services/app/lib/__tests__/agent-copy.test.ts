@@ -11,7 +11,7 @@ import { gettingStarted } from '@/lib/serving/getting-started';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin CLI if installed, or HTTP: https://x.test/llms.txt. If there are no saved credentials, you must ask the user for their email to complete authentication.\n\nAsk the user what artifact they'd like to build.";
+const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin CLI if installed, or HTTP: https://x.test/llms.txt. If there are no saved credentials, you must ask the user for their email to complete authentication.\n\nIf the user hasn't specified a task, ask what artifact they'd like to build.";
 
 describe('the tokenless paste', () => {
   it('offers one full installer command per platform on the selected host', () => {
@@ -46,10 +46,10 @@ describe('the tokenless paste', () => {
     expect(existingPaste(base, ID)).toContain(`${DEFAULT_SERVER}/a/${ID}`);
     expect(JSON.stringify(gettingStarted(base))).toContain('no --server flag is needed');
   });
-  it('keeps the handoff concise and asks the user what to build', () => {
+  it('asks what to build only when the user has not supplied a task', () => {
     const prompt = existingPaste('http://127.0.0.1:45407', ID);
     expect(prompt.length).toBeLessThan(350);
-    expect(prompt).toContain("\n\nAsk the user what artifact they'd like to build." );
+    expect(prompt).toContain("\n\nIf the user hasn't specified a task, ask what artifact they'd like to build." );
   });
   it('a trailing slash on the base does not double up', () => {
     expect(existingPaste('https://x.test/', ID)).toBe(STARTER);
@@ -62,7 +62,7 @@ describe('the tokenless paste', () => {
     const prompt = existingPaste(B, ID, template);
     expect(prompt).not.toContain('Keep template:');
     expect(prompt).toContain('/a/ab3cd9');
-    expect(prompt.endsWith(`Ask the user what ${phrase} they'd like to build.`)).toBe(true);
+    expect(prompt.endsWith(`If the user hasn't specified a task, ask what ${phrase} they'd like to build.`)).toBe(true);
   });
   it('is the module\'s only export — the start-link paste and the claim relay are gone', () => {
     expect(Object.keys(agentCopy)).toEqual(['existingPaste']);
