@@ -8,6 +8,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * the pre-engine coverage in markup-tier.test.ts for how their rows serve.
  */
 import { describe, expect, it } from 'vitest';
+import {drainPreparedPageWarmups} from '@/lib/publish/prepared/prepared-page.server';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -50,28 +51,32 @@ describe('document creation guards', () => {
   });
 });
 
-describe('retired themes on stored rows', () => {
-  it('a stored nocturne row serves as modernist-dark with the dark theme block in its sheet', async () => {
+describe('themes on stored rows', () => {
+  it('rebuilds stale stored nocturne styling consistently on cold and prepared reads', async () => {
     const t = await mintToken('t');
     const created = await (
       await createArtifactRoute(
         request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<h1>Legacy</h1>', theme: 'modernist' } }),
       )
     ).json();
-    // Shape the row like a document published before the retirement: the old
-    // theme name and a sheet compiled under the old registry (stale version).
+    // Model an old stored row, not an unversioned edit racing modernist's warmup.
+    await drainPreparedPageWarmups();
     const db = await harness.db();
     await db.query(
-      `UPDATE artifacts SET meta = meta || '{"theme":"nocturne","cssCompileVersion":"v-legacy"}' WHERE id = $1`,
+      `UPDATE artifacts SET meta = meta || '{"theme":"nocturne","colorMode":null,"cssCompileVersion":"v-legacy","compiledCss":".stale-theme-sentinel{}"}' WHERE id = $1`,
       [created.id],
     );
-    const res = await serveArtifact(request(`/a/${created.id}/raw`), params({ id: created.id }));
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(html).toContain('data-theme="modernist"');
-    expect(html).toMatch(/<html[^>]*class="dark"/);
-    // The frozen legacy sheet had no dark block — serving must have recompiled.
-    expect(html).toContain(':root:where([data-theme="modernist"].dark)');
+    await db.query('DELETE FROM prepared_pages WHERE artifact_id = $1', [created.id]);
+    for (const phase of ['cold', 'prepared']) {
+      const res = await serveArtifact(request(`/a/${created.id}/raw`), params({ id: created.id }));
+      expect(res.status, phase).toBe(200);
+      const html = await res.text();
+      expect(html, phase).toMatch(/<html[^>]*data-theme="nocturne"/);
+      expect(html, phase).toMatch(/<html[^>]*class="dark"/);
+      expect(html, phase).not.toContain('stale-theme-sentinel');
+      expect(html, phase).toContain('[data-theme="nocturne"]');
+      await drainPreparedPageWarmups();
+    }
   });
 });
 

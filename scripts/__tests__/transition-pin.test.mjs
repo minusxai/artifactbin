@@ -19,6 +19,11 @@ function fixture(transitionVersion) {
   writeFileSync(join(dir, 'services/app/public/chat/install.sh'), 'npx --yes @afbin/cli@latest setup\n');
   writeFileSync(join(dir, 'services/app/public/chat/install.ps1'), 'npx.cmd --yes @afbin/cli@latest setup\n');
   writeFileSync(join(dir, 'services/app/public/chat/release.json'), '{\n  "version": "0.1.9",\n  "protocol": 1\n}\n');
+  mkdirSync(join(dir, 'deploy/company'), { recursive: true });
+  for (const name of ['Dockerfile', 'compose.yaml']) {
+    const source = readFileSync(join(root, 'deploy/company', name), 'utf8');
+    writeFileSync(join(dir, 'deploy/company', name), source.replace(/(AFBIN_VERSION=|@afbin\/cli@|artifactbin-company:)\d+\.\d+\.\d+/g, (_, prefix) => `${prefix}0.1.9`));
+  }
   if (transitionVersion) writeFileSync(join(dir, transition), script(transitionVersion), { mode: 0o755 });
   return dir;
 }

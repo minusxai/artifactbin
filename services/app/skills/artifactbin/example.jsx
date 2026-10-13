@@ -1,5 +1,5 @@
 ---
-# CLI maintains identity.
+# CLI maintains id, edit_id and version.
 title: Q3 sales review
 template: dashboard
 theme: volta
@@ -25,7 +25,7 @@ where $region is null or region = $region group by 1 order by 1
 update tasks.rows set status = $status where id = $task_id
 `}</Mutation>
 </Helmet>
-{/* static JSX; className; no CDN scripts. */}
+{/* static JSX; className; persistent id; no CDN scripts. */}
 <div data-design="tw" className="@container px-4 py-8 @2xl:px-8">
 <header className="max-w-prose">
 <h1 className="text-3xl @2xl:text-5xl font-bold">Revenue grew in most regions</h1>

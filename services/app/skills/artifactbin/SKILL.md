@@ -9,10 +9,6 @@ Publish editable `.jsx`: YAML metadata fence, self-contained HTML and kit JSX, T
 
 [% include workflows.introduction %]
 
-## Contents
-
-[Auth](#authentication) · [Edit](#edit) · [Create](#create) · [Author](#authoring) · [Example](#example)
-
 ## Authentication
 
 [% include workflows.authentication %]
