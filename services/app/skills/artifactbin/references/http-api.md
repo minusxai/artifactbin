@@ -20,6 +20,10 @@ Authenticate with an email account using the [shared credential helper and sign-
 
 Follow non-success JSON recovery instructions. Reconcile uncertain mutations before another write.
 
+## HTTP dataset creation
+
+[% include "fragments/http-dataset-creation.md" %]
+
 ## Browser preview and interactive QA
 
 Use `POST /api/browser-sessions` with your bearer; no local Chrome is needed. Its `viewer` is fixed at creation. Each changed script needs a new `execution_id`; reuse only for exact replay and poll with that ID. Scripts run at most 20 seconds. Check receipt errors and IDs. Capacity refusal creates no session; follow its recovery message. See [live sessions](live-sessions.md).

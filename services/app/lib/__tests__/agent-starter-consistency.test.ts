@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { monitoringGuidance } from '@/lib/artifacts/monitoring-guidance';
 import { POST as startRoute } from '@/app/api/start/route';
+import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { agentContract } from '@/lib/serving';
 import { agentBlurb, existingPaste } from '@/lib/serving';
@@ -297,7 +298,7 @@ describe('public HTTP authoring references', () => {
     for (const file of skillTree().files.filter(file => file.ref && file.dir === 'artifactbin')) {
       const topic = file.file.replace(/\.md$/, '');
       const actual = publicGuideText(topic, BASE);
-      const expected = projectSkillLinks(file,renderSkill(file,{base:BASE}),BASE);
+      const expected = projectSkillLinks(file,renderSkill(file,{base:BASE,transport:'http'}),BASE);
       expect(actual, topic).toBe(expected);
       expect(actual, topic).not.toMatch(/\[\[|{%/);
       for (const [, linkedTopic] of actual!.matchAll(/\]\(http:\/\/localhost:3000\/llms\/([a-z0-9-]+)/g)) {
@@ -436,4 +437,21 @@ it('keeps live comment tracking from blocking existing work or waiting for proce
  expect(guide).toContain('head');
  expect(guide).toContain('wait=0');
  expect(guide).toContain('Save the returned cursor');
+});
+
+it('reuses an executable HTTP dataset creation example in both guides', async () => {
+ const guides=['http-api','publishing-datasets'].map(topic=>publicGuideText(topic,BASE)!);
+ const bodies=guides.map(guide=>{
+  const section=guide.split('## HTTP dataset creation')[1];
+  expect(section).toBeDefined();
+  expect(section).toContain('POST /api/artifacts');
+  const example=section!.match(/```json\n([\s\S]*?)\n```/)?.[1];
+  expect(example).toBeDefined();return JSON.parse(example!);
+ });
+ expect(bodies[0]).toEqual(bodies[1]);
+ const user=await createUser({email:'mxmx_test_dataset_guide@example.test'});
+ const token=await mintToken('dataset-guide',user.id,undefined,{expiresInMs:null});
+ const response=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:token.token,json:bodies[0]}));
+ expect(response.status).toBe(201);
+ const result=await response.json();expect(result.id).toBeTruthy();expect(result.url).toContain('/a/');
 });

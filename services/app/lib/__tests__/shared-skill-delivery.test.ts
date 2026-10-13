@@ -33,7 +33,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {skillPackageFiles,skillZip} from '../skills/package';
-import {projectSkillLinks} from '../skills/serve';
+import {projectSkillLinks,renderTree,skillFileWithFrontmatter} from '../skills/serve';
 import {publicGuideText} from '@/lib/serving/agent-references.server';
 import teaching from '../../../cli/src/generated/teaching.json';
 import {TEACHING_BASE} from '../../../cli/src/teaching-origin';
@@ -51,7 +51,12 @@ describe('installable shared skill folder',()=>{
   const expected=skillPackageFiles(skillTree(),origin);
   const cli=Object.fromEntries(Object.entries(teaching.files).map(([name,text])=>[name,text.split(TEACHING_BASE).join(origin)]));
   expect(expected['SKILL.md']).not.toBe(cli['SKILL.md']);
-  for(const name of Object.keys(expected).filter(name=>name!=='SKILL.md'))expect(expected[name],name).toBe(cli[name]);
+  for(const [transport,files] of [['http',expected],['cli',cli]] as const){
+   for(const {file,text} of renderTree(skillTree(),origin,transport))expect(files[file.path.replace(/^artifactbin\//,'')],`${transport}: ${file.path}`).toBe(skillFileWithFrontmatter(file,text));
+  }
+  for(const name of Object.keys(expected).filter(name=>name.startsWith('scripts/')))expect(expected[name],name).toBe(cli[name]);
+  expect(expected['references/publishing-datasets.md']).toContain('## HTTP dataset creation');
+  expect(cli['references/publishing-datasets.md']).not.toContain('## HTTP dataset creation');
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
   expect(await (await helperRoute()).text()).toBe(expected['scripts/credentials.mjs']);
   const response=await zipRoute(new Request(`${origin}/skills/artifactbin.zip`));
