@@ -135,7 +135,7 @@ it('resolves group publication refs as the saved group owner and refuses creator
 it('compares dataset and published artifact group principals without treating a group as a user',()=>{
  const policy=defaultDatasetGrants(),caller=identityForUser('viewer_account', null),owner={ ...identityForUser(null, null), groupId: 'grp_ownership' };
  expect(datasetGrantAllows(policy,'insert',{caller,owner,artifact:{id:'doc123',owner:{...owner}}})).toBe(true);
- expect(datasetGrantAllows(policy,'insert',{caller,owner,artifact:{id:'doc123',owner:{ ...identityForUser(null, null), groupId: 'other_group' }}})).toBe(false);
+ expect(datasetGrantAllows(policy,'insert',{caller,owner,artifact:{id:'doc123',owner:{groupId:'other_group',userId:null,tokenId:null}}})).toBe(false);
  expect(datasetGrantAllows(policy,'insert',{caller,owner})).toBe(false);
 });
 

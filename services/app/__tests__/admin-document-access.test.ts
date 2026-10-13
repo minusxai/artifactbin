@@ -18,6 +18,21 @@ import {GET as capabilities} from '@/app/api/capabilities/route';
 import {POST as preflight} from '@/app/api/artifacts/preflight/route';
 import {GET as versions} from '@/app/api/artifacts/[id]/versions/route';
 import {GET as version} from '@/app/api/artifacts/[id]/versions/[version]/route';
+import {GET as raw} from '@/app/a/[id]/raw/route';
+import {POST as mutate} from '@/app/a/[id]/mutate/route';
+import {GET as events} from '@/app/a/[id]/events/route';
+import {GET as exportImage} from '@/app/api/artifacts/[id]/export/route';
+import {GET as list} from '@/app/api/artifacts/route';
+import {GET as changes} from '@/app/api/artifacts/[id]/annotations/changes/route';
+import {GET as commentImage} from '@/app/api/artifacts/[id]/comment-images/[imageId]/route';
+import {GET as myArtifact} from '@/app/api/my/artifacts/[id]/route';
+import {POST as myComment} from '@/app/api/my/artifacts/[id]/annotations/route';
+import {GET as pageArtifact} from '@/app/api/page/artifact/[id]/route';
+import {identityForUser,sessionActor} from '@/lib/accounts';
+import {selectChildren} from '@/lib/artifacts';
+import {stageCommentImage} from '@/lib/annotations';
+import sharp from 'sharp';
+import type {Actor} from '@artifactbin/contracts';
 import {request,useAppHarness} from './harness';
 import {documentEditBody} from './prepared-document';
 
@@ -35,8 +50,8 @@ type Doc={id:string;visibility:'public'|'unlisted'|'private'};
 const UNLISTED:Doc={id:'unl123',visibility:'unlisted'},PRIVATE:Doc={id:'prv123',visibility:'private'};
 let token:{id:string;token:string};let userId:string;let identity:{userId:string;email:string;emailVerified:boolean};let proxy:ReturnType<typeof createAuthHost>;
 
-const routed=(handler:(request:Request,context:{params:Promise<Record<string,string>>})=>Promise<Response>|Response)=>
- (c:{req:{raw:Request;param:()=>Record<string,string>}})=>handler(c.req.raw,{params:Promise.resolve(c.req.param())});
+const routed=<P extends Record<string,string>>(handler:(request:Request,context:{params:Promise<P>})=>Promise<Response>|Response)=>
+ (c:{req:{raw:Request;param:()=>Record<string,string>}})=>handler(c.req.raw,{params:Promise.resolve(c.req.param() as P)});
 
 beforeEach(async()=>{
  const user=await createUser({email:'admin@example.com'});userId=user.id;
@@ -58,6 +73,12 @@ beforeEach(async()=>{
  app.post('/api/artifacts/:id/annotations',routed(annotate));
  app.get('/api/artifacts/:id/versions',routed(versions));
  app.get('/api/artifacts/:id/versions/:version',routed(version));
+ app.get('/api/artifacts',c=>list(c.req.raw));
+ app.get('/api/artifacts/:id/export',routed(exportImage));
+ app.get('/api/artifacts/:id/annotations/changes',routed(changes));
+ app.get('/api/artifacts/:id/comment-images/:imageId',routed(commentImage));
+ app.get('/a/:id/raw',routed(raw));
+ app.post('/a/:id/mutate',routed(mutate));
  proxy=createAuthHost({upstream:inProcess(app),tokens:createTokenReader({db}),sessions:{resolve:async()=>null,identity:async()=>identity},cookieSecret:'mxmx_test_cookie_secret_0123456789',env:{}});
 });
 afterEach(()=>setDocumentEditorPolicy());
@@ -103,4 +124,64 @@ it('answers the read of a non-private document with the edit capability and no u
  const body=await response.json() as Record<string,unknown>;
  expect(body.capabilities).toMatchObject({edit:true,delete:false});
  expect(body).not.toHaveProperty('access');
+});
+
+const params=(id:string)=>({params:Promise.resolve({id})});
+/** The owner comments with an image on a document, so the image door has something real to refuse. */
+async function ownerImage(doc:Doc):Promise<string>{
+ const owner=identityForUser('usr_owner','tok_owner'),row=(await getArtifactById(doc.id))!;
+ const png=await sharp({create:{width:20,height:10,channels:3,background:'red'}}).png().toBuffer();
+ const stage=await stageCommentImage(owner,doc.id,png,png,{v:1,capturedEditId:row.edit_id,capturedAt:new Date().toISOString(),method:'region',width:20,height:10,rect:{x:0,y:0,width:20,height:10},viewport:{width:1000,height:800},strokes:[]});
+ if(stage instanceof Response)throw new Error(await stage.text());
+ const session:Actor={credential:'session',userId:'usr_owner',email:'owner@example.com',emailVerified:true};
+ const made=await myComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor:session,json:{node_id:'intro',edit_id:row.edit_id,body:'See',attachment_id:stage.id}}),params(doc.id));
+ if(made.status!==201)throw new Error(await made.text());
+ return stage.id;
+}
+
+it('refuses an admin a private document at every other bearer door, and lists it nowhere',async()=>{
+ const images={[UNLISTED.id]:await ownerImage(UNLISTED),[PRIVATE.id]:await ownerImage(PRIVATE)};
+ const doors=(doc:Doc):Array<[string,()=>Promise<Response>]>=>[
+  ['raw',async()=>bearer(`/a/${doc.id}/raw`)],
+  ['mutate',async()=>bearer(`/a/${doc.id}/mutate`,{method:'POST',json:{mutation:'missing',args:{}}})],
+  ['export',async()=>bearer(`/api/artifacts/${doc.id}/export`)],
+  ['annotation changes',async()=>bearer(`/api/artifacts/${doc.id}/annotations/changes`)],
+  ['comment image',async()=>bearer(`/api/artifacts/${doc.id}/comment-images/${images[doc.id]}`)],
+ ];
+ for(const [door,ask] of doors(PRIVATE)){
+  const response=await ask(),text=await response.text();
+  expect(response.status,`${door}: ${text}`).toBe(404);
+  expect(text,door).not.toContain('private document');
+ }
+ // The same doors answer the non-private sibling: the refusal above is the visibility gate, not the door.
+ for(const [door,ask] of doors(UNLISTED))expect((await ask()).status,door).not.toBe(404);
+ for(const query of ['','?relationship=all','?search=document','?visibility=private']){
+  const listed=await bearer(`/api/artifacts${query}`);expect(listed.status).toBe(200);
+  const ids=((await listed.json()) as {artifacts:Array<{id:string}>}).artifacts.map(a=>a.id);
+  expect(ids,query).not.toContain(PRIVATE.id);
+ }
+ expect(await getArtifactById(PRIVATE.id)).toMatchObject({version:1,actor_user_id:null});
+});
+
+it('refuses an admin a private document at every browser door, its live stream and a folder listing',async()=>{
+ const session:Actor={credential:'session',userId,email:identity.email,emailVerified:true};
+ const at=(path:string)=>request(path,{actor:session,origin:'same'});
+ const statuses=async(doc:Doc)=>{
+  const stream=await events(at(`/a/${doc.id}/events`),params(doc.id));await stream.body?.cancel();
+  return {
+   head:(await myArtifact(at(`/api/my/artifacts/${doc.id}`),params(doc.id))).status,
+   page:(await pageArtifact(at(`/api/page/artifact/${doc.id}`),params(doc.id))).status,
+   raw:(await raw(at(`/a/${doc.id}/raw`),params(doc.id))).status,
+   stream:stream.status,
+  };
+ };
+ expect(await statuses(UNLISTED)).toEqual({head:200,page:200,raw:200,stream:200});
+ expect(await statuses(PRIVATE)).toEqual({head:404,page:404,raw:404,stream:404});
+ // A folder the admin may read lists no private child it holds, and no unlisted one: the grant lists nothing.
+ const db=await harness.db();
+ await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ('fld123','tok_owner','usr_owner','Shelf','','{}','folder','public','folder-edit')`);
+ await db.query("UPDATE artifacts SET ancestor_ids=ARRAY['fld123'] WHERE id IN ($1,$2)",[UNLISTED.id,PRIVATE.id]);
+ const admin=await sessionActor(at('/api/page/artifact/fld123'));expect(admin.documentEditor).toBe(true);
+ const shelf=await selectChildren((await getArtifactById('fld123'))!,admin);
+ expect(shelf.children.map(child=>child.id)).toEqual([]);
 });

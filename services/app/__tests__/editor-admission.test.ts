@@ -13,7 +13,8 @@ import { useAppHarness, request, setSession, mintAccountToken as mintToken } fro
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as headRead } from '@/app/api/my/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { createUser, claimToken, ensureUsername } from '@/lib/accounts';
+import { createUser, claimToken, ensureUsername, setDocumentEditorPolicy } from '@/lib/accounts';
+import type { Actor } from '@artifactbin/contracts';
 import { createGroup } from '@/lib/groups';
 
 const sessionUser = { id: '', email: '' };
@@ -85,5 +86,33 @@ describe('the editor door and the head read admit the same readers', () => {
     expect({ door: door === 200, head: head === 200 }).toEqual({ door: admitted, head: admitted });
     // The re-asked admission refuses exactly what the door refuses, with the same status (404, or the 410 of a retired shape).
     expect(again).toBe(door);
+  });
+});
+
+/**
+ * THE HOST'S DOCUMENT-EDITOR GRANT, through both halves: the editor door decides from the role
+ * (lib/artifacts/access), the head read from the SQL scope (lib/artifacts/table). They read one rule —
+ * markup a link could reach — so an admin is an editor of every non-private document and of nothing private.
+ */
+describe('the editor door and the head read agree on the host document-editor grant', () => {
+  const shared = harness.shared(world);
+  type Doc = 'shared' | 'privateDoc' | 'grouped' | 'publicViewer' | 'publicEditor';
+  const cases: Array<[string, Doc, boolean]> = [
+    ['a private document shared with others', 'shared', false],
+    ['a private document nobody shares', 'privateDoc', false],
+    ['a private document a group holds', 'grouped', false],
+    ['a public document whose link reads', 'publicViewer', true],
+    ['a public document whose link edits', 'publicEditor', true],
+  ];
+  it.each(cases)('an admin on %s', async (_name, doc, admitted) => {
+    const w = shared(), id = w.ids[doc];
+    as(null);
+    setDocumentEditorPolicy((account) => account.userId === w.stranger.id && account.emailVerified === true);
+    try {
+      const actor: Actor = { credential: 'session', userId: w.stranger.id, email: w.stranger.email, emailVerified: true };
+      const door = (await artifactPage(request(`/api/page/artifact/${id}?part=editor`, { actor }), params(id))).status;
+      const head = (await headRead(request(`/api/my/artifacts/${id}`, { actor }), params(id))).status;
+      expect({ door: door === 200, head: head === 200 }).toEqual({ door: admitted, head: admitted });
+    } finally { setDocumentEditorPolicy(); }
   });
 });

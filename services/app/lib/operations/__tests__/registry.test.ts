@@ -131,7 +131,7 @@ describe('browser_session viewer', () => {
     expect(seen[0]).toMatchObject({ viewer: 'guest', actor: { credential: 'bearer', userId: 'usr_owner' } });
     expect(seen[1]).not.toHaveProperty('viewer');
     // A guest session still belongs to the caller who created it.
-    expect(seen[0]!.actor).toMatchObject(identityForUser('usr_owner', 'tok_owner'));
+    expect(seen[0]!.actor).toMatchObject({ tokenId: 'tok_owner', userId: 'usr_owner' });
   });
 
   /**
@@ -199,7 +199,7 @@ describe('browser_session viewer', () => {
     const seen = record();
     await operation.run(context, { ...script, actor: { credential: 'bearer', tokenId: 'tok_other', userId: 'usr_other' }, pageActor: { credential: 'bearer', tokenId: 'tok_other', userId: 'usr_other' } });
     expect(seen).toHaveLength(1);
-    expect(seen[0]!.actor).toMatchObject(identityForUser('usr_owner', 'tok_owner'));
+    expect(seen[0]!.actor).toMatchObject({ tokenId: 'tok_owner', userId: 'usr_owner' });
     expect(seen[0]).not.toHaveProperty('pageActor');
   });
 
