@@ -15,7 +15,7 @@ export function existingPaste(base: string, artifactId: string, template?: strin
     : ARTIFACT_STARTERS.find(starter => starter.template === template)?.label.toLowerCase() ?? 'artifact';
   return `Edit my artifact at ${artifactUrl(base, artifactId)} in place. Use afbin CLI if installed, or HTTP: ${origin}/llms.txt. ${EMAIL_AUTHENTICATION_INSTRUCTION}
 
-Ask the user what ${pageType} they'd like to build.`;
+If the user hasn't specified a task, ask what ${pageType} they'd like to build.`;
 }
 
 const artifactUrl = (base: string, artifactId: string): string =>

@@ -42,7 +42,7 @@ describe('POST /api/my/artifacts/:id/agent-prompt', () => {
     expect(body.url).toBe(`${BASE}/a/${id}`);
     expect(body).not.toHaveProperty('token');
     expect(body.prompt).toBe(existingPaste(BASE, id));
-    expect(body.prompt).toContain("\n\nAsk the user what artifact they'd like to build.");
+    expect(body.prompt).toContain("\n\nIf the user hasn't specified a task, ask what artifact they'd like to build.");
     const tokenCount = await harness.db().then((db) => db.query<{ count: number }>('SELECT count(*)::int AS count FROM tokens'));
     expect(tokenCount.rows[0].count).toBe(1);
   });
