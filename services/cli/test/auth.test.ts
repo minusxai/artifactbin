@@ -1,6 +1,6 @@
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,rm,stat,realpath} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {runCli} from '../src/dispatch';
@@ -127,7 +127,7 @@ test('eager init installs the detected skill on a local command and is idempoten
   const skills=JSON.parse(st.join('')).skills as Array<{harness:string;path:string;installed:boolean;current:boolean}>;
   assert.equal(skills.length,4);
   const pi=skills.find(x=>x.harness==='pi')!;
-  assert.equal(pi.path,join(home,'.pi','agent','skills','artifactbin'));
+  assert.equal(pi.path,join(await realpath(home),'.pi','agent','skills','artifactbin'));
   assert.equal(pi.installed,true);assert.equal(pi.current,true);
   assert.equal(skills.find(x=>x.harness==='codex')!.installed,false);
  }finally{await rm(home,{recursive:true,force:true});}
@@ -280,7 +280,16 @@ describe('email authentication',()=>{
    assert.equal(code,otp?0:2,output.join(''));
    assert.equal((await loadConnection(origin,home,{}))?.token,otp?'new_access':'previous');
    assert.doesNotMatch(output.join(''),/temporary|new_access|new_refresh/);
-   if(otp){assert.ok(calls.includes('/api/auth/sign-out'));assert.ok(!calls.includes('/api/auth/email-otp/send-verification-otp'));}
+   if(otp){
+    assert.ok(calls.includes('/api/auth/sign-out'));assert.ok(!calls.includes('/api/auth/email-otp/send-verification-otp'));
+    const status:string[]=[];
+    assert.equal(await runCli(['status','--server',origin,'--json'],{home,cwd:home,env:{ARTIFACTBIN_SKILLS:'off'},interactive:false,stdout:s=>status.push(s),stderr:()=>{},fetch:async()=>assert.fail('status must remain offline after authentication')}),0);
+    const result=JSON.parse(status.join(''));
+    assert.equal(result.server,null);
+    assert.equal(result.accounts.credential,null);
+    assert.deepEqual(result.accounts.credentials,{present:true,server:origin,validation:'not_checked'});
+    assert.doesNotMatch(status.join(''),/new_access|new_refresh/);
+   }
    else {assert.equal(JSON.parse(output.join('')).error.code,'otp_required');assert.match(JSON.parse(output.join('')).error.fix,/--otp/);assert.deepEqual(calls,['/api/server','/api/auth/email-otp/send-verification-otp']);}
   }finally{await rm(home,{recursive:true,force:true});}
  });

@@ -600,6 +600,8 @@ test('workspace recovery teaching names explicit rebind, credential selection an
  assert.match(diagnosticCatalog.workspace_account_mismatch!.fix,/workspace rebind --account current/);
  assert.match(helpDocument('workspace'),/rebind --account current/);
  assert.match(helpDocument('publishing'),/last observed/);
+ assert.match(helpDocument('publishing'),/accounts\.credentials.*not_checked/);
+ assert.match(helpDocument('publishing'),/top-level server is the workspace tracking origin/);
  assert.match(helpDocument('publishing'),/no ownership transfer/);
 });
 

@@ -12,6 +12,7 @@ import {digest} from '../src/files';
 import {withPrivateStateHome,saveConnection,observedCredentialAccount} from '../src/config';
 import {publishLocalWorkspace} from '../src/local-publication';
 import {parseCommand} from '../src/commands';
+import {workspaceOwnership} from '../src/workspace-ownership';
 async function fixture(){
  const root=await realpath(await mkdtemp(join(tmpdir(),'afbin-rebind-'))),home=join(root,'home'),cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
  const workspace:Workspace={home,root:cwd,cwd,tracking:null};await writeFile(join(cwd,'draft.jsx'),'---\nid: loc001\n---\n<p id="text">Local</p>');await registerLocalFiles(workspace,['draft.jsx']);
@@ -104,4 +105,38 @@ test('a competing rebind waits for the common publication/pull lock in the same 
  const f=await fixture();let release!:()=>void,entered!:()=>void;const ready=new Promise<void>(resolve=>{entered=resolve;}),barrier=new Promise<void>(resolve=>{release=resolve;});
  try{const held=withLocalLock(f.workspace.root,async()=>{entered();await barrier;});await ready;const rebind=rebindWorkspace(f.workspace,f.client);await new Promise(resolve=>setTimeout(resolve,30));try{assert.equal(f.calls.length,0,'rebind must not probe or mutate while another operation owns the common lock');}finally{release();}await held;await rebind;assert.equal((await loadWorkspace(f.workspace.root,f.home)).tracking?.account,'usr_new');}
  finally{release();await f.cleanup();}
+});
+
+// A fresh saved grant has no observed account until a remote operation completes.
+test('offline ownership distinguishes available credentials from unobserved identity',async()=>{
+ const f=await fixture();try{
+  await saveConnection(f.client.connection,f.home);
+  const state=await workspaceOwnership(f.workspace,{},f.client.connection.server);
+  const serialized=JSON.stringify(state),summary=JSON.parse(serialized);
+  assert.equal(summary.credential,null);
+  assert.deepEqual(summary.credentials,{present:true,server:f.client.connection.server,validation:'not_checked'});
+  assert.ok(!serialized.includes(f.client.connection.token));
+  assert.equal(f.calls.length,0);
+ }finally{await f.cleanup();}
+});
+
+for(const scenario of ['missing','wrong-origin','environment','replacement','expired'] as const)test('offline credential presence: '+scenario,async()=>{
+ const f=await fixture();try{
+  const origin=f.client.connection.server;
+  if(scenario==='wrong-origin')await saveConnection({server:'https://other.example',token:'mxmx_test_other'},f.home);
+  if(scenario==='replacement'){
+   f.client.account=undefined;
+   await f.client.request('/artifacts?limit=1');
+   await saveConnection({...f.client.connection,token:'mxmx_test_replacement'},f.home);
+  }
+  if(scenario==='expired')await saveConnection({...f.client.connection,refreshToken:'mxmx_test_refresh',clientId:'test_client',expiresAt:1},f.home);
+  const env=scenario==='environment'?{ARTIFACTBIN_URL:origin,ARTIFACTBIN_TOKEN:'mxmx_test_environment'}:{};
+  const callsBefore=f.calls.length;
+  const state=await workspaceOwnership(f.workspace,env,origin);
+  const present=['environment','replacement','expired'].includes(scenario);
+  assert.deepEqual(state.credentials,{present,server:present?origin:null,validation:'not_checked'});
+  assert.equal(state.credential,null);
+  assert.equal(f.calls.length,callsBefore);
+  assert.doesNotMatch(JSON.stringify(state),/mxmx_test_|test_client/);
+ }finally{await f.cleanup();}
 });

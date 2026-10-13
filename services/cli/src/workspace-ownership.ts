@@ -16,5 +16,5 @@ export async function workspaceOwnership(workspace:Workspace,env?:NodeJS.Process
   const work=await withPrivateStateHome(copy.home,join(copy.home,'.artifactbin'),async()=>pending(await readState(copy.home),copy.manifest.root));
   publications.push({server:copy.manifest.server,account:copy.manifest.account,path:relative(workspace.root,copy.directory),pending:work});
  }
- return{observation:'last_observed',workspace:workspace.tracking?{server:origin,account:workspace.tracking.account}:null,credential:observed?{...observed,server:connection!.server}:null,publications,pending:[...pending(home,workspace.root),...pending(portable,LOCAL_WORKSPACE_SCOPE)],rebind_pending:!!portable?.get(LOCAL_WORKSPACE_SCOPE,'archive','workspace-rebind/current')};
+ return{observation:'last_observed',credentials:{present:connection!==null,server:connection?.server??null,validation:'not_checked'},workspace:workspace.tracking?{server:origin,account:workspace.tracking.account}:null,credential:observed?{...observed,server:connection!.server}:null,publications,pending:[...pending(home,workspace.root),...pending(portable,LOCAL_WORKSPACE_SCOPE)],rebind_pending:!!portable?.get(LOCAL_WORKSPACE_SCOPE,'archive','workspace-rebind/current')};
 }
