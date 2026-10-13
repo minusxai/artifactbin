@@ -49,11 +49,20 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
   credentials/data. Record server/source revision, candidate/skill hashes and harness/model/settings;
   invalidate stale assets on relevant inputs.
   CLI/shared-package/skill edits reach the next run without release.
+  Agent reproductions and timing experiments (including Pi runs) use the same eval harness,
+  target/candidate selection, isolation, authentication, tracing and metrics. Add a scenario or
+  a reusable harness capability when needed; do not build a separate agent runner. A URL-discovery
+  scenario must not supply documentation links or transport instructions absent from the user's
+  request. Keep baseline and candidate harness/settings identical; capture a new baseline after
+  changing harness semantics.
   Exception for this workflow: building/packing the complete candidate CLI and its required runtime
   assets locally is eval preparation, not a CI check. Use the normal package assembly, once per
   relevant source snapshot with an input-hash receipt; never a reduced-capability substitute or
   published-package fallback. This exception does not permit local full suites or merge gates.
   Harness delivers local OTP; agent follows normal auth.
+  Keep evaluator budgets, scoring criteria and expected answers out of model context. Enforce caps
+  outside the conversation, preserve native user replies, and capture private instruction evidence.
+  A verbatim user reproduction must not acquire extra task guidance through native hooks or config.
   Compare baseline/candidate with identical scenarios/settings; retain failures and missing metrics.
 - **50 test files TOTAL across Vitest + CLI.** Above 50, neither suite runs; exit 2:
   **DEFERRED TO CI, NOT PASSED**. No affected tests means unverified (exit 2); discovery errors fail visibly. Never count/preview, raise the cap, use `--all`, bypass the wrapper or batch a deferred suite.

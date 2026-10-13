@@ -9,11 +9,10 @@
  * never, so the defaults would have needed a `{% raw %}` around every code
  * span. `throwOnUndefined` is on — a typo in a variable name is a build
  * failure, never an empty string on the page (the lenient default renders
- * `[[ basee ]]` as nothing, silently). No `if`: a file that needs one is two
- * files.
+ * `[[ basee ]]` as nothing, silently). Transport procedures use shared Markdown includes; references select their own transport.
  *
- * Globals: `base` (the caller's origin — the ONLY runtime value; the CLI
- * bundle renders it once with the production base), `example` (the brief's
+ * Globals: `base` (the selected origin, a replaceable placeholder in CLI teaching),
+ * `workflows` (transport-specific source includes), `references` (relative link prefix), `example` (the brief's
  * inlined document, read from `skills/artifactbin/example.jsx` for `SKILL.md` only), `themes`, `templates`,
  * `components`, `tags`, `refusedTags`, `maxContentBytes`, and
  * — inside `themes/<n>.md` / `templates/<n>.md` — that file's own registry
@@ -32,9 +31,11 @@ import { OPERATIONS } from '@/lib/operations/registry';
 import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/dataflow';
 import { CORE_FUNCTIONS } from '@artifactbin/sql/core';
 import type { SkillFile } from './tree';
+import { AUTHENTICATION_INSTRUCTION } from '../platform/agent-discovery';
 
 export interface RenderOptions {
   base: string;
+  transport?: 'cli' | 'http';
   /**
    * Render the CONDENSED copy: the spans a reference marks as bundle-skippable are dropped rather
    * than kept. `afbin help <template>` concatenates eight references into one answer, and at 40 KB
@@ -80,7 +81,7 @@ export function skillExample(root = path.resolve(process.cwd(), 'skills')): stri
   return readFileSync(path.join(root, 'artifactbin', 'example.jsx'), 'utf8');
 }
 
-const env = new nunjucks.Environment(null, {
+const env = new nunjucks.Environment(new nunjucks.FileSystemLoader(path.resolve(process.cwd(), 'skills/artifactbin'), { noCache: true }), {
   autoescape: false,
   throwOnUndefined: true,
   trimBlocks: true,
@@ -139,15 +140,11 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
     const rendered = env.renderString(file.body, {
       ...REGISTRY_GLOBALS,
       base: opts.base,
+      authenticationInstruction: AUTHENTICATION_INSTRUCTION,
       // Only the brief inlines the example; a reference that names it is a build failure, by design.
       ...(file.file === 'SKILL.md' && !file.ref ? { example: skillExample().trimEnd() } : {}),
-      publishExample: '```sh\nafbin push report.jsx\n```',
-      editExample: 'Edit the local JSX file, then run `afbin push report.jsx`.',
-      readBackCall: '`afbin pull`',
-      authRule: 'afbin authenticates itself in the browser when it needs the server; run `afbin auth` to sign in deliberately.',
-      checkWork: 'Run `afbin validate report.jsx` locally before `afbin push report.jsx`. Use `afbin help operations` for image export.',
-      docsMoreLine: 'Open the relevant local file in `references/` beside this skill.',
-      docsIndexHint: 'all beside this file under `references/`',
+      references: file.ref ? '' : 'references/',
+      workflows: Object.fromEntries(['introduction', 'authentication', 'creation', 'editing', 'operations'].map(name => [name, `fragments/${opts.transport ?? 'cli'}-${name}.md`])),
       ...own,
     });
     const marked = (opts.bundle ? condenseForBundle(rendered) : stripBundleMarkers(rendered)).replace(/\n{3,}/g, '\n\n');

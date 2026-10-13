@@ -11,7 +11,8 @@
  * against a literal tree with no disk. The rules:
  *
  * - a top-level directory is a skill and must hold a `SKILL.md`; its detail
- *   files live flat under `references/` — nothing else, nothing deeper;
+ *   files live flat under `references/`; build-only `fragments/` are rendered
+ *   into those files and the root, never exposed as standalone skill files;
  * - frontmatter: `name` (≤64, `[a-z0-9-]`, `SKILL.md` → the directory's
  *   name, a reference → its basename), `description` (≤1,024, third person)
  *   — what the listing shows and what a plugin preloads; `order` and
@@ -291,6 +292,10 @@ export function loadSkillSources(root = path.resolve(process.cwd(), 'skills')): 
     for (const entry of readdirSync(full)) {
       const entryPath = path.join(full, entry);
       if (statSync(entryPath).isDirectory()) {
+        if(entry==='fragments'){
+          if(readdirSync(entryPath).some(file=>!FILE_RE.test(file)||!statSync(path.join(entryPath,file)).isFile()))throw new Error(`skills/${dir}/fragments: only flat Markdown source fragments are supported`);
+          continue;
+        }
         if(entry==='scripts'){
           const scripts=readdirSync(entryPath);
           if(scripts.some(file=>!['credentials.mjs','watch-comments.mjs'].includes(file)||!statSync(path.join(entryPath,file)).isFile()))throw new Error(`skills/${dir}/scripts: only generated credentials.mjs and watch-comments.mjs helpers are supported`);

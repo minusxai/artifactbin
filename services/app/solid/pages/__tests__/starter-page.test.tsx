@@ -77,7 +77,7 @@ it.each([['deck', 'presentation'], ['app', 'app'], ['editorial', 'article'], ['l
   expect(screen.getByRole('heading', { name: `Your ${label} is ready for your agent!` })).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Getting started' })).toHaveAttribute('href', `${window.location.origin}/getting-started`);
   const prompt = (screen.getByRole('textbox', { name: 'Agent instructions' }) as HTMLTextAreaElement).value;
-  expect(prompt).toContain(`${window.location.origin}/getting-started.md`);
+  expect(prompt).toContain(`${window.location.origin}/llms.txt`);
   expect(prompt).not.toMatch(/ensure-node|afbin help|--server|Approve access/);
 });
 

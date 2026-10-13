@@ -7,15 +7,15 @@ import { describe, expect, it } from 'vitest';
 import * as agentCopy from '@/lib/serving/agent-copy';
 import { existingPaste } from '@/lib/serving';
 import { DEFAULT_SERVER } from '@artifactbin/contracts';
-import { gettingStartedMarkdown } from '@/lib/serving/getting-started';
+import { gettingStarted } from '@/lib/serving/getting-started';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin CLI if installed, or HTTP: https://x.test/getting-started.md. Sign in as the recipient with edit access; the sender's login is not transferred.\n\nAsk the user what artifact they'd like to build.";
+const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin CLI if installed, or HTTP: https://x.test/llms.txt. If there are no saved credentials, you must ask the user for their email to complete authentication.\n\nAsk the user what artifact they'd like to build.";
 
 describe('the tokenless paste', () => {
   it('offers one full installer command per platform on the selected host', () => {
-    const guide = gettingStartedMarkdown(B);
+    const guide = JSON.stringify(gettingStarted(B));
     expect(guide).toContain("curl -fsSL 'https://x.test/chat/install.sh' | sh");
     expect(guide).toContain("Invoke-RestMethod 'https://x.test/chat/install.ps1' | Invoke-Expression");
     expect(guide).not.toContain('mktemp');
@@ -28,9 +28,9 @@ describe('the tokenless paste', () => {
     // by agent-starter-consistency.test.ts's case (c), over all of them.
   });
   it('links to the shared guide instead of embedding setup and connection instructions', () => {
-    expect(existingPaste(B, ID)).toContain('https://x.test/getting-started.md');
+    expect(existingPaste(B, ID)).toContain('https://x.test/llms.txt');
     expect(existingPaste(B, ID)).not.toMatch(/ensure-node|npx|@afbin\/cli|afbin help|--server|Approve access/);
-    const guide = gettingStartedMarkdown(B);
+    const guide = JSON.stringify(gettingStarted(B));
     expect(guide).toContain('If afbin is absent, use HTTP');
     expect(guide).not.toContain('If afbin is not installed, install and set it up first');
     expect(guide).toContain('Run afbin help to discover everything you can do');
@@ -38,13 +38,13 @@ describe('the tokenless paste', () => {
     expect(guide).toContain("afbin auth 'ARTIFACT_URL' --server 'https://x.test'");
   });
   it.each(['https://x.test', 'http://127.0.0.1:45407/'])('selects the handed-over server for every remote command: %s', (base) => {
-    expect(gettingStartedMarkdown(base)).toContain(`Pass --server ${base.replace(/\/$/, '')} to every afbin server command`);
-    expect(existingPaste(base, ID)).toContain(`${base.replace(/\/$/, '')}/getting-started.md`);
+    expect(JSON.stringify(gettingStarted(base))).toContain(`Pass --server ${base.replace(/\/$/, '')} to every afbin server command`);
+    expect(existingPaste(base, ID)).toContain(`${base.replace(/\/$/, '')}/llms.txt`);
   });
   it.each([DEFAULT_SERVER, `${DEFAULT_SERVER}/`])('keeps the handoff short on the host a fresh CLI already defaults to: %s', (base) => {
     expect(existingPaste(base, ID)).not.toContain('--server');
     expect(existingPaste(base, ID)).toContain(`${DEFAULT_SERVER}/a/${ID}`);
-    expect(gettingStartedMarkdown(base)).toContain('no --server flag is needed');
+    expect(JSON.stringify(gettingStarted(base))).toContain('no --server flag is needed');
   });
   it('keeps the handoff concise and asks the user what to build', () => {
     const prompt = existingPaste('http://127.0.0.1:45407', ID);
@@ -58,9 +58,9 @@ describe('the tokenless paste', () => {
     ['doc', 'document'], ['editorial', 'article'], ['deck', 'presentation'],
     ['dashboard', 'dashboard'], ['plan', 'plan'], ['landing', 'landing page'],
     ['scrolly', 'scrollytelling page'], ['app', 'app'],
-  ])('names %s in the template instruction and question for the user', (template, phrase) => {
+  ])('names %s in the question for the user', (template, phrase) => {
     const prompt = existingPaste(B, ID, template);
-    expect(prompt).toContain(`template: ${template}`);
+    expect(prompt).not.toContain('Keep template:');
     expect(prompt).toContain('/a/ab3cd9');
     expect(prompt.endsWith(`Ask the user what ${phrase} they'd like to build.`)).toBe(true);
   });

@@ -20,6 +20,12 @@ A pulled or copied complete published fence selects the original artifact, inclu
 
 status labels workspace, credential and publication accounts as last observed. workspace_account_mismatch names the pinned and authenticated accounts plus pin locations. Plain afbin auth verifies saved credentials; afbin auth --email <email> selects the intended account. To explicitly keep this directory under current credentials, run afbin workspace rebind --account current --dry-run, then repeat without --dry-run. This only changes local account pins: no ownership transfer, publication or permission grant. Pending operations refuse rebind. Previously published local drafts retain their old targets in archived metadata and require an explicit pull or fork; brand-new drafts may publish under the new account.
 
+## Edit and create
+
+[% include "fragments/cli-editing.md" %]
+
+[% include "fragments/cli-creation.md" %]
+
 ## Local preview
 
 Run `afbin preview report.jsx appendix.jsx` or `afbin preview .` to view and edit files without publishing. Run `afbin preview --port 7474` without paths for an empty import server: open its URL to Import an HTML file, or choose Connect to server in an offline .jsx.html file and enter http://localhost:7474. Confirm the workspace filename with Import and open. The original HTML stays unchanged; the server imports a copy with existing validation/conflict checks, then browser edits and comments save to that workspace. No other files are implicitly selected. Compatible hosted preview services use an explicit HTTPS reverse-proxy origin declared with --public-url https://preview.example.com; it does not change the listening interface. Browser saves write to disk; clean viewers refresh after external changes. Local comments stay in client SQLite. `--share` lets anyone reaching the foreground session edit and comment on selected files. Stop with Ctrl-C.

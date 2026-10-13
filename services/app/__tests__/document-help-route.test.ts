@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createAppServer } from '@/server/app';
 import { createArtifact } from '@/lib/artifacts';
-import { agentDiscovery, agentDiscoveryHead, agentDiscoveryTail } from '@/lib/compiled-page/agent-discovery';
+import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead, agentDiscoveryTail } from '@/lib/compiled-page/agent-discovery';
 import { llmsText } from '@/lib/serving/agent-references.server';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -35,7 +35,7 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="${AGENT_HELP_TITLE}">`);
     expect(html).toContain(agentDiscoveryHead(agentDiscovery(BASE)));
   });
   it('the plain app shell carries the same head pointer, and /llms.txt is the one-pager on the request base', async () => {
@@ -43,8 +43,8 @@ describe('GET /a/:id (the document itself)', () => {
     const shell = await app.request(`${BASE}/login`, { headers: { accept: 'text/html' } });
     expect(shell.status).toBe(200);
     const html = await shell.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
-    expect(html.match(/name="afbin"/g)).toHaveLength(1);
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="${AGENT_HELP_TITLE}">`);
+    expect(html.match(/name="agents"/g)).toHaveLength(1);
     // FIRST in the head: a fetch that keeps only the first few kilobytes must still see the pointer
     // (it sat after every preload link, one line past where OpenCode's fetch cut).
     expect(html.indexOf('<link rel="help"')).toBeLessThan(html.indexOf('<title>SPA</title>'));
@@ -58,14 +58,9 @@ describe('GET /a/:id (the document itself)', () => {
     const text = await llms.text();
     expect(text).toBe(llmsText(BASE));
     expect(text).toMatch(/^## Read first/);
-    expect(text).toContain(`${BASE}/getting-started.md`);
+    expect(text).toContain(`${BASE}/getting-started`);
     expect(text).not.toContain('@afbin/cli@latest setup');
-    const gettingStarted = await app.request(`${BASE}/getting-started.md`);
-    expect(gettingStarted.status).toBe(200);
-    const setup = await gettingStarted.text();
-    expect(setup).toContain('npx --yes @afbin/cli@latest setup');
-    expect(setup).toContain(`${BASE}/chat/install.ps1`);
-    expect(setup).toContain('npx.cmd --yes @afbin/cli@latest setup');
+    expect((await app.request(`${BASE}/getting-started.md`)).status).toBe(404);
     for (const topic of ['http-api', 'http-auth', 'http-authoring', 'http-document-graph']) {
       const linked = await app.request(`${BASE}/llms/${topic}`);
       expect(linked.status, topic).toBe(200);
@@ -79,7 +74,7 @@ describe('GET /a/:id (the document itself)', () => {
       }
     }
     expect(text).toContain(`${BASE}/llms/http-api`);
-    expect(text).toContain(`${BASE}/llms/http-document-graph`);
+    expect(text).toContain(`${BASE}/llms/http-authoring`);
     expect(text).not.toContain('[[ base ]]');
     const t = await mintToken('t');
     const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null, visibility: 'public' });
@@ -106,7 +101,7 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="${AGENT_HELP_TITLE}">`);
     expect(html).toContain(agentDiscoveryHead(agentDiscovery(BASE)));
     expect(html).toContain('hop');
     expect(html).toMatch(new RegExp(`<link rel="canonical" href="[^"]*${canonical}">`));
@@ -123,7 +118,7 @@ describe('GET /a/:id (the document itself)', () => {
       expect(res.status, path).toBe(200);
       const html = await res.text();
       expect(html.slice(html.lastIndexOf('<!--')), path).toMatch(new RegExp(`^${tail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</html>\\s*$`));
-      expect(html.match(/name="afbin"/g), path).toHaveLength(1);
+      expect(html.match(/name="agents"/g), path).toHaveLength(1);
     }
   });
   it('carries the same header and head pointer at an owned artifact pretty URL', async () => {
@@ -135,7 +130,7 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API">`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="${AGENT_HELP_TITLE}">`);
     expect(html).toContain(agentDiscoveryHead(agentDiscovery(BASE)));
   });
 });

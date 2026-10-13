@@ -1,0 +1,1 @@
+Existing artifacts: prefer named queries: `afbin query ID --name tasks`; `afbin query ID --write --name change_status`. Inspect params. Publishing does not verify appearance: one whole-document/all-slide export, `afbin export <artifact-url> --output out.png`. URL/`--refresh` uses server, files/IDs local. `afbin help <topic>` reads offline references.

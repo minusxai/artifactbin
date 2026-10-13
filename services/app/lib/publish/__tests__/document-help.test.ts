@@ -4,7 +4,7 @@ import { AGENT_HELP_TITLE } from '@/lib/compiled-page/agent-discovery';
 import { assembleReaderPage } from '@/lib/compiled-page/assembler';
 import type { AssembleHead, AssembleInput, CompiledPage } from '@/lib/compiled-page/contract';
 
-const HELP = { url: 'https://x.test/llms.txt', instruction: 'afbin: a CLI to operate artifacts. Install: curl -fsSL https://x.test/chat/install.sh | sh' };
+const HELP = { url: 'https://x.test/llms.txt', cliInstruction: 'Optional CLI setup', instruction: 'afbin: a CLI to operate artifacts. Install: curl -fsSL https://x.test/chat/install.sh | sh' };
 const build = { id: 'b'.repeat(16), manifest: {} };
 const compiled: CompiledPage = {
   build: build.id, html: '<h1>Hello</h1>', islands: [], module: null, ssr: null,
@@ -29,7 +29,7 @@ describe('the compiled document agent pointer', () => {
   it('renders a help link and a one-line afbin meta when the platform passes them', () => {
     const h = head(doc(withHelp(HELP)));
     expect(h).toContain(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}">`);
-    expect(h).toContain(`<meta name="afbin" content="${HELP.instruction}">`);
+    expect(h).toContain(`<meta name="agents" content="${HELP.instruction}">`);
   });
   it('escapes the URL like every other head value', () => {
     expect(head(doc(withHelp({ ...HELP, url: 'https://x.test/llms.txt?a=1&b=2' })))).toContain('href="https://x.test/llms.txt?a=1&amp;b=2"');
@@ -37,7 +37,7 @@ describe('the compiled document agent pointer', () => {
   it('renders nothing when help is absent or null', () => {
     for (const html of [doc(), doc(withHelp(null))]) {
       expect(head(html)).not.toContain('rel="help"');
-      expect(head(html)).not.toContain('name="afbin"');
+      expect(head(html)).not.toContain('name="agents"');
     }
   });
   it('comes before the page title and no inline script follows it', () => {

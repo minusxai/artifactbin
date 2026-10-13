@@ -54,7 +54,7 @@ export function ConnectDialog(props: {
     </>}>
     <div class="space-y-4 text-sm">
       <p>Connect to a local preview server for a workspace copy, or to hosted artifactbin to update the original. Connecting only sends a copy for review. Nothing is published until you confirm “Apply to original” or “Create independent copy” in the server tab. Your original HTML file stays here.</p>
-      <p><a class={LINK} href="https://app.artifactbin.dev/getting-started.md" target="_blank" rel="noopener">Install Node and afbin if needed</a>. If <code>afbin</code> is not installed, run <code>npx --yes @afbin/cli@latest setup</code> once (Windows PowerShell: <code>npx.cmd --yes @afbin/cli@latest setup</code>); it installs the <code>afbin</code> command and the agent skills. Then start a local server:</p>
+      <p><a class={LINK} href="https://app.artifactbin.dev/getting-started" target="_blank" rel="noopener">Install Node and afbin if needed</a>. If <code>afbin</code> is not installed, run <code>npx --yes @afbin/cli@latest setup</code> once (Windows PowerShell: <code>npx.cmd --yes @afbin/cli@latest setup</code>); it installs the <code>afbin</code> command and the agent skills. Then start a local server:</p>
       <p class="break-words text-xs">macOS / Linux: <code>afbin preview --port 7474</code></p>
       <p class="break-words text-xs">Windows PowerShell: <code>afbin.cmd preview --port 7474</code></p>
       <Field label="Server address" hint="Use http://localhost:7474, or the HTTPS address of hosted artifactbin or your compatible server.">

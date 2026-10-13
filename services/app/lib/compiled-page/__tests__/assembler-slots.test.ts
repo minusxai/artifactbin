@@ -9,7 +9,7 @@ import { parse, View } from 'vega';
 import { compile, type TopLevelSpec } from 'vega-lite';
 import { assembleReaderPage, isInertSvg, scriptJson } from '../assembler';
 import { speculationRulesOf } from '../speculation';
-import { agentDiscovery, agentDiscoveryTail } from '../agent-discovery';
+import { agentDiscovery, agentDiscoveryHead, agentDiscoveryTail } from '../agent-discovery';
 import { SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage } from '../contract';
 import type { DataSnapshot } from '@/lib/publish/prepared/snapshots.server';
 import { CHART_SLOT_ATTR, ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
@@ -138,7 +138,7 @@ describe('head metadata', () => {
     expect(pointer).toBeLessThan(html.indexOf('<title>'));
     expect(pointer).toBeLessThan(html.indexOf('rel="modulepreload"'));
     expect(pointer).toBeLessThan(html.indexOf('<style'));
-    expect(doc(html).querySelector('meta[name="afbin"]')?.getAttribute('content')).toBe(help.instruction);
+    expect(doc(html).querySelector('meta[name="agents"]')?.getAttribute('content')).toBe(help.instruction);
     expect(html.endsWith(`${agentDiscoveryTail(help)}</body></html>`)).toBe(true);
     expect(page.headers.Link).toBe(`<${help.url}>; rel="help"`);
   });
@@ -248,3 +248,16 @@ describe('isInertSvg', () => {
     ]) expect(isInertSvg(svg), svg).toBe(false);
   });
 });
+
+ it('discovers HTTP before optional CLI setup with separate escaped metadata',()=>{
+  const help=agentDiscovery('https://docs.example');
+  const document=doc(agentDiscoveryHead(help));
+  expect(document.querySelector('link[rel="help"]')?.getAttribute('href')).toBe('https://docs.example/llms.txt');
+  const agents=document.querySelector('meta[name="agents"]');
+  const cli=document.querySelector('meta[name="cli"]');
+  expect(agents?.getAttribute('content')).toBe('Use the HTTP API to authenticate, create, edit, and operate artifacts. Read /llms.txt for all details. You must ask the user for their email to complete authentication.');
+  expect(agents?.getAttribute('content')).not.toContain('npx');
+  expect(cli?.getAttribute('content')).toContain('npx --yes @afbin/cli@latest setup --server');
+  expect(agents?.nextElementSibling).toBe(cli);
+  expect(document.querySelector('meta[name="afbin"]')).toBeNull();
+ });

@@ -125,7 +125,7 @@ describe('the file, for a coding agent asked to edit it', () => {
     const help = doc.head.querySelector('link[rel="help"]');
     expect(help?.getAttribute('href')).toBe('https://app.artifactbin.dev/llms.txt');
     expect(help?.getAttribute('title')).toBe(AGENT_HELP_TITLE);
-    expect(doc.head.querySelector('meta[name="afbin"]')?.getAttribute('content')).toContain('npx --yes @afbin/cli@latest');
+    expect(doc.head.querySelector('meta[name="cli"]')?.getAttribute('content')).toContain('npx --yes @afbin/cli@latest');
   });
 
   it('puts the JSON before the code, with the top-level source as its second key', () => {

@@ -1,4 +1,5 @@
-/** One installable folder projection, shared by CLI teaching and the public ZIP.
+/** Public HTTP skill folder. References/helpers are shared with CLI teaching;
+ * the root selects HTTP procedures while the CLI compiler selects CLI procedures.
  * Assets are explicit: request input never selects a path or ZIP member. */
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import {renderTree,skillFileWithFrontmatter} from './serve';
 import type {SkillTree} from './tree';
 const SKILL_SCRIPT_FILES=['scripts/credentials.mjs','scripts/watch-comments.mjs'] as const;
 export function skillPackageFiles(tree:SkillTree,base:string,root=path.resolve(process.cwd(),'skills/artifactbin')):Record<string,string>{
- const files=Object.fromEntries(renderTree(tree,base).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]));
+ const files=Object.fromEntries(renderTree(tree,base,'http').map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]));
  for(const name of SKILL_SCRIPT_FILES)files[name]=readFileSync(path.join(root,name),'utf8');
  return files;
 }

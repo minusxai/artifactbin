@@ -8,7 +8,7 @@ import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prom
 import { agentContract } from '@/lib/serving';
 import { agentBlurb, existingPaste } from '@/lib/serving';
 import { DEFAULT_SERVER } from '@artifactbin/contracts';
-import { afbinInstallCommand, afbinWindowsInstallCommand, gettingStarted, gettingStartedMarkdown } from '@/lib/serving/getting-started';
+import { afbinInstallCommand, afbinWindowsInstallCommand, gettingStarted } from '@/lib/serving/getting-started';
 import { publicGuideText, llmsText } from '@/lib/serving/agent-references.server';
 import { GET as guideRoute } from '@/app/llms/[topic]/route';
 import { renderSkill } from '@/lib/skills/render';
@@ -65,8 +65,7 @@ const surfaces = async (): Promise<Array<[name: string, text: string]>> => {
     ['POST /api/my/artifacts/:id/agent-prompt prompt', handed.prompt],
     ['skills/artifactbin/SKILL.md', buildQuickSheet(BASE)],
     ['skills/artifactbin/llms.txt', llmsText(BASE)],
-    ['GET /getting-started.md', gettingStartedMarkdown(BASE)],
-    ['lib/compiled-page/agent-discovery meta', agentDiscovery(BASE).instruction],
+    ['lib/compiled-page/agent-discovery meta', agentDiscovery(BASE).instruction+' '+agentDiscovery(BASE).cliInstruction],
     ['lib/agent-contract', agentContract(BASE)],
     ['the 401 hint', refused.help],
   ];
@@ -81,8 +80,8 @@ describe('every agent-facing starter says the same thing', () => {
   });
 
   it('(b) links HTTP auth on refusal and offers CLI setup on the relevant surfaces', async () => {
-    for (const [name, text] of await surfaces()) expect(text, name).toContain(name==='the 401 hint' ? `${BASE}/llms/http-auth` : linkedInstaller(name) ? `${BASE}/getting-started.md` : INSTALLER);
-    expect(gettingStartedMarkdown(BASE)).toContain(INSTALLER);
+    for (const [name, text] of await surfaces()) expect(text, name).toContain(name==='the 401 hint' ? `${BASE}/llms/http-auth` : name==='skills/artifactbin/SKILL.md' ? 'references/npm-local.md' : name==='skills/artifactbin/llms.txt' ? `${BASE}/getting-started` : linkedInstaller(name) ? `${BASE}/llms.txt` : INSTALLER);
+    expect(JSON.stringify(gettingStarted(BASE))).toContain(INSTALLER);
   });
 
   it('(b) spells npm only as that one setup line; every other command is `afbin <command>`', async () => {
@@ -107,7 +106,7 @@ describe('every agent-facing starter says the same thing', () => {
     expect(guide).toContain('/api/authentication/token');
     expect(guide).toContain('Authorization: Bearer <access_token>');
     expect(llmsText(BASE)).toContain(`${BASE}/llms/http-authoring`);
-    expect(llmsText(BASE)).toContain(`${BASE}/llms/http-document-graph`);
+    expect(publicGuideText('http-authoring',BASE)).toContain(`${BASE}/llms/http-document-graph`);
   });
 
   it('CLI and HTTP teach the same reply and mobile authoring rules without sharing CLI authentication', () => {
@@ -235,21 +234,19 @@ describe('llms.txt and the discovery head', () => {
     expect(agentBlurb()).toContain('artifactbin');
     const help = agentDiscovery(BASE);
     expect(help.url).toBe(`${BASE}/llms.txt`);
-    expect(help.instruction).toContain('npx --yes @afbin/cli@latest setup');
-    expect(help.instruction).toContain('--server');
-    expect(help.instruction).toContain('Windows: npx.cmd');
-    expect(help.instruction).toContain(`${BASE}/skills/artifactbin.zip`);
-    expect(help.instruction).toContain(`${BASE}/llms.txt`);
-    expect(help.instruction).toContain('recipient');
+    expect(help.cliInstruction).toContain('npx --yes @afbin/cli@latest setup');
+    expect(help.cliInstruction).toContain('--server');
+    expect(help.instruction).toContain('Read /llms.txt for all details.');
+    expect(help.instruction).toContain('Use the HTTP API');
     // Product blurb and shared root are separate; discovery need not repeat the blurb.
     expect(help.instruction).not.toContain(agentBlurb());
   });
 
   it('the guide teaches npm CLI and email HTTP without retired installation or token doors', () => {
     const text = llmsText(BASE);
-    for (const line of [`${BASE}/getting-started.md`, 'afbin help', 'afbin preview report.jsx', `${BASE}/llms/http-api`, 'skill']) expect(text,line).toContain(line);
+    for (const line of [`${BASE}/getting-started`, 'POST /api/artifacts', 'expectedVersion', `${BASE}/llms/http-api`, 'skill']) expect(text,line).toContain(line);
     expect(text).not.toContain('[[');
-    const guide = gettingStartedMarkdown(BASE);
+    const guide = JSON.stringify(gettingStarted(BASE));
     expect(guide).toContain(afbinInstallCommand(BASE));
     expect(guide).toContain(afbinWindowsInstallCommand(BASE));
     expect(guide).toContain('artifactbin skill');
@@ -274,11 +271,12 @@ describe('llms.txt and the discovery head', () => {
   });
 
   it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {
-    expect(AGENT_HELP_TITLE).toBe('Agents: create, edit, or operate artifacts with the npm CLI or direct HTTP API');
+    expect(AGENT_HELP_TITLE).toBe('Agent guide: authentication, creation, editing, and operations');
     const head = agentDiscoveryHead(agentDiscovery('https://x.test/'));
     expect(head).toContain(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}">`);
     expect(head).toContain('setup --server');
-    expect(head).toContain('https://x.test/skills/artifactbin.zip');
+    expect(head).toContain('name="agents"');
+    expect(head).toContain('name="cli"');
   });
 });
 
@@ -403,8 +401,8 @@ it('HTTP guidance preserves rotating credentials across tasks and renews without
 describe('shared instructions after missing credentials and before publishing claims',()=>{
  it('asks for the real recipient email before sending an OTP rather than inventing an identity',()=>{
   const guide=publicGuideText('http-auth',BASE)!;
-  expect(guide).toContain('Ask the user for their email');
-  expect(guide.indexOf('Ask the user for their email')).toBeLessThan(guide.indexOf('POST /api/auth/email-otp/send-verification-otp'));
+  expect(guide).toContain('you must ask the user for their email');
+  expect(guide.indexOf('you must ask the user for their email')).toBeLessThan(guide.indexOf('POST /api/auth/email-otp/send-verification-otp'));
   expect(guide).toContain('Do not invent an email');
   expect(guide).toContain('Do not install the CLI');
  });

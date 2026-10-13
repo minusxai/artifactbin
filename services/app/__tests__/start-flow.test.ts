@@ -128,7 +128,7 @@ describe('POST /api/start', () => {
     expect(res.headers.get('set-cookie')).toBeNull();
 
     expect(body.prompt).toBe(existingPaste(BASE, body.id));
-    expect(body.prompt).toContain(`${BASE}/getting-started.md`);
+    expect(body.prompt).toContain(`${BASE}/llms.txt`);
     expect(body.prompt).not.toContain('npx --yes');
     expect(body.prompt).not.toContain('mx_');
     expect(body.prompt).not.toContain('/tokens/new');

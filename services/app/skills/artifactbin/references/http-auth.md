@@ -4,36 +4,11 @@ description: Shared origin-scoped credentials, email authentication and serializ
 ---
 ## Read first
 
-First reuse saved credentials for [[ base ]]: try the helper request below. Sign in only after `auth_required` (missing/revoked grant). `refresh_unavailable` and other transient failures retain the grant: retry later, without sending another OTP. Authenticate as the recipient; a sender’s login or public link does not grant editing.
+[% include "fragments/http-authentication.md" %]
 
-The shared helper needs Node 22 and filesystem access. If this skill is installed, use `scripts/credentials.mjs` from its folder. Otherwise download the same standalone helper without installing afbin:
+## Storage and refresh
 
-```sh
-curl -fsSL '[[ base ]]/skills/artifactbin/credentials.mjs' -o artifactbin-credentials.mjs
-node artifactbin-credentials.mjs request --origin '[[ base ]]' --path /api/artifacts
-```
-
-The examples below use the installed helper path; substitute `artifactbin-credentials.mjs` for the downloaded file.
-
-## Sign in only when required
-
-HTTP authentication requires an email account. After `auth_required`, reuse the recipient’s actual email if already known. Ask the user for their email if unknown, and wait for their answer before sending an OTP. Do not invent an email or send to a placeholder. Never search other users’ homes or credential stores or probe undocumented mailbox APIs. Do not install the CLI to work around missing HTTP credentials.
-
-Send JSON to `[[ base ]]` with `Content-Type: application/json`; session requests need `Origin: [[ base ]]`.
-
-1. `POST /api/auth/email-otp/send-verification-otp` with `{"email":"<recipient email>","type":"sign-in"}`; ask the user for the actual emailed OTP and wait for their answer before step 2; never invent a code.
-2. `POST /api/auth/sign-in/email-otp` with `{"email":"<recipient email>","otp":"<user's code>"}`; retain returned cookies in a private jar.
-3. `POST /api/authentication/token` with those cookies and Origin. Verified email sessions receive `access_token`, `refresh_token`, `client_id`, `expires_in` (seconds), `token_type: "Bearer"` and `scope: "artifacts"`.
-4. Save the new grant into the shared CLI/filesystem HTTP credential store; do not create a second rotating-token copy. In the installed artifactbin skill folder run:
-
-```sh
-node scripts/credentials.mjs path --origin '[[ base ]]'
-node scripts/credentials.mjs save --origin '[[ base ]]' < private-oauth-response.json
-node scripts/credentials.mjs request --origin '[[ base ]]' --path /api/artifacts
-node scripts/credentials.mjs request --origin '[[ base ]]' --path /api/artifacts/ID/prepare --method POST --body-file edit.json
-```
-
-Requests use `Authorization: Bearer <access_token>` only on the saved origin. Save reads the OAuth JSON from private stdin; protect/delete any temporary response file. Never put tokens in command arguments, URLs, docs, source control or logs. Request reads saved credentials, serializes refresh, atomically rotates both tokens and retries once. Reuse it for API requests instead of manually refreshing. Use `--account ID` only for the account observed on this origin. Sign-out closes the temporary email session, not the saved grant.
+The installed helper is `scripts/credentials.mjs`; substitute that path for `credentials.mjs` above. `refresh_unavailable` and transient errors retain the saved grant; retry later without another OTP. The helper’s `path --origin` command reports the actual backing file. Do not install the CLI to work around missing HTTP credentials.
 
 Storage root: `ARTIFACTBIN_HOME`, otherwise `~/.artifactbin`; private directories `0700`, credentials `0600`. HTTPS port 443 uses `hosts/<hostname>/credentials.env`; other origins use `hosts/<hostname>@<scheme>-<port>/credentials.env` (safe hostname encoding). The helper returns the actual backing path: readable locations may alias an existing hashed store for compatibility with older CLI writers. Do not copy, rename or independently rotate an alias. Fields are `ARTIFACTBIN_URL`, `ARTIFACTBIN_TOKEN`, `ARTIFACTBIN_REFRESH_TOKEN`, `ARTIFACTBIN_CLIENT_ID`, `ARTIFACTBIN_EXPIRES_AT` (Unix milliseconds).
 

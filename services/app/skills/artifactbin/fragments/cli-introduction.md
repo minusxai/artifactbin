@@ -1,0 +1,1 @@
+Use an already installed runnable CLI (`afbin`) with `--server [[ base ]]`; otherwise use [HTTP]([[ references ]]http-api.md). npx downloads the CLI; not installed. Install CLI only when requested or needed for local preview/serve: [setup]([[ references ]]npm-local.md).
