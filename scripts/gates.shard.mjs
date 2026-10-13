@@ -40,8 +40,9 @@ export function parseShard(arg) {
  * @param {readonly string[]} names  every gate in the set
  * @param {{index: number, total: number}} shard  1-based
  * @param {(name: string) => number} weight  how long the gate is expected to take
- * @param {{ isolated?: readonly string[], serialGroup?: (name: string) => string | undefined }} [options]
- *   `isolated`: names that share one bin, alone, whenever another bin remains.
+ * @param {{ isolated?: readonly (string | readonly string[])[], serialGroup?: (name: string) => string | undefined }} [options]
+ *   `isolated`: names that run without ordinary neighbours. A flat list of names is one group sharing one bin;
+ *   a list of groups gives each group a bin of its own. Each holds its bin alone whenever another bin remains.
  *   `serialGroup`: gates of one group run one at a time even across a runner's servers
  *   (scripts/gates.mjs), so two in one bin add up rather than overlap: each goes to the lightest bin
  *   that holds no other member of its group, while one exists.
@@ -53,12 +54,19 @@ export function shardOf(names, { index, total }, weight, { isolated = [], serial
   // Gates whose first attempt loses races under a neighbour's browser load share ONE runner, alone:
   // scripts/gates.mjs runs a set made only of them on one server, one at a time (gates.servers.mjs
   // `serversFor`), so they never meet each other's load either. The other bins hold every ordinary gate.
-  const exclusive = [...new Set(isolated)].filter(name => names.includes(name));
-  for (const name of exclusive) {
-    bins[0].names.add(name);
-    bins[0].load += weight(name);
-  }
-  const shared = exclusive.length > 0 ? bins.slice(1) : bins;
+  // A gate too contention-prone to share even with the others gets a group, and so a runner, of its own.
+  const groups = (isolated.every(entry => typeof entry === 'string') ? [isolated] : isolated.map(entry => typeof entry === 'string' ? [entry] : entry))
+    .map(group => [...new Set(group)].filter(name => names.includes(name)))
+    .filter(group => group.length > 0)
+    .slice(0, total - 1);
+  groups.forEach((group, at) => {
+    for (const name of group) {
+      bins[at].names.add(name);
+      bins[at].load += weight(name);
+    }
+  });
+  const exclusive = groups.flat();
+  const shared = bins.slice(groups.length);
   // Heaviest first, name as the tie-break so the split never depends on the
   // order the filesystem happened to hand back.
   const ordered = names.filter(name => !exclusive.includes(name)).sort((a, b) => weight(b) - weight(a) || a.localeCompare(b));

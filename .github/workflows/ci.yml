@@ -460,13 +460,13 @@ jobs:
   gates:
     needs: [ plan ]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/7)
+    name: browser gates (${{ matrix.shard }}/9)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4, 5, 6, 7 ]
+        shard: [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -523,7 +523,7 @@ jobs:
           ( node scripts/build/build-gate-inputs.mjs > "$RUNNER_TEMP/gate-build.log" 2>&1; echo $? > "$RUNNER_TEMP/gate-build.status" ) < /dev/null > /dev/null 2>&1 &
       - id: gate-browsers
         run: |
-          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/7)" >> "$GITHUB_OUTPUT"
+          echo "browsers=$(node scripts/gates.mjs --browsers --shard=${{ matrix.shard }}/9)" >> "$GITHUB_OUTPUT"
       # KEYED ON WHAT PINS THE BROWSER, not on the lockfile: browsers.json is where playwright-core
       # records the Chromium revision it will download, so the entry survives every lockfile change
       # that is not a Playwright upgrade — including the version line a release rewrites.
@@ -609,7 +609,7 @@ jobs:
       # lose races under a neighbour's load (`CI_ISOLATED_GATES`) share one shard and nothing else, and
       # the runner gives that set one server, one gate at a time (scripts/gates.servers.mjs `serversFor`).
       - name: every gate, two servers
-        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/7
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/9
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'

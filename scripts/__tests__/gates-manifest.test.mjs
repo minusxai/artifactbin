@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
+import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_ISOLATED_GATE_GROUPS, CI_SHARD_OPTIONS, CROSS_BROWSER_SETUP_SECONDS, GATE_RUNNERS, GATE_SPECS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from '../gates.manifest.mjs';
 import { parseShard, shardOf } from '../gates.shard.mjs';
 import { serversFor } from '../gates.servers.mjs';
 
@@ -198,12 +198,23 @@ it('prints the same browser plan used by the CI shards without starting servers'
 });
 
 describe('CI isolation', () => {
-  it('gives the gates that lose races under load one CI shard together, with no other gate in it', () => {
+  it('gives each isolated group its own bin, and a flat list one bin together', () => {
+    const weight = () => 10;
+    const names = ['a', 'b', 'c', 'd', 'e'];
+    const grouped = [1, 2, 3].map((index) => shardOf(names, { index, total: 3 }, weight, { isolated: [['a', 'b'], ['c']] }));
+    expect(grouped).toEqual([['a', 'b'], ['c'], ['d', 'e']]);
+    const flat = [1, 2].map((index) => shardOf(names, { index, total: 2 }, weight, { isolated: ['a', 'c'] }));
+    expect(flat).toEqual([['a', 'c'], ['b', 'd', 'e']]);
+  });
+
+  it('gives each group of gates that lose races under load a CI shard of its own, with no other gate in it', () => {
     const names = GATE_SPECS.map((spec) => spec.name);
     expect(CI_ISOLATED_GATES.length).toBeGreaterThan(0);
     const shards = Array.from({ length: CI_GATE_SHARDS }, (_, i) => shardOf(names, { index: i + 1, total: CI_GATE_SHARDS }, shardWeight, CI_SHARD_OPTIONS));
-    const isolated = names.filter((name) => CI_ISOLATED_GATES.includes(name));
-    for (const name of CI_ISOLATED_GATES) expect(shards.find((shard) => shard.includes(name))).toEqual(isolated);
+    for (const group of CI_ISOLATED_GATE_GROUPS) {
+      const isolated = names.filter((name) => group.includes(name));
+      for (const name of group) expect(shards.find((shard) => shard.includes(name))).toEqual(isolated);
+    }
     expect(shards.flat().sort()).toEqual([...names].sort());
   });
 
