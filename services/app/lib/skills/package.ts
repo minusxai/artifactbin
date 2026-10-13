@@ -1,5 +1,5 @@
 /** Public HTTP skill folder. References/helpers are shared with CLI teaching;
- * the root selects HTTP procedures while the CLI compiler selects CLI procedures.
+ * templates select HTTP procedures while the CLI compiler selects CLI procedures.
  * Assets are explicit: request input never selects a path or ZIP member. */
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
