@@ -1,5 +1,6 @@
 import { editorScope, ownerScope, type ArtifactRow, type Scope } from './table';
-import type { TokenActor } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { getArtifactFor } from './rows';
 import { writeShares } from './store';
 import { findWritersFor } from './dependents';
@@ -18,7 +19,7 @@ import { type DatasetAccess, type ShareEntry, type ShareRole, type SharingPatch,
  * the data (every mutate call re-checks), it only stops the documents that
  * write — which is why the share menu names them first.
  */
-export function setAccessFor(actor: TokenActor, id: string, access: DatasetAccess): Promise<ArtifactRow | null> {
+export function setAccessFor(actor: AccessActor, id: string, access: DatasetAccess): Promise<ArtifactRow | null> {
   return setAccessScoped(ownerScope(actor), id, access);
 }
 
@@ -57,7 +58,7 @@ export interface SharingState {
  * on an account. (`private` still needs one, and `canPrivate` says so, which
  * is what keeps the UI from offering a tier the door would refuse.)
  */
-export async function getSharingFor(actor: TokenActor, id: string): Promise<SharingState | null> {
+export async function getSharingFor(actor: AccessActor, id: string): Promise<SharingState | null> {
   const db = await getDb();
   const row = await getArtifactFor(actor, id);
   if (!row) return null;
@@ -83,7 +84,7 @@ export async function getSharingFor(actor: TokenActor, id: string): Promise<Shar
  * are normalized to lowercase and collapsed — the LAST role given for an
  * address wins; the route validates shape and role names upstream.
  */
-export async function updateSharingFor(actor: TokenActor, id: string, patch: SharingPatch): Promise<SharingState | null> {
+export async function updateSharingFor(actor: AccessActor, id: string, patch: SharingPatch): Promise<SharingState | null> {
   const db = await getDb();
   const scope = editorScope(actor);
   const done = await db.transaction(async (tx) => {
@@ -131,5 +132,5 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
 
 
 export async function updateSharing(userId: string, id: string, patch: SharingPatch): Promise<SharingState | null> {
-  return updateSharingFor({ tokenId: '', userId }, id, patch);
+  return updateSharingFor(identityForUser(userId), id, patch);
 }

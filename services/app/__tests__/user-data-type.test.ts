@@ -13,7 +13,7 @@ import { dataflowForRow, viewerIdentityFor } from '@/lib/document-data';
 import {publishMarkupForArtifact} from '@/lib/publish/publish';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {claimToken, createUser} from '@/lib/accounts';
+import { identityForUser, claimToken, createUser} from '@/lib/accounts';
 import {people} from '@/lib/datasets/user-fields';
 import {avatarUrl} from '@/lib/accounts';
 import {useAppHarness, request} from '@/__tests__/harness';
@@ -62,7 +62,7 @@ describe('native user fields',()=>{
   const report=await create(a.token,{markup,shares:[{email:b.user.email,role:'viewer'}]});
   const column=(await getArtifactById(dataset.id))!.meta.columns as Array<{constraints?:{memberOf:string[]}}>;
   expect(column[1].constraints?.memberOf).toEqual([`ref:${report.id}`]);
-  const flow=await dataflowForRow((await getArtifactById(report.id))!,{viewer:{userId:a.user.id,tokenId:a.tokenId,email:a.user.email}});
+  const flow=await dataflowForRow((await getArtifactById(report.id))!,{viewer:identityForUser(a.user.id, a.tokenId, a.user.email)});
   expect(flow?.state.errors).toEqual({});
   expect(flow?.state.tables.tasks.columns).toContainEqual({name:'assigned',type:'user',constraints:{memberOf:[`ref:${report.id}`]}});
   expect(flow?.state.tables.tasks.columns).toContainEqual({name:'text_only',type:'string'});
@@ -84,7 +84,7 @@ describe('native user fields',()=>{
   if(prepared instanceof Response)throw new Error(await prepared.text());
   if(kind==='normalized')await (await getDb()).transaction(tx=>commitNormalizedMarkup(tx,null,current,prepared));
   else {
-   const result=await applyEditFor({tokenId:a.tokenId,userId:a.user.id},report.id,{baseEditId:current.edit_id,documentUpdate:(await documentPublicationWithResources(current,{source:prepared.source})).document_update});
+   const result=await applyEditFor(identityForUser(a.user.id, a.tokenId),report.id,{baseEditId:current.edit_id,documentUpdate:(await documentPublicationWithResources(current,{source:prepared.source})).document_update});
    expect(result).toMatchObject({applied:true});
   }
   expect((await getArtifactById(dataset.id))!.meta.columns).toContainEqual({name:'assignee',type:'user',constraints:{memberOf:[`ref:${report.id}`]}});
@@ -131,7 +131,7 @@ describe('native user fields',()=>{
   const markup='<Helmet><Value name="rows" type="table" value={[{"n":1}]} /></Helmet><p>Paid by <User userId="$_me.id" /></p>';
   const report=await create(owner.token,{markup,visibility:'public'});
   const row=(await getArtifactById(report.id))!;
-  const mine=await dataflowForRow(row,{viewer:{userId:reader.user.id,tokenId:null,email:reader.user.email}});
+  const mine=await dataflowForRow(row,{viewer:identityForUser(reader.user.id, null, reader.user.email)});
   expect(mine?.state.people).toEqual({[reader.user.id]:{name:'reader',handle:null,image:null}});
   expect(JSON.stringify(mine?.state.people)).not.toContain('@');
   expect((await dataflowForRow(row,{}))?.state.people ?? {}).toEqual({});
@@ -202,10 +202,10 @@ it('offers accepted joiners in constrained user fields and permits assigning the
  const a=await account('joined_owner'), b=await account('joined_reader');
  const report=await create(a.token,{markup:'<h1>Project</h1>',visibility:'public'});
  const dataset=await create(a.token,{dataset:[{id:1,assignee:null}],columns:[{name:'assignee',type:'user',constraints:{memberOf:[`ref:${report.id}`]}}],access:'readwrite'});
- await changeMembership({userId:b.user.id,tokenId:b.tokenId},report.id,{action:'join'});
+ await changeMembership(identityForUser(b.user.id, b.tokenId),report.id,{action:'join'});
  expect((await mutate(a.token,dataset.id,`update public.rows set assignee='${b.user.id}'`)).status).toBe(403);
- await changeMembership({userId:a.user.id,tokenId:a.tokenId},report.id,{action:'approve',userId:b.user.id});
+ await changeMembership(identityForUser(a.user.id, a.tokenId),report.id,{action:'approve',userId:b.user.id});
  expect((await mutate(a.token,dataset.id,`update public.rows set assignee='${b.user.id}'`)).status).toBe(200);
- await changeMembership({userId:b.user.id,tokenId:b.tokenId},report.id,{action:'leave'});
+ await changeMembership(identityForUser(b.user.id, b.tokenId),report.id,{action:'leave'});
  expect((await mutate(a.token,dataset.id,`update public.rows set assignee='${b.user.id}'`)).status).toBe(403);
 });

@@ -21,7 +21,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { dataflowForRow } from '@/lib/document-data';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {claimToken,createUser} from '@/lib/accounts';
+import { identityForUser, claimToken,createUser} from '@/lib/accounts';
 import {request,useAppHarness} from './harness';
 const harness=useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
@@ -30,7 +30,7 @@ const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:t
 async function pgFixture(){
  const owner=await createUser({email:'mxmx_test_pg_owner@example.com'});const ownerToken=await mintToken('owner', owner.id);await claimToken(owner.id,ownerToken.token);
  const friend=await createUser({email:'mxmx_test_pg_friend@example.com'});
- const secret=await createDatasetSecret({userId:owner.id,tokenId:ownerToken.id},'permissions-test-password',target);
+ const secret=await createDatasetSecret(identityForUser(owner.id, ownerToken.id),'permissions-test-password',target);
  const connection={...target,passwordSecretId:secret.id};
  const definition={kind:'postgres',connection,defaultSchema:'public',refreshSeconds:60,tables:[{schema:'public',name:'people',source:{schema:'source',table:'people'},columns:['id']}]};
  const response=await create(request('/api/artifacts',{method:'POST',token:ownerToken.token,json:{dataset:definition,visibility:'public'}}));expect(response.status,await response.clone().text()).toBe(201);const id=(await response.json()).id as string;
@@ -38,7 +38,7 @@ async function pgFixture(){
  return {owner,ownerToken,friend,connection,id,db,definition,previous};
 }
 it('lets a shared editor add notebook models, expand exposure and replace credentials without redirecting an existing secret',async()=>{
- const f=await pgFixture();await f.db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'editor')",[f.id,f.friend.email]);const actor={userId:f.friend.id,tokenId:''};
+ const f=await pgFixture();await f.db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'editor')",[f.id,f.friend.email]);const actor=identityForUser(f.friend.id, '');
  const model={...f.definition,notebook:{cells:[{id:'summary',name:'summary',sql:'select id from source.people'}]},tables:[...f.definition.tables,{schema:'public',name:'summary',modelCellId:'summary',columns:['id']}]};
  const prepared=await prepareCatalog(model,actor,f.previous);expect(prepared,prepared instanceof Response?await prepared.clone().text():'').not.toBeInstanceOf(Response);
  const expanded={...f.definition,tables:[{...f.definition.tables[0],columns:['id','email']}]};
@@ -59,13 +59,13 @@ it('reports Postgres mutations as inactive and refuses execution after a writabl
  const made=await create(request('/api/artifacts',{method:'POST',token:f.ownerToken.token,json:{dataset:[{id:1}],visibility:'public',access:'readwrite'}}));expect(made.status).toBe(201);const id=(await made.json()).id as string;
  const doc=await create(request('/api/artifacts',{method:'POST',token:f.ownerToken.token,json:{markup:`<Helmet><Import name="edit_data" src="ref:${id}" /><Mutation name="edit">{\`update edit_data.rows set id=2\`}</Mutation></Helmet><Button run="$edit">Edit</Button>`}}));expect(doc.status,await doc.clone().text()).toBe(201);const documentId=(await doc.json()).id as string;
  const document=(await getArtifactById(documentId))!;
- expect((await dataflowForRow(document,{viewer:{userId:f.owner.id,tokenId:f.ownerToken.id}}))?.state.mutationAccess).toEqual({edit:null});
+ expect((await dataflowForRow(document,{viewer:identityForUser(f.owner.id, f.ownerToken.id)}))?.state.mutationAccess).toEqual({edit:null});
  // Simulate an already-published source changing kind; stale access=readwrite
  // must never override the Postgres runtime's read-only policy.
- const secret=await createDatasetSecret({userId:f.owner.id,tokenId:f.ownerToken.id},'mutation-test-password',target,id);
+ const secret=await createDatasetSecret(identityForUser(f.owner.id, f.ownerToken.id),'mutation-test-password',target,id);
  const catalog={...(f.previous.meta.catalog as Record<string,unknown>),connection:{...target,passwordSecretId:secret.id}};
  await f.db.query('UPDATE artifacts SET meta=jsonb_set(meta,\'{catalog}\',$2::jsonb) WHERE id=$1',[id,JSON.stringify(catalog)]);
- expect((await dataflowForRow(document,{viewer:{userId:f.owner.id,tokenId:f.ownerToken.id}}))?.state.mutationAccess).toEqual({edit:expect.any(String)});
+ expect((await dataflowForRow(document,{viewer:identityForUser(f.owner.id, f.ownerToken.id)}))?.state.mutationAccess).toEqual({edit:expect.any(String)});
  const response=await mutate(request(`/a/${documentId}/mutate`,{method:'POST',token:f.ownerToken.token,json:{mutation:'edit'}}),ctx(documentId));expect(response.status).toBe(403);expect(await response.json()).toMatchObject({error:'dataset_read_only'});
 });
 it.each(['bearer','browser'] as const)('returns a controlled unavailable-secret revert response through %s without changing the head',async transport=>{

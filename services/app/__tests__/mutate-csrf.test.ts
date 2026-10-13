@@ -94,7 +94,7 @@ describe('cross-site writes', () => {
   });
 
   it('reports the credential KIND on the actor — the thing the guard keys on', async () => {
-    const { requestOrSessionActor } = await import('@/lib/accounts/viewer');
+    const { requestOrSessionActor } = await import('@/lib/accounts/request-identity');
     const { t, user } = await setup();
     const at = (init: { token?: string; cookie?: string }) => requestOrSessionActor(mutationRequest('/x', init));
     expect((await at({ token: t.token })).credential).toBe('bearer');

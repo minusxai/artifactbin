@@ -9,5 +9,5 @@ import { runOperation } from '@/lib/operations/http';
  * that is already gone is 404, so a repeated delete reads as "done" rather than
  * as a refusal.
  */
-export const DELETE = withTokenAuth(async (request, { tokenId, userId, params }) =>
-  runOperation('testuser_delete', request, { tokenId, userId }, { id: params.id }));
+export const DELETE = withTokenAuth(async (request, { actor, params }) =>
+  runOperation('testuser_delete', request, actor, { id: params.id }));

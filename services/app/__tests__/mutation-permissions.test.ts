@@ -9,7 +9,7 @@ import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {appPagePolicy,createAppServer} from '@/server/app';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {claimToken,createUser} from '@/lib/accounts';
+import { identityForUser, claimToken,createUser} from '@/lib/accounts';
 import {request,useAppHarness} from './harness';
 import {PATCH as patchArtifact} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
@@ -25,7 +25,7 @@ async function fixture(){
  const actor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true};
  const write=(auth?:Actor)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',actor:auth,json:{mutation:'add'}}),ctx(doc));
  const permissions=async(auth?:Actor)=>{const r=auth?await query(request(`/a/${doc}/query`,{method:'POST',actor:auth,json:{}}),ctx(doc)):await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return r.json();};
- const share=(id:string,role:'viewer'|'editor')=>updateSharingFor({tokenId:owner.id,userId:owner.userId},id,{shares:[{email:user.email,role}]});
+ const share=(id:string,role:'viewer'|'editor')=>updateSharingFor(identityForUser(owner.userId, owner.id),id,{shares:[{email:user.email,role}]});
  // What `afbin push … --policy viewers-write` sends, byte for byte.
  const grantFor=async(id:string)=>{const head=await getArtifactById(id);const r=await patchArtifact(await observedRequest(`/api/artifacts/${id}`,{method:'PATCH',token:owner.token,json:{policy:viewersWritePolicy(),expectedPolicyRevision:head!.policy_revision??0}}),ctx(id));expect(r.status,await r.clone().text()).toBe(200);return r.json();};
  const grant=()=>grantFor(ds);
@@ -50,7 +50,7 @@ it('gives a dataset editor the session relay even when they only view the docume
  const app=createAppServer({indexHtml:async()=>'<html><head></head><body><div id="root"></div></body></html>'});
  expect((await app.request(request(`/a/${f.doc}`,{actor:f.actor}))).headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));
  expect((await f.write(f.actor)).status).toBe(200);
- await updateSharingFor({tokenId:f.owner.id,userId:f.owner.userId},f.ds,{access:'read'});
+ await updateSharingFor(identityForUser(f.owner.userId, f.owner.id),f.ds,{access:'read'});
  expect((await f.write(f.actor)).status).toBe(403);
  expect((await f.permissions(f.actor)).mutationAccess.add).toBeTruthy();
 });

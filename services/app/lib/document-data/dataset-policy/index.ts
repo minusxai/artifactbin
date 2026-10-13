@@ -8,7 +8,7 @@ import { getDb } from '@/lib/platform/db';
 import { canReadArtifact, effectiveRole } from '@/lib/artifacts';
 import { editorScope, writerFor, type ArtifactRow } from '@/lib/artifacts';
 import { groupMemberPredicate } from '@/lib/artifacts/table';
-import type { TokenActor, RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactFor } from '@/lib/artifacts';
 import { catalogOf } from '@/lib/datasets/catalog';
 
@@ -22,7 +22,7 @@ export function policyReaderSql(user = '$13', token = '$14'): string {
 }
 export async function canUseDataPolicy(
   dataset: ArtifactRow,
-  actor: RoleActor,
+  actor: AccessActor,
 ): Promise<boolean> {
   if (!dataset.dataset_policy) return false;
   try {
@@ -39,7 +39,7 @@ export async function canUseDataPolicy(
   return result.rows.length > 0;
 }
 export async function setDatasetPolicy(
-  actor: TokenActor,
+  actor: AccessActor,
   id: string,
   value: unknown,
   revision: number,
@@ -81,7 +81,7 @@ export async function setDatasetPolicy(
 }
 export async function mutationPolicy(
   dataset: ArtifactRow,
-  actor: RoleActor,
+  actor: AccessActor,
   table: { schema: string; name: string },
   declared: boolean | GrantDocument,
 ): Promise<DatasetMutationPolicy | undefined> {
@@ -95,10 +95,7 @@ export async function mutationPolicy(
   }
   if (
     !declared &&
-    !(await getArtifactFor(
-      { userId: actor.userId, tokenId: actor.tokenId ?? '' },
-      dataset.id,
-    ))
+    !(await getArtifactFor(actor, dataset.id))
   )
     throw new Error('Direct SQL requires dataset edit access');
   if (!(await canUseDataPolicy(dataset, actor)))
@@ -113,7 +110,7 @@ export async function mutationPolicy(
 }
 export async function recheckMutation(
   dataset: ArtifactRow,
-  actor: RoleActor,
+  actor: AccessActor,
   document?: GrantDocument,
 ): Promise<ArtifactRow> {
   const current = await getArtifactById(dataset.id);
@@ -132,12 +129,7 @@ export async function recheckMutation(
     if (
       !doc ||
       doc.edit_id !== document.editId ||
-      !(await canReadArtifact(
-        doc,
-        actor.userId
-          ? { userId: actor.userId, email: actor.email ?? null }
-          : null,
-      ))
+      !(await canReadArtifact(doc, actor))
     )
       throw new Error('Document access or mutation changed');
     if (!(await getArtifactFor(writerFor(doc), dataset.id)))
@@ -152,7 +144,7 @@ export async function recheckMutation(
 export type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
 
 /** The dataset must allow writes AND the current actor must hold its editor role. */
-export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor, declared: boolean | GrantDocument = false): Promise<WriteRefusal | null> {
+export async function canWriteDataset(dataset: ArtifactRow, actor: AccessActor, declared: boolean | GrantDocument = false): Promise<WriteRefusal | null> {
   if (dataset.format !== 'dataset') return 'not_a_dataset';
   if(catalogOf(dataset)?.kind==='postgres')return 'dataset_read_only';
   if(grantsOf(dataset))return await grantsPermitWrite(dataset,actor,typeof declared==='object'?declared:undefined)?null:'dataset_read_only';

@@ -9,5 +9,5 @@ import { runOperation } from '@/lib/operations/http';
  * whole request. The browser's own door (/api/my/artifacts/:id/restore) is the
  * same call under the other credential.
  */
-export const POST = withTokenAuth(async (request: Request, { tokenId, userId, params }) =>
-  runOperation('restore_artifact', request, { tokenId, userId }, { id: params.id }));
+export const POST = withTokenAuth(async (request: Request, { actor, params }) =>
+  runOperation('restore_artifact', request, actor, { id: params.id }));

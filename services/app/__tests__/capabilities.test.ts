@@ -10,7 +10,7 @@
 import { expect, it } from 'vitest';
 import { useAppHarness, createGuestOwner } from './harness';
 import { can } from '@/lib/artifacts';
-import { createTestUser } from '@/lib/accounts';
+import { identityForUser, createTestUser } from '@/lib/accounts';
 import { createArtifact } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
@@ -20,14 +20,14 @@ useAppHarness();
 async function world() {
   const acct = await createUser({ email: 'mxmx_test_acct@example.com' }); const t = await mintToken('acct', acct.id); await claimToken(acct.id, t.token);
   const guest = await createGuestOwner();
-  const minted = await createTestUser({ tokenId: t.id, userId: acct.id });
+  const minted = await createTestUser(identityForUser(acct.id, t.id));
   if (!minted.ok) throw new Error(minted.error);
   const real = await createArtifact(t.id, acct.id, { format: 'markup', source: '<p>real</p>', meta: {}, visibility: 'unlisted' });
   const sandbox = await createArtifact(minted.tokenId, minted.userId, { format: 'markup', source: '<p>sandbox</p>', meta: {}, visibility: 'unlisted' });
   return {
-    account: { tokenId: t.id, userId: acct.id },
-    guest: { tokenId: guest.tokenId, userId: guest.userId },
-    testuser: { tokenId: minted.tokenId, userId: minted.userId },
+    account: { ...identityForUser(acct.id, t.id), userId: acct.id },
+    guest: { ...identityForUser(guest.userId, guest.tokenId), userId: guest.userId },
+    testuser: { ...identityForUser(minted.userId, minted.tokenId), userId: minted.userId },
     real, sandbox,
   };
 }
@@ -60,7 +60,7 @@ it('a test user is a full user inside the sandbox and a guest outside it', async
 
 it('an anonymous request can only read', async () => {
   const w = await world();
-  const nobody = { tokenId: null, userId: null };
+  const nobody = identityForUser(null, null);
   expect(await can(nobody, 'read', w.real)).toBe(true);
   for (const c of ['create', 'fork', 'write_as_me', 'like', 'comment'] as const) expect(await can(nobody, c, w.real), c).toBe(false);
 });

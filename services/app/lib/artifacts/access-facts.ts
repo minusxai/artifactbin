@@ -13,7 +13,7 @@ import { maxRole, type ArtifactRole, type GroupRole, type Queryable, type UserKi
 import { getGroupRole } from '../groups';
 import { userKindOf } from '../user-kinds';
 import { getDb } from '../platform/db';
-import type { RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 
 export interface AccessFacts {
   /** The actor's role in a live group, or null (always null without an account). */
@@ -35,10 +35,10 @@ const SHARED_WITH_SQL = 'SELECT 1 FROM artifact_shares s WHERE s.artifact_id=$1 
 const RESOLVE_SHARES_SQL = (artifacts: string) => `UPDATE artifact_shares SET user_id = $2 WHERE artifact_id ${artifacts} AND user_id IS NULL AND email = (SELECT email FROM users WHERE id = $2)`;
 const EDITOR_GROUPS_SQL = "SELECT gm.group_id FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.user_id=$1 AND gm.role='editor' AND g.deleted_at IS NULL FOR SHARE OF gm,g";
 /** The address an unresolved share may still match from this session (empty when it carries none). */
-const sessionEmail = (actor: RoleActor) => actor.email?.toLowerCase().trim() ?? '';
+const sessionEmail = (actor: AccessActor) => actor.email?.toLowerCase().trim() ?? '';
 
 /** One statement per fact asked, on `query` (or the shared database when omitted). */
-export function liveAccessFacts(actor: RoleActor, query?: Queryable): AccessFacts {
+export function liveAccessFacts(actor: AccessActor, query?: Queryable): AccessFacts {
   const db = async () => query ?? await getDb();
   return {
     groupRole: (groupId) => getGroupRole(actor.userId, groupId, query),
@@ -81,7 +81,7 @@ interface ShareFact { artifact_id: string; user_id: string | null; email: string
  * are. A fact about anything outside `rows` falls back to the live query, so a decision is never
  * answered from a partial preload.
  */
-export async function preloadAccessFacts(db: Queryable, actor: RoleActor, rows: ReadonlyArray<{ id: string; user_id: string | null }>): Promise<PreloadedAccessFacts> {
+export async function preloadAccessFacts(db: Queryable, actor: AccessActor, rows: ReadonlyArray<{ id: string; user_id: string | null }>): Promise<PreloadedAccessFacts> {
   const live = liveAccessFacts(actor, db);
   const ids = [...new Set(rows.map((row) => row.id))], preloaded = new Set(ids);
   const userIds = new Set([actor.userId, ...rows.map((row) => row.user_id)].filter((id): id is string => !!id));

@@ -48,7 +48,7 @@
 import { createHash } from 'node:crypto';
 import { type ArtifactRow, canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { dataflowForRow } from '@/lib/document-data';
-import type { RoleActor, Viewer } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform/db';
 import { DatasetError } from '@/lib/datasets/errors';
 import { type CompiledDataflow, dataRefs, selectQueries, readUrlValues } from '@/lib/dataflow';
@@ -78,9 +78,9 @@ function servable(flow: CompiledDataflow): string[] {
 
 interface ServedResultsRequest {
   /** The viewer the page's query door admits: the session's for the app page (the POST door); null is the anonymous door. */
-  admit: Viewer;
+  admit: AccessActor;
   /** Who the run is for, as that door passes it (null: anonymous). */
-  viewer: RoleActor | null;
+  viewer: AccessActor | null;
   /** The page's query string: the reader's `$` values. */
   search: string;
   /** Tests only; the product always runs under SERVED_RESULTS_BUDGET_MS. */

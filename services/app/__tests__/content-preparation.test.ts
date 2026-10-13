@@ -1,4 +1,5 @@
 import {expect,it,vi} from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import {useAppHarness} from './harness';
 import {prepareContentInput,applyPreparedContent} from '@/lib/publish/prepared/prepare-content';
 import {objectStore} from '@/lib/object-store';
@@ -27,7 +28,7 @@ for(const [kind,body] of Object.entries({
 it('prepares stored catalog models against staged data without persisting their source tables',async()=>{
  const token=await mintToken('preparation');const put=vi.spyOn(objectStore(),'put');
  try {
-  const result=await prepareContentInput({dataset:{kind:'stored',tables:[{schema:'public',name:'rows',rows:[{n:3}]},{schema:'public',name:'summary',sql:'select sum(n) as total from rows'}]}},{prepareDataset:(input,objects)=>prepareCatalog(input,{tokenId:token.id,userId:token.userId},undefined,objects)});
+  const result=await prepareContentInput({dataset:{kind:'stored',tables:[{schema:'public',name:'rows',rows:[{n:3}]},{schema:'public',name:'summary',sql:'select sum(n) as total from rows'}]}},{prepareDataset:(input,objects)=>prepareCatalog(input,identityForUser(token.userId, token.id),undefined,objects)});
   expect(result instanceof Response ? await result.clone().text() : 'prepared').toBe('prepared');
   if(result instanceof Response)return;
   expect(put).not.toHaveBeenCalled();

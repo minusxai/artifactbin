@@ -25,7 +25,7 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { readEvents } from '@/__tests__/sse';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { createAppServer } from '@/server/app';
@@ -174,7 +174,7 @@ describe('who may see which rows', () => {
   it('gives a reader who may not read a dataset the route\'s own refusal and none of its rows', async () => {
     const who = await owner();
     const ds = await publish(who.token, { dataset: [{ region: 'EU', n: 7 }] });
-    await setDatasetPolicy({ userId: who.user.id, tokenId: who.tokenId }, ds, { version: 2, allow: [{ actions: ['read'], from: { user: '$owner' } }] }, 0);
+    await setDatasetPolicy(identityForUser(who.user.id, who.tokenId), ds, { version: 2, allow: [{ actions: ['read'], from: { user: '$owner' } }] }, 0);
     const id = await publish(who.token, { markup: `<Helmet><Import name="d" src="ref:${ds}" /><Query name="q">{\`select sum(n) as total from d.rows\`}</Query></Helmet><p>Total <Number data="$q" col="total" /></p>` });
     await drainPreparedPageWarmups();
     // The owner reads the dataset: served rows, the route's rows.
@@ -212,7 +212,7 @@ describe('who may see which rows', () => {
     const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: who.token, json: { dataset: [{ n: 1 }], access: 'readwrite' } }));
     expect(made.status).toBe(201);
     const ds = ((await made.json()) as { id: string }).id;
-    await setDatasetPolicy({ userId: who.user.id, tokenId: who.tokenId }, ds, defaultDatasetGrants(), 0);
+    await setDatasetPolicy(identityForUser(who.user.id, who.tokenId), ds, defaultDatasetGrants(), 0);
     const id = await publish(who.token, { markup: `<Helmet><Import name="d" src="ref:${ds}" /><Query name="rows">{\`select count(*) as n from d.rows\`}</Query><Mutation name="add">{\`insert into d.rows values (2)\`}</Mutation></Helmet><p><Number data="$rows" col="n" /></p><Button run="$add">Add</Button>` });
     await drainPreparedPageWarmups();
     const seen: Array<Record<string, string | null> | undefined> = [];

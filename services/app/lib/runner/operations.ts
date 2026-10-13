@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import { identityForUser } from '@/lib/accounts';
 import {z} from 'zod';
 import {actorOf} from '@artifactbin/utils';
 import { type ArtifactRow, canReadArtifact, durableMutation, getArtifactById } from '@/lib/artifacts';
@@ -13,7 +14,7 @@ export async function lambdaOperation(request:Request,operation:string,input:Rec
  if(!pin||!userId||typeof source!=='string'||createHash('sha256').update(source).digest('hex')!==pin.sourceHash)return json({error:'invalid_runner_context'},403);
  const authorize=async()=>{
   const row=await getArtifactById(pin.artifactId);
-  if(!row||row.deleted_at||!await canReadArtifact(row,{userId,email:null}))throw Error('not_found');
+  if(!row||row.deleted_at||!await canReadArtifact(row, identityForUser(userId)))throw Error('not_found');
   return row;
  };
  try{
@@ -21,7 +22,8 @@ export async function lambdaOperation(request:Request,operation:string,input:Rec
   if(current.format!=='markup'||!/^\d+$/.test(pin.version))return json({error:'not_executable'},400);
   // Recompile pinned declarations, but resolve dataset grants and account ownership afresh.
   const doc:ArtifactRow={...current,source,document:null,meta:{},version:Number(pin.version),edit_id:pin.editId};
-  const actor={userId,tokenId:''};
+  // The runner host attests the run's user, not a login: that user's own principal, never a verified grant.
+  const actor=identityForUser(userId);
   if(operation==='lambda_query'){
    const parsed=query.safeParse(input);if(!parsed.success)return json({error:'invalid_query'},400);
    const result=await dataflowForRow(doc,{...parsed.data,viewer:actor,authorize:async()=>{await authorize();},signal:request.signal});

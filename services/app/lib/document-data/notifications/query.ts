@@ -7,10 +7,10 @@ import {executeDocumentQueries,type DocumentQuerySource,type DocumentQuerySource
 import { selectQueries, platformValues, DataflowResultError, type Row } from '@/lib/dataflow';
 import {getDb} from '@/lib/platform/db';
 import { tableForRef, acceptedMembers } from '../dataflow';
-import type { RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 export interface NotificationQueryDependencies {
  load(input:MutationNotificationJobInput):Promise<{
-  executionFence:MutationNotificationPlan['executionFence'];members:Row[];actor:RoleActor;
+  executionFence:MutationNotificationPlan['executionFence'];members:Row[];actor:AccessActor;
   resolve(ref:string,mode?:DocumentQuerySourceMode):Promise<DocumentQuerySource|null>;
   receipt(ref:string):NotificationSource|undefined;
   authorize():Promise<void>;

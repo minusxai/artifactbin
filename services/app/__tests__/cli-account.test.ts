@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { useAppHarness, request } from './harness';
 import { cliWorkspace } from './cli-harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { createArtifact, getArtifactById, getSharingFor, updateSharingFor } from '@/lib/artifacts';
 import { ownedArtifactState } from '@/lib/workspace';
 import { has } from '@/lib/accounts';
@@ -82,7 +82,7 @@ describe('cli-account-resources', () => {
     expect(deleted.result.results.map((entry:{result:{type:string}})=>entry.result.type)).toEqual(['folder','artifact']);
 
     // getArtifactById reads through the live gate, so ownership is read past it.
-    for(const id of [folder.id,child.id,document.id])expect(await ownedArtifactState({tokenId:token.id,userId:token.userId},id),id).toEqual({deleted:true});
+    for(const id of [folder.id,child.id,document.id])expect(await ownedArtifactState(identityForUser(token.userId, token.id),id),id).toEqual({deleted:true});
     // Local bytes survive a remote deletion; only the tracking entry goes.
     expect(await readFile(join(root,'doc.jsx'))).toEqual(bytes);
     expect((await tracking(root,root)).files).toEqual({});
@@ -269,7 +269,7 @@ describe('cli-governance', () => {
    const shares=[{email:'mxmx_test_reader@example.com',role:'viewer'}];
    const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Shared</p>',shares}}));
    expect(response.status).toBe(201);const created=await response.json();
-   expect((await getSharingFor({tokenId:token.id,userId:token.userId},created.id))?.shares).toEqual(shares);
+   expect((await getSharingFor(identityForUser(token.userId, token.id),created.id))?.shares).toEqual(shares);
    expect(created.shares).toEqual(shares);
    const snapshot=await read(request(`/api/artifacts/${created.id}`,{token:token.token}),{params:Promise.resolve({id:created.id})});
    expect((await snapshot.json()).shares).toEqual(shares);
@@ -282,7 +282,7 @@ describe('cli-governance', () => {
   });
 
   it('concurrent invitation changes invalidate observed-state writes without publishing stale content',async()=>{
-   const token=await mintToken('mxmx_test_cli_share_race');const actor={tokenId:token.id,userId:token.userId};
+   const token=await mintToken('mxmx_test_cli_share_race');const actor=identityForUser(token.userId, token.id);
    const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Original</p>'}}));
    const {id}=await response.json();const base=(await getArtifactById(id))!;
    const shares=[{email:'mxmx_test_reader@example.com',role:'viewer' as const}];
@@ -293,7 +293,7 @@ describe('cli-governance', () => {
   });
 
   it('a conditional replacement commits content and invitation removal together',async()=>{
-   const token=await mintToken('mxmx_test_cli_share_replace');const actor={tokenId:token.id,userId:token.userId};
+   const token=await mintToken('mxmx_test_cli_share_replace');const actor=identityForUser(token.userId, token.id);
    const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Original</p>'}}));const {id}=await response.json();
    await updateSharingFor(actor,id,{shares:[{email:'mxmx_test_reader@example.com',role:'viewer'}]});
    const base=(await getArtifactById(id))!;

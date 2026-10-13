@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, setSession, mintAccountToken } from './harness';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import { updateSharingFor, effectiveRole, getArtifactById, membershipState, savedMentionStates } from '@/lib/artifacts';
 import { setRelationState } from '@/lib/accounts';
 import { POST as publish } from '@/app/api/artifacts/route';
@@ -133,11 +133,11 @@ describe('the page payload does not carry the document tree', () => {
 
   it('serves the nodes part to a reader who may only read, once the link or a share lets them in', async () => {
     const w = await ownerWorld();
-    await updateSharingFor({ tokenId: '', userId: w.owner.id }, w.id, { shares: [{ email: STRANGER, role: 'viewer' }] });
+    await updateSharingFor(identityForUser(w.owner.id, ''), w.id, { shares: [{ email: STRANGER, role: 'viewer' }] });
     as(w.stranger, STRANGER);
     const part = await framed(w.id, '?part=nodes');
     expect(part.status).toBe(200);
-    await updateSharingFor({ tokenId: '', userId: w.owner.id }, w.id, { shares: [] });
+    await updateSharingFor(identityForUser(w.owner.id, ''), w.id, { shares: [] });
     expect((await framed(w.id, '?part=nodes')).status).toBe(404);
   });
 });
@@ -145,7 +145,7 @@ describe('the page payload does not carry the document tree', () => {
 describe('the page reads the artifact row once, and a refusal reads none', () => {
   it('reads the whole row once for an owner whose document has invited users', async () => {
     const w = await ownerWorld();
-    await updateSharingFor({ tokenId: '', userId: w.owner.id }, w.id, { shares: [{ email: STRANGER, role: 'viewer' }] });
+    await updateSharingFor(identityForUser(w.owner.id, ''), w.id, { shares: [{ email: STRANGER, role: 'viewer' }] });
     as(w.owner, OWNER);
     const seen = await sqlOf(() => json(w.id).then((r) => r.json() as Promise<{ role: string; surface: { hasInvitedUsers: boolean } }>));
     expect(seen.value.role).toBe('owner');
@@ -183,7 +183,7 @@ describe('/members names the same mentions with or without reading the document'
     await (await getDb()).transaction((tx) => setRelationState(tx, bob.id, 'join', id, { status: 'pending', direction: 'invitation', initiatedBy: owner.id, revision: 1 }));
     return { owner, token, bob, id };
   }
-  const stateOf = (w: { owner: { id: string }; id: string }) => membershipState({ userId: w.owner.id, tokenId: null }, w.id);
+  const stateOf = (w: { owner: { id: string }; id: string }) => membershipState(identityForUser(w.owner.id, null), w.id);
   const reference = async (id: string) => savedMentionStates((await getArtifactById(id))!);
 
   it('finds a person the document\'s text names, as the whole-row scan does, reading the document because it can name someone', async () => {
@@ -215,7 +215,7 @@ describe('/members names the same mentions with or without reading the document'
 describe('a named share is stamped only when there is something to stamp', () => {
   async function sharedWorld(resolved: boolean) {
     const w = await ownerWorld('<h1 id="t">Shared</h1>');
-    await updateSharingFor({ tokenId: '', userId: w.owner.id }, w.id, { shares: [{ email: STRANGER, role: 'commenter' }] });
+    await updateSharingFor(identityForUser(w.owner.id, ''), w.id, { shares: [{ email: STRANGER, role: 'commenter' }] });
     const db = await getDb();
     if (resolved) await db.query('UPDATE artifact_shares SET user_id=$2 WHERE artifact_id=$1', [w.id, w.stranger.id]);
     else await db.query('UPDATE artifact_shares SET user_id=NULL WHERE artifact_id=$1', [w.id]);
@@ -223,7 +223,7 @@ describe('a named share is stamped only when there is something to stamp', () =>
   }
   const roleOfStranger = async (w: Awaited<ReturnType<typeof ownerWorld>>) => {
     const row = await getArtifactById(w.id);
-    return effectiveRole(row!, { userId: w.stranger.id, tokenId: null, email: STRANGER });
+    return effectiveRole(row!, identityForUser(w.stranger.id, null, STRANGER));
   };
 
   it('reads an already-stamped share in one statement and writes nothing', async () => {

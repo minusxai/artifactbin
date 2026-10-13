@@ -9,15 +9,12 @@
 import { respondToEdit } from '@/lib/artifacts';
 import { applyEditFor } from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
-import { actorForArtifacts } from '@/lib/accounts';
-import { baseUrl, readJson, unauthorized } from '@/lib/http';
+import { baseUrl, readJson } from '@/lib/http';
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
-  const scoped = actorForArtifacts(actor);
-  if (!scoped) return unauthorized(request);
   const { id } = await ctx.params;
   const echo = new URL(request.url).searchParams.get('echo') === 'full' ? 'full' : 'patch';
-  return respondToEdit(baseUrl(request), await readJson(request), (input) => applyEditFor(scoped, id, input), echo);
+  return respondToEdit(baseUrl(request), await readJson(request), (input) => applyEditFor(actor, id, input), echo);
 }

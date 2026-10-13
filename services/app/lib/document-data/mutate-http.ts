@@ -3,7 +3,7 @@
  * a document's declared mutation run by name (the bearer twin of the page door). Both answer the same
  * refusal shapes the routes and the CLI read.
  */
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById, getArtifactFor, grantsOf, grantsPermitWrite, ownsArtifact, parseExpectedVersion, readableArtifact, type MutationReceipt } from '@/lib/artifacts';
 import { bindParams, bindTypes, parseMutationRequest, platformValues, type Scalar } from '@/lib/dataflow';
 import { rewriteBuiltinFields } from '@/lib/dataflow/server';
@@ -17,13 +17,13 @@ const isScalar = (v: unknown): v is Scalar =>
   v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
 
 /** A document's declared mutation, run by name with its arguments — the bearer twin of the page door. */
-async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Record<string, unknown>, receipt?: MutationReceipt): Promise<Response> {
+async function respondToDeclaredMutation(actor: AccessActor, id: string, body: Record<string, unknown>, receipt?: MutationReceipt): Promise<Response> {
   const row = await getArtifactById(id);
-  if (!row || row.deleted_at || !(ownsArtifact(row,actor) || (await canReadArtifact(row, actor.userId ? { userId: actor.userId, email: null } : null)))) return json({ error: 'not_found' }, 404);
+  if (!row || row.deleted_at || !(ownsArtifact(row,actor) || (await canReadArtifact(row, actor)))) return json({ error: 'not_found' }, 404);
   const { name, id: _id, ...rest } = body;
   const parsed = parseMutationRequest({ ...rest, mutation: name });
   if (parsed instanceof Response) return json(await parsed.json(), 400);
-  const result = await runDocumentMutation(row, parsed, { userId: actor.userId, tokenId: actor.tokenId }, receipt);
+  const result = await runDocumentMutation(row, parsed, actor, receipt);
   if (!result.ok) {
     switch (result.reason) {
       case 'operation_key_required': return json({error:'operation_key_required',detail:result.detail},400);
@@ -54,7 +54,7 @@ async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Re
  * A body naming a `name` is the document's declared mutation instead.
  */
 export async function respondToMutate(
-  actor: TokenActor,
+  actor: AccessActor,
   id: string,
   body: Record<string, unknown> | null,
   receipt?:MutationReceipt,

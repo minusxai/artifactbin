@@ -1,4 +1,3 @@
-import {tokenActorForRequest} from '@/lib/accounts';
 import { getVersionFor, readableArtifact, refusingUnservable, servableDocument } from '@/lib/artifacts';
 /** Authenticated immutable content reads never use public serving/import paths. */
 import {withTokenAuth} from '@/lib/accounts';
@@ -16,8 +15,8 @@ const readableDefinition=(catalog:DatasetCatalog)=>serializeDatasetDefinition({
  tables:catalog.tables.map(table=>({schema:table.schema,name:table.name,columns:table.columns.map(column=>column.name)})),
 });
 
-export const GET=withTokenAuth((request,{tokenId,userId,params})=>refusingUnservable(async()=>{
- const actor=tokenActorForRequest(request,{tokenId,userId});const readable=await readableArtifact(actor,params.id);
+export const GET=withTokenAuth((request,{ actor,params })=>refusingUnservable(async()=>{
+ const readable=await readableArtifact(actor,params.id);
  if(!readable)return json({error:'not_found'},404);
  const head=readable.row;
  const raw=new URL(request.url).searchParams.get('version');

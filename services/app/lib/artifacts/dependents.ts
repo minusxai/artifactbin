@@ -3,7 +3,7 @@
  * that reference it, and the documents that declare writes to a dataset. The share menu and delete
  * ask this before changing what others rely on.
  */
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { mutationTargetRef } from '@/lib/dataflow';
 import { storedMediaReferences } from '../datasets/media-references';
 import { getDb } from '../platform/db';
@@ -18,7 +18,7 @@ import { ownerScope, type ArtifactRow, type Scope } from './table';
  * turning writes off can say what will stop working. Same shape and scope as
  * `findDependents`, narrowed to declared writers.
  */
-export async function findWritersFor(actor: TokenActor, datasetId: string): Promise<Array<{ id: string; title: string | null; mutations: string[] }>> {
+export async function findWritersFor(actor: AccessActor, datasetId: string): Promise<Array<{ id: string; title: string | null; mutations: string[] }>> {
   const dependents = await findDependentsFor(actor, datasetId);
   const out: Array<{ id: string; title: string | null; mutations: string[] }> = [];
   for (const dep of dependents) {
@@ -56,6 +56,6 @@ async function findDependentsScoped(scope: Scope, refId: string): Promise<Artifa
   return [...found.values()];
 }
 
-export function findDependentsFor(actor: TokenActor, refId: string): Promise<ArtifactRow[]> {
+export function findDependentsFor(actor: AccessActor, refId: string): Promise<ArtifactRow[]> {
   return findDependentsScoped(ownerScope(actor), refId);
 }

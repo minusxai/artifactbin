@@ -2,7 +2,7 @@
 import sharp from 'sharp';
 import {COMMENT_IMAGE_LIMITS as LIMITS,type CommentImageMetadata,type CommentImageWire} from '../../../contracts/src/comment-image';
 import { annotationScope } from '@/lib/artifacts';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';
 import {getDb,type Queryable} from '../platform/db';
 import {objectStore} from '../object-store/index';
 import {generateInternalId} from '../platform/ids';
@@ -14,7 +14,7 @@ interface ImageRow {id:string;artifact_id:string;annotation_id:string|null;token
 const variants=['original','preview','thumbnail'] as const;
 type Variant=typeof variants[number];
 const key=(id:string,variant:Variant)=>`comment-images/${id}/${variant}.webp`;
-const owned=(row:ImageRow,actor:TokenActor)=>actor.userId ? row.user_id===actor.userId : row.user_id===null && row.token_id===actor.tokenId;
+const owned=(row:ImageRow,actor:AccessActor)=>actor.userId ? row.user_id===actor.userId : row.user_id===null && row.token_id===actor.tokenId;
 function validCommentImage(value:unknown):value is CommentImageMetadata {
  if(!value || typeof value!=='object')return false;
  const m=value as CommentImageMetadata;
@@ -38,7 +38,8 @@ export async function sweepCommentImages(database?:Queryable):Promise<void>{
   try{for(const variant of variants)await objectStore().delete(key(row.id,variant));await db.query('DELETE FROM comment_images WHERE id=$1 AND annotation_id IS NULL AND expires_at < now()',[row.id]);}catch{/* Retry on a later upload; never forget charged objects. */}
  }
 }
-export async function stageCommentImage(actor:TokenActor,artifactId:string,original:Buffer,preview:Buffer,metadata:unknown):Promise<{id:string}|Response>{
+/** Stamps `comment_images.token_id` (NOT NULL): the uploader must hold a token — a session's is its account token (`withAccountToken`). */
+export async function stageCommentImage(actor:TokenHoldingActor,artifactId:string,original:Buffer,preview:Buffer,metadata:unknown):Promise<{id:string}|Response>{
  const db=await getDb(),scope=annotationScope(actor);
  const access=await db.query<{edit_id:string}>(`SELECT edit_id FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[artifactId,scope.val]);
  if(!access.rows[0])return json({error:'not_found'},404);
@@ -80,7 +81,7 @@ export async function stageCommentImage(actor:TokenActor,artifactId:string,origi
  }
 }
 /** Called inside the same transaction as the root comment; no external queries or object I/O. */
-export async function consumeCommentImage(tx:Queryable,actor:TokenActor,artifactId:string,id:string,annotationId:string,editId:string):Promise<boolean>{
+export async function consumeCommentImage(tx:Queryable,actor:AccessActor,artifactId:string,id:string,annotationId:string,editId:string):Promise<boolean>{
  const row=(await tx.query<ImageRow>('SELECT * FROM comment_images WHERE id=$1 AND artifact_id=$2 AND ready=true AND annotation_id IS NULL AND expires_at > now() FOR UPDATE',[id,artifactId])).rows[0];
  if(!row||!owned(row,actor)||row.metadata.capturedEditId!==editId)return false;
  await tx.query('UPDATE comment_images SET annotation_id=$2 WHERE id=$1',[id,annotationId]);return true;
@@ -89,7 +90,7 @@ export async function commentImagesFor(tx:Queryable,artifactId:string):Promise<M
  const rows=await tx.query<ImageRow>('SELECT * FROM comment_images WHERE artifact_id=$1 AND annotation_id IS NOT NULL',[artifactId]);
  return new Map(rows.rows.map(row=>[row.annotation_id!,commentImageWire(row)]));
 }
-export async function readCommentImage(actor:TokenActor,artifactId:string,id:string,variant:string):Promise<{buffer:Buffer}|null>{
+export async function readCommentImage(actor:AccessActor,artifactId:string,id:string,variant:string):Promise<{buffer:Buffer}|null>{
  if(!variants.includes(variant as Variant)||!await readableArtifact(actor,artifactId))return null;
  const db=await getDb();
  const row=(await db.query<ImageRow>('SELECT i.* FROM comment_images i JOIN annotations a ON a.id=i.annotation_id WHERE i.id=$1 AND i.artifact_id=$2 AND a.deleted_at IS NULL AND i.ready=true',[id,artifactId])).rows[0];
@@ -102,7 +103,7 @@ export async function expireCommentImagesFor(tx:Queryable,userId:string,artifact
 }
 
 /** Both HTTP doors use identical image bytes, visibility checks and private caching. */
-export async function commentImageResponse(actor:TokenActor,artifactId:string,imageId:string,variant:string):Promise<Response>{
+export async function commentImageResponse(actor:AccessActor,artifactId:string,imageId:string,variant:string):Promise<Response>{
  const result=await readCommentImage(actor,artifactId,imageId,variant);
  return result?new Response(new Uint8Array(result.buffer),{headers:{'Content-Type':'image/webp','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}}):json({error:'not_found'},404);
 }

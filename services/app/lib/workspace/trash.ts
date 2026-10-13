@@ -21,7 +21,7 @@
  */
 import { trackEvent } from '@/lib/platform/analytics';
 import { artifactQuery, LIVE_ARTIFACT_SQL, ownerPredicate } from '@/lib/artifacts/table';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform/db';
 import { servableDocument } from '@/lib/artifacts';
 import { actorSubject, emit } from '@/lib/platform/events';
@@ -40,7 +40,7 @@ const SUBTREE = '(id = $1 OR ancestor_ids @> ARRAY[$1])';
  * rows would refuse exactly the retry it exists to let through. Ownership, not
  * liveness, is the question; null means unknown or foreign.
  */
-export async function ownedArtifactState(actor: TokenActor, id: string): Promise<{ deleted: boolean } | null> {
+export async function ownedArtifactState(actor: AccessActor, id: string): Promise<{ deleted: boolean } | null> {
   const db = await getDb();
   const scope = ownerPredicate(actor);
   const found = await db.query<{ deleted_at: string | null }>(
@@ -60,7 +60,7 @@ export async function ownedArtifactState(actor: TokenActor, id: string): Promise
  * this takes is only ever the caller's own; null means the NAMED row is unknown or foreign. Repeating an owned delete
  * returns its still-deleted identities without stamping another deletion.
  */
-export async function trashArtifactFor(actor: TokenActor, id: string): Promise<string[] | null> {
+export async function trashArtifactFor(actor: AccessActor, id: string): Promise<string[] | null> {
   const db = await getDb();
   const scope = ownerPredicate(actor);
   const r = await db.query<{id:string;format:string;ancestor_ids:string[];newly_deleted:boolean}>(
@@ -107,7 +107,7 @@ export async function trashArtifactFor(actor: TokenActor, id: string): Promise<s
  * refuses the whole restore (UnservableDocument, lib/artifacts/servable): it
  * would come back live and unreadable.
  */
-export async function restoreArtifactFor(actor: TokenActor, id: string): Promise<{ id: string; ancestor_ids: string[] } | null> {
+export async function restoreArtifactFor(actor: AccessActor, id: string): Promise<{ id: string; ancestor_ids: string[] } | null> {
   const db = await getDb();
   const scope = ownerPredicate(actor);
   const placement = await db.transaction(async (tx) => {
@@ -167,7 +167,7 @@ interface TrashEntry {
 }
 
 /** The owner's trash, newest first — what the trash page lists. */
-export async function listTrashFor(actor: TokenActor): Promise<TrashEntry[]> {
+export async function listTrashFor(actor: AccessActor): Promise<TrashEntry[]> {
   const db = await getDb();
   const scope = ownerPredicate(actor);
   const r = await db.query<TrashEntry>(

@@ -1,4 +1,5 @@
 import {expect,it,vi} from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -13,7 +14,7 @@ import type {DocumentUpdate} from '@artifactbin/contracts';
 import {useAppHarness,request} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById, type ArtifactRow } from '@/lib/artifacts';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { AccessActor } from '@/lib/accounts';
 import {getDb} from '@/lib/platform';
 import {prepareClientDocumentPublication,type ClientDocumentChange} from '@/lib/document/document-update-client';
 import {prepareDocumentAuthoringContext} from '@/lib/publish/publish';
@@ -24,9 +25,9 @@ useAppHarness();
 async function setup(){
  const token=await mintToken('mxmx_test_operation_api');
  const created=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));
- const {id}=await created.json();return {token,id,actor:{tokenId:token.id,userId:token.userId},row:(await getArtifactById(id))!};
+ const {id}=await created.json();return {token,id,actor:identityForUser(token.userId, token.id),row:(await getArtifactById(id))!};
 }
-async function prepare(row:ArtifactRow,actor:TokenActor,change:ClientDocumentChange){
+async function prepare(row:ArtifactRow,actor:AccessActor,change:ClientDocumentChange){
  if(row.document?.kind!=='graph')throw new Error('Missing authoring snapshot');
  const document_update=await prepareClientDocumentPublication({...row,document:row.document},change,async source=>{
   const context=await prepareDocumentAuthoringContext(actor,row.id,{source});

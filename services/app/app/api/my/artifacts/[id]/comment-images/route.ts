@@ -1,13 +1,13 @@
-import {browserActor} from '@/lib/accounts';
-import {actorForArtifacts} from '@/lib/accounts';
+import {browserActor,withAccountToken} from '@/lib/accounts';
 import {capabilityGuard} from '@/lib/artifacts';
 import {json,unauthorized} from '@/lib/http';
 import {stageCommentImage} from '@/lib/annotations';
 import {COMMENT_IMAGE_LIMITS} from '../../../../../../../contracts/src/comment-image';
 
 export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){
- const viewer=await browserActor(request);if(viewer instanceof Response)return viewer;
- const actor=actorForArtifacts(viewer);if(!actor)return unauthorized(request);
+ const browser=await browserActor(request);if(browser instanceof Response)return browser;
+ // The upload is charged to a token: a session's is its account token, as every browser create is.
+ const actor=await withAccountToken(browser);if(!actor)return unauthorized(request);
  const {id}=await ctx.params;const refusal=await capabilityGuard(actor,'comment',id);if(refusal)return refusal;
  // Bound the stream before parsing multipart, including requests without Content-Length.
  const reader=request.body?.getReader();if(!reader)return json({error:'invalid_image'},400);

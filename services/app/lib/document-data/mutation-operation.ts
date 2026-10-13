@@ -1,5 +1,5 @@
 import type {MutationInitiator, MutationOperationRequest, MutationOperationSuccess, Queryable} from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from '@/lib/artifacts';
 
 /** Only explicit caller inputs belong in the fingerprint; server defaults are pinned separately. */
@@ -8,7 +8,7 @@ export function normalizeMutationOperation(request:MutationOperationRequest):Mut
  ...(request.row!==undefined?{row:request.row}:{}),...(request.value!==undefined?{value:request.value}:{}),
  ...(request.tz!==undefined?{tz:request.tz}:{}),...(request.expectedState!==undefined?{expectedState:request.expectedState}:{})};
 }
-export function mutationInitiator(actor:Pick<TokenActor,'userId'|'tokenId'>,execution:'human'|'agent',agentLabel:string|null=null):MutationInitiator{
+export function mutationInitiator(actor:Pick<AccessActor,'userId'|'tokenId'>,execution:'human'|'agent',agentLabel:string|null=null):MutationInitiator{
  return {principal:actor.tokenId?{kind:'token',id:actor.tokenId}:actor.userId?{kind:'user',id:actor.userId}:{kind:'anonymous'},execution,agentLabel};
 }
 export const documentMutationReply=(success:MutationOperationSuccess):MutationReply=>({status:200,body:{mutationOperation:success}});

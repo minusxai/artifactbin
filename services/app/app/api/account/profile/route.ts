@@ -2,16 +2,16 @@ import {withTokenAuth} from '@/lib/accounts';
 import {json,readJson} from '@/lib/http';
 import {durableMutation,accountProfile,updateAccountProfile} from '@/lib/artifacts';
 
-export const GET=withTokenAuth(async(request,{userId,credential})=>{
- if(request.headers.has('authorization')&&credential!=='bearer')return json({error:'auth_required'},401);
- if(!userId)return json({error:'account_required',hint:'Sign in with an account using `afbin auth`.'},403);
- const profile=await accountProfile(userId);return profile?json(profile):json({error:'not_found'},404);
+export const GET=withTokenAuth(async(request,{actor})=>{
+ if(request.headers.has('authorization')&&actor.credential!=='bearer')return json({error:'auth_required'},401);
+ if(!actor.userId)return json({error:'account_required',hint:'Sign in with an account using `afbin auth`.'},403);
+ const profile=await accountProfile(actor.userId);return profile?json(profile):json({error:'not_found'},404);
 });
-export const PATCH=withTokenAuth(async(request,{tokenId,userId,credential})=>{
- if(request.headers.has('authorization')&&credential!=='bearer')return json({error:'auth_required'},401);
- if(!userId)return json({error:'account_required'},403);
+export const PATCH=withTokenAuth(async(request,{ actor })=>{
+ if(request.headers.has('authorization')&&actor.credential!=='bearer')return json({error:'auth_required'},401);
+ if(!actor.userId)return json({error:'account_required'},403);
  const body=await readJson(request);if(!body)return json({error:'invalid_json'},400);
- const actor={tokenId,userId},key=request.headers.get('Idempotency-Key');
+ const key=request.headers.get('Idempotency-Key');
  const result=key?await durableMutation(actor,request.url,key,{operation:'profile',body},receipt=>updateAccountProfile(actor,body,receipt)):await updateAccountProfile(actor,body);
  const terminal=key&&!['operation_pending','outcome_unknown','idempotency_mismatch','invalid_idempotency_key'].includes(String(result.body.error));
  return json(result.body,result.status,terminal?{'X-Artifactbin-Mutation-Receipt':key}:{});

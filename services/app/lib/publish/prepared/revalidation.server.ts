@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ArchivedRender, ArtifactHeader } from '@/lib/artifacts';
-import type { RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { type DataPlan, loadCompilerBuild, MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, planOf } from '@/lib/compiled-page';
 import { holdableImports } from '@/lib/document-data';
 import { readUrlValues } from '@/lib/dataflow';
@@ -47,7 +47,7 @@ export interface DocumentEtagInput {
   /** Which stored Mermaid drawings this surface shows, or none (`CompiledReaderRequest.drawings`). */
   drawings: 'document' | 'inline' | null;
   /** The reader whose holdings the page's engine answers for, or undefined when the page holds nothing (`CompiledReaderRequest.holder`). */
-  holder: RoleActor | null | undefined;
+  holder: AccessActor | null | undefined;
   /** Everything else the route decides about the answer: reader, role, trust, surface, addresses. Opaque here. */
   facts: unknown;
 }
@@ -126,7 +126,8 @@ export async function documentEtag(input: DocumentEtagInput): Promise<string | n
     v: 1,
     facts: input.facts,
     row: [row.id, row.version, row.title, row.description, row.visibility, artifact.edit_id, artifact.updated_at, artifact.link_role, at?.version ?? null],
-    page: [page.cssVersion ?? null, page.pageFormat, page.handoverContract, !!input.stale],
+    // A version whose script does not build serves its notice (lib/compiled-page/assembler): named only then, so every other tag is unchanged.
+    page: [page.cssVersion ?? null, page.pageFormat, page.handoverContract, !!input.stale, ...(page.authorScriptErrors ? ['script-failed'] : [])],
     compile: [stored.build, stored.module?.sha ?? null, stored.ssr?.sha ?? null, stored.sharedBuild?.id ?? null],
     code: codeFingerprint(),
     data: [snapshot, mermaid, hold],

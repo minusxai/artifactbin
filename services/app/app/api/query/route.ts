@@ -1,12 +1,11 @@
 import { refLoaderForActor } from '@/lib/artifacts';
 import { datasetResolverForActor, runDocumentDataflow } from '@/lib/document-data';
-import { actorForArtifacts, sessionActor } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { parseJsx } from '@/lib/jsx';
 import { syntaxErrorDetail } from '@/lib/jsx/syntax-error';
 import { validateHelmet } from '@/lib/document';
 import { parseQueryRequest } from '@/lib/http/query-request';
-import { resolveToken } from '@/lib/accounts';
 import {DatasetError} from '@/lib/datasets/errors';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
@@ -21,18 +20,12 @@ import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
  * missing table, never data). Nothing is persisted.
  */
 export async function POST(request: Request) {
-  const bearer = request.headers.get('authorization') ?? '';
-  const presented = bearer.startsWith('Bearer ') ? bearer.slice('Bearer '.length).trim() : '';
-  const token = presented ? await resolveToken(presented) : null;
-  let actor: { tokenId: string; userId: string | null } | null = token ? { tokenId: token.id, userId: token.userId } : null;
-  if (!actor) {
-    // The BROWSER's credential — the anonymous owner editing their own doc runs
-    // its draft queries here. Cookie-authenticated, so a cross-site caller
-    // riding it is CSRF (this compiles and runs the caller's markup).
-    if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);
-    actor = actorForArtifacts(await sessionActor(request));
-    if (!actor) return unauthorized(request);
-  }
+  // An agent's bearer, else the BROWSER's credential — the owner editing their own doc runs its draft
+  // queries here. Anything but a bearer is cookie-authenticated, so a cross-site caller riding it is CSRF
+  // (this compiles and runs the caller's markup).
+  const actor = await requestOrSessionActor(request);
+  if (actor.credential !== 'bearer' && isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);
+  if (!actor.userId && !actor.tokenId) return unauthorized(request);
 
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
@@ -47,11 +40,9 @@ export async function POST(request: Request) {
   const helmetErrors = validateHelmet(tree.nodes);
   if (helmetErrors.length) return json({ error: 'invalid_jsx', details: helmetErrors }, 400);
 
-  const admittedActor=actor;
   const authorize=async()=>{
-    const currentToken=presented?await resolveToken(presented):null;
-    const current=presented?(currentToken?{tokenId:currentToken.id,userId:currentToken.userId}:null):actorForArtifacts(await sessionActor(request));
-    if(!current||current.tokenId!==admittedActor.tokenId||current.userId!==admittedActor.userId)throw new DatasetError('Query access revoked',403);
+    const current=await requestOrSessionActor(request,{revalidate:true});
+    if(current.tokenId!==actor.tokenId||current.userId!==actor.userId)throw new DatasetError('Query access revoked',403);
   };
   try {
     const flow = await runDocumentDataflow(markup, refLoaderForActor(actor), datasetResolverForActor(actor), {...parsed,authorize,signal:request.signal});

@@ -1,4 +1,5 @@
 import {describe,it,expect,vi} from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import {executeDocumentQueries} from '../datasets/document-queries';
 import type { CompiledDataflow } from '@/lib/dataflow';
 import type {DatasetCatalog} from '../datasets/types';
@@ -15,8 +16,8 @@ describe('shared document query execution for notifications',()=>{
  it.each(['stored','postgres'] as const)('uses dataset execution and fresh reads for %s sources',async kind=>{
   execute.mockResolvedValue({columns:[{name:'to',type:'string'},{name:'message',type:'string'}],rows:[{to:['usr_first','usr_second'],message:'Changed'}]});
   const catalog={kind,defaultSchema:'public',tables:[]} as unknown as DatasetCatalog;
-  const result=await executeDocumentQueries({...flow,queries:[{...query,source:'Dataset01'}]},async()=>({tables:{},catalog}),{actor:{userId:'usr_actual',tokenId:'tok_actual'},refresh:true,now:'2026-01-01T00:00:00.000Z',bindings:{values:{task_id:'usr_saved'},types:{task_id:'user'}}});
-  expect(execute).toHaveBeenLastCalledWith(catalog,query.sql,{task_id:'usr_saved',_now:'2026-01-01T00:00:00.000Z'},expect.objectContaining({actor:{userId:'usr_actual',tokenId:'tok_actual'},refresh:true,paramTypes:{task_id:'user',_now:'timestamp'}}));
+  const result=await executeDocumentQueries({...flow,queries:[{...query,source:'Dataset01'}]},async()=>({tables:{},catalog}),{actor:identityForUser('usr_actual', 'tok_actual'),refresh:true,now:'2026-01-01T00:00:00.000Z',bindings:{values:{task_id:'usr_saved'},types:{task_id:'user'}}});
+  expect(execute).toHaveBeenLastCalledWith(catalog,query.sql,{task_id:'usr_saved',_now:'2026-01-01T00:00:00.000Z'},expect.objectContaining({actor:identityForUser('usr_actual', 'tok_actual'),refresh:true,paramTypes:{task_id:'user',_now:'timestamp'}}));
   expect(result.state.tables.n?.rows[0]?.to).toEqual(['usr_first','usr_second']);expect(result.sourceIds).toEqual(['Dataset01']);
  });
  it('refuses truncated upstream rows before a dependent query can disguise overflow',async()=>{

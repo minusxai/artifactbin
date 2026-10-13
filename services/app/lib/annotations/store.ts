@@ -25,7 +25,7 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
 import { annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {
   anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
   type AnnotationRange, isAreaRange, isTargetRange, sourcePathToBodyPath,
@@ -295,7 +295,7 @@ function targetBelongsTo(owner: JsxElement, target: CommentTarget): boolean {
  * `stale` refusal so the live page retries with fresh coordinates.
  */
 export async function createAnnotationFor(
-  actor: TokenActor,
+  actor: AccessActor,
   artifactId: string,
   input: CreateAnnotationInput,
   author: AnnotationAuthor,
@@ -435,7 +435,7 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
  * resolved history.
  */
 /** Page only roots; replies for these roots remain one coherent conversation. */
-export async function listAnnotationPageFor(actor: TokenActor, artifactId: string,
+export async function listAnnotationPageFor(actor: AccessActor, artifactId: string,
   opts: {status: 'open' | 'resolved' | 'all'; limit: number; after?: string;author?:string}): Promise<{annotations: AnnotationWire[]; next?: string} | null> {
   const db = await getDb();
   const row = await scopedHead(db, annotationScope(actor), artifactId);
@@ -452,7 +452,7 @@ export async function listAnnotationPageFor(actor: TokenActor, artifactId: strin
 }
 
 export async function listAnnotationsFor(
-  actor: TokenActor,
+  actor: AccessActor,
   artifactId: string,
   opts?: { status?: 'open' | 'resolved' | 'all' },
 ): Promise<AnnotationWire[] | null> {
@@ -489,7 +489,7 @@ export async function annotationsWireForRow(
  * current state is idempotent. null = unknown annotation or unreachable artifact.
  */
 export async function actOnAnnotationFor(
-  actor: TokenActor,
+  actor: AccessActor,
   artifactId: string,
   annotationId: string,
   action: AnnotationAction,
@@ -584,7 +584,7 @@ export async function actOnAnnotationFor(
  * cleaned back out of the source — best-effort, through the same edit protocol
  * (a concurrent edit of that node simply wins; a stray attribute is inert).
  */
-export async function deleteAnnotationFor(actor: TokenActor, artifactId: string, annotationId: string): Promise<boolean> {
+export async function deleteAnnotationFor(actor: AccessActor, artifactId: string, annotationId: string): Promise<boolean> {
   const db = await getDb();
   const scope = annotationScope(actor);
   const reached = await scopedRow(db, scope, artifactId);

@@ -19,7 +19,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const row = await getArtifactById(id);
   if (!row) return new Response('not found', { status: 404 });
   const actor = await sessionActor(request);
-  if (!(await canReadArtifact(row, actor.viewer))) return new Response('not found', { status: 404 });
+  if (!(await canReadArtifact(row, actor))) return new Response('not found', { status: 404 });
   const datasets = row.format === 'markup' ? await datasetsForDocument(row) : [];
   return Response.json(
     {

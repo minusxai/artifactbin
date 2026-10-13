@@ -139,3 +139,4 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | File | Purpose | Run by |
 |---|---|---|
 | `scripts/compiled-backfill.ts` | Recompile selected stored document versions on a running server. | an operator, by hand |
+| `scripts/audit-author-scripts.ts` | Read-only: list live documents whose current Helmet script no longer builds (`id, visibility, version, error`, `--json`). | an operator, by hand |

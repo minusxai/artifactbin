@@ -1,6 +1,7 @@
 import { canReadArtifact, ownsArtifact } from '@/lib/artifacts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { type ArtifactHeader, type ArtifactRow, writerFor } from '@/lib/artifacts';
-import type { RoleActor, TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getLinkReadableArtifacts } from '@/lib/artifacts';
 import { compileErrorText, compileResultForRow, compiledForRow, declarationsForRow } from '@/lib/artifacts';
 import { executeDocumentQueries, executeDocumentQueriesMany, type DocumentQuerySourceMode } from '../datasets/document-queries';
@@ -9,7 +10,7 @@ import { grantContext, grantsOf, grantsPermitRead } from '@/lib/artifacts';
 import { isQueryFailure, SIGN_IN_REQUIRED, type PersonCard } from '@artifactbin/contracts';
 import { type DataflowState, imageRefData, rawUrl, isEmptyDataflow, type Row, type Scalar, EMPTY_COMPILED_DATAFLOW, type CompiledDataflow, type CompiledMutation, bindParams, bindTypes, dataRefs, importRef, mutationParams, mutationReads, mutationTargetRef, selectQueries, type ImportTables, bindMutationRequest, HOLD_MAX_BYTES, HOLD_MAX_ROWS, readerZone, VIEWER, VIEWER_ID, type MutationRequest, runLocalStateMutation, type LocalMutationResult, localTableOverrides, type DatasetColumn } from '@/lib/dataflow';
 import { validateUserWrites, userOptions, people } from '@/lib/datasets/user-fields';
-import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from '@/lib/artifacts';
+import { can, refusalFor, type CapabilityRefusal } from '@/lib/artifacts';
 import { pinMutationContext, type MutationReceipt } from '@/lib/artifacts';
 import { notificationContextSnapshot } from '../notifications/context';
 import type { MutationNotificationJobInput, MutationInitiator } from '@artifactbin/contracts';
@@ -54,7 +55,7 @@ type DocumentMutationOutcome =
 export async function runDocumentMutation(
   doc: ArtifactRow,
   request: MutationRequest,
-  actor: RoleActor = {userId:null,tokenId:null},
+  actor: AccessActor = ANONYMOUS_ACTOR,
   receipt?: MutationReceipt,
 ): Promise<DocumentMutationOutcome> {
   if (doc.format !== 'markup' || !doc.source) return { ok: false, reason: 'unknown_mutation' };
@@ -85,14 +86,13 @@ export async function runDocumentMutation(
    * come through here, and the same one `mutationAccessFor` previews for the
    * button; this is only about the ORDER the three checks run in.
    */
-  const me: CapabilityActor = { userId: actor.userId ?? null, tokenId: actor.tokenId ?? null };
-  if (readsViewer(m) && !(await can(me, 'write_as_me', doc))) {
+  if (readsViewer(m) && !(await can(actor, 'write_as_me', doc))) {
     // ANONYMOUS keeps the answer it always had: there is no identity to refuse,
     // only a statement that needs a person, and the code is what draws the
     // door. A guest or a test user HAS an identity, and the honest answer names
     // it — the sign-in door for one, the sandbox for the other.
-    return me.userId
-      ? { ok: false, reason: 'policy_denied', detail: '$_me.id writes belong to the person signed in; this credential may not make them here', code: SIGN_IN_REQUIRED, capability: await refusalFor(me, doc.id) }
+    return actor.userId
+      ? { ok: false, reason: 'policy_denied', detail: '$_me.id writes belong to the person signed in; this credential may not make them here', code: SIGN_IN_REQUIRED, capability: await refusalFor(actor, doc.id) }
       : { ok: false, reason: 'policy_denied', detail: '$_me.id requires a logged-in user', code: SIGN_IN_REQUIRED };
   }
 
@@ -207,7 +207,7 @@ export async function dataflowForRow(
       const allowed:string[]=[];
       for(const ref of refs) {
         const id=ref==='current'?row.id:ref.slice(4), scope=await getArtifactById(id);
-        if(scope&&(ownsArtifact(scope,{tokenId:viewer?.tokenId??null,userId:viewer?.userId??null})||await canReadArtifact(scope,viewer?.userId?{userId:viewer.userId,email:viewer.email??null}:null)))allowed.push(`ref:${id}`);
+        if(scope&&(ownsArtifact(scope,viewer??ANONYMOUS_ACTOR)||await canReadArtifact(scope,viewer??ANONYMOUS_ACTOR)))allowed.push(`ref:${id}`);
       }
       return {...column,constraints:{...column.constraints,memberOf:allowed}};
     };
@@ -272,12 +272,12 @@ export async function dataflowRunsForRow(
  * reasons keeps saying so, and only the reader who could proceed by signing in
  * is asked to.
  */
-async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state: DataflowState, viewer: RoleActor | null): Promise<Record<string,string|null>> {
+async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state: DataflowState, viewer: AccessActor | null): Promise<Record<string,string|null>> {
   // ONE capability question for the whole document, asked once: may this
   // reader write as themselves here at all? A guest is answered exactly as an
   // anonymous reader is — with the code the page turns into `<SignIn>` — so the
   // button a guest sees is the door rather than a control that will refuse.
-  const me: CapabilityActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null };
+  const me = viewer ?? ANONYMOUS_ACTOR;
   const meRefusal = await can(me, 'write_as_me', doc) ? null : (await refusalFor(me, doc.id)).body.hint ?? SIGN_IN_REQUIRED;
   const guestOf = (m: CompiledMutation, answer: string|null): string|null =>
     answer === null && readsViewer(m) && meRefusal ? meRefusal : answer;
@@ -285,7 +285,7 @@ async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state
     if(readsViewer(m) && meRefusal)return [m.name,meRefusal];
     const ref=mutationTargetRef(flow,m);
     if(!ref)return [m.name,guestOf(m,null)];
-    const actor=viewer??{userId:null,tokenId:null};
+    const actor=me;
     const candidate=await getArtifactById(ref);
     const dataset=candidate&&grantsOf(candidate)?candidate:await getArtifactFor(writerFor(doc),ref);
     if(dataset&&grantsOf(dataset)){
@@ -368,7 +368,7 @@ interface DataflowRunOptions {
    * that is exactly the point: reach is the document owner's, the rows are the
    * viewer's. Absent = anonymous.
    */
-  viewer?: RoleActor | null;
+  viewer?: AccessActor | null;
   /** The reader's zone (`$_tz`); UTC when absent. */
   tz?: string;
   values?: Record<string, Scalar>;
@@ -396,14 +396,14 @@ export type ImportCache = Map<string, Promise<RefData | null>>;
 type RefData = { tables: ImportTables[string]; catalog?: import('@/lib/datasets/types').DatasetCatalog };
 
 /** A resolved ref row → its data, under the viewer whose run this is. */
-export async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null, document?:ArtifactRow, loadRows=true): Promise<RefData | null> {
+export async function tableForRef(r: ArtifactRow | null, viewer: AccessActor | null, document?:ArtifactRow, loadRows=true): Promise<RefData | null> {
   if (!r) return null;
   if (r.format === 'folder') {
     if (!loadRows) return {tables:{}};
-    return { tables: { rows: await childrenTableFor(r, { userId: viewer?.userId ?? null, email: viewer?.email ?? null, tokenId: viewer?.tokenId ?? null }) } };
+    return { tables: { rows: await childrenTableFor(r, viewer) } };
   }
   if (r.format !== 'dataset') return null; // wrong kind → the query reports the missing table
-  if(grantsOf(r)&&!(await grantsPermitRead(r,viewer??{userId:null,tokenId:null},document)))return null;
+  if(grantsOf(r)&&!(await grantsPermitRead(r,viewer??ANONYMOUS_ACTOR,document)))return null;
   const catalog=catalogOf(r);
   if(!catalog)return null; // missing storage is unavailable data, never an empty computed source
   if(!loadRows||catalog.kind==='postgres')return { tables: {}, catalog };
@@ -416,7 +416,7 @@ export async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | nul
  * anything link-readable — render-time must resolve whatever the publish door
  * admitted (getLinkReadableArtifact), or an accepted ref serves broken. The
  * VIEWER is separate and rides through: reach is the document's, rows are theirs. */
-const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): DatasetResolver => async (id,mode) =>
+const datasetResolverForRow = (row: ArtifactRow, viewer: AccessActor | null): DatasetResolver => async (id,mode) =>
   tableForRef(await importedArtifactFor(row, id), viewer, row, mode===undefined||mode==='import');
 
 /** The artifact a document's import names, by the document's own reach. */
@@ -436,11 +436,11 @@ const importedArtifactFor = async (row: ArtifactHeader, id: string): Promise<Art
  * carry no row-level rules today (a read grant is the whole dataset), so the
  * dataset's rows are exactly what the viewer may read.
  */
-async function holdableDataset(row: ArtifactHeader, ref: string, viewer: RoleActor | null): Promise<import('@/lib/datasets/types').DatasetCatalog | null> {
+async function holdableDataset(row: ArtifactHeader, ref: string, viewer: AccessActor | null): Promise<import('@/lib/datasets/types').DatasetCatalog | null> {
   const dataset = await importedArtifactFor(row, ref);
   if (!dataset || dataset.format !== 'dataset') return null;
-  const reader: RoleActor = viewer ?? { userId: null, tokenId: null };
-  if (!ownsArtifact(dataset, reader) && !(await canReadArtifact(dataset, reader.userId ? { userId: reader.userId, email: reader.email ?? null } : null))) return null;
+  const reader = viewer ?? ANONYMOUS_ACTOR;
+  if (!ownsArtifact(dataset, reader) && !(await canReadArtifact(dataset, reader))) return null;
   // The document-scoped read grant a run applies (tableForRef), for this reader.
   if (grantsOf(dataset) && !(await grantsPermitRead(dataset, reader, row))) return null;
   const catalog = catalogOf(dataset);
@@ -474,7 +474,7 @@ export async function importsFingerprint(row: ArtifactRow, flow: CompiledDataflo
   return JSON.stringify(parts);
 }
 
-async function heldImportFor(row: ArtifactRow, flow: CompiledDataflow, name: string, viewer: RoleActor | null): Promise<ImportTables[string] | null> {
+async function heldImportFor(row: ArtifactRow, flow: CompiledDataflow, name: string, viewer: AccessActor | null): Promise<ImportTables[string] | null> {
   const ref = importRef(flow, name);
   const catalog = ref ? await holdableDataset(row, ref, viewer) : null;
   return catalog ? importedRows(catalog) : null;
@@ -486,7 +486,7 @@ async function heldImportFor(row: ArtifactRow, flow: CompiledDataflow, name: str
  * dataset's rows: sizes come from storedRowStats, and a dataset imported
  * under several names is decided once.
  */
-export async function holdableImports(row: ArtifactHeader, flow: CompiledDataflow, viewer: RoleActor | null): Promise<string[]> {
+export async function holdableImports(row: ArtifactHeader, flow: CompiledDataflow, viewer: AccessActor | null): Promise<string[]> {
   const byRef = new Map<string, Promise<unknown>>();
   const held = await Promise.all(flow.imports.map(async (i) => {
     if (!byRef.has(i.ref)) byRef.set(i.ref, holdableDataset(row, i.ref, viewer));
@@ -496,7 +496,7 @@ export async function holdableImports(row: ArtifactHeader, flow: CompiledDataflo
 }
 
 /** One import's rows for this reader, or null when they may not hold it (the query route's `hold`). */
-export async function holdImport(row: ArtifactRow, name: string, viewer: RoleActor | null): Promise<ImportTables[string] | null> {
+export async function holdImport(row: ArtifactRow, name: string, viewer: AccessActor | null): Promise<ImportTables[string] | null> {
   const flow = (await declarationsForRow(row))?.flow;
   return flow ? heldImportFor(row, flow, name, viewer) : null;
 }
@@ -513,7 +513,7 @@ export async function holdImport(row: ArtifactRow, name: string, viewer: RoleAct
  * Without `ids`, everyone in that set: the offline file, which can ask nobody
  * later, carries them all (lib/offline/assemble.server).
  */
-export async function nameablePeople(row: ArtifactRow, viewer: RoleActor | null, ids?: string[]): Promise<Record<string, PersonCard>> {
+export async function nameablePeople(row: ArtifactRow, viewer: AccessActor | null, ids?: string[]): Promise<Record<string, PersonCard>> {
   const wanted = ids ? new Set(ids) : null, allowed = new Set<string>();
   if (viewer?.userId && (!wanted || wanted.has(viewer.userId))) allowed.add(viewer.userId);
   const flow = row.format === 'markup' ? (await declarationsForRow(row))?.flow : undefined;
@@ -535,7 +535,7 @@ export async function nameablePeople(row: ArtifactRow, viewer: RoleActor | null,
 }
 
 /** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */
-export const datasetResolverForActor = (actor: TokenActor): DatasetResolver => async (id,mode) =>
+export const datasetResolverForActor = (actor: AccessActor): DatasetResolver => async (id,mode) =>
   tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { ...actor },undefined,mode===undefined||mode==='import');
 
 /** The rows of the named imports, resolved; an import that does not resolve is left out, and its readers report the missing table. */

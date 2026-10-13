@@ -2,13 +2,13 @@
 import { executeCatalog } from '@/lib/datasets/execute';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { DatasetCatalog } from '@/lib/datasets/types';
-import type { RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { type CompiledDataflow, importRef, selectQueries, type ImportTables, type Scalar } from '@/lib/dataflow';
 import { runDataflow, runDataflowMany, type RunDataflowOptions } from '../sql/run-dataflow';
 export type DocumentQuerySource = { tables: ImportTables[string]; catalog?: DatasetCatalog };
 export type DocumentQuerySourceMode = 'import' | 'catalog' | 'verify';
 interface DocumentQueryOptions extends RunDataflowOptions {
-  actor?: RoleActor;
+  actor?: AccessActor;
   signal?: AbortSignal;
   refresh?: boolean;
   /** An authority-aware caller supplies its own schema fence; ordinary reads also pin catalog definitions. */

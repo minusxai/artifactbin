@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
-import {createUser,mintToken,resolveToken} from '@/lib/accounts';
+import { identityForUser, createUser,mintToken,resolveToken} from '@/lib/accounts';
 import {createTestUser} from '@/lib/accounts/testusers';
 import {canAuthenticateUser} from '@/lib/accounts/user-kinds';
 import {getDb} from '@/lib/platform/db';
@@ -14,7 +14,7 @@ describe('company delegated test identities',()=>{
   overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:'owner@example.com'});
   const parent=await createUser({email:'owner@example.com'});const parentToken=await mintToken('parent',parent.id);
   await admitDeploymentIdentity({userId:parent.id,email:parent.email!,emailVerified:true});
-  const child=await createTestUser({userId:parent.id,tokenId:parentToken.id});if(!child.ok)throw Error(child.error);
+  const child=await createTestUser(identityForUser(parent.id, parentToken.id));if(!child.ok)throw Error(child.error);
   expect(await canAuthenticateUser(child.id)).toBe(true);
   expect(await canUseDeploymentIdentity(child.id)).toBe(false);
   const group=await createGroup(parent.id,{handle:'delegation',name:'Delegation'});await setupDeployment(parent.id,group.id);

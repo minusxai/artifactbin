@@ -13,6 +13,8 @@ export interface PreparedStoryRuntime {
   compiledCss: string | null;
   authorCss: string | null;
   authorScript: string | null;
+  /** The builder's messages when the version's Helmet script does not build (`authorScript` is then null); absent otherwise. */
+  authorScriptErrors?: string[];
   theme: StoryDesignName | null;
   /**
    * How `baseCss` was built: the Helmet's font slots and the design system's sheet text. With `theme`,

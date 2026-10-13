@@ -6,7 +6,7 @@ import { accountWorkspaceFor, accountWorkspaceCoreFor, accountWorkspaceInsightsF
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
-  const user = actor.credential === 'session' && actor.viewer?.userId ? actor.viewer : null;
+  const user = actor.credential === 'session' && actor.userId ? actor : null;
   const part = new URL(request.url).searchParams.get('part');
   const groupId=new URL(request.url).searchParams.get('groupId')??undefined;
   if (part === 'bootstrap') {

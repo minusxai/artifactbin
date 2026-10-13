@@ -14,8 +14,8 @@ import { runOperation } from '@/lib/operations/http';
  * chooses itself is what makes two of them tellable apart, and a lifetime the
  * caller could set is a lifetime somebody sets to a year.
  */
-export const POST = withTokenAuth(async (request, { tokenId, userId }) =>
-  runOperation('testuser_create', request, { tokenId, userId }, {}));
+export const POST = withTokenAuth(async (request, { actor }) =>
+  runOperation('testuser_create', request, actor, {}));
 
-export const GET = withTokenAuth(async (request, { tokenId, userId }) =>
-  runOperation('testuser_list', request, { tokenId, userId }, {}), { readOnly: true });
+export const GET = withTokenAuth(async (request, { actor }) =>
+  runOperation('testuser_list', request, actor, {}), { readOnly: true });

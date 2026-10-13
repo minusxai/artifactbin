@@ -11,14 +11,14 @@ import {ACCOUNT_OPERATIONS} from './account';
 import {SESSION_OPERATIONS} from './sessions';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
-import { resolveTestUser } from '@/lib/accounts';
+import { identityForUser, resolveTestUser, withAccountToken } from '@/lib/accounts';
 import { CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, MARKUP_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';
 import { createArtifactFromBody, forkArtifact, forkDatasetPreview, forkRefusal, refreshAssetsFor, replaceArtifactWithBody, type ForkOverrides } from '@/lib/publish/publish';
 import {parseArtifactDestination,transferArtifact} from '@/lib/artifacts';
 import {DatasetError} from '@/lib/datasets/errors';
@@ -43,7 +43,7 @@ export interface OpContext {
   /** App-attested authority binding; never operation input or caller headers. */
   requestScope?:string;
   mutationReceipt?:MutationReceipt;
-  actor: TokenActor;
+  actor: AccessActor;
   /** The caller's own origin — every `url` in a reply is built from it. */
   base: string;
   /** The transport request passed through to the publish pipeline. */
@@ -82,9 +82,9 @@ export interface Operation {
  * a live credential to act through.
  */
 export async function forkOwner(
-  actor: TokenActor,
+  actor: TokenHoldingActor,
   as: unknown,
-): Promise<{ actor: TokenActor; testuser?: string } | { status: number; error: string; message: string }> {
+): Promise<{ actor: TokenHoldingActor; testuser?: string } | { status: number; error: string; message: string }> {
   if (as === undefined || as === null) return { actor };
   const named = (as as { testuser?: unknown }).testuser;
   if (typeof named !== 'string' || !named) {
@@ -97,7 +97,8 @@ export async function forkOwner(
   if (resolved === TESTUSER_ERRORS.notYours) {
     return { status: 403, error: TESTUSER_ERRORS.notYours, message: `${named} is not one of your live test users. List them with testuser_list, or mint one with testuser_create.` };
   }
-  return { actor: { tokenId: resolved.tokenId, userId: resolved.id }, testuser: resolved.id };
+  // The parent acts AS its test user: that user's own principal, never the parent's verified claims.
+  return { actor: identityForUser(resolved.id, resolved.tokenId), testuser: resolved.id };
 }
 
 /** A lib pipeline already answers a Response; an OpReply is that, transport-free. */
@@ -210,7 +211,9 @@ const createArtifactOp: Operation = {
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
-    return fromResponse(await createArtifactFromBody(input, ctx.actor, ctx.base, ctx.request));
+    const creator = await withAccountToken(ctx.actor);
+    if (!creator) return reply({ error: 'unauthorized' }, 401);
+    return fromResponse(await createArtifactFromBody(input, creator, ctx.base, ctx.request));
   },
 };
 
@@ -542,8 +545,7 @@ const exportArtifactOp: Operation = {
     // The URL's own rule, readable = exportable, applied to the tool's actor:
     // the publishing token reaches its own document directly; a claimed
     // token's account reaches whatever the account may read.
-    const viewer = ctx.actor.userId ? { userId: ctx.actor.userId, email: null } : null;
-    const authorized = ctx.actor.tokenId === artifact.token_id || (await canReadArtifact(artifact, viewer));
+    const authorized = ctx.actor.tokenId === artifact.token_id || (await canReadArtifact(artifact, ctx.actor));
     if (!authorized) return reply({ error: 'not_found' }, 404);
     void trackEvent('export', artifact.id, { userId: ctx.actor.userId ?? null });
     const res = await exportImageResponse(artifact, {
@@ -632,8 +634,7 @@ const forkArtifactOp: Operation = {
     // The export operation's rule, for the same reason: the publishing token
     // reaches its own artifact directly, an account reaches whatever it may
     // read. Unreachable and unknown are one answer.
-    const viewer = ctx.actor.userId ? { userId: ctx.actor.userId, email: null } : null;
-    if ((!!source.group_id || ctx.actor.tokenId !== source.token_id) && !(await canReadArtifact(source, viewer))) {
+    if ((!!source.group_id || ctx.actor.tokenId !== source.token_id) && !(await canReadArtifact(source, ctx.actor))) {
       return reply({ error: 'not_found' }, 404);
     }
 
@@ -646,7 +647,9 @@ const forkArtifactOp: Operation = {
     // copy: `as` naming a test user that is not yours, or one that has expired,
     // must refuse the PREFLIGHT too — otherwise a caller is told what a fork
     // would copy and then refused when it asks for it.
-    const owner = await forkOwner(ctx.actor, input.as);
+    const forker = await withAccountToken(ctx.actor);
+    if (!forker) return reply({ error: 'unauthorized' }, 401);
+    const owner = await forkOwner(forker, input.as);
     if ('error' in owner) return reply({ error: owner.error, message: owner.message }, owner.status);
 
     // Asked and answered: what a fork WOULD copy, before anything exists to
@@ -656,10 +659,10 @@ const forkArtifactOp: Operation = {
     if (input.dry_run === true) {
       const unforkable = forkRefusal(source);
       if (unforkable) return fromResponse(unforkable);
-      return { status: 200, body: { datasets: await forkDatasetPreview(ctx.actor, source, owner.actor), ...(owner.testuser ? { owner: owner.testuser } : {}) } };
+      return { status: 200, body: { datasets: await forkDatasetPreview(forker, source, owner.actor), ...(owner.testuser ? { owner: owner.testuser } : {}) } };
     }
 
-    const copy = await forkArtifact(ctx.actor, source, overrides, owner.actor);
+    const copy = await forkArtifact(forker, source, overrides, owner.actor);
     if (copy instanceof Response) return fromResponse(copy);
     return { status: 201, body: { ...createdArtifactWire(copy.artifact, ctx.base, undefined), forked_from: source.id, datasets: copy.datasets, ...(owner.testuser ? { owner: owner.testuser } : {}) } };
   },

@@ -21,7 +21,7 @@ import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { artifactQuotaExceeded, getArtifactById } from '@/lib/artifacts';
 import { setArtifactQuotaForTests } from '@/lib/artifacts/store';
 import { sweepTestUsers } from '@/lib/operations/testuser-erase';
-import { noteTestUserSession, testUserSessionCount, createTestUser, listTestUsers } from '@/lib/accounts';
+import { identityForUser, noteTestUserSession, testUserSessionCount, createTestUser, listTestUsers } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { resolveTokenById } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -40,7 +40,7 @@ async function account(name: string) {
 }
 
 async function testUserOf(owner: { tokenId: string; userId: string }) {
-  const minted = await createTestUser(owner);
+  const minted = await createTestUser(identityForUser(owner.userId, owner.tokenId));
   if (!minted.ok) throw new Error(minted.error);
   return minted;
 }

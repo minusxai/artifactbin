@@ -9,11 +9,11 @@ import { request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute, DELETE as deleteRoute } from '@/app/api/artifacts/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { AccessActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { resolveToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { claimToken, createUser, identityForUser } from '@/lib/accounts';
 import { listTrashFor, restoreArtifactFor } from '@/lib/workspace';
 import { createAppServer } from '@/server/app';
 
@@ -24,7 +24,8 @@ async function owner() {
   const u = await createUser({ email: 'o@example.com' });
   const t = await mintToken('o', u.id);
     await claimToken(u.id, t.token);
-  const actor = (await resolveToken(t.token)) as unknown as TokenActor;
+  const resolved = (await resolveToken(t.token))!;
+  const actor: AccessActor = identityForUser(resolved.userId, resolved.id);
   return { token: t.token, actor };
 }
 const create = async (token: string, body: Record<string, unknown>) => { const r = await j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token }))); expect(r.status, JSON.stringify(r.body)).toBe(201); return r.body; };

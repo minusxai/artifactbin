@@ -8,8 +8,8 @@ import { json, readJson } from '@/lib/http';
  * INSERT/UPDATE/DELETE against a dataset they own (lib/artifact-wire
  * respondToMutate holds the semantics and the refusals).
  */
-export const POST = withTokenAuth(async (request: Request, { tokenId, userId, params }) => {
+export const POST = withTokenAuth(async (request: Request, { actor, params }) => {
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
-  return runOperation('mutate_dataset', request, { tokenId, userId }, { ...body, id: params.id });
+  return runOperation('mutate_dataset', request, actor, { ...body, id: params.id });
 });

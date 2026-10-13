@@ -10,43 +10,31 @@
  * Creation requires an email account session or its approved CLI bearer.
  * No browser ownership cookie or bearer is issued by this route.
  */
-import { auth } from '@/auth';
 import { createArtifact } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/serving';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
 import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
-import { resolveToken } from '@/lib/accounts';
 import {canUseDeploymentIdentity} from '@/lib/deployment';
 import { canAuthenticateUser } from '@/lib/accounts';
-import { sessionActor } from '@/lib/accounts';
+import { requestOrSessionActor, sessionActor, withAccountToken } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/publish/document/input';
 import {parseArtifactDestination} from '@/lib/artifacts';
 import {DatasetError} from '@/lib/datasets/errors';
 
 export async function POST(request: Request) {
-  // A browser session takes precedence over an approved CLI bearer.
-  // auth() can throw synchronously outside a request context.
-  let userId: string | null = null;
-  try {
-    userId = (await auth())?.user?.id ?? null;
-  } catch {
-    userId = null;
-  }
-
-  const offered = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
-  const bearer = offered ? await resolveToken(offered) : null;
-  const actor = bearer ? null : await sessionActor(request);
-  const ownerId = userId ?? bearer?.userId ?? actor?.viewer?.userId ?? null;
-  const existingTokenId = bearer?.id ?? actor?.tokenId ?? '';
-  if (!await canUseDeploymentIdentity(ownerId)||!await canAuthenticateUser(ownerId)) return unauthorized(request);
-  const tokenId = existingTokenId;
+  // A browser session takes precedence over an approved CLI bearer; both are the one request identity
+  // (lib/accounts request-identity). A session creates through the account's own token, as every browser create does.
+  const session = await sessionActor(request);
+  const actor = session.credential === 'session' ? session : await requestOrSessionActor(request);
+  const creator = actor.userId ? await withAccountToken(actor) : null;
+  if (!creator || !await canUseDeploymentIdentity(creator.userId) || !await canAuthenticateUser(creator.userId)) return unauthorized(request);
   const parsed = await parseContentInput({ markup: new URL(request.url).searchParams.get('mode') === 'blank' ? BLANK_REPORT_MARKUP : START_PLACEHOLDER_MARKUP }, {});
   if (parsed instanceof Response) return parsed; // unreachable: both starting documents are fixed and valid
 
   const body = await readJson(request, {allowEmpty:true});
   if (!body) return json({error:'invalid_json'},400);
   let row: Awaited<ReturnType<typeof createArtifact>>;
-  try { row = await createArtifact(tokenId, ownerId, {
+  try { row = await createArtifact(creator.tokenId, creator.userId, {
     ...parsed,
     destination: parseArtifactDestination(body.destination),
     // NULL, not 'Untitled': unnamed must stay distinguishable from named-that,

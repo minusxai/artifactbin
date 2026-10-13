@@ -2,7 +2,7 @@
  * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
 import { trackEvent } from '@/lib/platform';
 import { archivedVersionFor, servedRow } from '@/lib/serving';
-import { canReadArtifact, getArtifactById, refusingUnservable, roleFor } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, refusingUnservable, effectiveRole } from '@/lib/artifacts';
 import { requestOrSessionActor } from '@/lib/accounts';
 import { exportImageResponse } from '@/lib/export';
 import { baseUrl, json } from '@/lib/http';
@@ -29,8 +29,7 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
   // hold, an unfurler with neither. Direct token ownership counts — an
   // unclaimed token's doc has no viewer.userId to match.
   const actor = await requestOrSessionActor(request);
-  const { viewer, tokenId } = actor;
-  const authorized = tokenId === artifact.token_id || (await canReadArtifact(artifact, viewer));
+  const authorized = actor.tokenId === artifact.token_id || (await canReadArtifact(artifact, actor));
   if (!authorized) return json({ error: 'not_found' }, 404);
   const q = new URL(request.url).searchParams;
   /*
@@ -45,13 +44,13 @@ async function exportArtifact(request: Request, ctx: { params: Promise<{ id: str
   if (at === 'not_found') return json({ error: 'not_found' }, 404);
   // The framing overview is editing chrome, not a public export surface.
   if (q.get('mode') === 'preview') {
-    if (artifact.format !== 'markup' || !canEdit(await roleFor(artifact, actor))) {
+    if (artifact.format !== 'markup' || !canEdit(await effectiveRole(artifact, actor))) {
       return json({ error: 'not_found' }, 404);
     }
   }
   // Post-ACL, pre-render: an export event is "an authorized image was asked
   // for" (link unfurls land here), whether or not the shot succeeds.
-  void trackEvent('export', artifact.id, { userId: viewer?.userId ?? null });
+  void trackEvent('export', artifact.id, { userId: actor.userId });
 
   // `search` carries the reader's `<Value>` picks straight through to the page
   // this shoots (lib/dataflow/url-values) — the raw route is the one door that

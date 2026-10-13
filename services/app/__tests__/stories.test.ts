@@ -17,8 +17,9 @@ import { applyEditFor,getArtifactById } from '@/lib/artifacts';
 
 import { parseContentInput } from '@/lib/publish/document/input';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 
 const harness = useAppHarness();
 
@@ -58,6 +59,9 @@ describe('retired themes on stored rows', () => {
         request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<h1>Legacy</h1>', theme: 'modernist' } }),
       )
     ).json();
+    // The publish warms its prepared page in the background; let it land first, or it can store the
+    // fresh modernist page after the rewrite below and serve that instead of the legacy row.
+    await drainPreparedPageWarmups();
     // Shape the row like a document published before the retirement: the old
     // theme name and a sheet compiled under the old registry (stale version).
     const db = await harness.db();
@@ -122,7 +126,7 @@ describe('document editing', () => {
     const parsed = await parseContentInput({ markup: '<h1>Edited</h1>', theme: 'organic' });
     if (parsed instanceof Response) throw new Error('parse failed');
     const prepared=documentEdit((await getArtifactById(created.id))!,{source:parsed.source!,metadata:{theme:'organic'},whole:true});
-    const result=await applyEditFor({tokenId:'',userId:user.id},created.id,prepared);
+    const result=await applyEditFor(identityForUser(user.id, ''),created.id,prepared);
     if(!result||result instanceof Response||!result.applied)throw new Error('replace failed');
     const row=result.row;
     expect(row?.version).toBe(2);
@@ -130,7 +134,7 @@ describe('document editing', () => {
     expect(row?.source).toMatch(/<h1\s[^>]*id="[^"]+"[^>]*>/);
 
     const other = await createUser({ email: 'other@x.com' });
-    expect(await applyEditFor({ tokenId:'',userId:other.id },created.id,prepared)).toBeNull();
+    expect(await applyEditFor(identityForUser(other.id, ''),created.id,prepared)).toBeNull();
   });
 
   it('preview compiles the document tier without persisting (bearer auth)', async () => {

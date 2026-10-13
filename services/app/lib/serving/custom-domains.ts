@@ -29,7 +29,7 @@ import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLI
 import { urlHash, collectExternalAssetUrls } from '@/lib/document';
 import { getDb } from '@/lib/platform/db';
 import { canonicalArtifactPath, domainPostPath } from '@/lib/http/urls';
-import { ownerUsername } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, ownerUsername } from '@/lib/accounts';
 
 type DomainStatus = 'pending' | 'verified';
 /** One CAA property, as `tag value` (`issue letsencrypt.org`). `critical` is the issuer-critical flag. */
@@ -448,7 +448,7 @@ export async function domainPath(ownerId: string, path: string): Promise<{ artif
  * images. Nothing else's bytes are reachable on the host, markup included.
  */
 export async function servesEmbeddedArtifact(ownerId: string, row: ArtifactRow): Promise<boolean> {
-  if (!EMBEDDED_FORMATS.has(row.format) || !(await canReadArtifact(row, null))) return false;
+  if (!EMBEDDED_FORMATS.has(row.format) || !(await canReadArtifact(row, ANONYMOUS_ACTOR))) return false;
   const db = await getDb();
   const referencing = await db.query(
     `SELECT 1 FROM artifacts WHERE ${OWNER_POSTS_SQL} AND meta->'refs' @> $2::jsonb LIMIT 1`,

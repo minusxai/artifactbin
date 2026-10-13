@@ -13,7 +13,7 @@ import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
 import {POST as revertArtifact} from '@/app/api/artifacts/[id]/revert/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { DATASET_OPERATIONS } from '@/lib/operations/datasets';
 import { request, useAppHarness } from './harness';
 
@@ -100,10 +100,21 @@ it('binds a secret only to a dataset the caller can edit, through the route and 
   const refused = await createSecret(request('/api/my/secrets',{method:'POST',token:stranger.token.token,json:{value:'stranger-password',connection:target,datasetId:id}}));
   expect(refused.status).toBe(404);
   const operation = DATASET_OPERATIONS.find(op=>op.name==='create_dataset_secret')!;
-  const viaOperation = await operation.run({actor:{userId:stranger.user.id,tokenId:stranger.token.id}} as never,{value:'stranger-password',connection:target,datasetId:id});
+  const viaOperation = await operation.run({actor:identityForUser(stranger.user.id, stranger.token.id)} as never,{value:'stranger-password',connection:target,datasetId:id});
   expect(viaOperation.status).toBe(404);
   expect(await bound()).toBe(before);
   const allowed = await createSecret(request('/api/my/secrets',{method:'POST',token:owner.token.token,json:{value:'owner-password',connection:target,datasetId:id}}));
   expect(allowed.status).toBe(201);
   expect(await bound()).toBe(before+1);
+});
+
+it('stores a secret for an account SESSION, charged to the account token and owned by the account', async () => {
+  const owner = await actor('session');
+  const session = { credential: 'session' as const, userId: owner.user.id, email: owner.user.email!, emailVerified: true };
+  const response = await createSecret(request('/api/my/secrets', { method: 'POST', origin: 'same', actor: session, json: { value: 'session-password', connection: target } }));
+  expect(response.status, await response.clone().text()).toBe(201);
+  const { secret } = await response.json() as { secret: { id: string } };
+  const row = (await (await harness.db()).query<{ token_id: string; user_id: string }>('SELECT token_id,user_id FROM dataset_secrets WHERE id=$1', [secret.id])).rows[0]!;
+  expect(row.user_id).toBe(owner.user.id);
+  expect((await (await harness.db()).query('SELECT 1 FROM tokens WHERE id=$1 AND user_id=$2', [row.token_id, owner.user.id])).rows).toHaveLength(1);
 });

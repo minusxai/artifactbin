@@ -14,6 +14,7 @@ import { generateTokenId } from '../platform/ids';
 import type { Harness } from '@/lib/platform';
 import { canAuthenticateUser } from './user-kinds';
 import { currentRequest } from '../platform/request-context';
+import type { AccessActor } from './actors';
 
 const TOKEN_PREFIX = 'mx_';
 
@@ -39,7 +40,7 @@ export const LIVE_TOKEN_SQL = 'tokens.deleted_at IS NULL AND (tokens.expires_at 
  * forgets the request's answers, so a request that revokes a token never reads its own stale "live".
  */
 const requestAnswers = new WeakMap<Request, Map<string, Promise<unknown>>>();
-function answeredOnce<T>(key: string, ask: () => Promise<T>): Promise<T> {
+export function answeredOnce<T>(key: string, ask: () => Promise<T>): Promise<T> {
   const request = currentRequest();
   if (!request) return ask();
   let answers = requestAnswers.get(request);
@@ -178,6 +179,15 @@ export async function ensureUserToken(userId: string): Promise<string> {
   return (await mintToken('web', userId, undefined, { expiresInMs: null })).id;
 }
 
+/**
+ * The actor, holding a token: its own when it presented one, else the account's 'web' token (an account
+ * session creates through that, `ensureUserToken`). Null for nobody — there is no one to charge a row to.
+ */
+export async function withAccountToken<T extends AccessActor>(actor: T): Promise<(T & { tokenId: string }) | null> {
+  if (actor.tokenId) return { ...actor, tokenId: actor.tokenId };
+  return actor.userId ? { ...actor, tokenId: await ensureUserToken(actor.userId) } : null;
+}
+
 interface ResolvedToken {
   id: string;
   userId: string | null;
@@ -251,7 +261,7 @@ export async function revokeToken(id: string): Promise<boolean> {
  * Stamp `last_used_at` for a token the app just trusted. SAMPLED: the row is written only when the
  * stamp is NULL or older than TOUCH_INTERVAL_MS, so a busy agent costs one UPDATE a minute, not one per
  * request. Never throws to the caller — attribution, not authorization. Called once per request from the
- * place the app first trusts a token-bearing actor (lib/viewer), in BOTH shapes: the in-process resolvers
+ * place the app first trusts a token-bearing actor (lib/accounts/request-identity), in BOTH shapes: the bearer it resolves
  * and the actor the proxy attaches (the proxy's reader is SELECT-only and cannot stamp).
  */
 export const TOUCH_INTERVAL_MS = 60 * 1000;

@@ -1,11 +1,11 @@
 /** Shared namespace for reserved and normally created identities. */
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {getDb,type Queryable} from '../platform/db';
 import {generateFileId} from '../platform/ids';
 import {CreationReplay} from './creation-ledger';
-import { matchesWorkspaceAccount } from '../accounts';
-const owner=(actor:TokenActor)=>actor.userId??actor.tokenId;
-export async function reserveIds(actor:TokenActor,batch:string,workspaceAccount?:string|null):Promise<string[]>{
+import { accountOf, matchesWorkspaceAccount } from '../accounts';
+const owner=accountOf;
+export async function reserveIds(actor:AccessActor,batch:string,workspaceAccount?:string|null):Promise<string[]>{
  if(!/^[A-Za-z0-9_-]{16,128}$/.test(batch))throw new CreationReplay({status:400,body:{error:'invalid_batch'}});
  // Preserve the original guest batch namespace after verified adoption, even
  // when the account already allocated a different pool with the same nonce.
@@ -36,7 +36,7 @@ export async function reserveIds(actor:TokenActor,batch:string,workspaceAccount?
  * already knows how to consume. A rolled-back creation leaves its reservations
  * behind unconsumed, which costs one registry row and reveals nothing.
  */
-export async function reserveArtifactIds(actor:TokenActor,count:number):Promise<string[]>{
+export async function reserveArtifactIds(actor:AccessActor,count:number):Promise<string[]>{
  const db=await getDb();const ids:string[]=[];
  for(let attempt=0;ids.length<count&&attempt<count*20+20;attempt++){
   const id=generateFileId();
@@ -46,7 +46,7 @@ export async function reserveArtifactIds(actor:TokenActor,count:number):Promise<
  if(ids.length!==count)throw new Error('ID allocation exhausted');
  return ids;
 }
-export async function claimArtifactId(tx:Queryable,id:string,actor:TokenActor,reserved:boolean):Promise<void>{
+export async function claimArtifactId(tx:Queryable,id:string,actor:AccessActor,reserved:boolean):Promise<void>{
  if(!reserved){await tx.query('INSERT INTO artifact_id_registry(id,owner,consumed) VALUES($1,$2,true)',[id,owner(actor)]);return;}
  // Adoption authorizes the current account without rewriting the old pool's
  // owner. Check it inside the claim statement so consumption remains atomic.

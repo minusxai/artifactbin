@@ -1,4 +1,5 @@
 import {expect,it,vi,beforeEach} from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 const upstream=vi.hoisted(()=>({query:vi.fn()}));
 import {overridePostgres} from '@/lib/datasets/postgres';
 overridePostgres({query:upstream.query});
@@ -16,7 +17,7 @@ useAppHarness();
 beforeEach(()=>{upstream.query.mockReset().mockResolvedValue({rows:[{n:1}],columns:[{name:'n',type:'number'}]});});
 const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
 async function setup(){
- const token=await mintToken('cache-execute'),actor={tokenId:token.id,userId:token.userId};
+ const token=await mintToken('cache-execute'),actor=identityForUser(token.userId, token.id);
  const secret=await createDatasetSecret(actor,'fixture-pass',target);
  const catalog:DatasetCatalog={kind:'postgres',connection:{...target,passwordSecretId:secret.id},refreshSeconds:60,defaultSchema:'public',tables:[{schema:'public',name:'rows',source:{schema:'public',table:'rows'},columns:[{name:'n',type:'number'}]}]};
  const row=await createArtifact(token.id, token.userId,{format:'dataset',source:null,meta:{catalog},visibility:'public'});

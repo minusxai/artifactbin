@@ -1,4 +1,5 @@
 import {getArtifactById,getVersionFor} from '@/lib/artifacts';
+import { identityForUser } from '@/lib/accounts';
 import {documentEditBody,documentPublicationBody} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
@@ -128,7 +129,7 @@ describe('the annotation anchor', () => {
     const { t, doc, ann } = await setup();
     await put(t.token,doc.id,'<p>replacement</p>');
     expect((await list(t.token,doc.id))[0].orphaned).toBe(true);
-    const current=(await getArtifactById(doc.id))!;const archived=await getVersionFor({tokenId:t.id,userId:t.userId},doc.id,doc.version);
+    const current=(await getArtifactById(doc.id))!;const archived=await getVersionFor(identityForUser(t.userId, t.id),doc.id,doc.version);
     const back = await revertRoute(
       request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: t.token, json: documentEditBody(current,{source:archived!.source!,whole:true}) }),
       params({ id: doc.id }),
@@ -218,7 +219,7 @@ describe('annotation ops through an edit', () => {
     expect(made.status).toBe(201);
     const doc = await made.json();
     const comment = await createAnnotationFor(
-      { tokenId:token.id,userId:token.userId },
+      identityForUser(token.userId, token.id),
       doc.id,
       {
         nodeId: 'b',
@@ -290,7 +291,7 @@ describe('annotation ops through an edit', () => {
    const token=await mintToken('mxmx_test_editor_mixed');
    const response=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:MERGE_BEFORE}}));
    const doc=await response.json();
-   await createAnnotationFor({tokenId:token.id,userId:token.userId},doc.id,{nodeId:'b',body:'suffix',quote:'same',range:{v:1,parts:[{rel:'',start:5,end:9,text:'same'}]}},{kind:'human',label:'Tester',transport:'browser'});
+   await createAnnotationFor(identityForUser(token.userId, token.id),doc.id,{nodeId:'b',body:'suffix',quote:'same',range:{v:1,parts:[{rel:'',start:5,end:9,text:'same'}]}},{kind:'human',label:'Tester',transport:'browser'});
    const get=async()=> (await getArtifactRoute(request(`/api/artifacts/${doc.id}`,{token:token.token}),params({ id: doc.id }))).json();
    const head=(await getArtifactById(doc.id))!;
    const result=await replaceArtifactRoute(request(`/api/artifacts/${doc.id}`,{method:'PUT',token:token.token,json:documentPublicationBody(head,{markup:MERGE_AFTER,title:'Retitled',annotation_ops:[MERGE_OP]},true)}),params({ id: doc.id }));

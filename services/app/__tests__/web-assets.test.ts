@@ -22,7 +22,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
 import { objectStore } from '@/lib/object-store';
 import { setAssetByteQuotaForTests } from '@/lib/artifacts/asset-quota';
@@ -100,7 +100,7 @@ afterEach(() => setAssetByteQuotaForTests(null));
 
 const accountToken = async () => {
   const { id, userId } = await mintToken('t');
-  return { tokenId: id, userId };
+  return identityForUser(userId, id);
 };
 
 // Every test in this file reaches a loopback server, which the guard refuses
@@ -213,7 +213,7 @@ describe('importWebAsset', () => {
     allowLocal();
     const user = await createUser({ email: 'mxmx_test_assets@example.com' });
     const { id } = await mintToken('owned', user.id);
-    const row = await importWebAsset(`${base}/photo.png`, { tokenId: id, userId: user.id });
+    const row = await importWebAsset(`${base}/photo.png`, identityForUser(user.id, id));
     expect(row.fetched_by_user_id).toBe(user.id);
   });
 });

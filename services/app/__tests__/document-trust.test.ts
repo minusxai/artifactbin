@@ -12,7 +12,7 @@ import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { DELETE as revokeRoute, GET as trustRoute, POST as grantRoute } from '@/app/api/trust/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { cspExtensionsFor, cspRequestFor, TRUST_SESSION_COOKIE } from '@/lib/trust/document-trust';
@@ -60,10 +60,10 @@ describe('the publisher rule', () => {
     const id = await publish(owner.token, asks(METEO, PLOTLY));
     const artifact = (await getArtifactById(id))!;
 
-    expect(await cspRequestFor({ artifact, viewer: { userId: owner.userId } })).toMatchObject({ status: 'publisher', asking: EMPTY_CSP_EXTENSIONS });
-    expect(await cspExtensionsFor({ artifact, viewer: { userId: owner.userId } })).toEqual(set([METEO], [PLOTLY]));
+    expect(await cspRequestFor({ artifact, viewer: identityForUser(owner.userId) })).toMatchObject({ status: 'publisher', asking: EMPTY_CSP_EXTENSIONS });
+    expect(await cspExtensionsFor({ artifact, viewer: identityForUser(owner.userId) })).toEqual(set([METEO], [PLOTLY]));
     // The publishing token is the same publisher.
-    expect((await cspRequestFor({ artifact, viewer: { userId: null, tokenId: owner.tokenId } })).status).toBe('publisher');
+    expect((await cspRequestFor({ artifact, viewer: identityForUser(null, owner.tokenId) })).status).toBe('publisher');
     expect(await cspRequestFor({ artifact, viewer: null })).toMatchObject({ status: 'blocked', denied: false, asking: set([METEO], [PLOTLY]) });
     expect(await cspExtensionsFor({ artifact, viewer: null })).toEqual(EMPTY_CSP_EXTENSIONS);
 
@@ -81,15 +81,15 @@ describe('the publisher rule', () => {
     const artifact = (await getArtifactById(id))!;
 
     // The owner published METEO (it survived the editor's version) but not OTHER: asked about OTHER only.
-    const ownerAsk = await cspRequestFor({ artifact, viewer: { userId: owner.userId } });
+    const ownerAsk = await cspRequestFor({ artifact, viewer: identityForUser(owner.userId) });
     expect(ownerAsk).toMatchObject({ status: 'blocked', asking: set([OTHER]) });
-    expect(await cspExtensionsFor({ artifact, viewer: { userId: owner.userId } })).toEqual(set([METEO]));
+    expect(await cspExtensionsFor({ artifact, viewer: identityForUser(owner.userId) })).toEqual(set([METEO]));
     const ownerCsp = await servedCsp(id, { actor: owner.actor });
     expect(ownerCsp).toContain(METEO);
     expect(ownerCsp).not.toContain(OTHER);
 
     // The editor introduced OTHER only; METEO was the owner's, so the editor is asked about it.
-    expect(await cspRequestFor({ artifact, viewer: { userId: editor.userId } })).toMatchObject({ status: 'blocked', asking: set([METEO]) });
+    expect(await cspRequestFor({ artifact, viewer: identityForUser(editor.userId) })).toMatchObject({ status: 'blocked', asking: set([METEO]) });
 
     // The owner allows the rest for this document: everything applies.
     const always = await grant(id, 'document', { actor: owner.actor });

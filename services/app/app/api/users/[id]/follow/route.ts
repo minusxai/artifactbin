@@ -13,14 +13,14 @@ import { refusesCrossSite } from '@/lib/accounts';
 import { json, unauthorized } from '@/lib/http';
 import { count, has, link, unlink } from '@/lib/accounts';
 import { getUserById } from '@/lib/accounts';
-import { can, capabilityRefusal, type CapabilityActor } from '@/lib/artifacts';
+import { can, capabilityRefusal } from '@/lib/artifacts';
 import { userKindOf } from '@/lib/accounts';
-import { sessionActor } from '@/lib/accounts';
+import { sessionActor, type AccessActor } from '@/lib/accounts';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 /** Who is asking about which existing account — or the Response that refuses them. */
-async function opened(request: Request, ctx: Ctx): Promise<{ id: string; actor: CapabilityActor } | Response> {
+async function opened(request: Request, ctx: Ctx): Promise<{ id: string; actor: AccessActor } | Response> {
   const { id } = await ctx.params;
   const actor = await sessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
@@ -28,10 +28,10 @@ async function opened(request: Request, ctx: Ctx): Promise<{ id: string; actor: 
   // A TEST USER is nobody's to follow from outside its sandbox, and a listing
   // that named one would be the sandbox leaking into a real account's page:
   // unknown and invisible are the same 404, as everywhere else.
-  if (!target || (target.kind === 'testuser' && actor.viewer?.userId !== target.parent_user_id && (await userKindOf(actor.viewer?.userId ?? null)) !== 'testuser')) return json({ error: 'not_found' }, 404);
-  const userId = actor.viewer?.userId ?? null;
+  if (!target || (target.kind === 'testuser' && actor.userId !== target.parent_user_id && (await userKindOf(actor.userId)) !== 'testuser')) return json({ error: 'not_found' }, 404);
+  const userId = actor.userId;
   if (userId === id) return json({ error: 'cannot_follow_self' }, 400);
-  return { id, actor: { userId, tokenId: actor.tokenId } };
+  return { id, actor };
 }
 
 /**

@@ -1,4 +1,4 @@
-import {createUser,claimToken} from '@/lib/accounts';
+import { identityForUser, createUser,claimToken} from '@/lib/accounts';
 import { changeMembership } from '@/lib/artifacts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
@@ -43,7 +43,7 @@ describe('GET /a/<id>/events hears the document\'s datasets', () => {
     const t=await mintToken('member stream', owner.id);await claimToken(owner.id,t.token);
     const doc=(await create(t.token,{visibility:'public',markup:'<p>Membership stream</p>'})).id;
     const res=await eventsRoute(request(`/a/${doc}/events`),params({id:doc}));
-    const leaving=changeMembership({userId:owner.id,tokenId:t.id},doc,{action:'leave'});
+    const leaving=changeMembership(identityForUser(owner.id, t.id),doc,{action:'leave'});
     const events=await readEvents(res.body!,3);
     await leaving;
     expect(events.find(e=>e.event==='data')?.data).toMatchObject({datasets:['_members'],version:1});

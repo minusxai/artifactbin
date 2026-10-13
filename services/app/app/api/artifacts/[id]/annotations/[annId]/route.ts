@@ -20,22 +20,22 @@ import { json, readJson } from '@/lib/http';
 import { annotationAuthorForRequest } from '@/lib/annotations';
 import { deleteAnnotationFor } from '@/lib/annotations';
 
-export const POST = withTokenAuth(async (request: Request, { tokenId, userId, params, credential, clientHarness }) => {
+export const POST = withTokenAuth(async (request: Request, { actor, params, clientHarness }) => {
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
   return runOperation(
     'annotate',
     request,
-    { tokenId, userId },
+    actor,
     { ...body, id: params.id, annotation_id: params.annId },
-    credential !== 'bearer'
+    actor.credential !== 'bearer'
       ? { kind: 'human', label: null, transport: 'browser' }
       : annotationAuthorForRequest(request, clientHarness),
   );
 });
 
-export const DELETE = withTokenAuth(async (_request: Request, { tokenId, userId, params }) => {
-  if (!userId) return json({ error: 'account_required', hint: 'Run `afbin auth` and sign in with an account; an anonymous credential owns no comments to delete.' }, 403);
-  const deleted = await deleteAnnotationFor({ tokenId, userId }, params.id, params.annId);
+export const DELETE = withTokenAuth(async (_request: Request, { actor, params }) => {
+  if (!actor.userId) return json({ error: 'account_required', hint: 'Run `afbin auth` and sign in with an account; an anonymous credential owns no comments to delete.' }, 403);
+  const deleted = await deleteAnnotationFor(actor, params.id, params.annId);
   return deleted ? json({ ok: true }) : json({ error: 'not_found' }, 404);
 });

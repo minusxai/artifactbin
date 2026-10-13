@@ -3,6 +3,7 @@ import {SERVICE_AUTH_HEADER} from '@artifactbin/contracts';
 import {INTERNAL_SERVICE_SECRET} from '@/lib/platform';
 import {getDb} from '@/lib/platform';
 import { membershipInbox } from '@/lib/document-data';
+import { identityForUser } from '@/lib/accounts';
 import {json,readJson} from '@/lib/http';
 export async function POST(request:Request){
  const supplied=Buffer.from(request.headers.get(SERVICE_AUTH_HEADER)??''),expected=Buffer.from(INTERNAL_SERVICE_SECRET??'');
@@ -12,6 +13,7 @@ export async function POST(request:Request){
  const db=await getDb();
  const user=(await db.query<{email:string|null;kind:string}>('SELECT email,kind FROM users WHERE id=$1',[body.recipientId])).rows[0];
  if(!user?.email||user.kind!=='account')return json({notification:null});
- const inbox=await membershipInbox({userId:body.recipientId,tokenId:null},0,body.notificationId);
+ // A recipient rebuilt from its row, not a request: no verified claim, so no host grant.
+ const inbox=await membershipInbox(identityForUser(body.recipientId,null,user.email),0,body.notificationId);
  return json({notification:inbox.notifications[0]?{...inbox.notifications[0],email:user.email}:null});
 }

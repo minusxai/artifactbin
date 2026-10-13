@@ -1,6 +1,6 @@
 import { canReadArtifact, compiledForRow, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { dataflowForRow, holdableImports, viewerIdentityFor } from '@/lib/document-data';
-import { type RoleActor, sessionActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, sessionActor, type AccessActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { json } from '@/lib/http';
 import { planOf } from '@/lib/compiled-page';
@@ -37,20 +37,19 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // null` fetch is deliberately credential-blind, like GET /query: never let a
   // cookie or bearer turn this cross-origin door into a session read.
   const opaqueOrigin = request.headers.get('Origin') === 'null';
-  const actor = opaqueOrigin ? { viewer: null, tokenId: null } : await sessionActor(request);
-  if (!(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404);
+  const actor = opaqueOrigin ? ANONYMOUS_ACTOR : await sessionActor(request);
+  if (!(await canReadArtifact(artifact, actor))) return json({ error: 'not_found' }, 404);
 
   // The query route's actor: the token id travels with the account (see app/a/[id]/query POST).
-  const viewer: RoleActor = { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null };
   const authorize = async () => {
-    const current = await getArtifactById(id), currentActor = opaqueOrigin ? null : (await sessionActor(request)).viewer;
+    const current = await getArtifactById(id), currentActor = opaqueOrigin ? ANONYMOUS_ACTOR : await sessionActor(request, { revalidate: true });
     if (!current || current.edit_id !== artifact.edit_id || !(await canReadArtifact(current, currentActor))) throw new DatasetError('Document is unavailable', 404);
   };
   const refused = () => json({ error: 'not_found' }, 404, { 'Cache-Control': 'no-store' });
 
   let overlay: ViewerOverlay;
   try {
-    overlay = await overlayFor(artifact, viewer, new URL(request.url).search, authorize, request.signal);
+    overlay = await overlayFor(artifact, actor, new URL(request.url).search, authorize, request.signal);
     await authorize();
   } catch (error) {
     if (error instanceof LocalStateInputError) return json({ error: 'invalid_local_state', detail: error.message }, 400, { 'Cache-Control': 'no-store' });
@@ -69,7 +68,7 @@ const pick = <T>(from: Record<string, T> | undefined, names: ReadonlySet<string>
 
 const EMPTY: ServedResults = { tables: {}, errors: {} };
 
-async function overlayFor(artifact: ArtifactRow, viewer: RoleActor, search: string, authorize: () => Promise<void>, signal: AbortSignal): Promise<ViewerOverlay> {
+async function overlayFor(artifact: ArtifactRow, viewer: AccessActor, search: string, authorize: () => Promise<void>, signal: AbortSignal): Promise<ViewerOverlay> {
   const flow = artifact.format === 'markup' ? await compiledForRow(artifact) : null;
   if (!flow) return { viewer: await viewerIdentityFor(artifact, viewer.userId), results: EMPTY, hold: [] };
 
@@ -85,7 +84,7 @@ async function overlayFor(artifact: ArtifactRow, viewer: RoleActor, search: stri
   return { viewer: identity, results, hold };
 }
 
-async function viewerResults(artifact: ArtifactRow, names: string[], viewer: RoleActor, values: ReturnType<typeof readUrlValues>, authorize: () => Promise<void>, signal: AbortSignal): Promise<ServedResults> {
+async function viewerResults(artifact: ArtifactRow, names: string[], viewer: AccessActor, values: ReturnType<typeof readUrlValues>, authorize: () => Promise<void>, signal: AbortSignal): Promise<ServedResults> {
   const ran = await dataflowForRow(artifact, { values, only: names, viewer, authorize, signal });
   const answered = new Set(names);
   const state = ran?.state;

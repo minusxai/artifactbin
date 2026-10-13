@@ -3,7 +3,8 @@
  * fallback), and its dataflow as the compiler answers it under the author's own reach. Below
  * store and dataflow, so the write path can store the compiled record and the runs can read it.
  */
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
+import { identityForUser } from '@/lib/accounts';
 import type { DatasetAccessPolicy as DatasetPolicy } from '@artifactbin/contracts';
 import { parseDatasetAccessPolicy } from '@artifactbin/utils';
 import { EMPTY_COMPILED_DATAFLOW, EMPTY_DATAFLOW, initialTables, initialValues, isEmptyDataflow, type CompiledDataflow, type DatasetColumn, type QueryDecl, type Scalar } from '@/lib/dataflow';
@@ -21,9 +22,9 @@ import { CHILDREN_COLUMNS } from './placement';
 import { getArtifact, getArtifactFor, getLinkReadableArtifact } from './rows';
 import { writerFor, type ArtifactRow } from './table';
 
-export function refLoaderForActor(actor: TokenActor): ServerRefLoader {
+export function refLoaderForActor(actor: AccessActor): ServerRefLoader {
   if(actor.groupId)return async id=>{const own=await getArtifactFor(actor,id);const row=own??await getLinkReadableArtifact(id);return row?rowToResolvedRef(row,!!own):null;};
-  return actor.userId ? refLoaderForUser(actor.userId) : refLoaderFor(actor.tokenId);
+  return actor.userId ? refLoaderForUser(actor.userId) : refLoaderFor(actor.tokenId ?? '');
 }
 
 /** A stored policy the publish door can analyze against, or nothing at all:
@@ -127,7 +128,7 @@ function refLoaderFor(tokenId: string): ServerRefLoader {
 /** Same, scoped by account (the session-authed /api/my routes) before the link-readable fallback. */
 function refLoaderForUser(userId: string): ServerRefLoader {
   return async (id: string): Promise<ServerRef | null> => {
-    const own = await getArtifactFor({userId,tokenId:''}, id);
+    const own = await getArtifactFor(identityForUser(userId), id);
     const row = own ?? (await getLinkReadableArtifact(id));
     if (!row) return null;
     return rowToResolvedRef(row, !!own);

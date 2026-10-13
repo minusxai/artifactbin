@@ -1,5 +1,5 @@
 import {recordEvent} from '@/lib/notifications';
-import {link} from '@/lib/accounts';
+import { identityForUser, link} from '@/lib/accounts';
 import {actOnAnnotationFor,deleteAnnotationFor} from '@/lib/annotations';
 import {expect,it} from 'vitest';
 import {useAppHarness} from './harness';
@@ -16,7 +16,7 @@ it('keeps newer activity unread when an older rendered revision is acknowledged'
  await db.query("UPDATE artifacts SET link_role='commenter' WHERE id='notify1'");
  const input={id:'thread:bob',artifactId:'notify1',recipientId:bob.id,senderId:alice.id,kind:'reply',source:'comment:thread'};
  await db.transaction(tx=>recordNotification(tx,input));
- const actor={userId:bob.id,tokenId:null};
+ const actor=identityForUser(bob.id, null);
  const first=(await membershipInbox(actor)).notifications[0]!;
  await db.transaction(tx=>recordNotification(tx,{...input,kind:'resolved'}));
  await updateMembershipInbox(actor,{read:first.id,revision:first.revision});
@@ -40,7 +40,7 @@ it('coalesces an agent reply and resolution, including its own account, and noti
  const db=await getDb();
  await db.query("INSERT INTO artifacts(id,token_id,user_id,format,source,visibility) VALUES('thread1','t',$1,'markup','<p id=\"note\">Hello</p>','public')",[owner.id]);
  await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,author_user_id,author_token_id,status,snippet) VALUES('ann_thread','thread1','Please fix','human',$1,'t','open','')",[owner.id]);
- const actor={userId:owner.id,tokenId:'t'};
+ const actor=identityForUser(owner.id, 't');
  const result=await actOnAnnotationFor(actor,'thread1','ann_thread',{reply:'Fixed it',resolve:true},{kind:'agent',label:'helper',transport:'http'});
  expect(result?.status).toBe('resolved');
  let inbox=await membershipInbox(actor);
@@ -58,7 +58,7 @@ it('keeps a mention and subsequent replies in one conversation item and hides de
  await db.query("INSERT INTO annotations(id,artifact_id,body,author_kind,author_user_id,author_token_id,status,snippet) VALUES('ann_mentions','thread2','Please fix','human',$1,'t','open','')",[alice.id]);
  await db.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id,status,direction,initiated_by) VALUES('user',$1,'join','artifact','thread2','accepted','invitation',$2)",[bob.id,alice.id]);
  await db.query("UPDATE artifacts SET link_role='commenter' WHERE id='thread2'");
- const actor={userId:alice.id,tokenId:'t'},recipient={userId:bob.id,tokenId:null};
+ const actor=identityForUser(alice.id, 't'),recipient=identityForUser(bob.id, null);
  await actOnAnnotationFor(actor,'thread2','ann_mentions',{reply:`Hi [@bob](/people/${bob.id})`},{kind:'human',label:null,transport:'http'});
  await actOnAnnotationFor(actor,'thread2','ann_mentions',{reply:'Another update',resolve:true},{kind:'human',label:null,transport:'http'});
  const inbox=await membershipInbox(recipient);

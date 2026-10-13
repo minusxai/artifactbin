@@ -25,7 +25,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const row = await getArtifactById(id);
   if (!row) return new Response('not found', { status: 404 });
   const actor = await sessionActor(request);
-  if (!(await canReadArtifact(row, actor.viewer))) return new Response('not found', { status: 404 });
+  if (!(await canReadArtifact(row, actor))) return new Response('not found', { status: 404 });
   /*
    * A FOLDER HAS NO FRAME, and this route is its OWN door — it never goes
    * through `raw`'s switch, so the rule has to be said again here.

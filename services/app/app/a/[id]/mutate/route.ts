@@ -30,7 +30,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (refusesCrossSite(request, actor)) {
     return json({ error: 'forbidden' }, 403, CORS);
   }
-  if (!(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404, CORS);
+  if (!(await canReadArtifact(artifact, actor))) return json({ error: 'not_found' }, 404, CORS);
 
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400, CORS);
@@ -38,7 +38,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (parsed instanceof Response) return parsed;
 
   const work=async(receipt?:MutationReceipt):Promise<Response>=>{
-  const result = await runDocumentMutation(artifact, parsed, {userId:actor.viewer?.userId ?? null,tokenId:actor.tokenId,email:actor.viewer?.email},receipt);
+  const result = await runDocumentMutation(artifact, parsed, actor,receipt);
   if (!result.ok) {
     if(String(result.reason)==='operation_key_required')return json({error:'operation_key_required'},400,CORS);
     switch (result.reason) {
@@ -78,9 +78,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   );
   };
   const key=parsed.operationKey??request.headers.get('Idempotency-Key');
-  if(!key||(!actor.viewer?.userId&&!actor.tokenId))return work();
-  const principal={userId:actor.viewer?.userId??null,tokenId:actor.tokenId!};
-  const reply=await durableMutation(principal,request.url,key,normalizeMutationOperation({documentId:id,...parsed}),async receipt=>{const response=await work(receipt);return {status:response.status,body:await response.json()};},{initiator:mutationInitiator(principal,actor.credential==='session'?'human':'agent')});
+  if(!key||(!actor.userId&&!actor.tokenId))return work();
+  const reply=await durableMutation(actor,request.url,key,normalizeMutationOperation({documentId:id,...parsed}),async receipt=>{const response=await work(receipt);return {status:response.status,body:await response.json()};},{initiator:mutationInitiator(actor,actor.credential==='session'?'human':'agent')});
   const adapted=adaptMutationOperationReply(reply,'browser');
   // Older non-Notify writes store the dataset-shaped success in their atomic receipt.
   if(adapted.status===200&&typeof adapted.body.id==='string')adapted.body={ok:true,dataset:adapted.body.id,version:adapted.body.version,affected:adapted.body.affected,rowCount:adapted.body.rowCount};

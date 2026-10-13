@@ -9,10 +9,10 @@ import { useAppHarness } from '@/__tests__/harness';
 import { actOnAnnotationFor, createAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 import { createArtifact } from '@/lib/artifacts';
-import type { TokenActor } from '@/lib/accounts/actors';
+import type { AccessActor } from '@/lib/accounts';
 import { setServices } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 
 useAppHarness();
 
@@ -45,7 +45,7 @@ async function publish(email: string) {
   const row = await createArtifact(tok.id, owner.id, doc);
   await vi.waitFor(() => expect(fake.events.map((e) => e.verb)).toContain('created'));
   await listen();
-  return { owner, row, actor: { tokenId: tok.id, userId: owner.id } satisfies TokenActor };
+  return { owner, row, actor: identityForUser(owner.id, tok.id) satisfies AccessActor };
 }
 
 /** A legacy document with token ownership — kept to verify event provenance. */
@@ -54,10 +54,10 @@ async function publishLegacy() {
   const row = await createArtifact(tok.id, tok.userId, doc);
   await vi.waitFor(() => expect(fake.events.map((e) => e.verb)).toContain('created'));
   await listen();
-  return { row, actor: { tokenId:tok.id,userId:tok.userId } satisfies TokenActor };
+  return { row, actor: identityForUser(tok.userId, tok.id) satisfies AccessActor };
 }
 
-const open = async (actor: TokenActor, artifactId: string, baseEditId: string, body: string) => {
+const open = async (actor: AccessActor, artifactId: string, baseEditId: string, body: string) => {
   const wire = await createAnnotationFor(actor, artifactId, { nodeId: 'findings', baseEditId, body }, author);
   expect(wire, 'the fixture must actually annotate').toMatchObject({ id: expect.any(String) });
   return wire as { id: string };
@@ -81,7 +81,7 @@ describe('a thread opened', () => {
   });
   it('a refused create (a stranger, a path that is not there) says nothing', async () => {
     const { row, actor } = await publish('mxmx_test_ann_refused@example.com');
-    expect(await createAnnotationFor({ tokenId: 'tok_stranger', userId: 'usr_stranger' }, row.id, { nodeId: 'findings', baseEditId: row.edit_id, body: 'nope' }, author)).toBeNull();
+    expect(await createAnnotationFor(identityForUser('usr_stranger', 'tok_stranger'), row.id, { nodeId: 'findings', baseEditId: row.edit_id, body: 'nope' }, author)).toBeNull();
     expect(await createAnnotationFor(actor, row.id, { nodeId: 'nowhere', baseEditId: row.edit_id, body: 'nope' }, author)).toMatchObject({ refused: 'bad_path' });
     expect((await said('annotated'))).toEqual([]);
   });
@@ -158,7 +158,7 @@ describe('a thread erased', () => {
     });
     await listen();
     expect(await deleteAnnotationFor(actor, row.id, wire.id), 'already gone').toBe(false);
-    expect(await deleteAnnotationFor({ tokenId: 'tok_stranger', userId: 'usr_stranger' }, row.id, wire.id)).toBe(false);
+    expect(await deleteAnnotationFor(identityForUser('usr_stranger', 'tok_stranger'), row.id, wire.id)).toBe(false);
     expect((await said('annotation_deleted'))).toEqual([]);
   });
 });

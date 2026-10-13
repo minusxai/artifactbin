@@ -14,7 +14,7 @@ import {AUTH_SECRET} from '@/lib/platform';
 import {createAuthHost} from '@artifactbin/auth';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {createUser,claimToken} from '@/lib/accounts';
+import { identityForUser, createUser,claimToken} from '@/lib/accounts';
 const harness=useAppHarness();
 const deferred=<T,>()=>{let resolve!:(x:T)=>void;const promise=new Promise<T>(r=>{resolve=r;});return {resolve,promise};};
 
@@ -23,7 +23,7 @@ async function fixture(twoQueries=false){
   const user=await createUser({email:'mxmx_test_speedup_access@example.com'}),token=await mintToken('source-owner',user.id);
   await claimToken(user.id,token.token);
   const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
-  const secret=await createDatasetSecret({userId:user.id,tokenId:token.id},'test-only-password',target);
+  const secret=await createDatasetSecret(identityForUser(user.id, token.id),'test-only-password',target);
   const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'private',dataset:{kind:'postgres',connection:{...target,passwordSecretId:secret.id},defaultSchema:'public',refreshSeconds:60,tables:[{schema:'public',name:'numbers',source:{schema:'source',table:'numbers'},columns:['n']}]}}}));
   expect(ds.status,await ds.clone().text()).toBe(201);const dataset=(await ds.json()).id;
   const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet><Query name="q" source="ref:${dataset}">{\`select n from numbers\`}</Query>${twoQueries?`<Query name="q2" source="ref:${dataset}">{\`select n from numbers where n > 0\`}</Query>`:''}</Helmet><DataTable data="$q"/>`}}));

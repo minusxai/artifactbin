@@ -55,7 +55,7 @@ async function fetchForDocument(request: Request, ctx: { params: Promise<{ id: s
   const artifact = await getArtifactById(id);
   if (!artifact) return json({ error: 'not_found' }, 404, NO_STORE);
   const actor = await requestOrSessionActor(request);
-  if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404, NO_STORE);
+  if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
 
   const raw = new URL(request.url).searchParams.get('url') ?? '';
   let target: URL;
@@ -68,14 +68,14 @@ async function fetchForDocument(request: Request, ctx: { params: Promise<{ id: s
   }
   const pages = pagesRequestOf(request);
   const trusted = await cspExtensionsFor({
-    artifact: row, viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null },
+    artifact: row, viewer: actor,
     // The app origin's session cookie never belongs to a document's own origin: there, only what was carried.
     ...(pages ? { carried: pages.carried ?? null } : { request }),
   });
   if (!admits(trusted.connect, target)) {
     return json({ error: 'host_not_allowed', detail: `this reader has not allowed this document to reach ${target.origin}` }, 403, NO_STORE);
   }
-  const reader = actor.viewer?.userId ?? actor.tokenId ?? 'guest';
+  const reader = actor.userId ?? actor.tokenId ?? 'guest';
   if (documentFetchRateLimited(id, reader)) return json({ error: 'rate_limited' }, 429, { ...NO_STORE, 'Retry-After': '60' });
 
   try {

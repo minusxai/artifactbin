@@ -28,7 +28,7 @@ import { createCodeStore } from '@artifactbin/utils';
 import { ANONYMOUS, type Actor } from '@artifactbin/contracts';
 import { getDb } from '../platform/db';
 import { resolveTokenById, sha256 } from './tokens';
-import type { RequestActor } from './viewer';
+import type { AccessActor, RequestIdentity } from './actors';
 import { canAuthenticateUser } from './user-kinds';
 
 /** How long a ticket is good for: the frame loads it at once. */
@@ -51,21 +51,16 @@ const codes = async () => createCodeStore(await getDb());
 /**
  * A pages session carries an email account session or a trusted scripted browser's account token.
  * One browser reads as a bearer: a browser SESSION's scripted browser (`BROWSER_SESSION_HEADER` on a request
- * the trusted session transport attached its actor to, lib/accounts/viewer `isBrowserSessionRequest`). It is
+ * the trusted session transport attached its actor to, lib/accounts/request-identity `isBrowserSessionRequest`). It is
  * a browser holding a token, so its pages session is exactly that: an agent cookie for that token.
  */
-function snapshotOf(actor: RequestActor, browserSession: boolean): ActorSnapshot | null {
+function snapshotOf(actor: RequestIdentity, browserSession: boolean): ActorSnapshot | null {
   const credential = actor.credential === 'session' ? actor.credential
     : actor.credential === 'bearer' && browserSession && actor.tokenId ? 'agent-cookie' : null;
   if (!credential) return null;
-  if (!actor.viewer?.userId && !actor.tokenId) return null;
-  return {
-    credential,
-    userId: actor.viewer?.userId ?? null,
-    tokenId: actor.tokenId ?? null,
-    email: actor.viewer?.email ?? null,
-    emailVerified: actor.viewer && 'emailVerified' in actor.viewer && typeof actor.viewer.emailVerified === 'boolean' ? actor.viewer.emailVerified : null,
-  };
+  if (!actor.userId && !actor.tokenId) return null;
+  // The CLAIM is stored, never the grant it earned: the document origin re-resolves it per request.
+  return { credential, userId: actor.userId, tokenId: actor.tokenId, email: actor.email, emailVerified: actor.emailVerified };
 }
 
 /**
@@ -81,8 +76,8 @@ export type PagesCarried = Readonly<Record<string, unknown>>;
  * page carries nothing for). A guest with something carried gets a ticket for nobody (`credential: 'none'`).
  * `browserSession` says the app page is being served to a browser session's scripted browser (see `snapshotOf`).
  */
-export async function issuePagesTicket(actor: RequestActor, carried: PagesCarried = {}, now = Date.now(), options: { browserSession?: boolean } & PagesBinding): Promise<string | null> {
-  const nobody = !actor.viewer?.userId && !actor.tokenId;
+export async function issuePagesTicket(actor: RequestIdentity, carried: PagesCarried = {}, now = Date.now(), options: { browserSession?: boolean } & PagesBinding): Promise<string | null> {
+  const nobody = !actor.userId && !actor.tokenId;
   const snapshot = snapshotOf(actor, options.browserSession === true) ?? (nobody && Object.keys(carried).length ? NOBODY : null);
   if (!snapshot || (snapshot.credential !== 'none' && !await canAuthenticateUser(snapshot.userId))) return null;
   const ticket = randomSecret(24);
@@ -176,7 +171,7 @@ export async function endPagesSession(cookie: string | null | undefined): Promis
  * Logout's half: every pages session of this reader — whatever cookies their browsers still hold — is gone. A cookie
  * left behind names no row, so it reads as nobody.
  */
-export async function endPagesSessionsFor(reader: { userId?: string | null; tokenId?: string | null }): Promise<void> {
+export async function endPagesSessionsFor(reader: AccessActor): Promise<void> {
   const db = await getDb();
   if (reader.userId) await db.query('DELETE FROM pages_sessions WHERE user_id = $1', [reader.userId]);
   if (reader.tokenId) await db.query('DELETE FROM pages_sessions WHERE token_id = $1', [reader.tokenId]);

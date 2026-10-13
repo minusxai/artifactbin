@@ -1,4 +1,4 @@
-import {sessionActor,actorForArtifacts} from '@/lib/accounts';
+import {sessionActor} from '@/lib/accounts';
 import {unauthorized} from '@/lib/http';
 import { membershipInbox } from '@/lib/document-data';
 import {notificationChannel} from '@/lib/notifications';
@@ -6,8 +6,8 @@ import {subscribeChannel} from '@/lib/publish/realtime/live';
 import {LIVE_KEEPALIVE_EVENT,LIVE_KEEPALIVE_MS} from '@/lib/http';
 /** Recipient-scoped wakeups, using the same database transport as artifact live updates. */
 export async function GET(request:Request){
- const actor=actorForArtifacts(await sessionActor(request));
- if(!actor?.userId)return unauthorized(request);
+ const actor=await sessionActor(request);
+ const userId=actor.userId;if(!userId)return unauthorized(request);
  await membershipInbox(actor);
  let stop:(()=>Promise<void>)|undefined;
  let timer:ReturnType<typeof setInterval>|undefined;
@@ -20,7 +20,7 @@ export async function GET(request:Request){
    const close=()=>{if(closed)return;closed=true;clearInterval(timer);void stop?.();controller.close();};
    request.signal.addEventListener('abort',close,{once:true});
    // A lost database listener ends the stream: the client reconnects (lib/live-stream) and re-reads.
-   try{stop=await subscribeChannel(notificationChannel(actor.userId!),send,close);if(closed){await stop();return;}send();timer=setInterval(beat,LIVE_KEEPALIVE_MS);}catch{close();}
+   try{stop=await subscribeChannel(notificationChannel(userId),send,close);if(closed){await stop();return;}send();timer=setInterval(beat,LIVE_KEEPALIVE_MS);}catch{close();}
   },
   cancel(){closed=true;clearInterval(timer);void stop?.();},
  });

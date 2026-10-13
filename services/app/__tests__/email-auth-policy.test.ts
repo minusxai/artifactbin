@@ -8,7 +8,7 @@ import { issuePagesTicket, exchangePagesTicket, pagesSessionOf } from '@/lib/acc
 import { getDb } from '@/lib/platform/db';
 import { sha256 } from '@/lib/accounts/tokens';
 import { markPagesRequest, pagesSiteFor } from '@/lib/http/pages-origin';
-import { agentCookie, request, useAppHarness, createGuestOwner } from './harness';
+import { testIdentity, agentCookie, request, useAppHarness, createGuestOwner } from './harness';
 
 useAppHarness();
 
@@ -29,7 +29,7 @@ it('keeps email-account bearer authentication', async () => {
 it('does not authenticate an ownership cookie without an email login', async () => {
   const guest = await createGuestOwner();
   const actor = await sessionActor(request('/api/my/artifacts', { cookie: await agentCookie([guest.tokenId]) }));
-  expect(actor).toMatchObject({ credential: 'none', tokenId: null, viewer: null });
+  expect(actor).toMatchObject(testIdentity('none'));
 });
 
 it('refuses anonymous artifact creation without creating ownership', async () => {
@@ -60,7 +60,7 @@ const BIND = { artifactId: 'testdoc', origin: 'https://74657374646f63.pages.exam
 
 it('does not issue authenticated pages tickets for legacy guest identities', async () => {
   const guest = await createGuestOwner();
-  expect(await issuePagesTicket({ credential: 'agent-cookie', tokenId: guest.tokenId, viewer: { userId: guest.userId, email: null } }, {}, Date.now(), BIND)).toBeNull();
+  expect(await issuePagesTicket(testIdentity('agent-cookie', { userId: guest.userId, email: null, tokenId: guest.tokenId }), {}, Date.now(), BIND)).toBeNull();
 });
 
 it('invalidates persisted legacy guest pages sessions', async () => {
@@ -73,7 +73,7 @@ it('invalidates persisted legacy guest pages sessions', async () => {
 it('admits account-backed scripted browser pages cookies only on the trusted pages boundary', async () => {
   const account = await createUser({ email: 'mxmx_test_pages_account@example.com' });
   const bearer = await mintToken('scripted account', account.id);
-  const ticket = await issuePagesTicket({ credential: 'bearer', tokenId: bearer.id, viewer: { userId: account.id, email: account.email } }, {}, Date.now(), { ...BIND, browserSession: true });
+  const ticket = await issuePagesTicket(testIdentity('bearer', { userId: account.id, email: account.email, tokenId: bearer.id }), {}, Date.now(), { ...BIND, browserSession: true });
   expect(ticket).not.toBeNull();
   const session = await exchangePagesTicket(ticket!, BIND);
   const pages = await pagesSessionOf(session!.cookie, Date.now(), BIND.artifactId);
@@ -81,5 +81,5 @@ it('admits account-backed scripted browser pages cookies only on the trusted pag
   const plain = request('/', { actor: pages!.actor });
   expect(await sessionActor(plain)).toMatchObject({ credential: 'none' });
   const trusted = markPagesRequest(request('/', { actor: pages!.actor }), { id: 'testdoc', self: 'https://74657374646f63.pages.example.test', site: pagesSiteFor('pages.example.test', 'https://app.example.test') });
-  expect(await sessionActor(trusted)).toMatchObject({ credential: 'agent-cookie', viewer: { userId: account.id }, tokenId: bearer.id });
+  expect(await sessionActor(trusted)).toMatchObject({ credential: 'agent-cookie', userId: account.id, tokenId: bearer.id, documentEditor: false });
 });

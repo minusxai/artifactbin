@@ -29,7 +29,7 @@ import { getArtifactById, accountProfile } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { getDb } from '@/lib/platform';
-import { createTestUser } from '@/lib/accounts';
+import { identityForUser, createTestUser } from '@/lib/accounts';
 import { tokenStatus } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, createUser } from '@/lib/accounts';
@@ -68,7 +68,7 @@ async function account(name: string) {
 
 /** One test user of this account's, as `testuser_create` makes it. */
 async function testUserOf(owner: { tokenId: string; userId: string }) {
-  const minted = await createTestUser(owner);
+  const minted = await createTestUser(identityForUser(owner.userId, owner.tokenId));
   if (!minted.ok) throw new Error(minted.error);
   return minted;
 }
@@ -138,7 +138,7 @@ it('refuses another account\'s test user, an expired one, and a caller with no a
 
   // A guest has no test users to name, and neither has an anonymous token.
   const guest = await createGuestOwner();
-  for (const actor of [{ tokenId: 'tok_anonymous' }, { userId: guest.userId, tokenId: guest.tokenId }]) {
+  for (const actor of [{ tokenId: 'tok_anonymous' }, identityForUser(guest.userId, guest.tokenId)]) {
     const reply = await operation.run(context(actor), script('s-guest', { viewer: { testuser: theirs.id } }));
     expect(reply.status, JSON.stringify(reply.body)).toBe(403);
     expect(reply.body.error).toBe('not_your_testuser');
