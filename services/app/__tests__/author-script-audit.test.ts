@@ -3,11 +3,11 @@
  * document's current head script, built with today's builder, and the ones that no longer build reported by id,
  * visibility and version — over a connection opened read-only, so the audit can never change what it reads.
  *
- * Seeded through the real publish route on the harness's database, then audited over an independent PGLite copy
- * of it (a separate connection, as the script opens its own), so the read-only session never reaches the harness.
+ * Seeded through the real publish route on the harness's database, then audited over that same connection made
+ * read-only, exactly as the script makes its own; the session is returned to read-write before the harness's next
+ * reset (the harness owns the database — harness-rollout.test.ts pin 1).
  */
 import { describe, expect, it } from 'vitest';
-import { PGlite } from '@electric-sql/pglite';
 import { request, useAppHarness, mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
@@ -48,22 +48,12 @@ async function seed() {
   return { good, none, broken, brokenVersion, deleted };
 }
 
-/** An independent copy of the harness's database, opened as the script opens its own. */
-async function copyOfHarness(): Promise<PGlite> {
-  const handle = (await harness.db()).raw();
-  if (handle.kind !== 'pglite') throw new Error('the harness runs PGLite');
-  const dump = await (handle.instance as PGlite).dumpDataDir('none');
-  const copy = new PGlite({ loadDataDir: dump });
-  await copy.waitReady;
-  return copy;
-}
-
 describe('the author-script audit', () => {
   it('reports exactly the live document whose head script no longer builds, read-only', async () => {
     const seeded = await seed();
-    const copy = await copyOfHarness();
+    const harnessDb = await harness.db();
     try {
-      const db = await openReadOnly(copy);
+      const db = await openReadOnly(harnessDb);
       const report = await auditAuthorScripts(db);
       expect(report.failures).toEqual([{ id: seeded.broken, visibility: 'unlisted', version: seeded.brokenVersion, errors: [expect.stringMatching(/reviewState/)] }]);
       // Two live documents carry a script (the good one and the broken one); the prose page and the deleted one are not built.
@@ -81,9 +71,9 @@ describe('the author-script audit', () => {
       expect((await db.query<{ default_transaction_read_only: string }>('SHOW default_transaction_read_only')).rows[0]!.default_transaction_read_only).toBe('on');
       await expect(db.query('UPDATE artifacts SET title = $2 WHERE id = $1', [seeded.good, 'changed'])).rejects.toThrow(/read-only/);
       await expect(db.query('DELETE FROM prepared_pages')).rejects.toThrow(/read-only/);
-      expect((await copy.query<{ title: string }>('SELECT title FROM artifacts WHERE id = $1', [seeded.good])).rows[0]!.title).toBe('Audit');
     } finally {
-      await copy.close();
+      await harnessDb.query('SET default_transaction_read_only = off');
     }
+    expect((await getArtifactById(seeded.good))!.title).toBe('Audit');
   });
 });
