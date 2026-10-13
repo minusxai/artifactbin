@@ -368,6 +368,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const framedOrigin = framedSrc?.origin ?? null;
   const frame: DocumentFrame | null = framedSrc && prepared ? {
     src: framedSrc.src,
+    contentUrl: `/a/${artifact.id}/raw${at ? `?version=${at.version}` : ''}`,
     title: row.title || prepared.page.title || 'Document',
     colorMode: readerPick ?? design.colorMode ?? prepared.page.data.colorMode,
     head: {

@@ -244,6 +244,35 @@ describe('the app\'s paths', () => {
 });
 
 describe('readable startup discovery', () => {
+  it('offers an admitted document content link outside its iframe without a reader ticket', async () => {
+    const w = await world();
+    const res = await app.request(`${BASE}/a/${w.pub.id}`, { headers: as({ credential: 'none' }) });
+    expect(res.status).toBe(200);
+    const body = (await res.text()).split('<body>')[1]!;
+    const readable = body.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+    expect(readable).toContain(`<a href="/a/${w.pub.id}/raw">Read document content</a>`);
+    expect(readable).toContain('<h1>Pub</h1>');
+    const raw = await app.request(`${BASE}/a/${w.pub.id}/raw`, { headers: as({ credential: 'none' }) });
+    expect(raw.status).toBe(200);
+    expect(await raw.text()).toContain('public words');
+  });
+
+  it.each(['Untitled', '<Project & "status">'])('keeps the real unlisted title %s and a readable link', async title => {
+    const w = await world();
+    const created = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` }, body: JSON.stringify({ title, visibility: 'unlisted', markup: '<h1 id="heading">Project status</h1><p id="status">The launch is scheduled for Monday.</p>' }) }));
+    const { id } = await created.json() as { id: string };
+    const res = await app.request(`${BASE}/a/${id}`, { headers: as({ credential: 'none' }) });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    const fallback = /<section data-document-startup[^>]*>([\s\S]*?)<\/section>/.exec(html)![1];
+    expect(fallback).toContain(`<h1>${title === 'Untitled' ? title : '&lt;Project &amp; &quot;status&quot;&gt;'}</h1>`);
+    expect(fallback).toContain(`<a href="/a/${id}/raw">Read document content</a>`);
+    expect(fallback).not.toMatch(/_pt=|key=|Project status<|Monday/);
+    const raw = await app.request(`${BASE}/a/${id}/raw`, { headers: as({ credential: 'none' }) });
+    expect(raw.status).toBe(200);
+    expect(await raw.text()).toContain('The launch is scheduled for Monday.');
+  });
+
   it('makes the shared HTTP discovery readable in the initial page body', async () => {
     const w = await world();
     const res = await app.request(`${BASE}/a/${w.pub.id}`, { headers: as({ credential: 'none' }) });
@@ -265,11 +294,14 @@ describe('readable startup discovery', () => {
     const w = await world();
     const responses = await Promise.all([w.priv.id, 'missing'].map(id => app.request(`${BASE}/a/${id}`, { headers: { ...as({ credential: 'none' }), accept: 'text/html' } })));
     const bodies = await Promise.all(responses.map(async res => { expect(res.status).toBe(404); return res.text(); }));
+    expect((await app.request(`${BASE}/a/${w.priv.id}/raw`, { headers: as({ credential: 'none' }) })).status).toBe(404);
     for (const html of bodies) {
       expect(html).toContain(`<a href="${agentDiscovery(BASE).url}">`);
       expect(html).not.toContain('secret words');
       expect(html).not.toContain('data-mx-document-frame');
       expect(html).not.toContain(w.priv.id);
+      expect(html).not.toContain('data-document-startup');
+      expect(html).not.toContain('Read document content');
     }
   });
 });

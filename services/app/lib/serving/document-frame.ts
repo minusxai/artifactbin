@@ -18,6 +18,8 @@ import { APP_BAR_H } from '@/lib/story-ui/edit-bar';
 export interface DocumentFrame {
   /** The frame's first URL: the document's own origin, carrying this reader's one-time ticket (lib/http/pages-origin pagesFrameUrl). */
   src: string;
+  /** Stable permission-checked content address; never the frame's reader ticket. */
+  contentUrl: string;
   /** The frame's accessible name. */
   title: string;
   /** The document's own ground while it loads (the app's dotted page never shows behind it). */
@@ -39,6 +41,11 @@ export const DOCUMENT_FRAME_CSS = `[${STORY_FRAMED_ATTR}]{position:fixed;inset:0
 export function documentFrameHtml(frame: DocumentFrame): string {
   const iframe = `<iframe data-mx-document-frame="" src="${escapeHtml(frame.src)}" title="${escapeHtml(frame.title)}" name="mx-document" sandbox="${FRAME_SANDBOX}" allow="${FRAME_ALLOW}" referrerpolicy="no-referrer"></iframe>`;
   return `<div ${STORY_FRAMED_ATTR}="" class="${frame.colorMode}">${iframe}</div>`;
+}
+
+/** Startup content for readers that do not follow iframes, cleared by the app mount. */
+export function documentFrameFallback(frame: DocumentFrame): string {
+  return `<section data-document-startup class="px-6 pt-16"><h1>${escapeHtml(frame.title)}</h1><a href="${escapeHtml(frame.contentUrl)}">Read document content</a></section>`;
 }
 
 /** The document's name in the app page's head: its title, description and social card. */
