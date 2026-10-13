@@ -134,7 +134,7 @@ async function admittedFrameSrc(request: Request, artifact: Pick<ArtifactRow, 'i
   const origin = pagesOriginFor(artifact.id, site);
   // The reader's "Allow once" grants live in an app-origin cookie the document's origin never sees: they ride the
   // ticket, and the document's origin reads them back as `pagesRequestOf(request).carried` (app/a/[id]/raw, /fetch).
-  const carried = carriedTrust(request, { userId: actor.userId, tokenId: actor.tokenId ?? null });
+  const carried = carriedTrust(request, actor);
   // A browser session's scripted browser reads its frame as the session's actor (lib/accounts/pages-sessions).
   // The ticket is for THIS document at this exact origin, and is spent there (server/pages-host): the frame's first URL is the document's own.
   const ticket = await issuePagesTicket(actor, carried, Date.now(), { browserSession: isBrowserSessionRequest(request), artifactId: artifact.id, origin });
@@ -357,7 +357,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     membershipAvailable ? membershipOf(actor, artifact.id, readerAdmitted) : Promise.resolve(undefined),
     // What the document asks of the network beyond the default policy, and where this reader stands on it:
     // the consent bar (solid/document/CspConsentBar) draws from this. The served row is the version shown.
-    isDoc ? cspRequestFor({ artifact: row, viewer: { userId: viewerId, tokenId: actor.tokenId }, request }) : Promise.resolve(null),
+    isDoc ? cspRequestFor({ artifact: row, viewer: actor, request }) : Promise.resolve(null),
   ] as const);
   const served = firstServed;
   const authorUsername = author?.username ?? null;

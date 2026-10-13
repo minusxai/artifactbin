@@ -68,7 +68,7 @@ async function fetchForDocument(request: Request, ctx: { params: Promise<{ id: s
   }
   const pages = pagesRequestOf(request);
   const trusted = await cspExtensionsFor({
-    artifact: row, viewer: { userId: actor.userId, tokenId: actor.tokenId ?? null },
+    artifact: row, viewer: actor,
     // The app origin's session cookie never belongs to a document's own origin: there, only what was carried.
     ...(pages ? { carried: pages.carried ?? null } : { request }),
   });

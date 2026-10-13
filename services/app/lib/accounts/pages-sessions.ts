@@ -28,7 +28,7 @@ import { createCodeStore } from '@artifactbin/utils';
 import { ANONYMOUS, type Actor } from '@artifactbin/contracts';
 import { getDb } from '../platform/db';
 import { resolveTokenById, sha256 } from './tokens';
-import type { RequestIdentity } from './actors';
+import type { AccessActor, RequestIdentity } from './actors';
 import { canAuthenticateUser } from './user-kinds';
 
 /** How long a ticket is good for: the frame loads it at once. */
@@ -171,7 +171,7 @@ export async function endPagesSession(cookie: string | null | undefined): Promis
  * Logout's half: every pages session of this reader — whatever cookies their browsers still hold — is gone. A cookie
  * left behind names no row, so it reads as nobody.
  */
-export async function endPagesSessionsFor(reader: { userId?: string | null; tokenId?: string | null }): Promise<void> {
+export async function endPagesSessionsFor(reader: AccessActor): Promise<void> {
   const db = await getDb();
   if (reader.userId) await db.query('DELETE FROM pages_sessions WHERE user_id = $1', [reader.userId]);
   if (reader.tokenId) await db.query('DELETE FROM pages_sessions WHERE token_id = $1', [reader.tokenId]);

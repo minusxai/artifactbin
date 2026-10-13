@@ -514,7 +514,7 @@ async function documentDecision({ request, artifact, meta, at, domain, pages, fr
   // hosts they published, or every declared one once they allowed the rest; nothing for a capture. On its own
   // origin the reader's "Allow once" grants arrive with the pages session (`pages.carried`).
   const extensions = capture ? undefined : await cspExtensionsFor({
-    artifact: { id: artifact.id, version: artifact.version, ...declares }, viewer: { userId: actor.userId, tokenId: actor.tokenId },
+    artifact: { id: artifact.id, version: artifact.version, ...declares }, viewer: actor,
     // The app origin's session cookie never belongs to a document's own origin: there, only what was carried.
     ...(pages ? { carried: pages.carried ?? null } : { request }),
   });
