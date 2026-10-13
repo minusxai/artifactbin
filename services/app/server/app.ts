@@ -50,7 +50,7 @@ import { ROUTES } from './routes.generated';
 import { GITHUB_EXTERNAL_URL } from '@/lib/serving';
 import { createListingPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
-import { DOCUMENT_FRAME_CSS, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
+import { DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
 import { enableSnapshotRevalidations, installStoryCommitHooks } from '@/lib/publish/prepared';
 import { mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
@@ -118,7 +118,8 @@ function withDocumentFrame(html: string, frame: DocumentFrame): string {
     .replace(/<title>[\s\S]*?<\/title>/i, '')
     .replace(/<meta name="description"[^>]*>/i, '')
     .replace('</head>', () => `${documentHeadTags(frame.head)}<style data-mx-frame-css>${DOCUMENT_FRAME_CSS}</style></head>`);
-  return head.replace(/<body([^>]*)>/i, (open) => `${open}${documentFrameHtml(frame)}`);
+  return head.replace(/<body([^>]*)>/i, (open) => `${open}${documentFrameHtml(frame)}`)
+    .replace(/<div id="root">/i, (open) => `${open}${documentFrameFallback(frame)}`);
 }
 
 /** The shell's first-screen face (lib/app-fonts), preloaded on a page with no document of its own. */
