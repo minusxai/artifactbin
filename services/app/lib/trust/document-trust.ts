@@ -3,8 +3,9 @@
  *
  * Every document runs under one default policy. A document that needs more declares it in its Helmet
  * (`<meta name="csp-connect" …>`, lib/document/csp-extensions). Each version's own source is its
- * declaration — nothing is copied beside it, because edits commit client-prepared patches and a copy
- * would drift. This module answers, per reader, which of those hosts are appended to the document's header:
+ * declaration — nothing is copied beside the row, because edits commit client-prepared patches and a copy
+ * would drift. The one derived copy is per VERSION: its prepared page records the set its source declares
+ * (lib/publish/prepared `declaredCsp`), so a validator is named from the row's header without the source. This module answers, per reader, which of those hosts are appended to the document's header:
  *
  *  - THE PUBLISHER of a host: whoever's publish introduced a host consented to it by publishing it. The
  *    introducer is derived from the version history: the actor of the earliest version in the unbroken
@@ -42,8 +43,12 @@ export interface TrustViewer {
 }
 
 interface TrustQuery {
-  /** The row being served: its source declares the set, and its version is where the history walk starts. */
-  artifact: Pick<ArtifactRow, 'id' | 'version' | 'source'>;
+  /**
+   * The row being served: its source declares the set, and its version is where the history walk starts. A caller holding
+   * only the row's header passes the set its version's prepared page recorded from that source (`declared`) instead —
+   * never a header without either, which would be answered (and cached) as declaring nothing.
+   */
+  artifact: Pick<ArtifactRow, 'id' | 'version'> & ({ source: ArtifactRow['source'] } | { declared: CspExtensions });
   viewer: TrustViewer | null;
   /** The reader's request, for this browser session's once-grants and denies. Absent ⇒ none consulted. */
   request?: Request;
@@ -266,7 +271,7 @@ export async function revokeTrust(userId: string, artifactId: string): Promise<v
 interface Standing { request: CspRequest; published: CspExtensions }
 
 async function standingOf({ artifact, viewer, request, carried }: TrustQuery): Promise<Standing> {
-  const extensions = declaredAt(artifact.id, artifact.version, artifact.source);
+  const extensions = 'declared' in artifact ? artifact.declared : declaredAt(artifact.id, artifact.version, artifact.source);
   if (!hasCspExtensions(extensions)) return { request: { extensions, asking: emptyCspExtensions(), status: 'none', denied: false }, published: emptyCspExtensions() };
   const published = await hostsPublishedBy(artifact, viewer, extensions);
   const asking = subtractCspExtensions(extensions, published);

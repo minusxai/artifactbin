@@ -11,7 +11,7 @@ export { canReadArtifact, ownsArtifact, roleFor, effectiveRole, isOwner } from '
 export { commentMonitorScope, annotationScope, editorScope, writerFor } from './table';
 export type { ArtifactRow, Scope } from './table';
 export { readableArtifact, snapshotForReader, snapshotHeadFor } from './read-access';
-export { getArtifact, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor } from './rows';
+export { accessMoved, getArtifact, getArtifactById, getArtifactFor, getArtifactHeaderById, getArtifactsFor, getEditableArtifactFor, getLinkReadableArtifact, getLinkReadableArtifacts, getOwnedArtifactFor, hasInvitedUsersFor } from './rows';
 export type { ArtifactHeader } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived, versionToWire } from './store';
 export type { ArtifactSummary } from './store';
@@ -51,7 +51,7 @@ export type { Viewer } from './placement';
 export { grantsOf, grantsPermitRead, grantsPermitWrite } from './dataset-policy/grants';
 
 /** Serving: what may be served, and archived versions. */
-export { UnservableDocument, refusingUnservable, servableDocument, unservable } from './servable';
+export { UnservableDocument, refusingUnservable, servableDocument, servableHeader, unservable } from './servable';
 export { VERSION_PARAM, archivedReadOnly, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
 export type { ArchivedRender } from './archived-version';
 

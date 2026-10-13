@@ -13,7 +13,7 @@ import type { IslandDocument } from '@/lib/islands/contract';
 
 interface FakeController {
   input: Record<string, unknown> & { appFetch: (path: string, init: RequestInit) => Promise<Response>; editId: () => string; initialSource: () => string | null; fragmentSurface?: string };
-  nonce: string; sent: unknown[]; updates: unknown[]; listeners: Set<(event: unknown) => void>; disposed: boolean;
+  nonce: string; sent: unknown[]; updates: unknown[]; trees: unknown[]; listeners: Set<(event: unknown) => void>; disposed: boolean;
   restoredResult: () => Promise<void>;
   emit(event: unknown): void;
 }
@@ -21,11 +21,12 @@ const made = vi.hoisted(() => ({ controllers: [] as FakeController[] }));
 vi.mock('@/lib/islands/island-controller', () => ({
   createIslandController: (input: FakeController['input']) => {
     const controller = {
-      input, nonce: 'n'.repeat(32), sent: [] as unknown[], updates: [] as unknown[], listeners: new Set<(event: unknown) => void>(), disposed: false,
+      input, nonce: 'n'.repeat(32), sent: [] as unknown[], updates: [] as unknown[], trees: [] as unknown[], listeners: new Set<(event: unknown) => void>(), disposed: false,
       restoredResult: () => Promise.resolve(),
       selectionReady() {},
       send(command: unknown) { controller.sent.push(command); },
       update(command: unknown) { controller.updates.push(command); },
+      setNodes(nodes: unknown) { controller.trees.push(nodes); },
       restored() { return controller.restoredResult(); },
       subscribe(listener: (event: unknown) => void) { controller.listeners.add(listener); return () => { controller.listeners.delete(listener); }; },
       invalidate() {}, getViewportRect: () => new DOMRect(),
@@ -486,6 +487,62 @@ describe('the frame bridge', () => {
     frameWin.parent.postMessage({ type: FRAME_BRIDGE_MESSAGE, payload: { kind: 'hello' } }, APP);
     await settle(() => made.controllers.length > 1);
     expect(made.controllers[1]!.input.nodes).toEqual(v3);
+  });
+
+  it('a document attached without its tree tells the page of the reader\'s first touch, key or selection once, and takes the tree into the same session', async () => {
+    // A tap or long-press into a frame on another origin may never move the page's focus: the frame says it itself.
+    const { frame, frameWin, toFrame } = framedPair();
+    const onPressed = vi.fn();
+    const { bridge, onReady } = parentFor(frame, { onPressed });
+    openDoor(frameWin);
+    await settle(() => onReady.mock.calls.length > 0);
+    const controller = made.controllers[0]!;
+    // A selection that collapsed is not the reader's; an untrusted (script) event is not either.
+    dispatchTrusted(frameWin.document, new frameWin.Event('selectionchange'));
+    frameWin.document.dispatchEvent(new frameWin.Event('pointerdown'));
+    await tick(); await tick();
+    expect(onPressed).not.toHaveBeenCalled();
+    // A long-press selects a word with no pointer event the document hears, and no blur the page sees.
+    const range = frameWin.document.createRange();
+    range.selectNodeContents(frameWin.document.getElementById('lede')!);
+    frameWin.getSelection()!.removeAllRanges();
+    frameWin.getSelection()!.addRange(range);
+    dispatchTrusted(frameWin.document, new frameWin.Event('selectionchange'));
+    await settle(() => onPressed.mock.calls.length > 0);
+    dispatchTrusted(frameWin.document, new frameWin.KeyboardEvent('keydown', { key: 'Shift' }));
+    dispatchTrusted(frameWin.document, new frameWin.Event('selectionchange'));
+    await tick(); await tick();
+    expect(onPressed).toHaveBeenCalledTimes(1);
+
+    const tree = parseJsxOrThrow('<p id="lede">The lede.</p>').nodes;
+    bridge.setNodes(tree);
+    await settle(() => controller.trees.length > 0);
+    expect(controller.trees).toEqual([tree]);
+    // The same session: no detach, no second attach, no second controller.
+    const sent = toFrame.map(({ data }) => data as { key?: string; payload?: { kind?: string } });
+    expect(sent.map((envelope) => envelope.payload?.kind)).not.toContain('detach');
+    // (`attach` is re-sent on the door's hello under the same key, which the door ignores.)
+    expect(new Set(sent.filter((envelope) => envelope.payload?.kind === 'attach').map((envelope) => envelope.key)).size).toBe(1);
+    expect(made.controllers).toHaveLength(1);
+    // Once the bridge holds a tree it is not replaced, and a document that loads again is attached with it.
+    bridge.setNodes(parseJsxOrThrow('<p>Other</p>').nodes);
+    frameWin.parent.postMessage({ type: FRAME_BRIDGE_MESSAGE, payload: { kind: 'hello' } }, APP);
+    await settle(() => made.controllers.length > 1);
+    expect(controller.trees).toHaveLength(1);
+    expect(made.controllers[1]!.input.nodes).toEqual(tree);
+  });
+
+  it('a document attached with its tree never reports a press', async () => {
+    const { frame, frameWin, toPage } = framedPair();
+    const onPressed = vi.fn();
+    const { onReady } = parentFor(frame, { onPressed, nodes: parseJsxOrThrow('<p id="lede">The lede.</p>').nodes });
+    openDoor(frameWin);
+    await settle(() => onReady.mock.calls.length > 0);
+    dispatchTrusted(frameWin.document, new frameWin.Event('pointerdown'));
+    dispatchTrusted(frameWin.document, new frameWin.KeyboardEvent('keydown', { key: 'a' }));
+    await tick(); await tick();
+    expect(onPressed).not.toHaveBeenCalled();
+    expect(toPage.map((data) => (data as { payload?: { kind?: string } }).payload?.kind)).not.toContain('pressed');
   });
 
   it('reads the app origin the server wrote on the document, else its own URL origin', () => {

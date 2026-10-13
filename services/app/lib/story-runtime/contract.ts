@@ -527,6 +527,11 @@ export type FrameBridgeParentPayload =
   | { kind: 'send'; command: unknown }
   | { kind: 'update'; command: StoryDocumentUpdate }
   | { kind: 'restored'; call: number }
+  /**
+   * The tree for a session attached without one (`attach.nodes` `[]`), once the page has it: the running controller
+   * classifies against it from now on, and a selection made before it arrived is described again (its bubble shown).
+   */
+  | { kind: 'nodes'; nodes: JsxNode[] }
   /** The answer to a relayed app request (`fetch`): status, the headers the controller reads, the body as text. */
   | { kind: 'fetch-result'; call: number; status: number; headers: Record<string, string>; body: string }
   | { kind: 'fetch-result'; call: number; error: string }
@@ -538,6 +543,12 @@ export type FrameBridgeFramePayload =
   /** The controller runs; `nonce` is what its events carry. */
   | { kind: 'ready'; nonce: string; urlValues?: string }
   | { kind: 'event'; event: unknown }
+  /**
+   * The reader first pressed, touched, typed or selected in a document attached without its tree: the page may ask
+   * for the tree now. Once per session. The frame says it itself because a press into a frame on another origin is
+   * not otherwise visible to the page (a touch may never even move the page's focus).
+   */
+  | { kind: 'pressed' }
   | { kind: 'restored'; call: number; ok: true }
   | { kind: 'restored'; call: number; ok: false; error: string }
   /** One of the controller's app requests (IslandControllerInput.appFetch), for the page to make with its session. */

@@ -152,7 +152,7 @@ describe('a bridge made without the tree', () => {
     return { story, envelopes, ready };
   }
 
-  it('attaches at once with no tree, then again with the tree when it is asked for and arrives', async () => {
+  it('attaches at once with no tree, then hands the tree to the same session when it is asked for and arrives', async () => {
     const { story, envelopes, ready } = barePage();
     expect(envelopes().map((e) => e.payload)).toEqual([expect.objectContaining({ kind: 'attach', nodes: [] })]);
     const firstKey = envelopes()[0]!.key!;
@@ -164,16 +164,13 @@ describe('a bridge made without the tree', () => {
     expect(envelopes()).toHaveLength(1);
     arrive(TREE);
     await Promise.resolve(); await Promise.resolve();
-    const [, detach, attach] = envelopes();
-    expect(detach).toEqual(expect.objectContaining({ key: firstKey, payload: { kind: 'detach' } }));
-    expect(attach?.payload).toEqual(expect.objectContaining({ kind: 'attach', nodes: TREE }));
-    expect(attach?.key).not.toBe(firstKey);
-    // The old session's nonce is gone; the new controller's arrives with its ready.
-    expect(story.nonce()).toBeNull();
-    ready(attach!.key!, 'second-nonce');
-    expect(story.nonce()).toBe('second-nonce');
-    ready(firstKey, 'stale-nonce');
-    expect(story.nonce()).toBe('second-nonce');
+    // The running controller takes the tree: no detach, no new session, so a selection made meanwhile keeps its
+    // controller (which describes it again and shows its bubble) and the nonce the page's actions check is unchanged.
+    expect(envelopes()).toEqual([
+      expect.objectContaining({ key: firstKey, payload: expect.objectContaining({ kind: 'attach', nodes: [] }) }),
+      expect.objectContaining({ key: firstKey, payload: { kind: 'nodes', nodes: TREE } }),
+    ]);
+    expect(story.nonce()).toBe('first-nonce');
   });
 
   it('asks once, keeps the bare bridge for a tree that never arrives, and does nothing after the page is gone', async () => {

@@ -143,7 +143,16 @@ const RESTORE_DELAY_MS = 250;
 /** A draft that must redraw the document waits until typing has paused this long: the typed region is never redrawn under the caret. */
 export const TYPING_QUIET_MS = 1000;
 
-export function createIslandController({ win, root, islands, nodes: served, portal, id, editId, initialSource, appFetch = sameOriginFetch(win), fragmentSurface = 'app', adopted = true }: IslandControllerInput): IslandStoryController {
+/** The controller over a document root, and the one input the frame bridge hands it later (FrameBridgeParentPayload `nodes`). */
+export interface DocumentIslandController extends IslandStoryController {
+  /**
+   * The tree for a controller made without one: comments and selections classify against it from now on, and a live
+   * selection made before it arrived is described again. Ignored when the version on screen announced its own nodes.
+   */
+  setNodes(nodes: JsxNode[]): void;
+}
+
+export function createIslandController({ win, root, islands, nodes: served, portal, id, editId, initialSource, appFetch = sameOriginFetch(win), fragmentSurface = 'app', adopted = true }: IslandControllerInput): DocumentIslandController {
   let nodes = served;
   /**
    * The version on screen (the live edit id the page's body names) when `nodes` last described it. The document's
@@ -716,6 +725,13 @@ export function createIslandController({ win, root, islands, nodes: served, port
     },
     subscribe(listener: (event: unknown) => void) { if (!disposed) listeners.add(listener); return () => { listeners.delete(listener); }; },
     getViewportRect: () => new DOMRect(0, 0, win.innerWidth, win.innerHeight),
+    setNodes(next: JsxNode[]) {
+      if (disposed || (nodesDrawnFor !== null && nodesDrawnFor === shownVersion())) return;
+      nodes = next; nodesDrawnFor = null;
+      nodesDescribeShown();
+      annotate?.setNodes(nodes);
+      selection?.setNodes(nodes);
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
