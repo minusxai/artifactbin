@@ -23,10 +23,10 @@ export default {
         'deploy/company/ci-smtp-fixture.mjs',
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
-        // proofs spawned by their tests, the offline gate's preview build and the backfill.
+        // proofs spawned by their tests, the offline gate's preview build, the backfill and the author-script audit.
         'scripts/gates/gate-*.mjs', 'scripts/ci/check-residual-names.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
         'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/__tests__/reserved-ids-{local,postgres}-proof.ts',
-        'scripts/build/build-preview-gate-inputs.mjs', 'scripts/compiled-backfill.ts',
+        'scripts/build/build-preview-gate-inputs.mjs', 'scripts/compiled-backfill.ts', 'scripts/audit-author-scripts.ts',
         // Design-system tooling (generate:design-systems and its screenshot helpers).
         'design-systems/*.mjs',
         // Gate and page-speed fixtures, read by path.

@@ -485,6 +485,8 @@ export async function compiledPageFor(row: ArtifactRow, page: Prepared, reader: 
       head: reader.head,
       live: reader.live,
       footer: reader.footer ?? null,
+      // Every copy of a version whose script did not build says so: /raw, the framed document, a domain post, a capture, the morph's fragment.
+      scriptFailed: !!page.authorScriptErrors,
       sheets: reader.sheets ?? null,
       appOrigin: reader.appOrigin ?? null,
     });

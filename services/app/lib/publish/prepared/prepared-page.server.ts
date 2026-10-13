@@ -46,7 +46,7 @@ import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { preparedCssVersion } from './css-version.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { lookupWebAssets } from '../assets/web-assets';
-import { collectExternalAssetUrls, lazyCodeOf, type LazyCode, fixHtmlNesting } from '../../document';
+import { collectExternalAssetUrls, lazyCodeOf, type LazyCode, fixHtmlNesting, storyBodyFor } from '../../document';
 import { storedCompiledDataflow } from '@/lib/document/server';
 import { prepareStoryParts, readerIslandData, type ReaderIslandInput } from './prepare-runtime.server';
 import { assetsPath, inlineStoryCss, inlineStoryNodes, mutatePath, queryPath, type StoryBaseCssRecipe, type StyleOverride, styleOverrides } from '@/lib/page-styles';
@@ -80,6 +80,12 @@ export interface PreparedPage {
   /** The raw authored `<style>`: the editor's door only (never the reader payload). */
   authorCss: string | null;
   authorScript: string | null;
+  /**
+   * The builder's messages when this version's Helmet script does not build under today's API: the page is served
+   * without it (`authorScript` null), says so to its readers (lib/compiled-page/assembler) and tells its editors why
+   * (lib/serving/artifact-page). Absent when the script built or there is none.
+   */
+  authorScriptErrors?: string[];
   theme: StoryDesignName | null;
   title: string;
   fontPreloads: string[];
@@ -277,10 +283,13 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, compiler: Retu
       ...(runtime.data.glyphs ? { glyphs: runtime.data.glyphs } : {}),
     },
     css, overrides, base: parts.baseRecipe, authorCss: runtime.authorCss, authorScript: runtime.authorScript,
+    ...(runtime.authorScriptErrors ? { authorScriptErrors: runtime.authorScriptErrors } : {}),
     theme: runtime.theme, title: runtime.title, fontPreloads: runtime.fontPreloads ?? [],
     lazyCode: lazyCodeOf(nodes), declared: declared ?? null,
     deps: { datasets, assets: assetUrls }, mermaidCodes: prerenderableCodes(nodes), declaredCsp: declaredCspExtensions(row.source),
   };
+  // An incident, not a known state: the operator's line names the version and the builder's words, never the source.
+  if (runtime.authorScriptErrors) console.error(`[prepared-page] ${row.id} v${row.version}: the author script does not build and is served without it: ${runtime.authorScriptErrors.join('; ')}`);
   // Only the version's compiled output is stored; request data is rendered by its pinned SSR module.
   const anonymous = await readerInputFor(row, page, { at, viewer: null, search: '' });
   if (compiler) page.compiled = await compiledFor(row, page, anonymous.refData, compiler);
@@ -447,15 +456,37 @@ export async function preparedPageFor<const P extends PreparedParts = typeof WHO
         ...found.page!, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0, cssVersion: found.css_version,
         data: { ...found.page!.data, ...(want.nodes ? { nodes: found.nodes! } : {}) }, ...(want.compiled ? { compiled: found.compiled! } : {}),
       } as PreparedView<P>;
-      if (!page.declaredCsp) page.declaredCsp = await recordDeclaredCsp(row, slot, key);
-      if (page.cssVersion === preparedCssVersion()) return { row, page };
-      queueRestyle(stored, at);
-      return { row, page, stale: true };
+      // A page an earlier deployment prepared by dropping its script without a word is prepared again below, once.
+      if (!droppedSilently(row, page)) {
+        if (!page.declaredCsp) page.declaredCsp = await recordDeclaredCsp(row, slot, key);
+        if (page.cssVersion === preparedCssVersion()) return { row, page };
+        queueRestyle(stored, at);
+        return { row, page, stale: true };
+      }
     }
   }
   const page = await prepareNow(row, at);
   await store(row, slot, page);
   return { row, page: narrow(page, want) };
+}
+
+/** Versions whose source mentions `<script` with no Helmet script (prose about HTML): parsed once per process, not per read. */
+const SCRIPTLESS_KEPT = 4096;
+const scriptless = new Set<string>();
+/**
+ * A stored page with no script and no recorded failure whose version DOES declare a Helmet script: an earlier
+ * deployment prepared it when the script no longer built and kept nothing but a warning. Preparing it again records
+ * the failure ({@link PreparedPage.authorScriptErrors}) or, should it build now, the script; either way never again.
+ * Only a version whose source names `<script` at all is parsed, and its verdict is remembered.
+ */
+function droppedSilently(row: ArtifactRow, page: Pick<PreparedPage, 'authorScript' | 'authorScriptErrors'>): boolean {
+  if (page.authorScript || page.authorScriptErrors || !row.source?.includes('<script')) return false;
+  const key = `${row.id}@${row.version}`;
+  if (scriptless.has(key)) return false;
+  if (storyBodyFor(row.source)?.content.script) return true;
+  if (scriptless.size >= SCRIPTLESS_KEPT) scriptless.clear();
+  scriptless.add(key);
+  return false;
 }
 
 /**

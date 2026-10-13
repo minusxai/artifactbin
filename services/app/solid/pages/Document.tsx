@@ -21,6 +21,7 @@ import type { AnnotationWire } from '@/lib/annotations/store';
 import { ARTIFACT_ID_PATTERN, type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
 import { DocumentActions } from '../document/DocumentActions';
 import { CspConsentBar } from '../document/CspConsentBar';
+import { ScriptFailureNotice } from '../document/ScriptFailureNotice';
 import type { CspRequest } from '@/lib/document';
 import { AnnotationLayer } from '../document/AnnotationLayer';
 import { SelectionActions } from '../document/SelectionActions';
@@ -75,6 +76,8 @@ interface DocumentAnswer {
   archived?: { version: number; head: number } | null;
   /** What the document asks of the network beyond the default policy, and this reader's standing (lib/trust). */
   cspRequest?: CspRequest;
+  /** Why the head runs without its script: the builder's messages, for a writer only (lib/serving/artifact-page). */
+  scriptFailure?: { errors: string[] };
   like?: { liked: boolean; count: number };
   follow?: { userId: string; following: boolean; count: number } | null;
 }
@@ -468,6 +471,10 @@ export function DocumentPage(): JSX.Element {
     )}</Show>
     <Show when={page?.cspRequest?.status === 'blocked' && !editing() && frameSlot()}>{(slot) => (
       <Portal mount={slot()}><TrustedUi><CspConsentBar id={id!} request={page!.cspRequest!} accountSession={accountSession()} /></TrustedUi></Portal>
+    )}</Show>
+    {/* Gone once a newer version is shown: publish refuses a script that does not build, so any newer head built its own. */}
+    <Show when={!!page?.scriptFailure?.errors.length && !editing() && currentVersion() <= (page?.surface?.version ?? 0) && frameSlot()}>{(slot) => (
+      <Portal mount={slot()}><TrustedUi><ScriptFailureNotice errors={page!.scriptFailure!.errors} /></TrustedUi></Portal>
     )}</Show>
     <TrustedUi overlay layer="discussion">
     <Show when={ready() && nonce()}>

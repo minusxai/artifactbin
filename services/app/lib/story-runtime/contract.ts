@@ -214,6 +214,11 @@ export const ISLAND_DATA_ID = 'mx-story-data';
  */
 export const STORY_NODES_ID = 'mx-story-nodes';
 /**
+ * The served version's script did not build (lib/publish/prepared prepare-runtime `authorScriptErrors`): the page's
+ * notice before the story root (lib/compiled-page/assembler), which the morph keeps in step with the version it draws.
+ */
+export const SCRIPT_FAILURE_ATTR = 'data-mx-script-failure';
+/**
  * Dispatched on the document by the morph in the SAME task it draws a new version: `{ editId, nodes }` (nodes null
  * when the fragment carried none). Selections and comments are classified against these nodes, so no event between
  * the new DOM and its nodes ever sees the two disagree.

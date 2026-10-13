@@ -25,6 +25,9 @@ import type { TableResult } from '@/lib/dataflow';
 import { assembleArtifactFile } from '../assemble.server';
 import { packCompiledBrowserModule } from '../compiled-bundle.server';
 import { parseArtifactFile, type ArtifactFile } from '../file-format';
+import { renderArtifactFileHtml } from '../file-html';
+import { createDocumentGraph } from '@/lib/document/document-graph';
+import { JSDOM } from 'jsdom';
 
 useAppHarness();
 
@@ -327,6 +330,36 @@ describe('threads', () => {
     expect(file.threads.map((t) => [t.id, t.status]).sort()).toEqual([[id(open), 'open'], [id(resolved), 'resolved']].sort());
     // A viewer-role reader may not see the discussion at all.
     expect((await download(w.doc, reader(w.bob))).threads).toEqual([]);
+  });
+});
+
+describe('a version whose stored script no longer builds', () => {
+  const SCRIPTED = (script: string) => `<Helmet><Value name="n" type="number" default={0} /><script>{\`${script}\`}</script></Helmet><h1 id="h">Brew</h1><p id="rest">Steps</p>`;
+  const GOOD = SCRIPTED('import { signal } from "page"; const [n, setN] = signal("$n"); setN(n() + 1);');
+  const REMOVED = SCRIPTED('import { reviewState } from "page"; const [open, setOpen] = reviewState("open", false); setOpen(!open());');
+
+  it('says so in the offline file as the reader does, without the builder\'s words; a valid script\'s file carries nothing', async () => {
+    const owner = await account('scripted');
+    const good = await create(owner.token.token, { markup: GOOD, visibility: 'unlisted' });
+    const broken = await create(owner.token.token, { markup: GOOD, visibility: 'unlisted' });
+    const db = await getDb();
+    // As an earlier deployment stored it: publish refuses this script today.
+    const { version } = (await getArtifactById(broken))!;
+    await db.query('UPDATE artifacts SET document = $2::jsonb WHERE id = $1', [broken, JSON.stringify(createDocumentGraph(REMOVED, version))]);
+    await db.query('DELETE FROM prepared_pages WHERE artifact_id = $1', [broken]);
+
+    const valid = await download(good, owner.actor);
+    expect(valid).not.toHaveProperty('scriptFailed');
+    const failed = await download(broken, owner.actor);
+    expect(failed.scriptFailed).toBe(true);
+    expect(JSON.stringify(failed)).not.toMatch(/'page' exports/);
+    expect(parseArtifactFile(JSON.parse(JSON.stringify(failed)))).toEqual(JSON.parse(JSON.stringify(failed)));
+    const doc = new JSDOM(renderArtifactFileHtml({ file: failed, code: 'AA==' })).window.document;
+    const notice = doc.querySelector('[role="status"][aria-label="Page script unavailable"]');
+    expect(notice?.textContent).toMatch(/script could not load/);
+    expect(notice?.textContent).not.toMatch(/reviewState/);
+    expect(doc.getElementById('rest')?.textContent).toBe('Steps');
+    expect(new JSDOM(renderArtifactFileHtml({ file: valid, code: 'AA==' })).window.document.querySelector('[data-mx-script-failure]')).toBeNull();
   });
 });
 

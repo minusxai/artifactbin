@@ -33,16 +33,17 @@ import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { ISLAND_DOCUMENT_KEY, LINKED_BASE_SELECTOR, LIVE_DIRECT_ATTR, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR, type IslandHost } from '../contract';
 import type { IslandEntry, IslandModule, IslandMorphSeam, MorphableIslandDocument } from '../boot';
 import type { StoryUpdateOptions } from '../live-update';
-import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR, LITERALS_ATTR, STORY_NODES_ID, STORY_VERSION_DRAWN_EVENT } from '@/lib/story-runtime/contract';
+import { DOCUMENT_MODULE_PATH, ISLAND_DATA_ID, ISLANDS_PATH, LIVE_DATA_ATTR, LITERALS_ATTR, SCRIPT_FAILURE_ATTR, STORY_NODES_ID, STORY_VERSION_DRAWN_EVENT } from '@/lib/story-runtime/contract';
 
 const HK = 'data-hk';
 /**
  * Sheets that belong to one version and may be absent from the next (lib/page-styles/document-styles, the assembler):
  * the Tailwind in all its parts (`data-mx-tw`, and on a document with linked shared sheets its shards `-s<n>` and the
- * rules it carries itself `-i<n>`, lib/page-styles/linked-sheets.server), the Helmet's fonts, the design system, the author's CSS.
+ * rules it carries itself `-i<n>`, lib/page-styles/linked-sheets.server), the Helmet's fonts, the design system, the author's CSS,
+ * and the notice's sheet of a version whose script did not build.
  */
 const isVersionSheet = (key: string): boolean =>
-  key.startsWith('data-mx-tw') || ['data-mx-story-css', 'data-mx-font-vars', 'data-mx-system', 'data-mx-author'].includes(key);
+  key.startsWith('data-mx-tw') || ['data-mx-story-css', 'data-mx-font-vars', 'data-mx-system', 'data-mx-author', `${SCRIPT_FAILURE_ATTR}-css`].includes(key);
 /** How often a version the server is still compiling is asked for again, and how long apart. */
 const NOT_READY_RETRIES = 6;
 const NOT_READY_DELAY_MS = 250;
@@ -288,7 +289,7 @@ const bootLink = (doc: Document): HTMLLinkElement | null =>
 const bootUrl = (doc: Document): string | null => bootLink(doc)?.getAttribute('href') ?? null;
 
 /**
- * The page's module script and boot preload become the new version's, so the next version is compared
+ * The page's module script, boot preload and script-failure notice become the new version's, so the next version is compared
  * with what the page runs now (the same-module shortcut, the island-build guard). A script cloned from a
  * parsed document is already started: inserting it runs nothing (its module was imported, and a module
  * runs once per URL anyway).
@@ -302,6 +303,16 @@ function syncModuleRecord(doc: Document, next: Document): void {
   };
   record(moduleScript(doc), moduleScript(next), doc.body);
   record(bootLink(doc), bootLink(next), doc.head);
+  // The notice of a version whose script did not build (SCRIPT_FAILURE_ATTR) is the drawn version's: before the story
+  // root when it carries one, gone when it does not (an author's fixed republish reaches a reader holding the page).
+  const notice = (d: Document) => d.querySelector(`[${SCRIPT_FAILURE_ATTR}]`);
+  const here = notice(doc), there = notice(next);
+  if (!there) here?.remove();
+  else if (!here?.isEqualNode(there)) {
+    const copy = doc.importNode(there, true);
+    if (here) here.replaceWith(copy);
+    else doc.querySelector(STORY_ROOT_SELECTOR)?.before(copy);
+  }
 }
 
 /**

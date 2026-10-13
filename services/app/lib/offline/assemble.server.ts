@@ -440,6 +440,8 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     localIds: [],
     bundle: 'solid',
     compiledFlowDigest: sourceDigest(JSON.stringify(island.dataflow?.flow ?? null)),
+    // The version runs without a script that does not build: the file says so, as every served copy does (never the builder's words).
+    ...(page.authorScriptErrors || parts.runtime.authorScriptErrors ? { scriptFailed: true as const } : {}),
     extras: await offlineExtrasRef(),
     // The island and stylesheets above were built from exactly this source.
     derivedFrom: sourceDigest(source),

@@ -11,7 +11,7 @@ import { assembleReaderPage } from '../assembler';
 import { documentStyleSheets } from '@/lib/page-styles/document-styles';
 import { SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage } from '../contract';
 import type { DataSnapshot } from '@/lib/publish/prepared/snapshots.server';
-import { CHART_SLOT_ATTR, ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
+import { CHART_SLOT_ATTR, ISLAND_DATA_ID, SCRIPT_FAILURE_ATTR } from '@/lib/story-runtime/contract';
 
 const build = { id: 'b'.repeat(16), manifest: { 'solid-js': '/islands/solid-1111aaaa.js', 'solid-js/web': '/islands/web-2222bbbb.js', 'solid-js/store': '/islands/store-3333cccc.js', '@mx/rt': '/islands/rt-4444dddd.js', '@mx/boot': '/islands/boot-5555eeee.js', '@mx/deck': '/islands/deck-6666ffff.js' } };
 const compiled = (over: Partial<CompiledPage> = {}): CompiledPage => ({
@@ -33,6 +33,20 @@ const input = (over: Partial<AssembleInput> = {}): AssembleInput => ({
 const dom = (page: { html: string }) => new JSDOM(page.html).window.document;
 
 describe('assembleReaderPage', () => {
+  it('says, before the story, that a version\'s script did not build, and adds nothing to a version whose script built', () => {
+    const plain = assembleReaderPage(input());
+    expect(assembleReaderPage(input({ scriptFailed: false })).html).toBe(plain.html);
+    const doc = dom(assembleReaderPage(input({ scriptFailed: true })));
+    const notice = doc.querySelector('[role="status"][aria-label="Page script unavailable"]');
+    expect(notice?.hasAttribute(SCRIPT_FAILURE_ATTR)).toBe(true);
+    expect(notice?.textContent).toMatch(/script could not load/);
+    // Outside the story root (the hydrated tree never sees it), and the first thing in the body.
+    expect(notice?.nextElementSibling?.id).toBe('mx-story-root');
+    expect(doc.body.firstElementChild).toBe(notice);
+    expect(doc.head.querySelector(`style[${SCRIPT_FAILURE_ATTR}-css]`)?.textContent).toContain(`[${SCRIPT_FAILURE_ATTR}]`);
+    expect(dom(plain).querySelector(`[${SCRIPT_FAILURE_ATTR}], style[${SCRIPT_FAILURE_ATTR}-css]`)).toBeNull();
+  });
+
   it('uses immutable compiled carriers when request-specific SSR supplies only the visible story', () => {
     const compiledHtml = '<div class="mx-doc">seed</div><script type="application/json" data-mx-island-literals="aaaaaaaaaaaaaaaa">["chart"]</script><script type="application/json" data-mx-module-data>{"moduleData":[{"rows":[1]}]}</script>';
     const page = assembleReaderPage(input({ compiled: compiled({ html: compiledHtml }), story: '<div class="mx-doc"><p id="request">request values</p></div>' }));
