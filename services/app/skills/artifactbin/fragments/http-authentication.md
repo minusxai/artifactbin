@@ -1,4 +1,4 @@
-Reuse credentials for [[ base ]]. Use the installed `scripts/credentials.mjs` or download [[ base ]]/skills/artifactbin/credentials.mjs as `credentials.mjs`:
+Reuse credentials for [[ base ]]. Helper: installed `scripts/credentials.mjs` or [[ base ]]/skills/artifactbin/credentials.mjs, saved as `credentials.mjs`:
 
 ```sh
 node credentials.mjs request --origin '[[ base ]]' --path /api/artifacts
@@ -8,7 +8,7 @@ Only `auth_required` needs login. HTTP authentication requires an email account.
 
 1. `POST /api/auth/email-otp/send-verification-otp` with `{"email":"<recipient email>","type":"sign-in"}`. Ask for the emailed OTP and wait for the reply.
 2. `POST /api/auth/sign-in/email-otp` with `{"email":"<recipient email>","otp":"<user code>"}`. Retain cookies privately.
-3. `POST /api/authentication/token` with those cookies. Save the response privately:
+3. `POST /api/authentication/token` with those cookies. Save privately:
 
 ```sh
 node credentials.mjs save --origin '[[ base ]]' < private-oauth-response.json

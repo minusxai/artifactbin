@@ -6,6 +6,8 @@ description: Shared origin-scoped credentials, email authentication and serializ
 
 [% include "fragments/http-authentication.md" %]
 
+Verified email sessions receive `access_token`, `refresh_token`, `client_id` and `expires_in` from the token endpoint.
+
 ## Storage and refresh
 
 The installed helper is `scripts/credentials.mjs`; substitute that path for `credentials.mjs` above. `refresh_unavailable` and transient errors retain the saved grant; retry later without another OTP. The helper’s `path --origin` command reports the actual backing file. Do not install the CLI to work around missing HTTP credentials.
