@@ -226,11 +226,6 @@ export class PostgresDb implements Db {
     }
   }
 
-  async initializeSchema(): Promise<void> {
-    for (const stmt of SCHEMA_STATEMENTS) {
-      await this.pool.query(stmt);
-    }
-  }
 
   /**
    * Lazily acquire the shared listener client and wire its notification dispatch.
@@ -329,6 +324,9 @@ export const SERVING_POOL = { max: 20, connectionTimeoutMillis: 5_000, statement
  * An idle client's error (a database restart or failover) is emitted on the pool; with no listener Node
  * throws it and the process exits. The pool has already discarded that client, so logging is enough.
  */
+/** Shared with the server's extensions, whose boot DDL takes the same lock. */
+export const SCHEMA_LOCK = 'artifactbin.app.schema';
+
 export function withPoolErrors<P extends { on(event: 'error', cb: (error: Error) => void): unknown }>(pool: P): P {
   pool.on('error', (error) => console.error('[db] idle connection lost:', error.message));
   return pool;
@@ -346,12 +344,17 @@ async function createDb(): Promise<Db> {
     pg.types.setTypeParser(TIMESTAMP_OID, (v: string) => toIso(v.replace(' ', 'T') + 'Z'));
     // The boot DDL and backfills run on their own short-lived connection, with no statement timeout: an index
     // build on a large table may outlast the request bound the serving pool below holds every statement to.
-    const boot = new PostgresDb(withPoolErrors(new pg.Pool({ connectionString: target.url, max: 1 })));
+    // ONE BOOT AT A TIME. Replicas booting together would race `CREATE … IF NOT EXISTS` (not concurrency-safe in
+    // Postgres: the loser fails on the catalog's unique index), so the session advisory lock serialises them. Each
+    // statement still commits on its own, keeping the table locks it takes as short as before.
+    const boot = withPoolErrors(new pg.Client({ connectionString: target.url }));
+    await boot.connect();
     try {
-      await boot.initializeSchema();
+      await boot.query(`SELECT pg_advisory_lock(hashtext('${SCHEMA_LOCK}'))`);
+      for (const stmt of SCHEMA_STATEMENTS) await boot.query(stmt);
       await applyBackfills(boot);
     } finally {
-      await boot.close();
+      await boot.end();
     }
     return new PostgresDb(withPoolErrors(new pg.Pool({ connectionString: target.url, ...SERVING_POOL })));
   }
@@ -389,7 +392,7 @@ async function createDb(): Promise<Db> {
  * adapter is handed in because `getDb()` would wait on the promise this very
  * call resolves.
  */
-async function applyBackfills(db: Db): Promise<void> {
+async function applyBackfills(db: Queryable): Promise<void> {
   // Existing likes/follows predate lifecycle fields. Membership has no legacy migration.
   await db.query("UPDATE relations SET initiated_by=coalesce(initiated_by,subject_id),accepted_at=coalesce(accepted_at,created_at),status=CASE WHEN deleted_at IS NULL THEN status ELSE 'left' END WHERE verb IN ('like','follow') AND initiated_by IS NULL");
 }
