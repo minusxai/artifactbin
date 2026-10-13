@@ -12,7 +12,7 @@
  * The frame is the server's — it may have loaded before this code ran — so this adopts it and never draws or removes
  * one; the page owns its layout.
  */
-import { createEffect, createRoot, createSignal, getOwner, on, onCleanup, type Accessor } from 'solid-js';
+import { createEffect, createSignal, getOwner, on, onCleanup, runWithOwner, type Accessor } from 'solid-js';
 import type { JsxNode } from '@/lib/jsx/types';
 import { createFrameBridgeParent, type FrameBridgeParent } from '@/lib/story-runtime/frame-bridge/parent';
 import { withUrlValuesOf } from '@/lib/dataflow/url-values';
@@ -108,6 +108,11 @@ interface FramedStoryOptions {
    * the mode pick and the `$` values need none of it), and `attachTree` brings it when an action can use it.
    */
   nodes: JsxNode[] | Promise<JsxNode[] | null>;
+  /**
+   * A bridge made without the tree: the frame reports the reader's first press, touch, key or selection in the
+   * document (contract `pressed`), which a page that can use the tree answers with `attachTree`.
+   */
+  onPressed?: () => void;
   /** The head pointer drafts are previewed against, and the source the editor opened on (read live; sent on change). */
   editId: () => string;
   source: () => string | null;
@@ -130,9 +135,9 @@ export interface FramedStory {
   /** How far the page's bars reach over the frame's top edge: the document reserves it without moving (bridge `inset`). */
   setTopInset(px: number): void;
   /**
-   * The tree for a bridge made without one (`nodes: []`), asked for once: when it arrives the bridge attaches again
-   * with it — a new session, so the frame's controller starts over and `nonce` is null until it runs. Ignored for a
-   * bridge given its tree, and for one that never arrives (the bridge stays as it was).
+   * The tree for a bridge made without one (`nodes: []`), asked for once: when it arrives it goes to the running
+   * frame controller (bridge `setNodes`) — the same session, so a selection the reader made while it was on its way
+   * is described again and gets its bubble. Ignored for a bridge given its tree, and for one that never arrives.
    */
   attachTree(nodes: Promise<JsxNode[] | null>): void;
 }
@@ -147,25 +152,17 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
   let inset = 0;
   /** The bridge was made without the tree, and it has not been asked for yet. */
   let bare = Array.isArray(options.nodes) && options.nodes.length === 0;
-  /** Ends the current bridge and the effects that feed it. */
-  let stopBridge: (() => void) | null = null;
-  const start = (nodes: JsxNode[], replace = false) => {
-    if (disposed || (current() && !replace)) return;
-    stopBridge?.();
-    stopBridge = null;
-    setNonce(null);
-    createRoot((disposeEffects) => startBridge(nodes, disposeEffects), owner ?? undefined);
-  };
-  const startBridge = (nodes: JsxNode[], disposeEffects: () => void) => {
+  const start = (nodes: JsxNode[]) => {
+    if (disposed || current()) return;
     const bridge = createFrameBridgeParent({
       win: window, frame, frameOrigin: origin, id: options.id, nodes,
       editId: options.editId, source: options.source,
       onReady: (next) => setNonce(next || null),
       onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
       onUrlValues: (values) => followFramedValues(window, values),
+      onPressed: () => { if (bare) options.onPressed?.(); },
     });
     setCurrent(bridge);
-    stopBridge = () => { disposeEffects(); bridge.dispose(); };
     if (inset) bridge.setTopInset(inset);
     createEffect(on([options.editId, options.source], ([editId, source]) => bridge.setContext(editId, source), { defer: true }));
     // Each saved version once, while reading: the editor's drafts (and Done's return to reading) draw their own.
@@ -178,13 +175,13 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     });
   };
   if (Array.isArray(options.nodes)) start(options.nodes);
-  else void options.nodes.then((nodes) => { if (nodes) start(nodes); });
+  else void options.nodes.then((nodes) => { if (nodes && !disposed) runWithOwner(owner, () => start(nodes)); });
   onCleanup(() => {
     disposed = true;
-    stopBridge?.();
-    stopBridge = null;
+    const bridge = current();
     setCurrent(null);
     setNonce(null);
+    bridge?.dispose();
   });
   return {
     controller: current, nonce, frame,
@@ -192,7 +189,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     attachTree: (nodes) => {
       if (!bare || disposed) return;
       bare = false;
-      void nodes.then((tree) => { if (tree && current()) start(tree, true); });
+      void nodes.then((tree) => { if (tree && !disposed) current()?.setNodes(tree); });
     },
   };
 }

@@ -49,6 +49,8 @@ interface FrameBridgeParentOptions {
   onClosed?: (reason: string) => void;
   /** The document's link moved: `search` is what the page's address's `$` params should now say (`''` at rest). */
   onUrlValues?: (search: string) => void;
+  /** The reader first pressed, touched, typed or selected in a document attached without its tree (contract `pressed`). */
+  onPressed?: () => void;
 }
 
 export interface FrameBridgeParent extends IslandStoryController {
@@ -59,6 +61,12 @@ export interface FrameBridgeParent extends IslandStoryController {
    * controller that starts (a document that loads anew starts with none reserved).
    */
   setTopInset(px: number): void;
+  /**
+   * The tree for a bridge made without one (`nodes: []`): the running frame controller classifies against it from
+   * now on (contract `nodes`) — no new session, so a selection the reader already made gets its bubble — and a
+   * document that loads again is attached with it. Ignored once the bridge holds a tree.
+   */
+  setNodes(nodes: JsxNode[]): void;
 }
 
 /** The longest `$` query a document may hand the page's address. */
@@ -207,6 +215,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
         return;
       }
       case 'fetch': void relay(payload); return;
+      case 'pressed': options.onPressed?.(); return;
       case 'scroll': options.onScroll?.({ x: Number(payload.scrollX) || 0, y: Number(payload.scrollY) || 0 }); return;
       case 'error': console.error('[frame-bridge]', payload.message); return;
       default: return;
@@ -249,6 +258,11 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
       return new DOMRect(box.left + frame.clientLeft, box.top + frame.clientTop, frame.clientWidth, frame.clientHeight);
     },
     setContext(editId: string, source: string | null) { post({ kind: 'context', editId, source }); },
+    setNodes(next: JsxNode[]) {
+      if (nodes.length || !next.length) return;
+      nodes = next;
+      post({ kind: 'nodes', nodes: next });
+    },
     setTopInset(px: number) {
       const top = Number.isFinite(px) ? Math.max(0, Math.round(px)) : 0;
       if (top === inset) return;

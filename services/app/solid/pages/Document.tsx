@@ -338,21 +338,28 @@ export function DocumentPage(): JSX.Element {
     // page's data), and on a large document most of the page's bytes. A commenter or editor asks for it now, while the
     // frame loads, and the bridge attaches when it is here. Every other reader's bridge attaches at once without it
     // (reading, the mode pick and the `$` values need none of it): a guest's selection bubble (Comment → sign-in) is
-    // the one use left, so a guest asks for it on the first press into the document; a signed-in viewer never does.
+    // the one use left, so a guest asks for it on the first press into the document — the frame reports a press,
+    // touch, key or selection itself (a touch may never move focus), and the page's window losing focus to the frame
+    // is a second signal — and the tree goes to the running frame controller, which shows the bubble for a selection
+    // made while it was on its way. A signed-in viewer and an archived version never ask.
     const nodes = new AbortController();
     onCleanup(() => nodes.abort());
     const askTree = () => fetchFrameNodes(id, window.location.search, nodes.signal);
     const treeOnLoad = annotatable() || editable();
+    let treeAsked = treeOnLoad;
+    const askTreeOnPress = () => {
+      if (treeAsked || !story || !canStartComment()) return;
+      treeAsked = true;
+      story.attachTree(askTree());
+    };
     story = createFramedStory({
       id, framed, nodes: treeOnLoad ? askTree() : [],
       editId: () => editorSeed()?.edit_id ?? editorPart()?.editId ?? page.surface?.editId ?? '',
       source: () => editorSeed()?.markup ?? editorPart()?.source ?? null,
       version: live, reading: () => lifecycle.phase() === 'reading',
+      onPressed: askTreeOnPress,
     });
-    if (!treeOnLoad && canStartComment()) {
-      const bare = story;
-      onCleanup(onFirstPressInto(framed.frame, () => bare.attachTree(askTree())));
-    }
+    if (!treeOnLoad && !archivedNow()) onCleanup(onFirstPressInto(framed.frame, askTreeOnPress));
     // The document's links to app paths take this page (another document by a full load, an app page by the router).
     const stopNavigation = answerFrameNavigation({ win: window, frame: framed.frame, frameOrigin: framed.origin, navigate: (path) => navigate(path) });
     // The document is on screen: one view (a prerendered page counts when it is shown).

@@ -21,13 +21,13 @@
  * must not draw a newer version under the editor: the frame half claims STORY_ADOPT_HOOK from edit mode on until the
  * page's `restored` has drawn the saved version, as the app page's in-page mount does for its lifetime.
  */
-import { createIslandController } from '@/lib/islands/island-controller';
+import { createIslandController, type DocumentIslandController } from '@/lib/islands/island-controller';
 import { writeUrlValues } from '@/lib/dataflow/url-values';
 import { islandDocumentOf } from '@/lib/islands/handover';
 import { ISLANDS_READY_EVENT, STORY_ROOT_SELECTOR } from '@/lib/islands/contract';
 import { createTrustedOverlayHost } from '@/lib/islands/trusted-overlay-host';
 import { applyReaderChoice } from './reader-actions';
-import { ISLAND_DATA_ID, READER_READY_ATTR, STORY_ADOPT_HOOK, STORY_READER_MODE_MESSAGE, type FrameBridgeParentPayload, type IslandStoryController } from '@/lib/story-runtime/contract';
+import { ISLAND_DATA_ID, READER_READY_ATTR, STORY_ADOPT_HOOK, STORY_READER_MODE_MESSAGE, type FrameBridgeParentPayload } from '@/lib/story-runtime/contract';
 import type { FrameBridgeSession, FrameBridgeStartOptions } from './frame-door';
 import type { StoryEditFramePost } from '@/lib/edit-protocol';
 
@@ -94,7 +94,7 @@ const isLinkKey = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && 
 export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions): FrameBridgeSession {
   const doc = win.document;
   let disposed = false;
-  let controller: IslandStoryController | null = null;
+  let controller: DocumentIslandController | null = null;
   let editing = false;
   const context = { editId: attach.editId, source: attach.source };
   const queue: FrameBridgeParentPayload[] = [];
@@ -146,6 +146,7 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
         return;
       }
       case 'update': controller.update(payload.command); return;
+      case 'nodes': controller.setNodes(payload.nodes); return;
       case 'restored': {
         const { call } = payload;
         controller.restored().then(
@@ -189,6 +190,22 @@ export function startFrameBridge({ win, post, attach }: FrameBridgeStartOptions)
     scrollQueued = true;
     win.requestAnimationFrame(() => { scrollQueued = false; if (!disposed) post({ kind: 'scroll', scrollX: win.scrollX, scrollY: win.scrollY }); });
   };
+
+  // ── attached without the tree: the reader's first press, touch, key or selection here asks the page for it ──
+  // (a press into a frame on another origin moves no focus the page can always see: a touch may never blur it)
+  if (attach.nodes.length === 0) {
+    const kinds = ['pointerdown', 'touchstart', 'mousedown', 'keydown', 'contextmenu', 'selectionchange'] as const;
+    const stop = () => { for (const kind of kinds) doc.removeEventListener(kind, onPress, true); };
+    const onPress = (event: Event) => {
+      if (!event.isTrusted) return;
+      // A selection that collapsed (a script's, or the document settling) is not the reader's.
+      if (event.type === 'selectionchange' && (win.getSelection()?.isCollapsed ?? true)) return;
+      stop();
+      post({ kind: 'pressed' });
+    };
+    for (const kind of kinds) doc.addEventListener(kind, onPress, { capture: true, passive: true });
+    cleanups.push(stop);
+  }
 
   const start = () => {
     if (disposed || controller) return;
