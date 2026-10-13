@@ -672,21 +672,36 @@ it.each([['a guest', 'anon'], ['a signed-in viewer', 'account']])('%s reads, nav
   } finally { delete document.documentElement.dataset.theme; }
 });
 
-it('asks for the tree when a guest first presses into the document, once, and attaches the bridge with it', async () => {
+/** The frame half reports the reader's first press, touch, key or selection in a document attached without its tree. */
+const framePressed = (frame: HTMLIFrameElement, key: string) => window.dispatchEvent(new MessageEvent('message', {
+  data: { type: 'mx:frame-bridge', key, payload: { kind: 'pressed' } }, origin: FRAME_ORIGIN, source: frame.contentWindow,
+}));
+const treesSent = (posted: Posted) => envelopes(posted).filter((message) => message.payload?.kind === 'nodes');
+
+it.each([
+  ['presses into the document (the page\'s window loses focus to the frame)', (frame: HTMLIFrameElement) => pressIntoDocument(frame)],
+  ['touches or selects in the document (the frame says so; no focus moves)', (frame: HTMLIFrameElement, key: string) => framePressed(frame, key)],
+])('asks for the tree once when a guest first %s, and hands it to the running frame controller', async (_how, press) => {
   mockKind = 'anon'; mockRole = 'viewer'; servingTree();
   const { frame, posted } = mount();
   doorOpens(frame);
   await settle();
   expect(nodeFetches()).toBe(0);
-  pressIntoDocument(frame);
+  const key = attaches(posted)[0]!.key!;
+  frameReady(frame, key, 'guest-nonce');
+  press(frame, key);
   await waitFor(() => expect(nodeFetches()).toBe(1));
-  await waitFor(() => expect(attaches(posted).at(-1)?.payload?.nodes).toEqual(TREE));
-  expect(envelopes(posted).map((message) => message.payload?.kind)).toContain('detach');
+  await waitFor(() => expect(treesSent(posted)).toHaveLength(1));
+  // The same session: the controller that holds the reader's selection takes the tree; nothing detaches or re-attaches.
+  expect(treesSent(posted)[0]).toEqual(expect.objectContaining({ key, payload: { kind: 'nodes', nodes: TREE } }));
+  expect(envelopes(posted).map((message) => message.payload?.kind)).not.toContain('detach');
+  expect(new Set(attaches(posted).map((message) => message.key))).toEqual(new Set([key]));
   frame.blur();
   pressIntoDocument(frame);
+  framePressed(frame, key);
   await settle();
   expect(nodeFetches()).toBe(1);
-  expect(attaches(posted)).toHaveLength(2);
+  expect(treesSent(posted)).toHaveLength(1);
 });
 
 it.each([['a signed-in viewer', 'account', null], ['a guest reading an archived version', 'anon', { version: 1, head: 2 }]] as const)('never asks for the tree for %s, pressing into the document included', async (_who, kind, archived) => {
@@ -694,9 +709,11 @@ it.each([['a signed-in viewer', 'account', null], ['a guest reading an archived 
   const { frame, posted } = mount();
   doorOpens(frame);
   pressIntoDocument(frame);
+  framePressed(frame, attaches(posted)[0]!.key!);
   await settle();
   expect(nodeFetches()).toBe(0);
   expect(attaches(posted)).toEqual([expect.objectContaining({ payload: expect.objectContaining({ nodes: [] }) })]);
+  expect(treesSent(posted)).toEqual([]);
 });
 
 it.each(['commenter', 'owner'])('a %s gets the tree on load, and the bridge attaches only with it', async (role) => {
