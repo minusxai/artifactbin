@@ -29,7 +29,7 @@ import {GET as myArtifact} from '@/app/api/my/artifacts/[id]/route';
 import {POST as myComment} from '@/app/api/my/artifacts/[id]/annotations/route';
 import {GET as pageArtifact} from '@/app/api/page/artifact/[id]/route';
 import {identityForUser,sessionActor} from '@/lib/accounts';
-import {selectChildren} from '@/lib/artifacts';
+import {readThrough,selectChildren} from '@/lib/artifacts';
 import {stageCommentImage} from '@/lib/annotations';
 import sharp from 'sharp';
 import type {Actor} from '@artifactbin/contracts';
@@ -182,6 +182,8 @@ it('refuses an admin a private document at every browser door, its live stream a
  await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ('fld123','tok_owner','usr_owner','Shelf','','{}','folder','public','folder-edit')`);
  await db.query("UPDATE artifacts SET ancestor_ids=ARRAY['fld123'] WHERE id IN ($1,$2)",[UNLISTED.id,PRIVATE.id]);
  const admin=await sessionActor(at('/api/page/artifact/fld123'));expect(admin.documentEditor).toBe(true);
+ // The dataset-grant read (a document a grant names) reads the same rule: no private document for the grant.
+ expect(await readThrough(db,(await getArtifactById(PRIVATE.id))!,admin)).toBe(false);
  const shelf=await selectChildren((await getArtifactById('fld123'))!,admin);
  expect(shelf.children.map(child=>child.id)).toEqual([]);
 });

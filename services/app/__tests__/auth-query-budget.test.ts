@@ -8,11 +8,11 @@
  * the very next request) is pinned beside it so the savings cannot come from skipping the work.
  */
 import { describe, expect, it } from 'vitest';
-import type { Actor } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
 import { GET as sessionRoute } from '@/app/api/page/session/route';
 import { GET as sessionsRoute } from '@/app/api/sessions/route';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
-import { revokeToken, sessionActor } from '@/lib/accounts';
+import { requestOrSessionActor, revokeToken, sessionActor } from '@/lib/accounts';
 import { getDb, measureQueries, runWithRequest } from '@/lib/platform';
 import type { Queryable } from '@/lib/platform/db';
 
@@ -115,6 +115,36 @@ describe('a bearer-token operation request', () => {
       expect(await resolveToken(token)).toMatchObject({ id });
       await revokeToken(id);
       expect(await resolveToken(token)).toBeNull();
+    });
+  });
+});
+
+describe('one request, one identity', () => {
+  it('resolves once however many doors ask, and re-resolves only off the request', async () => {
+    const actor = verified('usr_once', 'once@example.com');
+    await sessionActor(request('/api/my/artifacts', { actor }));
+    const req = request('/api/my/artifacts', { actor });
+    const inside = await recorded(() => runWithRequest(req, async () => {
+      const first = await sessionActor(req), second = await sessionActor(req), third = await requestOrSessionActor(req);
+      return [first, second, third];
+    }));
+    expect(inside.value[1]).toBe(inside.value[0]);
+    expect(inside.value[2]).toBe(inside.value[0]);
+    expect(touching(inside.sql, 'group_invitations')).toHaveLength(1);
+    // Off the request (a direct call) nothing is remembered: each ask is its own.
+    const outside = await recorded(async () => { await sessionActor(req); await sessionActor(req); });
+    expect(touching(outside.sql, 'group_invitations')).toHaveLength(2);
+  });
+
+  it('answers a mid-request re-check afresh: a token revoked elsewhere is gone, the memo is not consulted', async () => {
+    const { id, userId } = await mintAccountToken('recheck');
+    const req = request('/a/abc123', { actor: { credential: 'bearer', tokenId: id, userId: userId! }, headers: { [BROWSER_SESSION_HEADER]: '1' } });
+    await runWithRequest(req, async () => {
+      expect(await sessionActor(req)).toMatchObject({ credential: 'bearer', tokenId: id });
+      // Another request revokes the token: a direct write this request never saw.
+      await (await getDb()).query('UPDATE tokens SET deleted_at=now() WHERE id=$1', [id]);
+      expect(await sessionActor(req), 'the request keeps the identity it admitted').toMatchObject({ credential: 'bearer', tokenId: id });
+      expect(await sessionActor(req, { revalidate: true }), 'a re-check asks again').toMatchObject({ credential: 'none', tokenId: null });
     });
   });
 });
