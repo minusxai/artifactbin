@@ -307,7 +307,8 @@ A stored version whose Helmet script no longer builds under today's API (publish
 with `invalid_script`, but a version stored before an export was removed still exists) is prepared and
 served without its script, never silently: the prepared page records the builder's messages
 (`authorScriptErrors`, logged at error level with the id and version), every copy of the page carries a
-notice before its story root (`data-mx-script-failure`, the assembler's `scriptFailed`), and the app
+notice before its story root (`data-mx-script-failure`, the assembler's `scriptFailed`; the offline
+file's `scriptFailed` draws the same notice), and the app
 page shows a writer the messages above the frame. A page an earlier deployment prepared without
 recording it is prepared again on its next read. `scripts/audit-author-scripts.ts --db <url> [--json]`
 lists every live head whose script does not build (`id, visibility, version, error`) over a read-only

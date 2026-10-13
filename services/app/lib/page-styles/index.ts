@@ -8,7 +8,7 @@
 export { buildDocumentCsp } from './document-csp';
 export { documentFonts, invalidFontFamilies } from './document-fonts';
 export { documentRootAttributes } from './document-root';
-export { DOCUMENT_ROOT_CSS, DOMAIN_FOOTER_CSS, SCRIPT_FAILURE_CSS, documentStyleSheets } from './document-styles';
+export { DOCUMENT_ROOT_CSS, DOMAIN_FOOTER_CSS, documentStyleSheets } from './document-styles';
 export type { DocumentSheet } from './document-styles';
 export { STYLESHEET_PATH } from './shared-paths';
 export { splitStoryCss, storyCssBase, type StoryCssBase } from './story-css-split';

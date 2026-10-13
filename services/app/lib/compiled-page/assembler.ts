@@ -30,9 +30,9 @@ import { LIVE_DIRECT_ATTR, type IslandPageData } from '@/lib/islands';
 import { AUTHOR_VENDOR_EXPORTS } from '@/lib/author-script/contract';
 import { renderOutlineRail } from '@/lib/reader-chrome';
 import { CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SCRIPT_FAILURE_ATTR, STORY_ROOT_ID, type DrawnChart } from '@/lib/story-runtime/contract';
-import { inlineStoryElement } from './story-element';
+import { inlineStoryElement, SCRIPT_FAILURE_CSS, SCRIPT_FAILURE_NOTICE } from './story-element';
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
-import { DOCUMENT_ROOT_CSS, documentRootAttributes, fontPreloadTags, SCRIPT_FAILURE_CSS } from '@/lib/page-styles';
+import { DOCUMENT_ROOT_CSS, documentRootAttributes, fontPreloadTags } from '@/lib/page-styles';
 import {
   SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER,
   type AssembleHead, type AssembleInput, type AssembleReaderPage, type AssembledPage, type CompilerBuild,
@@ -115,9 +115,6 @@ export const assembleReaderPage: AssembleReaderPage = (input: AssembleInput): As
 
 const unique = (urls: readonly string[]): string[] => [...new Set(urls)];
 
-/** What every copy of a page whose script did not build says (AssembleInput.scriptFailed): what a reader needs, and nothing of the builder's. */
-const SCRIPT_FAILURE_NOTICE = `<div ${SCRIPT_FAILURE_ATTR}="" role="status" aria-label="Page script unavailable">`
-  + 'This page\u2019s script could not load, so some of its controls may not respond. Its editors can see why on the document\u2019s page.</div>';
 
 /** The document's live identity on `<body>`, which the island runtime's boot opens the live stream from. */
 const liveAttrs = (live: AssembleInput['live']): string =>
