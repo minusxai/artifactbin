@@ -11,7 +11,7 @@ import { gettingStartedMarkdown } from '@/lib/serving/getting-started';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin or HTTP: https://x.test/getting-started.md. Sign in as the recipient with edit access; the sender's login is not transferred.\n\nAsk the user what artifact they'd like to build.";
+const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin CLI if installed, or HTTP: https://x.test/getting-started.md. Sign in as the recipient with edit access; the sender's login is not transferred.\n\nAsk the user what artifact they'd like to build.";
 
 describe('the tokenless paste', () => {
   it('offers one full installer command per platform on the selected host', () => {
