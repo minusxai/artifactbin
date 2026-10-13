@@ -1,4 +1,4 @@
-import { getArtifactById, roleFor } from '@/lib/artifacts';
+import { getArtifactById, effectiveRole } from '@/lib/artifacts';
 import { forkArtifact, forkDatasetPreview, forkRefusal } from '@/lib/publish/publish';
 import { forkOwner } from '@/lib/operations/registry';
 import { capabilityGuard } from '@/lib/artifacts';
@@ -43,14 +43,15 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
   const row = await getArtifactById(id);
-  if (!row || !canRead(await roleFor(row, actor))) return json({ error: 'not_found' }, 404);
-  const userId = actor.viewer?.userId;
+  if (!row || !canRead(await effectiveRole(row, actor))) return json({ error: 'not_found' }, 404);
+  const userId = actor.userId;
   if (!userId) return json({ error: 'sign_in_required' }, 409);
   // A guest is sent to sign in by the line above; a TEST USER holds an account
   // id and is still refused — it forks inside its sandbox and nowhere else.
-  const sandbox = await capabilityGuard({ userId, tokenId: actor.tokenId }, 'fork', id);
+  const sandbox = await capabilityGuard(actor, 'fork', id);
   if (sandbox) return sandbox;
-  const tokenId = await ensureUserToken(userId);
+  // The browser forks through the account's own token, whatever cookie it rode in on.
+  const forker = { ...actor, tokenId: await ensureUserToken(userId) };
   // A body is optional here (the control row sends none), so an unreadable one
   // is simply "no options" rather than a 400: this door has no overrides to
   // silently drop, which is the hazard the operation's door answers 400 for.
@@ -58,15 +59,15 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // `as: {testuser}` — the ONE door from the real world into a test user's
   // sandbox, and it is the same rule at both fork doors: read, refs and the
   // artifact quota stay the account's, and only the OWNER of the copy changes.
-  const owner = await forkOwner({ tokenId, userId }, body?.as);
+  const owner = await forkOwner(forker, body?.as);
   if ('error' in owner) return json({ error: owner.error, message: owner.message }, owner.status);
   if (body?.dry_run === true) {
     const unforkable = forkRefusal(row);
     if (unforkable) return unforkable;
-    return json({ datasets: await forkDatasetPreview({ tokenId, userId }, row, owner.actor), ...(owner.testuser ? { owner: owner.testuser } : {}) }, 200);
+    return json({ datasets: await forkDatasetPreview(forker, row, owner.actor), ...(owner.testuser ? { owner: owner.testuser } : {}) }, 200);
   }
 
-  const copy = await forkArtifact({ tokenId, userId }, row, {}, owner.actor);
+  const copy = await forkArtifact(forker, row, {}, owner.actor);
   // A publish refusal (an unownable <Mutation> target, an unreadable ref) is
   // passed through by name — it tells the forker exactly what stopped it.
   if (copy instanceof Response) return copy;

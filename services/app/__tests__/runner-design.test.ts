@@ -1,6 +1,6 @@
 import { it, expect, afterEach } from "vitest";
 import { useAppHarness, request } from "./harness";
-import { createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as publish } from "@/app/api/artifacts/route";
 import { GET as read } from "@/app/api/artifacts/[id]/route";
@@ -39,7 +39,7 @@ async function setup() {
     recoveryKey: "a".repeat(64),
   });
   const thread: any = await createAnnotationFor(
-    { tokenId: token.id, userId: user.id },
+    identityForUser(user.id, token.id),
     doc.id,
     {
       nodeId: "review",
@@ -386,7 +386,7 @@ it("seeds Pi with the saved transcript on the next comment and isolates history 
     first = await runDesignPath(fixture);
   expect(first.completed).toBe(true);
   const thread: any = await createAnnotationFor(
-    { tokenId: fixture.actor.tokenId, userId: fixture.actor.userId },
+    identityForUser(fixture.actor.userId, fixture.actor.tokenId),
     fixture.artifactId,
     {
       nodeId: "review",
@@ -494,18 +494,18 @@ it("compiles TypeScript and rejects host files, native packages and remote impor
     ).rejects.toThrow("import_not_allowed");
 }, 15000);
 
-import { actorForArtifacts, sessionActor } from "@/lib/accounts";
+import { sessionActor } from "@/lib/accounts";
 import { runOperation } from "@/lib/operations/http";
 const userOperations = {
   read: async (req: Request, id: string) => {
-    const actor = actorForArtifacts(await sessionActor(req));
-    return actor
+    const actor = await sessionActor(req);
+    return actor.userId || actor.tokenId
       ? runOperation("get_artifact", req, actor, { id })
       : new Response(null, { status: 401 });
   },
   reply: async (req: Request, id: string, annId: string) => {
-    const actor = actorForArtifacts(await sessionActor(req));
-    return actor
+    const actor = await sessionActor(req);
+    return actor.userId || actor.tokenId
       ? runOperation("annotate", req, actor, {
           ...(await req.json()),
           id,

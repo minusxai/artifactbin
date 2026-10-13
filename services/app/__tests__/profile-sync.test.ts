@@ -28,7 +28,7 @@ describe('profile sync from the actor', () => {
   it('creates the app\'s row for a session actor the app has never seen, with a handle assigned', async () => {
     const before = profileWrites();
     const actor = await sessionActor(actorRequest({ credential: 'session', userId: 'usr_new1', email: 'new@example.com', emailVerified: true }));
-    expect(actor.viewer).toEqual({ userId: 'usr_new1', email: 'new@example.com', emailVerified: true });
+    expect(actor).toMatchObject({ userId: 'usr_new1', email: 'new@example.com', emailVerified: true, documentEditor: false });
     const db = await harness.db();
     const row = (await db.query<{ id: string; email: string; username: string | null }>('SELECT id, email, username FROM users WHERE id = $1', ['usr_new1'])).rows[0];
     expect(row).toMatchObject({ id: 'usr_new1', email: 'new@example.com' });
@@ -64,9 +64,9 @@ describe('profile sync from the actor', () => {
  * through, so someone who only ever uses the CLI must not have to open a
  * browser once before the documents they were invited to appear.
  *
- * The bearer door is `withTokenAuth`, so that is where the sync sits; whether
- * the claims BELONG to the presented credential stays `tokenActorForRequest`'s
- * single rule (viewer-actor-of.test.ts pins its mismatch cases).
+ * The bearer door is `withTokenAuth`, so that is where the sync runs; whether
+ * the claims BELONG to the presented credential is the request-identity
+ * resolver's single rule (viewer-actor-of.test.ts pins its mismatch cases).
  */
 describe('profile sync at the bearer door', () => {
   const cliRequest = (token: { id: string; token: string }, actor: Actor) =>
@@ -181,11 +181,11 @@ describe('profile sync at the bearer door', () => {
 
 /**
  * THE SECOND BEARER DOOR. `withTokenAuth` is not the only place a token is admitted:
- * `requestOrSessionActor` (lib/viewer) resolves the same bearer for export, mutate, tables, raw, the
+ * `requestOrSessionActor` (lib/accounts) resolves the same bearer for export, mutate, tables, raw, the
  * dataset endpoints and the remote routes. An invitee whose FIRST call lands on one of those was
  * still rowless there, and the SQL scopes that read a share through `(SELECT email FROM users WHERE
  * id = $p)` — every `editorScope` — answered the uniform 404. The claims-match rule is not repeated:
- * both doors call the one exported `syncProfileForToken`.
+ * both doors are one resolver (lib/accounts request-identity).
  */
 describe('a bearer-only invitee whose first call is not a withTokenAuth route', () => {
   const TARGET = { host: 'db.example.com', port: 5432, database: 'commerce', username: 'reader', ssl: true };

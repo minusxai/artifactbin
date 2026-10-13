@@ -1,14 +1,14 @@
 import {grantsOf,grantsPermitRead} from '@/lib/artifacts/dataset-policy/grants';
 import { effectiveRole } from './access';
 import { type ArtifactRow } from './table';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { getArtifactById, getEditableArtifactFor } from './rows';
 import {servableDocument} from './servable';
 import {canRead,canEdit,canAnnotate,type ArtifactRole} from '@artifactbin/contracts';
 import {publicCatalogOf} from '../datasets/catalog';
 
 /** Read access never implies access to the editable governance or connection definition. */
-export async function readableArtifact(actor:TokenActor,id:string){
+export async function readableArtifact(actor:AccessActor,id:string){
  const row=await getArtifactById(id);
  if(!row)return null;
  const role=await effectiveRole(row,actor);
@@ -21,7 +21,7 @@ export async function readableArtifact(actor:TokenActor,id:string){
  * as served. Either refuses a retired shape (lib/artifacts/servable). lib/annotations/wire inlines the open
  * annotations into it, then narrows it with `snapshotForReader`.
  */
-export async function snapshotHeadFor(actor:TokenActor,id:string){
+export async function snapshotHeadFor(actor:AccessActor,id:string){
  const readable=await readableArtifact(actor,id);if(!readable)return null;
  const {row,role}=readable;const editable=canEdit(role);
  // Recheck the edit predicate in the query that reads the invitation snapshot.

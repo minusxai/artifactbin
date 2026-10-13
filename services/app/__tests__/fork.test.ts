@@ -29,7 +29,7 @@ import { getArtifactById, getSharingFor } from '@/lib/artifacts';
 import { listArtifactsFor } from '@/lib/artifacts/store';
 import { getDb } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser } from '@/lib/accounts';
 
 const BASE = 'http://localhost:3000';
 useAppHarness();
@@ -201,10 +201,10 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
     expect(res.status, await res.clone().text()).toBe(201);
     const copyId = ((await res.json()) as { id: string }).id;
 
-    const bob = { tokenId: '', userId: w.bob.id };
+    const bob = identityForUser(w.bob.id, '');
     expect((await getSharingFor(bob, copyId))?.shares).toEqual([]);
     // The original's list is untouched by being forked.
-    const owner = { tokenId: '', userId: w.owner.id };
+    const owner = identityForUser(w.owner.id, '');
     expect((await getSharingFor(owner, w.doc.id))?.shares).toEqual([{ email: 'bob@x.com', role: 'editor' }]);
   });
 
@@ -503,11 +503,11 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
     const w = await world();
     const ds = await create(w.ta.token, { dataset: [{ choice: 'ramen' }], access: 'readwrite', visibility: 'public', title: 'votes' });
     const doc = await create(w.ta.token, { markup: MUTATING(ds.id), visibility: 'public' });
-    const before = (await listArtifactsFor({ tokenId: w.tb.id, userId: w.bob.id })).length;
+    const before = (await listArtifactsFor(identityForUser(w.bob.id, w.tb.id))).length;
     const res = await bearerFork(doc.id, w.tb.token, { dry_run: true });
     expect(res.status, await res.clone().text()).toBe(200);
     expect(await res.json()).toEqual({ datasets: [{ id: ds.id, title: 'votes' }] });
-    expect((await listArtifactsFor({ tokenId: w.tb.id, userId: w.bob.id })).length).toBe(before);
+    expect((await listArtifactsFor(identityForUser(w.bob.id, w.tb.id))).length).toBe(before);
   });
 
   it('an ordinary document copies no datasets: the answer says so with an empty list', async () => {
@@ -545,12 +545,12 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
 
   it('a body that was SENT and does not parse is invalid_json, and nothing is created', async () => {
     const w = await world();
-    expect(await listArtifactsFor({ tokenId: w.tb.id, userId: w.bob.id })).toHaveLength(0);
+    expect(await listArtifactsFor(identityForUser(w.bob.id, w.tb.id))).toHaveLength(0);
     const res = await rawFork(w.doc.id, w.tb.token, '{"visibility":"private"');
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe('invalid_json');
     // Not a copy at the SOURCE's visibility — the refusal is the whole point.
-    expect(await listArtifactsFor({ tokenId: w.tb.id, userId: w.bob.id })).toHaveLength(0);
+    expect(await listArtifactsFor(identityForUser(w.bob.id, w.tb.id))).toHaveLength(0);
   });
 
   it('every format forks; a dataset copy shares the object key', async () => {

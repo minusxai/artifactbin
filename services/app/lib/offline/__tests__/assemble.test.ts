@@ -13,12 +13,12 @@ import { documentEditBody } from '@/__tests__/prepared-document';
 import { actOnAnnotationFor, createAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 import { getArtifactById, getVersionFor } from '@/lib/artifacts';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { AccessActor } from '@/lib/accounts';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/document/asset-url';
-import { setAvatar } from '@/lib/accounts';
+import { identityForUser, setAvatar } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
 import type { TableResult } from '@/lib/dataflow';
@@ -40,7 +40,7 @@ async function account(name: string) {
   const user = await createUser({ email: `mxmx_test_offline_${name}@example.com` });
   const token = await mintToken(`mxmx_test_offline_${name}`);
   await claimToken(user.id, token.token);
-  const actor: RoleActor = { userId: user.id, tokenId: token.id, email: user.email };
+  const actor: AccessActor = identityForUser(user.id, token.id, user.email);
   return { user, token, actor };
 }
 
@@ -89,7 +89,7 @@ async function world() {
     ],
   });
   const secret = await create(owner.token.token, { dataset: [{ code: 'owner-only' }] });
-  expect(await setDatasetPolicy({ userId: owner.user.id, tokenId: owner.token.id }, secret, { version: 2, allow: [{ actions: ['read'], from: { user: '$owner' } }] }, 0)).toMatchObject({ revision: 1 });
+  expect(await setDatasetPolicy(identityForUser(owner.user.id, owner.token.id), secret, { version: 2, allow: [{ actions: ['read'], from: { user: '$owner' } }] }, 0)).toMatchObject({ revision: 1 });
   const img = await create(owner.token.token, { image: PNG });
   await seedWebImage();
   const doc = await create(owner.token.token, { markup: DASHBOARD(ds, secret, img), visibility: 'unlisted' });
@@ -97,9 +97,9 @@ async function world() {
   return { owner, bob, stranger, ds, secret, img, doc, privateDoc };
 }
 
-const reader = (a: { user: { id: string; email: string } }): RoleActor => ({ userId: a.user.id, tokenId: null, email: a.user.email });
+const reader = (a: { user: { id: string; email: string } }): AccessActor => (identityForUser(a.user.id, null, a.user.email));
 
-async function download(id: string, actor: RoleActor, extra: { version?: number; maxFileBytes?: number } = {}): Promise<ArtifactFile> {
+async function download(id: string, actor: AccessActor, extra: { version?: number; maxFileBytes?: number } = {}): Promise<ArtifactFile> {
   const file = await assembleArtifactFile({ id, actor, origin: ORIGIN, ...extra });
   if ('refused' in file) throw new Error(`refused: ${file.refused} ${file.message}`);
   return file;
@@ -114,7 +114,7 @@ describe('access', () => {
     expect((await download(w.privateDoc, w.owner.actor)).source).toMatch(/<p[^>]*>Only mine\.<\/p>/);
     expect((await download(w.doc, reader(w.bob))).artifactId).toBe(w.doc);
     expect(await assembleArtifactFile({ id: w.privateDoc, actor: reader(w.stranger), origin: ORIGIN })).toMatchObject({ refused: 'forbidden' });
-    expect(await assembleArtifactFile({ id: w.privateDoc, actor: { userId: null, tokenId: null }, origin: ORIGIN })).toMatchObject({ refused: 'forbidden' });
+    expect(await assembleArtifactFile({ id: w.privateDoc, actor: identityForUser(null, null), origin: ORIGIN })).toMatchObject({ refused: 'forbidden' });
     expect(await assembleArtifactFile({ id: 'Zz9Zz9', actor: w.owner.actor, origin: ORIGIN })).toMatchObject({ refused: 'not_found' });
     const notADocument = await assembleArtifactFile({ id: w.ds, actor: w.owner.actor, origin: ORIGIN });
     expect(notADocument).toMatchObject({ refused: 'not_found' });
@@ -124,8 +124,8 @@ describe('access', () => {
   it('retains an admitted shared-reader download without granting history or retaining refused private reads', async () => {
     const owner = await account('retention_owner');
     const bob = await account('retention_reader');
-    const ownerScope = { userId: owner.user.id, tokenId: owner.token.id };
-    const readerScope = { userId: bob.user.id, tokenId: bob.token.id };
+    const ownerScope = identityForUser(owner.user.id, owner.token.id);
+    const readerScope = identityForUser(bob.user.id, bob.token.id);
     const shared = await create(owner.token.token, { markup: '<p>Shared baseline</p>', visibility: 'unlisted' });
     const privateId = await create(owner.token.token, { markup: '<p>Private baseline</p>', visibility: 'private' });
     expect(await getVersionFor(ownerScope, shared, 1)).toBeNull();
@@ -314,7 +314,7 @@ describe('a self-contained file', () => {
 describe('threads', () => {
   it('carries open and resolved threads the downloader may see, and no deleted or unseeable ones', async () => {
     const w = await world();
-    const tokenActor = { userId: w.owner.user.id, tokenId: w.owner.token.id };
+    const tokenActor = identityForUser(w.owner.user.id, w.owner.token.id);
     const open = await createAnnotationFor(tokenActor, w.doc, { body: 'Check the west number', quote: 'Quarterly numbers.' }, AUTHOR);
     const resolved = await createAnnotationFor(tokenActor, w.doc, { body: 'Title ok?', quote: 'Sales' }, AUTHOR);
     const gone = await createAnnotationFor(tokenActor, w.doc, { body: 'Never mind', quote: 'Quarterly numbers.' }, AUTHOR);

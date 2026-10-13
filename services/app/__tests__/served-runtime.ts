@@ -31,8 +31,8 @@ export async function servedRuntimeOf(id: string, options: ServedRuntimeOptions 
   const { runtime } = await servedPage(prepared.row, prepared.page, {
     at, search,
     drawings: /[?&]mermaid=engine\b/.test(search) ? 'engine' : 'stored',
-    viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
-    ...(options.results ? { results: { admit: actor.viewer } } : {}),
+    viewer: actor,
+    ...(options.results ? { results: { admit: actor } } : {}),
   });
   return runtime;
 }

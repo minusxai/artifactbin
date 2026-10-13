@@ -15,25 +15,16 @@ import {updateMetadataFromBody} from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { trashArtifactFor } from '@/lib/workspace';
-import { actorForArtifacts } from '@/lib/accounts';
-import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
+import { baseUrl, json, readJson } from '@/lib/http';
 
-/** The caller as an artifact scope, or the Response that refuses them. */
-async function scopeFor(request: Request) {
+
+/** GET /api/my/artifacts/:id — owner-actor full read-back (for the editor). */
+export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
-  return actorForArtifacts(actor) ?? unauthorized(request);
-}
-
-/** GET /api/my/artifacts/:id — owner-scoped full read-back (for the editor). */
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const scoped = await scopeFor(request);
-  if (scoped instanceof Response) return scoped;
   const { id } = await ctx.params;
-  const row = await getEditableArtifactFor(scoped, id);
+  const row = await getEditableArtifactFor(actor, id);
   if (!row) return json({ error: 'not_found' }, 404);
-  const browser = await browserActor(request);
-  const viewer = browser instanceof Response ? null : browser.viewer ?? null;
   const wire = await artifactToWireWithAnnotations(row, baseUrl(request));
   // The EDITOR loads through here, and it names a dataset in the data view —
   // "C1kWy2" names nothing to a person. artifactToWire has no viewer to check
@@ -47,7 +38,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // per picture on every editor load to answer a question nobody asks.
       if (ref.kind !== 'dataset') return ref;
       const target = await getArtifactById(ref.id);
-      return target && (await canReadArtifact(target, viewer))
+      return target && (await canReadArtifact(target, actor))
         ? { ...ref, title: target.title ?? null }
         : ref;
     }));
@@ -56,25 +47,25 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 }
 
 /**
- * PUT /api/my/artifacts/:id — owner-scoped full replace (editor save). The
+ * PUT /api/my/artifacts/:id — owner-actor full replace (editor save). The
  * SAME pipeline the bearer route runs (lib/artifact-wire): only the credential
  * differs, so the validation, the version bump and the answer are identical.
  */
 export async function PUT(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const scoped = await scopeFor(request);
-  if (scoped instanceof Response) return scoped;
+  const actor = await browserActor(request);
+  if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
-  return replaceArtifactFromRequest(request, scoped, id, baseUrl(request));
+  return replaceArtifactFromRequest(request, actor, id, baseUrl(request));
 }
 
 /** Browser metadata shares the same state condition and validation as the CLI. */
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const scoped = await scopeFor(request);
-  if (scoped instanceof Response) return scoped;
+  const actor = await browserActor(request);
+  if (actor instanceof Response) return actor;
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
   const { id } = await ctx.params;
-  return updateMetadataFromBody(scoped,id,body,baseUrl(request));
+  return updateMetadataFromBody(actor,id,body,baseUrl(request));
 }
 
 /**
@@ -86,10 +77,10 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
  * retention and runs no sweep.
  */
 export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const scoped = await scopeFor(request);
-  if (scoped instanceof Response) return scoped;
+  const actor = await browserActor(request);
+  if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
-  if (!(await trashArtifactFor(scoped, id))) return json({ error: 'not_found' }, 404);
+  if (!(await trashArtifactFor(actor, id))) return json({ error: 'not_found' }, 404);
   return json({ ok: true });
 }
 

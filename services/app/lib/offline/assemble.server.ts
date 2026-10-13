@@ -27,7 +27,7 @@ import { listAnnotationsFor, type AnnotationWire } from '@/lib/annotations/store
 import { archivedReadOnly, archivedVersionForActor, servedRow } from '@/lib/artifacts';
 import { acceptedMembers, dataflowForRow, dataflowRunsForRow, importsFingerprint, holdableImports, holdImport, nameablePeople, refDataForRow, viewerIdentityFor, type ImportCache } from '@/lib/document-data';
 import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts';
-import { getUserById, type RoleActor, type TokenActor } from '@/lib/accounts';
+import { getUserById, type AccessActor } from '@/lib/accounts';
 import { getArtifactById, retainDownloadedVersion } from '@/lib/artifacts';
 import { type ImportTables, placeDataflow, type DataflowState, type CompiledDataflow } from '@/lib/dataflow';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -59,7 +59,7 @@ export const OFFLINE_FILE_MAX_BYTES = 25 * 1024 * 1024;
 interface AssembleArtifactFileInput {
   id: string;
   /** The downloader, as the read paths resolve them. */
-  actor: RoleActor;
+  actor: AccessActor;
   /** An archived version, admitted only through the history check. */
   version?: number;
   /** Where the file came from, e.g. https://app.artifactbin.dev (no trailing slash needed). */
@@ -102,14 +102,8 @@ class TooLarge extends Error {
 
 const EMPTY_STATE: DataflowState = { values: {}, tables: {}, errors: {} };
 
-/** The actor as the history and annotation scopes take it; null with no credential at all. */
-function tokenActorOf(actor: RoleActor): TokenActor | null {
-  if (actor.userId) return { ...actor, userId: actor.userId, tokenId: actor.tokenId ?? '' };
-  return actor.tokenId ? { tokenId: actor.tokenId, userId: null } : null;
-}
-
 /** A display label for the top bar — a name or handle, never an email. */
-async function downloaderLabel(actor: RoleActor): Promise<string> {
+async function downloaderLabel(actor: AccessActor): Promise<string> {
   if (actor.userId) {
     const user = await getUserById(actor.userId);
     if (user) return user.name?.trim() || user.username || 'Signed-in reader';
@@ -244,7 +238,7 @@ const OFFLINE_VARIANTS_PREFIX = 'offline-variants';
  * the caps and the queries that need the server. Null when any of it cannot be pinned (a connected
  * database, a query that reads the clock), so those documents recompute every time.
  */
-async function variantsKey(artifact: ArtifactRow, version: number, row: ArtifactRow, flow: CompiledDataflow, actor: RoleActor, caps: VariantCaps | undefined, queries: ReadonlySet<string>): Promise<string | null> {
+async function variantsKey(artifact: ArtifactRow, version: number, row: ArtifactRow, flow: CompiledDataflow, actor: AccessActor, caps: VariantCaps | undefined, queries: ReadonlySet<string>): Promise<string | null> {
   if (flow.queries.some((q) => q.params.includes('_now'))) return null;
   const data = await importsFingerprint(row, flow);
   if (data === null) return null;
@@ -295,16 +289,14 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const maxFileBytes = input.maxFileBytes ?? OFFLINE_FILE_MAX_BYTES;
   const artifact = await timed(timings, 'access', () => getArtifactById(input.id));
   if (!artifact) return refuse('not_found', 'This document does not exist.');
-  const viewer = actor.userId ? { ...actor, userId: actor.userId, email: actor.email ?? null } : null;
-  const admitted = (!!actor.tokenId && actor.tokenId === artifact.token_id) || (await timed(timings, 'access', () => canReadArtifact(artifact, viewer)));
+  const admitted = (!!actor.tokenId && actor.tokenId === artifact.token_id) || (await timed(timings, 'access', () => canReadArtifact(artifact, actor)));
   if (!admitted) return refuse('forbidden', 'You do not have access to this document.');
   if (artifact.format !== 'markup') return refuse('not_found', 'Only documents can be downloaded for offline use.');
 
   // Only an admitted live server snapshot can become a download checkpoint.
   if (input.version === undefined) await retainDownloadedVersion(artifact);
 
-  const history = tokenActorOf(actor);
-  const at = input.version === undefined ? null : await archivedVersionForActor(history, artifact, input.version);
+  const at = input.version === undefined ? null : await archivedVersionForActor(actor, artifact, input.version);
   if (at === 'not_found') return refuse('not_found', `Version ${input.version} of this document is not available to you.`);
   const row: ArtifactRow = await servedRow(artifact, at);
   const source = row.source ?? '';
@@ -399,7 +391,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     : { variants: [], frozen: [] };
 
   // Comments anchor to the CURRENT document; an older version carries none (as its served render offers none).
-  const threads: AnnotationWire[] = !at && history ? (await timed(timings, 'threads', () => listAnnotationsFor(history, artifact.id, { status: 'all' }))) ?? [] : [];
+  const threads: AnnotationWire[] = !at && (actor.userId || actor.tokenId) ? (await timed(timings, 'threads', () => listAnnotationsFor(actor, artifact.id, { status: 'all' }))) ?? [] : [];
 
   const imageRefs = new Set(Object.entries(refData).filter(([, r]) => r.kind === 'image').map(([id]) => id));
   const inliner = new Inliner(origin, imageRefs, maxFileBytes);

@@ -13,7 +13,7 @@ import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { updateSharingFor } from '@/lib/artifacts';
-import { link, unlink } from '@/lib/accounts';
+import { identityForUser, link, unlink } from '@/lib/accounts';
 
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -86,7 +86,7 @@ describe('GET /api/page/home', () => {
   it('keeps another owner\'s placement out of the shared-with-you list', async () => {
     const w = await world();
     const guest = await ensureUsername(await createUser({ email: 'mxmx_test_guest@example.com' }));
-    await updateSharingFor({ userId: w.owner.id, tokenId: '' }, w.priv.id, { shares: [{ email: guest.email, role: 'viewer' }] });
+    await updateSharingFor(identityForUser(w.owner.id, ''), w.priv.id, { shares: [{ email: guest.email, role: 'viewer' }] });
     asSession(guest);
     const body = await (await homePage(request('/api/page/home'))).json();
     expect(body.shared.map((a: { id: string }) => a.id)).toEqual([w.priv.id]);
@@ -148,7 +148,7 @@ describe('GET /api/page/artifact/:id', () => {
     const own = await (await artifactPage(request(`/api/page/artifact/${w.priv.id}`), params({ id: w.priv.id }))).json();
     expect(own).toMatchObject({ role: 'owner', kind: 'account' });
     expect(own.surface).toMatchObject({ openAnnotations: 0, accountSession: true, visibility: 'private', hasInvitedUsers: false });
-    await updateSharingFor({ userId: w.owner.id, tokenId: '' }, w.priv.id, { shares: [{ email: 'mxmx_test_invitee@example.com', role: 'viewer' }] });
+    await updateSharingFor(identityForUser(w.owner.id, ''), w.priv.id, { shares: [{ email: 'mxmx_test_invitee@example.com', role: 'viewer' }] });
     const shared = await (await artifactPage(request(`/api/page/artifact/${w.priv.id}`), params({ id: w.priv.id }))).json();
     expect(shared.surface.hasInvitedUsers).toBe(true);
     expect(shared.surface).not.toHaveProperty('shares');

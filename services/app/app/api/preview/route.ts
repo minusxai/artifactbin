@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   const tokenOk = presented ? await resolveToken(presented) : null;
   if (!tokenOk) {
     const actor = await sessionActor(request);
-    if (!actor.viewer && !actor.tokenId) return unauthorized(request);
+    if (!actor.userId && !actor.tokenId) return unauthorized(request);
     // Cookie-authenticated: refuse a cross-site caller (this compiles markup).
     if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);
   }

@@ -10,8 +10,8 @@
  * and an email change reaches the row on the very next request. The user id
  * is the proxy's (`usr_…`) — the same value every artifact, share and token
  * keys on. The row is created LAZILY on the first sight of a credential that
- * CARRIES claims — a cookie session (lib/viewer proxyActor) or a bearer token
- * the proxy could name an account for (lib/viewer syncProfileForToken), since
+ * CARRIES claims — a cookie session or a bearer token the proxy could name an
+ * account for (both resolved in lib/accounts/request-identity), since
  * a CLI-only person is a person too and `artifact_shares` is matched through
  * this row. There is no boot-time sync: one identity, one row, ids agreeing by
  * construction.
@@ -21,7 +21,7 @@ import { ensureUsername, getUserById } from './users';
 
 /**
  * ONE ADDRESS, TWO IDS — the provisioning fault below, as a type callers can single out. A door that
- * wants the request to survive it (lib/viewer's bearer sync) must not survive a broken database as
+ * wants the request to survive it (request-identity's bearer sync) must not survive a broken database as
  * well, and matching on the message text would make this module's wording load-bearing at a distance.
  */
 export class DuplicateProfileEmail extends Error {}

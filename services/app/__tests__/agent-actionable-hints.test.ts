@@ -27,7 +27,7 @@ import { runOperation } from '@/lib/operations/http';
 import { remoteRoute } from '@/lib/remote/route';
 import { accountProfile, updateAccountProfile } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -83,7 +83,7 @@ describe('refusals an afbin command reaches name the afbin action', () => {
 
   it('a session listing on an unclaimed token names afbin auth (afbin list --type session)', async () => {
     const t = await mintToken('anon',null);
-    const res = await runOperation('list_remote_sessions', request('/api/sessions', { token: t.token }), { tokenId:t.id,userId:t.userId }, {});
+    const res = await runOperation('list_remote_sessions', request('/api/sessions', { token: t.token }), identityForUser(t.userId, t.id), {});
     expect(res.status).toBe(403);
     const refusal = await body(res);
     expect(refusal.error).toBe('account_required');
@@ -158,7 +158,7 @@ describe('refusals an afbin command reaches name the afbin action', () => {
     const o = await claimed('profileowner');
     const current = await accountProfile(o.userId);
     // A well-formed observed state that is not the current one: someone moved the profile on.
-    const result = await updateAccountProfile({ tokenId: o.tokenId, userId: o.userId }, { ...current, state: 'a'.repeat(64) });
+    const result = await updateAccountProfile(identityForUser(o.userId, o.tokenId), { ...current, state: 'a'.repeat(64) });
     expect(result.status).toBe(409);
     expect(result.body.error).toBe('state_conflict');
     expect(String(result.body.hint)).toContain('afbin pull --type profile');

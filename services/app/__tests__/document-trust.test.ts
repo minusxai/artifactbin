@@ -12,7 +12,7 @@ import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { DELETE as revokeRoute, GET as trustRoute, POST as grantRoute } from '@/app/api/trust/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { getArtifactById } from '@/lib/artifacts';
 import { cspExtensionsFor, cspRequestFor, TRUST_SESSION_COOKIE } from '@/lib/trust/document-trust';
@@ -63,7 +63,7 @@ describe('the publisher rule', () => {
     expect(await cspRequestFor({ artifact, viewer: { userId: owner.userId } })).toMatchObject({ status: 'publisher', asking: EMPTY_CSP_EXTENSIONS });
     expect(await cspExtensionsFor({ artifact, viewer: { userId: owner.userId } })).toEqual(set([METEO], [PLOTLY]));
     // The publishing token is the same publisher.
-    expect((await cspRequestFor({ artifact, viewer: { userId: null, tokenId: owner.tokenId } })).status).toBe('publisher');
+    expect((await cspRequestFor({ artifact, viewer: identityForUser(null, owner.tokenId) })).status).toBe('publisher');
     expect(await cspRequestFor({ artifact, viewer: null })).toMatchObject({ status: 'blocked', denied: false, asking: set([METEO], [PLOTLY]) });
     expect(await cspExtensionsFor({ artifact, viewer: null })).toEqual(EMPTY_CSP_EXTENSIONS);
 

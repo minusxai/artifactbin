@@ -17,7 +17,7 @@ import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById,getVersionFor,applyEditFor,listVersionsFor,revertArtifactFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, revokeUserToken } from '@/lib/accounts';
+import { identityForUser, createUser, revokeUserToken } from '@/lib/accounts';
 import { listAccountTokenRows } from '@/lib/workspace';
 
 const harness = useAppHarness();
@@ -185,10 +185,10 @@ describe('user-scoped versions + revert (dashboard)', () => {
     const art = await create(t.token, '<h1 id="head">v1</h1>');
     await put(t.token, art.id, '<h1 id="head">v2</h1>');
 
-    const versions = await listVersionsFor({ tokenId: '', userId: user.id }, art.id);
+    const versions = await listVersionsFor(identityForUser(user.id, ''), art.id);
     expect(versions?.map((v) => v.version)).toEqual([1]);
 
-    const actor={tokenId:'',userId:user.id},target=(await getVersionFor(actor,art.id,1))!;
+    const actor=identityForUser(user.id, ''),target=(await getVersionFor(actor,art.id,1))!;
     const outcome=await applyEditFor(actor,art.id,documentEdit((await getArtifactById(art.id))!,{source:target.source!,whole:true}));
     expect(outcome).toMatchObject({applied:true});if(!outcome||outcome instanceof Response||!outcome.applied)throw new Error('Restore failed');
     const reverted=outcome.row;
@@ -204,7 +204,7 @@ describe('user-scoped versions + revert (dashboard)', () => {
     const art = await create(t.token, '<h1>v1</h1>');
     await put(t.token, art.id, '<h1>v2</h1>');
 
-    expect(await listVersionsFor({ tokenId: '', userId: mallory.id }, art.id)).toBeNull();
-    expect(await revertArtifactFor({ tokenId: '', userId: mallory.id }, art.id, 1)).toBeNull();
+    expect(await listVersionsFor(identityForUser(mallory.id, ''), art.id)).toBeNull();
+    expect(await revertArtifactFor(identityForUser(mallory.id, ''), art.id, 1)).toBeNull();
   });
 });

@@ -24,7 +24,7 @@
  * a stored Never belong to an account (401 otherwise) — a signed-out Never is kept for the session.
  */
 import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
-import { refusesCrossSite, sessionActor, type RequestActor } from '@/lib/accounts';
+import { refusesCrossSite, sessionActor, type RequestIdentity } from '@/lib/accounts';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { subtractCspExtensions } from '@/lib/document';
@@ -43,15 +43,15 @@ function foreignWrite(request: Request): boolean {
   return site ? site !== 'same-origin' : isCrossSiteRequest(request);
 }
 
-async function opened(request: Request, artifactId: unknown): Promise<{ artifact: ArtifactRow; actor: RequestActor; viewer: TrustViewer } | Response> {
+async function opened(request: Request, artifactId: unknown): Promise<{ artifact: ArtifactRow; actor: RequestIdentity; viewer: TrustViewer } | Response> {
   if (foreignWrite(request)) return json({ error: 'forbidden' }, 403);
   if (request.method !== 'GET' && !(request.headers.get('content-type') ?? '').toLowerCase().startsWith('application/json')) return json({ error: 'unsupported_media_type' }, 415);
   const actor = await sessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
   if (typeof artifactId !== 'string' || !ID_RE.test(artifactId)) return json({ error: 'invalid_artifact_id' }, 400);
   const artifact = await getArtifactById(artifactId);
-  if (!artifact || artifact.format !== 'markup' || !(actor.tokenId === artifact.token_id || (await canReadArtifact(artifact, actor.viewer)))) return json({ error: 'not_found' }, 404);
-  return { artifact, actor, viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId } };
+  if (!artifact || artifact.format !== 'markup' || !(actor.tokenId === artifact.token_id || (await canReadArtifact(artifact, actor)))) return json({ error: 'not_found' }, 404);
+  return { artifact, actor, viewer: { userId: actor.userId, tokenId: actor.tokenId } };
 }
 
 async function answer(request: Request, artifact: ArtifactRow, viewer: TrustViewer, setCookie?: string): Promise<Response> {
@@ -89,7 +89,7 @@ export async function POST(request: Request): Promise<Response> {
   if (standing.status === 'publisher') return answer(request, artifact, viewer);
   // What the reader was asked about: the declared hosts minus their own (re-derived, never sent by the client).
   const asked = subtractCspExtensions(standing.extensions, await hostsPublishedBy(artifact, viewer, standing.extensions));
-  const userId = actor.viewer?.userId ?? null;
+  const userId = actor.userId;
   const hash = extensionsHash(standing.extensions);
   if (grant === 'once') return answer(request, artifact, viewer, sessionTrustCookie(request, viewer, artifact.id, { hash, decision: 'allow' }));
   if (grant === 'never' && !userId) return answer(request, artifact, viewer, sessionTrustCookie(request, viewer, artifact.id, { hash, decision: 'deny' }));
@@ -105,7 +105,7 @@ export async function DELETE(request: Request): Promise<Response> {
   const opening = await opened(request, body?.artifactId);
   if (opening instanceof Response) return opening;
   const { artifact, actor, viewer } = opening;
-  const userId = actor.viewer?.userId ?? null;
+  const userId = actor.userId;
   if (userId) await revokeTrust(userId, artifact.id);
   return answer(request, artifact, viewer, sessionTrustCookie(request, viewer, artifact.id, { decision: null }));
 }

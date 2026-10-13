@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { identityForUser } from '@/lib/accounts';
 import { afterEach, expect, it } from 'vitest';
 import { request, useAppHarness, mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -23,7 +24,7 @@ async function seed(threads: number) {
   const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: DOC } }));
   const doc = (await made.json()) as { id: string; edit_id: string };
   const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
-  const tokenActor = { userId: t.userId!, tokenId: t.id, email: t.email! };
+  const tokenActor = identityForUser(t.userId!, t.id, t.email!);
   const db = await getDb();
   const ids: string[] = [];
   for (let i = 0; i < threads; i++) {
@@ -114,7 +115,7 @@ async function seedBig(threads: number) {
   const doc = (await made.json()) as { id: string; edit_id: string };
   expect(made.status).toBe(201);
   const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
-  const tokenActor = { userId: t.userId!, tokenId: t.id, email: t.email! };
+  const tokenActor = identityForUser(t.userId!, t.id, t.email!);
   for (let i = 0; i < threads; i++) {
     const res = await myCreateAnnotationRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor, json: { node_id: i % 2 ? 'findings' : 'intro', edit_id: doc.edit_id, body: `thread ${i}` } }), params({ id: doc.id }));
     expect(res.status, await res.clone().text()).toBe(201);
@@ -165,7 +166,7 @@ it('reads the document of a large page once, only to anchor the threads it lists
 it('answers a stranger, and a trashed or missing document, with the same null and the uniform 404 body', async () => {
   const f = await seedBig(1);
   const stranger = await mintToken('other');
-  const strangerActor = { userId: stranger.userId!, tokenId: stranger.id, email: stranger.email! };
+  const strangerActor = identityForUser(stranger.userId!, stranger.id, stranger.email!);
   const refused = await readingDocument(() => listAnnotationPageFor(strangerActor, f.doc.id, { status: 'open', limit: 10 }));
   expect(refused.value).toBeNull();
   expect(refused.documentRows).toBe(0);

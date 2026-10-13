@@ -1,7 +1,6 @@
 import { browserActor } from '@/lib/accounts';
-import { json, unauthorized } from '@/lib/http';
+import { json } from '@/lib/http';
 import { restoreArtifactFor } from '@/lib/workspace';
-import { actorForArtifacts } from '@/lib/accounts';
 
 /**
  * POST /api/my/artifacts/:id/restore — take a row of YOUR OWN back out of the
@@ -19,10 +18,8 @@ import { actorForArtifacts } from '@/lib/accounts';
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
-  const scoped = actorForArtifacts(actor);
-  if (!scoped) return unauthorized(request);
   const { id } = await ctx.params;
-  const restored = await restoreArtifactFor(scoped, id);
+  const restored = await restoreArtifactFor(actor, id);
   if (!restored) return json({ error: 'not_found' }, 404);
   return json({ id: restored.id, url: `/a/${restored.id}`, parent_id: restored.ancestor_ids.at(-1) ?? null, ancestor_ids: restored.ancestor_ids });
 }

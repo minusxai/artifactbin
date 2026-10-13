@@ -3,7 +3,7 @@ import type {RunStart,RunnerService} from '@artifactbin/contracts';
 import {runInNewContext} from 'node:vm';
 import {transform} from 'esbuild';
 import {useAppHarness,request} from './harness';
-import { createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {POST as publish} from '@/app/api/artifacts/route';
 import {PUT as update} from '@/app/api/artifacts/[id]/route';
@@ -33,7 +33,7 @@ it('API authenticates callers and pins only the published server handler, ignori
  expect(admitted[0]!.program.source).not.toContain('browser-only');
  const row=(await getArtifactById(id))!;if(row.document?.kind!=='graph')throw Error('Missing graph');
  const document_update=await prepareClientDocumentPublication({...row,document:row.document},{source:markup(2),whole:true},async source=>{
-  const result=await prepareDocumentAuthoringContext({userId:owner.id,tokenId:token.id},id,{source});if(!result.ok)throw Error(await result.text());
+  const result=await prepareDocumentAuthoringContext(identityForUser(owner.id, token.id),id,{source});if(!result.ok)throw Error(await result.text());
  });
  const replaced=await update(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{edit_id:row.edit_id,document_update}}),{params:Promise.resolve({id})});expect(replaced.status,await replaced.clone().text()).toBe(200);
  expect(admitted[0]!.document!.source).toContain('version:1');expect(admitted[0]!.document!.source).not.toContain('version:2');

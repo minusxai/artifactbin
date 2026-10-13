@@ -29,7 +29,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!tokenId || !held?.tokenIds.includes(tokenId)) return json({ error: 'not_found' }, 404);
 
   const actor = await sessionActor(request);
-  const sessionUserId = actor.credential === 'session' ? actor.viewer?.userId ?? null : null;
+  const sessionUserId = actor.credential === 'session' ? actor.userId : null;
   const revoked = await revokeHeldToken(tokenId, sessionUserId);
   if (!revoked) return json({ error: 'not_found' }, 404);
 

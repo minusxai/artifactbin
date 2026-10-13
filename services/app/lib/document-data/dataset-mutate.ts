@@ -51,7 +51,7 @@ import { getDb } from '@/lib/platform/db';
 import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
 import { editorScope, type ArtifactRow } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL, groupMemberPredicate } from '@/lib/artifacts/table';
-import type { RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { loadDatasetRows, storeDatasetRows } from '@/lib/datasets/dataset-store';
 import { newEditId } from '../document';
 import type { Scalar } from '@/lib/dataflow';
@@ -117,7 +117,7 @@ export const isMutationRefused = (r: MutationApplied | MutationRefused): r is Mu
  */
 export async function mutateDataset(
   dataset: ArtifactRow,
-  actor: RoleActor,
+  actor: AccessActor,
   sql: string,
   params: Record<string, Scalar> = {},
   guard: Pick<MutationInput, 'expectedAffected' | 'paramTypes' | 'reads'> & {target?:{schema:string;table:string};document?:GrantDocument;receipt?:MutationReceipt;expectedState?:string;notificationJob?:MutationNotificationJobInput} = {},
@@ -126,7 +126,7 @@ export async function mutateDataset(
   const db = await getDb();
   const jobs=guard.notificationJob?await notificationJobStore():null;
   const mutationRunId=guard.notificationJob?.origin.mutationRunId;
-  const scope = editorScope({userId:actor.userId,tokenId:actor.tokenId ?? ''});
+  const scope = editorScope(actor);
   const invocation=mutationInvocation({dataset,actor,document:guard.document,db,recheckAccess:async()=>{await recheckMutation(dataset,actor,guard.document);}});
   if(guard.document && await canUseDataPolicy(dataset,actor) && await canWriteDataset(dataset,actor)){
     try{await throttlePublicMutation(dataset.id);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Public mutation limit reached'};}

@@ -1,7 +1,8 @@
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
+import { identityForUser } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, type ArtifactRow, type Scope } from './table';
-import type { TokenActor } from '@/lib/accounts';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from './table';
+import type { AccessActor } from '@/lib/accounts';
 import { compiledForRow, isEmptyCompiled } from './row-compile';
 import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
@@ -159,7 +160,7 @@ export async function createArtifact(
    */
   atCreation: { reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
-  const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination({tokenId,userId},input.destination,input.ancestor_ids?.at(-1));
+  const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
   input={...input,destination};
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source).source };
@@ -214,17 +215,19 @@ async function insertArtifact(
   sourceIds: string[],
   atCreation: Parameters<typeof createArtifact>[3] = {},
 ): Promise<ArtifactRow> {
-  await assertOwnerPlacement(tx,{tokenId,userId,groupId:input.destination?.type==='group'?input.destination.id:null},input.ancestor_ids??[]);
-  await assertDestination(tx,{tokenId,userId},input.destination??{type:'personal'});
+  // The creator as the row records it: ownership, placement and reservations read its ids, never a grant.
+  const creator = identityForUser(userId, tokenId);
+  await assertOwnerPlacement(tx,{...creator,groupId:input.destination?.type==='group'?input.destination.id:null},input.ancestor_ids??[]);
+  await assertDestination(tx,creator,input.destination??{type:'personal'});
   if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
-  await claimArtifactId(tx,id,{tokenId,userId},!!atCreation.reservedId);
+  await claimArtifactId(tx,id,creator,!!atCreation.reservedId);
   // A FORK carries its source's rows verbatim — a snapshot the forker may read,
   // not rows the forker wrote — so a user column's "must be the logged-in user"
   // rule is not re-judged under the forker's id: that would make every app
   // whose rows name its members unforkable by anyone but the one person named.
   if (!atCreation.forkedFrom) await validateUserContent(tx,input,userId,key=>loadDatasetRows({meta:{objectKey:key}}));
   const catalog=catalogOf(input);
-  if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
+  if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,creator,id,tx);
   const ownerKind = await userKindOf(userId, tx);
   /*
    * THE SANDBOX CEILING. A test user's work never lists anywhere and is never
@@ -297,7 +300,7 @@ async function insertArtifact(
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
   await bindCurrentUserScopes(tx,created.rows[0]);
   if(input.format==='markup'&&userId)await seedOwnerJoin(tx,id,userId);
-  if(!atCreation.forkedFrom)await documentMentions(tx,created.rows[0],{userId,tokenId});
+  if(!atCreation.forkedFrom)await documentMentions(tx,created.rows[0],creator);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   return created.rows[0];
 }
@@ -346,7 +349,7 @@ async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void
 }
 
 /** The two actor columns a write stamps, in the order every statement binds them. */
-const actorStamp = (actor: TokenActor): [string | null, string | null] => [actor.userId, actor.tokenId || null];
+const actorStamp = (actor: AccessActor): [string | null, string | null] => [actor.userId, actor.tokenId || null];
 
 export async function writeShares(tx:Queryable,id:string,shares:ShareEntry[]):Promise<{shares:ShareEntry[];sharing_revision:number}>{
  const normalized=[...new Map(shares.map(entry=>[entry.email.trim().toLowerCase(),entry.role])).entries()].sort(([a],[b])=>a.localeCompare(b)).map(([email,role])=>({email,role}));
@@ -394,7 +397,7 @@ export interface PreparedMarkupWrite {
  update:DocumentUpdate;
 }
 export async function commitNormalizedMarkup(
- tx:Queryable,actor:TokenActor|null,current:ArtifactRow,
+ tx:Queryable,actor:AccessActor|null,current:ArtifactRow,
  normalized:PreparedMarkupWrite & {title?:string|null;description?:string|null;format?:ArtifactFormat},
 ):Promise<ArtifactRow>{
  const scope=actor?editorScope(actor):{val:current.id,where:(param:string)=>`id=${param}`};
@@ -476,7 +479,7 @@ const policyLocked = (detail: string): Response => json({error:'policy_locked',d
  * archived first), so a revert is itself revertible and the URL never moves.
  * Null when the artifact or the requested version doesn't exist.
  */
-async function revertScoped(actor: TokenActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
+async function revertScoped(actor: AccessActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
   const db = await getDb();
   const scope = editorScope(actor);
   const initial = (await artifactQuery<ArtifactRow>(db,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id,scope.val])).rows[0];
@@ -569,7 +572,7 @@ export interface ReplaceOpts {
  * current values. Null when no artifact matches (unknown/foreign).
  */
 async function replaceScoped(
-  actor: TokenActor,
+  actor: AccessActor,
   id: string,
   input: ArtifactInput,
   opts: ReplaceOpts = {},
@@ -603,7 +606,7 @@ async function replaceScoped(
     if (current.dataset_policy && !(await tx.query('SELECT 1 FROM artifacts WHERE id=$1 AND '+ownerScope(actor).where('$2'), [id, ownerScope(actor).val])).rows.length) {
       return policyLocked('this dataset carries a write policy; only its owner may replace its content');
     }
-    if(input.ancestor_ids)await assertOwnerPlacement(tx,{tokenId:current.token_id,userId:current.user_id,groupId:current.group_id},input.ancestor_ids);
+    if(input.ancestor_ids)await assertOwnerPlacement(tx,writerFor(current),input.ancestor_ids);
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true, reason:'state_conflict', currentVersion:current.version, currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
@@ -717,7 +720,7 @@ async function wakeParents({ from, to }: { from: string | null; to: string | nul
  * the same pair and would otherwise say a move on every save. Fire-and-forget
  * and outside the transaction, like every other emit here (lib/events).
  */
-function sayMoved(actor: TokenActor, id: string, moved: { from: string | null; to: string | null } | null): void {
+function sayMoved(actor: AccessActor, id: string, moved: { from: string | null; to: string | null } | null): void {
   if (!moved || moved.from === moved.to) return;
   void emit(actorSubject(actor), 'moved', { kind: 'artifact', id }, { from_parent_id: moved.from, to_parent_id: moved.to });
 }
@@ -858,7 +861,7 @@ async function patchesSince(db: Queryable, id: string, baseVersion: number, head
 
 /** Clients own semantic validation and patch preparation. This boundary owns
  * authorization and the atomic operation/dependency/history commit. */
-export async function applyEditScoped(actor: TokenActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
+export async function applyEditScoped(actor: AccessActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
   const db = await getDb();
   const scope = opts.scope ?? editorScope(actor);
   if(input.documentUpdate){
@@ -914,7 +917,7 @@ export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
 
 /** Stable keyset pagination; creation timestamps never move when content is edited. */
 interface ArtifactCollectionFilters {type?:'artifact'|'folder'|'dataset'|'file';visibility?:'private'|'unlisted'|'public';relationship?:'all'|'owned'|'shared';search?:string;parent_id?:string}
-export async function listArtifactPageFor(actor: TokenActor, limit: number, cursor?: {created: string; id: string}, filters:ArtifactCollectionFilters={}): Promise<{rows: ArtifactSummary[]; next?: {created: string; id: string}}> {
+export async function listArtifactPageFor(actor: AccessActor, limit: number, cursor?: {created: string; id: string}, filters:ArtifactCollectionFilters={}): Promise<{rows: ArtifactSummary[]; next?: {created: string; id: string}}> {
   const owner=ownerPredicate(actor);const values:unknown[]=[owner.val,limit+1];
   // Membership is a discovery relationship even when it grants read access only.
   const shared=actor.userId?`(${SHARE_PREDICATE(['viewer','commenter','editor'],'$1')} OR ${groupMemberPredicate('$1')})`:'FALSE';
@@ -932,19 +935,19 @@ export async function listArtifactPageFor(actor: TokenActor, limit: number, curs
   return {rows,...(result.rows.length>limit&&last?{next:{created:last.page_created,id:last.id}}:{})};
 }
 
-export function listArtifactsFor(actor: TokenActor): Promise<ArtifactSummary[]> {
+export function listArtifactsFor(actor: AccessActor): Promise<ArtifactSummary[]> {
   return listArtifactsScoped(ownerScope(actor));
 }
 
-export function replaceArtifactFor(actor: TokenActor, id: string, input: ArtifactInput, opts: ReplaceOpts = {}): Promise<ArtifactRow | VersionConflict | Response | null> {
+export function replaceArtifactFor(actor: AccessActor, id: string, input: ArtifactInput, opts: ReplaceOpts = {}): Promise<ArtifactRow | VersionConflict | Response | null> {
   return replaceScoped(actor, id, input, opts);
 }
 
-export function applyEditFor(actor: TokenActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
+export function applyEditFor(actor: AccessActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
   return applyEditScoped(actor, id, input, opts);
 }
 
-export async function listVersionPageFor(actor: TokenActor, id: string, limit: number, before?: number, through?:number, filters:{author?:string;since?:string;until?:string}={}): Promise<{rows: VersionSummary[]; next?: number} | null> {
+export async function listVersionPageFor(actor: AccessActor, id: string, limit: number, before?: number, through?:number, filters:{author?:string;since?:string;until?:string}={}): Promise<{rows: VersionSummary[]; next?: number} | null> {
   const scope = editorScope(actor);
   const db = await getDb();
   // Keep authorization and the head/history snapshot in one statement.
@@ -970,11 +973,11 @@ export async function listVersionPageFor(actor: TokenActor, id: string, limit: n
   return {rows, ...(result.rows.length > limit ? {next: rows.at(-1)!.version} : {})};
 }
 
-export function listVersionsFor(actor: TokenActor, id: string): Promise<VersionSummary[] | null> {
+export function listVersionsFor(actor: AccessActor, id: string): Promise<VersionSummary[] | null> {
   return listVersionsScoped(editorScope(actor), id);
 }
 
-export function getVersionFor(actor: TokenActor, id: string, version: number): Promise<VersionContent | null> {
+export function getVersionFor(actor: AccessActor, id: string, version: number): Promise<VersionContent | null> {
   return getVersionScoped(editorScope(actor), id, version);
 }
 
@@ -991,10 +994,10 @@ export function getVersionFor(actor: TokenActor, id: string, version: number): P
  * Only a caller that has verified an export key for THIS row may use it.
  */
 export function versionForCapture(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, version: number): Promise<VersionContent | null> {
-  return getVersionScoped(editorScope({ userId: row.user_id, tokenId: row.token_id,groupId:row.group_id }), row.id, version);
+  return getVersionScoped(editorScope(writerFor(row)), row.id, version);
 }
 
-export function revertArtifactFor(actor: TokenActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
+export function revertArtifactFor(actor: AccessActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
   return revertScoped(actor, id, version, opts);
 }
 
@@ -1014,9 +1017,9 @@ export interface MetadataPatch {
 }
 
 /** Metadata commits as one observed-state transaction, without a content version. */
-export function setMetadataFor(actor: TokenActor, id: string, patch: MetadataPatch): Promise<ArtifactRow | null>;
-export function setMetadataFor(actor: TokenActor, id: string, patch: MetadataPatch, opts: ReplaceOpts & {allowEditor?:boolean;dryRun?:boolean}): Promise<ArtifactRow | VersionConflict | null>;
-export async function setMetadataFor(actor: TokenActor, id: string, patch: MetadataPatch, opts: ReplaceOpts & {allowEditor?:boolean;dryRun?:boolean} = {}): Promise<ArtifactRow | VersionConflict | null> {
+export function setMetadataFor(actor: AccessActor, id: string, patch: MetadataPatch): Promise<ArtifactRow | null>;
+export function setMetadataFor(actor: AccessActor, id: string, patch: MetadataPatch, opts: ReplaceOpts & {allowEditor?:boolean;dryRun?:boolean}): Promise<ArtifactRow | VersionConflict | null>;
+export async function setMetadataFor(actor: AccessActor, id: string, patch: MetadataPatch, opts: ReplaceOpts & {allowEditor?:boolean;dryRun?:boolean} = {}): Promise<ArtifactRow | VersionConflict | null> {
   const db = await getDb();
   const scope = opts.allowEditor?editorScope(actor):ownerScope(actor);
   let moved: {from: string | null; to: string | null} | null = null;
@@ -1024,7 +1027,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
     const current = (await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [id,scope.val])).rows[0];
     if (!current) return null;
     if(current.format==='markup')return null;
-    if(patch.ancestor_ids)await assertOwnerPlacement(tx,{tokenId:current.token_id,userId:current.user_id,groupId:current.group_id},patch.ancestor_ids);
+    if(patch.ancestor_ids)await assertOwnerPlacement(tx,writerFor(current),patch.ancestor_ids);
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) return {conflict:true,currentVersion:current.version};
     if(patch.policy!==undefined&&current.policy_revision!==opts.expectedPolicyRevision)return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};

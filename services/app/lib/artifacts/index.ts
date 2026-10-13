@@ -7,7 +7,7 @@
  */
 
 /** Reads and access (every server caller): the row, the role decision and its scopes, the reader snapshot, the lookups, versions and listings, capabilities, views and the state digest. */
-export { canReadArtifact, ownsArtifact, roleFor, effectiveRole, isOwner } from './access';
+export { canReadArtifact, documentEditorReaches, ownsArtifact, effectiveRole } from './access';
 export { commentMonitorScope, annotationScope, editorScope, writerFor } from './table';
 export type { ArtifactRow, Scope } from './table';
 export { readableArtifact, snapshotForReader, snapshotHeadFor } from './read-access';
@@ -16,7 +16,6 @@ export type { ArtifactHeader } from './rows';
 export { getVersionFor, listVersionsFor, listVersionPageFor, listArtifactPageFor, isVersionNotArchived, versionToWire } from './store';
 export type { ArtifactSummary } from './store';
 export { can, capabilityGuard, capabilityRefusal } from './capabilities';
-export type { CapabilityActor } from './capabilities';
 export { recordArtifactView } from './view-admission';
 export { artifactState } from './state';
 
@@ -45,7 +44,6 @@ export { getSharingFor, updateSharingFor } from './sharing';
 export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates, mentionedPeople, savedMentionStates, selfMembership } from './membership/membership';
 export { accountProfile, updateAccountProfile } from './membership/account-profile';
 export { ancestorsForMove, isParentRefusal, notifyParent, parentOf, resolveParent, selectChildren } from './placement';
-export type { Viewer } from './placement';
 export { grantsOf, grantsPermitRead, grantsPermitWrite } from './dataset-policy/grants';
 
 /** Serving: what may be served, and archived versions. */

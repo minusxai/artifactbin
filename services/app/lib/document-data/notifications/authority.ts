@@ -6,8 +6,8 @@ import { grantsOf, grantsPermitRead, readThrough, type ReadRow } from '@/lib/art
 import { liveAccessFacts, preloadAccessFacts, type AccessFacts } from '@/lib/artifacts';
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
 import type { ArtifactRow } from '@/lib/artifacts';
-import type { RoleActor } from '@/lib/accounts';
-import { hasDocumentEditorAccess } from '@/lib/accounts';
+import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { documentEditorReaches } from '@/lib/artifacts';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {PUBLIC_BASE_URL} from '@/lib/platform/config';
 import {NotificationExecutionError} from '@/lib/notifications/errors';
@@ -16,11 +16,11 @@ import {DatasetError} from '@/lib/datasets/errors';
 
 interface Account {id:string;email:string|null;kind:string;expires_at:string|null}
 interface LiveToken {id:string;user_id:string|null;expires_at:string|null;audience:string|null;scope:string|null}
-interface Identity {actor:RoleActor;kind:string|null;revision:string}
+interface Identity {actor:AccessActor;kind:string|null;revision:string}
 interface Share {user_id:string|null;email:string;role:string}
 interface NotificationArtifactAuthority {row:ArtifactRow;shares:Share[];revision:string}
 const denied=()=>new NotificationExecutionError('notification_access_revoked');
-const owner=(row:ArtifactRow,actor:RoleActor)=>!row.group_id&&(row.user_id?row.user_id===actor.userId:row.token_id===actor.tokenId);
+const owner=(row:ArtifactRow,actor:AccessActor)=>!row.group_id&&(row.user_id?row.user_id===actor.userId:row.token_id===actor.tokenId);
 async function account(tx:Queryable,id:string):Promise<Account|null>{
  return (await tx.query<Account>("SELECT id,email,kind,expires_at FROM users WHERE id=$1 AND (expires_at IS NULL OR expires_at>now()) AND merged_into_user_id IS NULL",[id])).rows[0]??null;
 }
@@ -35,7 +35,8 @@ export async function notificationPrincipal(tx:Queryable,principal:MutationIniti
  }
  const user=userId?await account(tx,userId):null;
  if(userId&&(!user||user.kind==='guest'))throw denied();
- return {actor:{userId,tokenId:token?.id??null,email:user?.email??null},kind:user?.kind??null,revision:hash([principal,token,user])};
+ // Rebuilt from rows, not a request: no verified claim exists here, so the host's editor grant never applies.
+ return {actor:identityForUser(userId,token?.id??null,user?.email??null),kind:user?.kind??null,revision:hash([principal,token,user])};
 }
 export async function notificationArtifactAuthority(tx:Queryable,id:string):Promise<NotificationArtifactAuthority>{
  const row=(await tx.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0];
@@ -97,7 +98,7 @@ export async function notificationSourcesReadableMany(tx:Queryable,recipientId:s
  const members=await explicitNotificationMemberships(tx,items.map(item=>item.documentId),recipientId);
  const ids=[...new Set(items.flatMap(item=>members.has(item.documentId)?[item.documentId,...item.sources.map(source=>source.artifactId)]:[]))];
  const rows=new Map((ids.length?(await tx.query<ReadableArtifact>(`SELECT ${READABLE_COLUMNS} FROM artifacts WHERE id=ANY($1::text[]) AND deleted_at IS NULL`,[ids])).rows:[]).map(row=>[row.id,row]));
- const identity:Identity={actor:{userId:user.id,tokenId:null,email:user.email},kind:user.kind,revision:''};
+ const identity:Identity={actor:identityForUser(user.id,null,user.email),kind:user.kind,revision:''};
  const facts=await preloadAccessFacts(tx,identity.actor,[...rows.values()]),connections=new Map<string,Promise<void>>();
  const connection=(row:ReadableArtifact)=>{
   let checked=connections.get(row.id);
@@ -149,7 +150,7 @@ async function canManageNotificationDocument(tx:Queryable,principal:MutationInit
   if(row.format!=='markup')return false;
   if(owner(row,identity.actor)||row.group_id&&await getGroupRole(identity.actor.userId,row.group_id,tx)==='editor')return true;
   if(identity.kind!=='account')return false;
-  return hasDocumentEditorAccess(identity.actor)||(row.visibility!=='private'&&row.link_role==='editor')||shares.some(share=>share.role==='editor'&&(share.user_id?share.user_id===identity.actor.userId:!!identity.actor.email&&share.email===identity.actor.email));
+  return documentEditorReaches(row,identity.actor)||(row.visibility!=='private'&&row.link_role==='editor')||shares.some(share=>share.role==='editor'&&(share.user_id?share.user_id===identity.actor.userId:!!identity.actor.email&&share.email===identity.actor.email));
  }catch(error){if(error instanceof NotificationExecutionError)return false;throw error;}
 }
 export const notificationAuthority={validatePlan:validateNotificationPlan,admitRecipients,canManage:canManageNotificationDocument};

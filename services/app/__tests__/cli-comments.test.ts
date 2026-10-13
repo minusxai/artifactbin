@@ -6,7 +6,7 @@ import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
 import { cliWorkspace } from './cli-harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { createArtifact, getArtifactFor, updateSharingFor } from '@/lib/artifacts';
 import * as annotations from '@/app/api/artifacts/[id]/annotations/route';
 import { POST as createComment, GET as listComments } from '@/app/api/artifacts/[id]/annotations/route';
@@ -25,7 +25,7 @@ it('private comment creation and reply refusals release the CLI journal without 
   expect(made.status).toBe(201);const artifact=await made.json();
   const recipient=await createUser({email:'mxmx_test_comment_refusal_viewer@example.com'});
   await cli.connect('mxmx_test_comment_refusal_viewer',recipient.id);
-  await updateSharingFor({tokenId:owner.id,userId:owner.userId},artifact.id,{shares:[{email:recipient.email!,role:'viewer'}]});
+  await updateSharingFor(identityForUser(owner.userId, owner.id),artifact.id,{shares:[{email:recipient.email!,role:'viewer'}]});
   for(const id of [artifact.id,'zzzzzz'])for(const reply of [false,true]){
    const ctx={params:Promise.resolve({id})};
    let rejected:Response|undefined;
@@ -44,7 +44,7 @@ it('private comment creation and reply refusals release the CLI journal without 
 });
 
 it('creates agent comments by unambiguous quote without editing the document, and refuses ambiguous quotes',async()=>{
- const token=await mintToken('comments');const actor={tokenId:token.id,userId:token.userId};
+ const token=await mintToken('comments');const actor=identityForUser(token.userId, token.id);
  const row=await createArtifact(token.id, token.userId,{visibility:'unlisted',title:'comments',format:'markup',source:'<div id="container"><p id="first">One unique sentence.</p><p id="second">Repeated</p><p id="third">Repeated</p></div>',meta:{}});
  const post=(annotations as unknown as {POST:typeof annotations.GET}).POST;expect(post).toBeTypeOf('function');
  const call=(body:Record<string,unknown>)=>post(request(`/api/artifacts/${row.id}/annotations`,{method:'POST',token:token.token,json:body}),{params:Promise.resolve({id:row.id})});

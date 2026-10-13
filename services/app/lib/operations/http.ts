@@ -1,7 +1,6 @@
 import {hostedAuthorization,hostedRefusal,hostedOperationCompleted} from '@/lib/accounts';
 import { canReadArtifact, durableMutation, getArtifactById, getArtifactFor, grantsOf, grantsPermitWrite, MembershipError, readableArtifact, refusingUnservable } from '@/lib/artifacts';
 import { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from '@/lib/document-data';
-import {tokenActorForRequest} from '@/lib/accounts';
 import { type AnnotationAuthor, canAnnotate } from '@artifactbin/contracts';
 import {ownedArtifactState} from '@/lib/workspace/trash';
 import {sessionOwnedBy} from '@/lib/remote/resource';
@@ -14,7 +13,7 @@ import {sessionOwnedBy} from '@/lib/remote/resource';
  * pipeline).
  */
 import { json, baseUrl } from '@/lib/http/http';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { OPERATIONS, type OpContext, type Operation, type OpReply } from './registry';
 
 /**
@@ -28,8 +27,8 @@ import { OPERATIONS, type OpContext, type Operation, type OpReply } from './regi
  * state a naive existence check would read, so a liveness check would refuse
  * precisely the retry the receipt exists to answer.
  */
-const AUTHORIZED: Record<string, (actor: TokenActor, input: Record<string, unknown>) => Promise<boolean>> = {
-  mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(input.name?await canReadArtifact(row,actor.userId?{userId:actor.userId,email:null}:null)||row.token_id===actor.tokenId:grantsOf(row)?await grantsPermitWrite(row,actor)||!!await getArtifactFor(actor,row.id):!!await getArtifactFor(actor,row.id));},
+const AUTHORIZED: Record<string, (actor: AccessActor, input: Record<string, unknown>) => Promise<boolean>> = {
+  mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(input.name?await canReadArtifact(row,actor)||row.token_id===actor.tokenId:grantsOf(row)?await grantsPermitWrite(row,actor)||!!await getArtifactFor(actor,row.id):!!await getArtifactFor(actor,row.id));},
   annotate: async (actor, input) => {
     const access = await readableArtifact(actor, String(input.id));
     return !!access && canAnnotate(access.role);
@@ -70,11 +69,10 @@ function opResponse(reply: OpReply): Response {
 export async function runOperation(
   name: string,
   request: Request,
-  actor: TokenActor,
+  actor: AccessActor,
   input: Record<string, unknown>,
   author: AnnotationAuthor = { kind: 'agent', label: null, transport: 'http' },
 ): Promise<Response> {
-  actor = tokenActorForRequest(request, actor);
   const scope=await hostedAuthorization(actor.userId,actor.tokenId,name,input);
   const refusal=hostedRefusal(scope);if(refusal)return refusal;
   const complete=async(response:Response)=>{if(scope.kind==='allowed')await hostedOperationCompleted(actor.userId,actor.tokenId,name,input,response);return response;};

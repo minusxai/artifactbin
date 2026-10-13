@@ -1,5 +1,5 @@
 import { createArtifactFromBody } from '@/lib/publish/publish';
-import { withTokenAuth } from '@/lib/accounts';
+import { withTokenAuth, type TokenHoldingActor } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
 import { baseUrl, json, readJson } from '@/lib/http';
 import { readFileUpload } from '@/lib/datasets/file-store';
@@ -16,7 +16,7 @@ import { readFileUpload } from '@/lib/datasets/file-store';
  */
 export async function createArtifactFromRequest(
   request: Request,
-  { tokenId, userId }: { tokenId: string; userId: string | null },
+  actor: TokenHoldingActor,
 ): Promise<Response> {
   const contentType = (request.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
   const q = new URL(request.url).searchParams;
@@ -32,19 +32,19 @@ export async function createArtifactFromRequest(
       ...(q.has('title')?{title:q.get('title')}:{}),
       ...(q.has('visibility')?{visibility:q.get('visibility')}:{}),
     };
-    return createArtifactFromBody(body,{tokenId,userId},baseUrl(request),request);
+    return createArtifactFromBody(body,actor,baseUrl(request),request);
   }
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
-  return runOperation('create_artifact', request, { tokenId, userId }, body);
+  return runOperation('create_artifact', request, actor, body);
 }
 
 /** POST /api/artifacts — create from `markup`, a data tier, or raw image bytes; returns the shareable URL. */
-export const POST = withTokenAuth((request: Request, { tokenId, userId }) =>
-  createArtifactFromRequest(request, { tokenId, userId }),
+export const POST = withTokenAuth((request: Request, { actor }) =>
+  createArtifactFromRequest(request, actor),
 );
 
 /** GET /api/artifacts — the actor's list (whole account for a claimed token), newest first, no content. */
-export const GET = withTokenAuth((request: Request, { tokenId, userId }) =>
-  runOperation('list_artifacts', request, { tokenId, userId }, Object.fromEntries(new URL(request.url).searchParams)),
+export const GET = withTokenAuth((request: Request, { actor }) =>
+  runOperation('list_artifacts', request, actor, Object.fromEntries(new URL(request.url).searchParams)),
 );

@@ -8,9 +8,9 @@ import { effectiveRole } from '@/lib/artifacts';
 import { type ArtifactRow } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import { preloadAccessFacts } from '@/lib/artifacts';
-import type { RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { readThrough } from '@/lib/artifacts';
-export async function membershipInbox(actor:RoleActor,offset=0,onlyId:string|null=null){
+export async function membershipInbox(actor:AccessActor,offset=0,onlyId:string|null=null){
  if(!actor.userId)throw new MembershipError('Sign in to see notifications');
  const db=await getDb();
  const user=(await db.query<{auto_accept_mentions:boolean}>("SELECT auto_accept_mentions FROM users WHERE id=$1 AND kind<>'guest'",[actor.userId])).rows[0];
@@ -29,7 +29,7 @@ export async function membershipInbox(actor:RoleActor,offset=0,onlyId:string|nul
  const blocks=(await db.query<{user_id:string;username:string|null}>('SELECT b.blocked_user_id AS user_id,u.username FROM user_blocks b JOIN users u ON u.id=b.blocked_user_id WHERE b.user_id=$1',[actor.userId])).rows;
  return {autoAccept:user.auto_accept_mentions,notifications:combined.slice(offset,offset+50),unread:combined.filter(n=>!n.read_at).length,next:combined.length>offset+50?offset+50:null,blocks};
 }
-export async function updateMembershipInbox(actor:RoleActor,input:{autoAccept?:boolean;read?:string;readAll?:boolean;revision?:number;block?:string;unblock?:string}){
+export async function updateMembershipInbox(actor:AccessActor,input:{autoAccept?:boolean;read?:string;readAll?:boolean;revision?:number;block?:string;unblock?:string}){
  if(!actor.userId)throw new MembershipError('Sign in to update notifications');
  const db=await getDb();
  await db.transaction(async tx=>{

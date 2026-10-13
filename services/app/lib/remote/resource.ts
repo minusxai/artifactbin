@@ -1,6 +1,6 @@
 import type { SessionResource } from "../../../contracts/src/account-resource";
 import type { RemoteSessionInfo } from "../../../contracts/src/remote";
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { remoteAgents } from "./agents";
 
 /**
@@ -31,6 +31,6 @@ export function sessionResource(info: RemoteSessionInfo): SessionResource {
  * session: a terminate that is retried under the same operation identity must
  * still authorize after the row is gone, so an owned tombstone counts.
  */
-export async function sessionOwnedBy(actor: TokenActor, id: string): Promise<boolean> {
+export async function sessionOwnedBy(actor: AccessActor, id: string): Promise<boolean> {
   return !!actor.userId && await remoteAgents.owns(actor.userId, id);
 }

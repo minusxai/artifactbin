@@ -1,4 +1,5 @@
 import {documentPublicationWithResources} from './prepared-document';
+import { identityForUser } from '@/lib/accounts';
 import {prepareDocumentAuthoringContext} from '@/lib/publish/publish';
 import {prepareClientDocumentPublication} from '@/lib/document/document-update-client';
 import {observedRequest} from '@/__tests__/conditional-request';
@@ -181,7 +182,7 @@ describe('the agent door — an external <img src> is served as written and neve
     let asked=0;
     const update=await prepareClientDocumentPublication({...row,document:row.document},{source:row.source!.replace('</div>',`<img id="logo" src="${web}/logo.png" alt="" /></div>`)},async source=>{
       asked++;
-      return (await prepareDocumentAuthoringContext({tokenId:t.id,userId:t.userId},made.id,{source})).json();
+      return (await prepareDocumentAuthoringContext(identityForUser(t.userId, t.id),made.id,{source})).json();
     });
     const res=await editsRoute(request(`/api/artifacts/${made.id}/edits`,{method:'POST',token:t.token,json:{edit_id:row.edit_id,document_update:update}}),params({id:made.id}));
     expect(res.status).toBe(200);

@@ -12,7 +12,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser, type AccessActor } from '@/lib/accounts';
 import { getArtifactById } from '@/lib/artifacts';
 import { childrenTableFor } from '@/lib/artifacts/placement';
 import { getDb, measureQueries } from '@/lib/platform';
@@ -53,12 +53,12 @@ async function seed(children: number) {
      SELECT 'view', 'fv' || lpad(i::text, 3, '0'), NULL, now() - interval '5 days' FROM generate_series(1, $1::int) i, generate_series(1, 2)`,
     [children],
   );
-  return { user, token, viewer: { userId: user.id, tokenId: token.id, email: user.email } };
+  return { user, token, viewer: identityForUser(user.id, token.id, user.email) };
 }
 
 const viewsOf = (rows: Array<{ id: string; views?: unknown }>) => Object.fromEntries(rows.map((row) => [row.id, row.views]));
 const expectedAll = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, k) => [childId(k + 1), expectedViews(k + 1)]));
-const STRANGER = { userId: null, tokenId: null, email: null };
+const STRANGER = identityForUser(null, null, null);
 
 describe('the folder page at volume', () => {
   it('counts every child\'s views from the folded totals, exactly as the raw events say', async () => {
@@ -153,7 +153,7 @@ describe('the children table', () => {
   });
 });
 
-async function seed100Again(db: Awaited<ReturnType<typeof getDb>>, viewer: { userId: string; tokenId: string }) {
+async function seed100Again(db: Awaited<ReturnType<typeof getDb>>, viewer: AccessActor) {
   await db.query(
     `INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version, visibility, ancestor_ids)
      SELECT 'fx' || lpad(i::text, 3, '0'), $1, $2, 'markup', 'More ' || i, '{}', 1, 'private', ARRAY['fvfolder'] FROM generate_series(1, 90) i`,

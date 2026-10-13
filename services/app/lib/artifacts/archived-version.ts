@@ -29,7 +29,7 @@
  */
 import { getVersionFor, listVersionsFor, versionForCapture } from '@/lib/artifacts/store';
 import { type ArtifactRow } from '@/lib/artifacts/table';
-import { actorForArtifacts, requestOrSessionActor, type TokenActor } from '@/lib/accounts';
+import { requestOrSessionActor, type AccessActor } from '@/lib/accounts';
 import { servableDocument } from '@/lib/artifacts/servable';
 
 /** The parameter's name, in one place: the three doors and the export URL. */
@@ -113,7 +113,7 @@ export async function archivedVersionFor(
     const shot = await versionForCapture(row, asked);
     return shot ? archived(asked, head, { source: shot.source ?? '', meta: shot.meta, title: shot.title, description: shot.description }) : 'not_found';
   }
-  return archivedVersionForActor(actorForArtifacts(await requestOrSessionActor(request)), row, asked);
+  return archivedVersionForActor(await requestOrSessionActor(request), row, asked);
 }
 
 /**
@@ -122,13 +122,14 @@ export async function archivedVersionFor(
  * whoever may read its history, else `'not_found'`.
  */
 export async function archivedVersionForActor(
-  actor: TokenActor | null,
+  actor: AccessActor,
   row: ArtifactRow,
   asked: number,
 ): Promise<ArchivedRender | 'not_found'> {
   if (row.format !== 'markup' || !Number.isInteger(asked) || asked < 1) return 'not_found';
   const head = row.version;
-  if (!actor) return 'not_found';
+  // History is an editor's: nobody (no account, no token) reads it.
+  if (!actor.userId && !actor.tokenId) return 'not_found';
   /*
    * THE HEAD IS USUALLY NOT IN THE ARCHIVE. Save-less editing bumps `version`
    * on every accepted edit while snapshots coalesce, so the current version

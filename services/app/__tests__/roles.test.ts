@@ -1,12 +1,12 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness, mintAccountToken as mintToken, setSession, request } from '@/__tests__/harness';
-import { applyEditFor, type ArtifactRow, canReadArtifact, changeMembership, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, getVersionFor, invitePeople, membershipState, mentionCandidates, parseShareEntries, roleFor as requestRoleFor, updateSharingFor } from '@/lib/artifacts';
+import { applyEditFor, type ArtifactRow, canReadArtifact, changeMembership, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, getVersionFor, invitePeople, membershipState, mentionCandidates, parseShareEntries, updateSharingFor } from '@/lib/artifacts';
 import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { committedHeadsSettled } from '@/lib/artifacts/store';
 import { linkRoleOf } from '@/lib/artifacts/access';
 import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
-import { claimToken, createUser, setUserEmail, ensureUsername, setRelationState, has, count, linked, link } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, NO_IDENTITY, identityForUser, type RequestIdentity, claimToken, createUser, setUserEmail, ensureUsername, setRelationState, has, count, linked, link } from '@/lib/accounts';
 import { documentEdit, documentEditBody, documentPublicationBody } from '@/__tests__/prepared-document';
 import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor } from '@/lib/annotations';
 import { PUT as putArtifactRoute, GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
@@ -68,7 +68,7 @@ async function head(id: string): Promise<ArtifactRow | null> {
 async function docOf(owner: Account, visibility: Visibility, linkRole?: ShareRole): Promise<ArtifactRow> {
   const row = await createArtifact(owner.token.id, owner.user.id, { format: 'markup', source: SOURCE, meta: {}, visibility, title: 't' });
   if (!linkRole) return row;
-  await updateSharingFor({ tokenId: '', userId: owner.user.id }, row.id, { linkRole });
+  await updateSharingFor(identityForUser(owner.user.id, ''), row.id, { linkRole });
   return (await head(row.id))!;
 }
 
@@ -80,10 +80,10 @@ async function clearLinkRole(id: string): Promise<ArtifactRow> {
 }
 
 const shareWith = (owner: Account, row: ArtifactRow, email: string, role: ShareRole) =>
-  updateSharingFor({ tokenId: '', userId: owner.user.id }, row.id, { shares: [{ email, role }] });
+  updateSharingFor(identityForUser(owner.user.id, ''), row.id, { shares: [{ email, role }] });
 
 /** Nobody at all — the anonymous visitor holding only the address. */
-const STRANGER = { userId: null, tokenId: null };
+const STRANGER = identityForUser(null, null);
 const SHARE_ROLE_LIST: ShareRole[] = ['viewer', 'commenter', 'editor'];
 
 describe('the lattice is an ordering, and every question is a comparison on it', () => {
@@ -173,17 +173,17 @@ const ROLE_CASES: Array<[string, () => Promise<Array<[string, ArtifactRow, Asked
   ['a bare token owns what it created — an anonymous owner is still an owner', async () => {
     const token = await mintToken('anon', null);
     const row = await createArtifact(token.id, token.userId, { format: 'markup', source: SOURCE, meta: {}, visibility: 'unlisted', title: 't' });
-    return [['its token', row, { userId: null, tokenId: token.id }, 'owner'], ['another token', row, { userId: null, tokenId: 'tok_someone_else' }, 'viewer']];
+    return [['its token', row, identityForUser(null, token.id), 'owner'], ['another token', row, identityForUser(null, 'tok_someone_else'), 'viewer']];
   }],
   ['claimed account ownership requires resolved identity, never the creating token alone', async () => {
     const owner = await account('mxmx_test_claimed_owner@example.com');
     const privateRow = await docOf(owner, 'private');
     const publicRow = await docOf(owner, 'public');
     return [
-      ['resolved owner token', privateRow, { userId: owner.user.id, tokenId: owner.token.id }, 'owner'],
-      ['bare creating token, private', privateRow, { userId: null, tokenId: owner.token.id }, 'none'],
-      ['bare creating token, public link', publicRow, { userId: null, tokenId: owner.token.id }, 'viewer'],
-      ['other account with creating token', privateRow, { userId: 'usr_other', tokenId: owner.token.id }, 'none'],
+      ['resolved owner token', privateRow, identityForUser(owner.user.id, owner.token.id), 'owner'],
+      ['bare creating token, private', privateRow, identityForUser(null, owner.token.id), 'none'],
+      ['bare creating token, public link', publicRow, identityForUser(null, owner.token.id), 'viewer'],
+      ['other account with creating token', privateRow, identityForUser('usr_other', owner.token.id), 'none'],
     ];
   }],
   ['a named share grants exactly its role on a private document', async () => {
@@ -193,14 +193,14 @@ const ROLE_CASES: Array<[string, () => Promise<Array<[string, ArtifactRow, Asked
       const row = await docOf(owner, 'private');
       const guest = await account(`mxmx_test_${role}@example.com`);
       await shareWith(owner, row, guest.user.email!, role);
-      out.push([role, row, { userId: guest.user.id, tokenId: null }, role]);
+      out.push([role, row, identityForUser(guest.user.id, null), role]);
     }
     return out;
   }],
   ['a stranger gets none on a private document and viewer on a link-readable one', async () => {
     const owner = await account('mxmx_test_owner@example.com');
     const stranger = await account('mxmx_test_stranger@example.com');
-    const asStranger = { userId: stranger.user.id, tokenId: null, email: stranger.user.email };
+    const asStranger = identityForUser(stranger.user.id, null, stranger.user.email);
     return [
       ['signed in, private', await docOf(owner, 'private'), asStranger, 'none'],
       ['nobody, private', await docOf(owner, 'private'), STRANGER, 'none'],
@@ -215,11 +215,11 @@ const ROLE_CASES: Array<[string, () => Promise<Array<[string, ArtifactRow, Asked
     await shareWith(owner, row, 'mxmx_test_late@example.com', 'commenter');
     // The invite predates the account entirely.
     const guest = await createUser({ email: 'mxmx_test_late@example.com' });
-    const before: [string, ArtifactRow, Asked, ArtifactRole] = ['by the session address', row, { userId: guest.id, tokenId: null, email: guest.email }, 'commenter'];
+    const before: [string, ArtifactRow, Asked, ArtifactRole] = ['by the session address', row, identityForUser(guest.id, null, guest.email), 'commenter'];
     expect(await effectiveRole(before[1], before[2])).toBe(before[3]);
     // Resolution stamps it, so it now follows the ACCOUNT through an address change.
     await setUserEmail(guest.id, 'mxmx_test_late_new@example.com');
-    return [['by the account after an address change', row, { userId: guest.id, tokenId: null, email: 'mxmx_test_late_new@example.com' }, 'commenter']];
+    return [['by the account after an address change', row, identityForUser(guest.id, null, 'mxmx_test_late_new@example.com'), 'commenter']];
   }],
   ['an agent of an invited person reaches what its person does — no session address needed', async () => {
     const owner = await account('mxmx_test_owner@example.com');
@@ -227,7 +227,7 @@ const ROLE_CASES: Array<[string, () => Promise<Array<[string, ArtifactRow, Asked
     const guest = await account('mxmx_test_agent_person@example.com');
     await shareWith(owner, row, guest.user.email!, 'editor');
     // A bearer token resolves to its user with NO email attached: the match has to go through users.email.
-    return [['the bearer', row, { userId: guest.user.id, tokenId: guest.token.id, email: null }, 'editor']];
+    return [['the bearer', row, identityForUser(guest.user.id, guest.token.id, null), 'editor']];
   }],
   ['an UNRESOLVED invite to an address the person no longer has grants nothing', async () => {
     const owner = await account('mxmx_test_owner@example.com');
@@ -235,12 +235,12 @@ const ROLE_CASES: Array<[string, () => Promise<Array<[string, ArtifactRow, Asked
     const guest = await createUser({ email: 'mxmx_test_old@example.com' });
     await setUserEmail(guest.id, 'mxmx_test_new@example.com');
     await shareWith(owner, row, 'mxmx_test_old@example.com', 'editor');
-    return [['the new address', row, { userId: guest.id, tokenId: null, email: 'mxmx_test_new@example.com' }, 'none']];
+    return [['the new address', row, identityForUser(guest.id, null, 'mxmx_test_new@example.com'), 'none']];
   }],
   ['the link grants a signed-in stranger exactly what it says', async () => {
     const owner = await account('mxmx_test_owner@example.com');
     const stranger = await account('mxmx_test_stranger@example.com');
-    const asStranger = { userId: stranger.user.id, tokenId: null, email: stranger.user.email };
+    const asStranger = identityForUser(stranger.user.id, null, stranger.user.email);
     const out: Array<[string, ArtifactRow, Asked, ArtifactRole]> = [];
     for (const role of SHARE_ROLE_LIST) out.push([`link ${role}`, await docOf(owner, 'public', role), asStranger, role]);
     return out;
@@ -251,25 +251,25 @@ const ROLE_CASES: Array<[string, () => Promise<Array<[string, ArtifactRow, Asked
     const out: Array<[string, ArtifactRow, Asked, ArtifactRole]> = [];
     for (const role of ['commenter', 'editor'] as ShareRole[]) {
       const row = await docOf(owner, 'public', role);
-      out.push([`link ${role}, nobody at all`, row, { userId: null, tokenId: null }, 'viewer']);
+      out.push([`link ${role}, nobody at all`, row, identityForUser(null, null), 'viewer']);
       // An anonymous TOKEN is not an account: attributable, but with no handle to show beside a comment.
-      out.push([`link ${role}, an anonymous token`, row, { userId: null, tokenId: anonToken.id }, 'viewer']);
+      out.push([`link ${role}, an anonymous token`, row, identityForUser(null, anonToken.id), 'viewer']);
     }
     return out;
   }],
   ['still answers none to everyone on a private document, whatever the link column holds', async () => {
     const owner = await account('mxmx_test_owner@example.com');
     const stranger = await account('mxmx_test_stranger@example.com');
-    return [['link editor, private', await docOf(owner, 'private', 'editor'), { userId: stranger.user.id, tokenId: null, email: stranger.user.email }, 'none']];
+    return [['link editor, private', await docOf(owner, 'private', 'editor'), identityForUser(stranger.user.id, null, stranger.user.email), 'none']];
   }],
   ['takes the MAX of the link and a named share, in both directions', async () => {
     const owner = await account('mxmx_test_owner@example.com');
     const guest = await account('mxmx_test_guest@example.com');
-    const asGuest = { userId: guest.user.id, tokenId: null, email: guest.user.email };
+    const asGuest = identityForUser(guest.user.id, null, guest.user.email);
     const linkViews = await docOf(owner, 'public', 'viewer');
-    await updateSharingFor({ tokenId: '', userId: owner.user.id }, linkViews.id, { shares: [{ email: guest.user.email!, role: 'editor' }] });
+    await updateSharingFor(identityForUser(owner.user.id, ''), linkViews.id, { shares: [{ email: guest.user.email!, role: 'editor' }] });
     const linkEdits = await docOf(owner, 'public', 'editor');
-    await updateSharingFor({ tokenId: '', userId: owner.user.id }, linkEdits.id, { shares: [{ email: guest.user.email!, role: 'viewer' }] });
+    await updateSharingFor(identityForUser(owner.user.id, ''), linkEdits.id, { shares: [{ email: guest.user.email!, role: 'viewer' }] });
     return [
       ['the share is higher than the link', (await head(linkViews.id))!, asGuest, 'editor'],
       ['a viewer share cannot pull a link editor down', (await head(linkEdits.id))!, asGuest, 'editor'],
@@ -281,7 +281,7 @@ const ROLE_CASES: Array<[string, () => Promise<Array<[string, ArtifactRow, Asked
     const out: Array<[string, ArtifactRow, Asked, ArtifactRole]> = [];
     for (const visibility of ['private', 'unlisted', 'public'] as Visibility[]) {
       for (const linkRole of [undefined, 'viewer', 'editor'] as (ShareRole | undefined)[]) {
-        out.push([`${visibility}/${linkRole ?? 'default'}`, await docOf(owner, visibility, linkRole), { userId: owner.user.id, tokenId: null }, 'owner']);
+        out.push([`${visibility}/${linkRole ?? 'default'}`, await docOf(owner, visibility, linkRole), identityForUser(owner.user.id, null), 'owner']);
       }
     }
     return out;
@@ -300,12 +300,12 @@ describe('canReadArtifact is canRead(effectiveRole) — and answers exactly what
   it('preserves every verdict the old pair gave', async () => {
     const owner = await account('mxmx_test_owner@example.com');
     const guest = await account('mxmx_test_guest@example.com');
-    const asGuest = { userId: guest.user.id, email: guest.user.email };
+    const asGuest = identityForUser(guest.user.id, null, guest.user.email);
 
     const priv = await docOf(owner, 'private');
-    expect(await canReadArtifact(priv, { userId: owner.user.id, email: owner.user.email })).toBe(true);
+    expect(await canReadArtifact(priv, identityForUser(owner.user.id, null, owner.user.email))).toBe(true);
     expect(await canReadArtifact(priv, asGuest), 'a stranger cannot read a private document').toBe(false);
-    expect(await canReadArtifact(priv, null), 'nor can an anonymous visitor').toBe(false);
+    expect(await canReadArtifact(priv, ANONYMOUS_ACTOR), 'nor can an anonymous visitor').toBe(false);
 
     // Every share role reads a private document — including `viewer`, which the
     // old roleFor deliberately ignored while canReadArtifact honoured it.
@@ -317,7 +317,7 @@ describe('canReadArtifact is canRead(effectiveRole) — and answers exactly what
 
     for (const v of ['unlisted', 'public'] as Visibility[]) {
       const row = await docOf(owner, v);
-      expect([v, await canReadArtifact(row, null)]).toEqual([v, true]);
+      expect([v, await canReadArtifact(row, ANONYMOUS_ACTOR)]).toEqual([v, true]);
     }
   });
 });
@@ -325,7 +325,7 @@ describe('canReadArtifact is canRead(effectiveRole) — and answers exactly what
 describe('the sharing surface round-trips the link role', () => {
   it('persists it, reads it back, and reports viewer for a pre-column row', async () => {
     const owner = await account('mxmx_test_owner@example.com');
-    const actor = { tokenId: '', userId: owner.user.id };
+    const actor = identityForUser(owner.user.id, '');
     const row = await docOf(owner, 'public');
 
     expect((await getSharingFor(actor, row.id))?.linkRole, 'the default').toBe('viewer');
@@ -347,7 +347,7 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const row = await docOf(owner, 'public', 'commenter');
 
     const made = await createAnnotationFor(
-      { tokenId: stranger.token.id, userId: stranger.user.id },
+      identityForUser(stranger.user.id, stranger.token.id),
       row.id,
       { nodeId: 'root', baseEditId: row.edit_id, body: 'a stranger with the link says something' },
       { kind: 'human', label: 'stranger', transport: 'browser' },
@@ -355,7 +355,7 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     expect(made, JSON.stringify(made)).toMatchObject({ status: 'open' });
 
     // …and the owner sees it.
-    const seen = await listAnnotationsFor({ tokenId: owner.token.id, userId: owner.user.id }, row.id);
+    const seen = await listAnnotationsFor(identityForUser(owner.user.id, owner.token.id), row.id);
     expect(seen?.length).toBe(1);
   });
 
@@ -364,7 +364,7 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const stranger = await account('mxmx_test_stranger@example.com');
     const row = await docOf(owner, 'public', 'viewer');
     const made = await createAnnotationFor(
-      { tokenId: stranger.token.id, userId: stranger.user.id },
+      identityForUser(stranger.user.id, stranger.token.id),
       row.id,
       { nodeId: 'root', baseEditId: row.edit_id, body: 'nope' },
       { kind: 'human', label: 'stranger', transport: 'browser' },
@@ -375,7 +375,7 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
   it('lets a signed-in stranger EDIT a link-editable document, and refuses a link-commentable one', async () => {
     const owner = await account('mxmx_test_owner@example.com');
     const stranger = await account('mxmx_test_stranger@example.com');
-    const asStranger = { tokenId: stranger.token.id, userId: stranger.user.id };
+    const asStranger = identityForUser(stranger.user.id, stranger.token.id);
 
     const editable = await docOf(owner, 'public', 'editor');
     const ok = await applyEditFor(asStranger, editable.id, documentEdit(editable, { source: editable.source!.replace('hello', 'edited') }));
@@ -391,8 +391,8 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const owner = await account('mxmx_test_owner@example.com');
     const stranger = await account('mxmx_test_stranger@example.com');
     const row = await docOf(owner, 'public', 'editor');
-    expect(await getSharingFor({ tokenId: stranger.token.id, userId: stranger.user.id }, row.id)).not.toBeNull();
-    expect(await updateSharingFor({ tokenId: stranger.token.id, userId: stranger.user.id }, row.id, { visibility: 'private' })).not.toBeNull();
+    expect(await getSharingFor(identityForUser(stranger.user.id, stranger.token.id), row.id)).not.toBeNull();
+    expect(await updateSharingFor(identityForUser(stranger.user.id, stranger.token.id), row.id, { visibility: 'private' })).not.toBeNull();
   });
 });
 
@@ -460,20 +460,20 @@ describe('the commenter role, through the routes', () => {
     it('may open a thread, reply, and resolve — and so may an editor; a viewer may not', async () => {
       const w = await world();
       const input = { nodeId: 'root', baseEditId: w.row.edit_id, body: 'is this right?' };
-      const opened = await createAnnotationFor({ tokenId: w.tc.id, userId: w.commenter.id }, w.doc.id, input, human);
+      const opened = await createAnnotationFor(identityForUser(w.commenter.id, w.tc.id), w.doc.id, input, human);
       expect(opened && 'id' in opened, JSON.stringify(opened)).toBe(true);
       const id = (opened as { id: string }).id;
-      const reply = await actOnAnnotationFor({ tokenId: w.tc.id, userId: w.commenter.id }, w.doc.id, id, { reply: 'still wondering' }, human);
+      const reply = await actOnAnnotationFor(identityForUser(w.commenter.id, w.tc.id), w.doc.id, id, { reply: 'still wondering' }, human);
       expect(reply && 'id' in reply).toBe(true);
-      expect((await listAnnotationsFor({ tokenId: w.tc.id, userId: w.commenter.id }, w.doc.id))?.length).toBe(1);
+      expect((await listAnnotationsFor(identityForUser(w.commenter.id, w.tc.id), w.doc.id))?.length).toBe(1);
 
       const head = (await getArtifactById(w.doc.id))!;
-      const byEditor = await createAnnotationFor({ tokenId: w.te.id, userId: w.editor.id }, w.doc.id, { ...input, baseEditId: head.edit_id }, human);
+      const byEditor = await createAnnotationFor(identityForUser(w.editor.id, w.te.id), w.doc.id, { ...input, baseEditId: head.edit_id }, human);
       expect(byEditor && 'id' in byEditor, 'an editor may comment').toBe(true);
 
-      const byViewer = await createAnnotationFor({ tokenId: w.tv.id, userId: w.viewer.id }, w.doc.id, { ...input, baseEditId: head.edit_id }, human);
+      const byViewer = await createAnnotationFor(identityForUser(w.viewer.id, w.tv.id), w.doc.id, { ...input, baseEditId: head.edit_id }, human);
       expect(byViewer, 'a viewer is refused with the uniform miss').toBeNull();
-      expect(await listAnnotationsFor({ tokenId: w.tv.id, userId: w.viewer.id }, w.doc.id)).toBeNull();
+      expect(await listAnnotationsFor(identityForUser(w.viewer.id, w.tv.id), w.doc.id)).toBeNull();
     });
 
     it('may NOT edit, replace, or delete — every write door is the uniform 404', async () => {
@@ -492,7 +492,7 @@ describe('what an editor may do with sharing', () => {
   async function person(name:string){
    const user=await createUser({email:`mxmx_test_${name}@example.com`}),token=await mintToken(name,user.id);
    await claimToken(user.id,token.token);
-   return {user,token,actor:{userId:user.id,tokenId:token.id},session:{userId:user.id,email:user.email,emailVerified:true,credential:'session' as const}};
+   return {user,token,actor:identityForUser(user.id, token.id),session:{userId:user.id,email:user.email,emailVerified:true,credential:'session' as const}};
   }
   async function fixture(role:'viewer'|'commenter'|'editor',dataset=false){
    const owner=await person('sharing_owner'),editor=await person('sharing_editor');
@@ -582,7 +582,7 @@ describe('editors through every door', () => {
     if(row?.format==='markup'&&(match[2]||method==='PATCH')){
      let input=body as Record<string,unknown>;
      if(match[2]==='revert'){
-      const archived=await getVersionFor({tokenId:row.token_id,userId:row.user_id},row.id,Number(input.version));
+      const archived=await getVersionFor(identityForUser(row.user_id, row.token_id),row.id,Number(input.version));
       if(!archived)throw new Error('Fixture archive missing');input={source:archived.source};
      }
      return request(path,{method:'POST',token,json:documentPublicationBody(row,input,match[2]==='revert')});
@@ -798,20 +798,22 @@ describe('editors through every door', () => {
       const w = await world();
       asSession({ id: w.owner.id, email: w.owner.email });
       expect((await share(w.doc.id, [{ email: w.owner.email, role: 'viewer' }])).status).toBe(200);
-      expect(await roleFor(await head(w.doc.id), { userId: w.owner.id, tokenId: null })).toBe('owner');
+      expect(await roleFor(await head(w.doc.id), identityForUser(w.owner.id, null))).toBe('owner');
       expect((await getSharingRoute(await jreq(`/api/my/artifacts/${w.doc.id}/sharing`, 'GET'), params({ id: w.doc.id }))).status).toBe(200);
     });
 
-    it('lib/viewer wraps the same decision for a request actor (session, agent cookie, nobody)', async () => {
+    it('decides a whole request identity (session, bearer, agent cookie, nobody) exactly as its actor', async () => {
       const w = await world();
       await inviteEditor(w);
       const row = await head(w.doc.id);
-      expect(await requestRoleFor(row, { viewer: { userId: w.owner.id, email: w.owner.email }, tokenId: null, credential: 'session' })).toBe('owner');
-      expect(await requestRoleFor(row, { viewer: { userId: w.bob.id, email: null }, tokenId: w.tb.id, credential: 'bearer' })).toBe('editor');
-      expect(await requestRoleFor(row, { viewer: { userId: w.owner.id, email: w.owner.email }, tokenId: w.ta.id, credential: 'bearer' })).toBe('owner');
-      expect(await requestRoleFor(row, { viewer: null, tokenId: w.ta.id, credential: 'agent-cookie' })).toBe('viewer');
-      expect(await requestRoleFor(row, { viewer: null, tokenId: w.anon.id, credential: 'agent-cookie' })).toBe('viewer');
-      expect(await requestRoleFor(row, { viewer: null, tokenId: null, credential: 'none' })).toBe('viewer');
+      const identity = (userId: string | null, tokenId: string | null, email: string | null, credential: RequestIdentity['credential']): RequestIdentity =>
+        ({ ...identityForUser(userId, tokenId, email), credential, emailVerified: null });
+      expect(await roleFor(row, identity(w.owner.id, null, w.owner.email, 'session'))).toBe('owner');
+      expect(await roleFor(row, identity(w.bob.id, w.tb.id, null, 'bearer'))).toBe('editor');
+      expect(await roleFor(row, identity(w.owner.id, w.ta.id, w.owner.email, 'bearer'))).toBe('owner');
+      expect(await roleFor(row, identity(null, w.ta.id, null, 'agent-cookie'))).toBe('viewer');
+      expect(await roleFor(row, identity(null, w.anon.id, null, 'agent-cookie'))).toBe('viewer');
+      expect(await roleFor(row, NO_IDENTITY)).toBe('viewer');
     });
   });
 
@@ -898,7 +900,7 @@ describe('editors through every door', () => {
       await claimToken(bob.id, tb.token);
       // The library call uses the same email account owner scope as browser sharing.
       const { updateSharingFor } = await import('@/lib/artifacts');
-      const state = await updateSharingFor({ tokenId:anon.id,userId:anon.userId }, doc.id, { shares: [{ email: 'bob@x.com', role: 'editor' }] });
+      const state = await updateSharingFor(identityForUser(anon.userId, anon.id), doc.id, { shares: [{ email: 'bob@x.com', role: 'editor' }] });
       expect(state?.shares).toEqual([{ email: 'bob@x.com', role: 'editor' }]);
       const id = doc.id;
       expect((await editsRoute(await jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: doc.edit_id, source: PROSE2 }, tb.token), params({ id }))).status).toBe(200);
@@ -1003,14 +1005,14 @@ describe('editors through every door', () => {
       const w = await world();
       await inviteEditor(w);
       const row = await head(w.doc.id);
-      expect(await roleFor(row, { userId: w.owner.id, tokenId: null })).toBe('owner');
-      expect(await roleFor(row, { userId: w.owner.id, tokenId: w.ta.id })).toBe('owner');
-      expect(await roleFor(row, { userId: null, tokenId: w.ta.id })).toBe('viewer');
-      expect(await roleFor(row, { userId: w.bob.id, tokenId: null })).toBe('editor');
-      expect(await roleFor(row, { userId: w.bob.id, tokenId: w.tb.id })).toBe('editor');
-      expect(await roleFor(row, { userId: w.carol.id, tokenId: null }), 'a public link grants a view').toBe('viewer');
-      expect(await roleFor(row, { userId: null, tokenId: w.anon.id })).toBe('viewer');
-      expect(await roleFor(row, { userId: null, tokenId: null })).toBe('viewer');
+      expect(await roleFor(row, identityForUser(w.owner.id, null))).toBe('owner');
+      expect(await roleFor(row, identityForUser(w.owner.id, w.ta.id))).toBe('owner');
+      expect(await roleFor(row, identityForUser(null, w.ta.id))).toBe('viewer');
+      expect(await roleFor(row, identityForUser(w.bob.id, null))).toBe('editor');
+      expect(await roleFor(row, identityForUser(w.bob.id, w.tb.id))).toBe('editor');
+      expect(await roleFor(row, identityForUser(w.carol.id, null)), 'a public link grants a view').toBe('viewer');
+      expect(await roleFor(row, identityForUser(null, w.anon.id))).toBe('viewer');
+      expect(await roleFor(row, identityForUser(null, null))).toBe('viewer');
     });
 
     it('a private document shared to an email is readable by that account\'s TOKEN viewer too (email: null)', async () => {
@@ -1018,10 +1020,10 @@ describe('editors through every door', () => {
       asSession({ id: w.owner.id, email: w.owner.email });
       expect((await share(w.doc.id, [{email:'bob@x.com',role:'viewer'}])).status).toBe(200);
       const row = await head(w.doc.id);
-      expect(await canReadArtifact(row, { userId: w.bob.id, email: null })).toBe(true);
-      expect(await canReadArtifact(row, { userId: w.bob.id, email: 'bob@x.com' })).toBe(true);
-      expect(await canReadArtifact(row, { userId: w.carol.id, email: null })).toBe(false);
-      expect(await canReadArtifact(row, null)).toBe(false);
+      expect(await canReadArtifact(row, identityForUser(w.bob.id, null, null))).toBe(true);
+      expect(await canReadArtifact(row, identityForUser(w.bob.id, null, 'bob@x.com'))).toBe(true);
+      expect(await canReadArtifact(row, identityForUser(w.carol.id, null, null))).toBe(false);
+      expect(await canReadArtifact(row, ANONYMOUS_ACTOR)).toBe(false);
     });
   });
 
@@ -1221,7 +1223,7 @@ describe('editors through every door', () => {
 
       // The first edit after a quiet spell archives the version it replaced, copied as stored: the archive is exactly
       // the pre-edit head, document and all.
-      const archived = await getVersionFor({ userId: base.user_id, tokenId: base.token_id }, w.doc.id, base.version);
+      const archived = await getVersionFor(identityForUser(base.user_id, base.token_id), w.doc.id, base.version);
       expect(archived?.source).toBe(base.source);
       expect((await db.query<{ document: unknown }>('SELECT document FROM artifact_versions WHERE artifact_id=$1 AND version=$2', [w.doc.id, base.version])).rows[0]?.document).toEqual(base.document);
     });
@@ -1236,7 +1238,7 @@ describe('artifact membership', () => {
     const db = await getDb();
     for (const [user, username] of [[owner,'member_owner'],[bob,'member_bob'],[eve,'member_eve']] as const) await db.query('UPDATE users SET username=$2 WHERE id=$1',[user.id,username]);
     await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,link_role) VALUES('a1B2c3','owner-token',$1,'markup','public','commenter')",[owner.id]);
-    return { db, owner, bob, eve, actor: (user: {id:string}) => ({ userId:user.id,tokenId:null }) };
+    return { db, owner, bob, eve, actor: (user: {id:string}) => (identityForUser(user.id, null)) };
   }
   it('joins an owner immediately; readers request and only an editor can approve', async () => {
     const w=await world();
@@ -1276,7 +1278,7 @@ describe('artifact membership', () => {
   });
   it('rechecks access before approving and refuses anonymous participation', async () => {
     const w=await world();
-    await expect(changeMembership({userId:null,tokenId:null},'a1B2c3',{action:'join'})).rejects.toThrow(/sign in/i);
+    await expect(changeMembership(identityForUser(null, null),'a1B2c3',{action:'join'})).rejects.toThrow(/sign in/i);
     await changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'});
     await w.db.query("UPDATE artifacts SET visibility='private',sharing_revision=sharing_revision+1 WHERE id='a1B2c3'");
     await expect(changeMembership(w.actor(w.owner),'a1B2c3',{action:'approve',userId:w.bob.id})).rejects.toThrow(/access/i);
@@ -1322,7 +1324,7 @@ describe('artifact membership', () => {
   it('posts resolved comment mentions atomically for agents and ignores examples in code',async()=>{
    const w=await world();await link(w.bob.id,'follow',w.owner.id);
    await w.db.query(`UPDATE artifacts SET source='<p id="mark">Hello</p>' WHERE id='a1B2c3'`);
-   const actor={userId:w.owner.id,tokenId:'owner-token'};
+   const actor=identityForUser(w.owner.id, 'owner-token');
    const post=(body:string)=>createAnnotationFor(actor,'a1B2c3',{nodeId:'mark',body},{kind:'agent',label:'test',transport:'http'});
    expect(await post('`[@member_bob](/people/'+w.bob.id+')`')).not.toBeNull();
    expect((await membershipInbox(w.actor(w.bob))).notifications).toHaveLength(0);

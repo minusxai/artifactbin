@@ -44,7 +44,7 @@ describe('a verified-email browser request', () => {
     await sessionActor(request('/api/my/artifacts', { actor }));
     const { value, sql, transactions, count } = await recorded(() => sessionActor(request('/api/my/artifacts', { actor })));
     console.info('[budget] verified-email cookie request, no invitation: statements=%d transactions=%d', count, transactions);
-    expect(value.viewer).toMatchObject({ userId: 'usr_budget' });
+    expect(value).toMatchObject({ userId: 'usr_budget' });
     expect(transactions).toBe(0);
     expect(sql.filter((text) => /FOR UPDATE/i.test(text))).toEqual([]);
     expect(touching(sql, 'group_invitations')).toHaveLength(1);

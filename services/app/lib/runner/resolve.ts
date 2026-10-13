@@ -1,4 +1,5 @@
 import { canReadArtifact, declarationsForRow, getArtifactById } from '@/lib/artifacts';
+import { identityForUser } from '@/lib/accounts';
 import { EMPTY_COMPILED_DATAFLOW } from '@/lib/dataflow';
 import {parseJsx} from '../jsx';
 import {splitHelmet, validateHelmet} from '../document';
@@ -7,7 +8,7 @@ import type {LambdaProgramResolver} from '../runner';
 /** One published JSX source supplies both declarations and the executable entry point. */
 export const resolveLambdaProgram:LambdaProgramResolver=async(artifactId,userId)=>{
  const row=await getArtifactById(artifactId);
- if(!row||row.deleted_at||row.format!=='markup'||!row.source||!await canReadArtifact(row,{userId,email:null}))return null;
+ if(!row||row.deleted_at||row.format!=='markup'||!row.source||!await canReadArtifact(row, identityForUser(userId)))return null;
  const parsed=parseJsx(row.source);if(!parsed.ok)return null;
  const errors=validateHelmet(parsed.nodes);if(errors.length)throw Error(errors.map(e=>e.message).join('\n'));
  const split=splitHelmet(parsed.nodes),{serverScript}=split.content;

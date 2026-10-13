@@ -16,7 +16,7 @@ export async function remoteRoute(
       (request.headers.has("authorization") && actor.credential !== "bearer")
     )
       return json({ error: "Authentication required. Run afbin auth to sign in." }, 401);
-    if (!actor.viewer?.userId)
+    if (!actor.userId)
       return json(
         {
           error:
@@ -26,7 +26,7 @@ export async function remoteRoute(
       );
     if (refusesCrossSite(request, actor))
       return json({ error: "Forbidden" }, 403);
-    const owner = actor.viewer.userId;
+    const owner = actor.userId;
     if (request.method === "GET") {
       if (!id) return json({ sessions: await remoteAgents.list(owner) });
       const since = Number(

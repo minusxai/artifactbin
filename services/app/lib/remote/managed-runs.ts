@@ -11,7 +11,7 @@ const spec=z.object({requestId:z.string().min(1).max(128),name:z.string().regex(
 const disabled:RunnerCapabilities={version:1,managedProcesses:false,persistence:false,ssh:false,defaults:{vcpu:1,memoryMiB:2048}};
 /** The app only forwards authenticated requests; managed allocation requires a configured external service. */
 export async function managedRunRoute(request:Request,action:'capabilities'|'create',dependencies?:{enabled:boolean;runner:RunnerService;db:Db}){
- const actor=await sessionActor(request),owner=actor.viewer?.userId;
+ const actor=await sessionActor(request),owner=actor.userId;
  if(!owner)return json({error:'unauthorized'},401);
  if(action==='create'&&isCookieCredential(actor)&&isCrossSiteRequest(request))return json({error:'forbidden'},403);
  const enabled=dependencies?.enabled??!!RUNNER_SERVICE_URL,runner=dependencies?.runner??services().runner;

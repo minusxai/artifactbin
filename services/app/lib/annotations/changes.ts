@@ -4,7 +4,7 @@
  */
 import { createHash } from 'node:crypto';
 import type { CommentChangesPage, CommentChangeEvent } from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { commentMonitorScope } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform/db';
 import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/publish/realtime/live';
@@ -23,7 +23,7 @@ const MAX_ACCOUNT_WAITS = 4;
 const MAX_PROCESS_WAITS = 128;
 const accountWaits = new Map<string, number>();
 let activeWaits = 0;
-function acquireWait(actor: TokenActor): () => void {
+function acquireWait(actor: AccessActor): () => void {
   const key = actor.userId ? `account:${actor.userId}` : `token:${actor.tokenId}`;
   const count = accountWaits.get(key) ?? 0;
   // No await between checking and reserving: concurrent requests cannot overbook.
@@ -44,7 +44,7 @@ interface ChangeRow {
   created_at: string; deleted_at: string | null;
 }
 const encode = (cursor: Cursor) => Buffer.from(JSON.stringify(cursor)).toString('base64url');
-const cursorScope = (actor: TokenActor, id: string) => createHash('sha256').update(JSON.stringify([id, actor.userId ?? actor.tokenId])).digest('hex');
+const cursorScope = (actor: AccessActor, id: string) => createHash('sha256').update(JSON.stringify([id, actor.userId ?? actor.tokenId])).digest('hex');
 function decode(raw: string, scope: string): string {
   try {
     if (raw.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(raw)) throw new Error();
@@ -58,7 +58,7 @@ function decode(raw: string, scope: string): string {
  * Empty filtered pages advance too. has_more describes raw rows and requires an
  * immediate follow-up even when all scanned comments were agents or deleted.
  */
-export async function readCommentChangesFor(actor: TokenActor, id: string, options: {
+export async function readCommentChangesFor(actor: AccessActor, id: string, options: {
   after: string; limit: number; waitSeconds: number; signal: AbortSignal;
 }): Promise<CommentChangesPage | null> {
   const db = await getDb();

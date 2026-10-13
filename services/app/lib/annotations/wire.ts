@@ -11,7 +11,7 @@ import type { ReviewReceipt } from '../remote/agents';
 import { notifyRemoteComment } from '../remote/mentions';
 import type { MutationReceipt } from '@/lib/artifacts';
 import type { ArtifactRow } from '@/lib/artifacts';
-import type { TokenActor } from '../accounts';
+import type { AccessActor } from '../accounts';
 import { artifactToWire } from '@/lib/artifacts';
 import { snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
 import { json } from '../http/http';
@@ -41,7 +41,7 @@ const openAnnotationsFor = (row: ArtifactRow): Promise<number> =>
   row.format === 'markup' || row.format === 'folder' ? countOpenAnnotations(row.id) : Promise.resolve(0);
 
 /** One artifact as the bearer read door answers it: the head this reader may see, its open threads, and their capabilities. */
-export async function readArtifactSnapshot(actor: TokenActor, id: string, base: string) {
+export async function readArtifactSnapshot(actor: AccessActor, id: string, base: string) {
   const head = await snapshotHeadFor(actor, id);
   if (!head) return null;
   const wire: Record<string, unknown> = await artifactToWireWithAnnotations(head.snapshot, base);
@@ -71,7 +71,7 @@ function parseAnnotationAction(body: Record<string, unknown>): AnnotationAction 
 /** The ONE annotation mutation — only the credential (and thus the attribution) differs per door. */
 export async function respondToAnnotationAction(
   body: Record<string, unknown> | null,
-  actor: TokenActor,
+  actor: AccessActor,
   author: AnnotationAuthor,
   id: string,
   annId: string,

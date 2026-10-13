@@ -3,12 +3,12 @@ import {respondToEdit,artifactToWire,committedOpenAnnotations,parseShareEntries,
 import { applyEditFor, isVersionConflict, setMetadataFor, type MetadataPatch } from './store';
 import { getArtifactFor, getOwnedArtifactFor } from './rows';
 import { writerFor } from './table';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {resolveParent,isParentRefusal} from './placement';
 import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
 import {json} from '../http/http';
 import {validateDatasetPolicyForRow} from '../datasets/policy/validation';
-export async function updateMetadataFromBody(actor:TokenActor,id:string,body:Record<string,unknown>,base:string,dryRun=false):Promise<Response>{
+export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Record<string,unknown>,base:string,dryRun=false):Promise<Response>{
  if(Object.hasOwn(body,'document_update'))return respondToEdit(base,body,input=>applyEditFor(actor,id,input,{dryRun}));
  const current=await getArtifactFor(actor,id);if(!current)return json({error:'not_found'},404);
  if(current.format==='markup')return json({error:'jsonb_operations_required',hint:'Submit document_update using the current CLI or browser editor.'},400);

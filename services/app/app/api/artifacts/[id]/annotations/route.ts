@@ -15,7 +15,7 @@ import { canAnnotate } from '@artifactbin/contracts';
  */
 import { createAnnotationFor, listAnnotationPageFor } from '@/lib/annotations';
 import {decodePage, encodeCursor} from '@/lib/http';
-import { type TokenActor, withTokenAuth } from '@/lib/accounts';
+import { type AccessActor, withTokenAuth } from '@/lib/accounts';
 import { capabilityGuard } from '@/lib/artifacts';
 import { annotationAuthorForRequest } from '@/lib/annotations';
 import { notifyRemoteComment } from '@/lib/remote/mentions';
@@ -24,7 +24,7 @@ import { json, readJson } from '@/lib/http';
 const STATUSES = new Set(['open', 'resolved', 'all']);
 
 /** Shared by both doors: the ?status= vocabulary and the {annotations} envelope. */
-export async function respondToAnnotationList(request: Request, actor: TokenActor, id: string): Promise<Response> {
+export async function respondToAnnotationList(request: Request, actor: AccessActor, id: string): Promise<Response> {
   const raw = new URL(request.url).searchParams.get('status') ?? 'open';
   if (!STATUSES.has(raw)) return json({ error: 'invalid_status' }, 400);
   const author=new URL(request.url).searchParams.get('author')??undefined;
@@ -38,12 +38,12 @@ export async function respondToAnnotationList(request: Request, actor: TokenActo
   return json({ annotations: result.annotations, next_cursor: result.next ? encodeCursor('comments', {seq: result.next,scope}) : null });
 }
 
-export const GET = withTokenAuth((request, { tokenId, userId, params }) =>
-  respondToAnnotationList(request, { tokenId, userId }, params.id),
+export const GET = withTokenAuth((request, { actor, params }) =>
+  respondToAnnotationList(request, actor, params.id),
 );
 
 /** Agent creation uses stable node identity or a unique text quote. */
-export const POST = withTokenAuth(async (request, {tokenId, userId, params, clientHarness}) => {
+export const POST = withTokenAuth(async (request, { actor, params, clientHarness }) => {
   const body = await readJson(request);
   if (!body) return json({error: 'invalid_json'}, 400);
   if (Object.keys(body).some(key => !['node_id', 'quote', 'range', 'body'].includes(key)) ||
@@ -56,7 +56,6 @@ export const POST = withTokenAuth(async (request, {tokenId, userId, params, clie
   if(body.range!=null&&(!range||(isAreaRange(refinementRange(range))&&body.quote!==undefined)))return json({error:'bad_range'},400);
   const viewState=body.view_state===undefined?undefined:parseCommentViewState(body.view_state);
   if(body.view_state!==undefined&&!viewState)return json({error:'bad_view_state'},400);
-  const actor={tokenId,userId};
   // Commenting is an act attributed to a PERSON: a guest is sent to sign in and
   // a test user is held inside its sandbox, at this door exactly as at the
   // browser's (lib/capabilities).
@@ -64,13 +63,13 @@ export const POST = withTokenAuth(async (request, {tokenId, userId, params, clie
   if (refusal) return refusal;
   const key=request.headers.get('Idempotency-Key');
   const work=async(receipt?:MutationReceipt)=>{
-  const made = await createAnnotationFor({tokenId, userId}, params.id, {
+  const made = await createAnnotationFor(actor, params.id, {
     body: body.body as string, ...(typeof body.node_id === 'string'?{nodeId:body.node_id}:{}),...(typeof body.quote==='string'?{quote:body.quote}:{}),...(range?{range}:{}),...(viewState?{viewState}:{}),
   }, annotationAuthorForRequest(request, clientHarness),receipt);
   if (made instanceof Response) return made;
   if (!made) return json({error: 'not_found'}, 404);
   if ('refused' in made) return json({error: made.refused, hint: 'Read the current document again, then anchor with a --quote that appears exactly once, or with the node id from its stored markup as --node.'}, made.refused === 'stale' ? 409 : 400);
-  notifyRemoteComment(userId, params.id, made.id, made.thread[0]);
+  notifyRemoteComment(actor.userId, params.id, made.id, made.thread[0]);
   return json(made, 201);
   };
   if(!key)return work();

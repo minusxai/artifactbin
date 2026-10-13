@@ -4,7 +4,7 @@
  * lib/artifacts/__tests__/feedback-images.test.ts, which asserted the service's edge cases over doubles.
  * The image, file and picture headers are media-headers.test.ts's rows.
  */
-import { claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { updateSharingFor, changeMembership } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
@@ -28,13 +28,13 @@ const imageCount=async(datasetId:string)=>(await (await getDb()).query<{count:nu
 async function world(){
   const owner=await createUser({email:'mxmx_test_image_owner@example.test'}),reporter=await createUser({email:'mxmx_test_image_reporter@example.test'});
   const token=await mintToken('feedback-images-owner', owner.id);await claimToken(owner.id,token.token);
-  const ownerActor={userId:owner.id,tokenId:token.id};
+  const ownerActor=identityForUser(owner.id, token.id);
   const make=async(body:object)=>{const response=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:body}));expect(response.status,await response.clone().text()).toBe(201);return response.json();};
   const dataset=await make({dataset:[{message:'initial',image_ref:''}],visibility:'private',access:'readwrite'});
   const document=await make({visibility:'public',markup:`<Helmet><Import name="feedback" src="ref:${dataset.id}" /><Value name="message" type="string" default="" /><Value name="image_ref" type="string" default="" /><Mutation name="submit">{\`insert into feedback.rows (message,image_ref) values ($message,$image_ref)\`}</Mutation></Helmet>`});
   await updateSharingFor(ownerActor,dataset.id,{shares:[{email:reporter.email!,role:'viewer'}]});
   await setDatasetPolicy(ownerActor,dataset.id,{version:2,allow:[{actions:['read'],from:{user:'*'}},{actions:['insert'],from:{artifact:document.id}}]},0);
-  await changeMembership({userId:reporter.id,tokenId:null},document.id,{action:'join'});
+  await changeMembership(identityForUser(reporter.id, null),document.id,{action:'join'});
   await changeMembership(ownerActor,document.id,{action:'approve',userId:reporter.id});
   const pageActor:Session={credential:'session',userId:reporter.id,email:reporter.email!,emailVerified:true};
   const ownerSession:Session={credential:'session',userId:owner.id,email:owner.email!,emailVerified:true};

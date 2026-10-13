@@ -13,7 +13,7 @@
  * wakeup converges on the next event with no cursor bookkeeping.
  */
 import { trackEvent } from '@/lib/platform';
-import { canReadArtifact, getArtifactById, isOwner, roleFor } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, ownsArtifact, effectiveRole } from '@/lib/artifacts';
 import { datasetsForDocument } from '@/lib/document-data';
 import { isDocumentFormat } from '@/lib/publish/document/input';
 import { canAnnotate } from '@artifactbin/contracts';
@@ -42,17 +42,16 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // and the agent cookie). Resolving it any other way drops an anonymous
   // owner's live stream the moment their document goes private.
   const actor = await sessionActor(request);
-  const viewer = actor.viewer;
-  if (!(await canReadArtifact(initial, viewer))) return new Response('not found', { status: 404 });
+  if (!(await canReadArtifact(initial, actor))) return new Response('not found', { status: 404 });
   // Annotations are OWNER-state (either browser credential — the account
   // owner, or the anonymous agent-cookie owner), decided once here and
   // re-checked on every wakeup like the ACL.
-  const ownerConnection = isOwner(initial, actor);
+  const ownerConnection = ownsArtifact(initial, actor);
   // Annotations are narrated to everyone who may write them: the owner, an editor, a commenter.
-  const annotatorConnection = ownerConnection || canAnnotate(await roleFor(initial, actor));
+  const annotatorConnection = ownerConnection || canAnnotate(await effectiveRole(initial, actor));
   const artifactId = initial.id;
   // Connect only — never in the wakeup loop, which fires per remote edit.
-  void trackEvent('sse_connect', artifactId, { userId: viewer?.userId ?? null });
+  void trackEvent('sse_connect', artifactId, { userId: actor.userId });
 
   /**
    * THE DOCUMENT'S DATASETS, WATCHED BESIDE THE DOCUMENT ITSELF.
@@ -107,8 +106,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (closed || !annotatorConnection) return;
     const row = await getArtifactById(id);
     if (!row) return void close();
-    if (!(await canReadArtifact(row, viewer))) return void close();
-    if (!isOwner(row, actor) && !canAnnotate(await roleFor(row, actor))) return; // demoted mid-stream: stop narrating, keep the document
+    if (!(await canReadArtifact(row, actor))) return void close();
+    if (!ownsArtifact(row, actor) && !canAnnotate(await effectiveRole(row, actor))) return; // demoted mid-stream: stop narrating, keep the document
     void sendAnnotations();
   };
 
@@ -149,7 +148,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (closed) return;
     const row = await getArtifactById(id);
     if (!row) return void close();
-    if (!(await canReadArtifact(row, viewer))) return void close();
+    if (!(await canReadArtifact(row, actor))) return void close();
     const dataset = await getArtifactById(datasetId);
     void sendData({ datasets: [datasetId], version: dataset?.version ?? 0 });
   };
@@ -238,7 +237,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     // and access is not. Without this, someone who connected while a document
     // was public kept receiving everything written after it was made private
     // — revocation that never reached the one reader it was aimed at.
-    if (!(await canReadArtifact(row, viewer))) return void close();
+    if (!(await canReadArtifact(row, actor))) return void close();
     if (payload === 'members') void sendData({datasets:['_members'],version:row.version});
     queueRow(row);
   };

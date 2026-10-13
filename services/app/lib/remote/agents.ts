@@ -1,4 +1,5 @@
 import {services} from '../platform/services';
+import { identityForUser } from '@/lib/accounts';
 import {managedTerminalView,managedTerminalInput,stopManagedTerminal} from './managed-terminal';
 import {managedRunRosterStatus} from './managed-status';
 import {externalHostedProofHash} from './hosted-proof';
@@ -164,7 +165,7 @@ export class RemoteAgents {
   // call a second database owner inside the serialized relay transaction.
   const queued=(await db.query<WorkRow>("SELECT * FROM remote_work WHERE owner=$1 AND session_id=$2 AND phase='queued' ORDER BY seq LIMIT 1",[owner,id])).rows[0];
   let permitted=true;
-  if(queued){const artifact=await getArtifactById(queued.artifact_id);permitted=!!artifact&&!artifact.deleted_at&&await canReadArtifact(artifact,{userId:owner,email:null});}
+  if(queued){const artifact=await getArtifactById(queued.artifact_id);permitted=!!artifact&&!artifact.deleted_at&&await canReadArtifact(artifact, identityForUser(owner));}
   return db.transaction(async tx=>{
    const r=await this.row(tx,owner,id,true);if(!r)return this.relay.exchange(owner,id,body);
    this.check(r,body.runnerKey);if(!r.active)throw new RemoteError('Session stopped',410);

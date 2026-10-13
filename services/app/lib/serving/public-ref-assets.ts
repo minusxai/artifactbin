@@ -1,4 +1,5 @@
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform/ids';
 import type { WebAssetKind } from '@/lib/publish/assets/web-assets';
 import { serveStoredFile } from '@/lib/datasets/file-store';
@@ -7,7 +8,7 @@ import { serveStoredFile } from '@/lib/datasets/file-store';
 export async function publicRefAsset(id: string, kind: WebAssetKind | 'binary' = 'binary') {
   if (!ID_RE.test(id)) return null;
   const row = await getArtifactById(id);
-  if (!row || !['file', 'image', 'pdf'].includes(row.format) || !await canReadArtifact(row, null)) return null;
+  if (!row || !['file', 'image', 'pdf'].includes(row.format) || !await canReadArtifact(row, ANONYMOUS_ACTOR)) return null;
   const type = (row.meta as { contentType?: string })?.contentType ?? 'application/octet-stream';
   if (kind !== 'binary' && !(kind === 'image' ? type.startsWith('image/') : kind === 'font' ? type.startsWith('font/')
     : kind === 'pdf' ? type === 'application/pdf' : ['text/javascript', 'application/javascript'].includes(type))) return null;

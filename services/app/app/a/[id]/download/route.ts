@@ -39,7 +39,7 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
   const file = await assembleArtifactFile({
     timings,
     id,
-    actor: { ...actor.viewer, userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId },
+    actor: actor,
     origin: baseUrl(request),
     ...(version !== undefined ? { version } : {}),
   });

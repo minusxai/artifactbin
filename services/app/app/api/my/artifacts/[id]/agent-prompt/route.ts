@@ -1,7 +1,6 @@
 import { getArtifactFor } from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
-import { actorForArtifacts } from '@/lib/accounts';
-import { baseUrl, json, unauthorized } from '@/lib/http';
+import { baseUrl, json } from '@/lib/http';
 import { existingPaste } from '@/lib/serving';
 
 /**
@@ -14,13 +13,11 @@ import { existingPaste } from '@/lib/serving';
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
-  const scoped = actorForArtifacts(actor);
-  if (!scoped) return unauthorized(request);
   const { id } = await ctx.params;
-  const row = await getArtifactFor(scoped, id);
+  const row = await getArtifactFor(actor, id);
   if (!row) return json({ error: 'not_found' }, 404);
   // Anonymous browser sessions have no account token for an agent to reuse.
-  if (!actor.viewer?.userId) return json({ error: 'sign_in_required' }, 409);
+  if (!actor.userId) return json({ error: 'sign_in_required' }, 409);
   const base = baseUrl(request);
   return json({ id: row.id, url: `${base}/a/${row.id}`, prompt: existingPaste(base, row.id, row.meta.template as string | null) }, 201);
 }

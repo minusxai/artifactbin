@@ -1,15 +1,11 @@
 import { browserActor } from '@/lib/accounts';
-import { actorForArtifacts } from '@/lib/accounts';
-import { unauthorized } from '@/lib/http';
 import { datasetPolicyRequest } from '@/lib/document-data';
 async function handle(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const auth = await browserActor(request);
-  if (auth instanceof Response) return auth;
-  const actor = actorForArtifacts(auth);
-  if (!actor) return unauthorized(request);
+  const actor = await browserActor(request);
+  if (actor instanceof Response) return actor;
   return datasetPolicyRequest(request, actor, (await ctx.params).id);
 }
 export const GET = handle;

@@ -33,8 +33,8 @@ function overridesFrom(raw: string): Record<string, unknown> | null {
  * The browser's own fork door (/api/my/artifacts/:id/fork) is untouched: same
  * `forkArtifact`, different credential.
  */
-export const POST = withTokenAuth(async (request: Request, { tokenId, userId, params }) => {
+export const POST = withTokenAuth(async (request: Request, { actor, params }) => {
   const overrides = overridesFrom(await request.text());
   if (!overrides) return json({ error: 'invalid_json' }, 400);
-  return runOperation('fork_artifact', request, { tokenId, userId }, { ...overrides, id: params.id });
+  return runOperation('fork_artifact', request, actor, { ...overrides, id: params.id });
 });

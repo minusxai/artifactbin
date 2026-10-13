@@ -1,8 +1,8 @@
 /** Hosted handoff: authenticated baseline proof, existing atomic graph edits, then recoverable existing annotation operations. The offered HTML never executes. */
 import {createHash} from 'node:crypto';
-import { actorForArtifacts, browserActor, ownerUsername } from '../accounts';
+import { browserActor, ownerUsername, withAccountToken, type TokenHoldingActor } from '../accounts';
 import { applyEditFor, durableMutation, getEditableArtifactFor, getVersionFor, respondToEdit, capabilityGuard } from '../artifacts';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {UnservableDocument} from '@/lib/artifacts';
 import {actOnAnnotationFor,createAnnotationFor,listAnnotationsFor,type AnnotationWire} from '../annotations';
 import {baseUrl,json} from '../http';
@@ -15,15 +15,17 @@ import {verifyHostedComments,offlineCommentBody} from './hosted-comments';
 import type {ArtifactFile} from './file-format';
 
 const identity=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-async function actorOf(request:Request):Promise<TokenActor|Response>{
+async function actorOf(request:Request):Promise<TokenHoldingActor|Response>{
  const actor=await browserActor(request);if(actor instanceof Response)return actor;
- const scoped=actorForArtifacts(actor);return scoped?.userId?scoped:json({error:'authentication_required',hint:'Log in with email to apply this file.'},401);
+ // An offline copy is created like any browser create: through the account's own token.
+ const holding=actor.userId?await withAccountToken(actor):null;
+ return holding??json({error:'authentication_required',hint:'Log in with email to apply this file.'},401);
 }
 /** The file's server base, or null when it is unavailable here — a retired stored shape (lib/artifacts/servable) included. */
-async function baseline(actor:TokenActor,file:ArtifactFile){
+async function baseline(actor:AccessActor,file:ArtifactFile){
  try{return await servedBaseline(actor,file);}catch(error){if(error instanceof UnservableDocument)return null;throw error;}
 }
-async function servedBaseline(actor:TokenActor,file:ArtifactFile){
+async function servedBaseline(actor:AccessActor,file:ArtifactFile){
  if(!(/^[A-Za-z0-9]{6,12}$/).test(file.artifactId))return null;
  const head=await getEditableArtifactFor(actor,file.artifactId);if(!head||head.format!=='markup'||head.document?.kind!=='graph')return null;
  if(head.version===file.base.version)return {document:head.document,version:head.version,markup:head.source??'',meta:head.meta,title:head.title,description:head.description};
@@ -42,7 +44,7 @@ export async function inspectHostedOffer(request:Request,value:unknown):Promise<
  }
  return json({title:file.metadata.title,comments:file.threads.length,target:'',kind:'copy',reason});
 }
-async function publishComments(actor:TokenActor,request:Request,id:string,file:ArtifactFile,copy:boolean):Promise<void>{
+async function publishComments(actor:AccessActor,request:Request,id:string,file:ArtifactFile,copy:boolean):Promise<void>{
  const refusal=await capabilityGuard(actor,'comment',id);if(refusal&&file.threads.length)throw Error('Your account cannot publish comments on this document.');
  const author={kind:'human' as const,label:await ownerUsername(actor.userId),transport:'browser' as const};
  const current=await listAnnotationsFor(actor,id,{status:'all'});if(!current)throw Error('The document is no longer accessible.');
@@ -108,6 +110,6 @@ export async function applyHostedOffer(request:Request,value:unknown):Promise<Re
  const id=copy?String(result.body.id):file.artifactId;
  if(!/^[A-Za-z0-9]{6,12}$/.test(id))return json({error:'The server did not confirm a document identity. Preserve this file and inspect your account.'},502);
  try{await publishComments(actor,request,id,file,copy);}catch(error){return json({error:error instanceof Error?error.message:String(error),sourceApplied:true,artifactId:id,hint:'The document was saved; some comments may still be pending. Keep this file and retry the same action. Confirmed comments will not be duplicated.'},409);}
- // Released HTML accepts only /workspace/* opened paths. This is a real hosted redirect, scoped again on arrival.
+ // Released HTML accepts only /workspace/* opened paths. This is a real hosted redirect, actor again on arrival.
  return json({path:`/workspace/${id}`,artifactId:id,sourceApplied:true});
 }

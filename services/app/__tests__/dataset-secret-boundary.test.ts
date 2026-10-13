@@ -13,7 +13,7 @@ import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as artifactPage} from '@/app/api/page/artifact/[id]/route';
 import {POST as revertArtifact} from '@/app/api/artifacts/[id]/revert/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { DATASET_OPERATIONS } from '@/lib/operations/datasets';
 import { request, useAppHarness } from './harness';
 
@@ -100,7 +100,7 @@ it('binds a secret only to a dataset the caller can edit, through the route and 
   const refused = await createSecret(request('/api/my/secrets',{method:'POST',token:stranger.token.token,json:{value:'stranger-password',connection:target,datasetId:id}}));
   expect(refused.status).toBe(404);
   const operation = DATASET_OPERATIONS.find(op=>op.name==='create_dataset_secret')!;
-  const viaOperation = await operation.run({actor:{userId:stranger.user.id,tokenId:stranger.token.id}} as never,{value:'stranger-password',connection:target,datasetId:id});
+  const viaOperation = await operation.run({actor:identityForUser(stranger.user.id, stranger.token.id)} as never,{value:'stranger-password',connection:target,datasetId:id});
   expect(viaOperation.status).toBe(404);
   expect(await bound()).toBe(before);
   const allowed = await createSecret(request('/api/my/secrets',{method:'POST',token:owner.token.token,json:{value:'owner-password',connection:target,datasetId:id}}));

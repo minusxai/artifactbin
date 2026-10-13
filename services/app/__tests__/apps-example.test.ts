@@ -6,7 +6,7 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {GET as query} from '@/app/a/[id]/query/route';
 import {getArtifactById,changeMembership} from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {claimToken,createUser} from '@/lib/accounts';
+import { identityForUser, claimToken,createUser} from '@/lib/accounts';
 import {request,useAppHarness} from './harness';
 useAppHarness();
 it('publishes the reference and exposes accepted members, never pending requests or custom join rows',async()=>{
@@ -18,11 +18,11 @@ it('publishes the reference and exposes accepted members, never pending requests
  expect(res.status,await res.clone().text()).toBe(201);const {id}=await res.json();
  const read=async()=>{const r=await query(request(`/a/${id}/query?q=%7B%7D`),{params:Promise.resolve({id})});expect(r.status).toBe(200);return (await r.json()).tables.members.rows.map((m:{user_id:string})=>m.user_id);};
  expect(await read()).toEqual([owner.id]);
- await changeMembership({userId:reader.id,tokenId:null},id,{action:'join'});
+ await changeMembership(identityForUser(reader.id, null),id,{action:'join'});
  expect(await read()).toEqual([owner.id]);
- await changeMembership({userId:owner.id,tokenId:token.id},id,{action:'approve',userId:reader.id});
+ await changeMembership(identityForUser(owner.id, token.id),id,{action:'approve',userId:reader.id});
  expect(await read()).toEqual([owner.id,reader.id]);
- await changeMembership({userId:reader.id,tokenId:null},id,{action:'leave'});
+ await changeMembership(identityForUser(reader.id, null),id,{action:'leave'});
  expect(await read()).toEqual([owner.id]);
  expect((await getArtifactById(id))?.source).not.toContain('<Mutation');
 });

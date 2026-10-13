@@ -30,7 +30,7 @@ import { updateSharing } from '@/lib/artifacts/sharing';
 import { childrenTableFor } from '@/lib/artifacts/placement';
 import { subscribeToArtifact } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser, type AccessActor } from '@/lib/accounts';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -59,11 +59,11 @@ async function world() {
 }
 
 /** The table as one viewer reads it. */
-const tableFor = async (folderId: string, viewer: { userId: string | null; tokenId: string | null; email: string | null }) =>
+const tableFor = async (folderId: string, viewer: AccessActor) =>
   childrenTableFor((await getArtifactById(folderId))!, viewer);
 
 /** Nobody at all: no account, no token, no share. */
-const STRANGER = { userId: null, tokenId: null, email: null };
+const STRANGER = identityForUser(null, null, null);
 
 describe('the children table', () => {
   it('a stranger on a public folder sees its PUBLIC children only (never unlisted, never private), with no numbers and a thumbnail', async () => {
@@ -80,7 +80,7 @@ describe('the children table', () => {
 
   it('the owner sees every child, with view counts and a sparkline, and no thumbnail for a private one', async () => {
     const { o, f, pub, priv, sub, quiet } = await world();
-    const rows = (await tableFor(f.id, { userId: o.userId, tokenId: o.tokenId, email: o.email })).rows as any[];
+    const rows = (await tableFor(f.id, identityForUser(o.userId, o.tokenId, o.email))).rows as any[];
     expect(rows.map((x) => x.id).sort()).toEqual([pub.id, priv.id, sub.id, quiet.id].sort());
     expect(rows.find((x) => x.id === quiet.id).thumbnail).toContain(`/a/${quiet.id}/export`);
     const p = rows.find((x) => x.id === priv.id);
@@ -110,7 +110,7 @@ describe('the children table', () => {
     const child = await create(t.token, { markup: '<p>open</p>', title: 'Open', visibility: 'public', parent_id: f.id });
     const quiet = await create(t.token, { markup: '<p>quiet</p>', title: 'Quiet', visibility: 'unlisted', parent_id: f.id });
 
-    const mine = (await tableFor(f.id, { userId: t.userId, tokenId: t.id, email: t.email })).rows as any[];
+    const mine = (await tableFor(f.id, identityForUser(t.userId, t.id, t.email))).rows as any[];
     expect(mine.map((x) => x.id).sort()).toEqual([child.id, quiet.id].sort());
     const open = mine.find((x) => x.id === child.id);
     expect(typeof open.views).toBe('number');
@@ -136,7 +136,7 @@ describe('the children table', () => {
     const bystander = await createUser({ email: 'bystander@example.com' });
     await updateSharing(o.userId, priv.id, { shares: [{ email: 'guest@example.com', role: 'viewer' }] });
     const seen = async (u: { id: string; email: string }) =>
-      (await tableFor(f.id, { userId: u.id, tokenId: null, email: u.email })).rows.map((r) => r.id).sort();
+      (await tableFor(f.id, identityForUser(u.id, null, u.email))).rows.map((r) => r.id).sort();
     expect(await seen(guest)).toEqual([priv.id, pub.id, sub.id].sort());
     expect(await seen(bystander)).toEqual([pub.id, sub.id].sort());
   });

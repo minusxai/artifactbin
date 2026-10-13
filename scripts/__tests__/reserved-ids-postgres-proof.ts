@@ -1,12 +1,13 @@
 /** CI-only: exercise the actual allocator and claim transaction on pooled Postgres. */
 import assert from 'node:assert/strict';
+import { identityForUser } from '@/lib/accounts';
 import {getDb} from '@/lib/platform';
 import { reserveIds } from '@/lib/artifacts';
 import { claimArtifactId } from '@/lib/artifacts/identities';
 const db=await getDb();
 try{
  assert.equal(db.raw().kind,'pg','This proof must never silently run on PGLite');
- const actor={tokenId:'proof-token',userId:'proof-account'};
+ const actor=identityForUser('proof-account', 'proof-token');
  const pids=await Promise.all(Array.from({length:8},()=>db.transaction(async tx=>{
   const pid=(await tx.query<{pid:number}>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
   await tx.query('SELECT pg_sleep(0.1)');return pid;
@@ -23,7 +24,7 @@ try{
  const rollback=batches[0]![1]!;
  await assert.rejects(db.transaction(async tx=>{await claimArtifactId(tx,rollback,actor,true);throw Error('rollback');}),/rollback/);
  await db.transaction(tx=>claimArtifactId(tx,rollback,actor,true));
- await assert.rejects(db.transaction(tx=>claimArtifactId(tx,batches[0]![2]!,{tokenId:'other',userId:'other-account'},true)));
+ await assert.rejects(db.transaction(tx=>claimArtifactId(tx,batches[0]![2]!,identityForUser('other-account', 'other'),true)));
  // A normal create cannot steal an unconsumed reservation: same namespace.
  await assert.rejects(db.transaction(tx=>claimArtifactId(tx,batches[0]![3]!,actor,false)));
  assert.equal((await db.query<{count:string}>('SELECT count(*) AS count FROM artifact_id_registry')).rows[0]!.count,'900');

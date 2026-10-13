@@ -6,7 +6,8 @@
  */
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { attachActor, decodeAgentSession as decodeAgentSessionEnvelope } from '@artifactbin/utils';
-import type { Actor } from '@artifactbin/contracts';
+import type { Actor, Credential } from '@artifactbin/contracts';
+import { identityForUser, type RequestIdentity } from '@/lib/accounts';
 import { overrideSession, type Session } from '@/auth';
 import { AGENT_COOKIE, agentSessionSetCookie, encodeAgentSession } from '@/lib/accounts/agent-session';
 import { resetRateLimit } from '@/lib/accounts/auth';
@@ -84,6 +85,11 @@ export function request(path: string, opts: RequestOptions = {}): Request {
 }
 
 /** The signed agent cookie header value for these held token ids: `${AGENT_COOKIE}=${encoded}`. */
+/** A resolved request identity as a door hands it to a handler (lib/accounts request-identity). It grants nothing. */
+export function testIdentity(credential: Credential, ids: { userId?: string | null; tokenId?: string | null; email?: string | null; emailVerified?: boolean | null } = {}): RequestIdentity {
+  return { ...identityForUser(ids.userId ?? null, ids.tokenId ?? null, ids.email ?? null), credential, emailVerified: ids.emailVerified ?? null };
+}
+
 export async function agentCookie(tokenIds: string[]): Promise<string> {
   const value = await encodeAgentSession({ tokenIds });
   const cookie = `${AGENT_COOKIE}=${value}`;

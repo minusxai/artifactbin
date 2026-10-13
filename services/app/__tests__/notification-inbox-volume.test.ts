@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import { request, setSession, useAppHarness } from './harness';
 import { createAppServer } from '../server/app';
 import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
@@ -6,7 +7,7 @@ import { getDb, measureQueries } from '@/lib/platform';
 import { RECIPIENT, inboxVolumeBase, seedInboxVolume } from './inbox-volume';
 
 useAppHarness();
-const actor = { userId: RECIPIENT.id, tokenId: null, email: RECIPIENT.email };
+const actor = identityForUser(RECIPIENT.id, null, RECIPIENT.email);
 
 /**
  * The seed's rules, restated independently of the inbox: which notifications the recipient may see.

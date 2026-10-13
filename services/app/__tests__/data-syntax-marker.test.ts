@@ -5,6 +5,7 @@
  * never marked as converted by an edit that validated only part of it.
  */
 import {expect,it} from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import {useAppHarness,request} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {editorScope,getArtifactById} from '@/lib/artifacts';
@@ -16,7 +17,7 @@ import type {DocumentGraph} from '@/lib/document/document-graph';
 const harness=useAppHarness();
 
 async function created(markup:string){
- const token=await mintToken('mxmx_test_data_syntax'),actor={tokenId:token.id,userId:token.userId};
+ const token=await mintToken('mxmx_test_data_syntax'),actor=identityForUser(token.userId, token.id);
  const res=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup}}));
  expect(res.status).toBe(201);
  return {actor,id:((await res.json()) as {id:string}).id};

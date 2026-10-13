@@ -9,7 +9,7 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import type { Actor } from '@artifactbin/contracts';
 import { request, setSession, useAppHarness, mintAccountToken } from '@/__tests__/harness';
-import { claimToken, createUser, avatarVersion, getUserById } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser, avatarVersion, getUserById } from '@/lib/accounts';
 import { getArtifactById, updateSharingFor, changeMembership } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { PUT as putProfileImage } from '@/app/api/my/profile/image/route';
@@ -62,7 +62,7 @@ async function datasetUploads() {
   const reporter = await createUser({ email: 'mxmx_test_media_headers_reporter@example.test' });
   const token = await mintAccountToken('media-headers-owner', owner.id);
   await claimToken(owner.id, token.token);
-  const ownerActor = { userId: owner.id, tokenId: token.id };
+  const ownerActor = identityForUser(owner.id, token.id);
   const make = async (body: object) => {
     const response = await createArtifact(request('/api/artifacts', { method: 'POST', token: token.token, json: body }));
     expect(response.status, await response.clone().text()).toBe(201);
@@ -72,7 +72,7 @@ async function datasetUploads() {
   const document = await make({ visibility: 'public', markup: `<Helmet><Import name="feedback" src="ref:${dataset.id}" /><Value name="message" type="string" default="" /><Value name="image_ref" type="string" default="" /><Mutation name="submit">{\`insert into feedback.rows (message,image_ref) values ($message,$image_ref)\`}</Mutation></Helmet>` });
   await updateSharingFor(ownerActor, dataset.id, { shares: [{ email: reporter.email!, role: 'viewer' }] });
   await setDatasetPolicy(ownerActor, dataset.id, { version: 2, allow: [{ actions: ['read'], from: { user: '*' } }, { actions: ['insert'], from: { artifact: document.id } }] }, 0);
-  await changeMembership({ userId: reporter.id, tokenId: null }, document.id, { action: 'join' });
+  await changeMembership(identityForUser(reporter.id, null), document.id, { action: 'join' });
   await changeMembership(ownerActor, document.id, { action: 'approve', userId: reporter.id });
   const pageActor: Actor = { credential: 'session', userId: reporter.id, email: reporter.email!, emailVerified: true };
   const reporterToken = await mintAccountToken('media-headers-reporter', reporter.id);

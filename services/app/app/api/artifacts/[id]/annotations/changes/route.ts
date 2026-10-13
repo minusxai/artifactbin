@@ -4,7 +4,7 @@ import { json } from '@/lib/http';
 import { COMMENT_CHANGES_MAX_WAIT_SECONDS } from '@artifactbin/contracts';
 
 /** Auth/query translation only; the annotations module owns replay and waits. */
-export const GET = withTokenAuth(async (request, {tokenId, userId, params}) => {
+export const GET = withTokenAuth(async (request, { actor, params }) => {
   const query = new URL(request.url).searchParams;
   const after = query.get('after') ?? 'now';
   const waitRaw = query.get('wait') ?? '0';
@@ -12,7 +12,7 @@ export const GET = withTokenAuth(async (request, {tokenId, userId, params}) => {
   if (!/^\d+$/.test(waitRaw) || Number(waitRaw) > COMMENT_CHANGES_MAX_WAIT_SECONDS) return json({error: 'invalid_wait'}, 400);
   if (!/^\d+$/.test(limitRaw) || Number(limitRaw) < 1 || Number(limitRaw) > 100) return json({error: 'invalid_limit'}, 400);
   try {
-    const result = await readCommentChangesFor({tokenId, userId}, params.id, {
+    const result = await readCommentChangesFor(actor, params.id, {
       after, waitSeconds: Number(waitRaw), limit: Number(limitRaw), signal: request.signal,
     });
     return result ? json(result, 200, {'Cache-Control': 'no-store'}) : json({error: 'not_found'}, 404);

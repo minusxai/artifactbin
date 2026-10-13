@@ -1,7 +1,6 @@
 import { getArtifactHeaderById } from './rows';
 import { grantsOf, grantsPermitRead } from './dataset-policy/grants';
-import { hasDocumentEditorAccess } from '@/lib/accounts';
-import type { RequestActor, RoleActor, Viewer } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { isLinkOnlyKind } from '../user-kinds';
 import { liveAccessFacts, type AccessFacts } from './access-facts';
 import type { ArtifactRow } from './table';
@@ -13,47 +12,28 @@ import { ANONYMOUS_CEILING, canRead, capRole, maxRole, type ArtifactRole } from 
  */
 export async function canReadArtifact(
   row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
-  viewer: Viewer,
+  actor: AccessActor,
 ): Promise<boolean> {
+  // Bare-token ownership is not consulted here — sound because `private` requires an account to anchor its
+  // ACL (getSharingFor's canPrivate), so a token-owned document is never private. The reader is the account.
+  const reader: AccessActor = { ...actor, tokenId: null };
   if(row.format==='dataset'||row.format===undefined){
     // A dataset's policy and visibility are columns of its header; its rows (the `source`) are never consulted here.
     const dataset=await getArtifactHeaderById(row.id);
     if(!dataset)return false;
-    if(grantsOf(dataset))return grantsPermitRead(dataset,{userId:viewer?.userId??null,tokenId:null,email:viewer?.email});
+    if(grantsOf(dataset))return grantsPermitRead(dataset,reader);
   }
   // One decision, asked one way: reading is simply the bottom of the lattice.
-  // A Viewer carries no token id, so bare-token ownership is not consulted
-  // here — the same as before, and sound because `private` requires an account
-  // to anchor its ACL (getSharingFor's canPrivate), so a token-owned document
-  // is never private.
-  return canRead(await effectiveRole({ ...row, token_id: '' }, { ...viewer, userId: viewer?.userId ?? null, tokenId: null }));
+  return canRead(await effectiveRole({ ...row, token_id: '' }, reader));
 }
 
 /** Does this actor OWN the row — pure, the account by user_id, a bare token by token_id. */
-export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: RoleActor): boolean {
+export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: AccessActor): boolean {
   if (row.group_id) return !!actor.groupId && actor.groupId===row.group_id;
   if (row.user_id) return !!actor.userId && row.user_id === actor.userId;
   return !!actor.tokenId && row.token_id === actor.tokenId;
 }
 
-/** A request's credentials as the ids and address the role decision reads. */
-const roleActor = (actor: RequestActor): RoleActor => ({ ...actor.viewer, userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId });
-
-/** Does this request's actor OWN the row — pure (ownsArtifact), for the places that need only that. */
-export function isOwner(row: Pick<ArtifactRow, 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>, actor: RequestActor): boolean {
-  return ownsArtifact(row, roleActor(actor));
-}
-
-/**
- * This request's actor's ROLE on the row — the one definition, used by page and app
- * server alike: the MAX of ownership, the share list and what the link grants
- * (effectiveRole). Both halves of the reader/owner split ask
- * this, so they cannot disagree on who gets the shell; `none` is the miss that
- * every serving path answers as the uniform 404.
- */
-export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>, actor: RequestActor): Promise<ArtifactRole> {
-  return effectiveRole(row, roleActor(actor));
-}
 
 /**
  * The role this actor holds WITHOUT the link — ownership, or a share naming
@@ -71,7 +51,7 @@ export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | '
  */
 export async function roleWithoutLink(
   row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
-  actor: RoleActor,
+  actor: AccessActor,
   facts: AccessFacts = liveAccessFacts(actor),
 ): Promise<ArtifactRole> {
   if (ownsArtifact(row, actor)) return 'owner';
@@ -86,7 +66,6 @@ export async function roleWithoutLink(
   // an account invites. They reach a stranger's document through the LINK or
   // not at all (lib/user-kinds).
   if (isLinkOnlyKind(await facts.userKind(actor.userId))) return groupRole;
-  if (row.format === 'markup' && hasDocumentEditorAccess(actor)) return 'editor';
   return maxRole(groupRole,await namedRoleFor(row, actor, facts));
 }
 
@@ -106,7 +85,7 @@ export async function roleWithoutLink(
  */
 export async function effectiveRole(
   row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'|'group_id'>>,
-  actor: RoleActor,
+  actor: AccessActor,
   facts: AccessFacts = liveAccessFacts(actor),
 ): Promise<ArtifactRole> {
   const held = await roleWithoutLink(row, actor, facts);
@@ -114,8 +93,9 @@ export async function effectiveRole(
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a
   // URL is not. Without an account there is nothing to attribute a write to.
-  const byLink = actor.userId && await reachesAsAccount(row, actor, facts) ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
-  return maxRole(byLink, held);
+  const account = !!actor.userId && await reachesAsAccount(row, actor, facts);
+  const byLink = account ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
+  return maxRole(byLink, account && documentEditorReaches(row, actor) ? 'editor' : 'none', held);
 }
 
 /**
@@ -126,11 +106,22 @@ export async function effectiveRole(
  * owns, which is what makes it a full user in there and a guest out here
  * (lib/user-kinds, the same rule the SQL scopes read).
  */
-async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: RoleActor, facts: AccessFacts): Promise<boolean> {
+async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: AccessActor, facts: AccessFacts): Promise<boolean> {
   const kind = await facts.userKind(actor.userId);
   if (kind === null || kind === 'account') return true;
   if (kind !== 'testuser') return false;
   return await facts.userKind(row.user_id) === 'testuser';
+}
+
+/**
+ * THE HOST'S DOCUMENT-EDITOR GRANT (production: ADMIN__EMAILS), decided once per request by the resolver
+ * (`actor.documentEditor`) and applied HERE and in the SQL scopes (lib/artifacts/table `scopeAtLeast`) by
+ * one rule: it reaches exactly what a link could reach — a MARKUP document that is not private — and makes
+ * the holder its editor. Never a private artifact of any kind, never a dataset, never ownership (delete,
+ * sharing). Like the link, it lists nothing: a listing reads `roleWithoutLink`, which this is not part of.
+ */
+export function documentEditorReaches(row: Partial<Pick<ArtifactRow, 'format' | 'visibility'>>, actor: Pick<AccessActor, 'documentEditor'>): boolean {
+  return actor.documentEditor && row.format === 'markup' && row.visibility !== undefined && row.visibility !== 'private';
 }
 
 /**
@@ -161,7 +152,7 @@ export function linkRoleOf(row: Pick<ArtifactRow, 'visibility' | 'link_role'>): 
  */
 async function namedRoleFor(
   row: Pick<ArtifactRow, 'id'>,
-  actor: RoleActor,
+  actor: AccessActor,
   facts: AccessFacts,
 ): Promise<ArtifactRole> {
   if (!actor.userId) return 'none';

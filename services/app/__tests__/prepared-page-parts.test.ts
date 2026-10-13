@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, setSession, mintAccountToken } from './harness';
-import { createUser, setRelationState } from '@/lib/accounts';
+import { identityForUser, createUser, setRelationState } from '@/lib/accounts';
 import { getArtifactById, membershipState, savedMentionStates } from '@/lib/artifacts';
 import { POST as publish } from '@/app/api/artifacts/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
@@ -161,7 +161,7 @@ describe('/members names the people a document mentions without scanning the doc
     await (await getDb()).transaction((tx) => setRelationState(tx, bob.id, 'join', id, { status: 'pending', direction: 'invitation', initiatedBy: owner.id, revision: 1 }));
     return { owner, token, bob, id };
   }
-  const state = (w: { owner: { id: string }; id: string }) => membershipState({ userId: w.owner.id, tokenId: null }, w.id);
+  const state = (w: { owner: { id: string }; id: string }) => membershipState(identityForUser(w.owner.id, null), w.id);
   const reference = async (id: string) => savedMentionStates((await getArtifactById(id))!);
   const scanned = (sql: string[]) => sql.filter((text) => /document::text|strpos\(/.test(text)).length;
   const fullRows = (sql: string[]) => sql.filter((text) => /SELECT (artifacts\.)?\*.* FROM artifacts\b/.test(text)).length;
@@ -180,7 +180,7 @@ describe('/members names the people a document mentions without scanning the doc
 
   it('stores an empty list for a document that names no one, and reads nothing for it', async () => {
     const w = await world(20);
-    const seen = await observe(() => membershipState({ userId: w.owner.id, tokenId: null }, w.id));
+    const seen = await observe(() => membershipState(identityForUser(w.owner.id, null), w.id));
     expect(seen.value.mentions).toEqual({});
     expect((await (await getDb()).query<{ mentions: string[] | null }>("SELECT mentions FROM prepared_pages WHERE artifact_id = $1 AND slot = 'head'", [w.id])).rows[0]!.mentions).toEqual([]);
     expect(scanned(seen.sql)).toBe(0);

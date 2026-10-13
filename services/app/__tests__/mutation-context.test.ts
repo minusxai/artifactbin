@@ -1,4 +1,5 @@
 import {expect,it} from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/platform';
 import { durableMutation } from '@/lib/artifacts';
@@ -6,7 +7,7 @@ import { pinMutationContext } from '@/lib/artifacts/mutation-receipt';
 import { completeDocumentMutationReceipt } from '@/lib/document-data/mutation-operation';
 useAppHarness();
 it('pins context before work and reads the winning canonical receipt for first and repeated calls',async()=>{
- const actor={userId:null,tokenId:'mxmx_test_token'};
+ const actor=identityForUser(null, 'mxmx_test_token');
  let calls=0;
  const work=()=>durableMutation(actor,'http://localhost:5001','mxmx_test_saved_context',{mutation:'add'},async receipt=>{
   calls++;
@@ -22,7 +23,7 @@ it('pins context before work and reads the winning canonical receipt for first a
  expect(rows.rows[0]!.context).toEqual({bindings:{n:7},revision:'old'});
 });
 it('will not execute an interrupted claimed operation again or overwrite a pinned context',async()=>{
- const actor={userId:null,tokenId:'mxmx_test_token'};let calls=0;
+ const actor=identityForUser(null, 'mxmx_test_token');let calls=0;
  const work=()=>durableMutation(actor,'http://localhost:5001','mxmx_test_interrupted_context',{},async receipt=>{
   calls++;await pinMutationContext(receipt,{revision:'original'});
   await expect(pinMutationContext(receipt,{revision:'replacement'})).rejects.toThrow('mutation_context_already_claimed');

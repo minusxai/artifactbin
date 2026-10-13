@@ -8,7 +8,7 @@ import {documentAnnotationSql,annotationSqlInput,annotationSqlGuard} from './doc
  * identity maintenance share the artifact row lock and the same SQL statement. */
 import type {DocumentUpdate,Queryable} from '@artifactbin/contracts';
 import { ownerPredicate, type ArtifactRow, type Scope } from '../table';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {hydrateArtifactDocument} from '../document';
 import {GRAPH_POLICY, newEditId} from '../../document';
 import {graphPatchSql,graphReferencesSql} from './document-graph-sql';
@@ -28,7 +28,7 @@ const headWithoutDocument=(alias:string)=>`jsonb_build_object(${HEAD_COLUMNS.map
  */
 export const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annotations a WHERE a.artifact_id=${artifactId} AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open')`;
 type DocumentCommitResult={applied:true;row:ArtifactRow;withheld?:true}|{applied:false;head:ArtifactRow;refusal?:string;ownerOnly?:boolean;invalidParent?:boolean;invalidGraph?:boolean};
-export async function commitDocumentUpdate(db:Queryable,actor:TokenActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean;
+export async function commitDocumentUpdate(db:Queryable,actor:AccessActor|null,scope:Scope,id:string,update:DocumentUpdate,options:{dryRun?:boolean;
  /**
   * The caller answers with patches, never the document (the browser editor's save, lib/artifacts respondToEdit): the
   * statement returns the head WITHOUT its document, and the caller derives what needs the new source after it has

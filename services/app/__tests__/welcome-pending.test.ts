@@ -10,7 +10,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
-import { syncProfile, createTestUser } from '@/lib/accounts';
+import { identityForUser, syncProfile, createTestUser } from '@/lib/accounts';
 import { claimToken, createUser, getUserById } from '@/lib/accounts';
 import { avatarUrl, avatarVersion, setAvatar } from '@/lib/accounts';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
@@ -130,7 +130,7 @@ describe('erasing a test user', () => {
     await claimToken(owner.id, token.token);
 
     const mint = async () => {
-      const minted = await createTestUser({ tokenId: token.id, userId: owner.id });
+      const minted = await createTestUser(identityForUser(owner.id, token.id));
       if (!minted.ok) throw new Error(minted.error);
       return minted;
     };

@@ -3,7 +3,7 @@ import * as annotations from '@/lib/annotations';
 import * as artifactStore from '@/lib/artifacts/store';
 import * as artifactRows from '@/lib/artifacts/rows';
 import {useAppHarness,request} from './harness';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {getArtifactById,applyEditFor} from '@/lib/artifacts';
 import {createAnnotationFor,listAnnotationsFor} from '@/lib/annotations';
@@ -26,7 +26,7 @@ async function setup(){
  if(row.document?.kind!=='graph')throw Error('Expected a graph document');
  const file=artifactFile({origin:'http://localhost:3000',artifactId:doc.id,base:{version:row.version,editId:row.edit_id,source:row.source!},source:row.source!,metadata:{title:row.title??'',description:row.description,theme:row.meta.theme as string??null,template:row.meta.template as string??null,colorMode:row.meta.colorMode as 'light'|'dark'??null}});
  const send=(mode:'update'|'copy'='update',override=actor)=>apply(request('/connect/import',{method:'POST',actor:override,origin:'same',json:{html:html(file),filename:'Report.jsx.html',mode,operationId:'00000000-0000-4000-8000-000000000000'}}));
- return {actor,file,row,document:row.document,send,scope:{userId:user.id,tokenId:token.id}};
+ return {actor,file,row,document:row.document,send,scope:identityForUser(user.id, token.id)};
 }
 describe('hosted portable file handoff',()=>{
  it.each([false,true])('can apply a real download between coalesced saves (save interleaves with download: %s)',async(interleave)=>{

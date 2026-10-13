@@ -1,6 +1,6 @@
 import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
 import { dataflowForRow, holdImport, nameablePeople } from '@/lib/document-data';
-import { type RoleActor, sessionActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, type AccessActor, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { json, readJson } from '@/lib/http';
 import { parseQueryRequest, type QueryRequest } from '@/lib/http/query-request';
@@ -39,7 +39,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const artifact = await getArtifactById(id);
   if (!artifact) return json({ error: 'not_found' }, 404);
   // Anonymous viewer, always — see above. Never sessionViewer() here.
-  if (!(await canReadArtifact(artifact, null))) return json({ error: 'not_found' }, 404);
+  if (!(await canReadArtifact(artifact, ANONYMOUS_ACTOR))) return json({ error: 'not_found' }, 404);
 
   const raw = new URL(request.url).searchParams.get(QUERY_REQUEST_PARAM);
   if (raw === null) return json({ error: 'invalid_json', details: [`${QUERY_REQUEST_PARAM} must be the JSON of {values?, only?, page?}`] }, 400);
@@ -53,7 +53,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // no-store: an edit changes the answer, and the document asks again anyway.
   return answer(artifact, parsed, null, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' }, async()=>{
     const current=await getArtifactById(id);
-    if(!current||current.edit_id!==artifact.edit_id||!await canReadArtifact(current,null))throw new DatasetError('Document is unavailable',404);
+    if(!current||current.edit_id!==artifact.edit_id||!await canReadArtifact(current, ANONYMOUS_ACTOR))throw new DatasetError('Document is unavailable',404);
   },request.signal);
 }
 
@@ -67,7 +67,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // would leave a claimed-token browser owning the shell while its private
   // document's queries 404.
   const actor = await sessionActor(request);
-  if (!(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404);
+  if (!(await canReadArtifact(artifact, actor))) return json({ error: 'not_found' }, 404);
 
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
@@ -81,10 +81,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
    * listing: no private children, no counts. Measured on the dev walk, where
    * every artifact belongs to an unclaimed token.
    */
-  const cors: Record<string, string> = !actor.viewer && !actor.tokenId ? {'Access-Control-Allow-Origin': '*'} : {};
-  return answer(artifact, parsed, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null }, cors,async()=>{
-    const current=await getArtifactById(id),currentActor=await sessionActor(request);
-    if(!current||current.edit_id!==artifact.edit_id||!await canReadArtifact(current,currentActor.viewer))throw new DatasetError('Document is unavailable',404);
+  const cors: Record<string, string> = !actor.userId && !actor.tokenId ? {'Access-Control-Allow-Origin': '*'} : {};
+  return answer(artifact, parsed, actor, cors,async()=>{
+    const current=await getArtifactById(id),currentActor=await sessionActor(request,{revalidate:true});
+    if(!current||current.edit_id!==artifact.edit_id||!await canReadArtifact(current, currentActor))throw new DatasetError('Document is unavailable',404);
   },request.signal);
 }
 
@@ -99,7 +99,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
  * document's own (its <Query> may name only what its owner may read); this is
  * WHICH ROWS come back.
  */
-async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleActor | null, extra: Record<string, string> = {}, authorize?:()=>Promise<void>,signal?:AbortSignal): Promise<Response> {
+async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: AccessActor | null, extra: Record<string, string> = {}, authorize?:()=>Promise<void>,signal?:AbortSignal): Promise<Response> {
   if (parsed.hold !== undefined) return held(artifact, parsed.hold, viewer, extra, authorize);
   if (parsed.people !== undefined) return named(artifact, parsed.people, viewer, extra, authorize);
   if (artifact.format !== 'markup' && artifact.format !== 'folder') return json({ tables: {}, errors: {} }, 200, extra);
@@ -124,7 +124,7 @@ async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleA
  * the viewer may not read, a connected database, past the cap — is one answer,
  * so a refusal says nothing about why.
  */
-async function held(artifact: ArtifactRow, name: string, viewer: RoleActor | null, extra: Record<string, string>, authorize?: () => Promise<void>): Promise<Response> {
+async function held(artifact: ArtifactRow, name: string, viewer: AccessActor | null, extra: Record<string, string>, authorize?: () => Promise<void>): Promise<Response> {
   const refused = () => json({ error: 'not_holdable' }, 404, { ...extra, 'Cache-Control': 'no-store' });
   if (artifact.format !== 'markup') return refused();
   const tables = await holdImport(artifact, name, viewer);
@@ -137,7 +137,7 @@ async function held(artifact: ArtifactRow, name: string, viewer: RoleActor | nul
  * (lib/page-store/store asks once per id). Decided for THIS door's viewer
  * (lib/artifacts nameablePeople): an id it may not name is simply absent.
  */
-async function named(artifact: ArtifactRow, ids: string[], viewer: RoleActor | null, extra: Record<string, string>, authorize?: () => Promise<void>): Promise<Response> {
+async function named(artifact: ArtifactRow, ids: string[], viewer: AccessActor | null, extra: Record<string, string>, authorize?: () => Promise<void>): Promise<Response> {
   const people = await nameablePeople(artifact, viewer, ids);
   try { await authorize?.(); } catch (error) { if (error instanceof DatasetError) return json({ error: 'not_found' }, 404, { ...extra, 'Cache-Control': 'no-store' }); throw error; }
   return json({ people }, 200, { ...extra, 'Cache-Control': 'no-store', [REVALIDATE_ACTOR_HEADER]: '1' });

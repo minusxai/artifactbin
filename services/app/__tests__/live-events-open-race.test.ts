@@ -22,15 +22,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** Runs inside the handler, between its first read and its subscription. */
 let duringSetup: (() => Promise<void>) | null = null;
-vi.mock('@/lib/accounts/viewer', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/accounts/viewer')>();
+vi.mock('@/lib/accounts/request-identity', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/accounts/request-identity')>();
   return {
     ...actual,
     sessionActor: async () => {
       const run = duringSetup;
       duringSetup = null;
       if (run) await run();
-      return { viewer: null, tokenId: null, credential: 'none' as const };
+      return { userId: null, tokenId: null, email: null, documentEditor: false, emailVerified: null, credential: 'none' as const };
     },
   };
 });

@@ -48,7 +48,7 @@ import { parseFragment } from 'parse5';
 import { createHash } from 'node:crypto';
 import { type ArchivedRender, type ArtifactRow } from '@/lib/artifacts';
 import { holdableImports } from '@/lib/document-data';
-import type { RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { mermaidImagesForCodes } from '@/lib/mermaid-images/store';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
@@ -89,7 +89,7 @@ export interface CompiledReaderRequest {
    * IslandPageData.hold): the one the page's query door answers — the app page's request actor, `/raw`'s
    * anonymous reader (`null`), as the page's reader rules decide it. Absent: the page holds nothing.
    */
-  holder?: RoleActor | null;
+  holder?: AccessActor | null;
   /** An archived render's read-only reason. */
   readOnly?: string | null;
   /** The document's live identity (`<body data-mx-live-id data-mx-live-edit>`); null on a capture or an archived render. */

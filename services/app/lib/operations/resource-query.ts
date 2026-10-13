@@ -3,7 +3,7 @@ import { validateQueryValues } from '@/lib/dataflow';
 import {createHash} from 'node:crypto';
 import { artifactState, declarationsForRow, readableArtifact } from '@/lib/artifacts';
 import { dataflowForRow } from '@/lib/document-data';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {catalogOf} from '../datasets/catalog';
 import {executeCatalog} from '../datasets/execute';
 import {DatasetError} from '../datasets/errors';
@@ -13,7 +13,7 @@ import type {TableResult} from '@artifactbin/contracts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
 /** Query validation, pagination and authorization are independent of the transport. */
-async function queryResource(actor:TokenActor,id:string,body:Record<string,unknown>,signal?:AbortSignal,checkActor?:()=>Promise<void>):Promise<Response>{
+async function queryResource(actor:AccessActor,id:string,body:Record<string,unknown>,signal?:AbortSignal,checkActor?:()=>Promise<void>):Promise<Response>{
  if(Object.keys(body).some(key=>!['sql','values','name','limit','cursor','refresh'].includes(key)))return json({error:'unknown_query_fields'},400);
  if(body.sql!==undefined&&(typeof body.sql!=='string'||!body.sql.trim())||body.name!==undefined&&(typeof body.name!=='string'||!body.name)||body.refresh!==undefined&&typeof body.refresh!=='boolean')return json({error:'invalid_query'},400);
  const parsed=parseQueryRequest({...(body.values===undefined?{}:{values:body.values})});if(parsed instanceof Response)return parsed;
@@ -72,7 +72,7 @@ async function queryResource(actor:TokenActor,id:string,body:Record<string,unkno
  }
 }
 
-export async function queryResourceForRequest(actor:TokenActor,id:string,body:Record<string,unknown>,request:Request):Promise<Response>{
+export async function queryResourceForRequest(actor:AccessActor,id:string,body:Record<string,unknown>,request:Request):Promise<Response>{
  try{return await queryResource(actor,id,body,request.signal,async()=>{
   const bearer=request.headers.get('authorization');if(!bearer)return;
   const token=bearer.startsWith('Bearer ')?await resolveToken(bearer.slice(7).trim()):null;

@@ -14,7 +14,7 @@ import { setArtifactQuotaForTests } from '@/lib/artifacts/store';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser } from '@/lib/accounts';
 import { viewersWritePolicy } from '@artifactbin/utils';
 
 const BASE = 'http://localhost:3000';
@@ -56,7 +56,7 @@ async function world() {
   const owner = await createUser({ email: 'owner@x.com' }); const ta = await mintToken('a', owner.id); await claimToken(owner.id, ta.token);
   const bob = await createUser({ email: 'bob@x.com' }); const tb = await mintToken('b', bob.id); await claimToken(bob.id, tb.token);
   const written = await create(ta.token, { dataset: [{ id: 1, who: owner.id, item: 'Groceries', amount: 48.5 }], access: 'readwrite', visibility: 'unlisted', title: 'tab' });
-  expect(await setDatasetPolicy({ tokenId: ta.id, userId: owner.id }, written.id, viewersWritePolicy(), 0)).toMatchObject({ revision: 1 });
+  expect(await setDatasetPolicy(identityForUser(owner.id, ta.id), written.id, viewersWritePolicy(), 0)).toMatchObject({ revision: 1 });
   const readOnly = await create(ta.token, { dataset: [{ code: 'USD', rate: 1 }], visibility: 'unlisted', title: 'rates' });
   const page = await create(ta.token, {
     visibility: 'unlisted', title: 'Splitwise tracker',
@@ -98,7 +98,7 @@ describe('forking a page that writes a dataset', () => {
       columns: [{ name: 'id', type: 'number' }, { name: 'person', type: 'user', constraints: { self: true } }, { name: 'item', type: 'string' }],
       access: 'readwrite', visibility: 'unlisted', title: 'people tab',
     });
-    expect(await setDatasetPolicy({ tokenId: w.ta.id, userId: w.owner.id }, tab.id, viewersWritePolicy(), 0)).toMatchObject({ revision: 1 });
+    expect(await setDatasetPolicy(identityForUser(w.owner.id, w.ta.id), tab.id, viewersWritePolicy(), 0)).toMatchObject({ revision: 1 });
     const page = await create(w.ta.token, {
       visibility: 'unlisted', title: 'People',
       markup: `<Helmet><Import name="rows_data" src="ref:${tab.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="join_data" src="ref:${tab.id}" /><Mutation name="join">{\`insert into join_data.rows (id, person, item) select 2, $_me.id, 'Taxi'\`}</Mutation></Helmet><div><Button run="$join">Join</Button><DataTable data="$rows" /></div>`,

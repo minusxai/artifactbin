@@ -41,7 +41,7 @@ import { getDb } from '@/lib/platform/db';
 import { archivedReadOnly, type ArchivedRender, type ArtifactHeader, type ArtifactRow, declarationsForRow, mentionedPeople, savedMentionStates, servableHeader, servedRow } from '@/lib/artifacts';
 import { holdableImports, refDataForRow, viewerIdentityFor } from '@/lib/document-data';
 import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
-import type { Viewer, RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { preparedCssVersion } from './css-version.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -135,7 +135,7 @@ export type TreelessServedRuntime = Omit<ServedStoryRuntime, 'data'> & { data: O
 /** What a request (never the document) decides about its render. */
 interface ReaderContext {
   at: ArchivedRender | null;
-  viewer: RoleActor | null;
+  viewer: AccessActor | null;
   /** The page's query string — the reader's `$` values. */
   search: string;
   /**
@@ -153,7 +153,7 @@ interface ReaderContext {
    * admitted as the page's query door admits this viewer. Absent: the page
    * fetches its own rows, as the stored anonymous render always does.
    */
-  results?: { admit: Viewer };
+  results?: { admit: AccessActor };
 }
 
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');

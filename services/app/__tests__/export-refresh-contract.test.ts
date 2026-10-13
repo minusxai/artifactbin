@@ -1,4 +1,5 @@
 import {afterEach,expect,it} from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import {z} from 'zod';
 import {OPERATIONS,type OpContext} from '@/lib/operations/registry';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
@@ -28,7 +29,7 @@ it('keeps an explicit fresh-image request at the export operation boundary',()=>
 it('forced export rerenders the current published head and leaves ordinary cache hits intact',async()=>{
  browser=fakeBrowser({ok:true,mime:'image/png',bytes:EXPORT_PNG});setServices({browser});
  const token=await mintAccountToken('mxmx_test_export_freshness');
- const actor={tokenId:token.id,userId:token.userId};
+ const actor=identityForUser(token.userId, token.id);
  const original=await createArtifact(token.id,token.userId,{format:'markup',source:SOURCE('$10'),meta:{},title:'Budget',description:null,visibility:'public'});
  const operation=OPERATIONS.find(operation=>operation.name==='export_artifact')!;
  const ctx={actor,base:BASE,request:request('/api/artifacts/export')} as unknown as OpContext;

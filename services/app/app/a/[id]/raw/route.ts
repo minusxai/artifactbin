@@ -19,11 +19,11 @@
  */
 import { agentDiscovery, READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page';
 import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/serving';
-import { accessMoved, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, roleFor, VERSION_PARAM } from '@/lib/artifacts';
+import { accessMoved, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, effectiveRole, VERSION_PARAM } from '@/lib/artifacts';
 import type { ArchivedRender } from '@/lib/artifacts';
 import { dataflowForRow } from '@/lib/document-data';
 import { trackEvent, verifyExportKey } from '@/lib/platform';
-import { requestOrSessionActor, type RequestActor } from '@/lib/accounts';
+import { requestOrSessionActor, type RequestIdentity } from '@/lib/accounts';
 import { baseUrl, parseByteRange } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
@@ -138,9 +138,8 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
   // Bearer first, then the browser credentials, the same order as the export route, so the CLI
   // can fetch the page of an artifact its token owns or may read.
   const actor = await requestOrSessionActor(request);
-  const viewer = actor.viewer;
   const byExportKey = verifyExportKey(header.id, key ?? undefined);
-  const admits = async (row: ArtifactHeader) => actor.tokenId === row.token_id || (await canReadArtifact(row, viewer)) || byExportKey;
+  const admits = async (row: ArtifactHeader) => actor.tokenId === row.token_id || (await canReadArtifact(row, actor)) || byExportKey;
   if (!(await admits(header))) return notFound();
 
   // The revalidation is named from the header, its version's stored page head and the hosts that page recorded: the same
@@ -156,7 +155,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
     });
     const held = tag ? matchingTag(asked, tag) : null;
     if (held) {
-      if (request.method !== 'HEAD') void trackEvent('view', header.id, { userId: viewer?.userId ?? null });
+      if (request.method !== 'HEAD') void trackEvent('view', header.id, { userId: actor.userId });
       return notModified(held);
     }
   }
@@ -321,7 +320,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
        * document to photograph it, not a reader. `void`, because analytics may
        * never delay or fail a render.
        */
-      if (!key && !fragment && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: viewer?.userId ?? null });
+      if (!key && !fragment && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: actor.userId });
 
       const meta = row.meta as StoredMeta;
       {
@@ -360,7 +359,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
         // The exporter photographs this page: its run is settled, and carries whoever asked (see the
         // capture's run below) — never the guest snapshot's rows, never cached.
         const ran = capture && flow && !prepared.page.declared?.state
-          ? await dataflowForRow(row, { values: readUrlValues(new URL(request.url).search, flow), viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } })
+          ? await dataflowForRow(row, { values: readUrlValues(new URL(request.url).search, flow), viewer: actor })
           : null;
         // Named again from the page as read: a compile that changed since the head was read is the one served, and tagged.
         const etag = revalidated ? await etagFor(prepared) : null;
@@ -374,7 +373,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
           drawings,
           colorMode: shownMode,
           // On its own origin the copy carries its reader's pages session, an account's or a guest owner's.
-          signedIn: pages ? actor.credential !== 'none' : actor.credential === 'session' && !!viewer?.userId,
+          signedIn: pages ? actor.credential !== 'none' : actor.credential === 'session' && !!actor.userId,
           // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as /raw always has.
           // On its own origin its doors answer for its pages session's reader, so the page holds what they may.
           holder,
@@ -434,7 +433,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
               ...answer.headers,
               [READER_MODE_HEADER]: 'compiled',
               // The /raw copy asks from an opaque origin; an anonymous answer is what anyone with the link reads.
-              ...(fragment && !actor.viewer && !actor.tokenId ? { 'Access-Control-Allow-Origin': '*' } : {}),
+              ...(fragment && !actor.userId && !actor.tokenId ? { 'Access-Control-Allow-Origin': '*' } : {}),
               ...COMMON,
               ...(etag ? { ETag: etag, 'Cache-Control': REVALIDATE } : {}),
             },
@@ -474,7 +473,7 @@ interface DocumentRequest {
   fragment: StoryFragmentRequest | null;
   key: string | null;
   byExportKey: boolean;
-  actor: RequestActor;
+  actor: RequestIdentity;
   /** What the served version declares to the network: its source, or the set its prepared page recorded from it. */
   declares: Pick<ArtifactRow, 'source'> | { declared: CspExtensions };
 }
@@ -485,7 +484,6 @@ interface DocumentRequest {
  * from the header alone: what either reads of the row is its header and what its version declares.
  */
 async function documentDecision({ request, artifact, meta, at, domain, pages, fragment, key, byExportKey, actor, declares }: DocumentRequest) {
-  const viewer = actor.viewer;
   // Stored rows may carry an unknown theme name (unthemed) and a sheet
   // compiled under an older registry (recompiled) — both resolve at the
   // door so the served document always speaks the live vocabulary.
@@ -516,13 +514,13 @@ async function documentDecision({ request, artifact, meta, at, domain, pages, fr
   // hosts they published, or every declared one once they allowed the rest; nothing for a capture. On its own
   // origin the reader's "Allow once" grants arrive with the pages session (`pages.carried`).
   const extensions = capture ? undefined : await cspExtensionsFor({
-    artifact: { id: artifact.id, version: artifact.version, ...declares }, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId },
+    artifact: { id: artifact.id, version: artifact.version, ...declares }, viewer: { userId: actor.userId, tokenId: actor.tokenId },
     // The app origin's session cookie never belongs to a document's own origin: there, only what was carried.
     ...(pages ? { carried: pages.carried ?? null } : { request }),
   });
   const canonical = chrome ? (domain?.homepage ? `https://${domain.hostname}/` : domain?.path ? `https://${domain.hostname}${domain.path}` : await canonicalDocumentUrl(artifact)) : null;
   const drawings = domain || engineRequested(request.url) ? null : appStory ? 'inline' as const : 'document' as const;
-  const holder = pages ? { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } : null;
+  const holder = pages ? actor : null;
   /*
    * REVALIDATION. A document on its own origin is cached by its reader's browser alone (`private, no-cache`) under
    * a strong ETag over everything that determines its bytes, and `If-None-Match` is answered 304 before anything is
@@ -538,8 +536,8 @@ async function documentDecision({ request, artifact, meta, at, domain, pages, fr
   const revalidated = !!pages && !key && !fragment && !at;
   const facts = revalidated ? {
     // Who asks, in what role, and what they trust: another reader never matches this reader's tag.
-    reader: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null, credential: actor.credential },
-    role: await roleFor(artifact, actor), trust: extensions ?? null,
+    reader: { userId: actor.userId, tokenId: actor.tokenId ?? null, email: actor.email, credential: actor.credential },
+    role: await effectiveRole(artifact, actor), trust: extensions ?? null,
     // The surface and the addresses written into it.
     surface: pages ? { self: pages.self, app: pages.site.app } : null,
     chrome, canonical, design, policy,

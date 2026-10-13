@@ -1,4 +1,5 @@
 import {expect,it,vi} from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import {useAppHarness,request} from './harness';
 import {documentEdit,documentEditBody} from './prepared-document';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -8,7 +9,7 @@ import { applyEditScoped } from '@/lib/artifacts/store';
 import {POST as editRoute} from '@/app/api/artifacts/[id]/edits/route';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();
-async function setup(){const token=await mintToken('mxmx_test_atomic_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {id,token,actor:{tokenId:token.id,userId:token.userId},row:(await getArtifactById(id))!};}
+async function setup(){const token=await mintToken('mxmx_test_atomic_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {id,token,actor:identityForUser(token.userId, token.id),row:(await getArtifactById(id))!};}
 it('two stale independent variable-length Unicode edits each use one atomic statement',async()=>{
  const {id,actor,row}=await setup(),db=await getDb();
  const a=documentEdit(row,{source:row.source!.replace('Alpha','First 👩🏽‍💻')}),b=documentEdit(row,{source:row.source!.replace('Beta','Second &amp; β')});

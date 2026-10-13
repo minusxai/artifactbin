@@ -11,7 +11,7 @@ import { readJson } from '@/lib/http';
  * the document form takes the id in the BODY so one address serves both — the
  * alternative was two doors for one verb.
  */
-export const POST = withTokenAuth(async (request: Request, { tokenId, userId }) => {
+export const POST = withTokenAuth(async (request: Request, { actor }) => {
   const body = await readJson(request);
-  return runOperation('refresh_asset', request, { tokenId, userId }, body ?? {});
+  return runOperation('refresh_asset', request, actor, body ?? {});
 });

@@ -4,13 +4,13 @@
 import {MAX_DOCUMENT_BYTES,type DocumentUpdate} from '@artifactbin/contracts';
 import { type ArtifactRow, editorScope, type PreparedMarkupWrite, writerFor } from '@/lib/artifacts';
 import { loadArtifactDocument } from '@/lib/artifacts/table';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {createDocumentGraph, stampNodeIds, prepareClientDocumentPublication} from '@/lib/document';
 import {getDb} from '@/lib/platform/db';
 import {json} from '@/lib/http/http';
 import {prepareDocumentAuthoringContext} from './document-authoring-context';
 
-export async function prepareDocumentSource(actor:TokenActor,id:string,body:Record<string,unknown>):Promise<Response>{
+export async function prepareDocumentSource(actor:AccessActor,id:string,body:Record<string,unknown>):Promise<Response>{
  if(typeof body.source!=='string'||Buffer.byteLength(body.source)>MAX_DOCUMENT_BYTES)return json({error:'invalid_authoring_context'},400);
  if(typeof body.edit_id!=='string'||!Number.isSafeInteger(body.expectedVersion)||Number(body.expectedVersion)<1)return json({error:'observed_snapshot_required'},400);
  const metadata=body.metadata;

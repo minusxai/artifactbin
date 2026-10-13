@@ -19,7 +19,7 @@ import { createAppServer } from '@/server/app';
 import { artifactPageAnswer } from '@/lib/serving';
 import { mintExportKey } from '@/lib/platform';
 import { pagesOriginFor, pagesSite } from '@/lib/http/pages-origin';
-import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { MIN_HANDOVER_CONTRACT, READER_MODE_HEADER, type CompiledPage } from '@/lib/compiled-page/contract';
@@ -381,7 +381,7 @@ describe('the guest snapshot never outlives the guest\'s access', () => {
     const who = await owner();
     const { sales, id } = await dashboard(who);
     expect(storyText(await (await raw(id, '?reader=compiled')).text())).toContain('$744,503');
-    await updateSharingFor({ tokenId: who.tokenId, userId: who.user.id }, sales, { visibility: 'private' });
+    await updateSharingFor(identityForUser(who.user.id, who.tokenId), sales, { visibility: 'private' });
     const res = await raw(id, '?reader=compiled');
     expect(res.headers.get(READER_MODE_HEADER)).toBe('compiled');
     const html = await res.text();

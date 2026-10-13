@@ -23,22 +23,22 @@
  * exists.
  */
 import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
-import { can, capabilityRefusal, type CapabilityActor } from '@/lib/artifacts';
+import { can, capabilityRefusal } from '@/lib/artifacts';
 import { refusesCrossSite } from '@/lib/accounts';
 import { json, unauthorized } from '@/lib/http';
 import { count, has, link, unlink } from '@/lib/accounts';
-import { sessionActor } from '@/lib/accounts';
+import { sessionActor, type AccessActor } from '@/lib/accounts';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 /** Who is asking about which readable artifact — or the Response that refuses them. */
-async function opened(request: Request, ctx: Ctx): Promise<{ artifact: ArtifactRow; actor: CapabilityActor } | Response> {
+async function opened(request: Request, ctx: Ctx): Promise<{ artifact: ArtifactRow; actor: AccessActor } | Response> {
   const { id } = await ctx.params;
   const actor = await sessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
   const artifact = await getArtifactById(id);
-  if (!artifact || !(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404);
-  return { artifact, actor: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId } };
+  if (!artifact || !(await canReadArtifact(artifact, actor))) return json({ error: 'not_found' }, 404);
+  return { artifact, actor };
 }
 
 /**

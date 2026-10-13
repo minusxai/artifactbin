@@ -19,6 +19,7 @@ import {POST as preflight} from '@/app/api/artifacts/preflight/route';
 import {GET as versions} from '@/app/api/artifacts/[id]/versions/route';
 import {GET as version} from '@/app/api/artifacts/[id]/versions/[version]/route';
 import {request,useAppHarness} from './harness';
+import {documentEditBody} from './prepared-document';
 
 /**
  * The host's document editor grant (ADMIN__EMAILS in production) through the REAL production shape:
@@ -83,9 +84,10 @@ it('refuses an admin every door to a private document with the uniform not-found
   ['content',bearer(`/api/artifacts/${PRIVATE.id}/content`)],
   ['versions',bearer(`/api/artifacts/${PRIVATE.id}/versions`)],
   ['prepare',bearer(`/api/artifacts/${PRIVATE.id}/prepare`,{method:'POST',json:{source:SOURCE}})],
-  ['edits',bearer(`/api/artifacts/${PRIVATE.id}/edits`,{method:'POST',json:{edit_id:row.edit_id,source:'<p>Admin</p>'}})],
+  // A well-formed edit (prepared-document's protocol body), so the refusal is the access decision and not the body check.
+  ['edits',bearer(`/api/artifacts/${PRIVATE.id}/edits`,{method:'POST',json:documentEditBody(row,{source:'<p id="intro">Admin</p>',whole:true})})],
   ['annotations',bearer(`/api/artifacts/${PRIVATE.id}/annotations`)],
-  ['annotate',bearer(`/api/artifacts/${PRIVATE.id}/annotations`,{method:'POST',json:{body:'hello',anchor:{node:'intro'}}})],
+  ['annotate',bearer(`/api/artifacts/${PRIVATE.id}/annotations`,{method:'POST',json:{node_id:'intro',body:'hello'}})],
  ];
  for(const [door,pending] of doors){
   const response=await pending,text=await response.text();

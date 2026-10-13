@@ -30,7 +30,7 @@ import { trackEvent, mintExportKey } from '@/lib/platform';
 import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS, listArtifactsByUser } from '@/lib/workspace';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser } from '@/lib/accounts';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
 
 const BASE = 'http://localhost:3000';
@@ -134,7 +134,7 @@ describe('write events', () => {
     expect((await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1>v2</h1>' } }), params({ id: doc.id }))).status).toBe(200);
     await expectEvent(doc.id, 'edit');
 
-    const head=(await getArtifactById(doc.id))!;const archived=await getVersionFor({tokenId:t.id,userId:t.userId},doc.id,1);
+    const head=(await getArtifactById(doc.id))!;const archived=await getVersionFor(identityForUser(t.userId, t.id),doc.id,1);
     expect((await revertRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:t.token,json:documentEditBody(head,{source:archived!.source!,whole:true})}),params({id:doc.id}))).status).toBe(200);
     expect((await eventRows(doc.id)).filter(row=>row.event==='edit')).toHaveLength(2);
 

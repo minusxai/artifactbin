@@ -16,6 +16,7 @@ import {catalogOf} from '@/lib/datasets/catalog';
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import { type ArtifactRow } from './table';
+import type { AccessActor } from '@/lib/accounts';
 import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 import { type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { declarationsForRow } from './row-compile';
@@ -332,7 +333,7 @@ export function parseShareEntries(v:unknown):ShareEntry[]|undefined|Response{
  * the one placement code. A refusal comes back as the 400 to answer.
  */
 export async function placementFor(
-  owner: { userId: string | null; tokenId: string },
+  owner: AccessActor,
   parent: string | null | undefined,
   moved: { id: string; format: string } | null,
   mayPlace = true,

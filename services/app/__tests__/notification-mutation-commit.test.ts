@@ -1,4 +1,4 @@
-import {createUser} from '@/lib/accounts';
+import { identityForUser, createUser} from '@/lib/accounts';
 import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artifactbin/contracts';
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
@@ -134,8 +134,8 @@ it('publishes one combined item for an explicitly joined recipient, excludes rea
  const secondSql=`select '${recipient.id}' as "to", 'Counter is 1' as message union all select '${recipient.id}', 'Second message'`;
  const {db,dataset,doc,send}=await fixture(firstSql,owner.id,secondSql);
  await db.query("UPDATE artifacts SET visibility='public',link_role='commenter' WHERE id=ANY($1::text[])",[[dataset.id,doc.id]]);
- await changeMembership({userId:recipient.id,tokenId:null},doc.id,{action:'join'});
- await changeMembership({userId:owner.id,tokenId:null},doc.id,{action:'approve',userId:recipient.id});
+ await changeMembership(identityForUser(recipient.id, null),doc.id,{action:'join'});
+ await changeMembership(identityForUser(owner.id, null),doc.id,{action:'approve',userId:recipient.id});
  const response=await send('mxmx_test_notification_combined_join');expect(response.status).toBe(200);
  const run=(await response.json()).mutationRunId;
  const store=await notificationJobStore(),worker=createNotificationWorker({store,evaluator:{evaluate:evaluateNotificationQuery}});
@@ -145,7 +145,7 @@ it('publishes one combined item for an explicitly joined recipient, excludes rea
  const replay=await send('mxmx_test_notification_combined_join');expect(replay.status).toBe(200);
  expect(await worker.drainOnce()).toBe(false);
  expect((await db.query('SELECT id FROM mutation_notifications WHERE mutation_run_id=$1',[run])).rows).toHaveLength(1);
- expect((await membershipInbox({userId:recipient.id,tokenId:null})).notifications.filter(item=>item.kind==='mutation')).toHaveLength(1);
- await changeMembership({userId:recipient.id,tokenId:null},doc.id,{action:'leave'});
- expect((await membershipInbox({userId:recipient.id,tokenId:null})).notifications.filter(item=>item.kind==='mutation')).toHaveLength(0);
+ expect((await membershipInbox(identityForUser(recipient.id, null))).notifications.filter(item=>item.kind==='mutation')).toHaveLength(1);
+ await changeMembership(identityForUser(recipient.id, null),doc.id,{action:'leave'});
+ expect((await membershipInbox(identityForUser(recipient.id, null))).notifications.filter(item=>item.kind==='mutation')).toHaveLength(0);
 });

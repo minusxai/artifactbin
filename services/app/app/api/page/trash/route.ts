@@ -8,12 +8,11 @@
  */
 import { json, unauthorized } from '@/lib/http';
 import { listTrashFor } from '@/lib/workspace';
-import { actorForArtifacts, sessionActor } from '@/lib/accounts';
+import { sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
-  const scoped = actorForArtifacts(actor);
-  if (!scoped) return unauthorized(request);
-  const files = await listTrashFor(scoped);
+  if (!actor.userId && !actor.tokenId) return unauthorized(request);
+  const files = await listTrashFor(actor);
   return json({ files }, 200, { 'Cache-Control': 'no-store' });
 }
