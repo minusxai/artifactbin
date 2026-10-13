@@ -177,7 +177,16 @@ export function objectStore(): ObjectStore {
 
 const nodeRequire = createRequire(import.meta.url);
 
-export function createS3Store(config: S3Config): ObjectStore {
+/**
+ * BOUNDED S3 CALLS. The SDK's default handler waits forever for a connection and a response, and a read that
+ * never settles is worse than a failed one: `cachedReads` shares its pending promise, so every later reader
+ * of that object waits on it too, until restart. With these bounds an unreachable S3 fails the read (after
+ * the SDK's retries) and the next reader asks again. `requestTimeout` is socket inactivity, not total time,
+ * so a long streaming read that keeps moving is unaffected.
+ */
+const S3_TIMEOUTS = { connectionTimeout: 5_000, requestTimeout: 30_000 } as const;
+
+export function createS3Store(config: S3Config, timeouts: { connectionTimeout: number; requestTimeout: number } = S3_TIMEOUTS): ObjectStore {
   // Imported lazily so the AWS SDK is not loaded at all when running on the
   // local fallback — the sanctioned exception pattern lib/db.ts documents.
   // `createRequire` rather than a bare `require`: this package is ESM, so the
@@ -190,6 +199,8 @@ export function createS3Store(config: S3Config): ObjectStore {
     endpoint: config.endpoint,
     forcePathStyle: config.forcePathStyle,
     credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    // Without throwOnRequestTimeout this SDK only logs a warning when requestTimeout passes, and keeps waiting.
+    requestHandler: { ...timeouts, throwOnRequestTimeout: true },
   });
   return {
     backend: 's3',
