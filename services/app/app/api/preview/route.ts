@@ -1,7 +1,6 @@
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
-import { sessionActor } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/accounts';
 import { parseContentInput } from '@/lib/publish/document/input';
-import { resolveToken } from '@/lib/accounts';
 
 /**
  * POST /api/preview { markup, theme?, title? } → { html, format, css? }: the
@@ -14,17 +13,10 @@ export async function POST(request: Request) {
   // agent-session cookie. The cookie matters here because the EDIT CANVAS
   // compiles draft CSS through this route — an anonymous owner editing their
   // own document would otherwise 401 on every keystroke and see it unstyled.
-  // (`sessionActor` swallows auth()'s synchronous throw outside a request
-  // scope, e.g. direct handler calls in tests.)
-  const bearer = request.headers.get('authorization') ?? '';
-  const presented = bearer.startsWith('Bearer ') ? bearer.slice('Bearer '.length).trim() : '';
-  const tokenOk = presented ? await resolveToken(presented) : null;
-  if (!tokenOk) {
-    const actor = await sessionActor(request);
-    if (!actor.userId && !actor.tokenId) return unauthorized(request);
-    // Cookie-authenticated: refuse a cross-site caller (this compiles markup).
-    if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);
-  }
+  const actor = await requestOrSessionActor(request);
+  if (!actor.userId && !actor.tokenId) return unauthorized(request);
+  // Cookie-authenticated: refuse a cross-site caller (this compiles markup).
+  if (actor.credential !== 'bearer' && isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
   const parsed = await parseContentInput(body);

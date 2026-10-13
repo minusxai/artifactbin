@@ -1,4 +1,4 @@
-import {resolveToken} from '../accounts/tokens';
+import {requestOrSessionActor} from '../accounts';
 import { validateQueryValues } from '@/lib/dataflow';
 import {createHash} from 'node:crypto';
 import { artifactState, declarationsForRow, readableArtifact } from '@/lib/artifacts';
@@ -74,8 +74,9 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
 
 export async function queryResourceForRequest(actor:AccessActor,id:string,body:Record<string,unknown>,request:Request):Promise<Response>{
  try{return await queryResource(actor,id,body,request.signal,async()=>{
-  const bearer=request.headers.get('authorization');if(!bearer)return;
-  const token=bearer.startsWith('Bearer ')?await resolveToken(bearer.slice(7).trim()):null;
-  if(!token||token.id!==actor.tokenId||token.userId!==actor.userId)throw new DatasetError('Query access revoked',403);
+  // A long query re-asks an explicit bearer whether it still stands (no memo, no side effects).
+  if(!request.headers.has('authorization'))return;
+  const current=await requestOrSessionActor(request,{revalidate:true});
+  if(!current.tokenId||current.tokenId!==actor.tokenId||current.userId!==actor.userId)throw new DatasetError('Query access revoked',403);
  });}catch(error){if(error instanceof DatasetError)return json({error:'query_access_revoked'},error.status);throw error;}
 }
