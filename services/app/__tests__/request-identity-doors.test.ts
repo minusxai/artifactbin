@@ -18,7 +18,8 @@ import {GET as read} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as remote} from '@/app/api/remote/sessions/route';
 import {GET as pageSession} from '@/app/api/page/session/route';
-import {mintAccountToken,request,setSession,useAppHarness} from './harness';
+import {createGuestOwner,mintAccountToken,request,setSession,useAppHarness} from './harness';
+import {sessionActor} from '@/lib/accounts';
 
 const harness=useAppHarness();
 const verified=(userId:string,email:string,extra:Partial<Actor>={}):Actor=>({credential:'session',userId,email,emailVerified:true,...extra});
@@ -102,6 +103,12 @@ describe('the browser-session header',()=>{
   expect(await edit()).toBe(true);
   expect(await edit({[BROWSER_SESSION_HEADER]:'1'})).toBe(false);
  });
+ it('suppresses it for a proxy-attached bearer too: the grant is never decided from a scripted browser',async()=>{
+  setDocumentEditorPolicy(account=>account.userId===a.userId&&account.emailVerified===true);
+  const claims:Actor={credential:'bearer',userId:a.userId!,tokenId:a.id,email:a.email!,emailVerified:true};
+  expect(await sessionActor(request('/a/door01',{actor:claims}))).toMatchObject({credential:'bearer',documentEditor:true});
+  expect(await sessionActor(request('/a/door01',{actor:claims,headers:{[BROWSER_SESSION_HEADER]:'1'}}))).toMatchObject({credential:'bearer',emailVerified:null,documentEditor:false});
+ });
  it('admits only a live token that belongs to the attached account',async()=>{
   const forged=request('/api/page/session',{actor:{credential:'bearer',userId:a.userId!,tokenId:b.id},headers:{[BROWSER_SESSION_HEADER]:'1'}});
   expect(await (await pageSession(forged)).json()).toMatchObject({user:null,kind:'none'});
@@ -117,5 +124,12 @@ describe('session side effects',()=>{
   expect((await db.query("SELECT 1 FROM group_members WHERE group_id='gdoor' AND user_id=$1",[a.userId])).rows).toHaveLength(0);
   await pageSession(request('/api/page/session',{actor:verified(a.userId!,a.email!)}));
   expect((await db.query("SELECT role FROM group_members WHERE group_id='gdoor' AND user_id=$1",[a.userId])).rows).toEqual([{role:'viewer'}]);
+ });
+ it('adopt held guest ownership only for a verified address',async()=>{
+  const guest=await createGuestOwner(),db=await harness.db();
+  const held=(emailVerified:boolean)=>pageSession(request('/api/page/session',{actor:verified(a.userId!,a.email!,{emailVerified,heldTokenIds:[guest.tokenId]})}));
+  const owner=async()=>(await db.query<{user_id:string}>('SELECT user_id FROM tokens WHERE id=$1',[guest.tokenId])).rows[0]!.user_id;
+  await held(false);expect(await owner()).toBe(guest.userId);
+  await held(true);expect(await owner()).toBe(a.userId);
  });
 });
