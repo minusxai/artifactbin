@@ -93,6 +93,12 @@ export async function runnerOperation(request: Request, operation: string, input
     const identity = actorOf(request);
     if (!identity?.userId)
         return json({ error: 'unauthorized' }, 401);
+    // A document's handler runs as whoever started it: account operations only when that is the artifact's own owner.
+    if (identity.runner) {
+        const source = await getArtifactById(identity.runner.artifactId);
+        if (!source || source.user_id !== identity.userId)
+            return json({ error: 'operation_not_allowed' }, 403);
+    }
     const actor = await sessionActor(request);
     if (isCookieCredential(actor) && isCrossSiteRequest(request))
         return json({ error: 'forbidden' }, 403);
