@@ -18,7 +18,7 @@ import { archivedReadOnly } from '@/lib/serving';
 import {documentEditBody} from './prepared-document';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser } from '@/lib/accounts';
 
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -97,7 +97,7 @@ describe('who may open an archived version', () => {
     const { owner, id } = await twoVersions();
     const editor = await account('editor@x.com');
     const reader = await account('reader@x.com');
-    const shared = await updateSharingFor({ tokenId:owner.id,userId:owner.userId }, id, {
+    const shared = await updateSharingFor(identityForUser(owner.userId, owner.id), id, {
       shares: [{ email: 'editor@x.com', role: 'editor' }, { email: 'reader@x.com', role: 'viewer' }],
     });
     expect(shared?.shares).toEqual([{ email: 'editor@x.com', role: 'editor' }, { email: 'reader@x.com', role: 'viewer' }]);

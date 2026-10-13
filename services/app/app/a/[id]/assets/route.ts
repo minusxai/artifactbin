@@ -49,13 +49,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const artifact = await getArtifactById(id);
   if (!artifact) return missing();
   const actor = await requestOrSessionActor(request);
-  const { viewer } = actor;
   // …and the exporter's own credential, on exactly the terms `raw` admits it:
   // a signed, seconds-long key scoped to THIS artifact. The capture runs in a
   // headless browser with no session, so without this a private document's
   // export photographs alt text where its picture should be.
   const key = params.get('key');
-  const admitted = actor.tokenId===artifact.token_id || (await canReadArtifact(artifact, viewer)) || verifyExportKey(artifact.id, key ?? undefined);
+  const admitted = actor.tokenId===artifact.token_id || (await canReadArtifact(artifact, actor)) || verifyExportKey(artifact.id, key ?? undefined);
   if (!admitted) return missing();
 
   const kind = params.get('kind') ?? 'image';

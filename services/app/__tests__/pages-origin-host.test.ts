@@ -8,7 +8,7 @@ import { withHttpServer, type RunningServer } from '@artifactbin/test-support/ne
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { testIdentity, useAppHarness, request } from '@/__tests__/harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, pagesSessionActor, revokeToken } from '@/lib/accounts';
 import { DELETE as clearSession } from '@/app/api/session/token/route';
@@ -175,7 +175,7 @@ describe('the pages session', () => {
     const w = await world();
     const app = framing();
     const self = pagesOriginFor(w.secret, site);
-    const ticket = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }, {}, Date.now(), bindingOf(w.secret)))!;
+    const ticket = (await issuePagesTicket(testIdentity('session', { userId: w.user.id, email: null }), {}, Date.now(), bindingOf(w.secret)))!;
     const url = `${self}/?_pt=${ticket}`;
     const res = await app.request(url);
     expect(res.status).toBe(200);
@@ -232,27 +232,27 @@ describe('the pages session', () => {
   it('spends a ticket once, within 60 s; a guest gets none; a revoked token ends the session it rode', async () => {
     const w = await world();
     const bind = bindingOf(w.secret);
-    expect(await issuePagesTicket({ viewer: null, tokenId: null, credential: 'none' }, {}, Date.now(), bind)).toBeNull();
+    expect(await issuePagesTicket(testIdentity('none'), {}, Date.now(), bind)).toBeNull();
     const now = Date.now();
-    const late = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }, {}, now, bind))!;
+    const late = (await issuePagesTicket(testIdentity('session', { userId: w.user.id, email: null }), {}, now, bind))!;
     expect(await exchangePagesTicket(late, bind, now + 61_000)).toBeNull();
     const guest = await mintToken('guest-owner', null);
-    expect(await issuePagesTicket({ viewer: null, tokenId: guest.id, credential: 'agent-cookie' }, {}, Date.now(), bind)).toBeNull();
-    const ticket = (await issuePagesTicket({ viewer: {userId:w.user.id,email:w.user.email!,emailVerified:true}, tokenId: w.token.id, credential: 'bearer' }, {}, now, { ...bind, browserSession: true }))!;
+    expect(await issuePagesTicket(testIdentity('agent-cookie', { tokenId: guest.id }), {}, Date.now(), bind)).toBeNull();
+    const ticket = (await issuePagesTicket(testIdentity('bearer', { userId: w.user.id, email: w.user.email!, emailVerified: true, tokenId: w.token.id }), {}, now, { ...bind, browserSession: true }))!;
     const session = (await exchangePagesTicket(ticket, bind))!;
     expect(await exchangePagesTicket(ticket, bind)).toBeNull();
     expect(await pagesSessionActor(session.cookie, w.secret)).toEqual({ credential: 'agent-cookie', userId:w.user.id, email:w.user.email!, emailVerified:true, tokenId: w.token.id });
     await revokeToken(w.token.id);
     expect(await pagesSessionActor(session.cookie, w.secret)).toBeNull();
     // …and a token revoked between the app page and the exchange never renders once: the reader is read back.
-    const stale = (await issuePagesTicket({ viewer: {userId:w.user.id,email:w.user.email!,emailVerified:true}, tokenId: w.token.id, credential: 'bearer' }, {}, now, { ...bind, browserSession: true }))!;
+    const stale = (await issuePagesTicket(testIdentity('bearer', { userId: w.user.id, email: w.user.email!, emailVerified: true, tokenId: w.token.id }), {}, now, { ...bind, browserSession: true }))!;
     expect(await exchangePagesTicket(stale, bind)).toBeNull();
   });
 
   it('is bound to its document and its exact origin: a foreign ticket mints nothing and renders as nobody', async () => {
     const w = await world();
     const app = framing();
-    const actor = { viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' } as const;
+    const actor = testIdentity('session', { userId: w.user.id, email: null });
     const forX = (await issuePagesTicket(actor, {}, Date.now(), bindingOf(w.secret)))!;
     // Spent at another document's origin: refused, and consumed (a wrong guess is never tried twice).
     const atOther = await app.request(`${pagesOriginFor(w.other, site)}/?_pt=${forX}`);
@@ -301,7 +301,7 @@ describe('the pages session', () => {
     expect((await app.request(`${self}/`, { headers: { cookie: `${COOKIE}=${cookie}` } })).status).toBe(200);
     expect((await app.request(`${self}/`)).status).toBe(404);
     // A replayed (spent) ticket keeps what the browser holds, and nothing more.
-    const spent = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }, {}, Date.now(), bindingOf(w.secret)))!;
+    const spent = (await issuePagesTicket(testIdentity('session', { userId: w.user.id, email: null }), {}, Date.now(), bindingOf(w.secret)))!;
     expect((await app.request(`${self}/?_pt=${spent}`)).status).toBe(200);
     const replayHeld = await app.request(`${self}/?_pt=${spent}`, { headers: { cookie: `${COOKIE}=${cookie}` } });
     expect(replayHeld.status).toBe(200);
@@ -312,7 +312,7 @@ describe('the pages session', () => {
     const w = await world();
     const app = framing();
     const self = pagesOriginFor(w.secret, site);
-    const ticket = (await issuePagesTicket({ viewer: { userId: w.user.id, email: null }, tokenId: null, credential: 'session' }, {}, Date.now(), bindingOf(w.secret)))!;
+    const ticket = (await issuePagesTicket(testIdentity('session', { userId: w.user.id, email: null }), {}, Date.now(), bindingOf(w.secret)))!;
     const head = await app.request(`${self}/?_pt=${ticket}`, { method: 'HEAD' });
     expect(head.headers.get('set-cookie')).toBeNull();
     expect((await app.request(`${self}/?_pt=${ticket}`)).status).toBe(200);

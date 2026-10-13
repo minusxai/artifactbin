@@ -18,6 +18,7 @@
  *
  * Nothing here decides permission. `can(actor, …)` does, in one place.
  */
+import type { AccessActor } from './actors';
 import type { TestUser } from '@artifactbin/contracts';
 import { TESTUSER_ERRORS, TESTUSER_LIMITS } from '@artifactbin/contracts';
 import { getDb } from '../platform/db';
@@ -57,7 +58,7 @@ const LIVE_TESTUSER_SQL = "kind = 'testuser' AND (expires_at IS NULL OR expires_
  * The cap is counted inside the same transaction as the insert, so two
  * simultaneous mints cannot both see room for the last slot.
  */
-export async function createTestUser(parent: { tokenId: string; userId: string | null }): Promise<TestUserMinted | TestUserRefusal> {
+export async function createTestUser(parent: AccessActor): Promise<TestUserMinted | TestUserRefusal> {
   if (!parent.userId || (await userKindOf(parent.userId)) !== 'account') {
     return {
       ok: false, status: 403, error: TESTUSER_ERRORS.requiresAccount,

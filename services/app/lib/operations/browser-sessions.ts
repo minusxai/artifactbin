@@ -68,7 +68,9 @@ export const BROWSER_SESSION_OPERATIONS: Operation[] = [{
     const sessionService = services().browser.sessions;
     if (!sessionService) return { status: 503, body: { error: 'sessions_unavailable' } };
     const viewer: ViewerChoice | undefined = safeInput.viewer;
-    const actor = { credential: 'bearer', ...ctx.actor } as Actor;
+    // The wire shape the session transport attaches to its browser's requests (contracts Actor): the ids and the
+    // address, never a grant — the app re-resolves it per request, under the browser-session header.
+    const actor: Actor = { credential: 'bearer', ...(ctx.actor.userId ? { userId: ctx.actor.userId } : {}), ...(ctx.actor.tokenId ? { tokenId: ctx.actor.tokenId } : {}), ...(ctx.actor.email ? { email: ctx.actor.email } : {}) };
     const sessionId = safeInput.session_id;
     // Every call is a chance to notice the test users nobody will ever delete.
     // It can never fail the call: `status` is the disconnect-recovery path.

@@ -13,12 +13,12 @@ import { revokeUserToken } from '@/lib/accounts';
 
 export async function DELETE(request: Request, ctx: { params: Promise<Record<string, string>> }) {
   const actor = await sessionActor(request);
-  if (actor.credential !== 'session' || !actor.viewer?.userId) return unauthorized(request);
+  if (actor.credential !== 'session' || !actor.userId) return unauthorized(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
   const { id } = await ctx.params;
   if (typeof id !== 'string' || !id) return json({ error: 'not_found' }, 404);
   // Ownership-scoped: the UPDATE simply does not match another account's row.
-  return (await revokeUserToken(actor.viewer.userId, id))
+  return (await revokeUserToken(actor.userId, id))
     ? new Response(null, { status: 204 })
     : json({ error: 'not_found' }, 404);
 }

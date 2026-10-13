@@ -48,6 +48,7 @@
  * forgotten, never re-run.
  */
 import { createHash } from 'node:crypto';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { type ArtifactHeader, canReadArtifact, compiledForRow, getArtifactById, grantsOf, grantsPermitRead } from '@/lib/artifacts';
 import { dataflowForRow } from '@/lib/document-data';
 import { type DataPlan, type DatasetAccessFacts, planOf } from '@/lib/compiled-page';
@@ -281,7 +282,7 @@ export async function anonymousAccessFacts(document: ArtifactHeader, flow: Compi
   const datasets: Record<string, { anonymousRead: boolean }> = {};
   for (const ref of refs) {
     const dataset = await getArtifactById(ref);
-    const anonymousRead = !!dataset && (grantsOf(dataset) ? await grantsPermitRead(dataset, { userId: null, tokenId: null }, document) : dataset.visibility !== 'private');
+    const anonymousRead = !!dataset && (grantsOf(dataset) ? await grantsPermitRead(dataset, ANONYMOUS_ACTOR, document) : dataset.visibility !== 'private');
     datasets[ref] = { anonymousRead };
   }
   return { datasets };
@@ -298,7 +299,7 @@ async function revalidateKey(key: SnapshotKey, given?: Recipe & { build?: string
   const { values } = recipe;
   const row = await getArtifactById(key.artifactId);
   // The anonymous door's own admission: a document a guest cannot read has no guest snapshot.
-  if (!row || row.format !== 'markup' || !(await canReadArtifact(row, null))) return null;
+  if (!row || row.format !== 'markup' || !(await canReadArtifact(row, ANONYMOUS_ACTOR))) return null;
   // The head's plan NOW: a republish or an access change that moves the plan leaves this key behind for good.
   const flow = await compiledForRow(row);
   const plan = flow ? planOf(flow, await anonymousAccessFacts(row, flow)) : null;
@@ -314,7 +315,7 @@ async function revalidateKey(key: SnapshotKey, given?: Recipe & { build?: string
   // The query route's recheck: the same version, still readable by the anonymous door, after every wait.
   const authorize = async () => {
     const now = await getArtifactById(row.id);
-    if (!now || now.edit_id !== row.edit_id || !(await canReadArtifact(now, null))) throw new DatasetError('Document is unavailable', 404);
+    if (!now || now.edit_id !== row.edit_id || !(await canReadArtifact(now, ANONYMOUS_ACTOR))) throw new DatasetError('Document is unavailable', 404);
   };
   let ran;
   try {

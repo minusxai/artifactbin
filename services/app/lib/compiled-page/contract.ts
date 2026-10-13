@@ -427,6 +427,12 @@ export interface AssembleInput {
    */
   footer?: { html: string; css: string } | null;
   /**
+   * The version's Helmet script did not build (lib/publish/prepared prepared-page `authorScriptErrors`), so the page
+   * runs without it: a short notice before the story root says so, on every copy of the page (no builder detail —
+   * that is its editors', on the app page).
+   */
+  scriptFailed?: boolean;
+  /**
    * A document served BY ITSELF (`/raw`, a domain post, a capture) carries the standalone
    * document's stylesheets, byte for byte (lib/page-styles/document-styles), in place of `css`: the story is
    * the page, and Mermaid reads `--font-mono`'s text into the palette that names a stored drawing.

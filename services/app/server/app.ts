@@ -1,7 +1,7 @@
 import {getDeploymentState} from '@/lib/deployment';
 import {renderSetupInstaller} from '@/lib/serving/setup-installers';
 import { artifactAppPath } from '@/lib/serving';
-import { type ArtifactRow, canReadArtifact, getArtifactById, roleFor, UnservableDocument } from '@/lib/artifacts';
+import { type ArtifactRow, canReadArtifact, getArtifactById, effectiveRole, UnservableDocument } from '@/lib/artifacts';
 import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
 import { loginRedirectTarget } from '@/lib/http';
 /**
@@ -37,7 +37,7 @@ import { measureQueries, runWithRequest } from '@/lib/platform';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/http';
 /** Every static address solid/App.tsx routes: a direct load or a reload of one missing here is a 404. */
 import { spaPaths } from '@/lib/http/app-pages';
-import { ownerUsername, sessionActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, ownerUsername, sessionActor } from '@/lib/accounts';
 import { AGENT_COOKIE } from '@/lib/accounts';
 import { canEdit } from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';
@@ -520,8 +520,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const key = url.searchParams.get('key');
     if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row } };
     const actor = await sessionActor(request).catch(() => null);
-    if (url.pathname.endsWith('/edit') && (!actor || !canEdit(await roleFor(row, actor)))) return { status: 404 };
-    if (!(await canReadArtifact(row, actor?.viewer ?? null))) return { status: 404 };
+    if (url.pathname.endsWith('/edit') && (!actor || !canEdit(await effectiveRole(row, actor)))) return { status: 404 };
+    if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR))) return { status: 404 };
     // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
     if (url.searchParams.has('key')) return { status: 200, admitted: { row } };
     const canonicalPath = canonicalArtifactPath(row, await ownerUsername(row.user_id));
@@ -684,7 +684,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.on(['GET', 'HEAD'], '/', async c => {
     const signedIn = await runWithRequest(c.req.raw, async () => {
       const actor = await sessionActor(c.req.raw);
-      return actor.credential === 'session' && !!actor.viewer?.userId;
+      return actor.credential === 'session' && !!actor.userId;
     });
     if (signedIn) return page(c);
     c.header('Cache-Control', 'no-store');
@@ -696,7 +696,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.on(['GET', 'HEAD'], ['/login', '/login/cli'], async c => {
     c.header('Cache-Control', 'no-store');
     const actor = await runWithRequest(c.req.raw, () => sessionActor(c.req.raw));
-    if (actor.credential === 'session' && actor.viewer?.userId) {
+    if (actor.credential === 'session' && actor.userId) {
       const url = new URL(c.req.url);
       return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw), url.pathname === '/login/cli'), 302);
     }

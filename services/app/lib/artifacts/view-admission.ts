@@ -15,9 +15,9 @@ export async function recordArtifactView(request: Request, id: string): Promise<
   const actor = await sessionActor(request);
   // The header decides (format and access): a view is never a reason to read the document itself.
   const artifact = await getArtifactHeaderById(id);
-  if (!artifact || artifact.format !== 'markup' || !(await canReadArtifact(artifact, actor.viewer))) return 'not_found';
+  if (!artifact || artifact.format !== 'markup' || !(await canReadArtifact(artifact, actor))) return 'not_found';
   if (!new URL(request.url).searchParams.has('key')) {
-    await trackEvent('view', artifact.id, { userId: actor.viewer?.userId ?? null });
+    await trackEvent('view', artifact.id, { userId: actor.userId });
   }
   return 'accepted';
 }

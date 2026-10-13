@@ -1,6 +1,6 @@
 /** Artifact ownership is distinct from attribution and request credentials. */
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import type {TokenActor} from '../accounts';
+import type {AccessActor} from '../accounts';
 import {getAccountPreferences,getGroupRole} from '../groups';
 import {selectNewArtifactDestination} from '../groups/destination';
 import {DeploymentError,getDeploymentDefaultDestination} from '../deployment';
@@ -17,7 +17,7 @@ export function parseArtifactDestination(value:unknown):ArtifactDestination|unde
  throw new DatasetError('Invalid destination',400);
 }
 const destinationOf=(row:Pick<ArtifactRow,'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>):ArtifactDestination=>row.group_id?{type:'group',id:row.group_id}:{type:'personal'};
-export async function newArtifactDestination(actor:TokenActor,explicit?:ArtifactDestination,parentId?:string|null):Promise<ArtifactDestination>{
+export async function newArtifactDestination(actor:AccessActor,explicit?:ArtifactDestination,parentId?:string|null):Promise<ArtifactDestination>{
  const db=await getDb();
  const parent=parentId?(await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[parentId])).rows[0]:undefined;
  if(parentId&&!parent)throw new DatasetError('Invalid parent',400);
@@ -34,7 +34,7 @@ export async function newArtifactDestination(actor:TokenActor,explicit?:Artifact
  if(destination.type==='group'&&await getGroupRole(actor.userId,destination.id)!=='editor')throw new DatasetError('Destination requires group editor membership',403);
  return destination;
 }
-export async function assertDestination(tx:Queryable,actor:TokenActor,destination:ArtifactDestination):Promise<void>{
+export async function assertDestination(tx:Queryable,actor:AccessActor,destination:ArtifactDestination):Promise<void>{
  if(destination.type==='group'){
   // Lock membership and group rows until creation/transfer commits; removal waits.
   const found=await tx.query('SELECT id FROM groups WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[destination.id]);
@@ -43,7 +43,7 @@ export async function assertDestination(tx:Queryable,actor:TokenActor,destinatio
 }
 
 /** Recheck placement under the write lock, so transfer cannot strand a child. */
-export async function assertOwnerPlacement(tx:Queryable,owner:{userId:string|null;tokenId:string;groupId?:string|null},ancestors:string[]):Promise<void>{
+export async function assertOwnerPlacement(tx:Queryable,owner:AccessActor,ancestors:string[]):Promise<void>{
  const id=ancestors.at(-1);if(!id)return;
  const parent=(await tx.query<ArtifactRow>("SELECT * FROM artifacts WHERE id=$1 AND format='folder' AND deleted_at IS NULL FOR SHARE",[id])).rows[0];
  if(!parent||(owner.groupId?parent.group_id!==owner.groupId:parent.group_id||(owner.userId?parent.user_id!==owner.userId:parent.user_id||parent.token_id!==owner.tokenId))||JSON.stringify([...parent.ancestor_ids,parent.id])!==JSON.stringify(ancestors))throw new DatasetError('Parent owner or placement changed',409);

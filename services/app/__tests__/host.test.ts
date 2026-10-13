@@ -24,8 +24,13 @@ it.each([false,true])('assembles identity and an optional host document policy (
  const anonymous=await host.fetch(new Request(origin+'/api/artifacts/'+artifact.id));
  expect([401,404]).toContain(anonymous.status);
  const otherToken=await mintToken('other','usr_other');
- const foreign=await host.request(new Request(origin+'/api/artifacts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({markup:'<p>Other owner</p>',visibility:'private'})}),{credential:'bearer',tokenId:otherToken.id,userId:'usr_other',email:'other@self.invalid',emailVerified:true});
- expect(foreign.status).toBe(201);const other=await foreign.json();
- const access=await host.fetch(new Request(origin+'/api/artifacts/'+other.id,{headers:{authorization:'Bearer '+token}}));
- expect(access.status).toBe(grant?200:404);
+ const publishAsOther=async(visibility:'unlisted'|'private')=>{
+  const made=await host.request(new Request(origin+'/api/artifacts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({markup:'<p>Other owner</p>',visibility})}),{credential:'bearer',tokenId:otherToken.id,userId:'usr_other',email:'other@self.invalid',emailVerified:true});
+  expect(made.status).toBe(201);return (await made.json()).id as string;
+ };
+ // The host grant edits a foreign document a link could reach, and nothing private.
+ const access=await host.fetch(new Request(origin+'/api/artifacts/'+await publishAsOther('unlisted'),{headers:{authorization:'Bearer '+token}}));
+ expect(access.status).toBe(200);expect((await access.json()).capabilities).toMatchObject({edit:grant,delete:false});
+ const hidden=await host.fetch(new Request(origin+'/api/artifacts/'+await publishAsOther('private'),{headers:{authorization:'Bearer '+token}}));
+ expect(hidden.status).toBe(404);
 });

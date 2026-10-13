@@ -4,6 +4,7 @@
  * an access policy takes no direct SQL its grants do not name, not even from its owner.
  */
 import { describe, expect, it } from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { POST as mutateDataset } from '@/app/api/artifacts/[id]/mutate/route';
 import { getArtifactById } from '@/lib/artifacts';
@@ -47,7 +48,7 @@ describe('a dataset under an access policy', () => {
   it('refuses its owner\'s direct SQL that no grant names, and keeps the rows', async () => {
     const o = await owner();
     const ds = await o.created({ dataset: [{ branch: 'root' }], access: 'readwrite' });
-    const actor = { tokenId: o.t.id, userId: o.t.userId };
+    const actor = identityForUser(o.t.userId, o.t.id);
     await setDatasetPolicy(actor, ds, {
       version: 1,
       enforcement: 'enabled',

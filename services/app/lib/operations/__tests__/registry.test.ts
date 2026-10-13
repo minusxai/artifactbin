@@ -8,6 +8,7 @@
  * vocabulary with a fix per code.
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import { z } from 'zod';
 import type { BrowserSessionRequest, BrowserSessionResult } from '@artifactbin/contracts';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
@@ -95,7 +96,7 @@ describe('the registry is curated, not generated', () => {
 describe('browser_session viewer', () => {
   const operation = OPERATIONS.find((op) => op.name === 'browser_session')!;
   const script = { op: 'script', session_id: 'session-id', execution_id: 'execution-id', create: true, code: 'return 1' };
-  const context = { actor: { tokenId: 'tok_owner', userId: 'usr_owner' }, base: 'http://app', request: new Request('http://app/api/browser-sessions', { method: 'POST' }), author: {} } as unknown as OpContext;
+  const context = { actor: identityForUser('usr_owner', 'tok_owner'), base: 'http://app', request: new Request('http://app/api/browser-sessions', { method: 'POST' }), author: {} } as unknown as OpContext;
   const previous = services().browser;
   const record = () => {
     // `viewer` and `pageActor` ride on the union's `script` member, so the

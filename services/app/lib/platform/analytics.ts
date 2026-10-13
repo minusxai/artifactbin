@@ -148,7 +148,7 @@ async function analyticsIdentity(userId?:string|null):Promise<{client:string|nul
 
 /** Document commits include their counter and durable event in the same SQL
  * statement. Other telemetry retains trackEvent's best-effort boundary. */
-export async function documentEditEventSql(id:string,actor:{userId:string|null;tokenId:string}|null,param:(value:unknown)=>string,hasParent:string):Promise<string>{
+export async function documentEditEventSql(id:string,actor:{userId:string|null;tokenId:string|null}|null,param:(value:unknown)=>string,hasParent:string):Promise<string>{
  const {client,visitor}=await analyticsIdentity(actor?.userId);
  const event=envelope(visitor?{kind:'visitor',id:visitor}:null,'edited',{kind:'artifact',id},{client,user_id:null});
  const input=param(JSON.stringify(event)),clientValue=param(client),visitorValue=param(visitor);

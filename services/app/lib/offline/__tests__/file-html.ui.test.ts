@@ -47,6 +47,29 @@ describe('renderArtifactFileHtml', () => {
     }
   });
 
+  it('says, as the reader does, that the version\'s script did not build, and leaves a file whose script built as it was', () => {
+    const compiled = { ...file, compiled: { html: '<h1 data-mx-ast="0">Compiled sales</h1>' } as NonNullable<typeof file.compiled> };
+    const valid = renderArtifactFileHtml({ file: compiled, code: 'AA==' });
+    const failedHtml = renderArtifactFileHtml({ file: { ...compiled, scriptFailed: true }, code: 'AA==' });
+    const doc = parse(failedHtml);
+    const notice = doc.querySelector('[role="status"][aria-label="Page script unavailable"]');
+    expect(notice?.hasAttribute('data-mx-script-failure')).toBe(true);
+    expect(notice?.textContent).toBe('This page\u2019s script could not load, so some of its controls may not respond. Its editors can see why on the document\u2019s page.');
+    // Before the story, inside the root the file's shell keeps (solid-entry mounts its bar beside it, never over it).
+    expect(notice?.parentElement?.id).toBe('afbin-root');
+    expect(notice?.nextElementSibling?.hasAttribute('data-mx-inline-story')).toBe(true);
+    expect(doc.head.querySelector('style[data-mx-script-failure-css]')?.textContent).toContain('[data-mx-script-failure]');
+    // Saved again, it still says so.
+    expect(parse(renderArtifactFileHtml(readArtifactFileParts(doc))).querySelector('[data-mx-script-failure]')).not.toBeNull();
+    // A valid script's file carries none of it: the failed file less its notice, sheet and flag is the valid file, byte for byte.
+    expect(valid).not.toContain('data-mx-script-failure');
+    const stripped = failedHtml
+      .replace(/<style data-mx-script-failure-css>[^<]*<\/style>\n/, '')
+      .replace(/<div data-mx-script-failure=""[^>]*>[^<]*<\/div>/, '')
+      .replace(',"scriptFailed":true', '');
+    expect(stripped).toBe(valid);
+  });
+
   it('round-trips the packed compiled script and optional SQLite bytes for Save', () => {
     const parts = { file, code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=', compiledCode: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=', wasm: 'AA==', templates: { a: '<div>offline</div>' } };
     const doc = parse(renderArtifactFileHtml(parts));

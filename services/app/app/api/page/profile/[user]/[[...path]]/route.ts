@@ -27,12 +27,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   const handle = u.slice(1).toLowerCase();
   const path = (rawPath ?? '').split('/').filter(Boolean).map(decoded);
   const actor = await sessionActor(request);
-  const viewer = actor.viewer;
 
   const file = parsePrettyPath(path);
   if (file) {
     const artifact = await getArtifactById(file.id);
-    if (artifact && (await canReadArtifact(artifact, viewer))) {
+    if (artifact && (await canReadArtifact(artifact, actor))) {
       const groupId=(artifact as ArtifactSummary & {group_id?:string|null}).group_id;
       const canonical = canonicalArtifactPath(artifact, groupId ? (await getGroupById(groupId))?.handle ?? null : await ownerUsername(artifact.user_id));
       const requested = `/@${handle}${path.length ? '/' + path.join('/') : ''}`;
@@ -45,7 +44,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   // is no listing below the handle any more, so it is the uniform 404 — the
   // same answer an unreadable id-path falls through to.
   if (path.length > 0) return notFound();
-  const group = await getGroupDetail(viewer?.userId ?? null, handle);
+  const group = await getGroupDetail(actor.userId, handle);
   if (group) return json({kind:'group',handle:group.group.id},200,{'Cache-Control':'no-store'});
   const owner = await getUserByUsername(handle);
   if (!owner) return notFound();
@@ -55,14 +54,14 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   const anon = false;
   // The follow counts are everyone's, owner included; how the viewer and the
   // owner relate is a signed-in stranger's alone (lib/profile-social).
-  const social = await profileSocial(owner.id, viewer?.userId ?? null);
+  const social = await profileSocial(owner.id, actor.userId);
   return json({
     kind: 'public-profile',
     handle,
     owner: { id: owner.id, image: avatarUrl(owner) },
     social,
     files: strip(files).map(({ ancestor_ids: _placement, ...card }) => card),
-    authed: !!viewer,
+    authed: !!actor.userId,
     anon,
   });
 }

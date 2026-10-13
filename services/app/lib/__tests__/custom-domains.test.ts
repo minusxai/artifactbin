@@ -24,7 +24,7 @@ import {
   type CaaRecord, type DomainResolver,
 } from '@/lib/serving';
 import { eraseTestUser } from '@/lib/operations/testuser-erase';
-import { mintToken, createTestUser } from '@/lib/accounts';
+import { identityForUser, mintToken, createTestUser } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
@@ -260,7 +260,7 @@ describe('removing, serving and the flag', () => {
     const token = await mintToken('parent');
     const parent = await createUser({ email: 'parent@example.com' });
     await claimToken(parent.id, token.token);
-    const minted = await createTestUser({ tokenId: token.id, userId: parent.id });
+    const minted = await createTestUser(identityForUser(parent.id, token.id));
     if (!minted.ok) throw new Error(minted.message);
     const domain = await attached(minted.id, 'tester.example.org');
     await verifyDomain(minted.id, 'tester.example.org', followed('tester.example.org', domain.txtValue));

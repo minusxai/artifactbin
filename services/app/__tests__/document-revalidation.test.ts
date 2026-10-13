@@ -14,7 +14,7 @@ import { POST as createRoute } from '@/app/api/artifacts/route';
 import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as grantRoute } from '@/app/api/trust/route';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
-import { claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser } from '@/lib/accounts';
 import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import * as serve from '@/lib/publish/prepared/serve.server';
 import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
@@ -216,7 +216,7 @@ describe('the document on its own origin', () => {
     // The same reader, a different role on the document: the link now grants edit. Nothing about the version moved.
     const strangerCookie = (await pagesCookie(id, strangerActor))!;
     const { updateSharingFor } = await import('@/lib/artifacts');
-    await updateSharingFor({ tokenId: w.token.id, userId: w.user.id }, id, { linkRole: 'editor' });
+    await updateSharingFor(identityForUser(w.user.id, w.token.id), id, { linkRole: 'editor' });
     const asEditor = await read(id, { cookie: strangerCookie, 'if-none-match': reader });
     expect(asEditor.status).toBe(200);
     expect(tagOf(asEditor)).not.toBe(reader);
@@ -230,7 +230,7 @@ describe('the document on its own origin', () => {
     const cookie = (await pagesCookie(id, actor))!;
     const viewer = tagOf(await read(id, { cookie }));
     const { updateSharingFor } = await import('@/lib/artifacts');
-    await updateSharingFor({ tokenId: w.token.id, userId: w.user.id }, id, { shares: [{ email: stranger.email!, role: 'editor' }] });
+    await updateSharingFor(identityForUser(w.user.id, w.token.id), id, { shares: [{ email: stranger.email!, role: 'editor' }] });
     const editor = await read(id, { cookie, 'if-none-match': viewer });
     expect(editor.status).toBe(200);
     expect(tagOf(editor)).not.toBe(viewer);

@@ -11,7 +11,7 @@ import {type ArtifactRow} from '@/lib/artifacts';
 import {forkDatasetPreview} from '@/lib/publish/publish';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {claimToken,createUser} from '@/lib/accounts';
+import { identityForUser, claimToken,createUser} from '@/lib/accounts';
 import {request,setSession,useAppHarness} from './harness';
 const harness=useAppHarness();const current={id:'',email:''};
 const ctx=(id:string)=>({params:Promise.resolve({id})});
@@ -20,7 +20,7 @@ beforeEach(()=>{current.id='';current.email='';});
 beforeEach(()=>setSession(()=>current.id?{user:{id:current.id,email:current.email}}:null));
 async function user(name:string){const account=await createUser({email:`mxmx_test_pg_fork_${name}@example.com`});const token=await mintToken(name, account.id);await claimToken(account.id,token.token);return {account,token};}
 async function postgresDataset(owner:Awaited<ReturnType<typeof user>>){
- const secret=await createDatasetSecret({userId:owner.account.id,tokenId:owner.token.id},'fork-test-password',target);
+ const secret=await createDatasetSecret(identityForUser(owner.account.id, owner.token.id),'fork-test-password',target);
  const definition={kind:'postgres',connection:{...target,passwordSecretId:secret.id},defaultSchema:'public',refreshSeconds:60,tables:[{schema:'public',name:'rows',source:{schema:'public',table:'rows'},columns:['id']}]};
  const made=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{dataset:definition,visibility:'public'}}));expect(made.status,await made.clone().text()).toBe(201);return {id:(await made.json()).id as string,definition};
 }
@@ -34,7 +34,7 @@ it('refuses reader and owner forks after a live read; a new dataset requires its
   expect(Number((await artifactQuery<{n:string}>(db,'SELECT count(*) n FROM artifacts')).rows[0].n)).toBe(before);
  }
  const reused=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{dataset:definition,visibility:'public'}}));expect(reused.status).toBe(403);
- const secret=await createDatasetSecret({userId:owner.account.id,tokenId:owner.token.id},'replacement-fork-test-password',target);
+ const secret=await createDatasetSecret(identityForUser(owner.account.id, owner.token.id),'replacement-fork-test-password',target);
  const configured=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{dataset:{...definition,connection:{...target,passwordSecretId:secret.id}},visibility:'public'}}));expect(configured.status,await configured.clone().text()).toBe(201);expect((await configured.json()).id).not.toBe(id);
  expect((await artifactQuery<{dataset_id:string}>(db,'SELECT dataset_id FROM dataset_secrets WHERE id=$1',[definition.connection.passwordSecretId])).rows[0].dataset_id).toBe(id);
 });
@@ -63,7 +63,7 @@ it('refuses a shared editor fork and copying the dataset-bound secret into a new
  */
 it('a POSTGRES dataset is never a fork copy: a written one is skipped by the plan, a read one keeps its ref',async()=>{
  const owner=await user('pg-writer'),forker=await user('pg-forker'),{id}=await postgresDataset(owner),db=await harness.db();
- const actor={tokenId:forker.token.id,userId:forker.account.id};
+ const actor=identityForUser(forker.account.id, forker.token.id);
  const writes=`<Helmet><Import name="add_data" src="ref:${id}" /><Mutation name="add">{\`insert into add_data.rows (id) select 2\`}</Mutation></Helmet><div><Button run="$add">Add</Button></div>`;
  expect(await forkDatasetPreview(actor,{format:'markup',source:writes} as ArtifactRow)).toEqual([]);
  const page=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{visibility:'public',title:'Live rows',

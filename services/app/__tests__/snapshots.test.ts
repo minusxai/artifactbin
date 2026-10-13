@@ -16,7 +16,7 @@ import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
 import { POST as queryRoute } from '@/app/a/[id]/query/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, ensureUsername } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser, ensureUsername } from '@/lib/accounts';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { defaultDatasetGrants } from '@artifactbin/utils';
 import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
@@ -138,7 +138,7 @@ describe('invalidate', () => {
     const who = await owner();
     const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: who.token, json: { visibility: 'public', dataset: [{ n: 1 }], access: 'readwrite' } }));
     const wds = ((await made.json()) as { id: string }).id;
-    await setDatasetPolicy({ userId: who.user.id, tokenId: who.tokenId }, wds, defaultDatasetGrants(), 0);
+    await setDatasetPolicy(identityForUser(who.user.id, who.tokenId), wds, defaultDatasetGrants(), 0);
     const writer = await publish(who.token, { markup: `<Helmet><Import name="d" src="ref:${wds}" /><Query name="rows">{\`select count(*) as n from d.rows\`}</Query><Mutation name="add">{\`insert into d.rows values (2)\`}</Mutation></Helmet><p><Number data="$rows" col="n" /></p><Button run="$add">Add</Button>` });
     const other = await publish(who.token, { dataset: [{ k: 1 }] });
     const bystander = await publish(who.token, { markup: `<Helmet><Import name="o" src="ref:${other}" /><Query name="q">{\`select count(*) as n from o.rows\`}</Query></Helmet><p><Number data="$q" col="n" /></p>` });
@@ -194,14 +194,14 @@ describe('the probe\'s write paths', () => {
 
   it('a sharing change on the dataset makes the dependent snapshot stale and nothing else', async () => {
     const { d, store, key, keyB } = await pair();
-    await updateSharingFor({ userId: d.user.id, tokenId: d.tokenId }, d.sales, { shares: [{ email: 'mxmx_test_snap_reader@example.com', role: 'viewer' }] });
+    await updateSharingFor(identityForUser(d.user.id, d.tokenId), d.sales, { shares: [{ email: 'mxmx_test_snap_reader@example.com', role: 'viewer' }] });
     expect((await store.get(key))!.fresh).toBe(false);
     expect((await store.get(keyB))!.fresh).toBe(true);
   });
 
   it('a policy change on the dataset makes the dependent snapshot stale and nothing else', async () => {
     const { d, store, key, keyB } = await pair();
-    await setDatasetPolicy({ userId: d.user.id, tokenId: d.tokenId }, d.sales, defaultDatasetGrants(), 0);
+    await setDatasetPolicy(identityForUser(d.user.id, d.tokenId), d.sales, defaultDatasetGrants(), 0);
     expect((await store.get(key))!.fresh).toBe(false);
     expect((await store.get(keyB))!.fresh).toBe(true);
   });
@@ -245,7 +245,7 @@ describe('the probe\'s write paths', () => {
     const who = await owner();
     const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: who.token, json: { visibility: 'public', dataset: [{ n: 1 }], access: 'readwrite' } }));
     const wds = ((await made.json()) as { id: string }).id;
-    await setDatasetPolicy({ userId: who.user.id, tokenId: who.tokenId }, wds, defaultDatasetGrants(), 0);
+    await setDatasetPolicy(identityForUser(who.user.id, who.tokenId), wds, defaultDatasetGrants(), 0);
     const writer = await publish(who.token, { markup: `<Helmet><Import name="d" src="ref:${wds}" /><Query name="rows">{\`select count(*) as n from d.rows\`}</Query><Mutation name="add">{\`insert into d.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>` });
     await drainPreparedPageWarmups();
     const hung = vi.spyOn(snapshotStore, 'invalidate').mockImplementation(() => new Promise(() => {}));
@@ -282,7 +282,7 @@ describe('the probe\'s write paths', () => {
     const who = await owner();
     const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: who.token, json: { visibility: 'public', dataset: [{ n: 1 }], access: 'readwrite' } }));
     const wds = ((await made.json()) as { id: string }).id;
-    await setDatasetPolicy({ userId: who.user.id, tokenId: who.tokenId }, wds, defaultDatasetGrants(), 0);
+    await setDatasetPolicy(identityForUser(who.user.id, who.tokenId), wds, defaultDatasetGrants(), 0);
     const doc = await publish(who.token, { markup: `<Helmet><Import name="d" src="ref:${wds}" /><Query name="rows">{\`select count(*) as n from d.rows\`}</Query><Mutation name="add">{\`insert into d.rows values (2)\`}</Mutation></Helmet><p><Number data="$rows" col="n" /></p><User userId="${who.user.id}" /><Button run="$add">Add</Button>` });
     await drainPreparedPageWarmups();
     // The run itself carries them (the route answers them to this door): the snapshot must not.

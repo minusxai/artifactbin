@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {MutationInitiator,Queryable} from '@artifactbin/contracts';
 import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import {getDb} from '../platform/db';
 
 export interface MutationReply {status:number;body:Record<string,unknown>}
@@ -10,7 +10,7 @@ const ordered=(value:unknown):unknown=>Array.isArray(value)?value.map(ordered):v
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(ordered(value))).digest('hex');
 
 /** The caller authorizes before lookup. A claimed operation never expires into permission to execute again. */
-export async function durableMutation(actor:TokenActor,origin:string,key:string,payload:unknown,work:(receipt:MutationReceipt)=>Promise<MutationReply>,options:{initiator?:MutationInitiator}={}):Promise<MutationReply>{
+export async function durableMutation(actor:AccessActor,origin:string,key:string,payload:unknown,work:(receipt:MutationReceipt)=>Promise<MutationReply>,options:{initiator?:MutationInitiator}={}):Promise<MutationReply>{
  if(!/^[A-Za-z0-9_-]{16,128}$/.test(key))return {status:400,body:{error:'invalid_idempotency_key'}};
  const scope=hash([new URL(origin).origin,actor.userId??actor.tokenId]);
  const receipt:MutationReceipt={scope,key,fingerprint:hash(payload),runId:hash(['mutation-run',scope,key]),...options};

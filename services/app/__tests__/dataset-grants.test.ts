@@ -1,7 +1,7 @@
 import {POST as mutateDirect} from '@/app/api/artifacts/[id]/mutate/route';
 import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
-import { createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
@@ -15,7 +15,7 @@ useAppHarness();
 it('allows a recipient through a saved owner artifact only after approval',async()=>{
  const owner=await createUser({email:'mxmx_test_grants_owner@example.com'}),bob=await createUser({email:'mxmx_test_grants_bob@example.com'});
  const token=await mintToken('mxmx_test_grants', owner.id);await claimToken(owner.id,token.token);
- const actor={userId:owner.id,tokenId:token.id};
+ const actor=identityForUser(owner.id, token.id);
  const dsResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite'}}));
  expect(dsResponse.status).toBe(201);const ds=(await dsResponse.json()).id;
  expect(await setDatasetPolicy(actor,ds,defaultDatasetGrants(),0)).toMatchObject({revision:1});
@@ -23,11 +23,11 @@ it('allows a recipient through a saved owner artifact only after approval',async
  expect(docResponse.status,await docResponse.clone().text()).toBe(201);const doc=(await docResponse.json()).id;
  const click=()=>mutate(request(`/a/${doc}/mutate`,{method:'POST',origin:'same',actor:{credential:'session',userId:bob.id,email:bob.email!,emailVerified:true},json:{mutation:'add',args:{}}}),{params:Promise.resolve({id:doc})});
  const refused=await click();expect(refused.status).toBe(403);expect((await refused.json()).detail).toMatch(/join/i);
- await changeMembership({userId:bob.id,tokenId:null},doc,{action:'join'});
+ await changeMembership(identityForUser(bob.id, null),doc,{action:'join'});
  expect((await click()).status).toBe(403);
  await changeMembership(actor,doc,{action:'approve',userId:bob.id});
  const written=await click();expect(written.status,await written.clone().text()).toBe(200);
- await changeMembership({userId:bob.id,tokenId:null},doc,{action:'leave'});
+ await changeMembership(identityForUser(bob.id, null),doc,{action:'leave'});
  expect((await click()).status).toBe(403);
  expect((await getArtifactById(ds))?.version).toBe(2);
 });
@@ -35,7 +35,7 @@ it('allows a recipient through a saved owner artifact only after approval',async
 it('enforces read grants independently of link visibility and keeps owner administration',async()=>{
  const owner=await createUser({email:'mxmx_test_read_grants@example.com'});
  const token=await mintToken('mxmx_test_read_grants', owner.id);await claimToken(owner.id,token.token);
- const actor={userId:owner.id,tokenId:token.id};
+ const actor=identityForUser(owner.id, token.id);
  const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}]}}));
  const {id}=await res.json();
  expect((await getArtifactById(id))?.dataset_policy).toEqual(defaultDatasetGrants());
@@ -45,9 +45,9 @@ it('enforces read grants independently of link visibility and keeps owner admini
   const details=(await denied.json()).details.join(' ');expect(details).toContain('grant');expect(details).not.toContain('--access readwrite');
  }
 
- expect(await readableArtifact({userId:null,tokenId:''},id)).not.toBeNull();
+ expect(await readableArtifact(identityForUser(null, ''),id)).not.toBeNull();
  await setDatasetPolicy(actor,id,{version:2,allow:[{actions:['read'],from:{user:'$owner'}}]},0);
- expect(await readableArtifact({userId:null,tokenId:''},id)).toBeNull();
+ expect(await readableArtifact(identityForUser(null, ''),id)).toBeNull();
  expect(await readableArtifact(actor,id)).not.toBeNull();
  await setDatasetPolicy(actor,id,{version:2,allow:[]},1);
  expect(await readableArtifact(actor,id)).toBeNull();
@@ -57,7 +57,7 @@ it('enforces read grants independently of link visibility and keeps owner admini
 it('forks even an owners written dataset independently and resets memberships',async()=>{
  const owner=await createUser({email:'mxmx_test_fork_grants@example.com'});
  const token=await mintToken('mxmx_test_fork_grants', owner.id);await claimToken(owner.id,token.token);
- const actor={userId:owner.id,tokenId:token.id};
+ const actor=identityForUser(owner.id, token.id);
  const make=async(json:object)=>{const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id;};
  const ds=await make({dataset:[{n:1}]});
  const doc=await make({visibility:'public',markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
@@ -86,11 +86,11 @@ it('does not disclose private grant-controlled datasets through direct mutation 
 it('preserves private dataset visibility in a public fork',async()=>{
  const owner=await createUser({email:'mxmx_test_audit_fork@example.com'});
  const token=await mintToken('mxmx_test_audit_fork', owner.id);await claimToken(owner.id,token.token);
- const actor={userId:owner.id,tokenId:token.id};
+ const actor=identityForUser(owner.id, token.id);
  const make=async(json:object)=>{const res=await create(request('/api/artifacts',{method:'POST',token:token.token,json}));expect(res.status,await res.clone().text()).toBe(201);return (await res.json()).id;};
  const ds=await make({dataset:[{n:1}],visibility:'private'});
  const doc=await make({visibility:'private',markup:`<Helmet><Import name="rows_data" src="ref:${ds}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query><Import name="add_data" src="ref:${ds}" /><Mutation name="add">{\`insert into add_data.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
  const fork=await forkArtifact(actor,(await getArtifactById(doc))!,{visibility:'public'});expect(fork).not.toBeInstanceOf(Response);if(fork instanceof Response)return;
  expect((await getArtifactById(fork.datasets[0].id))?.visibility).toBe('private');
- expect(await readableArtifact({userId:null,tokenId:''},fork.datasets[0].id)).toBeNull();
+ expect(await readableArtifact(identityForUser(null, ''),fork.datasets[0].id)).toBeNull();
 });

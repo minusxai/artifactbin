@@ -1,10 +1,10 @@
 import type {Queryable} from '@artifactbin/contracts';
-import type { RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import type { ArtifactRow } from '../table';
 import {invitePeople} from './membership';
 import {isPersonMentionHref, nodeIndex} from '@/lib/document';
 /** Static authored links only; query results, User chips, imports and forks never notify. */
-export async function documentMentions(tx:Queryable,row:ArtifactRow,actor:RoleActor,previous=''){
+export async function documentMentions(tx:Queryable,row:ArtifactRow,actor:AccessActor,previous=''){
  if(row.format!=='markup'||!row.source?.includes('/people/'))return;
  const prior=nodeIndex(previous);
  const targetIds=[...nodeIndex(row.source).values()].flatMap(({node})=>{const href=node.attributes.find(a=>a.name==='href')?.value;return node.tag==='a'&&href?.static&&typeof href.json==='string'&&isPersonMentionHref(href.json)?[href.json.slice('/people/'.length)]:[];});

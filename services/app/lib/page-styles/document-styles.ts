@@ -23,6 +23,7 @@ export const DOCUMENT_ROOT_CSS = ':root { --mx-vh: 100vh; } body { margin: 0; }'
 export const DOMAIN_FOOTER_CSS = '[data-mx-domain-footer]{box-sizing:border-box;max-width:100%;margin:0;padding:40px 16px 48px;text-align:center;font-size:13px;line-height:1.5;opacity:.65}'
   + '[data-mx-domain-footer] a{color:inherit;text-decoration:underline;text-underline-offset:2px}';
 
+
 interface DocumentStylesInput {
   /** The version's compiled Tailwind (lib/data/story/story-css.server currentStoryCss), or none. */
   compiledCss: string | null;

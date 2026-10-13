@@ -10,8 +10,8 @@ import { sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
-  if (actor.credential !== 'session' || !actor.viewer?.userId) return unauthorized(request);
-  const tokens = (await listTokensByUser(actor.viewer.userId)).map((token) => ({
+  if (actor.credential !== 'session' || !actor.userId) return unauthorized(request);
+  const tokens = (await listTokensByUser(actor.userId)).map((token) => ({
     ...token,
     status: tokenStatus(token),
   }));

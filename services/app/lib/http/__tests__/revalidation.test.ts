@@ -3,17 +3,18 @@
  * determines the bytes, the `If-None-Match` comparison, and the 304.
  */
 import { describe, expect, it } from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import { etagOf, matchingTag, notModified, revalidationHeaders, withEncoding } from '../revalidation';
 
 const ifNoneMatchHits = (header: string | null, etag: string): boolean => matchingTag(header, etag) !== null;
 
 describe('etagOf', () => {
   it('is a strong validator, the same for equal facts in any key order and different for any change', () => {
-    const facts = { id: 'Ab3xK9', version: 4, viewer: { userId: 'u1', tokenId: null }, list: ['a', 'b'] };
+    const facts = { id: 'Ab3xK9', version: 4, viewer: identityForUser('u1', null), list: ['a', 'b'] };
     const tag = etagOf(facts);
     expect(tag).toMatch(/^"[A-Za-z0-9_-]{22}"$/);
-    expect(etagOf({ list: ['a', 'b'], viewer: { tokenId: null, userId: 'u1' }, version: 4, id: 'Ab3xK9' })).toBe(tag);
-    for (const changed of [{ ...facts, version: 5 }, { ...facts, viewer: { userId: 'u2', tokenId: null } }, { ...facts, viewer: { userId: 'u1', tokenId: 't' } }, { ...facts, list: ['b', 'a'] }, { ...facts, id: 'ab3xk9' }, { ...facts, extra: undefined, list: ['a', 'b', 'c'] }]) {
+    expect(etagOf({ list: ['a', 'b'], viewer: identityForUser('u1', null), version: 4, id: 'Ab3xK9' })).toBe(tag);
+    for (const changed of [{ ...facts, version: 5 }, { ...facts, viewer: identityForUser('u2', null) }, { ...facts, viewer: identityForUser('u1', 't') }, { ...facts, list: ['b', 'a'] }, { ...facts, id: 'ab3xk9' }, { ...facts, extra: undefined, list: ['a', 'b', 'c'] }]) {
       expect(etagOf(changed)).not.toBe(tag);
     }
     // `undefined` is absent, `null` is a value.

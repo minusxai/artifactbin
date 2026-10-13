@@ -4,6 +4,7 @@
  */
 
 import { expect, it, vi } from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import { getArtifactById, setMutationInvocation } from '@/lib/artifacts';
 import type { MutationInvocation } from '@/lib/artifacts/mutation-invocation';
 import { getDb } from '@/lib/platform';
@@ -338,12 +339,12 @@ describe('cli-datasets-definition', () => {
     expect(journal+operation).not.toContain('hunter2');
 
     // The secret resolves for its creator against that exact target, and nothing else.
-    const actor={tokenId:token.id,userId:token.userId};
+    const actor=identityForUser(token.userId, token.id);
     const target={host:'db.example.com',port:5432,database:'commerce',username:'reader',ssl:true};
     expect((await resolveDatasetConnection({...target,passwordSecretId:secretId!},actor)).password).toBe('hunter2');
     await expect(resolveDatasetConnection({...target,database:'other',passwordSecretId:secretId!},actor)).rejects.toBeInstanceOf(DatasetError);
     const other=await mintToken('definition-secret-other');
-    await expect(resolveDatasetConnection({...target,passwordSecretId:secretId!},{tokenId:other.id,userId:other.userId})).rejects.toBeInstanceOf(DatasetError);
+    await expect(resolveDatasetConnection({...target,passwordSecretId:secretId!},identityForUser(other.userId, other.id))).rejects.toBeInstanceOf(DatasetError);
    }finally{await cli.cleanup();}
   });
 

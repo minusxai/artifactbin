@@ -69,14 +69,19 @@ export function readerIslandData(input: ReaderIslandInput): Omit<StoryIslandData
   };
 }
 
-/** One parse, glyph resolution and font lookup shared by raw/export and SPA. */
-/** The Helmet script as the module the page runs (lib/author-script/author-module.server); a draft whose script does not build carries none. */
-async function authorModuleCode(helmet: HelmetContent): Promise<string | null> {
-  if (!helmet.script) return null;
+/**
+ * The Helmet script as the module the page runs (lib/author-script/author-module.server). A script that does not
+ * build under today's API (a version stored before an export was removed; publish refuses one now) is served as
+ * none, and its builder messages are what the page records instead: never a silent drop. The caller that knows the
+ * version logs it (prepared-page.server); a draft or an offline file only carries it.
+ */
+async function authorModuleOf(helmet: HelmetContent): Promise<{ code: string | null; errors?: string[] }> {
+  if (!helmet.script) return { code: null };
   const built = await buildAuthorModule(helmet.script, authorModuleNames(helmet));
-  if (!built.ok) { console.warn('[prepare] the author script does not build:', built.errors.join('; ')); return null; }
-  return built.module.code;
+  return built.ok ? { code: built.module.code } : { code: null, errors: built.errors };
 }
+
+/** One parse, glyph resolution and font lookup shared by raw/export and SPA. */
 
 export async function prepareStoryParts(input: PrepareStoryInput) {
   const chrome = input.chrome ?? true;
@@ -96,9 +101,12 @@ export async function prepareStoryParts(input: PrepareStoryInput) {
   const systemCss = storySystemSheetCss(input.theme);
   const baseRecipe: StoryBaseCssRecipe = { chrome, theme: input.theme ?? null, fonts: docFonts, ...(systemCss ? { systemCss } : {}) };
   const baseCss = storyBaseCss(baseRecipe);
+  const script = await authorModuleOf(helmet);
   const runtime: PreparedStoryRuntime = {
     data, baseCss, compiledCss: input.compiledCss, authorCss: helmet.style,
-    authorScript: await authorModuleCode(helmet),
+    authorScript: script.code,
+    // Only on a failure, so a page whose script builds is prepared byte for byte as before.
+    ...(script.errors ? { authorScriptErrors: script.errors } : {}),
     theme: input.theme, base: baseRecipe, title,
     // The faces this document's first screen paints (lib/page-styles/first-screen-fonts), one per file.
     fontPreloads: firstScreenFonts({ theme: input.theme, nodes: split?.body ?? [], docFonts }).map(face => face.url),

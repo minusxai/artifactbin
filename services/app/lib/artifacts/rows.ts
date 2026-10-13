@@ -3,7 +3,8 @@
  * reach, ownership or the link admits, and the head an editor edits. Every read carries the trash gate
  * (./table). Below access and the write path, so both can read a row without a cycle.
  */
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR } from '@/lib/accounts';
 import { getDb } from '../platform/db';
 import { artifactQuery, loadArtifactDocument } from './document';
 import { grantsOf, grantsPermitRead } from './dataset-policy/grants';
@@ -61,7 +62,7 @@ export const accessMoved = (decided: ArtifactHeader, loaded: ArtifactRow): boole
  * Does the actor's reach (the same editor scope as {@link getArtifactFor}) include this row, and is it shared with
  * anyone? One EXISTS instead of loading the row and its share list to test `shares.length > 0`.
  */
-export async function hasInvitedUsersFor(actor: TokenActor, id: string): Promise<boolean> {
+export async function hasInvitedUsersFor(actor: AccessActor, id: string): Promise<boolean> {
   const db = await getDb();
   const scope = editorScope(actor);
   const found = await db.query<{ shared: boolean }>(
@@ -72,7 +73,7 @@ export async function hasInvitedUsersFor(actor: TokenActor, id: string): Promise
 }
 
 /** The actor's reach over several rows at once ({@link getArtifactFor}'s scope, `id = ANY`): the ones they own or may edit, without share lists. */
-export async function getArtifactsFor(actor: TokenActor, ids: readonly string[]): Promise<ArtifactRow[]> {
+export async function getArtifactsFor(actor: AccessActor, ids: readonly string[]): Promise<ArtifactRow[]> {
   if (!ids.length) return [];
   const db = await getDb();
   const scope = editorScope(actor);
@@ -85,7 +86,7 @@ export async function getLinkReadableArtifacts(ids: readonly string[]): Promise<
   const db = await getDb();
   const rows = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id = ANY($1::text[]) AND ${LIVE_ARTIFACT_SQL}`, [[...ids]])).rows;
   const readable: ArtifactRow[] = [];
-  for (const row of rows) if (grantsOf(row) ? await grantsPermitRead(row, { userId: null, tokenId: null }) : row.visibility !== 'private') readable.push(row);
+  for (const row of rows) if (grantsOf(row) ? await grantsPermitRead(row, ANONYMOUS_ACTOR) : row.visibility !== 'private') readable.push(row);
   return readable;
 }
 
@@ -101,7 +102,7 @@ async function getArtifactScoped(scope: Scope, id: string): Promise<ArtifactRow 
  * one the current code no longer reads throws UnservableDocument
  * (lib/artifacts/servable), so an author never edits a retired shape.
  */
-export async function getEditableArtifactFor(actor: TokenActor, id: string): Promise<ArtifactRow | null> {
+export async function getEditableArtifactFor(actor: AccessActor, id: string): Promise<ArtifactRow | null> {
   const row = await getArtifactFor(actor, id);
   return row && servableDocument(row);
 }
@@ -118,15 +119,15 @@ export async function getEditableArtifactFor(actor: TokenActor, id: string): Pro
  */
 export async function getLinkReadableArtifact(id: string): Promise<ArtifactRow | null> {
   const row = await getArtifactById(id);
-  return row && (grantsOf(row)?await grantsPermitRead(row,{userId:null,tokenId:null}):row.visibility !== 'private') ? row : null;
+  return row && (grantsOf(row)?await grantsPermitRead(row,ANONYMOUS_ACTOR):row.visibility !== 'private') ? row : null;
 }
 
 /** The actor's REACH: what they own, and what they are named editor on. */
-export function getArtifactFor(actor: TokenActor, id: string): Promise<ArtifactRow | null> {
+export function getArtifactFor(actor: AccessActor, id: string): Promise<ArtifactRow | null> {
   return getArtifactScoped(editorScope(actor), id);
 }
 
 /** What the actor OWNS — the read behind every owner-only surface (sharing, metadata, delete). */
-export function getOwnedArtifactFor(actor: TokenActor, id: string): Promise<ArtifactRow | null> {
+export function getOwnedArtifactFor(actor: AccessActor, id: string): Promise<ArtifactRow | null> {
   return getArtifactScoped(ownerScope(actor), id);
 }

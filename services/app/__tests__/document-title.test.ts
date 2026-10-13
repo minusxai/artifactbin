@@ -1,4 +1,5 @@
 import {getArtifactById, updateSharingFor} from '@/lib/artifacts';
+import { identityForUser } from '@/lib/accounts';
 import {documentEditBody} from './prepared-document';
 import {patchMetadata} from '@/__tests__/conditional-request';
 /**
@@ -35,7 +36,7 @@ const start = async (): Promise<Start> => {
   const res = await startRoute(request('/api/start', { method: 'POST', json: {}, token }));
   expect(res.status).toBe(201);
   const started = (await res.json()) as Omit<Start, 'token'>;
-  await updateSharingFor({ tokenId: credential.id, userId: credential.userId }, started.id, { visibility: 'public' });
+  await updateSharingFor(identityForUser(credential.userId, credential.id), started.id, { visibility: 'public' });
   return { ...started, token };
 };
 

@@ -14,7 +14,7 @@ export async function POST(_request: Request) {
 export async function DELETE(request?: Request) {
   if (request) {
     const actor = await sessionActor(request);
-    await endPagesSessionsFor({ userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null });
+    await endPagesSessionsFor(actor);
   }
   return new Response(null, { status: 204, headers: {
     'Cache-Control': 'no-store', 'Set-Cookie': agentSessionClearCookie(),

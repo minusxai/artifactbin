@@ -12,9 +12,8 @@
  * lib/accounts/{users,guest-owner,testusers} (account merges and cascades), lib/notifications/events
  * (recipient joins) and lib/datasets/user-fields.
  */
-import { ACCOUNT_REACH_SQL, type TokenActor } from '@/lib/accounts';
+import { ACCOUNT_REACH_SQL, identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import type { StoredDocument } from '../document';
-import { hasDocumentEditorAccess } from './document-policy';
 
 export { artifactQuery, loadArtifactDocument } from './document';
 import { shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
@@ -138,10 +137,10 @@ export const SHARE_PREDICATE = (roles: readonly string[], param: string) =>
  */
 export const groupMemberPredicate = (user:string, role?:'editor', alias='artifacts') => `EXISTS (SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id WHERE gm.group_id=${alias}.group_id AND gm.user_id=${user}${role ? " AND gm.role='editor'" : ''} AND g.deleted_at IS NULL)`;
 
-export const ownerPredicate = ({ tokenId, userId, groupId }: TokenActor): Scope =>
-  groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'editor')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId };
+export const ownerPredicate = ({ tokenId, userId, groupId }: AccessActor): Scope =>
+  groupId ? {where:p=>`group_id = ${p}`,val:groupId} : userId ? { where: (p) => `((group_id IS NULL AND user_id = ${p}) OR ${groupMemberPredicate(p,'editor')})`, val: userId } : { where: (p) => `group_id IS NULL AND user_id IS NULL AND token_id = ${p}`, val: tokenId ?? '' };
 
-export const ownerScope = (actor: TokenActor): Scope => live(ownerPredicate(actor));
+export const ownerScope = (actor: AccessActor): Scope => live(ownerPredicate(actor));
 
 /**
  * The LINK half of the lattice, in SQL. Only ever composed into a scope that
@@ -155,6 +154,13 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
   `(artifacts.visibility <> 'private' AND COALESCE(artifacts.link_role, 'viewer') IN (${shareRolesAtLeast(min).map((r) => `'${r}'`).join(', ')}))`;
 
 /**
+ * The host's document-editor grant, in SQL: what a link could reach, for markup only — the mirror of
+ * lib/artifacts/access `documentEditorReaches`. It grants `editor`, which reaches every `min` it is asked
+ * for, and only ever inside ACCOUNT_REACH_SQL (scopeAtLeast below).
+ */
+const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format = 'markup' AND artifacts.visibility <> 'private')";
+
+/**
  * The SQL MIRROR of the lattice: the owner, an account holding any share role
  * that reaches `min`, or the LINK. One generator rather than a hand-written
  * predicate per door, so "which roles may edit" is answered in the same place
@@ -163,12 +169,12 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
  * An anonymous token has no account to be named through, so it narrows to
  * bare ownership.
  */
-const scopeAtLeast = (actor: TokenActor, min: ArtifactRole): Scope =>
+const scopeAtLeast = (actor: AccessActor, min: ArtifactRole): Scope =>
   actor.userId
-    ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})))`, val: actor.userId })
+    ? live({ where: (p) => `(${ownerPredicate(actor).where(p)} OR (${ACCOUNT_REACH_SQL(p)} AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${actor.documentEditor ? ` OR ${DOCUMENT_EDITOR_PREDICATE}` : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
-export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'editor');
+export const editorScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'editor');
 
 /**
  * The scope the annotation sidecar reaches a document through: the owner, an
@@ -180,13 +186,13 @@ export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'ed
  * narrowed again (deleteAnnotationFor): the owner may remove any thread, a
  * named editor only one they wrote.
  */
-export const annotationScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'commenter');
+export const annotationScope = (actor: AccessActor): Scope => scopeAtLeast(actor, 'commenter');
 
 /** Group viewers may observe comment feeds without gaining annotation writes. */
-export const commentMonitorScope = (actor:TokenActor):Scope => {
+export const commentMonitorScope = (actor:AccessActor):Scope => {
  const scope=annotationScope(actor);
  return actor.userId?{where:p=>`(${scope.where(p)} OR (${LIVE_ARTIFACT_SQL} AND ${groupMemberPredicate(p)}))`,val:scope.val}:scope;
 };
 
 /** The document author's identity resolves its declared data references, never a viewer's write authority. */
-export const writerFor = (doc: Pick<ArtifactRow, 'token_id' | 'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>): TokenActor => ({ tokenId: doc.token_id, userId: doc.user_id, groupId:doc.group_id ?? null });
+export const writerFor = (doc: Pick<ArtifactRow, 'token_id' | 'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>): TokenHoldingActor => ({ ...identityForUser(doc.user_id, doc.token_id), groupId: doc.group_id ?? null });

@@ -1,14 +1,14 @@
 import {getDb} from '@/lib/platform/db';
 import { getArtifactFor } from '@/lib/artifacts';
 import { editorScope } from '@/lib/artifacts';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { getSharingFor } from '@/lib/artifacts';
 import { catalogOf } from '@/lib/datasets/catalog';
 import { json, readJson } from '@/lib/http/http';
 import { setDatasetPolicy } from '.';
 
 export async function readDatasetPolicy(
-  actor: TokenActor,
+  actor: AccessActor,
   id: string,
 ): Promise<Response> {
   const row = await getArtifactFor(actor, id);
@@ -32,7 +32,7 @@ export async function readDatasetPolicy(
   });
 }
 export async function writeDatasetPolicy(
-  actor: TokenActor,
+  actor: AccessActor,
   id: string,
   body: Record<string, unknown>,
 ): Promise<Response> {
@@ -67,7 +67,7 @@ export async function writeDatasetPolicy(
 }
 export async function datasetPolicyRequest(
   request: Request,
-  actor: TokenActor,
+  actor: AccessActor,
   id: string,
 ): Promise<Response> {
   if (request.method === 'GET') return readDatasetPolicy(actor, id);

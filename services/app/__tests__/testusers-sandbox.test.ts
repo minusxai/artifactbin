@@ -20,7 +20,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { viewerIdentityFor } from '@/lib/document-data';
 import { getDb } from '@/lib/platform';
 import { request, useAppHarness } from './harness';
-import { createTestUser, claimToken, createUser, getUserByUsername } from '@/lib/accounts';
+import { identityForUser, createTestUser, claimToken, createUser, getUserByUsername } from '@/lib/accounts';
 import { userOptions } from '@/lib/datasets/user-fields';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { listPublicArtifactsByUser } from '@/lib/workspace';
@@ -36,7 +36,7 @@ async function account(name: string) {
 }
 
 async function testUserOf(owner: { tokenId: string; userId: string }) {
-  const minted = await createTestUser(owner);
+  const minted = await createTestUser(identityForUser(owner.userId, owner.tokenId));
   if (!minted.ok) throw new Error(minted.error);
   return minted;
 }

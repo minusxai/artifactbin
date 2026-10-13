@@ -6,7 +6,7 @@
  * a test) there is no header and therefore no session — unless a test says who
  * is signed in (`overrideSession`).
  */
-import { sessionActor } from './viewer';
+import { sessionActor } from './request-identity';
 
 export interface Session {
   user: { id: string; email?: string | null; name?: string | null };
@@ -27,6 +27,6 @@ export function overrideSession(session: (() => Session | null) | undefined): vo
 export async function auth(): Promise<Session | null> {
   if (override) return override();
   const actor = await sessionActor(undefined, { headerOnly: true });
-  if (actor.credential !== 'session' || !actor.viewer?.userId) return null;
-  return { user: { id: actor.viewer.userId, email: actor.viewer.email ?? null } };
+  if (actor.credential !== 'session' || !actor.userId) return null;
+  return { user: { id: actor.userId, email: actor.email } };
 }

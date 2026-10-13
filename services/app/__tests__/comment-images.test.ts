@@ -1,5 +1,6 @@
-import {claimToken,createUser} from '@/lib/accounts';
+import { identityForUser, claimToken,createUser} from '@/lib/accounts';
 import {GET as readImageRoute} from '@/app/api/my/artifacts/[id]/comment-images/[imageId]/route';
+import {POST as stageRoute} from '@/app/api/my/artifacts/[id]/comment-images/route';
 import {getDb} from '@/lib/platform';
 import {describe,expect,it} from 'vitest';
 import sharp from 'sharp';
@@ -19,7 +20,7 @@ async function setup(){
  await (await getDb()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1',[doc.id,'private']);
  const image=await sharp({create:{width:100,height:50,channels:3,background:'red'}}).png().toBuffer();
  const metadata:CommentImageMetadata={v:1,capturedEditId:doc.edit_id,capturedAt:new Date().toISOString(),method:'region',width:100,height:50,rect:{x:0,y:0,width:100,height:50},viewport:{width:1000,height:800},strokes:[]};
- return {token,doc,image,metadata,actor:{tokenId:token.id,userId:token.userId},browserActor:{credential:'session' as const,userId:token.userId!,email:token.email!,emailVerified:true}};
+ return {token,doc,image,metadata,actor:identityForUser(token.userId, token.id),browserActor:{credential:'session' as const,userId:token.userId!,email:token.email!,emailVerified:true}};
 }
 describe('comment image attachment ownership',()=>{
  it('accepts an individual 50 MB image and refuses one byte more',async()=>{
@@ -41,7 +42,7 @@ describe('comment image attachment ownership',()=>{
   expect(await readCommentImage(s.actor,s.doc.id,stage.id,'thumbnail')).not.toBeNull();
   const privateRead=await readImageRoute(request(`/api/my/artifacts/${s.doc.id}/comment-images/${stage.id}`),{params:Promise.resolve({id:s.doc.id,imageId:stage.id})});expect(privateRead.status).toBe(404);
   const ownerRead=await readImageRoute(request(`/api/my/artifacts/${s.doc.id}/comment-images/${stage.id}`,{actor:s.browserActor}),{params:Promise.resolve({id:s.doc.id,imageId:stage.id})});expect(ownerRead.status).toBe(200);expect(ownerRead.headers.get('cache-control')).toBe('private, no-store');
-  const stranger=await mintToken('agent');expect(await readCommentImage({tokenId:stranger.id,userId:stranger.userId},s.doc.id,stage.id,'original')).toBeNull();
+  const stranger=await mintToken('agent');expect(await readCommentImage(identityForUser(stranger.userId, stranger.id),s.doc.id,stage.id,'original')).toBeNull();
  });
  it('refuses invalid raster and metadata before reserving bytes',async()=>{
   const s=await setup();const result=await stageCommentImage(s.actor,s.doc.id,Buffer.from('not an image'),s.image,s.metadata);
@@ -78,7 +79,7 @@ it('keeps a stale stage unconsumed and retries a committed comment idempotently'
 it('rejects another actor consuming a private stage and malformed stroke coordinates',async()=>{
  const s=await setup();
  const invalid=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,strokes:[{color:'#ff0000',width:2,points:[[200,5]]}]});expect((invalid as Response).status).toBe(400);
- const stranger=await mintToken('agent');const result=await stageCommentImage({tokenId:stranger.id,userId:stranger.userId},s.doc.id,s.image,s.image,s.metadata);expect((result as Response).status).toBe(404);
+ const stranger=await mintToken('agent');const result=await stageCommentImage(identityForUser(stranger.userId, stranger.id),s.doc.id,s.image,s.image,s.metadata);expect((result as Response).status).toBe(404);
 });
 
 it('carries a staged image and its quota into a claimed account',async()=>{
@@ -138,7 +139,7 @@ describe('a reply carries its own image',()=>{
   expect(wire.thread[0].image).toBeUndefined();
   expect(wire.thread[1]).toMatchObject({body:'Here is what I see',image:{id:stage.id,width:100,height:50,thumbnailUrl:expect.stringContaining(stage.id)}});
   expect(await readCommentImage(s.actor,s.doc.id,stage.id,'thumbnail')).not.toBeNull();
-  const stranger=await mintToken('agent');expect(await readCommentImage({tokenId:stranger.id,userId:stranger.userId},s.doc.id,stage.id,'preview')).toBeNull();
+  const stranger=await mintToken('agent');expect(await readCommentImage(identityForUser(stranger.userId, stranger.id),s.doc.id,stage.id,'preview')).toBeNull();
   // Single use: the same stage cannot ride a second reply, and the refused reply is not written.
   expect((await reply(s,root,{reply:'Again',attachment_id:stage.id,edit_id:s.doc.edit_id})).status).toBe(400);
   const replies=(await (await getDb()).query('SELECT id FROM annotations WHERE root_id=$1 AND deleted_at IS NULL',[root])).rows;
@@ -168,5 +169,21 @@ describe('a reply carries its own image',()=>{
   expect((await db.query('SELECT id FROM annotations WHERE root_id=$1',[root])).rows).toHaveLength(0);
   // Naming the moved head does not launder a stage made against the old one.
   expect((await reply(s,root,{reply:'Stale image',attachment_id:stage.id,edit_id:'moved-head'})).status).toBe(400);
+ });
+});
+
+describe('comment image upload from an account session',()=>{
+ it('stages through the browser door, charged to the account token, and attaches to a comment',async()=>{
+  const s=await setup();
+  const form=new FormData();
+  form.set('original',new Blob([new Uint8Array(s.image)],{type:'image/png'}));form.set('preview',new Blob([new Uint8Array(s.image)],{type:'image/png'}));form.set('metadata',JSON.stringify(s.metadata));
+  const staged=await stageRoute(request(`/api/my/artifacts/${s.doc.id}/comment-images`,{method:'POST',actor:s.browserActor,origin:'same',body:form}),params(s.doc.id));
+  expect(staged.status,await staged.clone().text()).toBe(201);
+  const {id}=await staged.json() as {id:string};
+  const row=(await (await getDb()).query<{token_id:string;user_id:string}>('SELECT token_id,user_id FROM comment_images WHERE id=$1',[id])).rows[0]!;
+  expect(row.user_id).toBe(s.token.userId);
+  expect((await (await getDb()).query('SELECT 1 FROM tokens WHERE id=$1 AND user_id=$2',[row.token_id,s.token.userId])).rows).toHaveLength(1);
+  const comment=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{node_id:'capture',edit_id:s.doc.edit_id,body:'Pasted',attachment_id:id}}),params(s.doc.id));
+  expect(comment.status,await comment.clone().text()).toBe(201);
  });
 });

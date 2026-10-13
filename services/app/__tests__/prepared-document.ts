@@ -1,4 +1,5 @@
 import {GET as archiveRoute} from '@/app/api/artifacts/[id]/versions/[version]/route';
+import { identityForUser } from '@/lib/accounts';
 import {POST as operationRoute} from '@/app/api/artifacts/[id]/edits/route';
 import {request} from './harness';
 /** Test authoring client: compile before calling the real service/route. Keeping
@@ -44,7 +45,7 @@ export async function documentPublicationWithResources(row:ArtifactRow,body:Reco
  const prepared=documentPublicationBody(row,body,whole);
  if(row.document?.kind!=='graph')throw new Error('Missing authoring graph');
  const update=await prepareClientDocumentPublication({...row,document:row.document},{source:(body.markup??body.source) as string|undefined,metadata:prepared.document_update.metadata,whole,annotationOps:prepared.document_update.annotationOps},async source=>{
-  const response=await prepareDocumentAuthoringContext({tokenId:row.token_id,userId:row.user_id},row.id,{source});
+  const response=await prepareDocumentAuthoringContext(identityForUser(row.user_id, row.token_id),row.id,{source});
   if(!response.ok)throw new Error(await response.text());
   return response.json();
  });

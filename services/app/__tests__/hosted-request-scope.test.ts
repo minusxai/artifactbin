@@ -1,6 +1,6 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {createUser} from '@/lib/accounts';
-import {requestOrSessionActor,sessionActor} from '@/lib/accounts/viewer';
+import { identityForUser, createUser} from '@/lib/accounts';
+import {requestOrSessionActor,sessionActor} from '@/lib/accounts/request-identity';
 import {PATCH as profilePatch} from '@/app/api/account/profile/route';
 import {attachActor} from '@artifactbin/utils';
 import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts';
@@ -18,7 +18,7 @@ async function ownedThread(scoped=true){
  const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="scope-target">Target</p>'}}));expect(made.status).toBe(201);const doc=await made.json();
  const posted=await comment(request(`/api/artifacts/${doc.id}/annotations`,{method:'POST',token:token.token,json:{node_id:'scope-target',body:'Original request'}}),{params:Promise.resolve({id:doc.id})});expect(posted.status).toBe(201);const thread=await posted.json();
  if(scoped)await (await getDb()).query('UPDATE tokens SET request_authority=true WHERE id=$1',[token.id]);
- return {user,token,doc,thread,actor:{userId:user.id,tokenId:token.id}};
+ return {user,token,doc,thread,actor:identityForUser(user.id, token.id)};
 }
 const operationRequest=(key?:string)=>new Request('http://localhost/api/artifacts/doc/annotations/thread',{method:'POST',headers:key?{'Idempotency-Key':key}:{}});
 it('ordinary authenticated agent can reply to its actual owned thread',async()=>{

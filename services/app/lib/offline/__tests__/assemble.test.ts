@@ -13,18 +13,21 @@ import { documentEditBody } from '@/__tests__/prepared-document';
 import { actOnAnnotationFor, createAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
 import { getArtifactById, getVersionFor } from '@/lib/artifacts';
-import type { RoleActor } from '@/lib/accounts/actors';
+import type { AccessActor } from '@/lib/accounts';
 import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { getDb } from '@/lib/platform';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/document/asset-url';
-import { setAvatar } from '@/lib/accounts';
+import { identityForUser, setAvatar } from '@/lib/accounts';
 import { mintToken } from '@/lib/accounts';
 import { claimToken, createUser } from '@/lib/accounts';
 import type { TableResult } from '@/lib/dataflow';
 import { assembleArtifactFile } from '../assemble.server';
 import { packCompiledBrowserModule } from '../compiled-bundle.server';
 import { parseArtifactFile, type ArtifactFile } from '../file-format';
+import { renderArtifactFileHtml } from '../file-html';
+import { createDocumentGraph } from '@/lib/document/document-graph';
+import { JSDOM } from 'jsdom';
 
 useAppHarness();
 
@@ -40,7 +43,7 @@ async function account(name: string) {
   const user = await createUser({ email: `mxmx_test_offline_${name}@example.com` });
   const token = await mintToken(`mxmx_test_offline_${name}`);
   await claimToken(user.id, token.token);
-  const actor: RoleActor = { userId: user.id, tokenId: token.id, email: user.email };
+  const actor: AccessActor = identityForUser(user.id, token.id, user.email);
   return { user, token, actor };
 }
 
@@ -89,7 +92,7 @@ async function world() {
     ],
   });
   const secret = await create(owner.token.token, { dataset: [{ code: 'owner-only' }] });
-  expect(await setDatasetPolicy({ userId: owner.user.id, tokenId: owner.token.id }, secret, { version: 2, allow: [{ actions: ['read'], from: { user: '$owner' } }] }, 0)).toMatchObject({ revision: 1 });
+  expect(await setDatasetPolicy(identityForUser(owner.user.id, owner.token.id), secret, { version: 2, allow: [{ actions: ['read'], from: { user: '$owner' } }] }, 0)).toMatchObject({ revision: 1 });
   const img = await create(owner.token.token, { image: PNG });
   await seedWebImage();
   const doc = await create(owner.token.token, { markup: DASHBOARD(ds, secret, img), visibility: 'unlisted' });
@@ -97,9 +100,9 @@ async function world() {
   return { owner, bob, stranger, ds, secret, img, doc, privateDoc };
 }
 
-const reader = (a: { user: { id: string; email: string } }): RoleActor => ({ userId: a.user.id, tokenId: null, email: a.user.email });
+const reader = (a: { user: { id: string; email: string } }): AccessActor => (identityForUser(a.user.id, null, a.user.email));
 
-async function download(id: string, actor: RoleActor, extra: { version?: number; maxFileBytes?: number } = {}): Promise<ArtifactFile> {
+async function download(id: string, actor: AccessActor, extra: { version?: number; maxFileBytes?: number } = {}): Promise<ArtifactFile> {
   const file = await assembleArtifactFile({ id, actor, origin: ORIGIN, ...extra });
   if ('refused' in file) throw new Error(`refused: ${file.refused} ${file.message}`);
   return file;
@@ -114,7 +117,7 @@ describe('access', () => {
     expect((await download(w.privateDoc, w.owner.actor)).source).toMatch(/<p[^>]*>Only mine\.<\/p>/);
     expect((await download(w.doc, reader(w.bob))).artifactId).toBe(w.doc);
     expect(await assembleArtifactFile({ id: w.privateDoc, actor: reader(w.stranger), origin: ORIGIN })).toMatchObject({ refused: 'forbidden' });
-    expect(await assembleArtifactFile({ id: w.privateDoc, actor: { userId: null, tokenId: null }, origin: ORIGIN })).toMatchObject({ refused: 'forbidden' });
+    expect(await assembleArtifactFile({ id: w.privateDoc, actor: identityForUser(null, null), origin: ORIGIN })).toMatchObject({ refused: 'forbidden' });
     expect(await assembleArtifactFile({ id: 'Zz9Zz9', actor: w.owner.actor, origin: ORIGIN })).toMatchObject({ refused: 'not_found' });
     const notADocument = await assembleArtifactFile({ id: w.ds, actor: w.owner.actor, origin: ORIGIN });
     expect(notADocument).toMatchObject({ refused: 'not_found' });
@@ -124,8 +127,8 @@ describe('access', () => {
   it('retains an admitted shared-reader download without granting history or retaining refused private reads', async () => {
     const owner = await account('retention_owner');
     const bob = await account('retention_reader');
-    const ownerScope = { userId: owner.user.id, tokenId: owner.token.id };
-    const readerScope = { userId: bob.user.id, tokenId: bob.token.id };
+    const ownerScope = identityForUser(owner.user.id, owner.token.id);
+    const readerScope = identityForUser(bob.user.id, bob.token.id);
     const shared = await create(owner.token.token, { markup: '<p>Shared baseline</p>', visibility: 'unlisted' });
     const privateId = await create(owner.token.token, { markup: '<p>Private baseline</p>', visibility: 'private' });
     expect(await getVersionFor(ownerScope, shared, 1)).toBeNull();
@@ -314,7 +317,7 @@ describe('a self-contained file', () => {
 describe('threads', () => {
   it('carries open and resolved threads the downloader may see, and no deleted or unseeable ones', async () => {
     const w = await world();
-    const tokenActor = { userId: w.owner.user.id, tokenId: w.owner.token.id };
+    const tokenActor = identityForUser(w.owner.user.id, w.owner.token.id);
     const open = await createAnnotationFor(tokenActor, w.doc, { body: 'Check the west number', quote: 'Quarterly numbers.' }, AUTHOR);
     const resolved = await createAnnotationFor(tokenActor, w.doc, { body: 'Title ok?', quote: 'Sales' }, AUTHOR);
     const gone = await createAnnotationFor(tokenActor, w.doc, { body: 'Never mind', quote: 'Quarterly numbers.' }, AUTHOR);
@@ -327,6 +330,36 @@ describe('threads', () => {
     expect(file.threads.map((t) => [t.id, t.status]).sort()).toEqual([[id(open), 'open'], [id(resolved), 'resolved']].sort());
     // A viewer-role reader may not see the discussion at all.
     expect((await download(w.doc, reader(w.bob))).threads).toEqual([]);
+  });
+});
+
+describe('a version whose stored script no longer builds', () => {
+  const SCRIPTED = (script: string) => `<Helmet><Value name="n" type="number" default={0} /><script>{\`${script}\`}</script></Helmet><h1 id="h">Brew</h1><p id="rest">Steps</p>`;
+  const GOOD = SCRIPTED('import { signal } from "page"; const [n, setN] = signal("$n"); setN(n() + 1);');
+  const REMOVED = SCRIPTED('import { reviewState } from "page"; const [open, setOpen] = reviewState("open", false); setOpen(!open());');
+
+  it('says so in the offline file as the reader does, without the builder\'s words; a valid script\'s file carries nothing', async () => {
+    const owner = await account('scripted');
+    const good = await create(owner.token.token, { markup: GOOD, visibility: 'unlisted' });
+    const broken = await create(owner.token.token, { markup: GOOD, visibility: 'unlisted' });
+    const db = await getDb();
+    // As an earlier deployment stored it: publish refuses this script today.
+    const { version } = (await getArtifactById(broken))!;
+    await db.query('UPDATE artifacts SET document = $2::jsonb WHERE id = $1', [broken, JSON.stringify(createDocumentGraph(REMOVED, version))]);
+    await db.query('DELETE FROM prepared_pages WHERE artifact_id = $1', [broken]);
+
+    const valid = await download(good, owner.actor);
+    expect(valid).not.toHaveProperty('scriptFailed');
+    const failed = await download(broken, owner.actor);
+    expect(failed.scriptFailed).toBe(true);
+    expect(JSON.stringify(failed)).not.toMatch(/'page' exports/);
+    expect(parseArtifactFile(JSON.parse(JSON.stringify(failed)))).toEqual(JSON.parse(JSON.stringify(failed)));
+    const doc = new JSDOM(renderArtifactFileHtml({ file: failed, code: 'AA==' })).window.document;
+    const notice = doc.querySelector('[role="status"][aria-label="Page script unavailable"]');
+    expect(notice?.textContent).toMatch(/script could not load/);
+    expect(notice?.textContent).not.toMatch(/reviewState/);
+    expect(doc.getElementById('rest')?.textContent).toBe('Steps');
+    expect(new JSDOM(renderArtifactFileHtml({ file: valid, code: 'AA==' })).window.document.querySelector('[data-mx-script-failure]')).toBeNull();
   });
 });
 

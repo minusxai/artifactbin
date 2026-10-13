@@ -9,7 +9,7 @@
  */
 import { parseArtifactDestination, newArtifactDestination, ownsArtifact, applyEditFor, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, committedOpenAnnotations, createArtifact, createdArtifactWire, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, refLoaderForActor, replaceArtifactFor, replacedArtifactWire, respondToEdit, rowToResolvedRef, setMetadataFor, sourceRepairsEcho, writerFor } from '@/lib/artifacts';
 import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts';
+import { identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import { parseAnnotationOperations, normalizeNodeIds, collectExternalAssetUrls } from '@/lib/document';
 import { prepareCatalog, catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
@@ -39,7 +39,7 @@ function parseVisibility(body: Record<string, unknown>, canPrivate: boolean): Vi
  */
 export async function replaceArtifactFromRequest(
   request: Request,
-  actor: TokenActor,
+  actor: AccessActor,
   id: string,
   base: string,
 ): Promise<Response> {
@@ -50,7 +50,7 @@ export async function replaceArtifactFromRequest(
 /** The same pipeline with the body already in hand — what the operations registry calls. */
 export async function replaceArtifactWithBody(
   body: Record<string, unknown> | null,
-  actor: TokenActor,
+  actor: AccessActor,
   id: string,
   base: string,
   options: {dryRun?:boolean} = {},
@@ -218,7 +218,7 @@ export async function replaceArtifactWithBody(
  */
 export async function createArtifactFromBody(
   body: Record<string, unknown>,
-  actor: TokenActor,
+  actor: TokenHoldingActor,
   base: string,
   request?: Request,
   options: {dryRun?:boolean} = {},
@@ -236,8 +236,7 @@ export async function createArtifactFromBody(
   if (body.forked_from !== undefined && body.forked_from !== null) {
     if (typeof body.forked_from !== 'string' || !ID_RE.test(body.forked_from)) return json({ error: 'invalid_metadata', hint: 'forked_from is the id of the artifact this copy came from.' }, 400);
     const source = await getArtifactById(body.forked_from);
-    const viewer = actor.userId ? { userId: actor.userId, email: null } : null;
-    if (!source || (!ownsArtifact(source,actor) && !(await canReadArtifact(source, viewer)))) return json({ error: 'not_found', hint: 'forked_from must name an artifact you can read.' }, 404);
+    if (!source || (!ownsArtifact(source,actor) && !(await canReadArtifact(source, actor)))) return json({ error: 'not_found', hint: 'forked_from must name an artifact you can read.' }, 404);
     forkedFrom = source.id;
   }
   let responseBody: ((row: ArtifactRow) => Record<string,unknown>) = row => createdArtifactWire(row,base,body.markup);
@@ -257,7 +256,8 @@ export async function createArtifactFromBody(
   const placement = (await placementFor(actor, parent, null)) ?? { ancestor_ids: [] };
   if (placement instanceof Response) return placement;
   try{destination=await newArtifactDestination(actor,destination,parent);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
-  const publicationActor:TokenActor=destination.type==='group'?{tokenId:actor.tokenId,userId:null,groupId:destination.id}:actor;
+  // A group publishes as the group: the creating token, no account, the group as owner (never the actor's grant).
+  const publicationActor:AccessActor=destination.type==='group'?{...identityForUser(null,actor.tokenId),groupId:destination.id}:actor;
   const sentMarkup=body.markup;
   const prepared = await prepareContentInput(body, {
     normalizeMarkup: source => normalizeNodeIds(source),
@@ -318,7 +318,7 @@ export async function createArtifactFromBody(
  * urls that could — a partial refresh is more useful than a refused one.
  */
 export async function refreshAssetsFor(
-  actor: TokenActor,
+  actor: AccessActor,
   input: { url?: unknown; id?: unknown },
 ): Promise<Response> {
   const url = typeof input.url === 'string' && input.url ? input.url : null;
@@ -326,7 +326,7 @@ export async function refreshAssetsFor(
   if (!url && !id) return json({ error: 'nothing_to_refresh', details: ['name a url, or the id of a document whose external urls should be refreshed'] }, 400);
 
   let urls: string[];
-  let by: WebAssetImporter = { tokenId: actor.tokenId, userId: actor.userId };
+  let by: WebAssetImporter = actor;
   if (id) {
     const row = await getArtifactFor(actor, id);
     if (!row) return json({ error: 'not_found' }, 404);
@@ -335,8 +335,7 @@ export async function refreshAssetsFor(
     urls = named.filter((u) => held.has(u));
     // The bytes belong to whoever the DOCUMENT belongs to, exactly as they did
     // when the view-time door imported them — an editor refreshing does not take them over.
-    const owner = writerFor(row);
-    by = { tokenId: owner.tokenId, userId: owner.userId };
+    by = writerFor(row);
   } else {
     urls = [url!];
   }
@@ -355,7 +354,7 @@ function preflightReply(prepared:PreparedContent):Response {
  * against the NEW content. Warnings, never blocks: a data refresh
  * can't be stopped by a stale chart.
  */
-async function refreshWarningsFor(actor: TokenActor, updated: ArtifactRow): Promise<Array<{ id: string; title: string | null; details: string[] }>> {
+async function refreshWarningsFor(actor: AccessActor, updated: ArtifactRow): Promise<Array<{ id: string; title: string | null; details: string[] }>> {
   if (updated.format !== 'dataset' && updated.format !== 'viz') return [];
   const dependents = await findDependentsFor(actor, updated.id);
   if (dependents.length === 0) return [];

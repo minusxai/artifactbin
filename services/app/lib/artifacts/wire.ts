@@ -16,6 +16,7 @@ import {catalogOf} from '@/lib/datasets/catalog';
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import { type ArtifactRow } from './table';
+import type { AccessActor } from '@/lib/accounts';
 import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 import { type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
 import { declarationsForRow } from './row-compile';
@@ -71,7 +72,8 @@ export function artifactSummaryToWire(
     format: row.format,
     version: row.version,
     visibility: row.visibility,
-    ...(row.access ? { access: row.access } : {}),
+    // The dataset write ACL, on a dataset only (see artifactToWire).
+    ...(row.format === 'dataset' && row.access ? { access: row.access } : {}),
     /*
      * PLACEMENT, both halves. `parent_id` is what a client WRITES back (an
      * agent holds a folder's id and nothing else), and `ancestor_ids` is the
@@ -159,7 +161,9 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
   // `deleted_at` is dropped with the ownership columns: the trash gate means a
   // row a caller can read is always live, so the field could only ever echo
   // null — a key in every agent's context that can carry no news.
-  const { source, token_id: _token, user_id: _owner, deleted_at: _trashed, meta, format, ...rest } = row;
+  // `access` is the dataset write ACL: it rides on a dataset's wire only, and every other format's default
+  // 'read' would read as a statement about the caller's access to it.
+  const { source, token_id: _token, user_id: _owner, deleted_at: _trashed, meta, format, access, ...rest } = row;
   const m = meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
   // Echo the LIVE vocabulary: a stored unknown theme reads back as none, so an
   // agent that read-before-writes never learns a name that publish would reject.
@@ -169,6 +173,7 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
   const isDoc = format === 'markup' || format === 'folder';
   return {
     ...rest,
+    ...(format === 'dataset' ? { access } : {}),
     ...artifactOwnershipWire(row),
     state: content ? artifactState(row) : '',
     format,
@@ -332,7 +337,7 @@ export function parseShareEntries(v:unknown):ShareEntry[]|undefined|Response{
  * the one placement code. A refusal comes back as the 400 to answer.
  */
 export async function placementFor(
-  owner: { userId: string | null; tokenId: string },
+  owner: AccessActor,
   parent: string | null | undefined,
   moved: { id: string; format: string } | null,
   mayPlace = true,

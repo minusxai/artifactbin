@@ -1,4 +1,4 @@
-import {seedOwnerJoin} from '@/lib/accounts';
+import { identityForUser, seedOwnerJoin} from '@/lib/accounts';
 import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/document-data/notifications/authority';
 import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 import {beforeEach,expect,it} from 'vitest';
@@ -23,7 +23,7 @@ async function fixture(){
  await seedOwnerJoin(db,doc.id,recipient.id);
  const authority=await notificationArtifactAuthority(db,source.id);
  await db.query(`INSERT INTO mutation_notifications(id,job_id,mutation_run_id,recipient_id,artifact_id,initiator,messages,sources) VALUES('n0','job','run',$1,$2,$3::jsonb,$4::jsonb,$5::jsonb)`,[recipient.id,doc.id,JSON.stringify({principal:{kind:'token',id:token.id},execution:'agent'}),JSON.stringify(['Task is Done','Review is ready']),JSON.stringify([{artifactId:source.id,authorityRevision:authority.revision,schemaRevision:notificationSourceSchema(authority)}])]);
- return {sender,recipient,token,doc,source,db,actor:{userId:recipient.id,tokenId:null}};
+ return {sender,recipient,token,doc,source,db,actor:identityForUser(recipient.id, null)};
 }
 it('projects a combined run card, the saved user actor, and revision acknowledgments without private provenance',async()=>{
  const f=await fixture(),inbox=await membershipInbox(f.actor);
@@ -45,7 +45,7 @@ it('marks every notification read across pages and kinds, preserves history and 
  expect((await membershipInbox(f.actor,50)).notifications).toHaveLength(2);
  const rows=(await f.db.query<{revision:number;seen_revision:number;read_at:string}>('SELECT revision,seen_revision,read_at FROM member_notifications WHERE recipient_id=$1 UNION ALL SELECT revision,seen_revision,read_at FROM mutation_notifications WHERE recipient_id=$1',[f.recipient.id])).rows;
  expect(rows).toHaveLength(52);for(const row of rows){expect(row.seen_revision).toBe(row.revision);expect(row.read_at).not.toBeNull();}
- expect((await membershipInbox({userId:f.sender.id,tokenId:null})).unread).toBe(1);
+ expect((await membershipInbox(identityForUser(f.sender.id, null))).unread).toBe(1);
  expect((await clear()).status).toBe(200);
  await f.db.transaction(tx=>recordNotification(tx,{id:'follow-0',artifactId:null,recipientId:f.recipient.id,senderId:f.sender.id,kind:'follow'}));
  expect((await membershipInbox(f.actor)).unread).toBe(1);

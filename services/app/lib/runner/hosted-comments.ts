@@ -1,4 +1,5 @@
 import {annotationsChannel,type HostedRemoteAgent,type RunnerJson} from '@artifactbin/contracts';
+import { identityForUser } from '@/lib/accounts';
 import {attachActor} from '@artifactbin/utils';
 import {getDb,type Db} from '../platform/db';
 import {PUBLIC_BASE_URL} from '../platform/config';
@@ -21,7 +22,7 @@ export function externalHostedComments(agent:HostedRemoteAgent,secret:string,opt
    for(const work of rows){
     if(!agent.owns(work.owner,work.session_id)||!agent.deliverComment)continue;
     const artifact=await getArtifactById(work.artifact_id);
-    if(!artifact||artifact.deleted_at||!await canReadArtifact(artifact,{userId:work.owner,email:null})){
+    if(!artifact||artifact.deleted_at||!await canReadArtifact(artifact, identityForUser(work.owner))){
      await db.transaction(async tx=>{await tx.query("UPDATE remote_work SET phase='unavailable',updated_at=now() WHERE id=$1 AND phase IN ('queued','dispatching')",[work.id]);await tx.query('SELECT pg_notify($1,$2)',[annotationsChannel(work.artifact_id),work.thread_id]);});continue;
     }
     const context=work.data.commentContext??await readCommentContext(db,artifact,work.thread_id,work.comment_id);
@@ -57,7 +58,7 @@ export async function hostedCommentOperation(request:Request):Promise<Response>{
  const work=(await db.query<Work>('SELECT w.* FROM remote_work w JOIN remote_agents a ON a.id=w.session_id AND a.owner=w.owner WHERE w.id=$1 AND w.owner=$2 AND w.session_id=$3 AND a.active=true',[body.requestId,actor.userId,body.sessionId])).rows[0];
  if(!work||(work.phase==='queued'&&(body.operation!=='reply'||(body.input as Record<string,unknown>).phase!=='failed')))return json({error:'not_found'},404);
  const artifact=await getArtifactById(work.artifact_id);
- if(!artifact||artifact.deleted_at||!await canReadArtifact(artifact,{userId:actor.userId,email:null}))return json({error:'not_found'},404);
+ if(!artifact||artifact.deleted_at||!await canReadArtifact(artifact, identityForUser(actor.userId)))return json({error:'not_found'},404);
  const input=body.input as Record<string,unknown>;
  const headers=new Headers();
  if(body.operation==='reply'){

@@ -1,7 +1,7 @@
 import { newArtifactDestination, afterCreated, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, compiledForRow, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, grantsOf, grantsPermitRead, refLoaderForActor, reserveArtifactIds, rowToResolvedRef, unservable } from '@/lib/artifacts';
 import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import { mutationTargetRef } from '@/lib/dataflow';
 import { collectRefUses } from '@/lib/dataflow/references';
 import { catalogOf } from '@/lib/datasets/catalog';
@@ -56,7 +56,7 @@ export interface ForkOverrides {
  * is already permitted, and copying a live source would freeze it at the moment of the fork.
  */
 export async function forkArtifact(
-  actor: TokenActor,
+  actor: TokenHoldingActor,
   source: ArtifactRow,
   overrides: ForkOverrides = {},
   /**
@@ -69,7 +69,7 @@ export async function forkArtifact(
    * own to spend, and this door is the single way anything real gets into its
    * sandbox.
    */
-  owner: TokenActor = actor,
+  owner: TokenHoldingActor = actor,
 ): Promise<ForkResult | Response> {
   /*
    * WHO CREATES vs WHO OWNS. The copy is created BY the forker's token and FOR
@@ -83,7 +83,8 @@ export async function forkArtifact(
   try{destination=await newArtifactDestination(owner,overrides.destination,overrides.ancestor_ids?.at(-1));}
   catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
   overrides={...overrides,destination};
-  const creator: TokenActor = { tokenId: actor.tokenId, userId: owner.userId };
+  // Created BY the forker's token, owned BY the owner's account: a row principal, never a request's grant.
+  const creator = identityForUser(owner.userId, actor.tokenId);
   /*
    * A FOLDER IS NOT FORKABLE, and the refusal lives HERE so both doors — the
    * one a person clicks and the `fork_artifact` operation — inherit it from the
@@ -96,7 +97,7 @@ export async function forkArtifact(
   // A copy is born marked current (lib/dataflow/data-syntax): a retired stored shape is never copied into one.
   const retired = unservable(source);
   if (retired) return retired.response();
-  const publicationOwner:TokenActor=destination.type==='group'?{tokenId:creator.tokenId,userId:null,groupId:destination.id}:creator;
+  const publicationOwner:TokenHoldingActor=destination.type==='group'?{...identityForUser(null,creator.tokenId),groupId:destination.id}:creator;
   const copying = await writtenDatasetForkPlan(actor, source, publicationOwner);
   // The page PLUS its dataset copies: one cap, counted against what this call
   // will really create rather than against the page alone.
@@ -151,7 +152,7 @@ interface ForkResult {
  *     (`postgresForkRefusal`), so the copy could not answer a single query.
  * Each falls through to `validateRefs`, which names it at the publish door.
  */
-async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow, owner: TokenActor = actor): Promise<ArtifactRow[]> {
+async function writtenDatasetForkPlan(actor: AccessActor, source: ArtifactRow, owner: TokenHoldingActor): Promise<ArtifactRow[]> {
   if (source.format !== 'markup' || !source.source) return [];
   const uses = collectRefUses(sourceWithoutAnchors(source.source));
   if (!uses) return [];
@@ -166,7 +167,7 @@ async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow, ow
     if(!candidate||candidate.format!=='dataset'||catalogOf(candidate)?.kind==='postgres')continue;
     const policy=grantsOf(candidate);
     if(policy){
-      if(!written.has(use.id)&&await grantsPermitRead(candidate,{userId:null,tokenId:null}))continue;
+      if(!written.has(use.id)&&await grantsPermitRead(candidate,ANONYMOUS_ACTOR))continue;
       if(!(await grantsPermitRead(candidate,actor,source)))continue;
       plan.push(candidate);continue;
     }
@@ -181,7 +182,7 @@ async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow, ow
 }
 
 /** What a fork of this page would copy, for the DRY RUN — the plan, as titles. */
-export async function forkDatasetPreview(actor: TokenActor, source: ArtifactRow, owner: TokenActor = actor): Promise<Array<{ id: string; title: string | null }>> {
+export async function forkDatasetPreview(actor: TokenHoldingActor, source: ArtifactRow, owner: TokenHoldingActor = actor): Promise<Array<{ id: string; title: string | null }>> {
   if (source.format === 'folder') return [];
   return (await writtenDatasetForkPlan(actor, source, owner)).map((row) => ({ id: row.id, title: row.title }));
 }
@@ -195,7 +196,7 @@ export async function forkDatasetPreview(actor: TokenActor, source: ArtifactRow,
  * transaction is inserts only, and a failure halfway leaves no orphan dataset
  * sitting in the forker's account under a page that was never created.
  */
-async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkOverrides, copying: ArtifactRow[], owner: TokenActor = actor): Promise<ForkResult | Response> {
+async function deepFork(actor: TokenHoldingActor, source: ArtifactRow, overrides: ForkOverrides, copying: ArtifactRow[], owner: TokenHoldingActor = actor): Promise<ForkResult | Response> {
   // Reserved for whoever will OWN the copies: `claimArtifactId` consumes a
   // reservation only for the actor creating the row, so reserving as the forker
   // and inserting as its test user would refuse its own fork.
@@ -205,7 +206,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
   const copies = copying.map((row, index) => ({ row, id: ids[index]! }));
   const rewrite = new Map(copies.map((copy) => [copy.row.id, copy.id]));
   const planned = new Map(copies.map((copy) => [copy.id, copy.row]));
-  const publicationOwner:TokenActor=overrides.destination?.type==='group'?{tokenId:owner.tokenId,userId:null,groupId:overrides.destination.id}:owner;
+  const publicationOwner:TokenHoldingActor=overrides.destination?.type==='group'?{...identityForUser(null,owner.tokenId),groupId:overrides.destination.id}:owner;
   const loader = refLoaderForActor(publicationOwner);
   const input = await forkInput(publicationOwner, source, overrides, {
     source: repointRefs(sourceWithoutAnchors(source.source ?? ''), rewrite),
@@ -279,7 +280,7 @@ function repointRefs(source: string, rewrite: Map<string, string>): string {
 
 /** The copy's stored state, as the forker would have published it. */
 async function forkInput(
-  actor: TokenActor,
+  actor: TokenHoldingActor,
   source: ArtifactRow,
   overrides: ForkOverrides,
   /** An APP fork: the repointed source and the loader that answers for its planned dataset copies. */

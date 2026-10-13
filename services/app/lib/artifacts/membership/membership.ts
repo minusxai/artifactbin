@@ -1,4 +1,4 @@
-import { JOIN_RELATIONS, lockMembershipUsers, type RoleActor, setRelationState } from '@/lib/accounts';
+import { identityForUser, JOIN_RELATIONS, lockMembershipUsers, type AccessActor, setRelationState } from '@/lib/accounts';
 import {artifactQuery} from '@/lib/artifacts/document';
 import {recordEvent} from '@/lib/notifications/events';
 import {DatasetError} from '@/lib/datasets/errors';
@@ -16,14 +16,14 @@ export class MembershipError extends DatasetError {
   constructor(message: string, status = 403) { super(message,status); }
 }
 const fail = (message: string, status = 403): never => { throw new MembershipError(message, status); };
-async function opened(actor: RoleActor, id: string) {
+async function opened(actor: AccessActor, id: string) {
   const artifact = await getArtifactById(id);
   if (!artifact) return fail('Artifact not found',404);
   const role = await effectiveRole(artifact,actor);
   if (!canRead(role)) return fail('Artifact not found',404);
   return { artifact, role };
 }
-async function account(actor: RoleActor, artifact: ArtifactRow) {
+async function account(actor: AccessActor, artifact: ArtifactRow) {
   if (!actor.userId || !(await can(actor,'comment',artifact))) fail('Sign in to participate');
   const db=await getDb();
   const user=(await db.query<{kind:string}>('SELECT kind FROM users WHERE id=$1',[actor.userId])).rows[0];
@@ -31,7 +31,7 @@ async function account(actor: RoleActor, artifact: ArtifactRow) {
   return actor.userId!;
 }
 const memberFields = 'm.user_id,u.username,u.name,m.status,m.direction,m.initiated_by,m.joined_at,m.explicit_join';
-export async function membershipState(actor: RoleActor, id: string): Promise<MembershipState> {
+export async function membershipState(actor: AccessActor, id: string): Promise<MembershipState> {
   // The decision is made from the header; the document is read only if it could name a person (mentionStatesFor).
   const header = await getArtifactHeaderById(id);
   const role = header ? await effectiveRole(header,actor) : 'none';
@@ -45,7 +45,7 @@ export async function membershipState(actor: RoleActor, id: string): Promise<Mem
  * The viewer's own membership row on a document the caller has ALREADY admitted them to (the page's Join/Joined/Pending
  * pill): the one row, not the member list, the mentions or a second admission. Null without an account or a row.
  */
-export async function selfMembership(actor: RoleActor, id: string): Promise<ArtifactMember | null> {
+export async function selfMembership(actor: AccessActor, id: string): Promise<ArtifactMember | null> {
   if (!actor.userId) return null;
   const db=await getDb();
   return (await db.query<ArtifactMember>(`SELECT ${memberFields} FROM ${JOIN_RELATIONS} m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND m.user_id=$2`,[id,actor.userId])).rows[0]??null;
@@ -57,7 +57,7 @@ async function follows(tx: Queryable, follower: string, followed: string): Promi
   return !!(await tx.query("SELECT 1 FROM relations WHERE subject_kind='user' AND subject_id=$1 AND verb='follow' AND object_kind='user' AND object_id=$2 AND deleted_at IS NULL AND status='accepted'",[follower,followed])).rows.length;
 }
 /** Candidate eligibility is enforced again on send, including when an agent supplies raw IDs. */
-export async function mentionCandidates(actor: RoleActor, id: string, query: string, purpose: 'mention' | 'invite' = 'mention'): Promise<Array<{user_id:string;username:string;name:string|null}>> {
+export async function mentionCandidates(actor: AccessActor, id: string, query: string, purpose: 'mention' | 'invite' = 'mention'): Promise<Array<{user_id:string;username:string;name:string|null}>> {
   const {artifact,role}=await opened(actor,id);
   await account(actor,artifact);
   if(!canAnnotate(role))fail('Comment or edit access is required to invite people');
@@ -71,7 +71,7 @@ export async function mentionCandidates(actor: RoleActor, id: string, query: str
 }
 interface StoredMember {status:MembershipStatus;direction:MembershipDirection;initiated_by:string;revision:number;explicit_join:boolean}
 /** One transaction owns the pair, the account's 30-slot budget, and its notification receipts. */
-export async function changeMembership(actor: RoleActor, id: string, input: MembershipInput): Promise<MembershipState> {
+export async function changeMembership(actor: AccessActor, id: string, input: MembershipInput): Promise<MembershipState> {
   const {artifact,role}=await opened(actor,id), userId=await account(actor,artifact), db=await getDb();
   if(!['join','invite','accept','approve','dismiss','leave'].includes(input.action))fail('Unknown membership action',400);
   if(input.includeAccess&&(input.action!=='invite'||!canEdit(role)))fail('Only owners and editors can include access with an invitation');
@@ -91,8 +91,8 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
     if(input.action==='approve'&&!canEdit(role))fail('Only owners and editors can approve requests');
     if(input.action==='dismiss'&&target!==userId&&!canEdit(role))fail('Only owners and editors can dismiss other requests');
     if(['invite','approve','accept'].includes(input.action)) {
-      if(!canRead(await effectiveRole(artifact,{userId:target,tokenId:null})) && !(input.action==='invite'&&input.includeAccess&&canEdit(role)))fail('Give this person access before inviting or approving them');
-      if(!(await can({userId:target,tokenId:null},'comment',artifact)))fail('Person is not eligible for this artifact');
+      if(!canRead(await effectiveRole(artifact,identityForUser(target))) && !(input.action==='invite'&&input.includeAccess&&canEdit(role)))fail('Give this person access before inviting or approving them');
+      if(!(await can(identityForUser(target),'comment',artifact)))fail('Person is not eligible for this artifact');
     }
   }
   await db.transaction(async tx=>{
@@ -101,7 +101,7 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
     await lockMembershipUsers(tx,[userId,...targets]);
     for(const target of targets) {
       if(input.action==='invite'){
-        if(input.includeAccess&&!(await readThrough(tx,current,{userId:target,tokenId:null}))){
+        if(input.includeAccess&&!(await readThrough(tx,current,identityForUser(target)))){
           const recipient=(await tx.query<{email:string|null}>("SELECT email FROM users WHERE id=$1 AND kind='account'",[target])).rows[0];
           if(!recipient?.email)fail('This person cannot receive shared access');
           await tx.query("INSERT INTO artifact_shares(artifact_id,user_id,email,role) VALUES($1,$2,$3,'viewer') ON CONFLICT(artifact_id,email) DO NOTHING",[id,target,recipient.email]);
@@ -151,7 +151,7 @@ export async function changeMembership(actor: RoleActor, id: string, input: Memb
 }
 
 /** The saved artifact is already locked by the caller. Shared by UI, CLI and saved mentions. */
-export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleActor,targets:string[],source?:string,explicitInvitation=false):Promise<void>{
+export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:AccessActor,targets:string[],source?:string,explicitInvitation=false):Promise<void>{
  const sender=actor.userId;if(!sender)return fail('Sign in to mention people');
  await lockMembershipUsers(tx,[sender,...targets]);
  const identities=(await tx.query<{id:string;kind:string;auto_accept_mentions:boolean}>('SELECT id,kind,auto_accept_mentions FROM users WHERE id=ANY($1::text[]) AND (expires_at IS NULL OR expires_at>now())',[[sender,...targets,artifact.user_id]])).rows;
@@ -164,7 +164,7 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:RoleA
   const previous=(await tx.query<StoredMember>(`SELECT status,direction,initiated_by,revision,explicit_join FROM ${JOIN_RELATIONS} WHERE artifact_id=$1 AND user_id=$2`,[artifact.id,target])).rows[0];
   const follower=await follows(tx,target,sender);
   if(!explicitInvitation&&!follower&&previous?.status!=='accepted')fail('Person is not eligible for this invitation');
-  if(!(await readThrough(tx,artifact,{userId:target,tokenId:null})))fail('Give this person access before mentioning them');
+  if(!(await readThrough(tx,artifact,identityForUser(target))))fail('Give this person access before mentioning them');
   if(source&&(await tx.query('SELECT 1 FROM member_notifications WHERE artifact_id=$1 AND recipient_id=$2 AND source=$3',[artifact.id,target,source])).rows.length)continue;
   if(previous?.status==='pending'||(previous?.status==='accepted'&&!source))continue;
   if(previous?.status!=='accepted'&&(await tx.query("SELECT 1 FROM member_notifications WHERE sender_id=$1 AND recipient_id=$2 AND kind='dismissed'",[sender,target])).rows.length)fail('This person declined an earlier invitation; they can request to join instead');

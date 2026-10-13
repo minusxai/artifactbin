@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   // this browser already holds, and that token's ownership is not this
   // route's to change.
   const actor = await sessionActor(request);
-  const userId = actor.credential === 'session' ? actor.viewer?.userId ?? null : null;
+  const userId = actor.credential === 'session' ? actor.userId : null;
   if (!await canAuthenticateUser(userId)) return json({ error: 'email_auth_required' }, 401);
   const body = (await request.json().catch(() => ({}))) as { expiresInHours?: unknown; audience?: unknown; scope?: unknown };
   let expiresInMs: number | undefined;

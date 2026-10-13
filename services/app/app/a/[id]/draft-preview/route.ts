@@ -1,5 +1,5 @@
 /** Ephemeral server compile for an editor's unsaved source. */
-import { getArtifactById, declarationsForRow, roleFor } from '@/lib/artifacts';
+import { getArtifactById, declarationsForRow, effectiveRole } from '@/lib/artifacts';
 import { dataflowForRow, refDataForRow } from '@/lib/document-data';
 import { readUrlValues } from '@/lib/dataflow';
 import { collectRefUses } from '@/lib/dataflow/references';
@@ -50,7 +50,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const artifact = await getArtifactById(id);
   if (!artifact || artifact.format !== 'markup') return json({ error: 'not_found' }, 404, NO_STORE);
   const actor = await requestOrSessionActor(request);
-  if (!canEdit(await roleFor(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
+  if (!canEdit(await effectiveRole(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
   const meta = (artifact.meta ?? {}) as { theme?: StoryDesignName | null; colorMode?: 'light' | 'dark' | null; template?: string | null };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
   const source = artifact.source ?? '';
@@ -78,7 +78,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (!artifact || artifact.format !== 'markup') return json({ error: 'not_found' }, 404, NO_STORE);
   const actor = await requestOrSessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403, NO_STORE);
-  if (!canEdit(await roleFor(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
+  if (!canEdit(await effectiveRole(artifact, actor))) return json({ error: 'not_found' }, 404, NO_STORE);
   if (gate.superseded(ticket)) return SUPERSEDED();
   const body = await readJson(request);
   if (gate.superseded(ticket)) return SUPERSEDED();
@@ -106,7 +106,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const compile = async (): Promise<string> => {
     const [compiledCss, dataflow, refData, assetUrls] = await Promise.all([
       compileStoryCss(source, { force: true }),
-      dataflowForRow(draft, { ...(values ? { values } : {}), viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null } }),
+      dataflowForRow(draft, { ...(values ? { values } : {}), viewer: actor }),
       refDataForRow(draft),
       lookupWebAssets(collectExternalAssetUrls(source).all),
     ]);

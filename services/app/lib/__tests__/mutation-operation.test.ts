@@ -1,4 +1,5 @@
 import {expect,it} from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import { adaptMutationOperationReply, mutationInitiator, normalizeMutationOperation } from '@/lib/document-data';
 import { documentMutationReply } from '@/lib/document-data/mutation-operation';
 it('adapts one domain outcome consistently without exposing its internal edit identity',()=>{
@@ -8,9 +9,9 @@ it('adapts one domain outcome consistently without exposing its internal edit id
 });
 it('keeps explicit request identity separate from server defaults and operation key',()=>{
  expect(normalizeMutationOperation({documentId:'doc',mutation:'update',args:{},value:null})).toEqual({documentId:'doc',mutation:'update',args:{},value:null});
- expect(mutationInitiator({userId:null,tokenId:'token'},'agent','untrusted label')).toEqual({principal:{kind:'token',id:'token'},execution:'agent',agentLabel:'untrusted label'});
+ expect(mutationInitiator(identityForUser(null, 'token'),'agent','untrusted label')).toEqual({principal:{kind:'token',id:'token'},execution:'agent',agentLabel:'untrusted label'});
 });
 it('retains the presented token as authority even when it is attached to an account',()=>{
- expect(mutationInitiator({userId:'account',tokenId:'credential'},'agent').principal).toEqual({kind:'token',id:'credential'});
- expect(mutationInitiator({userId:'account',tokenId:''},'human').principal).toEqual({kind:'user',id:'account'});
+ expect(mutationInitiator(identityForUser('account', 'credential'),'agent').principal).toEqual({kind:'token',id:'credential'});
+ expect(mutationInitiator(identityForUser('account', ''),'human').principal).toEqual({kind:'user',id:'account'});
 });

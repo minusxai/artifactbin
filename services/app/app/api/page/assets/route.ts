@@ -9,7 +9,7 @@ import { sessionActor } from '@/lib/accounts';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
-  const userId = actor.credential === 'session' ? actor.viewer?.userId : null;
+  const userId = actor.credential === 'session' ? actor.userId : null;
   if (!userId) return unauthorized(request);
 
   const params = new URL(request.url).searchParams;

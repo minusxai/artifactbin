@@ -8,7 +8,6 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * the pre-engine coverage in markup-tier.test.ts for how their rows serve.
  */
 import { describe, expect, it } from 'vitest';
-import {drainPreparedPageWarmups} from '@/lib/publish/prepared/prepared-page.server';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -18,8 +17,9 @@ import { applyEditFor,getArtifactById } from '@/lib/artifacts';
 
 import { parseContentInput } from '@/lib/publish/document/input';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
+import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 
 const harness = useAppHarness();
 
@@ -59,7 +59,7 @@ describe('themes on stored rows', () => {
         request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: '<h1>Legacy</h1>', theme: 'modernist' } }),
       )
     ).json();
-    // Model an old stored row, not an unversioned edit racing modernist's warmup.
+    // Let the publish warmup finish before simulating a legacy stored row.
     await drainPreparedPageWarmups();
     const db = await harness.db();
     await db.query(
@@ -127,7 +127,7 @@ describe('document editing', () => {
     const parsed = await parseContentInput({ markup: '<h1>Edited</h1>', theme: 'organic' });
     if (parsed instanceof Response) throw new Error('parse failed');
     const prepared=documentEdit((await getArtifactById(created.id))!,{source:parsed.source!,metadata:{theme:'organic'},whole:true});
-    const result=await applyEditFor({tokenId:'',userId:user.id},created.id,prepared);
+    const result=await applyEditFor(identityForUser(user.id, ''),created.id,prepared);
     if(!result||result instanceof Response||!result.applied)throw new Error('replace failed');
     const row=result.row;
     expect(row?.version).toBe(2);
@@ -135,7 +135,7 @@ describe('document editing', () => {
     expect(row?.source).toMatch(/<h1\s[^>]*id="[^"]+"[^>]*>/);
 
     const other = await createUser({ email: 'other@x.com' });
-    expect(await applyEditFor({ tokenId:'',userId:other.id },created.id,prepared)).toBeNull();
+    expect(await applyEditFor(identityForUser(other.id, ''),created.id,prepared)).toBeNull();
   });
 
   it('preview compiles the document tier without persisting (bearer auth)', async () => {

@@ -32,13 +32,7 @@ import { canRead, canEdit } from '@artifactbin/contracts';
 import { effectiveRole, ownsArtifact } from './access';
 import { type ArtifactRow } from './table';
 import { getArtifactById } from './rows';
-import { userKindOf } from '../accounts';
-
-/** Who is acting: the ids a request already carries, nothing more. */
-export interface CapabilityActor {
-  userId: string | null;
-  tokenId: string | null;
-}
+import { userKindOf, type AccessActor } from '../accounts';
 
 /** A user target (follow) rather than a document one. */
 interface UserTarget { userId: string }
@@ -55,7 +49,7 @@ const isArtifact = (target: CapabilityTarget): target is ArtifactRow => 'id' in 
  */
 type ActorKind = 'none' | 'account' | 'guest' | 'testuser';
 
-async function kindOfActor(actor: CapabilityActor): Promise<ActorKind> {
+async function kindOfActor(actor: AccessActor): Promise<ActorKind> {
   if (!actor.userId) return 'none';
   return (await userKindOf(actor.userId)) ?? 'account';
 }
@@ -73,7 +67,7 @@ async function isSandboxArtifact(row: ArtifactRow): Promise<boolean> {
  * given none is `false`: a door that cannot say what it is acting on has not
  * asked a question this table can answer.
  */
-export async function can(actor: CapabilityActor, capability: Capability, target?: CapabilityTarget): Promise<boolean> {
+export async function can(actor: AccessActor, capability: Capability, target?: CapabilityTarget): Promise<boolean> {
   const kind = await kindOfActor(actor);
 
   // An anonymous browser creates drafts and claims them at login; a guest is
@@ -133,7 +127,7 @@ export interface CapabilityRefusal { status: number; body: { error: string; hint
  * `capability` is not in the message on purpose: the caller's own route says
  * what was being attempted, and a refusal that repeats it reads as a lecture.
  */
-export async function refusalFor(actor: CapabilityActor, artifactId?: string): Promise<CapabilityRefusal> {
+export async function refusalFor(actor: AccessActor, artifactId?: string): Promise<CapabilityRefusal> {
   if ((await kindOfActor(actor)) === 'testuser') {
     const target = artifactId ?? '<id>';
     return {
@@ -148,7 +142,7 @@ export async function refusalFor(actor: CapabilityActor, artifactId?: string): P
 }
 
 /** The refusal as a Response, for the routes that answer one directly. */
-export async function capabilityRefusal(actor: CapabilityActor, artifactId?: string): Promise<Response> {
+export async function capabilityRefusal(actor: AccessActor, artifactId?: string): Promise<Response> {
   const refusal = await refusalFor(actor, artifactId);
   return json(refusal.body, refusal.status);
 }
@@ -163,7 +157,7 @@ export async function capabilityRefusal(actor: CapabilityActor, artifactId?: str
  * stranger an id is real: the gate speaks only to someone the artifact is
  * already visible to.
  */
-export async function capabilityGuard(actor: CapabilityActor, capability: Capability, artifactId: string): Promise<Response | null> {
+export async function capabilityGuard(actor: AccessActor, capability: Capability, artifactId: string): Promise<Response | null> {
   const row = await getArtifactById(artifactId);
   if (!row || !(await can(actor, 'read', row))) return null;
   return (await can(actor, capability, row)) ? null : capabilityRefusal(actor, artifactId);

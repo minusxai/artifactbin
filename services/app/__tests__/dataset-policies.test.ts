@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/platform';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import { it, expect, vi } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace } from '@/app/api/artifacts/[id]/route';
@@ -15,7 +15,7 @@ import { request, useAppHarness } from './harness';
 useAppHarness();
 async function fixture() {
   const owner = await mintToken('policy-owner');
-  const actor = { tokenId:owner.id,userId:owner.userId };
+  const actor = identityForUser(owner.userId, owner.id);
   const publish = async (body: object) => {
     const r = await create(
       request('/api/artifacts', {
@@ -74,7 +74,7 @@ it('fences administration by edit access and revision, and removing a policy rev
   const stranger = await mintToken('stranger');
   expect(
     await setDatasetPolicy(
-      { tokenId:stranger.id,userId:stranger.userId },
+      identityForUser(stranger.userId, stranger.id),
       f.ds,
       f.policy,
       0,
@@ -103,7 +103,7 @@ it('cannot evade active policy through ordinary file replacement', async () => {
   const f = await sharedFixture('editor');
   await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
   const row = (await getArtifactById(f.ds))!;
-  const editor = { tokenId: f.token.id, userId: f.user.id };
+  const editor = identityForUser(f.user.id, f.token.id);
   const refused = await replaceArtifactFor(editor, f.ds, {
     format: 'dataset',
     source: null,
@@ -306,7 +306,7 @@ it('rechecks edit access when committing a policy change', async () => {
     return original(sql,values);
   });
   try {
-    const result = await setDatasetPolicy({userId:f.user.id,tokenId:f.token.id},f.ds,f.policy,0);
+    const result = await setDatasetPolicy(identityForUser(f.user.id, f.token.id),f.ds,f.policy,0);
     expect(revoked).toBe(true);
     expect(result).toEqual({conflict:true});
     expect((await getArtifactById(f.ds))?.policy_revision).toBe(0);

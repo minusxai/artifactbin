@@ -41,7 +41,7 @@ describe('legacy ownership proofs', () => {
     const token = await mintToken('old browser', userId);
     const cookie = await agentCookie([token.id]);
     const artifact = await createArtifact(token.id, userId, { format: 'markup', source: '<p id="private">Private</p>', visibility: 'private', meta: {} });
-    expect(await sessionActor(request('/api/my/artifacts', { cookie }))).toMatchObject({ credential: 'none', viewer: null });
+    expect(await sessionActor(request('/api/my/artifacts', { cookie }))).toMatchObject({ credential: 'none', userId: null, tokenId: null });
     expect((await listMine(request('/api/my/artifacts', { cookie }))).status).toBe(401);
     for (const [handler, path] of [[raw, `/a/${artifact.id}/raw`], [events, `/a/${artifact.id}/events`]] as const) {
       expect((await handler(request(path, { cookie }), params(artifact.id))).status).toBe(404);

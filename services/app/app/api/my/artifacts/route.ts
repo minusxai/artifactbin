@@ -8,10 +8,9 @@
  * That is what lets the app's own UI stop holding a bearer secret and still
  * show an anonymous owner their document.
  */
-import { browserActor } from '@/lib/accounts';
+import { browserActor, withAccountToken } from '@/lib/accounts';
 import { listOwnedArtifacts } from '@/lib/workspace';
 import { artifactSummaryToWire } from '@/lib/artifacts';
-import { actorForArtifacts } from '@/lib/accounts';
 import { ensureUserToken } from '@/lib/accounts';
 import { createArtifactFromRequest } from '@/app/api/artifacts/route';
 import { baseUrl, json, unauthorized } from '@/lib/http';
@@ -19,23 +18,19 @@ import { baseUrl, json, unauthorized } from '@/lib/http';
 export async function POST(request: Request) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
-  const userId = actor.viewer?.userId ?? null;
-  // A session mints/reuses its own token to own the row; an anonymous browser
-  // already presented one.
-  const tokenId = userId ? await ensureUserToken(userId) : actor.tokenId!;
-  return createArtifactFromRequest(request, { tokenId, userId });
+  // A session mints/reuses its own token to own the row; an agent-cookie browser holds one.
+  const creator = actor.userId ? { ...actor, tokenId: await ensureUserToken(actor.userId) } : await withAccountToken(actor);
+  return creator ? createArtifactFromRequest(request, creator) : unauthorized(request);
 }
 
 export async function GET(request: Request) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
-  const scoped = actorForArtifacts(actor);
-  if (!scoped) return unauthorized(request);
-  // Account-wide for a session, token-scoped for an anonymous browser — the
+  // Account-wide for a session, token-actor for an anonymous browser — the
   // same rule as every other `*For` call, with the dashboard's view counts.
-  const rows = scoped.userId
-    ? await listOwnedArtifacts('user_id', scoped.userId)
-    : await listOwnedArtifacts('token_id', scoped.tokenId);
+  const rows = actor.userId
+    ? await listOwnedArtifacts('user_id', actor.userId)
+    : await listOwnedArtifacts('token_id', actor.tokenId ?? '');
   const base = baseUrl(request);
   return json({ artifacts: rows.map((r) => artifactSummaryToWire(r, base)) });
 }

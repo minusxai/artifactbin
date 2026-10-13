@@ -3,7 +3,7 @@ import {actorSubject,emit} from '../platform/events';
 import {notifyParent,parentOf} from './placement';
 import {generateInternalId} from '../platform/ids';
 import type {ArtifactDestination} from '@artifactbin/contracts';
-import type {TokenActor} from '../accounts';
+import type {AccessActor} from '../accounts';
 import {getDb} from '../platform/db';
 import {DatasetError} from '../datasets/errors';
 import {catalogOf} from '../datasets/catalog';
@@ -12,7 +12,7 @@ import {getGroupRole} from '../groups';
 import {assertTransferDependencies} from './transfer-dependencies';
 import type {Queryable} from '../platform/db';
 
-export async function transferArtifact(actor:TokenActor,id:string,destination:ArtifactDestination):Promise<ArtifactRow|null>{
+export async function transferArtifact(actor:AccessActor,id:string,destination:ArtifactDestination):Promise<ArtifactRow|null>{
  if(!actor.userId)throw new DatasetError('Sign in to transfer ownership',403);
  const db=await getDb();
  let changed:ArtifactRow[]=[];let previousParent:string|null=null;
@@ -59,7 +59,7 @@ export async function transferArtifact(actor:TokenActor,id:string,destination:Ar
 }
 
 /** Membership writers serialize on the group row; refuse contention before reading authority. */
-async function lockTransferGroup(tx:Queryable,actor:TokenActor,id:string):Promise<void>{
+async function lockTransferGroup(tx:Queryable,actor:AccessActor,id:string):Promise<void>{
  const group=await tx.query('SELECT id FROM groups WHERE id=$1 AND deleted_at IS NULL FOR UPDATE NOWAIT',[id]);
  if(!group.rows.length||await getGroupRole(actor.userId,id,tx)!=='editor')throw new DatasetError('Destination requires group editor membership',403);
 }

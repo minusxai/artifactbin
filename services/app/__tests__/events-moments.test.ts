@@ -14,7 +14,7 @@ import { useAppHarness } from '@/__tests__/harness';
 import { createArtifact, updateSharingFor } from '@/lib/artifacts';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { setServices } from '@/lib/platform';
-import { revokeHeldToken, revokeToken } from '@/lib/accounts';
+import { identityForUser, revokeHeldToken, revokeToken } from '@/lib/accounts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { claimToken, claimTokenById, createUser, revokeUserToken } from '@/lib/accounts';
 import { mountRoutes } from '@/server/api';
@@ -36,13 +36,13 @@ describe('sharing', () => {
     const tok = await mintToken('web', owner.id, undefined, { expiresInMs: null });
     const row = await createArtifact(tok.id, owner.id, markup);
     await settled();
-    const state = await updateSharingFor({ tokenId: tok.id, userId: owner.id }, row.id, { visibility: 'public', shares: [{ email: 'mxmx_test_reader@example.com', role: 'viewer' }] });
+    const state = await updateSharingFor(identityForUser(owner.id, tok.id), row.id, { visibility: 'public', shares: [{ email: 'mxmx_test_reader@example.com', role: 'viewer' }] });
     expect(state).not.toBeNull();
     expect(fake.events).toHaveLength(1);
     expect(fake.events[0]).toMatchObject({ source: 'app', verb: 'sharing_changed', subject_kind: 'user', subject_id: owner.id, object_kind: 'artifact', object_id: row.id, payload: { visibility: 'public', link_role: null } });
     expect(JSON.stringify(fake.events[0])).not.toContain('mxmx_test_reader');
     listen();
-    await updateSharingFor({ tokenId: tok.id, userId: owner.id }, row.id, { linkRole: 'commenter' });
+    await updateSharingFor(identityForUser(owner.id, tok.id), row.id, { linkRole: 'commenter' });
     expect(fake.events[0]).toMatchObject({ verb: 'sharing_changed', payload: { visibility: null, link_role: 'commenter' } });
   });
   it('a refused change (not the owner) says nothing', async () => {
@@ -50,7 +50,7 @@ describe('sharing', () => {
     const tok = await mintToken('web', owner.id, undefined, { expiresInMs: null });
     const row = await createArtifact(tok.id, owner.id, markup);
     await settled();
-    expect(await updateSharingFor({ tokenId: 'tok_stranger', userId: 'usr_stranger' }, row.id, { visibility: 'public' })).toBeNull();
+    expect(await updateSharingFor(identityForUser('usr_stranger', 'tok_stranger'), row.id, { visibility: 'public' })).toBeNull();
     expect(fake.events).toHaveLength(0);
   });
 });

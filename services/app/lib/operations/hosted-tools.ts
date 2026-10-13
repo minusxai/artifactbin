@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import type {DocumentGraph,DocumentResourcePreparation,RunnerJson} from '@artifactbin/contracts';
-import type { TokenActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { getEditableArtifactFor } from '@/lib/artifacts';
 import {OPERATIONS} from './registry';
 import {runOperation} from './http';
@@ -23,7 +23,7 @@ export function hostedOperationTools():Array<{name:string;description:string;par
  }),{name:'edit_document',description:'Edit a JSX document after reading it. Send the observed edit_id and complete revised markup. The host compiles an atomic update with normal validation and permissions. On doc_changed, read again and preserve intervening edits.',parameters:z.toJSONSchema(editInput) as RunnerJson}];
 }
 
-export async function editHostedDocument(request:Request,actor:TokenActor,input:Record<string,unknown>):Promise<Response> {
+export async function editHostedDocument(request:Request,actor:AccessActor,input:Record<string,unknown>):Promise<Response> {
  const parsed=editInput.safeParse(input);
  if(!parsed.success)return json({error:'invalid_operation_input',details:parsed.error.issues},400);
  const {id,edit_id,markup}=parsed.data;

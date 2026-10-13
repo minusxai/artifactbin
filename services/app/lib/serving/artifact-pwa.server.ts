@@ -32,7 +32,7 @@ export async function readableApp(request: Request, id: string) {
   const row = await getArtifactById(id);
   if (!row) return null;
   const actor = await sessionActor(request);
-  return await canReadArtifact(row, actor.viewer) ? row : null;
+  return await canReadArtifact(row, actor) ? row : null;
 }
 
 export function artifactManifest(row: PwaRow & Pick<ArtifactRow, 'id' | 'title'>): ArtifactManifest {

@@ -5,18 +5,15 @@
  */
 import { deleteAnnotationFor, respondToAnnotationAction } from '@/lib/annotations';
 import { browserActor } from '@/lib/accounts';
-import { json, readJson, unauthorized } from '@/lib/http';
+import { json, readJson } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';
-import { actorForArtifacts } from '@/lib/accounts';
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string; annId: string }> }) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
-  const scoped = actorForArtifacts(actor);
-  if (!scoped) return unauthorized(request);
   const { id, annId } = await ctx.params;
-  return respondToAnnotationAction(await readJson(request), scoped, {
-    kind: 'human', label: await ownerUsername(scoped.userId), transport: 'browser',
+  return respondToAnnotationAction(await readJson(request), actor, {
+    kind: 'human', label: await ownerUsername(actor.userId), transport: 'browser',
   }, id, annId);
 }
 
@@ -27,10 +24,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
 export async function DELETE(request: Request, ctx: { params: Promise<{ id: string; annId: string }> }) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
-  const scoped = actorForArtifacts(actor);
-  if (!scoped) return unauthorized(request);
   const { id, annId } = await ctx.params;
-  const deleted = await deleteAnnotationFor(scoped, id, annId);
+  const deleted = await deleteAnnotationFor(actor, id, annId);
   if (!deleted) return json({ error: 'not_found' }, 404);
   return json({ ok: true });
 }

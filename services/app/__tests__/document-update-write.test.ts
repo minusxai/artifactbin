@@ -1,4 +1,4 @@
-import {createUser} from '@/lib/accounts';
+import { identityForUser, createUser} from '@/lib/accounts';
 import {prepareDocumentAuthoringContext} from '@/lib/publish/publish';
 import {documentAfterOperation,documentBeforeOperation,type DocumentOperationHistory} from '@/lib/document/document-update-history';
 import {afterEach,expect,it,vi} from 'vitest';
@@ -14,7 +14,7 @@ import {applyGraphPatch} from '@/lib/document/document-graph-patch';
 useAppHarness();
 afterEach(()=>vi.restoreAllMocks());
 async function setup(){
- const token=await mintToken('mxmx_test_trusted_ops'),actor={tokenId:token.id,userId:token.userId};
+ const token=await mintToken('mxmx_test_trusted_ops'),actor=identityForUser(token.userId, token.id);
  const res=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:'<main id="root"><p id="a">Alpha</p><p id="b">Beta</p></main>'}}));expect(res.status).toBe(201);
  const {id}=await res.json(),db=await getDb(),row=(await getArtifactById(id))!;
  const document=(await db.query<{document:DocumentGraph}>('SELECT document FROM artifacts WHERE id=$1',[id])).rows[0]!.document;
@@ -32,7 +32,7 @@ it('checks permissions, mutates JSONB and records compact history in one query',
  const replay=applyGraphPatch(base.document,1,logs[0]!.document_state.forward)!;expect(graphIntegrity(replay)).toEqual([]);expect(graphSource(replay)).toContain('Longer α');
  expect(documentBeforeOperation(replay,logs[0]!.document_state)).toEqual(base.document);
  expect(logs[0]!.document_state.beforeNodes).not.toHaveProperty('$root');
- const stranger={tokenId:'other',userId:null};const denied=vi.spyOn(db,'query');expect(await commitDocumentUpdate(db,stranger,editorScope(stranger),id,update)).toBeNull();expect(denied.mock.calls).toHaveLength(1);denied.mockRestore();
+ const stranger=identityForUser(null, 'other');const denied=vi.spyOn(db,'query');expect(await commitDocumentUpdate(db,stranger,editorScope(stranger),id,update)).toBeNull();expect(denied.mock.calls).toHaveLength(1);denied.mockRestore();
 });
 it('carries only the changed nodes of the old row into history unless the commit archives a version',async()=>{
  const {db,actor,id,base}=await setup(),scope=editorScope(actor);
@@ -133,7 +133,7 @@ it('resolves authoring inputs without loading or mutating the target document',a
  expect(spy.mock.calls.filter(([sql])=>/FROM artifacts WHERE id=/.test(String(sql))).every(([sql])=>String(sql).startsWith('SELECT token_id,user_id'))).toBe(true);
  spy.mockRestore();
  expect((await db.query('SELECT document,version FROM artifacts WHERE id=$1',[id])).rows).toEqual(previous);
- expect((await prepareDocumentAuthoringContext({tokenId:'stranger',userId:null},id,{source:'<Icon name="calendar" />'})).status).toBe(404);
+ expect((await prepareDocumentAuthoringContext(identityForUser(null, 'stranger'),id,{source:'<Icon name="calendar" />'})).status).toBe(404);
  expect((await prepareDocumentAuthoringContext(actor,id,{source:'<Icon name="calendar" />',dryRun:true})).status).toBe(200);
 });
 
@@ -141,7 +141,7 @@ it('binds an unresolved editor grant during the same commit and preserves it aft
  const {db,id,base}=await setup();
  const editor=await createUser({email:'mxmx_test_editor@example.com'});
  await db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'editor')",[id,editor.email]);
- const actor={userId:editor.id,tokenId:'unused'};
+ const actor=identityForUser(editor.id, 'unused');
  const update=prepareClientDocumentUpdate(base,{source:'<main id="root"><p id="a">From editor</p><p id="b">Beta</p></main>'});
  const spy=vi.spyOn(db,'query');const result=await commitDocumentUpdate(db,actor,editorScope(actor),id,update);expect(result?.applied).toBe(true);expect(spy.mock.calls).toHaveLength(1);spy.mockRestore();
  expect((await db.query('SELECT user_id FROM artifact_shares WHERE artifact_id=$1',[id])).rows[0]!.user_id).toBe(editor.id);

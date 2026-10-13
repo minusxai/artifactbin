@@ -2,9 +2,9 @@
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import { applyEditFor, findDependentsFor, getArtifactFor, getOwnedArtifactFor, respondToEdit, updateMetadataFromBody } from '@/lib/artifacts';
 import {createArtifactFromBody,replaceArtifactWithBody} from './requests';
-import type { TokenActor } from '@/lib/accounts';
+import type { TokenHoldingActor } from '@/lib/accounts';
 import {json,baseUrl} from '@/lib/http/http';
-export async function preflightPublication(request:Request,actor:TokenActor,body:Record<string,unknown>):Promise<Response>{
+export async function preflightPublication(request:Request,actor:TokenHoldingActor,body:Record<string,unknown>):Promise<Response>{
  const input=body.input;
  if(!input||typeof input!=='object'||Array.isArray(input))return json({error:'invalid_preflight',hint:'Send {input:{...publication fields},id?:artifact id}.'},400);
  if(body.id!==undefined&&(typeof body.id!=='string'||!ARTIFACT_ID_PATTERN.test(body.id)))return json({error:'invalid_reference'},400);

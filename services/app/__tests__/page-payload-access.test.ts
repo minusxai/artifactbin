@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, setSession, mintAccountToken } from './harness';
-import { createUser } from '@/lib/accounts';
+import { identityForUser, createUser } from '@/lib/accounts';
 import { createGroup, setAccountPreferences, setGroupMember } from '@/lib/groups';
 import { updateSharingFor } from '@/lib/artifacts';
 import { POST as publish } from '@/app/api/artifacts/route';
@@ -152,7 +152,7 @@ describe('membership of the owner and the owning group is what lets a reader in'
 
 describe('a named share is honoured while it exists and refused on the very next request once revoked', () => {
   const share = (w: World, role: 'viewer' | 'commenter' | 'editor' | null) =>
-    updateSharingFor({ tokenId: '', userId: w.owner.id }, w.docs.privatePersonal, { shares: role ? [{ email: STRANGER_EMAIL, role }] : [] });
+    updateSharingFor(identityForUser(w.owner.id, ''), w.docs.privatePersonal, { shares: role ? [{ email: STRANGER_EMAIL, role }] : [] });
 
   it('a commenter share reads, lists comments, and loses all three doors when revoked', async () => {
     const w = await world();

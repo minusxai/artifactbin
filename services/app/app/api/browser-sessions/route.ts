@@ -2,9 +2,9 @@ import { withTokenAuth } from '@/lib/accounts';
 import { runOperation } from '@/lib/operations/http';
 import { json } from '@/lib/http';
 
-export const POST = withTokenAuth(async (request: Request, { tokenId, userId }) => {
+export const POST = withTokenAuth(async (request: Request, { actor }) => {
   let input: unknown;
   try { input = await request.json(); } catch { return json({ error: 'invalid_json' }, 400); }
   if (!input || typeof input !== 'object' || Array.isArray(input)) return json({ error: 'invalid_request' }, 400);
-  return runOperation('browser_session', request, { tokenId, userId }, input as Record<string, unknown>);
+  return runOperation('browser_session', request, actor, input as Record<string, unknown>);
 });

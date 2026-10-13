@@ -21,7 +21,7 @@ import { canAnnotate, canEdit, canRead } from '@artifactbin/contracts';
 // folder is not somewhere to file into, and a trashed child is not listed.
 import { ownerPredicate, LIVE_ARTIFACT_SQL, type ArtifactRow } from './table';
 import { effectiveRole, roleWithoutLink } from './access';
-import type { RoleActor } from '@/lib/accounts';
+import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
 import type { ArtifactFormat } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
@@ -102,10 +102,10 @@ export const isParentRefusal = (r: { ancestor_ids: string[] } | ParentRefusal): 
  */
 export async function selectChildren(
   folder: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>,
-  viewer: Viewer,
+  viewer: AccessActor | null,
 ): Promise<{ children: ChildRow[]; numbers: boolean; views: ReadonlyMap<string, number>; sparkline: (id: string) => Promise<string> }> {
   const db = await getDb();
-  const actor: RoleActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null, email: viewer?.email ?? null };
+  const actor = viewer ?? ANONYMOUS_ACTOR;
   const folderRole = await effectiveRole(folder as ArtifactRow, actor);
   const numbers = canEdit(folderRole);
   // A role on the FOLDER is read as a role on its shelf. `canAnnotate` rather
@@ -173,7 +173,7 @@ export function parentOf(row: Pick<ArtifactRow, 'ancestor_ids'>): string | null 
 }
 
 /** The owner-scope predicate, the same rule every artifact write already uses. */
-const ownedBy = (owner: { userId: string | null; tokenId: string;groupId?:string|null }) => {const scope=ownerPredicate(owner);return {where:scope.where('$2'),val:scope.val};};
+const ownedBy = (owner: AccessActor) => {const scope=ownerPredicate(owner);return {where:scope.where('$2'),val:scope.val};};
 
 /**
  * Resolve a wire `parent_id` for a row about to be created or moved, AFTER the
@@ -187,7 +187,7 @@ const ownedBy = (owner: { userId: string | null; tokenId: string;groupId?:string
  * them apart would be an existence oracle for every id in the table.
  */
 export async function resolveParent(
-  owner: { userId: string | null; tokenId: string },
+  owner: AccessActor,
   parentId: string | null,
   moved: { id: string; format: string } | null,
 ): Promise<{ ancestor_ids: string[] } | ParentRefusal> {
@@ -253,9 +253,6 @@ export function ancestorsForMove(
   };
 }
 
-/** Whoever is asking. Null is a stranger with no credential at all. */
-export type Viewer = { userId: string | null; email: string | null; tokenId: string | null } | null;
-
 /** One child as the selection reads it, before either caller projects it. */
 interface ChildRow {
   id: string;
@@ -284,7 +281,7 @@ interface ChildRow {
  */
 export async function childrenTableFor(
   folder: ArtifactRow,
-  viewer: Viewer,
+  viewer: AccessActor | null,
 ): Promise<{ rows: Record<string, unknown>[]; columns: DatasetColumn[] }> {
   const picked = await selectChildren(folder, viewer);
   const rows: Record<string, unknown>[] = [];

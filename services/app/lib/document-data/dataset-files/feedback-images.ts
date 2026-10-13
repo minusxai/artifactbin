@@ -2,7 +2,7 @@ import { getDb } from '@/lib/platform/db';
 import { generateInternalId, ID_RE } from '@/lib/platform';
 import type { ArtifactRow } from '@/lib/artifacts';
 import { getArtifactById } from '@/lib/artifacts';
-import type { RoleActor } from '@/lib/accounts';
+import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { dataflowForRow } from '../dataflow';
 import { catalogOf } from '@/lib/datasets/catalog';
@@ -23,7 +23,7 @@ const refFor = (id: string) => `dimg:${id}`;
 type DatasetImageRow = { id:string; dataset_id:string; document_id:string; actor_id:string; operation_key:string; sha256:string; meta:Record<string,unknown> };
 type DatasetImageUpload = { ref:string; url:string; replayed?:boolean };
 
-function actorKey(actor:RoleActor):string {
+function actorKey(actor:AccessActor):string {
   const key=actor.userId??actor.tokenId;
   if(!key)throw new DatasetError('Sign in to upload a file',403);
   return key;
@@ -55,18 +55,18 @@ async function declaredDataset(document:ArtifactRow,datasetId:string):Promise<bo
   const dataflow=await dataflowForRow(document);
   return !!dataflow?.flow.imports.some(entry=>entry.ref===datasetId||entry.ref===`ref:${datasetId}`);
 }
-async function authorizeInsert(dataset:ArtifactRow,document:ArtifactRow,actor:RoleActor,tx?:import('@/lib/platform/db').Queryable):Promise<void> {
+async function authorizeInsert(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx?:import('@/lib/platform/db').Queryable):Promise<void> {
   const grants=grantsOf(dataset);
   if(!grants)throw new DatasetError('This dataset does not grant file uploads',403);
   const context=await grantContext(dataset,actor,{id:document.id,editId:document.edit_id} satisfies GrantDocument,tx);
   if(!imageInsertAllowed(grants,context))throw new DatasetError('No insert grant permits this upload',403);
 }
-async function datasetReadable(dataset:ArtifactRow,document:ArtifactRow,actor:RoleActor,tx:import('@/lib/platform/db').Queryable):Promise<boolean> {
+async function datasetReadable(dataset:ArtifactRow,document:ArtifactRow,actor:AccessActor,tx:import('@/lib/platform/db').Queryable):Promise<boolean> {
   if(grantsOf(dataset))return grantsPermitRead(dataset,actor,document,tx);
   return await readThrough(tx,dataset,actor)&&await readThrough(tx,document,actor);
 }
 
-type UploadInput={actor:RoleActor;documentId:string;editId:string;datasetId:string;bytes:Buffer;contentType:string;operationKey:string};
+type UploadInput={actor:AccessActor;documentId:string;editId:string;datasetId:string;bytes:Buffer;contentType:string;operationKey:string};
 export async function uploadDatasetImage(input:UploadInput):Promise<DatasetImageUpload>{return uploadContent(input);}
 export async function uploadDatasetFile(input:UploadInput&{filename:string}):Promise<DatasetUploadResult>{return uploadContent(input,true) as Promise<DatasetUploadResult>;}
 async function uploadContent(input:UploadInput&{filename?:string},generic=false):Promise<DatasetImageUpload|DatasetUploadResult>{
@@ -115,11 +115,11 @@ async function uploadContent(input:UploadInput&{filename?:string},generic=false)
   });
 }
 
-export async function readDatasetFile(input:{actor:RoleActor;documentId:string;datasetId:string;fileId:string}):Promise<{body:Buffer;contentType:string;filename:string;image:boolean}|null>{
+export async function readDatasetFile(input:{actor:AccessActor;documentId:string;datasetId:string;fileId:string}):Promise<{body:Buffer;contentType:string;filename:string;image:boolean}|null>{
   return readContent({...input,imageId:input.fileId});
 }
-export async function readDatasetImage(input:{actor:RoleActor;documentId:string;datasetId:string;imageId:string}):Promise<{body:Buffer;contentType:string}|null>{return readContent(input,true);}
-async function readContent(input:{actor:RoleActor;documentId:string;datasetId:string;imageId:string},imageOnly=false):Promise<{body:Buffer;contentType:string;filename:string;image:boolean}|null>{
+export async function readDatasetImage(input:{actor:AccessActor;documentId:string;datasetId:string;imageId:string}):Promise<{body:Buffer;contentType:string}|null>{return readContent(input,true);}
+async function readContent(input:{actor:AccessActor;documentId:string;datasetId:string;imageId:string},imageOnly=false):Promise<{body:Buffer;contentType:string;filename:string;image:boolean}|null>{
   const {actor,documentId,datasetId,imageId}=input;
   if(!ID_RE.test(documentId)||!ID_RE.test(datasetId)||!/^\w{10,30}$/.test(imageId))return null;
   const initialDoc=await getArtifactById(documentId);

@@ -8,8 +8,8 @@ import { getDb } from '@/lib/platform/db';
 import { canRead } from '@artifactbin/contracts';
 import { effectiveRole, type ArtifactRow } from '@/lib/artifacts';
 import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
-import type { RoleActor } from '@/lib/accounts';
-import { selectChildren, type Viewer } from '@/lib/artifacts';
+import { ANONYMOUS_ACTOR, type AccessActor } from '@/lib/accounts';
+import { selectChildren } from '@/lib/artifacts';
 import type { ShelfRow } from './shelf';
 
 /**
@@ -59,7 +59,7 @@ export interface FolderPage {
  */
 export async function folderPageFor(
   folder: ArtifactRow,
-  viewer: Viewer,
+  viewer: AccessActor | null,
 ): Promise<FolderPage> {
   const [head, picked] = await Promise.all([folderHeadFor(folder, viewer), selectChildren(folder, viewer)]);
   const rows: ShelfRow[] = [];
@@ -110,13 +110,13 @@ export async function folderPageFor(
  */
 async function folderHeadFor(
   folder: Pick<ArtifactRow, 'id' | 'title' | 'ancestor_ids'>,
-  viewer: Viewer,
+  viewer: AccessActor | null,
 ): Promise<{ id: string; title: string | null; trail: FolderCrumb[] }> {
   const head = { id: folder.id, title: folder.title, trail: [] as FolderCrumb[] };
   const ids = folder.ancestor_ids ?? [];
   if (!ids.length) return head;
   const db = await getDb();
-  const actor: RoleActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null, email: viewer?.email ?? null };
+  const actor = viewer ?? ANONYMOUS_ACTOR;
   const r = await db.query<Pick<ArtifactRow, 'id' | 'title' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>>(
     `SELECT id, title, user_id, group_id, token_id, visibility, link_role FROM artifacts
       WHERE id = ANY($1::text[]) AND ${LIVE_ARTIFACT_SQL}`,

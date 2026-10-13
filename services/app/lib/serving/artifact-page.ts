@@ -26,9 +26,10 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * loaded, and the document is read once, after admission.
  */
 import { archivedVersionFor, servedRow } from '@/lib/artifacts';
+import type { AccessActor } from '@/lib/accounts';
 import { UnservableDocument } from '@/lib/artifacts';
 import { countOpenAnnotations } from '@/lib/annotations/store';
-import { canReadArtifact, roleFor } from '@/lib/artifacts';
+import { canReadArtifact, effectiveRole } from '@/lib/artifacts';
 import { accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/workspace/folders';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -37,7 +38,7 @@ import { baseUrl, json, parseCookie } from '@/lib/http/http';
 import { forkedFromCredit } from './fork-credit.server';
 import { ID_RE } from '@/lib/platform/ids';
 import {
-  actorForArtifacts, avatarUrl, browserSessionKind, count, getUserById, has, isBrowserSessionRequest,
+  avatarUrl, browserSessionKind, count, getUserById, has, isBrowserSessionRequest,
   issuePagesTicket, ownerUsername, sessionActor,
 } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
@@ -123,7 +124,7 @@ export async function framedDocumentSrc(request: Request, id: string, site: Page
   const artifact = await getArtifactHeaderById(id);
   if (!artifact || artifact.format !== 'markup') return null;
   const actor = await sessionActor(request);
-  if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor.viewer))) return null;
+  if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor))) return null;
   return admittedFrameSrc(request, artifact, actor, site, search, readerPickOf(request));
 }
 
@@ -133,7 +134,7 @@ async function admittedFrameSrc(request: Request, artifact: Pick<ArtifactRow, 'i
   const origin = pagesOriginFor(artifact.id, site);
   // The reader's "Allow once" grants live in an app-origin cookie the document's origin never sees: they ride the
   // ticket, and the document's origin reads them back as `pagesRequestOf(request).carried` (app/a/[id]/raw, /fetch).
-  const carried = carriedTrust(request, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null });
+  const carried = carriedTrust(request, actor);
   // A browser session's scripted browser reads its frame as the session's actor (lib/accounts/pages-sessions).
   // The ticket is for THIS document at this exact origin, and is spent there (server/pages-host): the frame's first URL is the document's own.
   const ticket = await issuePagesTicket(actor, carried, Date.now(), { browserSession: isBrowserSessionRequest(request), artifactId: artifact.id, origin });
@@ -168,18 +169,18 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const key = search.get('key');
   const exporting = verifyExportKey(header.id, key ?? undefined);
   const actor = await sessionActor(request);
-  if (!admitted && !exporting && actor.tokenId !== header.token_id && !(await canReadArtifact(header, actor.viewer))) return notFound();
+  if (!admitted && !exporting && actor.tokenId !== header.token_id && !(await canReadArtifact(header, actor))) return notFound();
   if (!ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
   if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
   const artifact = admitted ?? await getArtifactById(id);
   if (!artifact) return notFound();
   // The row moved between the two reads (shared, made private, handed over): admission is asked again of the row served.
-  if (!admitted && accessMoved(header, artifact) && !exporting && actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor.viewer))) return notFound();
+  if (!admitted && accessMoved(header, artifact) && !exporting && actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor))) return notFound();
 
   // One role per request, beside the reads that need none of it.
   const groupId = (artifact as typeof artifact & { group_id?: string | null }).group_id ?? null;
   const [role, ownerGroup, kind] = await Promise.all([
-    roleFor(artifact, actor),
+    effectiveRole(artifact, actor),
     groupId ? getGroupById(groupId) : Promise.resolve(null),
     browserSessionKind(request, actor),
   ]);
@@ -203,9 +204,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   if (artifact.format === 'folder') {
     const handle = groupId ? ownerGroup?.handle ?? null : await ownerUsername(artifact.user_id);
     const [folder, workspace] = await Promise.all([
-      folderPageFor(artifact, { userId: actor.viewer?.userId ?? null, email: actor.viewer?.email ?? null, tokenId: actor.tokenId ?? null }),
-      role === 'owner' && actor.viewer?.userId
-        ? accountWorkspaceFor(actor.viewer.userId, actor.viewer.email)
+      folderPageFor(artifact, actor),
+      role === 'owner' && actor.userId
+        ? accountWorkspaceFor(actor.userId, actor.email)
         : Promise.resolve(null),
     ]);
     return { status: 200, body: {
@@ -278,7 +279,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // when one was asked for, the artifact itself otherwise. A document's comes
   // with its prepared page (lib/publish/prepared/prepared-page.server) — a stored entry on
   // a hit, a compile on a miss — while the reads that need neither run beside it.
-  const viewerId = actor.viewer?.userId ?? null;
+  const viewerId = actor.userId;
   // Independent reads begin only after ACL admission. These values belong to
   // this request; no identity or permission answer is retained across requests.
   const social = Promise.all([
@@ -337,11 +338,11 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     // This version's stored diagram drawings, unless the engine was asked for by name (`?mermaid=engine`).
     drawings: engineRequested(request.url) ? 'engine' : 'stored',
     colorMode: capturedColor,
-    viewer: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null },
+    viewer: actor,
     // The first results, as the page's own query door (POST, this session) would answer them.
-    ...(results ? { results: { admit: actor.viewer } } : {}),
+    ...(results ? { results: { admit: actor } } : {}),
   }) : Promise.resolve(null));
-  const ownerScope = role === 'owner' ? actorForArtifacts(actor) : null;
+  const ownerScope = role === 'owner' ? actor : null;
   // The reader was admitted above (or by the caller) unless an export key stood in for the check: only then is it asked.
   const readerAdmitted = !!admitted || !exporting || actor.tokenId === artifact.token_id;
   // Beside the served runtime and the social reads, not after them: none depends on another.
@@ -351,12 +352,12 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     social,
     ownerScope ? hasInvitedUsersFor(ownerScope, id) : Promise.resolve(false),
     // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
-    framing && artifact.format === 'markup' && (readerAdmitted || await canReadArtifact(artifact, actor.viewer))
+    framing && artifact.format === 'markup' && (readerAdmitted || await canReadArtifact(artifact, actor))
       ? admittedFrameSrc(request, artifact, actor, options.pages!, new URL(request.url).search, readerPick) : Promise.resolve(null),
     membershipAvailable ? membershipOf(actor, artifact.id, readerAdmitted) : Promise.resolve(undefined),
     // What the document asks of the network beyond the default policy, and where this reader stands on it:
     // the consent bar (solid/document/CspConsentBar) draws from this. The served row is the version shown.
-    isDoc ? cspRequestFor({ artifact: row, viewer: { userId: viewerId, tokenId: actor.tokenId }, request }) : Promise.resolve(null),
+    isDoc ? cspRequestFor({ artifact: row, viewer: actor, request }) : Promise.resolve(null),
   ] as const);
   const served = firstServed;
   const authorUsername = author?.username ?? null;
@@ -430,9 +431,13 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     // What the editor's door will cost, so the page prefetches it on idle only when it is cheap (solid/pages/Document).
     ...(isDoc && !at && canEdit(role) ? { sourceLength: (row.source ?? '').length } : {}),
   };
+  // Why the head runs without its script (prepared-page.server authorScriptErrors), for someone who can republish it
+  // (solid/document/ScriptFailureNotice). A reader has the framed document's own notice and never the builder's words.
+  const scriptErrors = isDoc && !at && canEdit(role) ? prepared?.page.authorScriptErrors : undefined;
   const body = {
     canonical: canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : authorUsername),
     ...(cspRequest ? { cspRequest } : {}),
+    ...(scriptErrors?.length ? { scriptFailure: { errors: scriptErrors } } : {}),
     description: row.description,
     role,
     kind,
@@ -459,9 +464,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
  * The reader's standing on a document that writes to datasets: the rail's Join/Joined/Pending pill. A reader this request
  * already admitted needs only their own join row; one an export key stood in for is admitted by the full check.
  */
-async function membershipOf(viewer: Awaited<ReturnType<typeof sessionActor>>, id: string, admitted: boolean): Promise<'join' | 'pending' | 'joined'> {
-  const actor = actorForArtifacts(viewer);
-  const self = actor?.userId ? (admitted ? await selfMembership(actor, id) : (await membershipState(actor, id)).self) : null;
+async function membershipOf(actor: AccessActor, id: string, admitted: boolean): Promise<'join' | 'pending' | 'joined'> {
+  const self = actor.userId ? (admitted ? await selfMembership(actor, id) : (await membershipState(actor, id)).self) : null;
   return self?.status === 'accepted' && self.explicit_join ? 'joined' : self?.status === 'pending' ? 'pending' : 'join';
 }
 

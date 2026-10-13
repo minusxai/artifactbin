@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {parseAccountResource} from '@artifactbin/utils/account-resource';
 import type {ProfileResource} from '@artifactbin/contracts';
 import {getDb,type Queryable} from '@/lib/platform/db';
-import { getUserById, isAccountRow, linked, replaceLinked, setUsername, type TokenActor } from '@/lib/accounts';
+import { getUserById, isAccountRow, linked, replaceLinked, setUsername, type AccessActor } from '@/lib/accounts';
 import {readableArtifact} from '../read-access';
 import {completeMutationReceipt,type MutationReceipt,type MutationReply} from '../mutation-receipt';
 
@@ -13,7 +13,7 @@ export async function accountProfile(userId:string,query?:Queryable):Promise<Pro
 }
 
 /** A profile proposal replaces explicit relationship lists; omission preserves them. */
-export async function updateAccountProfile(actor:TokenActor,input:unknown,receipt?:MutationReceipt):Promise<MutationReply>{
+export async function updateAccountProfile(actor:AccessActor,input:unknown,receipt?:MutationReceipt):Promise<MutationReply>{
  if(!actor.userId)return {status:403,body:{error:'account_required'}};
  let resource:ProfileResource;
  try{const parsed=parseAccountResource(input);if(parsed.type!=='profile')throw Error('Expected a profile resource.');resource=parsed;}

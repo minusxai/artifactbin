@@ -13,7 +13,7 @@ export async function POST(request:Request,ctx:{params:Promise<{id:string;datase
   const actor=await sessionActor(request);
   if(refusesCrossSite(request,actor))return json({error:'forbidden'},403,headers);
   const doc=await getArtifactById(id);
-  if(!doc||!(await canReadArtifact(doc,actor.viewer)))return json({error:'not_found'},404,headers);
+  if(!doc||!(await canReadArtifact(doc, actor)))return json({error:'not_found'},404,headers);
   const advertised=Number(request.headers.get('content-length'));
   if(advertised>MAX_IMAGE_BYTES)return json({error:'image_too_large',maxBytes:MAX_IMAGE_BYTES},413,headers);
   const editId=request.headers.get('X-Edit-Id')??'',contentType=(request.headers.get('content-type')??'').split(';')[0]!.trim().toLowerCase();
@@ -23,7 +23,7 @@ export async function POST(request:Request,ctx:{params:Promise<{id:string;datase
   try {for(;;){const {value,done}=await reader.read();if(done)break;total+=value.byteLength;if(total>MAX_IMAGE_BYTES){await reader.cancel();return json({error:'image_too_large',maxBytes:MAX_IMAGE_BYTES},413,headers);}chunks.push(value);}}finally{reader.releaseLock();}
   if(total===0)return json({error:'invalid_image_upload'},400,headers);
   try {
-    const result=await uploadDatasetImage({actor:{...actor.viewer,userId:actor.viewer?.userId??null,tokenId:actor.tokenId??null},documentId:id,datasetId,editId,bytes:Buffer.concat(chunks,total),contentType,operationKey:request.headers.get('Idempotency-Key')??''});
+    const result=await uploadDatasetImage({actor:actor,documentId:id,datasetId,editId,bytes:Buffer.concat(chunks,total),contentType,operationKey:request.headers.get('Idempotency-Key')??''});
     return json(result,201,headers);
   } catch(error) {
     if(error instanceof DatasetError)return json({error:'dataset_image_upload_failed',detail:error.message},error.status,headers);

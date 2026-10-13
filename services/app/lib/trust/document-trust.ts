@@ -27,6 +27,7 @@ import { AUTH_SECRET, PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { getDb } from '@/lib/platform/db';
 import { parseCookie } from '@/lib/http/http';
 import { type ArtifactRow } from '@/lib/artifacts';
+import type { AccessActor } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { parseJsx } from '@/lib/jsx';
 import {
@@ -36,11 +37,6 @@ import {
 
 export type { CspExtensions, CspRequest } from '@/lib/document';
 
-/** Who is reading: an account, a token (a guest's publishes are its token's), or nobody. */
-export interface TrustViewer {
-  userId: string | null;
-  tokenId?: string | null;
-}
 
 interface TrustQuery {
   /**
@@ -49,7 +45,7 @@ interface TrustQuery {
    * never a header without either, which would be answered (and cached) as declaring nothing.
    */
   artifact: Pick<ArtifactRow, 'id' | 'version'> & ({ source: ArtifactRow['source'] } | { declared: CspExtensions });
-  viewer: TrustViewer | null;
+  viewer: AccessActor | null;
   /** The reader's request, for this browser session's once-grants and denies. Absent ⇒ none consulted. */
   request?: Request;
   /**
@@ -112,7 +108,7 @@ async function actorsUpTo(artifactId: string, version: number): Promise<VersionA
     .map((row) => ({ version: Number(row.version), userId: row.actor_user_id, tokenId: row.actor_token_id }));
 }
 
-const isActor = (version: VersionActor, viewer: TrustViewer): boolean =>
+const isActor = (version: VersionActor, viewer: AccessActor): boolean =>
   (!!viewer.userId && version.userId === viewer.userId) || (!!viewer.tokenId && version.tokenId === viewer.tokenId);
 
 /**
@@ -121,7 +117,7 @@ const isActor = (version: VersionActor, viewer: TrustViewer): boolean =>
  * host) that ends at the served version. A gap in the history makes the introducer unknown, which
  * presumes nobody. A viewer who produced no version at all is answered from the actor list alone.
  */
-export async function hostsPublishedBy(artifact: TrustQuery['artifact'], viewer: TrustViewer | null, declared: CspExtensions): Promise<CspExtensions> {
+export async function hostsPublishedBy(artifact: TrustQuery['artifact'], viewer: AccessActor | null, declared: CspExtensions): Promise<CspExtensions> {
   const out = emptyCspExtensions();
   if (!viewer?.userId && !viewer?.tokenId) return out;
   const history = await actorsUpTo(artifact.id, artifact.version);
@@ -160,7 +156,7 @@ export function extensionsHash(extensions: CspExtensions): string {
 }
 
 /** Whose session entries these are: grants made signed out do not follow a sign-in, nor the reverse. */
-const subjectOf = (viewer: TrustViewer | null): string => viewer?.userId ? `u:${viewer.userId}` : viewer?.tokenId ? `t:${viewer.tokenId}` : 'anon';
+const subjectOf = (viewer: AccessActor | null): string => viewer?.userId ? `u:${viewer.userId}` : viewer?.tokenId ? `t:${viewer.tokenId}` : 'anon';
 
 const sign = (payload: string): string => createHmac('sha256', AUTH_SECRET).update(`document-trust.${payload}`).digest('base64url');
 
@@ -202,7 +198,7 @@ const CARRIED_TRUST_KEY = 'trust';
  * cookie. Every document's, not one: the pages cookie is shared by all of a reader's frames, and each framed load
  * replaces it. Server-minted data in a server-side row — never read from the document's request.
  */
-export function carriedTrust(request: Request, viewer: TrustViewer | null): Record<string, unknown> {
+export function carriedTrust(request: Request, viewer: AccessActor | null): Record<string, unknown> {
   const subject = subjectOf(viewer);
   const entries = readSession(request, subject);
   return entries.length ? { [CARRIED_TRUST_KEY]: { s: subject, g: entries.map((e) => [e.id, e.hash, e.decision === 'deny' ? 'd' : 'a']) } } : {};
@@ -217,7 +213,7 @@ function carriedEntries(carried: TrustQuery['carried'], subject: string): Sessio
 }
 
 /** The Set-Cookie value that records (or, with `decision: null`, forgets) this session's choice on one document. */
-export function sessionTrustCookie(request: Request, viewer: TrustViewer | null, artifactId: string, change: { hash: string; decision: Decision } | { decision: null }): string {
+export function sessionTrustCookie(request: Request, viewer: AccessActor | null, artifactId: string, change: { hash: string; decision: Decision } | { decision: null }): string {
   const subject = subjectOf(viewer);
   const kept = readSession(request, subject).filter((entry) => entry.id !== artifactId);
   const entries = change.decision ? [...kept, { id: artifactId, hash: change.hash, decision: change.decision }] : kept;

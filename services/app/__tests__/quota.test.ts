@@ -1,4 +1,5 @@
 import {observedRequest} from '@/__tests__/conditional-request';
+import { identityForUser } from '@/lib/accounts';
 /**
  * Per-token quota: creation stops with 403 quota_exceeded
  * at ARTIFACT_QUOTA_PER_TOKEN artifacts; updates/deletes are never blocked
@@ -36,7 +37,7 @@ describe('per-token artifact quota', () => {
     const first = await (
       await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>1</p>' } }))
     ).json() as { id: string };
-    await (await import('@/lib/workspace/trash')).trashArtifactFor({ tokenId:t.id,userId:t.userId }, first.id);
+    await (await import('@/lib/workspace/trash')).trashArtifactFor(identityForUser(t.userId, t.id), first.id);
     const next = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>2</p>' } }));
     expect(next.status).toBe(403);
     expect(((await next.json()) as { error: string }).error).toBe('quota_exceeded');

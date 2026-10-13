@@ -26,10 +26,10 @@ import { browserSessionKind, sessionActor } from '@/lib/accounts';
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
   const kind = await browserSessionKind(request, actor);
-  const userId = actor.credential === 'session' ? actor.viewer?.userId : undefined;
+  const userId = actor.credential === 'session' ? actor.userId : undefined;
   const row = userId ? await getUserById(userId) : null;
   const user = userId
-    ? { id: userId, email: actor.viewer?.email ?? null, username: row?.username ?? null, image: row ? avatarUrl(row) : null }
+    ? { id: userId, email: actor.email, username: row?.username ?? null, image: row ? avatarUrl(row) : null }
     : null;
   const onboarded = userId ? !(await welcomePending(row)) : true;
   return json({ user, kind, onboarded }, 200, { 'Cache-Control': 'no-store' });

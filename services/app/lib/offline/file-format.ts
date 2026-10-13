@@ -127,6 +127,11 @@ export interface ArtifactFile {
   compiled?: CompiledPage;
   /** The flow baked into the compiled browser module, retained across local edits. */
   compiledFlowDigest?: string;
+  /**
+   * The downloaded version's Helmet script did not build (lib/publish/prepared prepared-page `authorScriptErrors`), so
+   * the file runs without it and says so as the reader does (lib/offline/file-html). Absent when it built or there is none.
+   */
+  scriptFailed?: true;
   snapshot: ArtifactFileSnapshot;
   journal: ArtifactFileEdit[];
   /** Server threads visible to the downloader, plus threads and replies made in a file. */
@@ -239,7 +244,8 @@ function isWellFormed(v: Json): boolean {
     && isStringList(v.localIds)
     && (v.bundle === 'core' || v.bundle === 'mermaid' || v.bundle === 'solid')
     && isExtras(v.extras)
-    && (v.derivedFrom === undefined || isString(v.derivedFrom));
+    && (v.derivedFrom === undefined || isString(v.derivedFrom))
+    && (v.scriptFailed === undefined || v.scriptFailed === true);
 }
 
 /**

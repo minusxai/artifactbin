@@ -1,4 +1,5 @@
 import {afterEach, expect, it, vi} from 'vitest';
+import { identityForUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform/db';
 import { measureQueries } from '@/lib/platform';
 import { readCommentChangesFor } from '@/lib/annotations/changes';
@@ -35,7 +36,7 @@ async function fixture() {
  const made = await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="intro">Read this</p>'}}));
  expect(made.status).toBe(201);
  const doc = await made.json();
- const actor = {tokenId:token.id,userId:token.userId};
+ const actor = identityForUser(token.userId, token.id);
  const open = async (body:string, author=human) => {
   const comment = await createAnnotationFor(actor,doc.id,{nodeId:'intro',body},author);
   expect(comment).toMatchObject({id:expect.any(String)});
@@ -232,7 +233,7 @@ it.each(['viewer','editor'] as const)('revokes a group %s ongoing private monito
 
 it('spends a handful of statements on an idle ten second wait, not three per second',async()=>{
  const f=await fixture();
- const idle=await measureQueries(()=>readCommentChangesFor({tokenId:f.token.id,userId:f.token.userId},f.doc.id,{after:f.cursor,limit:100,waitSeconds:10,signal:new AbortController().signal}));
+ const idle=await measureQueries(()=>readCommentChangesFor(identityForUser(f.token.userId, f.token.id),f.doc.id,{after:f.cursor,limit:100,waitSeconds:10,signal:new AbortController().signal}));
  expect(idle.value).toMatchObject({events:[],has_more:false});
  expect(idle.stats.count).toBeLessThanOrEqual(10);
 },20000);

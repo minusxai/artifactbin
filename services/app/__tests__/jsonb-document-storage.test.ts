@@ -1,4 +1,5 @@
 import {observedRequest} from './conditional-request';
+import { identityForUser } from '@/lib/accounts';
 import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
 import {documentEdit} from './prepared-document';
 import {expect,it} from 'vitest';
@@ -13,7 +14,7 @@ import {forkArtifact} from '@/lib/publish/publish';
 import {UnservableDocument} from '@/lib/artifacts/servable';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 useAppHarness();
-async function create(){const token=await mintToken('mxmx_test_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {token,id,actor:{tokenId:token.id,userId:token.userId},row:(await getArtifactById(id))!};}
+async function create(){const token=await mintToken('mxmx_test_jsonb');const response=await createRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p><p>Beta</p></section>'}}));expect(response.status).toBe(201);const {id}=await response.json();return {token,id,actor:identityForUser(token.userId, token.id),row:(await getArtifactById(id))!};}
 const stored=async(id:string)=>(await (await getDb()).query('SELECT * FROM artifacts WHERE id=$1',[id])).rows[0];
 it('writes new markup as JSONB, while reads and edit logs retain exact JSX',async()=>{
  const {id,row}=await create();const raw=await stored(id);expect(raw.source).toBeNull();expect(raw.document).toMatchObject({schema:3,kind:'graph'});
@@ -47,7 +48,7 @@ it('can replace a document with a native dataset without retaining its JSONB gra
  const response=await replaceRoute(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{dataset:[{value:1}]}}),{params:Promise.resolve({id})});
  expect(response.status,await response.clone().text()).toBe(200);
  const head=await stored(id);expect(head.format).toBe('dataset');expect(head.document).toBeNull();
- expect((await getVersionFor({tokenId:token.id,userId:token.userId},id,row.version))?.source).toBe(row.source);
+ expect((await getVersionFor(identityForUser(token.userId, token.id),id,row.version))?.source).toBe(row.source);
 });
 it('no longer migrates a retired storage shape: reads leave it as stored, and the version read refuses it by name',async()=>{
  const {id,row,actor}=await create(),db=await getDb();

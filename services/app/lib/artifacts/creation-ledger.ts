@@ -1,8 +1,8 @@
 import {createHash} from 'node:crypto';
 import type {Queryable} from '@artifactbin/contracts';
 import type { ArtifactRow } from './table';
-import type { TokenActor } from '@/lib/accounts';
-import { matchesWorkspaceAccount } from '../accounts';
+import type { AccessActor } from '@/lib/accounts';
+import { accountOf, matchesWorkspaceAccount } from '../accounts';
 
 interface CreationReply {status: number; body: Record<string,unknown>}
 export interface CreationOperation {
@@ -18,10 +18,10 @@ const ordered = (value: unknown): unknown => Array.isArray(value) ? value.map(or
   : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key,ordered((value as Record<string,unknown>)[key])])) : value;
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(ordered(value))).digest('hex');
 
-export async function creationOperation(actor: TokenActor, origin: string, key: string | null | undefined, payload: unknown, reply: CreationOperation['reply'], workspaceAccount?: string | null): Promise<CreationOperation | null> {
+export async function creationOperation(actor: AccessActor, origin: string, key: string | null | undefined, payload: unknown, reply: CreationOperation['reply'], workspaceAccount?: string | null): Promise<CreationOperation | null> {
   if (!key) return null;
   if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) throw new CreationReplay({status:400,body:{error:'invalid_idempotency_key'}});
-  const current = actor.userId ?? actor.tokenId;
+  const current = accountOf(actor);
   // A retry retains its original ledger scope after verified adoption. Never
   // trust a caller-supplied account pin without checking its relationship.
   const account = workspaceAccount && await matchesWorkspaceAccount(workspaceAccount,current) ? workspaceAccount : current;

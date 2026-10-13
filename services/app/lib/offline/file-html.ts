@@ -23,7 +23,7 @@
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
 import { agentDiscovery, agentDiscoveryHead } from '@/lib/compiled-page/agent-discovery';
 import { documentRootAttributes } from '@/lib/page-styles/document-root';
-import { inlineStoryElement } from '@/lib/compiled-page/story-element';
+import { inlineStoryElement, SCRIPT_FAILURE_CSS, SCRIPT_FAILURE_NOTICE } from '@/lib/compiled-page/story-element';
 import { withModuleDataId } from '@/lib/compiled-page/carriers';
 import { ArtifactFileError, parseArtifactFile, type ArtifactFile } from './file-format';
 
@@ -150,8 +150,11 @@ export function renderArtifactFileHtml(parts: ArtifactFileParts): string {
   return `<!doctype html>\n<!-- ${commentSafe(artifactFileAgentNote(file))} -->\n<html lang="en" ${documentRootAttributes(file.metadata.colorMode, file.metadata.theme)}>\n<head>\n<meta charset="utf-8">\n`
     + `<meta http-equiv="Content-Security-Policy" content="${escapeHtml(artifactFileCsp(file.origin, file.bundle !== 'solid' || !!parts.wasm))}">\n`
     + '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
-    + `<title>${title}</title>\n${agentDiscoveryHead(agentDiscovery(file.origin))}\n<style>${BOOT_CSS}</style>\n</head>\n<body>\n`
-    + `<div id="${ARTIFACT_FILE_IDS.root}">${compiledStory}<p id="${ARTIFACT_FILE_IDS.boot}" role="status">Opening ${title}\u2026</p></div>\n`
+    + `<title>${title}</title>\n${agentDiscoveryHead(agentDiscovery(file.origin))}\n<style>${BOOT_CSS}</style>\n`
+    // A version whose script did not build says so before its story, as the reader does; a valid one's file is unchanged.
+    + (file.scriptFailed ? `<style data-mx-script-failure-css>${SCRIPT_FAILURE_CSS}</style>\n` : '')
+    + '</head>\n<body>\n'
+    + `<div id="${ARTIFACT_FILE_IDS.root}">${file.scriptFailed ? SCRIPT_FAILURE_NOTICE : ''}${compiledStory}<p id="${ARTIFACT_FILE_IDS.boot}" role="status">Opening ${title}\u2026</p></div>\n`
     + Object.entries(parts.templates ?? {}).map(([key, markup]) => `<template data-mx-island-template="${escapeHtml(key)}">${escapeHtml(markup)}</template>\n`).join('')
     + `<script type="application/json" id="${ARTIFACT_FILE_IDS.file}">${fileJson({ format, source, ...rest })}</script>\n`
     + `<script type="application/octet-stream" id="${ARTIFACT_FILE_IDS.code}">${parts.code}</script>\n`

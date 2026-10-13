@@ -15,7 +15,7 @@ import { setDatasetPolicy } from '@/lib/document-data/dataset-policy';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import { readCompiledDataflow, storedCompiledDataflow } from '@/lib/document/parsed-artifact-metadata';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser } from '@/lib/accounts';
 import { request, useAppHarness } from './harness';
 
 useAppHarness();
@@ -55,7 +55,7 @@ async function booking(markup = GOLDEN, policyAfterPublish = false) {
   const owner = await person('booking-owner@example.com');
   const guest = await person('booking-friend@example.com');
   const ds = (await publish(owner.token, { dataset: [], columns: COLUMNS, access: 'readwrite' })).id;
-  const policy = async () => expect(await setDatasetPolicy({ tokenId: owner.tokenId, userId: owner.userId }, ds, POLICY, 0)).toMatchObject({ revision: 1 });
+  const policy = async () => expect(await setDatasetPolicy(identityForUser(owner.userId, owner.tokenId), ds, POLICY, 0)).toMatchObject({ revision: 1 });
   if (!policyAfterPublish) await policy();
   const doc = (await publish(owner.token, { markup: markup.replace('ref:BookRows1', `ref:${ds}`), visibility: 'unlisted' })).id;
   if (policyAfterPublish) await policy();

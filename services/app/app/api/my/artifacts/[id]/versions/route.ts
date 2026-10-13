@@ -1,16 +1,13 @@
 import { listVersionsFor } from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
-import { actorForArtifacts } from '@/lib/accounts';
-import { json, unauthorized } from '@/lib/http';
+import { json } from '@/lib/http';
 
-/** GET /api/my/artifacts/:id/versions — owner-scoped version history. */
+/** GET /api/my/artifacts/:id/versions — owner-actor version history. */
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
-  const scoped = actorForArtifacts(actor);
-  if (!scoped) return unauthorized(request);
   const { id } = await ctx.params;
-  const versions = await listVersionsFor(scoped, id);
+  const versions = await listVersionsFor(actor, id);
   if (!versions) return json({ error: 'not_found' }, 404);
   return json({ versions });
 }

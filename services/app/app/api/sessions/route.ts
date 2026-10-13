@@ -6,5 +6,5 @@ import { runOperation } from '@/lib/operations/http';
  * remote terminal sessions as typed resources. The relay's own
  * /api/remote/sessions keeps the mirror protocol shape the browser reads.
  */
-export const GET = withTokenAuth(async (request: Request, { tokenId, userId }) =>
-  runOperation('list_remote_sessions', request, { tokenId, userId }, {}));
+export const GET = withTokenAuth(async (request: Request, { actor }) =>
+  runOperation('list_remote_sessions', request, actor, {}));

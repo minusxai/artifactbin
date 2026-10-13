@@ -1,4 +1,5 @@
 import {PUBLIC_BASE_URL} from './platform/config';
+import { identityForUser } from '@/lib/accounts';
 import type {CapabilityContext} from '@artifactbin/runner/local';
 import {runnerIdentity} from '@artifactbin/runner/capabilities';
 import {lambdaOperation} from './runner/operations';
@@ -9,7 +10,7 @@ import type { Db } from './platform/db';
 import { z } from 'zod';
 import type { RunStart, RunnerJson, ScheduledExecution, ScheduleInput, SchedulerService } from '@artifactbin/contracts';
 import { actorOf, attachActor } from '@artifactbin/utils';
-import { actorForArtifacts, sessionActor, isCookieCredential } from './accounts';
+import { sessionActor, isCookieCredential } from './accounts';
 import { canReadArtifact, getArtifactById } from './artifacts';
 import { OPERATIONS } from './operations/registry';
 import { runOperation } from './operations/http';
@@ -24,15 +25,15 @@ export type LambdaProgramResolver = (artifactId: string, userId: string) => Prom
 } | null>;
 let resolveProgram: LambdaProgramResolver = resolveLambdaProgram;
 export function setLambdaProgramResolver(resolver: LambdaProgramResolver | undefined) { resolveProgram = resolver ?? resolveLambdaProgram; }
-async function user(request: Request, write = false) { const actor = await sessionActor(request); if (!actor.viewer?.userId)
+async function user(request: Request, write = false) { const actor = await sessionActor(request); if (!actor.userId)
     return null; if (write && isCookieCredential(actor) && isCrossSiteRequest(request))
-    return null; return actor.viewer.userId; }
+    return null; return actor.userId; }
 export async function invokeArtifact(request: Request, artifactId: string) {
     const userId = await user(request, true);
     if (!userId)
         return json({ error: 'unauthorized' }, 401);
     const artifact = await getArtifactById(artifactId);
-    if (!artifact || artifact.deleted_at || !await canReadArtifact(artifact, { userId, email: null }))
+    if (!artifact || artifact.deleted_at || !await canReadArtifact(artifact, identityForUser(userId)))
         return json({ error: 'not_found' }, 404);
     const body = await readJson(request);
     if (!body || typeof body.requestId !== 'string' || !body.requestId || body.requestId.length > 128)
@@ -46,7 +47,7 @@ export async function invokeArtifact(request: Request, artifactId: string) {
 /** Resolve the latest readable server handler or owner-controlled native program at execution time. */
 async function resolveArtifactExecution(spec: ScheduleInput): Promise<ScheduledExecution> {
     const artifact = await getArtifactById(spec.artifactId);
-    if (!artifact || artifact.deleted_at || !await canReadArtifact(artifact,{userId:spec.userId,email:null})) throw Error('not_found');
+    if (!artifact || artifact.deleted_at || !await canReadArtifact(artifact, identityForUser(spec.userId))) throw Error('not_found');
     if (artifact.format === 'program') {
         const native = await resolveProgramArtifact(spec.artifactId,spec.userId);
         if (!native) throw Error('not_found');
@@ -92,11 +93,10 @@ export async function runnerOperation(request: Request, operation: string, input
     const identity = actorOf(request);
     if (!identity?.userId)
         return json({ error: 'unauthorized' }, 401);
-    const caller = await sessionActor(request);
-    if (isCookieCredential(caller) && isCrossSiteRequest(request))
+    const actor = await sessionActor(request);
+    if (isCookieCredential(actor) && isCrossSiteRequest(request))
         return json({ error: 'forbidden' }, 403);
-    const actor = actorForArtifacts(caller);
-    if (!actor)
+    if (!actor.userId && !actor.tokenId)
         return json({ error: 'unauthorized' }, 401);
     // Internal transport addresses are never reader-facing artifact URLs.
     const headers = new Headers(request.headers);

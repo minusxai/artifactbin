@@ -8,7 +8,7 @@ export async function GET(request:Request,ctx:{params:Promise<{id:string;dataset
   const {id,datasetId,imageId}=await ctx.params;
   if(!ID_RE.test(id)||!ID_RE.test(datasetId))return json({error:'not_found'},404,headers);
   const actor=await sessionActor(request);
-  const image=await readDatasetImage({actor:{...actor.viewer,userId:actor.viewer?.userId??null,tokenId:actor.tokenId??null},documentId:id,datasetId,imageId});
+  const image=await readDatasetImage({actor:actor,documentId:id,datasetId,imageId});
   if(!image)return json({error:'not_found'},404,headers);
   return new Response(new Uint8Array(image.body),{status:200,headers:{...headers,'Content-Type':image.contentType,'Content-Disposition':'inline'}});
 }

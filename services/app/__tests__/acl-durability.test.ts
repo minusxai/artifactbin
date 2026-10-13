@@ -21,7 +21,7 @@ import { POST as patchMineRoute } from '@/app/api/my/artifacts/[id]/edits/route'
 import { getArtifactById,getVersionFor } from '@/lib/artifacts';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser, ensureUsername, setUsername } from '@/lib/accounts';
 import { useAppHarness, request, setSession } from '@/__tests__/harness';
 
 useAppHarness();
@@ -112,7 +112,7 @@ describe('a private document stays private through every write', () => {
     expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [vault] });
 
     const current=(await getArtifactById(doc.id))!;
-    const archived=await getVersionFor({tokenId:current.token_id,userId:current.user_id},doc.id,1);
+    const archived=await getVersionFor(identityForUser(current.user_id, current.token_id),doc.id,1);
     const reverted = await revertRoute(
       request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token, json: documentEditBody((await getArtifactById(doc.id))!,{source:archived!.source!,whole:true}) }),
       params({ id: doc.id }),

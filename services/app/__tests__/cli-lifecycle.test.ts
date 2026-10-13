@@ -12,7 +12,7 @@ import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
 import { cliWorkspace } from './cli-harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { createUser, claimToken } from '@/lib/accounts';
+import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { getArtifactById, updateSharingFor, createArtifact } from '@/lib/artifacts';
 import { ownedArtifactState } from '@/lib/workspace';
 import { POST as create, GET as list } from '@/app/api/artifacts/route';
@@ -53,12 +53,12 @@ describe('cli-restore', () => {
     const deleted=await invoke(['delete',created.id]);
     expect(deleted.code,JSON.stringify(deleted.result)).toBe(0);
     expect(deleted.result).toMatchObject({id:created.id,type:'artifact',status:'deleted',local_file:'preserved'});
-    expect(await ownedArtifactState({tokenId:token.id,userId:token.userId},created.id)).toEqual({deleted:true});
+    expect(await ownedArtifactState(identityForUser(token.userId, token.id),created.id)).toEqual({deleted:true});
 
     const restored=await invoke(['push','--restore',created.id]);
     expect(restored.code,JSON.stringify(restored.result)).toBe(0);
     expect(restored.result.operations).toEqual([{id:created.id,url:expect.stringContaining(`/a/${created.id}`),parent_id:null,ancestor_ids:[],status:'restored',operation:expect.any(String)}]);
-    expect(await ownedArtifactState({tokenId:token.id,userId:token.userId},created.id)).toEqual({deleted:false});
+    expect(await ownedArtifactState(identityForUser(token.userId, token.id),created.id)).toEqual({deleted:false});
 
     // The live row answers the restore route with the same 404 a missing id would,
     // so the pre-read is the only thing that can call this a success.
@@ -72,7 +72,7 @@ describe('cli-restore', () => {
   });
 
   it('a retried restore or delete under the same operation identity commits once and replays its receipt',async()=>{
-   const token=await mintToken('mxmx_test_restore_retry');const actor={tokenId:token.id,userId:token.userId};
+   const token=await mintToken('mxmx_test_restore_retry');const actor=identityForUser(token.userId, token.id);
    const created=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Retry</p>'}}))).json();
    const deleteKey='restore-retry-delete-00001',restoreKey='restore-retry-restore-0001';
    const del=(headers?:Record<string,string>)=>remove(request(`/api/artifacts/${created.id}`,{method:'DELETE',token:token.token,headers}),params(created.id));
@@ -108,7 +108,7 @@ describe('cli-restore', () => {
    const editor=await createUser({email:'mxmx_test_restore_editor@example.com'});
    const editorToken=await mintToken('mxmx_test_restore_editor', editor.id);await claimToken(editor.id,editorToken.token);
    const created=await(await create(request('/api/artifacts',{method:'POST',token:ownerToken.token,json:{markup:'<p>Shared</p>'}}))).json();
-   await updateSharingFor({tokenId:ownerToken.id,userId:owner.id},created.id,{shares:[{email:'mxmx_test_restore_editor@example.com',role:'editor'}]});
+   await updateSharingFor(identityForUser(owner.id, ownerToken.id),created.id,{shares:[{email:'mxmx_test_restore_editor@example.com',role:'editor'}]});
 
    // The UI door says the same: an editor may edit, only the owner may delete.
    const snapshot=await(await read(request(`/api/artifacts/${created.id}`,{token:editorToken.token}),params(created.id))).json();
@@ -121,7 +121,7 @@ describe('cli-restore', () => {
    const deleted=await remove(request(`/api/artifacts/${created.id}`,{method:'DELETE',token:ownerToken.token,headers:{'Idempotency-Key':key}}),params(created.id));
    expect(deleted.status).toBe(200);
    expect((await restore(request(`/api/artifacts/${created.id}/restore`,{method:'POST',token:editorToken.token,headers:{'Idempotency-Key':'restore-editor-0000000002'}}),params(created.id))).status).toBe(404);
-   expect(await ownedArtifactState({tokenId:ownerToken.id,userId:owner.id},created.id)).toEqual({deleted:true});
+   expect(await ownedArtifactState(identityForUser(owner.id, ownerToken.id),created.id)).toEqual({deleted:true});
   });
 
   it('refresh reports each url on its own and a retried refresh answers the recorded receipt',async()=>{
@@ -194,7 +194,7 @@ describe('cli-restore', () => {
    const invoke=(args:string[])=>cli.run(args,lossy);
    const journal=()=>readRecord<{path:string;body:unknown}>(root,root,'pending-operation','current');
    try{
-    const token=await mintToken('mxmx_test_delete_recovery');const actor={tokenId:token.id,userId:token.userId};
+    const token=await mintToken('mxmx_test_delete_recovery');const actor=identityForUser(token.userId, token.id);
     await cli.useToken(token.token);
     const created=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Lost reply</p>'}}))).json();
 

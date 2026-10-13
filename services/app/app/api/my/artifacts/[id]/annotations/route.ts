@@ -12,23 +12,16 @@ import { notifyRemoteComment } from '@/lib/remote/mentions';
  * Either browser credential authorizes (account session or the agent-session
  * cookie); who may create is `annotationScope` — owner, editor or COMMENTER,
  * the role that may say something and change nothing. A stranger's cookie
- * sees the uniform 404, because the artifact read is scoped the same way.
+ * sees the uniform 404, because the artifact read is actor the same way.
  */
 import { respondToAnnotationList } from '@/app/api/artifacts/[id]/annotations/route';
 import { createAnnotationFor, type CreateAnnotationInput } from '@/lib/annotations';
 import { isAreaRange, refinementRange, parseAnnotationRange } from '@/lib/document';
 import { browserActor } from '@/lib/accounts';
 import { capabilityGuard } from '@/lib/artifacts';
-import { json, readJson, unauthorized } from '@/lib/http';
+import { json, readJson } from '@/lib/http';
 import { ownerUsername } from '@/lib/accounts';
-import { actorForArtifacts } from '@/lib/accounts';
 
-/** The caller as an artifact scope, or the Response that refuses them. */
-async function scopeFor(request: Request) {
-  const actor = await browserActor(request);
-  if (actor instanceof Response) return actor;
-  return actorForArtifacts(actor) ?? unauthorized(request);
-}
 
 /**
  * Body → input, or the named refusal. `quote` and `range` are OPTIONAL and
@@ -67,20 +60,20 @@ function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
 }
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const scoped = await scopeFor(request);
-  if (scoped instanceof Response) return scoped;
+  const actor = await browserActor(request);
+  if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
-  return respondToAnnotationList(request, scoped, id);
+  return respondToAnnotationList(request, actor, id);
 }
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const scoped = await scopeFor(request);
-  if (scoped instanceof Response) return scoped;
+  const actor = await browserActor(request);
+  if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
   // A GUEST may read a thread and may not start one: commenting is an act
   // attributed to a person, and an anonymous cookie is not one. A TEST USER
   // comments inside its sandbox and nowhere else (lib/capabilities).
-  const refusal = await capabilityGuard(scoped, 'comment', id);
+  const refusal = await capabilityGuard(actor, 'comment', id);
   if (refusal) return refusal;
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
@@ -91,8 +84,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // account's public handle, or null for an anonymous cookie owner — the UI
   // then falls back to the kind.
   const work = async (receipt?:MutationReceipt) => {
-  const made = await createAnnotationFor(scoped, id, parsed.input, {
-    kind: 'human', label: await ownerUsername(scoped.userId), transport: 'browser',
+  const made = await createAnnotationFor(actor, id, parsed.input, {
+    kind: 'human', label: await ownerUsername(actor.userId), transport: 'browser',
   },receipt);
   if (made instanceof Response) return made; // the anchor edit's named publish refusal
   if (!made) return json({ error: 'not_found' }, 404);
@@ -100,11 +93,11 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     if (made.refused === 'stale') return json({ error: 'stale', edit_id: made.head.editId, version: made.head.version }, 409);
     return json({ error: made.refused }, 400);
   }
-  notifyRemoteComment(scoped.userId, id, made.id, made.thread[0]);
+  notifyRemoteComment(actor.userId, id, made.id, made.thread[0]);
   return json(made, 201);
   };
   const key=request.headers.get('Idempotency-Key');
   if(!key)return work();
-  const result=await durableMutation(scoped,request.url,key,{operation:'create_comment',id,body},async receipt=>{const response=await work(receipt);return {status:response.status,body:await response.json()};});
+  const result=await durableMutation(actor,request.url,key,{operation:'create_comment',id,body},async receipt=>{const response=await work(receipt);return {status:response.status,body:await response.json()};});
   return json(result.body,result.status);
 }

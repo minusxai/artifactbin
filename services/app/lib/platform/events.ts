@@ -52,10 +52,10 @@ export async function emit<K extends ObjectKind, V extends EventVerb<K>>(
  * neither — the one rule every lib call site shares, written once so a
  * credential is never turned into a subject two slightly different ways.
  *
- * It takes the two fields rather than `TokenActor` so the emitter keeps no
+ * It takes the two fields rather than `AccessActor` so the emitter keeps no
  * dependency on `lib/artifacts`; every caller already holds both.
  */
-export function actorSubject(actor: { tokenId: string; userId: string | null }): EventSubject | null {
+export function actorSubject(actor: { tokenId: string | null; userId: string | null }): EventSubject | null {
   if (actor.userId) return { kind: 'user', id: actor.userId };
   return actor.tokenId ? { kind: 'token', id: actor.tokenId } : null;
 }

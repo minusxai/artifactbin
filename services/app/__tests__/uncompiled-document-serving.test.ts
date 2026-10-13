@@ -18,7 +18,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { liveFrameFor } from '@/lib/publish/data/frame';
 import { queryResourceForRequest } from '@/lib/operations/resource-query';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
+import { identityForUser, claimToken, createUser } from '@/lib/accounts';
 
 const harness = useAppHarness();
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -27,7 +27,7 @@ async function owner() {
   const user = await createUser({ email: 'uncompiled-owner@example.com' });
   const token = await mintToken('mxmx_test_uncompiled', user.id);
     await claimToken(user.id, token.token);
-  return { token: token.token, tokenId: token.id, userId: user.id, email: user.email, actor: { tokenId: token.id, userId: user.id } };
+  return { token: token.token, tokenId: token.id, userId: user.id, email: user.email, actor: identityForUser(user.id, token.id) };
 }
 type Owner = Awaited<ReturnType<typeof owner>>;
 

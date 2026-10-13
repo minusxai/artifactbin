@@ -5,22 +5,15 @@
 import { capabilityGuard, getArtifactFor, getSharingFor, parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue, updateSharingFor } from '@/lib/artifacts';
 import type { SharingPatch } from '@artifactbin/contracts';
 import { browserActor } from '@/lib/accounts';
-import { json, readJson, unauthorized } from '@/lib/http';
-import { actorForArtifacts } from '@/lib/accounts';
+import { json, readJson } from '@/lib/http';
 import { catalogOf } from '@/lib/datasets/catalog';
 
-/** The caller as an artifact scope, or the Response that refuses them. */
-async function scopeFor(request: Request) {
-  const actor = await browserActor(request);
-  if (actor instanceof Response) return actor;
-  return actorForArtifacts(actor) ?? unauthorized(request);
-}
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const scoped = await scopeFor(request);
-  if (scoped instanceof Response) return scoped;
+  const actor = await browserActor(request);
+  if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
-  const state = await getSharingFor(scoped, id);
+  const state = await getSharingFor(actor, id);
   if (!state) return json({ error: 'not_found' }, 404);
   return json(state);
 }
@@ -28,8 +21,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 export async function PUT(request: Request, ctx: { params: Promise<{ id: string }> }) {
   // browserActor also refuses a cross-site mutation: this is cookie-
   // authenticated, so a browser is by definition the caller.
-  const scoped = await scopeFor(request);
-  if (scoped instanceof Response) return scoped;
+  const actor = await browserActor(request);
+  if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
@@ -38,12 +31,12 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   // a door with its own parsing accepts `access` on a document and answers 200
   // for a write the SQL then drops, where the others answer 400, and one error
   // code ends up with two different refusals.
-  const current = await getArtifactFor(scoped, id);
+  const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
   // Sharing is how an artifact reaches a PERSON by address, so it is one of the
   // acts a guest is sent to sign in for; a test user shares only inside its own
   // sandbox, where the addresses it could name are its own (lib/capabilities).
-  const refusal = await capabilityGuard(scoped, 'share', id);
+  const refusal = await capabilityGuard(actor, 'share', id);
   if (refusal) return refusal;
 
   const patch: SharingPatch = {};
@@ -70,7 +63,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (shares instanceof Response) return shares;
   if (shares) patch.shares = shares;
 
-  const state = await updateSharingFor(scoped, id, patch);
+  const state = await updateSharingFor(actor, id, patch);
   if (!state) return json({ error: 'not_found' }, 404);
   return json(state);
 }

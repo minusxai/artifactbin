@@ -1,7 +1,5 @@
 import { browserActor } from '@/lib/accounts';
-import { actorForArtifacts } from '@/lib/accounts';
 import { refreshAssetsFor } from '@/lib/publish/publish';
-import { unauthorized } from '@/lib/http';
 
 /**
  * POST /api/my/artifacts/:id/assets/refresh — "refresh external images", from
@@ -16,8 +14,6 @@ import { unauthorized } from '@/lib/http';
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
-  const scoped = actorForArtifacts(actor);
-  if (!scoped) return unauthorized(request);
   const { id } = await ctx.params;
-  return refreshAssetsFor(scoped, { id });
+  return refreshAssetsFor(actor, { id });
 }
