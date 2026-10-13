@@ -77,13 +77,21 @@ async function runBoot(port: number, overrides: Record<string, string>): Promise
       clearTimeout(deadline);
       resolve(value);
     };
-    child.once('exit', (code) => finish({ kind: 'exited', code, output }));
+    // HTTP and stdio are independent: neither a health response nor a child log
+    // alone proves that this child has finished starting on the selected port.
+    let healthy = false;
+    const observeReady = (): void => {
+      if (healthy && child.exitCode === null && output.includes(`[boot] auth + app on http://localhost:${port} (`)) {
+        finish({ kind: 'listened', code: null, output });
+      }
+    };
+    child.stdout!.on('data', observeReady);
+    child.once('close', (code) => finish({ kind: 'exited', code, output }));
     const probe = setInterval(() => {
-      void fetch(`http://127.0.0.1:${port}/health`).then(async (response) => {
+      void fetch(`http://127.0.0.1:${port}/health`).then((response) => {
         if (response.ok && child.exitCode === null) {
-          // stdout can arrive just after the health response on a busy runner.
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          finish({ kind: 'listened', code: child.exitCode, output });
+          healthy = true;
+          observeReady();
         }
       }).catch(() => undefined);
     }, 100);
