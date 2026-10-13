@@ -151,6 +151,18 @@ describe('source host compatibility matrix', () => {
     expect(candidate?.run).toContain('afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs');
     expect(candidate?.run).toContain('services/cli/dist/afbin.mjs');
     expect(candidate?.run).toContain('scripts/gates.mjs --servers=1 --only=accounts-and-workspace');
+    expect(ci.jobs['reference-compatibility'].strategy.matrix.include).toEqual([
+      {proof:'accounts-source-email',cli:'source',credential:''},
+      {proof:'accounts-npm-email',cli:'npm',credential:''},
+      {proof:'accounts-source-oauth',cli:'source',credential:'outbox-oauth'},
+      {proof:'team',cli:'source',credential:''},
+    ]);
+    expect(candidate.if).toBe("matrix.proof != 'team'");
+    expect(candidate.env.CONFORMANCE__CREDENTIAL_SOURCE).toBe('${{ matrix.credential }}');
+    expect(candidate.run.match(/node scripts\/gates\.mjs/g)).toHaveLength(1);
+    expect(candidate.run).not.toMatch(/&|wait_pair|ci_pids/);
+    expect(steps.find(step=>step.name==='Install real package artifacts outside the checkout').if).toBe("matrix.cli == 'npm'");
+
     expect(readFileSync(ciPath, 'utf8')).not.toContain('build-public-packages.mjs');
   });
 });
