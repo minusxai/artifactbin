@@ -47,13 +47,16 @@ async function main() {
   if (url) process.env.DATABASE_URL = url;
   const { openReadOnly, auditAuthorScripts, formatScriptAudit } = await import('@/lib/publish/prepared/script-audit.server');
   const { db, close } = await connect(url);
+  let failing = 0;
   try {
     const report = await auditAuthorScripts(await openReadOnly(db), values.batch ? { batch: Number(values.batch) } : {});
     console.log(formatScriptAudit(report, { json: !!values.json }));
-    if (report.failures.length) process.exitCode = 1;
+    failing = report.failures.length;
   } finally {
     await close();
   }
+  // After closing: PGLite's runtime resets the exit code as it shuts down.
+  if (failing) process.exitCode = 1;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) await main();
