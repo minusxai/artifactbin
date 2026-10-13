@@ -132,8 +132,8 @@ describe('POST /api/start', () => {
     expect(body.prompt).not.toContain('npx --yes');
     expect(body.prompt).not.toContain('mx_');
     expect(body.prompt).not.toContain('/tokens/new');
-    expect(body.prompt).toContain("\n\n---\n\nLet's build an artifact for " );
-    expect(body.prompt.length).toBeLessThan(600); // instructions plus a short editable brief
+    expect(body.prompt).toContain("\n\nAsk the user what artifact they'd like to build." );
+    expect(body.prompt.length).toBeLessThan(600); // instructions plus a short question for the user
   });
 
   it('answers a signed-in caller the same body, and stamps the document with the account', async () => {

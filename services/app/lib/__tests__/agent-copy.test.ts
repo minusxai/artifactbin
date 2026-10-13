@@ -11,7 +11,7 @@ import { gettingStartedMarkdown } from '@/lib/serving/getting-started';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin or HTTP: https://x.test/getting-started.md. Sign in as the recipient with edit access; the sender's login is not transferred.\n\n---\n\nLet's build an artifact for ...";
+const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin or HTTP: https://x.test/getting-started.md. Sign in as the recipient with edit access; the sender's login is not transferred.\n\nAsk the user what artifact they'd like to build.";
 
 describe('the tokenless paste', () => {
   it('offers one full installer command per platform on the selected host', () => {
@@ -46,23 +46,23 @@ describe('the tokenless paste', () => {
     expect(existingPaste(base, ID)).toContain(`${DEFAULT_SERVER}/a/${ID}`);
     expect(gettingStartedMarkdown(base)).toContain('no --server flag is needed');
   });
-  it('keeps the handoff concise and leaves a separated brief for the user', () => {
+  it('keeps the handoff concise and asks the user what to build', () => {
     const prompt = existingPaste('http://127.0.0.1:45407', ID);
     expect(prompt.length).toBeLessThan(350);
-    expect(prompt).toContain("\n\n---\n\nLet's build an artifact for " );
+    expect(prompt).toContain("\n\nAsk the user what artifact they'd like to build." );
   });
   it('a trailing slash on the base does not double up', () => {
     expect(existingPaste('https://x.test/', ID)).toBe(STARTER);
   });
   it.each([
-    ['doc', 'a document'], ['editorial', 'an article'], ['deck', 'a presentation'],
-    ['dashboard', 'a dashboard'], ['plan', 'a plan'], ['landing', 'a landing page'],
-    ['scrolly', 'a scrollytelling page'], ['app', 'an app'],
-  ])('names %s in the template instruction and editable brief', (template, phrase) => {
+    ['doc', 'document'], ['editorial', 'article'], ['deck', 'presentation'],
+    ['dashboard', 'dashboard'], ['plan', 'plan'], ['landing', 'landing page'],
+    ['scrolly', 'scrollytelling page'], ['app', 'app'],
+  ])('names %s in the template instruction and question for the user', (template, phrase) => {
     const prompt = existingPaste(B, ID, template);
     expect(prompt).toContain(`template: ${template}`);
     expect(prompt).toContain('/a/ab3cd9');
-    expect(prompt.endsWith(`Let's build ${phrase} for ...`)).toBe(true);
+    expect(prompt.endsWith(`Ask the user what ${phrase} they'd like to build.`)).toBe(true);
   });
   it('is the module\'s only export — the start-link paste and the claim relay are gone', () => {
     expect(Object.keys(agentCopy)).toEqual(['existingPaste']);
