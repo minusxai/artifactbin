@@ -2,7 +2,7 @@ import {createCipheriv,createDecipheriv,createHash,randomBytes} from 'node:crypt
 import {AUTH_SECRET} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
 import type {Queryable} from '@artifactbin/contracts';
-import type { AccessActor } from '@/lib/accounts';
+import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';
 import type {DatasetConnection,PostgresConfig} from './types';
 import {DatasetError} from './errors';
 
@@ -15,7 +15,8 @@ const seal=(value:string,id:string,hash:string)=>{const iv=randomBytes(12),ciphe
 const open=(row:SecretRow)=>{const bytes=Buffer.from(row.ciphertext,'base64'),decipher=createDecipheriv('aes-256-gcm',key(),bytes.subarray(0,12));decipher.setAAD(Buffer.from(`${row.id}\0${row.target_hash}`));decipher.setAuthTag(bytes.subarray(-16));return Buffer.concat([decipher.update(bytes.subarray(12,-16)),decipher.final()]).toString('utf8');};
 const owned=(actor:AccessActor)=>actor.userId?{sql:'(user_id=$3 OR token_id IN (SELECT id FROM tokens WHERE user_id=$3))',value:actor.userId}:{sql:'token_id=$3 AND user_id IS NULL',value:actor.tokenId};
 
-export async function createDatasetSecret(actor:AccessActor,value:string,target:Target,datasetId?:string):Promise<{id:string}>{
+/** Stamps `dataset_secrets.token_id` (NOT NULL): the creator must hold a token — a session's is its account token (`withAccountToken`). */
+export async function createDatasetSecret(actor:TokenHoldingActor,value:string,target:Target,datasetId?:string):Promise<{id:string}>{
  if(typeof value!=='string'||!value.length||value.length>4096)throw new DatasetError('Secret value is required');
  const id='sec_'+randomBytes(12).toString('hex'),hash=targetHash(target),db=await getDb();
  await db.query('INSERT INTO dataset_secrets(id,token_id,user_id,dataset_id,target_hash,ciphertext) VALUES($1,$2,$3,$4,$5,$6)',[id,actor.tokenId,actor.userId,datasetId??null,hash,seal(value,id,hash)]);return {id};

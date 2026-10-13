@@ -2,7 +2,7 @@
 import sharp from 'sharp';
 import {COMMENT_IMAGE_LIMITS as LIMITS,type CommentImageMetadata,type CommentImageWire} from '../../../contracts/src/comment-image';
 import { annotationScope } from '@/lib/artifacts';
-import type { AccessActor } from '@/lib/accounts';
+import type { AccessActor, TokenHoldingActor } from '@/lib/accounts';
 import {getDb,type Queryable} from '../platform/db';
 import {objectStore} from '../object-store/index';
 import {generateInternalId} from '../platform/ids';
@@ -38,7 +38,8 @@ export async function sweepCommentImages(database?:Queryable):Promise<void>{
   try{for(const variant of variants)await objectStore().delete(key(row.id,variant));await db.query('DELETE FROM comment_images WHERE id=$1 AND annotation_id IS NULL AND expires_at < now()',[row.id]);}catch{/* Retry on a later upload; never forget charged objects. */}
  }
 }
-export async function stageCommentImage(actor:AccessActor,artifactId:string,original:Buffer,preview:Buffer,metadata:unknown):Promise<{id:string}|Response>{
+/** Stamps `comment_images.token_id` (NOT NULL): the uploader must hold a token — a session's is its account token (`withAccountToken`). */
+export async function stageCommentImage(actor:TokenHoldingActor,artifactId:string,original:Buffer,preview:Buffer,metadata:unknown):Promise<{id:string}|Response>{
  const db=await getDb(),scope=annotationScope(actor);
  const access=await db.query<{edit_id:string}>(`SELECT edit_id FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`,[artifactId,scope.val]);
  if(!access.rows[0])return json({error:'not_found'},404);

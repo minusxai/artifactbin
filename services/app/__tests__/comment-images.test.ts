@@ -1,5 +1,6 @@
 import { identityForUser, claimToken,createUser} from '@/lib/accounts';
 import {GET as readImageRoute} from '@/app/api/my/artifacts/[id]/comment-images/[imageId]/route';
+import {POST as stageRoute} from '@/app/api/my/artifacts/[id]/comment-images/route';
 import {getDb} from '@/lib/platform';
 import {describe,expect,it} from 'vitest';
 import sharp from 'sharp';
@@ -168,5 +169,21 @@ describe('a reply carries its own image',()=>{
   expect((await db.query('SELECT id FROM annotations WHERE root_id=$1',[root])).rows).toHaveLength(0);
   // Naming the moved head does not launder a stage made against the old one.
   expect((await reply(s,root,{reply:'Stale image',attachment_id:stage.id,edit_id:'moved-head'})).status).toBe(400);
+ });
+});
+
+describe('comment image upload from an account session',()=>{
+ it('stages through the browser door, charged to the account token, and attaches to a comment',async()=>{
+  const s=await setup();
+  const form=new FormData();
+  form.set('original',new Blob([new Uint8Array(s.image)],{type:'image/png'}));form.set('preview',new Blob([new Uint8Array(s.image)],{type:'image/png'}));form.set('metadata',JSON.stringify(s.metadata));
+  const staged=await stageRoute(request(`/api/my/artifacts/${s.doc.id}/comment-images`,{method:'POST',actor:s.browserActor,origin:'same',body:form}),params(s.doc.id));
+  expect(staged.status,await staged.clone().text()).toBe(201);
+  const {id}=await staged.json() as {id:string};
+  const row=(await (await getDb()).query<{token_id:string;user_id:string}>('SELECT token_id,user_id FROM comment_images WHERE id=$1',[id])).rows[0]!;
+  expect(row.user_id).toBe(s.token.userId);
+  expect((await (await getDb()).query('SELECT 1 FROM tokens WHERE id=$1 AND user_id=$2',[row.token_id,s.token.userId])).rows).toHaveLength(1);
+  const comment=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor:s.browserActor,json:{node_id:'capture',edit_id:s.doc.edit_id,body:'Pasted',attachment_id:id}}),params(s.doc.id));
+  expect(comment.status,await comment.clone().text()).toBe(201);
  });
 });

@@ -107,3 +107,14 @@ it('binds a secret only to a dataset the caller can edit, through the route and 
   expect(allowed.status).toBe(201);
   expect(await bound()).toBe(before+1);
 });
+
+it('stores a secret for an account SESSION, charged to the account token and owned by the account', async () => {
+  const owner = await actor('session');
+  const session = { credential: 'session' as const, userId: owner.user.id, email: owner.user.email!, emailVerified: true };
+  const response = await createSecret(request('/api/my/secrets', { method: 'POST', origin: 'same', actor: session, json: { value: 'session-password', connection: target } }));
+  expect(response.status, await response.clone().text()).toBe(201);
+  const { secret } = await response.json() as { secret: { id: string } };
+  const row = (await (await harness.db()).query<{ token_id: string; user_id: string }>('SELECT token_id,user_id FROM dataset_secrets WHERE id=$1', [secret.id])).rows[0]!;
+  expect(row.user_id).toBe(owner.user.id);
+  expect((await (await harness.db()).query('SELECT 1 FROM tokens WHERE id=$1 AND user_id=$2', [row.token_id, owner.user.id])).rows).toHaveLength(1);
+});
