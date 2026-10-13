@@ -108,7 +108,7 @@ it('places the doc agent handoff in trusted document navigation, outside the pag
   mount();
   expect(screen.queryByRole('button', { name: 'Copy for agent' })).toBeNull();
   fireEvent.click(trusted().getByRole('button', { name: 'Copy for agent' }));
-  await waitFor(() => expect(copyText).toHaveBeenCalledWith(expect.stringContaining('template: doc')));
+  await waitFor(() => expect(copyText).toHaveBeenCalledWith(expect.stringContaining('/a/doc12345 in place.')));
 });
 
 it('hides the agent handoff in Code and restores it in Artifact', async () => {

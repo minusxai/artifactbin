@@ -89,7 +89,9 @@ describe('the document page and its page data', () => {
     expect(brotliDecompressSync(encoded).toString()).toBe(identity);
     expect(encoded.byteLength).toBeLessThan(Buffer.byteLength(identity));
     expect(identity).toContain('SPA');
-    expect(identity).toContain('otherwise HTTP');
+    expect(identity).toContain('Use the HTTP API to authenticate, create, edit, and operate artifacts.');
+    expect(identity).toContain('name="agents"');
+    expect(identity).toContain('name="cli"');
   });
   it('the content-addressed island reader is its build-time brotli sibling through the app', async () => {
     const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'public/islands/manifest.json'), 'utf8')) as { manifest: Record<string,string> };

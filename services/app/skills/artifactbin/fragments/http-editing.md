@@ -1,4 +1,4 @@
-For a supplied artifact:
+Edit the supplied artifact in place; do not publish scratch replacement documents:
 
 1. `GET /api/artifacts/<id>`. Edit `markup`, preserving IDs. Keep this read’s `edit_id` and `version`.
 2. `POST /api/artifacts/<id>/prepare`:

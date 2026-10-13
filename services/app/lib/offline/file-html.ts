@@ -73,6 +73,7 @@ function artifactFileAgentNote(file: Pick<ArtifactFile, 'origin' | 'liveUrl' | '
   // The title as the JSON below writes it (quoted, `<` as \u003c): a title is the author's text, never markup here.
   const title = JSON.stringify(file.metadata.title).replace(/</g, '\\u003c');
   return `artifactbin offline file for ${title} (${file.liveUrl}). `
+    + 'Local/offline editing needs no remote API. '
     + 'To edit the document, change the top-level "source" string (the second key) in the <script id="afbin-file"> JSON below. '
     + `It is artifactbin JSX (reference: ${help.url}; prepare Node/npm using ${help.url}). `
     + 'If afbin is not installed, run "npx @afbin/cli@latest setup" once (Windows PowerShell: "npx.cmd @afbin/cli@latest setup"); it installs the afbin command and the agent skills. Then read "afbin help markup". '

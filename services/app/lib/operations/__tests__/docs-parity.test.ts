@@ -27,8 +27,9 @@ it('documents every command/flag and direct HTTP while refusing retired CLI and 
  expect(http).toContain('`expectedPolicyRevision`');
  expect(http).not.toContain('to observe `policy_revision`');
  expect(http).toContain('CSV on a document ID converts it to a dataset');
- expect(http).toContain('Submit that exact update and `edit_id` to `/edits`.');
- expect(http).toContain('do not publish scratch replacement documents');
+ expect(http).toContain('POST /api/artifacts/<id>/edits');
+ expect(teaching.files['references/http-authoring.md']).toContain('Submit the prepared update unchanged. Preparation does not save.');
+ expect(teaching.files['references/http-authoring.md']).toContain('do not publish scratch replacement documents');
  expect(http).toContain('## Browser preview and interactive QA');
  expect(http).toContain('POST /api/browser-sessions');
  expect(http).toContain('output.image(await page.screenshot())');

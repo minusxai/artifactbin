@@ -7,9 +7,9 @@
 **FAST — after every change:** `npm run validate`,
 `npm test -- --files <paths>`, the running dev app, `npm run afbin`.
 
-**SLOW — EXACTLY ONCE, at the end before merge. NEVER per edit or mid-task:** gate containers, pushing for PR CI, bare `npm test`.
+**SLOW — once at completion before merge, never mid-task/per edit:** gate containers, PR CI push, bare `npm test`.
 
-- **Finish the entire change on FAST checks, then SLOW once.** Never push, poll CI or gate per edit.
+- **Finish on FAST, then SLOW once.** Never push, poll CI or gate per edit.
 - **Gates belong to PR CI** (7 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
 - **Pre-merge is one sequence, run once:** FAST tier clean → commit and push ONCE → PR CI green →
   the exact user scenario verified end to end on the built artifact → merge.
@@ -26,8 +26,7 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
 
 ## Working rules
 
-- Design modules first (Ousterhout): state boundaries/contracts; hide complexity in cohesive modules
-  with narrow interfaces. Routes translate results to HTTP.
+- Design modules first (Ousterhout): cohesive boundaries/contracts, narrow interfaces; routes translate to HTTP.
 - Layers: entry points `server.ts`, `scripts`, `services/cli`, `services/app/{app,server,scripts}`; UI `services/app/{solid,web}`;
   libraries `services/app/lib/*`; packages the other `services/*`, importing only `contracts`, `utils` and themselves.
   `npm run validate` (`scripts/ci/module-graph.mjs`) fails a cycle through an entry point or the UI, a package
@@ -36,8 +35,7 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
 - TDD for features and refactors: contracts, then behavioral tests, observe the failure, implement.
   Refactors: existing tests pass, prove the assertion detects broken behavior, restore it (Blue → Red → Blue).
   Report only observed runs and red/green/end-to-end evidence.
-- Probe risky assumptions; record evidence/unknowns. Order milestones by plan-changing risk; end
-  with runnable checks.
+- Probe assumptions; record evidence/unknowns. Order milestones by risk; end with runnable checks.
 - Verify user-facing changes on the task's running app (`npm run dev`, port `APP__PORT` in `.env`;
   a worktree has its own). Changed `services/cli` or the skill: `npm run afbin -- <args>` runs the
   branch's CLI against that server, state in `~/.artifactbin-dev/<port>`; `npm run eval` shows an agent using them. Both take `APP__PORT=<n>`.
@@ -49,26 +47,22 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
   credentials/data. Record server/source revision, candidate/skill hashes and harness/model/settings;
   invalidate stale assets on relevant inputs.
   CLI/shared-package/skill edits reach the next run without release.
-  Agent reproductions and timing experiments (including Pi runs) use the same eval harness,
-  target/candidate selection, isolation, authentication, tracing and metrics. Add a scenario or
-  a reusable harness capability when needed; do not build a separate agent runner. A URL-discovery
-  scenario must not supply documentation links or transport instructions absent from the user's
-  request. Keep baseline and candidate harness/settings identical; capture a new baseline after
-  changing harness semantics.
-  Exception for this workflow: building/packing the complete candidate CLI and its required runtime
-  assets locally is eval preparation, not a CI check. Use the normal package assembly, once per
-  relevant source snapshot with an input-hash receipt; never a reduced-capability substitute or
-  published-package fallback. This exception does not permit local full suites or merge gates.
+  Reproductions/timings (including Pi) reuse this eval harness, target/candidate, isolation,
+  auth, traces and metrics; add scenarios/capabilities, never separate runners. URL probes use
+  verbatim user requests. Changed harness semantics require a matched new baseline.
+  Exception: complete CLI/runtime packing is local eval preparation. Use normal assembly once per
+  input-hashed snapshot; no reduced substitute, published fallback, local full suites or merge gates.
   Harness delivers local OTP; agent follows normal auth.
-  Keep evaluator budgets, scoring criteria and expected answers out of model context. Enforce caps
-  outside the conversation, preserve native user replies, and capture private instruction evidence.
-  A verbatim user reproduction must not acquire extra task guidance through native hooks or config.
+  Enforce caps outside model context; no evaluator/scorer/answer hints via prompts, hooks or config.
+  Preserve native replies and private instruction evidence.
   Compare baseline/candidate with identical scenarios/settings; retain failures and missing metrics.
-- **50 test files TOTAL across Vitest + CLI.** Above 50, neither suite runs; exit 2:
-  **DEFERRED TO CI, NOT PASSED**. No affected tests means unverified (exit 2); discovery errors fail visibly. Never count/preview, raise the cap, use `--all`, bypass the wrapper or batch a deferred suite.
-- **Mid-task deferral is the wrong command**: return to `--files`. At FAST-clean completion:
-  commit, push ONCE, open/update an empty-body PR (no descriptive comments unless requested) and inspect CI. Report
-  deferral accurately; require selected checks before merge. Full suites, Docker/Chromium integration, gates and builds are CI-only. On a red PR: fetch every failed job's log in ONE command, fix all
+- **50 files TOTAL across Vitest + CLI.** Above 50: neither runs; exit 2 means **DEFERRED, NOT PASSED**.
+  No affected tests: unverified (exit 2). Discovery errors fail. No counting/previewing, cap increases,
+  `--all`, wrapper bypasses or deferred-suite batching.
+- **Mid-task deferral**: return to `--files`. After FAST: commit, push ONCE,
+  open/update an empty-body PR (no descriptive comments unless requested), inspect CI. Report deferral;
+  require selected checks before merge. Full suites, Docker/Chromium integration, gates/builds are CI-only.
+  On a red PR: fetch every failed job's log in ONE command, fix all
   failures together (independent ones in parallel agents), never retry unchanged code.
 - **Reuse evidence** in the same worktree: `npm run validate -- --reuse`, `npm test -- --reuse` (same
   arguments). One-hour receipts need matching sources, command, environment, runtime, lock and generated inputs;
@@ -94,13 +88,13 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
   `text-micro|2xs`, `h-control*`); `/dev/ui` shows all. `scripts/ci/check-ui-primitives.mjs` refuses
   hand-rolled controls, overlays and one-off styles: add needs to ui. UI tests use accessible names;
   tooltips use `ui/Tooltip`, not `title`.
-- Tests use real handlers on isolated state; reset database/limiter between cases.
-  Merge gates use deterministic third-party fixtures; live-provider checks are separate.
-- Generate routes/schemas/CSS candidate lists; never hand-edit. Review diffs.
+- Tests: real handlers, isolated state, reset database/limiter. Gates: deterministic third-party
+  fixtures; separate live-provider checks.
+- Generate routes/schemas/CSS lists; never hand-edit; review diffs.
 
 ## Commands
 
-From repo root. Keep current.
+From repo root.
 
 - `npm ci` — install pinned dependencies. `npm run setup` — create or repair local settings.
 - `npm run dev` — full local composition, default http://localhost:3030; `dev:app` the app alone, without login/OAuth.
@@ -157,5 +151,5 @@ worktree, data directory and port block, never delegates or shares a checkout.
 **Independent deliverables get separate briefs/implementers in parallel worktrees; shared files get one brief. The orchestrator merges.** Browser gates run in containers
 (`scripts/gate-container.mjs`), up to engine CPUs ÷ container CPUs at once (`GATES__CONTAINER_SLOTS`
 overrides), never on the host. **Gates are SLOW-tier: an implementer runs them ONCE at the end of the
-brief, NEVER per edit. Every brief must say so verbatim.** Keep PRs scoped per repository.
+brief, NEVER per edit. Every brief must say so verbatim.** Separate PRs per repository.
 Handoff: [docs/agent-workflows.md](docs/agent-workflows.md).
