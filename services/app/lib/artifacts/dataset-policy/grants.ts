@@ -6,7 +6,7 @@ import { datasetGrantAllows, parseDatasetGrants } from '@artifactbin/utils';
 import type { ArtifactRow } from '../table';
 import type { RoleActor } from '@/lib/accounts';
 import { getDb } from '@/lib/platform/db';
-import { hasDocumentEditorAccess } from '@/lib/artifacts/document-policy';
+import { hasDocumentEditorAccess } from '@/lib/accounts';
 import { DatasetError } from '@/lib/datasets/errors';
 
 export function grantsOf(row: Pick<ArtifactRow,'dataset_policy'>): DatasetGrantPolicy | null {

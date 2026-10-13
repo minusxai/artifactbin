@@ -1,7 +1,8 @@
 import {documentEditBody} from './prepared-document';
 import {createDocumentGraph} from '@/lib/document/document-graph';
 import {afterEach,beforeEach,expect,it} from 'vitest';
-import {setDocumentEditorPolicy,roleFor} from '@/lib/artifacts';
+import {roleFor} from '@/lib/artifacts';
+import {setDocumentEditorPolicy} from '@/lib/accounts';
 import type {Actor} from '@artifactbin/contracts';
 import {GET,PUT,DELETE} from '@/app/api/my/artifacts/[id]/route';
 import {POST as edit} from '@/app/api/my/artifacts/[id]/edits/route';

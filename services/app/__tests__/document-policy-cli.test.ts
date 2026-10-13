@@ -1,6 +1,6 @@
 import {expect,it} from 'vitest';
 import {createDocumentGraph} from '@/lib/document/document-graph';
-import {setDocumentEditorPolicy} from '@/lib/artifacts';
+import {setDocumentEditorPolicy} from '@/lib/accounts';
 import {Hono} from 'hono';
 import {createAuthHost} from '@artifactbin/auth';
 import {createTokenReader,inProcess} from '@artifactbin/utils';

@@ -1,6 +1,6 @@
 import { getArtifactHeaderById } from './rows';
 import { grantsOf, grantsPermitRead } from './dataset-policy/grants';
-import { hasDocumentEditorAccess } from './document-policy';
+import { hasDocumentEditorAccess } from '@/lib/accounts';
 import type { RequestActor, RoleActor, Viewer } from '@/lib/accounts';
 import { isLinkOnlyKind } from '../user-kinds';
 import { liveAccessFacts, type AccessFacts } from './access-facts';

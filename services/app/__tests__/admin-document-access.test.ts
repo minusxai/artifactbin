@@ -5,8 +5,8 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {createAuthHost} from '@artifactbin/auth';
 import {createTokenReader,inProcess} from '@artifactbin/utils';
 import {createDocumentGraph} from '@/lib/document/document-graph';
-import {getArtifactById,setDocumentEditorPolicy} from '@/lib/artifacts';
-import {createUser,claimToken} from '@/lib/accounts';
+import {getArtifactById} from '@/lib/artifacts';
+import {createUser,claimToken,setDocumentEditorPolicy} from '@/lib/accounts';
 import {mintAccountToken as mintToken} from '@/__tests__/harness';
 import {cliHarness,type RecordedCall} from '../../cli/test/harness';
 import {GET,PUT} from '@/app/api/artifacts/[id]/route';
@@ -78,7 +78,7 @@ it('lets an admin pull and push a non-private document whose save prepares an au
 
 it('refuses an admin every door to a private document with the uniform not-found, leaking nothing',async()=>{
  const row=(await getArtifactById(PRIVATE.id))!;
- const doors:Array<[string,Promise<Response>]>=[
+ const doors:Array<[string,Response|Promise<Response>]>=[
   ['read',bearer(`/api/artifacts/${PRIVATE.id}`)],
   ['content',bearer(`/api/artifacts/${PRIVATE.id}/content`)],
   ['versions',bearer(`/api/artifacts/${PRIVATE.id}/versions`)],

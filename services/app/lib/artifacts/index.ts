@@ -32,8 +32,6 @@ export type { MutationReceipt } from './mutation-receipt';
 export { emitHeadCommitted, onDatasetCommitted, onHeadCommitted } from './after-commit';
 export { setMutationInvocation } from './mutation-invocation';
 export type { MutationInvocationFactory } from './mutation-invocation';
-export { setDocumentEditorPolicy } from './document-policy';
-export type { DocumentEditorPolicy } from './document-policy';
 
 /** Wire (routes, publish, operations): body parsers and the response shapes. */
 export { SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire, respondToEdit, sourceRepairsEcho } from './wire';
@@ -72,7 +70,6 @@ export { assertGrantCommit, grantContext, readThrough } from './dataset-policy/g
 export type { GrantDocument, ReadRow } from './dataset-policy/grants';
 export { liveAccessFacts, preloadAccessFacts } from './access-facts';
 export type { AccessFacts } from './access-facts';
-export { hasDocumentEditorAccess } from './document-policy';
 export { refusalFor } from './capabilities';
 export type { CapabilityRefusal } from './capabilities';
 export { pinMutationContext } from './mutation-receipt';

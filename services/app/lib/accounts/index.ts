@@ -2,7 +2,7 @@
  * The accounts module's interface: only what other modules import. Server-only; the one other entry is
  * ./tokens, which a downstream deployment imports by path (services/app/__tests__/downstream-exports.test.ts).
  */
-export type { RoleActor, TokenActor, VerifiedAccount, Viewer } from './actors';
+export type { RoleActor, TokenActor, Viewer } from './actors';
 export { hasAdminCredential } from './admin-auth';
 export { AGENT_COOKIE, agentSessionClearCookie, agentSessionSetCookie, decodeAgentSessionEnvelope, encodeAgentSession, liveAgentSession, withToken, withoutToken } from './agent-session';
 export { browserActor, docAssetImportRateLimited, documentFetchRateLimited, refusesCrossSite, resetRateLimit, resetWebIngestRateLimit, setDocAssetImportCapForTests, webIngestRateLimited, withTokenAuth } from './auth';
@@ -25,3 +25,4 @@ export { actorForArtifacts, browserSessionKind, isBrowserSessionRequest, isCooki
 export type { RequestActor } from './viewer';
 export { endPagesSession, endPagesSessionsFor, exchangePagesTicket, issuePagesTicket, pagesSessionActor, pagesSessionOf } from './pages-sessions';
 export type { PagesSession } from './pages-sessions';
+export { hasDocumentEditorAccess, setDocumentEditorPolicy, type DocumentEditorPolicy } from './document-editor';

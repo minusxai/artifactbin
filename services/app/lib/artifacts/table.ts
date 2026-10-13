@@ -14,7 +14,7 @@
  */
 import { ACCOUNT_REACH_SQL, type TokenActor } from '@/lib/accounts';
 import type { StoredDocument } from '../document';
-import { hasDocumentEditorAccess } from './document-policy';
+import { hasDocumentEditorAccess } from '@/lib/accounts';
 
 export { artifactQuery, loadArtifactDocument } from './document';
 import { shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';

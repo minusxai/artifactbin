@@ -7,7 +7,7 @@ import { liveAccessFacts, preloadAccessFacts, type AccessFacts } from '@/lib/art
 import type {MutationNotificationJobInput,MutationNotificationPlan,NotificationSource,Queryable,MutationInitiator} from '@artifactbin/contracts';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts';
-import { hasDocumentEditorAccess } from '@/lib/artifacts';
+import { hasDocumentEditorAccess } from '@/lib/accounts';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {PUBLIC_BASE_URL} from '@/lib/platform/config';
 import {NotificationExecutionError} from '@/lib/notifications/errors';
