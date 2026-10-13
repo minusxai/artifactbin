@@ -131,6 +131,12 @@ function Entries(props: { entries: MenuEntry[]; context: RowContext }): JSX.Elem
   )}</Index>;
 }
 
+/** Each flyout owns its sibling selection; hovering a child must not close its parent. */
+function FlyoutEntries(props: { entries: MenuEntry[]; close: () => void }): JSX.Element {
+  const [sub, setSub] = createSignal<string | null>(null);
+  return <Entries entries={props.entries} context={{ close: props.close, sub, setSub }} />;
+}
+
 function Row(props: { item: MenuItem; context: RowContext }): JSX.Element {
   let row: HTMLElement | undefined;
   let flyout: HTMLDivElement | undefined;
@@ -174,7 +180,7 @@ function Row(props: { item: MenuItem; context: RowContext }): JSX.Element {
       <div ref={flyout} role="menu" aria-label={props.item.label}
         onKeyDown={(event) => { if (event.key === 'ArrowLeft') { event.preventDefault(); event.stopPropagation(); props.context.setSub(null); row?.focus(); } }}
         class={`absolute left-full top-0 ml-1 rounded-panel border border-edge bg-surface text-fg shadow-lg ${SURFACE}`}>
-        <div class="flex flex-col"><Entries entries={props.item.items!} context={props.context} /></div>
+        <div class="flex flex-col"><FlyoutEntries entries={props.item.items!} close={props.context.close} /></div>
       </div>
     </Show>
   </div>;

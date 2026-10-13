@@ -22,7 +22,10 @@ it.each([
   ['Scrollytelling', 'scrolly'], ['App', 'app'],
 ])('creates %s privately and preserves the current page in browser history', async (label, template) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ id: 'new123' }, { status: 201 })));
-  fireEvent.click(open().getByRole('menuitem', { name: label }));
+  const item = open().getByRole('menuitem', { name: label });
+  fireEvent.mouseEnter(item.parentElement!);
+  expect(item).toBeInTheDocument();
+  fireEvent.click(item);
   await waitFor(() => expect(openDocument).toHaveBeenCalledWith(`/a/new123${template === 'doc' ? '/edit' : ''}`));
   expect(replaceDocument).not.toHaveBeenCalled();
   const [url, init] = vi.mocked(fetch).mock.calls[0];

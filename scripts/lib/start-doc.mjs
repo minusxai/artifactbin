@@ -38,10 +38,10 @@ export async function startDocument(base, options) {
     throw new Error(`cannot start a document (${res.status} ${JSON.stringify(body)}).`);
   }
   if (typeof body.prompt !== 'string'
-    || !body.prompt.includes("\n\n---\n\nLet's build an artifact for ")
+    || !body.prompt.includes("\n\nAsk the user what artifact they'd like to build.")
     || body.prompt.includes('\r')
     || body.prompt.includes('mx_')) {
-    throw new Error('the start paste must contain tokenless instructions and an editable brief');
+    throw new Error('the start paste must contain tokenless instructions and a question for the user');
   }
   if ('token' in body) throw new Error('the start response handed out a credential');
   const shared = await fetch(`${base}/api/my/artifacts/${body.id}/sharing`, {

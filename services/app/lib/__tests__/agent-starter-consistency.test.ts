@@ -135,11 +135,11 @@ describe('every agent-facing starter says the same thing', () => {
     expect(withoutTheException(skill).toLowerCase()).not.toContain('token');
   });
 
-  it('the starter includes the editable brief and is identical everywhere it is handed over', async () => {
+  it('the starter includes the question for the user and is identical everywhere it is handed over', async () => {
     const all = await surfaces();
     const [, started] = all.find(([name]) => name === 'POST /api/start prompt')!;
     const [, handed] = all.find(([name]) => name.includes('agent-prompt'))!;
-    expect(started).toContain("\n\n---\n\nLet's build an artifact for " );
+    expect(started).toContain("\n\nAsk the user what artifact they'd like to build." );
     expect(handed.replace(/\/a\/[A-Za-z0-9]+/g, '/a/<id>')).toBe(started.replace(/\/a\/[A-Za-z0-9]+/g, '/a/<id>'));
     expect(started.replace(/\/a\/[A-Za-z0-9]+/g, '/a/<id>')).toBe(existingPaste(BASE, '<id>'));
   });
