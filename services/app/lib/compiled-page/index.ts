@@ -27,7 +27,7 @@ export { ISLANDS_MANIFEST_PATH } from './build.server';
 export { assembleReaderPage } from './assembler';
 export { withStoredCarriers } from './carriers';
 export { planOf } from './plan';
-export { agentDiscovery, agentDiscoveryHead, withAgentDiscoveryTail } from './agent-discovery';
+export { agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, withAgentDiscoveryTail } from './agent-discovery';
 
 // ---- Build storage: the shared build, the per-document modules and their binding to the build.
 export { loadCompilerBuild } from './build.server';

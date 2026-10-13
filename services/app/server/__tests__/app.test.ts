@@ -5,6 +5,7 @@
  * document's stranger gets the uniform 404 page; the app's paths get the SPA
  * under the app CSP; and anything else is a plain 404.
  */
+import { agentDiscovery } from '@/lib/platform/agent-discovery';
 import { pagesSite } from '@/lib/http/pages-origin';
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
@@ -239,5 +240,36 @@ describe('the app\'s paths', () => {
   it('mounts the API: an unauthenticated write is the handler\'s own 401', async () => {
     const res = await app.request('/api/artifacts', { method: 'POST', body: '{}', headers: { 'content-type': 'application/json', ...as({ credential: 'none' }) } });
     expect(res.status).toBe(401);
+  });
+});
+
+describe('readable startup discovery', () => {
+  it('makes the shared HTTP discovery readable in the initial page body', async () => {
+    const w = await world();
+    const res = await app.request(`${BASE}/a/${w.pub.id}`, { headers: as({ credential: 'none' }) });
+    const html = await res.text();
+    const body = html.slice(html.indexOf('<body'));
+    const text = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]*>/g, '');
+    expect(text).toContain(agentDiscovery(BASE).instruction);
+    expect(body).toContain(`<a href="${agentDiscovery(BASE).url}">`);
+  });
+
+  it('escapes the origin in the readable link', async () => {
+    const response = await app.request(`${BASE}/login`, { headers: { 'x-forwarded-host': 'docs&example.test' } });
+    const body = (await response.text()).split('<body>')[1]!;
+    expect(body).toContain('<a href="http://docs&amp;example.test/llms.txt">');
+    expect(body).not.toContain('href="http://docs&example.test/llms.txt');
+  });
+
+  it('provides the same generic guide on private and missing browser pages without disclosing the document', async () => {
+    const w = await world();
+    const responses = await Promise.all([w.priv.id, 'missing'].map(id => app.request(`${BASE}/a/${id}`, { headers: { ...as({ credential: 'none' }), accept: 'text/html' } })));
+    const bodies = await Promise.all(responses.map(async res => { expect(res.status).toBe(404); return res.text(); }));
+    for (const html of bodies) {
+      expect(html).toContain(`<a href="${agentDiscovery(BASE).url}">`);
+      expect(html).not.toContain('secret words');
+      expect(html).not.toContain('data-mx-document-frame');
+      expect(html).not.toContain(w.priv.id);
+    }
   });
 });

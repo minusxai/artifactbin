@@ -13,4 +13,7 @@ captureInstallPrompt(window);
 captureServedFrame();
 // The app's own sheet, re-scoped into every trusted shadow root (solid/components/TrustedUi).
 configureTrustedUiFromShell(document);
-render(() => <App />, document.getElementById('root')!);
+const root = document.getElementById('root')!;
+// Static startup help is for readers without the app runtime.
+root.replaceChildren();
+render(() => <App />, root);
