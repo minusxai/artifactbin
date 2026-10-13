@@ -4,6 +4,17 @@ import {skillTree} from '../skills';
 import {renderSkill} from '../skills/render';
 
 describe('one root for installed and direct HTTP agents',()=>{
+ it('gives URL readers complete HTTP operations while installed skills keep CLI operations',()=>{
+  const origin='https://skills-contract.example';
+  const http=llmsText(origin);
+  const cli=teaching.files['SKILL.md'].split(TEACHING_BASE).join(origin);
+  for(const operation of ['POST /api/artifacts','GET /api/artifacts/<id>','POST /api/artifacts/<id>/prepare','POST /api/artifacts/<id>/edits'])expect(http).toContain(operation);
+  for(const field of ['expectedVersion','document_update','refresh_token','client_id','persistent secret store'])expect(http).toContain(field);
+  expect(http).toContain('If there are no saved credentials, you must ask the user for their email to complete authentication. Do not invent an email.');
+  expect(http).not.toContain('afbin pull');expect(http).not.toContain('afbin push');
+  expect(cli).toContain('afbin pull');expect(cli).toContain('afbin push');
+  expect(cli).not.toContain('POST /api/artifacts/<id>/prepare');
+ });
  it('distinguishes an installed CLI from downloading one through npx',()=>{
   const root=llmsText('https://skills-contract.example');
   expect(root).toContain('npx downloads the CLI');
@@ -12,7 +23,7 @@ describe('one root for installed and direct HTTP agents',()=>{
  it('serves precisely the root body with online topic links, without appending a second manual',()=>{
   const origin='https://skills-contract.example';
   const root=skillTree().get('artifactbin/SKILL.md')!;
-  const expected=renderSkill(root,{base:origin}).replace(/\]\(references\/([a-z0-9-]+)\.md(#[^)\s]+)?\)/g,(_match,name:string,hash:string|undefined)=>`](${origin}/llms/${name}${hash??''})`);
+  const expected=renderSkill(root,{base:origin,transport:'http'}).replace(/\]\(references\/([a-z0-9-]+)\.md(#[^)\s]+)?\)/g,(_match,name:string,hash:string|undefined)=>`](${origin}/llms/${name}${hash??''})`);
   expect(llmsText(origin).trim()).toBe(expected.trim());
  });
 });
@@ -39,7 +50,9 @@ describe('installable shared skill folder',()=>{
   const origin='https://recipient.example';
   const expected=skillPackageFiles(skillTree(),origin);
   const cli=Object.fromEntries(Object.entries(teaching.files).map(([name,text])=>[name,text.split(TEACHING_BASE).join(origin)]));
-  expect(expected).toEqual(cli);
+  expect(expected['SKILL.md']).not.toBe(cli['SKILL.md']);
+  for(const name of Object.keys(expected).filter(name=>name!=='SKILL.md'))expect(expected[name],name).toBe(cli[name]);
+  expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
   expect(await (await helperRoute()).text()).toBe(expected['scripts/credentials.mjs']);
   const response=await zipRoute(new Request(`${origin}/skills/artifactbin.zip`));
   expect(response.headers.get('content-type')).toBe('application/zip');
@@ -69,3 +82,21 @@ describe('installable shared skill folder',()=>{
   for(const name of ['../SKILL.md','scripts/other.mjs','/root/file','references/../secrets.md'])expect(()=>skillZip({[name]:'bad'})).toThrow('Unsupported skill member');
  });
 });
+
+ it('reuses the same procedure fragments in roots and references without changing reference transport',()=>{
+  const base='https://reuse.example';
+  const tree=skillTree();
+  const root=tree.get('artifactbin/SKILL.md')!;
+  for(const transport of ['http','cli'] as const){
+   const text=renderSkill(root,{base,transport});
+   for(const [operation,reference] of [['authentication',transport==='http'?'http-auth':'publishing-auth'],['creation',transport==='http'?'http-authoring':'publishing'],['editing',transport==='http'?'http-authoring':'publishing']]){
+    const fragment=renderSkill({...root,body:`[% include "fragments/${transport}-${operation}.md" %]`},{base,transport}).trim();
+    expect(text).toContain(fragment);
+    const ref=tree.get(`artifactbin/references/${reference}.md`)!;
+    const rendered=renderSkill(ref,{base,transport}).replace(/\]\((?!https:)([a-z-]+\.md)/g,'](references/$1');
+    expect(rendered).toContain(fragment);
+    expect(renderSkill(ref,{base,transport:'cli'})).toBe(renderSkill(ref,{base,transport:'http'}));
+   }
+  }
+  expect(()=>renderSkill({...root,body:'[% include "fragments/missing.md" %]'},{base})).toThrow();
+ });

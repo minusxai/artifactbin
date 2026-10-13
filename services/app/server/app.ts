@@ -100,7 +100,7 @@ function withPreconnects(html: string, frame: DocumentFrame): string {
   let origin: string;
   try { origin = new URL(frame.src).origin; } catch { return html; }
   const tags = `<link rel="preconnect" href="${escapeHtml(origin)}">`;
-  const after = /<meta name="afbin"[^>]*>/i.exec(html) ?? /<head(?:\s[^>]*)?>/i.exec(html);
+  const after = /<meta name="cli"[^>]*>/i.exec(html) ?? /<head(?:\s[^>]*)?>/i.exec(html);
   return after ? `${html.slice(0, after.index + after[0].length)}${tags}${html.slice(after.index + after[0].length)}` : html;
 }
 
@@ -162,7 +162,7 @@ function fontSlot(head: string): number {
   let cut = -1;
   for (const m of head.matchAll(STYLESHEET)) cut = m.index! + m[0].length;
   if (cut >= 0) return cut;
-  for (const tag of [/<meta\b[^>]*name=["']viewport["'][^>]*>/i, /<meta\b[^>]*charset=[^>]*>/i, /<meta\b[^>]*name=["']afbin["'][^>]*>/i, /<head\b[^>]*>/i]) {
+  for (const tag of [/<meta\b[^>]*name=["']viewport["'][^>]*>/i, /<meta\b[^>]*charset=[^>]*>/i, /<meta\b[^>]*name=["']cli["'][^>]*>/i, /<head\b[^>]*>/i]) {
     const m = tag.exec(head);
     if (m) return m.index + m[0].length;
   }

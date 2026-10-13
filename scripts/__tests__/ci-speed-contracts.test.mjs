@@ -65,8 +65,9 @@ it('does not compile the app twice or repeat email-source conformance in the ref
  const steps=workflow().jobs['reference-compatibility'].steps;
  expect(steps.find(step=>step.name==='Build OSS host').run).toBe('node scripts/build/build-server.mjs dist/server.mjs');
  const command=steps.find(step=>step.name==='ID-first conformance for source bundle and installed npm package').run;
- expect(command.match(/wait_pair\n/g)).toHaveLength(1);
- expect(command).toContain('CONFORMANCE__CREDENTIAL_SOURCE=outbox-oauth');
+ expect(command.match(/node scripts\/gates\.mjs/g)).toHaveLength(1);
+ expect(command).not.toContain('wait_pair');
+ expect(steps.find(step=>step.name==='ID-first conformance for source bundle and installed npm package').env.CONFORMANCE__CREDENTIAL_SOURCE).toBe('${{ matrix.credential }}');
 });
 it('warms the complete ordinary package cache without a nonexistent plan dependency',()=>{
  const job=workflow().jobs['warm-caches'];
@@ -130,8 +131,8 @@ it('hands the source build from the current pack run to reference proof without 
 });
 it('splits independent credential and database host proofs into required parallel lanes',()=>{
  const job=workflow().jobs['reference-compatibility'];
- expect(job.strategy?.matrix.proof).toEqual(['accounts','team']);
- expect(job.steps.find(step=>step.name==='ID-first conformance for source bundle and installed npm package').if).toBe("matrix.proof == 'accounts'");
+ expect(job.strategy?.matrix.include.map(({proof})=>proof)).toEqual(['accounts-source-email','accounts-npm-email','accounts-source-oauth','team']);
+ expect(job.steps.find(step=>step.name==='ID-first conformance for source bundle and installed npm package').if).toBe("matrix.proof != 'team'");
  expect(job.steps.find(step=>step.name==='Team hosts with isolated PGLite and PostgreSQL').if).toBe("matrix.proof == 'team'");
  expect(job.strategy['fail-fast']).toBe(false);
 });

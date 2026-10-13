@@ -1,0 +1,1 @@
+Push confirms source acceptance; do not pull, diff or grep just to reconfirm it.

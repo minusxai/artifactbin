@@ -64,29 +64,19 @@ describe('docs addresses', () => {
     expect(old.status).toBe(404);
   });
 
-  it('serves Getting started as a public page and a direct Markdown guide', async () => {
+  it('keeps human setup and serves one canonical agent guide', async () => {
     const human = await app.request('/getting-started', { headers: BROWSER });
     expect(human.status).toBe(200);
     expect(human.headers.get('content-type')).toContain('text/html');
-    const guide = await app.request('/getting-started.md');
+    const removed = await app.request('/getting-started.md');
+    expect(removed.status).toBe(404);
+    expect(removed.headers.get('location')).toBeNull();
+    const guide = await app.request('/llms.txt');
     expect(guide.status).toBe(200);
     expect(guide.headers.get('content-type')).toContain('text/plain');
     const text = await guide.text();
-    expect(text).toContain('# Getting started');
-    expect(text).toContain('npx --yes @afbin/cli@latest setup');
-    expect(text).toContain('npx.cmd --yes @afbin/cli@latest setup');
-    expect(text).toContain('afbin help');
-    expect(text).toContain('Claude Code, Codex, Pi, and OpenCode');
-    expect(text).toContain('use the artifactbin skill');
-    expect(text).toContain('afbin help to discover everything you can do');
-    expect(text).toContain('sign in through the browser automatically when needed; a browser already signed in on the same machine connects with no click');
-    expect(text).toContain('direct HTTP clients use email authentication');
-    expect(text).toContain('--server');
-    expect(text).toContain('afbin pull');
-    expect(text).toContain('afbin push');
-    const discovery = await (await app.request('/llms.txt')).text();
-    expect(discovery).toContain('/getting-started.md');
-    expect(discovery).not.toContain('Prepare Node:');
+    expect(text).toContain('POST /api/artifacts');
+    expect(text).not.toContain('/getting-started.md');
   });
 
   it('a guessed API path answers 404 JSON naming /docs, never the SPA', async () => {
@@ -137,9 +127,8 @@ describe('docs addresses', () => {
   it('the shell carries the help link with a title and the agent meta', async () => {
     const html = await (await app.request('/login')).text();
     expect(html).toMatch(/<link rel="help" href="[^"]+\/llms.txt" title="[^"]+"/);
-    expect(html).toMatch(/<meta name="afbin" content="[^"]*afbin[^"]*"/);
-    expect(html).toContain('Windows: npx.cmd');
-    expect(html).toContain('Use an installed afbin CLI, otherwise HTTP');
-    expect(html).toContain('/skills/artifactbin.zip');
+    expect(html).toMatch(/<meta name="agents" content="[^"]*HTTP API[^"]*"/);
+    expect(html).toContain('Use the HTTP API');
+    expect(html).toMatch(/<meta name="cli" content="[^"]*npx --yes @afbin\/cli@latest setup/);
   });
 });

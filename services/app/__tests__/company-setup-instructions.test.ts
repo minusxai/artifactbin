@@ -1,10 +1,11 @@
 import {renderSetupInstaller} from '@/lib/serving/setup-installers';
 import type {DeploymentState} from '@artifactbin/contracts';
 import {describe,it,expect} from 'vitest';
-import {useAppHarness,request} from './harness';
+import {useAppHarness} from './harness';
 import {overrideConfig} from '@/lib/platform/config';
 import {getDb} from '@/lib/platform/db';
-import {GET as markdown} from '@/app/getting-started.md/route';
+import {gettingStarted} from '@/lib/serving/getting-started';
+import {getDeploymentState} from '@/lib/deployment';
 import {createAppServer} from '@/server/app';
 import {spawnSync} from 'node:child_process';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
@@ -16,12 +17,12 @@ const server=()=>createAppServer({indexHtml:async()=>'<div>SPA</div>',publicDir:
 const headers={'x-forwarded-proto':'https','x-forwarded-host':'company.example.test'};
 async function confirm(){const db=await getDb();await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES ('grp_company','company-team','Company','owner')");await db.query("INSERT INTO deployment_state(id,owner_user_id,default_group_id,setup_complete) VALUES ('company','owner','grp_company',true)");}
 describe('deployment-aware recipient setup',()=>{
- it('completed company Markdown teaches the same recipient group/default command as group copy',async()=>{
-  company();await confirm();const text=await(await markdown(request('/getting-started.md'))).text();
+ it('completed company human setup teaches the same recipient group/default command as group copy',async()=>{
+  company();await confirm();const text=JSON.stringify(gettingStarted('http://localhost:3000',await getDeploymentState(null)));
   expect(text).toContain("--group 'company-team' --set-default");expect(text).toContain('PUT /api/me/preferences');expect(text).not.toContain('grp_company');
  });
  it('incomplete company setup selects only this server and does not advertise a group',async()=>{
-  company();const text=await(await markdown(request('/getting-started.md'))).text();expect(text).toContain('--set-default');expect(text).not.toContain('--group');
+  company();const text=JSON.stringify(gettingStarted('http://localhost:3000',await getDeploymentState(null)));expect(text).toContain('--set-default');expect(text).not.toContain('--group');
   const script=await(await server().request('/chat/install.sh',{headers})).text();expect(script).toContain('--set-default');expect(script).not.toContain('--group');
  });
  it('the actual served company shell forwards explicit recipient group and host defaults as arguments',async()=>{

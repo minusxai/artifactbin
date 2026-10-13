@@ -126,18 +126,23 @@ it('the published direct HTTP example edits JSX with an email bearer, reserved i
   const edited=await post('/api/artifacts/'+id+'/edits',{edit_id:snapshot.edit_id,document_update},auth);expect(edited.status,await edited.clone().text()).toBe(200);
   const head=await(await read()).json();expect(head.markup).toBe('<p id="message">Updated HTTP text 😀</p>');expect(head.version).toBe(snapshot.version+1);
   const stale=await post('/api/artifacts/'+id+'/edits',{edit_id:snapshot.edit_id,document_update},auth);expect(stale.status).toBe(409);expect((await(await read()).json()).markup).toBe(head.markup);
-  // Execute the recommended source-authoring guide verbatim with the same email bearer.
-  const sourceCode=/```js\n(\/\/ BEGIN HTTP SOURCE EDIT[\s\S]*?\/\/ END HTTP SOURCE EDIT)\n```/.exec(guide)?.[1];
-  expect(sourceCode,'HTTP guide needs an executable source preparation example').toBeTruthy();
+  // Execute the documented request bodies through the real handlers.
+  const workflow=await readFile(join(process.cwd(),'skills/artifactbin/fragments/http-editing.md'),'utf8');
+  const bodies=[...workflow.matchAll(/```json\n([\s\S]*?)\n```/g)].map(match=>match[1]);
+  expect(bodies).toHaveLength(2);
   const fresh=await post('/api/artifacts',{markup:body.markup,title:'Source example'},auth);
   expect(fresh.status).toBe(201);const original=await fresh.json();
-  const run=runInNewContext('(async()=>{'+sourceCode+'\n;return edited;})',{
-   fetch:(url:string,init:RequestInit)=>host.fetch(new Request(url,init)),base,artifactId:original.id,accessToken:auth.authorization.slice('Bearer '.length),
-  }) as ()=>Promise<Record<string,unknown>>;
-  const sourceEdited=await run();expect(sourceEdited.id).toBe(original.id);
+  const observed=await(await host.fetch(new Request(base+'/api/artifacts/'+original.id,{headers:auth}))).json();
+  const preparation=JSON.parse(bodies[0].replace('<edited markup>','<p id=\\"message\\">Updated HTTP text</p>').replace('<observed edit_id>',observed.edit_id).replace('<observed version>',JSON.stringify(observed.version)));
+  const proposed=await post('/api/artifacts/'+original.id+'/prepare',preparation,auth);
+  expect(proposed.status).toBe(200);const update=await proposed.json();
+  const submission=JSON.parse(bodies[1].replace('<returned edit_id>',update.edit_id).replace('<returned document_update>',JSON.stringify(update.document_update)));
+  const sourceEdited=await post('/api/artifacts/'+original.id+'/edits',submission,auth);
+  expect(sourceEdited.status).toBe(200);expect((await sourceEdited.json()).id).toBe(original.id);
   const sourceHead=await(await host.fetch(new Request(base+'/api/artifacts/'+original.id,{headers:auth}))).json();
   expect(sourceHead.markup).toBe('<p id="message">Updated HTTP text</p>');
-  expect(sourceHead.title).toBe('Updated HTTP example');expect(sourceHead.version).toBe(original.version+1);
+  expect(sourceHead.version).toBe(observed.version+1);
+  expect((await post('/api/artifacts/'+original.id+'/prepare',preparation,auth)).status).toBe(409);
 
  }finally{await drainPreparedPageWarmups();await drainSnapshotRevalidations();await host.close();await rm(directory,{recursive:true,force:true});}
 });

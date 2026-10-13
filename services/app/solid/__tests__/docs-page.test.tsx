@@ -6,7 +6,7 @@ import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { STORY_SYSTEMS } from '@/lib/data/story/story-systems';
 import GetStarted from '@/solid/components/GetStarted';
 import { App } from '@/solid/App';
-import { afbinInstallCommand, afbinWindowsInstallCommand, gettingStarted, gettingStartedMarkdown } from '@/lib/serving/getting-started';
+import { afbinInstallCommand, afbinWindowsInstallCommand, gettingStarted } from '@/lib/serving/getting-started';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
 it('serves the human tour with current templates, live design systems and a link to Getting started', async () => {
@@ -38,13 +38,11 @@ it('renders the same Getting started instructions as Markdown, with sidebar and 
   const main = await screen.findByRole('main');
   expect(within(main).getByRole('heading', { level: 1, name: 'Getting started' })).toBeInTheDocument();
   expect(screen.getByRole('navigation', { name: 'Workspace' })).toBeInTheDocument();
-  expect(within(main).getByRole('link', { name: 'Markdown for agents ↗' })).toHaveAttribute('href', '/getting-started.md');
+  expect(within(main).getByRole('link', { name: 'Markdown for agents ↗' })).toHaveAttribute('href', '/llms.txt');
   const guide = gettingStarted(window.location.origin);
-  const markdown = gettingStartedMarkdown(window.location.origin);
   for (const section of guide.sections) {
     expect(document.getElementById(section.id)).toBeInTheDocument();
     for (const block of section.blocks) {
-      expect(markdown).toContain(block.text);
       expect(within(main).getByText(block.text, { normalizer: text => text })).toBeInTheDocument();
       if (block.kind === 'command') expect(within(main).getByRole('button', { name: `Copy ${block.label.toLowerCase()} command` })).toBeInTheDocument();
     }
@@ -71,4 +69,15 @@ it('company setup panel copies shared recipient defaults and preserves explicit 
  expect(document.body.textContent).toContain("--group 'company-team' --set-default");expect(document.body.textContent).toContain('PUT /api/me/preferences');expect(document.body.textContent).not.toContain('grp_team');
  fireEvent.click(screen.getByRole('button',{name:'Create a live document for my agent'}));
  expect(fetcher).toHaveBeenCalledWith('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:{type:'personal'}})});
+});
+
+import {DeploymentWelcome} from '@/solid/pages/DeploymentWelcome';
+import {agentDiscovery,AGENT_HELP_TITLE} from '@/lib/platform/agent-discovery';
+it('shows the shared HTTP discovery instruction and guide before CLI setup',()=>{
+ render(()=><DeploymentWelcome deployment={{mode:'company',setup_complete:false,is_owner:false,default_group:null}}/>);
+ const help=agentDiscovery(window.location.origin);
+ expect(screen.getByText(help.instruction)).toBeVisible();
+ expect(screen.getByRole('link',{name:AGENT_HELP_TITLE})).toHaveAttribute('href',help.url);
+ const headings=screen.getAllByRole('heading').map(node=>node.textContent);
+ expect(headings.indexOf('AI agents')).toBeLessThan(headings.indexOf('Connect your CLI'));
 });

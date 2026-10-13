@@ -189,7 +189,7 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
    * over the rendered tree covers every one of them, and covers a file added tomorrow too.
    */
   it('keeps every rendered guide — the brief and every reference — within its reading budget',()=>{
-    for(const file of tree.files)if(file.kind==='guide')expect(Buffer.byteLength(render(file)),file.path).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
+    for(const transport of ['cli','http'] as const)for(const file of tree.files)if(file.kind==='guide')expect(Buffer.byteLength(renderSkill(file,{base:SIZE_BASE,transport})),`${transport}: ${file.path}`).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
     expect(tree.files.length).toBeGreaterThan(10);
     expect(tree.files.some(file=>!file.ref),'the brief itself must be in the sweep').toBe(true);
   });
@@ -227,7 +227,8 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
       expect(text).toContain('optional historical selection');
     }
   });
-  it.each([BASE, 'https://artifactbin.dev', 'https://app.artifactbin.dev', 'https://artifacts.company.example'])('uses the CLI-owned root within its budget at %s',base=>{
+  it.each([BASE, 'https://artifactbin.dev', 'https://app.artifactbin.dev', 'https://artifacts.company.example'])('keeps both transport roots within budget at %s',base=>{
+    expect(Buffer.byteLength(renderSkill(tree.get('artifactbin/SKILL.md')!,{base,transport:'http'}))).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
     const sheet=buildQuickSheet(base);expect(Buffer.byteLength(sheet)).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);expect(sheet).toContain('afbin push');
   });
   it('renders every file for two bases with no leftover template syntax', () => {

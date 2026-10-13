@@ -123,6 +123,7 @@ describe('the file, for a coding agent asked to edit it', () => {
     const note = /^<!doctype html>\n<!-- ([\s\S]*?) -->\n<html/.exec(html)?.[1];
     expect(note).toBe(
       'artifactbin offline file for "Q3 - -> review \\u003c!- - plan" (https://app.artifactbin.dev/a/Ab12Cd). '
+      + 'Local/offline editing needs no remote API. '
       + 'To edit the document, change the top-level "source" string (the second key) in the <script id="afbin-file"> JSON below. '
       + 'It is artifactbin JSX (reference: https://app.artifactbin.dev/llms.txt; prepare Node/npm using https://app.artifactbin.dev/llms.txt). '
       + 'If afbin is not installed, run "npx @afbin/cli@latest setup" once (Windows PowerShell: "npx.cmd @afbin/cli@latest setup"); it installs the afbin command and the agent skills. Then read "afbin help markup". '
@@ -148,7 +149,7 @@ describe('the file, for a coding agent asked to edit it', () => {
     const help = doc.head.querySelector('link[rel="help"]');
     expect(help?.getAttribute('href')).toBe('https://app.artifactbin.dev/llms.txt');
     expect(help?.getAttribute('title')).toBe(AGENT_HELP_TITLE);
-    expect(doc.head.querySelector('meta[name="afbin"]')?.getAttribute('content')).toContain('npx --yes @afbin/cli@latest');
+    expect(doc.head.querySelector('meta[name="cli"]')?.getAttribute('content')).toContain('npx --yes @afbin/cli@latest');
   });
 
   it('puts the JSON before the code, with the top-level source as its second key', () => {

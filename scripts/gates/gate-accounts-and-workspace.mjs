@@ -127,7 +127,7 @@ async function startLeg() {
       check(!/\/start\?k=/.test(prompt), 'and carries no start link');
       check(prompt.length < 600 && prompt.includes("\n\nAsk the user what artifact they'd like to build."), `and includes a short question for the user (${prompt.length} chars)`);
       check(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
-      check(prompt.includes('/getting-started.md') && !/ensure-node|afbin help|--server/.test(prompt), 'and links to the shared setup guide while keeping the handoff short');
+      check(prompt.includes('/llms.txt') && !/ensure-node|afbin help|--server/.test(prompt), 'and links to the shared setup guide while keeping the handoff short');
 
       // The retired doors (the start-link brief, its claim door, the public anonymous mint) answering 404 are HTTP
       // facts with no browser in them: services/app/server/__tests__/docs-human.test.ts asserts them on the app server.

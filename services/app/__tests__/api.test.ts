@@ -206,10 +206,10 @@ describe('CLI and HTTP discovery',()=>{
   const response=await getLlmsTxt(request('/llms.txt'));const text=await response.text();
   expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('text/plain');
   expect(text).toMatch(/^## Read first/);
-  expect(text).toContain('http://localhost:3000/getting-started.md');
-  expect(text).toContain('afbin help');expect(text).not.toMatch(/@afbin\/cli@latest|ensure-node|releases\/download|npm install/);
+  expect(text).toContain('http://localhost:3000/getting-started');
+  expect(text).toContain('POST /api/artifacts/<id>/edits');expect(text).not.toMatch(/@afbin\/cli@latest|ensure-node|releases\/download|npm install/);
   expect(Buffer.byteLength(text)).toBeLessThanOrEqual(8192);
-  for(const topic of ['http-api','http-auth','http-authoring','http-document-graph','live-sessions'])
+  for(const topic of ['http-api','http-auth','http-authoring','live-sessions'])
     expect(text).toContain(`http://localhost:3000/llms/${topic}`);
   expect(text).toContain('## Example');expect(text).toContain('## Read next');
   expect(text).not.toContain('## Direct HTTP API');

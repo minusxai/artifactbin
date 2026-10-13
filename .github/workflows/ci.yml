@@ -1237,7 +1237,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        proof: [accounts, team]
+        include:
+          - {proof: accounts-source-email, cli: source, credential: ''}
+          - {proof: accounts-npm-email, cli: npm, credential: ''}
+          - {proof: accounts-source-oauth, cli: source, credential: outbox-oauth}
+          - {proof: team, cli: source, credential: ''}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -1278,7 +1282,7 @@ jobs:
           name: afbin-npm-release
           path: npm-candidate
       - name: Install real package artifacts outside the checkout
-        if: matrix.proof == 'accounts'
+        if: matrix.cli == 'npm'
         working-directory: .
         run: |
           mkdir -p "$RUNNER_TEMP/afbin-packages" "$RUNNER_TEMP/afbin-consumer"
@@ -1290,28 +1294,22 @@ jobs:
         working-directory: .
       # CLI host build already compiled the app; bundle only the gate server now.
       - name: Build OSS host
-        if: matrix.proof == 'accounts'
+        if: matrix.proof != 'team'
         working-directory: .
         run: node scripts/build/build-server.mjs dist/server.mjs
       - name: ID-first conformance for source bundle and installed npm package
-        if: matrix.proof == 'accounts'
+        if: matrix.proof != 'team'
         working-directory: .
+        env:
+          CONFORMANCE__CREDENTIAL_SOURCE: ${{ matrix.credential }}
         run: |
-          # Each runner owns a PID-scoped data directory, outbox and OS-allocated port.
-          wait_pair() {
-            ci_result=0
-            for ci_pid in "${ci_pids[@]}"; do wait "$ci_pid" || ci_result=1; done
-            return "$ci_result"
-          }
-          ci_pids=()
-          for cli in "$GITHUB_WORKSPACE/services/cli/dist/afbin.mjs" "$RUNNER_TEMP/afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs"; do
-            CONFORMANCE__CLI="$cli" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
-            ci_pids+=("$!")
-          done
-          # OAuth uses its own PID-scoped host and outbox, alongside the two email proofs.
-          CONFORMANCE__CREDENTIAL_SOURCE=outbox-oauth CONFORMANCE__CLI="$GITHUB_WORKSPACE/services/cli/dist/afbin.mjs" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace &
-          ci_pids+=("$!")
-          wait_pair
+          # One complete gate per runner: preserve every browser/CLI scenario without
+          # three hosts and their Chromium processes contending for the same CPUs.
+          cli="$GITHUB_WORKSPACE/services/cli/dist/afbin.mjs"
+          if [ "${{ matrix.cli }}" = npm ]; then
+            cli="$RUNNER_TEMP/afbin-consumer/node_modules/@afbin/cli/dist/afbin.mjs"
+          fi
+          CONFORMANCE__CLI="$cli" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace
 
       - name: Prepare standalone sandbox worker
         if: matrix.proof == 'team'

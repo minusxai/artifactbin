@@ -13,7 +13,7 @@ export function GettingStartedPage(): JSX.Element {
       <a href="/docs-human" class={`text-sm ${LINK}`}>Human docs</a>
       <div class="mt-3 flex flex-wrap items-baseline justify-between gap-3">
         <h1 class="font-sans text-3xl font-semibold tracking-tight">{guide().title}</h1>
-        <a href="/getting-started.md" rel="external" class={`text-sm ${LINK}`}>Markdown for agents ↗</a>
+        <a href="/llms.txt" rel="external" class={`text-sm ${LINK}`}>Markdown for agents ↗</a>
       </div>
       <p class="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">{guide().intro}</p>
     </header>

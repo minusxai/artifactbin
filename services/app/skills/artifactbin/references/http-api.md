@@ -12,7 +12,7 @@ Authenticate with an email account using the [shared credential helper and sign-
 - `GET /api/artifacts/<id>`: read source, metadata and current version/state.
 - `POST /api/artifacts`: create with one content field. Use new IDs for datasets/media; CSV on a document ID converts it to a dataset.
 - `PUT /api/artifacts/<id>`: replace datasets/media with observed `expectedVersion` and `expectedState`; reconcile 409s.
-- `POST /api/artifacts/<id>/prepare`: send edited JSX as `source` plus observed `edit_id` and `expectedVersion`; it returns an unsaved `document_update`. Submit that exact update and `edit_id` to `/edits`. Preserve IDs and reconcile 409s; do not publish scratch replacement documents.
+- `POST /api/artifacts/<id>/prepare` and `POST /api/artifacts/<id>/edits`: [prepare and commit an edit](http-authoring.md#prepare-an-edit-from-jsx).
 - Policy: `GET /api/artifacts/<id>/policy` for `revision`, then `PUT` with `policy` and `expectedPolicyRevision`, separately from content.
 - Markup edits preserve graph reads/claims and node identity; raw JSX does not replace that contract. See [JSX authoring](http-authoring.md) and [graph wire fields](http-document-graph.md).
 - `GET/POST /api/artifacts/<id>/annotations`: read/create comments with a body and node/quote anchor; permissions apply.

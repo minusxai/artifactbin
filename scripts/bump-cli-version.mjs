@@ -25,6 +25,27 @@ if (!parts || pointer.version !== pkg.version || shrinkwrap.version !== pkg.vers
 }
 const transitionPin = new RegExp(`^AFBIN_VERSION=${pkg.version.replaceAll('.', '\\.')}$`, 'm');
 if (!transition || !transitionPin.test(transition)) throw new Error(`${transitionPath} must pin AFBIN_VERSION=${pkg.version} before bumping`);
+// Deployment defaults are release assets too: reject drift before touching any file.
+const deploymentPins = [
+  { path: 'deploy/company/Dockerfile', pins: [
+    { pattern: /^(ARG AFBIN_VERSION=)([^\s]+)$/gm, count: 1 },
+    { pattern: /^(ARG AFBIN_PACKAGE=@afbin\/cli@)([^\s]+)$/gm, count: 1 },
+  ] },
+  { path: 'deploy/company/compose.yaml', pins: [
+    { pattern: /^(\s*image: artifactbin-company:)([^\s]+)$/gm, count: 2 },
+    { pattern: /^(\s*AFBIN_PACKAGE: \$\{AFBIN_PACKAGE:-@afbin\/cli@)([^}\s]+)(?=\}$)/gm, count: 1 },
+  ] },
+];
+const deployments = await Promise.all(deploymentPins.map(async ({ path, pins }) => {
+  const text = await readFile(path, 'utf8');
+  for (const { pattern, count } of pins) {
+    const matches = [...text.matchAll(pattern)];
+    if (matches.length !== count || matches.some((match) => match[2] !== pkg.version)) {
+      throw new Error(`${path} must pin CLI version ${pkg.version} before bumping`);
+    }
+  }
+  return { path, pins, text };
+}));
 const [major, minor, patch] = [parts[1], parts[2], parts[3]].map(BigInt);
 const next = level === 'major' ? `${major + 1n}.0.0` : level === 'minor' ? `${major}.${minor + 1n}.0` : `${major}.${minor}.${patch + 1n}`;
 lock.packages['services/cli'].version = next;
@@ -35,4 +56,8 @@ await writeFile(pkgPath, pkgText.replace(`"version": "${pkg.version}"`, `"versio
 await writeFile('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
 await writeFile(transitionPath, transition.replace(transitionPin, `AFBIN_VERSION=${next}`));
 await writeFile(pointerPath, pointerText.replace(`"version": "${pkg.version}"`, `"version": "${next}"`));
+for (const { path, pins, text } of deployments) {
+  const updated = pins.reduce((content, { pattern }) => content.replace(pattern, (_, prefix) => prefix + next), text);
+  await writeFile(path, updated);
+}
 console.log(`afbin ${pkg.version} → ${next}. Land the version files with the change that needs them; teaching is generated at build time; successful main CI publishes the tested npm package.`);

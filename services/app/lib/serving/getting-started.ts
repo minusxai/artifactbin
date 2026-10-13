@@ -16,7 +16,7 @@ type GuideBlock =
   | { kind: 'text'; text: string }
   | { kind: 'command'; label: string; language: 'sh' | 'powershell'; text: string };
 
-/** One source for the human page, agent Markdown, and the compact installation panel.
+/** Shared setup content for the human page and compact installation panel.
  * Pure and browser-safe; the caller supplies its deployment origin. */
 export function gettingStarted(base: string, deployment?:DeploymentState) {
   const origin = base.replace(/\/+$/, '');
@@ -74,12 +74,4 @@ export function gettingStarted(base: string, deployment?:DeploymentState) {
     intro: 'Use the installed CLI or direct HTTP to create and edit artifacts. Reuse your skill and credentials.',
     sections,
   };
-}
-
-export function gettingStartedMarkdown(base: string,deployment?:DeploymentState): string {
-  const guide = gettingStarted(base,deployment);
-  return `# ${guide.title}\n\n${guide.intro}\n\n` + guide.sections.map((section, index) =>
-    `## ${index + 1}. ${section.title}\n\n` + section.blocks.map(block => block.kind === 'text' ? block.text
-      : `${block.label}\n\n\`\`\`${block.language}\n${block.text}\n\`\`\``).join('\n\n'),
-  ).join('\n\n') + '\n';
 }

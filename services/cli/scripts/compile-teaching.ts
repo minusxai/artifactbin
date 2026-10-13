@@ -21,7 +21,7 @@ const tree=buildSkillTree(loadSkillSources());
 const brief=tree.get('artifactbin/SKILL.md');
 if(!brief)throw new Error('skills/artifactbin/SKILL.md is missing');
 // The brief keeps its frontmatter: the harness preloads the name and description, then loads the body on trigger.
-const files:Record<string,string>={'SKILL.md':skillFileWithFrontmatter(brief,renderSkill(brief,{base:BASE}))};
+const files:Record<string,string>={'SKILL.md':skillFileWithFrontmatter(brief,renderSkill(brief,{base:BASE,transport:'cli'}))};
 /**
  * The SECOND length of a reference that carries `<!--bundle:skip-->` spans: what `afbin help
  * <template>` concatenates, without the rationale a single-file read can afford. Only files that
@@ -31,9 +31,9 @@ const condensed:Record<string,string>={};
 for(const file of tree.files){
  if(!file.ref||file.audience!=='agent')continue;
  const path=`references/${file.file}`;
- files[path]=skillFileWithFrontmatter(file,renderSkill(file,{base:BASE}));
- const short=renderSkill(file,{base:BASE,bundle:true});
- if(short!==renderSkill(file,{base:BASE}))condensed[path]=short;
+ files[path]=skillFileWithFrontmatter(file,renderSkill(file,{base:BASE,transport:'cli'}));
+ const short=renderSkill(file,{base:BASE,bundle:true,transport:'cli'});
+ if(short!==renderSkill(file,{base:BASE,transport:'cli'}))condensed[path]=short;
 }
 for(const [path,text] of Object.entries(files)){
  if(!text.includes('bundle:skip'))continue;

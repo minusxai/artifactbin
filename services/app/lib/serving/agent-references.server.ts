@@ -11,10 +11,10 @@ let references:SkillTree|null=null;
 export function publicGuideText(topic:string,base:string):string|null{
  if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(topic))return null;
  const file=(references??=buildSkillTree(loadSkillSources())).get(`artifactbin/references/${topic}.md`);
- return file?projectSkillLinks(file,renderSkill(file,{base:origin(base)}),origin(base)):null;
+ return file?projectSkillLinks(file,renderSkill(file,{base:origin(base),transport:'http'}),origin(base)):null;
 }
-/** The installed root, projected onto the request's origin, with no second manual. */
+/** The shared root with HTTP procedures and request-origin links; no second manual. */
 export function llmsText(base:string):string{
  const file=skillTree().get('artifactbin/SKILL.md')!;
- return projectSkillLinks(file,renderSkill(file,{base:origin(base)}),origin(base));
+ return projectSkillLinks(file,renderSkill(file,{base:origin(base),transport:'http'}),origin(base));
 }
