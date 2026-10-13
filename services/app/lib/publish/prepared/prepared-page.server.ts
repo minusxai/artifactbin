@@ -38,7 +38,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getDb } from '@/lib/platform/db';
-import { archivedReadOnly, type ArchivedRender, type ArtifactRow, declarationsForRow, mentionedPeople, savedMentionStates, servedRow } from '@/lib/artifacts';
+import { archivedReadOnly, type ArchivedRender, type ArtifactHeader, type ArtifactRow, declarationsForRow, mentionedPeople, savedMentionStates, servableHeader, servedRow } from '@/lib/artifacts';
 import { holdableImports, refDataForRow, viewerIdentityFor } from '@/lib/document-data';
 import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import type { Viewer, RoleActor } from '@/lib/accounts';
@@ -63,6 +63,8 @@ import type { JsxNode } from '@/lib/jsx';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { prepareWorkers } from './prepare-workers.server';
+import { declaredCspExtensions } from '@/lib/trust/document-trust';
+import type { CspExtensions } from '@/lib/document';
 
 /** Raise manually when older prepared pages cannot be read. */
 const PAGE_FORMAT = MIN_PAGE_FORMAT;
@@ -94,6 +96,12 @@ export interface PreparedPage {
   cssVersion?: string | null;
   /** The diagram codes a harvest may store a drawing for (lib/mermaid-images): what a reader looks drawings up by without loading the tree. */
   mermaidCodes: string[];
+  /**
+   * The hosts this version's source declares (lib/trust/document-trust `declaredCspExtensions`), derived once per version
+   * so a validator is named from the row's header without its source ({@link preparedHeadFor}). Absent on a page
+   * prepared before it was recorded: its next full read fills it in.
+   */
+  declaredCsp?: CspExtensions;
 }
 interface PreparedDeps { datasets: string[]; assets: string[] }
 
@@ -163,7 +171,7 @@ function compilerBuild(): { build: CompilerBuild | null; error: string | null } 
   }
 }
 /** Only an edit changes a document's preparation identity. The slot is the other half of the key. */
-const keyOf = (row: ArtifactRow): string => `v:${row.version}`;
+const keyOf = (row: Pick<ArtifactRow, 'version'>): string => `v:${row.version}`;
 
 /** Recorded provenance of other rows used by a new preparation; never invalidates a stored version. */
 async function fingerprint(deps: PreparedDeps): Promise<string> {
@@ -271,7 +279,7 @@ async function build(row: ArtifactRow, at: ArchivedRender | null, compiler: Retu
     css, overrides, base: parts.baseRecipe, authorCss: runtime.authorCss, authorScript: runtime.authorScript,
     theme: runtime.theme, title: runtime.title, fontPreloads: runtime.fontPreloads ?? [],
     lazyCode: lazyCodeOf(nodes), declared: declared ?? null,
-    deps: { datasets, assets: assetUrls }, mermaidCodes: prerenderableCodes(nodes),
+    deps: { datasets, assets: assetUrls }, mermaidCodes: prerenderableCodes(nodes), declaredCsp: declaredCspExtensions(row.source),
   };
   // Only the version's compiled output is stored; request data is rendered by its pinned SSR module.
   const anonymous = await readerInputFor(row, page, { at, viewer: null, search: '' });
@@ -439,6 +447,7 @@ export async function preparedPageFor<const P extends PreparedParts = typeof WHO
         ...found.page!, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0, cssVersion: found.css_version,
         data: { ...found.page!.data, ...(want.nodes ? { nodes: found.nodes! } : {}) }, ...(want.compiled ? { compiled: found.compiled! } : {}),
       } as PreparedView<P>;
+      if (!page.declaredCsp) page.declaredCsp = await recordDeclaredCsp(row, slot, key);
       if (page.cssVersion === preparedCssVersion()) return { row, page };
       queueRestyle(stored, at);
       return { row, page, stale: true };
@@ -447,6 +456,47 @@ export async function preparedPageFor<const P extends PreparedParts = typeof WHO
   const page = await prepareNow(row, at);
   await store(row, slot, page);
   return { row, page: narrow(page, want) };
+}
+
+/**
+ * THE LAZY FILL of {@link PreparedPage.declaredCsp} for a page prepared before it was recorded: derived from the
+ * version's source this read already holds and written onto that same entry (never a newer one). A failed write is
+ * a header read that falls back to the whole row once more, never a failed read.
+ */
+async function recordDeclaredCsp(row: ArtifactRow, slot: string, key: string): Promise<CspExtensions> {
+  const declared = declaredCspExtensions(row.source);
+  try {
+    const db = await getDb();
+    await db.query(
+      "UPDATE prepared_pages SET page = page || jsonb_build_object('declaredCsp', $4::jsonb) WHERE artifact_id = $1 AND slot = $2 AND page_key = $3",
+      [row.id, slot, key, JSON.stringify(declared)],
+    );
+  } catch (error) {
+    console.warn('[prepared-page] declared hosts write-back failed', row.id, slot, error);
+  }
+  return declared;
+}
+
+/**
+ * THE HEAD VERSION'S STORED PAGE, NAMED FROM THE ROW'S HEADER — its shell and its compile's head, for a validator
+ * (revalidation.server documentEtag), with no read of the row's `source` or `document`. Only an entry that needs
+ * nothing of them answers: current for the header's version, split, compiled, prepared under this deployment's
+ * stylesheet, and carrying the version's declared hosts. Such an entry is prepared only from a row
+ * `servedRow` passed (lib/artifacts/servable), so it stands for that version's servable verdict; `servableHeader`
+ * judges the rest from the header. Anything else is null and the caller reads the row whole — which prepares, fills
+ * the declared hosts in, and queues a stale page's re-preparation (that needs the source, so it is never queued here).
+ */
+export async function preparedHeadFor(header: ArtifactHeader): Promise<{ row: ArtifactHeader; page: PreparedView<{ compiled: 'head' }> } | null> {
+  if (!servableHeader(header)) return null;
+  const db = await getDb();
+  const found = (await db.query<StoredRow>(READ_PARTS, [header.id, slotOf(null), false, false, true, COMPILED_BULK])).rows[0];
+  if (!found || found.legacy || !found.has_compiled || found.page_key !== keyOf(header) || !found.page?.declaredCsp) return null;
+  if (found.css_version !== preparedCssVersion()) return null;
+  const page = {
+    ...found.page, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0, cssVersion: found.css_version,
+    compiled: found.compiled as CompiledHead,
+  } as PreparedView<{ compiled: 'head' }>;
+  return { row: header, page };
 }
 
 /**

@@ -21,7 +21,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ArchivedRender, ArtifactRow } from '@/lib/artifacts';
+import type { ArchivedRender, ArtifactHeader } from '@/lib/artifacts';
 import type { RoleActor } from '@/lib/accounts';
 import { type DataPlan, loadCompilerBuild, MIN_HANDOVER_CONTRACT, MIN_PAGE_FORMAT, planOf } from '@/lib/compiled-page';
 import { holdableImports } from '@/lib/document-data';
@@ -34,9 +34,9 @@ import { preparedCssVersion } from './css-version.server';
 import { SNAPSHOT_MAX_AGE_MS, anonymousAccessFacts, snapshotKeyFor, snapshotStore } from './snapshots.server';
 
 export interface DocumentEtagInput {
-  /** The row this request renders (the head, or an archived version's bytes on it) and the head it came from. */
-  row: ArtifactRow;
-  artifact: ArtifactRow;
+  /** The row this request renders (the head, or an archived version's bytes on it) and the head it came from: their headers name it. */
+  row: ArtifactHeader;
+  artifact: ArtifactHeader;
   at: ArchivedRender | null;
   /** The version's shell and its compile's head: neither the tree nor the compiled page's bulk is read to name a validator. */
   page: PreparedView<{ compiled: 'head' }>;

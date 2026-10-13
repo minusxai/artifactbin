@@ -163,6 +163,43 @@ describe('the document on its own origin', () => {
     expect(readsCompiled()).toBe(false);
   });
 
+  it('answers a matching If-None-Match from the row\'s header: no row read carries the source or the document', async () => {
+    const w = await world();
+    const plain = await w.publish(BODY);
+    const declaring = await w.publish(`<Helmet><meta name="csp-script" content="${PLOTLY}" /></Helmet>${BODY}`, 'public');
+    // A prepared page stored before it carried the version's declared hosts gains them on its next full read.
+    const db = await getDb();
+    await db.query("UPDATE prepared_pages SET page = page - 'declaredCsp' WHERE artifact_id = $1", [plain]);
+    const query = db.query.bind(db);
+    const answered: unknown[] = [];
+    vi.spyOn(db, 'query').mockImplementation(async (sql: string, params?: unknown[]) => {
+      const result = await query(sql, params);
+      answered.push(...result.rows);
+      return result;
+    });
+    const content = () => answered.filter((row) => !!row && typeof row === 'object' && (Object.hasOwn(row, 'source') || Object.hasOwn(row, 'document')));
+    for (const [id, cookie] of [[plain, null], [declaring, null], [declaring, (await pagesCookie(declaring, w.actor))!]] as const) {
+      const headers: Record<string, string> = cookie ? { cookie } : {};
+      const first = await read(id, headers);
+      expect(first.status).toBe(200);
+      const tag = tagOf(first);
+      answered.length = 0;
+      const again = await read(id, { ...headers, 'if-none-match': tag });
+      expect(again.status).toBe(304);
+      expect(again.headers.get('etag')).toBe(tag);
+      expect(answered.length, 'the spy sees the reads').toBeGreaterThan(0);
+      expect(content(), 'a 304 reads no document content').toEqual([]);
+    }
+    // The declared hosts the header path trusts are the source's: the publisher's 304 carries the policy its 200 did.
+    const owner = (await pagesCookie(declaring, w.actor))!;
+    expect((await read(declaring, { cookie: owner })).headers.get('content-security-policy')).toContain(PLOTLY);
+    // A private document is the uniform 404 to a stranger, decided before any content is read.
+    const hidden = await w.publish(BODY, 'private');
+    answered.length = 0;
+    expect((await read(hidden, { 'if-none-match': '"anything-at-all-000000"' })).status).toBe(404);
+    expect(content()).toEqual([]);
+  });
+
   it('changes the tag with the reader: another account, the same account in another role, and a guest', async () => {
     const w = await world();
     const id = await w.publish(BODY, 'public');

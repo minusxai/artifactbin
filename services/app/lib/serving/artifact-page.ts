@@ -29,7 +29,7 @@ import { archivedVersionFor, servedRow } from '@/lib/artifacts';
 import { UnservableDocument } from '@/lib/artifacts';
 import { countOpenAnnotations } from '@/lib/annotations/store';
 import { canReadArtifact, roleFor } from '@/lib/artifacts';
-import { getArtifactById, getArtifactHeaderById, hasInvitedUsersFor } from '@/lib/artifacts';
+import { accessMoved, getArtifactById, getArtifactHeaderById, hasInvitedUsersFor } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/workspace/folders';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { verifyExportKey } from '@/lib/platform/export-read-key';
@@ -98,11 +98,6 @@ function framedRuntime(runtime: TreelessServedRuntime): FramedRuntime {
   const { dataflow } = runtime.data;
   return { title: runtime.title, data: dataflow ? { dataflow } : {} };
 }
-
-/** Did what admission reads move between the header it was decided on and the row then loaded? Then it is decided again on the row. */
-const accessMoved = (decided: ArtifactHeader, loaded: ArtifactRow): boolean =>
-  decided.visibility !== loaded.visibility || decided.link_role !== loaded.link_role || decided.user_id !== loaded.user_id
-  || (decided.group_id ?? null) !== (loaded.group_id ?? null) || decided.token_id !== loaded.token_id || (decided.sharing_revision ?? 0) !== (loaded.sharing_revision ?? 0);
 
 /**
  * A document frame's first URL for this request's reader (APP__PAGES_HOST): the document's own origin carrying a

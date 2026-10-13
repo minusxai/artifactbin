@@ -1,5 +1,5 @@
 import { canReadArtifact, ownsArtifact } from '@/lib/artifacts';
-import { type ArtifactRow, writerFor } from '@/lib/artifacts';
+import { type ArtifactHeader, type ArtifactRow, writerFor } from '@/lib/artifacts';
 import type { RoleActor, TokenActor } from '@/lib/accounts';
 import { getArtifactById, getArtifactFor, getArtifactsFor, getLinkReadableArtifact, getLinkReadableArtifacts } from '@/lib/artifacts';
 import { compileErrorText, compileResultForRow, compiledForRow, declarationsForRow } from '@/lib/artifacts';
@@ -420,7 +420,7 @@ const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): Data
   tableForRef(await importedArtifactFor(row, id), viewer, row, mode===undefined||mode==='import');
 
 /** The artifact a document's import names, by the document's own reach. */
-const importedArtifactFor = async (row: ArtifactRow, id: string): Promise<ArtifactRow | null> =>
+const importedArtifactFor = async (row: ArtifactHeader, id: string): Promise<ArtifactRow | null> =>
   getArtifactById(id).then(async dataset=>dataset&&grantsOf(dataset)?dataset:(await getArtifactFor(writerFor(row),id))??(await getLinkReadableArtifact(id)));
 
 /**
@@ -436,7 +436,7 @@ const importedArtifactFor = async (row: ArtifactRow, id: string): Promise<Artifa
  * carry no row-level rules today (a read grant is the whole dataset), so the
  * dataset's rows are exactly what the viewer may read.
  */
-async function holdableDataset(row: ArtifactRow, ref: string, viewer: RoleActor | null): Promise<import('@/lib/datasets/types').DatasetCatalog | null> {
+async function holdableDataset(row: ArtifactHeader, ref: string, viewer: RoleActor | null): Promise<import('@/lib/datasets/types').DatasetCatalog | null> {
   const dataset = await importedArtifactFor(row, ref);
   if (!dataset || dataset.format !== 'dataset') return null;
   const reader: RoleActor = viewer ?? { userId: null, tokenId: null };
@@ -486,7 +486,7 @@ async function heldImportFor(row: ArtifactRow, flow: CompiledDataflow, name: str
  * dataset's rows: sizes come from storedRowStats, and a dataset imported
  * under several names is decided once.
  */
-export async function holdableImports(row: ArtifactRow, flow: CompiledDataflow, viewer: RoleActor | null): Promise<string[]> {
+export async function holdableImports(row: ArtifactHeader, flow: CompiledDataflow, viewer: RoleActor | null): Promise<string[]> {
   const byRef = new Map<string, Promise<unknown>>();
   const held = await Promise.all(flow.imports.map(async (i) => {
     if (!byRef.has(i.ref)) byRef.set(i.ref, holdableDataset(row, i.ref, viewer));

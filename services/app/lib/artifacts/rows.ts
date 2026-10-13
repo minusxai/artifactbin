@@ -50,6 +50,14 @@ export async function getArtifactHeaderById(id: string): Promise<ArtifactHeader 
 }
 
 /**
+ * Did the row's ACCESS change between the header an admission decided on and the whole row read after it? Then the
+ * admission is asked again of the row that is served.
+ */
+export const accessMoved = (decided: ArtifactHeader, loaded: ArtifactRow): boolean =>
+  decided.visibility !== loaded.visibility || decided.link_role !== loaded.link_role || decided.user_id !== loaded.user_id
+  || (decided.group_id ?? null) !== (loaded.group_id ?? null) || decided.token_id !== loaded.token_id || (decided.sharing_revision ?? 0) !== (loaded.sharing_revision ?? 0);
+
+/**
  * Does the actor's reach (the same editor scope as {@link getArtifactFor}) include this row, and is it shared with
  * anyone? One EXISTS instead of loading the row and its share list to test `shares.length > 0`.
  */

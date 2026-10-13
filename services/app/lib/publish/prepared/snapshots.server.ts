@@ -48,7 +48,7 @@
  * forgotten, never re-run.
  */
 import { createHash } from 'node:crypto';
-import { type ArtifactRow, canReadArtifact, compiledForRow, getArtifactById, grantsOf, grantsPermitRead } from '@/lib/artifacts';
+import { type ArtifactHeader, canReadArtifact, compiledForRow, getArtifactById, grantsOf, grantsPermitRead } from '@/lib/artifacts';
 import { dataflowForRow } from '@/lib/document-data';
 import { type DataPlan, type DatasetAccessFacts, planOf } from '@/lib/compiled-page';
 import { type CompiledDataflow, dataRefs, type Scalar } from '@/lib/dataflow';
@@ -276,7 +276,7 @@ const pick = <T>(from: Record<string, T> | undefined, names: ReadonlySet<string>
  * the guest when its grants permit the read, one without when it is not private. One helper, so every
  * caller that keys a snapshot (this store, the serve path) derives the same plan and the same `planKey`.
  */
-export async function anonymousAccessFacts(document: ArtifactRow, flow: CompiledDataflow): Promise<DatasetAccessFacts> {
+export async function anonymousAccessFacts(document: ArtifactHeader, flow: CompiledDataflow): Promise<DatasetAccessFacts> {
   const refs = dataRefs(flow, flow.values.flatMap((v) => (v.source ? [v.source] : [])));
   const datasets: Record<string, { anonymousRead: boolean }> = {};
   for (const ref of refs) {
