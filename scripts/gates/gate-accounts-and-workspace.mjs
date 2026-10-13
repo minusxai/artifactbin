@@ -125,7 +125,7 @@ async function startLeg() {
       check(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
       check(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
       check(!/\/start\?k=/.test(prompt), 'and carries no start link');
-      check(prompt.length < 600 && prompt.includes("\n\nAsk the user what artifact they'd like to build."), `and includes a short question for the user (${prompt.length} chars)`);
+      check(prompt.length < 600 && prompt.includes("\n\nIf the user hasn't specified a task, ask what artifact they'd like to build."), `and includes a short question for the user (${prompt.length} chars)`);
       check(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
       check(prompt.includes('/llms.txt') && !/ensure-node|afbin help|--server/.test(prompt), 'and links to the shared setup guide while keeping the handoff short');
 

@@ -38,7 +38,7 @@ export async function startDocument(base, options) {
     throw new Error(`cannot start a document (${res.status} ${JSON.stringify(body)}).`);
   }
   if (typeof body.prompt !== 'string'
-    || !body.prompt.includes("\n\nAsk the user what artifact they'd like to build.")
+    || !body.prompt.includes("\n\nIf the user hasn't specified a task, ask what artifact they'd like to build.")
     || body.prompt.includes('\r')
     || body.prompt.includes('mx_')) {
     throw new Error('the start paste must contain tokenless instructions and a question for the user');
