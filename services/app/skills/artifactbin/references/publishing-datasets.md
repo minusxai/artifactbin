@@ -17,3 +17,9 @@ An imported URL is NOT an artifact and never appears in `afbin list`. Imported b
 
 <!--bundle:skip-->CLI creation flags: `afbin push data.csv --access <ACCESS> --policy <POLICY>`; read `afbin push -h` for accepted values. HTTP creates use the separate policy contract in [HTTP API](http-api.md).
 <!--/bundle:skip-->
+
+[% if workflows.creation == "fragments/http-creation.md" %]
+## HTTP dataset creation
+
+[% include "fragments/http-dataset-creation.md" %]
+[% endif %]
