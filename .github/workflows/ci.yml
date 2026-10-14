@@ -997,6 +997,17 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
+      # Downstream hosts consume this same universal tarball after the run's tested receipt.
+      # Pack owns the release alias even for nightly/version-only selection. Uploaded right after the signed
+      # release (the native matrix's longer tail waits on that one) and before the seed transfers: the company
+      # container waits for it (scripts/lib/ci-artifact-wait.mjs) rather than for this whole job.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-npm-packages
+          path: services/cli/dist/packages/*.tgz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
       # A CLI or services/utils change without a version proves the same tarball on the npm matrix under
       # another name: the publisher only ever reads afbin-npm-release.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -1009,17 +1020,6 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 3
-      # Downstream hosts consume this same universal tarball after the run's tested receipt.
-      # Pack owns the release alias even for nightly/version-only selection. Uploaded right after the signed
-      # release (the native matrix's longer tail waits on that one) and before the seed transfers: the company
-      # container waits for it (scripts/lib/ci-artifact-wait.mjs) rather than for this whole job.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: afbin-npm-packages
-          path: services/cli/dist/packages/*.tgz
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 7
       - if: needs.plan.outputs.cli == 'true' && steps.npm-seeds.outputs.cache-hit != 'true'
         run: node services/cli/scripts/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -1247,6 +1247,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE: ${{ fromJSON(needs.plan.outputs.plan).cliRelease && 'afbin-npm-release' || 'afbin-npm-candidate' }}
+        # Bash on every runner: Windows' default PowerShell would read "$CANDIDATE" as its own empty variable.
+        shell: bash
         run: node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" "$CANDIDATE"
       - name: Download the verified exact-version CLI candidate
         env:

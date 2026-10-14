@@ -239,7 +239,8 @@ describe('current-tree packaging for reused patch checks',()=>{
   const pick="${{ fromJSON(needs.plan.outputs.plan).cliRelease && 'afbin-npm-release' || 'afbin-npm-candidate' }}";
   const wait=jobs.cli.steps.find(step=>step.name==="Wait for this attempt's packed candidate");
   const download=jobs.cli.steps.find(step=>step.name==='Download the verified exact-version CLI candidate');
-  expect(wait.env.CANDIDATE).toBe(pick);expect(wait.run).toContain('"$CANDIDATE"');
+  expect(wait.env.CANDIDATE).toBe(pick);expect(wait.run).toContain('"$CANDIDATE"');expect(wait.shell).toBe('bash');
+  expect(download.shell).toBe('bash');
   expect(download.env.CANDIDATE).toBe(pick);expect(download.run).toContain('"$CANDIDATE" "$version"');
   expect(download.env.REQUIRE_SIGNED_CANDIDATE).toMatch(/^\$\{\{ fromJSON\(needs\.plan\.outputs\.plan\)\.cliRelease && /);
   expect(readFileSync(path.join(root,'.github/workflows/release-cli.yml'),'utf8')).not.toContain('afbin-npm-candidate');
