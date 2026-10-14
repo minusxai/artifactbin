@@ -329,7 +329,15 @@ function Wait-StandardExit([Diagnostics.Process]$Process,[int]$Timeout,[string]$
   if($null -eq $code -or $code -isnot [int]){throw 'Standard-user child did not provide an integer exit code'}
   return $code
 }
+$waiter=$null
 try {
+  if($WaitForArtifact) {
+    # Wait for and fetch the exact current-run package WHILE the standard-user probes below run (20-70s of logon
+    # on hosted runners); the same shared waiter enforces this attempt, its digest and producer failure.
+    $archive=Join-Path $root 'candidate.zip'
+    $waiter=Start-Process node -ArgumentList @('scripts/lib/ci-artifact-wait.mjs',$env:GITHUB_REPOSITORY,$env:GITHUB_RUN_ID,$env:GITHUB_RUN_ATTEMPT,$archive,(Join-Path $root 'failed.json')) -NoNewWindow -PassThru
+    $null=$waiter.Handle
+  }
   foreach($expected in @(0,7)) {
     $probe=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("exit $expected"))
     $process=Start-StandardProcess $probe ('exit-'+$expected)
@@ -342,9 +350,8 @@ try {
     if($WaitForArtifact) {
       # This parent uses the runner's existing Node/gh. The child still proves an empty PATH
       # and installs official Node as its own fresh non-admin user while packaging runs.
-      $archive=Join-Path $root 'candidate.zip'
-      & node scripts/lib/ci-artifact-wait.mjs $env:GITHUB_REPOSITORY $env:GITHUB_RUN_ID $env:GITHUB_RUN_ATTEMPT $archive (Join-Path $root 'failed.json')
-      if($LASTEXITCODE -ne 0){Write-StandardFailure;throw 'Waiting for exact current-run package failed'}
+      $waiter.WaitForExit()
+      if($waiter.ExitCode -ne 0){Write-StandardFailure;throw 'Waiting for exact current-run package failed'}
       $download=Join-Path $root 'download'
       Expand-Archive -Path $archive -DestinationPath $download
       $candidates=@(Get-ChildItem $download -Filter '*.tgz')
@@ -377,6 +384,7 @@ try {
   if($exitCode -ne 0 -or !(Test-Path (Join-Path $root 'passed.json'))){Get-Content (Join-Path $root 'bootstrap.stderr');throw 'Standard-user Node bootstrap failed'}
   Get-Content (Join-Path $root 'passed.json')
 } finally {
+  if($waiter){if(!$waiter.HasExited){$waiter.Kill();$waiter.WaitForExit()};$waiter.Dispose()}
   Remove-LocalUser -Name $identity -ErrorAction SilentlyContinue
   Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
 }
