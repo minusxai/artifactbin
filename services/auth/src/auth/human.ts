@@ -21,6 +21,7 @@
  * this runtime share ONE object instead of the renderer holding a copy.
  */
 import { betterAuth } from 'better-auth';
+import { createAuthMiddleware } from 'better-auth/api';
 import { getMigrations } from 'better-auth/db/migration';
 import type { EventsService, Queryable } from '@artifactbin/contracts';
 import { emailOTP, genericOAuth } from 'better-auth/plugins';
@@ -114,6 +115,7 @@ export type BetterAuthOptions = Parameters<typeof betterAuth>[0];
  * carries it). Every side effect lives in createHumanAuth.
  */
 export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<string, unknown>>): BetterAuthOptions {
+  const createdUsers = new WeakMap<Request, string>();
   const trusted = ['email-otp', ...(opts.google ? ['google'] : []), ...(opts.oidc ? [opts.oidc.providerId] : [])];
   return {
     baseURL: opts.baseURL,
@@ -123,6 +125,11 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
     // Identity itself has no request limiter. OTP attempt caps remain part of code verification.
     rateLimit: { enabled: false },
     session: { cookieCache: { enabled: false } },
+    hooks: { after: createAuthMiddleware(async ctx => {
+      if (ctx.path !== '/sign-in/email-otp' || !ctx.context.newSession) return;
+      return ctx.json({ ...ctx.context.returned as Record<string, unknown>,
+        account_created_this_login: !!ctx.request && createdUsers.get(ctx.request) === ctx.context.newSession.user.id });
+    }) },
     /*
      * THE IDENTITY MOMENTS, said where the ROWS land rather than where the
      * routes are — Better Auth owns half a dozen ways in (a code, Google, any
@@ -145,7 +152,8 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
     databaseHooks: {
       user: {
         create: {
-          after: async (user: { id: string; email: string }) => {
+          after: async (user, context) => {
+            if (context?.request) createdUsers.set(context.request, user.id);
             void say(opts.events, { kind: 'user', id: user.id }, 'signed_up', { kind: 'user', id: user.id }, { email: user.email });
           },
         },

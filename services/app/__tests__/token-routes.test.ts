@@ -19,6 +19,7 @@ import { POST as mintInternal } from '@/app/api/internal/tokens/route';
 import { GET as listMine } from '@/app/api/my/tokens/route';
 import { DELETE as revokeMine } from '@/app/api/my/tokens/[id]/route';
 import { POST as adoptSession, DELETE as clearSession } from '@/app/api/session/token/route';
+import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { cookieValue, request } from './harness';
 import { useAppHarness } from '@/__tests__/harness';
@@ -34,6 +35,26 @@ const json = (r: Response) => r.json() as Promise<Record<string, unknown>>;
 type TokenRow = { id: string; status: string; expires_at: string | null; last_used_at: string | null };
 
 describe('token routes served by the app', () => {
+  it('reports created documents at mint, including group-owned and trashed documents, not received ones', async () => {
+    const creator = await createUser({ email: 'mxmx_test_context@example.com' });
+    const recipient = await createUser({ email: 'mxmx_test_recipient@example.com' });
+    const actor = { credential: 'session' as const, userId: creator.id, email: creator.email, emailVerified: true };
+    const issue = () => mintInternal(request('/api/internal/tokens', { method: 'POST', actor }));
+    const first = await json(await issue());
+    expect(first.has_created_document).toBe(false);
+    const folder = await createArtifact(request('/api/artifacts', { method: 'POST', token: String(first.token), json: { format: 'folder', title: 'Folder' } }));
+    expect(folder.status).toBe(201);
+    expect((await json(await issue())).has_created_document).toBe(false);
+    const document = await createArtifact(request('/api/artifacts', { method: 'POST', token: String(first.token), json: { markup: '<p id="intro">Hello</p>' } }));
+    expect(document.status).toBe(201);
+    const { id } = await document.json();
+    await (await harness.db()).query('UPDATE artifacts SET user_id=$2, deleted_at=now() WHERE id=$1', [id, recipient.id]);
+    expect((await json(await issue())).has_created_document).toBe(true);
+    const received = await mintInternal(request('/api/internal/tokens', { method: 'POST', actor: { ...actor, userId: recipient.id, email: recipient.email } }));
+    expect((await json(received)).has_created_document).toBe(false);
+    await (await harness.db()).query('UPDATE artifacts SET user_id=NULL, group_id=$2 WHERE id=$1', [id, 'test_group']);
+    expect((await json(await issue())).has_created_document).toBe(true);
+  });
   it('POST /api/tokens mints with the admin secret and 404s without it', async () => {
     expect((await mintAdmin(request('/api/tokens', { method: 'POST', json: {} }))).status).toBe(404);
     const res = await mintAdmin(request('/api/tokens', { method: 'POST', token: ADMIN, json: { email: ADMIN_EMAIL, name: 't' } }));

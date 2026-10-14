@@ -19,7 +19,7 @@
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE} from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';
 import { agentContract } from '@/lib/serving';
-import { canAuthenticateUser, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sessionActor, sourcedTokenName } from '@/lib/accounts';
+import { canAuthenticateUser, hasCreatedDocument, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sessionActor, sourcedTokenName } from '@/lib/accounts';
 
 export async function POST(request: Request) {
   // Only an ACCOUNT session binds the mint: the agent cookie names a token
@@ -53,6 +53,7 @@ export async function POST(request: Request) {
   const minted = await mintToken(sourcedTokenName('api'), userId, undefined, { expiresInMs, audience, scope });
   return json(
     {
+      has_created_document: await hasCreatedDocument(userId!),
       id: minted.id,
       token: minted.token,
       expiresAt: minted.expiresAt,

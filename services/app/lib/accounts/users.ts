@@ -354,3 +354,10 @@ export async function revokeUserToken(userId: string, tokenId: string): Promise<
   await emit({ kind: 'user', id: userId }, 'revoked', { kind: 'token', id: tokenId }, { name: row.name });
   return true;
 }
+
+/** Creator attribution survives ownership transfers and trash; no history is stored separately. */
+export async function hasCreatedDocument(userId: string): Promise<boolean> {
+  const result = await (await getDb()).query<{ found: boolean }>(
+    "SELECT EXISTS (SELECT 1 FROM artifacts WHERE creator_user_id=$1 AND format='markup') AS found", [userId]);
+  return result.rows[0]!.found;
+}
