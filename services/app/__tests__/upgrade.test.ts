@@ -110,6 +110,8 @@ describe('the additive DDL is replay-safe', () => {
       // the same reason. Nothing writes it on this table yet (a comment is
       // erased, not trashed); the gate in lib/annotations is what it buys.
       'deleted_at', 'author_remote',
+      // When the author last rewrote the body; appended on upgrade like the rest.
+      'edited_at',
     ]);
     // Provenance is APPENDED, never inserted: a fork's parent is a column the
     // additive DDL adds on the next boot, with nothing to backfill (NULL is
