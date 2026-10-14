@@ -5,8 +5,9 @@ import {createBrowser} from '@artifactbin/browser/local';
 import {chromiumExecutable} from './chromium';
 import type {LocalImageOptions} from './local-image-options';
 import {localIdentities} from './identities';
+import {previewWatchNext} from './local-comment-watch';
 /** Foreground file-session entry, loaded only after choosing the preview runtime. */
-import {join,resolve} from 'node:path';
+import {join,relative,resolve} from 'node:path';
 import {networkInterfaces} from 'node:os';
 import {startPreview} from './preview/session';
 import {previewFiles,type PreviewOptions} from './preview-options';
@@ -24,13 +25,15 @@ async function openPreview(options:PreviewOptions,assets:string,capture=false){
  const session=await startPreview({root:workspace.root,home:options.home,files,localFiles,assets:join(assets,'preview'),publicAssets:join(assets,'public'),port:options.port,share:options.share,publicUrl:options.publicUrl,origin,capture,
   asset:async id=>{throw new CliError('unresolved_reference',`Reference ${id} is not available in this workspace. Add or import its local copy before previewing.`);},
   dataset:async id=>{throw new CliError('unresolved_reference',`Dataset ${id} is not available in this workspace. Add or import its local copy before previewing.`);}});
- return {session,files};
+ return {session,files,workspace};
 }
 export async function startPreviewHost(options:PreviewOptions,assets:string):Promise<void>{
- const {session,files}=await openPreview(options,assets);
+ const {session,files,workspace}=await openPreview(options,assets);
  const port=new URL(session.url).port;
  const urls=[...(options.publicUrl?[options.publicUrl]:[]),session.url,...(options.share?Object.values(networkInterfaces()).flatMap(list=>(list??[]).filter(address=>!address.internal&&address.family==='IPv4').map(address=>`http://${address.address}:${port}`)):[])];
- process.stdout.write(options.json?JSON.stringify({url:options.publicUrl??session.url,urls,files})+'\n':`Preview: ${urls.join('\n         ')}\nPress Ctrl-C to stop.\n`);
+ // As a push names the watch for a published page, a preview names the one for the comments made in it.
+ const next=previewWatchNext(files.map(file=>relative(workspace.cwd,resolve(workspace.root,file))||file));
+ process.stdout.write(options.json?JSON.stringify({url:options.publicUrl??session.url,urls,files,...(next?{next}:{})})+'\n':`Preview: ${urls.join('\n         ')}\nPress Ctrl-C to stop.\n${next?next+'\n':''}`);
  let stop!:()=>void;
  try{
   await new Promise<void>(resolve=>{

@@ -125,3 +125,15 @@ test('a comment written through the preview server reaches a watcher reading the
   assert.deepEqual(page.events.map(e=>[e.comment_id,e.change??'new',e.body]),[[thread.id,'new','From the browser, edited']]);
  }finally{await session?.close();await f.cleanup();}
 });
+
+test('a running preview names the watch that follows its comments, as a push names its own',async()=>{
+ const {previewWatchNext}=await import('../src/local-comment-watch');
+ const next=previewWatchNext(['report.jsx','notes/plan.jsx']);
+ assert.match(next,/afbin watch report\.jsx --comments --json/);
+ assert.match(next,/afbin watch notes\/plan\.jsx --comments --json/);
+ assert.match(next,/in the background with a tool that wakes you on each output line/);
+ assert.match(next,/your user.s requests/);
+ assert.equal(previewWatchNext([]),'');
+ // Only documents take comments: a dataset preview names no watch.
+ assert.equal(previewWatchNext(['sales.csv']),'');
+});

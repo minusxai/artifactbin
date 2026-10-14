@@ -65,7 +65,7 @@ export async function localCommentFeed(workspace:Workspace,file:string){
 
 /** `afbin watch <file> --comments --json`: the shared watch loop over the local feed — stdout events, stderr checkpoints, no network. */
 export async function localWatchCommand(workspace:Workspace,parsed:ParsedCommand,file:string,options:{stdout:(value:string)=>void;stderr:(value:string)=>void;signal?:AbortSignal}):Promise<void>{
- if(!parsed.flags.comments||!parsed.flags.json)throw new CliError('invalid_arguments','Use afbin watch <file> --comments --json.');
+ if(!parsed.flags.comments||!parsed.flags.json)throw new CliError('invalid_arguments','Use afbin watch <url|id|file> --comments --json.');
  if(!file.toLowerCase().endsWith('.jsx'))throw new CliError('not_markup','Local comments live on JSX documents.');
  const feed=await localCommentFeed(workspace,file);
  const controller=new AbortController(),stop=()=>controller.abort();
@@ -78,4 +78,15 @@ export async function localWatchCommand(workspace:Workspace,parsed:ParsedCommand
    onCheckpoint:cursor=>{options.stderr(JSON.stringify({checkpoint:cursor})+'\n');},
   })){if(signal.aborted)return;options.stdout(JSON.stringify(event)+'\n');}
  }finally{process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);}
+}
+
+/**
+ * What a running preview tells the agent that started it, as every push's `next` does for a published page: the people
+ * looking at this preview comment on it, so name the watch that follows those comments. Empty when no file takes comments.
+ */
+export function previewWatchNext(files:readonly string[]):string{
+ const documents=files.filter(file=>file.toLowerCase().endsWith('.jsx'));
+ if(!documents.length)return '';
+ const watches=documents.map(file=>`\`afbin watch ${file} --comments --json\``).join(', ');
+ return `Next, without asking: comments made in this preview are your user’s requests. Unless one already runs, start ${watches} in the background with a tool that wakes you on each output line, and keep it running after your reply; make each change and reply on its thread.`;
 }
