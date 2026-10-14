@@ -6,7 +6,8 @@
  */
 export interface CommentChangeEvent {
  type:'artifactbin.comment';event_id:string;artifact_id:string;annotation_id:string;comment_id:string;
- author:{kind:'human';label:string|null;user_id:string|null};body:string;created_at:string;
+ /** `you`: the comment's author is the watcher's own user (the account watching; locally, the person at the workspace). */
+ author:{kind:'human';label:string|null;user_id:string|null;you?:boolean};body:string;created_at:string;
  change?:'edited';edited_at?:string;
 }
 export interface CommentChangesPage {events:CommentChangeEvent[];next_cursor:string;has_more:boolean}

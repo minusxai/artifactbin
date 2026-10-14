@@ -38,7 +38,7 @@ import {installSkills,planSkills,restartHints,selectSkills,skillsDisabled,type S
 import {CLI_VERSION} from './version';
 import {CLI_PROTOCOL_VERSION} from '../../contracts/src/cli-auth';
 import {readFile,realpath,stat} from 'node:fs/promises';
-import {basename,resolve} from 'node:path';
+import {basename,resolve,sep} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {recoverFiles,stagedFiles} from './journal';
 import {withLock,State} from './state';
@@ -60,6 +60,7 @@ import {DEFAULT_SERVER,loadConnection,loadConnectionFor,exportedServer,saveDefau
 import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './server-identity';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {watchCommand} from './watch';
+import {localWatchCommand} from './local-comment-watch';
 import {HttpClient,detailLine} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull,pullToStdout} from './pull';
@@ -197,6 +198,8 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   const portable=!!await findLocalWorkspace(workspace.root,workspace.home);
   if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
   if(command==='mv'){await (portable?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
+  // A local file's comments are followed from the workspace itself: no server, no sign-in, no request.
+  if(command==='watch'&&positionals[0]){const ref=await resolveReference(positionals[0],{root:workspace.root,cwd:workspace.cwd}).catch(()=>undefined);if(ref?.kind==='path'){await localWatchCommand(workspace,parsed,ref.path.split(sep).join('/'),{stdout,stderr,signal:context.signal});return 0;}}
   // Discussion on a local file lives in the workspace: deleting it never needs a server or a sign-in.
   if(command==='delete'&&flags.type==='comment'&&portable){const local=await localDeleteComments(workspace,String(flags.in),positionals,{dryRun:!!flags['dry-run'],hostedIds:!!remoteContext(context.env)});if(local){emit(local.value);return local.exitCode;}}
   const account=await accountPlan(workspace,parsed);
