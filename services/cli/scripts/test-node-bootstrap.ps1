@@ -330,13 +330,25 @@ function Wait-StandardExit([Diagnostics.Process]$Process,[int]$Timeout,[string]$
   return $code
 }
 $waiter=$null
+$seedWaiter=$null
+# Where this runner's time goes (diagnostic only, never a gate): the global install below writes to the profile on C:.
+try {
+  $defender=Get-MpComputerStatus -ErrorAction Stop
+  Write-Output ('Defender: real-time '+$defender.RealTimeProtectionEnabled+', on-access '+$defender.OnAccessProtectionEnabled+', mode '+$defender.AMRunningMode+'; exclusions '+((Get-MpPreference).ExclusionPath -join ','))
+} catch { Write-Output ('Defender status unavailable: '+$_.Exception.Message) }
+try { Get-Volume -DriveLetter C,D -ErrorAction Stop | ForEach-Object { Write-Output ('Volume '+$_.DriveLetter+': '+$_.FileSystem+' '+[math]::Round($_.Size/1GB)+' GB') } } catch {}
 try {
   if($WaitForArtifact) {
-    # Wait for and fetch the exact current-run package WHILE the standard-user probes below run (20-70s of logon
-    # on hosted runners); the same shared waiter enforces this attempt, its digest and producer failure.
+    # Wait for and fetch the exact current-run package and this platform's seed WHILE the standard-user probes
+    # below run (20-70s of logon on hosted runners); the same shared waiter enforces this attempt, each archive's
+    # digest and producer failure.
     $archive=Join-Path $root 'candidate.zip'
     $waiter=Start-Process node -ArgumentList @('scripts/lib/ci-artifact-wait.mjs',$env:GITHUB_REPOSITORY,$env:GITHUB_RUN_ID,$env:GITHUB_RUN_ATTEMPT,$archive,(Join-Path $root 'failed.json')) -NoNewWindow -PassThru
     $null=$waiter.Handle
+    $seedName='afbin-npm-dependency-seed-Windows-X64'
+    $seedZip=Join-Path $root 'npm-dependency-seed.zip'
+    $seedWaiter=Start-Process node -ArgumentList @('scripts/lib/ci-artifact-wait.mjs',$env:GITHUB_REPOSITORY,$env:GITHUB_RUN_ID,$env:GITHUB_RUN_ATTEMPT,$seedZip,(Join-Path $root 'failed.json'),$seedName) -NoNewWindow -PassThru
+    $null=$seedWaiter.Handle
   }
   foreach($expected in @(0,7)) {
     $probe=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("exit $expected"))
@@ -359,10 +371,8 @@ try {
       # Restore the exact-platform seed while the child waits for candidate.tgz. The shared
       # helper enforces current-attempt identity and the archive digest; merge-seed validates
       # the public dependency graph before creating the ACL-inheriting consumer cache.
-      $seedName='afbin-npm-dependency-seed-Windows-X64'
-      $seedZip=Join-Path $root 'npm-dependency-seed.zip'
-      & node scripts/lib/ci-artifact-wait.mjs $env:GITHUB_REPOSITORY $env:GITHUB_RUN_ID $env:GITHUB_RUN_ATTEMPT $seedZip (Join-Path $root 'failed.json') $seedName
-      if($LASTEXITCODE -ne 0){Write-StandardFailure;throw 'Waiting for exact current-run Windows npm seed failed'}
+      $seedWaiter.WaitForExit()
+      if($seedWaiter.ExitCode -ne 0){Write-StandardFailure;throw 'Waiting for exact current-run Windows npm seed failed'}
       $seedDownload=Join-Path $root 'npm-dependency-seed'
       Expand-Archive -Path $seedZip -DestinationPath $seedDownload
       $seeds=@(Get-ChildItem $seedDownload -Filter 'npm-dependency-seed-Windows-X64.tar' -File -Recurse)
@@ -384,7 +394,7 @@ try {
   if($exitCode -ne 0 -or !(Test-Path (Join-Path $root 'passed.json'))){Get-Content (Join-Path $root 'bootstrap.stderr');throw 'Standard-user Node bootstrap failed'}
   Get-Content (Join-Path $root 'passed.json')
 } finally {
-  if($waiter){if(!$waiter.HasExited){$waiter.Kill();$waiter.WaitForExit()};$waiter.Dispose()}
+  foreach($pending in @($waiter,$seedWaiter)){if($pending){if(!$pending.HasExited){$pending.Kill();$pending.WaitForExit()};$pending.Dispose()}}
   Remove-LocalUser -Name $identity -ErrorAction SilentlyContinue
   Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
 }

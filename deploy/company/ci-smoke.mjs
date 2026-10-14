@@ -105,6 +105,7 @@ async function configureFixture(directory,{caddyCache:cached=false}={}){
 `);
 }
 const marker='company-container-persistence';
+const screenshot=path=>`const {chromium}=require('/usr/local/lib/node_modules/@afbin/cli/node_modules/playwright');(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();await p.setContent('<h1>Company export dependency check</h1>');await p.screenshot({path:'${path}'});await b.close();})().catch(e=>{console.error(e);process.exit(1)})`;
 function databaseMarker(directory){return compose(directory,['exec','-T','postgres','psql','-U','artifactbin','-d','artifactbin','-Atc','SELECT value FROM hosting_acceptance.marker'],{capture:true}).trim();}
 function artifactMarker(directory){return compose(directory,['exec','-T','app','node','-e',"process.stdout.write(require('node:fs').readFileSync('/data/data/hosting-acceptance.txt','utf8'))"],{capture:true}).trim();}
 async function pinnedCaddy(){
@@ -156,7 +157,7 @@ async function acceptance(){
  compose(first,['exec','-T','app','node','-e',`require('node:fs').writeFileSync('/data/data/hosting-acceptance.txt','${marker}')`]);
  // Exercise the package's pinned lazy installer and the installed Chromium's Linux dependencies.
  compose(first,['exec','-T','app','afbin','setup','--service','chromium','--json'],{timeout:120_000});
- compose(first,['exec','-T','app','node','-e',"const {chromium}=require('/usr/local/lib/node_modules/@afbin/cli/node_modules/playwright');(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();await p.setContent('<h1>Company export dependency check</h1>');await p.screenshot({path:'/data/data/hosting-browser.png'});await b.close();})().catch(e=>{console.error(e);process.exit(1)})"],{timeout:60_000});
+ compose(first,['exec','-T','app','node','-e',screenshot('/data/data/hosting-browser.png')],{timeout:60_000});
  compose(first,['restart','app','postgres']);compose(first,['up','-d','--wait','--wait-timeout','90','app']);
  assert.equal(databaseMarker(first),marker);assert.equal(artifactMarker(first),marker);
  const backup=join(scratch,'backup');run(first,'sh',['backup.sh',backup]);
@@ -170,6 +171,11 @@ async function acceptance(){
  assert.deepEqual(await readFile(join(restored,'config/server.env')),config,'Persistent auth secret and database configuration survived restore');
  assert.deepEqual(await readFile(join(restored,'backup.sh')),await readFile(join(bundle,'backup.sh')),'The recovered deployment retains its backup helper');
  compose(restored,['exec','-T','app','node','-e',"if(require('node:fs').statSync('/data/data/hosting-browser.png').size<100)process.exit(1)"]);
+ // The backup leaves out the re-installable Chromium download; the restored deployment installs it again and exports.
+ compose(restored,['exec','-T','app','node','-e',"if(require('node:fs').existsSync('/data/chromium'))process.exit(1)"]);
+ compose(restored,['exec','-T','app','afbin','setup','--service','chromium','--json'],{timeout:120_000});
+ compose(restored,['exec','-T','app','node','-e',screenshot('/data/data/restored-browser.png')],{timeout:60_000});
+ compose(restored,['exec','-T','app','node','-e',"if(require('node:fs').statSync('/data/data/restored-browser.png').size<100)process.exit(1)"]);
  await caddy;
- console.log(JSON.stringify({status:'passed',package:tarballs[0],sha256:createHash('sha256').update(await readFile(join(candidate,tarballs[0]))).digest('hex'),checks:['exact-package-image','pinned-caddy-route53','nonroot-app','authenticated-starttls-email-code','postgres-migrations','chromium-install-and-screenshot','restart-persistence','consistent-backup','fresh-restore','persistent-auth-secret']}));
+ console.log(JSON.stringify({status:'passed',package:tarballs[0],sha256:createHash('sha256').update(await readFile(join(candidate,tarballs[0]))).digest('hex'),checks:['exact-package-image','pinned-caddy-route53','nonroot-app','authenticated-starttls-email-code','postgres-migrations','chromium-install-and-screenshot','restart-persistence','consistent-backup','fresh-restore','persistent-auth-secret','restored-chromium-reinstall']}));
 }

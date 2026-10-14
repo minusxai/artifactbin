@@ -13,7 +13,9 @@ destination=$(cd "$destination" && pwd)
 docker compose stop app
 trap 'docker compose start app >&2' EXIT HUP INT TERM
 docker compose exec -T postgres pg_dump -U artifactbin -d artifactbin --format=custom >"$destination/database.dump"
-docker compose run -T --rm --no-deps --entrypoint tar volume-init -C /data -czf - . >"$destination/artifacts.tar.gz"
+# /data/chromium is the package's re-installable browser download (hundreds of MB, most of the archive time);
+# the restored app reinstalls it on its first export, or at once with `afbin setup --service chromium`.
+docker compose run -T --rm --no-deps --entrypoint tar volume-init -C /data --exclude=./chromium -czf - . >"$destination/artifacts.tar.gz"
 mkdir -p packages
 tar -czf "$destination/configuration.tar.gz" packages backup.sh restore.sh .env config secrets Caddyfile dns-provider.caddy compose.yaml Dockerfile Caddy.Dockerfile caddy-entrypoint.sh
 printf '%s\n' 'Consistent backup complete. Contains login/provider secrets: encrypt and copy off this server.' >&2

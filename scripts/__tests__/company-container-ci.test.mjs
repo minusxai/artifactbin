@@ -73,3 +73,14 @@ it('reports PostgreSQL ready only once the real server listens, never the initia
  // A socket probe reached the temporary server (FATAL: database "artifactbin" does not exist) once polled every second.
  expect(compose.services.postgres.healthcheck.test).toEqual(['CMD-SHELL','pg_isready -h 127.0.0.1 -U artifactbin -d artifactbin']);
 });
+it('backs up artifacts without the re-installable Chromium download and proves the restored deployment reinstalls it',()=>{
+ const backup=readFileSync(new URL('../../deploy/company/backup.sh',import.meta.url),'utf8');
+ expect(backup).toContain('--entrypoint tar volume-init -C /data --exclude=./chromium -czf - .');
+ const smoke=readFileSync(new URL('../../deploy/company/ci-smoke.mjs',import.meta.url),'utf8');
+ expect(smoke).toContain("'restored-chromium-reinstall'");
+ const restored=smoke.slice(smoke.indexOf("run(restored,'sh',['restore.sh',backup]"));
+ expect(restored).toContain("existsSync('/data/chromium'))process.exit(1)");
+ expect(restored.indexOf("compose(restored,['exec','-T','app','afbin','setup','--service','chromium','--json']")).toBeGreaterThan(0);
+ expect(restored).toContain("screenshot('/data/data/restored-browser.png')");
+ expect(readFileSync(new URL('../../deploy/company/README.md',import.meta.url),'utf8')).toContain('leaves out `/data/chromium`');
+});

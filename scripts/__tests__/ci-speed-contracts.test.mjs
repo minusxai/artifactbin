@@ -331,12 +331,26 @@ it('releases the signed candidate before seed uploads and uses one verified tran
  expect(steps.some(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}')).toBe(false);
 });
 
-it('prepares all consumer prerequisites before waiting for the same-run candidate',()=>{
+it('prepares consumer prerequisites beside the candidate wait and the candidate install',()=>{
  const job=workflow().jobs.cli,steps=job.steps;
  expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
- const waiting=steps.findIndex(step=>step.run?.includes('ci-artifact-wait.mjs'));
+ const waiting=steps.findIndex(step=>step.run?.includes('ci-artifact-wait.mjs --wait-only'));
  expect(steps.some(step=>step.id==='dependency-cache-path')).toBe(false);
- expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='acceptance-browser'));
+ // The seed downloads in the background from before the wait and is collected after the candidate.
+ const seed=steps.findIndex(step=>step.name==="Download and verify this attempt's platform seed");
+ expect(seed).toBeLessThan(waiting);expect(steps[seed].run).toMatch(/\) < \/dev\/null > \/dev\/null 2>&1 &\n$/);
+ const seedWait=steps.findIndex(step=>step.name==="Wait for this attempt's platform seed");
+ expect(seedWait).toBeGreaterThan(waiting);
+ expect(seedWait).toBeLessThan(steps.findIndex(step=>step.name==='Same-tarball native npm and warmed offline acceptance'));
+ // The experience install runs in the background while the browser and its libraries restore, awaited before use.
+ const install=steps.findIndex(step=>step.name==='Install the same candidate for experience checks');
+ const installWait=steps.findIndex(step=>step.name==='Wait for the candidate install');
+ expect(install).toBeGreaterThan(seedWait);
+ for(const id of ['acceptance-browser','acceptance-apt'])expect(steps.findIndex(step=>step.id===id)).toBeGreaterThan(install);
+ expect(installWait).toBeGreaterThan(steps.findIndex(step=>step.name==='Install Linux acceptance browser dependencies'));
+ expect(installWait).toBeLessThan(steps.findIndex(step=>step.name==='Installed npm runtime boundary, terminal exit and declarations'));
+ expect(steps[installWait].if).toBe("matrix.phase != 'native'");
+ expect(steps[installWait].run).toContain('exit "$(cat "$RUNNER_TEMP/candidate-install.status")"');
  expect(steps[waiting].run).toContain('--wait-only');
  expect(steps[waiting].env.GH_TOKEN).toBe('${{ github.token }}');
  const candidate=steps.findIndex(step=>step.name==='Download the verified exact-version CLI candidate');
