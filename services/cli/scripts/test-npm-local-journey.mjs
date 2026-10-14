@@ -1,8 +1,8 @@
 /** CI-only complete journey through the actual installed npm entry, with no credentials or remote API. */
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,cp,rm,realpath} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,readdir,cp,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join,resolve} from 'node:path';
+import {basename,dirname,join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {execFileSync,spawn} from 'node:child_process';
 import {createServer} from 'node:http';
@@ -42,7 +42,7 @@ async function windowsPrivateState(cwd,home,args){
  const directory=await mkdtemp(join(tmpdir(),'afbin-spawns-')),counter=join(directory,'count.cjs');await writeFile(counter,SPAWN_COUNTER);
  const run=async(label,args)=>{
   const log=join(directory,`${label}.log`),started=performance.now();
-  const output=JSON.parse(await command(cwd,home,args,180000,{NODE_OPTIONS:`--require "${counter.replaceAll('\\','/')}"`,AFBIN_SPAWN_LOG:log}));
+  const output=JSON.parse(await command(cwd,home,args,180000,{NODE_OPTIONS:`${process.env.NODE_OPTIONS??''} --require "${counter.replaceAll('\\','/')}"`.trim(),AFBIN_SPAWN_LOG:log}));
   return {output,ms:Math.round(performance.now()-started),powershell:(await readFile(log,'utf8').catch(()=>'')).split('\n').filter(Boolean).length};
  };
  // The same command again: it walks the same private directories, now warm, and keeps the same ids.
@@ -50,18 +50,30 @@ async function windowsPrivateState(cwd,home,args){
  assert.deepEqual(next.output,fresh.output);
  assert.ok(fresh.powershell>0,'a command on a fresh Windows home protects its private directories');
  assert.equal(next.powershell,0,'a later command on a protected Windows home launches no PowerShell');
+ // Every directory privateDirectory protected carries its signed record; the key directory holds the key.
+ const keyDirectory=join(home,'AppData','Local','artifactbin');
+ const recorded=async root=>(await readdir(root,{recursive:true})).filter(name=>basename(name)==='.private-directory').map(name=>join(root,dirname(name)));
+ const directories=[keyDirectory,...await recorded(home),...await recorded(join(cwd,'.artifactbin'))].filter((path,index,all)=>all.indexOf(path)===index);
+ assert.ok(directories.length>=2,`the command protected its private directories: ${directories.join(', ')}`);
+ // .NET and [Console] only: no module autoload (this runner's PSModulePath belongs to PowerShell 7), no localized
+ // names (SIDs), no output encoding of the non-ASCII paths (each line carries its index, not its path).
  const literal=path=>`'${path.replace(/'/g,"''")}'`;
- // .NET reads the ACL directly: Get-Acl's module may not load when this runner's PSModulePath belongs to PowerShell 7.
- const acl=expression=>`$a=[IO.Directory]::GetAccessControl(${expression}); [pscustomobject]@{path=[string](${expression});protected=$a.AreAccessRulesProtected;rules=@($a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|ForEach-Object{$_.IdentityReference.Value+'|'+$_.FileSystemRights+'|'+$_.InheritanceFlags+'|'+$_.IsInherited+'|'+$_.AccessControlType})}`;
- const directories=[join(home,'AppData','Local','artifactbin'),home,join(cwd,'.artifactbin')].map(path=>`$(${acl(literal(path))})`).join(',');
- const script=`$ErrorActionPreference='Stop'; [pscustomobject]@{user=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;profile=$(${acl("[Environment]::GetFolderPath('LocalApplicationData')")}).rules;directories=@(${directories})} | ConvertTo-Json -Depth 4 -Compress`;
- const observed=JSON.parse(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{encoding:'utf8'}));
- const own=[`${observed.user}|FullControl|ContainerInherit, ObjectInherit|False|Allow`,'S-1-5-18|FullControl|ContainerInherit, ObjectInherit|False|Allow'].sort();
- for(const entry of observed.directories)assert.deepEqual({path:entry.path,protected:entry.protected,rules:[...entry.rules].sort()},{path:entry.path,protected:true,rules:own},'a private directory grants only its owner and SYSTEM');
+ const acl=(index,expression)=>`$a=[IO.Directory]::GetAccessControl(${expression}); $r=@($a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|ForEach-Object{$_.IdentityReference.Value+'|'+$_.FileSystemRights+'|'+$_.InheritanceFlags+'|'+$_.IsInherited+'|'+$_.AccessControlType}); [Console]::Out.WriteLine('${index}'+[char]9+$a.AreAccessRulesProtected+[char]9+($r -join ';'))`;
+ const script=[`$ErrorActionPreference='Stop'`,`[Console]::Out.WriteLine('user'+[char]9+[Security.Principal.WindowsIdentity]::GetCurrent().User.Value)`,
+  acl('profile',"[Environment]::GetFolderPath('LocalApplicationData')"),...directories.map((path,index)=>acl(index,literal(path)))].join('; ');
+ const lines=Object.fromEntries(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{encoding:'utf8'})
+  .split(/\r?\n/).filter(Boolean).map(line=>{const [key,...rest]=line.split('\t');return [key,rest];}));
+ const user=lines.user?.[0];assert.match(user??'',/^S-1-5-21-/,'the current user SID');
+ const own=[`${user}|FullControl|ContainerInherit, ObjectInherit|False|Allow`,'S-1-5-18|FullControl|ContainerInherit, ObjectInherit|False|Allow'].sort();
+ directories.forEach((path,index)=>{
+  const [protectedFlag,rules]=lines[index]??[];
+  assert.deepEqual({path,protected:protectedFlag,rules:(rules??'').split(';').filter(Boolean).sort()},{path,protected:'True',rules:own},'a private directory grants only its owner and SYSTEM');
+ });
  // The key's parent is the user's AppData\Local: no broad group may reach it (Everyone, Authenticated Users, Users).
- const broad=observed.profile.filter(rule=>/^(S-1-1-0|S-1-5-11|S-1-5-32-545)\|/.test(rule)&&rule.endsWith('|Allow'));
- assert.deepEqual(broad,[],`AppData\\Local grants a broad group: ${observed.profile.join(', ')}`);
- console.log(JSON.stringify({windows_private_state:{fresh_ms:fresh.ms,fresh_powershell:fresh.powershell,next_ms:next.ms,next_powershell:next.powershell,local_app_data:observed.profile}}));
+ const profile=(lines.profile?.[1]??'').split(';').filter(Boolean);
+ assert.ok(profile.length>0,'AppData\\Local has readable rules');
+ assert.deepEqual(profile.filter(rule=>/^(S-1-1-0|S-1-5-11|S-1-5-32-545)\|/.test(rule)&&rule.endsWith('|Allow')),[],`AppData\\Local grants a broad group: ${profile.join(', ')}`);
+ console.log(JSON.stringify({windows_private_state:{fresh_ms:fresh.ms,fresh_powershell:fresh.powershell,next_ms:next.ms,next_powershell:next.powershell,protected:directories.length,local_app_data:profile}}));
  await rm(directory,{recursive:true,force:true});
  return fresh.output;
 }
