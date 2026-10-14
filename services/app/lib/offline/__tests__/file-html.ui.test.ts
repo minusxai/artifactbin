@@ -136,6 +136,13 @@ describe('the file, for a coding agent asked to edit it', () => {
     );
   });
 
+  it('says a local document is not published instead of printing an empty link', () => {
+    const local = renderArtifactFileHtml({ file: artifactFile({ liveUrl: '' }), code: 'H4sIAAAAAAAAA0tMTgYAQGCRmgQAAAA=' });
+    const note = /^<!doctype html>\n<!-- ([\s\S]*?) -->\n<html/.exec(local)?.[1];
+    expect(note).toMatch(/^artifactbin offline file for "[^"]*" \(a local document, not published\)\. /);
+    expect(note).not.toContain('()');
+  });
+
   it('keeps the note one comment whatever the title holds', () => {
     const doc = parse(html);
     const comments = [...doc.childNodes].filter((n) => n.nodeType === Node.COMMENT_NODE);

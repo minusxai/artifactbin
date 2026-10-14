@@ -36,3 +36,15 @@ export async function localSourceDiff(workspace:Workspace,file:LocalFile){
  const text=(isDatasetFile(source.path)||extname(source.path).toLowerCase()==='.jsx');
  return{path:source.path,resource:file.path,diff:text?createTwoFilesPatch(`base/${source.path}`,`local/${source.path}`,before,after,'last observed','working file',{context:3}):`Binary file ${source.path} differs`};
 }
+/**
+ * `afbin list` where nothing can be listed remotely without a sign-in: an untracked local workspace and no
+ * saved credential for the selected server. The workspace's own files answer, and say what the server
+ * listing needs, instead of a device sign-in the person never asked for.
+ */
+export async function localList(workspace:Workspace,server:string){
+ const artifacts=(await inspectWorkspace(workspace)).filter(file=>file.bytes).map(file=>{
+  const metadata=file.document?.metadata??file.resource;
+  return {path:file.path,id:metadata?.id??null,title:file.document?.metadata.title??file.resource?.title??null,published:metadata?.head_version!==undefined};
+ });
+ return {local:true,root:workspace.root,artifacts,next_cursor:null,remote:`Not signed in to ${server}: these are this workspace's local files. Run afbin auth to list the artifacts on ${server}.`};
+}

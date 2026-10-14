@@ -20,7 +20,7 @@ export const declaredRefs=(flow:Dataflow):string[]=>[...new Set([...flow.imports
 /** Compile a local document against its local copies; the compiler's own messages when it does not compile. */
 export async function compileLocal(flow:Dataflow,table:LocalTable):Promise<CompiledDataflow>{
  const result=await compileWithLoader(flow,async ref=>{const found=await table(ref);return found?{kind:'dataset',tables:[{name:'rows',columns:found.columns}]}:null;});
- if(!result.ok)throw new CliError('invalid_query',result.errors.map(error=>error.message).join('\n'),'Fix the declarations, or run afbin validate on this file.');
+ if(!result.ok)throw new CliError('invalid_query',result.errors.map(error=>error.message).join('\n'),'Correct the named declaration; afbin help data shows the supported SQL and declarations.');
  return result.compiled;
 }
 

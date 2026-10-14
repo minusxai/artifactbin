@@ -65,7 +65,7 @@ const hash=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value
 export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Workspace>{
  cwd=await realpath(cwd);
  const state=await readState(home);
- const portableRoot=await findLocalWorkspace(cwd);
+ const portableRoot=await findLocalWorkspace(cwd,home);
  const portable=portableRoot?await readLocalWorkspaceState(portableRoot):null;
  const portableIntent=portable?.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current')?.value;
  if(state&&portable&&portableRoot&&portableIntent){

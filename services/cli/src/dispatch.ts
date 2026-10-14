@@ -2,7 +2,7 @@ import {groupDestination,setupDestination} from './group-destination';
 import {accountMismatch} from './account-diagnostic';
 import {rebindWorkspace} from './workspace-rebind';
 import {collectionFilters} from './collection-filters';
-import {localCommentCommand} from './local-comments-command';
+import {localCommentCommand,localDeleteComments} from './local-comments-command';
 import {localHistory,localHistoryHead} from './local-history';
 import {importLocalHtml} from './local-html-import';
 import {publishLocalWorkspace} from './local-publication';
@@ -47,15 +47,16 @@ import {homedir} from 'node:os';
 import {parseCommand,CliError,type ParsedCommand} from './commands';
 import {loadWorkspace,inspectWorkspace,type Workspace} from './workspace';
 import {validateFiles} from './validation';
+import {verifyLocalDocuments} from './local-verification';
 import {deleteComments} from './delete';
 import {diffCommand,remoteStatus} from './comparison';
-import {localStatus} from './local';
+import {localStatus,localList} from './local';
 import {helpDocument,writeHelp,helpBundle} from './teaching';
 import {withTeachingOrigin} from './teaching-origin';
 import {validateMarkupStructure,type JsxNode} from '../../app/lib/cli-toolkit';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
-import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault,remoteContext,claudeConfigDirectory,claudeConfigEnvironment} from './config';
+import {DEFAULT_SERVER,loadConnection,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault,remoteContext,claudeConfigDirectory,claudeConfigEnvironment} from './config';
 import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './server-identity';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {watchCommand} from './watch';
@@ -182,6 +183,8 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    emit(installed.length?`${text}\nInstalled skill: ${installed.join(', ')} — the same references, as files under references/ there.\n`:text);return 0;
   }
   let workspace=await loadWorkspace(context.cwd,home);
+  // A workspace adopted from an ancestor directory is named once, so a surprising root is never silent.
+  if(workspace.root!==workspace.cwd)stderr(`${style.dim('Workspace:')} ${workspace.root}\n`);
   const foreignManagedWorkspace=async()=>!!(managedOrigin&&workspace.tracking&&!sameServer(await managedIdentity()!,workspace.tracking.server));
   const refuseForeignManagedWorkspace=async()=>{
    if(!await foreignManagedWorkspace())return;
@@ -191,9 +194,11 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   // Check the binding before they can rewrite local state under a foreign managed session.
   if(command==='add'||command==='mv')await refuseForeignManagedWorkspace();
   if(command==='import'){emit(await importLocalHtml(workspace,positionals[0]!,typeof flags.output==='string'?flags.output:undefined));return 0;}
-  const portable=!!await findLocalWorkspace(workspace.root);
+  const portable=!!await findLocalWorkspace(workspace.root,workspace.home);
   if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
-  if(command==='mv'){await (await findLocalWorkspace(workspace.root)?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
+  if(command==='mv'){await (portable?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
+  // Discussion on a local file lives in the workspace: deleting it never needs a server or a sign-in.
+  if(command==='delete'&&flags.type==='comment'&&portable){const local=await localDeleteComments(workspace,String(flags.in),positionals,{dryRun:!!flags['dry-run'],hostedIds:!!remoteContext(context.env)});if(local){emit(local.value);return local.exitCode;}}
   const account=await accountPlan(workspace,parsed);
   if(account&&command==='push'&&(flags.group||flags.personal))throw new CliError('unsupported_destination','Destination flags require artifact files without account profile or session operations.','Push the artifact files separately.');
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
@@ -255,9 +260,11 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   let localValidation:Awaited<ReturnType<typeof validateFiles>>|undefined;
   if(command==='validate'&&!account){localValidation=await validateFiles(workspace,positionals,!!flags.fix);if(!flags.remote||!localValidation.valid){
    // One validate answers what an agent otherwise checks by hand: pi spent ten calls slicing its own viz
-   // JSON out of the file with Python before pushing (local deck, 14 Sep).
-   const verified=localValidation.valid?await verifiedSummary(workspace,positionals):undefined;
-   emit({...localValidation,...(verified?{verified}:{})});return localValidation.valid?0:2;}}
+   // JSON out of the file with Python before pushing (local deck, 14 Sep). It names only checks it ran.
+   const local=await verifyLocalDocuments(workspace,localValidation.files.filter(file=>file.valid).map(file=>resolve(workspace.root,file.path)));
+   const files=localValidation.files.map(file=>{const found=local.diagnostics.get(file.path);return found?{...file,valid:false,diagnostics:[...file.diagnostics,...found]}:file;});
+   const valid=files.every(file=>file.valid);
+   emit({valid,files,...(local.verified.length?{verified:local.verified}:{})});return valid?0:2;}}
   if(command==='log'&&portable&&!urlArgument()){
    const filters=collectionFilters('log',flags.filter as string[]|undefined);
    if(filters.author)throw new CliError('unsupported_local_filter','Local history does not record verified author identities. Use since or until.');
@@ -270,10 +277,13 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
     const offset=flags.cursor===undefined?0:Number(flags.cursor),limit=flags.limit===undefined?100:Number(flags.limit);
     if(!Number.isSafeInteger(offset)||offset<0)throw new CliError('invalid_cursor','A local history cursor must be a nonnegative integer.');
     const selected=entries.filter(entry=>(ref.version===undefined||entry.version===ref.version)&&(!filters.since||Date.parse(entry.at)>=Date.parse(filters.since))&&(!filters.until||Date.parse(entry.at)<=Date.parse(filters.until)));
-    results.push({path,local:true,head,versions:selected.slice(offset,offset+limit),next_cursor:offset+limit<selected.length?String(offset+limit):null});
+    // A summary per version by default: five versions of a dashboard printed five full sources.
+    const page=selected.slice(offset,offset+limit).map(entry=>flags.full?entry:{version:entry.version,at:entry.at,revision:entry.revision,title:entry.metadata.title??null,bytes:Buffer.byteLength(entry.source)});
+    results.push({path,local:true,head,versions:page,next_cursor:offset+limit<selected.length?String(offset+limit):null});
    }
    emit(results.length===1?results[0]:{operations:results});return 0;
   }
+  if(command==='log'&&flags.full)throw new CliError('unsupported_flag','--full reads local version history; a published artifact\'s history is a summary.','Read one published version with afbin pull <ref>@<version> --output -.');
   if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env,typeof flags.server==='string'?flags.server:undefined));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
    try{const result=await diffCommand(workspace,parsed,serverOrigin()??declaredServer,false,stdout,undefined,style,await addresses());if(result)emit(result);return 0;}
@@ -289,6 +299,12 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    const result=await localQuery(workspace,parsed,querySql,workspace.tracking?.server??serverOrigin()??declaredServer,await addresses());if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout,style);return 0;}
   }
   const selectedServer=serverOrigin()??declaredServer;
+  // An untracked local workspace with no sign-in has nothing to list remotely until the person signs in:
+  // answer from the workspace, or say what is needed, before any identity request or device sign-in.
+  if(command==='list'&&portable&&!workspace.tracking&&!await loadConnection(selectedServer,home,context.env)){
+   if(positionals.length||flags.type!==undefined||flags.in!==undefined||flags.filter!==undefined||flags.cursor!==undefined)throw new CliError('auth_required',`This listing reads ${selectedServer}, and there is no sign-in for it.`,`Run afbin auth to sign in to ${selectedServer}, then repeat. afbin list alone shows this workspace's local files.`);
+   await resultOutput(await localList(workspace,selectedServer),parsed,workspace.cwd,emit,stdout,style);return 0;
+  }
   if(command==='remote'&&typeof flags.stop==='string'){
    const {stopLocalRemote}=await import('./remote-state');
    if(await stopLocalRemote(home,selectedServer,flags.stop,context.env)){emit({id:flags.stop,status:'stopping',local:true});return 0;}

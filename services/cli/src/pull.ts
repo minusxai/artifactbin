@@ -215,7 +215,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
   }
   return{...(options.dryRun?{dry_run:true}:{}),...(recovery?{recovered_request:recovery}:{}),operations};
  };
- return options.dryRun?run():await findLocalWorkspace(workspace.root)?withLocalLock(workspace.root,()=>withLock(workspace.home,workspace.root,run)):withLock(workspace.home,workspace.root,run);
+ return options.dryRun?run():await findLocalWorkspace(workspace.root,workspace.home)?withLocalLock(workspace.root,()=>withLock(workspace.home,workspace.root,run)):withLock(workspace.home,workspace.root,run);
 }
 function defaultExtension(snapshot:Snapshot):string{
  if(snapshot.format==='program')return '.program.json';
