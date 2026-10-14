@@ -451,6 +451,9 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
   return null;
 }
 
+/** Recovery shared by markup metadata rejections on both write endpoints. */
+export const PREPARED_METADATA_HINT = 'For markup title, description, theme, template or colorMode: GET /api/artifacts/:id. POST /api/artifacts/:id/prepare with source from markup, edit_id from edit_id, expectedVersion from version of that read, and changes nested under metadata. Then POST /api/artifacts/:id/edits with the returned edit_id and document_update unchanged.';
+
 /**
  * One edit against a claimed base (the concurrent-edit protocol on the wire).
  * Shared by the bearer route and the session-authed twin under /api/my — same
@@ -470,7 +473,7 @@ export async function respondToEdit(
   echo: 'full' | 'patch' = 'full',
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
-  if (['meta','title','theme','colorMode','template','description','visibility','linkRole','parent_id','access'].some(key=>Object.hasOwn(body,key))) return json({error:'metadata_requires_patch',hint:'Use PATCH with expectedState for metadata only, or PUT with expectedVersion and expectedState for mixed content and metadata.'},400);
+  if (['meta','title','theme','colorMode','template','description','visibility','linkRole','parent_id','access'].some(key=>Object.hasOwn(body,key))) return json({error:'metadata_requires_patch',hint:PREPARED_METADATA_HINT},400);
   const input = parseEditBody(body);
   if (!input) return json({ error: 'invalid_edit_body' }, 400);
 
