@@ -30,7 +30,7 @@ import { COMPUTED_FIGURE_RULE, DISPLAY_ROWS, MAX_DOCUMENT_BYTES, NATIVE_TABLE_AU
 import { OPERATIONS } from '@/lib/operations/registry';
 import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/dataflow';
 import { CORE_FUNCTIONS } from '@artifactbin/sql/core';
-import type { SkillFile } from './tree';
+import { stripFrontmatter, type SkillFile } from './tree';
 import { AUTHENTICATION_INSTRUCTION } from '../platform/agent-discovery';
 
 export interface RenderOptions {
@@ -140,9 +140,10 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
     const rendered = env.renderString(file.body, {
       ...REGISTRY_GLOBALS,
       base: opts.base,
+      transport: opts.transport ?? 'cli',
       authenticationInstruction: AUTHENTICATION_INSTRUCTION,
       // Only the brief inlines the example; a reference that names it is a build failure, by design.
-      ...(file.file === 'SKILL.md' && !file.ref ? { example: skillExample().trimEnd() } : {}),
+      ...(file.file === 'SKILL.md' && !file.ref ? { example: (opts.transport === 'http' ? stripFrontmatter(skillExample()) : skillExample()).trimEnd() } : {}),
       references: file.ref ? '' : 'references/',
       workflows: Object.fromEntries(['introduction', 'authentication', 'creation', 'editing', 'operations'].map(name => [name, `fragments/${opts.transport ?? 'cli'}-${name}.md`])),
       ...own,
