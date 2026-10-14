@@ -1,5 +1,5 @@
 import {artifactState} from './state';
-import {respondToEdit,artifactToWire,committedOpenAnnotations,parseShareEntries,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './wire';
+import {PREPARED_METADATA_HINT,respondToEdit,artifactToWire,committedOpenAnnotations,parseShareEntries,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './wire';
 import { applyEditFor, isVersionConflict, setMetadataFor, type MetadataPatch } from './store';
 import { getArtifactFor, getOwnedArtifactFor } from './rows';
 import { writerFor } from './table';
@@ -11,7 +11,7 @@ import {validateDatasetPolicyForRow} from '../datasets/policy/validation';
 export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Record<string,unknown>,base:string,dryRun=false):Promise<Response>{
  if(Object.hasOwn(body,'document_update'))return respondToEdit(base,body,input=>applyEditFor(actor,id,input,{dryRun}));
  const current=await getArtifactFor(actor,id);if(!current)return json({error:'not_found'},404);
- if(current.format==='markup')return json({error:'jsonb_operations_required',hint:'Submit document_update using the current CLI or browser editor.'},400);
+ if(current.format==='markup')return json({error:'jsonb_operations_required',hint:PREPARED_METADATA_HINT},400);
  const expected=parseExpectedVersion(body,false);if(expected instanceof Response)return expected;
  if(!expected.expectedState)return json({error:'state_required',hint:'Read the artifact and send its state as expectedState.'},400);
  const allowed=new Set(['expectedState','expectedVersion','expectedPolicyRevision','policy','title','description','theme','template','colorMode','visibility','linkRole','parent_id','access','shares']);
