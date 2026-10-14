@@ -8,7 +8,7 @@
 export const STORY_UI_COMPONENT_NAME_LIST = [
   'Markdown',
   'Dialog', 'DialogTrigger', 'DialogContent', 'DialogClose',
-  'Mermaid', 'DeckGL',
+  'Mermaid', 'DeckGL', 'Isometric',
   'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardContent', 'CardFooter', 'CardAction',
   'Badge', 'Button',
   'Alert', 'AlertTitle', 'AlertDescription',

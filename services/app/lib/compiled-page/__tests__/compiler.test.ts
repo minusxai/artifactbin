@@ -52,6 +52,21 @@ async function inputOf(source: string, template: string | null = null): Promise<
 const dom = (html: string) => new JSDOM(`<div id="r">${html}</div>`).window.document.getElementById('r')!;
 
 describe('compilePage', () => {
+  it('renders Isometric to static accessible SVG and hydrates only a bound scene', async () => {
+    const parts = [{ key: 'base', kind: 'slab', x: 0, y: 0, z: 0, width: 100, depth: 60, height: 8, separation: [0, 0, 60] }];
+    const figure = `<Isometric id="assembly" title="Bearing &amp; shaft" parts={${JSON.stringify(parts)}} />`;
+    const page = await compilePage(await inputOf(figure), loadCompilerBuild());
+    expect(dom(page.html).querySelector('#assembly svg')?.getAttribute('aria-label')).toBe('Bearing & shaft');
+    expect(dom(page.html).querySelectorAll('#assembly path').length).toBeGreaterThan(3);
+    expect(page.module).toBeNull();
+    expect(page.unported).toEqual([]);
+    const live = '<Helmet><Value name="spread" type="number" default={0} /></Helmet>' + figure.replace(' />', ' spread="$spread" />');
+    const bound = await compilePage(await inputOf(live), loadCompilerBuild());
+    expect(bound.module?.specifiers).toContain('@mx/kit/isometric');
+    expect(dom(bound.html).querySelector('#assembly path')).not.toBeNull();
+    expect(bound.unported).toEqual([]);
+  });
+
   it('compiles Markdown as static HTML without a reader module or shared kit dependency', async () => {
     const input = await inputOf('<Markdown id="body" className="text-lg">{`# Notes\n\nKeep **formatting** together.`}</Markdown>');
     const page = await compilePage(input, loadCompilerBuild());

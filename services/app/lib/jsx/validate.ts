@@ -5,6 +5,7 @@
  * scopes, registered components / allowed HTML tags, no event handlers, and no
  * dangerous URL schemes. Parsing alone does not enforce these constraints.
  */
+import { isometricError } from './isometric-spec';
 import { mermaidSourceError } from './mermaid-source';
 import { markdownContent, markdownSource } from '@/lib/markdown/content';
 import { validateDeckMap } from './deck-spec';
@@ -154,6 +155,11 @@ function walk(
     }
     const max = node.attributes.find(a => a.name === 'maxFiles')?.value;
     if (max && (!max.static || typeof max.json !== 'number' || !Number.isInteger(max.json) || max.json < 1)) errors.push({message: 'FileUpload maxFiles must be a positive integer', tag: node.tag, attr: 'maxFiles', start: node.start, end: node.end});
+  }
+  if (node.tag === 'Isometric') {
+    const props = Object.fromEntries(node.attributes.map(a => [a.name, a.value.static ? a.value.json : null]));
+    const error = isometricError(props);
+    if (error) errors.push({ message: error, tag: node.tag, start: node.start, end: node.end });
   }
   if (node.tag === 'Mermaid') {
     const code = node.attributes.find(a => a.name === 'code')?.value;

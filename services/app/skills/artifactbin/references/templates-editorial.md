@@ -24,6 +24,29 @@ kicker, the headline face, the deck and the pull figure (its reference
 carries an editorial specimen when it fits); the thesis owns how the
 evidence is staged. Pick ONE composition and build that.
 
+## Contents
+
+- [Explain with a visual](#explain-with-a-visual)
+- [Compositions](#compositions)
+- [What the runtime needs](#what-the-runtime-needs)
+- [Rules](#rules)
+
+## Explain with a visual
+
+Aim for at least one explanatory visual: a Mermaid diagram for a flow or
+relationship, an HTML/CSS wireframe for an interface or user journey, or an
+animated SVG diagram for a mechanism or change over time. Pick the form that
+makes the article's central idea easier to understand; place it beside the
+relevant argument and caption what it explains. A decorative illustration
+does not serve this purpose. For a purely textual piece, omit it rather than
+invent a process or interface. Follow [the diagram guide](markup-svg.md);
+SVG animation uses CSS or author script, with a readable static state for
+reduced motion, never SMIL.
+
+For a mechanism-led illustration, read [explanatory figures](explainers.md):
+build a concrete object whose behaviour teaches the idea, using the built-in
+`<Isometric>` figure for assemblies or custom SVG for other mechanisms.
+
 ## Compositions
 
 - **Illustrated feature.** A persistent subject scene, drawn in the system's
@@ -50,8 +73,8 @@ evidence is staged. Pick ONE composition and build that.
   and tables may widen within the document. [[ nativeTableAuthoringRule ]]
 - Every figure is a `<figure>` with a FIG-numbered `<figcaption>`, numbered
   continuously. Charts are `<Question>` over a `<Query>` in `<Helmet>`,
-  evidence 380 to 440px, a lone number 170 to 220px. Diagrams are inline
-  `<svg>` in the hand. Images are `<img src="ref:<imageId>" />` or an
+  evidence 380 to 440px, a lone number 170 to 220px. Diagrams use `<Mermaid>`
+  or inline `<svg>` in the system's hand; wireframes use HTML/CSS. Images are `<img src="ref:<imageId>" />` or an
   `https://` URL, which is imported at publish and rewritten to `ref:<id>`.
 
 Skeleton of the runtime pieces (publishable as is; the staging is yours):

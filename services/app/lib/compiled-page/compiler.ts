@@ -114,6 +114,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Files: { mod: 'files', island: true, api: ['data', 'variant', 'glyphs'], dom: 'identity' },
   Select: { mod: 'data', island: true, api: ['label', 'placeholder', 'value', 'options', 'className'] },
   Button: { mod: 'basic', api: ['variant', 'size', 'run', 'set', 'args'] },
+  Isometric: { mod: 'isometric', api: ['parts', 'title', 'width', 'height', 'azimuth', 'elevation', 'spread'], noChildren: true },
   Mermaid: { mod: 'mermaid', island: true, api: ['code', 'title', 'colorMode'], grid: true },
   FileUpload: { mod: 'upload', island: true, api: ['dataset', 'value', 'busy', 'multiple', 'accept', 'label', 'maxFiles', 'disabled', 'className'] },
   Input: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'type', 'min', 'max', 'step', 'aria-label'] },
@@ -150,7 +151,7 @@ const KIT_CHUNK: ReadonlySet<string> = new Set([
   // A Button without run/set (one with them is an island), a File (its `ref:` src resolved here, `kitParts`), a deck's
   // SlideDeck and Slide (named by a pattern: a new string literal here would join the recipe class union, recipe-classes.ts,
   // and flip every story's CSS compile version).
-  'Button', 'File', ...Object.keys(KIT).filter((tag) => /^Slide(?:Deck)?$/.test(tag)),
+  'Button', 'File', 'Isometric', ...Object.keys(KIT).filter((tag) => /^Slide(?:Deck)?$/.test(tag)),
 ]);
 /** The rail's miniature stubs its embeds. */
 const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table' };

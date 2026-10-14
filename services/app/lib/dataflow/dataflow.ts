@@ -299,6 +299,7 @@ export const REF_ATTRS: {
     Number: { data: 'table' },
     DataTable: { data: 'table' },
     DeckGL: { data: 'table' },
+    Isometric: { spread: 'scalar' },
     // A folder's listing, bound to the children table its <Query> reads.
     Files: { data: 'table' },
     // The kit CONTROL components: the same
