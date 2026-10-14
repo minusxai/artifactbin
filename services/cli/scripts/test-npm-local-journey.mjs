@@ -1,10 +1,11 @@
 /** CI-only complete journey through the actual installed npm entry, with no credentials or remote API. */
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,cp,rm,realpath} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,lstat,cp,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {spawn} from 'node:child_process';
+import {execFileSync,spawn} from 'node:child_process';
+import {createHmac} from 'node:crypto';
 import {createServer} from 'node:http';
 import {chromium} from 'playwright';
 import {artifactFilePayload as payload} from './artifact-file-payload.mjs';
@@ -19,8 +20,8 @@ const server=`http://127.0.0.1:${unavailable.address().port}`;
 const profiles=[join(scratch,'first-home'),join(scratch,'second-home'),join(scratch,'import-home')];
 for(const home of profiles)await mkdir(home);
 const environment=home=>({...process.env,HOME:home,USERPROFILE:home,ARTIFACTBIN_SKILLS:'off',ARTIFACTBIN_HOME:home,ARTIFACTBIN_URL:server,CLI__AUTO_UPDATE:'0'});
-async function command(cwd,home,args,timeout=180000){
- const child=spawn(process.execPath,[entry,...args],{cwd,env:environment(home),stdio:['ignore','pipe','pipe']});
+async function command(cwd,home,args,timeout=180000,extra={}){
+ const child=spawn(process.execPath,[entry,...args],{cwd,env:{...environment(home),...extra},stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',chunk=>stdout+=chunk);child.stderr.on('data',chunk=>stderr+=chunk);
  return await new Promise((done,reject)=>{
   const timer=setTimeout(()=>{child.kill('SIGTERM');reject(Error(`Installed command timed out: ${args.join(' ')}\n${stdout}\n${stderr}`));},timeout);
@@ -28,6 +29,60 @@ async function command(cwd,home,args,timeout=180000){
  });
 }
 const jsonCommand=async(...args)=>JSON.parse(await command(...args));
+/** Windows only: count the PowerShell launches of a fresh-home command and of the same command repeated, and read the ACLs they left. */
+const SPAWN_COUNTER=`const cp=require('node:child_process'),{promisify}=require('node:util'),{appendFileSync}=require('node:fs'),{syncBuiltinESMExports}=require('node:module');
+const note=file=>{if(/powershell/i.test(String(file)))appendFileSync(process.env.AFBIN_SPAWN_LOG,String(file)+'\\n');};
+for(const name of ['execFile','execFileSync','spawn','spawnSync','exec','execSync']){const original=cp[name];if(typeof original!=='function')continue;
+ const wrapped=function(file,...rest){note(file);return original.call(this,file,...rest);};
+ if(original[promisify.custom])wrapped[promisify.custom]=function(file,...rest){note(file);return original[promisify.custom].call(this,file,...rest);};
+ cp[name]=wrapped;}
+syncBuiltinESMExports();
+`;
+async function windowsPrivateState(cwd,home,args){
+ // NODE_OPTIONS reads backslashes as escapes, so the preload is named with forward slashes.
+ const directory=await mkdtemp(join(tmpdir(),'afbin-spawns-')),counter=join(directory,'count.cjs');await writeFile(counter,SPAWN_COUNTER);
+ const run=async(label,args)=>{
+  const log=join(directory,`${label}.log`),started=performance.now();
+  const output=JSON.parse(await command(cwd,home,args,180000,{NODE_OPTIONS:`${process.env.NODE_OPTIONS??''} --require "${counter.replaceAll('\\','/')}"`.trim(),AFBIN_SPAWN_LOG:log}));
+  return {output,ms:Math.round(performance.now()-started),powershell:(await readFile(log,'utf8').catch(()=>'')).split('\n').filter(Boolean).length};
+ };
+ // The same command again: it walks the same private directories, now warm, and keeps the same ids.
+ const fresh=await run('fresh',args),next=await run('next',args);
+ assert.deepEqual(next.output,fresh.output);
+ assert.ok(fresh.powershell>0,'a command on a fresh Windows home protects its private directories');
+ assert.equal(next.powershell,0,'a later command on a protected Windows home launches no PowerShell');
+ // `add` makes exactly these private: the per-user key's directory, the workspace store (localWorkspaceState and
+ // its State) and the store's lock directory (withLocalLock). It never opens the home store.
+ const keyDirectory=join(home,'AppData','Local','artifactbin'),store=join(cwd,'.artifactbin');
+ const directories=[keyDirectory,store,join(store,'locks')];
+ const key=await readFile(join(keyDirectory,'private-directory.key'));assert.equal(key.length,32,'the per-user record key');
+ for(const path of directories.slice(1)){
+  const info=await lstat(path,{bigint:true});assert.ok(info.isDirectory()&&!info.isSymbolicLink(),`${path} is a real directory`);
+  const signed=createHmac('sha256',key).update(`${info.dev}:${info.ino}:${info.birthtimeNs}`).digest('hex')+'\n';
+  assert.equal(await readFile(join(path,'.private-directory'),'utf8'),signed,`${path} carries a record signed for it`);
+ }
+ // .NET and [Console] only: no module autoload (this runner's PSModulePath belongs to PowerShell 7), no localized
+ // names (SIDs), no output encoding of the non-ASCII paths (each line carries its index, not its path).
+ const literal=path=>`'${path.replace(/'/g,"''")}'`;
+ const acl=(index,expression)=>`$a=[IO.Directory]::GetAccessControl(${expression}); $r=@($a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|ForEach-Object{$_.IdentityReference.Value+'|'+$_.FileSystemRights+'|'+$_.InheritanceFlags+'|'+$_.IsInherited+'|'+$_.AccessControlType}); [Console]::Out.WriteLine('${index}'+[char]9+$a.AreAccessRulesProtected+[char]9+($r -join ';'))`;
+ const script=[`$ErrorActionPreference='Stop'`,`[Console]::Out.WriteLine('user'+[char]9+[Security.Principal.WindowsIdentity]::GetCurrent().User.Value)`,
+  acl('profile',"[Environment]::GetFolderPath('LocalApplicationData')"),...directories.map((path,index)=>acl(index,literal(path)))].join('; ');
+ const lines=Object.fromEntries(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{encoding:'utf8'})
+  .split(/\r?\n/).filter(Boolean).map(line=>{const [key,...rest]=line.split('\t');return [key,rest];}));
+ const user=lines.user?.[0];assert.match(user??'',/^S-1-5-21-/,'the current user SID');
+ const own=[`${user}|FullControl|ContainerInherit, ObjectInherit|False|Allow`,'S-1-5-18|FullControl|ContainerInherit, ObjectInherit|False|Allow'].sort();
+ directories.forEach((path,index)=>{
+  const [protectedFlag,rules]=lines[index]??[];
+  assert.deepEqual({path,protected:protectedFlag,rules:(rules??'').split(';').filter(Boolean).sort()},{path,protected:'True',rules:own},'a private directory grants only its owner and SYSTEM');
+ });
+ // The key's parent is the user's AppData\Local: no broad group may reach it (Everyone, Authenticated Users, Users).
+ const profile=(lines.profile?.[1]??'').split(';').filter(Boolean);
+ assert.ok(profile.length>0,'AppData\\Local has readable rules');
+ assert.deepEqual(profile.filter(rule=>/^(S-1-1-0|S-1-5-11|S-1-5-32-545)\|/.test(rule)&&rule.endsWith('|Allow')),[],`AppData\\Local grants a broad group: ${profile.join(', ')}`);
+ console.log(JSON.stringify({windows_private_state:{fresh_ms:fresh.ms,fresh_powershell:fresh.powershell,next_ms:next.ms,next_powershell:next.powershell,protected:directories.length,local_app_data:profile}}));
+ await rm(directory,{recursive:true,force:true});
+ return fresh.output;
+}
 async function preview(cwd,home,path='report.jsx'){
  const child=spawn(process.execPath,[entry,'preview',...(path===null?[]:[path]),'--port','0','--json'],{cwd,env:environment(home),stdio:['ignore','pipe','pipe','ipc']});
  let stdout='',stderr='';child.stderr.on('data',chunk=>stderr+=chunk);
@@ -73,7 +128,8 @@ try{
  await writeFile(join(workspace,'sales.csv'),'amount\n10\n20\n');
  const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4KsAAAAASUVORK5CYII=','base64');
  await writeFile(join(workspace,'pixel.png'),image);await writeFile(join(workspace,'report.jsx'),'<h1 id="title">Local report</h1><p id="text">Initial paragraph</p>');
- const ids=await jsonCommand(workspace,profiles[0],['add','sales.csv','pixel.png','report.jsx','--json']);
+ const firstAdd=['add','sales.csv','pixel.png','report.jsx','--json'];
+ const ids=process.platform==='win32'?await windowsPrivateState(workspace,profiles[0],firstAdd):await jsonCommand(workspace,profiles[0],firstAdd);
  assert.match(ids['report.jsx'],/^[A-Za-z0-9]{6,12}$/);
  const registered=await readFile(join(workspace,'report.jsx'),'utf8');
  const source=registered.replace('<h1 id="title">Local report</h1>',`<Helmet><Import name="sales_data" src="ref:${ids['sales.csv']}"/><Query name="sales">{\`select sum(amount) as total from sales_data.rows\`}</Query></Helmet><h1 id="title">Local report</h1><img id="picture" src="ref:${ids['pixel.png']}" alt="Portable image"/><Number id="sum" data="$sales" col="total" agg="sum"/>`);

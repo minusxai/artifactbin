@@ -1008,6 +1008,18 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 7
+      # A CLI or services/utils change without a version proves the same tarball on the npm matrix under
+      # another name: the publisher only ever reads afbin-npm-release.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: needs.plan.outputs.cli == 'true' && !fromJSON(needs.plan.outputs.plan).cliRelease
+        with:
+          name: afbin-npm-candidate
+          path: |
+            services/cli/dist/packages/*.tgz
+            services/cli/dist/packages/transition/*
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
       - if: needs.plan.outputs.cli == 'true' && steps.npm-seeds.outputs.cache-hit != 'true'
         run: node services/cli/scripts/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -1234,16 +1246,21 @@ jobs:
       - name: Wait for this attempt's packed candidate
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}"
+          CANDIDATE: ${{ fromJSON(needs.plan.outputs.plan).cliRelease && 'afbin-npm-release' || 'afbin-npm-candidate' }}
+        # Bash on every runner: Windows' default PowerShell would read "$CANDIDATE" as its own empty variable.
+        shell: bash
+        run: node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" "$CANDIDATE"
       - name: Download the verified exact-version CLI candidate
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ github.sha }}
-          REQUIRE_SIGNED_CANDIDATE: ${{ github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+          CANDIDATE: ${{ fromJSON(needs.plan.outputs.plan).cliRelease && 'afbin-npm-release' || 'afbin-npm-candidate' }}
+          # Only a release is signed; an unreleased candidate is this run's own unsigned tarball.
+          REQUIRE_SIGNED_CANDIDATE: ${{ fromJSON(needs.plan.outputs.plan).cliRelease && github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         shell: bash
         run: |
           version=$(node -p "require('./services/cli/package.json').version")
-          node scripts/lib/ci-artifact-wait.mjs --extract-candidate "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" afbin-npm-release "$version" "$SOURCE_SHA" "$REQUIRE_SIGNED_CANDIDATE" "$GITHUB_WORKSPACE/npm-candidate"
+          node scripts/lib/ci-artifact-wait.mjs --extract-candidate "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" "$CANDIDATE" "$version" "$SOURCE_SHA" "$REQUIRE_SIGNED_CANDIDATE" "$GITHUB_WORKSPACE/npm-candidate"
       - name: Wait for this attempt's platform seed
         shell: bash
         run: |
