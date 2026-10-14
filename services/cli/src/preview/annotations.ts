@@ -53,7 +53,10 @@ export function previewAnnotations(state:State,root:string,file:string,source:st
    const value={...entry.value,thread:entry.value.thread.map(comment=>comment.id===commentId?{...comment,body,edited_at:now()}:comment)};
    save({...entry,value});return resolved({...entry,value});
   },
+  /** A thread's id deletes the thread; a reply's id deletes that reply alone, as the server does. */
   delete(id:string){
+   const thread=entries().find(entry=>entry.value.id!==id&&entry.value.thread.some(comment=>comment.id===id));
+   if(thread){save({...thread,value:{...thread.value,thread:thread.value.thread.filter(comment=>comment.id!==id)}});return;}
    const entry=get(id);state.delete(root,'preview-thread',entry.value.id);
    // A migrated note must not reappear on the next read.
    state.delete(root,'preview-comment',entry.value.id);

@@ -8,23 +8,25 @@ import {join} from 'node:path';
 import {PREVIEW_CONNECT_MAX_BYTES} from '../../../contracts/src/preview-connect';
 import {atomicWrite,privateDirectory} from '../files';
 import {CliError} from '../errors';
-import {readArtifactFileHtml,importLocalHtml} from '../local-html-import';
+import {readArtifactFileHtml,importLocalHtml,localIdentityOwner} from '../local-html-import';
 import {loadWorkspace} from '../workspace';
 
 function readOfferFile(html:string){try{return readArtifactFileHtml(html);}catch(error){if(error instanceof CliError)throw error;throw new CliError('invalid_html',error instanceof Error?error.message:String(error));}}
 
-export function inspectPreviewOffer(value:unknown){
+/** `root`, when given, lets an offline copy of a workspace document propose that document as its destination. */
+export async function inspectPreviewOffer(value:unknown,root?:string){
  if(!value||typeof value!=='object')throw new CliError('invalid_html','Choose an artifactbin HTML file.');
  const input=value as {html?:unknown;filename?:unknown;target?:unknown};
  if(typeof input.html!=='string'||Buffer.byteLength(input.html)>PREVIEW_CONNECT_MAX_BYTES||typeof input.filename!=='string'||input.filename.length>255)throw new CliError('invalid_html','Choose an artifactbin HTML file smaller than 25 MB.');
  const file=readOfferFile(input.html);
  const basename=input.filename.split(/[\\/]/).pop()!.replace(/\.html$/i,'').replace(/\.jsx$/i,'').replace(/[^a-zA-Z0-9_-]+/g,'-').replace(/^-+|-+$/g,'');
- const target=input.target??`${basename||'document'}.jsx`;
+ const owner=input.target===undefined&&root&&file.localWorkspace?await localIdentityOwner(root,file.localWorkspace.documentId):undefined;
+ const target=input.target??owner??`${basename||'document'}.jsx`;
  if(typeof target!=='string'||!target.toLowerCase().endsWith('.jsx')||target.length>500||/[\\:\x00-\x1f]/.test(target)||target.split('/').some(part=>!part||part.startsWith('.')||part==='node_modules'))throw new CliError('invalid_html','Choose a relative JSX filename within this workspace, such as report.jsx.');
  return {html:input.html,title:file.metadata.title,comments:file.threads.length,target};
 }
 export async function importPreviewOffer(root:string,home:string,value:unknown){
- const offer=inspectPreviewOffer(value),directory=join(root,'.artifactbin','imports');
+ const offer=await inspectPreviewOffer(value,root),directory=join(root,'.artifactbin','imports');
  const workspace=await loadWorkspace(root,home),file=readOfferFile(offer.html);
  try{
  const identities=await localIdentities(workspace),future:Record<string,string>={[offer.target]:file.source};

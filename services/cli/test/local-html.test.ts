@@ -89,3 +89,12 @@ test('an id-less document exports with an id on every element, the same ids its 
  assert.equal((await readFile(join(root,'weather.jsx'),'utf8')).split('---\n').at(-1),body);
  assert.equal(body.replace(/ id="[A-Za-z][A-Za-z0-9]{3}"/g,''),authored,'only id attributes were added: the author\'s layout and comments stay');
 }));
+test('a never-published local export names its real server and says it is not published',()=>fixture(async(root,home)=>{
+ await writeFile(join(root,'report.jsx'),'<p id="words">Local only</p>');const cwd=process.cwd();
+ try{
+  const bytes=await exportLocalHtml({cwd:root,home,path:'report.jsx',server:'https://artifacts.example'},resolve('../app')),text=bytes.toString(),file=readArtifactFileHtml(text);
+  assert.equal(file.origin,'https://artifacts.example');assert.equal(file.liveUrl,'');
+  assert.match(text,/^<!doctype html>\n<!-- artifactbin offline file for "report\.jsx" \(a local document, not published\)\. /);
+  assert.match(text,/reference: https:\/\/artifacts\.example\/llms\.txt/);assert.doesNotMatch(text,/http:\/\/localhost/);
+ }finally{process.chdir(cwd);}
+}));

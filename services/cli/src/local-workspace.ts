@@ -1,7 +1,8 @@
 /** Portable authoring state. Identity and discussion belong to the folder; credentials remain at home. */
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {randomBytes,randomUUID} from 'node:crypto';
-import {readFile,lstat,realpath,link,unlink} from 'node:fs/promises';
+import {readFile,lstat,realpath,link,unlink,stat} from 'node:fs/promises';
+import {homedir,tmpdir} from 'node:os';
 import {basename,dirname,extname,join,relative,resolve,sep} from 'node:path';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {State,withLock} from './state';
@@ -9,7 +10,7 @@ import {recordLocalHistory,assertLocalHistoryMove,moveLocalHistory,localHistoryH
 import {parseJsx,stampNodeIds,stampNodeIdsInPlace} from '../../app/lib/cli-toolkit';
 import {stateFor,readState} from './state-access';
 import {workspaceStateEnv} from './config';
-import {atomicWrite,digest,privateDirectory,readOptional} from './files';
+import {atomicWrite,digest,privateDirectory,readOptional,isMissing} from './files';
 import {confinedPath,stageFiles,recoverFiles,type FileChange} from './journal';
 import {parseDocument,writeDocument} from './document';
 import {parseResourceFile,writeResourceFile} from './resource-file';
@@ -28,13 +29,25 @@ async function marker(root:string):Promise<WorkspaceMarker|null>{
  if(value?.format!==1||typeof value.id!=='string'||! /^[a-f0-9-]{36}$/.test(value.id))throw new CliError('invalid_workspace','Unsupported workspace marker.');
  return value;
 }
-export async function findLocalWorkspace(cwd:string):Promise<string|null>{
- for(let root=await realpath(cwd);;root=dirname(root)){
+/**
+ * THE NEAREST WORKSPACE, WITHIN BOUNDS. The working directory itself is always eligible; discovery then
+ * climbs, but never past a git repository's root and never into a directory nobody's project lives in:
+ * HOME (whose `.artifactbin` is the CLI's own state), the shared temp roots, a directory another user
+ * owns, or the filesystem root. A stale marker in /private/tmp once adopted every scratch directory below it.
+ */
+export async function findLocalWorkspace(cwd:string,home:string=homedir()):Promise<string|null>{
+ const boundaries=new Set<string>();
+ for(const path of new Set([home,homedir(),tmpdir(),'/tmp','/var/tmp']))try{boundaries.add(await realpath(path));}catch{/* An absent directory bounds nothing. */}
+ const uid=process.getuid?.();
+ let root=await realpath(cwd);
+ for(let first=true;;first=false,root=dirname(root)){
   if(basename(root)==='.artifactbin')return null;
+  if(!first&&(boundaries.has(root)||uid!==undefined&&(await stat(root)).uid!==uid))return null;
   if(await marker(root))return root;
-  if(dirname(root)===root)return null;
+  if(dirname(root)===root||await readOptionalStat(join(root,'.git')))return null;
  }
 }
+const readOptionalStat=async(path:string)=>{try{return await lstat(path);}catch(error){if(isMissing(error))return null;throw error;}};
 export async function localWorkspaceState(root:string):Promise<State>{
  root=await realpath(root);
  if(!await marker(root)){

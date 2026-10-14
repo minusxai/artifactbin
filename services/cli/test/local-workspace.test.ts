@@ -103,7 +103,7 @@ test('moving a local document keeps its identity and discussion, and status disc
  const before=await readFile(join(root,'draft.jsx'));await saveLocalFile(root,'draft.jsx',digest(before),Buffer.from(before.toString().replace('Original','Edited')));
  const output:string[]=[];const context={cwd:root,home:workspace.home,env:{},stdout:(s:string)=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local history must not fetch')};
  assert.equal(await runCli(['mv','draft.jsx','moved.jsx','--json'],context),0,output.join(''));output.length=0;
- assert.equal(await runCli(['log','moved.jsx','--json'],context),0,output.join(''));
+ assert.equal(await runCli(['log','moved.jsx','--full','--json'],context),0,output.join(''));
  const result=JSON.parse(output[0]!);assert.equal(result.local,true);assert.equal(result.versions[0].version,1);assert.match(result.versions[0].source,/Original/);
  }finally{await rm(root,{recursive:true,force:true});}
 });

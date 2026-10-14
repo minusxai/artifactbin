@@ -11,6 +11,9 @@ import {recoverFiles} from './journal';
 import {withLock} from './state';
 import {baselineOf,inspectWorkspace,loadWorkspace,saveTracking,type LocalFile,type Workspace,type Snapshot,type TrackedFile} from './workspace';
 import {skillStatus} from './skill-install';
+import {localIdentities} from './identities';
+import {findLocalWorkspace} from './local-workspace';
+import {localHistory,localHistoryHead} from './local-history';
 import type {HttpClient} from './http';
 
 /** Observation never moves the accepted base or rewrites working files. */
@@ -39,7 +42,7 @@ async function comparisonTargets(workspace:Workspace,input:string|string[]|undef
  const targets:Array<{file:LocalFile;version:number|undefined}>=[];
  for(const one of inputs){
   const ref=await resolveReference(one,{root:workspace.root,cwd:workspace.cwd,server,aliases:[...aliases]});
-  const path=ref.kind==='path'?ref.path:Object.entries(workspace.tracking?.files??{}).find(([,file])=>file.id===ref.id)?.[0];
+  const path=ref.kind==='path'?ref.path:Object.entries(workspace.tracking?.files??{}).find(([,file])=>file.id===ref.id)?.[0]??(await localIdentities(workspace))[ref.id];
   if(!path)throw new CliError('not_tracked','Diff needs a local working file for this artifact.','Use afbin pull <ref> first.');
   if(targets.some(target=>target.file.path===path))throw new CliError('duplicate_identity',`The selected references address ${path} more than once.`);
   const [file]=await inspectWorkspace(workspace,[resolve(workspace.root,path)]);
@@ -52,6 +55,13 @@ export async function compare(workspace:Workspace,input:string|string[]|undefine
  for(const {file,version} of targets){
   const tracked=file.tracked;
   if(!tracked){
+   // An unpublished file's versions are its local history: the numbers afbin log lists for it.
+   if(version&&!remote&&file.bytes&&await findLocalWorkspace(workspace.root,workspace.home)===workspace.root){
+    const head=await localHistoryHead(workspace.root,file.path);
+    const before=version===head.version?file.bytes.toString():(await localHistory(workspace.root,file.path)).find(entry=>entry.version===version)?.source;
+    if(before===undefined)throw new CliError('unknown_version',`${file.path} has no local version ${version}.`,`afbin log ${file.path} lists its local versions.`);
+    diffs.push({path:file.path,diff:createTwoFilesPatch(`base/${file.path}`,`local/${file.path}`,before,file.bytes.toString(),`local version ${version}`,'working file',{context:3})});continue;
+   }
    if(remote||version)throw new CliError('not_tracked',`${file.path} has no saved base.`);
    diffs.push({path:file.path,diff:file.document?createTwoFilesPatch(`base/${file.path}`,`local/${file.path}`,'',file.bytes?.toString()??''): `Binary file ${file.path} is new`});continue;
   }

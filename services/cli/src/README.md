@@ -49,7 +49,7 @@ One row per command `dispatch.ts` routes. Handler modules are listed in the orde
 | `uninstall` | `uninstall.ts` | skills, the global `afbin`, `--purge` |
 | `update` | `update.ts`, `update-progress.ts`, `skill-install.ts` | `updateCli` |
 | `upload` | `upload.ts` | `uploadAttachment` |
-| `validate` | `validation.ts`, `sync.ts`, `account-workspace.ts` | local `validateFiles`; `--remote` a dry-run push |
+| `validate` | `validation.ts`, `local-verification.ts`, `sync.ts`, `account-workspace.ts` | local `validateFiles` and `verifyLocalDocuments`; `--remote` a dry-run push |
 | `watch` | `watch.ts` | `watchCommand`: new comments as NDJSON until cancelled |
 | `workspace` | `workspace-rebind.ts` | `rebindWorkspace` |
 
@@ -121,6 +121,7 @@ What `dispatch.ts` calls to do a command's work.
 | `local-query.ts` | `query` against local engines. |
 | `local-document-query.ts` | Run a local document's declared query. |
 | `local-dataflow.ts` | Compile and run a local document's dataflow in process. |
+| `local-verification.ts` | Validate's local query dry-run and chart-column checks, naming what did not run. |
 | `local-html.ts` | Offline HTML export over the local compiler and reader. |
 | `local-html-options.ts` | Options for the local HTML export. |
 | `local-image-options.ts` | Options for the local image export. |

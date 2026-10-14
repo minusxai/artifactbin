@@ -31,7 +31,7 @@ import {snapshotDocument} from './local';
 import {ARTIFACT_ID_PATTERN,type DocumentGraph} from '@artifactbin/contracts';
 import type {HttpClient} from './http';
 import {publishLocalComments} from './local-comment-publication';
-interface LocalPublicationResult {operations:Array<Record<string,unknown>>;dry_run?:boolean;local_only?:boolean;publication_copy?:string;local_source_preserved?:boolean}
+interface LocalPublicationResult {operations:Array<Record<string,unknown>>;dry_run?:boolean;local_only?:boolean;publication_copy?:string;ids_added?:string[];remote_fence_written?:boolean}
 interface Options {destination?:ArtifactDestination;force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
 interface Input {localId?:string;bytes:string;hash:string;ids?:Record<string,string>}
 interface ImportedBaseline {artifactId:string;origin:string;base:{version:number;editId:string;source:string};source:string}
@@ -185,7 +185,8 @@ async function publishProjection(workspace:Workspace,paths:string[],client:HttpC
  if(options.dryRun)return{dry_run:true,local_only:true,operations:ordered.map(path=>({path,status:'would_publish'}))};
  // The author's file carries the element ids it publishes with, so the published source never diverges from it
  // on identity and a later local edit does not overlap publication normalization.
- for(const path of ordered)if(extname(path).toLowerCase()==='.jsx')await identifyLocalDocument(workspace.root,path,{acknowledge:true});
+ const idsAdded:string[]=[];
+ for(const path of ordered)if(extname(path).toLowerCase()==='.jsx'&&await identifyLocalDocument(workspace.root,path,{acknowledge:true}))idsAdded.push(path);
 
  if(stored&&(stored.format!==1||typeof stored.server!=='string'||typeof stored.account!=='string'||!stored.account))throw new CliError('invalid_journal','This publication copy has invalid ownership metadata.');
  if(workspace.tracking&&!client.sameServer(workspace.tracking.server))throw new CliError('wrong_server','The authoring baseline belongs to another server.');
@@ -314,7 +315,22 @@ async function publishProjection(workspace:Workspace,paths:string[],client:HttpC
   try{result=await deliverBound(workspace,bindings,manifest,()=>push(stage,ordered.map(path=>join(root,path)),client,options));}
   catch(error){await projectBindingConflicts(workspace,stage,bindings);throw error;}
   await finalizeBindings(workspace);
-  try{const comments=await publishLocalComments(workspace,await loadWorkspace(root,home),ordered,client,options);return{...result,operations:[...result.operations,...comments],publication_copy:relative(workspace.root,publication),local_source_preserved:bindings.length===0};}
-  catch(error){if(error instanceof CliError)throw new CliError(error.code,error.message,error.fix,{...(error.details&&typeof error.details==='object'?error.details:{}),completed_operations:[...result.operations,...((error.details as {completed_operations?:Array<Record<string,unknown>>}|undefined)?.completed_operations??[])],publication_copy:relative(workspace.root,publication),local_source_preserved:bindings.length===0},error.exitCode);throw error;}
+  try{const comments=await publishLocalComments(workspace,await loadWorkspace(root,home),ordered,client,options);const copy=relative(workspace.root,publication);return{...result,operations:[...result.operations.map(operation=>authorFileReport(operation,idsAdded,copy,bindings)),...comments],publication_copy:copy,...authorFiles(idsAdded,bindings.length>0)};}
+  catch(error){if(error instanceof CliError)throw new CliError(error.code,error.message,error.fix,{...(error.details&&typeof error.details==='object'?error.details:{}),completed_operations:[...result.operations.map(operation=>authorFileReport(operation,idsAdded,relative(workspace.root,publication),bindings)),...((error.details as {completed_operations?:Array<Record<string,unknown>>}|undefined)?.completed_operations??[])],publication_copy:relative(workspace.root,publication),...authorFiles(idsAdded,bindings.length>0)},error.exitCode);throw error;}
  }));
+}
+/**
+ * WHAT HAPPENED TO THE AUTHOR'S FILES, exactly. Before publishing, element ids are written into each local
+ * document that lacked them (`ids_added`); unless a file is bound to a published identity, whose fence is then
+ * written into it (`remote_fence_written`), that is the only change publication makes to the author's files.
+ * The server's own normalization of an unbound document lands in the publication copy, not the author's file.
+ */
+function authorFiles(idsAdded:string[],fenceWritten:boolean){return {...(idsAdded.length?{ids_added:idsAdded}:{}),remote_fence_written:fenceWritten};}
+/** An operation's hint names the file that actually changed: the author's (ids) or only the publication copy (server normalization). */
+function authorFileReport(operation:Record<string,unknown>,idsAdded:string[],copy:string,bound:ReadonlyArray<{path:string}>):Record<string,unknown>{
+ // A bound file is the published identity's own authoring file: its accepted source is written into it, as sync's hint says.
+ const path=typeof operation.path==='string'?operation.path:undefined;if(!path||bound.some(binding=>binding.path===path))return operation;
+ const ids=idsAdded.includes(path);
+ if(operation.source_rewritten)return {...operation,hint:`The server normalized the published source; your file keeps what you wrote${ids?' plus the element ids added before publishing':''}. The published source is ${join(copy,'files',path)}.${ids?' Re-read your file before editing.':''}`};
+ return ids?{...operation,ids_added:true,hint:'Element ids were written into your file before publishing; re-read it before editing.'}:operation;
 }

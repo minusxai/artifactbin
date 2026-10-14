@@ -1,5 +1,5 @@
 /** CLI discussion over the same portable annotation store as the local browser editor. */
-import {annotationAuthorForAgent,nodeIndex,canonicalQuote,canonicalText,type JsxNode,BackendRequestError} from '../../app/lib/cli-toolkit';
+import {annotationAuthorForAgent,nodeIndex,canonicalQuote,canonicalText,type JsxNode,BackendRequestError,type AnnotationAuthor} from '../../app/lib/cli-toolkit';
 import {resolve,sep} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -15,6 +15,11 @@ import type {Workspace} from './workspace';
 import {digest} from './files';
 import {localHistoryHead} from './local-history';
 
+/**
+ * Who wrote a CLI comment that names no --agent: the CLI, exactly as the server records an unnamed
+ * token's comment — an agent without a name. Only the browser editor writes as the person ("You").
+ */
+const CLI_AUTHOR:AnnotationAuthor={kind:'agent',label:null,transport:'http'};
 /** Resolve every target before writing so a mixed remote/local request cannot partly mutate locally. */
 export async function localCommentCommand(workspace:Workspace,parsed:ParsedCommand,providedBody?:string,options:{hostedIds?:boolean}={}):Promise<unknown|undefined>{
  if(parsed.command!=='comment'||parsed.positionals.some(value=>/^https?:\/\//i.test(value)))return undefined;
@@ -46,7 +51,7 @@ export async function localCommentCommand(workspace:Workspace,parsed:ParsedComma
   for(const target of targets){
    const original=await readFile(await confinedPath(workspace.root,target.path),'utf8'),document=parseDocument(original);
    const source=mutations&&!flags.thread&&flags.quote?identifiedLocalBody(store,target.path,document.body)??document.body:document.body;
-   const annotations=previewAnnotations(store,LOCAL_WORKSPACE_SCOPE,target.path,source,typeof flags.agent==='string'?annotationAuthorForAgent(flags.agent):undefined);
+   const annotations=previewAnnotations(store,LOCAL_WORKSPACE_SCOPE,target.path,source,typeof flags.agent==='string'?annotationAuthorForAgent(flags.agent):CLI_AUTHOR);
    const id=(await localIdentities(workspace));const documentId=Object.entries(id).find(([,path])=>path===target.path)?.[0];
    const context={local:true,path:target.path,...(documentId?{artifact_id:documentId}:{})};
    try{
@@ -93,5 +98,32 @@ export async function localCommentCommand(workspace:Workspace,parsed:ParsedComma
    }catch(error){if(error instanceof BackendRequestError)throw new CliError(error.status===404?'invalid_thread':error.status===403?'forbidden':'invalid_comment',error.message);throw error;}
   }
   return results.length===1?results[0]:{local:true,results};
+ });
+}
+
+/**
+ * `afbin delete --type comment --in <file> <id>…` on a local document: the same portable store and the
+ * same delete the preview's comment rail uses, so neither can see a comment the other removed. A thread
+ * id removes the thread, a reply id that reply alone. Undefined when the container is not local.
+ */
+export async function localDeleteComments(workspace:Workspace,container:string,ids:string[],options:{dryRun?:boolean;hostedIds?:boolean}={}):Promise<{value:unknown;exitCode:number}|undefined>{
+ if(/^https?:\/\//i.test(container))return undefined;
+ const ref=await resolveReference(container,{root:workspace.root,cwd:workspace.cwd,writable:true});
+ if(options.hostedIds&&ref.kind==='id')return undefined;
+ const path=(ref.kind==='path'?ref.path:(await localIdentities(workspace))[ref.id])?.split(sep).join('/');
+ if(!path)return undefined;
+ if(!path.toLowerCase().endsWith('.jsx'))throw new CliError('not_markup','Local comments belong to a JSX document.');
+ return withLocalLock(workspace.root,async()=>{
+  await recoverLocalFiles(workspace.root);const store=await localWorkspaceState(workspace.root);
+  await migrateLocalDiscussion(workspace.root,workspace.home,store);
+  const annotations=previewAnnotations(store,LOCAL_WORKSPACE_SCOPE,path,parseDocument(await readFile(await confinedPath(workspace.root,path),'utf8')).body);
+  const operations:Array<Record<string,unknown>>=[];let failed=false;
+  for(const id of ids){
+   const known=[...annotations.list('open'),...annotations.list('resolved')].some(thread=>thread.thread.some(comment=>comment.id===id));
+   if(!known){failed=true;operations.push({id,path,error:{code:'invalid_thread',message:`${id} is not a comment on ${path}.`,fix:`List its comments with afbin comment ${path}.`}});continue;}
+   if(options.dryRun){operations.push({id,path,status:'would_delete'});continue;}
+   store.transaction(()=>annotations.delete(id));operations.push({id,path,status:'deleted'});
+  }
+  return {value:{local:true,...(options.dryRun?{dry_run:true}:{}),operations},exitCode:failed?1:0};
  });
 }

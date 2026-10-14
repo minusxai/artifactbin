@@ -257,7 +257,7 @@ async function pullProfile(workspace:Workspace,parsed:ParsedCommand,plan:Account
  await save(workspace,path,current,before,Buffer.from(yaml(merged)),client);return {value:{operations:[{path,id:current.id,type:'profile',status:'pulled',...(backup?{backup}:{})}]}};
 }
 export async function remoteAccountCommand(workspace:Workspace,parsed:ParsedCommand,plan:AccountPlan,client:HttpClient):Promise<{value?:unknown;content?:string;exitCode?:number}>{
- if(!parsed.flags['dry-run']&&['pull','push','delete'].includes(parsed.command)&&await findLocalWorkspace(workspace.root))return withLocalLock(workspace.root,()=>withLock(workspace.home,workspace.root,()=>remoteAccountCore(workspace,parsed,plan,client)));
+ if(!parsed.flags['dry-run']&&['pull','push','delete'].includes(parsed.command)&&await findLocalWorkspace(workspace.root,workspace.home))return withLocalLock(workspace.root,()=>withLock(workspace.home,workspace.root,()=>remoteAccountCore(workspace,parsed,plan,client)));
  return remoteAccountCore(workspace,parsed,plan,client);
 }
 async function remoteAccountCore(workspace:Workspace,parsed:ParsedCommand,plan:AccountPlan,client:HttpClient):Promise<{value?:unknown;content?:string;exitCode?:number}>{

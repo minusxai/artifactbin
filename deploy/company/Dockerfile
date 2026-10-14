@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim
-ARG AFBIN_VERSION=0.5.38
-ARG AFBIN_PACKAGE=@afbin/cli@0.5.38
+ARG AFBIN_VERSION=0.5.39
+ARG AFBIN_PACKAGE=@afbin/cli@0.5.39
 ENV ARTIFACTBIN_SKILLS=off CLI__AUTO_UPDATE=0 ARTIFACTBIN_HOME=/data/client PLAYWRIGHT_BROWSERS_PATH=/data/chromium
 COPY packages/ /packages/
 RUN npm install --global --no-audit --no-fund "$AFBIN_PACKAGE" \

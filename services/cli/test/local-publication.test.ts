@@ -31,7 +31,7 @@ async function fixture(){
  await writeFile(join(cwd,'child.jsx'),'---\nid: loc002\n---\n<p id="text">One</p>');await writeFile(join(cwd,'rows.json'),'[{"link":"ref:loc002"}]');
  await registerLocalFiles(workspace,['doc.jsx','child.jsx']);
  const portable=await localWorkspaceState(cwd);portable.put(LOCAL_WORKSPACE_SCOPE,'draft-identity','rows.json',{id:'loc003'});
- const heads=new Map<string,any>(),versions=new Map<string,any>(),keys=new Map<string,any>();const calls:Array<{path:string;method:string;body:any}>=[];let rejectCreate=false,rejectEdit=false,lose=false,conflict=false,readEffect:(()=>Promise<void>)|undefined;
+ const heads=new Map<string,any>(),versions=new Map<string,any>(),keys=new Map<string,any>();const calls:Array<{path:string;method:string;body:any}>=[];let normalize:((markup:string)=>string)|undefined;let rejectCreate=false,rejectEdit=false,lose=false,conflict=false,readEffect:(()=>Promise<void>)|undefined;
  const request:typeof fetch=async(input,init)=>{
   const path=new URL(String(input)).pathname,method=init?.method??'GET',body=JSON.parse(String(init?.body??'{}'));calls.push({path,method,body});
   const headers={'X-Artifactbin-Account':'usr_one'};
@@ -39,7 +39,7 @@ async function fixture(){
   if(path==='/api/artifacts'&&method==='POST'){
    if(rejectCreate){rejectCreate=false;return Response.json({error:'invalid_sql',details:['Bad query']},{status:400,headers});}
    const key=new Headers(init?.headers).get('Idempotency-Key')!;if(keys.has(key))return Response.json(keys.get(key),{headers});
-   const id=body.reserved_id;const markup=body.markup?.replace('<p>','<p id="auto">');const head={id,version:1,edit_id:'edit1',state:digest(id+'1'),format:markup?'markup':body.image?'image':'dataset',...(body.image?{markup:null}:{}),...(markup?{markup,document:body.forked_from?legacyTree(markup):createDocumentGraph(markup,1)}:{columns:[]}),title:null,theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};heads.set(id,head);keys.set(key,head);if(lose){lose=false;throw Error('lost reply');}return Response.json(head,{headers});
+   const id=body.reserved_id;const markup=body.markup===undefined?undefined:normalize?normalize(body.markup):body.markup.replace('<p>','<p id="auto">');const head={id,version:1,edit_id:'edit1',state:digest(id+'1'),format:markup?'markup':body.image?'image':'dataset',...(body.image?{markup:null}:{}),...(markup?{markup,document:body.forked_from?legacyTree(markup):createDocumentGraph(markup,1)}:{columns:[]}),title:null,theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};heads.set(id,head);keys.set(key,head);if(lose){lose=false;throw Error('lost reply');}return Response.json(head,{headers});
   }
   const id=path.split('/')[3],head=heads.get(id);
   if(method==='GET'&&path.endsWith('/content'))return Response.json([{name:'One',count:1}],{headers});
@@ -55,7 +55,7 @@ async function fixture(){
   throw Error(`Unexpected ${method} ${path}`);
  };
  const client=new HttpClient({connection:{server:'https://example.com',token:'mxmx_test_publication'},home,account:'usr_one',fetch:request});
- return{root,workspace,client,heads,versions,calls,setRejectCreate:()=>{rejectCreate=true;},setRejectEdit:()=>{rejectEdit=true;},setReadEffect:(effect:()=>Promise<void>)=>{readEffect=effect;},setLost:()=>{lose=true;},setConflict:(value=true)=>{conflict=value;},cleanup:()=>rm(root,{recursive:true,force:true})};
+ return{root,workspace,client,heads,versions,calls,setRejectCreate:()=>{rejectCreate=true;},setRejectEdit:()=>{rejectEdit=true;},setReadEffect:(effect:()=>Promise<void>)=>{readEffect=effect;},setLost:()=>{lose=true;},setConflict:(value=true)=>{conflict=value;},setNormalize:(value:(markup:string)=>string)=>{normalize=value;},cleanup:()=>rm(root,{recursive:true,force:true})};
 }
 test('a pulled identity in a marked workspace updates its original and finalizes the authoring baseline',async()=>{
  const f=await fixture();try{
@@ -467,5 +467,23 @@ test('a bound author can edit normalized repeated nodes without rematching obsol
   await writeFile(file,accepted.replace('Same','Changed'));
   await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['child.jsx'],f.client,{});
   assert.equal(f.heads.size,1);assert.match(f.heads.get(head.id).markup,/Changed/);assert.match(f.heads.get(head.id).markup,/Same/);
+ }finally{await f.cleanup();}
+});
+
+test('a local publication says exactly what it did to the author\'s file: ids added, no remote fence, server normalization only in the copy',async()=>{
+ const f=await fixture();try{
+  await writeFile(join(f.workspace.root,'child.jsx'),'---\nid: loc002\n---\n<p>One</p>');
+  const first:any=await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
+  assert.deepEqual(first.ids_added,['child.jsx']);assert.equal(first.remote_fence_written,false);assert.equal(first.local_source_preserved,undefined);
+  const created=first.operations.find((op:any)=>op.path==='child.jsx');
+  assert.equal(created.ids_added,true);assert.match(created.hint,/Element ids were written into your file before publishing; re-read it before editing/);
+  const authored=await readFile(join(f.workspace.root,'child.jsx'),'utf8');
+  f.setNormalize(markup=>markup.replace('Other','Other.'));
+  await writeFile(join(f.workspace.root,'other.jsx'),authored.replace('loc002','loc009').replace('One','Other'));await registerLocalFiles(f.workspace,['other.jsx']);
+  const second:any=await publishLocalWorkspace(f.workspace,['other.jsx'],f.client,{});
+  const normalized=second.operations.find((op:any)=>op.path==='other.jsx');
+  assert.equal(second.ids_added,undefined,'its ids were already in place');assert.equal(normalized.source_rewritten,true);
+  assert.match(normalized.hint,/^The server normalized the published source; your file keeps what you wrote\. The published source is \.artifactbin\/publications\/[a-f0-9]+\/files\/other\.jsx\.$/);
+  assert.doesNotMatch(await readFile(join(f.workspace.root,'other.jsx'),'utf8'),/Other\./,'the author file is not rewritten by server normalization');
  }finally{await f.cleanup();}
 });

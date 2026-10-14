@@ -238,9 +238,10 @@ test('validate repairs a brace count it can prove, rewrites the file, and report
   const rewritten=await readFile(join(root,'doc.jsx'),'utf8');
   assert.ok(rewritten.startsWith(fence),'the fence is kept');
   assert.ok(rewritten.includes('"nominal"}}}}} />'),rewritten);
-  // …and validate then answers what was verified, so no hand-rolled JSON check is needed.
+  // …and validate then answers what it verified, and only that: the imported dataset has no local copy,
+  // so its query and the chart bound to it are named as not run, never claimed.
   assert.deepEqual(result.files[0].diagnostics.filter((d:{severity?:string})=>d.severity!=='notice'),[]);
-  assert.deepEqual(result.verified,[{path:'doc.jsx',title:'Braces',queries:['q'],charts:1,checks:['markup validated','1 query dry-run against the published dataset','1 chart checked against query columns','title and metadata accepted']}]);
+  assert.deepEqual(result.verified,[{path:'doc.jsx',title:'Braces',queries:['q'],charts:1,checks:['markup validated','1 query not run: dataset abc123 has no local copy (afbin pull abc123)','1 chart not checked: its query did not run','server checks not run; afbin validate --remote adds them']}]);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 

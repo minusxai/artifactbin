@@ -40,9 +40,9 @@ export type { AnnotationAuthor, AnnotationCommentWire } from '@artifactbin/contr
 export { validateFileComments } from '../offline/comment-validation';
 
 // ---- Dataflow: compile and evaluate a document's queries locally.
-export { compileWithLoader } from '../dataflow/server';
+export { compileWithLoader, validateVizAgainstColumns } from '../dataflow/server';
 export { collectRefUses } from '../dataflow/references';
-export { selectQueries, type ImportTables, evaluateDataflow, type RunDataflowOptions, validateQueryValues, imageReferenceId, REFERENCE_POSITIONS, type CompiledDataflow, type Dataflow, type DataflowState, type DatasetColumn, type RefDataMap } from '../dataflow';
+export { refName, selectQueries, type ImportTables, evaluateDataflow, type RunDataflowOptions, validateQueryValues, imageReferenceId, REFERENCE_POSITIONS, type CompiledDataflow, type Dataflow, type DataflowState, type DatasetColumn, type RefDataMap } from '../dataflow';
 
 // ---- Data ingest: CSV and GeoJSON files as typed rows.
 export { coerceRows } from '../data-ingest/coerce';

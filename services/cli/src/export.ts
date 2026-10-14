@@ -127,7 +127,7 @@ function selectFormat(refs:string[],options:ExportOptions):string{
 }
 
 async function renderTarget(workspace:Workspace,target:ExportTarget,options:ExportOptions):Promise<Buffer>{
- if(target.path!==undefined&&target.format==='html')return(options.localHtml??renderLocalHtml)({cwd:workspace.root,home:workspace.home,path:target.path});
+ if(target.path!==undefined&&target.format==='html')return(options.localHtml??renderLocalHtml)({cwd:workspace.root,home:workspace.home,path:target.path,server:options.server});
  if(target.path!==undefined&&(target.format==='png'||target.format==='jpg'))return (options.localImage??renderLocalImage)({cwd:workspace.root,home:workspace.home,path:target.path,server:options.server,format:target.format,page:options.page,og:options.og});
  const renderer=serverRenderer(options.server,options.client);
  const result=target.format==='html'

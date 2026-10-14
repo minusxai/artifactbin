@@ -9,7 +9,7 @@ import {atomicWrite,digest,readOptional,privateDirectory,isMissing} from './file
 import {parseDocument,writeDocument} from './document';
 import type {Workspace} from './workspace';
 import {CliError} from './errors';
-import {withLocalLock,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,stageLocalFiles,recoverLocalFiles,identifiedLocalBody} from './local-workspace';
+import {withLocalLock,localWorkspaceState,readLocalWorkspaceState,LOCAL_WORKSPACE_SCOPE,stageLocalFiles,recoverLocalFiles,identifiedLocalBody} from './local-workspace';
 
 const MAX_BYTES=25*1024*1024;
 const ID=/^[A-Za-z0-9]{6,12}$/;
@@ -45,6 +45,14 @@ function downloadedAssets(file:ArtifactFile,identity:string):NonNullable<Artifac
  return result;
 }
 
+/** A path as a shell argument, quoted only when it needs to be. */
+const quoted=(path:string)=>/[\s'"$`\\]/.test(path)?JSON.stringify(path):path;
+/** The workspace file that already holds a local document identity, if any: where its offline copy belongs. */
+export async function localIdentityOwner(root:string,id:string):Promise<string|undefined>{
+ const state=await readLocalWorkspaceState(root);
+ return state?.list<{id:string}>(LOCAL_WORKSPACE_SCOPE,'draft-identity').find(row=>row.value?.id===id)?.key;
+}
+
 /** Applies source, assets, identities and comments in one replayable workspace journal. */
 export async function importLocalHtml(workspace:Workspace,input:string,target?:string):Promise<{path:string;assets:string[];comments:number}>{
  workspace={...workspace,root:await realpath(workspace.root),cwd:await realpath(workspace.cwd)};
@@ -57,7 +65,9 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
  const provenance=file.localWorkspace;
  if(provenance&&(!ID.test(provenance.documentId)||provenance.documentId!==file.artifactId||provenance.baseDigest!==sourceDigest(file.base.source)))throw damaged('The local document baseline or identity is inconsistent.');
  const inputName=relative(workspace.root,inputPath).split(sep).join('/').replace(/(\.jsx)?\.html?$/i,'.jsx');
- const path=relative(workspace.root,target?resolve(workspace.cwd,target):join(workspace.root,inputName)).split(sep).join('/');
+ // Re-importing an offline copy of a workspace document reconciles that document by default.
+ const owner=!target&&provenance?await localIdentityOwner(workspace.root,provenance.documentId):undefined;
+ const path=owner??relative(workspace.root,target?resolve(workspace.cwd,target):join(workspace.root,inputName)).split(sep).join('/');
  if(!safePath(path)||!path.endsWith('.jsx'))throw damaged('Import destination must be a JSX file inside the workspace.');
  await noSymlink(workspace.root,path);await confinedPath(workspace.root,path);
  if(workspace.tracking?.files[path])throw new CliError('tracked_import','Import into a local document, then publish explicitly; this destination is bound to a remote artifact.');
@@ -68,7 +78,8 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
   const current=original?parseDocument(original.toString()):null;
   const identity=provenance?.documentId??(current?.metadata.id||randomBytes(3).toString('hex'));
   const registered=state.list<{id:string}>(scope,'draft-identity');
-  if(registered.some(row=>row.value.id===identity&&row.key!==path))throw damaged('This document identity already belongs to another workspace file.');
+  const holder=registered.find(row=>row.value.id===identity&&row.key!==path)?.key;
+  if(holder)throw new CliError('duplicate_identity',`This offline file is a copy of ${holder} (identity ${identity}); importing it as ${path} would give two files one identity.`,`Import it into ${holder} to reconcile that copy: afbin import ${quoted(input)} --output ${quoted(holder)}.`);
   const preserveConflict=async(reason:string):Promise<never>=>{
    const directory=await confinedPath(workspace.root,'.artifactbin/conflicts');await privateDirectory(directory);
    const saved=join(directory,randomUUID()+'.html');await atomicWrite(saved,html,{exclusive:true});
