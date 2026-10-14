@@ -19,20 +19,20 @@ The watch is long-lived: start it through your harness's background/monitor mech
 Use the saved credentials and refresh flow in [authentication](http-auth.md).
 
 ```text
-GET [[ base ]]/api/artifacts/ARTIFACT_ID/annotations/changes?after=now&wait=60
+GET [[ base ]]/api/artifacts/ARTIFACT_ID/annotations/changes?after=now&wait=0
+```
+
+The initial `after=now` request returns immediately with the current baseline; it does not wait. Continue with the returned `next_cursor`:
+
+```text
+GET [[ base ]]/api/artifacts/ARTIFACT_ID/annotations/changes?after=CURSOR&wait=60&limit=100
 ```
 
 Response: `{events: [...], next_cursor: "opaque", has_more: false}`. Each event carries `event_id`, `artifact_id`, `annotation_id` (the root thread), `comment_id`, human author, body and creation time. Supply the returned cursor as `after` on the next request. Save a cursor only after delivering its events; consume all pages. A repeated cursor replays the same event IDs, so deduplicate deliveries. Do not restart with `now` after a disconnect: it skips the gap. This feed covers new comments/replies, not resolution, deletion or edited-comment history.
 
 Reply with `POST /api/artifacts/ID/annotations/ANNOTATION_ID` and `{"reply":"Answer"}`. The same permissions apply to reading and replying. Never copy a token into the URL or conversation.
 
-The installed skill/ZIP includes `scripts/watch-comments.mjs`, a Node 22 HTTP loop using the same watcher and credential store as CLI:
-
-```sh
-node scripts/watch-comments.mjs --origin [[ base ]] --artifact ARTIFACT_ID
-```
-
-Without the ZIP, download it from [[ base ]]/skills/artifactbin/watch-comments.mjs. It emits events on stdout and checkpoints on stderr. Supply `--cursor CHECKPOINT` to resume. It reuses/refreshes the saved grant; it does not open browser login. Direct HTTP callers need a request timeout longer than the 60-second server wait.
+`wait` is an integer from 0 to 60 seconds (default 0); `limit` is 1 to 100 (default 100). A cursor request waits only when no events or further pages are available. Use a request timeout longer than the server wait. When `has_more` is true, consume the next page immediately with `wait=0`. Otherwise continue with `next_cursor` and the desired wait; an empty response is a valid checkpoint, not an error. For bounded reads between work steps, use `wait=0` with the saved cursor.
 
 ## Delivery and recovery
 

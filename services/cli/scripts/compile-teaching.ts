@@ -1,12 +1,11 @@
 /** Build-only projection: authoring references + executable command/operation registries. */
-import {readFileSync,mkdirSync,writeFileSync,existsSync,renameSync,rmSync} from 'node:fs';
+import {readFileSync,mkdirSync,writeFileSync,existsSync,renameSync,rmSync,rmdirSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {manPage} from '../src/man';
 import {buildSkillTree,loadSkillSources} from '../../app/lib/skills/tree';
 import {skillFileWithFrontmatter} from '../../app/lib/skills/serve';
 import {skillExample,renderSkill,condenseForBundle,stripBundleMarkers} from '../../app/lib/skills/render';
-import {build} from 'esbuild';
 import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 import {TEACHING_BASE,TEACHING_CREDENTIAL_PATH} from '../src/teaching-origin';
 const root=fileURLToPath(new URL('../',import.meta.url));
@@ -17,8 +16,10 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 const BASE=TEACHING_BASE;
 const example=skillExample();
 // The authoring compiler must never import the index that consumes its output.
-// Retire the formerly generated credential executable before checking the source tree.
-rmSync(join(root,'../app/skills/artifactbin/scripts/credentials.mjs'),{force:true});
+// Retire generated executables from existing checkouts before checking the source tree.
+const retiredScripts=join(root,'../app/skills/artifactbin/scripts');
+for(const name of ['credentials.mjs','watch-comments.mjs'])rmSync(join(retiredScripts,name),{force:true});
+if(existsSync(retiredScripts))rmdirSync(retiredScripts);
 const tree=buildSkillTree(loadSkillSources());
 const brief=tree.get('artifactbin/SKILL.md');
 if(!brief)throw new Error('skills/artifactbin/SKILL.md is missing');
@@ -41,15 +42,6 @@ for(const [path,text] of Object.entries(files)){
  if(!text.includes('bundle:skip'))continue;
  condensed[path]=condenseForBundle(text);
  files[path]=stripBundleMarkers(text);
-}
-// The monitoring asset is generated from its shared runtime.
-for(const [entry,name] of [['comment-watch-helper.ts','watch-comments.mjs']] as const){
- const bundled=await build({entryPoints:[join(root,'../utils/src',entry)],bundle:true,platform:'node',format:'esm',target:'node22',write:false});
- const helper=bundled.outputFiles[0]!.text;
- files[`scripts/${name}`]=helper;
- const helperTarget=join(root,'../app/skills/artifactbin/scripts',name);
- if(process.argv.includes('--check')){if(!existsSync(helperTarget)||readFileSync(helperTarget,'utf8')!==helper)throw new Error(`Shared ${name} helper is missing or stale; run generate:teaching.`);}
- else{mkdirSync(dirname(helperTarget),{recursive:true});if(!existsSync(helperTarget)||readFileSync(helperTarget,'utf8')!==helper)writeFileSync(helperTarget,helper);}
 }
 const version=JSON.parse(readFileSync(join(root,'package.json'),'utf8')).version;
 const contents=JSON.stringify({version,protocol:CLI_PROTOCOL_VERSION,files,condensed,example,man:manPage()},null,2)+'\n';
