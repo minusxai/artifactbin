@@ -1227,6 +1227,15 @@ jobs:
         if: (matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux'
         working-directory: services/cli
         run: node ../../scripts/ci/linux-acceptance-deps.mjs "${{ github.workspace }}/.ci-cache-key/acceptance-apt" ../../scripts/ci/npm-acceptance/node_modules/playwright/cli.js
+      # Windows installs are thousands of small-file writes: keep the consumer's fresh npm cache and prefix on the
+      # runner's local work disk (D:, where the checkout lives) rather than the OS disk's %TEMP%. Same npm, same
+      # Defender, same paths with spaces and non-ASCII names (test-npm-package.mjs); only the drive differs.
+      - name: Keep Windows acceptance installs on the work disk
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
       # Tooling and download/browser caches prepare while this run packs the candidate.
       # The shared bounded waiter rejects other attempts and failed producers.
       - name: Wait for this attempt's packed candidate

@@ -114,16 +114,19 @@ async function pinnedCaddy(){
  const modules=compose(first,['run','-T','--rm','--no-deps','caddy','list-modules'],{capture:true});assert.match(modules,/dns.providers.route53/);
  const caddyVersion=compose(first,['run','-T','--rm','--no-deps','caddy','version'],{capture:true});assert.match(caddyVersion,/^v2\.11\.7\b/);
 }
+let caddy=Promise.resolve();
 try{
  await mkdir(candidate,{recursive:true});
  const deployment=deploymentFiles(first);
+ // Nothing else runs Caddy, so its build and checks finish whenever they finish and are awaited last: a cold
+ // compile (~90s) never holds the app image, which waits only for the package.
+ caddy=deployment.then(pinnedCaddy);caddy.catch(()=>{});
  await together(
   // The exact package, from the current attempt only (scripts/lib/ci-artifact-wait.mjs), while the rest prepares.
   fetchCommand.length&&!prepareOnly?runAsync(process.cwd(),fetchCommand[0],fetchCommand.slice(1),{timeout:240_000}):Promise.resolve(),
-  deployment.then(()=>together(
-   pinnedCaddy(),
-   prepareOnly?Promise.resolve():composeAsync(first,['build','smtpfixture'],{timeout:300_000}),
-   prepareOnly?Promise.resolve():composeAsync(first,['pull','--quiet','postgres'],{timeout:300_000}),
+  prepareOnly?caddy:deployment.then(()=>together(
+   composeAsync(first,['build','smtpfixture'],{timeout:300_000}),
+   composeAsync(first,['pull','--quiet','postgres'],{timeout:300_000}),
   )),
   prepareOnly?Promise.resolve():mkdir(restored).then(()=>configureFixture(restored)),
  );
@@ -167,5 +170,6 @@ async function acceptance(){
  assert.deepEqual(await readFile(join(restored,'config/server.env')),config,'Persistent auth secret and database configuration survived restore');
  assert.deepEqual(await readFile(join(restored,'backup.sh')),await readFile(join(bundle,'backup.sh')),'The recovered deployment retains its backup helper');
  compose(restored,['exec','-T','app','node','-e',"if(require('node:fs').statSync('/data/data/hosting-browser.png').size<100)process.exit(1)"]);
+ await caddy;
  console.log(JSON.stringify({status:'passed',package:tarballs[0],sha256:createHash('sha256').update(await readFile(join(candidate,tarballs[0]))).digest('hex'),checks:['exact-package-image','pinned-caddy-route53','nonroot-app','authenticated-starttls-email-code','postgres-migrations','chromium-install-and-screenshot','restart-persistence','consistent-backup','fresh-restore','persistent-auth-secret']}));
 }
