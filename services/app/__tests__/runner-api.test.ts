@@ -40,6 +40,20 @@ it('pins the server-selected artifact program, protects owner reads and composes
  expect((await runnerOperation(cross,'update_artifact',{id:doc.id,markup:'bad'})).status).toBe(403);
 });
 
+it('lets a document handler use account operations only when its own owner started the run',async()=>{
+ const owner=await createUser({email:'mxmx_test_runner_ops_owner@example.com'}),token=await mintToken('runner-ops',owner.id);await claimToken(owner.id,token.token);
+ const reader=await createUser({email:'mxmx_test_runner_ops_reader@example.com'});
+ const doc=await (await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Handler fixture</p>',visibility:'public'}}))).json();
+ const run=(userId:string,runner=true)=>attachActor(new Request('http://localhost/api/runner/operations',{method:'POST'}),{userId,credential:'session',...(runner?{runner:{runId:'run_1',callId:1,artifactId:doc.id,version:'1',editId:'e',sourceHash:'h'}}:{})});
+ for(const [operation,input] of [['get_artifact',{id:doc.id}],['list_artifacts',{}],['create_artifact',{markup:'<p>copy</p>'}],['update_artifact',{id:doc.id,markup:'<p>x</p>'}],['edit_document',{id:doc.id,edit_id:'e',markup:'<p>x</p>'}],['mutate_dataset',{id:doc.id,rows:[]}],['annotate',{id:doc.id}],['query_resource',{id:doc.id}]] as const){
+  const refused=await runnerOperation(run(reader.id),operation,input as Record<string,unknown>);
+  expect(refused.status,operation).toBe(403);expect(await refused.json(),operation).toEqual({error:'operation_not_allowed'});
+ }
+ expect((await runnerOperation(run(owner.id),'get_artifact',{id:doc.id})).status).toBe(200);
+ expect((await runnerOperation(run(reader.id,false),'get_artifact',{id:doc.id})).status).toBe(200);
+ expect(await (await runnerOperation(run(reader.id),'lambda_query',{values:{},only:[]})).json()).not.toEqual({error:'operation_not_allowed'});
+});
+
 it('executes the documented HTTP handler lifecycle through authenticated routes',async()=>{
  const guide=readFileSync(new URL('../skills/artifactbin/references/lambdas.md',import.meta.url),'utf8');
  const authoring=readFileSync(new URL('../skills/artifactbin/references/http-authoring.md',import.meta.url),'utf8');
