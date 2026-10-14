@@ -1,9 +1,48 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { acquireCredential } from '../lib/credential.ts';
 
 const received = 'https://api.resend.com/emails/receiving';
 
 afterEach(() => vi.useRealTimers());
+
+it('acquires a credential through the normal local outbox login path', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'artifactbin-otp-inbox-'));
+  const outbox = join(directory, 'outbox.jsonl');
+  const email = 'mxmx_eval_disposable@example.test';
+  await writeFile(outbox, [
+    JSON.stringify({ to: email, createdAt: new Date(Date.now() - 60_000).toISOString(), otp: '111111' }),
+    JSON.stringify({ to: email, createdAt: new Date().toISOString(), otp: '482731' }),
+  ].join('\n'));
+  const fetch = vi.fn(async (input, init = {}) => {
+    const url = String(input);
+    if (url.endsWith('/api/auth/email-otp/send-verification-otp')) return new Response(null, { status: 200 });
+    if (url.endsWith('/api/auth/sign-in/email-otp')) {
+      expect(JSON.parse(init.body).otp).toBe('482731');
+      return new Response(null, { status: 200, headers: { 'set-cookie': 'session=fixture; Path=/' } });
+    }
+    if (url.endsWith('/api/authentication/token')) return Response.json({ access_token: 'test-access-token' });
+    throw new Error('unexpected request');
+  });
+  try {
+    const credential = await acquireCredential('outbox-oauth', {
+      base: 'http://localhost:3030',
+      origin: 'http://localhost:3030',
+      email,
+      localOutbox: outbox,
+      env: {},
+      grant: 'http-email',
+      fetch,
+      sleep: async () => {},
+    });
+    expect(credential.token).toBe('test-access-token');
+    expect(fetch).toHaveBeenCalledTimes(3);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 it('finds a matching login mail beyond the first ten concurrent unrelated arrivals', async () => {
   const since = Date.now() - 1_000;
