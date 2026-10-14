@@ -170,11 +170,11 @@ Template: plan. The template owns the beats (brief, screens, transitions, decisi
 
 ### App · avoid
 
-Page type: app, published without a template field. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject. Expect custom CSS: Operational tools, dense tables, anything read in a hurry or in daylight on a phone, and subjects that need a cheerful or clinical register.
+Template: app. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject. Expect custom CSS: Operational tools, dense tables, anything read in a hurry or in daylight on a phone, and subjects that need a cheerful or clinical register.
 
 ### Landing · good
 
-Page type: landing, published without a template field. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape. Classes the specimen uses: `ds-tpl-landing`, `ds-tpl-hero`, `ds-tpl-hero-words`, `t-label`, `ds-tpl-kicker`, `t-display-xl`, `ds-tpl-hero-h`, `ds-tpl-hero-sub`, `ds-row`, `n-btn`, `n-btn-primary`, `ds-tpl-hero-art`, `h-ground`, `h-muted`, `h-fill`, `h-fill2`, `h-glow`, `h-ink`, `h-num`, `h-text`, `ds-tpl-feats`, `ds-tpl-feat`, `t-title`.
+Template: landing. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape. Classes the specimen uses: `ds-tpl-landing`, `ds-tpl-hero`, `ds-tpl-hero-words`, `t-label`, `ds-tpl-kicker`, `t-display-xl`, `ds-tpl-hero-h`, `ds-tpl-hero-sub`, `ds-row`, `n-btn`, `n-btn-primary`, `ds-tpl-hero-art`, `h-ground`, `h-muted`, `h-fill`, `h-fill2`, `h-glow`, `h-ink`, `h-num`, `h-text`, `ds-tpl-feats`, `ds-tpl-feat`, `t-title`.
 
 ## Do and don't
 

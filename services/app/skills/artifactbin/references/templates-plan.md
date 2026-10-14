@@ -37,6 +37,8 @@ drawing leads. Pick ONE composition and build that. Publish with
 
 - Three or more `<h2>` sections get the same contents rail as editorial pages
   on wide screens; author semantic headings, the platform supplies navigation.
+  Any `<Grid>`, flow mode included, removes the contents rail: build columns as
+  a native CSS grid ([templates](templates.md)).
 - Flows are `<Mermaid>` ([markup-svg.md](markup-svg.md)): label arrows with the
   triggering action, include back, cancel, error and retry branches. Screen
   IDs stay consistent across drawings, arrows, state tables and tasks.

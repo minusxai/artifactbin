@@ -1,8 +1,8 @@
 ---
-title: CLI filters
+name: filters
 description: Supported afbin list, comment and log filters.
 ---
-# CLI filters
+## Read first
 
 Pass filters as `--filter FIELD=VALUE`. Repeat `--filter` to combine different
 fields. Each command accepts only the fields listed for its collection.

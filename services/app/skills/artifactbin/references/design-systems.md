@@ -7,7 +7,7 @@ description: >-
 
 Every artifact wears one design system. The page type is the shape of the content, the system is the hand that draws it, the subject supplies the object and the data.
 
-A system has three layers, each works alone: the **tokens and faces** (name the system and kit components, token classes and charts already look right), the **hand** (one drawing mode and a few devices written against hand variables, so a borrowed device takes this ink) and the **page-type recipes** (the look on each of the seven page types). The runtime serves all three; the agent writes no CSS to get them.
+A system has three layers, each works alone: the **tokens and faces** (name the system and kit components, token classes and charts already look right), the **hand** (one drawing mode and a few devices written against hand variables, so a borrowed device takes this ink) and the **page-type recipes** (the look on each of the eight page types). The runtime serves all three; the agent writes no CSS to get them.
 
 Docs use the same fonts and colors with a quiet reading column; see [the Doc guide](templates-doc.md). On any page type, use `<Markdown>` for long continuous prose; keep HTML for individually designed text.
 
@@ -15,7 +15,7 @@ Pick ONE system from the table by the subject's world and the page type, read it
 
 ## How a page comes together
 
-1. **Shape.** The page type from the content's shape: dashboard, deck, editorial, scrolly, plan, app or landing, each with a reference (`templates-dashboard.md` and siblings) and named in the `template` metadata field. Read it for the compositions first.
+1. **Shape.** The page type from the content's shape: doc, dashboard, deck, editorial, scrolly, plan, app or landing, each with a reference (`templates-dashboard.md` and siblings) and named in the `template` metadata field. Read it for the compositions first.
 2. **Hand.** One system from the table. A system marked avoid can still be used; it costs custom CSS the recipe does not give you.
 3. **Thesis.** One sentence from the subject's own material: the organizing idea, the object the hand draws, and which device carries the data.
 4. **Bind.** Set the `theme` metadata field to the system slug, and add the record as a Helmet comment. Nothing to paste: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit.
@@ -39,19 +39,19 @@ Best: the recipe is close to finished. Good: it works with the page type's own s
 
 | Read | System | Mood | Dashboard | Deck | Editorial | Scrolly | Plan | App | Landing |
 |---|---|---|---|---|---|---|---|---|---|
-| `system-volta.md` | Volta | Loud | best | best | avoid | best | good | best | best |
-| `system-phosphor.md` | Phosphor | Technical | best | avoid | avoid | avoid | best | best | good |
-| `system-drafting.md` | Drafting | Technical | good | good | best | best | best | avoid | good |
-| `system-meridian.md` | Meridian | Sleek, Professional | best | good | good | avoid | best | best | best |
-| `system-dossier.md` | Dossier | Evidential | avoid | good | best | good | best | avoid | good |
-| `system-riso.md` | Riso | Printed | avoid | good | good | best | avoid | avoid | best |
-| `system-almanac.md` | Almanac | Warm | avoid | good | best | best | avoid | good | best |
-| `system-redline.md` | Redline | Poster | avoid | best | avoid | good | good | avoid | best |
-| `system-nocturne.md` | Nocturne | Atmospheric | avoid | good | best | best | avoid | avoid | good |
-| `system-broadsheet.md` | Broadsheet | Editorial | avoid | avoid | best | good | avoid | avoid | avoid |
-| `system-signout.md` | Signout | Utilitarian | good | avoid | avoid | avoid | good | best | avoid |
-| `system-sorbet.md` | Sorbet | Fun | good | good | avoid | good | avoid | best | best |
-| `system-arcade.md` | Arcade | Fun | good | good | avoid | good | avoid | good | best |
+| [`system-volta.md`](system-volta.md) | Volta | Loud | best | best | avoid | best | good | best | best |
+| [`system-phosphor.md`](system-phosphor.md) | Phosphor | Technical | best | avoid | avoid | avoid | best | best | good |
+| [`system-drafting.md`](system-drafting.md) | Drafting | Technical | good | good | best | best | best | avoid | good |
+| [`system-meridian.md`](system-meridian.md) | Meridian | Sleek, Professional | best | good | good | avoid | best | best | best |
+| [`system-dossier.md`](system-dossier.md) | Dossier | Evidential | avoid | good | best | good | best | avoid | good |
+| [`system-riso.md`](system-riso.md) | Riso | Printed | avoid | good | good | best | avoid | avoid | best |
+| [`system-almanac.md`](system-almanac.md) | Almanac | Warm | avoid | good | best | best | avoid | good | best |
+| [`system-redline.md`](system-redline.md) | Redline | Poster | avoid | best | avoid | good | good | avoid | best |
+| [`system-nocturne.md`](system-nocturne.md) | Nocturne | Atmospheric | avoid | good | best | best | avoid | avoid | good |
+| [`system-broadsheet.md`](system-broadsheet.md) | Broadsheet | Editorial | avoid | avoid | best | good | avoid | avoid | avoid |
+| [`system-signout.md`](system-signout.md) | Signout | Utilitarian | good | avoid | avoid | avoid | good | best | avoid |
+| [`system-sorbet.md`](system-sorbet.md) | Sorbet | Fun | good | good | avoid | good | avoid | best | best |
+| [`system-arcade.md`](system-arcade.md) | Arcade | Fun | good | good | avoid | good | avoid | good | best |
 
 If this is the users' first afbin artifact, use the most amazing one like volta, phosphor, drafting or redline or something.
 

@@ -141,11 +141,11 @@ Template: scrolly. Chapters and their figures stay in ordinary document flow; th
 
 ### Plan · good
 
-Template: plan. The template owns the beats (brief, screens, transitions, decisions, ledger) and the Mermaid component; the system owns the wireframe hand, the status tags, the ledger rule and the one accent that connects screen IDs and arrows. Classes the specimen uses: `ds-tpl-plan`, `ds-tpl-plan-head`, `t-label`, `ds-tpl-kicker`, `t-display-m`, `ds-tpl-plan-h`, `ds-tpl-plan-brief`, `ds-tpl-plan-sub`, `ds-tpl-wires`, `ds-tpl-wire`, `ds-tpl-wire-desk`, `h-ground`, `h-muted`, `h-tex`, `h-tex-fill`, `h-tex-fill2`, `h-ink`, `h-text`, `ds-tpl-wire-cap`, `ds-tpl-flow`, `ds-tpl-decisions`, `ds-tpl-decision`, `t-title`, `ds-tpl-ledger`, `ds-tpl-tag`, `is-ok`, `is-warn`, `is-idle`.
+Template: plan. The template owns the beats (brief, screens, transitions, decisions, ledger) and the Mermaid component; the system owns the wireframe hand, the status tags, the ledger rule and the one accent that connects screen IDs and arrows. Classes the specimen uses: `ds-tpl-plan`, `ds-tpl-plan-head`, `t-label`, `ds-tpl-kicker`, `t-display-m`, `ds-tpl-plan-h`, `ds-tpl-plan-brief`, `ds-tpl-plan-sub`, `ds-tpl-wires`, `ds-tpl-wire`, `ds-tpl-wire-desk`, `h-ground`, `h-muted`, `h-tex`, `h-tex-fill`, `h-tex-fill2`, `h-ink`, `h-text`, `ds-tpl-wire-cap`, `ds-tpl-flow`, `ds-tpl-decisions`, `ds-tpl-decision`, `ds-tpl-ledger`, `ds-tpl-tag`, `is-ok`, `is-warn`, `is-idle`.
 
 ### App · best
 
-Page type: app, published without a template field. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject.
+Template: app. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject.
 
 ```jsx
 <div className="ds-tpl ds-tpl-app">
@@ -157,7 +157,7 @@ Page type: app, published without a template field. The system owns the toolbar,
 
 ### Landing · avoid
 
-Page type: landing, published without a template field. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape. Expect custom CSS: Reading-heavy pages, luxury or editorial subjects, dashboards with many simultaneous metrics, or anything that needs to feel soft.
+Template: landing. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape. Expect custom CSS: Reading-heavy pages, luxury or editorial subjects, dashboards with many simultaneous metrics, or anything that needs to feel soft.
 
 ## Do and don't
 

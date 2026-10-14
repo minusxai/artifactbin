@@ -52,13 +52,13 @@ Skeleton of the runtime pieces (publishable as is; the opening is yours):
       <div className="min-w-0">
         <p className="t-label">After Hours · Four Fridays in October</p>
         <h1 className="t-display-xl mt-4">Forty seats, one lamp, no phones.</h1>
-        <p className="t-body-l mt-5 max-w-prose">Doors at seven, music at eight, twenty-five a seat.</p>
-        <div className="mt-8 flex flex-wrap gap-3"><a href="#sessions" className="v-btn v-btn-primary">Explore sessions</a></div>
+        <p className="t-body mt-5 max-w-prose">Doors at seven, music at eight, twenty-five a seat.</p>
+        <div className="mt-8 flex flex-wrap gap-3"><a href="#sessions" className="inline-flex rounded-md bg-primary px-5 py-3 font-medium text-primary-foreground">Explore sessions</a></div>
       </div>
       <svg viewBox="0 0 480 240" className="w-full"><title>The room, drawn</title><rect className="h-ground" x="40" y="40" width="400" height="160"/><circle className="h-fill" cx="240" cy="120" r="24"/></svg>
     </header>
     <section id="sessions" className="mt-16">
-      <h2 className="t-display-m">The sessions</h2>
+      <h2 className="t-display-l">The sessions</h2>
       <Segmented label="Session" value="$session" options={["Oct 2 ambient","Oct 9 jazz","Oct 16 electronic","Oct 23 acoustic"]} />
     </section>
   </div>

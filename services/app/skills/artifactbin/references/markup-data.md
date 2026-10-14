@@ -32,12 +32,12 @@ order: 1
 
 - `<Import name="sales" src="ref:<id>" />` — dataset/folder. SQL: `sales.rows` (multi-table: `sales.<table>`). IDs: `afbin add --json` / `afbin push`. Folder: `<Import name="kids" src="ref:<folderId>" />` exposes `kids.rows`, which a document can list with `<Files data="$children" variant="icons|tiles" />` through a children query. Columns `id title format level visibility updated_at url thumbnail views sparkline`; viewer-scoped: strangers see only public children.
 - `<Value name type default />` — reader state. `type`:
-  `string | number | boolean | date | user`; no default = `null`, so
+  `string | number | boolean | date | timestamp | user`; default `null`, so
   `$region is null` means "all".<!--bundle:skip--> `?$region=EU` seeds a pre-filtered link; picks rewrite the link. `url={false}` excludes it both ways.<!--/bundle:skip-->
 - `<Value name="tiny" type="table" value={[{…}]} />` — inline rows: SQL `tiny`, view `$tiny`; local writes last until reload.
   [Local state](markup-state.md).
 - `<Query name>{`select …`}</Query>` — `(params) → rows`: one SELECT.
-  `$name` is a page value, bound, never spliced. Reads imports, table values and queries by name, in any order; cycles refused. Publish checks columns; errors name corrections.<!--bundle:skip--> A result shows its first [[ displayRows ]] rows and pages the rest;
+  `$name` is a page value, bound, never spliced. Reads imports, table values and queries by name in any order, no cycles. Publish checks columns; errors name corrections.<!--bundle:skip--> A result shows its first [[ displayRows ]] rows and pages the rest;
   a query stops at 10,000 rows and 5 s.<!--/bundle:skip--> Dates are ISO text; the
   library adds `date_add`, `date_part`, `date_format`, `date_series`,
   `to_timezone`, `dayname` and more ([SQL](markup-sql.md)).

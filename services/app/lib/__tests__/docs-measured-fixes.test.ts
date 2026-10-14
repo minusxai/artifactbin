@@ -39,7 +39,9 @@ describe('the deck FRAME: the brief routes to it, the template file carries it',
     const readTemplate = sheet.indexOf('Read your [page type]');
     expect(readTemplate).toBeGreaterThanOrEqual(0);
     expect(readTemplate).toBeLessThan(sheet.indexOf('## Example'));
-    expect(sheet).toContain('references/templates-<name>.md');
+    // A link, not a backticked path: over HTTP only a link is re-addressed to /llms/templates.
+    expect(sheet).toContain("Read your page type's guide, linked from [page types](references/templates.md), BEFORE writing");
+    expect(sheet).not.toContain('`references/templates-<name>.md`');
     expect(sheet).toContain('Keep content away from viewport edges.');
   });
   it('templates-deck.md says <Helmet> sits first at top level, never inside <SlideDeck>', () => {

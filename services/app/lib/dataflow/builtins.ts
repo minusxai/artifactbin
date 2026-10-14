@@ -57,6 +57,9 @@ export const rowField = (logical: string): string | null => ROW_FIELD.exec(logic
 export const isBuiltinInput = (logical: string): logical is BuiltinInput => builtinInput(logical) !== null;
 export const isBuiltinTable = (name: string): name is BuiltinTable => Object.hasOwn(BUILTIN_TABLES, name);
 
+/** SQLite's clock functions, which a statement may not call: the current time is `$_now`, identical on server and browser. */
+export const CLOCK_FUNCTIONS: ReadonlySet<string> = new Set(['current_date', 'current_time', 'current_timestamp']);
+
 /** `_me`, the viewer: bare, it is a row; its field is `_me.id`. */
 export const VIEWER = '_me';
 export const VIEWER_ID: BuiltinInput = '_me.id';

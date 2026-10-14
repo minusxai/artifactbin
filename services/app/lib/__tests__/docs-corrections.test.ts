@@ -19,6 +19,13 @@ const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'a
 const buildDesignDoc = (base: string) => renderDoc('artifactbin/references/design.md', base);
 const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
 import { publishJsx } from '../publish/document/jsx-tier';
+import { CLOCK_FUNCTIONS } from '../dataflow';
+import { STORY_SYSTEM_NAMES } from '../validation/story-system-names';
+import { llmsText, publicGuideText } from '../serving/agent-references.server';
+import { hasOutline } from '../reader-chrome/outline';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { compiledSource } from '@/test/helpers/compiled';
+import { runDataflow } from '@/lib/sql/run-dataflow';
 
 const BASE = 'https://example.test';
 
@@ -438,5 +445,106 @@ describe('the markup skill teaches the $ link', () => {
   it('names the URL form, the empty value, and that a reader\'s own picks travel', () => {
     expect(doc).toMatch(/\?\$region=/);
     expect(doc).toMatch(/pre-filtered link/);
+  });
+});
+
+/**
+ * A review of every agent-readable skill file (2026-10-14) reproduced each of these against the code: a
+ * function the compiler refuses listed as callable, a popover said not to portal, a test script that books
+ * a fixed hour, links an HTTP agent cannot follow, a rail that a Grid silently removes, a DuckDB cast in a
+ * SQLite document, a page-type count and a type list one short, and a snippet calling names it never defines.
+ */
+describe('the skill review corrections', () => {
+  const HOST = 'https://app.artifactbin.example';
+  const doc = (name: string) => renderDoc(`artifactbin/references/${name}.md`, BASE);
+  const fenced = (text: string, lang: string) => [...text.matchAll(new RegExp('```' + lang + '\\n([\\s\\S]*?)```', 'g'))].map((m) => m[1]!);
+
+  it('lists no clock function among SQLite\'s own: the compiler refuses them for $_now', () => {
+    const own = doc('markup-sql-functions').split('## SQLite\'s own')[1]!;
+    expect(CLOCK_FUNCTIONS.size).toBeGreaterThan(0);
+    for (const name of CLOCK_FUNCTIONS) expect(own, name).not.toContain(`\`${name}\``);
+    expect(own).toContain('`date`');
+  });
+
+  it('says PopoverContent portals while open and is placed against its trigger', () => {
+    const actions = doc('markup-actions');
+    expect(actions).not.toContain('not portaled');
+    expect(actions).toMatch(/PopoverContent is portaled/);
+  });
+
+  /**
+   * book.js runs once per test user on the same copy, at any hour: a fixed 09:00 is held by the first
+   * user when the second runs, and past for everyone after nine. Run here against a fake browser whose
+   * first day is full or past and whose second day has 09:00 taken.
+   */
+  it('the two-person booking script books the first open slot from today on', async () => {
+    const script = fenced(doc('markup-data-example'), 'js')[0]!;
+    const slots: Record<string, Array<{ day: string; slot: string; is_open: boolean }>> = {
+      '2026-10-14': [{ day: '2026-10-14', slot: '09:00', is_open: false }, { day: '2026-10-14', slot: '17:30', is_open: false }],
+      '2026-10-15': [{ day: '2026-10-15', slot: '09:00', is_open: false }, { day: '2026-10-15', slot: '09:30', is_open: true }],
+    };
+    let day = '2026-10-14';
+    const api = {
+      ready: async (name: string) => (name === 'days' ? Object.keys(slots).map((d) => ({ day: d })) : name === 'slots' ? slots[day] : []),
+      set: (name: string, value: string) => { if (name === 'day') day = value; },
+      get: (name: string) => (name === 'day' ? day : undefined),
+    };
+    const clicked: string[] = [], awaited: string[] = [];
+    const page = {
+      goto: async () => {}, waitForFunction: async () => {},
+      evaluate: async <T,>(fn: () => T) => { (globalThis as { window?: unknown }).window = { page: api }; try { return await fn(); } finally { delete (globalThis as { window?: unknown }).window; } },
+      getByRole: (_role: string, { name }: { name: string }) => ({ click: async () => { clicked.push(name); }, waitFor: async () => { awaited.push(name); } }),
+    };
+    const run = new Function('context', `return (async () => {${script}})();`) as (context: unknown) => Promise<unknown>;
+    await run({ newPage: async () => page });
+    expect(clicked).toEqual(['09:30']);
+    expect(awaited).toEqual(['Cancel 09:30']);
+  });
+
+  it('routes an HTTP agent to the page-type guides and the system files by links it can follow', () => {
+    const llms = llmsText(HOST);
+    expect(llms).not.toContain('`references/templates-<name>.md`');
+    expect(llms).toMatch(/\]\(https:\/\/app\.artifactbin\.example\/llms\/templates\)[^\n]*BEFORE writing/);
+    expect(buildQuickSheet(BASE)).toMatch(/\]\(references\/templates\.md\)[^\n]*BEFORE writing/);
+    const catalogue = publicGuideText('design-systems', HOST)!;
+    for (const slug of STORY_SYSTEM_NAMES) expect(catalogue, slug).toContain(`](${HOST}/llms/system-${slug})`);
+  });
+
+  it('warns that any <Grid>, flow mode included, removes the editorial and plan contents rail', () => {
+    const tree = (source: string) => parseJsxOrThrow(source).nodes;
+    const sections = Array.from({ length: 4 }, (_, i) => `<section><h2>S${i}</h2><p>body</p></section>`).join('');
+    expect(hasOutline(tree(sections))).toBe(true);
+    expect(hasOutline(tree(sections + '<Grid mode="flow"><GridItem w={8}><p>a</p></GridItem><GridItem w={4}><p>b</p></GridItem></Grid>'))).toBe(false);
+    for (const name of ['templates', 'templates-editorial', 'templates-plan']) expect(doc(name), name).toMatch(/[Aa]ny `<Grid>`, flow mode included, removes the\s+contents rail/);
+    expect(doc('templates-editorial')).not.toMatch(/Nothing to author\.\n/);
+  });
+
+  it('filters a JSON-array Value with list_contains, as SQLite runs it, not a DuckDB cast', async () => {
+    const block = fenced(doc('markup-select'), 'jsx')[0]!;
+    expect(block).not.toMatch(/cast\([^)]*\[\]\)/);
+    const flow = await compiledSource(block);
+    const filtered = async (regions: string) => (await runDataflow(flow, {}, { values: { regions } })).tables.filtered!.rows.map((r) => r.region);
+    expect(await filtered('["EU"]')).toEqual(['EU']);
+    expect((await filtered('[]')).sort()).toEqual(['EU', 'NA']);
+  });
+
+  it('counts the eight page types, doc included', () => {
+    const catalogue = doc('design-systems');
+    expect(catalogue).not.toContain('seven page types');
+    expect(catalogue).toContain('the eight page types');
+    expect(catalogue).toMatch(/1\. \*\*Shape\.\*\*[^\n]*\bdoc, dashboard, deck, editorial, scrolly, plan, app or landing\b/);
+  });
+
+  it('lists every <Value> type the parser accepts', () => {
+    expect(doc('markup-data')).toContain('`string | number | boolean | date | timestamp | user`');
+  });
+
+  it('the upload snippet defines every name it calls', () => {
+    const snippet = fenced(doc('markup-upload'), 'js')[0]!;
+    const imported = /import \{([^}]*)\} from 'page'/.exec(snippet)?.[1]!.split(',').map((s) => s.trim()) ?? [];
+    const declared = [...snippet.matchAll(/const (?:\[([^\]]+)\]|(\w+))/g)].flatMap((m) => (m[1] ? m[1].split(',').map((s) => s.trim()) : [m[2]!]));
+    const called = [...snippet.matchAll(/(?<![.\w])([A-Za-z_]\w*)\(/g)].map((m) => m[1]!).filter((n) => !['await', 'import'].includes(n));
+    expect(called.length).toBeGreaterThan(0);
+    for (const name of called) expect([...imported, ...declared], name).toContain(name);
   });
 });

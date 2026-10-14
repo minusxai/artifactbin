@@ -2,7 +2,7 @@
 name: monitoring
 description: Monitor human comments with the shared CLI or HTTP changes API.
 ---
-# Monitor comments
+## Read first
 
 Use one monitor per artifact while working. Existing open comments are in the artifact read; handle those too. A monitor starting at `now` follows only subsequently committed human comments and replies, including replies to old threads. It ignores agent replies. Do not treat an acknowledgment as completing the human request: respond with the answer or actual change.
 

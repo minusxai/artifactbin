@@ -17,7 +17,7 @@ holding a JSON array of strings; `"[]"` means no selection.
   <Query name="filtered">{`
     select * from sales
     where $regions is null or $regions = '[]'
-       or list_contains(cast($regions as varchar[]), region)
+       or list_contains($regions, region)
   `}</Query>
 </Helmet>
 <Select label="Regions" multiple valueFormat="json" value="$regions" options="$region_options" />

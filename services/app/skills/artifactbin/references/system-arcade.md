@@ -150,11 +150,11 @@ Template: plan. The template owns the beats (brief, screens, transitions, decisi
 
 ### App · good
 
-Page type: app, published without a template field. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject. Classes the specimen uses: `ds-tpl-app`, `ds-tpl-bar`, `ds-tpl-brand`, `ds-tpl-bar-end`, `ar-btn`, `ar-btn-primary`, `ds-tpl-rows`, `ds-tpl-row`, `ds-tpl-row-name`, `ds-tpl-row-meta`, `ds-tpl-tag`, `is-ok`, `is-warn`, `is-bad`, `is-idle`, `ds-tpl-form`.
+Template: app. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject. Classes the specimen uses: `ds-tpl-app`, `ds-tpl-bar`, `ds-tpl-brand`, `ds-tpl-bar-end`, `ar-btn`, `ar-btn-primary`, `ds-tpl-rows`, `ds-tpl-row`, `ds-tpl-row-name`, `ds-tpl-row-meta`, `ds-tpl-tag`, `is-ok`, `is-warn`, `is-bad`, `is-idle`, `ds-tpl-form`.
 
 ### Landing · best
 
-Page type: landing, published without a template field. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape.
+Template: landing. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape.
 
 ```jsx
 <div className="ds-tpl ds-tpl-landing">
