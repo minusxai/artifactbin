@@ -723,6 +723,25 @@ jobs:
           node services/cli/scripts/npm-dependency-cache.mjs prepare-seed "$RUNNER_TEMP/npm-public-seed"
           node services/cli/scripts/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
 
+      # The company container's pinned Caddy build cache (see that job), produced by the same smoke so the cache
+      # keys match: a release PR's first and only run starts warm. Last, because it restarts the Docker Engine.
+      - name: Name the pinned Caddy build cache
+        id: caddy-key
+        run: |
+          digests=$(sed -n 's/^FROM \([^ ]*\).*/\1/p' deploy/company/Caddy.Dockerfile | while read -r image; do
+            docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' || echo unresolved
+          done | sha256sum | cut -c1-16)
+          echo "key=company-caddy-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('deploy/company/Caddy.Dockerfile', 'deploy/company/caddy-entrypoint.sh', 'deploy/company/ci-smoke.mjs') }}-${digests}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: caddy-cache
+        with:
+          path: ${{ runner.temp }}/company-caddy-cache
+          key: ${{ steps.caddy-key.outputs.key }}
+      - if: steps.caddy-cache.outputs.cache-hit != 'true'
+        run: |
+          scripts/ci/docker-containerd-store.sh
+          node deploy/company/ci-smoke.mjs --prepare-only --caddy-cache "$RUNNER_TEMP/company-caddy-cache" --save-caddy-cache
+
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #
   # A tree that passed here has been tested, and testing it again — which is exactly what the push
@@ -978,6 +997,17 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
+      # Downstream hosts consume this same universal tarball after the run's tested receipt.
+      # Pack owns the release alias even for nightly/version-only selection. Uploaded right after the signed
+      # release (the native matrix's longer tail waits on that one) and before the seed transfers: the company
+      # container waits for it (scripts/lib/ci-artifact-wait.mjs) rather than for this whole job.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-npm-packages
+          path: services/cli/dist/packages/*.tgz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
       - if: needs.plan.outputs.cli == 'true' && steps.npm-seeds.outputs.cache-hit != 'true'
         run: node services/cli/scripts/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -1034,34 +1064,53 @@ jobs:
           path: afbin-reference-build.tar
           if-no-files-found: error
           retention-days: 1
-      # Downstream hosts consume this same universal tarball after the run's tested receipt.
-      # Pack owns the release alias even for nightly/version-only selection.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: afbin-npm-packages
-          path: services/cli/dist/packages/*.tgz
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 7
 
   # The actual packaged serve runtime, Linux browser dependencies and both storage halves.
+  # NOT `needs: cli-pack`: everything the tarball does not decide (the deployment directory, the pinned Caddy and
+  # SMTP fixture images, PostgreSQL) prepares while cli-pack packs, and the exact tarball arrives through the
+  # same current-attempt waiter the CLI matrix uses. A failed pack fails the waiter, and the rollup needs both.
   company-container:
     name: Company container hosting
-    needs: [plan, cli-pack]
+    needs: [ plan ]
     if: needs.plan.outputs.company-container == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 8
+    # The waiter reads this run's job and artifact lists. A job-level block REPLACES the workflow's.
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      # THE PINNED CADDY COMPILE (~85s of xcaddy) IS THE SAME EVERY RUN: its BuildKit cache is keyed on the
+      # Dockerfile, the entrypoint, the smoke that names the DNS module, and the digests the two FROM tags resolve
+      # to today (an upstream rebuild of the same tag is a new key, never a stale entry nothing can replace).
+      - name: Name the pinned Caddy build cache
+        id: caddy-key
+        run: |
+          digests=$(sed -n 's/^FROM \([^ ]*\).*/\1/p' deploy/company/Caddy.Dockerfile | while read -r image; do
+            docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' || echo unresolved
+          done | sha256sum | cut -c1-16)
+          echo "key=company-caddy-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('deploy/company/Caddy.Dockerfile', 'deploy/company/caddy-entrypoint.sh', 'deploy/company/ci-smoke.mjs') }}-${digests}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: caddy-cache
         with:
-          name: afbin-npm-packages
-          path: npm-candidate
+          path: ${{ runner.temp }}/company-caddy-cache
+          key: ${{ steps.caddy-key.outputs.key }}
+      - name: Use the containerd image store, which imports and exports BuildKit caches
+        run: scripts/ci/docker-containerd-store.sh
       - name: Build exact candidate and test PostgreSQL restart plus consistent recovery
-        run: node deploy/company/ci-smoke.mjs npm-candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SAVE_CADDY_CACHE: ${{ steps.caddy-cache.outputs.cache-hit != 'true' && '--save-caddy-cache' || '' }}
+        run: |
+          version=$(node -p "require('./services/cli/package.json').version")
+          # shellcheck disable=SC2086  # SAVE_CADDY_CACHE is one optional flag or nothing.
+          node deploy/company/ci-smoke.mjs npm-candidate --caddy-cache "$RUNNER_TEMP/company-caddy-cache" $SAVE_CADDY_CACHE -- \
+            node scripts/lib/ci-artifact-wait.mjs --extract "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" \
+            afbin-npm-packages "afbin-cli-$version.tgz" "$GITHUB_WORKSPACE/npm-candidate/afbin-cli-$version.tgz"
 
   # A fresh standard-user bootstrap is a separate machine/user proof. It must not
   # contend with native install/browser consumers in the same Windows VM.
@@ -1178,6 +1227,15 @@ jobs:
         if: (matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux'
         working-directory: services/cli
         run: node ../../scripts/ci/linux-acceptance-deps.mjs "${{ github.workspace }}/.ci-cache-key/acceptance-apt" ../../scripts/ci/npm-acceptance/node_modules/playwright/cli.js
+      # Windows installs are thousands of small-file writes: keep the consumer's fresh npm cache and prefix on the
+      # runner's local work disk (D:, where the checkout lives) rather than the OS disk's %TEMP%. Same npm, same
+      # Defender, same paths with spaces and non-ASCII names (test-npm-package.mjs); only the drive differs.
+      - name: Keep Windows acceptance installs on the work disk
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
       # Tooling and download/browser caches prepare while this run packs the candidate.
       # The shared bounded waiter rejects other attempts and failed producers.
       - name: Wait for this attempt's packed candidate

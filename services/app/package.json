@@ -17,7 +17,7 @@
     "postinstall": "node scripts/copy-assets.mjs",
     "generate-story-ui-classes": "tsx scripts/generate-story-ui-classes.ts",
     "generate:og": "tsx scripts/generate-og-image.ts",
-    "prebuild": "node ../cli/scripts/generate-teaching.mjs",
+    "prebuild": "node ../../scripts/lib/generate-teaching.mjs",
     "prevalidate": "node ../cli/scripts/generate-teaching.mjs"
   },
   "dependencies": {

@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,copyFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,copyFileSync,rmSync,chmodSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -45,4 +45,17 @@ it('older registry-backed snapshots restore with only the restore script in a fr
  copyFileSync(new URL('restore.sh',bundle),join(restored,'restore.sh'));
  execFileSync('sh',['restore.sh',snapshot],{cwd:restored,env});
  expect(readFileSync(join(restored,'config/server.env'),'utf8')).toBe('operator configuration');
+}));
+it('restores the archived file modes, so the rebuilt image has the build context that was backed up',()=>fixture((root,env)=>{
+ const first=join(root,'first'),snapshot=join(root,'snapshot'),restored=join(root,'restored');configuration(first,true);
+ for(const name of ['backup.sh','restore.sh'])copyFileSync(new URL(name,bundle),join(first,name));
+ chmodSync(join(first,'packages/afbin.tgz'),0o644);chmodSync(join(first,'packages'),0o755);chmodSync(join(first,'config/server.env'),0o600);
+ execFileSync('sh',['backup.sh',snapshot],{cwd:first,env});
+ writeFileSync(join(snapshot,'artifacts.tar.gz'),'artifact volume (the fake docker streams none)');
+ mkdirSync(restored);copyFileSync(new URL('restore.sh',bundle),join(restored,'restore.sh'));
+ // Both scripts run under umask 077; without -p the package (a COPY input) came back 0600 and missed Docker's layer cache.
+ execFileSync('sh',['restore.sh',snapshot],{cwd:restored,env});
+ const mode=file=>statSync(file).mode&0o777;
+ for(const file of ['packages/afbin.tgz','packages','config/server.env','Dockerfile'])expect(mode(join(restored,file)),file).toBe(mode(join(first,file)));
+ expect(mode(join(restored,'config/server.env'))).toBe(0o600);
 }));

@@ -151,10 +151,12 @@ it('overlaps the same standard-user bootstrap with pack instead of waiting to cr
  expect(job.steps.some(step=>step.with?.name==='afbin-npm-release')).toBe(false);
  expect(job.steps.find(step=>step.run?.includes('test-node-bootstrap.ps1')).run).toContain('-WaitForArtifact');
  const source=readFileSync(new URL('../../services/cli/scripts/test-node-bootstrap.ps1',import.meta.url),'utf8');
- expect(source.indexOf("$process=Start-StandardProcess $encoded 'bootstrap'")).toBeLessThan(source.indexOf('ci-artifact-wait.mjs'));
+ // The package is awaited (and fetched) from before the standard-user probes; the child starts before it is needed.
+ expect(source.indexOf("$waiter=Start-Process node -ArgumentList @('scripts/lib/ci-artifact-wait.mjs'")).toBeLessThan(source.indexOf('foreach($expected in @(0,7))'));
+ expect(source.indexOf("$process=Start-StandardProcess $encoded 'bootstrap'")).toBeLessThan(source.indexOf('$waiter.WaitForExit()'));
  expect(source.indexOf("$phase='wait for exact current-run candidate'")).toBeLessThan(source.indexOf("$phase='standard-user online npx query'"));
  // A child can fail before the package arrives; preserve its cause before parent cleanup.
- const early=source.match(/if\(\$LASTEXITCODE -ne 0\)\{([^}]*Waiting for exact current-run package failed[^}]*)\}/)?.[1];
+ const early=source.match(/if\(\$waiter\.ExitCode -ne 0\)\{([^}]*Waiting for exact current-run package failed[^}]*)\}/)?.[1];
  expect(early).toBeDefined();
  expect(early.indexOf('Write-StandardFailure')).toBeGreaterThanOrEqual(0);
  expect(early.indexOf('Write-StandardFailure')).toBeLessThan(early.indexOf('throw'));
