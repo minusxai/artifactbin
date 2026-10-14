@@ -1,10 +1,11 @@
 /** CI-only complete journey through the actual installed npm entry, with no credentials or remote API. */
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,readdir,cp,rm,realpath} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,lstat,cp,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {basename,dirname,join,resolve} from 'node:path';
+import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {execFileSync,spawn} from 'node:child_process';
+import {createHmac} from 'node:crypto';
 import {createServer} from 'node:http';
 import {chromium} from 'playwright';
 import {artifactFilePayload as payload} from './artifact-file-payload.mjs';
@@ -50,11 +51,16 @@ async function windowsPrivateState(cwd,home,args){
  assert.deepEqual(next.output,fresh.output);
  assert.ok(fresh.powershell>0,'a command on a fresh Windows home protects its private directories');
  assert.equal(next.powershell,0,'a later command on a protected Windows home launches no PowerShell');
- // Every directory privateDirectory protected carries its signed record; the key directory holds the key.
- const keyDirectory=join(home,'AppData','Local','artifactbin');
- const recorded=async root=>(await readdir(root,{recursive:true})).filter(name=>basename(name)==='.private-directory').map(name=>join(root,dirname(name)));
- const directories=[keyDirectory,...await recorded(home),...await recorded(join(cwd,'.artifactbin'))].filter((path,index,all)=>all.indexOf(path)===index);
- assert.ok(directories.length>=2,`the command protected its private directories: ${directories.join(', ')}`);
+ // `add` makes exactly these private: the per-user key's directory, the workspace store (localWorkspaceState and
+ // its State) and the store's lock directory (withLocalLock). It never opens the home store.
+ const keyDirectory=join(home,'AppData','Local','artifactbin'),store=join(cwd,'.artifactbin');
+ const directories=[keyDirectory,store,join(store,'locks')];
+ const key=await readFile(join(keyDirectory,'private-directory.key'));assert.equal(key.length,32,'the per-user record key');
+ for(const path of directories.slice(1)){
+  const info=await lstat(path,{bigint:true});assert.ok(info.isDirectory()&&!info.isSymbolicLink(),`${path} is a real directory`);
+  const signed=createHmac('sha256',key).update(`${info.dev}:${info.ino}:${info.birthtimeNs}`).digest('hex')+'\n';
+  assert.equal(await readFile(join(path,'.private-directory'),'utf8'),signed,`${path} carries a record signed for it`);
+ }
  // .NET and [Console] only: no module autoload (this runner's PSModulePath belongs to PowerShell 7), no localized
  // names (SIDs), no output encoding of the non-ASCII paths (each line carries its index, not its path).
  const literal=path=>`'${path.replace(/'/g,"''")}'`;
