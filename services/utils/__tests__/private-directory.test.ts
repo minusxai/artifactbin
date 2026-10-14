@@ -1,20 +1,23 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {copyFile,mkdir,mkdtemp,readFile,readdir,rm,stat,symlink,writeFile} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
+import {createHmac} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {privateDirectory} from '../src/private-directory';
+import {privateDirectories,privateDirectory} from '../src/private-directory';
+import {lockDirectory,privateStateDirectory,withStateLock} from '../src/state-lock';
 
 vi.mock('node:child_process',()=>({execFile:vi.fn()}));
 const spawn=vi.mocked(execFile) as unknown as ReturnType<typeof vi.fn>;
 const platform=Object.getOwnPropertyDescriptor(process,'platform')!;
 const saved={HOME:process.env.HOME,USERPROFILE:process.env.USERPROFILE};
 const windows=()=>Object.defineProperty(process,'platform',{...platform,value:'win32'});
-/** The directory each PowerShell launch protected, decoded from its script. */
-const protectedPaths=()=>spawn.mock.calls.filter(call=>call[0]==='powershell.exe').map(call=>{
+/** The directories each PowerShell launch protected, decoded from its script. */
+const launches=()=>spawn.mock.calls.filter(call=>call[0]==='powershell.exe').map(call=>{
  const script=Buffer.from(call[1][3] as string,'base64').toString('utf16le');
- return script.match(/\$path='((?:[^']|'')*)'/)![1]!.replace(/''/g,"'");
+ return [...script.match(/\$paths=@\(((?:'(?:[^']|'')*',?)*)\)/)![1]!.matchAll(/'((?:[^']|'')*)'/g)].map(match=>match[1]!.replace(/''/g,"'"));
 });
+const protectedPaths=()=>launches().flat();
 let root:string,home:string,keyDirectory:string,keyFile:string;
 beforeEach(async()=>{
  root=await mkdtemp(join(tmpdir(),'private-directory-'));home=join(root,'profile');await mkdir(home);
@@ -31,8 +34,8 @@ afterEach(async()=>{
 it('protects a fresh Windows directory exactly once and never respawns for the protected directory',async()=>{
  windows();const path=join(root,'state');
  await privateDirectory(path);
- expect(protectedPaths()).toEqual([keyDirectory,path]);
- const script=Buffer.from(spawn.mock.calls[1]![1][3] as string,'base64').toString('utf16le');
+ expect(launches()).toEqual([[keyDirectory,path]]);
+ const script=Buffer.from(spawn.mock.calls[0]![1][3] as string,'base64').toString('utf16le');
  expect(script).toContain('SetAccessRuleProtection($true,$false)');expect(script).toContain("S-1-5-18");
  await privateDirectory(path);await privateDirectory(path);
  expect(protectedPaths()).toEqual([keyDirectory,path]);
@@ -102,4 +105,42 @@ it.skipIf(process.platform==='win32')('keeps Unix directories at 0700 with no sp
  await privateDirectory(path);
  expect((await stat(path)).mode&0o777).toBe(0o700);expect(protectedPaths()).toEqual([]);expect(await readdir(path)).toEqual([]);
  expect(await readdir(home)).toEqual([]);
+});
+it('protects a fresh Windows state tree, its lock directory and the new key\'s directory in one launch, then never again',async()=>{
+ windows();const store=join(root,'workspace','.artifactbin'),locks=join(store,'locks');
+ // `afbin add` on a fresh home: the workspace store, its State, then the workspace lock.
+ await privateStateDirectory(store);await privateDirectory(store);
+ await withStateLock(store,'workspace',async()=>{});
+ expect(lockDirectory(store)).toBe(locks);
+ expect(launches()).toEqual([[keyDirectory,store,locks]]);
+ const key=await readFile(keyFile);
+ for(const path of[store,locks]){
+  const info=await stat(path,{bigint:true});
+  expect(await readFile(join(path,'.private-directory'),'utf8')).toBe(createHmac('sha256',key).update(`${info.dev}:${info.ino}:${info.birthtimeNs}`).digest('hex')+'\n');
+ }
+ await privateStateDirectory(store);await withStateLock(store,'workspace',async()=>{});
+ expect(launches()).toHaveLength(1);
+});
+it('protects in one launch only the batch\'s directories without a record signed for them',async()=>{
+ windows();const kept=join(root,'kept'),existing=join(root,'existing'),fresh=join(root,'fresh');
+ await privateDirectory(kept);await mkdir(existing);
+ await privateDirectories([kept,existing,fresh]);
+ expect(launches()).toEqual([[keyDirectory,kept],[existing,fresh]]);
+ await privateDirectories([fresh,existing,kept]);expect(launches()).toHaveLength(2);
+});
+it('keeps a failed batch\'s error, writes no key or record, and protects the whole batch on retry',async()=>{
+ windows();const store=join(root,'store'),locks=join(store,'locks');const failure=new Error('Access to the path is denied.');
+ spawn.mockImplementationOnce((...args:unknown[])=>{(args.at(-1) as (error:Error)=>void)(failure);});
+ await expect(privateStateDirectory(store)).rejects.toBe(failure);
+ await expect(readFile(keyFile)).rejects.toMatchObject({code:'ENOENT'});
+ expect(await readdir(store)).toEqual(['locks']);expect(await readdir(locks)).toEqual([]);
+ await privateStateDirectory(store);
+ expect(launches()).toEqual([[keyDirectory,store,locks],[keyDirectory,store,locks]]);
+ await privateStateDirectory(store);expect(launches()).toHaveLength(2);
+});
+it.skipIf(process.platform==='win32')('keeps every Unix directory of a batch at 0700 with no spawn',async()=>{
+ const store=join(root,'unix-store');await mkdir(store,{mode:0o755});
+ await privateStateDirectory(store);
+ for(const path of[store,join(store,'locks')])expect((await stat(path)).mode&0o777).toBe(0o700);
+ expect(launches()).toEqual([]);
 });

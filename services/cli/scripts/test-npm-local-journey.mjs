@@ -49,10 +49,10 @@ async function windowsPrivateState(cwd,home,args){
  // The same command again: it walks the same private directories, now warm, and keeps the same ids.
  const fresh=await run('fresh',args),next=await run('next',args);
  assert.deepEqual(next.output,fresh.output);
- assert.ok(fresh.powershell>0,'a command on a fresh Windows home protects its private directories');
+ assert.equal(fresh.powershell,1,'a command on a fresh Windows home protects all its private directories in one PowerShell launch');
  assert.equal(next.powershell,0,'a later command on a protected Windows home launches no PowerShell');
- // `add` makes exactly these private: the per-user key's directory, the workspace store (localWorkspaceState and
- // its State) and the store's lock directory (withLocalLock). It never opens the home store.
+ // `add` makes exactly these private, in that one launch: the per-user key's directory, the workspace store
+ // (localWorkspaceState and its State) and the store's lock directory (withLocalLock). It never opens the home store.
  const keyDirectory=join(home,'AppData','Local','artifactbin'),store=join(cwd,'.artifactbin');
  const directories=[keyDirectory,store,join(store,'locks')];
  const key=await readFile(join(keyDirectory,'private-directory.key'));assert.equal(key.length,32,'the per-user record key');

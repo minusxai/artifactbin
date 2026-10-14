@@ -10,7 +10,8 @@ import {recordLocalHistory,assertLocalHistoryMove,moveLocalHistory,localHistoryH
 import {parseJsx,stampNodeIds,stampNodeIdsInPlace} from '../../app/lib/cli-toolkit';
 import {stateFor,readState} from './state-access';
 import {workspaceStateEnv} from './config';
-import {atomicWrite,digest,privateDirectory,readOptional,isMissing} from './files';
+import {atomicWrite,digest,readOptional,isMissing} from './files';
+import {privateStateDirectory} from '@artifactbin/utils/node/state-lock';
 import {confinedPath,stageFiles,recoverFiles,type FileChange} from './journal';
 import {parseDocument,writeDocument} from './document';
 import {parseResourceFile,writeResourceFile} from './resource-file';
@@ -82,7 +83,8 @@ const readOptionalStat=async(path:string)=>{try{return await lstat(path);}catch(
 export async function localWorkspaceState(root:string):Promise<State>{
  root=await realpath(root);
  if(!await marker(root)){
-  await privateDirectory(join(root,'.artifactbin'));
+  // With its lock directory, which every workspace command takes next: one PowerShell launch on Windows.
+  await privateStateDirectory(join(root,'.artifactbin'));
   try{await atomicWrite(markerPath(root),JSON.stringify({format:1,id:randomUUID()} satisfies WorkspaceMarker)+'\n',{exclusive:true});}
   catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;await marker(root);}
  }

@@ -5,14 +5,20 @@ import {chmod,lstat} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
 import {setTimeout as sleep} from 'node:timers/promises';
 import type * as SQLite from 'node:sqlite';
-import {privateDirectory} from './private-directory';
+import {privateDirectories,privateDirectory} from './private-directory';
 const ownership=new AsyncLocalStorage<ReadonlyMap<string,symbol>>();
 const activeOwners=new Map<string,symbol>();
+/** Where `withStateLock` keeps a state directory's lock files. */
+export const lockDirectory=(root:string):string=>resolve(join(root,'locks'));
+/** A state directory and its lock directory made private together: one PowerShell launch on a fresh Windows home. */
+export async function privateStateDirectory(root:string):Promise<void>{
+ await privateDirectories([root,lockDirectory(root)]);
+}
 export interface LockOptions {waitMs?:number;reentrant?:boolean;signal?:AbortSignal}
 export async function withStateLock<T>(root:string,scope:string,run:()=>Promise<T>,options:LockOptions={}):Promise<T>{
  options.signal?.throwIfAborted();
  const name=createHash('sha256').update(scope).digest('hex').slice(0,16);
- const file=resolve(join(root,'locks',`${name}.sqlite`));
+ const file=join(lockDirectory(root),`${name}.sqlite`);
  const inherited=ownership.getStore()?.get(file);
  if(options.reentrant!==false&&inherited&&activeOwners.get(file)===inherited)return run();
  await privateDirectory(dirname(file));
