@@ -7,11 +7,8 @@
  *   node scripts/ci/test-timings.mjs <log file> ...      # or saved job logs
  *   node scripts/ci/test-timings.mjs --sums              # print each shard's packed load from the table
  *
- * Files a log does not mention keep their recorded time; the reserve table is kept as written. A reserve is
- * the shard's non-Vitest step (wall seconds) in FILE-time units: divide the step's wall time by the marginal
- * Vitest wall seconds one more second of file time costs on that job. Run 37974435698: 0.45 on both the node
- * and api shards; shard 1's Docker pull and integration project took 48 s (reserve 105 s), shard 3's CLI suite
- * 82 s (reserve 180 s, more than a plain shard's whole share, so shard 3 runs the CLI suite alone).
+ * Files a log does not mention keep their recorded time. No shard carries work outside Vitest (the integration
+ * project and the CLI source suite are jobs of their own), so the table holds file times and nothing else.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -51,15 +48,12 @@ export function mergeTimings(timings, measured) {
   return { ...timings, files };
 }
 
-/** Each job's shards as the sequencer packs every recorded file: [{ files, ms }] per shard, reserve included. */
+/** Each job's shards as the sequencer packs every recorded file: [{ files, ms }] per shard. */
 export function shardLoads(timings) {
   return Object.fromEntries(Object.entries(JOBS).map(([job, { projects, count }]) => {
     const items = projects.flatMap((project) => Object.entries(timings.files[project] ?? {}).map(([file, ms]) => ({ key: `${project}:${file}`, weight: ms })));
-    const reserve = timings.reserve?.[[...projects].sort().join('+')] ?? {};
     const weights = new Map(items.map((item) => [item.key, item.weight]));
-    return [job, pack(items, count, reserve).map((keys, i) => ({
-      files: keys.length, ms: keys.reduce((sum, key) => sum + weights.get(key), Number(reserve[String(i + 1)] ?? 0)),
-    }))];
+    return [job, pack(items, count).map((keys) => ({ files: keys.length, ms: keys.reduce((sum, key) => sum + weights.get(key), 0) }))];
   }));
 }
 

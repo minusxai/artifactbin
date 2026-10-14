@@ -12,11 +12,11 @@ on:
     - cron: '17 9 * * *'
   workflow_dispatch:
 
-# New commits supersede earlier checks on the same PR. Main runs stay independent.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number ||
-    github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# New commits supersede earlier checks on the same PR — through the `supersede` job, NOT a workflow-level
+# `concurrency` group. With cancel-in-progress the group holds the new run pending until the cancelled one has
+# fully stopped, its always() roll-up included: run 38627878372's plan started 84s after the run did, 3s after
+# run 38627752110 finished cancelling (and run 38535795832 waited 80s on 38535259485 the same way). Main runs
+# were never grouped and stay independent.
 
 # Jobs read the repo. cli-pack alone can request a signing identity for its npm artifact.
 permissions:
@@ -30,6 +30,29 @@ permissions:
 # no-parallel-projects rule (one embedded connection per process) still holds
 # within every job.
 jobs:
+  # CANCELS THIS PULL REQUEST'S EARLIER, STILL-RUNNING CI RUNS, and nothing waits for it: neither `plan` nor the
+  # `test` roll-up needs it, so the new run starts at once while the old one winds down beside it
+  # (scripts/lib/ci-supersede.mjs, builtin-only: no install).
+  supersede:
+    if: github.event_name == 'pull_request'
+    name: supersede earlier runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          sparse-checkout: scripts/lib
+      - name: Cancel this pull request's earlier runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          WORKFLOW_FILE: ci.yml
+        run: node scripts/lib/ci-supersede.mjs
+
   plan:
     name: affected modules
     runs-on: ubuntu-latest
@@ -43,6 +66,7 @@ jobs:
       plan: ${{ steps.select.outputs.plan }}
       checks: ${{ steps.select.outputs.checks }}
       node: ${{ steps.select.outputs.node }}
+      integration: ${{ steps.select.outputs.integration }}
       ui: ${{ steps.select.outputs.ui }}
       build: ${{ steps.select.outputs.build }}
       api: ${{ steps.select.outputs.api }}
@@ -53,19 +77,19 @@ jobs:
       company-container: ${{ steps.select.outputs.company-container }}
       cli-bootstrap: ${{ steps.select.outputs.cli-bootstrap }}
       reference-compatibility: ${{ steps.select.outputs.reference-compatibility }}
-      # Not a job: whether the node job runs the CLI source suite (every CLI change, not only a release).
+      # The CLI source suite's job (every CLI change, not only a release).
       cli-tests: ${{ steps.select.outputs.cli-tests }}
       # Not a job either: whether `checks` must refuse this PR for shipping the CLI without a version.
       cli-bump: ${{ steps.select.outputs.cli-bump }}
       # The exact-tree package producer: prior run for tree reuse, current run for patch reuse.
       source-run: ${{ steps.select.outputs.source-run }}
     steps:
+      # NO setup-node, here or in the `test` roll-up: both ends of every run's chain run builtin-only scripts
+      # (scripts/__tests__/ci-plan.test.mjs holds their imports to node:*), which the runner's own Node runs, and
+      # resolving a toolcache Node cost 4-5s in each (runs 38615330920, 38627878372).
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
       - id: select
         env:
           CI__EVENT: ${{ github.event_name }}
@@ -131,22 +155,12 @@ jobs:
         run: docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color
       - run: npm run validate
 
-  # THE NODE PROJECT SHARDS, like api and ui. It is the biggest project in the
-  # repo, and it was the only one
-  # running whole, which made `validate + node` a 2m16s job of which 103s was
-  # this step alone.
-  #
-  # FOUR shards, down from seven: seven ran 28-56s of Vitest each beside
-  # ~16s of setup, far under the gates (~155s warm), so four keep every shard below them — the
-  # heaviest, by scripts/ci/test-timings.json with the integration and CLI-suite reserves, ~124s warm.
-  # Earlier: EIGHT, down from ten after run 36838282615, where the plain shards ran 63-111s against a
-  # 240s budget and the gates set the run's path. Before that, TEN, up from four: shard 3 also builds and tests the CLI (~141s fixed, unaffected by
-  # shard count — see below), so on run 36611975484 it was the tallest job in the run at 236s even
-  # though its own share of the plain vitest work was only 72s. Downloading `build`'s artifact instead
-  # of rebuilding was tried and reverted: shard 3 has almost no OTHER setup to overlap the wait
-  # against (unlike `gates`), so waiting for `build` (~93s on run 36613650176) cost about the same as
-  # the 88s rebuild it replaced. Shrinking this shard's plain-vitest share by sharding further is the
-  # lever that actually works here.
+  # THE NODE PROJECT SHARDS, like api and ui: four, packed by measured file time
+  # (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json), and NOTHING ELSE. The integration
+  # project and the CLI source suite used to ride on shards 1 and 3 behind "reserves" that steered files
+  # away from them: on run 38615330920 (PR #658) shard 3 ran 93s of Vitest and then 117s of CLI suite, a
+  # 224s job and the run's last, while the reserves had piled the plain files onto shards 2 and 4. Each is
+  # now its own job below, beside these shards rather than after one of them.
   node:
     needs: [ plan ]
     if: needs.plan.outputs.node == 'true'
@@ -177,23 +191,6 @@ jobs:
           key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
-      # Only shard 1 runs integration tests; the other shards need no browser or Docker.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        if: matrix.shard == 1
-        id: playwright
-        with:
-          path: |
-            ~/.cache/ms-playwright/chromium-*
-            ~/.cache/ms-playwright/chromium_headless_shell-*
-            ~/.cache/ms-playwright/ffmpeg-*
-          key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
-      # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
-      # deps pass is only worth paying for when the browser is actually being downloaded.
-      - if: matrix.shard == 1
-        run: npx playwright install chromium
-      - if: matrix.shard == 1
-        run: docker pull postgres:17-alpine
       # The test global setup builds the server reader and the islands behind content-verified
       # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
       # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
@@ -209,27 +206,114 @@ jobs:
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
         run: node scripts/ci/ci.mjs node ${{ matrix.shard }}/4
-      # The heavy tests that `npm test` leaves out — a disposable Dockerised
-      # Postgres and real Chromium — live in the `integration` project and
-      # would otherwise run nowhere in CI. This job already provisions both
-      # (the Playwright install and `docker pull postgres:17-alpine` above), so
-      # coverage rides here rather than in a new top-level job: only jobs listed
-      # in scripts/lib/ci-plan.mjs's CI_JOBS are enforced by the `test` roll-up,
-      # and this one already is. Run once (shard 1, not per shard); no
-      # --passWithNoTests, so a rename that empties the include fails loudly
-      # instead of passing vacuously.
-      - if: matrix.shard == 1
-        run: npm run test:integration
-      # The lightest shard: shard 1 already carries the browser, Docker and integration steps,
-      # and together they overran its time budget.
-      # The suite needs the server reader and the island build (preview serves the compiled reader),
-      # not the full `npm run build -w services/cli` (SPA, runtime, host bundles: 67s here). The
-      # Vitest run above already built both through its global setup, so these are cache hits.
+
+  # The heavy tests that `npm test` leaves out — a disposable Dockerised Postgres and real Chromium — live in
+  # the `integration` project, selected wherever the node project is. Run once; no --passWithNoTests, so a
+  # rename that empties the include fails loudly instead of passing vacuously.
+  integration:
+    needs: [ plan ]
+    if: needs.plan.outputs.integration == 'true'
+    name: integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
+      # itself: see the `checks` job above, which carries the full note.
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: playwright
+        with:
+          path: |
+            ~/.cache/ms-playwright/chromium-*
+            ~/.cache/ms-playwright/chromium_headless_shell-*
+            ~/.cache/ms-playwright/ffmpeg-*
+          key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      # No `--with-deps`: ubuntu-latest already ships Chromium's system libraries, so a cache miss costs the
+      # download alone, not an apt pass (~30s).
+      - run: npx playwright install chromium
+      - run: docker pull postgres:17-alpine
+      # The test global setup builds the server reader and the islands behind content-verified
+      # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
+      # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/public/islands
+            services/app/lib/build-assets
+            node_modules/.cache/build-islands.json
+          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: test-builds-v1-${{ runner.os }}-
+      - run: npm run test:integration
+
+  # THE CLI SOURCE SUITE, on every CLI change and in two halves: `node --test` runs the files three at a time
+  # on a four-vCPU runner, and its 81 files took 112s whole on run 38615330920. `--test-shard` halves the
+  # file list (by position); the command is the CLI package's own `test` script with the shard inserted
+  # (scripts/__tests__/ci-plan.test.mjs holds the two together). The suite needs the server reader and the
+  # island build (preview serves the compiled reader), not the full `npm run build -w services/cli`.
+  cli-tests:
+    needs: [ plan ]
+    if: needs.plan.outputs.cli-tests == 'true'
+    name: CLI source suite (${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [ 1, 2 ]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
+      # itself: see the `checks` job above, which carries the full note.
+      - run: node scripts/ci/ci.mjs lock-fingerprint
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      # The test global setup builds the server reader and the islands behind content-verified
+      # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
+      # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: test-builds
+        with:
+          path: |
+            services/app/public/islands
+            services/app/lib/build-assets
+            node_modules/.cache/build-islands.json
+          key: test-builds-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: test-builds-v1-${{ runner.os }}-
       - name: CLI source suite on the release runtime
-        if: matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'
         run: |
           (cd services/app && node scripts/build-server-reader.mjs --cache && node ../../scripts/build/build-islands.mjs --cache)
-          npm test -w services/cli
+          npm run pretest -w services/cli
+          cd services/cli && node --import tsx --test --test-shard=${{ matrix.shard }}/2 test/*.test.ts
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
   # the environment boots per test file), so it shards like api does. Two shards ran 186s and 119s
@@ -772,6 +856,8 @@ jobs:
         plan,
         checks,
         node,
+        integration,
+        cli-tests,
         ui,
         build,
         api,
@@ -786,12 +872,10 @@ jobs:
     steps:
       # PR checkout is the synthetic merge: depth two includes its base parent for the
       # three-dot patch diff below. Main records only the current tree; neither needs full history.
+      # The runner's own Node: builtin-only scripts (see `plan`).
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
       - name: All selected jobs green
         env:
           CI__NEEDS: ${{ toJSON(needs) }}
@@ -1485,6 +1569,8 @@ jobs:
         plan,
         checks,
         node,
+        integration,
+        cli-tests,
         ui,
         build,
         api,

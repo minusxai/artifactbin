@@ -257,7 +257,7 @@ if (mode === 'plan') {
   console.log(JSON.stringify(plan, null, 2));
   if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT,
     `plan=${JSON.stringify(plan)}\n` + CI_JOBS.map((job) => `${job}=${plan.jobs[job]}\n`).join('')
-    + `company-container=${plan.companyContainer}\n` + `cli-pack=${plan.cliPack}\n` + `cli-tests=${plan.cliTests}\n` + `cli-bump=${cliBump}\n` + `source-run=${testedPatch ? env.GITHUB_RUN_ID : plan.testedRun ?? ''}\n`);
+    + `company-container=${plan.companyContainer}\n` + `cli-pack=${plan.cliPack}\n` + `cli-bump=${cliBump}\n` + `source-run=${testedPatch ? env.GITHUB_RUN_ID : plan.testedRun ?? ''}\n`);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY,
     `CI selection: ${plan.selection}\n\n`
     + (plan.testedRun ? `${testedPatch ? 'patch' : 'tree ' + treeOf(head)} tested by run ${plan.testedRun}\n\n` : '')

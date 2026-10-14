@@ -20,7 +20,7 @@ const SOLID_TESTS = 'services/app/solid/**/__tests__/**/*.test.{ts,tsx}';
 /**
  * Tests that spawn a real server or installer process (`tsx server.ts`, the dev runner, the shell
  * installer under a pty): 35s, 28s, 16s and 13s in CI, more than every other file in their shards.
- * They run in `integration` — once, in the node job's shard 1 — instead of in every affected
+ * They run in `integration` — once, in CI's `integration` job — instead of in every affected
  * `npm test` and in the api/node shards. Excluded from api and node so each runs exactly once.
  */
 const SERVER_BOOT_TESTS = [

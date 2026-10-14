@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
 import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, cliRuntimePath, isBuildInput, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
+import { supersededRuns } from '../lib/ci-supersede.mjs';
 import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
@@ -57,9 +58,9 @@ describe('CI change selection', () => {
       expect(planCi(['README.md'], { cliRelease: true }).jobs[job], job).toBe(true);
     }
     // The source suite still guards every CLI change; a release runs it too.
-    expect(planCi(['services/cli/src/runner.ts']).cliTests).toBe(true);
-    expect(planCi(['docs/notes.md']).cliTests).toBe(false);
-    expect(planCi(['package-lock.json']).cliTests).toBe(true);
+    expect(planCi(['services/cli/src/runner.ts']).jobs['cli-tests']).toBe(true);
+    expect(planCi(['docs/notes.md']).jobs['cli-tests']).toBe(false);
+    expect(planCi(['package-lock.json']).jobs['cli-tests']).toBe(true);
     expect(planCi(['README.md'], { cliRelease: true }).cliRelease).toBe(true);
   });
 
@@ -74,9 +75,8 @@ describe('CI change selection', () => {
     const inputs = ['.github/workflows/codeql.yml', 'scripts/__tests__/workflows.test.mjs'];
     const plan = planCi(inputs);
     expect(plan.full).toBe(false);
-    expect(plan.cliTests).toBe(false);
     expect(plan.nodeRoots).toEqual(['scripts/']);
-    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'node']);
+    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'node', 'integration']);
     expect(planCi([...inputs, 'services/app/lib/auth/auth.ts']).jobs.gates).toBe(true);
     expect(planCi([...inputs, '.github/workflows/ci.yml']).full).toBe(true);
     expect(planCi(inputs, {full: true}).full).toBe(true);
@@ -114,7 +114,7 @@ describe('CI change selection', () => {
     const cli = planCi(['services/cli/src/runner.ts']);
     expect(cli.nodeRoots).toEqual(['scripts/']);
     expect(cli.jobs).toMatchObject({ node: true, 'reference-compatibility': false, 'cli-bootstrap': false, cli: true, api: false, ui: false, gates: false });
-    expect(cli.cliTests).toBe(true);
+    expect(cli.jobs['cli-tests']).toBe(true);
     expect(cli.cliPack).toBe(true);
     expect(cliBumpRequired(['services/cli/src/runner.ts'])).toBe(true);
   });
@@ -183,7 +183,6 @@ describe('a release is a version and nothing else', () => {
     const plan = planCi(VERSION_BUMP_FILES, { versionOnly: true });
     expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'cli', 'cli-bootstrap']);
     expect(plan.cliRelease).toBe(true);
-    expect(plan.cliTests).toBe(false);
     expect(plan.nodeRoots).toEqual([]);
     // Without the flag the very same file list is a full run: the lockfile is shared input.
     expect(planCi(VERSION_BUMP_FILES).jobs.node).toBe(true);
@@ -765,17 +764,71 @@ describe('required CI result', () => {
 });
 
 describe('CI avoids superseded work and duplicate integration setup', () => {
-  it('cancels earlier runs only for the same PR, never main', () => {
+  it('cancels earlier runs only for the same PR, never main, and never makes the new run wait for them', () => {
     const workflow = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(workflow.concurrency.group).toContain('github.event.pull_request.number');
-    expect(workflow.concurrency['cancel-in-progress']).toContain("github.event_name == 'pull_request'");
+    // A workflow-level group with cancel-in-progress holds the new run pending until the old one has stopped.
+    expect(workflow.concurrency).toBeUndefined();
+    const job = workflow.jobs.supersede;
+    expect(job.if).toBe("github.event_name == 'pull_request'");
+    expect(job.needs).toBeUndefined();
+    expect(job.permissions).toEqual({ contents: 'read', actions: 'write' });
+    const cancel = job.steps.find(step => step.run === 'node scripts/lib/ci-supersede.mjs');
+    expect(cancel.env).toMatchObject({ HEAD_REPOSITORY: '${{ github.event.pull_request.head.repo.full_name }}', HEAD_REF: '${{ github.event.pull_request.head.ref }}', WORKFLOW_FILE: 'ci.yml' });
+    // Nothing waits for it: neither the roll-up nor any job that feeds it.
+    for (const [name, other] of Object.entries(workflow.jobs)) expect([other.needs ?? []].flat(), name).not.toContain('supersede');
   });
-  it('provisions Chromium and Postgres only on the integration shard', () => {
+  it('supersedes only this PR\'s earlier, unfinished runs from the same head repository and branch', () => {
+    const self = { runId: 500, headRepository: 'minusxai/artifactbin', headBranch: 'fix/x' };
+    const run = (id, status, extra = {}) => ({ id, status, head_branch: 'fix/x', head_repository: { full_name: 'minusxai/artifactbin' }, ...extra });
+    expect(supersededRuns([
+      run(499, 'in_progress'), run(498, 'queued'), run(497, 'completed'), run(501, 'in_progress'), run(500, 'in_progress'),
+      run(496, 'in_progress', { head_repository: { full_name: 'someone/fork' } }), run(495, 'waiting', { head_branch: 'fix/y' }),
+      run(494, 'in_progress', { head_repository: null }),
+    ], self)).toEqual([499, 498]);
+    expect(supersededRuns([run(1, 'in_progress')], { ...self, headRepository: '' })).toEqual([]);
+    expect(supersededRuns([run(1, 'in_progress')], { ...self, runId: Number.NaN })).toEqual([]);
+  });
+  it('runs both ends of the chain, plan and roll-up, on the runner\'s own Node with builtin-only scripts', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    const provisioning = jobs.node.steps.filter(step => step.id === 'playwright' || /playwright install|docker pull/.test(step.run ?? ''));
-    expect(provisioning.length).toBeGreaterThan(0);
-    for (const step of provisioning) expect(step.if).toContain('matrix.shard == 1');
-    expect(jobs.node.steps.find(step => step.run === 'npm run test:integration').if).toContain('matrix.shard == 1');
+    for (const job of ['plan', 'test', 'supersede']) {
+      expect(jobs[job].steps.filter(step => step.uses?.startsWith('actions/setup-node@')), job).toEqual([]);
+      expect(jobs[job].steps.filter(step => /\bnpm (ci|install)\b/.test(step.run ?? '')), job).toEqual([]);
+    }
+    const scripts = [...new Set(['plan', 'test', 'supersede'].flatMap(job => jobs[job].steps.flatMap(step => [...(step.run ?? '').matchAll(/node (scripts\/\S+\.mjs)/g)].map(match => match[1]))))];
+    expect(scripts).toEqual(expect.arrayContaining(['scripts/ci/ci.mjs', 'scripts/lib/ci-elapsed.mjs', 'scripts/lib/ci-supersede.mjs']));
+    // Every module those scripts load, transitively: Node builtins or this repository's own builtin-only modules.
+    const seen = new Set();
+    const visit = (file) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      for (const [, specifier] of readFileSync(path.join(root, file), 'utf8').matchAll(/^import\s[^'"]*['"]([^'"]+)['"]/gm)) {
+        if (specifier.startsWith('node:')) continue;
+        expect(specifier, `${file} imports ${specifier}`).toMatch(/^\.\.?\//);
+        visit(path.relative(root, path.resolve(path.dirname(path.join(root, file)), specifier)));
+      }
+    };
+    for (const script of scripts) visit(script);
+    expect(seen.size).toBeGreaterThan(scripts.length);
+  });
+  it('provisions Chromium and Postgres only for the integration project, in its own job beside the node shards', () => {
+    const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+    expect(jobs.node.steps.filter(step => step.id === 'playwright' || /playwright install|docker pull|test:integration/.test(step.run ?? ''))).toEqual([]);
+    const steps = jobs.integration.steps;
+    expect(jobs.integration.needs).toEqual(['plan']);
+    expect(jobs.integration.if).toBe("needs.plan.outputs.integration == 'true'");
+    const run = steps.findIndex(step => step.run === 'npm run test:integration');
+    for (const provision of [step => step.id === 'playwright', step => step.run === 'npx playwright install chromium', step => step.run === 'docker pull postgres:17-alpine']) {
+      const at = steps.findIndex(provision);
+      expect(at).toBeGreaterThan(-1);
+      expect(at).toBeLessThan(run);
+    }
+    expect(planCi(['scripts/x.mjs']).jobs.integration).toBe(true);
+    expect(planCi(['docs/notes.md']).jobs.integration).toBe(false);
+  });
+  it('leaves every node shard to Vitest alone: no shard is preloaded with other work', () => {
+    const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+    expect(jobs.node.steps.filter(step => step.if?.includes('matrix.shard'))).toEqual([]);
+    expect(JSON.parse(readFileSync(path.join(root, 'scripts/ci/test-timings.json'), 'utf8')).reserve).toBeUndefined();
   });
   it('splits the node project into four shards, and every shard runs its fourth', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
@@ -790,15 +843,25 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(jobs.ui.steps.find(step => (step.run ?? '').includes('vitest run --project=ui')).run)
       .toBe('npx vitest run --project=ui --project=islands --shard=${{ matrix.shard }}/2');
   });
-  it('runs the CLI source suite on the reader and island builds, never the full CLI build', () => {
+  it('runs the CLI source suite in halves on the reader and island builds, never the full CLI build', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    expect(jobs.node.steps.filter(step => (step.run ?? '').includes('npm run build -w services/cli'))).toHaveLength(0);
-    const suite = jobs.node.steps.find(step => (step.run ?? '').includes('npm test -w services/cli'));
-    expect(suite.if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
+    const job = jobs['cli-tests'];
+    expect(job.strategy.matrix.shard).toEqual([1, 2]);
+    expect(job.name).toBe('CLI source suite (${{ matrix.shard }}/2)');
+    expect(job.steps.filter(step => (step.run ?? '').includes('npm run build -w services/cli'))).toHaveLength(0);
+    const suite = job.steps.find(step => step.name === 'CLI source suite on the release runtime');
+    expect(suite.if).toBeUndefined();
     const prepare = suite.run.indexOf('build-islands.mjs --cache');
     expect(suite.run.indexOf('build-server-reader.mjs --cache')).toBeGreaterThan(-1);
     expect(prepare).toBeGreaterThan(-1);
-    expect(prepare).toBeLessThan(suite.run.indexOf('npm test -w services/cli'));
+    // The CLI package's own pretest and test script, with only the shard inserted after `--test`.
+    const { scripts } = JSON.parse(readFileSync(path.join(root, 'services/cli/package.json'), 'utf8'));
+    const pretest = suite.run.indexOf('npm run pretest -w services/cli');
+    const test = suite.run.indexOf(`cd services/cli && ${scripts.test.replace(' --test ', ' --test --test-shard=${{ matrix.shard }}/2 ')}`);
+    expect(scripts.test).toContain(' --test ');
+    expect(prepare).toBeLessThan(pretest);
+    expect(pretest).toBeGreaterThan(-1);
+    expect(test).toBeGreaterThan(pretest);
   });
   it('packs once and installs the uploaded universal npm artifact for native acceptance', () => {
     const {jobs}=yaml.parse(readFileSync(path.join(root,'.github/workflows/ci.yml'),'utf8'));
@@ -817,7 +880,7 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
   });
   it('restores the test global setup\'s builds before every Vitest shard and the app build run', () => {
     const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
-    for (const [name, runs] of [['api', 'vitest run'], ['node', 'ci.mjs node'], ['ui', 'vitest run'], ['build', 'npm run build -w services/cli']]) {
+    for (const [name, runs] of [['api', 'vitest run'], ['node', 'ci.mjs node'], ['integration', 'test:integration'], ['cli-tests', 'build-islands.mjs --cache'], ['ui', 'vitest run'], ['build', 'npm run build -w services/cli']]) {
       const steps = jobs[name].steps;
       const restore = steps.findIndex(step => step.id === 'test-builds');
       expect(restore, name).toBeGreaterThan(steps.findIndex(step => step.id === 'install'));
@@ -968,9 +1031,10 @@ describe('CI job shape', () => {
   it('runs the CLI suite once and native npm acceptance on every platform', () => {
     const { cli, node } = ci().jobs;
     expect(cli.strategy.matrix.os).toContain('ubuntu-24.04');
-    const suite = node.steps.filter((step) => (step.run ?? '').includes('npm test -w services/cli'));
+    expect(node.steps.filter((step) => (step.run ?? '').includes('services/cli'))).toHaveLength(0);
+    const suite = Object.values(ci().jobs).flatMap((job) => job.steps ?? []).filter((step) => (step.run ?? '').includes('--import tsx --test'));
     expect(suite).toHaveLength(1);
-    expect(suite[0].if).toBe("matrix.shard == 3 && needs.plan.outputs.cli-tests == 'true'");
+    expect(ci().jobs['cli-tests'].if).toBe("needs.plan.outputs.cli-tests == 'true'");
     // Each platform consumes the same packed npm artifact; source tests run once.
     expect(ci().jobs['cli-pack'].steps.some(step=>step.run==='npm run pack:release -w services/cli')).toBe(true);
     expect(cli.steps.some((step) => (step.run ?? '').includes('--import tsx --test'))).toBe(false);
@@ -999,7 +1063,9 @@ describe('CI job shape', () => {
     // one setup fewer than the separate `job timings` job it was. Not `notify-consumer` (it waits on
     // `test`), and not `warm-caches`: waiting on it would put a 15-minute job on merge → production.
     expect(jobs).not.toHaveProperty('timings');
-    const named = Object.keys(jobs).filter((job) => !['test', 'notify-consumer', 'warm-caches'].includes(job));
+    // Nor `supersede`: it cancels a PR's EARLIER runs, and nothing in this run may wait for it.
+    const named = Object.keys(jobs).filter((job) => !['test', 'notify-consumer', 'warm-caches', 'supersede'].includes(job));
+    expect(jobs.test.needs).not.toContain('supersede');
     expect(jobs.test.needs).not.toContain('notify-consumer');
     expect(jobs.test.needs).not.toContain('warm-caches');
     expect(jobs.test.needs).toEqual(expect.arrayContaining(named));

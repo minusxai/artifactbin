@@ -1,7 +1,7 @@
 /**
  * The identity-reservation proofs, formerly .github/workflows/reserved-ids-proof.yml (its own runner
  * and an uncached `npm ci` on every identity change). They now run in the `integration` project, in
- * the node job's shard 1, which already pulls `postgres:17-alpine`. Both proofs run unchanged as the
+ * CI's `integration` job, which already pulls `postgres:17-alpine`. Both proofs run unchanged as the
  * child processes the workflow ran; every assertion still lives in the proof scripts themselves.
  */
 import { execFile, execFileSync, spawnSync } from 'node:child_process';
