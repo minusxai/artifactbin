@@ -26,9 +26,9 @@ it('workflow waits for exact package, runs real Compose acceptance and blocks ro
  expect(job.steps.some(step=>step.uses?.startsWith('actions/download-artifact'))).toBe(false);
  expect(workflow.jobs.test.needs).toContain('company-container');
  expect(workflow.jobs.test.needs).toContain('cli-pack');
- // The universal tarball is published as soon as it is packed, before signing and seed transfers.
- const pack=workflow.jobs['cli-pack'].steps,packed=pack.findIndex(step=>step.run==='npm run pack:release -w services/cli');
- expect(pack.findIndex(step=>step.with?.name==='afbin-npm-packages')).toBe(packed+1);
+ // The universal tarball is published right after the signed release, before the seed transfers and archives.
+ const pack=workflow.jobs['cli-pack'].steps,release=pack.findIndex(step=>step.with?.name==='afbin-npm-release');
+ expect(pack.findIndex(step=>step.with?.name==='afbin-npm-packages')).toBe(release+1);
  expect(readFileSync(new URL('../../deploy/company/Caddy.Dockerfile',import.meta.url),'utf8')).toContain('xcaddy build v2.11.7');
 });
 it('reuses the pinned Caddy compile through a cache keyed on its inputs and resolved base images',()=>{
@@ -67,4 +67,9 @@ it('packaged SMTP acceptance uses a trusted private TLS sink and the normal owne
  expect(smoke).not.toContain('NODE_TLS_REJECT_UNAUTHORIZED');
  const fixture=readFileSync(new URL('../../deploy/company/CI.smtp.Dockerfile',import.meta.url),'utf8');
  expect(fixture).toContain('smtp-server@3.19.21');
+});
+it('reports PostgreSQL ready only once the real server listens, never the initialisation-time socket server',()=>{
+ const compose=yaml.parse(readFileSync(new URL('../../deploy/company/compose.yaml',import.meta.url),'utf8'));
+ // A socket probe reached the temporary server (FATAL: database "artifactbin" does not exist) once polled every second.
+ expect(compose.services.postgres.healthcheck.test).toEqual(['CMD-SHELL','pg_isready -h 127.0.0.1 -U artifactbin -d artifactbin']);
 });

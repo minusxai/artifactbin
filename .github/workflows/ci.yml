@@ -975,16 +975,6 @@ jobs:
       # Publish the signed candidate before transferring native seeds, so the cold
       # standard-user proof can install while consumers wait for their own seed.
       - run: npm run pack:release -w services/cli
-      # Downstream hosts consume this same universal tarball after the run's tested receipt.
-      # Pack owns the release alias even for nightly/version-only selection. Uploaded the moment it exists:
-      # the company container waits for it (scripts/lib/ci-artifact-wait.mjs) rather than for this whole job.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: afbin-npm-packages
-          path: services/cli/dist/packages/*.tgz
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 7
       - name: Sign the actual build's npm provenance
         if: fromJSON(needs.plan.outputs.plan).cliRelease && github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         env:
@@ -1007,6 +997,17 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
+      # Downstream hosts consume this same universal tarball after the run's tested receipt.
+      # Pack owns the release alias even for nightly/version-only selection. Uploaded right after the signed
+      # release (the native matrix's longer tail waits on that one) and before the seed transfers: the company
+      # container waits for it (scripts/lib/ci-artifact-wait.mjs) rather than for this whole job.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-npm-packages
+          path: services/cli/dist/packages/*.tgz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
       - if: needs.plan.outputs.cli == 'true' && steps.npm-seeds.outputs.cache-hit != 'true'
         run: node services/cli/scripts/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

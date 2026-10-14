@@ -69,7 +69,7 @@ async function configureFixture(directory,{caddyCache:cached=false}={}){
  const cache=cached?`
     build:
       cache_from: ['type=local,src=${caddyCache}']${saveCaddyCache?`
-      cache_to: ['type=local,dest=${caddyCache},mode=max']`:''}`:'';
+      cache_to: ['type=local,dest=${caddyCache},mode=min']`:''}`:'';
  // Health is polled every second while each container starts, so a ready service is seen at once rather than
  // at the next 5-10s interval; the checks themselves are the deployment's own.
  await writeFile(join(directory,'ci.override.yaml'),`services:
