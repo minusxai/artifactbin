@@ -66,9 +66,14 @@ const forbidden = (origin: string | null, detail: string): Response =>
 const sameReader = (a: Actor, b: Actor): boolean => (a.userId ?? null) === (b.userId ?? null) && (a.tokenId ?? null) === (b.tokenId ?? null);
 const notFound = (): Response => Response.json({ error: 'not_found' }, { status: 404, headers: { ...NO_STORE } });
 
-/** The document origin's own cookie: host-only (no `Domain`), a session cookie (the row carries the 8 h), `Max-Age=0` to clear. */
+/**
+ * The document origin's own cookie: host-only (no `Domain`), a session cookie (the row carries the 8 h), `Max-Age=0` to clear.
+ * On https it is `SameSite=None; Partitioned`: when the pages host is its own site (not a subdomain of the app's), the framed
+ * document is a third party, and only a partitioned cookie (CHIPS) is stored and sent there — keyed to the app page's site.
+ */
 function cookieLine(site: PagesSite, value: string, clear = false): string {
-  return `${pagesCookieName(site)}=${value}; Path=/; HttpOnly; SameSite=Lax${clear ? '; Max-Age=0' : ''}${site.scheme === 'https:' ? '; Secure' : ''}`;
+  const https = site.scheme === 'https:';
+  return `${pagesCookieName(site)}=${value}; Path=/; HttpOnly; SameSite=${https ? 'None' : 'Lax'}${clear ? '; Max-Age=0' : ''}${https ? '; Secure; Partitioned' : ''}`;
 }
 
 export function pagesHost(site: PagesSite): MiddlewareHandler {

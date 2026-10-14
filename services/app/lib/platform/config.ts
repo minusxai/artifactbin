@@ -263,8 +263,9 @@ export let ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
 /**
  * EVERY DOCUMENT ON ITS OWN ORIGIN (lib/http/pages-origin) — the only way a document is rendered.
  * The hostname documents are served under, one label per document: `<hex(id)>.<pages host>`, and the
- * app page frames that origin. It MUST be a subdomain of the app's registrable domain (same site) —
- * the frame's `afbin_pages` cookie is SameSite=Lax — and the scheme and port are the public URL's
+ * app page frames that origin. It may be a subdomain of the app's registrable domain or a domain of its
+ * own (a separate site, recommended in production): on https the frame's `afbin_pages` cookie is
+ * partitioned (SameSite=None; Partitioned), so it is kept either way — and the scheme and port are the public URL's
  * (`APP__PUBLIC_BASE_URL`), so development appends its port. A bare hostname: no scheme, port, path
  * or wildcard. REQUIRED to serve: a malformed value refuses any import of this module, and an unset one
  * refuses the boot (`requirePagesHost`, asked by the composition and the app server) — tooling that reads

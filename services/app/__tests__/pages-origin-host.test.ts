@@ -114,7 +114,7 @@ describe('the app page frames the document on its own origin', () => {
     expect(src.searchParams.get('_pt')).toBe('-');
     const cleared = await framing().request(src.href, { headers: { cookie: `${COOKIE}=stale-value-from-before-0123456789` } });
     expect(cleared.status).toBe(200);
-    expect(cleared.headers.get('set-cookie')).toBe(`${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`);
+    expect(cleared.headers.get('set-cookie')).toBe(`${COOKIE}=; Path=/; HttpOnly; SameSite=None; Max-Age=0; Secure; Partitioned`);
   });
 });
 
@@ -181,7 +181,7 @@ describe('the pages session', () => {
     expect(res.status).toBe(200);
     // One response: no redirect, no other host. The cookie has no Domain and no Max-Age (a session cookie; the row carries the 8 h).
     expect(res.headers.get('location')).toBeNull();
-    expect(res.headers.get('set-cookie')).toMatch(/^__Host-afbin_pages=[A-Za-z0-9_-]{40,}; Path=\/; HttpOnly; SameSite=Lax; Secure$/);
+    expect(res.headers.get('set-cookie')).toMatch(/^__Host-afbin_pages=[A-Za-z0-9_-]{40,}; Path=\/; HttpOnly; SameSite=None; Secure; Partitioned$/);
     expect(res.headers.get('referrer-policy')).toBe('no-referrer');
     expect(res.headers.get('cache-control')).toBe('private, no-cache');
     const html = await res.text();
@@ -280,7 +280,7 @@ describe('the pages session', () => {
     const guest = await app.request(`${self}/?_pt=-`, { headers: held });
     expect(guest.status).toBe(404);
     expect(await guest.text()).not.toContain('Private plan');
-    expect(guest.headers.get('set-cookie')).toBe(`${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`);
+    expect(guest.headers.get('set-cookie')).toBe(`${COOKIE}=; Path=/; HttpOnly; SameSite=None; Max-Age=0; Secure; Partitioned`);
     // The row is gone too: the old cookie value names nobody on the doors.
     const after = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, ...held, 'content-type': 'text/plain' }, body: query(w.secret) });
     expect(after.status).toBe(404);

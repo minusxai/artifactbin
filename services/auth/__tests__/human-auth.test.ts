@@ -65,6 +65,21 @@ const signInByOtp = async (email: string) => {
   return cookieOf(res);
 };
 
+describe('session cookie', () => {
+  it('on https is __Host- prefixed: Secure, Path=/, no Domain, so no sibling host can plant or shadow it', async () => {
+    const secure = await createHumanAuth({ pglite: pg, secret: 'human-auth-secret'.padEnd(32, '0'), baseURL: 'https://localhost:4794', secure: true, mail: { send: async (m) => { sent.push(m); } } });
+    const post = (path: string, body: unknown) => secure.handler(new Request(`https://localhost:4794/api/auth${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://localhost:4794' }, body: JSON.stringify(body) }));
+    await post('/email-otp/send-verification-otp', { email: 'host@example.com', type: 'sign-in' });
+    const res = await post('/sign-in/email-otp', { email: 'host@example.com', otp: sent.find((m) => m.to === 'host@example.com' && m.otp)!.otp! });
+    const line = (res.headers.getSetCookie?.() ?? []).find((c) => c.includes('session_token='))!;
+    expect(line).toMatch(/^__Host-better-auth\.session_token=/);
+    expect(line).toMatch(/; Secure/i);
+    expect(line).toMatch(/; Path=\//i);
+    expect(line).not.toMatch(/; Domain=/i);
+    expect((await secure.sessions.resolve(new Request('https://x', { headers: { cookie: line.split(';')[0]! } })))?.email).toBe('host@example.com');
+  });
+});
+
 describe('boot', () => {
   it('is idempotent: a second boot against the same database keeps the tables and the sessions', async () => {
     const cookie = await signInByOtp('boot@example.com');
