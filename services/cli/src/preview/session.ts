@@ -331,7 +331,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(page.startsWith('/workspace/')&&!res.headersSent){
    res.setHeader('Content-Type','text/html; charset=utf-8');res.setHeader('Content-Security-Policy',PROBLEM_PAGE_POLICY);
    const named=page.slice('/workspace/'.length);let file=named;try{file=decodeURIComponent(named);}catch{/* the raw path still names it */}
-   return res.end(previewProblemPage(file,String(error.message)));
+   return res.end(previewProblemPage(file,String(error.message),{refresh:!options.capture}));
   }
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:String(error.message),...(error instanceof CliError&&error.fix?{fix:error.fix}:{})}));
  });});

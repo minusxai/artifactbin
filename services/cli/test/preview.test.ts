@@ -511,5 +511,11 @@ test('a document that does not compile answers a readable page naming the file a
   // The data door the chrome reads stays JSON.
   const data=await fetch(session.url+'/document?file=report.jsx');
   assert.equal(data.status,400);assert.match(data.headers.get('content-type')??'',/application\/json/);
+  assert.match(html,/http-equiv="refresh"/,'a reader sees the fix without reloading by hand');
+  // An export's capture gets the same page standing still, and the export names the problem itself.
+  await session.close();session=await startPreview({root,home:join(root,'home'),files:['report.jsx'],capture:true});
+  const captured=await fetch(session.url+'/workspace/report.jsx?capture=1');
+  assert.equal(captured.status,400);assert.doesNotMatch(await captured.text(),/http-equiv="refresh"/);
+  assert.match(session.failure()??'',/Invalid JSX: Expected corresponding JSX closing tag/);
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
