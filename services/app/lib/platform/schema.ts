@@ -399,9 +399,12 @@ const ANNOTATIONS: Table = {
     { name: 'author_remote', type: 'JSONB' }, // managed session attribution, appended on upgrade
     // When the author last rewrote `body` (lib/annotations editAnnotationCommentFor); NULL = never edited. No history is kept.
     { name: 'edited_at', type: 'TIMESTAMPTZ' },
+    // The comment feed's position for a HUMAN edit: a fresh value from `seq`'s own sequence, so one cursor orders
+    // new comments and edits alike (lib/annotations/changes). NULL = never edited by a person.
+    { name: 'change_seq', type: 'BIGINT' },
   ],
   primaryKey: ['id'],
-  indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }],
+  indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }, { name: 'idx_annotations_artifact_change_seq', columns: ['artifact_id', 'change_seq'] }],
 };
 
 // RETIRED TABLES — `login_codes` and `oauth_codes` merged into `codes` below.

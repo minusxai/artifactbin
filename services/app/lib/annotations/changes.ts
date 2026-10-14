@@ -1,6 +1,12 @@
-/** Committed human comments. NOTIFY only wakes readers; bounded SQL scans own replay.
- * Both annotation INSERT paths lock the artifact before allocating seq, through commit.
- * Thus a visible same-artifact high watermark cannot skip a later low-seq commit.
+/** Committed human comments and human edits. NOTIFY only wakes readers; bounded SQL scans own replay.
+ * A row's feed position is its KEY: `seq`, or `change_seq` once a person has edited it (both drawn from seq's
+ * sequence). Both annotation INSERT paths and the edit path lock the artifact before allocating, through commit,
+ * so a visible same-artifact high watermark cannot skip a later low-position commit.
+ *
+ * Per row, past the reader's position: created after it (seq > position) → the plain new-comment event with its
+ * current words; created before it → an edit event. Several edits since one checkpoint are one event, the latest.
+ * Resolve, reopen and delete are not events: they carry no words to answer, a reopen that needs attention arrives
+ * with its reply, and a deleted row is exactly what the feed drops.
  */
 import { createHash } from 'node:crypto';
 import type { CommentChangesPage, CommentChangeEvent } from '@artifactbin/contracts';
@@ -39,10 +45,12 @@ function acquireWait(actor: AccessActor): () => void {
 }
 interface Cursor { v: 1; scope: string; seq: string }
 interface ChangeRow {
-  id: string; seq: string; root_id: string | null; body: string;
+  id: string; seq: string; key: string; root_id: string | null; body: string;
   author_kind: string; author_label: string | null; author_user_id: string | null;
-  created_at: string; deleted_at: string | null;
+  created_at: string; edited_at: string | null; deleted_at: string | null;
 }
+/** The feed position of a row: its creation, or a person's latest edit of it. */
+const KEY_SQL = 'greatest(seq, coalesce(change_seq, 0))';
 const encode = (cursor: Cursor) => Buffer.from(JSON.stringify(cursor)).toString('base64url');
 const cursorScope = (actor: AccessActor, id: string) => createHash('sha256').update(JSON.stringify([id, actor.userId ?? actor.tokenId])).digest('hex');
 function decode(raw: string, scope: string): string {
@@ -72,7 +80,7 @@ export async function readCommentChangesFor(actor: AccessActor, id: string, opti
   if (!await authorized()) return null;
   if (options.after === 'now') {
     // One statement/snapshot, no separate MAX after fetching a page.
-    const result = await db.query<{seq: string}>('SELECT coalesce(max(seq),0)::text AS seq FROM annotations WHERE artifact_id=$1', [id]);
+    const result = await db.query<{seq: string}>(`SELECT coalesce(max(${KEY_SQL}),0)::text AS seq FROM annotations WHERE artifact_id=$1`, [id]);
     position = result.rows[0]!.seq;
     checkAbort();
     return await authorized() ? page([], false) : null;
@@ -80,14 +88,16 @@ export async function readCommentChangesFor(actor: AccessActor, id: string, opti
   // One scan is the bounded read plus one access check AFTER it: access still held then covers the rows read.
   const scan = async (): Promise<CommentChangesPage | null> => {
     checkAbort();
+    const from = BigInt(position);
     const result = await db.query<ChangeRow>(
-      `SELECT id,seq::text,root_id,body,author_kind,author_label,author_user_id,created_at,deleted_at
-       FROM annotations WHERE artifact_id=$1 AND seq>$2::bigint ORDER BY seq LIMIT $3`, [id, position, options.limit + 1]);
+      `SELECT id,seq::text,${KEY_SQL}::text AS key,root_id,body,author_kind,author_label,author_user_id,created_at,edited_at,deleted_at
+       FROM annotations WHERE artifact_id=$1 AND (seq>$2::bigint OR change_seq>$2::bigint) ORDER BY ${KEY_SQL} LIMIT $3`, [id, position, options.limit + 1]);
     const scanned = result.rows.slice(0, options.limit);
-    if (scanned.length) position = scanned[scanned.length - 1]!.seq;
+    if (scanned.length) position = scanned[scanned.length - 1]!.key;
     const events: CommentChangeEvent[] = scanned.filter(row => row.author_kind === 'human' && !row.deleted_at).map(row => ({
-      type: 'artifactbin.comment', event_id: row.id, artifact_id: id, annotation_id: row.root_id ?? row.id, comment_id: row.id,
+      type: 'artifactbin.comment', event_id: BigInt(row.seq) > from ? row.id : `${row.id}:${row.key}`, artifact_id: id, annotation_id: row.root_id ?? row.id, comment_id: row.id,
       author: {kind: 'human', label: row.author_label, user_id: row.author_user_id}, body: row.body, created_at: row.created_at,
+      ...(BigInt(row.seq) > from ? {} : {change: 'edited' as const, edited_at: row.edited_at!}),
     }));
     checkAbort();
     return await authorized() ? page(events, result.rows.length > options.limit) : null;

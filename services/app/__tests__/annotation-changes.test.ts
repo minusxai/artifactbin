@@ -86,7 +86,7 @@ it('does not skip a comment inserted after the bounded scan snapshot', async()=>
  const f=await fixture();await f.open('First');const db=await getDb();const original=db.query.bind(db);let inserted=false;
  const spy=vi.spyOn(db,'query').mockImplementation(async(sql,values)=>{
   const result=await original(sql,values);
-  if(sql.includes('FROM annotations WHERE artifact_id=$1 AND seq>')&&!inserted){inserted=true;await f.open('Raced');}
+  if(sql.includes('FROM annotations WHERE artifact_id=$1 AND (seq>')&&!inserted){inserted=true;await f.open('Raced');}
   return result;
  });
  const first=await (await f.read(f.cursor)).json();spy.mockRestore();

@@ -132,6 +132,8 @@ export interface AnnotationAction {
 export interface AnnotationEdit {
   body: string;
   expectedRevision?: number;
+  /** Who is rewriting (the door's attribution). Only a person's edit enters the comment feed; an agent never hears its own. */
+  editorKind: AnnotationAuthor['kind'];
 }
 
 /** What an edit answers: the thread as it now reads, the edited comment, and the text it replaced (null when unchanged). */
@@ -635,7 +637,11 @@ export async function editAnnotationCommentFor(
 
     const changed = comment.body !== edit.body;
     if (changed) {
-      await tx.query('UPDATE annotations SET body = $2, edited_at = now() WHERE id = $1', [comment.id, edit.body]);
+      // A person's edit takes a new feed position from seq's own sequence, under the artifact lock already held,
+      // so a monitor's high-water mark cannot pass it before it commits (lib/annotations/changes).
+      await tx.query(edit.editorKind === 'human'
+        ? "UPDATE annotations SET body = $2, edited_at = now(), change_seq = nextval(pg_get_serial_sequence('annotations', 'seq')) WHERE id = $1"
+        : 'UPDATE annotations SET body = $2, edited_at = now() WHERE id = $1', [comment.id, edit.body]);
       await tx.query('UPDATE annotations SET revision = revision + 1 WHERE id = $1', [root.id]);
       await recordEvent(tx, actorSubject(actor), 'annotation_edited', { kind: 'artifact', id: artifactId }, {
         annotation_id: root.id, ...(comment.id !== root.id ? { reply_id: comment.id } : {}), agent: comment.author_kind === 'agent',
