@@ -7,10 +7,10 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,win32} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {digest} from '../src/files';
-import {saveLocalFile,localWorkspaceState,LOCAL_WORKSPACE_SCOPE} from '../src/local-workspace';
+import {saveLocalFile,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,workspaceCandidates,type DiscoveryHost} from '../src/local-workspace';
 import {previewAnnotations} from '../src/preview/annotations';
 import {parseDocument} from '../src/document';
 import {importLocalHtml} from '../src/local-html-import';
@@ -198,3 +198,21 @@ test('a preview import conflict names the person\'s file and what to do in the b
   return true;
  });
 }));
+
+test('bounded discovery holds for Windows path forms: 8.3 temp names, drive-letter case, \\\\?\\ prefixes, drive roots, .git files, unreadable ancestors',async()=>{
+ const long='C:\\Users\\runneradmin\\AppData\\Local\\Temp';
+ const aliases:Record<string,string>={'c:\\users\\runner~1\\appdata\\local\\temp':long,'\\\\?\\c:\\users\\runneradmin\\appdata\\local\\temp':long};
+ const host=(over:Partial<DiscoveryHost>={}):DiscoveryHost=>({path:win32,
+  realpath:async p=>{const k=p.toLowerCase();for(const [alias,target] of Object.entries(aliases))if(k===alias||k.startsWith(alias+'\\'))return target+p.slice(alias.length);return p;},
+  owner:async()=>undefined,isGit:async()=>false,boundaries:['C:\\Users\\RUNNER~1\\AppData\\Local\\Temp','c:\\users\\runneradmin'],...over});
+ // The 8.3 temp name and the long realpath are one boundary; the drive letter's case does not matter.
+ assert.deepEqual(await workspaceCandidates('c:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ws\\sub',undefined,host()),[`${long}\\ws\\sub`,`${long}\\ws`]);
+ assert.deepEqual(await workspaceCandidates('\\\\?\\C:\\Users\\runneradmin\\AppData\\Local\\Temp\\ws',undefined,host()),[`${long}\\ws`]);
+ assert.deepEqual(await workspaceCandidates('C:\\Users\\runneradmin\\projects\\doc',undefined,host()),['C:\\Users\\runneradmin\\projects\\doc','C:\\Users\\runneradmin\\projects'],'HOME in another case still bounds');
+ // A drive root ends the climb; D:\ has no boundary at all.
+ assert.deepEqual(await workspaceCandidates('D:\\a\\b',undefined,host()),['D:\\a\\b','D:\\a','D:\\']);
+ // A .git FILE (a git worktree) is a repository root too.
+ assert.deepEqual(await workspaceCandidates('D:\\repo\\src',undefined,host({isGit:async p=>p==='D:\\repo'})),['D:\\repo\\src','D:\\repo']);
+ // An ancestor that cannot be inspected bounds the climb instead of failing the command.
+ assert.deepEqual(await workspaceCandidates('D:\\a\\b',undefined,host({owner:async p=>{if(p==='D:\\a')throw Object.assign(new Error('EPERM'),{code:'EPERM'});return undefined;},isGit:async p=>{if(p==='D:\\a')throw Object.assign(new Error('EPERM'),{code:'EPERM'});return false;}})),['D:\\a\\b']);
+});
