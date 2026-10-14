@@ -61,6 +61,8 @@ export interface InboundMail {
 }
 
 const RESEND_API = 'https://api.resend.com';
+const RESEND_RECEIVED_PAGE_SIZE = 100;
+const RESEND_RECEIVED_MAX_PAGES = 10;
 const OTP_POLL_MS = 2_000;
 /** Measured: the same mailbox delivered in 3 s and in 50 s on two consecutive runs. */
 const OTP_CAP_MS = 120_000;
@@ -231,16 +233,34 @@ export async function acquireCredential(source: CredentialSource, opts: AcquireO
   // The dance is ONE code path from here on; only WHERE the login code is read differs.
   const email = opts.email ?? opts.env.EVAL_LOGIN_EMAIL;
   let read: CodeReader;
+  const mailboxDiagnostics: MailboxDiagnostics = {
+    polls: 0,
+    listStatuses: new Map(),
+    detailStatuses: new Map(),
+    pages: 0,
+    matchingMessages: 0,
+    pageLimitReached: false,
+    invalidResponses: 0,
+    requestErrors: 0,
+  };
   if (source === 'outbox-oauth') {
     if (!opts.localOutbox || !email) throw new Error('outbox-oauth needs the local server’s dev outbox path and an address to log in as');
     read = outboxCodeReader({ path: opts.localOutbox, email });
   } else {
     const key = opts.env.RESEND_EVAL_API_KEY;
     if (!email || !key) throw new Error('inbox-oauth needs RESEND_EVAL_API_KEY and EVAL_LOGIN_EMAIL');
-    read = resendCodeReader({ key, email, fetch: call });
+    read = resendCodeReader({ key, email, fetch: call, diagnostics: mailboxDiagnostics });
   }
   const origin = opts.origin ?? opts.base;
-  const cookie = await logIn({ base: opts.base, origin, email, read, fetch: call, sleep });
+  let cookie: string;
+  try {
+    cookie = await logIn({ base: opts.base, origin, email, read, fetch: call, sleep });
+  } catch (error) {
+    if (source === 'inbox-oauth' && error instanceof Error && error.message.startsWith('login: no code reached the eval mailbox')) {
+      throw new Error(`${error.message}; ${formatMailboxDiagnostics(mailboxDiagnostics)}`);
+    }
+    throw error;
+  }
   const token = opts.grant === 'http-email'
     ? await httpEmailGrant(opts.base, origin, cookie, call)
     : await grantAsMcpClient({ base: opts.base, origin, cookie, fetch: call });
@@ -339,19 +359,100 @@ async function logIn(o: { base: string; origin: string; email: string; read: Cod
  */
 type CodeReader = (since: number) => Promise<string | null>;
 
+interface MailboxDiagnostics {
+  polls: number;
+  listStatuses: Map<string, number>;
+  detailStatuses: Map<string, number>;
+  pages: number;
+  matchingMessages: number;
+  pageLimitReached: boolean;
+  invalidResponses: number;
+  requestErrors: number;
+}
+
+function incrementStatus(counts: Map<string, number>, status: number): void {
+  const key = String(status);
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+
+function formatMailboxDiagnostics(d: MailboxDiagnostics): string {
+  const statuses = (counts: Map<string, number>) => [...counts]
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([status, count]) => `${status}=${count}`).join(',') || 'none';
+  return `mailbox diagnostics: polls=${d.polls}, list_statuses=${statuses(d.listStatuses)}, detail_statuses=${statuses(d.detailStatuses)}, pages=${d.pages}, matching_messages=${d.matchingMessages}, page_limit_reached=${d.pageLimitReached}, invalid_responses=${d.invalidResponses}, request_errors=${d.requestErrors}`;
+}
+
 /** The eval's own inbound mailbox, read with the EVAL's key — never the product's. */
-function resendCodeReader(o: { key: string; email: string; fetch: typeof globalThis.fetch }): CodeReader {
+function resendCodeReader(o: { key: string; email: string; fetch: typeof globalThis.fetch; diagnostics: MailboxDiagnostics }): CodeReader {
   const headers = { authorization: `Bearer ${o.key}` };
   return async (since) => {
-    const list = await o.fetch(`${RESEND_API}/emails/receiving?limit=10`, { headers });
-    if (!list.ok) return null;
-    const body = await list.json() as { data?: InboundMail[] } | InboundMail[];
-    const mail = pickLoginMail(Array.isArray(body) ? body : body.data ?? [], { to: o.email, since });
-    if (!mail) return null;
-    const detail = await o.fetch(`${RESEND_API}/emails/receiving/${mail.id}`, { headers });
-    if (!detail.ok) return null;
-    const full = await detail.json() as { text?: string; html?: string };
-    return codeFromMail(full.text ?? full.html ?? '');
+    o.diagnostics.polls++;
+    let after: string | undefined;
+    for (let pageNumber = 0; pageNumber < RESEND_RECEIVED_MAX_PAGES; pageNumber++) {
+      const query = new URLSearchParams({ limit: String(RESEND_RECEIVED_PAGE_SIZE) });
+      if (after) query.set('after', after);
+      let list: Response;
+      try {
+        list = await o.fetch(`${RESEND_API}/emails/receiving?${query}`, { headers });
+      } catch {
+        o.diagnostics.requestErrors++;
+        return null;
+      }
+      incrementStatus(o.diagnostics.listStatuses, list.status);
+      if (!list.ok) return null;
+      let body: unknown;
+      try {
+        body = await list.json() as unknown;
+      } catch {
+        o.diagnostics.invalidResponses++;
+        return null;
+      }
+      const isList = Array.isArray(body);
+      if (!isList && (!body || typeof body !== 'object' || !Array.isArray((body as { data?: unknown }).data))) {
+        o.diagnostics.invalidResponses++;
+        return null;
+      }
+      const mails = isList ? body as InboundMail[] : (body as { data: InboundMail[] }).data;
+      o.diagnostics.pages++;
+      const mail = pickLoginMail(mails, { to: o.email, since });
+      if (mail) {
+        o.diagnostics.matchingMessages++;
+        let detail: Response;
+        try {
+          detail = await o.fetch(`${RESEND_API}/emails/receiving/${encodeURIComponent(mail.id)}`, { headers });
+        } catch {
+          o.diagnostics.requestErrors++;
+          return null;
+        }
+        incrementStatus(o.diagnostics.detailStatuses, detail.status);
+        if (!detail.ok) return null;
+        let full: unknown;
+        try {
+          full = await detail.json() as unknown;
+        } catch {
+          o.diagnostics.invalidResponses++;
+          return null;
+        }
+        if (!full || typeof full !== 'object') {
+          o.diagnostics.invalidResponses++;
+          return null;
+        }
+        const content = full as { text?: unknown; html?: unknown };
+        return codeFromMail(typeof content.text === 'string' ? content.text : typeof content.html === 'string' ? content.html : '');
+      }
+      // Resend's receiving-email list uses cursor pagination: `after` is the last item's ID and
+      // moves forward from newer to older messages (https://resend.com/docs/api-reference/pagination).
+      // Keep each poll bounded even for a busy inbox.
+      const hasMore = !isList && (body as { has_more?: unknown }).has_more === true;
+      if (!hasMore || mails.length === 0) return null;
+      after = mails[mails.length - 1]?.id;
+      if (!after) {
+        o.diagnostics.invalidResponses++;
+        return null;
+      }
+    }
+    o.diagnostics.pageLimitReached = true;
+    return null;
   };
 }
 
