@@ -10,14 +10,15 @@
  *  - `createFrameSelectionActions` / `createFrameAnnotateSession` (framework-free) drive the
  *    selection bubble and the pin overlay solid/document/AnnotationLayer expects;
  *  - `AnnotationLayer` (Solid, solid/document) is the SAME inline-comments UI the hosted app's Solid
- *    document page will mount, over a local `ArtifactBackend` (backend.ts) instead of the HTTP one.
+ *    document page mounts, over a local `ArtifactBackend` (backend.ts) instead of the HTTP one, and
+ *    `SelectionActions` grants the selection bubble exactly as that page does (solid/pages/Document.tsx).
  * `edit-controller.ts`'s `createPreviewEditController` is the missing piece all of this needs: a
  * `StoryController` for the compiled DOM (docs/phase2-architecture.md's gap, PR #219's own
  * solid-routes.ts comment — "widen once a Solid controller-establishing mount exists").
  */
-import {createSignal, Show, onCleanup, onMount} from 'solid-js';
+import {createEffect, createSignal, Show, onCleanup, onMount} from 'solid-js';
 import {render} from 'solid-js/web';
-import {createInPlaceEdit,trustedPortalOf,TrustedUi,configureTrustedUiStyles,createDocumentViewport,PageBar,DocumentTitle,DocumentCommentAction,DocumentEditAction,EditorToolbar,EditorViewTabs,EditorSourcePanel,SourceEditorPane,AnnotationLayer,parseJsx,splitHelmet,STORY_DOCUMENT_MESSAGE,STORY_ROOT_ID,type StoryController} from '../../../app/lib/cli-toolkit/browser';
+import {createInPlaceEdit,trustedPortalOf,TrustedUi,configureTrustedUiStyles,createDocumentViewport,PageBar,DocumentTitle,DocumentCommentAction,DocumentEditAction,EditorToolbar,EditorViewTabs,EditorSourcePanel,SourceEditorPane,AnnotationLayer,SelectionActions,Button,parseJsx,splitHelmet,STORY_DOCUMENT_MESSAGE,STORY_ROOT_ID,type StoryController,type StoryEditSelection} from '../../../app/lib/cli-toolkit/browser';
 import Code from 'lucide-solid/icons/code';
 import Paintbrush from 'lucide-solid/icons/paintbrush';
 import {createPreviewBackend} from './backend';
@@ -27,10 +28,11 @@ import type {PreviewDocument} from './types';
 const capture = new URLSearchParams(location.search).get('capture') === '1';
 const file = decodeURIComponent(location.pathname.slice('/workspace/'.length));
 
+class RequestError extends Error {constructor(message: string, readonly status: number) {super(message);}}
 async function api(path: string, body?: unknown): Promise<unknown> {
  const response = await fetch(path, body ? {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body)} : {});
  const value = await response.json();
- if (!response.ok) throw Error((value as {error?: string}).error ?? `${response.status}`);
+ if (!response.ok) throw new RequestError((value as {error?: string}).error ?? `${response.status}`, response.status);
  return value;
 }
 
@@ -44,6 +46,14 @@ export function Toolbar(props: {initial: PreviewDocument}) {
  const [document_, setDocument] = createSignal<PreviewDocument>(props.initial);
  const [commentCount, setCommentCount] = createSignal(0);
  const [railOpen, setRailOpen] = createSignal(false);
+ /** Words picked with the selection bubble's comment action: the composer opens on exactly them. */
+ const [commentSelection, setCommentSelection] = createSignal<StoryEditSelection | null>(null);
+ /** An open composer or a typed reply: the page waits to follow its file until there is nothing to lose. */
+ const [drafting, setDrafting] = createSignal(false);
+ /** The last save overlapped a newer change: the draft stays, and the bar offers the ways out. */
+ const [conflict, setConflict] = createSignal(false);
+ /** The block the bubble's edit action asked for, selected once the in-place editor is ready. */
+ const [editTarget, setEditTarget] = createSignal<string | null>(null);
  let revision = props.initial.revision;
  const sourceRef = {current: props.initial.body};
  const dirty = {current: false};
@@ -73,7 +83,7 @@ export function Toolbar(props: {initial: PreviewDocument}) {
   onCleanup(() => controller.dispose());
 
   const poll = window.setInterval(() => {
-   if (editing() || dirty.current) return;
+   if (editing() || dirty.current || drafting()) return;
    void api('/document?file=' + encodeURIComponent(file)).then(next => {
     if ((next as PreviewDocument).revision !== revision) location.reload();
    }).catch(error => setStatus(String(error)));
@@ -100,24 +110,41 @@ export function Toolbar(props: {initial: PreviewDocument}) {
   onSourceEdited: editSource,
  });
 
- const finish = async () => {
+ /**
+  * Save the draft against the revision it was made from: the server merges it onto any newer version of the file
+  * (another tab, an agent) unless both changed the same part. Then it answers 409, the draft stays exactly where it
+  * is, and pressing Done again retries. `over` names a newer revision to save over — only by the user's choice.
+  */
+ const finish = async (over?: string) => {
   try {
    // Raw source already lives in sourceRef; the hidden in-place editor owns no pending typing.
    if (!source()) await edit.commitPending(true);
-   await api('/save', {file, revision, body: sourceRef.current});
+   await api('/save', {file, revision: over ?? revision, body: sourceRef.current});
    dirty.current = false;
    // A fresh compiled render, not a morph: leaving edit mode tears down the prose/grid mount
    // (createFrameEditSession's unmountCompiledDom), and only a real reload is guaranteed to put
    // the compiled static markup back exactly as the server would serve it for the saved file.
    location.reload();
   } catch (error) {
+   setConflict(error instanceof RequestError && error.status === 409);
    setStatus(error instanceof Error ? error.message : String(error));
   }
+ };
+ /** The overlap's two ways out: keep the newer file (the draft is dropped), or save the draft over it (the newer file stays in local history). */
+ const discardDraft = () => {dirty.current = false; location.reload();};
+ const saveOver = async () => {
+  try {await finish(((await api('/document?file=' + encodeURIComponent(file))) as PreviewDocument).revision);}
+  catch (error) {setStatus(error instanceof Error ? error.message : String(error));}
  };
 
  // Entering the prose editor loads its compiled mount asynchronously. A commit sent
  // before mx:edit-ready has no receiver, so Code/Done must wait for that actual contract.
  const openingEditor = () => editing() && !source() && !edit.ready();
+ createEffect(() => {
+  const path = editTarget();
+  if (path === null || !editing() || source() || !edit.ready()) return;
+  setEditTarget(null); edit.select(path);
+ });
  const [sourceVersion, setSourceVersion] = createSignal(0);
  const [sourceDraft, setSourceDraft] = createSignal('');
  const openSource = async () => {
@@ -141,15 +168,28 @@ export function Toolbar(props: {initial: PreviewDocument}) {
      {key:'design',label:'App',aria:'Edit on the page',tip:'edit on the page',icon:<Paintbrush size={12}/>,active:!source(),choose:() => setSourceView(false)},
      {key:'code',label:'Code',aria:'Edit the source',tip:openingEditor()?'Opening editor…':'edit the source',icon:<Code size={12}/>,active:source(),disabled:openingEditor(),choose:() => void openSource()},
     ]}/></div>
-    <span role="status" aria-live="polite" class="truncate font-mono text-xs text-muted">{openingEditor() && status() === 'Ready' ? 'Opening editor…' : status()}</span>
+    <div class="flex min-w-0 items-center gap-2">
+     <span role="status" aria-live="polite" class="truncate font-mono text-xs text-muted">{openingEditor() && status() === 'Ready' ? 'Opening editor…' : status()}</span>
+     <Show when={conflict()}>
+      <Button type="button" variant="ghost" size="sm" aria-label="Discard my draft and show the newer file" onClick={discardDraft}>discard draft</Button>
+      <Button type="button" variant="secondary" size="sm" aria-label="Save my draft over the newer change" onClick={() => void saveOver()}>save mine over it</Button>
+     </Show>
+    </div>
    </EditorToolbar></Show>
    <Show when={source()}><EditorSourcePanel top={TOP_OFFSET+44} commentsOpen={railOpen()}>
     <SourceEditorPane value={sourceDraft()} revision={sourceVersion()} onChange={next => {setSourceDraft(next);editSource(next);}} />
    </EditorSourcePanel></Show>
   </TrustedUi>
-  <TrustedUi overlay layer="discussion"><AnnotationLayer id={document_().metadata.id ?? 'local-preview'} backend={backend} railOpen={railOpen()} onRailOpenChange={setRailOpen}
-   runtimeRef={runtimeRef} sessionNonce={nonce()} showViewComments topOffset={TOP_OFFSET+(editing()?44:0)} pickOnOpen
-   onAnnotationsChange={threads => setCommentCount(threads.filter(thread => thread.status === 'open').length)} /></TrustedUi>
+  <TrustedUi overlay layer="discussion">
+   <Show when={nonce()}>
+    <SelectionActions runtimeRef={runtimeRef} nonce={nonce()} canEdit canAnnotate editing={editing()}
+     onEdit={path => {setEditTarget(path); setEditing(true);}} onAnnotate={setCommentSelection} />
+   </Show>
+   <AnnotationLayer id={document_().metadata.id ?? 'local-preview'} backend={backend} railOpen={railOpen()} onRailOpenChange={setRailOpen}
+    runtimeRef={runtimeRef} sessionNonce={nonce()} showViewComments topOffset={TOP_OFFSET+(editing()?44:0)} pickOnOpen
+    initialSelection={commentSelection()} onSelectionConsumed={() => setCommentSelection(null)} onDraftingChange={setDrafting}
+    onAnnotationsChange={threads => setCommentCount(threads.filter(thread => thread.status === 'open').length)} />
+  </TrustedUi>
  </>;
 
 }

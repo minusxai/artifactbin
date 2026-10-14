@@ -8,7 +8,7 @@
  * comment, the chevron folds the conversation — all per viewer (lib/comment-folds). A resolved card
  * is muted until hovered or focused, and says what it was about when the document no longer can.
  */
-import { createEffect, createSignal, For, lazy, onCleanup, Show, Suspense, type JSX } from 'solid-js';
+import { createEffect, createSignal, For, lazy, on, onCleanup, Show, Suspense, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
@@ -80,6 +80,8 @@ interface AnnotationThreadProps {
   onEdit?: (commentId: string, body: string) => Promise<void>;
   onToggleFold: () => void;
   onToggleComment: (commentId: string) => void;
+  /** Whether this thread's reply box holds words; false again once they are sent, cleared or the thread is gone. */
+  onReplyDraftChange?: (typed: boolean) => void;
 }
 
 export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
@@ -105,6 +107,8 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   // The reply draft — words and image — belongs to the thread, so folding the thread away keeps it.
   const [reply, setReply] = createSignal('');
   const replyImage = createCommentImageDraft();
+  createEffect(on(() => hasReplyText(reply()), (typed) => props.onReplyDraftChange?.(typed)));
+  onCleanup(() => props.onReplyDraftChange?.(false));
   const visibleComments = () => props.open ? props.a.thread : props.a.thread.slice(0, 1);
   const first = () => props.a.thread[0];
   const replyCount = () => Math.max(0, props.a.thread.length - 1);

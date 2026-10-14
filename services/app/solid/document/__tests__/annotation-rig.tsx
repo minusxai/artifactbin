@@ -195,6 +195,7 @@ export function layer(over: Over = {}, runtime = makeRuntime(), options: { trust
       panelWidth={p().panelWidth}
       linkTarget={p().linkTarget}
       onAnnotationsChange={p().onAnnotationsChange}
+      onDraftingChange={p().onDraftingChange}
     />;
     const mounted = () => (options.trusted ? <TrustedUi overlay>{ui()}</TrustedUi> : ui());
     return options.wrap ? options.wrap(mounted) : mounted();

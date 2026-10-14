@@ -5,6 +5,8 @@ import {loadWorkspace} from '../workspace';
 import {LOCAL_WORKSPACE_SCOPE,localWorkspaceState,migrateLocalDiscussion,recoverLocalFiles,saveLocalFile,identifiedLocalBody,identifyLocalDocument,needsNodeIds} from '../local-workspace';
 import {workspaceStateEnv} from '../config';
 import {localHistory,localHistoryHead} from '../local-history';
+import {mergeSource} from '../reconcile';
+import {PROBLEM_PAGE_POLICY,previewProblemPage} from './problem-page';
 /** File-backed sessions: scope, revision-checked saves, SQL inputs and local comments. No publication. */
 import {previewGraph} from './graph';
 import {createPreviewEditor} from './editor';
@@ -68,11 +70,11 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   const rendered=doc.body;
 
   const refData:RefDataMap={};
-  const parsed=parseJsx(rendered);if(!parsed.ok)throw new Refusal(400,'Invalid JSX');
+  const parsed=parseJsx(rendered);if(!parsed.ok)throw new Refusal(400,`Invalid JSX: ${parsed.error}`);
   const checked=validateMarkupStructure(rendered);if(checked.errors.length)throw new Refusal(400,checked.errors.map(error=>error.message).join('\n'));
   for(const ref of collectRefUses(doc.body)??[])if(ref.kind==='image'||ref.kind==='file')refData[ref.id]={kind:ref.kind,url:'/remote/'+ref.id};
   if(override&&(collectRefUses(doc.body)??[]).some(ref=>!remoteIds.has(ref.id)))throw new Refusal(403,'Restart preview to include this reference.');
-  const authored=parseJsx(doc.body);if(!authored.ok)throw new Refusal(400,'Invalid JSX');
+  const authored=parseJsx(doc.body);if(!authored.ok)throw new Refusal(400,`Invalid JSX: ${authored.error}`);
   const split=splitHelmet(parsed.nodes),declared=dataflowOf(split.content);
   const revision=digest(source);
   const flow=await compiledFor(file,revision,declared);
@@ -107,10 +109,21 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(options.capture&&Object.keys(result.errors).length)failure=Object.values(result.errors).join("; ");
   return result;
  };
+ /**
+  * A save made from an older revision carries only the changes its tab made: those merge onto the file as it is now
+  * (another tab's save, an agent's write), the way hosted edits to different nodes coexist. Changes to the same
+  * part are refused, the file kept as it is, and the browser keeps its draft. The base is the version the tab
+  * loaded, from local history (every revision `/document` served is recorded there).
+  */
  const save=async(file:string,revision:string,source:string,metadata?:DocumentMetadata)=>{
     const current=await read(file);
-    if(revision!==current.revision)throw new Refusal(409,'File changed; draft retained');
     if(typeof source!=='string'||!parseJsx(source).ok)throw new Refusal(400,'Invalid JSX');
+    if(revision!==current.revision){
+     const base=typeof revision==='string'?(await localHistory(root,file)).find(entry=>entry.revision===revision):undefined;
+     const merged=base?mergeSource(base.body,source,current.body):null;
+     if(merged===null)throw new Refusal(409,base?`Another change edited the same part of ${file}; your draft is kept.`:'File changed; draft retained');
+     source=merged;
+    }
     // Preserve durable node anchors and the remote baseline; never accept metadata from browser saves.
     const body=identifiedLocalBody(comments,file,source,current.body)??source;
     const bytes=Buffer.from(writeDocument({metadata:metadata??current.metadata,body}));
@@ -139,6 +152,8 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   for(const id of refs)remoteIds.add(id);
   preparedCache.delete(path);compiledCache.delete(path);
  };
+ /** The last revision `/document` recorded in local history, per file. */
+ const served=new Map<string,string>();
  let url='';
  const server=createServer((req,res)=>{void (async()=>{
   const target=new URL(req.url??'/',url);
@@ -173,7 +188,13 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   const workspaceFile=target.pathname.startsWith('/workspace/')?decodeURIComponent(target.pathname.slice('/workspace/'.length)):null;
   const file=workspaceFile??target.searchParams.get('file')??options.files[0]!;
   if(req.method==='GET'&&target.pathname==='/'){res.writeHead(302,{Location:'/workspace/'+file.split('/').map(encodeURIComponent).join('/')+(options.capture?'?capture=1':'')});return res.end();}
-  if(req.method==='GET'&&target.pathname==='/document'){const {flow:_flow,declared:_declared,...document}=await read(file);return json(document);}
+  if(req.method==='GET'&&target.pathname==='/document'){
+   const {flow:_flow,declared:_declared,...document}=await read(file);
+   // The revision a tab edits from becomes a local version once, so its save can merge onto a later one. Recording
+   // never stands between a reader and the file: unrecorded, a stale save is refused (409), never misapplied.
+   if(!options.capture&&served.get(file)!==document.revision)await localHistoryHead(root,file).then(()=>{served.set(file,document.revision);},()=>{});
+   return json(document);
+  }
   if(req.method==='GET'&&target.pathname==='/comments'){await pathFor(file);return json(comments.list<PreviewComment>(LOCAL_WORKSPACE_SCOPE,'preview-comment').map(row=>row.value).filter(comment=>comment.file===file));}
   if(req.method==='GET'&&(target.pathname==='/resource'||workspaceFile&&resources.has(file))){if(!resources.has(file))throw new Refusal(403,'Resource not selected');res.setHeader('Content-Type',fileContentType(file)??'application/octet-stream');return res.end(await readFile(await confinedPath(root,join(root,file))));}
   if(req.method==='GET'&&/^\/a\/[A-Za-z0-9]{6,12}$/.test(target.pathname)){
@@ -302,7 +323,18 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    res.setHeader('Content-Type',extension==='css'?'text/css':'text/javascript');return res.end(await readFile(path));
   }
   throw new Refusal(404,'Not found');
- })().catch(error=>{if(options.capture&&req.url!=='/favicon.ico')failure=String(error.message);res.statusCode=error instanceof Refusal||error instanceof BackendRequestError?error.status:error instanceof CliError?(error.code==='import_conflict'?409:400):500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:String(error.message),...(error instanceof CliError&&error.fix?{fix:error.fix}:{})}));});});
+ })().catch(error=>{
+  if(options.capture&&req.url!=='/favicon.ico')failure=String(error.message);
+  res.statusCode=error instanceof Refusal||error instanceof BackendRequestError?error.status:error instanceof CliError?(error.code==='import_conflict'?409:400):500;
+  // A document page someone opened reads as a page; every data door stays JSON.
+  const page=req.method==='GET'?new URL(req.url??'/','http://preview').pathname:'';
+  if(page.startsWith('/workspace/')&&!res.headersSent){
+   res.setHeader('Content-Type','text/html; charset=utf-8');res.setHeader('Content-Security-Policy',PROBLEM_PAGE_POLICY);
+   const named=page.slice('/workspace/'.length);let file=named;try{file=decodeURIComponent(named);}catch{/* the raw path still names it */}
+   return res.end(previewProblemPage(file,String(error.message)));
+  }
+  res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:String(error.message),...(error instanceof CliError&&error.fix?{fix:error.fix}:{})}));
+ });});
  try{await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(options.port??0,options.share?'0.0.0.0':'127.0.0.1',resolve);});}catch(error){comments.close();throw startupPortFailure(error,options.port??0);}
  const address=server.address();if(!address||typeof address==='string')throw Error('No port');url=`http://127.0.0.1:${address.port}`;
  return {url,document:read,failure:()=>failure,close:async()=>{await queue;server.closeAllConnections();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));comments.close();}};

@@ -76,6 +76,11 @@ export interface AnnotationLayerProps {
   onRailOpenChange: (open: boolean) => void;
   /** The latest full open list from the live stream; null until the first frame. Replaces the read wholesale. */
   liveAnnotations?: AnnotationWire[] | null;
+  /**
+   * Whether this viewer holds something unsent: an open composer, or words typed into a reply. A page that would
+   * reload itself (the local preview following its file) waits while this is true.
+   */
+  onDraftingChange?: (drafting: boolean) => void;
   /** Every change to the list this layer holds — creates, replies, resolves — so the page's count follows it. */
   onAnnotationsChange?: (annotations: AnnotationWire[]) => void;
   /** Changes whenever the document's membership does (the live `_members` event); mention statuses read again. */
@@ -189,6 +194,14 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     if (value) next[id] = value; else delete next[id];
     return next;
   });
+  /** Rail threads whose reply box holds words (each thread owns its own reply draft). */
+  const [threadReplies, setThreadReplies] = createSignal<ReadonlySet<string>>(new Set());
+  const noteThreadReply = (id: string, typed: boolean) => setThreadReplies((current) => {
+    if (current.has(id) === typed) return current;
+    const next = new Set(current);
+    if (typed) next.add(id); else next.delete(id);
+    return next;
+  });
   const closePreview = () => batch(() => { setPinnedId(null); hoverUi(null); });
   const [viewStateRequest, setViewStateRequest] = createSignal(0);
   const [viewStateError, setViewStateError] = createSignal<{ id: string; message: string } | null>(null);
@@ -207,6 +220,9 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const phoneRail = createIsPhoneViewport();
   const [draft, setDraft] = createSignal('');
   const replaceDraft = setDraft;
+  const drafting = createMemo(() => selection() !== null || hasReplyText(draft())
+    || Object.values(replyDrafts()).some(hasReplyText) || threadReplies().size > 0);
+  createEffect(on(drafting, (value) => props.onDraftingChange?.(value)));
   /** Reading the draft as it will be read — a view of the same text, not a mode. */
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal<string | null>(null);
@@ -852,6 +868,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
   const threadHandlers = (id: string, resolved: boolean) => ({
     onHover: hoverUi,
+    onReplyDraftChange: (typed: boolean) => noteThreadReply(id, typed),
     onDelete: (commentId: string) => askDelete(commentId, commentId === id),
     onEdit: (commentId: string, body: string) => editComment(id, commentId, body),
     onToggleFold: () => toggle('threads', id),

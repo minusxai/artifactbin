@@ -27,6 +27,8 @@ export function createPreviewBackend(file:string,onSaved:(document:PreviewDocume
   live:()=>()=>{},liveFrame:async()=>null,
   queryTransport:()=>({run:(values,only)=>request('/query',{values,only}),page:async(values,name,page)=>(await request('/query',{values,only:[name],page:{name,...page}})).tables[name],dispose:()=>{}}),
   listAnnotations:(status,options)=>editor('annotations.list',{status},options?.signal),
+  // Every comment here lives in this workspace's own state, so its author may remove any of them.
+  canDeleteLocalAnnotation:()=>true,
   createAnnotation:(input,key)=>editor('annotations.create',{input,key}),
   actOnAnnotation:(id,input)=>editor('annotations.act',{id,input}),deleteAnnotation:id=>editor('annotations.delete',{id}),
   editAnnotation:(id,input)=>editor('annotations.edit',{id,input}),canEditLocalComment:comment=>comment.author.kind==='human'&&comment.author.label===LOCAL_AUTHOR_LABEL,
