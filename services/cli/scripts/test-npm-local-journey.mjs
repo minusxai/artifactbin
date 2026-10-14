@@ -38,10 +38,11 @@ for(const name of ['execFile','execFileSync','spawn','spawnSync','exec','execSyn
 syncBuiltinESMExports();
 `;
 async function windowsPrivateState(cwd,home,args){
+ // NODE_OPTIONS reads backslashes as escapes, so the preload is named with forward slashes.
  const directory=await mkdtemp(join(tmpdir(),'afbin-spawns-')),counter=join(directory,'count.cjs');await writeFile(counter,SPAWN_COUNTER);
  const run=async(label,args)=>{
   const log=join(directory,`${label}.log`),started=performance.now();
-  const output=JSON.parse(await command(cwd,home,args,180000,{NODE_OPTIONS:`--require "${counter}"`,AFBIN_SPAWN_LOG:log}));
+  const output=JSON.parse(await command(cwd,home,args,180000,{NODE_OPTIONS:`--require "${counter.replaceAll('\\','/')}"`,AFBIN_SPAWN_LOG:log}));
   return {output,ms:Math.round(performance.now()-started),powershell:(await readFile(log,'utf8').catch(()=>'')).split('\n').filter(Boolean).length};
  };
  // The same command again: it walks the same private directories, now warm, and keeps the same ids.
