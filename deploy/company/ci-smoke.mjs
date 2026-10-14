@@ -33,9 +33,9 @@ function run(directory,program,args,{capture=false,timeout=180_000}={}){
  return execFileSync(program,args,{cwd:directory,env:commandEnv(directory),stdio:capture?['ignore','pipe','inherit']:'inherit',encoding:'utf8',timeout,maxBuffer:8*1024*1024});
 }
 /** The same command without blocking this process, so independent phases overlap. */
-function runAsync(directory,program,args,{timeout=180_000}={}){
+function runAsync(directory,program,args,{timeout=180_000,env:extra={}}={}){
  return new Promise((done,fail)=>{
-  const child=spawn(program,args,{cwd:directory,env:commandEnv(directory),stdio:['ignore','inherit','inherit']});
+  const child=spawn(program,args,{cwd:directory,env:{...commandEnv(directory),...extra},stdio:['ignore','inherit','inherit']});
   const timer=setTimeout(()=>child.kill('SIGKILL'),timeout);
   child.on('error',error=>{clearTimeout(timer);fail(error);});
   child.on('exit',(code,signal)=>{clearTimeout(timer);code===0?done():fail(Error(`${[program,...args].join(' ')} exited with ${signal??code}`));});
@@ -108,7 +108,9 @@ const marker='company-container-persistence';
 function databaseMarker(directory){return compose(directory,['exec','-T','postgres','psql','-U','artifactbin','-d','artifactbin','-Atc','SELECT value FROM hosting_acceptance.marker'],{capture:true}).trim();}
 function artifactMarker(directory){return compose(directory,['exec','-T','app','node','-e',"process.stdout.write(require('node:fs').readFileSync('/data/data/hosting-acceptance.txt','utf8'))"],{capture:true}).trim();}
 async function pinnedCaddy(){
- await composeAsync(first,['build','caddy'],{timeout:300_000});
+ // Compose builds through Bake, which refuses a cache directory outside the project unless file-system
+ // entitlements are granted; this CI-owned definition reads and writes only the named cache directory.
+ await composeAsync(first,['build','caddy'],{timeout:300_000,env:cacheBackend?{BUILDX_BAKE_ENTITLEMENTS_FS:'0'}:{}});
  const modules=compose(first,['run','-T','--rm','--no-deps','caddy','list-modules'],{capture:true});assert.match(modules,/dns.providers.route53/);
  const caddyVersion=compose(first,['run','-T','--rm','--no-deps','caddy','version'],{capture:true});assert.match(caddyVersion,/^v2\.11\.7\b/);
 }
