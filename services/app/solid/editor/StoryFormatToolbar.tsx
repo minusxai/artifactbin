@@ -13,10 +13,10 @@
 import { createEffect, createSignal, createUniqueId, For, on, Show, type JSX } from 'solid-js';
 import AArrowDown from 'lucide-solid/icons/a-arrow-down';
 import AArrowUp from 'lucide-solid/icons/a-arrow-up';
-import AlignCenter from 'lucide-solid/icons/align-center';
-import AlignJustify from 'lucide-solid/icons/align-justify';
-import AlignLeft from 'lucide-solid/icons/align-left';
-import AlignRight from 'lucide-solid/icons/align-right';
+import AlignCenter from 'lucide-solid/icons/text-align-center';
+import AlignJustify from 'lucide-solid/icons/text-align-justify';
+import AlignLeft from 'lucide-solid/icons/text-align-start';
+import AlignRight from 'lucide-solid/icons/text-align-end';
 import ArrowDownFromLine from 'lucide-solid/icons/arrow-down-from-line';
 import ArrowDownToLine from 'lucide-solid/icons/arrow-down-to-line';
 import ArrowLeftFromLine from 'lucide-solid/icons/arrow-left-from-line';

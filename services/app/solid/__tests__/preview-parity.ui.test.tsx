@@ -2,7 +2,8 @@
 /**
  * The local preview behaves like the hosted document page for comments and concurrent edits: the selection bubble
  * is granted and its comment opens the composer on the picked words; following the file waits for unsent drafts;
- * an overlapping save keeps the draft and offers its ways out; every local comment can be deleted.
+ * an overlapping save keeps the draft and offers its ways out; every local comment can be deleted; and, while
+ * editing, the format toolbar's Comment (or ⌘⌥M) opens the composer on what the editor has selected.
  */
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {fireEvent,waitFor} from '@testing-library/dom';
@@ -15,10 +16,13 @@ import type {PreviewDocument} from '../../../cli/src/preview/types';
 import {STORY_ROOT_ID} from '@/lib/story-runtime/contract';
 import {createPreviewBackend} from '../../../cli/src/preview/backend';
 
-const edit=vi.hoisted(()=>({options:null as InPlaceEditOptions|null,commit:vi.fn(),select:vi.fn()}));
+const edit=vi.hoisted(()=>({options:null as InPlaceEditOptions|null,commit:vi.fn(),select:vi.fn(),setSelection:(_:StoryEditSelection|null)=>{}}));
 const layer=vi.hoisted(()=>({props:null as AnnotationLayerProps|null}));
 const runtime=vi.hoisted(()=>({sent:[] as Array<Record<string,unknown>>,listeners:new Set<(data:unknown)=>void>()}));
-vi.mock('@/solid/editor/create-in-place-edit',()=>({createInPlaceEdit:(options:InPlaceEditOptions)=>{edit.options=options;return {commitPending:edit.commit,ready:()=>true,select:edit.select};}}));
+vi.mock('@/solid/editor/create-in-place-edit',async()=>{const {createSignal}=await import('solid-js');return {createInPlaceEdit:(options:InPlaceEditOptions)=>{
+ const [selection,setSelection]=createSignal<StoryEditSelection|null>(null);edit.options=options;edit.setSelection=setSelection;
+ return {commitPending:edit.commit,ready:()=>true,select:edit.select,selection,applyFormat:vi.fn(),applyLink:vi.fn(),applyInline:vi.fn(),applyMarkdownBlock:vi.fn(),applyMarkdownTable:vi.fn()};
+}};});
 vi.mock('@/solid/document/AnnotationLayer',()=>({AnnotationLayer:(props:AnnotationLayerProps)=>{layer.props=props;return null;}}));
 vi.mock('../../../cli/src/preview/edit-controller',()=>({createPreviewEditController:()=>({
  nonce:'test-session',selectionReady(){},dispose(){},update(){},invalidate(){},getViewportRect:()=>new DOMRect(0,0,800,600),
@@ -109,6 +113,45 @@ it('discarding an overlapping draft shows the newer file without a leave prompt'
  expect(reload).toHaveBeenCalledOnce();
  const leave=new Event('beforeunload',{cancelable:true});window.dispatchEvent(leave);
  expect(leave.defaultPrevented).toBe(false);
+});
+
+it('comments from edit mode on what the editor selected, from the toolbar or ⌘⌥M, leaving the unsaved draft alone',async()=>{
+ await mount();
+ fireEvent.click(screen.getByRole('button',{name:'Edit'}));
+ // An unsaved edit to the very node the comment lands on: commenting neither flushes nor saves it, as hosted.
+ edit.options!.onSourceEdited('<p id="words">Mine</p>',false);
+ edit.setSelection(SELECTION);
+ fireEvent.click(await screen.findByRole('button',{name:'Comment on selection'}));
+ expect(layer.props!.initialSelection).toEqual(SELECTION);
+ layer.props!.onSelectionConsumed!();
+ expect(layer.props!.initialSelection).toBeNull();
+ fireEvent.keyDown(window,{key:'m',code:'KeyM',altKey:true,metaKey:true});
+ expect(layer.props!.initialSelection).toEqual(SELECTION);
+ layer.props!.onSelectionConsumed!();
+ edit.options!.onCommentKey!();
+ expect(layer.props!.initialSelection).toEqual(SELECTION);
+ expect(edit.commit).not.toHaveBeenCalled();
+ expect(saves()).toHaveLength(0);
+ expect(screen.getByRole('status').textContent).toBe('Unsaved');
+ // Nothing selected: the shortcut has nothing to comment on.
+ layer.props!.onSelectionConsumed!();edit.setSelection(null);
+ fireEvent.keyDown(window,{key:'m',code:'KeyM',altKey:true,metaKey:true});
+ expect(layer.props!.initialSelection).toBeNull();
+});
+
+it('the edit toolbar\'s delete removes the selected block from the draft',async()=>{
+ fetch_.mockImplementation(async(path:string,init?:RequestInit)=>path==='/save'?json({...initial,body:JSON.parse(String(init!.body)).body,revision:'saved'}):json({}));
+ await mount();
+ fireEvent.click(screen.getByRole('button',{name:'Edit'}));
+ // A document keeps at least one block, so the draft has a second one.
+ edit.options!.onSourceEdited('<p id="words">Initial</p><p id="more">More</p>',false);
+ edit.setSelection(SELECTION);
+ fireEvent.click(await screen.findByRole('button',{name:'Delete element'}));
+ expect(edit.select).toHaveBeenCalledWith(null);
+ fireEvent.click(screen.getByRole('button',{name:'Done editing'}));
+ await waitFor(()=>expect(saves()).toHaveLength(1));
+ expect(saves()[0]!.body).not.toContain('words');
+ expect(saves()[0]!.body).toContain('id="more"');
 });
 
 it('lets the local author delete any local comment',()=>{
