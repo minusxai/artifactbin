@@ -18,7 +18,8 @@ async function fixture(){
  const remote=new Map<string,any>(),receipts=new Map<string,any>(),calls:Array<{path:string;body:any;method:string}>=[];let lost=false,race=false;
  const request:typeof fetch=async(input,init)=>{
   const path=new URL(String(input)).pathname,method=init?.method??'GET',body=JSON.parse(String(init?.body??'{}'));calls.push({path,method,body});const headers={'X-Artifactbin-Account':'usr_one'};
-  if(method==='GET'&&path.endsWith('/annotations'))return Response.json({annotations:[...remote.values()],next_cursor:null},{headers});
+  // The real list door's page bound: a reader asking for more is refused, as the server refuses it.
+  if(method==='GET'&&path.endsWith('/annotations')){const limit=Number(new URL(String(input)).searchParams.get('limit')??100);if(!Number.isInteger(limit)||limit<1||limit>100)return Response.json({error:'invalid_limit'},{status:400,headers});return Response.json({annotations:[...remote.values()],next_cursor:null},{headers});}
   if(method==='GET')return Response.json({id:'rem001',capabilities:{comment:true,comment_receipts:true}},{headers});
   const key=new Headers(init?.headers).get('Idempotency-Key');assert.ok(key);if(receipts.has(key))return Response.json(receipts.get(key),{headers});
   let value:any;

@@ -102,7 +102,7 @@ export async function publishLocalComments(workspace:Workspace,stage:Workspace,p
 async function readThread(client:HttpClient,artifact:string,id:string):Promise<AnnotationWire>{
  let cursor:string|undefined;const seen=new Set<string>();
  do{
-  const page=await client.request<{annotations:AnnotationWire[];next_cursor:string|null}>(`/artifacts/${artifact}/annotations?status=all&limit=200${cursor?'&cursor='+encodeURIComponent(cursor):''}`);
+  const page=await client.request<{annotations:AnnotationWire[];next_cursor:string|null}>(`/artifacts/${artifact}/annotations?status=all&limit=100${cursor?'&cursor='+encodeURIComponent(cursor):''}`);
   const thread=page.annotations.find(value=>value.id===id);if(thread)return thread;
   cursor=page.next_cursor??undefined;if(cursor&&seen.has(cursor))throw new CliError('invalid_response','The comment listing repeated its cursor.');if(cursor)seen.add(cursor);
  }while(cursor);
