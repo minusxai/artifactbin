@@ -18,7 +18,17 @@ describe('release critical path',()=>{
  });
  it('starts ID-first conformance from the packed candidate instead of waiting on unrelated native proofs',()=>{
   const job=workflow().jobs['reference-compatibility'];
-  expect(job.needs).toContain('cli-pack');
+  // Prepares beside cli-pack and waits for exactly this attempt's two artifacts through the shared waiter.
+  expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
+  const wait=job.steps.findIndex(step=>step.name==="Wait for this attempt's packed candidate and source build");
+  for(const name of ['afbin-npm-release','afbin-reference-build']){
+   expect(job.steps[wait].run).toContain(`ci-artifact-wait.mjs --wait-only "\${{ github.repository }}" "\${{ github.run_id }}" "\${{ github.run_attempt }}" ${name}`);
+   expect(job.steps.findIndex(step=>step.with?.name===name)).toBeGreaterThan(wait);
+  }
+  expect(job.steps[wait].env.GH_TOKEN).toBe('${{ github.token }}');
+  expect(job.steps.findIndex(step=>step.name==='Prepare standalone sandbox worker')).toBeLessThan(wait);
+  const pack=workflow().jobs['cli-pack'].steps,reference=pack.findIndex(step=>step.with?.name==='afbin-reference-build');
+  expect(reference).toBeLessThan(pack.findIndex(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')));
   expect(job.needs).not.toContain('cli');
   expect(job.steps.some(step=>step.with?.name==='afbin-npm-release')).toBe(true);
  });

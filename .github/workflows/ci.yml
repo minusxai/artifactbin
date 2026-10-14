@@ -1008,6 +1008,22 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 7
+      # Source-vs-installed proof needs both locations, not another compilation of the same tree. Before the seed
+      # transfers: the reference proofs wait for it (scripts/lib/ci-artifact-wait.mjs), not for this whole job.
+      - name: Archive the source build for reference conformance
+        if: needs.plan.outputs.reference-compatibility == 'true'
+        run: |
+          tar --exclude='services/cli/dist/packages' -cf afbin-reference-build.tar \
+            services/cli/dist services/app/dist services/app/lib/build-assets \
+            services/app/public/islands services/app/public/libraries services/app/server/routes.generated.ts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: needs.plan.outputs.reference-compatibility == 'true'
+        with:
+          name: afbin-reference-build
+          path: afbin-reference-build.tar
+          if-no-files-found: error
+          retention-days: 1
+
       - if: needs.plan.outputs.cli == 'true' && steps.npm-seeds.outputs.cache-hit != 'true'
         run: node services/cli/scripts/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -1050,21 +1066,6 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 1
-      # Source-vs-installed proof needs both locations, not another compilation of the same tree.
-      - name: Archive the source build for reference conformance
-        if: needs.plan.outputs.reference-compatibility == 'true'
-        run: |
-          tar --exclude='services/cli/dist/packages' -cf afbin-reference-build.tar \
-            services/cli/dist services/app/dist services/app/lib/build-assets \
-            services/app/public/islands services/app/public/libraries services/app/server/routes.generated.ts
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: needs.plan.outputs.reference-compatibility == 'true'
-        with:
-          name: afbin-reference-build
-          path: afbin-reference-build.tar
-          if-no-files-found: error
-          retention-days: 1
-
   # The actual packaged serve runtime, Linux browser dependencies and both storage halves.
   # NOT `needs: cli-pack`: everything the tarball does not decide (the deployment directory, the pinned Caddy and
   # SMTP fixture images, PostgreSQL) prepares while cli-pack packs, and the exact tarball arrives through the
@@ -1322,12 +1323,17 @@ jobs:
           retention-days: 7
 
   # Reference conformance checks the source bundle and the exact tested installed npm package.
+  # NOT `needs: cli-pack`: install, browser and sandbox preparation run while cli-pack packs; the same current-attempt
+  # waiter as the CLI matrix holds the downloads until this run's candidate and source build exist.
   reference-compatibility:
-    needs: [ plan, cli-pack ]
+    needs: [ plan ]
     if: needs.plan.outputs.reference-compatibility == 'true'
     name: CLI distributions against ID-first host (${{ matrix.proof }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     # Distinct identity and database hosts share the same current-run build, not CPUs.
     strategy:
       fail-fast: false
@@ -1366,6 +1372,26 @@ jobs:
             ~/.cache/ms-playwright/chromium_headless_shell-*
             ~/.cache/ms-playwright/ffmpeg-*
           key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      # This runner policy already supplies Chromium libraries, as for Chromium-only gates.
+      # Keep binary installation on cache misses; avoid an unrelated apt update/upgrade.
+      - run: npx playwright install chromium
+        working-directory: .
+      - name: Prepare standalone sandbox worker
+        if: matrix.proof == 'team'
+        run: |
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo mkdir -p /sys/fs/cgroup/afbin-sessions
+          echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
+          sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
+          sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
+          docker pull -q postgres:17-alpine
+      - name: Wait for this attempt's packed candidate and source build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" afbin-npm-release
+          node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" afbin-reference-build
       # The current run's pack job built these source entrypoints and their app assets together.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -1383,10 +1409,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/afbin-packages" "$RUNNER_TEMP/afbin-consumer"
           cp "$GITHUB_WORKSPACE"/npm-candidate/*.tgz "$RUNNER_TEMP/afbin-packages/"
           npm install --prefix "$RUNNER_TEMP/afbin-consumer" --no-audit "$RUNNER_TEMP"/afbin-packages/*.tgz
-      # This runner policy already supplies Chromium libraries, as for Chromium-only gates.
-      # Keep binary installation on cache misses; avoid an unrelated apt update/upgrade.
-      - run: npx playwright install chromium
-        working-directory: .
       # CLI host build already compiled the app; bundle only the gate server now.
       - name: Build OSS host
         if: matrix.proof != 'team'
@@ -1406,15 +1428,6 @@ jobs:
           fi
           CONFORMANCE__CLI="$cli" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace
 
-      - name: Prepare standalone sandbox worker
-        if: matrix.proof == 'team'
-        run: |
-          sudo apt-get install -y bubblewrap
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          sudo mkdir -p /sys/fs/cgroup/afbin-sessions
-          echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
-          sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
-          sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
       - name: Team hosts with isolated PGLite and PostgreSQL
         if: matrix.proof == 'team'
         working-directory: services/cli
