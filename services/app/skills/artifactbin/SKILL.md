@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-Publish editable `.jsx`: YAML metadata fence, self-contained HTML and kit JSX, Tailwind `className`. Datasets/media. Local/offline editing needs no remote API.
+[% if transport == "http" %]Publish self-contained HTML and kit JSX in JSON `markup` (create) or `source` (prepare). Metadata belongs in JSON request fields.[% else %]Publish editable `.jsx`: YAML metadata fence, self-contained HTML and kit JSX.[% endif %] Tailwind `className`. Datasets/media. Local/offline editing needs no remote API.
 
 [% include workflows.introduction %]
 
