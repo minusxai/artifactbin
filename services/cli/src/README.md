@@ -46,6 +46,7 @@ One row per command `dispatch.ts` routes. Handler modules are listed in the orde
 | `setup` | `setup.ts`, `skill-install.ts`, `global-install.ts` | skills, the global `afbin`, `--service` |
 | `status` | `local.ts`, `comparison.ts`, `account-workspace.ts` | `localStatus`, `remoteStatus` |
 | `testuser` | `testuser.ts` | `testUserCommand` |
+| `uninstall` | `uninstall.ts` | skills, the global `afbin`, `--purge` |
 | `update` | `update.ts`, `update-progress.ts`, `skill-install.ts` | `updateCli` |
 | `upload` | `upload.ts` | `uploadAttachment` |
 | `validate` | `validation.ts`, `sync.ts`, `account-workspace.ts` | local `validateFiles`; `--remote` a dry-run push |
@@ -103,6 +104,7 @@ What `dispatch.ts` calls to do a command's work.
 | `skill-install.ts` | Install and report the agent skills. |
 | `global-install.ts` | The `afbin` command on PATH through npm. |
 | `update.ts` | `afbin update`. |
+| `uninstall.ts` | `afbin uninstall`. |
 | `update-progress.ts` | The terminal view of a foreground update. |
 | `auto-update.ts` | Observe releases during a command; install after it commits. |
 | `chromium.ts` | Prepare the browser outside render deadlines. |

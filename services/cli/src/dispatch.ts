@@ -31,6 +31,7 @@ import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
 import {progressRenderer} from './update-progress';
 import {setupSkills,setupSummary,setupService,setupGlobal,globalSummary,manualInstallHint} from './setup';
+import {confirmUninstall,uninstall,uninstallPaths} from './uninstall';
 import type {InstallKind,NpmRunner} from './global-install';
 import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
 import {installSkills,planSkills,restartHints,selectSkills,skillsDisabled,type SkillChoice,type SkillHarness,skillStatus} from './skill-install';
@@ -66,7 +67,7 @@ import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {signal?:AbortSignal;/** Executable entry; defaults to the running CLI. */entry?:string;/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {signal?:AbortSignal;/** Executable entry; defaults to the running CLI. */entry?:string;/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;/** Answers uninstall's terminal question; tests inject one. */confirm?:(question:string)=>Promise<boolean>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
  const update=automaticUpdate({home:context.home??homedir(),env:context.env,entry:context.entry,npm:context.npm,stderr:context.stderr??(value=>process.stderr.write(value))});
  const code=await dispatchCli(argv,context,update.observe);
@@ -115,6 +116,18 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
     return 0;
    }
    throw new CliError('invalid_arguments','Use afbin config get <key> or afbin config set <key> <value>.');
+  }
+  // Uninstall runs before eager init, which would otherwise reinstall the skills it is about to remove.
+  if(command==='uninstall'&&!flags.help){
+   const env=context.env??process.env,paths=await uninstallPaths(home,env,!!flags.purge);
+   if(!flags.yes){
+    if(json||!interactive)throw new CliError('confirmation_required','afbin uninstall deletes files.','Run afbin uninstall --yes.');
+    stdout(`Removes:\n${[...paths,'npm package @afbin/cli'].map(path=>`  ${path}\n`).join('')}`);
+    if(!await(context.confirm??confirmUninstall)('Continue? [y/N] '))return 1;
+   }
+   const result=await uninstall(paths,{env,...(context.npm?{npm:context.npm}:{})});
+   if(json)emit(result);else stdout(`${result.removed.map(path=>`Removed ${path}\n`).join('')}${result.npm==='removed'?'Removed npm package @afbin/cli\n':`Could not remove @afbin/cli: ${result.reason}\nRun npm uninstall -g @afbin/cli yourself.\n`}`);
+   return result.npm==='removed'?0:1;
   }
   // The skill and the help text must name the server THIS afbin talks to. Eager
   // init and help both run before the workspace is read, so they use what is
