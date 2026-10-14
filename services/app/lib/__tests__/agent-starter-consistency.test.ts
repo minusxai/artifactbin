@@ -81,7 +81,7 @@ describe('every agent-facing starter says the same thing', () => {
   });
 
   it('(b) links HTTP auth on refusal and offers CLI setup on the relevant surfaces', async () => {
-    for (const [name, text] of await surfaces()) expect(text, name).toContain(name==='the 401 hint' ? `${BASE}/llms/http-auth` : name==='skills/artifactbin/SKILL.md' ? 'references/npm-local.md' : name==='skills/artifactbin/llms.txt' ? `${BASE}/getting-started` : linkedInstaller(name) ? `${BASE}/llms.txt` : INSTALLER);
+    for (const [name, text] of await surfaces()) expect(text, name).toContain(name==='the 401 hint' ? `${BASE}/llms/http-auth` : name==='skills/artifactbin/SKILL.md' ? 'references/npm-local.md' : name==='skills/artifactbin/llms.txt' ? '/skills/artifactbin.zip' : linkedInstaller(name) ? `${BASE}/llms.txt` : INSTALLER);
     expect(JSON.stringify(gettingStarted(BASE))).toContain(INSTALLER);
   });
 
@@ -237,7 +237,7 @@ describe('llms.txt and the discovery head', () => {
     expect(help.url).toBe(`${BASE}/llms.txt`);
     expect(help.cliInstruction).toContain('npx --yes @afbin/cli@latest setup');
     expect(help.cliInstruction).toContain('--server');
-    expect(help.instruction).toContain('Read /llms.txt for all details.');
+    expect(help.instruction).toContain('Read /llms.txt for all details. Or download all skills at /skills/artifactbin.zip.');
     expect(help.instruction).toContain('Use the HTTP API');
     // Product blurb and shared root are separate; discovery need not repeat the blurb.
     expect(help.instruction).not.toContain(agentBlurb());
@@ -245,7 +245,7 @@ describe('llms.txt and the discovery head', () => {
 
   it('the guide teaches npm CLI and email HTTP without retired installation or token doors', () => {
     const text = llmsText(BASE);
-    for (const line of [`${BASE}/getting-started`, 'POST /api/artifacts', 'expectedVersion', `${BASE}/llms/http-api`, 'skill']) expect(text,line).toContain(line);
+    for (const line of ['/skills/artifactbin.zip', 'POST /api/artifacts', 'expectedVersion', `${BASE}/llms/http-api`, 'skill']) expect(text,line).toContain(line);
     expect(text).not.toContain('[[');
     const guide = JSON.stringify(gettingStarted(BASE));
     expect(guide).toContain(afbinInstallCommand(BASE));

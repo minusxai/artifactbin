@@ -128,3 +128,19 @@ it('teaches direct HTTP monitoring with baseline, cursor progression and bounded
  expect(text).toContain('immediately');
  expect(text).toContain('timeout longer');
 });
+
+it('offers the complete Markdown skill archive from the HTTP root',()=>{
+ const origin='https://guides.example';
+ expect(llmsText(origin)).not.toContain('Optional [setup]');
+ expect(llmsText(origin)).toContain('An installed afbin CLI has its own skill; npx downloads the CLI.');
+ expect(llmsText(origin)).toContain('[Download all skill guides](/skills/artifactbin.zip) to extract and search locally');
+});
+it('keeps credential recovery references consistent with direct HTTP authentication',()=>{
+ const origin='https://guides.example';
+ for(const name of ['publishing-auth','groups','errors']){
+  const text=publicGuideText(name,origin)!;
+  for(const obsolete of ['same credentials and helper','common helper','helper returns the actual backing path','shared helper for every request','shared credential helper'])expect(text).not.toContain(obsolete);
+  expect(text).toContain('/llms/http-auth');
+ }
+ expect(publicGuideText('publishing-auth',origin)).toContain(credentialPaths(origin,'~/.artifactbin').backingPath);
+});
