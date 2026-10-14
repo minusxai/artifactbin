@@ -2,14 +2,14 @@ import {PREVIEW_CONNECT_PATH,PREVIEW_CONNECT_INSPECT_PATH,PREVIEW_CONNECT_IMPORT
 import {previewPublicOrigin} from '../preview-options';
 import {inspectPreviewOffer,importPreviewOffer,previewConnectPage} from './connect-import';
 import {loadWorkspace} from '../workspace';
-import {LOCAL_WORKSPACE_SCOPE,localWorkspaceState,migrateLocalDiscussion,recoverLocalFiles,saveLocalFile} from '../local-workspace';
+import {LOCAL_WORKSPACE_SCOPE,localWorkspaceState,migrateLocalDiscussion,recoverLocalFiles,saveLocalFile,identifiedLocalBody,identifyLocalDocument,needsNodeIds} from '../local-workspace';
 import {workspaceStateEnv} from '../config';
 import {localHistory,localHistoryHead} from '../local-history';
 /** File-backed sessions: scope, revision-checked saves, SQL inputs and local comments. No publication. */
 import {previewGraph} from './graph';
 import {createPreviewEditor} from './editor';
 import {previewAnnotations} from './annotations';
-import {BackendRequestError,type RefDataMap,imageReferenceId,fileContentType,validateMarkupStructure,STORY_DESIGN_NAMES,type StoryDesignName,collectRefUses,parseJsx,splitHelmet,stampNodeIds,nodeIndex,parseAnnotationRange,validateQueryValues,dataflowOf,type CompiledDataflow} from '../../../app/lib/cli-toolkit';
+import {BackendRequestError,type RefDataMap,imageReferenceId,fileContentType,validateMarkupStructure,STORY_DESIGN_NAMES,type StoryDesignName,collectRefUses,parseJsx,splitHelmet,nodeIndex,parseAnnotationRange,validateQueryValues,dataflowOf,type CompiledDataflow} from '../../../app/lib/cli-toolkit';
 import type {DocumentMetadata} from '../document';
 import {createServer} from 'node:http';
 import {readFile,mkdir,realpath} from 'node:fs/promises';
@@ -57,7 +57,14 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  // can synthesize arbitrary strings, so its results cannot grant this authority.
  const datasetImages=new Map<string,Set<string>>();
  const read=async(file:string,override?:string)=>{
-  const path=await pathFor(file),source=override??await readFile(path,'utf8'),doc=parseDocument(source);
+  const path=await pathFor(file);let source=override??await readFile(path,'utf8');
+  // Anything served must be commentable: a file written outside the browser gets its node ids on disk the
+  // first time preview reads it. A capture is read-only; a concurrent outside write is simply read next time.
+  if(override===undefined&&!options.capture&&needsNodeIds(parseDocument(source).body)){
+   await identifyLocalDocument(root,file).catch(error=>{if(!(error instanceof CliError&&error.code==='stale_save'))throw error;});
+   source=await readFile(path,'utf8');
+  }
+  const doc=parseDocument(source);
   const rendered=doc.body;
 
   const refData:RefDataMap={};
@@ -105,7 +112,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     if(revision!==current.revision)throw new Refusal(409,'File changed; draft retained');
     if(typeof source!=='string'||!parseJsx(source).ok)throw new Refusal(400,'Invalid JSX');
     // Preserve durable node anchors and the remote baseline; never accept metadata from browser saves.
-    const body=stampNodeIds(source,{previousSource:current.body}).source;
+    const body=identifiedLocalBody(comments,file,source,current.body)??source;
     const bytes=Buffer.from(writeDocument({metadata:metadata??current.metadata,body}));
     await read(file,bytes.toString()); // Validate the proposed tree and dependency scope before writing.
     await saveLocalFile(root,file,current.revision,bytes).catch(error=>{if(error instanceof CliError&&error.code==='stale_save')throw new Refusal(409,error.message);throw error;});

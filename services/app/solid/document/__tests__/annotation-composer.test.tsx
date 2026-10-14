@@ -306,7 +306,7 @@ describe('the annotation composer', () => {
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(creates()).toHaveLength(0);
-    expect(screen.getByRole('alert')).toHaveTextContent('Wait for this change to save');
+    expect(screen.getByRole('alert')).toHaveTextContent("This element has no saved id yet, so a comment can't attach to it. If you just added it, comment once your edit saves. Your draft is still here.");
     expect(composer).toHaveTextContent('draft survives replacement');
   });
 
@@ -426,7 +426,7 @@ describe('the annotation composer', () => {
     expect(String(created!.init!.body)).not.toContain('edit_id');
   });
 
-  it('keeps an unsaved-node draft and asks the user to wait for ordinary autosave', async () => {
+  it('keeps an id-less node draft and says the element has no saved id, without claiming a save is pending', async () => {
     layer({ railOpen: true, initialSelection: TEXT({ path: '2.1', nodeId: undefined }) });
     await flush();
     const composer = await screen.findByLabelText('Annotation comment');
@@ -434,7 +434,7 @@ describe('the annotation composer', () => {
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(creates()).toHaveLength(0);
-    expect(screen.getByRole('alert')).toHaveTextContent('Wait for this change to save');
+    expect(screen.getByRole('alert')).toHaveTextContent("This element has no saved id yet, so a comment can't attach to it. If you just added it, comment once your edit saves. Your draft is still here.");
     expect(composer).toHaveTextContent('keep this draft');
   });
 

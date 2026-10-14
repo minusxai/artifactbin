@@ -100,6 +100,48 @@ test('inline preview comments preserve selections and accept only real body anch
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
 
+test('a document written without ids is commentable on every element, and its ids stay durable on disk',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-node-ids-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  // What an agent writes: no authored ids anywhere, never saved from the browser.
+  const card='<div className="rounded border p-4"><span className="text-xs">Rain chance</span><span className="text-2xl">0%</span></div>';
+  const authored=`<main className="p-6">\n  <h1>SF weather</h1>\n  <section className="grid grid-cols-2 gap-4">\n    ${card}\n    <div className="rounded border p-4"><span className="text-xs">High</span><span className="text-2xl">64°F</span></div>\n  </section>\n  <table><thead><tr><th>Day</th><th>High</th></tr></thead><tbody><tr><td>Mon</td><td>64</td></tr></tbody></table>\n</main>`;
+  await writeFile(join(root,'sf-weather.jsx'),authored);
+  session=await startPreview({root,home:join(root,'home'),files:['sf-weather.jsx']});
+  type Node={type:string;tag?:string;attributes?:Array<{name:string;value:{json?:unknown}}>;children?:Node[]};
+  const idOf=(node:Node)=>node.attributes?.find(attribute=>attribute.name==='id')?.value.json;
+  const elements=(nodes:Node[]):Node[]=>nodes.flatMap(node=>node.type==='element'?[node,...elements(node.children??[])]:[]);
+  const text=(node:Node):string=>node.type==='text'?(node as unknown as {value:string}).value:(node.children??[]).map(text).join('');
+  // The reader's first requests arrive together; exactly one of them stamps the file.
+  const [served,...concurrent]=await Promise.all(Array.from({length:4},async()=>(await fetch(session!.url+'/document?file=sf-weather.jsx')).json()));
+  for(const other of concurrent)assert.equal(other.revision,served.revision);
+  const nodes=elements(served.data.nodes);
+  assert.ok(nodes.length>=15);
+  for(const node of nodes)assert.match(String(idOf(node)),/^[A-Za-z][A-Za-z0-9]{3}$/,`<${node.tag}> carries a durable id`);
+  const span=nodes.find(node=>node.tag==='span'&&text(node)==='0%')!,spanId=String(idOf(span));
+  const onDisk=await readFile(join(root,'sf-weather.jsx'),'utf8');
+  assert.match(onDisk,new RegExp(`id="${spanId}">0%</span>`),'the served id is the one the file on disk holds');
+  assert.equal(served.revision,(await(await fetch(session.url+'/document?file=sf-weather.jsx')).json()).revision,'stamping happens once');
+  // Both comment doors: the original preview route and the production composer's editor protocol.
+  const posted=await fetch(session.url+'/comments',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'sf-weather.jsx',node:spanId,name:'Sam',text:'Is this right?'})});
+  assert.equal(posted.status,200,await posted.clone().text());
+  const call=async(operation:string,args:object={})=>(await fetch(session!.url+'/editor',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'sf-weather.jsx',operation,...args})})).json();
+  const thread=await call('annotations.create',{input:{node_id:spanId,body:'Check the forecast',quote:'0%'},key:'span'});
+  assert.equal(thread.anchor?.nodeId,spanId,JSON.stringify(thread));
+  await session.close();session=undefined;
+  // The agent regenerates the file from scratch (ids gone) and adds a paragraph.
+  await writeFile(join(root,'sf-weather.jsx'),authored.replace('</section>','</section>\n  <p>Fog clears by noon.</p>'));
+  session=await startPreview({root,home:join(root,'home'),files:['sf-weather.jsx']});
+  const reread=elements((await(await fetch(session.url+'/document?file=sf-weather.jsx')).json()).data.nodes);
+  for(const node of reread)assert.match(String(idOf(node)),/^[A-Za-z][A-Za-z0-9]{3}$/,`<${node.tag}> carries a durable id after an external edit`);
+  assert.equal(idOf(reread.find(node=>node.tag==='span'&&text(node)==='0%')!),spanId,'an unchanged element keeps its id');
+  assert.match(await readFile(join(root,'sf-weather.jsx'),'utf8'),new RegExp(`id="${spanId}">0%</span>`));
+  assert.equal((await(await fetch(session.url+'/comments?file=sf-weather.jsx')).json())[0].text,'Is this right?');
+  const open=await call('annotations.list',{status:'open'});
+  assert.equal(open.length,2);for(const row of open){assert.equal(row.orphaned,false);assert.equal(row.anchor.nodeId,spanId);}
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
 test('production editor protocol saves local graph edits and rejects stale file writes',async()=>{
  const root=await mkdtemp(join(tmpdir(),'preview-editor-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  try{

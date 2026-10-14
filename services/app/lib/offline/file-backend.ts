@@ -38,6 +38,7 @@ import { declarationsOf } from '@/lib/document/helmet';
 import { createDocumentGraph, graphNodes, graphSource, type GraphAstNode } from '@/lib/document/document-graph';
 import { applyGraphPatch } from '@/lib/document/document-graph-patch';
 import { needsAuthoringContext, prepareClientDocumentReplacement } from '@/lib/document/document-update-client';
+import { stampNodeIds } from '@/lib/document/node-ids';
 import { documentAfterOperation } from '@/lib/document/document-update-history';
 import { sourcePathToBodyPath } from '@/lib/document/edit-compose';
 import { storyUpdateParts } from '@/lib/document/update-parts';
@@ -300,6 +301,18 @@ export function sourceChangedOutside(file: ArtifactFile): boolean {
   return typeof file.derivedFrom === 'string' && sourceDigest(file.source) !== file.derivedFrom;
 }
 
+/**
+ * The changed source, with every element an outside rewrite stripped of its id given back the id it had in the
+ * last good build (the island), when its content is unchanged: the carry a commit makes from its previous
+ * source, so threads on untouched elements stay anchored. A source that does not parse is left to the commit's
+ * own repair and refusal.
+ */
+function withPriorIds(file: ArtifactFile): string {
+  if (!parseJsx(file.source).ok) return file.source;
+  try { return stampNodeIds(file.source, { previousSource: serializeJsx(file.island.nodes as JsxNode[]) }).source; }
+  catch { return file.source; }
+}
+
 interface RebuildResult {
   /** The file to open: rebuilt from its source, or unchanged when that could not be done. */
   file: ArtifactFile;
@@ -322,7 +335,7 @@ export async function rebuildArtifactFile(file: ArtifactFile, author: string | n
   const version = file.base.version + file.journal.length;
   let source: string;
   try {
-    const update = prepareClientDocumentReplacement(file.source, version);
+    const update = prepareClientDocumentReplacement(withPriorIds(file), version);
     source = update.replacement ? graphSource(update.replacement) : file.source;
   } catch (error) {
     return { file, rebuilt: false, error: error instanceof Error && error.message ? error.message : 'The source is not valid.' };

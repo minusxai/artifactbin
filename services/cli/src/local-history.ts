@@ -48,6 +48,13 @@ function ensureHead(store:State,path:string,current:Buffer):HistoryHead {
  store.put(SCOPE,'archive',headKey(path),head,{data:current});return head;
 }
 
+/** The body of the last version the workspace acknowledged for `path`, or null before it has one. */
+export function localHistoryHeadBody(store:State,path:string):string|null {
+ const data=store.get<HistoryHead>(SCOPE,'archive',headKey(path))?.data;
+ if(!data)return null;
+ try{return parseDocument(data.toString()).body;}catch{return null;}
+}
+
 /** Called inside stageLocalFiles' transaction, BEFORE the bytes are recovered to disk. */
 export function recordLocalHistory(store:State,path:string,before:Buffer,after:Buffer):void {
  const head=ensureHead(store,path,before);

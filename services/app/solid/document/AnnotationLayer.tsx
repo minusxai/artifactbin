@@ -110,6 +110,8 @@ export interface AnnotationLayerProps {
 const cardClass = 'rounded-panel border border-edge bg-raised text-sm';
 const CAPTURE_CHROME_CSS = ':host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome]{visibility:hidden!important}';
 const DELETE_THREAD_CONFIRMATION = { title: 'Delete this thread?', description: 'This thread and its replies will be permanently deleted. This cannot be undone.', action: 'Delete thread', confirmLabel: 'Confirm delete thread' };
+/** A selection whose source element has no durable id: an element an edit just added, or one a document never identified. */
+const NO_NODE_ID = "This element has no saved id yet, so a comment can't attach to it. If you just added it, comment once your edit saves. Your draft is still here.";
 const DELETE_REPLY_CONFIRMATION = { title: 'Delete this comment?', description: 'This comment will be removed. The rest of the thread will stay.', action: 'Delete comment', confirmLabel: 'Confirm delete comment' };
 const linkedFrom = (search: string | undefined) => {
   if (search === undefined) return null;
@@ -577,7 +579,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     const subject = selection();
     if (!subject || !hasReplyText(draft()) || capture.busy() || (capture.required() && !capture.draft())) return;
     if (!subject.nodeId) {
-      setFailure('Wait for this change to save before commenting. Your draft is still here.');
+      // Never claims a save is pending: the layer cannot know one is. Say what is true either way.
+      setFailure(NO_NODE_ID);
       return;
     }
     setBusy(true);
