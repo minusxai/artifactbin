@@ -162,6 +162,22 @@ describe('the frame bridge', () => {
     await expect(bridge.restored()).rejects.toThrow('the island build changed under the page');
   });
 
+  it('reports the document\'s uncaught errors to the page\'s console, including those from before the page attached', async () => {
+    const { frame, frameWin } = framedPair();
+    openDoor(frameWin);
+    frameWin.dispatchEvent(new frameWin.ErrorEvent('error', { message: 'boot failed early', filename: 'https://6869.pages.test/islands/rt.js', lineno: 7 }));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { onReady } = parentFor(frame);
+    await settle(() => onReady.mock.calls.length > 0);
+    frameWin.dispatchEvent(new frameWin.ErrorEvent('error', { message: 'query render failed' }));
+    await settle(() => logged.mock.calls.length > 1);
+    expect(logged.mock.calls.map((call) => call.join(' '))).toEqual([
+      '[frame-bridge] uncaught: boot failed early (https://6869.pages.test/islands/rt.js:7)',
+      '[frame-bridge] uncaught: query render failed',
+    ]);
+    logged.mockRestore();
+  });
+
   it('keeps every envelope from the author\'s listeners, and the page drops replies without its key', async () => {
     const { frame, frameWin, toFrame, pageProxy } = framedPair();
     const { bridge, onReady } = parentFor(frame);
