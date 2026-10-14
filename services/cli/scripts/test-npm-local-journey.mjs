@@ -9,6 +9,7 @@ import {createHmac} from 'node:crypto';
 import {createServer} from 'node:http';
 import {chromium} from 'playwright';
 import {artifactFilePayload as payload} from './artifact-file-payload.mjs';
+import {powershellLaunchCounter} from './powershell-launch-counter.mjs';
 const entry=resolve(process.argv[2]);
 const scratch=await realpath(await mkdtemp(join(tmpdir(),'afbin npm local é ')));
 const workspace=join(scratch,'workspace'),copy=join(scratch,'transferred'),recovery=join(scratch,'recovered'),connected=join(scratch,'connected');
@@ -30,21 +31,11 @@ async function command(cwd,home,args,timeout=180000,extra={}){
 }
 const jsonCommand=async(...args)=>JSON.parse(await command(...args));
 /** Windows only: count the PowerShell launches of a fresh-home command and of the same command repeated, and read the ACLs they left. */
-const SPAWN_COUNTER=`const cp=require('node:child_process'),{promisify}=require('node:util'),{appendFileSync}=require('node:fs'),{syncBuiltinESMExports}=require('node:module');
-const note=file=>{if(/powershell/i.test(String(file)))appendFileSync(process.env.AFBIN_SPAWN_LOG,String(file)+'\\n');};
-for(const name of ['execFile','execFileSync','spawn','spawnSync','exec','execSync']){const original=cp[name];if(typeof original!=='function')continue;
- const wrapped=function(file,...rest){note(file);return original.call(this,file,...rest);};
- if(original[promisify.custom])wrapped[promisify.custom]=function(file,...rest){note(file);return original[promisify.custom].call(this,file,...rest);};
- cp[name]=wrapped;}
-syncBuiltinESMExports();
-`;
 async function windowsPrivateState(cwd,home,args){
- // NODE_OPTIONS reads backslashes as escapes, so the preload is named with forward slashes.
- const directory=await mkdtemp(join(tmpdir(),'afbin-spawns-')),counter=join(directory,'count.cjs');await writeFile(counter,SPAWN_COUNTER);
+ const launches=await powershellLaunchCounter();
  const run=async(label,args)=>{
-  const log=join(directory,`${label}.log`),started=performance.now();
-  const output=JSON.parse(await command(cwd,home,args,180000,{NODE_OPTIONS:`${process.env.NODE_OPTIONS??''} --require "${counter.replaceAll('\\','/')}"`.trim(),AFBIN_SPAWN_LOG:log}));
-  return {output,ms:Math.round(performance.now()-started),powershell:(await readFile(log,'utf8').catch(()=>'')).split('\n').filter(Boolean).length};
+  const started=performance.now(),output=JSON.parse(await command(cwd,home,args,180000,launches.env(label)));
+  return {output,ms:Math.round(performance.now()-started),powershell:await launches.count(label)};
  };
  // The same command again: it walks the same private directories, now warm, and keeps the same ids.
  const fresh=await run('fresh',args),next=await run('next',args);
@@ -80,7 +71,7 @@ async function windowsPrivateState(cwd,home,args){
  assert.ok(profile.length>0,'AppData\\Local has readable rules');
  assert.deepEqual(profile.filter(rule=>/^(S-1-1-0|S-1-5-11|S-1-5-32-545)\|/.test(rule)&&rule.endsWith('|Allow')),[],`AppData\\Local grants a broad group: ${profile.join(', ')}`);
  console.log(JSON.stringify({windows_private_state:{fresh_ms:fresh.ms,fresh_powershell:fresh.powershell,next_ms:next.ms,next_powershell:next.powershell,protected:directories.length,local_app_data:profile}}));
- await rm(directory,{recursive:true,force:true});
+ await launches.close();
  return fresh.output;
 }
 async function preview(cwd,home,path='report.jsx'){
