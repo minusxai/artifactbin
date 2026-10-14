@@ -14,7 +14,9 @@ import type {Workspace} from './workspace';
 import type {HttpClient} from './http';
 interface StoredThread {file:string;node:string;value:AnnotationWire}
 interface Binding {file:string;artifactId:string;threadId:string;status:'open'|'resolved';revision:number;comments:Record<string,{id:string;hash:string;body:string}>}
-interface Context {thread:string;comment?:string;hash?:string;body?:string;file:string;artifactId:string;binding?:Binding;before:string[];status?:'open'|'resolved'}
+interface Context {thread:string;comment?:string;hash?:string;body?:string;file:string;artifactId:string;binding?:Binding;before:string[];status?:'open'|'resolved';
+ /** A local rewrite of a published comment: its local id and the server comment it rewrites. */
+ edit?:{comment:string;id:string;hash:string;body:string}}
 const key=(thread:string)=>'local-comments/'+thread;
 const hash=(comment:AnnotationCommentWire)=>digest(JSON.stringify([comment.body,comment.author.label]));
 const bodyFor=(comment:AnnotationCommentWire)=>comment.author.label&&comment.author.label!=='You'?`Offline note by ${comment.author.label} (unverified):\n\n${comment.body}`:comment.body;
@@ -27,7 +29,11 @@ export async function publishLocalComments(workspace:Workspace,stage:Workspace,p
   if(typeof wire.id!=='string'||!Array.isArray(wire.thread)||!Number.isSafeInteger(wire.revision)||!['open','resolved'].includes(wire.status))throw new CliError('invalid_response','The comment receipt is incomplete; recovery was retained.');
   const binding:Binding=context.binding?{...context.binding,comments:{...context.binding.comments}}:{file:context.file,artifactId:context.artifactId,threadId:wire.id,status:wire.status,revision:wire.revision!,comments:{}};
   if(binding.threadId!==wire.id)throw new CliError('invalid_response','The comment receipt changed the thread identity; recovery was retained.');
-  if(context.comment){
+  if(context.edit){
+   const edited=wire.thread.find(comment=>comment.id===context.edit!.id);
+   if(!edited||edited.body!==context.edit.body)throw new CliError('invalid_response','The edit receipt does not carry the new text; recovery was retained.');
+   binding.comments[context.edit.comment]={id:edited.id,hash:context.edit.hash,body:context.edit.body};
+  }else if(context.comment){
    const candidates=wire.thread.filter(comment=>!context.before.includes(comment.id)&&comment.body===context.body);
    if(candidates.length!==1)throw new CliError('comment_receipt_ambiguous','The confirmed reply could not be uniquely identified; recovery was retained.');
    binding.comments[context.comment]={id:candidates[0]!.id,hash:context.hash!,body:context.body!};
@@ -35,14 +41,14 @@ export async function publishLocalComments(workspace:Workspace,stage:Workspace,p
   binding.status=wire.status;binding.revision=wire.revision!;binding.file=context.file;
   store.put(stage.root,'archive',key(context.thread),binding);
  };
- const mutate=async(identity:Record<string,unknown>,path:string,body:Record<string,unknown>,prepare:()=>Promise<{body:unknown;context:Context}>)=>{
-  const result=await recoverableOperation(stage,client,{identity,path,method:'POST',body,prepare,finalize:finish});
+ const mutate=async(identity:Record<string,unknown>,path:string,body:Record<string,unknown>,prepare:()=>Promise<{body:unknown;context:Context}>,method='POST')=>{
+  const result=await recoverableOperation(stage,client,{identity,path,method,body,prepare,finalize:finish});
   operations.push({path:identity.file,status:'comment_published',thread:result.id,comment:identity.comment??null});
  };
  const pending=await pendingOperation(stage);
  if(pending){
   if((pending.identity as {type?:string})?.type!=='local-comment-publication')throw new CliError('pending_recovery','A different mutation is pending in this publication copy.');
-  await mutate(pending.identity as Record<string,unknown>,pending.path,pending.body as Record<string,unknown>,async()=>({body:pending.body,context:pending.context as Context}));
+  await mutate(pending.identity as Record<string,unknown>,pending.path,pending.body as Record<string,unknown>,async()=>({body:pending.body,context:pending.context as Context}),pending.method);
  }
  // Migrate legacy notes with the same production wire used by preview.
  for(const file of selected)if(typeof stage.tracking?.files[file]?.snapshot.markup==='string'){const source=parseDocument((await readFile(await confinedPath(workspace.root,file))).toString()).body;previewAnnotations(portable,LOCAL_WORKSPACE_SCOPE,file,source);}
@@ -51,15 +57,22 @@ export async function publishLocalComments(workspace:Workspace,stage:Workspace,p
  for(const record of store.list<Binding>(stage.root,'archive'))if(record.key.startsWith('local-comments/')&&selected.has(record.value.file)){
   const thread=localThreads.get(record.key.slice('local-comments/'.length));
   if(!thread)throw new CliError('comment_conflict','A published local thread was deleted.','Remote comments were preserved; delete the remote thread explicitly if intended.');
-  for(const [id,comment] of Object.entries(record.value.comments)){
-   const local=thread.value.thread.find(entry=>entry.id===id);
-   if(!local||hash(local)!==comment.hash)throw new CliError('comment_conflict','A published local comment was edited or deleted.','Publishing carries new replies and state changes, not edits to comments already published. Restore the published text locally, then change the published comment with afbin comment <artifact> --edit <comment-id>.');
-  }
+  for(const id of Object.keys(record.value.comments))if(!thread.value.thread.some(entry=>entry.id===id))throw new CliError('comment_conflict','A published local comment was deleted.','Publishing never deletes server comments; delete the published comment explicitly with afbin delete --type comment if intended.');
  }
  for(const thread of threads){
   const artifact=stage.tracking?.files[thread.file];if(!artifact||typeof artifact.snapshot.markup!=='string')continue;
   let binding=store.get<Binding>(stage.root,'archive',key(thread.value.id))?.value;
   if(binding&&binding.artifactId!==artifact.id)throw new CliError('comment_conflict','The published thread belongs to another document identity.');
+  // Local rewrites of published comments first: each is a PATCH of the server comment against the revision read.
+  for(const comment of thread.value.thread){
+   const published=binding?.comments[comment.id];if(!published||hash(comment)===published.hash)continue;
+   const body=bodyFor(comment),edit={comment:comment.id,id:published.id,hash:hash(comment),body},initialBinding=binding!;
+   await mutate({type:'local-comment-publication',file:thread.file,thread:thread.value.id,comment:comment.id,action:'edit',hash:edit.hash},`/artifacts/${artifact.id}/annotations/${published.id}`,{body},async()=>{
+    const remote=await readThread(client,artifact.id,initialBinding.threadId);verifyRemote(initialBinding,remote,!!options.force);
+    return{body:{body,expected_revision:remote.revision},context:{file:thread.file,artifactId:artifact.id,thread:thread.value.id,binding:initialBinding,before:remote.thread.map(entry=>entry.id),edit}};
+   },'PATCH');
+   binding=store.get<Binding>(stage.root,'archive',key(thread.value.id))!.value;
+  }
   for(const comment of thread.value.thread){
    if(binding?.comments[comment.id])continue;
    const body=bodyFor(comment),identity={type:'local-comment-publication',file:thread.file,thread:thread.value.id,comment:comment.id},path=`/artifacts/${artifact.id}/annotations${binding?'/'+binding.threadId:''}`;
@@ -89,7 +102,7 @@ export async function publishLocalComments(workspace:Workspace,stage:Workspace,p
 async function readThread(client:HttpClient,artifact:string,id:string):Promise<AnnotationWire>{
  let cursor:string|undefined;const seen=new Set<string>();
  do{
-  const page=await client.request<{annotations:AnnotationWire[];next_cursor:string|null}>(`/artifacts/${artifact}/annotations?status=all&limit=200${cursor?'&cursor='+encodeURIComponent(cursor):''}`);
+  const page=await client.request<{annotations:AnnotationWire[];next_cursor:string|null}>(`/artifacts/${artifact}/annotations?status=all&limit=100${cursor?'&cursor='+encodeURIComponent(cursor):''}`);
   const thread=page.annotations.find(value=>value.id===id);if(thread)return thread;
   cursor=page.next_cursor??undefined;if(cursor&&seen.has(cursor))throw new CliError('invalid_response','The comment listing repeated its cursor.');if(cursor)seen.add(cursor);
  }while(cursor);

@@ -37,10 +37,12 @@ export const POST = withTokenAuth(async (request: Request, { actor, params, clie
   );
 });
 
-export const PATCH = withTokenAuth(async (request: Request, { actor, params }) => {
+export const PATCH = withTokenAuth(async (request: Request, { actor, params, clientHarness }) => {
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
-  return runOperation('edit_comment', request, actor, { ...body, id: params.id, comment_id: params.annId });
+  // Who is editing, attributed as the reply door attributes: an agent's edit never re-enters the human comment feed.
+  return runOperation('edit_comment', request, actor, { ...body, id: params.id, comment_id: params.annId },
+    actor.credential !== 'bearer' ? { kind: 'human', label: null, transport: 'browser' } : annotationAuthorForRequest(request, clientHarness));
 });
 
 export const DELETE = withTokenAuth(async (_request: Request, { actor, params }) => {

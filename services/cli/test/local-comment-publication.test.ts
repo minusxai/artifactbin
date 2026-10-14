@@ -18,11 +18,13 @@ async function fixture(){
  const remote=new Map<string,any>(),receipts=new Map<string,any>(),calls:Array<{path:string;body:any;method:string}>=[];let lost=false,race=false;
  const request:typeof fetch=async(input,init)=>{
   const path=new URL(String(input)).pathname,method=init?.method??'GET',body=JSON.parse(String(init?.body??'{}'));calls.push({path,method,body});const headers={'X-Artifactbin-Account':'usr_one'};
-  if(method==='GET'&&path.endsWith('/annotations'))return Response.json({annotations:[...remote.values()],next_cursor:null},{headers});
+  // The real list door's page bound: a reader asking for more is refused, as the server refuses it.
+  if(method==='GET'&&path.endsWith('/annotations')){const limit=Number(new URL(String(input)).searchParams.get('limit')??100);if(!Number.isInteger(limit)||limit<1||limit>100)return Response.json({error:'invalid_limit'},{status:400,headers});return Response.json({annotations:[...remote.values()],next_cursor:null},{headers});}
   if(method==='GET')return Response.json({id:'rem001',capabilities:{comment:true,comment_receipts:true}},{headers});
   const key=new Headers(init?.headers).get('Idempotency-Key');assert.ok(key);if(receipts.has(key))return Response.json(receipts.get(key),{headers});
   let value:any;
   if(path.endsWith('/annotations')){value={id:'ann_remote',revision:0,status:'open',thread:[{id:'remote_first',body:body.body,author:{user_id:'usr_one'}}]};remote.set(value.id,value);}
+  else if(method==='PATCH'){value=[...remote.values()].find(thread=>thread.thread.some((comment:any)=>path.endsWith('/'+comment.id)));if(!value)return Response.json({error:'not_found'},{status:404,headers});if(race){race=false;value.revision++;value.thread.push({id:'raced',body:'Raced remote reply'});}if(body.expected_revision!==value.revision)return Response.json({error:'annotation_conflict',current_revision:value.revision},{status:409,headers:{...headers,'X-Artifactbin-Mutation-Receipt':key}});const comment=value.thread.find((entry:any)=>path.endsWith('/'+entry.id));if(comment.body!==body.body){comment.body=body.body;comment.edited_at='2026-10-15T00:00:00Z';value.revision++;}}
   else{value=remote.get('ann_remote');if(race){race=false;value.revision++;value.thread.push({id:'other',body:'Remote reply'});}if(body.expected_revision!==value.revision)return Response.json({error:'annotation_conflict',current_revision:value.revision},{status:409,headers:{...headers,'X-Artifactbin-Mutation-Receipt':key}});if(body.reply)value.thread.push({id:'remote_'+value.thread.length,body:body.reply,author:{user_id:'usr_one'}});if(body.resolve)value.status='resolved';if(body.reopen)value.status='open';value.revision++;}
   receipts.set(key,structuredClone(value));if(lost){lost=false;throw Error('lost response');}return Response.json(value,{headers});
  };
@@ -37,12 +39,53 @@ test('offline threads, replies and resolution publish once with durable receipt 
   const count=f.calls.length;await publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client);assert.equal(f.calls.length,count);
  }finally{await f.cleanup();}
 });
-test('offline edits and concurrent remote changes never overwrite published comments',async()=>{
+test('a local edit of a published comment is carried by PATCH against the observed revision, once',async()=>{
  const f=await fixture();try{
-  await publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client);const stored=f.portable.get<any>(LOCAL_WORKSPACE_SCOPE,'preview-thread',f.thread.id)!.value;stored.value.thread[0].body='Changed';f.portable.put(LOCAL_WORKSPACE_SCOPE,'preview-thread',f.thread.id,stored);
-  const count=f.calls.length;await assert.rejects(publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client),/edited/i);assert.equal(f.calls.length,count);assert.equal(f.remote.get('ann_remote').thread[0].body,'First');
-  stored.value.thread[0].body='First';f.portable.put(LOCAL_WORKSPACE_SCOPE,'preview-thread',f.thread.id,stored);f.annotations.act(f.thread.id,{reply:'Local reply'});f.setRace();await assert.rejects(publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client),/annotation_conflict/);assert.equal(f.remote.get('ann_remote').thread.length,2);assert.equal(f.remote.get('ann_remote').thread[1].body,'Remote reply');
-  await publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client,{force:true});assert.equal(f.remote.get('ann_remote').thread.length,3);assert.equal(f.remote.get('ann_remote').thread[1].body,'Remote reply');assert.equal(f.remote.get('ann_remote').thread[2].body,'Local reply');
+  await publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client);const published=f.remote.get('ann_remote').revision;
+  f.annotations.edit(f.thread.id,{body:'First, clarified'});
+  // The edit's response is lost after the server applied it: the next push finishes it from the journal, once.
+  f.setLost();await assert.rejects(publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client));
+  await publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client);
+  const patches=f.calls.filter(call=>call.method==='PATCH');assert.equal(patches.length,2);assert.deepEqual(patches[1]!.body,patches[0]!.body);
+  assert.ok(patches[0]!.path.endsWith('/annotations/remote_first'));assert.deepEqual(patches[0]!.body,{body:'First, clarified',expected_revision:published});
+  assert.equal(f.remote.get('ann_remote').thread[0].body,'First, clarified');assert.equal(f.remote.get('ann_remote').thread.length,1);
+  const count=f.calls.length;await publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client);assert.equal(f.calls.length,count);
+  // A reply edited locally goes to that reply, not to the thread.
+  f.annotations.act(f.thread.id,{reply:'Second'});await publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client);
+  const localReply=f.portable.get<any>(LOCAL_WORKSPACE_SCOPE,'preview-thread',f.thread.id)!.value.value.thread[1].id;
+  f.annotations.edit(localReply,{body:'Second, better'});await publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client);
+  assert.deepEqual(f.remote.get('ann_remote').thread.map((c:any)=>c.body),['First, clarified','Second, better']);
+ }finally{await f.cleanup();}
+});
+test('a local edit never overwrites words changed on the server, and waits for --force when only the conversation moved',async()=>{
+ const f=await fixture();try{
+  await publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client);
+  // Someone rewrote the published words on the server: never overwritten, even with --force.
+  f.remote.get('ann_remote').thread[0].body='Rewritten on the server';f.remote.get('ann_remote').revision++;
+  f.annotations.edit(f.thread.id,{body:'Rewritten locally'});
+  for(const options of [{},{force:true}]){await assert.rejects(publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client,options),/changed or disappeared remotely/);}
+  assert.equal(f.calls.filter(call=>call.method==='PATCH').length,0);assert.equal(f.remote.get('ann_remote').thread[0].body,'Rewritten on the server');
+ }finally{await f.cleanup();}
+ const g=await fixture();try{
+  await publishLocalComments(g.workspace,g.stage,['doc.jsx'],g.client);
+  const remote=g.remote.get('ann_remote');remote.thread.push({id:'other',body:'Remote reply'});remote.revision++;
+  g.annotations.edit(g.thread.id,{body:'First, after a remote reply'});
+  await assert.rejects(publishLocalComments(g.workspace,g.stage,['doc.jsx'],g.client),/remote conversation changed/);
+  assert.equal(remote.thread[0].body,'First');
+  await publishLocalComments(g.workspace,g.stage,['doc.jsx'],g.client,{force:true});
+  assert.deepEqual(remote.thread.map((c:any)=>c.body),['First, after a remote reply','Remote reply']);
+  // A concurrent server change between the read and the write is the server's 409, and nothing is changed.
+  g.annotations.edit(g.thread.id,{body:'Raced edit'});g.setRace();
+  await assert.rejects(publishLocalComments(g.workspace,g.stage,['doc.jsx'],g.client,{force:true}),/annotation_conflict/);
+  assert.equal(remote.thread[0].body,'First, after a remote reply');
+ }finally{await g.cleanup();}
+});
+test('a published comment deleted locally is still refused rather than deleted remotely',async()=>{
+ const f=await fixture();try{
+  await publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client);
+  f.annotations.delete(f.thread.id);
+  await assert.rejects(publishLocalComments(f.workspace,f.stage,['doc.jsx'],f.client),/deleted/);
+  assert.equal(f.remote.get('ann_remote').thread[0].body,'First');
  }finally{await f.cleanup();}
 });
 

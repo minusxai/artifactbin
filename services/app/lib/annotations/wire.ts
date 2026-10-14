@@ -90,9 +90,9 @@ export async function respondToAnnotationAction(
 }
 
 /** Body → edit; null = malformed (no words, or a revision that is not a count). */
-function parseAnnotationEdit(body: Record<string, unknown>): AnnotationEdit | null {
+function parseAnnotationEdit(body: Record<string, unknown>, editorKind: AnnotationEdit['editorKind']): AnnotationEdit | null {
   if (typeof body.body !== 'string' || body.body.trim().length === 0) return null;
-  const edit: AnnotationEdit = { body: body.body };
+  const edit: AnnotationEdit = { body: body.body, editorKind };
   if (body.expected_revision !== undefined) {
     if (!Number.isSafeInteger(body.expected_revision) || Number(body.expected_revision) < 0) return null;
     edit.expectedRevision = Number(body.expected_revision);
@@ -109,10 +109,11 @@ export async function respondToAnnotationEdit(
   actor: AccessActor,
   id: string,
   commentId: string,
+  editorKind: AnnotationEdit['editorKind'],
   receipt?: MutationReceipt,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
-  const edit = parseAnnotationEdit(body);
+  const edit = parseAnnotationEdit(body, editorKind);
   if (!edit) return json({ error: 'invalid_annotation_edit', hint: 'Send the new text as a non-empty `body`; `expected_revision` is the thread revision you read.' }, 400);
   let result;
   try { result = await editAnnotationCommentFor(actor, id, commentId, edit, receipt); }

@@ -4,7 +4,7 @@ description: Monitor human comments with the shared CLI or HTTP changes API.
 ---
 ## Read first
 
-Use one monitor per artifact while working. Existing open comments are in the artifact read; handle those too. A monitor starting at `now` follows only subsequently committed human comments and replies, including replies to old threads. It ignores agent replies. Do not treat an acknowledgment as completing the human request: respond with the answer or actual change.
+Use one monitor per artifact while working. Existing open comments are in the artifact read; handle those too. A monitor starting at `now` follows only subsequently committed human comments, replies and human edits of comments, including on old threads. It ignores agent replies and agent edits. Do not treat an acknowledgment as completing the human request: respond with the answer or actual change.
 
 ## CLI
 
@@ -28,7 +28,7 @@ The initial `after=now` request returns immediately with the current baseline; i
 GET [[ base ]]/api/artifacts/ARTIFACT_ID/annotations/changes?after=CURSOR&wait=60&limit=100
 ```
 
-Response: `{events: [...], next_cursor: "opaque", has_more: false}`. Each event carries `event_id`, `artifact_id`, `annotation_id` (the root thread), `comment_id`, human author, body and creation time. Supply the returned cursor as `after` on the next request. Save a cursor only after delivering its events; consume all pages. A repeated cursor replays the same event IDs, so deduplicate deliveries. Do not restart with `now` after a disconnect: it skips the gap. This feed covers new comments/replies, not resolution, deletion or edited-comment history.
+Response: `{events: [...], next_cursor: "opaque", has_more: false}`. Each event carries `event_id`, `artifact_id`, `annotation_id` (the root thread), `comment_id`, human author, body and creation time. An edit of a comment from before your cursor adds `"change":"edited"` and `edited_at`, carries the new body and has its own `event_id`: treat it as a revised request in the same thread. Several edits since one cursor arrive as one event with the latest text; a comment both new and edited arrives once, as a new comment with its current text. Supply the returned cursor as `after` on the next request. Save a cursor only after delivering its events; consume all pages. A repeated cursor replays the same event IDs, so deduplicate deliveries. Do not restart with `now` after a disconnect: it skips the gap. The feed carries words to answer, not thread state: resolving, reopening and deleting are not events (a reopen that needs work comes with a reply), and there is no edit history.
 
 Reply with `POST /api/artifacts/ID/annotations/ANNOTATION_ID` and `{"reply":"Answer"}`. The same permissions apply to reading and replying. Never copy a token into the URL or conversation.
 

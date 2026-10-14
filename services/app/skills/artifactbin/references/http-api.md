@@ -56,7 +56,7 @@ Create with `POST /api/artifacts/<id>/annotations` and `{"body":"Please clarify 
 
 Reply or transition with **POST** `/api/artifacts/<id>/annotations/<annotation_id>` using the root ID and last `expected_revision`. Send `reply`, `resolve:true` or `reopen:true`; a reply may combine with one transition, never both transitions. Use each returned revision. A `409 annotation_conflict` includes `current_revision`; reconcile before retrying.
 
-Edit your own comment with **PATCH** `/api/artifacts/<id>/annotations/<comment_id>` and `{"body":"New text","expected_revision":n}`; `comment_id` is the thread ID for its first comment or a reply's `id`. Only the author may; others get 404. It answers the thread with `edited_at` on that comment.
+Edit your own comment with **PATCH** `/api/artifacts/<id>/annotations/<comment_id>` and `{"body":"New text","expected_revision":n}`; `comment_id` is the thread ID for its first comment or a reply's `id`. Only the author may; others get 404. It answers the thread with `edited_at` on that comment. A person's edit reaches the [comment changes feed](monitoring.md) as an event with `"change":"edited"`.
 
 With existing `artifactId`, `nodeId` and private `accessToken`:
 

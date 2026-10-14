@@ -318,7 +318,7 @@ const editCommentOp: Operation = {
     if (!ctx.actor.userId) return reply({ error: 'account_required', hint: 'Run `afbin auth` and sign in with an account; an anonymous credential wrote no comments to edit.' }, 403);
     const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
     if (refusal) return fromResponse(refusal);
-    return fromResponse(await respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.mutationReceipt));
+    return fromResponse(await respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.author.kind, ctx.mutationReceipt));
   },
 };
 

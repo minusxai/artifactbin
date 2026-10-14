@@ -28,7 +28,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   const { id, annId } = await ctx.params;
   const refusal = await capabilityGuard(actor, 'comment', id);
   if (refusal) return refusal;
-  return respondToAnnotationEdit(await readJson(request), actor, id, annId);
+  return respondToAnnotationEdit(await readJson(request), actor, id, annId, 'human');
 }
 
 /**

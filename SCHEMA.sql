@@ -1336,6 +1336,7 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   deleted_at TIMESTAMPTZ,
   author_remote JSONB,
   edited_at TIMESTAMPTZ,
+  change_seq BIGINT,
   PRIMARY KEY (id)
 );
 
@@ -1385,7 +1386,11 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_remote JSONB;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS change_seq BIGINT;
+
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
+
+CREATE INDEX IF NOT EXISTS idx_annotations_artifact_change_seq ON app.annotations (artifact_id, change_seq);
 
 CREATE TABLE IF NOT EXISTS app.codes (
   kind TEXT NOT NULL,
