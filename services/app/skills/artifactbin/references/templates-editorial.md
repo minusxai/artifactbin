@@ -10,19 +10,16 @@ order: 1
 
 [[ template.personality ]]
 
-Reports, articles, briefings and long reads use `template: editorial`.
-The name describes the reading format; the document can be factual,
-analytical or narrative, with the design system supplying its appearance.
+Reports, articles, briefings and long reads use `template: editorial`;
+the design system supplies their appearance.
 
-Beats, as options rather than a sequence: [[ template.beats | join(' · ') ]]
+Optional beats: [[ template.beats | join(' · ') ]]
 
-Voice: a document, not a webpage. Section headlines are CLAIMS in sentence
-case ("Retention paid for the price increase"), set quiet; reading only the
-headlines delivers the whole argument. The body is measured prose: short
-paragraphs, no dangling one-line sections. The design system owns the
-kicker, the headline face, the deck and the pull figure (its reference
-carries an editorial specimen when it fits); the thesis owns how the
-evidence is staged. Pick ONE composition and build that.
+Voice: a document. Quiet, sentence-case headlines state CLAIMS
+("Retention paid for the price increase"); together they tell the argument.
+Use short, measured paragraphs, without dangling one-line sections. The
+design system owns typography and figure styling; the thesis owns how
+evidence is staged. Pick ONE composition.
 
 ## Contents
 
@@ -33,32 +30,25 @@ evidence is staged. Pick ONE composition and build that.
 
 ## Explain with a visual
 
-Aim for at least one explanatory visual: a Mermaid diagram for a flow or
-relationship, an HTML/CSS wireframe for an interface or user journey, or an
-animated SVG diagram for a mechanism or change over time. Pick the form that
-makes the article's central idea easier to understand; place it beside the
-relevant argument and caption what it explains. A decorative illustration
-does not serve this purpose. For a purely textual piece, omit it rather than
-invent a process or interface. Follow [the diagram guide](markup-svg.md);
-SVG animation uses CSS or author script, with a readable static state for
-reduced motion, never SMIL.
+Aim for at least one explanatory visual beside its argument, captioned with
+what it explains: Mermaid for relationships, HTML/CSS wireframes for
+interfaces, animated SVG for mechanisms. Skip decoration; purely textual
+pieces need not invent a process. Follow [diagram syntax](markup-svg.md);
+animate with CSS or author script, never SMIL, and provide a static
+reduced-motion state.
 
-For a mechanism-led illustration, read [explanatory figures](explainers.md):
-build a concrete object whose behaviour teaches the idea, using the built-in
-`<Isometric>` figure for assemblies or custom SVG for other mechanisms.
+For mechanisms, read [explanatory figures](explainers.md): use `<Isometric>`
+for assemblies or custom SVG, with shared signals for sliders and playback.
 
 ## Compositions
 
-- **Illustrated feature.** A persistent subject scene, drawn in the system's
-  hand, makes the evidence tangible as the argument develops; figures sit
-  inside the scene's vocabulary. For a pilot, a place, an experience.
-  Rejected default: a title, six numbered sections and a chart in each.
-- **Research dossier.** An argument-led opening, then sources, diagrams and
-  comparisons arranged for close reading, with the method where the reader
-  can check it. For a case that must survive a skeptic.
-- **Pilot report.** The findings up front as bold-lead bullets with their
-  numbers, numbered sections that each close on a takeaway, a method footer.
-  The restrained one, for a board that reads the summary and skims the rest.
+- **Illustrated feature.** A persistent subject scene in the system's hand
+  makes evidence tangible; figures share its vocabulary. For a place or
+  experience, avoid a generic title-and-numbered-charts sequence.
+- **Research dossier.** Lead with an argument, then sources, diagrams and
+  comparisons for close reading, with a checkable method.
+- **Pilot report.** Bold-lead findings with numbers, numbered sections ending
+  in takeaways, a method footer. For readers who skim after the summary.
 
 ## What the runtime needs
 
@@ -77,7 +67,7 @@ build a concrete object whose behaviour teaches the idea, using the built-in
   or inline `<svg>` in the system's hand; wireframes use HTML/CSS. Images are `<img src="ref:<imageId>" />` or an
   `https://` URL, which is imported at publish and rewritten to `ref:<id>`.
 
-Skeleton of the runtime pieces (publishable as is; the staging is yours):
+Runtime skeleton (choose the staging):
 
   <Helmet><Import name="sales" src="ref:abc123" /><Query name="q">{`select month, sum(revenue) revenue from sales.rows group by 1 order by 1`}</Query></Helmet>
   <div data-design="tw" className="@container px-6 py-12 text-foreground @2xl:py-16">
