@@ -945,6 +945,7 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
         : await webkit.launch();
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: dpr });
     const page = await context.newPage();
+    await page.addInitScript(() => { window.__saveTrace = []; const toBlob = HTMLCanvasElement.prototype.toBlob; HTMLCanvasElement.prototype.toBlob = function (callback, ...rest) { const entry = { event: 'toBlob', width: this.width, height: this.height, start: performance.now() }; window.__saveTrace.push(entry); return toBlob.call(this, blob => { entry.ms = performance.now() - entry.start; callback(blob); }, ...rest); }; const nativeFetch = window.fetch; window.fetch = function (input, init) { const url = String(input?.url ?? input); const entry = { event: 'fetch', url: url.replace(/^.*\/api\//, '/api/'), method: init?.method ?? 'GET', start: performance.now() }; if (entry.method === 'POST') window.__saveTrace.push(entry); return nativeFetch.call(this, input, init).then(response => { entry.ms = performance.now() - entry.start; entry.status = response.status; return response; }); }; });
     await page.addInitScript(() => { window.__captureTrace = []; const native = navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices); if (native) navigator.mediaDevices.getDisplayMedia = async (...args) => { try { const stream = await native(...args); window.__captureTrace.push({ event: 'stream', surface: stream.getVideoTracks()[0]?.getSettings().displaySurface }); const reference = document.createElement('video'); reference.muted = true; reference.srcObject = stream; window.__captureReference = reference; void reference.play(); return stream; } catch (e) { window.__captureTrace.push({ event: 'error', message: e.message }); throw e; } }; });
     await becomeOwner(page, BASE, seed.token);
     await page.goto(`${BASE}/a/${seed.id}`);
@@ -1013,17 +1014,26 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
           entry.error = typeof body.error === 'string' ? body.error : body.error?.code;
         }).catch(() => {});
       };
+      const sent = [];
+      const recordSent = request => { const path = new URL(request.url()).pathname; if (request.method() === 'POST') sent.push({ path, sentMs: Date.now() - started }); };
       page.on('response', recordWrite);
+      page.on('request', recordSent);
       try {
+        const clickAt = await page.evaluate(() => performance.now());
         await page.getByLabel('Save annotation', { exact: true }).click();
         await expect(page.getByRole('dialog', { name: 'Annotation composer' })).toHaveCount(0);
+        check.note(`${name}: save ${Date.now() - started}ms ${JSON.stringify(await page.evaluate(at => window.__saveTrace.filter(e => e.start >= at).map(e => ({ ...e, start: Math.round(e.start - at), ms: Math.round(e.ms ?? -1) })), clickAt))}`);
       } catch (error) {
-        console.error(name, { phase: 'save screenshot comment', writes,
-          alerts: await page.getByRole('alert').allTextContents(),
-          saveDisabled: await page.getByLabel('Save annotation', { exact: true }).isDisabled(),
-        });
+        console.error(name, { phase: 'save trace', trace: await page.evaluate(() => window.__saveTrace.map(e => ({ ...e, start: Math.round(e.start), ms: e.ms === undefined ? 'pending' : Math.round(e.ms) }))).catch(String), now: await page.evaluate(() => Math.round(performance.now())).catch(String) });
+        const state = async () => ({ elapsedMs: Date.now() - started, writes: [...writes], sent: [...sent],
+          alerts: await page.getByRole('alert').allTextContents(), status: await page.getByRole('status').allTextContents(),
+          saveDisabled: await page.getByLabel('Save annotation', { exact: true }).isDisabled().catch(() => null),
+          composer: await page.getByRole('dialog', { name: 'Annotation composer' }).count() });
+        console.error(name, { phase: 'save screenshot comment', ...await state() });
+        const closed = await expect(page.getByRole('dialog', { name: 'Annotation composer' })).toHaveCount(0, { timeout: 30000 }).then(() => true, () => false);
+        console.error(name, { phase: 'save screenshot comment, later', closed, ...await state() });
         throw error;
-      } finally { page.off('response', recordWrite); }
+      } finally { page.off('response', recordWrite); page.off('request', recordSent); }
       await page.reload();
       await openArtifactControls(page); await page.getByRole('button', { name: 'Toggle comments', exact: true }).click();
       await expect(doc.locator('#capturebox')).toHaveCSS('background-color', 'rgb(220, 30, 30)');
