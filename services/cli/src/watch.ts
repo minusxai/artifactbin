@@ -6,9 +6,9 @@ import type {Workspace} from './workspace';
 import type {HttpClient} from './http';
 /** Signals belong to this foreground command; remove both handlers on every exit. */
 export async function watchCommand(workspace:Workspace,parsed:ParsedCommand,client:HttpClient,options:{stdout:(value:string)=>void;stderr:(value:string)=>void;signal?:AbortSignal}):Promise<void>{
- if(!parsed.flags.comments||!parsed.flags.json)throw new CliError('invalid_arguments','Use afbin watch <url|id> --comments --json.');
+ if(!parsed.flags.comments||!parsed.flags.json)throw new CliError('invalid_arguments','Use afbin watch <url|id|file> --comments --json.');
  const ref=await resolveReference(parsed.positionals[0]!,{root:workspace.root,cwd:workspace.cwd,server:client.connection.server,aliases:[...client.aliases]});
- if(ref.kind!=='id'||ref.version!==undefined)throw new CliError('invalid_reference','Watch a published artifact URL or ID without @version.');
+ if(ref.kind!=='id'||ref.version!==undefined)throw new CliError('invalid_reference','Watch a published artifact URL or ID without @version, or a local workspace file.');
  const controller=new AbortController(),stop=()=>controller.abort();
  const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
  process.on('SIGINT',stop);process.on('SIGTERM',stop);

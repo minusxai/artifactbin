@@ -92,7 +92,7 @@ const FORMATS:Record<string,readonly string[]>={
 export const globalFlags=['help','version','json','server','yes'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
- {name:'watch',usage:'<url|id> --comments --json',description:'Follow new human comments, replies and edits as NDJSON until cancelled; --cursor resumes an explicit checkpoint.',min:1,max:1,flags:['comments','cursor'],examples:['afbin watch abc123 --comments --json']},
+ {name:'watch',usage:'<url|id|file> --comments --json',description:'Follow new human comments, replies and edits as NDJSON until cancelled; a local file is followed offline from the workspace; --cursor resumes an explicit checkpoint.',min:1,max:1,flags:['comments','cursor'],examples:['afbin watch abc123 --comments --json','afbin watch report.jsx --comments --json']},
  {name:'upload',usage:'<file> --in <document> --name <import>',description:'Upload one attachment to a declared dataset import; returns its file reference without changing rows.',min:1,max:1,flags:['in','name','idempotency-key'],examples:['afbin upload receipt.pdf --in abc123 --name expenses --json']},
  {name:'workspace',usage:'rebind --account current',description:'Explicitly rebind local workspace ownership; preserves content and remote permission checks.',min:1,max:1,flags:['account','dry-run'],examples:['afbin workspace rebind --account current --dry-run','afbin workspace rebind --account current']},
  {name:'add',usage:'<path> [<path> ...]',description:'Assign stable account-scoped identities to local files without publishing.',min:1,max:Infinity,flags:[],examples:['afbin add sales.csv report.jsx --json']},
