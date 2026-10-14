@@ -9,7 +9,7 @@
  * iframe reported, and every request goes through the real HTTP backend over a stubbed `fetch`.
  */
 import { beforeAll, vi } from 'vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, type JSX } from 'solid-js';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import { createHttpBackend } from '@/lib/artifact-backend/http';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
@@ -169,7 +169,7 @@ const withNode = (selection: StoryEditSelection | null | undefined) =>
  * Mount the layer with the React rig's defaults (id doc1, rail closed, no live list, 100px top).
  * `set` changes props the way a React `rerender` did; `runtime` is the fake document.
  */
-export function layer(over: Over = {}, runtime = makeRuntime(), options: { trusted?: boolean } = {}) {
+export function layer(over: Over = {}, runtime = makeRuntime(), options: { trusted?: boolean; wrap?: (ui: () => JSX.Element) => JSX.Element } = {}) {
   const [props, setProps] = createSignal<Over>({ ...over, initialSelection: withNode(over.initialSelection) });
   const view = render(() => {
     const p = () => props();
@@ -196,7 +196,8 @@ export function layer(over: Over = {}, runtime = makeRuntime(), options: { trust
       linkTarget={p().linkTarget}
       onAnnotationsChange={p().onAnnotationsChange}
     />;
-    return options.trusted ? <TrustedUi overlay>{ui()}</TrustedUi> : ui();
+    const mounted = () => (options.trusted ? <TrustedUi overlay>{ui()}</TrustedUi> : ui());
+    return options.wrap ? options.wrap(mounted) : mounted();
   });
   const set = (next: Over) => setProps({ ...next, initialSelection: withNode(next.initialSelection) });
   return { ...view, runtime, set };

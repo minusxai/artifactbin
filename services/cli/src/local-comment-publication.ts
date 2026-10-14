@@ -53,7 +53,7 @@ export async function publishLocalComments(workspace:Workspace,stage:Workspace,p
   if(!thread)throw new CliError('comment_conflict','A published local thread was deleted.','Remote comments were preserved; delete the remote thread explicitly if intended.');
   for(const [id,comment] of Object.entries(record.value.comments)){
    const local=thread.value.thread.find(entry=>entry.id===id);
-   if(!local||hash(local)!==comment.hash)throw new CliError('comment_conflict','A published local comment was edited or deleted.','The API supports replies and state changes; preserve the original and add a new reply instead.');
+   if(!local||hash(local)!==comment.hash)throw new CliError('comment_conflict','A published local comment was edited or deleted.','Publishing carries new replies and state changes, not edits to comments already published. Restore the published text locally, then change the published comment with afbin comment <artifact> --edit <comment-id>.');
   }
  }
  for(const thread of threads){

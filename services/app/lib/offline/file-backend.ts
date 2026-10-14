@@ -62,6 +62,7 @@ export const OFFLINE_REASONS: Record<BackendFeature, string> = {
 
 /** The refusal for deleting a comment that came from artifactbin. */
 export const LOCAL_DELETE_ONLY = 'Only comments made in this file can be deleted here.';
+export const LOCAL_EDIT_ONLY = 'Only comments made in this file can be edited here.';
 
 /** Who wrote a journal entry or a comment when nobody picked a name. */
 const UNNAMED_AUTHOR = 'Someone';
@@ -602,6 +603,20 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
       if (action.reopen) next = { ...next, status: 'open', resolved_at: null };
       saveThreads(file.threads.map((t) => (t.id === annotationId ? next : t)), localIds);
       return findThread(annotationId);
+    },
+
+    canEditLocalComment(comment) { return file.localIds.includes(comment.id); },
+
+    /** The words of a comment made in this file; its anchor, quote and the thread's state stay. Unchanged text is a no-op. */
+    async editAnnotation(commentId, edit) {
+      const thread = file.threads.find((t) => t.thread.some((c) => c.id === commentId));
+      if (!thread) throw new BackendRequestError('That comment is no longer in this file.', 404);
+      if (!file.localIds.includes(commentId)) throw new BackendRequestError(LOCAL_EDIT_ONLY, 403);
+      if (typeof edit.body !== 'string' || !edit.body.trim()) throw new BackendRequestError('invalid_annotation_edit: A comment needs some words.', 400);
+      const at = now();
+      const next: AnnotationWire = { ...thread, thread: thread.thread.map((c) => (c.id === commentId && c.body !== edit.body ? { ...c, body: edit.body, edited_at: at } : c)) };
+      saveThreads(file.threads.map((t) => (t.id === thread.id ? next : t)));
+      return findThread(thread.id);
     },
 
     async deleteAnnotation(annotationId) {

@@ -23,7 +23,7 @@ import {
   OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, parseArtifactFile, sourceDigest, type ArtifactFile,
 } from '../file-format';
 import {
-  CHANGED_OUTSIDE, createFileBackend, fileAssetInliner, LOCAL_DELETE_ONLY, OFFLINE_REASONS, rebuildArtifactFile, snapshotStateFor, sourceChangedOutside,
+  CHANGED_OUTSIDE, createFileBackend, fileAssetInliner, LOCAL_DELETE_ONLY, LOCAL_EDIT_ONLY, OFFLINE_REASONS, rebuildArtifactFile, snapshotStateFor, sourceChangedOutside,
 } from '../file-backend';
 
 const FIXTURE = path.resolve(process.cwd(), '../../scripts/fixtures/offline-file/artifact-file.json');
@@ -354,6 +354,30 @@ describe('comments in the file', () => {
     expect(latest().threads.map((t) => t.id)).toEqual(['ann_server']);
     expect(latest().localIds).toEqual([]);
     expect(LOCAL_DELETE_ONLY).toBe('Only comments made in this file can be deleted here.');
+  });
+
+  it('edits only the words written in this file, keeping the anchor, quote and state', async () => {
+    const file = { ...fixture(), threads: [{
+      id: 'ann_server', status: 'open' as const, anchor: null, orphaned: true, anchor_version: 1, snippet: 's', quote: null, range: null, quote_found: null,
+      thread: [{ id: 'ann_server', body: 'from the site', author: { kind: 'human' as const, label: 'Ravi', transport: 'browser' as const, user_id: 'u1', image: null }, created_at: '2026-09-25T00:00:00.000Z' }],
+      created_at: '2026-09-25T00:00:00.000Z', resolved_at: null,
+    }] };
+    const { backend, latest } = open(file);
+    await expect(backend.editAnnotation('ann_server', { body: 'rewritten' })).rejects.toThrow(LOCAL_EDIT_ONLY);
+    expect(backend.canEditLocalComment?.(file.threads[0]!.thread[0]!)).toBe(false);
+    const mine = await backend.createAnnotation({ path: '0.0', node_id: headingId(file), body: 'Mine', quote: 'Regional' }, 'k');
+    expect(backend.canEditLocalComment?.(mine.thread[0]!)).toBe(true);
+    await backend.actOnAnnotation(mine.id, { resolve: true });
+    const edited = await backend.editAnnotation(mine.id, { body: 'Mine, clarified' });
+    expect(edited).toMatchObject({ id: mine.id, status: 'resolved', quote: mine.quote, anchor: mine.anchor });
+    expect(edited.thread[0]).toMatchObject({ body: 'Mine, clarified', edited_at: expect.any(String) });
+    expect(latest().threads.find((t) => t.id === mine.id)!.thread[0]!.body).toBe('Mine, clarified');
+    const reply = (await backend.actOnAnnotation('ann_server', { reply: 'A reply here' })).thread[1]!;
+    const thread = await backend.editAnnotation(reply.id, { body: 'A better reply' });
+    expect(thread.thread.map((c) => c.body)).toEqual(['from the site', 'A better reply']);
+    expect(thread.thread[0]!.edited_at).toBeUndefined();
+    await expect(backend.editAnnotation(reply.id, { body: '  ' })).rejects.toBeInstanceOf(BackendRequestError);
+    await expect(backend.editAnnotation('local-missing', { body: 'x' })).rejects.toMatchObject({ status: 404 });
   });
 });
 

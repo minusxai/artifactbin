@@ -397,6 +397,8 @@ const ANNOTATIONS: Table = {
     // is no restore door — taking your words back is meant to read as final.
     { name: 'deleted_at', type: 'TIMESTAMPTZ' },
     { name: 'author_remote', type: 'JSONB' }, // managed session attribution, appended on upgrade
+    // When the author last rewrote `body` (lib/annotations editAnnotationCommentFor); NULL = never edited. No history is kept.
+    { name: 'edited_at', type: 'TIMESTAMPTZ' },
   ],
   primaryKey: ['id'],
   indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }],

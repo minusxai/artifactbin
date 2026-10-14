@@ -13,19 +13,23 @@ import Check from 'lucide-solid/icons/check';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import EllipsisVertical from 'lucide-solid/icons/ellipsis-vertical';
+import Pencil from 'lucide-solid/icons/pencil';
 import Trash2 from 'lucide-solid/icons/trash-2';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import type { AnnotationCommentWire } from '@artifactbin/contracts';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
-import { remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
+import { hasReplyText, remoteWorkLabel, remoteWorkActive } from '@/lib/annotations/remote-reply';
+import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import { agentNameColor } from '../lib/agent-identity';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { useOptionalInbox } from '../lib/notifications';
 import { useSession } from '../lib/session';
-import { AuthorIdentity, CommentTimestamp, firstLine, previewText, ThreadContinuation } from './AnnotationPreview';
+import { AuthorIdentity, CommentEdited, CommentTimestamp, firstLine, previewText, ThreadContinuation } from './AnnotationPreview';
 import { AnnotationReplyBox } from './AnnotationReplyBox';
 import { CommentFoldingBody } from './CommentFoldingBody';
+import { CommentSubmitHint } from './CommentMarkdown';
+import { CommentMarkdownField } from './LazyCommentField';
 import { CommentScreenshot } from './CommentScreenshot';
 import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
 
@@ -38,6 +42,7 @@ const Menu = lazy(() => import('../ui/Menu').then((module) => ({ default: module
 export const preloadThreadMenu = (): Promise<unknown> => Menu.preload();
 
 const threadClass = 'rounded-panel border border-edge bg-comment text-sm';
+const EDIT_FAILED = 'Could not save your edit. It is still here; try again.';
 
 /** ONE fold affordance for a thread, wherever the card is putting it. */
 function ThreadFoldControl(props: { folded: boolean; onToggle: () => void }): JSX.Element {
@@ -71,6 +76,8 @@ interface AnnotationThreadProps {
   onResolve: () => void;
   onReopen: () => void;
   onDelete: (commentId: string) => void;
+  /** Rewrite one comment's words; rejects with the backend's refusal, and the editor keeps the draft. Absent: no editing here. */
+  onEdit?: (commentId: string, body: string) => Promise<void>;
   onToggleFold: () => void;
   onToggleComment: (commentId: string) => void;
 }
@@ -106,6 +113,33 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
     return props.canDeleteAny === true
       || (userId !== undefined && userId !== null && comment.author.user_id === userId)
       || props.backend.canDeleteLocalAnnotation?.(comment.id) === true;
+  };
+
+  /** Only the words' author may rewrite them: their account online, or the backend's word for a local comment. */
+  const canEdit = (comment: AnnotationCommentWire) => {
+    if (!props.onEdit) return false;
+    const userId = session()?.user?.id;
+    return (userId !== undefined && userId !== null && comment.author.user_id === userId)
+      || props.backend.canEditLocalComment?.(comment) === true;
+  };
+  // ONE comment of this thread is edited at a time, in place of its body; the draft survives a refused save.
+  const [editing, setEditing] = createSignal<string | null>(null);
+  const [editDraft, setEditDraft] = createSignal('');
+  const [editError, setEditError] = createSignal('');
+  const [saving, setSaving] = createSignal(false);
+  const startEdit = (comment: AnnotationCommentWire) => {
+    setEditDraft(comment.body); setEditError(''); setEditing(comment.id);
+    if (!props.open) props.onOpen();
+  };
+  const cancelEdit = () => { if (saving()) return; setEditing(null); setEditDraft(''); setEditError(''); };
+  const saveEdit = async (comment: AnnotationCommentWire) => {
+    const body = editDraft();
+    if (saving() || !props.onEdit || !hasReplyText(body)) return;
+    if (body === comment.body) { cancelEdit(); return; }
+    setSaving(true); setEditError('');
+    try { await props.onEdit(comment.id, body); setEditing(null); setEditDraft(''); }
+    catch (cause) { setEditError(cause instanceof BackendRequestError && cause.code === 'annotation_conflict' ? cause.message : EDIT_FAILED); }
+    finally { setSaving(false); }
   };
 
   const agents = () => (props.a.remote_work ?? []).filter((work, index, all) => !all.slice(index + 1).some((next) => next.sessionId === work.sessionId));
@@ -213,7 +247,7 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
               <Show when={index() === 0 && props.resolved && props.open}>
                 <Button type="button" variant="ghost" size="sm" icon aria-label="Hide resolved conversation" aria-expanded="true" onClick={() => props.onOpen()}>↑</Button>
               </Show>
-              <Show when={canDelete(c()) && (index() > 0 || !props.resolved || props.open)}>
+              <Show when={(canDelete(c()) || canEdit(c())) && (index() > 0 || !props.resolved || props.open)}>
                 {(() => {
                   const trigger = (attrs?: object) => (
                     <Tooltip content={index() === 0 ? 'thread actions' : 'comment actions'}>
@@ -224,12 +258,30 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                   );
                   return <Suspense fallback={trigger()}>
                     <Menu label={index() === 0 ? 'Annotation action menu' : 'Comment action menu'}
-                      items={[{ label: index() === 0 ? 'Delete thread' : 'Delete comment', text: index() === 0 ? 'delete thread' : 'delete comment', icon: () => <Trash2 size={12} strokeWidth={1.75} />, danger: true, disabled: props.busy, onSelect: () => props.onDelete(c().id) }]}
+                      items={[
+                        ...(canEdit(c()) ? [{ label: 'Edit comment', text: 'edit', icon: () => <Pencil size={12} strokeWidth={1.75} />, disabled: props.busy || saving(), onSelect: () => startEdit(c()) }] : []),
+                        ...(canDelete(c()) ? [{ label: index() === 0 ? 'Delete thread' : 'Delete comment', text: index() === 0 ? 'delete thread' : 'delete comment', icon: () => <Trash2 size={12} strokeWidth={1.75} />, danger: true, disabled: props.busy, onSelect: () => props.onDelete(c().id) }] : []),
+                      ]}
                       trigger={(attrs) => trigger(attrs)} />
                   </Suspense>;
                 })()}
               </Show>
             </div>
+            <Show when={editing() !== c().id} fallback={
+              // Escape cancels, from anywhere in the editor (a native listener: the rail may sit in a shadow root). The
+              // editor's own keymap claims Escape (select parent node), so its defaultPrevented says nothing here; an
+              // open mention picker stops the key before it bubbles this far.
+              <div data-comment-editor on:keydown={(event) => { if (event.key !== 'Escape') return; event.preventDefault(); event.stopPropagation(); cancelEdit(); }}>
+                <CommentMarkdownField backend={props.backend} artifactId={props.artifactId} label="Edit comment" busy={saving()}
+                  value={editDraft()} onChange={setEditDraft} onSubmit={() => void saveEdit(c())} rows={3} autoFocus />
+                <Show when={editError()}><p role="alert" class="text-xs text-danger">{editError()}</p></Show>
+                <div class="mt-2 flex items-center justify-end gap-2">
+                  <CommentSubmitHint action="save" />
+                  <Button type="button" variant="ghost" size="sm" aria-label="Cancel edit" disabled={saving()} onClick={cancelEdit}>cancel</Button>
+                  <Button type="button" size="sm" aria-label="Save edit" disabled={saving() || !hasReplyText(editDraft())} onClick={() => void saveEdit(c())}>save</Button>
+                </div>
+              </div>
+            }>
             <Show when={commentFolded()} fallback={
               <Show when={props.open} fallback={<p class="line-clamp-2 font-sans leading-snug text-fg/90">{previewText(c().body)}</p>}>
                 <CommentFoldingBody text={c().body} foldable={!(props.justOpened && newest())} />
@@ -237,6 +289,9 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
             }>
               <p class="truncate font-sans leading-snug text-fg/90">{firstLine(c().body)}</p>
             </Show>
+            </Show>
+            {/* Below the words, not on the author line: that line is already full on a narrow rail. */}
+            <Show when={editing() !== c().id && c().edited_at}>{(at) => <CommentEdited iso={at()} class="mt-0.5 inline-block font-mono text-micro text-faint" />}</Show>
             <Show when={c().image ?? (index() === 0 ? props.a.image : undefined)}>{(image) => <CommentScreenshot image={image()} />}</Show>
             <Show when={newest() && !commentFolded() && props.open}><span data-notification-read-point class="block h-px" aria-hidden="true" /></Show>
           </li>;

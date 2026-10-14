@@ -16,6 +16,8 @@ Comments are sidecar relations to the node's persistent BODY `id`; reading or wr
 
 Set a thread to open or resolved with `afbin comment <ref> --thread <thread-id> --state open` or `--state resolved`; reopening does not post a new comment.
 
+Edit a comment you wrote with `afbin comment <ref> --edit <comment-id> --body "New text"` (or `--input`): the ID is the thread ID for its first comment, or a reply's ID from the listing. Only the author may edit (the same account, or locally the same `--agent`); the anchor, quote, image and thread state stay, and the comment gains `edited_at`. Edit to correct your own words; answer someone else with a reply.
+
 Listing a document returns its OPEN threads only. Read the ones already settled with `afbin comment <ref> --filter state=resolved`, or both lists at once with `--filter state=all`.
 
 "snippet" is the current node text. "quote" is the selected text; quote_found says whether it is still present. Comment Markdown supports links and emphasis: `![alt](url)` is not an image, but a literal exclamation mark plus a link. A comment cannot embed a picture. A deleted thread is not erased; there is no undo for it here.

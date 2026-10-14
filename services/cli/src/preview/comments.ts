@@ -10,3 +10,6 @@ export interface PreviewComment {
  quote?:string;
  range?:AnnotationRange|null;
 }
+
+/** The person at this machine, as local comments name them: the browser preview's author, and the CLI's without --agent. */
+export const LOCAL_AUTHOR_LABEL='You';

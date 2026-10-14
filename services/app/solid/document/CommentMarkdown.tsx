@@ -55,6 +55,6 @@ export function CommentMarkdown(props: { text: string; label?: string; class?: s
 }
 
 /** Shared footer hint keeps new comments and replies visually consistent. */
-export function CommentSubmitHint(props: { action: 'comment' | 'reply' }): JSX.Element {
-  return <span class="mr-auto hidden items-center gap-1.5 font-sans text-2xs text-muted sm:inline-flex" aria-label={`Keyboard shortcut to send ${props.action}`}><kbd class="rounded-chip border border-edge bg-surface px-1.5 py-0.5 font-sans text-micro">{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}</kbd><span aria-hidden="true">+</span><kbd class="rounded-chip border border-edge bg-surface px-1.5 py-0.5 font-sans text-micro">Enter</kbd><span class="ml-1">to {props.action}</span></span>;
+export function CommentSubmitHint(props: { action: 'comment' | 'reply' | 'save' }): JSX.Element {
+  return <span class="mr-auto hidden items-center gap-1.5 font-sans text-2xs text-muted sm:inline-flex" aria-label={props.action === 'save' ? 'Keyboard shortcut to save' : `Keyboard shortcut to send ${props.action}`}><kbd class="rounded-chip border border-edge bg-surface px-1.5 py-0.5 font-sans text-micro">{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}</kbd><span aria-hidden="true">+</span><kbd class="rounded-chip border border-edge bg-surface px-1.5 py-0.5 font-sans text-micro">Enter</kbd><span class="ml-1">to {props.action}</span></span>;
 }

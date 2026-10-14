@@ -174,6 +174,12 @@ test('production editor protocol saves local graph edits and rejects stale file 
   assert.equal((await call('annotations.create',{input:{node_id:'text',body:'Review this'},key:'once'})).id,thread.id);
   const reply=await call('annotations.act',{id:thread.id,input:{reply:'Done',resolve:true}});
   assert.equal(reply.thread.length,2);assert.equal(reply.status,'resolved');
+  // The author rewrites a reply on the resolved thread: words only, stamped, the first comment untouched.
+  const edited=await call('annotations.edit',{id:reply.thread[1].id,input:{body:'Done, with the totals fixed'}});
+  assert.equal(edited.status,'resolved');assert.deepEqual(edited.thread.map((c:{body:string})=>c.body),['Review this','Done, with the totals fixed']);
+  assert.ok(edited.thread[1].edited_at);assert.equal(edited.thread[0].edited_at,undefined);assert.equal(edited.anchor.nodeId,'text');
+  assert.match((await call('annotations.edit',{id:thread.id,input:{body:'  '}})).error,/1–10000 characters/);
+  assert.equal((await call('annotations.edit',{id:'missing',input:{body:'x'}})).error,'Comment not found');
   assert.equal((await call('annotations.list',{status:'open'})).length,0);
   assert.equal((await call('annotations.list',{status:'resolved'}))[0].anchor.nodeId,'text');
   assert.equal((await call('commit',{edit_id:head.edit_id,document_update:update})).status,409);
@@ -181,7 +187,7 @@ test('production editor protocol saves local graph edits and rejects stale file 
   assert.equal((await call('commit',{edit_id:fresh.edit_id,document_update:update})).status,409);
   assert.match(await readFile(join(root,'report.jsx'),'utf8'),/External/);
   await session.close();session=await startPreview({root,home:join(root,'home'),files:['report.jsx']});
-  assert.equal((await call('annotations.list',{status:'resolved'}))[0].thread.length,2);
+  assert.equal((await call('annotations.list',{status:'resolved'}))[0].thread[1].body,'Done, with the totals fixed');
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
 

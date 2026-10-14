@@ -16,6 +16,7 @@ Authenticate with an email account using the [direct HTTP sign-in and credential
 - Policy: `GET /api/artifacts/<id>/policy` for `revision`, then `PUT` with `policy` and `expectedPolicyRevision`, separately from content.
 - Markup edits preserve graph reads/claims and node identity; raw JSX does not replace that contract. See [JSX authoring](http-authoring.md) and [graph wire fields](http-document-graph.md).
 - `GET/POST /api/artifacts/<id>/annotations`: read/create comments with a body and node/quote anchor; permissions apply.
+- `PATCH /api/artifacts/<id>/annotations/<comment_id>`: edit the text of a comment you wrote; see [comments](#comments-create-reply-edit-resolve-and-reopen).
 - `DELETE /api/artifacts/<id>`: move to trash.
 
 Follow non-success JSON recovery instructions. Reconcile uncertain mutations before another write.
@@ -47,7 +48,7 @@ Use `s.result.controls` to find accessible names, then Playwright role/name loca
 
 - A saved page action uses `POST /api/artifacts/<page-id>/mutate` with `{"name":"vote","args":{"choice":"ramen"}}`. The API checks page access, dataset policy and membership. Public/unlisted links do not grant writes; direct dataset SQL may return 403 even to owners. See [actions](markup-data.md#declarations-helmet-only) and [dataset rules](apps.md#dataset-rules).
 
-## Comments: create, reply, resolve and reopen
+## Comments: create, reply, edit, resolve and reopen
 
 Comments require an email bearer and document comment permission. `GET /api/artifacts/<id>/annotations?status=all` lists threads as `{annotations,next_cursor}`; follow the cursor. Each has `id`, `revision`, `status` and `thread`.
 
@@ -55,14 +56,16 @@ Create with `POST /api/artifacts/<id>/annotations` and `{"body":"Please clarify 
 
 Reply or transition with **POST** `/api/artifacts/<id>/annotations/<annotation_id>` using the root ID and last `expected_revision`. Send `reply`, `resolve:true` or `reopen:true`; a reply may combine with one transition, never both transitions. Use each returned revision. A `409 annotation_conflict` includes `current_revision`; reconcile before retrying.
 
+Edit your own comment with **PATCH** `/api/artifacts/<id>/annotations/<comment_id>` and `{"body":"New text","expected_revision":n}`; `comment_id` is the thread ID for its first comment or a reply's `id`. Only the author may; others get 404. It answers the thread with `edited_at` on that comment.
+
 With existing `artifactId`, `nodeId` and private `accessToken`:
 
 ```js
 // BEGIN HTTP COMMENTS
 const headers = {'Content-Type':'application/json', Authorization:'Bearer ' + accessToken};
 const commentsPath = '/api/artifacts/' + artifactId + '/annotations';
-async function commentRequest(path, body) {
-  const response = await fetch(base + path, {method:'POST', headers, body:JSON.stringify(body)});
+async function commentRequest(path, body, method = 'POST') {
+  const response = await fetch(base + path, {method, headers, body:JSON.stringify(body)});
   if (!response.ok) throw Error(await response.text());
   return response.json();
 }
@@ -71,6 +74,7 @@ const threadPath = commentsPath + '/' + created.id;
 const replied = await commentRequest(threadPath, {reply:'I have clarified it', expected_revision:created.revision});
 const resolved = await commentRequest(threadPath, {resolve:true, expected_revision:replied.revision});
 const reopened = await commentRequest(threadPath, {reopen:true, expected_revision:resolved.revision});
+const edited = await commentRequest(threadPath, {body:'Please clarify this paragraph', expected_revision:reopened.revision}, 'PATCH');
 // END HTTP COMMENTS
 ```
 

@@ -1335,6 +1335,7 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   view_state JSONB,
   deleted_at TIMESTAMPTZ,
   author_remote JSONB,
+  edited_at TIMESTAMPTZ,
   PRIMARY KEY (id)
 );
 
@@ -1381,6 +1382,8 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS view_state JSONB;
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_remote JSONB;
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
 

@@ -224,6 +224,17 @@ export function createHttpBackend(id: string): ArtifactBackend {
       }
       return (await res.json()) as AnnotationWire;
     },
+    async editAnnotation(commentId, body) {
+      const res = await fetch(`${mine}/annotations/${encodeURIComponent(commentId)}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
+      if (!res.ok) {
+        const refusal = await res.json().catch(() => null) as { error?: unknown; code?: unknown } | null;
+        const code = typeof refusal?.error === 'string' ? refusal.error : undefined;
+        throw new BackendRequestError(code === 'annotation_conflict'
+          ? 'This conversation changed while you were editing. Your edit is still here; save again to apply it.'
+          : `Could not save this edit (${res.status})`, res.status, code === SIGN_IN_REQUIRED || refusal?.code === SIGN_IN_REQUIRED, code);
+      }
+      return (await res.json()) as AnnotationWire;
+    },
     async deleteAnnotation(annotationId) {
       const res = await fetch(`${mine}/annotations/${annotationId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Could not delete this comment. Try again.');

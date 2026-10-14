@@ -1,6 +1,7 @@
 /** Browser adapter: production components speak ArtifactBackend; only this module knows local routes. */
 import {type ArtifactBackend,type BackendFeature,type EditAnswer,BackendRequestError} from '../../../app/lib/cli-toolkit/browser';
 import type {PreviewDocument} from './types';
+import {LOCAL_AUTHOR_LABEL} from './comments';
 
 export function createPreviewBackend(file:string,onSaved:(document:PreviewDocument)=>void):ArtifactBackend {
  const request=async(path:string,body:object,signal?:AbortSignal)=>{
@@ -28,6 +29,7 @@ export function createPreviewBackend(file:string,onSaved:(document:PreviewDocume
   listAnnotations:(status,options)=>editor('annotations.list',{status},options?.signal),
   createAnnotation:(input,key)=>editor('annotations.create',{input,key}),
   actOnAnnotation:(id,input)=>editor('annotations.act',{id,input}),deleteAnnotation:id=>editor('annotations.delete',{id}),
+  editAnnotation:(id,input)=>editor('annotations.edit',{id,input}),canEditLocalComment:comment=>comment.author.kind==='human'&&comment.author.label===LOCAL_AUTHOR_LABEL,
   uploadCommentImage:async()=>refuse('commentImages'),members:async query=>query===undefined?{mentions:{}}:{people:[]},remoteSessions:async()=>({sessions:[]}),deleteRemoteSession:async()=>refuse('remoteSessions'),
  };
 }

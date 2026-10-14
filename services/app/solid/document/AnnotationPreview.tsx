@@ -157,6 +157,13 @@ export function CommentTimestamp(props: { iso: string; class?: string }): JSX.El
   return <Show when={valid()}><Tooltip content={exact()}><time dateTime={props.iso} aria-label={exact()} tabIndex={0} class={props.class}>{day()} · {time()}</time></Tooltip></Show>;
 }
 
+/** The mark of a rewritten comment: "edited", with when, keyboard-reachable in a tooltip. There is no history behind it. */
+export function CommentEdited(props: { iso: string; class?: string }): JSX.Element {
+  const date = () => new Date(props.iso);
+  const exact = () => Number.isNaN(date().getTime()) ? 'Edited' : `Edited ${date().toLocaleString(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+  return <Tooltip content={exact()}><span tabIndex={0} aria-label={exact()} class={props.class}>edited</span></Tooltip>;
+}
+
 /** Stack the visible threads at their anchors, spaced, and keep a short cluster inside the viewport. */
 export function positionedComments(annotations: AnnotationWire[], rects: Record<string, StoryEditRect>,
   frame: Pick<DOMRect, 'top' | 'height'>, viewportHeight: number): Array<{ annotation: AnnotationWire; top: number }> {
@@ -343,6 +350,7 @@ export function AnnotationPreview(props: {
           </div>
         </Show>
         <span data-card-body class="mb-1 mt-1.5 line-clamp-2 shrink-0 font-sans text-sm leading-snug text-fg/90">{previewText(first()!.body)}</span>
+        <Show when={first()!.edited_at}>{(at) => <span class="pointer-events-auto -mt-1 mb-1 shrink-0"><CommentEdited iso={at()} class="font-mono text-micro text-faint" /></span>}</Show>
         <Show when={props.resolveError}><span role="alert" class="mt-1 font-mono text-micro text-danger">{props.resolveError}</span></Show>
         {/* The count (and "+N more", which expands the replies) on the left; Reply and the way to the rail on the right. */}
         <span data-card-footer class={`mt-auto flex min-h-[22px] items-center justify-between gap-2 font-mono text-micro text-faint ${repliesExpanded() ? 'pt-2' : ''}`}>
@@ -365,6 +373,7 @@ export function AnnotationPreview(props: {
               <span role="listitem" class="block">
                 <AuthorIdentity author={reply.author} />
                 <span class="mt-1 block whitespace-pre-wrap break-words font-sans text-sm leading-snug text-fg/90">{previewText(reply.body)}</span>
+                <Show when={reply.edited_at}>{(at) => <CommentEdited iso={at()} class="font-mono text-micro text-faint" />}</Show>
                 <Show when={reply.image}>{(image) => <CommentScreenshot image={image()} />}</Show>
               </span>
             )}</For>

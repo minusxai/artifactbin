@@ -128,6 +128,19 @@ export interface AnnotationAction {
   reopen?: boolean;
 }
 
+/** A comment's new text, optionally conditional on the thread's revision (the ROOT's, the one every reader holds). */
+export interface AnnotationEdit {
+  body: string;
+  expectedRevision?: number;
+}
+
+/** What an edit answers: the thread as it now reads, the edited comment, and the text it replaced (null when unchanged). */
+export interface AnnotationEditResult {
+  wire: AnnotationWire;
+  comment: AnnotationCommentWire;
+  previous: string | null;
+}
+
 /** ~ how much annotated text survives as the snippet. */
 
 interface AnnotationRowDb {
@@ -156,6 +169,8 @@ interface AnnotationRowDb {
   /** JSON `AnnotationRange`, parsed on read — a malformed value reads as no range, never a throw. */
   range: string | null;
   view_state: CommentViewState | null;
+  /** Set when the author last rewrote `body`; null on a comment never edited. */
+  edited_at: string | null;
 }
 
 const scopedRow = async (q: Queryable, scope: Scope, id: string, lock = false): Promise<ArtifactRow | null> => {
@@ -205,6 +220,7 @@ const commentWire = (row: AnnotationRowDb, images: Map<string, CommentImageWire>
     },
     created_at: row.created_at,
     ...(images.has(row.id) ? { image: images.get(row.id) } : {}),
+    ...(row.edited_at ? { edited_at: row.edited_at } : {}),
   };
 };
 
@@ -567,6 +583,75 @@ export async function actOnAnnotationFor(
   if (!head) return null;
   const [wire] = await wireFor(db, head, [updated.row]);
   return wire ?? null;
+}
+
+/**
+ * Rewrite the TEXT of one comment — a thread's first comment or a reply, open or resolved — by its AUTHOR.
+ *
+ * EDITING IS NARROWER THAN DELETING. Reaching the document is the editor scope like every annotation verb, and
+ * then only the account that wrote the words (`author_user_id`) may change them: a document's owner may take
+ * someone's comment away, never put words in their mouth. A comment that is not this actor's is the same uniform
+ * null as an unknown id. Anchor, quote, range and image stay as they were; `edited_at` is stamped and no history
+ * is kept.
+ *
+ * The thread's `revision` (the root's) guards the write like a reply's. Repeating the current text changes
+ * nothing — no revision, no stamp, no notice — so a retried edit is harmless. Mentions the edit NEWLY adds are
+ * invited in this transaction (their notices leave through the event outbox once it commits); the caller tells
+ * connected sessions after commit with `previous`.
+ */
+export async function editAnnotationCommentFor(
+  actor: AccessActor,
+  artifactId: string,
+  commentId: string,
+  edit: AnnotationEdit,
+  receipt?: MutationReceipt,
+): Promise<AnnotationEditResult | null> {
+  if (!actor.userId) return null;
+  const db = await getDb();
+  const scope = annotationScope(actor);
+  return db.transaction(async (tx): Promise<AnnotationEditResult | null> => {
+    // Artifact → root → reply: the lock order every annotation mutation takes.
+    const row = await scopedRow(tx, scope, artifactId, true);
+    if (!row) return null;
+    const target = await tx.query<{ id: string; root_id: string | null }>(
+      `SELECT id, root_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND ${LIVE_ANNOTATION_SQL}`,
+      [commentId, artifactId],
+    );
+    if (!target.rows[0]) return null;
+    const rootId = target.rows[0].root_id ?? target.rows[0].id;
+    const root = (await tx.query<AnnotationRowDb>(
+      `SELECT * FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
+      [rootId, artifactId],
+    )).rows[0];
+    if (!root) return null;
+    const comment = target.rows[0].root_id
+      ? (await tx.query<AnnotationRowDb>(
+        `SELECT * FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id = $3 AND ${LIVE_ANNOTATION_SQL} FOR UPDATE`,
+        [commentId, artifactId, rootId],
+      )).rows[0]
+      : root;
+    if (!comment || comment.author_user_id !== actor.userId) return null;
+    if (edit.expectedRevision !== undefined && root.revision !== edit.expectedRevision) throw new AnnotationRevisionError(root.revision);
+
+    const changed = comment.body !== edit.body;
+    if (changed) {
+      await tx.query('UPDATE annotations SET body = $2, edited_at = now() WHERE id = $1', [comment.id, edit.body]);
+      await tx.query('UPDATE annotations SET revision = revision + 1 WHERE id = $1', [root.id]);
+      await recordEvent(tx, actorSubject(actor), 'annotation_edited', { kind: 'artifact', id: artifactId }, {
+        annotation_id: root.id, ...(comment.id !== root.id ? { reply_id: comment.id } : {}), agent: comment.author_kind === 'agent',
+      });
+      await commentMentions(tx, row, actor, edit.body, comment.id, comment.body);
+      await remoteAgents.enqueue(tx, actor.userId, artifactId, root.id,
+        { id: comment.id, body: edit.body, author: { kind: comment.author_kind, label: comment.author_label } }, comment.body);
+      await notify(tx, artifactId, root.id);
+    }
+    const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);
+    const [wire] = await wireFor(tx, row, fresh.rows);
+    const edited = wire?.thread.find((entry) => entry.id === comment.id);
+    if (!wire || !edited) return null;
+    if (receipt) await completeMutationReceipt(tx, receipt, { status: 200, body: wire as unknown as Record<string, unknown> });
+    return { wire, comment: edited, previous: changed ? comment.body : null };
+  });
 }
 
 /**

@@ -71,6 +71,8 @@ interface EventVerbs {
     mentioned: MembershipEventPayload;
     invitation_dismissed: MembershipEventPayload;
     annotation_reopened: AnnotationPayload;
+    /** A comment's author rewrote its text; `reply_id` names the reply when it was not the thread's first comment. */
+    annotation_edited: AnnotationPayload;
     joined: MembershipEventPayload;
     left: MembershipEventPayload;
     liked: EmptyPayload;
@@ -105,7 +107,7 @@ export type EventPayload<K extends ObjectKind, V extends EventVerb<K>> = EventVe
 
 /** The catalogue at runtime. Complete by construction: a verb missing from a list fails to type-check. */
 export const EVENT_VERBS = {
-  artifact: ['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked', 'joined', 'left', 'join_requested', 'invited', 'mentioned', 'invitation_dismissed', 'annotation_reopened'],
+  artifact: ['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked', 'joined', 'left', 'join_requested', 'invited', 'mentioned', 'invitation_dismissed', 'annotation_reopened', 'annotation_edited'],
   user: ['notification_changed', 'signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed'],
   token: ['minted', 'claimed', 'revoked'],
   door: ['denied'],

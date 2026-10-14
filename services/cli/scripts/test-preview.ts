@@ -157,6 +157,9 @@ try{
  await b.getByRole('textbox').last().fill('Image note');
  await b.getByRole('button',{name:'Save annotation'}).click();
  await b.getByText('Image note',{exact:true}).first().waitFor();
+ // The author's own thread now draws its actions menu, a lazy chunk: let it land before the host stops, or the
+ // page records the restart as a failed module fetch rather than anything about comments.
+ await b.waitForFunction(()=>performance.getEntriesByType('resource').some(entry=>/\/Menu-[A-Z0-9]+\.js$/.test(entry.name)&&(entry as PerformanceResourceTiming).responseEnd>0));
  const port=Number(new URL(server.url).port);await server.close();server=await launch(port);
  await b.reload();await b.getByRole('button',{name:'Comment',exact:true}).click();await b.getByText('Persistent note',{exact:true}).first().waitFor();await b.getByText('Image note',{exact:true}).first().waitFor();
  const threads=await(await b.request.post(server.url+'/editor',{data:{file:'report.jsx',operation:'annotations.list',status:'open'}})).json();

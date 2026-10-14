@@ -533,6 +533,27 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     } finally { setBusy(false); }
   };
   const act = (annId: string, body: AnnotationActionBody) => actOrThrow(annId, body).catch(() => false);
+  /** A thread as the server now answers it, wherever this viewer holds it (open, resolved, or counting down). */
+  const replaceThread = (wire: AnnotationWire) => batch(() => {
+    const swap = (rows: AnnotationWire[]) => rows.map((row) => (row.id === wire.id ? wire : row));
+    setAnnotations((prev) => swap(prev));
+    setResolvedList((prev) => prev && swap(prev));
+    setRecentResolved((current) => current[wire.id] ? { ...current, [wire.id]: { ...current[wire.id]!, row: wire } } : current);
+  });
+  /** One comment's words, against the thread revision this viewer read. A refusal rejects (the editor keeps the draft); a conflict first re-reads the thread so saving again applies. */
+  const editComment = async (rootId: string, commentId: string, body: string) => {
+    const held = [...annotations(), ...(resolvedList() ?? [])].find((row) => row.id === rootId);
+    try {
+      replaceThread(await backend.editAnnotation(commentId, { body, ...(held?.revision !== undefined ? { expected_revision: held.revision } : {}) }));
+    } catch (cause) {
+      if (cause instanceof BackendRequestError && cause.code === 'annotation_conflict') {
+        const [open, resolved] = await Promise.all([backend.listAnnotations('open'), backend.listAnnotations('resolved')]).catch(() => [[], []]);
+        const fresh = [...open, ...resolved].find((row) => row.id === rootId);
+        if (fresh) replaceThread(fresh);
+      }
+      throw cause;
+    }
+  };
   const resolveFromPreview = async (id: string) => {
     setAmbientResolveError(null);
     if (!await act(id, { resolve: true })) setAmbientResolveError({ id, message: 'Could not resolve this thread. Try again.' });
@@ -832,6 +853,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const threadHandlers = (id: string, resolved: boolean) => ({
     onHover: hoverUi,
     onDelete: (commentId: string) => askDelete(commentId, commentId === id),
+    onEdit: (commentId: string, body: string) => editComment(id, commentId, body),
     onToggleFold: () => toggle('threads', id),
     onToggleComment: (commentId: string) => toggle('comments', commentId),
     ...(resolved ? {
