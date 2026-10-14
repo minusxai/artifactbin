@@ -14,16 +14,17 @@ export function reconcileDocument(base:LocalDocument,local:LocalDocument,remote:
   if(!isDeepStrictEqual(remote.metadata[key],base.metadata[key])&&!isDeepStrictEqual(desired,remote.metadata[key]))fields.push(key);
   else Object.assign(metadata,{[key]:desired});
  }
- let body=remote.body;
- if(local.body!==base.body){
-  if(remote.body===base.body||local.body===remote.body)body=local.body;
-  else{
-   // Descending base-coordinate changes are an executable intervening edit log.
-   // Earlier replacements to the right do not move the remaining left-hand spans.
-   const intervening=sourceChanges(base.body,remote.body).reverse().map((change,seq)=>({...change,seq,editId:`remote-${seq}`}));
-   const merged=rebaseEditBatch(remote.body,sourceChanges(base.body,local.body),intervening);
-   if(merged.ok)body=merged.source;else fields.push('content');
-  }
- }
- return fields.length?{ok:false,fields}:{ok:true,document:{metadata,body}};
+ const body=mergeSource(base.body,local.body,remote.body);
+ if(body===null)fields.push('content');
+ return fields.length||body===null?{ok:false,fields}:{ok:true,document:{metadata,body}};
+}
+
+/** Both sides' changes to one base source, or null when they touch the same part. */
+export function mergeSource(base:string,local:string,remote:string):string|null{
+ if(local===base||remote===base||local===remote)return local===base?remote:local;
+ // Descending base-coordinate changes are an executable intervening edit log.
+ // Earlier replacements to the right do not move the remaining left-hand spans.
+ const intervening=sourceChanges(base,remote).reverse().map((change,seq)=>({...change,seq,editId:`remote-${seq}`}));
+ const merged=rebaseEditBatch(remote,sourceChanges(base,local),intervening);
+ return merged.ok?merged.source:null;
 }

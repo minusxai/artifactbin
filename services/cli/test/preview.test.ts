@@ -448,3 +448,74 @@ test('occupied preview port gives a recoverable instruction and preserves the li
   assert.equal(await (await fetch(`http://127.0.0.1:${port}`)).text(),'existing listener');
  }finally{await new Promise<void>((resolve,reject)=>existing.close(error=>error?reject(error):resolve()));await rm(root,{recursive:true,force:true});}
 });
+
+test('two tabs editing different paragraphs both save; an overlapping edit is refused and the file kept',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-two-tabs-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'<p id="first">First draft</p>\n<p id="second">Second draft</p>');
+  session=await startPreview({root,files:['report.jsx'],home:join(root,'home')});
+  const request=(path:string,body?:unknown)=>fetch(session!.url+path,{method:body?'POST':'GET',headers:{'content-type':'application/json',origin:session!.url},...(body?{body:JSON.stringify(body)}:{})});
+  const tabA=await (await request('/document?file=report.jsx')).json(),tabB=await (await request('/document?file=report.jsx')).json();
+  assert.equal(tabA.revision,tabB.revision);
+  assert.equal((await request('/save',{file:'report.jsx',revision:tabA.revision,body:tabA.body.replace('First draft','First by A')})).status,200);
+  // Tab B still holds the old revision: its edit to the other paragraph merges onto A's save.
+  const merged=await request('/save',{file:'report.jsx',revision:tabB.revision,body:tabB.body.replace('Second draft','Second by B')});
+  assert.equal(merged.status,200,await merged.clone().text());
+  let file=await readFile(join(root,'report.jsx'),'utf8');
+  assert.match(file,/First by A/);assert.match(file,/Second by B/);
+  // A third stale tab rewriting A's paragraph overlaps: refused, with the file untouched.
+  const overlap=await request('/save',{file:'report.jsx',revision:tabB.revision,body:tabB.body.replace('First draft','First by C')});
+  assert.equal(overlap.status,409);
+  assert.match((await overlap.json()).error,/same part of report\.jsx/);
+  assert.equal(await readFile(join(root,'report.jsx'),'utf8'),file);
+  // An agent writing the file directly is a version too: a stale tab's other-paragraph edit merges onto it.
+  const before=await (await request('/document?file=report.jsx')).json();
+  await writeFile(join(root,'report.jsx'),file.replace('First by A','First by agent'));
+  assert.equal((await request('/save',{file:'report.jsx',revision:before.revision,body:before.body.replace('Second by B','Second again')})).status,200);
+  file=await readFile(join(root,'report.jsx'),'utf8');
+  assert.match(file,/First by agent/);assert.match(file,/Second again/);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('local comments delete a whole thread or a single reply, and stay deleted after a restart',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-delete-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'<p id="text">Words</p>');
+  session=await startPreview({root,home:join(root,'home'),files:['report.jsx']});
+  const call=async(operation:string,args:object={})=>{const response=await fetch(session!.url+'/editor',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',operation,...args})});const value=await response.json();assert.equal(response.status,200,JSON.stringify(value));return value;};
+  const kept=await call('annotations.create',{input:{node_id:'text',body:'Keep this thread'},key:'kept'});
+  const replied=await call('annotations.act',{id:kept.id,input:{reply:'Remove this reply'}});
+  const gone=await call('annotations.create',{input:{node_id:'text',body:'Remove this thread'},key:'gone'});
+  await call('annotations.delete',{id:replied.thread[1].id});
+  await call('annotations.delete',{id:gone.id});
+  await session.close();session=await startPreview({root,home:join(root,'home'),files:['report.jsx']});
+  const open=await call('annotations.list',{status:'open'});
+  assert.deepEqual(open.map((thread:{id:string})=>thread.id),[kept.id]);
+  assert.deepEqual(open[0].thread.map((comment:{body:string})=>comment.body),['Keep this thread']);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
+test('a document that does not compile answers a readable page naming the file and the problem',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-broken-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'<p id="text">Fine</p>');
+  session=await startPreview({root,home:join(root,'home'),files:['report.jsx']});
+  await writeFile(join(root,'report.jsx'),'<p id="text">Broken <b>tag</p>');
+  const page=await fetch(session.url+'/workspace/report.jsx');
+  assert.equal(page.status,400);
+  assert.match(page.headers.get('content-type')??'',/^text\/html/);
+  const html=await page.text();
+  assert.match(html,/report\.jsx/);assert.match(html,/Invalid JSX/);
+  assert.doesNotMatch(html,/^\{"error"/);
+  assert.match(html,/closing tag for &lt;b&gt;/,"the parser's own words, escaped");
+  // The data door the chrome reads stays JSON.
+  const data=await fetch(session.url+'/document?file=report.jsx');
+  assert.equal(data.status,400);assert.match(data.headers.get('content-type')??'',/application\/json/);
+  assert.match(html,/http-equiv="refresh"/,'a reader sees the fix without reloading by hand');
+  // An export's capture gets the same page standing still, and the export names the problem itself.
+  await session.close();session=await startPreview({root,home:join(root,'home'),files:['report.jsx'],capture:true});
+  const captured=await fetch(session.url+'/workspace/report.jsx?capture=1');
+  assert.equal(captured.status,400);assert.doesNotMatch(await captured.text(),/http-equiv="refresh"/);
+  assert.match(session.failure()??'',/Invalid JSX: Expected corresponding JSX closing tag/);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});

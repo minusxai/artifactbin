@@ -160,6 +160,7 @@ What `dispatch.ts` calls to do a command's work.
 | `preview/editor.ts` | The editor protocol over local files. |
 | `preview/graph.ts` | The documents and references a preview session covers. |
 | `preview/local-inputs.ts` | Local bytes behind a registered reference. |
+| `preview/problem-page.ts` | The page a reader sees when the file cannot be shown. |
 | `preview/session.ts` | File-backed preview sessions: saves, SQL inputs, comments. |
 
 ### Sync and publication

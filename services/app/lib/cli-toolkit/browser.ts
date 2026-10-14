@@ -24,7 +24,7 @@ export type { StoryController, StoryDocumentUpdate } from '../story-runtime/cont
 export { isStoryDocumentUpdate } from '../story-runtime/document-update';
 // The edit protocol: the preview writes its wire strings, which the protocol's unions check.
 export { isEditParentMessage } from '../edit-protocol';
-export type { RuntimeChannel } from '../edit-protocol';
+export type { RuntimeChannel, StoryEditSelection } from '../edit-protocol';
 export type { FrameEditSession } from '../frame-edit/session';
 export type { FrameSelectionActions } from '../frame-edit/selection-actions';
 export type { FrameAnnotateSession } from '../frame-edit/annotate';
@@ -47,6 +47,8 @@ export { DocumentTitle, PageBar } from '../../solid/components/PageBar';
 export { createDocumentViewport } from '../../solid/document/create-document-viewport';
 export { DocumentCommentAction, DocumentEditAction } from '../../solid/document/DocumentBarActions';
 export { AnnotationLayer } from '../../solid/document/AnnotationLayer';
+export { SelectionActions } from '../../solid/document/SelectionActions';
+export { Button } from '../../solid/ui/Button';
 export { EditorSourcePanel, EditorToolbar, EditorViewTabs } from '../../solid/editor/EditorChrome';
 export { default as SourceEditorPane } from '../../solid/editor/SourceEditorPane';
 export { createInPlaceEdit } from '../../solid/editor/create-in-place-edit';
