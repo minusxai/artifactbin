@@ -7,6 +7,6 @@ export const AGENT_HELP_TITLE='Agent guide: authentication, creation, editing, a
 export function agentDiscovery(base:string):AgentDiscovery{
  const o=base.replace(/\/$/,'');
  return {url:`${o}/llms.txt`,
-  instruction:`Use the HTTP API to authenticate, create, edit, and operate artifacts. Read /llms.txt for all details. You must ask the user for their email to complete authentication.`,
+  instruction:`Use the HTTP API to authenticate, create, edit, and operate artifacts. Read /llms.txt for all details. Or download all skills at /skills/artifactbin.zip. You must ask the user for their email to complete authentication.`,
   cliInstruction:`If you have the artifactbin CLI installed, follow its artifactbin skill. To install and set up the CLI, run: ${buildNpmSetupCommand({serverOrigin:o})}`};
 }

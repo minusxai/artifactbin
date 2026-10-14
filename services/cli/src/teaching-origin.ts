@@ -1,3 +1,4 @@
+import {credentialPaths} from '@artifactbin/utils/node/credentials';
 /**
  * THE BUNDLE IS ORIGIN-FREE UNTIL IT IS USED.
  *
@@ -13,13 +14,15 @@
  * a substitution that is missed produces `__AFBIN_SERVER__/chat/install.sh`,
  * which fails loudly, rather than a plausible link to the wrong server.
  */
+export const TEACHING_CREDENTIAL_PATH = '__AFBIN_CREDENTIAL_PATH__';
 export const TEACHING_BASE = '__AFBIN_SERVER__';
 
 const TOKEN = new RegExp(TEACHING_BASE, 'g');
 
 /** One rendered document, addressed to `origin` (trailing slash trimmed, as every server origin is). */
 export function withTeachingOrigin(text: string, origin: string): string {
-  return text.replace(TOKEN,origin.replace(/\/+$/, ''));
+  const addressed=text.replace(TOKEN,origin.replace(/\/+$/, ''));
+  return addressed.includes(TEACHING_CREDENTIAL_PATH)?addressed.replaceAll(TEACHING_CREDENTIAL_PATH,credentialPaths(origin,'~/.artifactbin').backingPath):addressed;
 }
 
 /** A whole bundle — the installed skill tree — addressed to `origin`. */

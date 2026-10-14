@@ -10,7 +10,7 @@ it('documents every command/flag and direct HTTP while refusing retired CLI and 
  expect(reference).toContain('afbin <command> -h');
  for(const [file,text] of Object.entries(teaching.files)){
   expect(text,file).not.toMatch(/afbin api|MCP|\/docs\/|references\/api\.md/);
-  if(!file.startsWith('references/http-')&&file!=='scripts/credentials.mjs')expect(text,file).not.toContain('--method');
+  if(!file.startsWith('references/http-'))expect(text,file).not.toContain('--method');
  }
  expect(Object.keys(teaching.files)).not.toContain('references/api.md');
  const http=teaching.files['references/http-api.md'];

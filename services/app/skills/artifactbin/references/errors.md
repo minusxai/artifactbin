@@ -11,7 +11,7 @@ Read the returned error code and recovery instruction. A refusal is not successf
 - `cli_npm_required`: prepare Node with [[ base ]]/chat/install-node.sh (Windows: install-node.ps1), then run the selected server’s npm setup from [installation](npm-local.md).
 - `doc_changed` / 409: reread the head and reconcile; do not reuse stale version or graph claims.
 - Invalid JSX/SQL: follow the validation error and allowlist, then prepare again.
-- 401: use the shared credential helper to serialize refresh and retry once. Missing or revoked credentials require email sign-in.
+- 401: follow the [authentication refresh flow](http-auth.md#storage-and-refresh), serialize refresh and retry once. Missing or revoked credentials require email sign-in.
 - 403: confirm the recipient's own identity and artifact/dataset permission. A public or unlisted link grants reading, not ownership or dataset writes.
 - Capacity/transient failures: retain credentials and pending intent, follow retry guidance; avoid duplicate creation.
 

@@ -105,7 +105,6 @@ export default {
     'services/events': { entry: ['src/server.ts'] },
     'services/browser': { entry: ['src/server.ts', 'src/upload-gateway-server.ts'] },
     // The skill's standalone helpers, compiled by name (services/cli/scripts/compile-teaching.ts).
-    'services/utils': { entry: ['src/{credential-helper,comment-watch-helper}.ts'] },
   },
   ignoreWorkspaces: ['docs/proposals/runner-validation'],
   ignoreIssues: {

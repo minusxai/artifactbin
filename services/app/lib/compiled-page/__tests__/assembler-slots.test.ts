@@ -255,7 +255,7 @@ describe('isInertSvg', () => {
   expect(document.querySelector('link[rel="help"]')?.getAttribute('href')).toBe('https://docs.example/llms.txt');
   const agents=document.querySelector('meta[name="agents"]');
   const cli=document.querySelector('meta[name="cli"]');
-  expect(agents?.getAttribute('content')).toBe('Use the HTTP API to authenticate, create, edit, and operate artifacts. Read /llms.txt for all details. You must ask the user for their email to complete authentication.');
+  expect(agents?.getAttribute('content')).toBe('Use the HTTP API to authenticate, create, edit, and operate artifacts. Read /llms.txt for all details. Or download all skills at /skills/artifactbin.zip. You must ask the user for their email to complete authentication.');
   expect(agents?.getAttribute('content')).not.toContain('npx');
   expect(cli?.getAttribute('content')).toContain('npx --yes @afbin/cli@latest setup --server');
   expect(agents?.nextElementSibling).toBe(cli);

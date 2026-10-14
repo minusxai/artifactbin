@@ -4,7 +4,7 @@ description: Email-authenticated HTTP integration, artifact operations and condi
 ---
 ## Read first
 
-Authenticate with an email account using the [shared credential helper and sign-in contract](http-auth.md). Reuse CLI credentials on the same origin; authenticate as the recipient with access. Send JSON with `Content-Type: application/json`; session requests need `Origin: [[ base ]]`.
+Authenticate with an email account using the [direct HTTP sign-in and credential storage contract](http-auth.md). Reuse CLI credentials on the same origin; authenticate as the recipient with access. Send JSON with `Content-Type: application/json`; session requests need `Origin: [[ base ]]`.
 
 ## Operations
 
