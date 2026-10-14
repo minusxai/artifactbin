@@ -18,6 +18,8 @@ it('documents every command/flag and direct HTTP while refusing retired CLI and 
  expect(http).toContain('(http-auth.md)');
  expect(auth).toContain('/api/auth/email-otp/send-verification-otp');
  expect(auth).toContain('/api/authentication/token');
+ expect(auth).toContain('account_created_this_login');
+ expect(auth).toContain('has_created_document');
  expect(auth).toContain('Verified email sessions receive');
  expect(auth).toContain('refresh_token');expect(auth).toContain('client_id');
  expect(auth).toContain('persistent secret store');expect(auth).toContain('Atomically');

@@ -43,7 +43,7 @@ const optionsOf = async (): Promise<AuthOptions> => {
         const id = `tok_oauth_${serial}`;
         const expiresAt = new Date(Date.now() + requested.expiresInHours * 3600_000).toISOString();
         await query('INSERT INTO tokens (id, name, token_hash, user_id, audience, scope, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [id, 'oauth', hashToken(token), actor.userId, requested.audience ?? null, requested.scope ?? null, expiresAt]);
-        return new Response(JSON.stringify({ id, token, expiresAt }), { status: 201, headers: { 'content-type': 'application/json' } });
+        return new Response(JSON.stringify({ id, token, expiresAt, has_created_document: false }), { status: 201, headers: { 'content-type': 'application/json' } });
       }
       // The anonymous mint the app serves to a non-session actor: an unowned,
       // claimable token, with no audience/scope binding.
@@ -432,9 +432,11 @@ it('a direct HTTP consumer obtains its scoped bearer through real email OTP with
  expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
  expect((await post('/api/auth/sign-in/email-otp',{email,otp:'bad-code'})).ok).toBe(false);
  const login=await post('/api/auth/sign-in/email-otp',{email,otp});expect(login.status).toBe(200);
+ expect(await login.clone().json()).toMatchObject({account_created_this_login:true});
  const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
  const response=await post('/api/authentication/token',{},cookie);expect(response.status).toBe(201);
  const body=await response.json();expect(body.access_token).toMatch(/^mx_/);
+ expect(body.has_created_document).toBe(false);
  expect(body.refresh_token).toMatch(/^mxr_/);expect(body.client_id).toEqual(expect.any(String));expect(body.expires_in).toBe(86400);
  const row=(await testDb().query('SELECT user_id,audience,scope FROM tokens WHERE id=$1',[body.id])).rows[0];
  expect(row.user_id).toBeTruthy();expect(row.audience).toBe(RESOURCE);expect(row.scope).toBe('artifacts');

@@ -8,6 +8,8 @@ description: Direct HTTP email sign-in, origin-scoped credential storage and OAu
 
 Verified email sessions receive an OAuth bearer/refresh grant through the email-session token endpoint; email OTP is not an OAuth grant type. No CLI installation or downloaded script is needed.
 
+`account_created_this_login` says whether this sign-in created the account. `has_created_document` reflects documents the user created, including group-owned documents and trash; use it for first-artifact guidance.
+
 ## Storage and refresh
 
 The exact backing file for [[ base ]] is `[[ credentialPath ]]`. Storage root is `ARTIFACTBIN_HOME`, otherwise `~/.artifactbin`. Use private directories (`0700`) and a private file (`0600`), with one `NAME=value` per line:

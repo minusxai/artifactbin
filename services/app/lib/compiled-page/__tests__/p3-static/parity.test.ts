@@ -16,6 +16,8 @@ const uploadBaseline = JSON.parse(readFileSync(new URL('./upload-html.json', imp
 // Markdown also arrived after React retired. Its reviewed static HTML is appended at the new fixture
 // location; historical DOM still compares against the frozen capture, including the surrounding prose.
 const markdownBaseline = JSON.parse(readFileSync(new URL('./markdown-html.json', import.meta.url), 'utf8')) as Record<string, string>;
+// Isometric is another post-React component: retain its reviewed SVG beside the historical capture.
+const isometricBaseline = JSON.parse(readFileSync(new URL('./isometric-html.json', import.meta.url), 'utf8')) as Record<string, string>;
 function expectedHtml(key: string): string {
   if (key === 'file-upload') return uploadBaseline[key]!;
   const html = applyCurrentLayoutContracts(baseline[key]!);
@@ -27,6 +29,7 @@ function expectedHtml(key: string): string {
   const proseEnd = root.querySelector('article > p:last-of-type');
   if (!proseEnd) throw new Error('kitchen-sink capture lost its prose anchor');
   proseEnd.insertAdjacentHTML('afterend', '\n    ' + markdownBaseline['kitchen-sink-markdown']!);
+  root.querySelector('#markdown-prose')!.insertAdjacentHTML('afterend', '\n    ' + isometricBaseline['kitchen-sink-isometric']!);
   // Adding a kit island changes the fixture's serialized literal table, not historical DOM.
   const literals = [...root.querySelectorAll('script')].find(node => node.textContent?.startsWith('{"moduleData"'));
   if (!literals) throw new Error('kitchen-sink capture lost its literal table');

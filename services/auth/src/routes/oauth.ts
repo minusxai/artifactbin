@@ -72,7 +72,7 @@ interface OAuthRoutesOptions {
   publicBaseUrl?: string;
 }
 
-async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number }> {
+async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number; has_created_document: boolean }> {
   if (!grant.userId) throw new Error('Email account required');
   const identity = await o.sessions.identity?.(grant.userId);
   if (!identity?.email || !identity.emailVerified || identity.userId !== grant.userId) throw new Error('Verified email account required');
@@ -89,9 +89,9 @@ async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId:
   });
   const res = await o.upstream(mint, { credential: 'session', ...identity });
   if (!res.ok) throw new Error(`oauth exchange: the app refused the mint (${res.status})`);
-  const body = await res.json().catch(() => null) as { id?: string; token?: string } | null;
-  if (!body?.id || !body.token) throw new Error('oauth exchange: the app minted no token');
-  return { id: body.id, token: body.token, expiresIn };
+  const body = await res.json().catch(() => null) as { id?: string; token?: string; has_created_document?: boolean } | null;
+  if (!body?.id || !body.token || typeof body.has_created_document !== 'boolean') throw new Error('oauth exchange: the app minted no token');
+  return { id: body.id, token: body.token, expiresIn, has_created_document: body.has_created_document };
 }
 
 /**
@@ -104,7 +104,7 @@ async function issueCliConnection(o: OAuthRoutesOptions, request: Request, grant
   const scoped = { ...grant, scope: ARTIFACT_SCOPE };
   const minted = await mintFor(o, request, scoped);
   const refreshToken = await o.oauth.issueRefresh({ ...scoped, clientId, accessTokenId: minted.id });
-  return { access_token: minted.token, refresh_token: refreshToken, client_id: clientId, token_type: 'Bearer', expires_in: minted.expiresIn, scope: ARTIFACT_SCOPE };
+  return { has_created_document: minted.has_created_document, access_token: minted.token, refresh_token: refreshToken, client_id: clientId, token_type: 'Bearer', expires_in: minted.expiresIn, scope: ARTIFACT_SCOPE };
 }
 
 /** The app remains the sole authority for ownership and per-artifact grants. */
@@ -144,7 +144,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       const grant={userId:actor.userId,resource:resource(c.req.raw),scope:ARTIFACT_SCOPE};
       const minted=await mintFor(o,c.req.raw,grant);
       const refreshToken=await o.oauth.issueRefresh({...grant,clientId,accessTokenId:minted.id});
-      return new Response(JSON.stringify({id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope:ARTIFACT_SCOPE}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
+      return new Response(JSON.stringify({has_created_document:minted.has_created_document,id:minted.id,access_token:minted.token,refresh_token:refreshToken,client_id:clientId,token_type:'Bearer',expires_in:minted.expiresIn,scope:ARTIFACT_SCOPE}),{status:201,headers:{'Content-Type':'application/json',...NO_STORE}});
     }catch{return new Response(JSON.stringify({error:'temporarily_unavailable'}),{status:503,headers:{'Content-Type':'application/json',...NO_STORE}});}
   });
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
@@ -373,7 +373,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       try {
         const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: grant.resource, scope: grant.scope });
         const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: grant.resource, scope: grant.scope, accessTokenId: minted.id });
-        return oauthJson({ access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope });
+        return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope });
       } catch (error) {
         return oauthJson({ error: 'temporarily_unavailable', error_description: error instanceof Error ? error.message : 'mint failed' }, 503);
       }
@@ -388,7 +388,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       try {
         const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: grant.resource, scope: grant.scope });
         await o.oauth.bindRefresh(grant.token, minted.id);
-        return oauthJson({ access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: grant.token, scope: grant.scope });
+        return oauthJson({ has_created_document: minted.has_created_document, access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: grant.token, scope: grant.scope });
       } catch (error) {
         return oauthJson({ error: 'temporarily_unavailable', error_description: error instanceof Error ? error.message : 'mint failed' }, 503);
       }

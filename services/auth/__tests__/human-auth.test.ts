@@ -89,6 +89,19 @@ describe('boot', () => {
 });
 
 describe('email OTP', () => {
+  it('reports account creation only on the successful sign-in that creates it', async () => {
+    const email = 'mxmx_test_login_context@example.com';
+    for (const first of [true, false]) {
+      sent.length = 0;
+      await call('/email-otp/send-verification-otp', { email, type: 'sign-in' });
+      const failed = await call('/sign-in/email-otp', { email, otp: 'wrong' });
+      expect(await failed.json()).not.toHaveProperty('account_created_this_login');
+      const response = await call('/sign-in/email-otp', { email, otp: sent.find(m => m.otp)!.otp, account_created_this_login: !first });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ account_created_this_login: first });
+      expect(await auth.sessions.resolve(new Request('http://x', { headers: { cookie: cookieOf(response) } }))).toMatchObject({ email });
+    }
+  });
   it('signs in with a code sent by our mailer, under our usr_ ids, and the session resolves to a session actor', async () => {
     const cookie = await signInByOtp('a@example.com');
     expect(cookie).toContain('better-auth');

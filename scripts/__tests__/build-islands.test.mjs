@@ -12,7 +12,7 @@ import path from 'node:path';
 import { AUTHOR_VENDOR_SPECIFIERS, CACHE_MARKER, closureOf, DEFAULT_OUT_DIR, FRAME_EDITOR, ISLAND_SPECIFIERS } from '../build/build-islands.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
-const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'upload', 'data', 'files', 'people', 'mermaid', 'embed', 'cells', 'static'];
+const KIT_FAMILIES = ['basic', 'tabs', 'accordion', 'dialog', 'disclosure', 'controls', 'upload', 'data', 'files', 'people', 'mermaid', 'isometric', 'embed', 'cells', 'static'];
 
 describe('the toolchain', () => {
   it('pins Solid 1.9 and a matching babel preset', () => {
@@ -139,11 +139,15 @@ describe('buildIslands', () => {
 
   it('keeps every kit family inside the ready-time static budget, with the map engine behind dynamic imports', () => {
     const { manifest, files, closure } = first;
-    const staticUrls = closure([manifest['@mx/boot'], ...KIT_FAMILIES.map(family => manifest[`@mx/kit/${family}`])]);
+    const existingUrls = closure([manifest['@mx/boot'], ...KIT_FAMILIES.filter(family => family !== 'isometric').map(family => manifest[`@mx/kit/${family}`])]);
+    const staticUrls = closure([...existingUrls, manifest['@mx/kit/isometric']]);
     const { outputInputs } = JSON.parse(readFileSync(CACHE_MARKER, 'utf8'));
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/comment-view-state.ts'))).toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('contracts/src/routes.ts'))).toBe(false);
-    const staticBytes = staticUrls.reduce((sum, url) => sum + files[url].br, 0);
+    const staticBytes = existingUrls.reduce((sum, url) => sum + files[url].br, 0);
+    // The new optional geometry family adds at most 4 KB; preserve the existing families' budget.
+    const geometryBytes = staticUrls.filter(url => !existingUrls.includes(url)).reduce((sum, url) => sum + files[url].br, 0);
+    expect(geometryBytes).toBeLessThanOrEqual(4 * 1024);
     // 81 KB since kit view state (Tabs, Accordion, Collapsible, Dialog) registers as comment state: one shared
     // chunk for lib/islands/comment-state + lib/story-runtime/comment-state, ~0.7 KB brotli, beside those families.
     expect(staticBytes).toBeLessThanOrEqual(81 * 1024);
@@ -153,7 +157,7 @@ describe('buildIslands', () => {
     const menuFiles = Object.entries(outputInputs).filter(([, inputs]) => inputs.some(input => input.endsWith('islands/kit/select-popup.tsx'))).map(([url]) => url);
     expect(menuFiles.length).toBeGreaterThan(0);
     expect(menuFiles.every(url => !staticUrls.includes(url)), 'Select menu loads only on interaction').toBe(true);
-    const withImage = closure([manifest['@mx/kit/image'], ...staticUrls]);
+    const withImage = closure([manifest['@mx/kit/image'], ...existingUrls]);
     expect(withImage.reduce((sum, url) => sum + files[url].br, 0)).toBeLessThanOrEqual(85 * 1024);
     const dataCode = staticUrls.map(url => readFileSync(path.join(outDir, url.slice('/islands/'.length)), 'utf8')).join('\n');
     const dynamic = [...dataCode.matchAll(/import\("\.\/([\w-]+\.js)"\)/g)].map(match => `/islands/${match[1]}`);

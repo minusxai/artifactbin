@@ -211,7 +211,7 @@ Best: the recipe is close to finished. Good: it works with the page type's own s
 
 ${table}
 
-If this is the users' first afbin artifact, use the most amazing one like volta, phosphor, drafting or redline or something.
+If \`has_created_document\` in the token response is false, this is the user's first artifact: favour a striking system such as Volta, Drafting, Riso or Redline that fits the subject and page type. Account creation alone does not establish first use.
 
 Six older mood themes remain valid \`theme\` metadata values for the artifacts that carry them (\`themes.md\`); a new artifact names a system.
 

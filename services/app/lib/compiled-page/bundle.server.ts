@@ -319,7 +319,7 @@ async function islandSsrNamespace(specifier: string, retained?: SsrHalf): Promis
 
 /** The server half's static kit families, by module (`@mx/kit/<mod>`): the compiler renders static kit subtrees with them. */
 export type KitServer = Readonly<Record<string, Readonly<Record<string, unknown>>>>;
-const KIT_SERVER_MODS = ['basic', 'static'] as const;
+const KIT_SERVER_MODS = ['basic', 'static', 'isometric'] as const;
 
 /**
  * The live build's server kit — the half `defaultSsrImports` hands the SSR module, so a component rendered at

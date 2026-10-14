@@ -6,7 +6,7 @@ description: >-
 ---
 ## Read first
 
-**Drafting.** A drawing set, not a document. Drafting treats every page as a numbered sheet from an engineering drawing set: a gridded vellum, a frame, a title block, and the subject drawn in line-work with its dimensions. The reader is handed something measured. Cobalt annotates; vermilion marks the revision.
+**Drafting.** A drawing set, not a document. Drafting treats every page as a numbered sheet from an engineering drawing set: a gridded vellum, a frame, a title block, and the subject drawn in line-work with its dimensions. The reader is handed something measured. Cobalt carries the hierarchy and evidence; orange marks revisions; yellow flags assumptions. Colour belongs on the sheet, not just on hover.
 
 - **Use it for:** Implementation plans, specs and RFCs, process explainers, product teardowns, scroll stories where one object comes apart or goes together.
 - **Avoid it when:** Warm or emotional subjects, consumer marketing, dashboards that need many simultaneous status colours, or any page whose reader is not expected to inspect.
@@ -42,43 +42,44 @@ Classes on any element. Headings take the display family without a class; a role
 
 ## Colour
 
-Day is a cool grey-white vellum with a visible grid. Night is the same sheet as a blueprint: Prussian ground, pale line-work, cobalt lifted to sky-blue and vermilion warmed. Status colours are for ledgers and tables, never for the drawing itself.
+Keep vellum and ink dominant. Cobalt carries hierarchy and evidence; safety orange marks revisions. Warm fluorescent yellow is a small accent for assumption tags or a few words with d-highlight, never a paragraph or full-width callout. Notes and pull quotes use a neutral ground with a coloured rule. Night keeps the same roles on a Prussian ground.
 
 | Token | Use |
 |---|---|
 | `--ds-vellum` | Page ground: cool drafting vellum by day, Prussian blueprint by night. |
 | `--ds-vellum-raised` | Sheets, panels, fields. |
 | `--ds-vellum-sunk` | Wells, code, title-block cells. |
-| `--ds-grid` | The 24px drafting grid and hairline rules. Visible, never loud. |
+| `--ds-grid` | 24px drafting grid and hairline rules. Page grids use this at half strength; readable blocks have solid vellum backgrounds. |
 | `--ds-ink` | Line-work and primary text. 1px for construction, 2px for the object. |
 | `--ds-ink-muted` | Secondary text, dimension figures, notes. |
-| `--ds-cobalt` | The annotation colour: dimensions, leaders, links, the primary action. |
+| `--ds-cobalt` | Hierarchy and annotation: headline emphasis, sheet numbers, dimensions, links and the primary action. |
 | `--ds-on-cobalt` | Text on cobalt fills. |
-| `--ds-cobalt-soft` | Ground for selected rows and info notes. |
-| `--ds-vermilion` | The revision colour: what changed, what is wrong, the one highlighted part. |
+| `--ds-cobalt-soft` | Pale blue evidence panels, title blocks and selected regions of a drawing. |
+| `--ds-vermilion` | Fluorescent safety orange for revision fills, outlines and changed parts; use on-vermilion for text on the fill. |
 | `--ds-on-vermilion` | Text on vermilion fills. |
-| `--ds-vermilion-soft` | Ground for revision clouds and error notes. |
+| `--ds-vermilion-ink` | Readable orange ink for revision text on vellum and pale orange. |
+| `--ds-vermilion-soft` | Warm orange ground for revision notes and changed regions. |
 | `--ds-positive` | Verified, passed, released. Always with a word. |
 | `--ds-positive-soft` | Ground for verified rows. |
 | `--ds-caution` | Assumed, pending review. |
-| `--ds-caution-soft` | Ground for assumptions. |
-| `--ds-negative` | Failed, blocked. Shares vermilion in Night. |
+| `--ds-caution-soft` | Warm fluorescent yellow for small assumption tags and short highlighted phrases; never a paragraph or full-width panel. |
+| `--ds-negative` | Failed or blocked. Always pair with a word. |
 | `--ds-negative-soft` | Ground for failures. |
 
 Chart series order: cobalt, vermilion, ink, positive, ink-muted. Cobalt is the measured series; vermilion is the exception or the revision; ink is the baseline. Charts in Drafting look like figures: axis lines in ink, grid in the grid token, direct labels in the dim role.
 
 ## Components
 
-Kit components take Drafting through the contract: square, 1px edges, cobalt primary, vellum grounds. Authored classes add the title-block cells, the dimension figures and the revision marks.
+Square edges and ink frames hold cobalt title blocks, pale blue evidence notes and orange revisions. Use d-cobalt on one headline phrase; d-highlight marks only a few words. Wrap readable blocks in d-reading for a solid vellum background and responsive inset padding over the page grid. Long prose sits at roughly 60–70 characters per line with generous leading; keep section headings quieter than the display title.
 
 - **Buttons.** Kit buttons left; authored d-btn right: 1px ink frame, Archivo Narrow caps, cobalt primary. The revision button is vermilion and appears once per sheet at most.
 - **Tags.** Tags are title-block cells: Archivo Narrow caps in a 1px frame. State tags say the state in a word.
 - **Fields.** Fields are framed cells with the label in the title-block role above. Focus is a cobalt outline; there is no glow and no fill change.
 - **Stat.** A Stat is a dimension: label above, mono numeral, the source or state below. Stats sit in a row of framed cells sharing their borders, like a title block.
-- **Callouts.** Callouts are numbered notes in the margin. Assumptions take caution; revisions take vermilion; information takes cobalt.
+- **Callouts.** Information and evidence take pale cobalt; assumptions use a caution-coloured edge on plain vellum; revisions take pale orange. Reserve fluorescent yellow fills for small tags or short inline highlights. Pull quotes use ink and a thin cobalt rule, without a bright panel.
 - **Chart.** Charts are figures: ink axes, grid in the grid token, cobalt for the measured series, vermilion for the exception. Give every figure a Fig. number in the label role.
 - **Table.** Tables are bills of materials: narrow caps headers, mono figures right-aligned, 1px grid rules. Never striped.
-- **Card.** A card is a sheet: framed, with a title block along its bottom edge carrying number, sheet, scale and revision. Hover turns the frame cobalt.
+- **Card.** A framed sheet with a pale blue title block and a solid cobalt drawing-number cell. Figure labels are cobalt; the body stays vellum.
 
 ```jsx
 <Button>Book slot</Button><Button variant="secondary">Save draft</Button><Button variant="outline">Export sheet</Button><Button variant="ghost">Cancel</Button><button className="d-btn d-btn-primary">Book slot</button><button className="d-btn">Export sheet</button><button className="d-btn d-btn-rev">Mark revision</button>
@@ -88,16 +89,16 @@ Kit components take Drafting through the contract: square, 1px edges, cobalt pri
 <div className="d-sheet"><div className="d-sheet-body"><p className="t-label">Fig. 02 · Booking flow</p><h3 className="t-title">One slot per machine per hour</h3><p className="d-sheet-p">The API reserves the row with a unique index on (machine, hour). A second request gets 409 and the UI offers the next free hour.</p></div><div className="d-titleblock"><span><b>DWG</b> BN-007</span><span><b>SHEET</b> 2/7</span><span><b>SCALE</b> NTS</span><span><b>REV</b> B</span></div></div>
 ```
 
-Classes the runtime provides: `d-paper`, `d-grid`, `d-frame`, `d-ink2`, `d-ink1`, `d-block`, `d-dim`, `d-ext`, `d-arrow`, `d-lead`, `d-dim-t`, `d-blk-t`, `d-rev`, `d-rev-t`, `d-rev-l`, `d-muted`, `d-vermilion`, `d-ok`, `d-btn`, `d-btn-primary`, `d-btn-rev`, `d-tag`, `d-tag-ok`, `d-tag-assume`, `d-tag-rev`, `d-stat`, `d-note-box`, `d-note-info`, `d-note-assume`, `d-note-rev`, `d-sheet`, `d-sheet-body`, `d-sheet-p`, `d-titleblock`, `h-ink`, `h-outline-fill`, `h-num`, `h-text`, `h-fill`, `h-fill2`.
+Classes the runtime provides: `d-reading`, `d-paper`, `d-grid`, `d-frame`, `d-ink2`, `d-ink1`, `d-block`, `d-dim`, `d-ext`, `d-arrow`, `d-lead`, `d-dim-t`, `d-blk-t`, `d-rev`, `d-rev-t`, `d-rev-l`, `d-cobalt`, `d-highlight`, `d-muted`, `d-vermilion`, `d-ok`, `d-btn`, `d-btn-primary`, `d-btn-rev`, `d-tag`, `d-tag-ok`, `d-tag-assume`, `d-tag-rev`, `d-stat`, `d-note-box`, `d-note-info`, `d-note-assume`, `d-note-rev`, `d-sheet`, `d-sheet-body`, `d-sheet-p`, `d-titleblock`, `t-label`, `h-ink`, `h-outline-fill`, `h-num`, `h-text`, `h-fill`, `h-fill2`.
 
 ## The hand
 
-Line-work, dimensioned, on the grid. Drafting draws the subject the way a drawing set would: the object in 1.5px ink line-work with square caps, nothing filled, construction at 1px, and cobalt only for the dimension or the one part being measured. Vermilion marks the revision. A drawing without a figure attached to it is unfinished.
+Line-work, dimensioned, on the grid. Draw the subject in ink line-work with square caps and fine construction lines. Fill measured regions pale cobalt and revised regions pale orange; yellow can mark an explicitly labelled unknown. Keep outlines visible and attach figures to what they measure.
 
 | Rule | How |
 |---|---|
 | Stroke | 1.5px ink for the object, square caps and mitred joins. 1px grid lines for construction. |
-| Fill | None. Cobalt as an outline marks the measured part; vermilion marks the revised one. |
+| Fill | Pale cobalt for measured regions, pale orange for revisions, yellow for labelled assumptions. A fill should make the drawing easier to read. |
 | Shadow | None. A sheet lies flat. |
 | Texture | The 24px grid behind every drawing. |
 | Figures | Dimension figures in the mono dim role, attached with a 1px cobalt leader and closed arrowheads. |
@@ -200,13 +201,13 @@ Template: landing. The system owns the headline, the device drawing and the pair
 
 - Draw the subject in ink line-work and attach every figure with a dimension line.
 - Frame every sheet and give it a title block.
-- Cobalt for annotation, vermilion for the one revision.
-- Snap to the 24px grid; let it show.
+- Use cobalt for hierarchy and evidence, orange for revisions, and small warm-yellow marks for assumptions.
+- Keep the page grid visible in gutters and between sheets; use d-reading to give readable blocks a solid background and inset padding.
 
 Don't:
 
 - No photographs as the hero; no rounded corners; no shadows.
-- No status colour on the drawing itself.
+- Do not put text directly on grid lines or fluorescent fills behind paragraphs and full-width quotes.
 - No floating numbers; a figure without a leader is a rumour.
 - No more than one revision cloud per sheet.
 

@@ -6,8 +6,14 @@ order: 4
 ---
 ## Read first
 
+For projected assemblies, `<Isometric>` supplies geometry and optional exploded
+views; see [explanatory figures](explainers.md) for a complete example.
+
 For flowcharts, state machines and sequence diagrams, use `<Mermaid>`: it
 handles layout, theme and exports.
+
+For a crafted mechanism or interactive isometric illustration, read
+[explanatory figures](explainers.md).
 
 ```jsx
 <Mermaid title="Shift workflow" code={`flowchart TD

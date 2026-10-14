@@ -15,6 +15,7 @@ import { RECIPES as dialog } from './dialog';
 import { RECIPES as embed } from './embed';
 import { RECIPES as disclosure } from './disclosure';
 import { RECIPES as files } from './files';
+import { RECIPES as isometric } from './isometric';
 import { RECIPES as mermaid } from './mermaid';
 import { RECIPES as people } from './people';
 import { RECIPES as tabs } from './tabs';
@@ -27,7 +28,7 @@ export { cn } from './cn';
 export type Recipe = (props: Record<string, unknown>) => string;
 
 /** The recipes of each kit family (scripts/generate-story-ui-classes maps a tag to its family's sources). */
-export const FAMILIES: Readonly<Record<KitFamily, Readonly<Record<string, Recipe>>>> = { basic, tabs, accordion, dialog, disclosure, controls, upload, data, files, people, mermaid, embed, cells, static: staticKit };
+export const FAMILIES: Readonly<Record<KitFamily, Readonly<Record<string, Recipe>>>> = { basic, tabs, accordion, dialog, disclosure, controls, upload, data, files, people, mermaid, isometric, embed, cells, static: staticKit };
 
 function merge(families: typeof FAMILIES): Readonly<Record<string, Recipe>> {
   const merged: Record<string, Recipe> = {};
