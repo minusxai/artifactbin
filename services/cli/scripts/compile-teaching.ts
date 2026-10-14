@@ -8,7 +8,7 @@ import {skillFileWithFrontmatter} from '../../app/lib/skills/serve';
 import {skillExample,renderSkill,condenseForBundle,stripBundleMarkers} from '../../app/lib/skills/render';
 import {build} from 'esbuild';
 import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
-import {TEACHING_BASE} from '../src/teaching-origin';
+import {TEACHING_BASE,TEACHING_CREDENTIAL_PATH} from '../src/teaching-origin';
 const root=fileURLToPath(new URL('../',import.meta.url));
 // NOT an origin: the bundle ships addressed to nobody and the CLI substitutes
 // the SELECTED server when it installs the skill or prints a reference
@@ -17,11 +17,13 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 const BASE=TEACHING_BASE;
 const example=skillExample();
 // The authoring compiler must never import the index that consumes its output.
+// Retire the formerly generated credential executable before checking the source tree.
+rmSync(join(root,'../app/skills/artifactbin/scripts/credentials.mjs'),{force:true});
 const tree=buildSkillTree(loadSkillSources());
 const brief=tree.get('artifactbin/SKILL.md');
 if(!brief)throw new Error('skills/artifactbin/SKILL.md is missing');
 // The brief keeps its frontmatter: the harness preloads the name and description, then loads the body on trigger.
-const files:Record<string,string>={'SKILL.md':skillFileWithFrontmatter(brief,renderSkill(brief,{base:BASE,transport:'cli'}))};
+const files:Record<string,string>={'SKILL.md':skillFileWithFrontmatter(brief,renderSkill(brief,{base:BASE,credentialPath:TEACHING_CREDENTIAL_PATH,transport:'cli'}))};
 /**
  * The SECOND length of a reference that carries `<!--bundle:skip-->` spans: what `afbin help
  * <template>` concatenates, without the rationale a single-file read can afford. Only files that
@@ -31,17 +33,17 @@ const condensed:Record<string,string>={};
 for(const file of tree.files){
  if(!file.ref||file.audience!=='agent')continue;
  const path=`references/${file.file}`;
- files[path]=skillFileWithFrontmatter(file,renderSkill(file,{base:BASE,transport:'cli'}));
- const short=renderSkill(file,{base:BASE,bundle:true,transport:'cli'});
- if(short!==renderSkill(file,{base:BASE,transport:'cli'}))condensed[path]=short;
+ files[path]=skillFileWithFrontmatter(file,renderSkill(file,{base:BASE,credentialPath:TEACHING_CREDENTIAL_PATH,transport:'cli'}));
+ const short=renderSkill(file,{base:BASE,credentialPath:TEACHING_CREDENTIAL_PATH,bundle:true,transport:'cli'});
+ if(short!==renderSkill(file,{base:BASE,credentialPath:TEACHING_CREDENTIAL_PATH,transport:'cli'}))condensed[path]=short;
 }
 for(const [path,text] of Object.entries(files)){
  if(!text.includes('bundle:skip'))continue;
  condensed[path]=condenseForBundle(text);
  files[path]=stripBundleMarkers(text);
 }
-// Both assets are generated from shared runtimes, never authored a second time.
-for(const [entry,name] of [['credential-helper.ts','credentials.mjs'],['comment-watch-helper.ts','watch-comments.mjs']] as const){
+// The monitoring asset is generated from its shared runtime.
+for(const [entry,name] of [['comment-watch-helper.ts','watch-comments.mjs']] as const){
  const bundled=await build({entryPoints:[join(root,'../utils/src',entry)],bundle:true,platform:'node',format:'esm',target:'node22',write:false});
  const helper=bundled.outputFiles[0]!.text;
  files[`scripts/${name}`]=helper;

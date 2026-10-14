@@ -18,6 +18,7 @@
  * — inside `themes/<n>.md` / `templates/<n>.md` — that file's own registry
  * entry as `theme` / `template`.
  */
+import { credentialPaths } from '@artifactbin/utils/node/credentials';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import nunjucks from 'nunjucks';
@@ -35,6 +36,8 @@ import { AUTHENTICATION_INSTRUCTION } from '../platform/agent-discovery';
 
 export interface RenderOptions {
   base: string;
+  /** Deferred path for origin-free CLI teaching; concrete HTTP origins use the existing store. */
+  credentialPath?: string;
   transport?: 'cli' | 'http';
   /**
    * Render the CONDENSED copy: the spans a reference marks as bundle-skippable are dropped rather
@@ -140,6 +143,7 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
     const rendered = env.renderString(file.body, {
       ...REGISTRY_GLOBALS,
       base: opts.base,
+      credentialPath: opts.credentialPath ?? credentialPaths(opts.base, '~/.artifactbin').backingPath,
       transport: opts.transport ?? 'cli',
       authenticationInstruction: AUTHENTICATION_INSTRUCTION,
       // Only the brief inlines the example; a reference that names it is a build failure, by design.

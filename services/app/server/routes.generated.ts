@@ -156,10 +156,9 @@ import * as r152 from '@/app/llms.txt/route';
 import * as r153 from '@/app/llms/[topic]/route';
 import * as r154 from '@/app/people/[id]/route';
 import * as r155 from '@/app/skills/artifactbin.zip/route';
-import * as r156 from '@/app/skills/artifactbin/credentials.mjs/route';
-import * as r157 from '@/app/skills/artifactbin/watch-comments.mjs/route';
-import * as r158 from '@/app/tiles/[...tile]/route';
-import * as r159 from '@/app/workspace/[id]/route';
+import * as r156 from '@/app/skills/artifactbin/watch-comments.mjs/route';
+import * as r157 from '@/app/tiles/[...tile]/route';
+import * as r158 from '@/app/workspace/[id]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -319,8 +318,7 @@ export const ROUTES: RouteEntry[] = [
   { path: "/llms/:topic", dir: "/llms/[topic]", methods: ["GET"], module: r153 },
   { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r154 },
   { path: "/skills/artifactbin.zip", dir: "/skills/artifactbin.zip", methods: ["GET"], module: r155 },
-  { path: "/skills/artifactbin/credentials.mjs", dir: "/skills/artifactbin/credentials.mjs", methods: ["GET"], module: r156 },
-  { path: "/skills/artifactbin/watch-comments.mjs", dir: "/skills/artifactbin/watch-comments.mjs", methods: ["GET"], module: r157 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r158 },
-  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r159 },
+  { path: "/skills/artifactbin/watch-comments.mjs", dir: "/skills/artifactbin/watch-comments.mjs", methods: ["GET"], module: r156 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r157 },
+  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r158 },
 ];

@@ -405,7 +405,7 @@ describe('shared instructions after missing credentials and before publishing cl
   expect(guide).toContain('you must ask the user for their email');
   expect(guide.indexOf('you must ask the user for their email')).toBeLessThan(guide.indexOf('POST /api/auth/email-otp/send-verification-otp'));
   expect(guide).toContain('Do not invent an email');
-  expect(guide).toContain('Do not install the CLI');
+  expect(guide).toContain('No CLI installation or downloaded script is needed.');
  });
  it('teaches the supported local CLI status read without promising live authentication',()=>{
   const brief=buildQuickSheet(BASE);
@@ -454,4 +454,16 @@ it('reuses an executable HTTP dataset creation example in both guides', async ()
  const response=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:token.token,json:bodies[0]}));
  expect(response.status).toBe(201);
  const result=await response.json();expect(result.id).toBeTruthy();expect(result.url).toContain('/a/');
+});
+
+it('HTTP authentication is direct and reuses the existing rotating credential store',()=>{
+ const guide=publicGuideText('http-auth',BASE)!;
+ for(const text of [llmsText(BASE),guide]){
+  expect(text).not.toContain('credentials.mjs');
+  for(const path of ['/api/auth/email-otp/send-verification-otp','/api/auth/sign-in/email-otp','/api/authentication/token','/oauth/token'])expect(text).toContain(`POST ${path}`);
+  expect(text).toContain('Authorization: Bearer <access_token>');
+  expect(text).toContain('across sessions');
+ }
+ for(const field of ['ARTIFACTBIN_URL','ARTIFACTBIN_TOKEN','ARTIFACTBIN_REFRESH_TOKEN','ARTIFACTBIN_CLIENT_ID','ARTIFACTBIN_EXPIRES_AT'])expect(guide).toContain(field);
+ for(const part of ['ARTIFACTBIN_HOME','credentials.env','alias','serialized','grant_type','invalid_grant'])expect(guide).toContain(part);
 });

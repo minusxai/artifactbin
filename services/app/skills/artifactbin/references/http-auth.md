@@ -1,21 +1,37 @@
 ---
 name: http-auth
-description: Shared origin-scoped credentials, email authentication and serialized refresh for CLI and HTTP.
+description: Direct HTTP email sign-in, origin-scoped credential storage and OAuth refresh.
 ---
 ## Read first
 
 [% include "fragments/http-authentication.md" %]
 
-Verified email sessions receive `access_token`, `refresh_token`, `client_id` and `expires_in` from the token endpoint.
+Verified email sessions receive an OAuth bearer/refresh grant through the email-session token endpoint; email OTP is not an OAuth grant type. No CLI installation or downloaded script is needed.
 
 ## Storage and refresh
 
-The installed helper is `scripts/credentials.mjs`; substitute that path for `credentials.mjs` above. `refresh_unavailable` and transient errors retain the saved grant; retry later without another OTP. The helper’s `path --origin` command reports the actual backing file. Do not install the CLI to work around missing HTTP credentials.
+The exact backing file for [[ base ]] is `[[ credentialPath ]]`. Storage root is `ARTIFACTBIN_HOME`, otherwise `~/.artifactbin`. Use private directories (`0700`) and a private file (`0600`), with one `NAME=value` per line:
 
-Storage root: `ARTIFACTBIN_HOME`, otherwise `~/.artifactbin`; private directories `0700`, credentials `0600`. HTTPS port 443 uses `hosts/<hostname>/credentials.env`; other origins use `hosts/<hostname>@<scheme>-<port>/credentials.env` (safe hostname encoding). The helper returns the actual backing path: readable locations may alias an existing hashed store for compatibility with older CLI writers. Do not copy, rename or independently rotate an alias. Fields are `ARTIFACTBIN_URL`, `ARTIFACTBIN_TOKEN`, `ARTIFACTBIN_REFRESH_TOKEN`, `ARTIFACTBIN_CLIENT_ID`, `ARTIFACTBIN_EXPIRES_AT` (Unix milliseconds).
+| Field | Value |
+| --- | --- |
+| `ARTIFACTBIN_URL` | `[[ base ]]` |
+| `ARTIFACTBIN_TOKEN` | `access_token` |
+| `ARTIFACTBIN_REFRESH_TOKEN` | `refresh_token` |
+| `ARTIFACTBIN_CLIENT_ID` | `client_id` |
+| `ARTIFACTBIN_EXPIRES_AT` | Current Unix milliseconds + `expires_in` × 1000 |
 
-Each runtime has its own grant. Without filesystem access use a persistent secret store with atomic replacement and serialized single-use refresh; otherwise sandbox replacement requires email login. For that adapter `POST /oauth/token` with `{"grant_type":"refresh_token","client_id":"<saved client_id>","refresh_token":"<saved refresh_token>","resource":"[[ base ]]/api"}`. Atomically replace both tokens/expiry before retry once. Repeat email login only for missing credentials or `invalid_grant`; retain credentials on transient errors.
+The CLI may expose a readable hostname-directory alias to this same backing file. Update the backing file atomically; preserve any alias and never create a second credential copy. Parse values as data, not executable shell. Reuse the current session's grant and saved credentials before starting another sign-in.
+
+Before expiry, or after an API `401`, send `POST /oauth/token` with `Content-Type: application/json` and:
+
+```json
+{"grant_type":"refresh_token","client_id":"<saved client_id>","refresh_token":"<saved refresh_token>","resource":"[[ base ]]/api"}
+```
+
+Refresh is single-use and must be serialized across every process sharing the grant. Direct file updates require exclusive ownership of the credential store: coordinate with other clients, including the CLI, before refreshing. Re-read the saved values after acquiring exclusive access; another client may already have refreshed. Atomically save the returned access token, refresh token and calculated expiry, retaining origin and client ID, then retry the API request once. Release exclusive access after saving. Never rotate the same grant concurrently from separate copies.
+
+Keep credentials on network errors, `429`, server errors or incomplete refresh responses and retry later. Missing credentials or `invalid_grant`, `invalid_client` or `revoked_token` require sign-in again. Never log tokens or put them in URLs. Without filesystem access, keep the same values in a persistent secret store with atomic replacement and serialized refresh; if neither storage option is available, credentials cannot survive a new session.
 
 ## Account destination preferences
 
-See [groups](groups.md) for the authenticated group/default API and editor/viewer permissions. Reuse this origin’s recipient credential helper for those calls.
+See [groups](groups.md) for group/default APIs and editor/viewer permissions. Use the same origin-bound bearer credential for those requests.
