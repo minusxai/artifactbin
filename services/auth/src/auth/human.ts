@@ -181,8 +181,9 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
     user: {
       changeEmail: {
         enabled: true,
+        // The CURRENT address confirms the change; only then does Better Auth mail the new address its verification link.
         sendChangeEmailConfirmation: async ({ user, newEmail, url }: { user: { email: string }; newEmail: string; url: string }) => {
-          await opts.mail.send({ to: newEmail, kind: 'change-email', subject: 'Confirm your new email', text: `Confirm the change for ${user.email}: ${url}`, url });
+          await opts.mail.send({ to: user.email, kind: 'change-email', subject: 'Confirm your email change', text: `Confirm changing your email to ${newEmail}: ${url}`, url });
         },
       },
     },

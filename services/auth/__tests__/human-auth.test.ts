@@ -13,7 +13,8 @@ import {pgliteDialect} from '../src/auth/pglite';
  * HUMAN LOGIN — Better Auth core + emailOTP + genericOAuth, configured the
  * way the plan says is load-bearing: sessions DB-backed with the cookie cache
  * OFF (revocation is immediate), our own `usr_` ids, linking on VERIFIED
- * email only, email change verified at the new address, passwords never.
+ * email only, email change confirmed at the current address and then
+ * verified at the new one, passwords never.
  * On one PGLite, with its tables in the `auth` schema (spike I).
  */
 
@@ -95,13 +96,23 @@ describe('email OTP', () => {
     expect(await auth.sessions.resolve(new Request('http://x', { headers: { cookie } }))).toBeNull();
   });
 
-  it('email change reaches the NEW address, and the old one keeps the login until it is confirmed', async () => {
+  it('email change is confirmed by the CURRENT address first; the new address only verifies after that', async () => {
     const cookie = await signInByOtp('c@example.com');
     sent.length = 0;
     const res = await call('/change-email', { newEmail: 'c-new@example.com', callbackURL: '/' }, cookie);
     expect(res.status).toBe(200);
-    expect(sent.some((m) => m.to === 'c-new@example.com')).toBe(true);
+    expect(sent.map((m) => [m.to, m.kind])).toEqual([['c@example.com', 'change-email']]);
     expect((await auth.sessions.resolve(new Request('http://x', { headers: { cookie } })))!.email).toBe('c@example.com');
+
+    const confirm = await auth.handler(new Request(sent[0]!.url!, { headers: { cookie } }));
+    expect(confirm.status).toBeLessThan(400);
+    expect((await auth.sessions.resolve(new Request('http://x', { headers: { cookie } })))!.email).toBe('c@example.com');
+    const verification = sent.find((m) => m.to === 'c-new@example.com');
+    expect(verification?.kind).toBe('verify-email');
+
+    const verify = await auth.handler(new Request(verification!.url!, { headers: { cookie } }));
+    expect(verify.status).toBeLessThan(400);
+    expect((await auth.sessions.resolve(new Request('http://x', { headers: { cookie } })))!.email).toBe('c-new@example.com');
   });
 });
 
