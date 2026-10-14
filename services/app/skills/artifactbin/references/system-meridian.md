@@ -2,7 +2,7 @@
 name: system-meridian
 kind: data
 description: >-
-  Meridian, a design system for artifactbin: Quiet surfaces. One blue. Nothing to forgive. Sleek, Professional; for product dashboards, docs, saas marketing. Read only after the fit table in design-systems.md picked it; then name it in the fence and use what it provides. Never read a second system for the same artifact.
+  Meridian, a design system for artifactbin: Quiet surfaces. One blue. Nothing to forgive. Sleek, Professional; for product dashboards, docs, saas marketing. Read only after the fit table in design-systems.md picked it; then set the theme metadata field to its slug and use what it provides. Never read a second system for the same artifact.
 ---
 ## Read first
 
@@ -15,7 +15,7 @@ description: >-
 
 ## Bind it
 
-1. Fence: `theme: meridian`, and the page type's `template`. That is the whole binding: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit. Write no CSS for any of them.
+1. Set the `theme` metadata field to `meridian` and `template` to the page type. That is the whole binding: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit. Write no CSS for any of them.
 2. Root element: `<div data-design="tw" className="@container text-foreground">`, then kit components, token classes and the classes below. Keep layout wrappers transparent: the runtime paints the system's page ground, including textures. Use an opaque surface only for a deliberate panel or section; a blanket `bg-background` hides that ground.
 3. Helmet comment, the record later edits read instead of reskinning: `{/* design: system=Meridian · thesis=<one sentence> · object=<what the hand draws> · device=<which device carries the data> · overrides=<token list or none> */}`.
 4. Override one thing, if the subject needs it, with a Helmet `<style>` that reassigns a single `--ds-*` token under `:root` and again under `.dark`; every component, chart and device follows. Change the token, never the component. Tailwind utilities compile `!important`: layout utilities go on role-bearing elements, type utilities never do.

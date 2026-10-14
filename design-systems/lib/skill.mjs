@@ -2,7 +2,7 @@
  * The agent-facing references, from the same specs the pages and the runtime are built from:
  * services/app/skills/artifactbin/references/design-systems.md (the catalogue: layers, fit matrix, binding
  * steps, the no-fit path, the record, known losses; a guide, so under the tree's 8 KB cap) and
- * references/system-<slug>.md for every roster entry (what the runtime provides: the fence line, the roles,
+ * references/system-<slug>.md for every roster entry (what the runtime provides: the metadata binding, the roles,
  * the tokens with their use, the class vocabulary, the hand, the devices, the page-type recipes with specimen
  * markup for the best fits, one override example, no CSS). A system is `kind: data`: installed and served
  * like every reference, exempt from the reading caps. Output is committed and reviewed in the diff.
@@ -65,7 +65,7 @@ export function systemMd(slug) {
 name: system-${slug}
 kind: data
 description: >-
-  ${name}, a design system for artifactbin: ${S.tagline} ${S.mood}; for ${S.jobs.toLowerCase()}. Read only after the fit table in design-systems.md picked it; then name it in the fence and use what it provides. Never read a second system for the same artifact.
+  ${name}, a design system for artifactbin: ${S.tagline} ${S.mood}; for ${S.jobs.toLowerCase()}. Read only after the fit table in design-systems.md picked it; then set the theme metadata field to its slug and use what it provides. Never read a second system for the same artifact.
 ---
 ## Read first
 
@@ -78,7 +78,7 @@ description: >-
 
 ## Bind it
 
-1. Fence: \`theme: ${slug}\`, and the page type's \`template\`. That is the whole binding: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit. Write no CSS for any of them.
+1. Set the \`theme\` metadata field to \`${slug}\` and \`template\` to the page type. That is the whole binding: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit. Write no CSS for any of them.
 2. Root element: \`<div data-design="tw" className="@container text-foreground">\`, then kit components, token classes and the classes below. Keep layout wrappers transparent: the runtime paints the system's page ground, including textures. Use an opaque surface only for a deliberate panel or section; a blanket \`bg-background\` hides that ground.
 3. Helmet comment, the record later edits read instead of reskinning: \`${RECORD.replaceAll('<Name>', name)}\`.
 4. Override one thing, if the subject needs it, with a Helmet \`<style>\` that reassigns a single \`--ds-*\` token under \`:root\` and again under \`.dark\`; every component, chart and device follows. Change the token, never the component. Tailwind utilities compile \`!important\`: layout utilities go on role-bearing elements, type utilities never do.
@@ -183,14 +183,14 @@ A system has three layers, each works alone: the **tokens and faces** (name the 
 
 Docs use the same fonts and colors with a quiet reading column; see [the Doc guide](templates-doc.md). On any page type, use \`<Markdown>\` for long continuous prose; keep HTML for individually designed text.
 
-Pick ONE system from the table by the subject's world and the page type, read its file, and name it in the fence. Never read a second system for the same artifact; one system owns colour and type.
+Pick ONE system from the table by the subject's world and the page type, read its file, and set the \`theme\` metadata field to its slug. Never read a second system for the same artifact; one system owns colour and type.
 
 ## How a page comes together
 
-1. **Shape.** The page type from the content's shape: dashboard, deck, editorial, scrolly, plan, app or landing, each with a reference (\`templates-dashboard.md\` and siblings) and named in the fence \`template\`. Read it for the compositions first.
+1. **Shape.** The page type from the content's shape: dashboard, deck, editorial, scrolly, plan, app or landing, each with a reference (\`templates-dashboard.md\` and siblings) and named in the \`template\` metadata field. Read it for the compositions first.
 2. **Hand.** One system from the table. A system marked avoid can still be used; it costs custom CSS the recipe does not give you.
 3. **Thesis.** One sentence from the subject's own material: the organizing idea, the object the hand draws, and which device carries the data.
-4. **Bind.** Fence \`theme: <slug>\`, and the record as a Helmet comment. Nothing to paste: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit.
+4. **Bind.** Set the \`theme\` metadata field to the system slug, and add the record as a Helmet comment. Nothing to paste: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit.
 5. **Dress.** Open the system's section for this page type and take its classes and hook variables; keep the page type's structure.
 6. **Draw.** One object from the artifact's own world, in the hand, with the data inside one device. The system never supplies the object.
 7. **Override by token, borrow by device.** A hue is one \`--ds-*\` token in a second \`:root\` block, both modes; a voice is a type-role class; an object is a device from any system; one loud moment is bespoke CSS on that element. Never a second palette or family, never a page with no system.
@@ -213,7 +213,7 @@ ${table}
 
 If this is the users' first afbin artifact, use the most amazing one like volta, phosphor, drafting or redline or something.
 
-Six older mood themes remain valid fence values for the artifacts that carry them (\`themes.md\`); a new artifact names a system.
+Six older mood themes remain valid \`theme\` metadata values for the artifacts that carry them (\`themes.md\`); a new artifact names a system.
 
 ## When nothing fits
 

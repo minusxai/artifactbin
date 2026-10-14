@@ -11,7 +11,7 @@ const REFERENCES=join(import.meta.dirname,'../../app/skills/artifactbin/referenc
  * design-systems/specs into the skill tree (installed with the skill, printed by `afbin help system-<slug>`).
  * The runtime serves the CSS (lib/data/story/story-systems, from the same specs); a reference says what the agent gets.
  * This checks the bundled output — the shape an agent relies on at the bind step — so a regenerated
- * catalogue cannot silently lose a page type, a best-fit specimen, the fence line or the vocabulary,
+ * catalogue cannot silently lose a page type, a best-fit specimen, the metadata binding or the vocabulary,
  * and cannot start carrying CSS to paste again.
  */
 const PAGE_TYPES=['Dashboard','Deck','Editorial','Scrolly','Plan','App','Landing'];
@@ -55,11 +55,11 @@ test('every system carries the sections an agent binds from, in order',()=>{
  }
 });
 
-test('a system binds by its fence line alone: no CSS to paste, the vocabulary the runtime provides, and one override example',()=>{
+test('a system binds by its metadata fields alone: no CSS to paste, the vocabulary the runtime provides, and one override example',()=>{
  for(const name of systems){
   const slug=name.slice('system-'.length);
   const text=helpTopics[name]!;
-  assert.ok(text.includes(`1. Fence: \`theme: ${slug}\``),`${name}: the fence line`);
+  assert.ok(text.includes(`1. Set the \`theme\` metadata field to \`${slug}\` and \`template\` to the page type.`),`${name}: the metadata binding`);
   assert.equal(fenced(text,'css').length,0,`${name}: carries CSS to paste`);
   assert.match(text,/```jsx\n<Helmet><style>\{`:root \{ --ds-[a-z0-9-]+: #[0-9a-f]{6}; \} \.dark \{ --ds-[a-z0-9-]+: #[0-9a-f]{6}; \}`\}<\/style><\/Helmet>\n```/,`${name}: the override example`);
   assert.match(text,/\| `t-[a-z0-9-]+` \|/,`${name}: the type roles table`);
