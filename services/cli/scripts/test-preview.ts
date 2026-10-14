@@ -149,9 +149,19 @@ try{
  await b.getByRole('textbox').last().fill('Persistent note');
  await b.getByRole('button',{name:'Save annotation'}).click();
  await b.getByText('Persistent note',{exact:true}).first().waitFor();
+ // The image was written after `add`, without an id: preview gave it one on disk, so it takes a comment too.
+ const imageId=/<img src="ref:[^"]+" alt="Local image" id="([A-Za-z][A-Za-z0-9]{3})"/.exec(await readFile(join(root,'report.jsx'),'utf8'))?.[1];
+ assert.ok(imageId,'the id-less image carries a durable id on disk');
+ await b.locator('[aria-label="Select tool active"]').evaluate(element=>element.remove()).catch(()=>{});
+ await b.getByRole('img',{name:'Local image'}).click();
+ await b.getByRole('textbox').last().fill('Image note');
+ await b.getByRole('button',{name:'Save annotation'}).click();
+ await b.getByText('Image note',{exact:true}).first().waitFor();
  const port=Number(new URL(server.url).port);await server.close();server=await launch(port);
- await b.reload();await b.getByRole('button',{name:'Comment',exact:true}).click();await b.getByText('Persistent note',{exact:true}).first().waitFor();
- console.log('PASS production comments survive process restart with the same node anchor');
+ await b.reload();await b.getByRole('button',{name:'Comment',exact:true}).click();await b.getByText('Persistent note',{exact:true}).first().waitFor();await b.getByText('Image note',{exact:true}).first().waitFor();
+ const threads=await(await b.request.post(server.url+'/editor',{data:{file:'report.jsx',operation:'annotations.list',status:'open'}})).json();
+ assert.deepEqual(threads.map((thread:{anchor:{nodeId:string}|null;orphaned:boolean})=>[thread.anchor?.nodeId,thread.orphaned]).sort(),[[imageId,false],['text',false]].sort());
+ console.log('PASS production comments, on an authored id and on an element written without one, survive process restart with the same node anchor');
  await a.goto(server.url+'/?file=published.jsx');await a.locator('#text').filter({hasText:'Published local draft'}).waitFor();
  await a.getByRole('button',{name:'Edit',exact:true}).click();
  await a.getByRole('tab',{name:'Edit the source',exact:true}).click();
