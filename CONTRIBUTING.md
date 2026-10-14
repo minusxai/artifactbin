@@ -46,8 +46,10 @@ may be owned by exactly one process, so a second checkout changes its port in
 
 Every document is served at `<hex(id)>.<pages host>` and the app page frames it (services/app/server/pages-host.ts,
 services/app/lib/serving/document-frame.ts); there is no other renderer, so the server refuses to boot without
-`APP__PAGES_HOST`. The frame's document reads its reader from a host-only `afbin_pages` cookie (`__Host-afbin_pages` over https) that is `SameSite=Lax`, so the app and the
-pages host must be the **same site**. In development that means browsing the app at a name under the pages host, not
+`APP__PAGES_HOST`. The frame's document reads its reader from a host-only `afbin_pages` cookie. Over https it is
+`__Host-afbin_pages` with `SameSite=None; Partitioned`, so the pages host may be a site of its own (production serves
+documents from `artefactbin.dev`, apart from `artifactbin.dev`). Over plain http it is `SameSite=Lax`, so in
+development the app and the pages host must be the **same site**: browse the app at a name under the pages host, not
 at `localhost` — which is what `npm run setup` writes by default:
 
 ```sh
@@ -57,7 +59,7 @@ npm run dev                              # then open http://app.lvh.me:<port>
 
 `lvh.me` and every name under it resolve to 127.0.0.1 in public DNS, so no hosts-file edit is needed;
 the login outbox and the CLI's device mint treat them as loopback. `npm run setup -- --pages-host <host>`
-names another host (production: a subdomain of the app's registrable domain, such as `pages.example.com`). The dev
+names another host (production over https: preferably a registrable domain of its own, such as `example-content.com`). The dev
 server tells Vite `allowedHosts: ['.<pages host>', <app host>]` (its DNS-rebinding guard refuses unknown `Host`s, and
 every document is a new one) and `cors: false` (the app's origin gate, not Vite, answers CORS). The browser proof is
 `node scripts/gates/gate-own-origin-script.mjs <base>`; the gate runner's own servers use `pages.localhost`, and the gates
