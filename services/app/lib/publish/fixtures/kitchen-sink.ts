@@ -235,6 +235,7 @@ Continuous prose with **bold**, *emphasis* and a [link](https://example.com).
 | Format | Supported |
 | --- | --- |
 | Markdown | Yes |\`}</Markdown>
+    <Isometric id="isometric-assembly" className="mt-6" title="Bearing assembly" width={320} height={220} spread={0.5} parts={[{"key":"base","kind":"slab","x":-40,"y":-30,"z":0,"width":80,"depth":60,"height":8},{"key":"shaft","kind":"cylinder","x":0,"y":0,"z":8,"radius":8,"height":36,"tone":"accent","separation":[0,0,30]}]} />
   </article>
 </section>
 
