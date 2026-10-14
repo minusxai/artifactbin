@@ -73,10 +73,10 @@ it('company setup panel copies shared recipient defaults and preserves explicit 
 
 import {DeploymentWelcome} from '@/solid/pages/DeploymentWelcome';
 import {agentDiscovery,AGENT_HELP_TITLE} from '@/lib/platform/agent-discovery';
-it('shows the shared HTTP discovery instruction and guide before CLI setup',()=>{
+it('shows the shared descriptive guide before CLI setup',()=>{
  render(()=><DeploymentWelcome deployment={{mode:'company',setup_complete:false,is_owner:false,default_group:null}}/>);
  const help=agentDiscovery(window.location.origin);
- expect(screen.getByText(help.instruction)).toBeVisible();
+ expect(screen.queryByText(help.instruction)).toBeNull();
  expect(screen.getByRole('link',{name:AGENT_HELP_TITLE})).toHaveAttribute('href',help.url);
  const headings=screen.getAllByRole('heading').map(node=>node.textContent);
  expect(headings.indexOf('AI agents')).toBeLessThan(headings.indexOf('Connect your CLI'));

@@ -273,13 +273,15 @@ describe('readable startup discovery', () => {
     expect(await raw.text()).toContain('The launch is scheduled for Monday.');
   });
 
-  it('makes the shared HTTP discovery readable in the initial page body', async () => {
+  it('keeps the descriptive guide link visible and imperative instructions in metadata', async () => {
     const w = await world();
     const res = await app.request(`${BASE}/a/${w.pub.id}`, { headers: as({ credential: 'none' }) });
     const html = await res.text();
     const body = html.slice(html.indexOf('<body'));
     const text = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]*>/g, '');
-    expect(text).toContain(agentDiscovery(BASE).instruction);
+    expect(text).not.toContain(agentDiscovery(BASE).instruction);
+    expect(text).toContain('Agent guide: authentication, creation, editing, and operations');
+    expect(html).toContain('<meta name="agents"');
     expect(body).toContain(`<a href="${agentDiscovery(BASE).url}">`);
   });
 

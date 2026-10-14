@@ -18,7 +18,6 @@ export function DeploymentWelcome(props: { deployment: DeploymentState }): JSX.E
  return <main class={HOME_WORKSPACE_COLUMN}><div class="workspace-page space-y-6">
   <PageHeader title="Set up this workspace" description="Connect your terminal or coding agent to this deployment, then sign in with your own email." actions={<a href="/login" class="text-accent">Sign in</a>}/>
   <Panel title="AI agents">
-   <p class="text-sm leading-relaxed text-muted">{discovery().instruction}</p>
    <a href={discovery().url} class="text-accent">{AGENT_HELP_TITLE}</a>
   </Panel>
   <Panel title="Connect your CLI">

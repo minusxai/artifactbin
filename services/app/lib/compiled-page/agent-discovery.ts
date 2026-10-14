@@ -9,7 +9,7 @@ export function agentDiscoveryHead(help:AgentDiscovery):string{
 /** Readable startup help, replaced when the app mounts. Padding keeps it below
  * the app bar and behind a server-drawn document frame during startup. */
 export function agentDiscoveryBody(help:AgentDiscovery):string{
- return `<main data-app-startup class="px-6 pt-16"><p>${escapeHtml(help.instruction)}</p><a href="${escapeHtml(help.url)}">${escapeHtml(AGENT_HELP_TITLE)}</a></main>`;
+ return `<main data-app-startup class="px-6 pt-16"><a href="${escapeHtml(help.url)}">${escapeHtml(AGENT_HELP_TITLE)}</a></main>`;
 }
 /** The pointer again, as the page's last line: what a tail-keeping reader sees. */
 export function agentDiscoveryTail(help:AgentDiscovery):string{
