@@ -175,13 +175,48 @@ describe('the rules, each seen to fire on a literal tree', () => {
 });
 
 /**
- * The real tree's SHAPE and BUDGET — not `validateSkillTree`, which is exercised
- * against literal trees above. The brief links topics that live only in the CLI's
- * bundled teaching (`renderDoc`'s fallback, lib/skills/index), so the link rule
- * cannot be run against `skills/` as it stands.
+ * The real tree's SHAPE and BUDGET, and `validateSkillTree` over the shipped files in both flavours.
+ * Every rule runs; a problem the tree has not yet paid down is listed by file and rule in KNOWN, so a
+ * new violation (an empty `name`, a file that does not open with `## Read first`) fails here, and a
+ * fixed one fails until it leaves the list.
  */
 describe('the real tree (skills/) keeps its shape and its reading budget', () => {
   const tree = skillTree();
+  /** The rule a problem breaks, without the measurements that move with every edit. */
+  const rule = (problem: string) => problem
+    .replace(/: \d+ lines and \d+ sections without a "## Contents"$/, ': no Contents')
+    .replace(/: the Read first block is [\d,]+ B, cap [\d,]+$/, ': Read first over its cap')
+    .replace(/: the first heading must be "## Read first" \(got "[^"]*"\)$/, ': does not open with Read first');
+  const R = 'artifactbin/references';
+  /** Debt the tree carries today, each named by its rule; restructuring these files is its own change. */
+  const KNOWN = [
+    'artifactbin/SKILL.md: no Contents',
+    `${R}/apps.md: no Contents`,
+    `${R}/databases-users.md: does not open with Read first`,
+    `${R}/dataset-images.md: does not open with Read first`,
+    `${R}/http-document-graph.md: Read first over its cap`,
+    `${R}/lambdas.md: does not open with Read first`,
+    `${R}/lambdas.md: no Contents`,
+    `${R}/live-sessions.md: no Contents`,
+    `${R}/markup-data-example.md: no Contents`,
+    `${R}/markup-data.md: no Contents`,
+    `${R}/markup-embeds.md: does not open with Read first`,
+    `${R}/markup-maps.md: no Contents`,
+    `${R}/markup-notifications.md: does not open with Read first`,
+    `${R}/markup-scripts.md: no Contents`,
+    `${R}/markup-state.md: Read first over its cap`,
+    `${R}/markup.md: does not open with Read first`,
+    `${R}/markup.md: no Contents`,
+    `${R}/npm-local.md: does not open with Read first`,
+    `${R}/publishing-auth.md: Read first over its cap`,
+    `${R}/publishing-datasets.md: Read first over its cap`,
+    `${R}/publishing.md: Read first over its cap`,
+    `${R}/templates.md: Read first over its cap`,
+  ];
+  it.each(['cli', 'http'] as const)('obeys every tree rule in the %s flavour, less the listed debt', (transport) => {
+    const problems = validateSkillTree(tree, (file) => renderSkill(file, { base: SIZE_BASE, transport }));
+    expect(problems.map(rule).sort()).toEqual([...KNOWN].sort());
+  });
   /**
    * THE byte-cap sweep. It used to be asserted in seven places — the brief, the auth rule, the
    * folder guidance, the publish-first rule, the quick sheet, the measured-fixes template docs and
@@ -204,7 +239,7 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
     expect(data.length).toBe(13);
     for(const file of data)expect(file).toMatch(/^system-[a-z]+\.md$/);
     expect(tree.get('artifactbin/references/design-systems.md')?.kind).toBe('guide');
-    // The real tree always reports the brief's links to CLI-only topics (see above); the systems themselves must be clean.
+    // The systems carry none of the listed debt (see KNOWN above).
     expect(validateSkillTree(tree,render).filter(problem=>/system-[a-z]+\.md/.test(problem))).toEqual([]);
   });
   it('is ONE skill — the brief over its references, nothing else preloaded', () => {

@@ -166,7 +166,7 @@ export function catalogueMd() {
   const rows = [];
   for (const slug of ROSTER) {
     const S = loadSpec(slug);
-    rows.push([`\`system-${slug}.md\``, cell(S.name), cell(S.mood), ...FIT[slug].map((v) => RATING[v])]);
+    rows.push([`[\`system-${slug}.md\`](system-${slug}.md)`, cell(S.name), cell(S.mood), ...FIT[slug].map((v) => RATING[v])]);
   }
   const table = mdTable(['Read', 'System', 'Mood', ...TPL_HEADS], rows);
   const losses = LOSSES.map(({ title, text }) => `- **${title}.** ${text}`).join('\n');
@@ -179,7 +179,7 @@ description: >-
 
 Every artifact wears one design system. The page type is the shape of the content, the system is the hand that draws it, the subject supplies the object and the data.
 
-A system has three layers, each works alone: the **tokens and faces** (name the system and kit components, token classes and charts already look right), the **hand** (one drawing mode and a few devices written against hand variables, so a borrowed device takes this ink) and the **page-type recipes** (the look on each of the seven page types). The runtime serves all three; the agent writes no CSS to get them.
+A system has three layers, each works alone: the **tokens and faces** (name the system and kit components, token classes and charts already look right), the **hand** (one drawing mode and a few devices written against hand variables, so a borrowed device takes this ink) and the **page-type recipes** (the look on each of the eight page types). The runtime serves all three; the agent writes no CSS to get them.
 
 Docs use the same fonts and colors with a quiet reading column; see [the Doc guide](templates-doc.md). On any page type, use \`<Markdown>\` for long continuous prose; keep HTML for individually designed text.
 
@@ -187,7 +187,7 @@ Pick ONE system from the table by the subject's world and the page type, read it
 
 ## How a page comes together
 
-1. **Shape.** The page type from the content's shape: dashboard, deck, editorial, scrolly, plan, app or landing, each with a reference (\`templates-dashboard.md\` and siblings) and named in the \`template\` metadata field. Read it for the compositions first.
+1. **Shape.** The page type from the content's shape: doc, dashboard, deck, editorial, scrolly, plan, app or landing, each with a reference (\`templates-dashboard.md\` and siblings) and named in the \`template\` metadata field. Read it for the compositions first.
 2. **Hand.** One system from the table. A system marked avoid can still be used; it costs custom CSS the recipe does not give you.
 3. **Thesis.** One sentence from the subject's own material: the organizing idea, the object the hand draws, and which device carries the data.
 4. **Bind.** Set the \`theme\` metadata field to the system slug, and add the record as a Helmet comment. Nothing to paste: the runtime serves the tokens for both modes, the faces, the type roles, the components, the hand and the page-type kit.

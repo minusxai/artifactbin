@@ -136,15 +136,23 @@ booking its booker's. Put the returned id in `src="ref:…"` first.
 
 ## Test it as two people
 
-`book.js` books a slot (a different one per person); run it as two test users
-on a copy, one session at a time ([apps](apps.md)):
+`book.js` books the first open slot from today on, so the second person gets
+the next one; run it as two test users on a copy, one session at a time
+([apps](apps.md)):
 
 ```js
 const page = await context.newPage();
 await page.goto('/a/<copy-id>');
 await page.waitForFunction(() => Boolean(window.page));
-await page.getByRole('button', {name: '09:00', exact: true}).click();
-await page.getByRole('button', {name: 'Cancel 09:00', exact: true}).waitFor();
+const slot = await page.evaluate(async () => {
+  for (const {day} of await window.page.ready('days')) {
+    window.page.set('day', day);
+    const open = (await window.page.ready('slots')).find((s) => s.day === day && s.is_open);
+    if (open) return open.slot;
+  }
+});
+await page.getByRole('button', {name: slot, exact: true}).click();
+await page.getByRole('button', {name: `Cancel ${slot}`, exact: true}).waitFor();
 return await page.evaluate(() => window.page.ready('mine'));
 ```
 
@@ -156,5 +164,5 @@ afbin sessions close <session-id> --json
 afbin sessions script new --as <tu2> --input book.js --json
 ```
 
-Each books and cancels only their own slot; `--as guest` on the original
+Each sees Cancel only on their own booking; `--as guest` on the original
 finds both buttons disabled. [Live sessions](live-sessions.md).

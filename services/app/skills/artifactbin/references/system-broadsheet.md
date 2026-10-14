@@ -150,7 +150,7 @@ Template: editorial. The template owns the measure, the folio rhythm and figure 
 
 ### Scrolly · good
 
-Template: scrolly. Chapters and their figures stay in ordinary document flow; the author supplies each chapter’s figure state and the system owns the step card and figure, drawn in its hand. Classes the specimen uses: `ds-tpl-scrolly`, `ds-tpl-steps`, `ds-tpl-step`, `t-label`, `t-title`, `ds-tpl-figure`, `ds-tpl-figure-art`, `h-tex`, `h-tex-fill`, `h-tex-fill2`, `h-muted`, `h-ink`, `h-num`, `h-text`, `ds-tpl-figure-cap`.
+Template: scrolly. Chapters and their figures stay in ordinary document flow; the author supplies each chapter’s figure state and the system owns the step card and figure, drawn in its hand. Classes the specimen uses: `ds-tpl-scrolly`, `ds-tpl-steps`, `ds-tpl-step`, `t-label`, `ds-tpl-figure`, `ds-tpl-figure-art`, `h-tex`, `h-tex-fill`, `h-tex-fill2`, `h-muted`, `h-ink`, `h-num`, `h-text`, `ds-tpl-figure-cap`.
 
 ### Plan · avoid
 
@@ -158,11 +158,11 @@ Template: plan. The template owns the beats (brief, screens, transitions, decisi
 
 ### App · avoid
 
-Page type: app, published without a template field. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject. Expect custom CSS: Interactive tools, dashboards, anything scanned rather than read, or subjects that need colour to carry meaning.
+Template: app. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject. Expect custom CSS: Interactive tools, dashboards, anything scanned rather than read, or subjects that need colour to carry meaning.
 
 ### Landing · avoid
 
-Page type: landing, published without a template field. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape. Expect custom CSS: Interactive tools, dashboards, anything scanned rather than read, or subjects that need colour to carry meaning.
+Template: landing. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape. Expect custom CSS: Interactive tools, dashboards, anything scanned rather than read, or subjects that need colour to carry meaning.
 
 ## Do and don't
 

@@ -31,8 +31,8 @@ report select `dashboard`; a report presented as slides selects `deck`.
 
 A `template` is the document's PAGE TYPE: its structural genre, and the
 runtime behaviour that comes with it, which is the contents rail beside an
-`editorial` or `plan` page with three or more `h2` sections and present mode
-for a `deck`'s `<Slide>` nodes. Set it as the top-level `template` field.
+`editorial` or `plan` page with three or more `h2` sections and no `<Grid>`,
+and present mode for a `deck`'s `<Slide>` nodes. Set it as the top-level `template` field.
 `app` and `landing` carry no runtime behaviour; the field still records the
 type. A page type's guide is a REFERENCE, not a contract: it offers two or
 three compositions, and the thesis ([design.md](design.md)) picks one; a
@@ -53,7 +53,9 @@ legible prose, keyboard access, responsive stacking and bounded overflow.
 For prose columns, sidebars, comparisons and mixed text/evidence layouts, prefer
 `<Grid mode="flow"><GridItem w={8}>…</GridItem><GridItem w={4}>…</GridItem></Grid>`.
 Use it liberally when a layout has columns; keep ordinary single-column prose
-as ordinary HTML. Public components remain Grid / GridItem in both modes.
+as ordinary HTML. Any `<Grid>`, flow mode included, removes the contents rail:
+on an `editorial` or `plan` page that needs the rail, build columns as a native
+CSS grid (below). Public components remain Grid / GridItem in both modes.
 Flow follows source order, stacks below 42rem of container width and grows
 with content. Widths use the same 12-column default (`cols` can change it).
 A divider changes adjacent spans together; the editor's dedicated grip moves

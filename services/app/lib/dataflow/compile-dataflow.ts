@@ -26,7 +26,7 @@ import { paramSqlName, type ColumnType, type DatasetColumn, type Scalar, type St
 import { loadSqlite, type Relation, type SqlExtensions, type SqliteEngine } from '@artifactbin/sql/core';
 import { isQueryFailure } from '@artifactbin/contracts';
 import type { JsxNode, ValidationError } from '@/lib/jsx';
-import { BUILTIN_TABLES, builtinInput, isBuiltinTable, rowField, VIEWER, VIEWER_ID } from './builtins';
+import { BUILTIN_TABLES, builtinInput, CLOCK_FUNCTIONS, isBuiltinTable, rowField, VIEWER, VIEWER_ID } from './builtins';
 import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledNotify, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
 import { ARGS_ATTR, bindingMap, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
 import { analyzeRowScopes } from '@/lib/jsx/row-scope';
@@ -149,8 +149,6 @@ export function rewriteBuiltinFields(sql: string): { sql: string; fields: Map<st
 const SCHEMA_TABLE = /\bsqlite_(master|schema|temp_master|temp_schema)\b/i;
 const QUERY_WRITES = 'writes — a <Query> runs only read statements (one SELECT); a write is a <Mutation>';
 
-/** The clock functions a statement may not call: the current time is `$_now`, identical on server and browser. */
-const CLOCK_FUNCTIONS = new Set(['current_date', 'current_time', 'current_timestamp']);
 /** Functions that read `'now'` when handed it. */
 const DATE_FUNCTIONS = new Set(['date', 'time', 'datetime', 'julianday', 'strftime', 'unixepoch', 'timediff']);
 

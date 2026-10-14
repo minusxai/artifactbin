@@ -83,7 +83,7 @@ describe('the installed short skill',()=>{
   expect(sheet).toContain('edit_id');
  });
  it('routes design and vocabulary before the chosen page type and design system',()=>{
-  const positions=['references/design.md','references/markup.md','references/templates-<name>.md','references/design-systems.md'].map(s=>sheet.indexOf(s));
+  const positions=['references/design.md','references/markup.md','[page types](references/templates.md), BEFORE writing','references/design-systems.md'].map(s=>sheet.indexOf(s));
   expect(positions.every(x=>x>=0)).toBe(true);
   expect(positions).toEqual([...positions].sort((a,b)=>a-b));
   expect(sheet).toContain('references/design-systems.md');

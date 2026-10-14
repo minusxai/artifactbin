@@ -41,7 +41,8 @@ evidence is staged. Pick ONE composition and build that.
 
 - Three or more `<h2>` sections get a platform-built contents rail beside the
   column on wide screens; keep headings short enough to read in a list.
-  Nothing to author.
+  Nothing to author, but any `<Grid>`, flow mode included, removes the
+  contents rail: build columns as a native CSS grid ([templates](templates.md)).
 - Keep each prose column at a readable measure (`max-w-2xl` or the system's
   measure). A centered column is one composition; the system can also use
   margin notes, asymmetric evidence spreads, bands and distinct surfaces.

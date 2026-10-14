@@ -33,6 +33,6 @@ survives the nesting. A button-only Column still needs a query column:
 </DataTable>
 ```
 
-PopoverContent renders inline, not portaled: check it near the edges of its
-scroll container. For saved rows, write `tasks_data.rows` from an `<Import>`.
+PopoverContent is portaled while open and placed against its trigger, kept
+inside the viewport, so a scroll container does not clip it. For saved rows, write `tasks_data.rows` from an `<Import>`.
 See [row actions](markup-repeat.md).

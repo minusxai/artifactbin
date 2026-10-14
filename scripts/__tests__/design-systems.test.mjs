@@ -126,3 +126,49 @@ describe('the committed outputs are what the generator emits now', () => {
     expect(read(path.join(REFS, 'system-redline.md'))).toContain('`rl-paper`, `rl-red`, `rl-ink` and `rl-on-*` classes set SVG fills only; they do not paint HTML slides. For HTML, use stage classes such as `rl-stage-red`, which set background and text colors.');
   });
 });
+
+/**
+ * What a system reference tells an agent to paste must be what the runtime serves for that system: a type
+ * role the runtime never styles leaves the pasted heading bare, and a value-keyed rule styles only the
+ * values someone thought of. Checked against the runtime's own CSS, the thing a published page receives.
+ */
+describe('a system reference pastes only what its runtime serves', () => {
+  const runtime = renderRuntime().entries;
+  const rolesServed = (slug) => new Set([...runtime.find((e) => e.name === slug).css.matchAll(/\.t-([a-z0-9-]+)/g)].map((m) => `t-${m[1]}`));
+  const rolesNamed = (text) => {
+    const inMarkup = [...text.matchAll(/className="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/));
+    const inProse = [...text.matchAll(/`(t-[a-z0-9-]+)`/g)].map((m) => m[1]);
+    return [...new Set([...inMarkup, ...inProse])].filter((c) => /^t-[a-z0-9-]+$/.test(c));
+  };
+  it('names App and Landing by their template field, as Bind it and the page-type guides do', () => {
+    for (const slug of ROSTER) {
+      const text = systemMd(slug);
+      expect(text, slug).not.toContain('without a template field');
+      expect(text, slug).toMatch(/### App · \w+\n\nTemplate: app\./);
+      expect(text, slug).toMatch(/### Landing · \w+\n\nTemplate: landing\./);
+    }
+  });
+  it('every type role a system reference names is one its runtime styles', () => {
+    for (const slug of ROSTER) {
+      const served = rolesServed(slug);
+      for (const role of rolesNamed(systemMd(slug))) expect(served.has(role), `${slug} names ${role}`).toBe(true);
+    }
+  });
+  it('a Meridian bar fill takes any width, not only the three the specimen used', () => {
+    const text = systemMd('meridian');
+    const css = runtime.find((e) => e.name === 'meridian').css;
+    expect(css).not.toMatch(/\[data-w=/);
+    const fills = [...text.matchAll(/<span className="me-bar-fill[^"]*"([^>]*)>/g)].map((m) => m[1]);
+    expect(fills.length).toBeGreaterThan(0);
+    for (const attrs of fills) expect(attrs).toMatch(/style=\{\{ ?width: '\d+%' ?\}\}/);
+  });
+  it('the landing skeleton, publishable as is, wears any system: no system-scoped class, only roles every system serves', () => {
+    const landing = read(path.join(REFS, 'templates-landing.md'));
+    const skeleton = landing.split('Skeleton of the runtime pieces')[1].split('\n## ')[0];
+    const classes = [...skeleton.matchAll(/className="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/));
+    const prefixes = ROSTER.map((slug) => (loadSpec(slug).css ?? '').match(/\.ds-[a-z]+ \.([a-z]+)-btn\b/)?.[1]).filter(Boolean);
+    expect(prefixes).toContain('v');
+    for (const c of classes) for (const prefix of prefixes) expect(c.startsWith(`${prefix}-`), `${c} belongs to one system`).toBe(false);
+    for (const slug of ROSTER) for (const role of classes.filter((c) => c.startsWith('t-'))) expect(rolesServed(slug).has(role), `${slug} lacks ${role}`).toBe(true);
+  });
+});

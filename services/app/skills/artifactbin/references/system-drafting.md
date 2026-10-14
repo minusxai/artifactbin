@@ -167,7 +167,7 @@ Template: plan. The template owns the beats (brief, screens, transitions, decisi
 
 ```jsx
 <div className="ds-tpl ds-tpl-plan">
-  <div className="ds-tpl-plan-head"><p className="t-label ds-tpl-kicker">UI plan · Review draft</p><h3 className="t-display-m ds-tpl-plan-h">Onboarding: from sign-in to first value</h3>
+  <div className="ds-tpl-plan-head"><p className="t-label ds-tpl-kicker">UI plan · Review draft</p><h3 className="t-display-l ds-tpl-plan-h">Onboarding: from sign-in to first value</h3>
     <div className="ds-tpl-plan-brief"><div><span className="t-label">Outcome</span><p>A new workspace reaches its first real result in under ten minutes, on desktop and phone, without a support call.</p></div><div><span className="t-label">Scope</span><p>Sign-in, workspace setup, first import, first result. Out: billing, invites, SSO.</p></div><div><span className="t-label">Status</span><p>Plan only · 2 of 6 tasks done · nothing verified in production</p></div></div></div>
   <p className="t-label ds-tpl-plan-sub">01 · Proposed screens</p>
   <div className="ds-tpl-wires"><div className="ds-tpl-wire ds-tpl-wire-desk">{/* draw this screen in the hand */}</div><div className="ds-tpl-wire">{/* draw this screen in the hand */}</div></div>
@@ -190,11 +190,11 @@ Template: plan. The template owns the beats (brief, screens, transitions, decisi
 
 ### App · avoid
 
-Page type: app, published without a template field. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject. Expect custom CSS: Warm or emotional subjects, consumer marketing, dashboards that need many simultaneous status colours, or any page whose reader is not expected to inspect.
+Template: app. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject. Expect custom CSS: Warm or emotional subjects, consumer marketing, dashboards that need many simultaneous status colours, or any page whose reader is not expected to inspect.
 
 ### Landing · good
 
-Page type: landing, published without a template field. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape. Classes the specimen uses: `ds-tpl-landing`, `ds-tpl-hero`, `ds-tpl-hero-words`, `t-label`, `ds-tpl-kicker`, `t-display-xl`, `ds-tpl-hero-h`, `ds-tpl-hero-sub`, `ds-row`, `d-btn`, `d-btn-primary`, `ds-tpl-hero-art`, `h-ground`, `h-muted`, `h-ink`, `h-fill`, `h-outline-fill`, `h-fill2`, `h-num`, `h-text`, `ds-tpl-feats`, `ds-tpl-feat`, `t-title`.
+Template: landing. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape. Classes the specimen uses: `ds-tpl-landing`, `ds-tpl-hero`, `ds-tpl-hero-words`, `t-label`, `ds-tpl-kicker`, `t-display-xl`, `ds-tpl-hero-h`, `ds-tpl-hero-sub`, `ds-row`, `d-btn`, `d-btn-primary`, `ds-tpl-hero-art`, `h-ground`, `h-muted`, `h-ink`, `h-fill`, `h-outline-fill`, `h-fill2`, `h-num`, `h-text`, `ds-tpl-feats`, `ds-tpl-feat`, `t-title`.
 
 ## Do and don't
 

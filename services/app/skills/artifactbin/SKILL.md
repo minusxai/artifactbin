@@ -51,7 +51,7 @@ Keep content away from viewport edges.
 
 - [design](references/design.md).
 - [markup](references/markup.md); [data](references/markup-data.md).
-- Read `references/templates-<name>.md` BEFORE writing; [design systems](references/design-systems.md).
+- Read your page type's guide, linked from [page types](references/templates.md), BEFORE writing; [design systems](references/design-systems.md).
 - [sync and recovery](references/publishing.md).
 - [errors](references/errors.md).
 - [Comments](references/publishing-annotations.md); [monitoring](references/monitoring.md).

@@ -165,11 +165,11 @@ Template: plan. The template owns the beats (brief, screens, transitions, decisi
 
 ### App · avoid
 
-Page type: app, published without a template field. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject. Expect custom CSS: Long reading (condensed caps tire past a paragraph), dashboards with many simultaneous numbers, subjects that need warmth, softness or more than one colour.
+Template: app. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject. Expect custom CSS: Long reading (condensed caps tire past a paragraph), dashboards with many simultaneous numbers, subjects that need warmth, softness or more than one colour.
 
 ### Landing · best
 
-Page type: landing, published without a template field. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape.
+Template: landing. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape.
 
 ```jsx
 <div className="ds-tpl ds-tpl-landing">

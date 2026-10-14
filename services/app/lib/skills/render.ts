@@ -29,7 +29,7 @@ import { DANGEROUS_TAGS } from '@/lib/jsx/dangerous-tags';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/platform/config';
 import { COMPUTED_FIGURE_RULE, DISPLAY_ROWS, MAX_DOCUMENT_BYTES, NATIVE_TABLE_AUTHORING_RULE, PHONE_AUTHORING_RULE, PROGRESSIVE_AUTHORING_RULE, SQL_FUNCTIONS, URL_REPLY_RULE } from '@artifactbin/contracts';
 import { OPERATIONS } from '@/lib/operations/registry';
-import { BUILTIN_INPUTS, BUILTIN_TABLES } from '@/lib/dataflow';
+import { BUILTIN_INPUTS, BUILTIN_TABLES, CLOCK_FUNCTIONS } from '@/lib/dataflow';
 import { CORE_FUNCTIONS } from '@artifactbin/sql/core';
 import { stripFrontmatter, type SkillFile } from './tree';
 import { AUTHENTICATION_INSTRUCTION } from '../platform/agent-discovery';
@@ -124,8 +124,8 @@ const REGISTRY_GLOBALS = {
   sqlFunctionTable: ['| Function | What it does |', '|---|---|', ...SQL_FUNCTIONS.map((f) => `| \`${cell(f.signature)}\` | ${cell(f.summary)} |`)].join('\n'),
   /** The rows of one query result that travel to the page; the rest are paged (@artifactbin/contracts DISPLAY_ROWS). */
   displayRows: DISPLAY_ROWS.toLocaleString('en-US'),
-  /** SQLite's own functions an author may call, as the engine's guard admits them, less those the library replaces. */
-  sqliteFunctions: [...CORE_FUNCTIONS].filter((name) => /^[a-z]\w*$/.test(name) && !SQL_FUNCTIONS.some((f) => f.name === name)).map((name) => `\`${name}\``).join(', '),
+  /** SQLite's own functions an author may call, as the engine's guard admits them, less those the library replaces and the clock the compiler refuses. */
+  sqliteFunctions: [...CORE_FUNCTIONS].filter((name) => /^[a-z]\w*$/.test(name) && !SQL_FUNCTIONS.some((f) => f.name === name) && !CLOCK_FUNCTIONS.has(name)).map((name) => `\`${name}\``).join(', '),
   /** The built-in `$` values and tables, as the compiler and the server supply them (lib/dataflow/builtins). */
   builtinTable: [
     '| Name | What it is | Where it comes from | Read by |', '|---|---|---|---|',

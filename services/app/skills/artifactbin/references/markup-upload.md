@@ -28,7 +28,9 @@ The low-level `page.upload` and `page.fileUrl` APIs use the same transport.
 The Helmet script can import them directly:
 
 ```js
-import { upload, fileUrl } from 'page';
+import { signal, upload, fileUrl } from 'page';
+const [files, setFiles] = signal('$files');          // the JSON array of refs, as a string
+const refs = () => JSON.parse(files() || '[]');
 const result = await upload('attachments', file); // File from an input
 setFiles(JSON.stringify([...refs(), result.ref]));
 const previewOrDownload = fileUrl('attachments', result.ref);

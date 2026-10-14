@@ -158,8 +158,20 @@ function tplEditorial(S, D, T) {
 </div>`;
 }
 
+/**
+ * A type role the system styles: the first of `wanted` its spec defines (a type role, or a `.t-*` rule in its
+ * css), else none, so a shared specimen never pastes a role the runtime leaves unstyled; a heading without one
+ * keeps the display face.
+ */
+function role(S, ...wanted) {
+  const served = new Set([...S.type_roles.map((r) => r.name), ...[...(S.css ?? '').matchAll(/\.t-([a-z0-9-]+)/g)].map((m) => m[1])]);
+  const name = wanted.find((w) => served.has(w));
+  return name ? `t-${name}` : '';
+}
+const classAttr = (name) => (name ? ` className="${name}"` : '');
+
 function tplScrolly(S, D, T) {
-  const steps = T.steps.map(([h, p], i) => `<div className="ds-tpl-step"><span className="t-label">${pad2(i + 1)}</span><h4 className="t-title">${esc(h)}</h4><p>${esc(p)}</p></div>`).join('');
+  const steps = T.steps.map(([h, p], i) => `<div className="ds-tpl-step"><span className="t-label">${pad2(i + 1)}</span><h4${classAttr(role(S, 'title'))}>${esc(h)}</h4><p>${esc(p)}</p></div>`).join('');
   const fig = handRender(S, 'units', handUnits);
   return `<div className="ds-tpl ds-tpl-scrolly">
   <div className="ds-tpl-steps">${steps}</div>
@@ -177,7 +189,7 @@ function tplApp(S, D, T) {
 }
 
 function tplLanding(S, D, T) {
-  const feats = T.features.map(([h, p]) => `<div className="ds-tpl-feat"><h4 className="t-title">${esc(h)}</h4><p>${esc(p)}</p></div>`).join('');
+  const feats = T.features.map(([h, p]) => `<div className="ds-tpl-feat"><h4${classAttr(role(S, 'title'))}>${esc(h)}</h4><p>${esc(p)}</p></div>`).join('');
   const fig = handRender(S, 'phone', handPhone);
   return `<div className="ds-tpl ds-tpl-landing">
   <div className="ds-tpl-hero">
@@ -210,11 +222,11 @@ const PLAN_DEFAULT = {
 function tplPlan(S, D, T) {
   const P = { ...PLAN_DEFAULT, ...Object.fromEntries(Object.entries(T).filter(([k]) => k.startsWith('plan_'))) };
   const desk = handRender(S, 'screen', handScreen), mob = handRender(S, 'screen-mobile', handScreenMobile);
-  const decisions = P.plan_decisions.map(([h, b]) => `<div className="ds-tpl-decision"><h4 className="t-title">${esc(h)}</h4><p>${esc(b)}</p></div>`).join('');
+  const decisions = P.plan_decisions.map(([h, b]) => `<div className="ds-tpl-decision"><h4${classAttr(role(S, 'title'))}>${esc(h)}</h4><p>${esc(b)}</p></div>`).join('');
   const kind = { Done: 'ok', 'In progress': 'warn', Pending: 'idle', Blocked: 'bad' };
   const rows = P.plan_tasks.map(([t, o, st, done]) => `<tr><td>${done ? '<s>' + esc(t) + '</s>' : esc(t)}</td><td>${esc(o)}</td><td><span className="ds-tpl-tag is-${kind[st] ?? 'idle'}">${esc(st)}</span></td></tr>`).join('');
   return `<div className="ds-tpl ds-tpl-plan">
-  <div className="ds-tpl-plan-head"><p className="t-label ds-tpl-kicker">${esc(P.plan_eyebrow)}</p><h3 className="t-display-m ds-tpl-plan-h">${esc(P.plan_title)}</h3>
+  <div className="ds-tpl-plan-head"><p className="t-label ds-tpl-kicker">${esc(P.plan_eyebrow)}</p><h3 className="${[role(S, 'display-m', 'display-l'), 'ds-tpl-plan-h'].filter(Boolean).join(' ')}">${esc(P.plan_title)}</h3>
     <div className="ds-tpl-plan-brief"><div><span className="t-label">Outcome</span><p>${esc(P.plan_outcome)}</p></div><div><span className="t-label">Scope</span><p>${esc(P.plan_scope)}</p></div><div><span className="t-label">Status</span><p>${esc(P.plan_status)}</p></div></div></div>
   <p className="t-label ds-tpl-plan-sub">01 · Proposed screens</p>
   <div className="ds-tpl-wires"><div className="ds-tpl-wire ds-tpl-wire-desk">${desk}</div><div className="ds-tpl-wire">${mob}</div></div>
@@ -235,8 +247,8 @@ export const TEMPLATES = [
   ['editorial', 'Editorial', 'Template: editorial. The template owns the measure, the folio rhythm and figure placement; the system owns the kicker, the headline face, the deck and the pull figure.', tplEditorial],
   ['scrolly', 'Scrolly', 'Template: scrolly. Chapters and their figures stay in ordinary document flow; the author supplies each chapter’s figure state and the system owns the step card and figure, drawn in its hand.', tplScrolly],
   ['plan', 'Plan', 'Template: plan. The template owns the beats (brief, screens, transitions, decisions, ledger) and the Mermaid component; the system owns the wireframe hand, the status tags, the ledger rule and the one accent that connects screen IDs and arrows.', tplPlan],
-  ['app', 'App', 'Page type: app, published without a template field. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject.', tplApp],
-  ['landing', 'Landing', 'Page type: landing, published without a template field. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape.', tplLanding],
+  ['app', 'App', 'Template: app. The system owns the toolbar, the row rhythm, the status tags and the primary button; the structure comes from the subject.', tplApp],
+  ['landing', 'Landing', 'Template: landing. The system owns the headline, the device drawing and the pair of buttons; the hero split and feature row are the usual shape.', tplLanding],
 ];
 
 /** One page type's specimen markup for a spec: the spec's own override, else the generic one. */
