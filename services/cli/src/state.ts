@@ -159,13 +159,13 @@ export class State {
     return Number(this.db.prepare('DELETE FROM records WHERE scope = ?').run(scope).changes);
   }
 
-  /** The nearest registered workspace root at or above `directory` (both already realpath'd). */
-  nearestWorkspace<T = unknown>(directory: string): {root: string; value: T} | null {
-    for (let current = directory; ; current = dirname(current)) {
+  /** The first registered workspace root among `candidates`, nearest first (local-workspace's `workspaceCandidates`). */
+  nearestWorkspace<T = unknown>(candidates: Iterable<string>): {root: string; value: T} | null {
+    for (const current of candidates) {
       const found = this.get<T>(current, 'workspace', current);
       if (found) return {root: current, value: found.value};
-      if (dirname(current) === current) return null;
     }
+    return null;
   }
 }
 

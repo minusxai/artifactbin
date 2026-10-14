@@ -23,7 +23,7 @@ export async function inspectPreviewOffer(value:unknown,root?:string){
  const owner=input.target===undefined&&root&&file.localWorkspace?await localIdentityOwner(root,file.localWorkspace.documentId):undefined;
  const target=input.target??owner??`${basename||'document'}.jsx`;
  if(typeof target!=='string'||!target.toLowerCase().endsWith('.jsx')||target.length>500||/[\\:\x00-\x1f]/.test(target)||target.split('/').some(part=>!part||part.startsWith('.')||part==='node_modules'))throw new CliError('invalid_html','Choose a relative JSX filename within this workspace, such as report.jsx.');
- return {html:input.html,title:file.metadata.title,comments:file.threads.length,target};
+ return {html:input.html,filename:input.filename.split(/[\\/]/).pop()!,title:file.metadata.title,comments:file.threads.length,target};
 }
 export async function importPreviewOffer(root:string,home:string,value:unknown){
  const offer=await inspectPreviewOffer(value,root),directory=join(root,'.artifactbin','imports');
@@ -46,7 +46,7 @@ export async function importPreviewOffer(root:string,home:string,value:unknown){
  const path=join(directory,`${randomUUID()}.jsx.html`);
  try{
   await atomicWrite(path,Buffer.from(offer.html));
-  return await importLocalHtml(workspace,path,offer.target);
+  return await importLocalHtml(workspace,path,offer.target,{via:'preview',filename:offer.filename});
  }finally{await rm(path,{force:true});}
 }
 

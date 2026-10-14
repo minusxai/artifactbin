@@ -3,7 +3,7 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {readFile,lstat,realpath,link,unlink,stat} from 'node:fs/promises';
 import {homedir,tmpdir} from 'node:os';
-import {basename,dirname,extname,join,relative,resolve,sep} from 'node:path';
+import {extname,join,relative,resolve,sep,posix,win32} from 'node:path';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {State,withLock} from './state';
 import {recordLocalHistory,assertLocalHistoryMove,moveLocalHistory,localHistoryHeadBody,localHistoryHead} from './local-history';
@@ -30,22 +30,53 @@ async function marker(root:string):Promise<WorkspaceMarker|null>{
  return value;
 }
 /**
- * THE NEAREST WORKSPACE, WITHIN BOUNDS. The working directory itself is always eligible; discovery then
- * climbs, but never past a git repository's root and never into a directory nobody's project lives in:
- * HOME (whose `.artifactbin` is the CLI's own state), the shared temp roots, a directory another user
- * owns, or the filesystem root. A stale marker in /private/tmp once adopted every scratch directory below it.
+ * WHERE A WORKSPACE MAY BE FOUND: the working directory, then each ancestor discovery may climb to, nearest
+ * first. The climb never passes a git repository's root and never enters a directory nobody's project lives
+ * in: HOME (whose `.artifactbin` is the CLI's own state), the shared temp roots, a directory another user owns,
+ * or the filesystem root; nor does it leave or enter workspace state (`.artifactbin`). A stale marker in
+ * /private/tmp once adopted every scratch directory below it. Both discoveries — the portable marker and the
+ * home-store record — walk exactly this list.
  */
-export async function findLocalWorkspace(cwd:string,home:string=homedir()):Promise<string|null>{
+/**
+ * The filesystem discovery reads, injectable so Windows path forms are tested on any platform. `owner` is the
+ * directory's uid (undefined where uids do not exist); `isGit` is true for a `.git` directory or file (a git
+ * worktree); either may throw, and an ancestor that cannot be inspected bounds the climb.
+ */
+export interface DiscoveryHost {
+ path:typeof posix;realpath(path:string):Promise<string>;owner(path:string):Promise<number|undefined>;isGit(path:string):Promise<boolean>;
+ boundaries:readonly string[];uid?:number;
+}
+const nodeHost=(home:string):DiscoveryHost=>({
+ path:process.platform==='win32'?win32:posix,realpath:path=>realpath(path),
+ owner:async path=>process.getuid?(await stat(path)).uid:undefined,
+ isGit:async path=>!!await readOptionalStat(join(path,'.git')),
+ boundaries:[home,homedir(),tmpdir(),'/tmp','/var/tmp'],uid:process.getuid?.(),
+});
+export async function workspaceCandidates(cwd:string,home:string=homedir(),host:DiscoveryHost=nodeHost(home)):Promise<string[]>{
+ const {path}=host,windows=path===win32;
+ // One spelling per directory: Windows compares case-insensitively and without a \\?\ prefix, and every
+ // boundary counts both as written and as resolved (an 8.3 temp name and its long realpath are one directory).
+ const key=(value:string)=>{const resolved=path.resolve(windows?value.replace(/^\\\\\?\\/,''):value);return windows?resolved.toLowerCase():resolved;};
  const boundaries=new Set<string>();
- for(const path of new Set([home,homedir(),tmpdir(),'/tmp','/var/tmp']))try{boundaries.add(await realpath(path));}catch{/* An absent directory bounds nothing. */}
- const uid=process.getuid?.();
- let root=await realpath(cwd);
- for(let first=true;;first=false,root=dirname(root)){
-  if(basename(root)==='.artifactbin')return null;
-  if(!first&&(boundaries.has(root)||uid!==undefined&&(await stat(root)).uid!==uid))return null;
-  if(await marker(root))return root;
-  if(dirname(root)===root||await readOptionalStat(join(root,'.git')))return null;
+ for(const boundary of new Set(host.boundaries)){boundaries.add(key(boundary));try{boundaries.add(key(await host.realpath(boundary)));}catch{/* An absent directory bounds only as written. */}}
+ const inspect=async<T,>(read:()=>Promise<T>):Promise<T|null>=>{try{return await read();}catch{return null;}};
+ const candidates:string[]=[];
+ let root=await host.realpath(cwd);if(windows)root=root.replace(/^\\\\\?\\/,'');
+ for(let first=true;;first=false,root=path.dirname(root)){
+  if(path.basename(root)==='.artifactbin')return candidates;
+  if(!first){
+   if(boundaries.has(key(root)))return candidates;
+   const owner=await inspect(()=>host.owner(root));
+   if(owner===null||host.uid!==undefined&&owner!==undefined&&owner!==host.uid)return candidates;
+  }
+  candidates.push(root);
+  if(path.dirname(root)===root||await inspect(()=>host.isGit(root))!==false)return candidates;
  }
+}
+/** The nearest directory holding a workspace marker, within `workspaceCandidates`. */
+export async function findLocalWorkspace(cwd:string,home:string=homedir()):Promise<string|null>{
+ for(const root of await workspaceCandidates(cwd,home))if(await marker(root))return root;
+ return null;
 }
 const readOptionalStat=async(path:string)=>{try{return await lstat(path);}catch(error){if(isMissing(error))return null;throw error;}};
 export async function localWorkspaceState(root:string):Promise<State>{

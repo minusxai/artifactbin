@@ -2,7 +2,7 @@ import {groupDestination,setupDestination} from './group-destination';
 import {accountMismatch} from './account-diagnostic';
 import {rebindWorkspace} from './workspace-rebind';
 import {collectionFilters} from './collection-filters';
-import {localCommentCommand,localDeleteComments} from './local-comments-command';
+import {localCommentCommand,localDeleteComments,offlineCommentTargets} from './local-comments-command';
 import {localHistory,localHistoryHead} from './local-history';
 import {importLocalHtml} from './local-html-import';
 import {publishLocalWorkspace} from './local-publication';
@@ -322,7 +322,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   if(command==='export'&&await exportResources(workspace,positionals,exportOptions()))return 0;
   let commentBody=typeof flags.body==='string'?flags.body:undefined;
   if(command==='comment'&&typeof flags.input==='string')commentBody=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
-  if(command==='comment'&&portable){const local=await localCommentCommand(workspace,parsed,commentBody,{hostedIds:!!remoteContext(context.env)});if(local!==undefined){emit(local);return 0;}}
+  if(command==='comment'&&(portable||await offlineCommentTargets(workspace,positionals))){const local=await localCommentCommand(workspace,parsed,commentBody,{hostedIds:!!remoteContext(context.env)});if(local!==undefined){emit(local);return 0;}}
   if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log',selectedAddresses);
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,aliases:selectedAddresses,writable:true});
   if(command==='push'&&!account&&!portable&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
