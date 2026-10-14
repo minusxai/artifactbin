@@ -18,7 +18,7 @@ export { documentPatchStepSql } from './document-patch';
 export type { ProseOperation } from './document-prose';
 export type { StoredDocument } from './document-codec';
 export { decodeDocument } from './document-codec';
-export { nodeIndex, normalizeNodeIds, stampNodeIds } from './node-ids';
+export { nodeIndex, normalizeNodeIds, stampNodeIds, stampNodeIdsInPlace } from './node-ids';
 export type { StoredContent } from './stored-content';
 export { storyBodyFor } from './body';
 export { canonicalizeMarkup } from './canonical-source';

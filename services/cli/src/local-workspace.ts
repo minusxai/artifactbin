@@ -5,8 +5,8 @@ import {readFile,lstat,realpath,link,unlink} from 'node:fs/promises';
 import {basename,dirname,extname,join,relative,resolve,sep} from 'node:path';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {State,withLock} from './state';
-import {recordLocalHistory,assertLocalHistoryMove,moveLocalHistory,localHistoryHeadBody} from './local-history';
-import {parseJsx,stampNodeIds} from '../../app/lib/cli-toolkit';
+import {recordLocalHistory,assertLocalHistoryMove,moveLocalHistory,localHistoryHeadBody,localHistoryHead} from './local-history';
+import {parseJsx,stampNodeIds,stampNodeIdsInPlace} from '../../app/lib/cli-toolkit';
 import {stateFor,readState} from './state-access';
 import {workspaceStateEnv} from './config';
 import {atomicWrite,digest,privateDirectory,readOptional} from './files';
@@ -128,29 +128,35 @@ export async function migrateLocalDiscussion(root:string,home:string,portable:St
  * `id`, on disk, whoever wrote the file, so anything in it can take a comment. Ids already present are kept;
  * an element an outside rewrite stripped of its id gets back the one it had in `previous` (by default the last
  * version the workspace acknowledged, its history head) when its content is unchanged; fresh ids never reuse
- * one a local thread still names. Returns the stamped body, or null when nothing needs an id or the body does
- * not parse (the caller's own validation reports that).
+ * one a local thread still names. Ids are written into the source as the author wrote it: nothing else
+ * changes. Returns the stamped body, or null when nothing needs an id, the body does not parse (the caller's
+ * own validation reports that) or it is a `<Dataset>` definition, which is a table schema, not a document.
  */
 export function identifiedLocalBody(store:State,path:string,body:string,previous:string|null=localHistoryHeadBody(store,path)):string|null{
- if(!parseJsx(body).ok)return null;
+ if(body.trimStart().startsWith('<Dataset')||!parseJsx(body).ok)return null;
  const reservedIds=new Set<string>();
  for(const kind of ['preview-thread','preview-comment'] as const)for(const row of store.list<{file?:string;node?:string}>(LOCAL_WORKSPACE_SCOPE,kind))if(row.value?.file===path&&typeof row.value.node==='string')reservedIds.add(row.value.node);
- const stamped=stampNodeIds(body,{previousSource:previous!==null&&parseJsx(previous).ok?previous:null,reservedIds});
+ const stamped=stampNodeIdsInPlace(body,{previousSource:previous!==null&&parseJsx(previous).ok?previous:null,reservedIds});
  return stamped.minted||stamped.carried||stamped.repairs.length?stamped.source:null;
 }
 /** True when some body element of a parseable `body` lacks a valid, unique id: the cheap check before taking the lock. */
 export function needsNodeIds(body:string):boolean{
- if(!parseJsx(body).ok)return false;
+ if(body.trimStart().startsWith('<Dataset')||!parseJsx(body).ok)return false;
  const stamped=stampNodeIds(body);return stamped.minted>0||stamped.repairs.length>0;
 }
-/** Persist `identifiedLocalBody` through the guarded, history-keeping save. False when the file needed nothing. */
-export async function identifyLocalDocument(root:string,path:string):Promise<boolean>{
+/**
+ * Persist `identifiedLocalBody` through the guarded, history-keeping save. False when the file needed nothing.
+ * `acknowledge`: the file as it now stands also becomes the acknowledged head, because something outside the
+ * file (a publication) is about to name its ids; a later outside rewrite then carries them.
+ */
+export async function identifyLocalDocument(root:string,path:string,options:{acknowledge?:boolean}={}):Promise<boolean>{
  return withLocalLock(root,async()=>{
   await recoverLocalFiles(root);
   const bytes=await readFile(await confinedPath(root,path)),document=parseDocument(bytes.toString());
   const body=identifiedLocalBody(await localWorkspaceState(root),path,document.body);
-  if(body===null)return false;
-  await saveLocalFile(root,path,digest(bytes),Buffer.from(writeDocument({...document,body})));return true;
+  if(body!==null)await saveLocalFile(root,path,digest(bytes),Buffer.from(writeDocument({...document,body})));
+  else if(options.acknowledge)await localHistoryHead(root,path);
+  return body!==null;
  });
 }
 /** Local saves retain the previous bytes in the workspace's recovery history. */

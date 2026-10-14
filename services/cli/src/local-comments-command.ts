@@ -13,6 +13,7 @@ import {previewAnnotations} from './preview/annotations';
 import {localWorkspaceState,LOCAL_WORKSPACE_SCOPE,registerLocalFiles,withLocalLock,recoverLocalFiles,migrateLocalDiscussion,saveLocalFile,identifiedLocalBody} from './local-workspace';
 import type {Workspace} from './workspace';
 import {digest} from './files';
+import {localHistoryHead} from './local-history';
 
 /** Resolve every target before writing so a mixed remote/local request cannot partly mutate locally. */
 export async function localCommentCommand(workspace:Workspace,parsed:ParsedCommand,providedBody?:string,options:{hostedIds?:boolean}={}):Promise<unknown|undefined>{
@@ -70,6 +71,8 @@ export async function localCommentCommand(workspace:Workspace,parsed:ParsedComma
      if(assigned)Object.assign(context,{artifact_id:assigned});
      if(parseDocument(await readFile(await confinedPath(workspace.root,target.path),'utf8')).body!==source)throw new CliError('local_changed','The document changed while preparing the comment. Read it again and retry.');
      const value=store.transaction(()=>flags.thread?annotations.act(String(flags.thread),{...(body!==undefined?{reply:body}:{}),...(flags.state==='resolved'?{resolve:true}:flags.state==='open'?{reopen:true}:{})}):annotations.create({body,node_id:node,...(quote?{quote}:{})},randomUUID()));
+     // The version a new thread names ids in becomes the acknowledged head later re-stamps carry them from.
+     if(!flags.thread)await localHistoryHead(workspace.root,target.path).catch(error=>{if(!(error instanceof CliError&&error.code==='invalid_history'))throw error;});
      results.push({...value,...context});continue;
     }
     let rows=filters.state==='all'?[...annotations.list('open'),...annotations.list('resolved')]:annotations.list(filters.state);

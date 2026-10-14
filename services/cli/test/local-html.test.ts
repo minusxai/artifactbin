@@ -81,3 +81,11 @@ test('a Dossier data app exports offline with its own packaged font faces',()=>f
   assert.deepEqual(file.snapshot.state.tables.total!.rows,[{total:30}]);
  }finally{process.chdir(cwd);}
 }));
+test('an id-less document exports with an id on every element, the same ids its workspace file now holds',()=>fixture(async(root,home)=>{
+ await writeFile(join(root,'weather.jsx'),'<main>\n  <h1>SF weather</h1>\n  <div className="card"><span>Rain chance</span><span>0%</span></div>\n</main>');
+ const prepared=await prepareLocalHtml({cwd:root,home,path:'weather.jsx'});
+ const ids=[...prepared.document.body.matchAll(/<(\w+) [^>]*id="([A-Za-z][A-Za-z0-9]{3})"/g)].map(match=>match[1]);
+ assert.deepEqual(ids,['main','h1','div','span','span'],prepared.document.body);
+ assert.equal((await readFile(join(root,'weather.jsx'),'utf8')).split('---\n').at(-1),prepared.document.body);
+ assert.match(prepared.document.body,/^<main id="[^"]+">\n  <h1 id="[^"]+">SF weather<\/h1>\n/,'only id attributes were added');
+}));

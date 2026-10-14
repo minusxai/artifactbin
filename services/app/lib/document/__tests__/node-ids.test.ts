@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { stampNodeIds, nodeIndex } from '../node-ids';
+import { stampNodeIds, stampNodeIdsInPlace, nodeIndex } from '../node-ids';
 import { canonicalizeMarkup } from '../../publish/document/jsx-tier';
 
 const mint = (...ids: string[]) => { let index=0; return ()=>ids[index++] ?? `z${String(index).padStart(3,'0')}`; };
@@ -82,6 +82,25 @@ describe('persisted source node identity', () => {
     const p=nodeIndex(once.source).get('bbbb')!;
     expect(once.source.slice(p.node.start,p.node.end)).toBe('<p id="bbbb">A</p>');
     expect(p.path).toBe('0.0');
+  });
+
+  it('writes ids into the source as written: only id attributes change, the same ids as the serialized form', () => {
+    const authored = `<main>\n  {/* stat card */}\n  <div\n    className="card"\n    style={{ padding: 4 }}\n  >\n    <span className="v">0%</span>\n    <img src="x.png" alt="X" />\n    <br/>\n  </div>\n  <p id="kept">Kept</p>\n  <p id="kept">Duplicate</p>\n</main>`;
+    const placed = stampNodeIdsInPlace(authored, { mint: mint('aaaa', 'bbbb', 'cccc', 'dddd', 'eeee', 'ffff') });
+    const serialized = stampNodeIds(authored, { mint: mint('aaaa', 'bbbb', 'cccc', 'dddd', 'eeee', 'ffff') });
+    expect(placed.ids).toEqual(serialized.ids);
+    expect(placed.source).toBe(`<main id="aaaa">\n  {/* stat card */}\n  <div\n    className="card"\n    style={{ padding: 4 }} id="bbbb"\n  >\n    <span className="v" id="cccc">0%</span>\n    <img src="x.png" alt="X" id="dddd" />\n    <br id="eeee"/>\n  </div>\n  <p id="kept">Kept</p>\n  <p id="ffff">Duplicate</p>\n</main>`);
+    expect(placed.repairs).toEqual([{ path: '0.6', from: 'kept', to: 'ffff', reason: 'duplicate' }]);
+    // A complete source is returned byte for byte.
+    expect(stampNodeIdsInPlace(placed.source).source).toBe(placed.source);
+  });
+
+  it('carries ids in place across an outside rewrite exactly as the serialized form does', () => {
+    const previous = '<section id="sect"><h1 id="head">Title</h1><p id="para">Body</p></section>';
+    const rewritten = '<section>\n  <h1>Title</h1>\n  <p>Body, edited</p>\n</section>';
+    const placed = stampNodeIdsInPlace(rewritten, { previousSource: previous, mint: mint('aaaa', 'bbbb') });
+    expect(placed.source).toBe('<section id="aaaa">\n  <h1 id="head">Title</h1>\n  <p id="bbbb">Body, edited</p>\n</section>');
+    expect(placed.carried).toBe(1);
   });
 
   it('reserves later authored ids against exact-content recovery', () => {

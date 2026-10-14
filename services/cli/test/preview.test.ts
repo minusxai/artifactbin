@@ -142,6 +142,22 @@ test('a document written without ids is commentable on every element, and its id
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
 
+test('a comment on a file that arrived already identified survives an outside rewrite that drops its ids',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-acknowledged-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  // A pulled or hand-written file with every id present: nothing to stamp, so nothing recorded a version yet.
+  const pulled='<section id="sect"><h2 id="head">Forecast</h2><p id="para">Fog until noon.</p></section>';
+  await writeFile(join(root,'pulled.jsx'),pulled);
+  session=await startPreview({root,home:join(root,'home'),files:['pulled.jsx']});
+  const call=async(operation:string,args:object={})=>(await fetch(session!.url+'/editor',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'pulled.jsx',operation,...args})})).json();
+  assert.equal((await call('annotations.create',{input:{node_id:'head',body:'Which day?'},key:'head'})).anchor.nodeId,'head');
+  await writeFile(join(root,'pulled.jsx'),'<section><h2>Forecast</h2><p>Fog until 11am.</p></section>');
+  const [thread]=await call('annotations.list',{status:'open'});
+  assert.equal(thread.orphaned,false);assert.equal(thread.anchor.nodeId,'head');
+  assert.match(await readFile(join(root,'pulled.jsx'),'utf8'),/<h2 id="head">Forecast<\/h2>/);
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});
+
 test('production editor protocol saves local graph edits and rejects stale file writes',async()=>{
  const root=await mkdtemp(join(tmpdir(),'preview-editor-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
  try{

@@ -26,7 +26,9 @@ const ids=await new Promise<Record<string,string>>((resolve,reject)=>{
 });
 const registered=(await readFile(join(root,'report.jsx'),'utf8'));
 await writeFile(join(root,'covers.csv'),'id,title,cover_ref\n'+['red','blue'].map(color=>`${color},${color},ref:${ids[color+'-cover.png']}`).join('\n')+'\n');
-await writeFile(join(root,'report.jsx'),registered.replace('<p>Draft</p>',`<Helmet><Value name="minimum" type="number" default={0} /><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows where amount > $minimum\`}</Query></Helmet><div><a href="/a/${ids['appendix.jsx']}">Local appendix</a><img src="ref:${ids['pixel.png']}" alt="Local image" /><p id="text">Draft paragraph</p><Select label="Minimum" value="$minimum" options={[{"label":"All","value":0},{"label":"Above fifteen","value":15}]} /><Number data="$sales" col="total" agg="sum" /></div>`));
+// `add` gave the paragraph its node id; the document is rewritten around it.
+assert.match(registered,/<p id="[A-Za-z][A-Za-z0-9]{3}">Draft<\/p>/);
+await writeFile(join(root,'report.jsx'),registered.replace(/<p id="[A-Za-z][A-Za-z0-9]{3}">Draft<\/p>/,`<Helmet><Value name="minimum" type="number" default={0} /><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows where amount > $minimum\`}</Query></Helmet><div><a href="/a/${ids['appendix.jsx']}">Local appendix</a><img src="ref:${ids['pixel.png']}" alt="Local image" /><p id="text">Draft paragraph</p><Select label="Minimum" value="$minimum" options={[{"label":"All","value":0},{"label":"Above fifteen","value":15}]} /><Number data="$sales" col="total" agg="sum" /></div>`));
 async function launch(port=0){
  const args=['preview',ids['report.jsx']!,'published.jsx','--port',String(port),'--json'];
  const child=spawn(process.execPath,[entry,...args],{cwd:root,env:environment,stdio:['ignore','pipe','pipe','ipc']});

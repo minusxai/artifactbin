@@ -1,6 +1,7 @@
 import type { SourceRepair } from '@/lib/jsx/repair';
 /** Source identity policy only; storage reserves emitted ids in its write transaction. */
 
+import { escapeHtml } from '@artifactbin/utils/escape';
 import { parseJsx, serializeJsx, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
 
 interface NodeIdEntry { id: string; path: string; node: JsxElement }
@@ -99,8 +100,44 @@ function setStringAttr(node: JsxElement, name: string, value: string): void {
   else node.attributes.push({ name, value: { static: true, json: value }, start: node.start, end: node.start });
 }
 
+/** Where an assigned id goes: the element, and the id attribute it replaces (null: the element had none). */
+interface Assignment { node: JsxElement; id: string; replaces: { start: number; end: number } | null }
+
 /** Preserve explicit ids. Recover only unambiguous exact-content matches without ids. */
 export function stampNodeIds(source: string, options: NodeIdOptions = {}): NodeIdResult {
+  const { nodes, assignments: _assignments, ...result } = assignNodeIds(source, options);
+  return { source: serializeJsx(nodes), ...result };
+}
+
+/**
+ * The same identity policy as `stampNodeIds`, written into `source` as it is: only the id attributes it
+ * assigns change, so an author's formatting (line breaks, attribute layout, comments) survives. A new id
+ * goes after the element's last attribute, where `stampNodeIds` puts it. Falls back to the serialized
+ * form when the edit cannot be placed exactly.
+ */
+export function stampNodeIdsInPlace(source: string, options: NodeIdOptions = {}): NodeIdResult {
+  const { nodes, assignments, ...result } = assignNodeIds(source, options);
+  if (!assignments.length) return { source, ...result };
+  const edits: Array<{ start: number; end: number; text: string }> = [];
+  for (const { node, id, replaces } of assignments) {
+    const text = `id="${escapeHtml(id)}"`;
+    if (replaces) { edits.push({ start: replaces.start, end: replaces.end, text }); continue; }
+    const authored = node.attributes.filter((attribute) => attribute.end > attribute.start && attribute.start > node.start);
+    const at = authored.length ? Math.max(...authored.map((attribute) => attribute.end)) : node.start + 1 + node.tag.length;
+    if (!authored.length && source.slice(node.start + 1, at) !== node.tag) return { source: serializeJsx(nodes), ...result };
+    edits.push({ start: at, end: at, text: ` ${text}` });
+  }
+  let out = source;
+  for (const edit of edits.sort((a, b) => b.start - a.start)) out = out.slice(0, edit.start) + edit.text + out.slice(edit.end);
+  // The edit must say exactly what the policy decided, element for element; anything else is not placed exactly.
+  const placed = parseJsx(out);
+  const ids = placed.ok ? elements(placed.nodes).map(({ node }) => stringValue(attr(node, ID_ATTR))) : [];
+  return ids.length === result.ids.length && ids.every((id, index) => id === result.ids[index])
+    ? { source: out, ...result }
+    : { source: serializeJsx(nodes), ...result };
+}
+
+function assignNodeIds(source: string, options: NodeIdOptions): Omit<NodeIdResult, 'source'> & { nodes: JsxNode[]; assignments: Assignment[] } {
   const nodes = parsed(source);
   const walked = elements(nodes);
   const used = new Set<string>(options.reservedIds ?? []);
@@ -162,6 +199,7 @@ export function stampNodeIds(source: string, options: NodeIdOptions = {}): NodeI
   };
 
   const ids: string[] = [];
+  const assignments: Assignment[] = [];
   for (const { node, path } of walked) {
     const idAttribute = attr(node, ID_ATTR);
     const explicit = stringValue(idAttribute);
@@ -174,6 +212,7 @@ export function stampNodeIds(source: string, options: NodeIdOptions = {}): NodeI
       const carry = matches?.length === 1 && currentCounts.get(currentSignatures.get(node)!) === 1
         && !assigned.has(matches[0]) && !explicitIds.has(matches[0]) ? matches[0] : null;
       id = carry ?? mintFresh();
+      assignments.push({ node, id, replaces: idAttribute ? { start: idAttribute.start, end: idAttribute.end } : null });
       setStringAttr(node, ID_ATTR, id);
       if (carry) carried++; else minted++;
       if (idAttribute) repairs.push({ path, from: originalId, to: id, reason: explicit ? 'duplicate' : 'invalid' });
@@ -182,7 +221,7 @@ export function stampNodeIds(source: string, options: NodeIdOptions = {}): NodeI
     used.add(id);
     ids.push(id);
   }
-  return { source: serializeJsx(nodes), ids, minted, carried, repairs };
+  return { nodes, assignments, ids, minted, carried, repairs };
 }
 /** Source-node index; real ids only, first occurrence wins on legacy malformed documents. */
 export function nodeIndex(source: string): Map<string, NodeIdEntry> {
