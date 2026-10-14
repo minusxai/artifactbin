@@ -52,7 +52,7 @@
    "name": "grid",
    "light": "#d9d7cc",
    "dark": "#1f3350",
-   "usage": "The 24px drafting grid and hairline rules. Visible, never loud.",
+   "usage": "24px drafting grid and hairline rules. Page grids use this at half strength; readable blocks have solid vellum backgrounds.",
    "group": "Grounds"
   },
   {
@@ -73,7 +73,7 @@
    "name": "cobalt",
    "light": "#2a5bd7",
    "dark": "#8fb4ff",
-   "usage": "The annotation colour: dimensions, leaders, links, the primary action.",
+   "usage": "Hierarchy and annotation: headline emphasis, sheet numbers, dimensions, links and the primary action.",
    "group": "Brand"
   },
   {
@@ -87,14 +87,14 @@
    "name": "cobalt-soft",
    "light": "#dfe7fb",
    "dark": "#1b2f55",
-   "usage": "Ground for selected rows and info notes.",
+   "usage": "Pale blue evidence panels, title blocks and selected regions of a drawing.",
    "group": "Brand"
   },
   {
    "name": "vermilion",
-   "light": "#ff4a1c",
-   "dark": "#ff7a4d",
-   "usage": "The revision colour: what changed, what is wrong, the one highlighted part.",
+   "light": "#ff781f",
+   "dark": "#ff9747",
+   "usage": "Fluorescent safety orange for revision fills, outlines and changed parts; use on-vermilion for text on the fill.",
    "group": "Brand"
   },
   {
@@ -105,10 +105,17 @@
    "group": "Brand"
   },
   {
+   "name": "vermilion-ink",
+   "light": "#963b00",
+   "dark": "#ffaf6b",
+   "usage": "Readable orange ink for revision text on vellum and pale orange.",
+   "group": "Brand"
+  },
+  {
    "name": "vermilion-soft",
-   "light": "#ffe0d6",
-   "dark": "#3b1a10",
-   "usage": "Ground for revision clouds and error notes.",
+   "light": "#ffd4b5",
+   "dark": "#3b2413",
+   "usage": "Warm orange ground for revision notes and changed regions.",
    "group": "Brand"
   },
   {
@@ -127,23 +134,23 @@
   },
   {
    "name": "caution",
-   "light": "#8a6200",
-   "dark": "#f2c14e",
+   "light": "#685500",
+   "dark": "#ffe83d",
    "usage": "Assumed, pending review.",
    "group": "Status"
   },
   {
    "name": "caution-soft",
-   "light": "#f7ebc6",
-   "dark": "#33290a",
-   "usage": "Ground for assumptions.",
+   "light": "#ffe83d",
+   "dark": "#343b0f",
+   "usage": "Warm fluorescent yellow for small assumption tags and short highlighted phrases; never a paragraph or full-width panel.",
    "group": "Status"
   },
   {
    "name": "negative",
    "light": "#c2320a",
    "dark": "#ff7a4d",
-   "usage": "Failed, blocked. Shares vermilion in Night.",
+   "usage": "Failed or blocked. Always pair with a word.",
    "group": "Status"
   },
   {
@@ -278,7 +285,7 @@
   }
  ],
  "idea_headline": "A drawing set, not a document.",
- "idea": "Drafting treats every page as a numbered sheet from an engineering drawing set: a gridded vellum, a frame, a title block, and the subject drawn in line-work with its dimensions. The reader is handed something measured. Cobalt annotates; vermilion marks the revision.",
+ "idea": "Drafting treats every page as a numbered sheet from an engineering drawing set: a gridded vellum, a frame, a title block, and the subject drawn in line-work with its dimensions. The reader is handed something measured. Cobalt carries the hierarchy and evidence; orange marks revisions; yellow flags assumptions. Colour belongs on the sheet, not just on hover.",
  "use_for": "Implementation plans, specs and RFCs, process explainers, product teardowns, scroll stories where one object comes apart or goes together.",
  "avoid_when": "Warm or emotional subjects, consumer marketing, dashboards that need many simultaneous status colours, or any page whose reader is not expected to inspect.",
  "principles_headline": "Draw the subject. Dimension it. Number the sheet.",
@@ -292,12 +299,12 @@
    "Figures attach to the thing they measure with a dimension line and arrowheads. A figure floating in a card is a rumour."
   ],
   [
-   "Cobalt annotates, vermilion revises.",
-   "Two colours only. Cobalt for dimensions, links and the primary action; vermilion for what changed, what failed, the one part the reader must find."
+   "Cobalt leads; orange revises; yellow questions.",
+   "Use cobalt for headline emphasis, sheet labels and evidence. Orange marks a revision; small warm-yellow accents flag assumptions. Keep prose in ink on plain vellum."
   ],
   [
-   "The grid shows.",
-   "A 24px grid is the page texture. Elements snap to it; margins are multiples of it."
+   "The grid shows around the reading.",
+   "Keep the 24px page grid at half strength. Put readable blocks on solid vellum with generous inset padding; the grid remains visible in gutters and between sheets. Use d-reading for prose."
   ],
   [
    "Sheets, not sections.",
@@ -310,8 +317,8 @@
   "Mark assumptions as assumptions, in caution; mark verified results as verified, in positive.",
   "Revision notes say what changed and why, in one line each."
  ],
- "colour_headline": "Ink on vellum, cobalt annotations, one vermilion revision.",
- "colour_note": "Day is a cool grey-white vellum with a visible grid. Night is the same sheet as a blueprint: Prussian ground, pale line-work, cobalt lifted to sky-blue and vermilion warmed. Status colours are for ledgers and tables, never for the drawing itself.",
+ "colour_headline": "Vellum, cobalt ink, safety orange, fluorescent yellow.",
+ "colour_note": "Keep vellum and ink dominant. Cobalt carries hierarchy and evidence; safety orange marks revisions. Warm fluorescent yellow is a small accent for assumption tags or a few words with d-highlight, never a paragraph or full-width callout. Notes and pull quotes use a neutral ground with a coloured rule. Night keeps the same roles on a Prussian ground.",
  "chart_series": [
   "cobalt",
   "vermilion",
@@ -390,7 +397,7 @@
   ]
  ],
  "components_headline": "The kit becomes a title block.",
- "components_note": "Kit components take Drafting through the contract: square, 1px edges, cobalt primary, vellum grounds. Authored classes add the title-block cells, the dimension figures and the revision marks.",
+ "components_note": "Square edges and ink frames hold cobalt title blocks, pale blue evidence notes and orange revisions. Use d-cobalt on one headline phrase; d-highlight marks only a few words. Wrap readable blocks in d-reading for a solid vellum background and responsive inset padding over the page grid. Long prose sits at roughly 60–70 characters per line with generous leading; keep section headings quieter than the display title.",
  "buttons": "<Button>Book slot</Button><Button variant=\"secondary\">Save draft</Button><Button variant=\"outline\">Export sheet</Button><Button variant=\"ghost\">Cancel</Button><button className=\"d-btn d-btn-primary\">Book slot</button><button className=\"d-btn\">Export sheet</button><button className=\"d-btn d-btn-rev\">Mark revision</button>",
  "buttons_note": "Kit buttons left; authored d-btn right: 1px ink frame, Archivo Narrow caps, cobalt primary. The revision button is vermilion and appears once per sheet at most.",
  "tags": "<Badge>Cobalt</Badge><Badge variant=\"secondary\">Selected</Badge><Badge variant=\"outline\">Draft</Badge><Badge variant=\"destructive\">Blocked</Badge><span className=\"d-tag\">REV B</span><span className=\"d-tag d-tag-ok\">VERIFIED</span><span className=\"d-tag d-tag-assume\">ASSUMED</span><span className=\"d-tag d-tag-rev\">CHANGED</span>",
@@ -399,11 +406,11 @@
  "stats": "<div className=\"d-stat\"><span className=\"t-label\">Returned units</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"total\" /></span><span className=\"d-note\">batch RW-0417</span></div><div className=\"d-stat\"><span className=\"t-label\">Back in use</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"reuse\" /></span><span className=\"d-note d-ok\">verified · 60%</span></div>",
  "stats_note": "A Stat is a dimension: label above, mono numeral, the source or state below. Stats sit in a row of framed cells sharing their borders, like a title block.",
  "callouts": "<Alert><AlertTitle>Slot already booked</AlertTitle><AlertDescription>Pick another hour or another machine.</AlertDescription></Alert><div className=\"d-note-box d-note-info\"><strong>Note 3.</strong> Dimensions in millimetres. Tolerance ±0.5 unless stated.</div><div className=\"d-note-box d-note-assume\"><strong>Assumed.</strong> Equipment ids are stable across the migration. Verify before task 4.</div><div className=\"d-note-box d-note-rev\"><strong>REV B.</strong> Cancel now requires the booking owner; anonymous cancel removed.</div>",
- "callouts_note": "Callouts are numbered notes in the margin. Assumptions take caution; revisions take vermilion; information takes cobalt.",
+ "callouts_note": "Information and evidence take pale cobalt; assumptions use a caution-coloured edge on plain vellum; revisions take pale orange. Reserve fluorescent yellow fills for small tags or short inline highlights. Pull quotes use ink and a thin cobalt rule, without a bright panel.",
  "chart_comp_note": "Charts are figures: ink axes, grid in the grid token, cobalt for the measured series, vermilion for the exception. Give every figure a Fig. number in the label role.",
  "table_note": "Tables are bills of materials: narrow caps headers, mono figures right-aligned, 1px grid rules. Never striped.",
  "card": "<div className=\"d-sheet\"><div className=\"d-sheet-body\"><p className=\"t-label\">Fig. 02 · Booking flow</p><h3 className=\"t-title\">One slot per machine per hour</h3><p className=\"d-sheet-p\">The API reserves the row with a unique index on (machine, hour). A second request gets 409 and the UI offers the next free hour.</p></div><div className=\"d-titleblock\"><span><b>DWG</b> BN-007</span><span><b>SHEET</b> 2/7</span><span><b>SCALE</b> NTS</span><span><b>REV</b> B</span></div></div>",
- "card_note": "A card is a sheet: framed, with a title block along its bottom edge carrying number, sheet, scale and revision. Hover turns the frame cobalt.",
+ "card_note": "A framed sheet with a pale blue title block and a solid cobalt drawing-number cell. Figure labels are cobalt; the body stays vellum.",
  "motifs_headline": "Dimension lines, revision clouds, title blocks.",
  "motifs_note": "Drafting draws with the apparatus of a drawing set. Put the data on the drawing: a count becomes a dimension, a share becomes a section, a change becomes a cloud.",
  "motifs": [
@@ -425,16 +432,16 @@
  ],
  "sample_headline": "A first viewport in Drafting.",
  "sample_note": "A scroll story opener as sheet 1 of 7: the subject drawn and dimensioned, the three paths as a split dimension, and the title block that promises the rest of the set.",
- "sample": "<div className=\"d-sample\"><div className=\"d-sample-in\">\n  <div className=\"d-sample-sheet\">\n    <div className=\"d-sample-top\"><span className=\"t-label\">Batch RW-0417 · Teardown and routing record</span><span className=\"t-label d-muted\">Fictional · figures illustrative</span></div>\n    <div className=\"d-sample-grid\">\n      <div>\n        <h2 className=\"t-display-xl d-sample-h\">A batch of <span className=\"d-vermilion\">100</span> returned units</h2>\n        <p className=\"t-body d-sample-lede\">A service workshop takes in a batch of 100 returned units. Every one is opened, inspected part by part, and routed down one of three paths. Scroll to take the first one apart.</p>\n        <div className=\"d-stat-row\"><div className=\"d-stat\"><span className=\"t-label\">Back in use</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"reuse\" /></span></div><div className=\"d-stat\"><span className=\"t-label\">Donor for parts</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"donor\" /></span></div><div className=\"d-stat\"><span className=\"t-label\">Recycled</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"recycle\" /></span></div></div>\n      </div>\n      <div className=\"d-sample-fig\"><svg viewBox=\"0 0 400 420\"><title>Unit in plan with dimensions</title><rect className=\"d-ink2\" x=\"120\" y=\"40\" width=\"160\" height=\"320\" rx=\"0\"/><rect className=\"d-ink1\" x=\"132\" y=\"60\" width=\"136\" height=\"260\"/><circle className=\"d-ink1\" cx=\"200\" cy=\"340\" r=\"10\"/><rect className=\"d-ink1\" x=\"180\" y=\"48\" width=\"40\" height=\"4\"/><line className=\"d-dim\" x1=\"120\" y1=\"24\" x2=\"280\" y2=\"24\"/><polygon className=\"d-arrow\" points=\"120,24 128,20 128,28\"/><polygon className=\"d-arrow\" points=\"280,24 272,20 272,28\"/><text x=\"200\" y=\"18\" className=\"d-dim-t\" textAnchor=\"middle\">71.5</text><line className=\"d-dim\" x1=\"304\" y1=\"40\" x2=\"304\" y2=\"360\"/><polygon className=\"d-arrow\" points=\"304,40 300,48 308,48\"/><polygon className=\"d-arrow\" points=\"304,360 300,352 308,352\"/><text x=\"314\" y=\"204\" className=\"d-dim-t\">146.7</text><path className=\"d-rev\" d=\"M40 300 c6 -10 16 -10 22 0 c6 -10 16 -10 22 0 c0 8 0 16 0 24 c-6 10 -16 10 -22 0 c-6 10 -16 10 -22 0 c0 -8 0 -16 0 -24 z\"/><text x=\"48\" y=\"316\" className=\"d-rev-t\">FATE ?</text><line className=\"d-lead\" x1=\"84\" y1=\"312\" x2=\"132\" y2=\"312\"/></svg></div>\n    </div>\n    <div className=\"d-sample-bottom\"><DataTable data=\"$table\" rowKey=\"path\" height=\"180px\" columns={[{\"col\":\"path\",\"title\":\"Path\"},{\"col\":\"phones\",\"title\":\"Units\",\"align\":\"right\"},{\"col\":\"share\",\"title\":\"Share %\",\"fmt\":\".0f\",\"align\":\"right\",\"bar\":true},{\"col\":\"state\",\"title\":\"State\"}]} /></div>\n    <div className=\"d-titleblock\"><span><b>DWG</b> RW-0417-SL</span><span><b>TITLE</b> ROUTING RECORD · BATCH RW-0417</span><span><b>SHEET</b> 1/7</span><span><b>SCALE</b> NTS</span><span><b>REV</b> A · 02 OCT 26</span></div>\n  </div>\n</div></div>",
+ "sample": "<div className=\"d-sample\"><div className=\"d-sample-in\">\n  <div className=\"d-sample-sheet\">\n    <div className=\"d-sample-top\"><span className=\"t-label\">Batch RW-0417 · Teardown and routing record</span><span className=\"t-label d-muted\">Fictional · figures illustrative</span></div>\n    <div className=\"d-sample-grid\">\n      <div>\n        <h2 className=\"t-display-xl d-sample-h\">A batch of <span className=\"d-cobalt\">100</span> returned units</h2>\n        <p className=\"t-body d-sample-lede\">A service workshop takes in a batch of 100 returned units. Every one is opened, inspected part by part, and routed down one of three paths. Scroll to take the first one apart.</p>\n        <div className=\"d-stat-row\"><div className=\"d-stat\"><span className=\"t-label\">Back in use</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"reuse\" /></span></div><div className=\"d-stat\"><span className=\"t-label\">Donor for parts</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"donor\" /></span></div><div className=\"d-stat\"><span className=\"t-label\">Recycled</span><span className=\"t-numeral\"><Number data=\"$totals\" col=\"recycle\" /></span></div></div>\n      </div>\n      <div className=\"d-sample-fig\"><svg viewBox=\"0 0 400 420\"><title>Unit in plan with dimensions</title><rect className=\"d-ink2\" x=\"120\" y=\"40\" width=\"160\" height=\"320\" rx=\"0\"/><rect className=\"d-ink1\" x=\"132\" y=\"60\" width=\"136\" height=\"260\"/><circle className=\"d-ink1\" cx=\"200\" cy=\"340\" r=\"10\"/><rect className=\"d-ink1\" x=\"180\" y=\"48\" width=\"40\" height=\"4\"/><line className=\"d-dim\" x1=\"120\" y1=\"24\" x2=\"280\" y2=\"24\"/><polygon className=\"d-arrow\" points=\"120,24 128,20 128,28\"/><polygon className=\"d-arrow\" points=\"280,24 272,20 272,28\"/><text x=\"200\" y=\"18\" className=\"d-dim-t\" textAnchor=\"middle\">71.5</text><line className=\"d-dim\" x1=\"304\" y1=\"40\" x2=\"304\" y2=\"360\"/><polygon className=\"d-arrow\" points=\"304,40 300,48 308,48\"/><polygon className=\"d-arrow\" points=\"304,360 300,352 308,352\"/><text x=\"314\" y=\"204\" className=\"d-dim-t\">146.7</text><path className=\"d-rev\" d=\"M40 300 c6 -10 16 -10 22 0 c6 -10 16 -10 22 0 c0 8 0 16 0 24 c-6 10 -16 10 -22 0 c-6 10 -16 10 -22 0 c0 -8 0 -16 0 -24 z\"/><text x=\"48\" y=\"316\" className=\"d-rev-t\">FATE ?</text><line className=\"d-lead\" x1=\"84\" y1=\"312\" x2=\"132\" y2=\"312\"/></svg></div>\n    </div>\n    <div className=\"d-sample-bottom\"><DataTable data=\"$table\" rowKey=\"path\" height=\"180px\" columns={[{\"col\":\"path\",\"title\":\"Path\"},{\"col\":\"phones\",\"title\":\"Units\",\"align\":\"right\"},{\"col\":\"share\",\"title\":\"Share %\",\"fmt\":\".0f\",\"align\":\"right\",\"bar\":true},{\"col\":\"state\",\"title\":\"State\"}]} /></div>\n    <div className=\"d-titleblock\"><span><b>DWG</b> RW-0417-SL</span><span><b>TITLE</b> ROUTING RECORD · BATCH RW-0417</span><span><b>SHEET</b> 1/7</span><span><b>SCALE</b> NTS</span><span><b>REV</b> A · 02 OCT 26</span></div>\n  </div>\n</div></div>",
  "dos": [
   "Draw the subject in ink line-work and attach every figure with a dimension line.",
   "Frame every sheet and give it a title block.",
-  "Cobalt for annotation, vermilion for the one revision.",
-  "Snap to the 24px grid; let it show."
+  "Use cobalt for hierarchy and evidence, orange for revisions, and small warm-yellow marks for assumptions.",
+  "Keep the page grid visible in gutters and between sheets; use d-reading to give readable blocks a solid background and inset padding."
  ],
  "donts": [
   "No photographs as the hero; no rounded corners; no shadows.",
-  "No status colour on the drawing itself.",
+  "Do not put text directly on grid lines or fluorescent fills behind paragraphs and full-width quotes.",
   "No floating numbers; a figure without a leader is a rumour.",
   "No more than one revision cloud per sheet."
  ],
@@ -539,14 +546,14 @@
   ],
   "table_height": "180px"
  },
- "css": "\n.ds-drafting { --ds-cover-bg: var(--ds-vellum); background-image: linear-gradient(var(--ds-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ds-grid) 1px, transparent 1px); background-size: 24px 24px; }\n.ds-drafting .ds-section h2, .ds-drafting .ds-cover-name { font-family: var(--font-display); text-transform: uppercase; }\n.ds-drafting .ds-chip { border-radius: 0; font-family: \"Archivo Narrow\", sans-serif; }\n.ds-drafting .ds-comp, .ds-drafting .ds-motif, .ds-drafting .ds-note, .ds-drafting .ds-voice, .ds-drafting .ds-code { border-color: var(--ds-ink); }\n.ds-drafting .d-paper { fill: var(--ds-vellum); } .ds-drafting .d-grid { stroke: var(--ds-grid); stroke-width: 1; } .ds-drafting .d-frame { fill: none; stroke: var(--ds-ink); stroke-width: 1; }\n.ds-drafting .d-ink2 { fill: none; stroke: var(--ds-ink); stroke-width: 2; } .ds-drafting .d-ink1 { fill: none; stroke: var(--ds-ink); stroke-width: 1; } .ds-drafting .d-block { fill: var(--ds-vellum-raised); stroke: var(--ds-ink); stroke-width: 1; }\n.ds-drafting .d-dim { stroke: var(--ds-cobalt); stroke-width: 1; } .ds-drafting .d-ext { stroke: var(--ds-cobalt); stroke-width: 1; stroke-dasharray: 3 3; } .ds-drafting .d-arrow { fill: var(--ds-cobalt); } .ds-drafting .d-lead { stroke: var(--ds-vermilion); stroke-width: 1; }\n.ds-drafting .d-dim-t { font-family: var(--font-mono); font-size: 12px; font-weight: 500; fill: var(--ds-cobalt); } .ds-drafting .d-blk-t { font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .1em; fill: var(--ds-ink); }\n.ds-drafting .d-rev { fill: var(--ds-vermilion-soft); stroke: var(--ds-vermilion); stroke-width: 1.5; } .ds-drafting .d-rev-t { font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .1em; fill: var(--ds-vermilion); } .ds-drafting .d-rev-l { stroke: var(--ds-vermilion); stroke-width: 1; stroke-dasharray: 4 3; }\n.ds-drafting .d-muted { color: var(--ds-ink-muted); } .ds-drafting .d-vermilion { color: var(--ds-vermilion); } .ds-drafting .d-ok { color: var(--ds-positive); }\n.ds-drafting .d-btn { font-family: \"Archivo Narrow\", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; line-height: 18px; padding: 10px 16px; border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); color: var(--ds-ink); cursor: pointer; transition: border-color 120ms, color 120ms; }\n.ds-drafting .d-btn:hover { border-color: var(--ds-cobalt); color: var(--ds-cobalt); } .ds-drafting .d-btn:focus-visible { outline: 2px solid var(--ds-cobalt); outline-offset: 2px; }\n.ds-drafting .d-btn-primary { background: var(--ds-cobalt); color: var(--ds-on-cobalt); border-color: var(--ds-cobalt); } .ds-drafting .d-btn-primary:hover { color: var(--ds-on-cobalt); border-color: var(--ds-ink); }\n.ds-drafting .d-btn-rev { background: var(--ds-vermilion); color: var(--ds-on-vermilion); border-color: var(--ds-vermilion); } .ds-drafting .d-btn-rev:hover { color: var(--ds-on-vermilion); border-color: var(--ds-ink); }\n.ds-drafting .d-tag { display: inline-flex; padding: 3px 8px; border: 1px solid var(--ds-ink); font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; background: var(--ds-vellum-raised); color: var(--ds-ink); }\n.ds-drafting .d-tag-ok { color: var(--ds-positive); border-color: var(--ds-positive); background: var(--ds-positive-soft); } .ds-drafting .d-tag-assume { color: var(--ds-caution); border-color: var(--ds-caution); background: var(--ds-caution-soft); } .ds-drafting .d-tag-rev { color: var(--ds-vermilion); border-color: var(--ds-vermilion); background: var(--ds-vermilion-soft); }\n.ds-drafting .d-stat { display: grid; gap: 6px; padding: 16px 20px; border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); min-width: 160px; } .ds-drafting .d-stat + .d-stat { border-left: 0; }\n.ds-drafting .ds-stats { gap: 0; } .ds-drafting .d-stat-row { display: flex; flex-wrap: wrap; margin-top: 28px; } .ds-drafting .d-note { font-size: 12px; color: var(--ds-ink-muted); font-family: var(--font-mono); }\n.ds-drafting .d-note-box { padding: 12px 14px; border: 1px solid var(--ds-ink); border-left-width: 4px; font-size: 14px; line-height: 1.5; background: var(--ds-vellum-raised); }\n.ds-drafting .d-note-info { border-left-color: var(--ds-cobalt); } .ds-drafting .d-note-assume { border-left-color: var(--ds-caution); background: var(--ds-caution-soft); } .ds-drafting .d-note-rev { border-left-color: var(--ds-vermilion); background: var(--ds-vermilion-soft); }\n.ds-drafting .d-sheet { border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); display: grid; transition: border-color 120ms; } .ds-drafting .d-sheet:hover { border-color: var(--ds-cobalt); }\n.ds-drafting .d-sheet-body { padding: 20px 24px; } .ds-drafting .d-sheet h3 { margin: 6px 0 0; } .ds-drafting .d-sheet-p { margin: 10px 0 0; line-height: 1.55; color: var(--ds-ink-muted); max-width: 56ch; }\n.ds-drafting .d-titleblock { display: flex; flex-wrap: wrap; border-top: 1px solid var(--ds-ink); } .ds-drafting .d-titleblock span { padding: 8px 12px; border-right: 1px solid var(--ds-ink); font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; flex: 1 1 auto; } .ds-drafting .d-titleblock span:last-child { border-right: 0; } .ds-drafting .d-titleblock b { color: var(--ds-ink-muted); margin-right: 6px; font-weight: 700; }\n.ds-drafting .d-sample { padding: 40px 20px 64px; } .ds-drafting .d-sample-in { max-width: 1100px; margin: 0 auto; }\n.ds-drafting .d-sample-sheet { border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); background-image: linear-gradient(var(--ds-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ds-grid) 1px, transparent 1px); background-size: 24px 24px; }\n.ds-drafting .d-sample-top { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--ds-ink); }\n.ds-drafting .d-sample-grid { display: grid; gap: 24px; padding: 24px; } .ds-drafting .d-sample-h { margin: 0; max-width: 12ch; } .ds-drafting .d-sample-lede { margin-top: 20px; max-width: 48ch; }\n.ds-drafting .d-sample-fig svg { display: block; width: 100%; max-width: 400px; height: auto; margin: 0 auto; } .ds-drafting .d-sample-bottom { padding: 0 24px 24px; }\n@container (min-width: 760px) { .ds-drafting .d-sample { padding: 56px 40px 80px; } .ds-drafting .d-sample-grid { grid-template-columns: 3fr 2fr; padding: 48px 24px 24px; } }\n\n.ds-drafting { --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-cobalt); --ds-hand-fill2: var(--ds-vermilion); --ds-hand-muted: var(--ds-vellum-sunk); --ds-hand-ground: var(--ds-vellum-raised); --ds-hand-stroke: 1.5; --ds-hand-cap: square; --ds-hand-bg: var(--ds-vellum);\n  --ds-tpl-edge: 1px solid var(--ds-ink); --ds-tpl-radius: 0; --ds-tpl-rule: 1px solid var(--ds-ink); --ds-tag-radius: 0; --ds-slide-bg: var(--ds-vellum-raised); --ds-slide-title-bg: var(--ds-cobalt); --ds-slide-title-fg: var(--ds-on-cobalt); --ds-slide-split-a: var(--ds-cobalt); --ds-slide-split-b: var(--ds-vermilion); --ds-slide-split-b-fg: var(--ds-on-vermilion); --ds-hero-bg: var(--ds-vellum-raised); }\n.ds-drafting .ds-hand-art, .ds-drafting .ds-tpl-figure { background-image: linear-gradient(var(--ds-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ds-grid) 1px, transparent 1px); background-size: 24px 24px; }\n.ds-drafting .h-ink { stroke-linejoin: miter; } .ds-drafting .h-outline-fill { stroke-width: 1.5; }\n.ds-drafting .h-num { font-family: var(--font-mono); font-weight: 500; letter-spacing: -.02em; } .ds-drafting .h-text { font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .1em; }\n.ds-drafting .ds-tpl-tag { font-family: \"Archivo Narrow\", sans-serif; letter-spacing: .12em; border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); }\n.ds-drafting .ds-tpl-tag.is-ok { border-color: var(--ds-positive); } .ds-drafting .ds-tpl-tag.is-warn { border-color: var(--ds-caution); } .ds-drafting .ds-tpl-tag.is-bad { border-color: var(--ds-vermilion); color: var(--ds-vermilion); background: var(--ds-vermilion-soft); }\n.ds-drafting .ds-tpl-brand, .ds-drafting .ds-tpl-slide-h, .ds-drafting .ds-tpl-hero-h, .ds-drafting .ds-tpl-ed-h { text-transform: uppercase; }\n.ds-drafting .ds-tpl-stage-top, .ds-drafting .ds-tpl-stage-foot { font-family: \"Archivo Narrow\", sans-serif; font-weight: 700; }\n.ds-drafting .ds-tpl-kpi, .ds-drafting .ds-tpl-tile, .ds-drafting .ds-tpl-step { background: var(--ds-vellum-raised); }\n.ds-drafting .ds-tpl-dropcap { color: var(--ds-cobalt); } .ds-drafting .ds-tpl-pull { border-top-color: var(--ds-cobalt); }\n\n.ds-drafting .h-fill.h-outline-fill { fill: var(--ds-cobalt-soft); stroke: var(--ds-cobalt); stroke-width: 3.5; }\n.ds-drafting .h-fill2.h-outline-fill { fill: var(--ds-vermilion-soft); stroke: var(--ds-vermilion); stroke-width: 3.5; }\n\n.ds-drafting .ds-tpl-tile { overflow-x: auto; }\n",
+ "css": "\n.ds-drafting { --ds-cover-bg: var(--ds-vellum); background-image: linear-gradient(color-mix(in srgb, var(--ds-grid) 50%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--ds-grid) 50%, transparent) 1px, transparent 1px); background-size: 24px 24px; }\n.ds-drafting .d-reading { background: var(--ds-vellum-raised); padding: clamp(20px, 4cqw, 48px); }\n.ds-drafting .ds-section h2, .ds-drafting .ds-cover-name { font-family: var(--font-display); text-transform: uppercase; }\n.ds-drafting .ds-chip { border-radius: 0; font-family: \"Archivo Narrow\", sans-serif; }\n.ds-drafting .ds-comp, .ds-drafting .ds-motif, .ds-drafting .ds-note, .ds-drafting .ds-voice, .ds-drafting .ds-code { border-color: var(--ds-ink); }\n.ds-drafting .d-paper { fill: var(--ds-vellum); } .ds-drafting .d-grid { stroke: var(--ds-grid); stroke-width: 1; } .ds-drafting .d-frame { fill: none; stroke: var(--ds-ink); stroke-width: 1; }\n.ds-drafting .d-ink2 { fill: none; stroke: var(--ds-ink); stroke-width: 2; } .ds-drafting .d-ink1 { fill: none; stroke: var(--ds-ink); stroke-width: 1; } .ds-drafting .d-block { fill: var(--ds-vellum-raised); stroke: var(--ds-ink); stroke-width: 1; }\n.ds-drafting .d-dim { stroke: var(--ds-cobalt); stroke-width: 1; } .ds-drafting .d-ext { stroke: var(--ds-cobalt); stroke-width: 1; stroke-dasharray: 3 3; } .ds-drafting .d-arrow { fill: var(--ds-cobalt); } .ds-drafting .d-lead { stroke: var(--ds-vermilion); stroke-width: 1; }\n.ds-drafting .d-dim-t { font-family: var(--font-mono); font-size: 12px; font-weight: 500; fill: var(--ds-cobalt); } .ds-drafting .d-blk-t { font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .1em; fill: var(--ds-ink); }\n.ds-drafting .d-rev { fill: var(--ds-vermilion-soft); stroke: var(--ds-vermilion); stroke-width: 1.5; } .ds-drafting .d-rev-t { font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .1em; fill: var(--ds-vermilion-ink); } .ds-drafting .d-rev-l { stroke: var(--ds-vermilion); stroke-width: 1; stroke-dasharray: 4 3; }\n.ds-drafting .d-cobalt { color: var(--ds-cobalt); } .ds-drafting .d-highlight { color: var(--ds-ink); background: var(--ds-caution-soft); box-decoration-break: clone; padding-inline: .12em; }\n.ds-drafting .d-muted { color: var(--ds-ink-muted); } .ds-drafting .d-vermilion { color: var(--ds-vermilion-ink); } .ds-drafting .d-ok { color: var(--ds-positive); }\n.ds-drafting .d-btn { font-family: \"Archivo Narrow\", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; line-height: 18px; padding: 10px 16px; border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); color: var(--ds-ink); cursor: pointer; transition: border-color 120ms, color 120ms; }\n.ds-drafting .d-btn:hover { border-color: var(--ds-cobalt); color: var(--ds-cobalt); } .ds-drafting .d-btn:focus-visible { outline: 2px solid var(--ds-cobalt); outline-offset: 2px; }\n.ds-drafting .d-btn-primary { background: var(--ds-cobalt); color: var(--ds-on-cobalt); border-color: var(--ds-cobalt); } .ds-drafting .d-btn-primary:hover { color: var(--ds-on-cobalt); border-color: var(--ds-ink); }\n.ds-drafting .d-btn-rev { background: var(--ds-vermilion); color: var(--ds-on-vermilion); border-color: var(--ds-vermilion); } .ds-drafting .d-btn-rev:hover { color: var(--ds-on-vermilion); border-color: var(--ds-ink); }\n.ds-drafting .d-tag { display: inline-flex; padding: 3px 8px; border: 1px solid var(--ds-ink); font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; background: var(--ds-vellum-raised); color: var(--ds-ink); }\n.ds-drafting .d-tag-ok { color: var(--ds-positive); border-color: var(--ds-positive); background: var(--ds-positive-soft); } .ds-drafting .d-tag-assume { color: var(--ds-caution); border-color: var(--ds-caution); background: var(--ds-caution-soft); } .ds-drafting .d-tag-rev { color: var(--ds-on-vermilion); border-color: var(--ds-vermilion); background: var(--ds-vermilion); }\n.ds-drafting .d-stat { display: grid; gap: 6px; padding: 16px 20px; border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); min-width: 160px; } .ds-drafting .d-stat + .d-stat { border-left: 0; }\n.ds-drafting .ds-stats { gap: 0; } .ds-drafting .d-stat-row { display: flex; flex-wrap: wrap; margin-top: 28px; } .ds-drafting .d-note { font-size: 12px; color: var(--ds-ink-muted); font-family: var(--font-mono); }\n.ds-drafting .d-note-box { padding: 12px 14px; border: 1px solid var(--ds-ink); border-left-width: 4px; font-size: 14px; line-height: 1.5; background: var(--ds-vellum-raised); }\n.ds-drafting .d-note-info { border-left-color: var(--ds-cobalt); background: var(--ds-cobalt-soft); } .ds-drafting .d-note-assume { border-left-color: var(--ds-caution); background: var(--ds-vellum-raised); } .ds-drafting .d-note-rev { border-left-color: var(--ds-vermilion); background: var(--ds-vermilion-soft); }\n.ds-drafting .d-sheet { border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); display: grid; transition: border-color 120ms; } .ds-drafting .d-sheet:hover { border-color: var(--ds-cobalt); }\n.ds-drafting .d-sheet-body { padding: 20px 24px; } .ds-drafting .d-sheet h3 { margin: 6px 0 0; } .ds-drafting .d-sheet-p { margin: 10px 0 0; line-height: 1.55; color: var(--ds-ink-muted); max-width: 56ch; }\n.ds-drafting .d-titleblock { background: var(--ds-cobalt-soft); display: flex; flex-wrap: wrap; border-top: 1px solid var(--ds-ink); } .ds-drafting .d-titleblock span { padding: 8px 12px; border-right: 1px solid var(--ds-ink); font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; flex: 1 1 auto; } .ds-drafting .d-titleblock span:last-child { border-right: 0; } .ds-drafting .d-titleblock b { color: var(--ds-ink-muted); margin-right: 6px; font-weight: 700; }\n.ds-drafting .d-sheet-body > .t-label { color: var(--ds-cobalt); }\n.ds-drafting .d-titleblock span:first-child { background: var(--ds-cobalt); color: var(--ds-on-cobalt); } .ds-drafting .d-titleblock span:first-child b { color: inherit; }\n.ds-drafting .d-sample { padding: 40px 20px 64px; } .ds-drafting .d-sample-in { max-width: 1100px; margin: 0 auto; }\n.ds-drafting .d-sample-sheet { border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); }\n.ds-drafting .d-sample-top { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 12px 24px; border-bottom: 1px solid var(--ds-ink); }\n.ds-drafting .d-sample-grid { display: grid; gap: 24px; padding: 24px; } .ds-drafting .d-sample-h { margin: 0; max-width: 12ch; } .ds-drafting .d-sample-lede { margin-top: 20px; max-width: 48ch; }\n.ds-drafting .d-sample-fig svg { display: block; width: 100%; max-width: 400px; height: auto; margin: 0 auto; } .ds-drafting .d-sample-bottom { padding: 0 24px 24px; }\n@container (min-width: 760px) { .ds-drafting .d-sample { padding: 56px 40px 80px; } .ds-drafting .d-sample-grid { grid-template-columns: 3fr 2fr; padding: 48px 24px 24px; } }\n\n.ds-drafting { --ds-hand-ink: var(--ds-ink); --ds-hand-fill: var(--ds-cobalt); --ds-hand-fill2: var(--ds-vermilion); --ds-hand-muted: var(--ds-vellum-sunk); --ds-hand-ground: var(--ds-vellum-raised); --ds-hand-stroke: 1.5; --ds-hand-cap: square; --ds-hand-bg: var(--ds-vellum);\n  --ds-tpl-edge: 1px solid var(--ds-ink); --ds-tpl-radius: 0; --ds-tpl-rule: 1px solid var(--ds-ink); --ds-tag-radius: 0; --ds-slide-bg: var(--ds-vellum-raised); --ds-slide-title-bg: var(--ds-cobalt); --ds-slide-title-fg: var(--ds-on-cobalt); --ds-slide-split-a: var(--ds-cobalt); --ds-slide-split-b: var(--ds-vermilion); --ds-slide-split-b-fg: var(--ds-on-vermilion); --ds-hero-bg: var(--ds-vellum-raised); }\n.ds-drafting .ds-hand-art, .ds-drafting .ds-tpl-figure { background-image: linear-gradient(var(--ds-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ds-grid) 1px, transparent 1px); background-size: 24px 24px; }\n.ds-drafting .h-ink { stroke-linejoin: miter; } .ds-drafting .h-outline-fill { stroke-width: 1.5; }\n.ds-drafting .h-num { font-family: var(--font-mono); font-weight: 500; letter-spacing: -.02em; } .ds-drafting .h-text { font-family: \"Archivo Narrow\", sans-serif; font-size: 11px; font-weight: 700; letter-spacing: .1em; }\n.ds-drafting .ds-tpl-tag { font-family: \"Archivo Narrow\", sans-serif; letter-spacing: .12em; border: 1px solid var(--ds-ink); background: var(--ds-vellum-raised); }\n.ds-drafting .ds-tpl-tag.is-ok { border-color: var(--ds-positive); } .ds-drafting .ds-tpl-tag.is-warn { border-color: var(--ds-caution); color: var(--ds-caution); background: var(--ds-caution-soft); } .ds-drafting .ds-tpl-tag.is-bad { border-color: var(--ds-negative); color: var(--ds-negative); background: var(--ds-negative-soft); }\n.ds-drafting .ds-tpl-brand, .ds-drafting .ds-tpl-slide-h, .ds-drafting .ds-tpl-hero-h, .ds-drafting .ds-tpl-ed-h { text-transform: uppercase; }\n.ds-drafting .ds-tpl-stage-top, .ds-drafting .ds-tpl-stage-foot { font-family: \"Archivo Narrow\", sans-serif; font-weight: 700; }\n.ds-drafting .ds-tpl-kpi, .ds-drafting .ds-tpl-tile, .ds-drafting .ds-tpl-step { background: var(--ds-vellum-raised); }\n.ds-drafting .ds-tpl-kicker, .ds-drafting .ds-tpl-step > .t-label { color: var(--ds-cobalt); }\n.ds-drafting .ds-tpl-figure-cap { background: var(--ds-cobalt-soft); color: var(--ds-cobalt); }\n.ds-drafting .ds-tpl-dropcap { color: var(--ds-cobalt); } .ds-drafting .ds-tpl-pull { border-top-color: var(--ds-cobalt); }\n\n.ds-drafting .h-fill.h-outline-fill { fill: var(--ds-cobalt-soft); stroke: var(--ds-cobalt); stroke-width: 3.5; }\n.ds-drafting .h-fill2.h-outline-fill { fill: var(--ds-vermilion-soft); stroke: var(--ds-vermilion); stroke-width: 3.5; }\n\n.ds-drafting .ds-tpl-tile { overflow-x: auto; }\n",
  "btn_primary": "d-btn d-btn-primary",
  "btn_secondary": "d-btn",
  "hand": {
   "mode": "outline",
   "shadow": false,
   "headline": "Line-work, dimensioned, on the grid.",
-  "note": "Drafting draws the subject the way a drawing set would: the object in 1.5px ink line-work with square caps, nothing filled, construction at 1px, and cobalt only for the dimension or the one part being measured. Vermilion marks the revision. A drawing without a figure attached to it is unfinished.",
+  "note": "Draw the subject in ink line-work with square caps and fine construction lines. Fill measured regions pale cobalt and revised regions pale orange; yellow can mark an explicitly labelled unknown. Keep outlines visible and attach figures to what they measure.",
   "rules": [
    [
     "Stroke",
@@ -554,7 +561,7 @@
    ],
    [
     "Fill",
-    "None. Cobalt as an outline marks the measured part; vermilion marks the revised one."
+    "Pale cobalt for measured regions, pale orange for revisions, yellow for labelled assumptions. A fill should make the drawing easier to read."
    ],
    [
     "Shadow",
