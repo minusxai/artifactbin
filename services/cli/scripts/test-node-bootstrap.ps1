@@ -6,7 +6,11 @@ $identity = 'mxmx_node_' + [Guid]::NewGuid().ToString('N').Substring(0,6)
 $password = [Guid]::NewGuid().ToString('N')+'aA!9'
 $secure = ConvertTo-SecureString $password -AsPlainText -Force
 $credential = New-Object Management.Automation.PSCredential("$env:COMPUTERNAME\$identity",$secure)
-$root = Join-Path $env:PUBLIC ('afbin-node-'+[Guid]::NewGuid().ToString('N'))
+# The proof's working directory (fresh npm cache, npx install, candidate) sits on the runner's work disk when
+# there is one: on hosted runners %PUBLIC% is on the slow OS disk, where npm's small-file writes took about a
+# minute per install. The user, its profile, its Node and its global npm prefix stay where Windows puts them.
+$base = if($env:RUNNER_TEMP){$env:RUNNER_TEMP}else{$env:PUBLIC}
+$root = Join-Path $base ('afbin-node-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $root | Out-Null
 $diagnostics = if($env:GITHUB_WORKSPACE){Join-Path $env:GITHUB_WORKSPACE 'services/cli/test-results/windows-bootstrap'}else{Join-Path $root 'diagnostics'}
 New-Item -ItemType Directory $diagnostics -Force | Out-Null
