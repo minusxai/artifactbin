@@ -37,6 +37,8 @@ it('protects a fresh Windows directory exactly once and never respawns for the p
  expect(launches()).toEqual([[keyDirectory,path]]);
  const script=Buffer.from(spawn.mock.calls[0]![1][3] as string,'base64').toString('utf16le');
  expect(script).toContain('SetAccessRuleProtection($true,$false)');expect(script).toContain("S-1-5-18");
+ // A persisted DirectorySecurity clears its modified flags and writes nothing to a second path: one per path.
+ expect(script).toMatch(/foreach\(\$path in \$paths\) \{ \$acl=New-Object Security\.AccessControl\.DirectorySecurity;[^}]*SetAccessRuleProtection\(\$true,\$false\);.*\[IO\.Directory\]::SetAccessControl\(\$path,\$acl\) \}$/);
  await privateDirectory(path);await privateDirectory(path);
  expect(protectedPaths()).toEqual([keyDirectory,path]);
 });
