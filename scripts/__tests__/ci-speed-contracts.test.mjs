@@ -349,7 +349,11 @@ it('prepares consumer prerequisites beside the candidate wait and the candidate 
  for(const id of ['acceptance-browser','acceptance-apt'])expect(steps.findIndex(step=>step.id===id)).toBeGreaterThan(install);
  expect(installWait).toBeGreaterThan(steps.findIndex(step=>step.name==='Install Linux acceptance browser dependencies'));
  expect(installWait).toBeLessThan(steps.findIndex(step=>step.name==='Installed npm runtime boundary, terminal exit and declarations'));
- expect(steps[installWait].if).toBe("matrix.phase != 'native'");
+ expect(steps[installWait].if).toBe("matrix.phase != 'native' && runner.os != 'Windows'");
+ expect(steps[install].run).toContain('( set +e; npm run test:npm-package');
+ const windows=steps.find(step=>step.name==='Install the same candidate for experience checks on Windows');
+ expect(windows.if).toBe("matrix.phase != 'native' && runner.os == 'Windows'");expect(windows.shell).toBeUndefined();
+ expect(windows.run).toBe(steps[install].run.slice(steps[install].run.indexOf('npm run'),steps[install].run.indexOf(' > "$RUNNER_TEMP')));
  expect(steps[installWait].run).toContain('exit "$(cat "$RUNNER_TEMP/candidate-install.status")"');
  expect(steps[waiting].run).toContain('--wait-only');
  expect(steps[waiting].env.GH_TOKEN).toBe('${{ github.token }}');
