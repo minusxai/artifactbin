@@ -1,5 +1,7 @@
 /** The local bundle exposes current grammar without remote skill endpoints. */
 import {expect,it} from 'vitest';
+import {credentialPaths} from '@artifactbin/utils/node/credentials';
+import {withTeachingOrigin} from '../../cli/src/teaching-origin';
 import teaching from '../../cli/src/generated/teaching.json';
 import {STORY_HTML_TAGS,STORY_UI_COMPONENT_NAME_LIST} from '@/lib/jsx/component-names';
 import {commands} from '../../cli/src/commands';
@@ -13,10 +15,10 @@ it('the bundled vocabulary comes from the registries',()=>{
  expect(teaching.files['references/commands.md']).toContain('## watch\n');
 });
 it('the bundled auth guide teaches local setup without self-minting or legacy configuration',()=>{
- const auth=teaching.files['references/publishing-auth.md'];
- expect(auth).toContain('~/.artifactbin/hosts/<hostname>/credentials.env');
- expect(auth).toContain('hosts/<hostname>@<scheme>-<port>/credentials.env');
- expect(auth).toContain('readable locations may alias an older hashed store');expect(auth).toContain('afbin auth');
+ const origin='https://guide.example';
+ const auth=withTeachingOrigin(teaching.files['references/publishing-auth.md'],origin);
+ expect(auth).toContain(credentialPaths(origin,'~/.artifactbin').backingPath);
+ expect(auth).toContain('Readable hostname locations alias this backing file');expect(auth).toContain('afbin auth');
  expect(auth).toContain('browser approval');
  // tokens/anonymous, MCP and the old dotfile spelling are retired-surfaces.test.ts's row for
  // the bundle's auth guide.
