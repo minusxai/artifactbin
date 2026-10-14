@@ -51,7 +51,8 @@ async function windowsPrivateState(cwd,home,args){
  assert.ok(fresh.powershell>0,'a command on a fresh Windows home protects its private directories');
  assert.equal(next.powershell,0,'a later command on a protected Windows home launches no PowerShell');
  const literal=path=>`'${path.replace(/'/g,"''")}'`;
- const acl=expression=>`$a=Get-Acl -LiteralPath (${expression}); [pscustomobject]@{path=[string](${expression});protected=$a.AreAccessRulesProtected;rules=@($a.Access|ForEach-Object{$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value+'|'+$_.FileSystemRights+'|'+$_.InheritanceFlags+'|'+$_.IsInherited+'|'+$_.AccessControlType})}`;
+ // .NET reads the ACL directly: Get-Acl's module may not load when this runner's PSModulePath belongs to PowerShell 7.
+ const acl=expression=>`$a=[IO.Directory]::GetAccessControl(${expression}); [pscustomobject]@{path=[string](${expression});protected=$a.AreAccessRulesProtected;rules=@($a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|ForEach-Object{$_.IdentityReference.Value+'|'+$_.FileSystemRights+'|'+$_.InheritanceFlags+'|'+$_.IsInherited+'|'+$_.AccessControlType})}`;
  const directories=[join(home,'AppData','Local','artifactbin'),home,join(cwd,'.artifactbin')].map(path=>`$(${acl(literal(path))})`).join(',');
  const script=`$ErrorActionPreference='Stop'; [pscustomobject]@{user=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value;profile=$(${acl("[Environment]::GetFolderPath('LocalApplicationData')")}).rules;directories=@(${directories})} | ConvertTo-Json -Depth 4 -Compress`;
  const observed=JSON.parse(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{encoding:'utf8'}));
