@@ -14,7 +14,7 @@ import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { mergeIdentityMaps } from './annotation-map';
 import { captureBookmark, resolveBookmark, type EditorSelectionChange } from './bookmark';
 import { clipboardAst, type ClipboardKind } from './clipboard';
-import { splitTask, leaveCode } from './block-keys';
+import { splitTask, leaveCode, selectBlockText } from './block-keys';
 import { editorDocument, editorSchema, normalizeIdentities, pasteFragment, sourceNodes, toggleInline } from './model';
 import { indentBlocks, outdentAtStart } from './indent';
 import { autolink, linkEndingAt, pastedLink, TYPED_URL } from './links';
@@ -213,6 +213,7 @@ export function mountFlowView(mount: HTMLElement, props: () => FlowEditorProps, 
             return true;
           },
           ...baseKeymap,
+          'Mod-a': selectBlockText,
           'Mod-Enter': leaveCode,
           Backspace: chainCommands(outdentAtStart, baseKeymap.Backspace!),
           Enter: linkFirst(chainCommands(

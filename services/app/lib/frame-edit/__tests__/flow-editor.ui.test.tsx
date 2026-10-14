@@ -419,6 +419,71 @@ describe('HTML text editing', () => {
     expect(e.store.current()).toBe('<pre id="code"># literal\n  codeXCode</pre>');
   });
 
+  describe('select-all is scoped to the text being edited', () => {
+    const mac = /Mac/.test(navigator.platform);
+    const selectAll = (e: ReturnType<typeof editor>) => fireEvent.keyDown(e.v().dom, { key: 'a', ctrlKey: !mac, metaKey: mac });
+    const caretIn = (e: ReturnType<typeof editor>, text: string) => {
+      let at = -1;
+      e.v().state.doc.descendants((n, pos) => { if (at < 0 && n.isText && n.text!.includes(text)) at = pos + n.text!.indexOf(text) + 1; });
+      e.v().dispatch(e.v().state.tr.setSelection(TextSelection.create(e.v().state.doc, at)));
+    };
+    const selected = (e: ReturnType<typeof editor>) => {
+      const { from, to } = e.v().state.selection;
+      return e.v().state.doc.textBetween(from, to, '\n', '￼');
+    };
+    const mintedIds = (source: string) => source.match(/id="e[0-9a-f]{32}"/g) ?? [];
+
+    it('replacing all of a nested stat value keeps its wrappers, span and ids (no new <p>)', () => {
+      const original = '<div id="gQoB"><div id="J6UD"><span id="yrqL">0%</span></div></div>';
+      const e = editor(original);
+      caretIn(e, '0%');
+      selectAll(e);
+      expect(e.v().state.selection).toBeInstanceOf(TextSelection);
+      expect(selected(e)).toBe('0%');
+      e.type('40%');
+      expect(e.store.current()).toBe('<div id="gQoB"><div id="J6UD"><span id="yrqL">40%</span></div></div>');
+      expect(mintedIds(e.store.current())).toEqual([]);
+      expect(e.view.container.querySelector('#gQoB > #J6UD span#yrqL')?.textContent).toBe('40%');
+    });
+
+    it('selects only the current block of a multi-block region, and stays there on a second press', () => {
+      const original = '<div id="card" className="p-4"><p id="a" className="lead">Alpha <strong id="s">beta</strong></p><p id="b">Bravo</p></div>';
+      const e = editor(original);
+      caretIn(e, 'rav');
+      selectAll(e);
+      expect(selected(e)).toBe('Bravo');
+      selectAll(e);
+      expect(selected(e)).toBe('Bravo');
+      e.type('Charlie');
+      expect(e.store.current()).toBe('<div id="card" className="p-4"><p id="a" className="lead">Alpha <strong id="s">beta</strong></p><p id="b">Charlie</p></div>');
+      caretIn(e, 'Alpha');
+      selectAll(e);
+      expect(selected(e)).toBe('Alpha beta');
+      e.type('Lead');
+      expect(e.store.current()).toBe('<div id="card" className="p-4"><p id="a" className="lead">Lead</p><p id="b">Charlie</p></div>');
+      expect(mintedIds(e.store.current())).toEqual([]);
+    });
+
+    it('keeps a table cell edit inside its cell and the cell keeps its id', () => {
+      const e = editor('<table id="t"><tbody id="tb"><tr id="tr"><td id="l">left</td><td id="r">right</td></tr></tbody></table>');
+      caretIn(e, 'igh');
+      selectAll(e);
+      expect(selected(e)).toBe('right');
+      e.type('east');
+      expect(e.store.current()).toBe('<table id="t"><tbody id="tb"><tr id="tr"><td id="l">left</td><td id="r">east</td></tr></tbody></table>');
+    });
+
+    it('keeps a checklist item\'s box when its text is replaced', () => {
+      const e = editor('<p id="task"><input type="checkbox" disabled checked={true} /> Done</p>');
+      caretIn(e, 'Done');
+      selectAll(e);
+      expect(selected(e)).toBe('Done');
+      e.type('Shipped');
+      expect((e.view.getAllByRole('checkbox') as HTMLInputElement[]).map(box => box.checked)).toEqual([true]);
+      expect(e.view.container.querySelector('p#task')?.textContent).toBe(' Shipped');
+    });
+  });
+
   it('keeps a saved checkbox disabled when prose is not editable', () => {
     const onChange = vi.fn();
     const e = render(() => <FlowEditor nodes={nodes('<p><input type="checkbox" disabled checked={true} /> Done</p>')} path="0" canEdit={() => false} onChange={onChange} />);
