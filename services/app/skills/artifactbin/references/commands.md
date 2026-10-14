@@ -11,7 +11,7 @@ Run `afbin -h` for the command list and `afbin <command> -h` for exact invocatio
 ```text
 afbin watch <url|id> --comments --json
 
-Follow new human comments and replies as NDJSON until cancelled; --cursor resumes an explicit checkpoint.
+Follow new human comments, replies and edits as NDJSON until cancelled; --cursor resumes an explicit checkpoint.
 
   -h, --help
     Show local command help.
@@ -24,7 +24,7 @@ Follow new human comments and replies as NDJSON until cancelled; --cursor resume
   -y, --yes
     Accept confirmation defaults for this operation; never bypass authentication.
   --comments
-    Follow new human comments and replies.
+    Follow new human comments, replies and edits.
   --cursor <CURSOR>
     Continue from a returned next_cursor.
 
