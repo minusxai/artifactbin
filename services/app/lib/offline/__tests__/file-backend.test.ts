@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import type { DocumentGraph, DocumentUpdate } from '@artifactbin/contracts';
+import { COMMENT_TARGET_UNSAVED, type DocumentGraph, type DocumentUpdate } from '@artifactbin/contracts';
 import { graphSource } from '@/lib/document/document-graph';
 import { advanceGraph } from '@/lib/document/document-graph-patch';
 import { prepareClientDocumentUpdate } from '@/lib/document/document-update-client';
@@ -298,6 +298,8 @@ describe('comments in the file', () => {
     expect(await backend.createAnnotation({ path: '0.0', node_id: nodeId, body: 'Is this the right title?' }, 'key-1')).toEqual(wire);
     expect(latest().threads).toHaveLength(1);
     await expect(backend.createAnnotation({ path: '0.0', node_id: 'nope', body: 'x' }, 'key-2')).rejects.toBeInstanceOf(BackendRequestError);
+    // An element the saved file does not hold (added in an unsaved edit) is refused with what is true and what to do.
+    await expect(backend.createAnnotation({ path: '0.0', node_id: 'nope', body: 'x' }, 'key-3')).rejects.toMatchObject({ message: COMMENT_TARGET_UNSAVED, code: 'bad_path' });
   });
 
   it('replies, resolves and reopens, and lists by status', async () => {

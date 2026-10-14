@@ -12,6 +12,7 @@ import type { StoryEditSelection } from '@/lib/edit-protocol';
 import { fireEvent } from '../../__tests__/helpers';
 import { fetchCalls, flush, installAnnotationFetch, knobs, layer } from './annotation-rig';
 import { preloadCommentField } from '../LazyCommentField';
+import { COMMENT_TARGET_UNSAVED } from '@artifactbin/contracts';
 
 beforeEach(() => {
   installAnnotationFetch();
@@ -306,8 +307,22 @@ describe('the annotation composer', () => {
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(creates()).toHaveLength(0);
-    expect(screen.getByRole('alert')).toHaveTextContent("This element has no saved id yet, so a comment can't attach to it. If you just added it, comment once your edit saves. Your draft is still here.");
+    expect(screen.getByRole('alert')).toHaveTextContent("This element isn't in the saved document yet, so a comment can't attach to it. If you just added it, comment once your edit saves. Your draft is still here.");
     expect(composer).toHaveTextContent('draft survives replacement');
+  });
+
+  it('says the same true thing when the server finds no saved element for the comment (an edit not saved yet)', async () => {
+    knobs.createRefusal = { error: 'bad_path' };
+    layer({ railOpen: true, initialSelection: TEXT({ nodeId: 'added-in-draft' }) });
+    await flush();
+    const composer = await screen.findByLabelText('Annotation comment');
+    replaceComment(composer, 'on the new paragraph');
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    expect(creates()).toHaveLength(1);
+    expect(screen.getByRole('alert')).toHaveTextContent(COMMENT_TARGET_UNSAVED);
+    expect(screen.getByRole('alert')).not.toHaveTextContent('bad_path');
+    expect(composer).toHaveTextContent('on the new paragraph');
   });
 
   it('drops the old quote and range when the same path reports a different durable node', async () => {
@@ -426,7 +441,7 @@ describe('the annotation composer', () => {
     expect(String(created!.init!.body)).not.toContain('edit_id');
   });
 
-  it('keeps an id-less node draft and says the element has no saved id, without claiming a save is pending', async () => {
+  it('keeps an id-less node draft and says the element is not in the saved document yet, without claiming a save is pending', async () => {
     layer({ railOpen: true, initialSelection: TEXT({ path: '2.1', nodeId: undefined }) });
     await flush();
     const composer = await screen.findByLabelText('Annotation comment');
@@ -434,7 +449,7 @@ describe('the annotation composer', () => {
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     expect(creates()).toHaveLength(0);
-    expect(screen.getByRole('alert')).toHaveTextContent("This element has no saved id yet, so a comment can't attach to it. If you just added it, comment once your edit saves. Your draft is still here.");
+    expect(screen.getByRole('alert')).toHaveTextContent(COMMENT_TARGET_UNSAVED);
     expect(composer).toHaveTextContent('keep this draft');
   });
 

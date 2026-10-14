@@ -1,6 +1,7 @@
 /** Production annotation wires over local state; anchors are resolved against today's file on every read. */
 import {randomUUID} from 'node:crypto';
 import {type AnnotationWire,type AnnotationAuthor,nodeIndex,sourcePathToBodyPath,canonicalQuote,parseAnnotationRange,BackendRequestError} from '../../../app/lib/cli-toolkit';
+import {COMMENT_TARGET_UNSAVED} from '@artifactbin/contracts';
 import type {State} from '../state';
 import {LOCAL_AUTHOR_LABEL,type PreviewComment} from './comments';
 
@@ -27,7 +28,8 @@ export function previewAnnotations(state:State,root:string,file:string,source:st
    const requestKey=JSON.stringify([file,key]);const prior=state.get<string>(root,'preview-thread-request',requestKey);
    if(prior)return resolved(get(prior.value));
    const node=typeof body.node_id==='string'?body.node_id:'';const target=anchor(node);
-   if(!target)throw new BackendRequestError('That content is no longer in the document.',400);
+   // Not in the file on disk: most often an element the unsaved draft added. Say so, and what to do.
+   if(!target)throw new BackendRequestError(COMMENT_TARGET_UNSAVED,400,false,'bad_path');
    const range=body.range==null?null:parseAnnotationRange(body.range);
    if(body.range!=null&&!range)throw new BackendRequestError('Invalid selection',400);
    const quote=body.quote==null?null:canonicalQuote(text(body.quote));

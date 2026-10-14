@@ -10,6 +10,7 @@ import {runCli} from '../src/dispatch';
 import {startPreview} from '../src/preview/session';
 import {prepareClientDocumentUpdate} from '../../app/lib/document/document-update-client';
 import {buildPreview} from '../scripts/build-preview.mjs';
+import {COMMENT_TARGET_UNSAVED} from '@artifactbin/contracts';
 import {readdir} from 'node:fs/promises';
 
 test('empty preview starts without cloud access or selecting existing files',async()=>{
@@ -172,6 +173,8 @@ test('production editor protocol saves local graph edits and rejects stale file 
   const thread=await call('annotations.create',{input:{node_id:'text',body:'Review this'},key:'once'});
   assert.equal(thread.thread[0].body,'Review this');
   assert.equal((await call('annotations.create',{input:{node_id:'text',body:'Review this'},key:'once'})).id,thread.id);
+  // An element only the unsaved draft holds: the refusal says what is true and what to do, as hosted's composer does.
+  assert.deepEqual(await call('annotations.create',{input:{node_id:'draftOnly',body:'On the new paragraph'},key:'draft'}),{error:COMMENT_TARGET_UNSAVED});
   const reply=await call('annotations.act',{id:thread.id,input:{reply:'Done',resolve:true}});
   assert.equal(reply.thread.length,2);assert.equal(reply.status,'resolved');
   // The author rewrites a reply on the resolved thread: words only, stamped, the first comment untouched.

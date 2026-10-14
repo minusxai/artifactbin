@@ -36,6 +36,7 @@ import { loginHref } from '@/lib/http/login-href';
 import { hasReplyText } from '@/lib/annotations/remote-reply';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import { documentRect, sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import { COMMENT_TARGET_UNSAVED } from '@artifactbin/contracts';
 import { isEditFrameMessage, type StoryAnnotationsMessage, type StoryEditParentMessage, type StoryEditRect, type StoryEditSelection } from '@/lib/edit-protocol';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -115,8 +116,6 @@ export interface AnnotationLayerProps {
 const cardClass = 'rounded-panel border border-edge bg-raised text-sm';
 const CAPTURE_CHROME_CSS = ':host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome]{visibility:hidden!important}';
 const DELETE_THREAD_CONFIRMATION = { title: 'Delete this thread?', description: 'This thread and its replies will be permanently deleted. This cannot be undone.', action: 'Delete thread', confirmLabel: 'Confirm delete thread' };
-/** A selection whose source element has no durable id: an element an edit just added, or one a document never identified. */
-const NO_NODE_ID = "This element has no saved id yet, so a comment can't attach to it. If you just added it, comment once your edit saves. Your draft is still here.";
 const DELETE_REPLY_CONFIRMATION = { title: 'Delete this comment?', description: 'This comment will be removed. The rest of the thread will stay.', action: 'Delete comment', confirmLabel: 'Confirm delete comment' };
 const linkedFrom = (search: string | undefined) => {
   if (search === undefined) return null;
@@ -617,7 +616,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     if (!subject || !hasReplyText(draft()) || capture.busy() || (capture.required() && !capture.draft())) return;
     if (!subject.nodeId) {
       // Never claims a save is pending: the layer cannot know one is. Say what is true either way.
-      setFailure(NO_NODE_ID);
+      // A selection whose source element has no durable id: an element an edit just added, or one never identified.
+      setFailure(COMMENT_TARGET_UNSAVED);
       return;
     }
     setBusy(true);
@@ -644,7 +644,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         if (!(error instanceof BackendRequestError)) throw error;
         // A guest may READ a thread and may not start one: the login page, and back here with the ask.
         if (error.signInRequired) window.location.assign(loginHref(window.location, 'comment'));
-        else setFailure(error.message);
+        // The server holds no such element in the saved document (an edit not saved yet): the same true thing.
+        else setFailure(error.code === 'bad_path' ? COMMENT_TARGET_UNSAVED : error.message);
         return;
       }
       capture.reset();
