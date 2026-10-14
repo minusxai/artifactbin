@@ -42,3 +42,11 @@ export interface AnnotationCommentWire {
   /** When its author last rewrote the text; absent on a comment never edited. There is no edit history. */
   edited_at?: string;
 }
+
+/**
+ * Why a new comment cannot attach: the element it names is not in the SAVED document — added in an edit that has
+ * not saved yet, or carrying no id yet. Every surface that refuses on that ground says this one true, actionable
+ * thing: the composer before it sends, hosted's `bad_path` refusal, the offline file and the local preview.
+ * "Your draft" is the comment being written, which the composer keeps.
+ */
+export const COMMENT_TARGET_UNSAVED = "This element isn't in the saved document yet, so a comment can't attach to it. If you just added it, comment once your edit saves. Your draft is still here.";

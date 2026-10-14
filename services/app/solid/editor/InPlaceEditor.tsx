@@ -68,6 +68,7 @@ import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
 import type { ArtifactVersionSnapshot } from '@/lib/artifact-backend/types';
 import { createInPlaceEdit, type ImageDropPlacement, type InPlaceEditController } from './create-in-place-edit';
+import { createCommentShortcut } from './comment-shortcut';
 import { createLiveEdits } from './create-live-edits';
 import { createEditorSource } from './create-editor-source';
 import { createEditDraftSender } from './edit-draft';
@@ -300,6 +301,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     if (mode() !== 'code') chooseMode('code');
   };
   createEffect(on(mode, (now) => { if (now !== 'code') setScriptAt(null); }, { defer: true }));
+  // ⌘⌥M, pressed here or forwarded by a framed document: comment on what the editor has selected.
+  const commentOnSelection = createCommentShortcut({ selection: () => edit?.selection() ?? null, get onComment() { return props.onComment; } });
   const inPlace = createInPlaceEdit({
     get runtimeRef() { return runtimeRef; },
     get sessionNonce() { return props.sessionNonce; },
@@ -309,7 +312,7 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     onOpenScript: openScript,
     // A framed document's Enter / focus-out and ⌘⌥M, forwarded: the same as the window listeners below.
     onFlush: () => showInDocument.flush(),
-    onCommentKey: () => { const current = edit?.selection(); if (current) props.onComment?.(current); },
+    onCommentKey: () => { commentOnSelection(); },
     onLinkKey: () => openLink(),
     onImageDrop: (file, where) => imageDoors?.dropped(file, where),
     onImageReplaceRequest: (path) => imageDoors?.pick(path),
@@ -345,20 +348,14 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
   onMount(() => props.onEditorMount?.());
   createEffect(() => { if (inPlace.ready() || mode() !== 'design' || preview()) props.onEditorReady?.(); });
 
-  // ⌘⌥M: comment on what the editor has selected. ⌘K: link the text the caret is in (a framed document forwards both).
+  // ⌘K: link the text the caret is in (a framed document forwards it).
   onMount(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k'
         && (event.target as Element | null)?.closest?.('.ProseMirror')) {
         event.preventDefault();
         openLink();
-        return;
       }
-      if (!props.onComment || event.key.toLowerCase() !== 'm' || !event.altKey || !(event.metaKey || event.ctrlKey)) return;
-      const current = inPlace.selection();
-      if (!current) return;
-      event.preventDefault();
-      props.onComment(current);
     };
     window.addEventListener('keydown', onKey);
     onCleanup(() => window.removeEventListener('keydown', onKey));

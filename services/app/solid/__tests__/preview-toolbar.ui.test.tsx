@@ -10,7 +10,7 @@ import type {InPlaceEditOptions} from '@/solid/editor/create-in-place-edit';
 import type {PreviewDocument} from '../../../cli/src/preview/types';
 import { STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 const edit=vi.hoisted(()=>({options:null as InPlaceEditOptions|null,commit:vi.fn(),realController:false,ready:null as (()=>boolean)|null}));
-vi.mock('@/solid/editor/create-in-place-edit',()=>({createInPlaceEdit:(options:InPlaceEditOptions)=>{edit.options=options;return {commitPending:edit.commit,ready:()=>edit.ready?.()??true};}}));
+vi.mock('@/solid/editor/create-in-place-edit',()=>({createInPlaceEdit:(options:InPlaceEditOptions)=>{edit.options=options;return {commitPending:edit.commit,ready:()=>edit.ready?.()??true,selection:()=>null};}}));
 vi.mock('@/solid/document/AnnotationLayer',()=>({AnnotationLayer:()=>null}));
 vi.mock('../../../cli/src/preview/edit-controller',async(original)=>{const actual=await original<typeof import('../../../cli/src/preview/edit-controller')>();return {createPreviewEditController:(options:Parameters<typeof actual.createPreviewEditController>[0])=>edit.realController?actual.createPreviewEditController(options):({nonce:'test-session',selectionReady(){},dispose(){},update(){},send(){},subscribe:()=>()=>{}})};});
 vi.mock('../../../cli/src/preview/backend',()=>({createPreviewBackend:()=>({})}));

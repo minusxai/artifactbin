@@ -19,7 +19,7 @@ import { markdownContent, markdownSource } from '@/lib/markdown/content';
 import { assertProjectionSupported } from './project-document';
 import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
-import type { AnnotationCommentWire } from '@artifactbin/contracts';
+import { COMMENT_TARGET_UNSAVED, type AnnotationCommentWire } from '@artifactbin/contracts';
 import { anchorIndex, snippetOf, type AnchorEntry as Anchored } from '@/lib/document/anchors';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend, BackendFeature, EditAnswer, FlushResponse, LoadedArtifact } from '@/lib/artifact-backend/types';
@@ -566,7 +566,7 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
       const nodeId = typeof body.node_id === 'string' ? body.node_id : null;
       const found = nodeId ? anchorIndex(file.source).get(nodeId) : undefined;
       const text = typeof body.body === 'string' ? body.body : '';
-      if (!found || !nodeId) throw new BackendRequestError('bad_path: That part of the document is no longer here.', 400);
+      if (!found || !nodeId) throw new BackendRequestError(COMMENT_TARGET_UNSAVED, 400, false, 'bad_path');
       if (!text.trim()) throw new BackendRequestError('invalid_annotation: A comment needs some words.', 400);
       const viewState = body.view_state === undefined ? null : parseCommentViewState(body.view_state);
       if (body.view_state !== undefined && !viewState) throw new BackendRequestError('Invalid saved view.', 400);

@@ -89,13 +89,14 @@ export const FACES: AnnotationWire = {
 
 export const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
 /** Per-case knobs: an imported binding cannot be assigned to, so they live here. */
-export const knobs: { refuseCreate: boolean; resolvedVisible: boolean; open: AnnotationWire[]; resolved: AnnotationWire[] | null; sessions: unknown[] | null } =
-  { refuseCreate: false, resolvedVisible: true, open: [ANN], resolved: null, sessions: null };
+export const knobs: { refuseCreate: boolean; createRefusal: Record<string, unknown> | null; resolvedVisible: boolean; open: AnnotationWire[]; resolved: AnnotationWire[] | null; sessions: unknown[] | null } =
+  { refuseCreate: false, createRefusal: null, resolvedVisible: true, open: [ANN], resolved: null, sessions: null };
 
 /** Reset the knobs and install the annotations fetch stub. Call from `beforeEach`. */
 export function installAnnotationFetch() {
   fetchCalls.length = 0;
   knobs.refuseCreate = false;
+  knobs.createRefusal = null;
   knobs.resolvedVisible = true;
   knobs.open = [ANN];
   knobs.resolved = null;
@@ -121,6 +122,7 @@ export function installAnnotationFetch() {
       return new Response(JSON.stringify({ ...RESOLVED, status: body.reopen ? 'open' : 'resolved', resolved_at: body.reopen ? null : RESOLVED.resolved_at }), { status: 200 });
     }
     if (init?.method === 'POST') {
+      if (knobs.createRefusal) return new Response(JSON.stringify(knobs.createRefusal), { status: 400 });
       if (knobs.refuseCreate) {
         return new Response(JSON.stringify({ error: 'invalid_jsx', details: [{ message: 'Inline style attribute is not allowed' }] }), { status: 400 });
       }

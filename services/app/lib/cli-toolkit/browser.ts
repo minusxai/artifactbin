@@ -13,6 +13,9 @@
 export { parseJsx, serializeJsx } from '../jsx';
 export type { JsxNode } from '../jsx';
 export { splitHelmet } from '../document/helmet';
+// Structural edits the edit toolbar makes on the draft source (its Delete), as the hosted editor makes them.
+export { removeJsxNodeAtPath } from '../data/story/jsx-edit';
+export { bodyPathToSourcePath } from '../document/edit-compose';
 
 // ---- Backend contract: the local preview implements the app's artifact backend.
 export { BackendRequestError } from '../artifact-backend/errors';
@@ -52,3 +55,5 @@ export { Button } from '../../solid/ui/Button';
 export { EditorSourcePanel, EditorToolbar, EditorViewTabs } from '../../solid/editor/EditorChrome';
 export { default as SourceEditorPane } from '../../solid/editor/SourceEditorPane';
 export { createInPlaceEdit } from '../../solid/editor/create-in-place-edit';
+export { default as StoryFormatToolbar } from '../../solid/editor/StoryFormatToolbar';
+export { createCommentShortcut } from '../../solid/editor/comment-shortcut';
