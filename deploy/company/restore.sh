@@ -12,7 +12,9 @@ for file in database.dump artifacts.tar.gz configuration.tar.gz; do [ -s "$sourc
 [ ! -e .env ] && [ ! -e config/server.env ] || { echo 'Restore requires a fresh deployment directory; existing secrets will not be overwritten' >&2; exit 1; }
 # The archive is trusted operator output; never restore an untrusted archive.
 # Older registry-backed snapshots omitted the empty optional package context.
-tar -xzf "$source/configuration.tar.gz"
+# -p keeps the archived modes (secrets stay 0600) instead of narrowing every file to this shell's umask: the
+# rebuilt image then has the same build context as the one backed up, so Docker reuses its layers where it can.
+tar -xpzf "$source/configuration.tar.gz"
 mkdir -p packages
 docker compose build
 docker compose up -d --wait postgres

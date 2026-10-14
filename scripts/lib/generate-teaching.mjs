@@ -89,3 +89,9 @@ export async function generateTeaching() {
   renameSync(temporary, MARKER);
   return 'generated';
 }
+
+// `node scripts/lib/generate-teaching.mjs`: the cached generation as a build step (the app's `prebuild`), so a
+// build that already generated this tree's teaching — the CLI build runs first — does not compile it again.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  console.log(`teaching: ${await generateTeaching()}`);
+}
