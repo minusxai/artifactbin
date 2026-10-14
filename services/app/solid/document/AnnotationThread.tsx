@@ -230,7 +230,6 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                 class={`flex min-w-0 flex-1 items-center gap-2 rounded-chip ${props.open ? 'cursor-pointer' : ''}`}>
                 <AuthorIdentity author={c().author} />
                 <CommentTimestamp iso={c().created_at} class="ml-auto shrink-0 font-mono text-micro text-faint" />
-                <Show when={c().edited_at}>{(at) => <CommentEdited iso={at()} class="shrink-0 font-mono text-micro text-faint" />}</Show>
               </span>
               <Show when={index() === 0}><ThreadFoldControl folded={false} onToggle={props.onToggleFold} /></Show>
               <Show when={index() === 0 && props.resolved}>
@@ -269,8 +268,10 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
               </Show>
             </div>
             <Show when={editing() !== c().id} fallback={
-              // Escape cancels, from anywhere in the editor (a native listener: the rail may sit in a shadow root).
-              <div data-comment-editor on:keydown={(event) => { if (event.key !== 'Escape' || event.defaultPrevented) return; event.preventDefault(); event.stopPropagation(); cancelEdit(); }}>
+              // Escape cancels, from anywhere in the editor (a native listener: the rail may sit in a shadow root). The
+              // editor's own keymap claims Escape (select parent node), so its defaultPrevented says nothing here; an
+              // open mention picker stops the key before it bubbles this far.
+              <div data-comment-editor on:keydown={(event) => { if (event.key !== 'Escape') return; event.preventDefault(); event.stopPropagation(); cancelEdit(); }}>
                 <CommentMarkdownField backend={props.backend} artifactId={props.artifactId} label="Edit comment" busy={saving()}
                   value={editDraft()} onChange={setEditDraft} onSubmit={() => void saveEdit(c())} rows={3} autoFocus />
                 <Show when={editError()}><p role="alert" class="text-xs text-danger">{editError()}</p></Show>
@@ -289,6 +290,8 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
               <p class="truncate font-sans leading-snug text-fg/90">{firstLine(c().body)}</p>
             </Show>
             </Show>
+            {/* Below the words, not on the author line: that line is already full on a narrow rail. */}
+            <Show when={editing() !== c().id && c().edited_at}>{(at) => <CommentEdited iso={at()} class="mt-0.5 inline-block font-mono text-micro text-faint" />}</Show>
             <Show when={c().image ?? (index() === 0 ? props.a.image : undefined)}>{(image) => <CommentScreenshot image={image()} />}</Show>
             <Show when={newest() && !commentFolded() && props.open}><span data-notification-read-point class="block h-px" aria-hidden="true" /></Show>
           </li>;

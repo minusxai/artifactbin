@@ -321,7 +321,6 @@ export function AnnotationPreview(props: {
           <AuthorIdentity author={first()!.author} />
           <span class="pointer-events-auto relative z-10 flex shrink-0 items-center gap-2">
             <CommentTimestamp iso={first()!.created_at} class="whitespace-nowrap font-mono text-micro text-faint" />
-            <Show when={first()!.edited_at}>{(at) => <CommentEdited iso={at()} class="whitespace-nowrap font-mono text-micro text-faint" />}</Show>
             <Show when={props.row.status === 'open' && props.onResolve}>
               <Tooltip content="resolve thread">
                 <Button type="button" variant="ghost" size="sm" aria-label="Resolve thread" disabled={props.resolving} onClick={(event) => { event.stopPropagation(); props.onResolve?.(); }} class="-mr-1">
@@ -351,6 +350,7 @@ export function AnnotationPreview(props: {
           </div>
         </Show>
         <span data-card-body class="mb-1 mt-1.5 line-clamp-2 shrink-0 font-sans text-sm leading-snug text-fg/90">{previewText(first()!.body)}</span>
+        <Show when={first()!.edited_at}>{(at) => <span class="pointer-events-auto -mt-1 mb-1 shrink-0"><CommentEdited iso={at()} class="font-mono text-micro text-faint" /></span>}</Show>
         <Show when={props.resolveError}><span role="alert" class="mt-1 font-mono text-micro text-danger">{props.resolveError}</span></Show>
         {/* The count (and "+N more", which expands the replies) on the left; Reply and the way to the rail on the right. */}
         <span data-card-footer class={`mt-auto flex min-h-[22px] items-center justify-between gap-2 font-mono text-micro text-faint ${repliesExpanded() ? 'pt-2' : ''}`}>
@@ -372,8 +372,8 @@ export function AnnotationPreview(props: {
             <For each={props.row.thread.slice(1)}>{(reply) => (
               <span role="listitem" class="block">
                 <AuthorIdentity author={reply.author} />
-                <Show when={reply.edited_at}>{(at) => <CommentEdited iso={at()} class="ml-2 font-mono text-micro text-faint" />}</Show>
                 <span class="mt-1 block whitespace-pre-wrap break-words font-sans text-sm leading-snug text-fg/90">{previewText(reply.body)}</span>
+                <Show when={reply.edited_at}>{(at) => <CommentEdited iso={at()} class="font-mono text-micro text-faint" />}</Show>
                 <Show when={reply.image}>{(image) => <CommentScreenshot image={image()} />}</Show>
               </span>
             )}</For>

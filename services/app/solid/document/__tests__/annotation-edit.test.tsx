@@ -87,6 +87,8 @@ describe('editing your own comment', () => {
     const thread = await openThread();
     const field = await startEditing(thread);
     replaceComment(field, 'half a thought');
+    // In a browser the editor's own keymap claims Escape (select parent node) before it bubbles: cancel regardless.
+    field.addEventListener('keydown', (event) => event.preventDefault(), { once: true });
     fireEvent.keyDown(field, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByLabelText('Edit comment', { selector: '[contenteditable]' })).toBeNull());
     expect(within(thread).getByText('is this right?')).toBeTruthy();
