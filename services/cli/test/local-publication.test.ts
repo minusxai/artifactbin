@@ -139,9 +139,16 @@ test('private publication state overrides ambient CLI home without redirecting e
 test('server-normalized source remains publishable after local edits without writing remote fences to originals',async()=>{
  const f=await fixture();try{
   const first='---\nid: loc002\n---\n<p>One</p>';await writeFile(join(f.workspace.root,'child.jsx'),first);
-  await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});assert.match([...f.heads.values()][0].markup,/id="auto"/);assert.equal(await readFile(join(f.workspace.root,'child.jsx'),'utf8'),first);
-  await writeFile(join(f.workspace.root,'child.jsx'),first.replace('One','Two'));await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
-  assert.match([...f.heads.values()][0].markup,/id="[A-Za-z0-9]{4}"/);assert.match([...f.heads.values()][0].markup,/Two/);assert.doesNotMatch(await readFile(join(f.workspace.root,'child.jsx'),'utf8'),/auto/);
+  await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
+  // The author's file carries the element id it published with, and no remote fence.
+  const published=await readFile(join(f.workspace.root,'child.jsx'),'utf8'),id=/<p id="([A-Za-z][A-Za-z0-9]{3})">One<\/p>/.exec(published)?.[1];
+  assert.ok(id,published);assert.equal(published,first.replace('<p>',`<p id="${id}">`));assert.match([...f.heads.values()][0].markup,new RegExp(`<p id="${id}">One</p>`));
+  // An ordinary edit of the published file publishes without a normalization conflict.
+  await writeFile(join(f.workspace.root,'child.jsx'),published.replace('One','Two'));await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
+  assert.match([...f.heads.values()][0].markup,new RegExp(`<p id="${id}">Two</p>`));assert.doesNotMatch(await readFile(join(f.workspace.root,'child.jsx'),'utf8'),/edit_id|head_version|auto/);
+  // So does an agent regenerating it without ids: the new paragraph gets an id, the published one stays published.
+  await writeFile(join(f.workspace.root,'child.jsx'),first.replace('<p>One</p>','<p>Two</p><p>Three</p>'));await publishLocalWorkspace(f.workspace,['child.jsx'],f.client,{});
+  assert.match([...f.heads.values()][0].markup,new RegExp(`<p id="${id}">Two</p><p id="[A-Za-z][A-Za-z0-9]{3}">Three</p>`));
  }finally{await f.cleanup();}
 });
 

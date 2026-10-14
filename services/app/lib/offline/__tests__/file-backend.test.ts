@@ -411,6 +411,21 @@ describe('a source changed outside the file', () => {
     expect(thread).toMatchObject({ id: wire.id, orphaned: false, snippet: 'Quarterly sales' });
   });
 
+  it('gives an element an outside rewrite stripped of its id back its own id, so its thread stays anchored', async () => {
+    const file = fixture();
+    const { backend, latest } = open(file);
+    const wire = await backend.createAnnotation({ path: HEADING_PATH, node_id: headingId(file), body: 'Title?' }, 'k');
+    // What an agent that regenerates the source does: the same content, every id gone, one paragraph added.
+    const regenerated = changed((s) => s.replace(/ id="[^"]*"/g, '').replace('<Button run', '<p>Added by an agent</p>\n  <Button run'), latest());
+    expect(regenerated.source).not.toContain(headingId(file));
+    const { file: after, error } = await rebuildArtifactFile(regenerated);
+    expect(error).toBeNull();
+    expect(headingId(after)).toBe(headingId(file));
+    expect(after.source).toMatch(/<p id="[A-Za-z][A-Za-z0-9]{3}">Added by an agent<\/p>/);
+    const [thread] = await open(after).backend.listAnnotations();
+    expect(thread).toMatchObject({ id: wire.id, orphaned: false });
+  });
+
   it('is then edited and saved like any other file', async () => {
     const { file: after } = await rebuildArtifactFile(changed((s) => s.replace('Regional sales</h1>', 'Quarterly sales</h1>')));
     const { backend, latest } = open(after);

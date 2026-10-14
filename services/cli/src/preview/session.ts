@@ -2,14 +2,14 @@ import {PREVIEW_CONNECT_PATH,PREVIEW_CONNECT_INSPECT_PATH,PREVIEW_CONNECT_IMPORT
 import {previewPublicOrigin} from '../preview-options';
 import {inspectPreviewOffer,importPreviewOffer,previewConnectPage} from './connect-import';
 import {loadWorkspace} from '../workspace';
-import {LOCAL_WORKSPACE_SCOPE,localWorkspaceState,migrateLocalDiscussion,recoverLocalFiles,saveLocalFile} from '../local-workspace';
+import {LOCAL_WORKSPACE_SCOPE,localWorkspaceState,migrateLocalDiscussion,recoverLocalFiles,saveLocalFile,identifiedLocalBody,identifyLocalDocument,needsNodeIds} from '../local-workspace';
 import {workspaceStateEnv} from '../config';
 import {localHistory,localHistoryHead} from '../local-history';
 /** File-backed sessions: scope, revision-checked saves, SQL inputs and local comments. No publication. */
 import {previewGraph} from './graph';
 import {createPreviewEditor} from './editor';
 import {previewAnnotations} from './annotations';
-import {BackendRequestError,type RefDataMap,imageReferenceId,fileContentType,validateMarkupStructure,STORY_DESIGN_NAMES,type StoryDesignName,collectRefUses,parseJsx,splitHelmet,stampNodeIds,nodeIndex,parseAnnotationRange,validateQueryValues,dataflowOf,type CompiledDataflow} from '../../../app/lib/cli-toolkit';
+import {BackendRequestError,type RefDataMap,imageReferenceId,fileContentType,validateMarkupStructure,STORY_DESIGN_NAMES,type StoryDesignName,collectRefUses,parseJsx,splitHelmet,nodeIndex,parseAnnotationRange,validateQueryValues,dataflowOf,type CompiledDataflow} from '../../../app/lib/cli-toolkit';
 import type {DocumentMetadata} from '../document';
 import {createServer} from 'node:http';
 import {readFile,mkdir,realpath} from 'node:fs/promises';
@@ -57,7 +57,14 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  // can synthesize arbitrary strings, so its results cannot grant this authority.
  const datasetImages=new Map<string,Set<string>>();
  const read=async(file:string,override?:string)=>{
-  const path=await pathFor(file),source=override??await readFile(path,'utf8'),doc=parseDocument(source);
+  const path=await pathFor(file);let source=override??await readFile(path,'utf8');
+  // Anything served must be commentable: a file written outside the browser gets its node ids on disk the
+  // first time preview reads it. A capture is read-only; a concurrent outside write is simply read next time.
+  if(override===undefined&&!options.capture&&needsNodeIds(parseDocument(source).body)){
+   await identifyLocalDocument(root,file).catch(error=>{if(!(error instanceof CliError&&error.code==='stale_save'))throw error;});
+   source=await readFile(path,'utf8');
+  }
+  const doc=parseDocument(source);
   const rendered=doc.body;
 
   const refData:RefDataMap={};
@@ -105,7 +112,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     if(revision!==current.revision)throw new Refusal(409,'File changed; draft retained');
     if(typeof source!=='string'||!parseJsx(source).ok)throw new Refusal(400,'Invalid JSX');
     // Preserve durable node anchors and the remote baseline; never accept metadata from browser saves.
-    const body=stampNodeIds(source,{previousSource:current.body}).source;
+    const body=identifiedLocalBody(comments,file,source,current.body)??source;
     const bytes=Buffer.from(writeDocument({metadata:metadata??current.metadata,body}));
     await read(file,bytes.toString()); // Validate the proposed tree and dependency scope before writing.
     await saveLocalFile(root,file,current.revision,bytes).catch(error=>{if(error instanceof CliError&&error.code==='stale_save')throw new Refusal(409,error.message);throw error;});
@@ -115,6 +122,9 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   try{return (await localHistoryHead(root,file,revision)).version;}catch(error){if(error instanceof CliError&&error.code==='stale_save')throw new Refusal(409,error.message);throw error;}
  }});
  const comments=await State.open(root,workspaceStateEnv(root));
+ /** A comment makes the ids it names worth keeping: the version it was made on becomes the acknowledged head an
+  * outside rewrite's re-stamp carries them from (a file that arrived already identified may have none yet). */
+ const acknowledgeAnchors=async(file:string)=>{await localHistoryHead(root,file).catch(error=>{if(!(error instanceof CliError&&error.code==='invalid_history'))throw error;});};
  await migrateLocalDiscussion(root,home,comments);
  const admitImport=async(path:string)=>{
   const identities={...options.localFiles,...await localInputReferences(await loadWorkspace(root,home),options.origin)};
@@ -220,7 +230,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     }
     const annotations=previewAnnotations(comments,LOCAL_WORKSPACE_SCOPE,input.file,current.body);
     if(input.operation==='annotations.list')return annotations.list(input.status);
-    if(input.operation==='annotations.create')return annotations.create(input.input??{},input.key);
+    if(input.operation==='annotations.create'){const created=annotations.create(input.input??{},input.key);await acknowledgeAnchors(input.file);return created;}
     if(input.operation==='annotations.act')return annotations.act(input.id,input.input??{});
     if(input.operation==='annotations.delete'){annotations.delete(input.id);return null;}
     throw new Refusal(400,'Unknown editor operation');
@@ -242,7 +252,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     const range=input.range==null?null:parseAnnotationRange(input.range);
     if(typeof input.node!=='string'||!nodeIndex(current.body).has(input.node)||typeof input.name!=='string'||!input.name.trim()||input.name.length>100||typeof input.text!=='string'||!input.text.trim()||input.text.length>10000||input.range!=null&&!range||input.quote!==undefined&&(typeof input.quote!=='string'||input.quote.length>10000))throw new Refusal(400,'Invalid comment');
     const comment:PreviewComment={id:randomUUID(),file:input.file,node:input.node,name:input.name.trim(),text:input.text.trim(),...(input.quote!==undefined?{quote:input.quote}:{}),range};
-    comments.put(LOCAL_WORKSPACE_SCOPE,'preview-comment',comment.id,comment);return json(comment);
+    comments.put(LOCAL_WORKSPACE_SCOPE,'preview-comment',comment.id,comment);await acknowledgeAnchors(input.file);return json(comment);
    }
   }
   if(req.method==='GET'&&(target.pathname==='/'||workspaceFile)){

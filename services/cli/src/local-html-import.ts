@@ -9,7 +9,7 @@ import {atomicWrite,digest,readOptional,privateDirectory,isMissing} from './file
 import {parseDocument,writeDocument} from './document';
 import type {Workspace} from './workspace';
 import {CliError} from './errors';
-import {withLocalLock,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,stageLocalFiles,recoverLocalFiles} from './local-workspace';
+import {withLocalLock,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,stageLocalFiles,recoverLocalFiles,identifiedLocalBody} from './local-workspace';
 
 const MAX_BYTES=25*1024*1024;
 const ID=/^[A-Za-z0-9]{6,12}$/;
@@ -74,7 +74,10 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
    const saved=join(directory,randomUUID()+'.html');await atomicWrite(saved,html,{exclusive:true});
    throw new CliError('import_conflict',reason,`Your local files were retained. The incoming copy is saved at ${saved}.`);
   };
-  if(current&&(current.metadata.id!==undefined&&current.metadata.id!==identity||current.body!==file.base.source&&current.body!==file.source))return preserveConflict('Import conflict: the local document and offline copy both changed.');
+  // The workspace copy carries an id on every element, whoever wrote the offline copy; against an existing copy,
+  // unchanged elements keep the ids they have there, so re-importing the same file is not a divergent edit.
+  const incoming=identifiedLocalBody(state,path,file.source,current?.body??null)??file.source;
+  if(current&&(current.metadata.id!==undefined&&current.metadata.id!==identity||current.body!==file.base.source&&current.body!==file.source&&current.body!==incoming))return preserveConflict('Import conflict: the local document and offline copy both changed.');
   const changes:FileChange[]=[];
   const assets=Object.entries(provenance?.assets??downloadedAssets(file,identity));
   const destinations=new Set<string>([path]);let bytes=Buffer.byteLength(html);
@@ -100,7 +103,7 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
   const unchangedLocal=provenance?.threadsDigest===digest(JSON.stringify(existing));
   if(existing.length&&!same&&!unchangedIncoming&&!unchangedLocal)return preserveConflict('Import conflict: local comments and offline comments both changed.');
   const replaceThreads=!unchangedIncoming||existing.length===0;
-  const anchors=nodeIndex(file.source);
+  const anchors=nodeIndex(incoming);
   const fields=['title','description','theme','template','colorMode'] as const;
   const merged={...file.metadata};
   if(current){
@@ -113,7 +116,7 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
    }
   }
   const metadata={...(current?.metadata??{}),...Object.fromEntries(fields.map(key=>[key,merged[key]])),id:identity};
-  changes.unshift({path,before:original?digest(original):null,data:Buffer.from(writeDocument({metadata,body:file.source}))});
+  changes.unshift({path,before:original?digest(original):null,data:Buffer.from(writeDocument({metadata,body:incoming}))});
   await stageLocalFiles(workspace.root,changes,store=>{
    if(original)recordLocalHistory(store,path,original,changes[0]!.data!);
    store.put(scope,'draft-identity',path,{id:identity});

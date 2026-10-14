@@ -5,7 +5,8 @@ import {readFile,lstat,realpath,link,unlink} from 'node:fs/promises';
 import {basename,dirname,extname,join,relative,resolve,sep} from 'node:path';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {State,withLock} from './state';
-import {recordLocalHistory,assertLocalHistoryMove,moveLocalHistory} from './local-history';
+import {recordLocalHistory,assertLocalHistoryMove,moveLocalHistory,localHistoryHeadBody,localHistoryHead} from './local-history';
+import {parseJsx,stampNodeIds,stampNodeIdsInPlace} from '../../app/lib/cli-toolkit';
 import {stateFor,readState} from './state-access';
 import {workspaceStateEnv} from './config';
 import {atomicWrite,digest,privateDirectory,readOptional} from './files';
@@ -76,7 +77,7 @@ export async function registerLocalFiles(workspace:Workspace,inputs:string[],opt
  return withLocalLock(workspace.root,async()=>{
   const {root}=workspace;await recoverLocalFiles(root);
   const known=await localReferenceMap(root),byPath=new Map(Object.entries(known).map(([id,path])=>[path,id]));
-  const assigned:Record<string,string>={},trusted=new Map<string,boolean>(),changes:FileChange[]=[];
+  const assigned:Record<string,string>={},trusted=new Map<string,boolean>(),changes:FileChange[]=[],identifiedBodies:Array<{path:string;before:Buffer;after:Buffer}>=[];
   for(const input of [...new Set(inputs)]){
    const full=await confinedPath(root,resolve(workspace.cwd,input)),path=relative(root,full).split(sep).join('/');
    if(path.split('/').includes('.artifactbin'))throw new CliError('invalid_path','Workspace state cannot be registered as document content.');
@@ -91,10 +92,18 @@ export async function registerLocalFiles(workspace:Workspace,inputs:string[],opt
    if(!id){do{id=randomBytes(9).toString('base64').replace(/[^A-Za-z0-9]/g,'').slice(0,6);}while(id.length!==6||known[id]);}
    known[id]=path;byPath.set(path,id);assigned[path]=id;
    trusted.set(path,!metadata?.id||options.intent!=='automatic'||(await localWorkspaceState(root)).get<{trusted?:boolean}>(LOCAL_WORKSPACE_SCOPE,'draft-identity',path)?.value.trusted===true);
-   if(document&&!document.metadata.id)changes.push({path,before:digest(bytes),data:Buffer.from(writeDocument({...document,metadata:{...document.metadata,id}}))});
+   // Entering the workspace is where a document gets its node ids, in the same journaled write as its identity.
+   const identified=document?identifiedLocalBody(await localWorkspaceState(root),path,document.body):null;
+   if(document&&(!document.metadata.id||identified!==null)){
+    const data=Buffer.from(writeDocument({metadata:{...document.metadata,id},body:identified??document.body}));
+    changes.push({path,before:digest(bytes),data});
+    // As a save does: the stamped file becomes the acknowledged head later re-stamps carry ids from, and the bytes as written stay in history.
+    if(identified!==null)identifiedBodies.push({path,before:bytes,after:data});
+   }
    if(resource&&!resource.id)changes.push({path,before:digest(bytes),data:Buffer.from(writeResourceFile({...resource,id}))});
   }
   await stageLocalFiles(root,changes,state=>{
+   for(const body of identifiedBodies)recordLocalHistory(state,body.path,body.before,body.after);
    if(workspace.tracking){
     state.put(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE,{server:workspace.tracking.server,account:workspace.tracking.account});
     for(const [path,tracked] of Object.entries(workspace.tracking.files))state.put(LOCAL_WORKSPACE_SCOPE,'tracked',path,tracked);
@@ -113,6 +122,42 @@ export async function migrateLocalDiscussion(root:string,home:string,portable:St
  const legacy=await readState(home);if(!legacy||legacy.path===portable.path)return;
  const kinds=['preview-thread','preview-thread-request','preview-comment'] as const;
  portable.transaction(()=>{for(const kind of kinds)for(const row of legacy.list(root,kind))if(!portable.get(LOCAL_WORKSPACE_SCOPE,kind,row.key))portable.put(LOCAL_WORKSPACE_SCOPE,kind,row.key,row.value);portable.put(LOCAL_WORKSPACE_SCOPE,'archive','migration/discussion',{done:true});});
+}
+/**
+ * The one owner of local node identity: every body element of a workspace JSX document carries a durable
+ * `id`, on disk, whoever wrote the file, so anything in it can take a comment. Ids already present are kept;
+ * an element an outside rewrite stripped of its id gets back the one it had in `previous` (by default the last
+ * version the workspace acknowledged, its history head) when its content is unchanged; fresh ids never reuse
+ * one a local thread still names. Ids are written into the source as the author wrote it: nothing else
+ * changes. Returns the stamped body, or null when nothing needs an id, the body does not parse (the caller's
+ * own validation reports that) or it is a `<Dataset>` definition, which is a table schema, not a document.
+ */
+export function identifiedLocalBody(store:State,path:string,body:string,previous:string|null=localHistoryHeadBody(store,path)):string|null{
+ if(body.trimStart().startsWith('<Dataset')||!parseJsx(body).ok)return null;
+ const reservedIds=new Set<string>();
+ for(const kind of ['preview-thread','preview-comment'] as const)for(const row of store.list<{file?:string;node?:string}>(LOCAL_WORKSPACE_SCOPE,kind))if(row.value?.file===path&&typeof row.value.node==='string')reservedIds.add(row.value.node);
+ const stamped=stampNodeIdsInPlace(body,{previousSource:previous!==null&&parseJsx(previous).ok?previous:null,reservedIds});
+ return stamped.minted||stamped.carried||stamped.repairs.length?stamped.source:null;
+}
+/** True when some body element of a parseable `body` lacks a valid, unique id: the cheap check before taking the lock. */
+export function needsNodeIds(body:string):boolean{
+ if(body.trimStart().startsWith('<Dataset')||!parseJsx(body).ok)return false;
+ const stamped=stampNodeIds(body);return stamped.minted>0||stamped.repairs.length>0;
+}
+/**
+ * Persist `identifiedLocalBody` through the guarded, history-keeping save. False when the file needed nothing.
+ * `acknowledge`: the file as it now stands also becomes the acknowledged head, because something outside the
+ * file (a publication) is about to name its ids; a later outside rewrite then carries them.
+ */
+export async function identifyLocalDocument(root:string,path:string,options:{acknowledge?:boolean}={}):Promise<boolean>{
+ return withLocalLock(root,async()=>{
+  await recoverLocalFiles(root);
+  const bytes=await readFile(await confinedPath(root,path)),document=parseDocument(bytes.toString());
+  const body=identifiedLocalBody(await localWorkspaceState(root),path,document.body);
+  if(body!==null)await saveLocalFile(root,path,digest(bytes),Buffer.from(writeDocument({...document,body})));
+  else if(options.acknowledge)await localHistoryHead(root,path);
+  return body!==null;
+ });
 }
 /** Local saves retain the previous bytes in the workspace's recovery history. */
 export async function saveLocalFile(root:string,path:string,before:string,data:Buffer):Promise<void>{

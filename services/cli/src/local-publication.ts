@@ -1,7 +1,7 @@
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import {accountMismatch} from './account-diagnostic';
 import {prepareBindings,assertBindingInputs,installBindings,deliverBound,finalizeBindings,projectBindingConflicts} from './publication-binding';
-import {withLocalLock} from './local-workspace';
+import {withLocalLock,identifyLocalDocument} from './local-workspace';
 /**
  * Offline drafts publish through a recoverable projection and retain their local IDs.
  * Published authoring files retain their remote identity and accepted baseline.
@@ -183,6 +183,9 @@ async function publishProjection(workspace:Workspace,paths:string[],client:HttpC
  for(const [localId,remoteId] of Object.entries(stored?.ids??{}))if(identities[localId]&&!identities[remoteId])aliases[remoteId]=identities[localId]!;
  const graph=await dependencies(workspace,paths,{...aliases,...identities}),ordered=graph.paths;
  if(options.dryRun)return{dry_run:true,local_only:true,operations:ordered.map(path=>({path,status:'would_publish'}))};
+ // The author's file carries the element ids it publishes with, so the published source never diverges from it
+ // on identity and a later local edit does not overlap publication normalization.
+ for(const path of ordered)if(extname(path).toLowerCase()==='.jsx')await identifyLocalDocument(workspace.root,path,{acknowledge:true});
 
  if(stored&&(stored.format!==1||typeof stored.server!=='string'||typeof stored.account!=='string'||!stored.account))throw new CliError('invalid_journal','This publication copy has invalid ownership metadata.');
  if(workspace.tracking&&!client.sameServer(workspace.tracking.server))throw new CliError('wrong_server','The authoring baseline belongs to another server.');

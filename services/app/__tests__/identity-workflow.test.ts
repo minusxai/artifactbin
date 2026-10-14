@@ -89,7 +89,10 @@ it('previews unpublished document and dataset IDs locally with no server reads',
   expect((await result.json()).tables?.sales?.rows).toEqual([{total:42}]);
   const link=await fetch(session.url+'/a/'+appendix,{redirect:'manual'});expect(link.status).toBe(302);expect(link.headers.get('location')).toBe('/workspace/appendix.jsx');
   const pictureResponse=await fetch(session.url+'/remote/'+picture);expect(pictureResponse.status).toBe(200);expect(Buffer.from(await pictureResponse.arrayBuffer())).toEqual(Buffer.from([1,2,3]));
-  expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toBe(source);
+  // Preview gives every element an id on disk (so it can take a comment) and changes nothing else.
+  const previewed=await readFile(join(cli.root,'report.jsx'),'utf8');
+  expect(previewed).toMatch(/<a href="\/a\/[^"]+" id="[A-Za-z][A-Za-z0-9]{3}">Appendix<\/a><img src="ref:[^"]+" alt="Picture" id="[A-Za-z][A-Za-z0-9]{3}" \/>$/);
+  expect(previewed.replace(/ id="[A-Za-z][A-Za-z0-9]{3}"/g,'')).toBe(source);
  }finally{await session?.close();await cli.cleanup();}
 });
 
@@ -153,14 +156,17 @@ it('CLI add, preview mapping and push preserve a registered dependency graph thr
   await writeFile(join(cli.root,'sales.csv'),'amount\n42\n');await writeFile(join(cli.root,'report.jsx'),'<p>Draft</p>');
   const ids=await cli.invoke(['add','sales.csv','report.jsx']);
   expect(ids['sales.csv']).toMatch(/^[A-Za-z0-9]{6}$/);expect(await cli.invoke(['add','sales.csv','report.jsx'])).toEqual(ids);
-  const source=(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('<p>Draft</p>',`<Helmet><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select * from sales_data.rows\`}</Query></Helmet><p>Sales</p>`);
+  const source=(await readFile(join(cli.root,'report.jsx'),'utf8')).replace(/<p id="[A-Za-z][A-Za-z0-9]{3}">Draft<\/p>/,`<Helmet><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select * from sales_data.rows\`}</Query></Helmet><p>Sales</p>`);
   await writeFile(join(cli.root,'report.jsx'),source);
   await cli.invoke(['push','report.jsx']);
   const mapping=(await publication(cli.root)).ids;
   expect((await(await getDb()).query('SELECT id FROM artifacts ORDER BY id')).rows.map(row=>row.id)).toEqual(Object.values(mapping).sort());
   const remote=await(await read(request('/api/artifacts/'+mapping[ids['report.jsx']],{token:token.token}),{params:Promise.resolve({id:mapping[ids['report.jsx']]})})).json();
   expect(remote.markup).toContain('ref:'+mapping[ids['sales.csv']]);expect(remote.markup).not.toContain('ref:'+ids['sales.csv']);
-  expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toBe(source);
+  // The author's file keeps its local references and gains only the element id it published with.
+  const authored=await readFile(join(cli.root,'report.jsx'),'utf8');
+  expect(authored).toMatch(/<\/Helmet><p id="[A-Za-z][A-Za-z0-9]{3}">Sales<\/p>$/);expect(authored.replace(/ id="[A-Za-z][A-Za-z0-9]{3}"/g,'')).toBe(source);
+  expect(remote.markup).toContain(/<p id="[A-Za-z][A-Za-z0-9]{3}">Sales<\/p>/.exec(authored)![0]);
   await writeFile(join(cli.root,'bare.jsx'),'<p>Registered draft</p>');
   const bare=await cli.invoke(['add','bare.jsx']);
   const pushed=await cli.invoke(['push']);const bareRemote=(await publication(cli.root)).ids[bare['bare.jsx']];expect(pushed.operations.some((op:{id?:string})=>op.id===bareRemote)).toBe(true);expect(bareRemote).not.toBe(bare['bare.jsx']);
@@ -219,7 +225,10 @@ it('publishes mutually linked local documents with stable mapped IDs through a l
   const creates=calls.filter(call=>call.method==='POST'&&call.path==='/api/artifacts').map(call=>(call.body as {reserved_id:string}).reserved_id);
   expect(creates.indexOf(mapped[ids['sales.csv']])).toBeLessThan(creates.indexOf(mapped[ids['b.jsx']]));expect(creates.filter(id=>id===mapped[ids['b.jsx']])).toHaveLength(2);expect(new Set(creates).size).toBe(3);
   const count=calls.length;await cli.invoke(['push','a.jsx']);expect(calls.slice(count).map(call=>`${call.method} ${call.path}`)).toEqual(['GET /api/artifacts']);expect((await publication(cli.root)).ids).toEqual(mapped);
-  expect(await Promise.all(['a.jsx','b.jsx','sales.csv'].map(file=>readFile(join(cli.root,file),'utf8')))).toEqual(originals);
+  // The originals keep their local references; publishing added only the appended links' element ids.
+  const after=await Promise.all(['a.jsx','b.jsx','sales.csv'].map(file=>readFile(join(cli.root,file),'utf8')));
+  for(const source of after.slice(0,2))expect(source).toMatch(/<a href="\/a\/[A-Za-z0-9]{6}" id="[A-Za-z][A-Za-z0-9]{3}">Other<\/a>/);
+  expect(after.map(source=>source.replace(/(<a href="[^"]+") id="[A-Za-z][A-Za-z0-9]{3}"/,'$1'))).toEqual(originals);
  }finally{await cli.cleanup();}
 });
 it('refuses cyclic dataset dependencies before reserving or publishing and preserves local files',async()=>{

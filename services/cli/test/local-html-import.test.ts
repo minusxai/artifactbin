@@ -36,3 +36,11 @@ test('merges independent metadata edits and rejects title conflicts without losi
  const divergent=structuredClone(initial);divergent.metadata.title='Offline title';await writeFile(join(root,'input.html'),html(divergent));await assert.rejects(importLocalHtml(workspace,'input.html','report.jsx'),/metadata.*title/i);assert.match(await readFile(join(root,'report.jsx'),'utf8'),/title: Local/);
 }));
 test('validates the complete optional metadata baseline before importing an HTML payload',()=>{for(const metadataBaseline of [{title:'bad'},{title:'ok',description:null,theme:null,template:null,colorMode:'invalid'},{title:'ok',description:null,theme:null,template:null,colorMode:null,unexpected:'ignored'}]){const value=file();Object.assign(value.localWorkspace!,{metadataBaseline});assert.throws(()=>readArtifactFileHtml(html(value)),/damaged/i);}});
+test('an offline copy written without ids imports with an id on every element, and importing it again is not a conflict',()=>fixture(async(root,workspace)=>{
+ const bare='<main><h1>Fresh</h1><p>Body <b>bold</b></p></main>';const value=file(bare);value.base.source=bare;value.localWorkspace!.baseDigest=sourceDigest(bare);
+ await writeFile(join(root,'input.html'),html(value));await importLocalHtml(workspace,'input.html','fresh.jsx');
+ const imported=await readFile(join(root,'fresh.jsx'),'utf8');
+ assert.deepEqual([...imported.matchAll(/<(\w+) id="[A-Za-z][A-Za-z0-9]{3}"/g)].map(match=>match[1]),['main','h1','p','b'],imported);
+ await importLocalHtml(workspace,'input.html','fresh.jsx');
+ assert.equal(await readFile(join(root,'fresh.jsx'),'utf8'),imported,'the same offline copy imports to the same ids');
+}));

@@ -26,7 +26,9 @@ const ids=await new Promise<Record<string,string>>((resolve,reject)=>{
 });
 const registered=(await readFile(join(root,'report.jsx'),'utf8'));
 await writeFile(join(root,'covers.csv'),'id,title,cover_ref\n'+['red','blue'].map(color=>`${color},${color},ref:${ids[color+'-cover.png']}`).join('\n')+'\n');
-await writeFile(join(root,'report.jsx'),registered.replace('<p>Draft</p>',`<Helmet><Value name="minimum" type="number" default={0} /><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows where amount > $minimum\`}</Query></Helmet><div><a href="/a/${ids['appendix.jsx']}">Local appendix</a><img src="ref:${ids['pixel.png']}" alt="Local image" /><p id="text">Draft paragraph</p><Select label="Minimum" value="$minimum" options={[{"label":"All","value":0},{"label":"Above fifteen","value":15}]} /><Number data="$sales" col="total" agg="sum" /></div>`));
+// `add` gave the paragraph its node id; the document is rewritten around it.
+assert.match(registered,/<p id="[A-Za-z][A-Za-z0-9]{3}">Draft<\/p>/);
+await writeFile(join(root,'report.jsx'),registered.replace(/<p id="[A-Za-z][A-Za-z0-9]{3}">Draft<\/p>/,`<Helmet><Value name="minimum" type="number" default={0} /><Import name="sales_data" src="ref:${ids['sales.csv']}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows where amount > $minimum\`}</Query></Helmet><div><a href="/a/${ids['appendix.jsx']}">Local appendix</a><img src="ref:${ids['pixel.png']}" alt="Local image" /><p id="text">Draft paragraph</p><Select label="Minimum" value="$minimum" options={[{"label":"All","value":0},{"label":"Above fifteen","value":15}]} /><Number data="$sales" col="total" agg="sum" /></div>`));
 async function launch(port=0){
  const args=['preview',ids['report.jsx']!,'published.jsx','--port',String(port),'--json'];
  const child=spawn(process.execPath,[entry,...args],{cwd:root,env:environment,stdio:['ignore','pipe','pipe','ipc']});
@@ -147,9 +149,19 @@ try{
  await b.getByRole('textbox').last().fill('Persistent note');
  await b.getByRole('button',{name:'Save annotation'}).click();
  await b.getByText('Persistent note',{exact:true}).first().waitFor();
+ // The image was written after `add`, without an id: preview gave it one on disk, so it takes a comment too.
+ const imageId=/<img src="ref:[^"]+" alt="Local image" id="([A-Za-z][A-Za-z0-9]{3})"/.exec(await readFile(join(root,'report.jsx'),'utf8'))?.[1];
+ assert.ok(imageId,'the id-less image carries a durable id on disk');
+ await b.locator('[aria-label="Select tool active"]').evaluate(element=>element.remove()).catch(()=>{});
+ await b.getByRole('img',{name:'Local image'}).click();
+ await b.getByRole('textbox').last().fill('Image note');
+ await b.getByRole('button',{name:'Save annotation'}).click();
+ await b.getByText('Image note',{exact:true}).first().waitFor();
  const port=Number(new URL(server.url).port);await server.close();server=await launch(port);
- await b.reload();await b.getByRole('button',{name:'Comment',exact:true}).click();await b.getByText('Persistent note',{exact:true}).first().waitFor();
- console.log('PASS production comments survive process restart with the same node anchor');
+ await b.reload();await b.getByRole('button',{name:'Comment',exact:true}).click();await b.getByText('Persistent note',{exact:true}).first().waitFor();await b.getByText('Image note',{exact:true}).first().waitFor();
+ const threads=await(await b.request.post(server.url+'/editor',{data:{file:'report.jsx',operation:'annotations.list',status:'open'}})).json();
+ assert.deepEqual(threads.map((thread:{anchor:{nodeId:string}|null;orphaned:boolean})=>[thread.anchor?.nodeId,thread.orphaned]).sort(),[[imageId,false],['text',false]].sort());
+ console.log('PASS production comments, on an authored id and on an element written without one, survive process restart with the same node anchor');
  await a.goto(server.url+'/?file=published.jsx');await a.locator('#text').filter({hasText:'Published local draft'}).waitFor();
  await a.getByRole('button',{name:'Edit',exact:true}).click();
  await a.getByRole('tab',{name:'Edit the source',exact:true}).click();
