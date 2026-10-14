@@ -8,7 +8,7 @@
  * comment, the chevron folds the conversation — all per viewer (lib/comment-folds). A resolved card
  * is muted until hovered or focused, and says what it was about when the document no longer can.
  */
-import { createEffect, createSignal, For, lazy, on, onCleanup, Show, Suspense, type JSX } from 'solid-js';
+import { createEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, Show, Suspense, type JSX } from 'solid-js';
 import Check from 'lucide-solid/icons/check';
 import ChevronDown from 'lucide-solid/icons/chevron-down';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
@@ -260,14 +260,16 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                       </Button>
                     </Tooltip>
                   );
-                  return <Suspense fallback={trigger()}>
+                  // A chunk that cannot be fetched (the local preview restarted while it loaded, a dropped connection) leaves the
+                  // trigger standing, unavailable until the page loads again, instead of an uncaught error.
+                  return <ErrorBoundary fallback={trigger({ disabled: true })}><Suspense fallback={trigger()}>
                     <Menu label={index() === 0 ? 'Annotation action menu' : 'Comment action menu'}
                       items={[
                         ...(canEdit(c()) ? [{ label: 'Edit comment', text: 'edit', icon: () => <Pencil size={12} strokeWidth={1.75} />, disabled: props.busy || saving(), onSelect: () => startEdit(c()) }] : []),
                         ...(canDelete(c()) ? [{ label: index() === 0 ? 'Delete thread' : 'Delete comment', text: index() === 0 ? 'delete thread' : 'delete comment', icon: () => <Trash2 size={12} strokeWidth={1.75} />, danger: true, disabled: props.busy, onSelect: () => props.onDelete(c().id) }] : []),
                       ]}
                       trigger={(attrs) => trigger(attrs)} />
-                  </Suspense>;
+                  </Suspense></ErrorBoundary>;
                 })()}
               </Show>
             </div>
