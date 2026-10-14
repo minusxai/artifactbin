@@ -167,7 +167,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    const chunks:Buffer[]=[];let length=0;
    for await(const chunk of req){const bytes=Buffer.from(chunk);length+=bytes.length;if(length>2*PREVIEW_CONNECT_MAX_BYTES)throw new Refusal(413,'Body too large');chunks.push(bytes);}
    let input:unknown;try{input=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new Refusal(400,'Invalid import offer');}
-   if(target.pathname===PREVIEW_CONNECT_INSPECT_PATH){const {html:_html,...inspected}=await inspectPreviewOffer(input,root);return json(inspected);}
+   if(target.pathname===PREVIEW_CONNECT_INSPECT_PATH){const {html:_html,filename:_filename,...inspected}=await inspectPreviewOffer(input,root);return json(inspected);}
    return json(await serial(async()=>{const imported=await importPreviewOffer(root,home,input);await admitImport(imported.path);return {...imported,file:imported.path,path:'/workspace/'+imported.path.split('/').map(encodeURIComponent).join('/')};}));
   }
   const workspaceFile=target.pathname.startsWith('/workspace/')?decodeURIComponent(target.pathname.slice('/workspace/'.length)):null;

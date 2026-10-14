@@ -12,7 +12,7 @@ import {parseDocument,writeDocument} from './document';
 import {previewAnnotations} from './preview/annotations';
 import {localWorkspaceState,LOCAL_WORKSPACE_SCOPE,registerLocalFiles,withLocalLock,recoverLocalFiles,migrateLocalDiscussion,saveLocalFile,identifiedLocalBody} from './local-workspace';
 import type {Workspace} from './workspace';
-import {digest} from './files';
+import {digest,readOptional} from './files';
 import {localHistoryHead} from './local-history';
 
 /**
@@ -126,4 +126,21 @@ export async function localDeleteComments(workspace:Workspace,container:string,i
   }
   return {value:{local:true,...(options.dryRun?{dry_run:true}:{}),operations},exitCode:failed?1:0};
  });
+}
+/**
+ * Comments on never-published local JSX belong to the workspace even before the directory is one: the
+ * comment registers its file through the same owner `afbin add` and preview use (local-workspace), so a
+ * fresh directory needs no server, sign-in or prior add. A URL, an id, a tracked file or a pulled copy that
+ * carries a published head keeps the hosted path.
+ */
+export async function offlineCommentTargets(workspace:Workspace,refs:string[]):Promise<boolean>{
+ if(!refs.length)return false;
+ for(const input of refs){
+  if(/^https?:\/\//i.test(input))return false;
+  let ref;try{ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,writable:true});}catch{return false;}
+  if(ref.kind!=='path'||ref.version!==undefined||!ref.path.toLowerCase().endsWith('.jsx')||workspace.tracking?.files[ref.path])return false;
+  const bytes=await readOptional(await confinedPath(workspace.root,ref.path));
+  if(!bytes||parseDocument(bytes.toString()).metadata.head_version!==undefined)return false;
+ }
+ return true;
 }

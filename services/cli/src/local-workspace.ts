@@ -30,22 +30,29 @@ async function marker(root:string):Promise<WorkspaceMarker|null>{
  return value;
 }
 /**
- * THE NEAREST WORKSPACE, WITHIN BOUNDS. The working directory itself is always eligible; discovery then
- * climbs, but never past a git repository's root and never into a directory nobody's project lives in:
- * HOME (whose `.artifactbin` is the CLI's own state), the shared temp roots, a directory another user
- * owns, or the filesystem root. A stale marker in /private/tmp once adopted every scratch directory below it.
+ * WHERE A WORKSPACE MAY BE FOUND: the working directory, then each ancestor discovery may climb to, nearest
+ * first. The climb never passes a git repository's root and never enters a directory nobody's project lives
+ * in: HOME (whose `.artifactbin` is the CLI's own state), the shared temp roots, a directory another user owns,
+ * or the filesystem root; nor does it leave or enter workspace state (`.artifactbin`). A stale marker in
+ * /private/tmp once adopted every scratch directory below it. Both discoveries — the portable marker and the
+ * home-store record — walk exactly this list.
  */
-export async function findLocalWorkspace(cwd:string,home:string=homedir()):Promise<string|null>{
+export async function workspaceCandidates(cwd:string,home:string=homedir()):Promise<string[]>{
  const boundaries=new Set<string>();
  for(const path of new Set([home,homedir(),tmpdir(),'/tmp','/var/tmp']))try{boundaries.add(await realpath(path));}catch{/* An absent directory bounds nothing. */}
- const uid=process.getuid?.();
+ const uid=process.getuid?.(),candidates:string[]=[];
  let root=await realpath(cwd);
  for(let first=true;;first=false,root=dirname(root)){
-  if(basename(root)==='.artifactbin')return null;
-  if(!first&&(boundaries.has(root)||uid!==undefined&&(await stat(root)).uid!==uid))return null;
-  if(await marker(root))return root;
-  if(dirname(root)===root||await readOptionalStat(join(root,'.git')))return null;
+  if(basename(root)==='.artifactbin')return candidates;
+  if(!first&&(boundaries.has(root)||uid!==undefined&&(await stat(root)).uid!==uid))return candidates;
+  candidates.push(root);
+  if(dirname(root)===root||await readOptionalStat(join(root,'.git')))return candidates;
  }
+}
+/** The nearest directory holding a workspace marker, within `workspaceCandidates`. */
+export async function findLocalWorkspace(cwd:string,home:string=homedir()):Promise<string|null>{
+ for(const root of await workspaceCandidates(cwd,home))if(await marker(root))return root;
+ return null;
 }
 const readOptionalStat=async(path:string)=>{try{return await lstat(path);}catch(error){if(isMissing(error))return null;throw error;}};
 export async function localWorkspaceState(root:string):Promise<State>{

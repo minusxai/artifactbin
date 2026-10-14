@@ -54,7 +54,9 @@ export async function localIdentityOwner(root:string,id:string):Promise<string|u
 }
 
 /** Applies source, assets, identities and comments in one replayable workspace journal. */
-export async function importLocalHtml(workspace:Workspace,input:string,target?:string):Promise<{path:string;assets:string[];comments:number}>{
+/** Where an import came from: the CLI (a path the person typed) or the preview's import dialog (a file they chose). */
+export type ImportOrigin={via:'cli'}|{via:'preview';filename:string};
+export async function importLocalHtml(workspace:Workspace,input:string,target?:string,origin:ImportOrigin={via:'cli'}):Promise<{path:string;assets:string[];comments:number}>{
  workspace={...workspace,root:await realpath(workspace.root),cwd:await realpath(workspace.cwd)};
  const inputPath=await confinedPath(workspace.root,resolve(workspace.cwd,input));
  if((await stat(inputPath)).size>MAX_BYTES)throw damaged('The HTML file exceeds the 25 MB import limit.');
@@ -79,7 +81,9 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
   const identity=provenance?.documentId??(current?.metadata.id||randomBytes(3).toString('hex'));
   const registered=state.list<{id:string}>(scope,'draft-identity');
   const holder=registered.find(row=>row.value.id===identity&&row.key!==path)?.key;
-  if(holder)throw new CliError('duplicate_identity',`This offline file is a copy of ${holder} (identity ${identity}); importing it as ${path} would give two files one identity.`,`Import it into ${holder} to reconcile that copy: afbin import ${quoted(input)} --output ${quoted(holder)}.`);
+  // The preview stages the chosen file under a temporary name: speak of the file the person chose, and the dialog they are in.
+  if(holder)throw new CliError('duplicate_identity',`${origin.via==='preview'?origin.filename:'This offline file'} is a copy of ${holder} (identity ${identity}); importing it as ${path} would give two files one identity.`,
+   origin.via==='preview'?`In the import dialog, choose ${holder} as the file to import into; that reconciles your copy with it.`:`Import it into ${holder} to reconcile that copy: afbin import ${quoted(input)} --output ${quoted(holder)}.`);
   const preserveConflict=async(reason:string):Promise<never>=>{
    const directory=await confinedPath(workspace.root,'.artifactbin/conflicts');await privateDirectory(directory);
    const saved=join(directory,randomUUID()+'.html');await atomicWrite(saved,html,{exclusive:true});

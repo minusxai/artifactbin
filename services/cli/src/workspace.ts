@@ -1,9 +1,9 @@
 import {isProgramFile,programFileBytes} from './program-file';
-import {findLocalWorkspace,readLocalWorkspaceState,localReferenceMap,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
+import {findLocalWorkspace,workspaceCandidates,readLocalWorkspaceState,localReferenceMap,LOCAL_WORKSPACE_SCOPE} from './local-workspace';
 /**
  * A workspace is a directory the CLI has registered in its own store. No file is
- * ever written into it to mark it: discovery walks up from the working directory
- * and stops at the nearest ancestor that holds a `workspace` record.
+ * ever written into it to mark it: discovery walks up from the working directory, within the
+ * bounds of `workspaceCandidates`, and stops at the nearest ancestor that holds a `workspace` record.
  *
  * Tracking is hashes, not bytes. `TrackedFile.file` is the sha256 of the local
  * bytes last accepted, and the base text a diff or a merge needs is derived from
@@ -65,6 +65,7 @@ const hash=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value
 export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Workspace>{
  cwd=await realpath(cwd);
  const state=await readState(home);
+ const candidates=await workspaceCandidates(cwd,home);
  const portableRoot=await findLocalWorkspace(cwd,home);
  const portable=portableRoot?await readLocalWorkspaceState(portableRoot):null;
  const portableIntent=portable?.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current')?.value;
@@ -77,7 +78,7 @@ export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Wo
   portable.delete(LOCAL_WORKSPACE_SCOPE,'archive','tracking-to-home/current');
  }
  const activeState=state??(portableIntent?await readState(home):null);
- const legacy=activeState?.nearestWorkspace<WorkspaceRecord>(cwd);
+ const legacy=activeState?.nearestWorkspace<WorkspaceRecord>(candidates);
  if(state&&portable&&legacy?.root===portableRoot)await mirrorTracking(state,legacy.root,portable);
  const found=legacy&&(!portableRoot||legacy.root===portableRoot)?legacy:portableRoot&&portable?.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)?{root:portableRoot,value:portable.get<WorkspaceRecord>(LOCAL_WORKSPACE_SCOPE,'workspace',LOCAL_WORKSPACE_SCOPE)!.value}:null;
  if(state&&portable&&legacy?.root===portableRoot&&!portable.list(LOCAL_WORKSPACE_SCOPE,'archive').some(row=>row.key.startsWith('publication-finalize/')||row.key==='workspace-rebind/current')){

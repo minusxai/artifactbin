@@ -14,8 +14,8 @@ import {saveLocalFile,localWorkspaceState,LOCAL_WORKSPACE_SCOPE} from '../src/lo
 import {previewAnnotations} from '../src/preview/annotations';
 import {parseDocument} from '../src/document';
 import {importLocalHtml} from '../src/local-html-import';
-import {inspectPreviewOffer} from '../src/preview/connect-import';
-import {loadWorkspace} from '../src/workspace';
+import {inspectPreviewOffer,importPreviewOffer} from '../src/preview/connect-import';
+import {loadWorkspace,saveTracking} from '../src/workspace';
 import {sourceDigest,type ArtifactFile} from '../../app/lib/cli-toolkit';
 
 async function sandbox(run:(root:string,home:string)=>Promise<void>){
@@ -164,4 +164,37 @@ test('CLI comments without --agent are attributed to the CLI, not to the browser
  assert.equal(created.code,0,created.out+created.err);
  const author=created.json.thread[0].author;
  assert.equal(author.kind,'agent');assert.notEqual(author.transport,'browser');assert.notEqual(author.label,'You');
+}));
+
+test('a local .jsx in a directory that is not yet a workspace takes comments offline, as add or preview would make it',()=>sandbox(async(root,home)=>{
+ await writeFile(join(root,'doc.jsx'),DOC);
+ const created=await cli(root,home,['comment','doc.jsx','--node','para','--body','First note','--json']);
+ assert.equal(created.code,0,created.out+created.err);assert.equal(created.json.local,true);assert.equal(created.json.thread[0].body,'First note');
+ const listed=await cli(root,home,['comment','doc.jsx','--json']);
+ assert.deepEqual(listed.json.annotations.map((a:any)=>a.thread[0].body),['First note']);
+ assert.equal((await loadWorkspace(root,home)).root,root,'the directory is now the workspace');
+ for(const run of [created,listed])assert.deepEqual(run.sent,[]);
+}));
+
+test('the home-store workspace climb stops at a git root and at HOME, like the marker climb',()=>sandbox(async(root,home)=>{
+ await saveTracking(await loadWorkspace(root,home),{server:'https://one.example',account:'usr_one'});
+ const nested=join(root,'notes');await mkdir(nested);
+ assert.equal((await loadWorkspace(nested,home)).root,root,'an ordinary subdirectory still finds its workspace');
+ const repo=join(root,'repo'),inside=join(repo,'src');await mkdir(join(repo,'.git'),{recursive:true});await mkdir(inside);
+ const bounded=await loadWorkspace(inside,home);assert.equal(bounded.root,inside);assert.equal(bounded.tracking,null);
+ await saveTracking(await loadWorkspace(home,home),{server:'https://one.example',account:'usr_one'});
+ const below=join(home,'projects');await mkdir(below);
+ const underHome=await loadWorkspace(below,home);assert.equal(underHome.root,below);assert.equal(underHome.tracking,null);
+}));
+
+test('a preview import conflict names the person\'s file and what to do in the browser, never the temporary upload',()=>sandbox(async(root,home)=>{
+ await writeFile(join(root,'download.jsx.html'),offlineHtml(offlineFile()));
+ assert.equal((await importLocalHtml(await loadWorkspace(root,home),'download.jsx.html','fresh.jsx')).path,'fresh.jsx');
+ await assert.rejects(importPreviewOffer(root,home,{html:offlineHtml(offlineFile()),filename:'Report (1).jsx.html',target:'other.jsx'}),(error:any)=>{
+  assert.equal(error.code,'duplicate_identity');
+  assert.match(error.message,/Report \(1\)\.jsx\.html is a copy of fresh\.jsx/);
+  assert.doesNotMatch(error.message+error.fix,/\.artifactbin|imports\//);
+  assert.match(error.fix,/choose fresh\.jsx as the file to import into/);
+  return true;
+ });
 }));

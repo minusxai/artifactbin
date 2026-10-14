@@ -58,15 +58,17 @@ test('a transaction commits all writes or none, and a nested transaction joins t
   } finally { state.close(); }
 }));
 
-test('workspace discovery finds the nearest registered ancestor and nothing else', fixture(async home => {
+test('workspace discovery finds the nearest registered candidate and nothing else', fixture(async home => {
   const state = await State.open(home);
   try {
-    assert.equal(state.nearestWorkspace('/repo/docs/deep'), null);
+    // The candidates are local-workspace's bounded climb, nearest first.
+    assert.equal(state.nearestWorkspace(['/repo/docs/deep', '/repo/docs', '/repo']), null);
     state.put('/repo', 'workspace', '/repo', {server: 'https://example.com', account: 'usr_one'});
     state.put('/repo/docs', 'workspace', '/repo/docs', {server: 'https://example.com', account: 'usr_two'});
-    assert.deepEqual(state.nearestWorkspace('/repo/docs/deep'), {root: '/repo/docs', value: {server: 'https://example.com', account: 'usr_two'}});
-    assert.deepEqual(state.nearestWorkspace('/repo/src')?.root, '/repo');
-    assert.equal(state.nearestWorkspace('/elsewhere'), null);
+    assert.deepEqual(state.nearestWorkspace(['/repo/docs/deep', '/repo/docs', '/repo']), {root: '/repo/docs', value: {server: 'https://example.com', account: 'usr_two'}});
+    assert.deepEqual(state.nearestWorkspace(['/repo/src', '/repo'])?.root, '/repo');
+    assert.equal(state.nearestWorkspace(['/repo/src']), null, 'an ancestor beyond the bound is never adopted');
+    assert.equal(state.nearestWorkspace(['/elsewhere']), null);
   } finally { state.close(); }
 }));
 
