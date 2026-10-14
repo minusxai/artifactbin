@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {privateDirectories,privateDirectory} from '../src/private-directory';
 import {lockDirectory,privateStateDirectory,withStateLock} from '../src/state-lock';
+import {credentialPaths,privateCredentialStore,readCredentials,saveCredentials} from '../src/credentials';
 
 vi.mock('node:child_process',()=>({execFile:vi.fn()}));
 const spawn=vi.mocked(execFile) as unknown as ReturnType<typeof vi.fn>;
@@ -145,4 +146,23 @@ it.skipIf(process.platform==='win32')('keeps every Unix directory of a batch at 
  await privateStateDirectory(store);
  for(const path of[store,join(store,'locks')])expect((await stat(path)).mode&0o777).toBe(0o700);
  expect(launches()).toEqual([]);
+});
+it('saves a first credential on a fresh Windows home with one launch: store, locks, hosts and backing directory together',async()=>{
+ windows();const store=join(root,'home-store'),server='https://example.test',connection={server,token:'first_token'};
+ await saveCredentials(connection,store);
+ const {backingDirectory}=credentialPaths(server,store);
+ expect(launches()).toEqual([[keyDirectory,store,lockDirectory(store),join(store,'hosts'),backingDirectory]]);
+ expect(await readCredentials(server,store)).toEqual(connection);
+ await saveCredentials({...connection,token:'second_token'},store);expect(launches()).toHaveLength(1);
+});
+it('keeps a first sign-in to one launch when the store is prepared before its first write',async()=>{
+ windows();const store=join(root,'sign-in'),server='http://127.0.0.1:5020',connection={server,token:'signed_in'};
+ // The CLI's order: the server identity cache write (credential directories first, then the State), the auth
+ // lock, the pairing file's directory, then the credential save.
+ await privateCredentialStore(server,store);await privateStateDirectory(store);
+ await withStateLock(store,`auth:${server}`,async()=>{await privateDirectory(store);await saveCredentials(connection,store);});
+ expect(launches()).toHaveLength(1);
+ expect(await readCredentials(server,store)).toEqual(connection);
+ await privateCredentialStore(server,store);await withStateLock(store,`auth:${server}`,async()=>{await saveCredentials(connection,store);});
+ expect(launches()).toHaveLength(1);
 });

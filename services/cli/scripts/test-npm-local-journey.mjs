@@ -1,15 +1,14 @@
 /** CI-only complete journey through the actual installed npm entry, with no credentials or remote API. */
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,lstat,cp,rm,realpath} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,cp,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {execFileSync,spawn} from 'node:child_process';
-import {createHmac} from 'node:crypto';
+import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {chromium} from 'playwright';
 import {artifactFilePayload as payload} from './artifact-file-payload.mjs';
-import {powershellLaunchCounter} from './powershell-launch-counter.mjs';
+import {assertWindowsPrivate,powershellLaunchCounter} from './windows-private-state.mjs';
 const entry=resolve(process.argv[2]);
 const scratch=await realpath(await mkdtemp(join(tmpdir(),'afbin npm local é ')));
 const workspace=join(scratch,'workspace'),copy=join(scratch,'transferred'),recovery=join(scratch,'recovered'),connected=join(scratch,'connected');
@@ -44,33 +43,9 @@ async function windowsPrivateState(cwd,home,args){
  assert.equal(next.powershell,0,'a later command on a protected Windows home launches no PowerShell');
  // `add` makes exactly these private, in that one launch: the per-user key's directory, the workspace store
  // (localWorkspaceState and its State) and the store's lock directory (withLocalLock). It never opens the home store.
- const keyDirectory=join(home,'AppData','Local','artifactbin'),store=join(cwd,'.artifactbin');
- const directories=[keyDirectory,store,join(store,'locks')];
- const key=await readFile(join(keyDirectory,'private-directory.key'));assert.equal(key.length,32,'the per-user record key');
- for(const path of directories.slice(1)){
-  const info=await lstat(path,{bigint:true});assert.ok(info.isDirectory()&&!info.isSymbolicLink(),`${path} is a real directory`);
-  const signed=createHmac('sha256',key).update(`${info.dev}:${info.ino}:${info.birthtimeNs}`).digest('hex')+'\n';
-  assert.equal(await readFile(join(path,'.private-directory'),'utf8'),signed,`${path} carries a record signed for it`);
- }
- // .NET and [Console] only: no module autoload (this runner's PSModulePath belongs to PowerShell 7), no localized
- // names (SIDs), no output encoding of the non-ASCII paths (each line carries its index, not its path).
- const literal=path=>`'${path.replace(/'/g,"''")}'`;
- const acl=(index,expression)=>`$a=[IO.Directory]::GetAccessControl(${expression}); $r=@($a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|ForEach-Object{$_.IdentityReference.Value+'|'+$_.FileSystemRights+'|'+$_.InheritanceFlags+'|'+$_.IsInherited+'|'+$_.AccessControlType}); [Console]::Out.WriteLine('${index}'+[char]9+$a.AreAccessRulesProtected+[char]9+($r -join ';'))`;
- const script=[`$ErrorActionPreference='Stop'`,`[Console]::Out.WriteLine('user'+[char]9+[Security.Principal.WindowsIdentity]::GetCurrent().User.Value)`,
-  acl('profile',"[Environment]::GetFolderPath('LocalApplicationData')"),...directories.map((path,index)=>acl(index,literal(path)))].join('; ');
- const lines=Object.fromEntries(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{encoding:'utf8'})
-  .split(/\r?\n/).filter(Boolean).map(line=>{const [key,...rest]=line.split('\t');return [key,rest];}));
- const user=lines.user?.[0];assert.match(user??'',/^S-1-5-21-/,'the current user SID');
- const own=[`${user}|FullControl|ContainerInherit, ObjectInherit|False|Allow`,'S-1-5-18|FullControl|ContainerInherit, ObjectInherit|False|Allow'].sort();
- directories.forEach((path,index)=>{
-  const [protectedFlag,rules]=lines[index]??[];
-  assert.deepEqual({path,protected:protectedFlag,rules:(rules??'').split(';').filter(Boolean).sort()},{path,protected:'True',rules:own},'a private directory grants only its owner and SYSTEM');
- });
- // The key's parent is the user's AppData\Local: no broad group may reach it (Everyone, Authenticated Users, Users).
- const profile=(lines.profile?.[1]??'').split(';').filter(Boolean);
- assert.ok(profile.length>0,'AppData\\Local has readable rules');
- assert.deepEqual(profile.filter(rule=>/^(S-1-1-0|S-1-5-11|S-1-5-32-545)\|/.test(rule)&&rule.endsWith('|Allow')),[],`AppData\\Local grants a broad group: ${profile.join(', ')}`);
- console.log(JSON.stringify({windows_private_state:{fresh_ms:fresh.ms,fresh_powershell:fresh.powershell,next_ms:next.ms,next_powershell:next.powershell,protected:directories.length,local_app_data:profile}}));
+ const store=join(cwd,'.artifactbin'),directories=[store,join(store,'locks')];
+ const profile=await assertWindowsPrivate(home,directories);
+ console.log(JSON.stringify({windows_private_state:{fresh_ms:fresh.ms,fresh_powershell:fresh.powershell,next_ms:next.ms,next_powershell:next.powershell,protected:directories.length+1,local_app_data:profile}}));
  await launches.close();
  return fresh.output;
 }
