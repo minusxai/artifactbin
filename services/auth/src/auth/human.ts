@@ -175,7 +175,10 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
       // The client's address as the proxy in front of us reports it.
       ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
       database: { generateId: ({ model }) => (model === 'user' ? usrId() : anyId(model)) },
-      useSecureCookies: opts.secure ?? false,
+      // `__Host-` instead of Better Auth's own `__Secure-`: the browser then refuses any version of these cookies
+      // that carries a Domain, so no other host under the same site can plant or shadow the session.
+      useSecureCookies: false,
+      ...(opts.secure ? { cookiePrefix: '__Host-better-auth', defaultCookieAttributes: { secure: true } } : {}),
     },
     account: { accountLinking: { enabled: true, trustedProviders: trusted } },
     user: {
