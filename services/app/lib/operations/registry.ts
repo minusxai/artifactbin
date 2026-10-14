@@ -4,7 +4,7 @@ import { notificationJobStore, readDatasetPolicy, respondToMutate, writeDatasetP
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
 import {queryResourceForRequest} from './resource-query';
-import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction} from '@/lib/annotations';
+import {artifactWireFor,readArtifactSnapshot,respondToAnnotationAction,respondToAnnotationEdit} from '@/lib/annotations';
 import {decodePage, encodeCursor} from '@/lib/http/pagination';
 import {DATASET_OPERATIONS} from '@/lib/operations/datasets';
 import {ACCOUNT_OPERATIONS} from './account';
@@ -297,6 +297,28 @@ const annotateOp: Operation = {
     const reviewing=input.request_id!==undefined||input.phase!==undefined;
     if(reviewing&&(!input.request_id||!input.phase||!input.reply||!sessionId||!proof||ctx.author.kind!=='agent'))return reply({error:'invalid_review_receipt'},400);
     return fromResponse(await respondToAnnotationAction(input, ctx.actor, ctx.author, String(input.id), String(input.annotation_id),ctx.mutationReceipt,reviewing?{id:String(input.request_id),phase:input.phase as 'acknowledged'|'completed'|'blocked'|'failed',sessionId:sessionId!,proof:proof!}:undefined));
+  },
+};
+
+const editCommentOp: Operation = {
+  name: 'edit_comment',
+  title: 'Edit your comment',
+  http: { method: 'PATCH', path: '/api/artifacts/{id}/annotations/{comment_id}' },
+  description: 'Rewrite the text of a comment you wrote: a thread\'s first comment or a reply, open or resolved. Only its author may; the anchor, quote and image stay. Send the thread\'s last revision as expected_revision. Answers the whole thread; the edited comment carries edited_at. Only mentions the edit adds are notified.',
+  input: { id: z.string(), comment_id: z.string(), body: z.string(), expected_revision: z.number().int().nonnegative().optional() },
+  annotations: {},
+  example: { input: { id: 'aB3xK9', comment_id: 'ann_123', body: 'Tightened the intro; see the second paragraph', expected_revision: 3 } },
+  errors: [
+    NOT_FOUND,
+    { status: 400, code: 'invalid_annotation_edit', fix: 'send the new text as a non-empty body' },
+    { status: 403, code: 'account_required', fix: 'run `afbin auth` and sign in with the account that wrote the comment' },
+    { status: 409, code: 'annotation_conflict', fix: 'read the current conversation and retry with its revision; the comment was not changed' },
+  ],
+  async run(ctx, input) {
+    if (!ctx.actor.userId) return reply({ error: 'account_required', hint: 'Run `afbin auth` and sign in with an account; an anonymous credential wrote no comments to edit.' }, 403);
+    const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
+    if (refusal) return fromResponse(refusal);
+    return fromResponse(await respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.mutationReceipt));
   },
 };
 
@@ -719,6 +741,6 @@ const queryResourceOp:Operation={
 export const OPERATIONS: Operation[] = [
   ...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...SESSION_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,...notificationJobOperations(notificationJobStore),queryResourceOp,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
-  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
+  listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,
 ];

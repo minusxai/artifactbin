@@ -33,6 +33,11 @@ const AUTHORIZED: Record<string, (actor: AccessActor, input: Record<string, unkn
     const access = await readableArtifact(actor, String(input.id));
     return !!access && canAnnotate(access.role);
   },
+  // Authorship is the store's to check; the receipt only needs the document's comment authority.
+  edit_comment: async (actor, input) => {
+    const access = await readableArtifact(actor, String(input.id));
+    return !!access && canAnnotate(access.role);
+  },
   // Owner scope read past the trash gate: a trashed row is still this account's.
   delete_artifact: async (actor, input) => !!(await ownedArtifactState(actor, String(input.id))),
   restore_artifact: async (actor, input) => !!(await ownedArtifactState(actor, String(input.id))),

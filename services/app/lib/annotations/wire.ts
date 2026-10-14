@@ -16,7 +16,7 @@ import { artifactToWire } from '@/lib/artifacts';
 import { snapshotForReader, snapshotHeadFor } from '@/lib/artifacts';
 import { json } from '../http/http';
 import type { AnnotationAuthor } from '@artifactbin/contracts';
-import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction } from './store';
+import { AnnotationAttachmentError, AnnotationRevisionError, actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, editAnnotationCommentFor, type AnnotationAction, type AnnotationEdit } from './store';
 
 /**
  * The artifact GET's shape: the wire row plus the OPEN annotations inlined,
@@ -87,4 +87,42 @@ export async function respondToAnnotationAction(
   if (!wire) return json({ error: 'not_found' }, 404);
   if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);
+}
+
+/** Body → edit; null = malformed (no words, or a revision that is not a count). */
+function parseAnnotationEdit(body: Record<string, unknown>): AnnotationEdit | null {
+  if (typeof body.body !== 'string' || body.body.trim().length === 0) return null;
+  const edit: AnnotationEdit = { body: body.body };
+  if (body.expected_revision !== undefined) {
+    if (!Number.isSafeInteger(body.expected_revision) || Number(body.expected_revision) < 0) return null;
+    edit.expectedRevision = Number(body.expected_revision);
+  }
+  return edit;
+}
+
+/**
+ * The ONE comment-edit door, for both credentials: `{ body, expected_revision? }` against a comment id (a thread's
+ * first comment or a reply). Answers the whole thread. Not this actor's comment, or no such comment: the uniform 404.
+ */
+export async function respondToAnnotationEdit(
+  body: Record<string, unknown> | null,
+  actor: AccessActor,
+  id: string,
+  commentId: string,
+  receipt?: MutationReceipt,
+): Promise<Response> {
+  if (!body) return json({ error: 'invalid_json' }, 400);
+  const edit = parseAnnotationEdit(body);
+  if (!edit) return json({ error: 'invalid_annotation_edit', hint: 'Send the new text as a non-empty `body`; `expected_revision` is the thread revision you read.' }, 400);
+  let result;
+  try { result = await editAnnotationCommentFor(actor, id, commentId, edit, receipt); }
+  catch (error) {
+    if (error instanceof AnnotationRevisionError) return json({ error: 'annotation_conflict', current_revision: error.revision, hint: 'Read the current conversation before retrying; the comment was not changed.' }, 409);
+    if (error instanceof MembershipError) return json({ error: 'mention_refused', detail: error.message }, error.status);
+    throw error;
+  }
+  if (!result) return json({ error: 'not_found' }, 404);
+  // Sessions the edit newly mentions hear about it once it has committed; an unchanged text tells no one.
+  if (result.previous !== null) notifyRemoteComment(actor.userId, id, result.wire.id, result.comment, undefined, result.previous);
+  return json(result.wire);
 }

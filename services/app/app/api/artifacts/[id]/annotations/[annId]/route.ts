@@ -5,6 +5,9 @@
  * an unknown annotation or an unreachable artifact — indistinguishable on
  * purpose.
  *
+ * PATCH is the `edit_comment` OPERATION: `{ body, expected_revision? }` rewrites the text of the comment
+ * `annId` names (a thread's first comment or a reply) — its author's only, the same uniform 404 otherwise.
+ *
  * DELETE erases a thread (root + replies) for an ACCOUNT-CLAIMED bearer with
  * governing rights, the same ACL as the browser door; an anonymous token is
  * refused with account_required.
@@ -32,6 +35,12 @@ export const POST = withTokenAuth(async (request: Request, { actor, params, clie
       ? { kind: 'human', label: null, transport: 'browser' }
       : annotationAuthorForRequest(request, clientHarness),
   );
+});
+
+export const PATCH = withTokenAuth(async (request: Request, { actor, params }) => {
+  const body = await readJson(request);
+  if (!body) return json({ error: 'invalid_json' }, 400);
+  return runOperation('edit_comment', request, actor, { ...body, id: params.id, comment_id: params.annId });
 });
 
 export const DELETE = withTokenAuth(async (_request: Request, { actor, params }) => {

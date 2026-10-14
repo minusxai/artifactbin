@@ -1,16 +1,21 @@
 import { sessionMentions } from "./session-mentions";
 import type { AnnotationCommentWire } from "@artifactbin/contracts";
 import { remoteSessions, RemoteError, type RemoteRegistry } from "./registry";
-/** Explicit session links are stable mentions. A bare @claude never picks an arbitrary machine. */
+/**
+ * Explicit session links are stable mentions. A bare @claude never picks an arbitrary machine. `previous` is the
+ * text an edit replaced: only sessions the edit newly mentions hear about it.
+ */
 export function notifyRemoteComment(
   userId: string | null | undefined,
   artifactId: string,
   annotationId: string,
   comment: AnnotationCommentWire,
   registry: RemoteRegistry = remoteSessions,
+  previous?: string,
 ): void {
   if (!userId || comment.author.kind !== "human") return;
-  const targets = new Set([...sessionMentions(comment.body)].map((match) => match[2]));
+  const before = new Set(previous === undefined ? [] : [...sessionMentions(previous)].map((match) => match[2]));
+  const targets = new Set([...sessionMentions(comment.body)].map((match) => match[2]).filter((id) => !before.has(id)));
   const data =
     JSON.stringify({
       type: "artifactbin.comment",

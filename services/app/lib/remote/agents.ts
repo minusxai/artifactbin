@@ -196,11 +196,15 @@ export class RemoteAgents {
  private async blockedTargets(tx:Queryable,owner:string,artifactId:string,threadId:string){
   return (await tx.query<{id:string;name:string}>("SELECT DISTINCT a.id,a.info->>'name' AS name FROM remote_work w JOIN remote_agents a ON a.id=w.session_id AND a.owner=w.owner WHERE w.owner=$1 AND w.artifact_id=$2 AND w.thread_id=$3 AND w.phase='blocked' AND NOT EXISTS(SELECT 1 FROM remote_work later WHERE later.owner=w.owner AND later.session_id=w.session_id AND later.artifact_id=w.artifact_id AND later.thread_id=w.thread_id AND later.seq>w.seq AND (later.phase<>'unavailable' OR coalesce(later.data->>'reason','')<>'queue_full')) AND a.active=true AND (a.info->>'runId' IS NULL OR a.info->>'hostedGeneration' IS NOT NULL)",[owner,artifactId,threadId])).rows;
  }
- /** Called in the annotation transaction: a saved mention and its receipt commit together. */
- async enqueue(tx:Queryable,owner:string|null|undefined,artifactId:string,threadId:string,comment:{id:string;body:string;author:{kind:string;label:string|null}}){
+ /**
+  * Called in the annotation transaction: a saved mention and its receipt commit together. `previous` is the text an
+  * EDIT replaced: only sessions the edit newly mentions are sent work, and an edit never infers a recipient.
+  */
+ async enqueue(tx:Queryable,owner:string|null|undefined,artifactId:string,threadId:string,comment:{id:string;body:string;author:{kind:string;label:string|null}},previous?:string){
   if(!owner||comment.author.kind!=='human')return;
-  const targets=new Map([...sessionMentions(comment.body)].map(m=>[m[2]!,m[1]!.slice(1)]));
-  const implicit=!targets.size&&comment.id!==threadId&&!!comment.body.trim();
+  const before=new Set(previous===undefined?[]:[...sessionMentions(previous)].map(m=>m[2]!));
+  const targets=new Map([...sessionMentions(comment.body)].filter(m=>!before.has(m[2]!)).map(m=>[m[2]!,m[1]!.slice(1)]));
+  const implicit=previous===undefined&&!targets.size&&comment.id!==threadId&&!!comment.body.trim();
   if(implicit){
    // A saved human clarification belongs only to the sole active blocked
    // recipient of THIS thread. Never infer targets from old completed work.

@@ -38,6 +38,7 @@ const FIXTURES: Fixtures = {
     join_requested: {user_id:'usr_a',revision:1},
     invitation_dismissed: {user_id:'usr_a',revision:2},
     annotation_reopened: {annotation_id:'ann_1'},
+    annotation_edited: {annotation_id:'ann_1',reply_id:'ann_2'},
     liked: {},
     unliked: {},
   },

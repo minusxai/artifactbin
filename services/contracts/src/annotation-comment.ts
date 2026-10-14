@@ -39,4 +39,6 @@ export interface AnnotationCommentWire {
   created_at: string;
   /** The one image this comment carries — a root's or a reply's own. */
   image?: CommentImageWire;
+  /** When its author last rewrote the text; absent on a comment never edited. There is no edit history. */
+  edited_at?: string;
 }
