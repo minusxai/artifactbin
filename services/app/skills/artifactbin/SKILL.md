@@ -23,6 +23,10 @@ description: >-
 
 Share its returned URL. [[ urlReplyRule ]]
 
+## Monitor
+
+[% include workflows.monitoring %]
+
 ## Authoring
 
 - Shared/friends/team/signup/vote/RSVP flows: read [apps](references/apps.md) BEFORE data shape: accounts, never typed names.
@@ -54,6 +58,6 @@ Keep content away from viewport edges.
 - Read your page type's guide, linked from [page types](references/templates.md), BEFORE writing; [design systems](references/design-systems.md).
 - [sync and recovery](references/publishing.md).
 - [errors](references/errors.md).
-- [Comments](references/publishing-annotations.md); [monitoring](references/monitoring.md).
+- [Comments](references/publishing-annotations.md).
 - [datasets/media](references/publishing-datasets.md), [catalogs](references/databases.md), [lambdas](references/lambdas.md).
 - [Commands](references/commands.md); [saved-view wireframes](references/review-state.md); [Markdown import](references/markdown.md).

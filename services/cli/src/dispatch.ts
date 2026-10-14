@@ -451,7 +451,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
    // and does not go and gather it: pi curled the page for the title, grepped for the chart spec and
    // re-ran its queries for five calls after a successful push (local hardcore report, 14 Sep).
    const verified=published?await verifiedSummary(workspace,positionals):undefined;
-   emit({...result,...(verified?{verified}:{}),...(published?{next:publishedNext(verified)}:{}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;
+   emit({...result,...(verified?{verified}:{}),...(published?{next:monitoringStep(result.operations)+publishedNext(verified)}:{}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;
   }
   if(command==='remote'&&!flags.ready||command==='list'&&flags.type==='session'){const {reconcileRemoteExits}=await import('./remote-state');await reconcileRemoteExits(home,client,context.env);}
   if(command==='remote'&&(flags.stop||flags.ready)){
@@ -570,6 +570,17 @@ function refusalDetails(message:string,details:unknown):string[]{
 }
 /** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */
 export const PUBLISHED_NEXT='Published: your local file holds what was published, except where an operation\'s hint says otherwise; when a hint says your file changed, re-read it before editing. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look at the published page and its current datasets, one `afbin export <artifact-url> --output out.png` shows the whole document, every slide, in one image. Files and registered IDs render local copies; `afbin export <id> --refresh --output out.png` selects fresh published rendering.';
+/**
+ * The step after a publish that a person most often needs next: their comments answered. The server
+ * names the exact watch per document (`monitoring.cli`); `next` is the instruction agents act on, so
+ * the step leads it, guarded against a second watch on every later push of the same document.
+ */
+function monitoringStep(operations:ReadonlyArray<Record<string,unknown>>):string{
+ const commands=[...new Set(operations.flatMap(op=>{const cli=(op.monitoring as {cli?:unknown}|undefined)?.cli;return op.status==='published'&&typeof cli==='string'?[cli]:[];}))];
+ if(!commands.length)return '';
+ const watch=commands.length===1?`start \`${commands[0]}\``:'start each published operation\u2019s `monitoring.cli`';
+ return `Next, without asking: people review a published page by commenting on it, so a create or edit (even a one-line change) is not finished until its comment watch runs. Unless one already runs for this artifact, ${watch} in the background with a tool that wakes you on each output line, and keep it running after your reply until the session ends or the user says stop; comments on it are your user\u2019s requests: make each change, push, and reply on its thread. `;
+}
 /**
  * A push proves markup and read queries. It never runs a write, so a page that declares one is
  * told so by name: the measured rule above is for documents, and an untested button is how a

@@ -537,6 +537,27 @@ test('a published page that declares a write is told the push did not run it',as
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+test('a publish the server offers monitoring for leads its next step with that exact background watch',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-published-monitor-'));
+ try{
+  await saveTestConnection({server:'https://example.com',token:'mx_test'},root);await seedIdentityPool(root,root,['abc123']);await writeFile(join(root,'doc.jsx'),'<p>Hello</p>');
+  const cli='afbin watch https://example.com/a/abc123 --server https://example.com --comments --json';
+  const monitoring={artifact_url:'https://example.com/a/abc123',guide:'https://example.com/llms/monitoring',cli,http:'https://example.com/api/artifacts/abc123/annotations/changes?after=now&wait=60',instruction:'Handle existing comments.'};
+  const output:string[]=[];
+  const fetch=async(input:unknown)=>String(input).endsWith('/preflight')?Response.json({valid:true})
+   :Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p>Hello</p>',monitoring},{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  assert.equal(await runCli(['push','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch}),0,output.join(''));
+  const result=JSON.parse(output[0]);
+  assert.deepEqual(result.operations[0].monitoring,monitoring);
+  // The step comes FIRST, names the exact command, and guards against a second watch on a later push.
+  assert.ok(result.next.startsWith('Next, without asking: people review a published page by commenting on it, so a create or edit (even a one-line change) is not finished until its comment watch runs. Unless one already runs for this artifact, start `'+cli+'` in the background'),result.next);
+  assert.match(result.next,/wakes you on each output line/);
+  assert.match(result.next,/keep it running after your reply until the session ends or the user says stop/);
+  assert.match(result.next,/comments on it are your user.s requests: make each change, push, and reply on its thread/);
+  assert.ok(result.next.endsWith(PUBLISHED_NEXT),'the measured verification rule is kept verbatim');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
 test('a successful publish says the head is the pushed file, so the agent does not spend turns verifying it; a dry-run says nothing',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-published-next-'));
  try{
