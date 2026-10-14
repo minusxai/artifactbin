@@ -206,7 +206,7 @@ describe('cli-export', () => {
     calls.length=0;
     const local=await run(['export','deck.jsx','--format','html'],async()=>{throw new Error('a local HTML export attempted a request');});
     expect(local.code,JSON.stringify(local.result)).toBe(0);
-    expect(localHtmlRequests).toEqual([{cwd:await realpath(root),home:cli.home,path:'deck.jsx'}]);
+    expect(localHtmlRequests).toEqual([{cwd:await realpath(root),home:cli.home,path:'deck.jsx',server:expect.any(String)}]);
     expect(local.result.operations[0].path).toBe(localName);
     expect(await readFile(join(root,localName))).toEqual(localBytes);
     expect(calls).toEqual([]);
