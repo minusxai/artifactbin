@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import yaml from 'yaml';
 import { createServer } from 'node:http';
-import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isBuildInput, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
+import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, cliRuntimePath, isBuildInput, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
 import { CI_GATE_SHARDS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, gateNamesOnDisk, shardWeight, specFor } from '../gates.manifest.mjs';
 import { shardOf } from '../gates.shard.mjs';
 
@@ -41,16 +41,17 @@ describe('CI change selection', () => {
     for (const paths of [['package-lock.json'], ['services/contracts/src/remote.ts'], ['services/utils/src/index.ts'],
       ['vitest.config.ts'], ['.github/workflows/ci.yml'], ['services/new-service/src/index.ts'],
       ['services/cli/package.json'], ['services/cli/scripts/prepare-pty.mjs'], ['unexpected.txt']]) {
-      // …except the native npm jobs, which only a CLI release selects (see below).
-      expect(planCi(paths).jobs, paths.join()).toEqual(Object.fromEntries(CI_JOBS.map((job) => [job, !RELEASE_JOBS.includes(job)])));
+      // …except the native npm jobs, which a CLI release selects, and the npm matrix also a CLI runtime change (see below).
+      const runtime = paths.some(cliRuntimePath);
+      expect(planCi(paths).jobs, paths.join()).toEqual(Object.fromEntries(CI_JOBS.map((job) => [job, !RELEASE_JOBS.includes(job) || (job === 'cli' && runtime)])));
       expect(planCi(paths, { cliRelease: true }).jobs, paths.join()).toEqual(Object.fromEntries(CI_JOBS.map((job) => [job, true])));
     }
     expect(planCi(['README.md'], { full: true }).full).toBe(true);
   });
 
-  it('packs and proves the npm artifact only when the CLI version changed — on any run, full or affected', () => {
+  it('proves installers only when the CLI version changed, and the npm matrix also for CLI runtime changes', () => {
     for (const job of RELEASE_JOBS) {
-      expect(planCi(['services/cli/src/runner.ts']).jobs[job], job).toBe(false);
+      expect(planCi(['services/cli/src/runner.ts']).jobs[job], job).toBe(job === 'cli');
       expect(planCi(['package-lock.json']).jobs[job], job).toBe(false);
       expect(planCi(['services/cli/package.json'], { cliRelease: true }).jobs[job], job).toBe(true);
       expect(planCi(['README.md'], { cliRelease: true }).jobs[job], job).toBe(true);
@@ -112,8 +113,24 @@ describe('CI change selection', () => {
   it('isolates CLI changes while retaining script contract tests', () => {
     const cli = planCi(['services/cli/src/runner.ts']);
     expect(cli.nodeRoots).toEqual(['scripts/']);
-    expect(cli.jobs).toMatchObject({ node: true, 'reference-compatibility': false, cli: false, api: false, ui: false, gates: false });
+    expect(cli.jobs).toMatchObject({ node: true, 'reference-compatibility': false, 'cli-bootstrap': false, cli: true, api: false, ui: false, gates: false });
     expect(cli.cliTests).toBe(true);
+    expect(cli.cliPack).toBe(true);
+    expect(cliBumpRequired(['services/cli/src/runner.ts'])).toBe(true);
+  });
+
+  it('proves a utils-only change on every CLI platform without asking for a version', () => {
+    const utils = planCi(['services/utils/src/private-directory.ts']);
+    expect(utils.jobs).toMatchObject({ cli: true, 'cli-bootstrap': false, 'reference-compatibility': false });
+    expect(utils.cliPack).toBe(true);
+    expect(utils.cliRelease).toBe(false);
+    expect(cliBumpRequired(['services/utils/src/private-directory.ts'])).toBe(false);
+    // Their tests and prose change nothing a platform runs.
+    for (const path of ['services/utils/__tests__/private-directory.test.ts', 'services/cli/test/push.test.ts', 'services/cli/README.md', 'services/cli/src/a.test.ts'])
+      expect(cliRuntimePath(path), path).toBe(false);
+    expect(planCi(['services/utils/__tests__/private-directory.test.ts']).jobs.cli).toBe(false);
+    expect(planCi(['services/contracts/src/index.ts']).jobs.cli).toBe(false);
+    expect(planCi(['services/cli/scripts/test-npm-local-journey.mjs']).jobs.cli).toBe(true);
   });
 
   it('combines both sides of renames, deletions and mixed changes', () => {
@@ -215,6 +232,17 @@ describe('current-tree packaging for reused patch checks',()=>{
   expect(jobs['cli-pack'].if).toBe("needs.plan.outputs.cli-pack == 'true'");
   const release=jobs['cli-pack'].steps.find(step=>step.with?.name==='afbin-npm-release');
   expect(release.if).toBe('fromJSON(needs.plan.outputs.plan).cliRelease');
+  // An unreleased CLI or utils change proves its own unsigned tarball under a name the publisher never reads.
+  const candidate=jobs['cli-pack'].steps.find(step=>step.with?.name==='afbin-npm-candidate');
+  expect(candidate.if).toBe("needs.plan.outputs.cli == 'true' && !fromJSON(needs.plan.outputs.plan).cliRelease");
+  expect(candidate.with.path).not.toContain('sigstore');
+  const pick="${{ fromJSON(needs.plan.outputs.plan).cliRelease && 'afbin-npm-release' || 'afbin-npm-candidate' }}";
+  const wait=jobs.cli.steps.find(step=>step.name==="Wait for this attempt's packed candidate");
+  const download=jobs.cli.steps.find(step=>step.name==='Download the verified exact-version CLI candidate');
+  expect(wait.env.CANDIDATE).toBe(pick);expect(wait.run).toContain('"$CANDIDATE"');
+  expect(download.env.CANDIDATE).toBe(pick);expect(download.run).toContain('"$CANDIDATE" "$version"');
+  expect(download.env.REQUIRE_SIGNED_CANDIDATE).toMatch(/^\$\{\{ fromJSON\(needs\.plan\.outputs\.plan\)\.cliRelease && /);
+  expect(readFileSync(path.join(root,'.github/workflows/release-cli.yml'),'utf8')).not.toContain('afbin-npm-candidate');
   expect(jobs['cli-pack'].steps.find(step=>step.name==="Sign the actual build's npm provenance").if).toContain("fromJSON(needs.plan.outputs.plan).cliRelease");
   expect(jobs['cli-pack'].steps.find(step=>step.with?.name==='afbin-npm-packages').if).toBeUndefined();
   const archive=jobs['cli-pack'].steps.find(step=>step.name==='Archive the source build for reference conformance');
@@ -281,7 +309,8 @@ describe('GitHub CI adapter', () => {
       const pkg = (version) => writeFileSync(path.join(cwd, 'services/cli/package.json'), JSON.stringify({ name: 'afbin', version }));
       pkg('0.1.5'); git('add', '.'); git('commit', '-q', '-m', 'base');
       const base = git('rev-parse', 'HEAD');
-      writeFileSync(path.join(cwd, 'services/cli/runner.ts'), 'fixture'); git('add', '.'); git('commit', '-q', '-m', 'source');
+      // Prose: a change that selects the npm jobs only through a version.
+      writeFileSync(path.join(cwd, 'services/cli/notes.md'), 'fixture'); git('add', '.'); git('commit', '-q', '-m', 'source');
       const sourceOnly = git('rev-parse', 'HEAD');
       pkg('0.1.6'); git('add', '.'); git('commit', '-q', '-m', 'bump');
       const bumped = git('rev-parse', 'HEAD');
@@ -929,7 +958,9 @@ describe('CI job shape', () => {
     const candidate = ci().jobs.cli.steps.find(step => step.name === 'Download the verified exact-version CLI candidate');
     expect(candidate?.shell).toBe('bash');
     expect(candidate?.run).toContain('--extract-candidate');
-    expect(candidate?.run).toContain('afbin-npm-release');
+    // A release tests the very artifact the publisher uploads.
+    expect(candidate?.env.CANDIDATE).toMatch(/cliRelease && 'afbin-npm-release'/);
+    expect(candidate?.run).toContain('"$CANDIDATE"');
     expect(candidate?.run).toContain('$GITHUB_WORKSPACE/npm-candidate');
   });
 

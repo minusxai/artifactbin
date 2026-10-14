@@ -55,6 +55,12 @@ export function isVersionOnlyBump(files) {
   return true;
 }
 
+const isTestOrProse = (path) => path.endsWith('.md') || /(^|\/)(__tests__|test|tests)\//.test(path) || /\.test\.[cm]?[jt]sx?$/.test(path);
+/** A path of the CLI or its Node runtime layer (services/utils), other than its tests and prose. */
+export function cliRuntimePath(path) {
+  return /^services\/(cli|utils)\//.test(path) && !isTestOrProse(path);
+}
+
 /**
  * A CLI change that ships no version is a change nobody can install: the publisher only uploads when
  * the version moved, so the source would sit on main unreleased until someone noticed. Prose and the
@@ -147,8 +153,11 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
     jobs.node = affected.size > 0 || scannerContracts;
     for (const job of ['ui', 'build', 'api', 'gates']) jobs[job] = app;
   }
-  // Release-only, full run or not: the npm artifact is proved on every supported consumer.
-  jobs.cli = cliRelease;
+  // The npm artifact is proved on every supported consumer for a release, and for any change to the CLI
+  // or to services/utils, its Node runtime layer (filesystem privacy, processes, transport): code whose
+  // behaviour differs by platform never reaches Windows or macOS otherwise. Neither requires a version.
+  jobs.cli = cliRelease || paths.some(cliRuntimePath);
+  // The standard-user bootstrap and distribution conformance prove an installer, so they stay release-only.
   jobs['cli-bootstrap'] = cliRelease;
   jobs['reference-compatibility'] = cliRelease;
   // The CLI source suite (node job, shard 3) still guards every CLI change.
