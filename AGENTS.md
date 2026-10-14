@@ -13,6 +13,11 @@
 - **Gates belong to PR CI** (7 gate shards, the build, every test shard). Local gates only for failed CI gate shards or reader/hydration changes.
 - **Pre-merge is one sequence, run once:** FAST tier clean → commit and push ONCE → PR CI green →
   the exact user scenario verified end to end on the built artifact → merge.
+- **PRs into `main`: ONLY use squash and merge** (`gh pr merge --squash`). NEVER land all
+  branch commits via the PR methods "Create a merge commit" (`gh pr merge --merge`) or
+  "Rebase and merge" (`gh pr merge --rebase`). Each PR lands as one squashed commit on `main`.
+  Rebasing a working branch, including onto `main`, is allowed; this restriction applies only
+  to the final PR merge method.
 
 ## CI speed contract
 
