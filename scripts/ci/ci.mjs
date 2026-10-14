@@ -25,8 +25,23 @@ function cliVersionAt(rev) {
  * clone) reads as a release, because building bytes nobody publishes costs minutes while skipping
  * bytes the publisher then cannot find costs a release.
  */
+/**
+ * What a pull request is measured against. GitHub runs it on the MERGE commit of its head into today's base
+ * branch, while the event's `base.sha` can still name the base the PR was opened on. Against that stale base a
+ * main that moved since reads as the PR's own change: another PR's release looked like this PR's bump, and the
+ * CLI bump refusal stood down (#666). The merge commit's first parent IS the base it was merged into.
+ */
+function pullRequestBase(env) {
+  const head = env.CI__HEAD_SHA || 'HEAD';
+  try {
+    const parents = execFileSync('git', ['rev-list', '--parents', '-n', '1', head], { encoding: 'utf8' }).trim().split(' ').slice(1);
+    if (parents.length === 2) return parents[0];
+  } catch { /* no history to read: the event's own base stands */ }
+  return env.CI__BASE_SHA;
+}
+
 function cliVersionChanged(env) {
-  let base = env.CI__EVENT === 'pull_request' ? env.CI__BASE_SHA : env.CI__EVENT === 'push' ? env.CI__BEFORE_SHA : '';
+  let base = env.CI__EVENT === 'pull_request' ? pullRequestBase(env) : env.CI__EVENT === 'push' ? env.CI__BEFORE_SHA : '';
   if (!base && env.CI__EVENT === 'workflow_dispatch') {
     try { base = execFileSync('git', ['merge-base', 'origin/main', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { base = ''; }
   }
@@ -213,7 +228,7 @@ function treeOf(rev) {
 
 if (mode === 'plan') {
   const head = env.CI__HEAD_SHA || 'HEAD';
-  const base = env.CI__EVENT === 'pull_request' ? env.CI__BASE_SHA : env.CI__EVENT === 'push' ? env.CI__BEFORE_SHA : '';
+  const base = env.CI__EVENT === 'pull_request' ? pullRequestBase(env) : env.CI__EVENT === 'push' ? env.CI__BEFORE_SHA : '';
   const usable = base && !/^0+$/.test(base);
   // A PR is judged on its whole branch (base...head); a push on what it actually added (before..head).
   const paths = usable ? changedPaths(env.CI__EVENT === 'pull_request' ? `${base}...${head}` : `${base}..${head}`) : null;
