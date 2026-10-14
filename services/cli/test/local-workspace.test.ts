@@ -9,7 +9,7 @@ import {localIdentities} from '../src/identities';
 import {startPreview} from '../src/preview/session';
 import {registerLocalFiles,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,stageLocalFiles,recoverLocalFiles,saveLocalFile} from '../src/local-workspace';
 import {digest} from '../src/files';
-import {localHistoryHead} from '../src/local-history';
+import {localHistoryHead,localHistory} from '../src/local-history';
 
 test('fresh preview and add use portable identities without discovery or credentials',async()=>{
  const root=await mkdtemp(join(tmpdir(),'local-workspace-'));
@@ -150,5 +150,13 @@ test('a document entering the workspace gets durable node ids once, and an unpar
   assert.match(await readFile(join(root,'broken.jsx'),'utf8'),/<p>Unclosed$/);
   output.length=0;assert.equal(await runCli(['add','weather.jsx','--json'],context),0,output.join(''));
   assert.equal(await readFile(join(root,'weather.jsx'),'utf8'),weather,'registration is idempotent');
+  // An agent regenerates the file without ids: entering the workspace again gives unchanged elements their ids back.
+  const heading=/<h1 id="([^"]+)">/.exec(weather)![1]!;
+  await writeFile(join(root,'weather.jsx'),weather.replace(/ id="[^"]*"/g,'').replace('</main>','<p>Updated at 9am.</p></main>'));
+  output.length=0;assert.equal(await runCli(['add','weather.jsx','--json'],context),0,output.join(''));
+  const regenerated=await readFile(join(root,'weather.jsx'),'utf8');
+  assert.match(regenerated,new RegExp(`<h1 id="${heading}">SF weather</h1>`));
+  assert.match(regenerated,/<p id="[A-Za-z][A-Za-z0-9]{3}">Updated at 9am.<\/p>/);
+  assert.match((await localHistory(root,'weather.jsx')).at(-1)!.body,/^<main><h1>SF weather/,'the bytes as written stay in local history');
  }finally{await rm(root,{recursive:true,force:true});}
 });
