@@ -28,7 +28,9 @@ describe('release critical path',()=>{
   expect(job.steps[wait].env.GH_TOKEN).toBe('${{ github.token }}');
   expect(job.steps.findIndex(step=>step.name==='Prepare standalone sandbox worker')).toBeLessThan(wait);
   const pack=workflow().jobs['cli-pack'].steps,reference=pack.findIndex(step=>step.with?.name==='afbin-reference-build');
-  expect(reference).toBeLessThan(pack.findIndex(step=>step.with?.name?.startsWith('afbin-npm-dependency-seed-')));
+  // Seeds first: every native consumer installs from one; the reference proofs have the longer slack.
+  expect(reference).toBeGreaterThan(pack.findIndex(step=>step.with?.name==='afbin-npm-dependency-seed-macOS-ARM64'));
+  expect(reference).toBe(pack.length-1);
   expect(job.needs).not.toContain('cli');
   expect(job.steps.some(step=>step.with?.name==='afbin-npm-release')).toBe(true);
  });

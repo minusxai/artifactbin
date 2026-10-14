@@ -1008,22 +1008,6 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 7
-      # Source-vs-installed proof needs both locations, not another compilation of the same tree. Before the seed
-      # transfers: the reference proofs wait for it (scripts/lib/ci-artifact-wait.mjs), not for this whole job.
-      - name: Archive the source build for reference conformance
-        if: needs.plan.outputs.reference-compatibility == 'true'
-        run: |
-          tar --exclude='services/cli/dist/packages' -cf afbin-reference-build.tar \
-            services/cli/dist services/app/dist services/app/lib/build-assets \
-            services/app/public/islands services/app/public/libraries services/app/server/routes.generated.ts
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: needs.plan.outputs.reference-compatibility == 'true'
-        with:
-          name: afbin-reference-build
-          path: afbin-reference-build.tar
-          if-no-files-found: error
-          retention-days: 1
-
       - if: needs.plan.outputs.cli == 'true' && steps.npm-seeds.outputs.cache-hit != 'true'
         run: node services/cli/scripts/npm-dependency-cache.mjs pack-seeds "$RUNNER_TEMP/npm-public-seed" .ci-cache-key/npm-platform-seeds
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -1066,6 +1050,23 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 1
+      # Source-vs-installed proof needs both locations, not another compilation of the same tree. After the seeds,
+      # which every native consumer needs before installing; the reference proofs wait for this archive
+      # (scripts/lib/ci-artifact-wait.mjs), not for this whole job, and have the longer slack.
+      - name: Archive the source build for reference conformance
+        if: needs.plan.outputs.reference-compatibility == 'true'
+        run: |
+          tar --exclude='services/cli/dist/packages' -cf afbin-reference-build.tar \
+            services/cli/dist services/app/dist services/app/lib/build-assets \
+            services/app/public/islands services/app/public/libraries services/app/server/routes.generated.ts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: needs.plan.outputs.reference-compatibility == 'true'
+        with:
+          name: afbin-reference-build
+          path: afbin-reference-build.tar
+          if-no-files-found: error
+          retention-days: 1
+
   # The actual packaged serve runtime, Linux browser dependencies and both storage halves.
   # NOT `needs: cli-pack`: everything the tarball does not decide (the deployment directory, the pinned Caddy and
   # SMTP fixture images, PostgreSQL) prepares while cli-pack packs, and the exact tarball arrives through the
