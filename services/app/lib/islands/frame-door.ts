@@ -50,6 +50,21 @@ export function openFrameDoor(win: Window, appOrigin: string, load: () => Promis
   const send = (envelope: unknown) => { try { reflectApply(postMessage, parent, [envelope, appOrigin]); } catch { /* the page went away */ } };
 
   let session: { key: string; started: FrameBridgeSession | null; queue: FrameBridgeParentPayload[] } | null = null;
+  /*
+   * The document's uncaught failures reach the page's console ([frame-bridge], ./parent): a framed origin's own
+   * console is out of the page's reach, and a blank frame says nothing about why. Kept until a session exists.
+   */
+  const pendingErrors: string[] = [];
+  const report = (message: string) => {
+    const line = message.slice(0, 500);
+    if (session) send({ type: FRAME_BRIDGE_MESSAGE, key: session.key, payload: { kind: 'error', message: line } });
+    else if (pendingErrors.length < 10) pendingErrors.push(line);
+  };
+  const onError = (event: ErrorEvent) => report(`uncaught: ${event.message}${event.filename ? ` (${event.filename}:${event.lineno})` : ''}`);
+  const onRejection = (event: PromiseRejectionEvent) => {
+    const reason = event.reason as { stack?: unknown } | undefined;
+    report(`unhandled rejection: ${String(reason && typeof reason === 'object' && reason.stack ? reason.stack : event.reason)}`);
+  };
   const end = () => { const ending = session; session = null; ending?.started?.dispose(); };
 
   const onMessage = (event: MessageEvent) => {
@@ -65,6 +80,7 @@ export function openFrameDoor(win: Window, appOrigin: string, load: () => Promis
       const current = { key, started: null as FrameBridgeSession | null, queue: [] as FrameBridgeParentPayload[] };
       session = current;
       const post = (out: FrameBridgeFramePayload) => { if (session === current) send({ type: FRAME_BRIDGE_MESSAGE, key, payload: out }); };
+      for (const message of pendingErrors.splice(0)) post({ kind: 'error', message });
       void load().then(({ startFrameBridge }) => {
         if (session !== current) return;
         current.started = startFrameBridge({ win, post, attach: payload });
@@ -78,7 +94,9 @@ export function openFrameDoor(win: Window, appOrigin: string, load: () => Promis
     else session.queue.push(payload);
   };
   win.addEventListener('message', onMessage, true);
+  win.addEventListener('error', onError);
+  win.addEventListener('unhandledrejection', onRejection);
   // The door is open: the page may attach (it may also attach on the frame's load).
   send({ type: FRAME_BRIDGE_MESSAGE, payload: { kind: 'hello' } });
-  return () => { win.removeEventListener('message', onMessage, true); end(); };
+  return () => { win.removeEventListener('message', onMessage, true); win.removeEventListener('error', onError); win.removeEventListener('unhandledrejection', onRejection); end(); };
 }
