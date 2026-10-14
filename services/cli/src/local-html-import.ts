@@ -45,6 +45,8 @@ function downloadedAssets(file:ArtifactFile,identity:string):NonNullable<Artifac
  return result;
 }
 
+/** A path as a shell argument, quoted only when it needs to be. */
+const quoted=(path:string)=>/[\s'"$`\\]/.test(path)?JSON.stringify(path):path;
 /** The workspace file that already holds a local document identity, if any: where its offline copy belongs. */
 export async function localIdentityOwner(root:string,id:string):Promise<string|undefined>{
  const state=await readLocalWorkspaceState(root);
@@ -77,7 +79,7 @@ export async function importLocalHtml(workspace:Workspace,input:string,target?:s
   const identity=provenance?.documentId??(current?.metadata.id||randomBytes(3).toString('hex'));
   const registered=state.list<{id:string}>(scope,'draft-identity');
   const holder=registered.find(row=>row.value.id===identity&&row.key!==path)?.key;
-  if(holder)throw new CliError('duplicate_identity',`This offline file is a copy of ${holder} (identity ${identity}); importing it as ${path} would give two files one identity.`,`Import it into ${holder} to reconcile that copy: afbin import ${input} --output ${holder}.`);
+  if(holder)throw new CliError('duplicate_identity',`This offline file is a copy of ${holder} (identity ${identity}); importing it as ${path} would give two files one identity.`,`Import it into ${holder} to reconcile that copy: afbin import ${quoted(input)} --output ${quoted(holder)}.`);
   const preserveConflict=async(reason:string):Promise<never>=>{
    const directory=await confinedPath(workspace.root,'.artifactbin/conflicts');await privateDirectory(directory);
    const saved=join(directory,randomUUID()+'.html');await atomicWrite(saved,html,{exclusive:true});
