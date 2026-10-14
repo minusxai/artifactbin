@@ -18,8 +18,8 @@ import {dirname, join} from 'node:path';
 import type {DatabaseSync} from 'node:sqlite';
 import type * as SQLite from 'node:sqlite';
 import {configDir} from './config';
-import {withStateLock} from '@artifactbin/utils/node/state-lock';
-import {isMissing,privateDirectory} from './files';
+import {privateStateDirectory,withStateLock} from '@artifactbin/utils/node/state-lock';
+import {isMissing} from './files';
 
 export const HOME_SCOPE = 'home';
 export type StateKind =
@@ -63,7 +63,8 @@ function loadSqlite():typeof SQLite {
 }
 
 async function privateFile(path: string): Promise<void> {
-  await privateDirectory(dirname(path));
+  // With its lock directory: a fresh Windows home pays one PowerShell launch for both.
+  await privateStateDirectory(dirname(path));
   try { if (!(await lstat(path)).isFile()) throw new Error(`Expected a private file: ${path}`); }
   catch (error) { if (!isMissing(error)) throw error; }
 }
