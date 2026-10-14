@@ -2,10 +2,10 @@
 import {randomUUID} from 'node:crypto';
 import {type AnnotationWire,type AnnotationAuthor,nodeIndex,sourcePathToBodyPath,canonicalQuote,parseAnnotationRange,BackendRequestError} from '../../../app/lib/cli-toolkit';
 import type {State} from '../state';
-import type {PreviewComment} from './comments';
+import {LOCAL_AUTHOR_LABEL,type PreviewComment} from './comments';
 
 type Stored={file:string;node:string;value:AnnotationWire};
-export function previewAnnotations(state:State,root:string,file:string,source:string,author:AnnotationAuthor={kind:'human',label:'You',transport:'browser'}){
+export function previewAnnotations(state:State,root:string,file:string,source:string,author:AnnotationAuthor={kind:'human',label:LOCAL_AUTHOR_LABEL,transport:'browser'}){
  const anchors=nodeIndex(source);
  const anchor=(node:string)=>{const entry=anchors.get(node);if(!entry)return null;const path=sourcePathToBodyPath(source,entry.path);return path===null?null:{key:node,nodeId:node,path,spanStart:entry.node.start,spanEnd:entry.node.end};};
  const now=()=>new Date().toISOString();
@@ -40,6 +40,17 @@ export function previewAnnotations(state:State,root:string,file:string,source:st
    if(action.reply!==undefined)value={...value,thread:[...value.thread,comment(text(action.reply))]};
    if(action.resolve===true)value={...value,status:'resolved',resolved_at:now()};
    if(action.reopen===true)value={...value,status:'open',resolved_at:null};
+   save({...entry,value});return resolved({...entry,value});
+  },
+  /** Rewrite one comment's words — only its author's (the same kind and name), never its anchor or the thread's state. */
+  edit(commentId:string,input:Record<string,unknown>){
+   const entry=entries().find(entry=>entry.value.thread.some(comment=>comment.id===commentId));
+   if(!entry)throw new BackendRequestError('Comment not found',404);
+   const current=entry.value.thread.find(comment=>comment.id===commentId)!;
+   if(current.author.kind!==author.kind||current.author.label!==author.label)throw new BackendRequestError('Only the comment\'s author can edit it.',403);
+   const body=text(input.body);
+   if(body===current.body)return resolved(entry);
+   const value={...entry.value,thread:entry.value.thread.map(comment=>comment.id===commentId?{...comment,body,edited_at:now()}:comment)};
    save({...entry,value});return resolved({...entry,value});
   },
   delete(id:string){

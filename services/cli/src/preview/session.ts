@@ -232,6 +232,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     if(input.operation==='annotations.list')return annotations.list(input.status);
     if(input.operation==='annotations.create'){const created=annotations.create(input.input??{},input.key);await acknowledgeAnchors(input.file);return created;}
     if(input.operation==='annotations.act')return annotations.act(input.id,input.input??{});
+    if(input.operation==='annotations.edit')return annotations.edit(input.id,input.input??{});
     if(input.operation==='annotations.delete'){annotations.delete(input.id);return null;}
     throw new Refusal(400,'Unknown editor operation');
    }));

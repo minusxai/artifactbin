@@ -157,6 +157,13 @@ export function CommentTimestamp(props: { iso: string; class?: string }): JSX.El
   return <Show when={valid()}><Tooltip content={exact()}><time dateTime={props.iso} aria-label={exact()} tabIndex={0} class={props.class}>{day()} · {time()}</time></Tooltip></Show>;
 }
 
+/** The mark of a rewritten comment: "edited", with when, keyboard-reachable in a tooltip. There is no history behind it. */
+export function CommentEdited(props: { iso: string; class?: string }): JSX.Element {
+  const date = () => new Date(props.iso);
+  const exact = () => Number.isNaN(date().getTime()) ? 'Edited' : `Edited ${date().toLocaleString(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+  return <Tooltip content={exact()}><span tabIndex={0} aria-label={exact()} class={props.class}>edited</span></Tooltip>;
+}
+
 /** Stack the visible threads at their anchors, spaced, and keep a short cluster inside the viewport. */
 export function positionedComments(annotations: AnnotationWire[], rects: Record<string, StoryEditRect>,
   frame: Pick<DOMRect, 'top' | 'height'>, viewportHeight: number): Array<{ annotation: AnnotationWire; top: number }> {
@@ -314,6 +321,7 @@ export function AnnotationPreview(props: {
           <AuthorIdentity author={first()!.author} />
           <span class="pointer-events-auto relative z-10 flex shrink-0 items-center gap-2">
             <CommentTimestamp iso={first()!.created_at} class="whitespace-nowrap font-mono text-micro text-faint" />
+            <Show when={first()!.edited_at}>{(at) => <CommentEdited iso={at()} class="whitespace-nowrap font-mono text-micro text-faint" />}</Show>
             <Show when={props.row.status === 'open' && props.onResolve}>
               <Tooltip content="resolve thread">
                 <Button type="button" variant="ghost" size="sm" aria-label="Resolve thread" disabled={props.resolving} onClick={(event) => { event.stopPropagation(); props.onResolve?.(); }} class="-mr-1">
@@ -364,6 +372,7 @@ export function AnnotationPreview(props: {
             <For each={props.row.thread.slice(1)}>{(reply) => (
               <span role="listitem" class="block">
                 <AuthorIdentity author={reply.author} />
+                <Show when={reply.edited_at}>{(at) => <CommentEdited iso={at()} class="ml-2 font-mono text-micro text-faint" />}</Show>
                 <span class="mt-1 block whitespace-pre-wrap break-words font-sans text-sm leading-snug text-fg/90">{previewText(reply.body)}</span>
                 <Show when={reply.image}>{(image) => <CommentScreenshot image={image()} />}</Show>
               </span>

@@ -56,7 +56,7 @@ export const flags: Record<string,Flag> = {
  server:{value:'URL',description:'Use this server origin for this command.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; never bypass authentication.'},
  'dry-run':{short:'n',description:'Validate the operation without changing local or remote state.'},force:{short:'f',description:'Overwrite local changes on pull, or observe and conditionally replace a stale head on push. On delete, allow referenced assets. On auth, sign in again through the browser even when the saved token is valid.'},
  remote:{description:'Fetch current remote state; comparison still runs locally.'},fix:{description:'Apply mechanical local fixes. Push never fixes source.'},
- body:{value:'TEXT',description:'Post this comment text.'},thread:{value:'ID',description:'Select an existing thread for a reply or state change.'},state:{value:'STATE',description:'Set the selected thread to open or resolved; fixed names ignore case.'},
+ body:{value:'TEXT',description:'Post this comment text.'},thread:{value:'ID',description:'Select an existing thread for a reply or state change.'},edit:{value:'ID',description:'Rewrite the text of a comment you wrote (a thread ID or a reply ID) with --body or --input.'},state:{value:'STATE',description:'Set the selected thread to open or resolved; fixed names ignore case.'},
  node:{value:'ID',description:'Anchor a new thread to this node.'},quote:{value:'TEXT',description:'Anchor a new thread to this quote.'},
  limit:{value:'N',description:'Maximum results in this page (1–100).'},cursor:{value:'CURSOR',description:'Continue from a returned next_cursor.'},
  after:{value:'SEQUENCE',description:'Read run events after this sequence (default 0).'},
@@ -109,7 +109,7 @@ export const commands: Command[] = [
  {name:'log',usage:'<ref> [<ref> ...]',description:'List versions, newest first; @version starts at that version or earlier.',min:1,max:Infinity,flags:['type','filter','limit','cursor'],examples:['afbin log report.jsx --limit 10']},
  {name:'list',usage:'[<ref> ...]',description:'List resources or summaries; default accessible artifacts, newest first.',min:0,max:Infinity,flags:['type','in','filter','limit','cursor','format','output'],examples:['afbin list --json','afbin list --type session','afbin list --type table --in orders.yaml']},
  {name:'delete',usage:'<ref> [<ref> ...]',description:'Soft-delete resources, revoke tokens, terminate sessions or delete comments; keep local files.',min:1,max:Infinity,flags:['type','in','dry-run','force'],examples:['afbin delete report.jsx --dry-run','afbin delete --type comment --in abc123 ann_123']},
- {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, resolve or reopen.',min:1,max:Infinity,flags:['agent','image','variant','output','request','phase','body','input','thread','node','quote','state','filter','limit','cursor','dry-run'],examples:['afbin comment report.jsx','afbin comment report.jsx --image cim_123 --output screenshot.webp','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved']},
+ {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, edit your own comment, resolve or reopen.',min:1,max:Infinity,flags:['agent','image','variant','output','request','phase','body','input','thread','edit','node','quote','state','filter','limit','cursor','dry-run'],examples:['afbin comment report.jsx','afbin comment report.jsx --image cim_123 --output screenshot.webp','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved','afbin comment report.jsx --edit ann_456 --body "Fixed, with the Q3 totals"']},
  {name:'open',usage:'<ref> [<ref> ...]',description:'Open the published view of a resource, or print its URL with --json.',min:1,max:Infinity,flags:[],examples:['afbin open report.jsx','afbin open abc123 --json']},
  {name:'help',usage:'[topic]',description:'Read the bundled example, markup, data, themes, templates, schemas or command help; --for <template> prints everything a document of that kind needs in one call.',min:0,max:1,flags:['format','output','for'],examples:['afbin help --for deck','afbin help markup','afbin help dashboard']},
  {name:'serve',description:'Run a persistent authenticated server in the foreground.',usage:'[--dir <path>] [--owner-email <email>] [--config <path>] [--port <port>] [--db-url <url>]',min:0,max:0,flags:['config','dir','db-url','port','owner-email'],examples:['afbin serve --dir ~/team-artifacts --owner-email owner@example.com --port 7445','afbin serve --config ~/team-artifacts/server.env --db-url postgres://localhost/artifactbin']},
@@ -280,17 +280,22 @@ export function parseCommand(argv:string[]):ParsedCommand {
   if(f.image!==undefined){
    if(!/^cim_[A-Za-z0-9_-]{1,128}$/.test(String(f.image))||result.positionals.length!==1)throw new CliError('invalid_image','--image requires one artifact and a comment image ID from afbin comment.');
    if(typeof f.output!=='string'||f.output==='-')throw new CliError('invalid_output','--image requires --output <local-file>; binary stdout is not supported.');
-   if(['body','input','thread','node','quote','state','filter','limit','cursor','dry-run','request','phase'].some(key=>f[key]!==undefined))throw new CliError('invalid_arguments','Download images separately from comment listing or mutation flags.');
+   if(['body','input','thread','edit','node','quote','state','filter','limit','cursor','dry-run','request','phase'].some(key=>f[key]!==undefined))throw new CliError('invalid_arguments','Download images separately from comment listing or mutation flags.');
    if(f.variant!==undefined)f.variant=enumArgument(f.variant,['preview','original','thumbnail'],'variant');
   }else if(f.output!==undefined||f.variant!==undefined)throw new CliError('invalid_arguments','Comment --output and --variant require --image ID.');
   const body=f.body!==undefined||f.input!==undefined;
   if(f.body!==undefined&&f.input!==undefined)throw new CliError('invalid_comment','Use --body or --input, once.');
+  if(f.edit!==undefined){
+   if(!/^[A-Za-z0-9_-]+$/.test(String(f.edit))||result.positionals.length!==1)throw new CliError('invalid_comment','--edit requires a valid comment ID and exactly one artifact.');
+   if(['thread','node','quote','state','request','phase','filter','limit','cursor'].some(key=>f[key]!==undefined))throw new CliError('invalid_comment','--edit rewrites one comment\'s text; it takes only --body or --input.','Reply or change state in a separate command.');
+   if(!body)throw new CliError('invalid_comment','--edit requires the new text in --body or --input.');
+  }
   if(f.state&&!f.thread)throw new CliError('invalid_comment','--state requires --thread ID.');
   if(f.thread&&(!/^[A-Za-z0-9_-]+$/.test(String(f.thread))||result.positionals.length!==1))throw new CliError('invalid_thread','--thread requires a valid thread ID and exactly one artifact.');
   if(f.thread&&(f.node||f.quote))throw new CliError('invalid_comment','A reply uses the existing thread anchor.');
   if(f.node&&f.quote)throw new CliError('invalid_comment','Use --node or --quote to anchor a new thread.');
   if((body||f.state)&&(f.limit!==undefined||f.cursor!==undefined||f.filter!==undefined))throw new CliError('invalid_comment','--limit and --cursor apply only when listing comments.');
-  if(body&&!f.thread&&!f.node&&!f.quote)throw new CliError('invalid_comment','A new thread requires --node ID or --quote TEXT.');
+  if(body&&!f.edit&&!f.thread&&!f.node&&!f.quote)throw new CliError('invalid_comment','A new thread requires --node ID or --quote TEXT.');
   if(!body&&(f.node||f.quote||f.thread&&!f.state))throw new CliError('invalid_comment','Posting requires --body or --input.');
  }
 

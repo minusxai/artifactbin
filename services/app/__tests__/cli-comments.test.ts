@@ -10,7 +10,7 @@ import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { createArtifact, getArtifactFor, updateSharingFor } from '@/lib/artifacts';
 import * as annotations from '@/app/api/artifacts/[id]/annotations/route';
 import { POST as createComment, GET as listComments } from '@/app/api/artifacts/[id]/annotations/route';
-import { DELETE as removeComment, POST as updateComment } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
+import { DELETE as removeComment, PATCH as editComment, POST as updateComment } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as readArtifact } from '@/app/api/artifacts/[id]/route';
 import {readRecord} from '../../cli/test/tracking';
@@ -105,5 +105,34 @@ it('comment creation and reply recover lost responses without adding duplicate m
   const recovered=await invoke(args);expect(recovered.code,JSON.stringify(recovered)).toBe(0);expect(keys[0]).toBeTruthy();expect(keys[1]).toBe(keys[0]);
   lose=true;const reply=['--thread',recovered.result.id,'--body','Done','--state','resolved'];expect((await invoke(reply)).result.error.code).toBe('outcome_unknown');expect((await invoke(reply)).code).toBe(0);
   const listed=await listComments(request(`/api/artifacts/${artifact.id}/annotations?status=all`,{token:token.token}),ctx);const result=await listed.json();expect(result.annotations).toHaveLength(1);expect(result.annotations[0].thread).toHaveLength(2);expect(result.annotations[0].status).toBe('resolved');
+ }finally{await cli.cleanup();}
+});
+
+it('edits the caller\'s own hosted comment with --edit, recovering a lost response without a second edit',async()=>{
+ const cli=await cliWorkspace('comment-edit',{env:{}});
+ try{
+  const token=await cli.connect('mxmx_test_cli_comment_edit');
+  const made=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Review this finding</p>'}}));expect(made.status).toBe(201);const artifact=await made.json();const ctx={params:Promise.resolve({id:artifact.id})};
+  let lose=false;const methods:string[]=[];
+  const fetcher:typeof fetch=async(input,init)=>{
+   const req=new Request(input,init),path=new URL(req.url).pathname;
+   if(req.method==='GET')return readArtifact(req,ctx);
+   methods.push(req.method);
+   const annCtx={params:Promise.resolve({id:artifact.id,annId:path.split('/').at(-1)!})};
+   const response=path.endsWith('/annotations')?await createComment(req,ctx):req.method==='PATCH'?await editComment(req,annCtx):await updateComment(req,annCtx);
+   if(lose){lose=false;throw Error('lost committed edit response');}return response;
+  };
+  const invoke=(args:string[])=>cli.run(['comment',artifact.id,...args],fetcher);
+  const created=await invoke(['--quote','Review this finding','--body','Explian']);expect(created.code,JSON.stringify(created)).toBe(0);
+  const thread=created.result;
+  const dry=await invoke(['--edit',thread.id,'--body','Explain','--dry-run']);expect(dry.result).toMatchObject({dry_run:true,action:'edit',comment:thread.id});
+  lose=true;expect((await invoke(['--edit',thread.id,'--body','Explain'])).result.error.code).toBe('outcome_unknown');
+  const edited=await invoke(['--edit',thread.id,'--body','Explain']);expect(edited.code,JSON.stringify(edited)).toBe(0);
+  expect(edited.result.thread[0]).toMatchObject({body:'Explain',edited_at:expect.any(String)});
+  expect(edited.result.revision).toBe(thread.revision+1);
+  expect(methods).toEqual(['POST','PATCH','PATCH']);
+  const listed=await listComments(request(`/api/artifacts/${artifact.id}/annotations`,{token:token.token}),ctx);
+  expect((await listed.json()).annotations[0].thread.map((c:{body:string})=>c.body)).toEqual(['Explain']);
+  const missing=await invoke(['--edit','ann_missing','--body','x']);expect(missing.result.error.code).toBe('not_found');
  }finally{await cli.cleanup();}
 });

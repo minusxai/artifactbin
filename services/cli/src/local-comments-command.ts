@@ -50,6 +50,13 @@ export async function localCommentCommand(workspace:Workspace,parsed:ParsedComma
    const id=(await localIdentities(workspace));const documentId=Object.entries(id).find(([,path])=>path===target.path)?.[0];
    const context={local:true,path:target.path,...(documentId?{artifact_id:documentId}:{})};
    try{
+    if(mutations&&typeof flags.edit==='string'){
+     // Authorship is the local author's: the person at this machine, or the --agent that wrote it.
+     const id=flags.edit;
+     if(![...annotations.list('open'),...annotations.list('resolved')].some(item=>item.thread.some(comment=>comment.id===id)))throw new CliError('invalid_comment','That comment is not on the local document.','List threads with afbin comment <file>.');
+     if(flags['dry-run']){results.push({...context,dry_run:true,action:'edit',comment:id});continue;}
+     results.push({...store.transaction(()=>annotations.edit(id,{body})),...context});continue;
+    }
     if(mutations){
      let node=typeof flags.node==='string'?flags.node:undefined;
      const quote=typeof flags.quote==='string'?canonicalQuote(flags.quote):undefined;
@@ -83,7 +90,7 @@ export async function localCommentCommand(workspace:Workspace,parsed:ParsedComma
     const limit=typeof flags.limit==='string'?Number(flags.limit):100;
     if(!Number.isSafeInteger(limit)||limit<1||limit>1000)throw new CliError('invalid_limit','Use a comment limit from 1 to 1000.');
     results.push({...context,annotations:rows.slice(offset,offset+limit),next_cursor:offset+limit<rows.length?Buffer.from(JSON.stringify({file:target.path,offset:offset+limit})).toString('base64url'):null});
-   }catch(error){if(error instanceof BackendRequestError)throw new CliError(error.status===404?'invalid_thread':'invalid_comment',error.message);throw error;}
+   }catch(error){if(error instanceof BackendRequestError)throw new CliError(error.status===404?'invalid_thread':error.status===403?'forbidden':'invalid_comment',error.message);throw error;}
   }
   return results.length===1?results[0]:{local:true,results};
  });

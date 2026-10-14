@@ -21,7 +21,7 @@ import { renderTree, skillExample, skillTree } from '@/lib/skills';
 import { buildQuickSheet } from '@/test/helpers/skill-docs';
 import { createUser, mintToken } from '@/lib/accounts';
 import { POST as createCommentRoute, GET as listCommentsRoute } from '@/app/api/artifacts/[id]/annotations/route';
-import { POST as actOnCommentRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
+import { PATCH as editCommentRoute, POST as actOnCommentRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import { createBrowserSessions } from '../../../browser/src/sessions';
 import type { Actor, BrowserSessionRequest } from '@artifactbin/contracts';
 import { request, useAppHarness } from '@/__tests__/harness';
@@ -339,7 +339,7 @@ describe('public HTTP authoring references', () => {
 });
 
 
-it('the published HTTP comment example creates, replies, resolves and reopens through real handlers', async () => {
+it('the published HTTP comment example creates, replies, resolves, reopens and edits through real handlers', async () => {
   const guide = publicGuideText('http-api',BASE)!;
   const script = guide.match(/\/\/ BEGIN HTTP COMMENTS\n([\s\S]*?)\/\/ END HTTP COMMENTS/)?.[1];
   expect(script, 'executable HTTP comment contract is published').toBeTruthy();
@@ -351,18 +351,20 @@ it('the published HTTP comment example creates, replies, resolves and reopens th
     const annId = path.split('/')[5];
     const req = request(path, {method:init?.method ?? 'GET', token:token.token, ...(init?.body ? {body:init.body, headers:{'Content-Type':'application/json'}} : {})});
     const params = {params:Promise.resolve({id:artifact.id, ...(annId ? {annId} : {})})};
-    return annId ? actOnCommentRoute(req, params) : init?.method === 'POST' ? createCommentRoute(req, params) : listCommentsRoute(req, params);
+    return annId ? (init?.method === 'PATCH' ? editCommentRoute(req, params) : actOnCommentRoute(req, params)) : init?.method === 'POST' ? createCommentRoute(req, params) : listCommentsRoute(req, params);
   };
   const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-  const result = await new AsyncFunction('fetch','base','accessToken','artifactId','nodeId',script + '\nreturn {created,replied,resolved,reopened};')(localFetch, BASE, token.token, artifact.id, 'message');
+  const result = await new AsyncFunction('fetch','base','accessToken','artifactId','nodeId',script + '\nreturn {created,replied,resolved,reopened,edited};')(localFetch, BASE, token.token, artifact.id, 'message');
   expect(result.created.thread).toHaveLength(1);
   expect(result.replied.thread).toHaveLength(2);
   expect(result.resolved.status).toBe('resolved');
   expect(result.reopened.status).toBe('open');
   expect(result.reopened.revision).toBeGreaterThan(result.created.revision);
+  expect(result.edited.thread[0]).toMatchObject({body:'Please clarify this paragraph', edited_at:expect.any(String)});
+  expect(result.edited.revision).toBe(result.reopened.revision + 1);
   const stale = await actOnCommentRoute(request(`/api/artifacts/${artifact.id}/annotations/${result.created.id}`, {method:'POST',token:token.token,json:{reply:'stale duplicate',expected_revision:result.created.revision}}), {params:Promise.resolve({id:artifact.id,annId:result.created.id})});
   expect(stale.status).toBe(409);
-  expect(await stale.json()).toMatchObject({error:'annotation_conflict',current_revision:result.reopened.revision});
+  expect(await stale.json()).toMatchObject({error:'annotation_conflict',current_revision:result.edited.revision});
 });
 
 

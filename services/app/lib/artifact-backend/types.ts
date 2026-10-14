@@ -18,7 +18,7 @@
  * Every type here is the shape the call site already read before the move.
  * The module is types only: importing it adds nothing to a bundle.
  */
-import type { DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
+import type { AnnotationCommentWire, DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { DataflowState } from '@/lib/dataflow';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing, StoryIslandDataflow } from '@/lib/story-runtime/contract';
@@ -175,6 +175,9 @@ interface LiveHandlers {
 /** A reply and/or a state transition; a reply may carry the comment image staged for it. */
 export interface AnnotationActionBody { reply?: string; resolve?: boolean; reopen?: boolean; attachment_id?: string; edit_id?: string }
 
+/** One comment's new text; `expected_revision` is the THREAD revision the editor read (AnnotationWire.revision). */
+interface AnnotationEditBody { body: string; expected_revision?: number }
+
 export interface ArtifactBackend {
   /** 'offline' inside a downloaded file. */
   readonly mode: 'online' | 'offline';
@@ -224,6 +227,17 @@ export interface ArtifactBackend {
   actOnAnnotation(annotationId: string, body: AnnotationActionBody): Promise<AnnotationWire>;
   /** Optional exact permission hint for comments stored in an offline file. The backend still enforces it on delete. */
   canDeleteLocalAnnotation?(annotationId: string): boolean;
+  /**
+   * Rewrite the text of one comment this viewer wrote — a thread's first comment or a reply — and answer the
+   * thread. Rejects with a BackendRequestError: `annotation_conflict` (409) when the thread moved past
+   * `expected_revision`, 404 when the comment is gone or not this viewer's.
+   */
+  editAnnotation(commentId: string, body: AnnotationEditBody): Promise<AnnotationWire>;
+  /**
+   * Optional exact authorship hint for comments held outside a server account (an offline file's own, a local
+   * preview's). Online, authorship is the comment's `author.user_id`. The backend still enforces it on edit.
+   */
+  canEditLocalComment?(comment: AnnotationCommentWire): boolean;
   deleteAnnotation(annotationId: string): Promise<void>;
   uploadCommentImage(form: FormData): Promise<{ id: string }>;
   /** `query` omitted reads the saved mentions' statuses; a string (even '') searches people. Null when refused. */

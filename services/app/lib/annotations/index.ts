@@ -7,8 +7,8 @@ export type { MdNode } from './markdown-lite';
 export { mentionDraft } from './mention-draft';
 export { readAnnotationPages } from './pages';
 export { hasReplyText, remoteWorkLabel, replyMentionPrefix } from './remote-reply';
-export { actOnAnnotationFor, countOpenAnnotations, createAnnotationFor, deleteAnnotationFor, editAnnotationCommentFor, listAnnotationPageFor, listAnnotationsFor } from './store';
-export type { AnnotationEdit, AnnotationEditResult, AnnotationWire, CreateAnnotationInput } from './store';
+export { actOnAnnotationFor, countOpenAnnotations, createAnnotationFor, deleteAnnotationFor, listAnnotationPageFor, listAnnotationsFor } from './store';
+export type { AnnotationWire, CreateAnnotationInput } from './store';
 export { artifactToWireWithAnnotations, artifactWireFor, readArtifactSnapshot, respondToAnnotationAction, respondToAnnotationEdit } from './wire';
 
 export { readCommentChangesFor, InvalidCommentCursor, CommentWaitCapacityError } from './changes';

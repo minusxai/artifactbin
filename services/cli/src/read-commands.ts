@@ -62,9 +62,12 @@ export async function commentCommand(workspace:Workspace,parsed:ParsedCommand,cl
   if(head.capabilities&&head.capabilities.comment===false)throw new CliError('forbidden','You cannot comment on this artifact.','Ask the owner for commenter access.');
   if(flags.thread&&Array.isArray(head.annotations)&&!head.annotations.some(item=>item.id===flags.thread))throw new CliError('invalid_thread',`Thread ${flags.thread} is not on this artifact.`,'List threads with afbin comment <ref>.');
   if(flags.node&&Array.isArray(head.nodes)&&!head.nodes.includes(String(flags.node)))throw new CliError('invalid_node',`Node ${flags.node} is not in the current document.`,'Use a current node id.');
+  if(flags.edit)return {dry_run:true,id:ref.id,action:'edit',comment:flags.edit};
   return {dry_run:true,id:ref.id,action:flags.thread?(body!==undefined?'reply':'state'):'thread',...(flags.thread?{thread:flags.thread}:{}),...(flags.node?{node:flags.node}:{}),...(flags.quote?{quote:flags.quote}:{}),...(flags.state?{state:flags.state}:{})};
  }
- const mutate=(target:string,input:unknown)=>recoverableOperation(workspace,client,{path:target,method:'POST',body:input,...(typeof flags.agent==='string'?{agent:flags.agent}:{}),prepare:async()=>{const head=await client.request<{capabilities?:{comment_receipts?:boolean}}>(`/artifacts/${ref.id}`);if(!head.capabilities?.comment_receipts)throw new CliError('unsupported_server','This server does not support recoverable comments.');}});
+ const mutate=(target:string,input:unknown,method='POST')=>recoverableOperation(workspace,client,{path:target,method,body:input,...(typeof flags.agent==='string'?{agent:flags.agent}:{}),prepare:async()=>{const head=await client.request<{capabilities?:{comment_receipts?:boolean}}>(`/artifacts/${ref.id}`);if(!head.capabilities?.comment_receipts)throw new CliError('unsupported_server','This server does not support recoverable comments.');}});
+ // An edit names the comment itself (a thread's first comment or a reply); the server checks it is yours.
+ if(typeof flags.edit==='string'&&body!==undefined)return mutate(`${path}/${flags.edit}`,{body},'PATCH');
  if(flags.thread){
   if(!/^[A-Za-z0-9_-]+$/.test(String(flags.thread)))throw new CliError('invalid_thread','Use the thread id returned by afbin comment.');
   return mutate(`${path}/${flags.thread}`, {...(flags.request?{request_id:flags.request,phase:flags.phase}:{}),...(body!==undefined?{reply:body}:{}),...(flags.state?flags.state==='resolved'?{resolve:true}:{reopen:true}:{})});

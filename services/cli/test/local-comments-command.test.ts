@@ -80,3 +80,29 @@ test('local comments retain custom agent identity on both posts and replies',asy
   assert.equal(replied.thread[1].author.label,'Pi');
  }finally{await rm(root,{recursive:true,force:true});}
 });
+test('local --edit rewrites only its own author\'s words, keeps the anchor and state, and validates its grammar',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'local-cli-edit-'));
+ try{
+  await writeFile(join(root,'report.jsx'),'<article id="story"><p id="para">Keep this finding.</p></article>');
+  const workspace=await loadWorkspace(root,join(root,'home'));
+  const created:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--node','para','--body','Reveiw locally']));
+  const replied:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--thread',created.id,'--body','Agent reply','--agent','codex','--state','resolved']));
+  const agentReply=replied.thread[1].id;
+  const edited:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--edit',created.id,'--body','Review locally']));
+  assert.equal(edited.local,true);assert.equal(edited.status,'resolved');assert.equal(edited.anchor.nodeId,'para');
+  assert.deepEqual(edited.thread.map((c:any)=>c.body),['Review locally','Agent reply']);
+  assert.ok(edited.thread[0].edited_at);assert.equal(edited.thread[1].edited_at,undefined);
+  // The person at this machine did not write the agent's reply; the agent did.
+  await assert.rejects(localCommentCommand(workspace,parseCommand(['comment','report.jsx','--edit',agentReply,'--body','Put words in'])),(error:any)=>error.code==='forbidden');
+  const byAgent:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--edit',agentReply,'--body','Agent reply, corrected','--agent','codex']));
+  assert.equal(byAgent.thread[1].body,'Agent reply, corrected');
+  const dry:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--edit',created.id,'--body','Not saved','--dry-run']));
+  assert.equal(dry.action,'edit');
+  await assert.rejects(localCommentCommand(workspace,parseCommand(['comment','report.jsx','--edit','missing-id','--body','x'])),/not on the local document/);
+  const listed:any=await localCommentCommand(workspace,parseCommand(['comment','report.jsx','--filter','state=all']));
+  assert.equal(listed.annotations[0].thread[0].body,'Review locally');
+  assert.throws(()=>parseCommand(['comment','report.jsx','--edit',created.id]),/--edit requires the new text/);
+  assert.throws(()=>parseCommand(['comment','report.jsx','--edit',created.id,'--thread',created.id,'--body','x']),/takes only --body or --input/);
+  assert.throws(()=>parseCommand(['comment','a.jsx','b.jsx','--edit',created.id,'--body','x']),/exactly one artifact/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
