@@ -29,12 +29,17 @@ it('exports a drawing on demand and invalidates the cached image after undo', as
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
   const context = { clearRect: vi.fn(), drawImage: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn() };
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D);
-  const encode = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['drawing'], { type: 'image/png' })));
+  const encode = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(`data:image/png;base64,${btoa('drawing')}`);
+  const idleEncode = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob');
   const exportRef: { current: (() => Promise<ScreenshotDrawing>) | null } = { current: null };
   const view = render(() => <ScreenshotEditor image={image} initialStrokes={[{ color: '#ef4444', width: 3, points: [[10, 10], [20, 20]] }]} exportRef={exportRef} busy={false} onRetake={() => {}} />);
   loaded();
   const first = await exportRef.current!();
   expect(first.strokes).toHaveLength(1);
+  expect(first.preview.type).toBe('image/png');
+  expect(await first.preview.text()).toBe('drawing');
+  // Never Chromium's idle-scheduled encoder (lib/capture/png).
+  expect(idleEncode).not.toHaveBeenCalled();
   expect(await exportRef.current!()).toBe(first);
   expect(encode).toHaveBeenCalledTimes(1);
   fireEvent.click(view.getByRole('button', { name: 'Undo stroke' }));
@@ -52,7 +57,7 @@ it('draws with the chosen swatch, a typed custom colour and the slider width, an
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
   const context = { clearRect: vi.fn(), drawImage: vi.fn(), beginPath: vi.fn(), arc: vi.fn(), fill: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn() };
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D);
-  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['drawing'], { type: 'image/png' })));
+  vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(`data:image/png;base64,${btoa('drawing')}`);
   vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 100, height: 50, right: 100, bottom: 50, x: 0, y: 0, toJSON: () => ({}) });
   class TestPointerEvent extends MouseEvent { readonly pointerId: number; constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; } }
   vi.stubGlobal('PointerEvent', TestPointerEvent);

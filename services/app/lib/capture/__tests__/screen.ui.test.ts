@@ -56,7 +56,7 @@ it.each(['success','timeout','wrong-source','resize','ended'] as const)('reads d
  Object.defineProperty(HTMLVideoElement.prototype,'requestVideoFrameCallback',{configurable:true,value:()=>1});
  Object.defineProperty(HTMLVideoElement.prototype,'cancelVideoFrameCallback',{configurable:true,value:()=>{}});
  const drawImage=vi.fn();vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage} as unknown as CanvasRenderingContext2D);
- vi.spyOn(HTMLCanvasElement.prototype,'toBlob').mockImplementation(cb=>cb(new Blob(['pixels'],{type:'image/png'})));
+ vi.spyOn(HTMLCanvasElement.prototype,'toDataURL').mockReturnValue(`data:image/png;base64,${btoa('pixels')}`);
  const session=await beginCapture();const pending=session.capture({x:5,y:5,width:200,height:100}).catch(error=>error);
  await vi.advanceTimersByTimeAsync(5100);const result=await pending;
  expect(play).not.toHaveBeenCalled();expect(stop).toHaveBeenCalledOnce();

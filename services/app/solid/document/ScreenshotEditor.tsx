@@ -1,6 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { CapturedImage } from '@/lib/capture/contract';
+import { encodePng } from '@/lib/capture/png';
 import { COMMENT_IMAGE_LIMITS, type BrushStroke } from '../../../contracts/src/comment-image';
 import Undo2 from 'lucide-solid/icons/undo-2';
 import { Button } from '../ui/Button';
@@ -72,8 +73,9 @@ export function ScreenshotEditor(props: ScreenshotEditorProps): JSX.Element {
     if (exported) return exported;
     finish(); paint();
     const saved = structuredClone(strokes);
-    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-    if (!blob) throw new Error('Could not save the drawing. Please try again.');
+    // Encoded at once: Chromium's toBlob waits for main-thread idle time (lib/capture/png).
+    let blob: Blob;
+    try { blob = encodePng(canvas); } catch { throw new Error('Could not save the drawing. Please try again.'); }
     return exported = { preview: blob, strokes: saved };
   };
   onCleanup(() => { props.exportRef.current = null; });
