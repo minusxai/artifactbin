@@ -908,7 +908,10 @@ describe('CI job shape', () => {
 
   it('tests the exact universal npm artifact instead of compiling it again', () => {
     const job = ci().jobs['reference-compatibility'];
-    expect(job.needs).toEqual(expect.arrayContaining(['plan', 'cli-pack']));
+    // The exact current-attempt artifacts arrive through the shared waiter rather than `needs: cli-pack`.
+    expect(job.needs).toEqual(['plan']);
+    const waited = job.steps.findIndex(step => step.run?.includes('ci-artifact-wait.mjs --wait-only') && step.run.includes('afbin-reference-build') && step.run.includes('afbin-npm-release'));
+    expect(waited).toBeGreaterThan(-1);
     expect(job['runs-on']).toBe(ci().jobs.gates['runs-on']);
     const commands = job.steps.map(step => step.run ?? '');
     expect(commands.some(command => command.includes('build:binary'))).toBe(false);
@@ -918,7 +921,7 @@ describe('CI job shape', () => {
     const extract = job.steps.findIndex(step => step.run === 'tar -xf afbin-reference-build.tar');
     const download = job.steps.findIndex(step => step.with?.name === 'afbin-npm-release');
     expect(job.steps[download]?.with).toMatchObject({ name: 'afbin-npm-release', path: 'npm-candidate' });
-    expect(source).toBeGreaterThan(-1);
+    expect(source).toBeGreaterThan(waited);
     expect(extract).toBeGreaterThan(source);
     expect(download).toBeGreaterThan(extract);
     expect(commands.some(command=>command.includes('npm install --prefix'))).toBe(true);

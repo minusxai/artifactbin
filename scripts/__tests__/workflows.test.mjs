@@ -189,7 +189,8 @@ describe('one immutable npm artifact supplies every release acceptance',()=>{
     expect(nodeSetups[1].with['node-version']).toBe('${{ matrix.node }}');
     const install = matrix.steps.find(step => step.run === 'npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund');
     expect(install.if).toContain("matrix.phase != 'native'");
-    expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks')?.if).toBe("matrix.phase != 'native'");
+    expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks')?.if).toBe("matrix.phase != 'native' && runner.os != 'Windows'");
+    expect(matrix.steps.find(step => step.name === 'Install the same candidate for experience checks on Windows')?.if).toBe("matrix.phase != 'native' && runner.os == 'Windows'");
     const seed=matrix.steps.find(step=>step.name==="Download and verify this attempt's platform seed");
     expect(seed?.if).toBeUndefined();
     expect(seed?.run).toContain('ci-artifact-wait.mjs --extract');

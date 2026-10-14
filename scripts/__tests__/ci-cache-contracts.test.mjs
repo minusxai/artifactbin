@@ -74,8 +74,8 @@ it('reuses only public platform archives and still uploads them from the current
  expect(uploads).toHaveLength(5);
  expect(uploads.every(step=>step.if==="needs.plan.outputs.cli == 'true'")).toBe(true);
  expect(uploads.every(step=>step.with.path.startsWith('.ci-cache-key/npm-platform-seeds/'))).toBe(true);
- const consumers=jobs.cli.steps.filter(step=>['Same-tarball native npm and warmed offline acceptance','Install the same candidate for experience checks'].includes(step.name));
- expect(consumers).toHaveLength(2);
+ const consumers=jobs.cli.steps.filter(step=>['Same-tarball native npm and warmed offline acceptance','Install the same candidate for experience checks','Install the same candidate for experience checks on Windows'].includes(step.name));
+ expect(consumers).toHaveLength(3);
  expect(consumers.every(step=>step.run.includes('--dependency-seed'))).toBe(true);
  // npm -w changes cwd: hand the root-downloaded archive across that boundary absolutely.
  expect(consumers.every(step=>step.run.includes('--dependency-seed "${{ github.workspace }}/'))).toBe(true);

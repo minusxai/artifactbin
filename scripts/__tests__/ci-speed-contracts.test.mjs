@@ -18,7 +18,19 @@ describe('release critical path',()=>{
  });
  it('starts ID-first conformance from the packed candidate instead of waiting on unrelated native proofs',()=>{
   const job=workflow().jobs['reference-compatibility'];
-  expect(job.needs).toContain('cli-pack');
+  // Prepares beside cli-pack and waits for exactly this attempt's two artifacts through the shared waiter.
+  expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
+  const wait=job.steps.findIndex(step=>step.name==="Wait for this attempt's packed candidate and source build");
+  for(const name of ['afbin-npm-release','afbin-reference-build']){
+   expect(job.steps[wait].run).toContain(`ci-artifact-wait.mjs --wait-only "\${{ github.repository }}" "\${{ github.run_id }}" "\${{ github.run_attempt }}" ${name}`);
+   expect(job.steps.findIndex(step=>step.with?.name===name)).toBeGreaterThan(wait);
+  }
+  expect(job.steps[wait].env.GH_TOKEN).toBe('${{ github.token }}');
+  expect(job.steps.findIndex(step=>step.name==='Prepare standalone sandbox worker')).toBeLessThan(wait);
+  const pack=workflow().jobs['cli-pack'].steps,reference=pack.findIndex(step=>step.with?.name==='afbin-reference-build');
+  // Seeds first: every native consumer installs from one; the reference proofs have the longer slack.
+  expect(reference).toBeGreaterThan(pack.findIndex(step=>step.with?.name==='afbin-npm-dependency-seed-macOS-ARM64'));
+  expect(reference).toBe(pack.length-1);
   expect(job.needs).not.toContain('cli');
   expect(job.steps.some(step=>step.with?.name==='afbin-npm-release')).toBe(true);
  });
@@ -331,12 +343,30 @@ it('releases the signed candidate before seed uploads and uses one verified tran
  expect(steps.some(step=>step.uses?.startsWith('actions/download-artifact')&&step.with?.name==='afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}')).toBe(false);
 });
 
-it('prepares all consumer prerequisites before waiting for the same-run candidate',()=>{
+it('prepares consumer prerequisites beside the candidate wait and the candidate install',()=>{
  const job=workflow().jobs.cli,steps=job.steps;
  expect(job.needs).toEqual(['plan']);expect(job.permissions).toEqual({contents:'read',actions:'read'});
- const waiting=steps.findIndex(step=>step.run?.includes('ci-artifact-wait.mjs'));
+ const waiting=steps.findIndex(step=>step.run?.includes('ci-artifact-wait.mjs --wait-only'));
  expect(steps.some(step=>step.id==='dependency-cache-path')).toBe(false);
- expect(waiting).toBeGreaterThan(steps.findIndex(step=>step.id==='acceptance-browser'));
+ // The seed downloads in the background from before the wait and is collected after the candidate.
+ const seed=steps.findIndex(step=>step.name==="Download and verify this attempt's platform seed");
+ expect(seed).toBeLessThan(waiting);expect(steps[seed].run).toMatch(/\) < \/dev\/null > \/dev\/null 2>&1 &\n$/);
+ const seedWait=steps.findIndex(step=>step.name==="Wait for this attempt's platform seed");
+ expect(seedWait).toBeGreaterThan(waiting);
+ expect(seedWait).toBeLessThan(steps.findIndex(step=>step.name==='Same-tarball native npm and warmed offline acceptance'));
+ // The experience install runs in the background while the browser and its libraries restore, awaited before use.
+ const install=steps.findIndex(step=>step.name==='Install the same candidate for experience checks');
+ const installWait=steps.findIndex(step=>step.name==='Wait for the candidate install');
+ expect(install).toBeGreaterThan(seedWait);
+ for(const id of ['acceptance-browser','acceptance-apt'])expect(steps.findIndex(step=>step.id===id)).toBeGreaterThan(install);
+ expect(installWait).toBeGreaterThan(steps.findIndex(step=>step.name==='Install Linux acceptance browser dependencies'));
+ expect(installWait).toBeLessThan(steps.findIndex(step=>step.name==='Installed npm runtime boundary, terminal exit and declarations'));
+ expect(steps[installWait].if).toBe("matrix.phase != 'native' && runner.os != 'Windows'");
+ expect(steps[install].run).toContain('( set +e; npm run test:npm-package');
+ const windows=steps.find(step=>step.name==='Install the same candidate for experience checks on Windows');
+ expect(windows.if).toBe("matrix.phase != 'native' && runner.os == 'Windows'");expect(windows.shell).toBeUndefined();
+ expect(windows.run).toBe(steps[install].run.slice(steps[install].run.indexOf('npm run'),steps[install].run.indexOf(' > "$RUNNER_TEMP')));
+ expect(steps[installWait].run).toContain('exit "$(cat "$RUNNER_TEMP/candidate-install.status")"');
  expect(steps[waiting].run).toContain('--wait-only');
  expect(steps[waiting].env.GH_TOKEN).toBe('${{ github.token }}');
  const candidate=steps.findIndex(step=>step.name==='Download the verified exact-version CLI candidate');

@@ -1050,7 +1050,9 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 1
-      # Source-vs-installed proof needs both locations, not another compilation of the same tree.
+      # Source-vs-installed proof needs both locations, not another compilation of the same tree. After the seeds,
+      # which every native consumer needs before installing; the reference proofs wait for this archive
+      # (scripts/lib/ci-artifact-wait.mjs), not for this whole job, and have the longer slack.
       - name: Archive the source build for reference conformance
         if: needs.plan.outputs.reference-compatibility == 'true'
         run: |
@@ -1125,6 +1127,17 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      # The proof's global install must land in the new user's profile on C:, where it took 57-107s against 3.5s for
+      # the same packages on D: (run 38546666960: Defender real-time off, C:\ and D:\ excluded, so not scanning).
+      # 8.3 short-name generation, on by default for a system volume, costs every file npm creates in a crowded
+      # node_modules directory, and nothing in npm, Node or the CLI reads short names. Both volumes are logged.
+      - name: Stop 8.3 short-name generation on the system volume
+        shell: powershell
+        run: |
+          fsutil 8dot3name query C:
+          fsutil 8dot3name query D:
+          fsutil 8dot3name set C: 1
+          fsutil 8dot3name query C:
       - name: Standard-user Windows bootstrap, setup and fresh-shell checks under Restricted PS5.1
         shell: powershell
         env:
@@ -1198,8 +1211,63 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ matrix.node }}
-      # Every consumer receives the complete platform seed from this attempt; the
-      # acceptance script extracts it once into its unique fresh npm cache.
+      # Windows installs are thousands of small-file writes: keep the consumer's fresh npm cache and prefix on the
+      # runner's local work disk (D:, where the checkout lives) rather than the OS disk's %TEMP%. Same npm, same
+      # Defender, same paths with spaces and non-ASCII names (test-npm-package.mjs); only the drive differs.
+      - name: Keep Windows acceptance installs on the work disk
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+      # The platform seed follows the release by seconds: fetch it IN THE BACKGROUND from before the candidate wait,
+      # through the same verifying waiter (every stream redirected, or the runner would hold this step open).
+      # "Wait for this attempt's platform seed" collects it.
+      - name: Download and verify this attempt's platform seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ( node scripts/lib/ci-artifact-wait.mjs --extract "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" "afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}" "npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" > "$RUNNER_TEMP/platform-seed.log" 2>&1; echo $? > "$RUNNER_TEMP/platform-seed.status" ) < /dev/null > /dev/null 2>&1 &
+      # Tooling and the seed download prepare while this run packs the candidate.
+      # The shared bounded waiter rejects other attempts and failed producers.
+      - name: Wait for this attempt's packed candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}"
+      - name: Download the verified exact-version CLI candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+          REQUIRE_SIGNED_CANDIDATE: ${{ github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        shell: bash
+        run: |
+          version=$(node -p "require('./services/cli/package.json').version")
+          node scripts/lib/ci-artifact-wait.mjs --extract-candidate "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" afbin-npm-release "$version" "$SOURCE_SHA" "$REQUIRE_SIGNED_CANDIDATE" "$GITHUB_WORKSPACE/npm-candidate"
+      - name: Wait for this attempt's platform seed
+        shell: bash
+        run: |
+          until [ -f "$RUNNER_TEMP/platform-seed.status" ]; do sleep 1; done
+          cat "$RUNNER_TEMP/platform-seed.log"
+          exit "$(cat "$RUNNER_TEMP/platform-seed.status")"
+      # Unix bootstrap owns a separate fresh cache and is cheap enough to run alongside npm.
+      # Windows Restricted bootstrap runs on its own required runner above.
+      - name: Same-tarball native npm and warmed offline acceptance
+        if: matrix.phase == 'native'
+        run: npm run test:npm-package -w services/cli -- --ci --dependency-seed "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
+      # The experience phases install IN THE BACKGROUND while their browser and its system libraries restore, then
+      # wait for the install: on slower runners (macos-15-intel) the browser cache alone took 33s after the candidate.
+      # `set +e`: a failed install must still write its status, or the wait below would only end at the job timeout.
+      - name: Install the same candidate for experience checks
+        if: matrix.phase != 'native' && runner.os != 'Windows'
+        shell: bash
+        run: |
+          ( set +e; npm run test:npm-package -w services/cli -- --ci --install-only --dependency-seed "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" > "$RUNNER_TEMP/candidate-install.log" 2>&1; echo $? > "$RUNNER_TEMP/candidate-install.status" ) < /dev/null > /dev/null 2>&1 &
+      # Windows installs in the foreground with its default shell (~15s on the work disk): the same install launched
+      # from Git Bash failed there in 3s (runs 38546666960, 38547899283).
+      - name: Install the same candidate for experience checks on Windows
+        if: matrix.phase != 'native' && runner.os == 'Windows'
+        run: npm run test:npm-package -w services/cli -- --ci --install-only --dependency-seed "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar"
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         if: matrix.phase == 'preview' || matrix.phase == 'local'
         id: acceptance-browser
@@ -1227,42 +1295,13 @@ jobs:
         if: (matrix.phase == 'preview' || matrix.phase == 'local') && runner.os == 'Linux'
         working-directory: services/cli
         run: node ../../scripts/ci/linux-acceptance-deps.mjs "${{ github.workspace }}/.ci-cache-key/acceptance-apt" ../../scripts/ci/npm-acceptance/node_modules/playwright/cli.js
-      # Windows installs are thousands of small-file writes: keep the consumer's fresh npm cache and prefix on the
-      # runner's local work disk (D:, where the checkout lives) rather than the OS disk's %TEMP%. Same npm, same
-      # Defender, same paths with spaces and non-ASCII names (test-npm-package.mjs); only the drive differs.
-      - name: Keep Windows acceptance installs on the work disk
-        if: runner.os == 'Windows'
+      - name: Wait for the candidate install
+        if: matrix.phase != 'native' && runner.os != 'Windows'
         shell: bash
         run: |
-          echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
-          echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
-      # Tooling and download/browser caches prepare while this run packs the candidate.
-      # The shared bounded waiter rejects other attempts and failed producers.
-      - name: Wait for this attempt's packed candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}"
-      - name: Download the verified exact-version CLI candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ github.sha }}
-          REQUIRE_SIGNED_CANDIDATE: ${{ github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        shell: bash
-        run: |
-          version=$(node -p "require('./services/cli/package.json').version")
-          node scripts/lib/ci-artifact-wait.mjs --extract-candidate "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" afbin-npm-release "$version" "$SOURCE_SHA" "$REQUIRE_SIGNED_CANDIDATE" "$GITHUB_WORKSPACE/npm-candidate"
-      - name: Download and verify this attempt's platform seed
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/lib/ci-artifact-wait.mjs --extract "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" "afbin-npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}" "npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar"
-      # Unix bootstrap owns a separate fresh cache and is cheap enough to run alongside npm.
-      # Windows Restricted bootstrap runs on its own required runner above.
-      - name: Same-tarball native npm and warmed offline acceptance
-        if: matrix.phase == 'native'
-        run: npm run test:npm-package -w services/cli -- --ci --dependency-seed "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar" ${{ runner.os != 'Windows' && '--parallel-bootstrap' || '' }}
-      - name: Install the same candidate for experience checks
-        if: matrix.phase != 'native'
-        run: npm run test:npm-package -w services/cli -- --ci --install-only --dependency-seed "${{ github.workspace }}/npm-dependency-seed-${{ runner.os }}-${{ runner.arch }}.tar"
+          until [ -f "$RUNNER_TEMP/candidate-install.status" ]; do sleep 1; done
+          cat "$RUNNER_TEMP/candidate-install.log"
+          exit "$(cat "$RUNNER_TEMP/candidate-install.status")"
       - name: Installed npm runtime boundary, terminal exit and declarations
         if: matrix.phase == 'runtime'
         working-directory: services/cli
@@ -1285,12 +1324,17 @@ jobs:
           retention-days: 7
 
   # Reference conformance checks the source bundle and the exact tested installed npm package.
+  # NOT `needs: cli-pack`: install, browser and sandbox preparation run while cli-pack packs; the same current-attempt
+  # waiter as the CLI matrix holds the downloads until this run's candidate and source build exist.
   reference-compatibility:
-    needs: [ plan, cli-pack ]
+    needs: [ plan ]
     if: needs.plan.outputs.reference-compatibility == 'true'
     name: CLI distributions against ID-first host (${{ matrix.proof }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     # Distinct identity and database hosts share the same current-run build, not CPUs.
     strategy:
       fail-fast: false
@@ -1329,6 +1373,26 @@ jobs:
             ~/.cache/ms-playwright/chromium_headless_shell-*
             ~/.cache/ms-playwright/ffmpeg-*
           key: playwright-v2-chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      # This runner policy already supplies Chromium libraries, as for Chromium-only gates.
+      # Keep binary installation on cache misses; avoid an unrelated apt update/upgrade.
+      - run: npx playwright install chromium
+        working-directory: .
+      - name: Prepare standalone sandbox worker
+        if: matrix.proof == 'team'
+        run: |
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo mkdir -p /sys/fs/cgroup/afbin-sessions
+          echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
+          sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
+          sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
+          docker pull -q postgres:17-alpine
+      - name: Wait for this attempt's packed candidate and source build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" afbin-npm-release
+          node scripts/lib/ci-artifact-wait.mjs --wait-only "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" afbin-reference-build
       # The current run's pack job built these source entrypoints and their app assets together.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -1346,10 +1410,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/afbin-packages" "$RUNNER_TEMP/afbin-consumer"
           cp "$GITHUB_WORKSPACE"/npm-candidate/*.tgz "$RUNNER_TEMP/afbin-packages/"
           npm install --prefix "$RUNNER_TEMP/afbin-consumer" --no-audit "$RUNNER_TEMP"/afbin-packages/*.tgz
-      # This runner policy already supplies Chromium libraries, as for Chromium-only gates.
-      # Keep binary installation on cache misses; avoid an unrelated apt update/upgrade.
-      - run: npx playwright install chromium
-        working-directory: .
       # CLI host build already compiled the app; bundle only the gate server now.
       - name: Build OSS host
         if: matrix.proof != 'team'
@@ -1369,15 +1429,6 @@ jobs:
           fi
           CONFORMANCE__CLI="$cli" node scripts/gates.mjs --servers=1 --only=accounts-and-workspace
 
-      - name: Prepare standalone sandbox worker
-        if: matrix.proof == 'team'
-        run: |
-          sudo apt-get install -y bubblewrap
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          sudo mkdir -p /sys/fs/cgroup/afbin-sessions
-          echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
-          sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
-          sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
       - name: Team hosts with isolated PGLite and PostgreSQL
         if: matrix.proof == 'team'
         working-directory: services/cli
