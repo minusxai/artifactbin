@@ -53,6 +53,7 @@ fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 | `scripts/ci/ci.mjs` | GitHub adapter for the CI planner (`lib/ci-plan.mjs`): plan, build key, lock fingerprint, CLI bump, roll-up. | `ci.yml`, `page-speed.yml` |
 | `scripts/ci/test-timings.mjs` | Refresh `ci/test-timings.json`, the per-file times test shards are packed by. | by hand, with a CI run id |
 | `scripts/lib/ci-elapsed.mjs` | Measure the required-check chain's elapsed time for the job summary. | `ci.yml` |
+| `scripts/lib/ci-supersede.mjs` | Cancel a pull request's earlier, unfinished CI runs without making the new run wait for them. | `ci.yml` (`supersede`) |
 
 ## Browser gate runner
 
