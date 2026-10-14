@@ -198,7 +198,7 @@
   },
   {
    "title": "Unthemed ground",
-   "text": "The fence `theme` is the only door: a fence without one paints no ground, loads no faces and defines no type roles or classes, so a page that copies a system's class names without naming it gets the neutral contract (probed 3 Oct 2026)."
+   "text": "The `theme` metadata field is the only door: omitting it paints no ground, loads no faces and defines no type roles or classes, so a page that copies a system's class names without naming it gets the neutral contract (probed 3 Oct 2026)."
   },
   {
    "title": "Charts in a dark panel",

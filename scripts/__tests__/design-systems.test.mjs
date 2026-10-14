@@ -53,6 +53,13 @@ describe('the specs', () => {
 });
 
 describe('the committed outputs are what the generator emits now', () => {
+  it('describes shared system binding through metadata fields for both HTTP and CLI readers', () => {
+    for (const slug of ROSTER) {
+      expect(systemMd(slug), slug).toContain(`Set the \`theme\` metadata field to \`${slug}\` and \`template\` to the page type.`);
+    }
+    expect(catalogueMd()).toContain('`template` metadata field');
+    expect(catalogueMd()).toContain('`theme` metadata field');
+  });
   it('keeps Almanac band arches inside the mobile page surface while preserving the desktop tilt', () => {
     const css = renderRuntime().entries.find((entry) => entry.name === 'almanac').css;
     const mobile = css.match(/@container \(max-width: 440px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
