@@ -149,7 +149,7 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
       // Only the brief inlines the example; a reference that names it is a build failure, by design.
       ...(file.file === 'SKILL.md' && !file.ref ? { example: (opts.transport === 'http' ? stripFrontmatter(skillExample()) : skillExample()).trimEnd() } : {}),
       references: file.ref ? '' : 'references/',
-      workflows: Object.fromEntries(['introduction', 'authentication', 'creation', 'editing', 'operations'].map(name => [name, `fragments/${opts.transport ?? 'cli'}-${name}.md`])),
+      workflows: Object.fromEntries(['introduction', 'authentication', 'creation', 'editing', 'monitoring', 'operations'].map(name => [name, `fragments/${opts.transport ?? 'cli'}-${name}.md`])),
       ...own,
     });
     const marked = (opts.bundle ? condenseForBundle(rendered) : stripBundleMarkers(rendered)).replace(/\n{3,}/g, '\n\n');
