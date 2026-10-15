@@ -110,7 +110,8 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Cell: { mod: 'data', island: true, api: ['data', 'col', 'agg', 'prefix', 'suffix', 'format', 'className'], dom: 'identity' },
   Chart: { mod: 'data', island: true, api: ['data', 'viz', 'title', 'height', 'recipeData'], dom: 'identity', grid: true },
   // The live grid puts the author's class on its `data-slot="data-table"` box (recipes/data), and its adapter wrapper takes `id`/`data-*`.
-  DataTable: { mod: 'data', island: true, api: ['data', 'columns', 'sort', 'height', 'sticky', 'rowKey', 'templates', 'className'], dom: 'identity', grid: true, noChildren: true },
+  // `transpose` draws the comparison table instead (items as columns, `metrics` as rows, `header` heads them, `edge` adds the margin).
+  DataTable: { mod: 'data', island: true, api: ['data', 'columns', 'sort', 'height', 'sticky', 'rowKey', 'templates', 'transpose', 'header', 'metrics', 'edge', 'className'], dom: 'identity', grid: true, noChildren: true },
   Files: { mod: 'files', island: true, api: ['data', 'variant', 'glyphs'], dom: 'identity' },
   Select: { mod: 'data', island: true, api: ['label', 'placeholder', 'value', 'options', 'className'] },
   Button: { mod: 'basic', api: ['variant', 'size', 'run', 'set', 'args'] },

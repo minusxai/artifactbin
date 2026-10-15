@@ -91,6 +91,26 @@ First read [chart authoring](markup-data-authoring.md).
   field is true. [Conditions](markup-state.md).
 - `<User userId="$_me.id" />`, `<User userId="$_row.booked_by" />` — person by account id.
 
+## Comparison tables
+
+`transpose` compares a few items: each row becomes a column (at most 6,
+headed by `header`), each metric a row.
+
+```jsx
+<Helmet>
+  <Import name="langs" src="ref:cmp123" />
+  <Query name="picks">{`select * from langs.rows where name in ('Go', 'Rust', 'Ruby')`}</Query>
+</Helmet>
+
+<DataTable data="$picks" transpose header="name" edge metrics={[
+  {"col":"cost","title":"Cost","fmt":"$,.2f","better":"low"},
+  {"col":"score","title":"Score","fmt":".1f","better":"high"}]} />
+```
+
+`better` (`"high"`/`"low"`) bolds the best value; `rank`/`sub` name columns
+shown as `#n` and a line under it; `edge` adds "Rust by 25% vs Go".
+No `columns`, `sort` or `rowKey`.
+
 ## Bindings: controls (body)
 
 - A kit control binds a page value two-way: `label` plus `value="$name"`

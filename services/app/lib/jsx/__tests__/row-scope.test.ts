@@ -27,4 +27,18 @@ describe('row scope', () => {
     expect(date.cellColumns).toEqual({ set_due: 'due' });
     expect(table('<Slider value="$_row.due" run="$set_due" />').errors).toEqual([expect.stringContaining('DatePicker')]);
   });
+  it('checks the columns a transposed DataTable names — header, metric, rank and sub — against its table', () => {
+    const columns = { picks: [{ name: 'name', type: 'string' as const }, { name: 'cost', type: 'number' as const }, { name: 'cost_rank', type: 'number' as const }] };
+    const scan = (props: string) => analyzeRowScopes(parseJsxOrThrow(`<DataTable data="$picks" transpose ${props} />`).nodes, columns).errors;
+    expect(scan('header="name" metrics={[{"col":"cost","rank":"cost_rank"}]}')).toEqual([]);
+    expect(scan('header="label" metrics={[{"col":"price","rank":"r","sub":"s"}]}')).toEqual([
+      'DataTable transpose: header "label" is not a column of $picks (columns: name, cost, cost_rank)',
+      'DataTable transpose: metric "price" is not a column of $picks (columns: name, cost, cost_rank)',
+      'DataTable transpose: rank "r" is not a column of $picks (columns: name, cost, cost_rank)',
+      'DataTable transpose: sub "s" is not a column of $picks (columns: name, cost, cost_rank)',
+    ]);
+    // Without transpose (or with unknown columns) nothing is checked here: the props are refs.ts's to refuse.
+    expect(analyzeRowScopes(parseJsxOrThrow('<DataTable data="$picks" header="label" />').nodes, columns).errors).toEqual([]);
+    expect(analyzeRowScopes(parseJsxOrThrow('<DataTable data="$picks" transpose header="label" />').nodes).errors).toEqual([]);
+  });
 });

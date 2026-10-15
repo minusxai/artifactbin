@@ -36,6 +36,11 @@ const PLACEHOLDERS: Record<string, Placeholder> = {
       { day: '2026-08-03', month: '2026-08', region: 'NA', revenue: 1900 },
     ],
   },
+  /** Languages, compared side by side by the transposed DataTable example. */
+  cmp123: {
+    columns: [{ name: 'name', type: 'string' }, { name: 'cost', type: 'number' }, { name: 'score', type: 'number' }],
+    rows: [{ name: 'Go', cost: 12.5, score: 30 }, { name: 'Rust', cost: 10, score: 31 }, { name: 'Ruby', cost: 20, score: 22 }],
+  },
   /** Sprints, read by the roadmap editors. */
   def456: { columns: [{ name: 'name', type: 'string' }], rows: [{ name: 'S1' }] },
   /** The editable roadmap. */

@@ -173,7 +173,7 @@ export function sortRows(rows: Row[], sort: SortSpec | null): Row[] {
 }
 
 /** Cell text: d3-format when `fmt` is set and the value is a number, else the value's plain text ('' for null). */
-export function formatCell(value: unknown, column: ResolvedColumn): string {
+export function formatCell(value: unknown, column: Pick<ResolvedColumn, 'fmt'>): string {
   if (value === null || value === undefined) return '';
   const n = numeric(value);
   if (n === null) return typeof value === 'object' ? JSON.stringify(value) : String(value);

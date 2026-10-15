@@ -86,6 +86,21 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
         names.add(col);
         if (columns && table && !columns[table]?.some((c) => c.name === col)) errors.push(`unknown Column "${col}" in $${table}`);
       }
+      // A comparison (`transpose`) names its columns in `header` and `metrics[].col/rank/sub` (lib/jsx/comparison).
+      const known = table ? columns?.[table] : undefined;
+      if (known && attr(node, 'transpose') !== undefined && attr(node, 'transpose') !== false) {
+        const missing = (role: string, name: unknown) => {
+          if (typeof name === 'string' && name && !known.some((c) => c.name === name)) errors.push(`DataTable transpose: ${role} "${name}" is not a column of $${table} (columns: ${known.map((c) => c.name).join(', ')})`);
+        };
+        missing('header', attr(node, 'header'));
+        const metrics = attr(node, 'metrics');
+        if (Array.isArray(metrics)) for (const m of metrics) if (m && typeof m === 'object') {
+          const spec = m as Record<string, unknown>;
+          missing('metric', spec.col);
+          missing('rank', spec.rank);
+          missing('sub', spec.sub);
+        }
+      }
     }
     if (node.tag === 'Column') {
       if (parent !== 'DataTable' || !scope) errors.push('Column must be a direct child of a DataTable bound to a declared table');
