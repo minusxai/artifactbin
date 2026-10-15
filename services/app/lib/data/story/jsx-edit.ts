@@ -29,7 +29,7 @@ import { validateJsx, hasDangerousScheme, listHasDangerousScheme } from '@/lib/j
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { immutableSet } from '@/lib/jsx/immutable-set';
-import { isEditableTextHost, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
+import { isEditableTextHost, kitTextMarkAllowed, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 
 /*
  * Classification lives in a leaf module (lib/story-ui/host-classify) so the
@@ -711,6 +711,27 @@ function tmpToJsxNodes(tmp: TmpNode[], originalRoots: JsxNode[], errors: Validat
 // ---------------------------------------------------------------------------
 
 /**
+ * What a kit text component's text may hold (lib/story-ui/host-classify): text and the inline marks its element
+ * accepts. Any other element is unwrapped to its text — a block the browser made of a line, a link inside a link —
+ * and a component (spliced back by a stamp, possibly a hostile one) is dropped whole: its text is not the author's.
+ */
+function kitTextChildren(hostTag: string, nodes: JsxNode[], errors: ValidationError[]): JsxNode[] {
+  return nodes.flatMap((node): JsxNode[] => {
+    if (node.type !== 'element') return [node];
+    if (node.isComponent) {
+      errors.push({ message: `Dropped <${node.tag}> from the text of <${hostTag}>`, tag: node.tag });
+      return [];
+    }
+    const children = kitTextChildren(hostTag, node.children, errors);
+    if (!kitTextMarkAllowed(hostTag, node.tag)) {
+      errors.push({ message: `Unwrapped <${node.tag}> in the text of <${hostTag}>`, tag: node.tag });
+      return children;
+    }
+    return [{ ...node, children, selfClosing: children.length === 0 }];
+  });
+}
+
+/**
  * Apply contenteditable DOM edits back onto a story's JSX source. Each edit REPLACES the
  * children of the element at `astPath` with the sanitized JSX conversion of `innerHtml`.
  * Never throws; unresolvable paths / residual validation failures skip that edit and are
@@ -730,7 +751,14 @@ export function applyDomEditsToJsx(source: string, edits: JsxDomEdit[]): ApplyDo
       errors.push({ message: `No element at AST path "${edit.astPath}" — edit skipped` });
       continue;
     }
-    const children = tmpToJsxNodes(parseHtmlFragment(edit.innerHtml), parsed.nodes, errors);
+    // A component's children are written only when it is a kit text component whose children are its text,
+    // and then only as text and the marks it accepts: never a block, a component or anything its props hold.
+    if (host.isComponent && !isEditableTextHost(host)) {
+      errors.push({ message: `<${host.tag}> at AST path "${edit.astPath}" draws its own content — edit skipped`, tag: host.tag });
+      continue;
+    }
+    const converted = tmpToJsxNodes(parseHtmlFragment(edit.innerHtml), parsed.nodes, errors);
+    const children = host.isComponent ? kitTextChildren(host.tag, converted, errors) : converted;
     // Belt-and-braces: the sanitizer must have produced nodes clean by the PUBLISH door's
     // rules (stylePolicy included — an edit that composes but cannot save is still a
     // refusal, just a later and more confusing one). If anything slipped through (a future

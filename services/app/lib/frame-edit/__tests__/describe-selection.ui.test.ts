@@ -175,3 +175,34 @@ describe('describeSelection inside an authored <svg>', () => {
     expect(describeSelection(circle, svgNodes)).toMatchObject({ path: '0.0.0', tag: 'circle' });
   });
 });
+
+describe('kit text components', () => {
+  const KIT = '<Card id="card"><CardHeader id="hd"><CardTitle id="ct" className="text-lg">Revenue</CardTitle></CardHeader>'
+    + '<CardContent id="cc"><Table id="t"><TableBody id="tb"><TableRow id="r"><TableCell id="eVAF">Wed</TableCell><TableCell id="tot">{$q.rows[0].total}</TableCell><TableCell id="btn"><Button>Go</Button></TableCell></TableRow></TableBody></Table></CardContent></Card>';
+  const kit = (() => { const p = parseJsx(KIT); if (!p.ok) throw new Error('fixture does not parse'); return p.nodes; })();
+  const DOM = '<div data-slot="card" id="card" data-mx-ast="0"><div data-slot="card-header" id="hd" data-mx-ast="0.0"><div data-slot="card-title" id="ct" class="text-lg" data-mx-ast="0.0.0">Revenue</div></div>'
+    + '<div data-slot="card-content" id="cc" data-mx-ast="0.1"><div data-slot="table-container"><table data-slot="table" id="t" data-mx-ast="0.1.0"><tbody id="tb" data-mx-ast="0.1.0.0"><tr id="r" data-mx-ast="0.1.0.0.0">'
+    + '<td id="eVAF" data-mx-ast="0.1.0.0.0.0">Wed</td><td id="tot" data-mx-ast="0.1.0.0.0.1">1,204</td><td id="btn" data-mx-ast="0.1.0.0.0.2"><button data-mx-ast="0.1.0.0.0.2.0">Go</button></td></tr></tbody></table></div></div></div>';
+
+  it('a kit component whose children are its text is TEXT; one whose text comes from data is an embed', () => {
+    expect(selectionKindAt(kit, '0.0.0')).toBe('text');
+    expect(selectionKindAt(kit, '0.1.0.0.0.0')).toBe('text');
+    expect(selectionKindAt(kit, '0.1.0.0.0.1')).toBe('embed');
+    expect(selectionKindAt(kit, '0')).toBe('embed');
+  });
+
+  it('says why text takes no caret, and says nothing for text that does', () => {
+    document.body.innerHTML = DOM;
+    const at = (path: string) => document.querySelector(`[data-mx-ast="${path}"]`)!;
+    expect(describeSelection(at('0.1.0.0.0.0'), kit)).toMatchObject({ kind: 'text', tag: 'TableCell', nodeId: 'eVAF' });
+    expect(describeSelection(at('0.1.0.0.0.0'), kit)!.textLock).toBeUndefined();
+    expect(describeSelection(at('0.1.0.0.0.1'), kit)).toMatchObject({ kind: 'embed', textLock: 'Text comes from data' });
+    expect(describeSelection(at('0.1.0.0.0.2.0'), kit)).toMatchObject({ kind: 'embed', textLock: 'Text is drawn by the component' });
+    expect(describeSelection(at('0'), kit)!.textLock).toBeUndefined();
+  });
+
+  it('a kit table cell is part of its table: the grip moves the table, never one cell', () => {
+    document.body.innerHTML = DOM;
+    expect(gripTarget(document.getElementById('eVAF')!, kit)?.id).toBe('t');
+  });
+});

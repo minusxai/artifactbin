@@ -205,13 +205,17 @@ export default function StoryFormatToolbar(props: StoryFormatToolbarProps): JSX.
               {props.historyControls}
               <Show when={props.historyControls}><span class="mx-1 h-4 w-px shrink-0 bg-edge" /></Show>
 
+              <Show when={selection().textLock}>
+                {(reason) => <span role="note" aria-label="Why this text is not editable" class="shrink-0 text-2xs text-muted">{reason()}</span>}
+              </Show>
+
               <Show when={props.onAutoHeight && selection().customHeight}>
                 <span class="text-2xs text-muted">Height: custom</span>
                 <Button variant="secondary" size="sm" aria-label="Auto height" onClick={props.onAutoHeight}>Auto height</Button>
               </Show>
 
               <Show when={plan().text}>
-                <Show when={selection().tag !== 'Markdown'}>
+                <Show when={plan().size}>
                 <Chip label="Decrease font size" onClick={() => apply(stepSizeClass(cls(), -1))}><AArrowDown size={14} /></Chip>
                 <Chip label="Increase font size" onClick={() => apply(stepSizeClass(cls(), 1))}><AArrowUp size={14} /></Chip>
                 </Show>

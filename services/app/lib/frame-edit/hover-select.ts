@@ -18,14 +18,14 @@ import { createBlockSelection } from '@/lib/editor-engine/block-selection';
 import { inlineStates } from '@/lib/editor-engine/model';
 import { linkAt } from '@/lib/editor-engine/links';
 import { gridCols, gridRowHeight } from '@/lib/story-ui/grid-layout';
-import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
+import { resolveJsxNodeAtPath, textLockOf } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { nodeName } from '@/lib/story-ui/node-names';
 import type { StoryEditFramePost, StoryEditParentMessage, StoryEditRect, StoryEditSelection } from '@/lib/edit-protocol';
 import { describedKind, describeSelection } from './describe-selection';
 import { captureSelection } from './selection-range';
 import { markdownEditorFor } from '@/lib/markdown/editor';
-import { canResize, editChromeKind, gripTarget, isComponentPart } from './edit-chrome';
+import { canResize, editChromeKind, gripTarget, isComponentPart, isTablePart } from './edit-chrome';
 
 /**
  * The view's state with the selection the DOM holds NOW. A `selectionchange` listener can run before ProseMirror's
@@ -84,8 +84,8 @@ interface HoverSelect {
   blockSelected(): boolean;
   /** The selectable node a click on `target` would select, excluding duplicate document chrome. */
   selectableAt(target: EventTarget | null): Element | null;
-  /** BLOCK-select `el`: the caret goes and keyboard focus stays in the document. */
-  selectBlock(el: Element): void;
+  /** BLOCK-select `el` (or, unless `exact`, the block its grip moves): the caret goes and keyboard focus stays in the document. */
+  selectBlock(el: Element, exact?: boolean): void;
   /** Select (or clear) and tell the page. */
   reportSelection(selection: StoryEditSelection | null, block?: boolean): void;
   /** `el` described for the page, with the words selected inside it when there are any. */
@@ -188,7 +188,7 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
         : undefined;
     const inlineOrDrawingPart =
       node?.type === 'element' &&
-      (INLINE_TAGS.has(node.tag) || (el.namespaceURI === 'http://www.w3.org/2000/svg' && node.tag !== 'svg'));
+      (INLINE_TAGS.has(node.tag) || isTablePart(node) || (el.namespaceURI === 'http://www.w3.org/2000/svg' && node.tag !== 'svg'));
     chrome.select(inlineOrDrawingPart ? null : (el as HTMLElement), inlineOrDrawingPart ? null : selectedPath, grid, {
       resizable: node?.type === 'element' && canResize(node),
       label: node?.type === 'element' ? nodeName(node.tag) : 'Block',
@@ -214,8 +214,8 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     chrome.hover(under && gripTarget(under, nodes()));
   };
 
-  const selectBlock = (el: Element) => {
-    const target = gripTarget(el, nodes()) ?? el;
+  const selectBlock = (el: Element, exact = false) => {
+    const target = exact ? el : gripTarget(el, nodes()) ?? el;
     const focused = doc.activeElement as HTMLElement | null;
     if (focused && focused !== root && root.contains(focused)) focused.blur();
     win.getSelection()?.removeAllRanges();
@@ -337,7 +337,8 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     // Chrome the document draws for itself (the deck rail and its slide previews) re-renders the
     // slide's own nodes, so ids and AST stamps appear twice — a click there must never select the copy.
     if (target.closest(DOCUMENT_CHROME)) return;
-    if (target.closest('.ProseMirror, [data-mx-lexical]') && target.closest('a')) event.preventDefault();
+    // A link being typed in (prose, Markdown, a text host such as a kit BreadcrumbLink) is text, never a navigation.
+    if (target.closest('.ProseMirror, [data-mx-lexical], [contenteditable="true"]') && target.closest('a')) event.preventDefault();
     // A drag ends with a click on the common ancestor. It is still a text selection, never an
     // instruction to resize that entire container.
     const native = win.getSelection();
@@ -353,7 +354,11 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     const chromeKind = editChromeKind(stamped);
     // Nothing to type in a chart or an image: a click selects it.
     if (chromeKind === 'block') {
-      if (describeSelection(stamped, nodes())) selectBlock(stamped);
+      // Text that takes no caret (it comes from data, is computed, is the component's) is selected itself, so the
+      // page can say why; anything else selects the block its grip moves.
+      const path = stamped.getAttribute(AST_PATH_ATTR);
+      const locked = !!path && !!textLockOf(resolveJsxNodeAtPath(nodes(), path));
+      if (describeSelection(stamped, nodes())) selectBlock(stamped, locked);
       return;
     }
     // A container's padding selects nothing (its grip, Esc and the breadcrumb do) — unless the

@@ -275,3 +275,148 @@ describe('edit session', () => {
     expect([native.anchorOffset, native.focusOffset]).toEqual([0, 5]);
   });
 });
+
+describe('kit text components in the edit session', () => {
+  const KIT = '<Card id="card"><CardHeader id="hd"><CardTitle id="ct" className="text-lg">Revenue</CardTitle></CardHeader>'
+    + '<CardContent id="cc"><Table id="t"><TableBody id="tb"><TableRow id="r"><TableCell id="eVAF">Wed</TableCell><TableCell id="tot">{$q.rows[0].total}</TableCell></TableRow></TableBody></Table></CardContent></Card>'
+    + '<Breadcrumb id="bc"><BreadcrumbList id="bl"><BreadcrumbItem id="bi"><BreadcrumbLink id="bk" href="/reports">Reports</BreadcrumbLink></BreadcrumbItem></BreadcrumbList></Breadcrumb>';
+  /** The compiled reader's static kit HTML for KIT: recipe classes and data-slot on each element, the AST stamp on the node's own. */
+  const KIT_DOM = '<div data-slot="card" class="rounded-xl border" id="card" data-mx-ast="0"><div data-slot="card-header" id="hd" data-mx-ast="0.0"><div data-slot="card-title" class="text-lg" id="ct" data-mx-ast="0.0.0">Revenue</div></div>'
+    + '<div data-slot="card-content" id="cc" data-mx-ast="0.1"><div data-slot="table-container"><table data-slot="table" id="t" data-mx-ast="0.1.0"><tbody data-slot="table-body" id="tb" data-mx-ast="0.1.0.0"><tr data-slot="table-row" id="r" data-mx-ast="0.1.0.0.0">'
+    + '<td data-slot="table-cell" class="p-2" id="eVAF" data-mx-ast="0.1.0.0.0.0">Wed</td><td data-slot="table-cell" class="p-2" id="tot" data-mx-ast="0.1.0.0.0.1">1,204</td></tr></tbody></table></div></div></div>'
+    + '<nav aria-label="breadcrumb" data-slot="breadcrumb" id="bc" data-mx-ast="1"><ol data-slot="breadcrumb-list" id="bl" data-mx-ast="1.0"><li data-slot="breadcrumb-item" id="bi" data-mx-ast="1.0.0"><a data-slot="breadcrumb-link" href="/reports" id="bk" data-mx-ast="1.0.0.0">Reports</a></li></ol></nav>';
+  const CELL = '0.1.0.0.0.0';
+  const focus = (el: HTMLElement) => { el.focus(); el.dispatchEvent(new FocusEvent('focus')); };
+  const caretIn = (el: HTMLElement, offset = 1) => {
+    const range = document.createRange();
+    range.setStart(el.firstChild!, offset);
+    range.collapse(true);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+  };
+  const key = (el: HTMLElement, init: KeyboardEventInit) => {
+    const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+    el.dispatchEvent(event);
+    return event;
+  };
+
+  it('a kit cell, a card title and a breadcrumb link take a caret; a cell from data does not', async () => {
+    const { at } = await open(KIT.replace('>Revenue<', '><b>Net</b> revenue<'), KIT_DOM.replace('>Revenue<', '><b data-mx-ast="0.0.0.0">Net</b> revenue<'));
+    // Its marks are its text, typed in through it: not hosts of their own.
+    expect(at('0.0.0.0').getAttribute('contenteditable')).toBeNull();
+    expect(at(CELL).contentEditable).toBe('true');
+    expect(at('0.0.0').contentEditable).toBe('true');
+    expect(at('1.0.0.0').contentEditable).toBe('true');
+    expect(at('0.1.0.0.0.1').getAttribute('contenteditable')).toBeNull();
+    expect(at('0').getAttribute('contenteditable')).toBeNull();
+  });
+
+  it('focusing a kit cell reports a TEXT selection on it; typing then leaving posts its new text', async () => {
+    const { of, at } = await open(KIT, KIT_DOM);
+    const cell = at(CELL);
+    focus(cell);
+    expect(of('mx:selection').at(-1)?.selection).toMatchObject({ kind: 'text', path: CELL, tag: 'TableCell', nodeId: 'eVAF', mode: 'typing' });
+    cell.textContent = 'Thu';
+    cell.dispatchEvent(new Event('input', { bubbles: true }));
+    cell.blur();
+    cell.dispatchEvent(new FocusEvent('blur'));
+    expect(of('mx:text-edit').at(-1)).toMatchObject({ path: CELL, innerHtml: 'Thu' });
+  });
+
+  it('a click on a cell whose text comes from data selects that cell and says why it takes no caret', async () => {
+    const { of, at } = await open(KIT, KIT_DOM);
+    at('0.1.0.0.0.1').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(of('mx:selection').at(-1)?.selection).toMatchObject({ kind: 'embed', path: '0.1.0.0.0.1', tag: 'TableCell', mode: 'block', textLock: 'Text comes from data' });
+  });
+
+  it('select-all selects the text of the cell being edited, never the page', async () => {
+    const { at } = await open(KIT, KIT_DOM);
+    const cell = at(CELL);
+    focus(cell);
+    caretIn(cell);
+    const event = key(cell, { key: 'a', ctrlKey: !/Mac/.test(navigator.platform), metaKey: /Mac/.test(navigator.platform) });
+    expect(event.defaultPrevented).toBe(true);
+    const range = window.getSelection()!.getRangeAt(0);
+    expect(window.getSelection()!.toString()).toBe('Wed');
+    expect(cell.contains(range.startContainer) && cell.contains(range.endContainer)).toBe(true);
+  });
+
+  it('Enter never splits a kit text into blocks it cannot hold', async () => {
+    const { at } = await open(KIT, KIT_DOM);
+    const cell = at(CELL);
+    focus(cell);
+    caretIn(cell);
+    expect(key(cell, { key: 'Enter' }).defaultPrevented).toBe(true);
+  });
+
+  it('a paste into a kit text is its plain text on one line, typed where the caret is', async () => {
+    const { of, at } = await open(KIT, KIT_DOM);
+    const cell = at(CELL);
+    focus(cell);
+    caretIn(cell, 3);
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: (type: string) => type === 'text/plain' ? 'nes\n  day' : type === 'text/html' ? '<p>nes</p><p>day</p>' : '' } });
+    cell.dispatchEvent(paste);
+    expect(paste.defaultPrevented).toBe(true);
+    expect(cell.innerHTML).toBe('Wednes day');
+    expect(of('mx:edit-error')).toHaveLength(0);
+    session!.onParentMessage({ type: 'mx:commit' });
+    expect(of('mx:text-edit').at(-1)).toMatchObject({ path: CELL, innerHtml: 'Wednes day' });
+  });
+
+  it('the toolbar\'s bold, italic and underline wrap the selected words in the kit text, and unwrap them again', async () => {
+    const { of, at } = await open(KIT, KIT_DOM);
+    const cell = at(CELL);
+    focus(cell);
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    session!.onParentMessage({ type: 'mx:inline', tag: 'strong' });
+    expect(cell.innerHTML).toBe('<strong>Wed</strong>');
+    expect(of('mx:text-edit').at(-1)).toMatchObject({ path: CELL, innerHtml: '<strong>Wed</strong>' });
+    const inner = document.createRange();
+    inner.selectNodeContents(cell.querySelector('strong')!);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(inner);
+    session!.onParentMessage({ type: 'mx:inline', tag: 'strong' });
+    expect(cell.innerHTML).toBe('Wed');
+    expect(of('mx:text-edit').at(-1)).toMatchObject({ path: CELL, innerHtml: 'Wed' });
+  });
+
+  it('bold from the page\'s toolbar still lands when the click there took the focus from the kit text', async () => {
+    const { of, at } = await open(KIT, KIT_DOM);
+    const title = at('0.0.0');
+    focus(title);
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    title.blur();
+    title.dispatchEvent(new FocusEvent('blur'));
+    session!.onParentMessage({ type: 'mx:inline', tag: 'em' });
+    expect(of('mx:text-edit').at(-1)).toMatchObject({ path: '0.0.0', innerHtml: '<em>Revenue</em>' });
+  });
+
+  it('a click in a breadcrumb link being edited is a caret, never a navigation', async () => {
+    const { at } = await open(KIT, KIT_DOM);
+    const link = at('1.0.0.0');
+    focus(link);
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+  });
+
+  it('a breadcrumb link takes no link inside it', async () => {
+    const { of, at } = await open(KIT, KIT_DOM);
+    const link = at('1.0.0.0');
+    focus(link);
+    const range = document.createRange();
+    range.selectNodeContents(link);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    session!.onParentMessage({ type: 'mx:apply-link', path: '1.0.0.0', href: 'https://example.com' });
+    expect(link.querySelector('a')).toBeNull();
+    expect(of('mx:text-edit')).toHaveLength(0);
+  });
+});

@@ -16,29 +16,41 @@ describe('the unconditional controls', () => {
 
 describe('what varies, by kind', () => {
   it('offers Markdown text commands separately from whole-region styling', () => {
-    expect(selectionToolbarPlan({ kind: 'text', tag: 'Markdown', mode: 'typing' })).toEqual({ text: true, format: false, color: false, link: true, image: false });
-    expect(selectionToolbarPlan({ kind: 'text', tag: 'Markdown', mode: 'block' })).toEqual({ text: false, format: true, color: false, link: false, image: false });
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'Markdown', mode: 'typing' })).toEqual({ text: true, size: false, format: false, color: false, link: true, image: false });
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'Markdown', mode: 'block' })).toEqual({ text: false, size: false, format: true, color: false, link: false, image: false });
   });
   it('a component gets no class algebra — its classes are render output', () => {
     for (const tag of ['Question', 'Number', 'GridItem', 'Card']) {
-      expect(selectionToolbarPlan({ kind: 'embed', tag })).toEqual({ text: false, format: false, color: false, link: false, image: false });
+      expect(selectionToolbarPlan({ kind: 'embed', tag })).toEqual({ text: false, size: false, format: false, color: false, link: false, image: false });
     }
   });
   it('a text-bearing tag gets the type controls; a container only layout', () => {
-    expect(selectionToolbarPlan({ kind: 'element', tag: 'p' })).toEqual({ text: true, format: true, color: true, link: false, image: false });
-    expect(selectionToolbarPlan({ kind: 'element', tag: 'div' })).toEqual({ text: false, format: true, color: true, link: false, image: false });
+    expect(selectionToolbarPlan({ kind: 'element', tag: 'p' })).toEqual({ text: true, size: true, format: true, color: true, link: false, image: false });
+    expect(selectionToolbarPlan({ kind: 'element', tag: 'div' })).toEqual({ text: false, size: false, format: true, color: true, link: false, image: false });
   });
   it('links need the live Range only a focused text host holds', () => {
-    expect(selectionToolbarPlan({ kind: 'text', tag: 'p' })).toEqual({ text: true, format: true, color: true, link: true, image: false });
-    expect(selectionToolbarPlan({ kind: 'text', tag: 'p', mode: 'typing' })).toEqual({ text: true, format: true, color: true, link: true, image: false });
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'p' })).toEqual({ text: true, size: true, format: true, color: true, link: true, image: false });
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'p', mode: 'typing' })).toEqual({ text: true, size: true, format: true, color: true, link: true, image: false });
   });
 });
 
 describe('what a BLOCK selection offers', () => {
   it('drops the text-only tools (size, weight, colour, links) and keeps the block ones (align, spacing)', () => {
-    expect(selectionToolbarPlan({ kind: 'text', tag: 'p', mode: 'block' })).toEqual({ text: false, format: true, color: false, link: false, image: false });
-    expect(selectionToolbarPlan({ kind: 'element', tag: 'div', mode: 'block' })).toEqual({ text: false, format: true, color: false, link: false, image: false });
-    expect(selectionToolbarPlan({ kind: 'embed', tag: 'Question', mode: 'block' })).toEqual({ text: false, format: false, color: false, link: false, image: false });
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'p', mode: 'block' })).toEqual({ text: false, size: false, format: true, color: false, link: false, image: false });
+    expect(selectionToolbarPlan({ kind: 'element', tag: 'div', mode: 'block' })).toEqual({ text: false, size: false, format: true, color: false, link: false, image: false });
+    expect(selectionToolbarPlan({ kind: 'embed', tag: 'Question', mode: 'block' })).toEqual({ text: false, size: false, format: false, color: false, link: false, image: false });
+  });
+});
+
+describe('a kit text component', () => {
+  it('takes marks (and links where its element is not a link) but none of the class algebra: its classes are render output', () => {
+    for (const tag of ['TableCell', 'CardTitle', 'AlertDescription', 'Badge'])
+      expect(selectionToolbarPlan({ kind: 'text', tag, mode: 'typing' })).toEqual({ text: true, size: false, format: false, color: false, link: true, image: false });
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'BreadcrumbLink', mode: 'typing' })).toEqual({ text: true, size: false, format: false, color: false, link: false, image: false });
+  });
+  it('selected as a block, or locked, it offers only what every selection gets', () => {
+    expect(selectionToolbarPlan({ kind: 'text', tag: 'TableCell', mode: 'block' })).toEqual({ text: false, size: false, format: false, color: false, link: false, image: false });
+    expect(selectionToolbarPlan({ kind: 'embed', tag: 'TableCell', mode: 'block' })).toEqual({ text: false, size: false, format: false, color: false, link: false, image: false });
   });
 });
 
@@ -46,6 +58,6 @@ describe('an image', () => {
   it('gets its own controls and layout, never the text vocabulary — in either mode', () => {
     for (const mode of [undefined, 'block', 'typing'] as const)
       expect(selectionToolbarPlan({ kind: 'element', tag: 'img', mode }))
-        .toEqual({ text: false, format: true, color: false, link: false, image: true });
+        .toEqual({ text: false, size: false, format: true, color: false, link: false, image: true });
   });
 });

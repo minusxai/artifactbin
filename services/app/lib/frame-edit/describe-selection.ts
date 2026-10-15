@@ -15,7 +15,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
 // The leaf classification module, NOT the write-back path: importing the
 // latter pulled the validator and the component tables into this chunk (75 KB
 // gzipped to ask "is this a paragraph").
-import { crumbHint, isEditableTextHost, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
+import { crumbHint, isEditableTextHost, resolveJsxNodeAtPath, TEXT_LOCK_REASONS, textLockOf } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR, SOURCE_NODE_ID_ATTR } from '@/lib/story-ui/ast-path';
 import { isComponentPart } from './edit-chrome';
 import type { StoryEditCrumb, StoryEditSelection } from '@/lib/edit-protocol';
@@ -27,9 +27,8 @@ export function selectionKindAt(nodes: JsxNode[], path: string): StoryEditSelect
   if (!path) return null;
   const node = resolveJsxNodeAtPath(nodes, path);
   if (!node || node.type !== 'element') return null;
-  if (node.tag === 'Markdown') return 'text';
-  if (node.isComponent) return 'embed';
-  return isEditableTextHost(node) ? 'text' : 'element';
+  if (node.tag === 'Markdown' || isEditableTextHost(node)) return 'text';
+  return node.isComponent ? 'embed' : 'element';
 }
 
 /**
@@ -94,8 +93,10 @@ export function describeSelection(el: Element, nodes: JsxNode[]): StoryEditSelec
     ? authoredId.value.json
     : undefined;
   const r = el.getBoundingClientRect();
+  const lock = kind === 'text' ? null : textLockOf(node);
   return {
     kind,
+    ...(lock ? { textLock: TEXT_LOCK_REASONS[lock] } : {}),
     ...(el.hasAttribute('data-mx-markdown') ? { editor: 'markdown' as const } : el.closest('.ProseMirror') ? { editor: 'prose' as const } : {}),
     customHeight:node.attributes.some(a=>a.name==='minHeight'&&a.value.static&&typeof a.value.json==='number')||/\bmin-h-\[\d+px\]/.test(el.getAttribute('class')??''),
     path,

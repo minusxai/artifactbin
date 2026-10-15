@@ -99,10 +99,11 @@ export function composeSource(source: string, pending: PendingEdits): string {
    * A text edit may only address a TEXT HOST, checked against the source here.
    *
    * The frame makes nothing else editable, so a well-behaved document never
-   * sends anything else — but the parent is the boundary, and the write-back
-   * itself will happily replace a component's children with whatever it is
-   * given. A component's DOM is render chrome; writing it back would serialize
-   * a chart's markup into the author's source.
+   * sends anything else — but the parent is the boundary. A component's DOM is
+   * render chrome; writing it back would serialize a chart's markup into the
+   * author's source. The one kind of component that is a host is a kit text
+   * component whose children are plain text (lib/story-ui/host-classify), and
+   * the write-back keeps what it is given to the text and marks it accepts.
    */
   const parsed = parseJsx(source);
   const offset = parsed.ok ? helmetOffset(parsed.nodes) : 0;
@@ -116,7 +117,7 @@ export function composeSource(source: string, pending: PendingEdits): string {
   const addressable = (astPath: string) => {
     if (!parsed.ok) return false;
     const node = resolveJsxNodeAtPath(parsed.nodes, astPath);
-    return !!node && node.type === 'element' && !node.isComponent && isEditableTextHost(node);
+    return !!node && node.type === 'element' && isEditableTextHost(node);
   };
   const withText = applyDomEditsToJsx(
     source,

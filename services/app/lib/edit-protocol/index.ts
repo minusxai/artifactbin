@@ -92,6 +92,12 @@ export interface StoryEditSelection {
   /** 'text': a focused editable host · 'element': a click-selected container · 'embed': a component. */
   kind: 'text' | 'element' | 'embed';
   /**
+   * Why the text this node shows takes no caret, for the author (lib/story-ui/host-classify TEXT_LOCK_REASONS):
+   * it comes from data, is computed, or is drawn by the component. Absent when the node is text to type in, or
+   * shows no text of its own.
+   */
+  textLock?: string;
+  /**
    * 'typing': a caret in text (the toolbar offers text tools). 'block': the node
    * itself is selected (grip, Esc, breadcrumb, a click on a chart) — the caret
    * is gone, so the toolbar offers block tools only. Absent from older frames:
