@@ -51,6 +51,9 @@ export function isComponentPart(node: JsxNode | null, parent: JsxNode | null): b
 
 const parentPathOf = (path: string) => path.split('.').slice(0, -1).join('.');
 
+/** A section, row or cell of a table, plain or kit: never given block chrome of its own (the table moves as one). */
+export const isTablePart = (node: JsxNode | null): boolean => node?.type === 'element' && TABLE_PART_TAGS.has(node.tag);
+
 /**
  * The block a margin grip beside `el` moves: `el` itself, or its nearest
  * stamped block when `el` is an inline, drawing, table or component part. Null when nothing

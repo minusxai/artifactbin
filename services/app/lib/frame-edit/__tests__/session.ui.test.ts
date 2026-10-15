@@ -301,7 +301,9 @@ describe('kit text components in the edit session', () => {
   };
 
   it('a kit cell, a card title and a breadcrumb link take a caret; a cell from data does not', async () => {
-    const { at } = await open(KIT, KIT_DOM);
+    const { at } = await open(KIT.replace('>Revenue<', '><b>Net</b> revenue<'), KIT_DOM.replace('>Revenue<', '><b data-mx-ast="0.0.0.0">Net</b> revenue<'));
+    // Its marks are its text, typed in through it: not hosts of their own.
+    expect(at('0.0.0.0').getAttribute('contenteditable')).toBeNull();
     expect(at(CELL).contentEditable).toBe('true');
     expect(at('0.0.0').contentEditable).toBe('true');
     expect(at('1.0.0.0').contentEditable).toBe('true');
@@ -319,6 +321,12 @@ describe('kit text components in the edit session', () => {
     cell.blur();
     cell.dispatchEvent(new FocusEvent('blur'));
     expect(of('mx:text-edit').at(-1)).toMatchObject({ path: CELL, innerHtml: 'Thu' });
+  });
+
+  it('a click on a cell whose text comes from data selects that cell and says why it takes no caret', async () => {
+    const { of, at } = await open(KIT, KIT_DOM);
+    at('0.1.0.0.0.1').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(of('mx:selection').at(-1)?.selection).toMatchObject({ kind: 'embed', path: '0.1.0.0.0.1', tag: 'TableCell', mode: 'block', textLock: 'Text comes from data' });
   });
 
   it('select-all selects the text of the cell being edited, never the page', async () => {

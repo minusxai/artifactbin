@@ -458,7 +458,8 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
             });
           });
         }
-        if (node.type === 'element') visit(node.children, path);
+        // A kit text component's marks are its text, typed in through it: never hosts of their own.
+        if (node.type === 'element' && !(node.isComponent && isEditableTextHost(node))) visit(node.children, path);
         index++;
         continue;
       }
