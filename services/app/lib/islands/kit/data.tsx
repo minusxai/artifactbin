@@ -23,8 +23,7 @@ import type { TableResult, NumberAgg, Row, RefDataMap } from '@/lib/dataflow';
 import { cellValue } from '@/lib/dataflow/number-aggregation';
 import { numberFormatter } from '@/lib/dataflow/number-format';
 import { barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows, type SortSpec } from '@/lib/story-ui/data-table';
-import { compareTable, MAX_COMPARE_ITEMS, parseMetricSpecs } from '@/lib/story-ui/compare';
-import { TABLE_CLASSES } from './recipes/data';
+import { TABLE_CLASSES } from './data/table-classes';
 import { commentMetadata, keyedRowsError } from '@/lib/story-ui/repeat-identity';
 import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
 import { personFaceBackground, personInitial } from '../person-face';
@@ -70,6 +69,7 @@ interface ColumnTemplate { col: string; id?: string; path?: string; ids?: string
 /** A column's content, compiled: drawn in each row's cell with the row and where the cell sits (interpreter renderCell). */
 type CellContent = (row: Row, cell: CellScope) => JSX.Element;
 interface DataTableProps { data: unknown; columns?: unknown; sort?: unknown; transpose?: boolean; header?: string; metrics?: unknown; edge?: boolean; height?: number | string; sticky?: boolean; className?: string; id?: string; rowKey?: string; inGridItem?: boolean; templates?: ColumnTemplate[]; cells?: (CellContent | undefined)[]; renderCell?: (template: ColumnTemplate, row: Row, index: number) => JSX.Element; resolveSrc?: (url: string) => string | null; [key: `data-${string}`]: unknown }
+import ComparisonGrid from './data/comparison';
 const STATIC_ROWS = 50;
 const ROW_H = 33;
 function TimestampCell(props: { value: string }) {
@@ -234,7 +234,7 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
     <div ref={scroll} onScroll={onScroll} class={TABLE_CLASSES.scroll} style={css({ 'max-height': `${parseTableHeight(props.height)}px` })}>
       <table data-mx-kit-table="" class={TABLE_CLASSES.table} {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}>
         <thead class={`${TABLE_CLASSES.head}${props.sticky === false ? '' : ' sticky top-0 z-10'}`} {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}><tr class={TABLE_CLASSES.headRow} {...attr('style', virtual() ? css(rowGrid()) : undefined)}>
-          <For each={resolved()}>{column => <th {...attr('id', templateOf(column.col)?.id ?? (typeof templateOf(column.col)?.props?.id === 'string' ? templateOf(column.col)!.props!.id as string : undefined))} {...attr('data-mx-ast', templateOf(column.col)?.path)} scope="col" aria-label={`Sort by ${column.title}`} aria-sort={sort()?.col === column.col ? sort()?.dir === 'asc' ? 'ascending' : 'descending' : 'none'} {...attr('title', column.type === 'string' && !(table()?.columns ?? []).some(k => k.name === column.col) ? `"${column.col}" is not a column of this table` : undefined)} onClick={() => cycle(column.col)} class={`${TABLE_CLASSES.headCell} cursor-pointer select-none`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined })}>{column.title}<Show when={sort()?.col === column.col}><span aria-hidden="true" class="ml-1 opacity-70">{sort()?.dir === 'asc' ? '▲' : '▼'}</span></Show></th>}</For>
+          <For each={resolved()}>{column => <th {...attr('id', templateOf(column.col)?.id ?? (typeof templateOf(column.col)?.props?.id === 'string' ? templateOf(column.col)!.props!.id as string : undefined))} {...attr('data-mx-ast', templateOf(column.col)?.path)} scope="col" aria-label={`Sort by ${column.title}`} aria-sort={sort()?.col === column.col ? sort()?.dir === 'asc' ? 'ascending' : 'descending' : 'none'} {...attr('title', column.type === 'string' && !(table()?.columns ?? []).some(k => k.name === column.col) ? `"${column.col}" is not a column of this table` : undefined)} onClick={() => cycle(column.col)} class={TABLE_CLASSES.sortHeadCell} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined })}>{column.title}<Show when={sort()?.col === column.col}><span aria-hidden="true" class="ml-1 opacity-70">{sort()?.dir === 'asc' ? '▲' : '▼'}</span></Show></th>}</For>
         </tr></thead>
         <tbody {...attr('style', virtual() ? css({ display: 'block', height: `${virtualizer()?.getTotalSize() ?? ordered().length * ROW_H}px`, position: 'relative' }) : undefined)}><Show when={ordered().length} fallback={<tr {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}><td colSpan={Math.max(1, resolved().length)} class="block px-3 py-6 text-center text-muted-foreground">no rows</td></tr>}>
           <For each={rendered()}>{instance => {
@@ -250,48 +250,6 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
     </div>
     <Show when={table()?.truncated || loading() || (table()?.totalRows ?? 0) > shown().length}><div class={TABLE_CLASSES.footer}><span aria-label="Row count">{loading() ? 'loading rows…' : `${count.format(shown().length)} of ${count.format(table()?.totalRows ?? shown().length)} rows`}</span><Show when={remote() && !loading()}><button type="button" aria-label="Load more rows" onClick={() => readWindow(shown().length, sort(), false)} class="cursor-pointer font-medium underline-offset-2 hover:underline">load more</button></Show></div></Show>
   </div></Show>;
-}
-
-/** The measure column stays in view while the items scroll sideways; it paints the card under itself. */
-const PINNED = 'sticky left-0 z-[1] bg-card';
-/**
- * `<DataTable transpose>` — a comparison: each row of the table becomes a column headed by its `header`
- * cell, each metric a row (lib/story-ui/compare computes it). A static table drawn as served, with
- * DataTable's own classes element by element (TABLE_CLASSES): no virtual window, no sorting, no remote
- * paging, its own sideways scroll box with the measure column pinned. At most MAX_COMPARE_ITEMS items;
- * the footer says what was left out.
- */
-function ComparisonGrid(props: DataTableProps & { table: () => TableResult | undefined }) {
-  const model = createMemo(() => compareTable({
-    rows: props.table()?.rows ?? [], columns: props.table()?.columns ?? [], edge: props.edge === true,
-    header: typeof props.header === 'string' ? props.header : undefined,
-    metrics: props.metrics === undefined ? null : parseMetricSpecs(props.metrics),
-  }));
-  const total = () => Math.max(model().total, props.table()?.totalRows ?? 0);
-  const right = css({ 'text-align': 'right' });
-  const left = css({ 'text-align': 'left' });
-  return <div data-slot="data-table" aria-label="Comparison table" class={[TABLE_CLASSES.box, props.className].filter(Boolean).join(' ')}>
-    <div class={TABLE_CLASSES.scroll}>
-      <table data-mx-kit-table="" data-mx-compare="" class={TABLE_CLASSES.table}>
-        <thead class={TABLE_CLASSES.head}><tr class={TABLE_CLASSES.headRow}>
-          <th scope="col" class={`${TABLE_CLASSES.headCell} ${PINNED}`} style={left}><span class="sr-only">Measure</span></th>
-          <For each={model().items}>{item => <th scope="col" class={TABLE_CLASSES.headCell} style={right}>{item}</th>}</For>
-          <Show when={props.edge === true}><th scope="col" class={TABLE_CLASSES.headCell} style={right}>Edge</th></Show>
-        </tr></thead>
-        <tbody><Show when={model().items.length} fallback={<tr><td colSpan={2} class="block px-3 py-6 text-center text-muted-foreground">no rows</td></tr>}>
-          <For each={model().rows}>{row => <tr class={TABLE_CLASSES.row}>
-            <th scope="row" class={`${TABLE_CLASSES.cell} ${PINNED} font-normal`} style={left}>{row.title}</th>
-            <For each={row.cells}>{cell => <td class={`${TABLE_CLASSES.cell} tabular-nums`} style={right}>
-              <span class="block"><span {...attr('class', cell.best ? 'font-bold text-foreground' : undefined)}>{cell.text}</span><Show when={cell.rank}>{rank => <span class="ml-1.5 text-xs text-muted-foreground">{rank()}</span>}</Show></span>
-              <Show when={cell.sub}>{sub => <span class="block text-xs text-muted-foreground">{sub()}</span>}</Show>
-            </td>}</For>
-            <Show when={props.edge === true}><td class={`${TABLE_CLASSES.cell} text-xs text-muted-foreground`} style={right}><Show when={row.edge}>{edge => <><strong class="font-bold text-foreground">{edge().lead}</strong>{edge().rest}</>}</Show></td></Show>
-          </tr>}</For>
-        </Show></tbody>
-      </table>
-    </div>
-    <Show when={total() > model().items.length}><div class={TABLE_CLASSES.footer}><span aria-label="Item count">{`showing ${model().items.length} of ${total()} items — a comparison holds ${MAX_COMPARE_ITEMS}; filter the query to choose which`}</span></div></Show>
-  </div>;
 }
 
 interface QuestionProps { data: unknown; viz?: Record<string, unknown>; title?: string; height?: number | string; id?: string; drawn?: DrawnChart; chart?: () => Promise<IslandChartModule>; refData?: RefDataMap; recipeData?: unknown; inGridItem?: boolean; className?: string; [key: `data-${string}`]: unknown }

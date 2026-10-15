@@ -11,7 +11,7 @@ import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import { DataTable } from '../kit/data';
 import { RECIPES } from '../kit/recipes';
-import { TABLE_CLASSES } from '../kit/recipes/data';
+import { TABLE_CLASSES } from '../kit/data/table-classes';
 import { MAX_COMPARE_ITEMS } from '@/lib/story-ui/compare';
 import type { TableResult } from '@/lib/dataflow';
 
@@ -93,6 +93,7 @@ describe('DataTable transpose', () => {
       const gridHead = g.querySelector('thead th')!, itemHead = c.querySelectorAll('thead th')[1]!;
       expect(tokens(itemHead)).toEqual(TABLE_CLASSES.headCell.split(' ').sort());
       expect(tokens(gridHead)).toEqual([...TABLE_CLASSES.headCell.split(' '), 'cursor-pointer', 'select-none'].sort());
+      expect(tokens(gridHead)).toEqual(TABLE_CLASSES.sortHeadCell.split(' ').sort());
       expect(tokens(c.querySelector('thead'))).toEqual(TABLE_CLASSES.head.split(' ').sort());
       // A value cell is exactly a numeric DataGrid cell: same padding, rules, tabular figures; same alignment.
       const gridNumber = g.querySelectorAll('tbody tr')[0]!.querySelectorAll('td')[1]!;

@@ -150,7 +150,9 @@ describe('buildIslands', () => {
     expect(geometryBytes).toBeLessThanOrEqual(4 * 1024);
     // 81 KB since kit view state (Tabs, Accordion, Collapsible, Dialog) registers as comment state: one shared
     // chunk for lib/islands/comment-state + lib/story-runtime/comment-state, ~0.7 KB brotli, beside those families.
-    expect(staticBytes).toBeLessThanOrEqual(81 * 1024);
+    // 82 KB since <DataTable transpose> (kit/data/comparison + lib/story-ui/compare, ~1.5 KB brotli, the data family
+    // only); a lazy chunk instead kept it out of the served HTML and grew the shared runtime past its own budget.
+    expect(staticBytes).toBeLessThanOrEqual(82 * 1024);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/upload/control.tsx')), 'optional upload interactions load after mounting').toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/fit-drawing.ts')), 'legacy drawing compatibility is lazy').toBe(false);
     expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith('islands/kit/data-placeholder.tsx')), 'missing-data UI loads only when needed').toBe(false);
