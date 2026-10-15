@@ -37,7 +37,7 @@ describe('loopbackLookup', () => {
   const lookup = loopbackLookup(offline.lookup);
   beforeEach(() => { offline.asked.length = 0; });
 
-  it('answers a loopback name with IPv4 loopback, in every calling shape net and http use, without asking the resolver', async () => {
+  it('answers a loopback name the resolver cannot answer with IPv4 loopback, in every calling shape net and http use', async () => {
     expect(await ask(lookup, 'app.lvh.me')).toEqual({ error: null, address: '127.0.0.1', family: 4 });
     expect(await ask(lookup, 'APP.AFBIN.LOCALHOST', {})).toEqual({ error: null, address: '127.0.0.1', family: 4 });
     expect(await ask(lookup, 'localhost', 4)).toEqual({ error: null, address: '127.0.0.1', family: 4 });
@@ -45,7 +45,30 @@ describe('loopbackLookup', () => {
     expect(await ask(lookup, 'lvh.me', { family: 'IPv6' })).toEqual({ error: null, address: '::1', family: 6 });
     expect(await ask(lookup, '6162.lvh.me', { all: true })).toEqual({ error: null, address: [{ address: '127.0.0.1', family: 4 }, { address: '::1', family: 6 }], family: undefined });
     expect(await ask(lookup, 'app.localhost', { all: true, family: 4 })).toEqual({ error: null, address: [{ address: '127.0.0.1', family: 4 }], family: undefined });
-    expect(offline.asked).toEqual([]);
+    expect(offline.asked).toEqual(['app.lvh.me', 'APP.AFBIN.LOCALHOST', 'localhost', 'lvh.me', 'lvh.me', '6162.lvh.me', 'app.localhost']);
+  });
+
+  it("keeps the resolver's own answer for a loopback name: a container maps app.lvh.me to its host, not to itself", async () => {
+    const mapped = ((hostname: string, options: unknown, callback?: unknown) => {
+      const cb = (typeof options === 'function' ? options : callback) as (e: null, a: unknown, f?: number) => void;
+      const all = typeof options === 'object' && options !== null && (options as dns.LookupOptions).all;
+      if (hostname === 'app.lvh.me') process.nextTick(cb, null, all ? [{ address: '172.17.0.1', family: 4 }] : '172.17.0.1', all ? undefined : 4);
+      else process.nextTick(cb, Object.assign(new Error('ENOTFOUND'), { code: 'ENOTFOUND' }));
+    }) as unknown as typeof dns.lookup;
+    const containerLookup = loopbackLookup(mapped);
+    expect(await ask(containerLookup, 'app.lvh.me')).toEqual({ error: null, address: '172.17.0.1', family: 4 });
+    expect(await ask(containerLookup, 'app.lvh.me', { all: true })).toEqual({ error: null, address: [{ address: '172.17.0.1', family: 4 }], family: undefined });
+    expect(await ask(containerLookup, 'doc.lvh.me')).toEqual({ error: null, address: '127.0.0.1', family: 4 });
+  });
+
+  it('answers loopback when the resolver stalls on a loopback name, and ignores its late answer', async () => {
+    let late: ((e: null, a: string, f: number) => void) | undefined;
+    const stalled = ((_h: string, options: unknown, callback?: unknown) => { late = (typeof options === 'function' ? options : callback) as typeof late; }) as unknown as typeof dns.lookup;
+    const started = Date.now();
+    const answer = await ask(loopbackLookup(stalled, 50), 'app.lvh.me');
+    expect(answer).toEqual({ error: null, address: '127.0.0.1', family: 4 });
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(() => late?.(null, '10.0.0.9', 4)).not.toThrow();
   });
 
   it('hands every other name to the resolver it wraps, unchanged', async () => {
@@ -93,7 +116,8 @@ describe('useLoopbackLookup', () => {
     });
     expect(viaHttp).toBe(`hello lvh.me:${port}`);
     await expect(fetch(`http://elsewhere.example:${port}/`)).rejects.toThrow();
-    expect(offline.asked).toEqual(['elsewhere.example']);
+    // The resolver is asked first (a hosts file or container mapping wins); offline it fails, and loopback answers.
+    expect(offline.asked).toEqual(['app.lvh.me', '6162.afbin.localhost', 'lvh.me', 'elsewhere.example']);
   });
 
   it('installs once: a second call does not wrap the first', async () => {

@@ -243,7 +243,8 @@ describe('fetchWebResource on a server that resolves loopback names itself', () 
     for (const url of ['https://anything.localhost/x', 'https://a.b.localhost/x', 'https://x.lvh.me/x', 'https://lvh.me/x', 'https://localhost/x']) {
       expect(await code(fetchWebResource(url, { maxBytes: 1000 })), url).toBe('forbidden_address');
     }
-    expect(asked).toEqual([]);
+    // The resolver was asked (and failed, as offline): loopback answered, and the guard refused that address.
+    expect(asked).toEqual(['anything.localhost', 'a.b.localhost', 'x.lvh.me', 'lvh.me', 'localhost']);
   });
 
   it('with plain http allowed but not private addresses, a loopback name never reaches the live local server', async () => {
