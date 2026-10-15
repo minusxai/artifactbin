@@ -108,7 +108,7 @@ const number = (col, prefix = '', suffix = '', fmt = null, data = '$totals') => 
   if (prefix) a += ` prefix="${esc(prefix)}"`;
   if (suffix) a += ` suffix="${esc(suffix)}"`;
   if (fmt) a += ` format="${fmt}"`;
-  return `<Number ${a} />`;
+  return `<Cell ${a} />`;
 };
 
 // ---------- 07 · on each page type: generic specimens -------------------------------------------------------------
@@ -120,7 +120,7 @@ function tplDashboard(S, D, T) {
   <div className="ds-tpl-bar"><span className="ds-tpl-brand">${esc(T.brand)}</span><span className="t-label ds-tpl-crumb">${esc(T.dash_title)}</span><div className="ds-tpl-bar-end"><Segmented label="Window" value="$pick" options={${pyJson(D.segments)}} /></div></div>
   <div className="ds-tpl-kpis">${kpis}</div>
   <div className="ds-tpl-dash-grid">
-    <div className="ds-tpl-tile"><span className="t-label">${esc(D.chart_title)}</span><Question data="$series" height="240px" viz={${chart}} /></div>
+    <div className="ds-tpl-tile"><span className="t-label">${esc(D.chart_title)}</span><Chart data="$series" height="240px" viz={${chart}} /></div>
     <div className="ds-tpl-tile"><span className="t-label">${esc(T.dash_table_title ?? 'Breakdown')}</span><DataTable data="$table" rowKey="${D.row_key}" height="240px" columns={${cols}} /></div>
   </div>
 </div>`;
@@ -357,7 +357,7 @@ ${Object.entries(data.queries).map(([q, sql]) => `<Query name="${q}">{\`${sql}\`
     <div className="ds-comp"><p className="t-label ds-eyebrow">Tabs and progress</p><Tabs defaultValue="a"><TabsList><TabsTrigger value="a">${esc(data.tabs[0])}</TabsTrigger><TabsTrigger value="b">${esc(data.tabs[1])}</TabsTrigger><TabsTrigger value="c">${esc(data.tabs[2])}</TabsTrigger></TabsList><TabsContent value="a"><p className="ds-comp-note">${esc(data.tab_body)}</p></TabsContent><TabsContent value="b"><p className="ds-comp-note">Second tab.</p></TabsContent><TabsContent value="c"><p className="ds-comp-note">Third tab.</p></TabsContent></Tabs><div className="ds-progress"><span className="t-label">${esc(data.progress_label)}</span><Progress value={${data.progress}} /></div></div>
   </div>
   <div className="ds-comp-wide">
-    <div className="ds-comp"><p className="t-label ds-eyebrow">Chart</p><Question title="${esc(data.chart_title)}" data="$series" height="300px" viz={${chart}} /><p className="ds-comp-note">${esc(S.chart_comp_note)}</p></div>
+    <div className="ds-comp"><p className="t-label ds-eyebrow">Chart</p><Chart title="${esc(data.chart_title)}" data="$series" height="300px" viz={${chart}} /><p className="ds-comp-note">${esc(S.chart_comp_note)}</p></div>
     <div className="ds-comp"><p className="t-label ds-eyebrow">Table</p><DataTable data="$table" rowKey="${data.row_key}" height="${data.table_height ?? '300px'}" columns={${cols}} /><p className="ds-comp-note">${esc(S.table_note)}</p></div>
   </div>
   <div className="ds-comp"><p className="t-label ds-eyebrow">Card</p>${S.card}<p className="ds-comp-note">${esc(S.card_note)}</p></div>

@@ -74,7 +74,7 @@ describe('figures must be computed, not typed', () => {
   // constant carried by BOTH surfaces rather than a sentence someone might
   // reword out of one of them.
   it('the rule names the component and forbids the alternative', () => {
-    expect(COMPUTED_FIGURE_RULE).toMatch(/<Number/);
+    expect(COMPUTED_FIGURE_RULE).toMatch(/<Cell/);
     expect(COMPUTED_FIGURE_RULE).toMatch(/NEVER/);
     expect(COMPUTED_FIGURE_RULE).toMatch(/prose/i);
   });

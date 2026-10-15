@@ -32,7 +32,7 @@ checkbox). During a re-run embeds keep their old rows and show “updating…”
   <Mutation name="add" reset="title">{`insert into drafts (title) values ($title)`}</Mutation>
 </Helmet>
 
-<p>Drafts: <Number data="$summary" col="count" /></p>
+<p>Drafts: <Cell data="$summary" col="count" /></p>
 {$editing && <p>Editing {$title}</p>}
 <Dialog open="$editing">
   <DialogTrigger>Edit</DialogTrigger>

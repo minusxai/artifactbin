@@ -1,4 +1,4 @@
-// The <Question> sizing contract — ONE for every renderer.
+// The <Chart> sizing contract — ONE for every renderer.
 //
 // The editor and the reader both render from the same stored
 // source through this shared contract. Two renderers with their own defaults,
@@ -6,7 +6,7 @@
 // height change size between editing and reading.
 //
 // It lives in its OWN leaf module, importing nothing, because the served
-// document's runtime needs exactly this and nothing else from the <Question>
+// document's runtime needs exactly this and nothing else from the <Chart>
 // editing modules. Those import the editor's AST write-back (jsx-edit →
 // lib/jsx → acorn), so a runtime asking for one number would pull a 250 KB JSX
 // parser it can never use — the island carries parsed NODES, not source.

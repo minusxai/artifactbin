@@ -62,7 +62,7 @@ for assemblies or custom SVG, with shared signals for sliders and playback.
   Preserve source reading order and stack columns on narrow screens. Figures
   and tables may widen within the document. [[ nativeTableAuthoringRule ]]
 - Every figure is a `<figure>` with a FIG-numbered `<figcaption>`, numbered
-  continuously. Charts are `<Question>` over a `<Query>` in `<Helmet>`,
+  continuously. Charts are `<Chart>` over a `<Query>` in `<Helmet>`,
   evidence 380 to 440px, a lone number 170 to 220px. Diagrams use `<Mermaid>`
   or inline `<svg>` in the system's hand; wireframes use HTML/CSS. Images are `<img src="ref:<imageId>" />` or an
   `https://` URL, which is imported at publish and rewritten to `ref:<id>`.
@@ -81,7 +81,7 @@ Runtime skeleton (choose the staging):
         <h2 className="t-title">1. The section headline is a claim, never a topic</h2>
         <p className="mt-5 leading-relaxed">Two to four sentences set up the figure: what to look at, and what it will prove.</p>
         <figure className="my-10 @3xl:-mx-24">
-          <Question data="$q" viz={{"kind":"vega-lite","spec":{}}} height="400px" />
+          <Chart data="$q" viz={{"kind":"vega-lite","spec":{}}} height="400px" />
           <figcaption className="mt-3 border-t border-border pt-2 t-body-s">FIG. 01 — what the chart proves, at the data's precision.</figcaption>
         </figure>
         <p className="mt-8 border-t border-border pt-3 leading-relaxed"><strong>Takeaway:</strong> the section's one sentence to keep, with its number.</p>

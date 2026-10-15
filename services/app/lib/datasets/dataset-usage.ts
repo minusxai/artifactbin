@@ -30,7 +30,7 @@ export function datasetQuerySnippet(id: string, catalog?: DatasetCatalog, name =
 const jsonAttr = (value: unknown) => `{${JSON.stringify(value)}}`;
 
 /**
- * A `<Query>` over this dataset plus a `<Question>` bound to it — the shape of
+ * A `<Query>` over this dataset plus a `<Chart>` bound to it — the shape of
  * nearly every first chart (a non-numeric x, a numeric y); the agent edits
  * from something that works rather than assembling from a description. The
  * SQL names a stable table of the imported dataset; the chart binds the query.
@@ -44,8 +44,8 @@ function datasetUsageExample(id: string, columns: DatasetColumn[], catalog?: Dat
 
   if (!x || !y) {
     // No quantitative column: a table is the honest default, and it is also
-    // what <Question> renders when `viz` is absent.
-    return `${query}\n<Question title="Rows" data="$rows" />`;
+    // what <Chart> renders when `viz` is absent.
+    return `${query}\n<Chart title="Rows" data="$rows" />`;
   }
   const spec = {
     kind: 'vega-lite',
@@ -57,7 +57,7 @@ function datasetUsageExample(id: string, columns: DatasetColumn[], catalog?: Dat
       },
     },
   };
-  return `${query}\n<Question title="${y.name} by ${x.name}" data="$rows" viz=${jsonAttr(spec)} height="430px" />`;
+  return `${query}\n<Chart title="${y.name} by ${x.name}" data="$rows" viz=${jsonAttr(spec)} height="430px" />`;
 }
 
 /**

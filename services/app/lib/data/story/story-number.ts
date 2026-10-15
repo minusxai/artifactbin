@@ -1,5 +1,5 @@
 /**
- * The `<Number>` inspector's lens (the chart inspector's story-viz.ts, for the
+ * The `<Cell>` inspector's lens (the chart inspector's story-viz.ts, for the
  * inline figure: data="$name", col, agg, prefix, suffix, format — the props
  * InlineNumber renders from). Pure (client + server safe).
  */
@@ -10,7 +10,7 @@ import { questionTable } from './story-viz';
 /** The aggregations InlineNumber computes; 'first' is its default when the attr is absent. */
 export { NUMBER_AGGS } from '@/lib/dataflow/number-aggregation';
 
-/** What the Number panel renders from: the `<Number>` at `astPath`, or null if there is none. */
+/** What the Number panel renders from: the `<Cell>` at `astPath`, or null if there is none. */
 export interface NumberEmbedBinding {
   /** From `data="$name"` — the declared table; null when unbound. */
   table: string | null;

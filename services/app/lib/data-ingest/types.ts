@@ -3,7 +3,7 @@
  *
  * Everything here converges on the shape `publishDataset` already accepts
  * (a flat array of objects), so no new artifact tier and nothing downstream
- * changes: `ref:<id>`, <Question>, <Number>, <Param> and Vega are untouched.
+ * changes: `ref:<id>`, <Chart>, <Cell>, <Param> and Vega are untouched.
  *
  * The one thing ingest must do that the JSON path never had to: DECIDE TYPES.
  * CSV has none — every cell is a string — and handing raw parser output to

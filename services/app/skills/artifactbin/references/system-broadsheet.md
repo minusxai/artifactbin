@@ -143,7 +143,7 @@ Template: editorial. The template owns the measure, the folio rhythm and figure 
   <p className="t-label ds-tpl-byline">Saltmarsh, Sunday · from the committee’s notes</p>
   <div className="ds-tpl-ed-cols">
     <p className="ds-tpl-ed-body"><span className="ds-tpl-dropcap">B</span>efore the first tram, before the bakeries lift their shutters, there is a particular smell at the market: cold water, cut stems, diesel from the delivery vans. For six Sunday mornings this autumn residents could walk into it. The pilot opened the stalls at five and closed them at nine, and the committee must now decide whether that window stays.</p>
-    <div className="ds-tpl-pull"><span className="t-numeral ds-tpl-pull-n"><Number data="$totals" col="cost" prefix="$" format=",.0f" /></span><span className="t-label">Additional staffing</span></div>
+    <div className="ds-tpl-pull"><span className="t-numeral ds-tpl-pull-n"><Cell data="$totals" col="cost" prefix="$" format=",.0f" /></span><span className="t-label">Additional staffing</span></div>
   </div>
 </div>
 ```

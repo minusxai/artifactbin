@@ -35,7 +35,7 @@ An explicit range can emphasize categories while following theme switches:
 <Helmet>
   <Value name="totals" type="table" value={[{"region":"EU","revenue":100},{"region":"NA","revenue":200}]} />
 </Helmet>
-<Question data="$totals" height="280px" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal","title":"Region"},"y":{"field":"revenue","type":"quantitative","title":"Revenue"},"color":{"field":"region","type":"nominal","scale":{"range":["var(--chart-1)","var(--chart-2)"]}}}}}} />
+<Chart data="$totals" height="280px" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal","title":"Region"},"y":{"field":"revenue","type":"quantitative","title":"Revenue"},"color":{"field":"region","type":"nominal","scale":{"range":["var(--chart-1)","var(--chart-2)"]}}}}}} />
 ```
 
 The renderer resolves CSS token strings inside the spec, including scale ranges;
@@ -65,7 +65,7 @@ import json
 viz = {"kind": "vega-lite", "spec": {"mark": "bar", "encoding": {
     "x": {"field": "region", "type": "nominal"},
     "y": {"field": "revenue", "type": "quantitative"}}}}
-chart = '<Question data="$sales" viz={' + json.dumps(viz) + '} />'
+chart = '<Chart data="$sales" viz={' + json.dumps(viz) + '} />'
 ```
 
 <!--/bundle:skip-->
@@ -86,10 +86,14 @@ substitute `avg` for `median`.
 ## Check table totals
 
 Before publishing a table footer or budget total, run the named query with
-`afbin query <id> --name <query>` and inspect its rows and errors. Bind `<Number>`
+`afbin query <id> --name <query>` and inspect its rows and errors. Bind `<Cell>`
 to the query's actual result column; its default is the first row, while
 `agg="sum"` adds that column across rows. Confirm the chosen aggregate matches
 the row grain and the total agrees with the displayed table. After changing a
 published table, visually check its current image with
 `afbin export <published-url> --refresh --output out.png`; an export without
 `--refresh` may return the existing image while the new one is regenerated.
+
+A text `<Cell>` shows as written: `<Cell data="$top" col="region" />` → East;
+`sum`, `avg`, `median`, `min`, `max` need numbers. `Question` and `Number`, the
+earlier names of `Chart` and `Cell`, still work; write the new ones.

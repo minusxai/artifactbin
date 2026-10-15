@@ -42,7 +42,7 @@ tile grid for every dashboard is the failure this page exists to prevent.
 - A positioned `<Grid>` holds tiles that readers drag and resize in edit
   mode: ONE `<Grid>` per section, GridItems in reading order (phones stack in
   source order), embeds fill their cell (`h` sizes them; never `height=` on a
-  `<Question>` inside a cell), one embed per cell. Use the Question `title` prop
+  `<Chart>` inside a cell), one embed per cell. Use the Chart `title` prop
   for its heading; a separate sibling heading adds height and clips the chart.
   A flow Grid or plain HTML
   for anything that should grow with content.
@@ -69,7 +69,7 @@ Skeleton of the runtime pieces (publishable as is; the composition is yours):
     </div>
     <Grid>
       <GridItem x={0} y={0} w={6} h={3} className="rounded-md border border-border bg-card/50">
-        <Question data="$rev_by_week" viz={{"kind":"recipe","recipe":"minusx/trend@1","bindings":{"date":"period","value":["revenue"]},"params":{"compareMode":"last"},"columnFormats":{"revenue":{"format":"$,.0f","alias":"Revenue"}}}} />
+        <Chart data="$rev_by_week" viz={{"kind":"recipe","recipe":"minusx/trend@1","bindings":{"date":"period","value":["revenue"]},"params":{"compareMode":"last"},"columnFormats":{"revenue":{"format":"$,.0f","alias":"Revenue"}}}} />
       </GridItem>
     </Grid>
   </div>

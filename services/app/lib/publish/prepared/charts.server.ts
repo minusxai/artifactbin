@@ -1,7 +1,7 @@
 /**
  * CHARTS DRAWN ON THE SERVER (docs/phase2-architecture.md §1, §5; contract `DrawnChart`).
  *
- * A `<Question>` chart drawn to SVG from a snapshot's rows with vega on the
+ * A `<Chart>` chart drawn to SVG from a snapshot's rows with vega on the
  * server (`renderer: 'none'`, `view.toSVG()`), so a reader sees the chart in
  * the HTML and Vega loads in the browser only when the table changes or the
  * reader interacts. The spec is built exactly as the browser builds it
@@ -41,7 +41,7 @@ const MAX_DRAWING_BYTES = 512 * 1024;
 const TITLE_BAR_PX = 37;
 
 interface DrawChartInput {
-  /** The `<Question viz={…}>` prop: `{ kind: 'vega-lite' | 'vega' | 'recipe', … }`. */
+  /** The `<Chart viz={…}>` prop: `{ kind: 'vega-lite' | 'vega' | 'recipe', … }`. */
   viz: Record<string, unknown>;
   table: Pick<TableResult, 'rows' | 'columns'>;
   width: number;
@@ -270,7 +270,7 @@ function chartLayout(ancestors: readonly JsxNode[], options: SnapshotChartOption
 }
 
 /**
- * Every `<Question>` chart whose table the snapshot answered, drawn, keyed by
+ * Every `<Chart>` chart whose table the snapshot answered, drawn, keyed by
  * the question's node id (or its AST path, the interpreter's `data-mx-ast`, when
  * it has none), in document order. A question that is not a chart, reads a
  * table the snapshot did not answer, or cannot be drawn is left out: the island

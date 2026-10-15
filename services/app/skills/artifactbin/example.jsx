@@ -36,12 +36,12 @@ update tasks.rows set status = $status where id = $task_id
 <GridItem w={4}>
 <Card><CardHeader><CardTitle>Total revenue</CardTitle></CardHeader>
 <CardContent className="kpi text-4xl font-semibold">
-<Number data="$monthly" col="revenue" agg="sum" prefix="$" format=",.0f" />
+<Cell data="$monthly" col="revenue" agg="sum" prefix="$" format=",.0f" />
 </CardContent></Card>
 </GridItem>
 <GridItem w={8}>
 {/* Vega-Lite or shipped recipes, never hand-rolled <svg>. */}
-<Question title="Revenue by month" data="$monthly" height="320px"
+<Chart title="Revenue by month" data="$monthly" height="320px"
 viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} />
 </GridItem>
 </Grid>

@@ -41,6 +41,6 @@ describe('an author class on a compiled DataTable', () => {
     const browser = generate(input).browserIslands;
     expect(browser).toMatch(/<DataTable [^>]*className=\{"mt-6 ring-2"\}/);
     expect(browser).toMatch(/<Select [^>]*className=\{"mt-6 ring-2"\}/);
-    expect(browser).toMatch(/<Number [^>]*className=\{"font-bold"\}/);
+    expect(browser).toMatch(/<Cell [^>]*className=\{"font-bold"\}/);
   }, 120_000);
 });

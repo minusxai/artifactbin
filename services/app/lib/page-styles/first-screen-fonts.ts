@@ -14,7 +14,7 @@
  * page's inline story and the served /raw document), in document order up to a
  * first screen's worth of text:
  *   - a heading (h1–h6) paints the DISPLAY slot;
- *   - code, pre, kbd, samp, a `font-mono` utility and a `<Question>` title paint MONO;
+ *   - code, pre, kbd, samp, a `font-mono` utility and a `<Chart>` title paint MONO;
  *   - any other text paints BODY;
  *   - `font-sans` / `font-serif` are the system stacks in a story: no face;
  *   - em, i, cite, dfn, var, address, `italic`, and the tags a theme sets

@@ -36,7 +36,7 @@
  *
  * Components count by what they RENDER, which the kit decides and
  * lib/jsx/component-names `PHRASING_COMPONENTS` declares: a phrasing one (a
- * `<Number>`, a `<Tooltip>` on a word) leaves the paragraph a paragraph; any
+ * `<Cell>`, a `<Tooltip>` on a word) leaves the paragraph a paragraph; any
  * other — a `<Card>`, a control, a script component's mount — draws a box that
  * closes it, and a served paragraph the parser closes is one the hydrating
  * document cannot adopt (its whole tree came back blank, with only the islands
@@ -129,7 +129,7 @@ function breaksParagraph(nodes: JsxNode[], inSvg = false): boolean {
  *
  * The paragraph repair is structure-preserving: the element keeps its attributes, its
  * children and its position among its siblings, so nothing downstream that
- * addresses a node POSITIONALLY moves — the editor's held `<Question>`
+ * addresses a node POSITIONALLY moves — the editor's held `<Chart>`
  * selection and the edit protocol's AST paths both survive it. Only the tag
  * name changes.
  *

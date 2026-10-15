@@ -96,7 +96,7 @@ export interface IslandContext extends IslandData, IslandWrites {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Charts drawn in the browser (a `<Question>` whose table changed, or on interaction)
+ * Charts drawn in the browser (a `<Chart>` whose table changed, or on interaction)
  * ──────────────────────────────────────────────────────────────────────────── */
 
 export interface IslandChartInput {

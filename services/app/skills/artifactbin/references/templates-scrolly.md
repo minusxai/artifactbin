@@ -37,7 +37,7 @@ to it.
 ## Chapter layout and live figures
 
 - Bind every data figure to its query, including ticker/headline numbers and
-  figures in prose: `<Number data="$summary" col="value" />`. Do not copy
+  figures in prose: `<Cell data="$summary" col="value" />`. Do not copy
   dataset values into JSX text or chart specifications. Use nonnumeric prose
   if inline binding would distract; chapter labels and layout sizes are fine.
 
@@ -69,7 +69,7 @@ Skeleton of the runtime pieces (publishable as is; the conceit is yours):
       <p className="t-label">Chapter 02</p>
       <h2 className="reveal-up mt-6 t-display-l">Nobody turned around.</h2>
       <div className="reveal-up mt-10 border border-border p-4">
-        <Question data="$daily" viz={{"kind":"vega-lite","spec":{}}} height="380px" />
+        <Chart data="$daily" viz={{"kind":"vega-lite","spec":{}}} height="380px" />
         <p className="mt-3 t-label">Fig. 02 · What it shows</p>
       </div>
     </section>

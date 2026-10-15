@@ -1,16 +1,16 @@
 /**
- * Write-back for a `<Question>`'s DATA BINDING and VISUALISATION.
+ * Write-back for a `<Chart>`'s DATA BINDING and VISUALISATION.
  *
  * Editing a chart in the WYSIWYG editor is not a new kind of edit — it is a
  * prop edit on a component, which `updateJsxElementAtPath` + `setStaticJsxAttr`
- * already do for `<GridItem>` coordinates and `<Number>` queries. The only
+ * already do for `<GridItem>` coordinates and `<Cell>` queries. The only
  * thing new here is that `viz` holds an OBJECT (`viz={{"kind":"vega-lite",…}}`)
  * rather than a string or number, which `setStaticJsxAttr` accepts because it
  * takes a JsonValue.
  *
  * Everything goes through the same staleness guard as every other write-back: a
  * path that no longer resolves, or resolves to something that is not a
- * `<Question>`, leaves the source untouched. A stale path arriving from a
+ * `<Chart>`, leaves the source untouched. A stale path arriving from a
  * remounted canvas must never corrupt a story body.
  */
 import type { JsonValue } from '@/lib/jsx/types';
@@ -25,10 +25,10 @@ export interface VizEnvelopeValue {
 }
 
 /**
- * Replace the visualisation envelope on the `<Question>` at `astPath`.
+ * Replace the visualisation envelope on the `<Chart>` at `astPath`.
  *
  * Passing `undefined` REMOVES the prop, which is meaningful rather than a
- * no-op: a `<Question>` with no `viz` renders the themed table, so "show this
+ * no-op: a `<Chart>` with no `viz` renders the themed table, so "show this
  * as a table" and "clear the chart" are the same edit.
  */
 export function updateQuestionVizInJsx(
@@ -42,7 +42,7 @@ export function updateQuestionVizInJsx(
 }
 
 /**
- * Point the `<Question>` at `astPath` to a different declared table (a
+ * Point the `<Chart>` at `astPath` to a different declared table (a
  * <Query> or table <Value> name — lib/dataflow/dataflow.ts).
  *
  * The `$` is added here rather than expected from the caller: a bare name in
@@ -85,7 +85,7 @@ export function updateQuestionChartInJsx(
 }
 
 /**
- * Rename the `<Question>` at `astPath` — the title prop is the header strip.
+ * Rename the `<Chart>` at `astPath` — the title prop is the header strip.
  *
  * `null` or a whitespace-only string REMOVES the prop: a Question with no title
  * renders no strip, and an empty strip would read as a rendering bug rather
@@ -106,7 +106,7 @@ export function updateQuestionTitleInJsx(source: string, astPath: string, title:
  */
 export const DYNAMIC_VIZ = { kind: 'dynamic' } as const;
 
-/** What the chart panel renders from: the `<Question>` at `astPath`, or null if there is none. */
+/** What the chart panel renders from: the `<Chart>` at `astPath`, or null if there is none. */
 interface QuestionChart {
   viz: unknown;
   /** The declared table it is bound to (`data="$name"` → "name"), or null. */
@@ -131,7 +131,7 @@ export function readQuestionChart(source: string, astPath: string): QuestionChar
   };
 }
 
-/** The declared table a `<Question>`'s `data` prop points at (`"$sales"` → `"sales"`), or null. */
+/** The declared table a `<Chart>`'s `data` prop points at (`"$sales"` → `"sales"`), or null. */
 export function questionTable(data: unknown): string | null {
   return typeof data === 'string' ? refName(data.trim()) : null;
 }

@@ -254,7 +254,7 @@ describe('the markup skill', () => {
   it('markdown is refused, never "auto-converted"', () => {
     expect(doc).not.toContain('auto-converted');
   });
-  it('<Number> documents suffix and that agg defaults to first', () => {
+  it('<Cell> documents suffix and that agg defaults to first', () => {
     expect(doc).toMatch(/suffix/);
     expect(doc).toMatch(/agg[^\n]*(defaults? to|default[^\n]*)`first`/);
   });
