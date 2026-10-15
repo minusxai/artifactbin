@@ -39,7 +39,8 @@ function localPathErrors(nodes:JsxNode[]):ValidationError[]{
   for(const attr of node.attributes){
    if(!['href','src','source','poster','srcSet','srcset'].includes(attr.name)||!attr.value.static||typeof attr.value.json!=='string')continue;
    const values=attr.name.toLowerCase()==='srcset'?attr.value.json.split(',').map(item=>item.trim().split(/\s+/)[0]??''):[attr.value.json];
-   for(const value of values)if(value&&!value.startsWith('#')&&!value.startsWith('$')&&!value.startsWith('/')&&!/^[a-z][a-z0-9+.-]*:/i.test(value))errors.push({message:attr.name==='href'?'Local file references are not supported. Run afbin add --json and use /a/ID for document navigation links.':'Local file references are not supported. Run afbin add --json and use ref:ID for dataset and media references.',start:attr.start,end:attr.end});
+   // A value that opens with a template (`href="{$link}"`) is the page's value at read time, never a local file.
+   for(const value of values)if(value&&!value.startsWith('#')&&!value.startsWith('$')&&!/^\{\s*\$/.test(value)&&!value.startsWith('/')&&!/^[a-z][a-z0-9+.-]*:/i.test(value))errors.push({message:attr.name==='href'?'Local file references are not supported. Run afbin add --json and use /a/ID for document navigation links.':'Local file references are not supported. Run afbin add --json and use ref:ID for dataset and media references.',start:attr.start,end:attr.end});
   }
   errors.push(...localPathErrors(node.children));
  }
