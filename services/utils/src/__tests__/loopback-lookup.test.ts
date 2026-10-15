@@ -123,10 +123,10 @@ describe('a loopback name the hosts file maps', () => {
     expect(asked).toEqual(['app.lvh.me']);
   });
 
-  it('reads the names a hosts file lists, ignoring comments, addresses and case, and none from a missing file', () => {
+  it('reads the names a hosts file maps away from loopback, ignoring comments and case, and none from a missing file', () => {
     const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hosts-')), 'hosts');
-    fs.writeFileSync(file, '# comment app.lvh.me\n127.0.0.1\tlocalhost\n172.17.0.1 App.LVH.me other.test # trailing\n\n');
-    expect([...hostsFileNames(file)].sort()).toEqual(['app.lvh.me', 'localhost', 'other.test']);
+    fs.writeFileSync(file, '# comment 10.0.0.9 app.lvh.me\n127.0.0.1\tlocalhost\n::1 localhost ip6-localhost\n127.0.1.1 box.lvh.me\n172.17.0.1 App.LVH.me other.test # trailing\n\n');
+    expect([...hostsFileNames(file)].sort()).toEqual(['app.lvh.me', 'other.test']);
     expect(hostsFileNames(path.join(file, 'missing')).size).toBe(0);
   });
 });

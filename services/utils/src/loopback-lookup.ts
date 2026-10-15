@@ -13,10 +13,11 @@
  * reads on every connection: each Node entry point (the CLI, the app server, the gate tooling) calls it once,
  * first thing, so every HTTP client in the process shares the one answer.
  *
- * A loopback name the machine's hosts file lists is the machine's own answer, not ours: a container routes
+ * A loopback name the machine's hosts file maps ELSEWHERE is the machine's own answer, not ours: a container routes
  * `app.lvh.me` to its host with `extra_hosts` (the server repo's hosted agents reach the proxy that way), and
  * loopback there is the container itself. Those names go to the resolver, which reads the hosts file locally,
- * so they still answer offline.
+ * so they still answer offline. A name the file maps to loopback (`localhost` in every hosts file) keeps this
+ * answer: the same address, and the SSRF guards that refuse loopback see it without asking a resolver.
  */
 import dns from 'node:dns';
 import { readFileSync } from 'node:fs';
@@ -39,19 +40,26 @@ const HOSTS_FILE = process.platform === 'win32'
   ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'drivers', 'etc', 'hosts')
   : '/etc/hosts';
 
-/** The names a hosts file lists (lowercased), or none when it cannot be read. */
+/** A loopback address: 127.0.0.0/8 or ::1 (as a hosts file spells them). */
+const isLoopbackAddress = (address: string): boolean => /^127\./.test(address) || address === '::1' || address === '0:0:0:0:0:0:0:1';
+
+/**
+ * The names a hosts file maps to an address other than loopback (lowercased), or none when it cannot be read: a
+ * name it maps to loopback is answered the same way here, so only the others are the file's to answer.
+ */
 export function hostsFileNames(file: string = HOSTS_FILE): ReadonlySet<string> {
   let text = '';
   try { text = readFileSync(file, 'utf8'); } catch { return new Set(); }
   const names = new Set<string>();
   for (const line of text.split(/\r?\n/)) {
-    const fields = line.replace(/#.*/, '').trim().split(/\s+/);
-    for (const name of fields.slice(1)) if (name) names.add(name.toLowerCase());
+    const [address, ...aliases] = line.replace(/#.*/, '').trim().split(/\s+/);
+    if (!address || isLoopbackAddress(address)) continue;
+    for (const name of aliases) if (name) names.add(name.toLowerCase());
   }
   return names;
 }
 
-/** Whether this machine's hosts file lists `hostname`; the file is read once, on the first loopback name. */
+/** Whether this machine's hosts file maps `hostname` elsewhere; the file is read once, on the first loopback name. */
 let listedNames: ReadonlySet<string> | undefined;
 const listedInHostsFile = (hostname: string): boolean => (listedNames ??= hostsFileNames()).has(hostname.toLowerCase());
 
