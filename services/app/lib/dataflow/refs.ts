@@ -22,6 +22,7 @@ import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
 import { NUMBER_AGGS } from './number-aggregation';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 import {parseRowRef} from '@/lib/jsx/row-scope';
+import { COMPARE_DIRECTIONS, COMPARE_PROPS, GRID_ONLY_PROPS, MAX_COMPARE_ITEMS } from '@/lib/jsx/comparison';
 
 interface RefUse {
   id: string;
@@ -378,7 +379,7 @@ const EMBED_DATA_PROP: Record<string, { required: string; usage: string; table?:
   File: { required: 'src', usage: 'Use src="ref:<pdf id>" — the id create_artifact returned for a pdf — or src="<public https link to a .pdf>" (+ optionally title="…")' },
 };
 
-/** Every format spec an embed carries that d3 cannot parse: `<Cell format>` and `<DataTable columns[].fmt>`. */
+/** Every format spec an embed carries that d3 cannot parse: `<Cell format>` and `<DataTable columns[].fmt>` / `metrics[].fmt`. */
 function invalidNumberFormats(el: JsxElement): Array<{ attr: string; spec: string; start: number; end: number }> {
   const out: Array<{ attr: string; spec: string; start: number; end: number }> = [];
   for (const a of el.attributes) {
@@ -386,7 +387,7 @@ function invalidNumberFormats(el: JsxElement): Array<{ attr: string; spec: strin
     if (el.tag === 'Cell' && a.name === 'format' && typeof a.value.json === 'string' && !isNumberFormat(a.value.json)) {
       out.push({ attr: a.name, spec: a.value.json, start: a.start, end: a.end });
     }
-    if (el.tag === 'DataTable' && a.name === 'columns' && Array.isArray(a.value.json)) {
+    if (el.tag === 'DataTable' && (a.name === 'columns' || a.name === 'metrics') && Array.isArray(a.value.json)) {
       for (const c of a.value.json) {
         const fmt = c && typeof c === 'object' ? (c as { fmt?: unknown }).fmt : undefined;
         if (typeof fmt === 'string' && !isNumberFormat(fmt)) out.push({ attr: a.name, spec: fmt, start: a.start, end: a.end });
@@ -396,15 +397,82 @@ function invalidNumberFormats(el: JsxElement): Array<{ attr: string; spec: strin
   return out;
 }
 
+/** True for a `transpose` the author turned on (`transpose`, `transpose={true}`), false when absent or `{false}`. */
+const transposed = (el: JsxElement): boolean => {
+  const a = el.attributes.find((x) => x.name === 'transpose');
+  return !!a && (!a.value.static || a.value.json !== false);
+};
+
+/**
+ * `<DataTable transpose>` — what the comparison cannot draw, refused with the fix named: the sortable
+ * grid's props beside it, its own props without it, a metric that is not `{col, …}` or leans neither
+ * `high` nor `low`, and an inline table with more rows than a comparison shows. The columns the props
+ * name are checked against the query's result where it is known (lib/jsx/row-scope).
+ */
+function comparisonErrors(el: JsxElement, inlineRows: ReadonlyMap<string, number>): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const at = (a: { start: number; end: number }, attr?: string) => ({ tag: el.tag, ...(attr ? { attr } : {}), start: a.start, end: a.end });
+  if (!transposed(el)) {
+    for (const a of el.attributes) if ((COMPARE_PROPS as readonly string[]).includes(a.name)) {
+      errors.push({ message: `<DataTable ${a.name}=…> belongs to a comparison table: add transpose (each row becomes a column, each metric a row), or drop ${a.name}=.`, ...at(a, a.name) });
+    }
+    return errors;
+  }
+  for (const a of el.attributes) {
+    const instead = GRID_ONLY_PROPS[a.name];
+    if (instead) errors.push({ message: `<DataTable transpose> draws a comparison and takes no ${a.name}= — ${instead}.`, ...at(a, a.name) });
+  }
+  if (el.children.some((c) => c.type === 'element' && c.tag === 'Column')) {
+    errors.push({ message: `<DataTable transpose> takes no <Column> children — ${GRID_ONLY_PROPS.columns}.`, ...at(el) });
+  }
+  const metrics = el.attributes.find((a) => a.name === 'metrics');
+  if (metrics?.value.static) {
+    const list = metrics.value.json;
+    if (!Array.isArray(list) || list.some((m) => !m || typeof m !== 'object' || Array.isArray(m) || typeof (m as { col?: unknown }).col !== 'string' || !(m as { col: string }).col)) {
+      errors.push({ message: '<DataTable transpose metrics=…> is a list of {"col":"<column>","title":…,"fmt":…,"better":"high"|"low","rank":"<column>","sub":"<column>"}.', ...at(metrics, 'metrics') });
+    } else {
+      for (const m of list as Array<Record<string, unknown>>) {
+        if (m.better !== undefined && !(COMPARE_DIRECTIONS as readonly unknown[]).includes(m.better)) {
+          errors.push({ message: `<DataTable transpose metrics=…>: "${String(m.col)}" has better=${JSON.stringify(m.better)} — better is "high" or "low" (which way the best value lies).`, ...at(metrics, 'metrics') });
+        }
+        for (const key of ['rank', 'sub', 'title', 'fmt'] as const) {
+          if (m[key] !== undefined && typeof m[key] !== 'string') errors.push({ message: `<DataTable transpose metrics=…>: "${String(m.col)}" ${key} must be a string${key === 'rank' || key === 'sub' ? ' naming a column' : ''}.`, ...at(metrics, 'metrics') });
+        }
+      }
+    }
+  }
+  const data = el.attributes.find((a) => a.name === 'data');
+  const name = data?.value.static ? refName(data.value.json) : null;
+  const count = name ? inlineRows.get(name) : undefined;
+  if (data && count !== undefined && count > MAX_COMPARE_ITEMS) {
+    errors.push({ message: `<DataTable transpose data="$${name}">: $${name} has ${count} rows, and a comparison shows at most ${MAX_COMPARE_ITEMS} items side by side — keep the ones to compare (or use a plain DataTable for a list).`, ...at(data, 'data') });
+  }
+  return errors;
+}
+
+/** Each inline `<Value type="table" value={[…]}>`'s row count, by name. */
+function inlineTableRows(nodes: JsxNode[]): Map<string, number> {
+  const out = new Map<string, number>();
+  walk(nodes, (el) => {
+    if (el.tag !== 'Value' || attrValue(el, 'type') !== 'table') return;
+    const name = attrValue(el, 'name');
+    const value = attrValue(el, 'value');
+    if (typeof name === 'string' && Array.isArray(value)) out.set(name, value.length);
+  });
+  return out;
+}
+
 export function findBrokenEmbeds(source: string): ValidationError[] {
   const parsed = parseJsx(source);
   if (!parsed.ok) return [];
   const errors: ValidationError[] = [];
+  const inlineRows = inlineTableRows(parsed.nodes);
   walk(parsed.nodes, (el) => {
     const rule = EMBED_DATA_PROP[el.tag];
     if (!rule) return;
     // Errors name the element as the author wrote it: `<Number agg>` for a document that says Number.
     const written = el.authoredTag ?? el.tag;
+    if (el.tag === 'DataTable') errors.push(...comparisonErrors(el, inlineRows));
     if (el.tag === 'Cell') {
       const agg = el.attributes.find((a) => a.name === 'agg');
       const aggValue = agg?.value.static ? agg.value.json : undefined;

@@ -23,6 +23,7 @@ import type { TableResult, NumberAgg, Row, RefDataMap } from '@/lib/dataflow';
 import { cellValue } from '@/lib/dataflow/number-aggregation';
 import { numberFormatter } from '@/lib/dataflow/number-format';
 import { barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows, type SortSpec } from '@/lib/story-ui/data-table';
+import { TABLE_CLASSES } from './data/table-classes';
 import { commentMetadata, keyedRowsError } from '@/lib/story-ui/repeat-identity';
 import { questionEmbedHeightPx } from '@/lib/data/story/question-height';
 import { personFaceBackground, personInitial } from '../person-face';
@@ -67,7 +68,8 @@ export function Cell(props: { data: unknown; col?: string; agg?: NumberAgg; pref
 interface ColumnTemplate { col: string; id?: string; path?: string; ids?: string[]; props?: Record<string, unknown>; nodes?: unknown[] }
 /** A column's content, compiled: drawn in each row's cell with the row and where the cell sits (interpreter renderCell). */
 type CellContent = (row: Row, cell: CellScope) => JSX.Element;
-interface DataTableProps { data: unknown; columns?: unknown; sort?: unknown; height?: number | string; sticky?: boolean; className?: string; id?: string; rowKey?: string; inGridItem?: boolean; templates?: ColumnTemplate[]; cells?: (CellContent | undefined)[]; renderCell?: (template: ColumnTemplate, row: Row, index: number) => JSX.Element; resolveSrc?: (url: string) => string | null; [key: `data-${string}`]: unknown }
+interface DataTableProps { data: unknown; columns?: unknown; sort?: unknown; transpose?: boolean; header?: string; metrics?: unknown; edge?: boolean; height?: number | string; sticky?: boolean; className?: string; id?: string; rowKey?: string; inGridItem?: boolean; templates?: ColumnTemplate[]; cells?: (CellContent | undefined)[]; renderCell?: (template: ColumnTemplate, row: Row, index: number) => JSX.Element; resolveSrc?: (url: string) => string | null; [key: `data-${string}`]: unknown }
+import ComparisonGrid from './data/comparison';
 const STATIC_ROWS = 50;
 const ROW_H = 33;
 function TimestampCell(props: { value: string }) {
@@ -114,7 +116,7 @@ export function DataTable(props: DataTableProps) {
   }>
     {/* Cell sessions show saving on an editable table; only a read-only table dims while it refreshes. */}
     <div {...rootProps(props)} data-mx-live="" aria-label="DataTable embed" aria-busy={busy() ? 'true' : 'false'} {...attr('class', busy() && !props.templates?.length ? 'mx-busy' : undefined)} {...attr('attr:style', wrapper())}>
-      <DataGrid {...props} table={table} />
+      {props.transpose ? <ComparisonGrid {...props} table={table} /> : <DataGrid {...props} table={table} />}
     </div>
   </Show>;
 }
@@ -228,11 +230,11 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
   const rowMeta = (row: Row, columnKey?: string) => props.rowKey && owner ? commentMetadata(owner, { kind: 'table', rowKey: row[props.rowKey] as string | number, ...(columnKey ? { columnKey } : {}) }) : {};
   const count = new Intl.NumberFormat(undefined);
   const identityError = () => props.rowKey ? keyedRowsError(shown(), props.rowKey) : null;
-  return <Show when={!identityError()} fallback={<div role="alert">{identityError()}</div>}><div data-slot="data-table" aria-label="Data grid" class={['flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card text-sm', props.className].filter(Boolean).join(' ')}>
-    <div ref={scroll} onScroll={onScroll} class="relative min-h-0 w-full flex-1 overflow-auto" style={css({ 'max-height': `${parseTableHeight(props.height)}px` })}>
-      <table data-mx-kit-table="" class="w-full border-collapse text-sm" {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}>
-        <thead class={`bg-card text-left text-muted-foreground${props.sticky === false ? '' : ' sticky top-0 z-10'}`} {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}><tr class="border-b border-border" {...attr('style', virtual() ? css(rowGrid()) : undefined)}>
-          <For each={resolved()}>{column => <th {...attr('id', templateOf(column.col)?.id ?? (typeof templateOf(column.col)?.props?.id === 'string' ? templateOf(column.col)!.props!.id as string : undefined))} {...attr('data-mx-ast', templateOf(column.col)?.path)} scope="col" aria-label={`Sort by ${column.title}`} aria-sort={sort()?.col === column.col ? sort()?.dir === 'asc' ? 'ascending' : 'descending' : 'none'} {...attr('title', column.type === 'string' && !(table()?.columns ?? []).some(k => k.name === column.col) ? `"${column.col}" is not a column of this table` : undefined)} onClick={() => cycle(column.col)} class="min-w-0 cursor-pointer select-none overflow-hidden text-ellipsis whitespace-nowrap px-3 py-2 font-bold" style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined })}>{column.title}<Show when={sort()?.col === column.col}><span aria-hidden="true" class="ml-1 opacity-70">{sort()?.dir === 'asc' ? '▲' : '▼'}</span></Show></th>}</For>
+  return <Show when={!identityError()} fallback={<div role="alert">{identityError()}</div>}><div data-slot="data-table" aria-label="Data grid" class={[TABLE_CLASSES.box, props.className].filter(Boolean).join(' ')}>
+    <div ref={scroll} onScroll={onScroll} class={TABLE_CLASSES.scroll} style={css({ 'max-height': `${parseTableHeight(props.height)}px` })}>
+      <table data-mx-kit-table="" class={TABLE_CLASSES.table} {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}>
+        <thead class={`${TABLE_CLASSES.head}${props.sticky === false ? '' : ' sticky top-0 z-10'}`} {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}><tr class={TABLE_CLASSES.headRow} {...attr('style', virtual() ? css(rowGrid()) : undefined)}>
+          <For each={resolved()}>{column => <th {...attr('id', templateOf(column.col)?.id ?? (typeof templateOf(column.col)?.props?.id === 'string' ? templateOf(column.col)!.props!.id as string : undefined))} {...attr('data-mx-ast', templateOf(column.col)?.path)} scope="col" aria-label={`Sort by ${column.title}`} aria-sort={sort()?.col === column.col ? sort()?.dir === 'asc' ? 'ascending' : 'descending' : 'none'} {...attr('title', column.type === 'string' && !(table()?.columns ?? []).some(k => k.name === column.col) ? `"${column.col}" is not a column of this table` : undefined)} onClick={() => cycle(column.col)} class={TABLE_CLASSES.sortHeadCell} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined })}>{column.title}<Show when={sort()?.col === column.col}><span aria-hidden="true" class="ml-1 opacity-70">{sort()?.dir === 'asc' ? '▲' : '▼'}</span></Show></th>}</For>
         </tr></thead>
         <tbody {...attr('style', virtual() ? css({ display: 'block', height: `${virtualizer()?.getTotalSize() ?? ordered().length * ROW_H}px`, position: 'relative' }) : undefined)}><Show when={ordered().length} fallback={<tr {...attr('style', virtual() ? css({ display: 'block' }) : undefined)}><td colSpan={Math.max(1, resolved().length)} class="block px-3 py-6 text-center text-muted-foreground">no rows</td></tr>}>
           <For each={rendered()}>{instance => {
@@ -241,12 +243,12 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
             const index = () => at()?.index ?? 0;
             let el!: HTMLTableRowElement;
             createEffect(() => { if (virtual() && at()) virtualizer()?.measureElement(el); });
-            return <tr ref={el} {...rowMeta(row)} data-index={index()} class="border-b border-border/50 transition-colors hover:bg-muted/30" {...attr('style', at()?.start == null ? undefined : css({ ...rowGrid(), position: 'absolute', top: '0px', left: '0px', transform: `translateY(${at()!.start}px)` }))}><For each={resolved()}>{column => { const value = () => row[column.col]; const bar = () => barFraction(value(), column); const tint = () => cellTint(value(), column); return <td {...rowMeta(row, column.col)} class={`relative min-w-0 overflow-hidden whitespace-nowrap px-3 py-1.5 align-middle${column.type === 'number' ? ' tabular-nums' : ''}`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined, background: tint() ?? undefined })}><Show when={bar() !== null}><span data-bar="" aria-hidden="true" class="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25" style={css({ width: `${Math.round((bar() ?? 0) * 100)}%`, background: typeof column.bar === 'object' && column.bar.color ? column.bar.color : 'var(--chart-1)' })} /></Show><span class="relative block min-w-0 max-w-full truncate">{cell(value(), column, row, index)}</span></td>; }}</For></tr>;
+            return <tr ref={el} {...rowMeta(row)} data-index={index()} class={TABLE_CLASSES.row} {...attr('style', at()?.start == null ? undefined : css({ ...rowGrid(), position: 'absolute', top: '0px', left: '0px', transform: `translateY(${at()!.start}px)` }))}><For each={resolved()}>{column => { const value = () => row[column.col]; const bar = () => barFraction(value(), column); const tint = () => cellTint(value(), column); return <td {...rowMeta(row, column.col)} class={`${TABLE_CLASSES.cell}${column.type === 'number' ? ' tabular-nums' : ''}`} style={css({ 'text-align': column.align, width: column.width ? `${column.width}px` : undefined, background: tint() ?? undefined })}><Show when={bar() !== null}><span data-bar="" aria-hidden="true" class="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25" style={css({ width: `${Math.round((bar() ?? 0) * 100)}%`, background: typeof column.bar === 'object' && column.bar.color ? column.bar.color : 'var(--chart-1)' })} /></Show><span class="relative block min-w-0 max-w-full truncate">{cell(value(), column, row, index)}</span></td>; }}</For></tr>;
           }}</For>
         </Show></tbody>
       </table>
     </div>
-    <Show when={table()?.truncated || loading() || (table()?.totalRows ?? 0) > shown().length}><div class="flex items-center justify-between gap-3 border-t border-border px-3 py-1.5 text-xs text-muted-foreground"><span aria-label="Row count">{loading() ? 'loading rows…' : `${count.format(shown().length)} of ${count.format(table()?.totalRows ?? shown().length)} rows`}</span><Show when={remote() && !loading()}><button type="button" aria-label="Load more rows" onClick={() => readWindow(shown().length, sort(), false)} class="cursor-pointer font-medium underline-offset-2 hover:underline">load more</button></Show></div></Show>
+    <Show when={table()?.truncated || loading() || (table()?.totalRows ?? 0) > shown().length}><div class={TABLE_CLASSES.footer}><span aria-label="Row count">{loading() ? 'loading rows…' : `${count.format(shown().length)} of ${count.format(table()?.totalRows ?? shown().length)} rows`}</span><Show when={remote() && !loading()}><button type="button" aria-label="Load more rows" onClick={() => readWindow(shown().length, sort(), false)} class="cursor-pointer font-medium underline-offset-2 hover:underline">load more</button></Show></div></Show>
   </div></Show>;
 }
 

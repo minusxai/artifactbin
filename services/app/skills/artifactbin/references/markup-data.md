@@ -26,7 +26,6 @@ order: 1
 ```
 
 [Write forms](markup-data-example.md). [Attachments](markup-upload.md).
-[SQL rules/functions](markup-sql.md). [Editable cells](markup-editing.md).
 
 ## Declarations (Helmet only)
 
@@ -67,8 +66,8 @@ First read [chart authoring](markup-data-authoring.md).
 ## Bindings: embeds (body)
 
 - `<Chart data="$q" viz={…} height="430px" />` — a chart. `viz` needs `kind`:
-  `{"kind":"vega-lite","spec":{…}}` (encoding fields checked against the result
-  at publish), `{"kind":"table"}` (the default), `{"kind":"single_value",
+  `{"kind":"vega-lite","spec":{…}}` (fields checked against the result at
+  publish), `{"kind":"table"}` (the default), `{"kind":"single_value",
   "yCols":["revenue"],"singleValueConfig":{"label":"Revenue","prefix":"$","format":",.0f"}}`
   (a KPI of a one-row aggregate), or `{"kind":"recipe","recipe":"minusx/trend@1",
   "bindings":{"date":"period","value":["revenue"]}}` — **the KPI tile to
@@ -76,7 +75,7 @@ First read [chart authoring](markup-data-authoring.md).
   Shipped recipes: `minusx/trend@1`, `minusx/funnel@1`, `minusx/waterfall@1`,
   `minusx/radar@1`, `minusx/combo@1`, `minusx/single-value@1`, and the deprecated
   `minusx/choropleth@1` and `minusx/point-map@1` ([maps](markup-maps.md)); slots
-  in [chart authoring](markup-data-authoring.md).
+  in chart authoring (above).
 - `<Cell data="$q" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
   — one live value, inline; text shows as written. `agg` defaults to `first`;
   a total is `sum`, and `last`, `avg`, `median`, `min`, `max`, `count` exist. [[ computedFigureRule ]]
@@ -86,6 +85,9 @@ First read [chart authoring](markup-data-authoring.md).
   `fmt` and `format` are d3-format specs (`",.0f"`, `".1%"`).<!--bundle:skip-->
   `kind: "image"` draws each cell's URL as a picture from our own copy, fetched
   on first view.<!--/bundle:skip-->
+- `<DataTable data="$q" transpose header="name" edge metrics={[{"col":"cost","better":"low"}]} />`
+  — comparing a few items across measures: rows (≤ 6) become columns, metrics
+  rows, best bold. [Comparisons](markup-compare.md).
 - `<For each={$q} keyBy="id">…{$_row.name}…</For>` — a template per row. [Keyed repeats](markup-repeat.md).
 - `{($_row.is_open) && (<Button …/>)}` shows markup only while a value or row
   field is true. [Conditions](markup-state.md).
@@ -94,7 +96,7 @@ First read [chart authoring](markup-data-authoring.md).
 ## Bindings: controls (body)
 
 - A kit control binds a page value two-way: `label` plus `value="$name"`
-  (`checked="$name"` on `Switch`). Changes rerun all queries reading the value.
+  (`checked="$name"` on `Switch`). Changes rerun the queries reading it.
   `<Select value="$region" options="$regions" />` (a query's first column is the
   value, its second the label, or an inline `["day","week"]`), `<Segmented>`,
   `<Slider min max format>`, `<DatePicker>`, `<Switch>`, `<Input type>`,
@@ -103,6 +105,5 @@ First read [chart authoring](markup-data-authoring.md).
   with no SQL: from another value (`"$other"`), a row field or a literal.
 - `<Button run="$book">` runs a mutation: busy while it runs, a refusal shown
   beside it. `args={{"note": "$draft"}}` binds another value.
-  Inside a `<For>` or a DataTable `<Column>` the row is `$_row`.
 
 [User fields](databases-users.md) · [shared apps](apps.md).

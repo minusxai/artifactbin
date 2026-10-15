@@ -1,11 +1,12 @@
 /** Root class recipes evaluated at compile time, before islands load. */
 import { cn } from './cn';
 import type { Recipe } from '.';
+import { TABLE_CLASSES } from '../data/table-classes';
 const author = (props: Record<string, unknown>) => typeof props.className === 'string' ? props.className : undefined;
 
 export const RECIPES: Record<string, Recipe> = {
   Cell: props => cn(author(props)),
   Select: props => cn('mx-control relative inline-flex flex-col gap-1.5 align-top', author(props)),
-  DataTable: props => cn('flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card text-sm', author(props)),
+  DataTable: props => cn(TABLE_CLASSES.box, author(props)),
   Chart: props => cn('flex h-full w-full flex-col', author(props)),
 };

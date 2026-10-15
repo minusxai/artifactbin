@@ -241,3 +241,53 @@ describe('a viz that is a bare spec instead of an envelope', () => {
     expect(findBrokenEmbeds('<Helmet><Import name="q_data" src="ref:abc123" /><Query name="q">{`select a from q_data.rows`}</Query></Helmet>\n<Question data="$q" />')).toEqual([]);
   });
 });
+
+/**
+ * `<DataTable transpose>` — a comparison table (items as columns, `metrics` as rows). What it cannot draw is
+ * refused at publish with the fix named: the props of a sortable grid, a metric naming a column the query does
+ * not return, a format d3 cannot parse, and an inline table larger than a comparison shows.
+ */
+describe('a transposed DataTable', () => {
+  const metrics = (extra = '') => `metrics={[{"col":"revenue","title":"Revenue","fmt":"$,.0f","better":"high"${extra}}]}`;
+  const cmp = (props: string) => declared(`<DataTable data="$rows" transpose header="month" ${props} />`);
+  const refused = async (markup: string, pattern: RegExp) => {
+    const { status, body } = await create({ title: 'cmp', markup });
+    expect(status, JSON.stringify(body)).toBe(400);
+    expect((body.details as Array<{ message?: string } | string>).map((d) => typeof d === 'string' ? d : d.message).join('\n')).toMatch(pattern);
+  };
+
+  it('publishes a comparison over the query\'s columns', async () => {
+    expect((await create({ title: 'cmp', markup: cmp(`edge ${metrics()}`) })).status).toBe(201);
+  });
+
+  it('refuses the sortable grid\'s props beside transpose, naming the conflict', async () => {
+    await refused(cmp(`${metrics()} columns={[{"col":"revenue"}]}`), /transpose.*columns=/);
+    await refused(cmp(`${metrics()} sort="revenue"`), /transpose.*sort=/);
+    await refused(cmp(`${metrics()} rowKey="month"`), /transpose.*rowKey=/);
+    await refused(declared(`<DataTable data="$rows" transpose ${metrics()}><Column col="revenue" /></DataTable>`), /transpose.*Column/);
+  });
+
+  it('refuses the comparison\'s props without transpose', async () => {
+    await refused(declared(`<DataTable data="$rows" ${metrics()} />`), /metrics=.*transpose/);
+  });
+
+  it('refuses a metric fmt d3 cannot parse and a direction other than high or low', async () => {
+    await refused(cmp(`metrics={[{"col":"revenue","fmt":"0,0"}]}`), /"0,0"/);
+    await refused(cmp(`metrics={[{"col":"revenue","better":"lower"}]}`), /better.*"high" or "low"/);
+  });
+
+  it('refuses a header, metric, rank or sub column the query does not return', async () => {
+    await refused(declared(`<DataTable data="$rows" transpose header="name" ${metrics()} />`), /header "name".*\$rows/);
+    await refused(cmp(`metrics={[{"col":"cost"}]}`), /metric "cost".*\$rows/);
+    await refused(cmp(metrics(',"rank":"revenue_rank"')), /rank "revenue_rank".*\$rows/);
+    await refused(cmp(metrics(',"sub":"range"')), /sub "range".*\$rows/);
+  });
+
+  it('refuses an inline table with more items than a comparison shows', async () => {
+    const rows = JSON.stringify(Array.from({ length: 7 }, (_, i) => ({ name: `v${i}`, cost: i })));
+    const markup = `<Helmet><Value name="vendors" type="table" value={${rows}} /></Helmet><DataTable data="$vendors" transpose header="name" metrics={[{"col":"cost","better":"low"}]} />`;
+    await refused(markup, /7 rows.*at most 6/);
+    const six = `<Helmet><Value name="vendors" type="table" value={${JSON.stringify(JSON.parse(rows).slice(0, 6))}} /></Helmet><DataTable data="$vendors" transpose header="name" metrics={[{"col":"cost","better":"low"}]} />`;
+    expect((await create({ title: 'cmp', markup: six })).status).toBe(201);
+  });
+});
