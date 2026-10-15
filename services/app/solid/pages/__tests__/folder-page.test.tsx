@@ -58,13 +58,30 @@ it('mounts the owner listing and workspace rail without recursive updates', () =
 });
 
 it('keeps one live stream when a folder refresh updates its data but not its id', async () => {
-  let changed: (() => void) | undefined;
+  let changed: ((event: MessageEvent) => void) | undefined;
   let connections = 0;
-  vi.stubGlobal('EventSource', class { constructor() { connections++; } addEventListener(_name: string, callback: () => void) { changed = callback; } removeEventListener() {} close() {} });
+  vi.stubGlobal('EventSource', class { constructor() { connections++; } addEventListener(name: string, callback: (event: MessageEvent) => void) { if (name === 'data') changed = callback; } removeEventListener() {} close() {} });
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({ folder: folder({ title: 'Updated' }) })));
   open('owner');
   expect(connections).toBe(1);
-  changed?.();
+  changed?.(new MessageEvent('data', { data: '{"datasets":["fold01"],"version":2}' }));
   await screen.findByRole('heading', { name: 'Updated' });
   expect(connections).toBe(1);
+});
+
+it('re-reads the listing when its live stream comes back after a cut: what changed meanwhile is never missed', async () => {
+  const sources: Array<{ onerror: ((e: Event) => void) | null; onmessage: ((e: MessageEvent) => void) | null; closed: boolean }> = [];
+  vi.stubGlobal('EventSource', class { onopen = null; onmessage = null; onerror = null; closed = false; constructor() { sources.push(this); } addEventListener() {} removeEventListener() {} close() { this.closed = true; } });
+  const fetches = vi.fn(async () => Response.json({ folder: folder({ title: 'Filed while away' }) }));
+  vi.stubGlobal('fetch', fetches);
+  open('owner');
+  expect(sources).toHaveLength(1);
+  sources[0]!.onmessage?.(new MessageEvent('message', { data: '{"editId":"e1"}' }));
+  expect(fetches, 'the first connection is the page it already has').not.toHaveBeenCalled();
+  sources[0]!.onerror?.(new Event('error')); // an idle proxy cut it, or the server restarted
+  await waitFor(() => expect(sources).toHaveLength(2), { timeout: 3000 });
+  expect(sources[0]!.closed).toBe(true);
+  sources[1]!.onmessage?.(new MessageEvent('message', { data: '{"editId":"e1"}' }));
+  await screen.findByRole('heading', { name: 'Filed while away' });
+  expect(fetches).toHaveBeenCalledWith('/api/page/artifact/fold01', expect.anything());
 });
