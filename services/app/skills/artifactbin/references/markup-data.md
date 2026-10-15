@@ -29,7 +29,7 @@ order: 1
 
 ## Declarations (Helmet only)
 
-- `<Import name="sales" src="ref:<id>" />` — dataset/folder. SQL: `sales.rows` (multi-table: `sales.<table>`). IDs: `afbin add --json` / `afbin push`. Folder: `<Import name="kids" src="ref:<folderId>" />` exposes `kids.rows`, listed by `<Files data="$children" variant="icons|tiles" />` over a children query. Columns `id title format level visibility updated_at url thumbnail views sparkline`; viewer-scoped: strangers see only public children.
+- `<Import name="sales" src="ref:<id>" />` — dataset/folder. SQL: `sales.rows` (multi-table: `sales.<table>`). IDs: `afbin add --json` / `afbin push`. Folder: `<Import name="kids" src="ref:<folderId>" />` exposes `kids.rows`, which a document can list with `<Files data="$children" variant="icons|tiles" />` through a children query. Columns `id title format level visibility updated_at url thumbnail views sparkline`; viewer-scoped: strangers see only public children.
 - `<Value name type default />` — reader state. `type`:
   `string | number | boolean | date | timestamp | user`; default `null`, so
   `$region is null` means "all".<!--bundle:skip--> `?$region=EU` seeds a pre-filtered link; picks rewrite the link. `url={false}` excludes it both ways.<!--/bundle:skip-->
@@ -75,7 +75,7 @@ First read [chart authoring](markup-data-authoring.md).
   Shipped recipes: `minusx/trend@1`, `minusx/funnel@1`, `minusx/waterfall@1`,
   `minusx/radar@1`, `minusx/combo@1`, `minusx/single-value@1`, and the deprecated
   `minusx/choropleth@1` and `minusx/point-map@1` ([maps](markup-maps.md)); slots
-  in chart authoring, linked above.
+  in chart authoring (above).
 - `<Cell data="$q" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
   — one live value, inline; text shows as written. `agg` defaults to `first`;
   a total is `sum`, and `last`, `avg`, `median`, `min`, `max`, `count` exist. [[ computedFigureRule ]]
@@ -85,9 +85,9 @@ First read [chart authoring](markup-data-authoring.md).
   `fmt` and `format` are d3-format specs (`",.0f"`, `".1%"`).<!--bundle:skip-->
   `kind: "image"` draws each cell's URL as a picture from our own copy, fetched
   on first view.<!--/bundle:skip-->
-- `<DataTable data="$q" transpose header="name" edge metrics={[{"col":"cost","fmt":"$,.0f","better":"low"}]} />`
+- `<DataTable data="$q" transpose header="name" edge metrics={[{"col":"cost","better":"low"}]} />`
   — comparing a few items across measures: rows (≤ 6) become columns, metrics
-  rows, the best bold. [Comparisons](markup-compare.md).
+  rows, best bold. [Comparisons](markup-compare.md).
 - `<For each={$q} keyBy="id">…{$_row.name}…</For>` — a template per row. [Keyed repeats](markup-repeat.md).
 - `{($_row.is_open) && (<Button …/>)}` shows markup only while a value or row
   field is true. [Conditions](markup-state.md).
