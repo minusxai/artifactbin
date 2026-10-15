@@ -472,8 +472,8 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
     if (!rule) return;
     // Errors name the element as the author wrote it: `<Number agg>` for a document that says Number.
     const written = el.authoredTag ?? el.tag;
-    if (el.tag === 'Cell') {
     if (el.tag === 'DataTable') errors.push(...comparisonErrors(el, inlineRows));
+    if (el.tag === 'Cell') {
       const agg = el.attributes.find((a) => a.name === 'agg');
       const aggValue = agg?.value.static ? agg.value.json : undefined;
       if (agg && !NUMBER_AGGS.some((value) => value === aggValue)) {

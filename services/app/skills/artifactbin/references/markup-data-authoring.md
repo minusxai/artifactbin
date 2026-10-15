@@ -4,6 +4,8 @@ description: Chart authoring.
 ---
 ## Read first
 
+Compare items side by side: `<DataTable transpose>` ([comparisons](markup-compare.md)).
+
 <!--bundle:skip-->
 ## Theme, legends and labels
 
@@ -73,12 +75,6 @@ Use the generated element in the document. JavaScript's `JSON.stringify` works
 the same way. After a brace error, regenerate the attribute from the object;
 do not repeatedly patch a guessed run of closing braces.<!--bundle:skip--> A failed publish did
 not change stored markup. Read it again before an exact-text edit.<!--/bundle:skip-->
-
-## Compare a few items
-
-Up to 6 items side by side across measures: `<DataTable data="$q" transpose
-header="name" edge metrics={[{"col":"cost","fmt":"$,.0f","better":"low"}]} />`
-makes rows columns and metrics rows, the best bold. [Comparison tables](markup-compare.md).
 
 ## Preserve what the statistic means
 
