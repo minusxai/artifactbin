@@ -15,8 +15,12 @@
  *     the document sets this document's own HOST-ONLY cookie (`__Host-afbin_pages` on https). Three cases:
  *       `_pt=<ticket>`  a ticket minted for THIS document and origin: a new session replaces whatever the browser
  *                       held — and serves the document in the same response, unless the browser held a live session of the
- *                       SAME reader (a repeat view), when it is a 302 to the same URL without `_pt` so the clean address revalidates (304). A replayed, expired or foreign ticket mints nothing and renders as what the
- *                       browser's own cookie says, or nobody (a back navigation replaying the frame's first URL).
+ *                       SAME reader (a repeat view), when it is a 302 to the same URL without `_pt` so the clean address
+ *                       revalidates (304). The SAME browser asking again for that repeat view's URL within seconds (its
+ *                       first response was lost: a retry, a prefetch) presents the live session it held then, and gets the
+ *                       same answer with the same session (lib/accounts/pages-sessions). A replayed, expired or
+ *                       foreign ticket mints nothing and renders as what the browser's own cookie says, or nobody (a back
+ *                       navigation replaying the frame's first URL).
  *       `_pt=-`         the app page decided "nobody": the document renders as nobody even if a cookie is held,
  *                       and the same response ends and clears it.
  *       no `_pt`        a bookmark or a direct visit: whatever the browser's cookie for this host says, as it always did.
@@ -34,7 +38,7 @@
  */
 import type { Context, MiddlewareHandler, Next } from 'hono';
 import { attachActor, readCookie } from '@artifactbin/utils';
-import { ANONYMOUS, type Actor } from '@artifactbin/contracts';
+import { ANONYMOUS } from '@artifactbin/contracts';
 import { endPagesSession, exchangePagesTicket, pagesSessionOf, type PagesSession } from '@/lib/accounts';
 import { runWithRequest } from '@/lib/platform';
 import { GUEST_TICKET, idFromPagesHost, idFromPagesOrigin, isPagesApexHost, markPagesRequest, PAGES_TICKET_PARAM, pagesCookieName, pagesOriginFor, withoutPagesTicket, type PagesSite } from '@/lib/http/pages-origin';
@@ -62,8 +66,6 @@ function doorOf(pathname: string, id: string): string | null {
 
 const forbidden = (origin: string | null, detail: string): Response =>
   Response.json({ error: 'forbidden_origin', detail: `${origin ?? 'this origin'} ${detail}` }, { status: 403, headers: { ...NO_STORE, vary: 'Origin' } });
-/** The same person (or token) on both sides: a ticket for a different reader than the held session names is a first view. */
-const sameReader = (a: Actor, b: Actor): boolean => (a.userId ?? null) === (b.userId ?? null) && (a.tokenId ?? null) === (b.tokenId ?? null);
 const notFound = (): Response => Response.json({ error: 'not_found' }, { status: 404, headers: { ...NO_STORE } });
 
 /**
@@ -129,15 +131,14 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
         session = null;
         if (cookie) { await endPagesSession(cookie); setCookie = cookieLine(site, '', true); }
       } else if (request.method === 'GET') {
-        const minted = await exchangePagesTicket(marker, { artifactId: id, origin: pagesOriginFor(id, site) });
+        // The new session replaces whatever the browser held (ended in the same step), and carries the app page's current
+        // decisions. A repeat view asked again (its first response was lost) is handed the same session.
+        const minted = await exchangePagesTicket(marker, { artifactId: id, origin: pagesOriginFor(id, site), held: cookie });
         if (minted) {
-          // A repeat view of the SAME reader: the browser very likely holds this document under its clean address, which
-          // revalidates (document-revalidation) — but only if the frame ends there. So the ticket is spent as ever (the new
-          // session replaces the old, and carries the app page's current decisions), and the frame is sent to the clean URL.
-          const before = cookie ? await pagesSessionOf(cookie, Date.now(), id) : null;
-          await endPagesSession(cookie);
           const line = cookieLine(site, minted.cookie);
-          if (before && sameReader(before.actor, minted.actor)) {
+          // A repeat view of the SAME reader: the browser very likely holds this document under its clean address, which
+          // revalidates (document-revalidation) — but only if the frame ends there.
+          if (minted.repeat) {
             // Relative: behind the TLS-terminating proxy `url` is http://, and an http Location in an https frame is refused.
             return new Response(null, { status: 302, headers: { location: `${url.pathname}${url.search}`, 'set-cookie': line, ...NO_STORE, 'referrer-policy': 'no-referrer' } });
           }

@@ -3,9 +3,9 @@
  *
  * The page's private handle on the served story root: comments, selections, reader mode, data
  * wakeups, in-place editing (lib/frame-edit/session over the compiled DOM, mounted by
- * lib/frame-edit/dom-mounter) and new versions morphed in place (lib/islands/live-update). A page
- * shell (the Solid document page) moves the root into its tree (`moveInto`), creates this
- * controller, and hands its `nonce` to the page's annotation and editor chrome.
+ * lib/frame-edit/dom-mounter) and new versions morphed in place (lib/islands/live-update). The
+ * framed document's bridge (lib/islands/frame-bridge) creates it over the story root where it was
+ * served, and hands its `nonce` across to the app page's annotation and editor chrome.
  */
 import type { IslandDocument } from '@/lib/islands/contract';
 import { serializeJsx } from '@/lib/jsx/serialize';
@@ -24,18 +24,6 @@ import { storyFragmentUrl, type StorySurface } from '@/lib/story-runtime/story-f
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { LIVE_EDIT_ATTR } from '@/lib/islands/contract';
 import { type StoryDocumentUpdate, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_VERSION_DRAWN_EVENT } from '@/lib/story-runtime/contract';
-
-type Movable = HTMLElement & { moveBefore?: (node: Node, child: Node | null) => void };
-
-/** Move `story` under `host` keeping its state (iframes, focus, animations) where the browser can. */
-export function moveInto(host: HTMLElement, story: HTMLElement): void {
-  if (story.parentElement === host) return;
-  const move = (host as Movable).moveBefore;
-  if (typeof move === 'function' && story.isConnected && host.isConnected) {
-    try { move.call(host, story, null); return; } catch { /* a cross-document or disconnected move: append instead */ }
-  }
-  host.appendChild(story);
-}
 
 /**
  * Pause the islands for editing (lib/islands/boot `setMode('edit')`): they stay mounted with their DOM and state, a

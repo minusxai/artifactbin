@@ -32,10 +32,14 @@ export const FRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-
 export const FRAME_ALLOW = 'fullscreen; clipboard-write';
 const GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
-/** The frame is the viewport under the app bar: it scrolls inside, the bar and the rail stay above and beside. */
-export const DOCUMENT_FRAME_CSS = `[${STORY_FRAMED_ATTR}]{position:fixed;inset:0;top:${APP_BAR_H}px;display:block}`
+/**
+ * The frame is the viewport under the app bar: it scrolls inside, the bar and the rail stay above and beside. Its host is
+ * drawn in its FINAL place — the page never moves it (a moved frame reloads), it only sets its inset beside the rail and
+ * puts its notices' row above the frame (solid/pages/Document) — so the host is the column the frame fills.
+ */
+export const DOCUMENT_FRAME_CSS = `[${STORY_FRAMED_ATTR}]{position:fixed;inset:0;top:${APP_BAR_H}px;display:flex;flex-direction:column}`
   + `[${STORY_FRAMED_ATTR}].light{background:${GROUND.light}}[${STORY_FRAMED_ATTR}].dark{background:${GROUND.dark}}`
-  + `[${STORY_FRAMED_ATTR}]>iframe{display:block;width:100%;height:100%;border:0;background:transparent}`;
+  + `[${STORY_FRAMED_ATTR}]>iframe{display:block;flex:1 1 0;min-height:0;width:100%;border:0;background:transparent}`;
 
 /** The frame's element: `iframe[data-mx-document-frame]` (the one frame a consent grant reloads) in its host. */
 export function documentFrameHtml(frame: DocumentFrame): string {

@@ -419,6 +419,122 @@ describe('the pages session', () => {
   });
 });
 
+/**
+ * A FIRST URL LOADED TWICE: the browser asks for the frame's first URL, the server spends the ticket, and the response never
+ * arrives — WebKit reloads a frame the page re-parents, a prefetch or a retried connection does the same — so the browser
+ * asks again with the same ticket and the cookie it held before. The second request must find the session the first one
+ * bought; nobody else's request ever may.
+ */
+describe('a first URL loaded twice', () => {
+  const held = (value: string) => ({ headers: { cookie: `${COOKIE}=${value}` } });
+
+  it('a repeat view whose response never arrived: the same browser, asking again, is sent on with the SAME session, and reads the private document', async () => {
+    const w = await world();
+    const app = framing();
+    const self = pagesOriginFor(w.secret, site);
+    const before = await pagesCookie(app, w.actor, w.secret);
+    const src = (await frameSrc(app, w.actor, w.secret)).href;
+    // The response is lost: the browser keeps `before`.
+    const lost = await app.request(src, held(before));
+    expect(lost.status).toBe(302);
+    const minted = cookieOf(lost)!;
+    expect(minted).not.toBe(before);
+    // WebKit's second load: the same URL, the same cookie. The same answer, the same session — nothing new minted.
+    const again = await app.request(src, held(before));
+    expect(again.status).toBe(302);
+    expect(again.headers.get('location')).toBe('/');
+    expect(again.headers.get('cache-control')).toBe('no-store');
+    expect(again.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(cookieOf(again)).toBe(minted);
+    const doc = await app.request(`${self}/`, held(minted));
+    expect(doc.status).toBe(200);
+    expect(await doc.text()).toContain('Private plan');
+    // …as many times as the browser asks within the window (a reload, then back).
+    expect(cookieOf(await app.request(src, held(before)))).toBe(minted);
+    // The session the browser held before is still replaced: it names nobody.
+    expect(await pagesSessionActor(before, w.secret)).toBeNull();
+    expect(await pagesSessionActor(minted, w.secret)).toMatchObject({ userId: w.user.id });
+  });
+
+  it('hands nothing to a browser whose cookie proves nothing: a dead one, or one a document\'s author could have planted', async () => {
+    const w = await world();
+    const app = framing();
+    // A dead cookie (signed out since): the spent ticket stays spent, as for a browser that held nothing.
+    const dead = await pagesCookie(app, w.actor, w.secret);
+    await clearSession(as(`${APP}/api/session/token`, w.actor, { method: 'DELETE' }));
+    const src = (await frameSrc(app, w.actor, w.secret)).href;
+    expect((await app.request(src, held(dead))).status).toBe(200);
+    const again = await app.request(src, held(dead));
+    expect(again.status).toBe(404);
+    expect(again.headers.get('set-cookie')).toBeNull();
+    // The author's own live session for their unlisted document, planted by its script in a guest's browser (document.cookie
+    // can write the pages name while no HttpOnly cookie is held). The visitor signs in and opens it: the script reads the
+    // ticket from its location, and the author holds the planted value. Together they buy nothing.
+    const open = await w.publish('<h1>Open</h1>', 'unlisted');
+    await drainPreparedPageWarmups();
+    const planted = await pagesCookie(app, w.actor, open);
+    const visitor = await createUser({ email: 'mxmx_test_pages_visitor@example.com' });
+    const visitorActor: Actor = { credential: 'session', userId: visitor.id, email: visitor.email!, emailVerified: true };
+    const visit = new URL(await frameSrc(app, visitorActor, open));
+    const first = await app.request(visit.href, held(planted));
+    expect(first.status).toBe(200);
+    const visitorCookie = cookieOf(first)!;
+    expect(await pagesSessionActor(visitorCookie, open)).toMatchObject({ userId: visitor.id });
+    for (const init of [held(planted), {}]) {
+      const replay = await app.request(visit.href, init);
+      expect(replay.headers.get('set-cookie')).toBeNull();
+      expect(await replay.text()).not.toContain(visitor.id);
+    }
+    expect(await exchangePagesTicket(visit.searchParams.get('_pt')!, { ...bindingOf(open), held: planted })).toBeNull();
+  });
+
+  it('hands that session to nobody else: no cookie, another cookie, another document, after the window, after sign-out', async () => {
+    const w = await world();
+    const app = framing();
+    const self = pagesOriginFor(w.secret, site);
+    const before = await pagesCookie(app, w.actor, w.secret);
+    const src = new URL(await frameSrc(app, w.actor, w.secret));
+    const minted = cookieOf(await app.request(src.href, held(before)))!;
+    // The ticket alone — what a document's script could read from its location, or a log could hold — buys nothing.
+    for (const [label, init] of [
+      ['no cookie', {}],
+      ['another cookie', held('another-browser-0123456789abcdefghij')],
+      ['a cookie for another document', held(await pagesCookie(app, w.actor, w.other))],
+    ] as const) {
+      const replay = await app.request(src.href, init);
+      expect(replay.status, label).toBe(404);
+      expect(replay.headers.get('set-cookie'), label).toBeNull();
+    }
+    // The same browser's cookie at another document's origin is not that document's.
+    const elsewhere = await app.request(`${pagesOriginFor(w.other, site)}/${src.search}`, held(before));
+    expect(elsewhere.status).toBe(404);
+    expect(elsewhere.headers.get('set-cookie')).toBeNull();
+    // A browser that received the new session reads as it, and is handed nothing more.
+    const received = await app.request(src.href, held(minted));
+    expect(received.status).toBe(200);
+    expect(received.headers.get('set-cookie')).toBeNull();
+    // After the window the ticket is only spent; after sign-out the session it bought is gone and is never handed out again.
+    const ticket = src.searchParams.get('_pt')!;
+    expect(await exchangePagesTicket(ticket, { ...bindingOf(w.secret), held: before }, Date.now() + 31_000)).toBeNull();
+    expect(await exchangePagesTicket(ticket, { ...bindingOf(w.secret), held: before })).toMatchObject({ cookie: minted });
+    await clearSession(as(`${APP}/api/session/token`, w.actor, { method: 'DELETE' }));
+    const afterSignOut = await app.request(src.href, held(before));
+    expect(afterSignOut.status).toBe(404);
+    expect(afterSignOut.headers.get('set-cookie')).toBeNull();
+    expect((await app.request(`${self}/`, held(minted))).status).toBe(404);
+  });
+
+  it('keeps a browser that held nothing to today\'s rule: the spent ticket renders as nobody', async () => {
+    const w = await world();
+    const app = framing();
+    const src = (await frameSrc(app, w.actor, w.secret)).href;
+    expect((await app.request(src)).status).toBe(200);
+    const again = await app.request(src);
+    expect(again.status).toBe(404);
+    expect(again.headers.get('set-cookie')).toBeNull();
+  });
+});
+
 describe('a document\'s own origin', () => {
   it('admits only its own file-upload door and its filename header', async () => {
     const w = await world();
