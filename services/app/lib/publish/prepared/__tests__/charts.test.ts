@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { drawChart, drawSnapshotCharts } from '../charts.server';
+import { specDigest } from '@/lib/jsx/template';
 import { DRAWING_CLASS } from '@/lib/islands/chart';
 import { STORY_UI_RECIPE_BASE, STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
 import { prepareStoryParts } from '../prepare-runtime.server';
@@ -147,6 +148,17 @@ describe('drawSnapshotCharts', () => {
     const { runtime } = await prepareStoryParts({ source, compiledCss: null, theme: null, colorMode: 'light', title: 'plan', template: 'plan', refData: {}, assetUrls: new Set() });
     const drawing = (await drawSnapshotCharts(runtime.data.nodes, { tables: { monthly: { rows, columns } }, errors: {} }, { colorMode: 'light', template: 'plan' })).inside!;
     expect(drawing.svg).toMatch(/<svg[^>]*width="990"/);
+  });
+
+  it('draws a templated spec with the snapshot\'s values and cells, and records the spec it drew', async () => {
+    const source = '<Question id="t" data="$monthly" viz={{"kind":"vega-lite","spec":{"title":"Revenue, {$region} ({$monthly.month})","mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} /><Question id="p" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} />';
+    const { runtime } = await prepareStoryParts({ source, compiledCss: null, theme: null, colorMode: 'light', title: 'templated', template: null, refData: {}, assetUrls: new Set() });
+    const results = { tables: { monthly: { rows, columns } }, errors: {} };
+    const drawings = await drawSnapshotCharts(runtime.data.nodes, results, { colorMode: 'light', values: { region: 'West' } });
+    expect(drawings.t!.svg).toContain('Revenue, West (2025-01-01)');
+    const resolved = { kind: 'vega-lite', spec: { title: 'Revenue, West (2025-01-01)', mark: 'line', encoding: { x: { field: 'month', type: 'temporal' }, y: { field: 'revenue', type: 'quantitative' } } } };
+    expect(drawings.t!.spec).toBe(specDigest(resolved));
+    expect(drawings.p!.spec, 'an untemplated chart records no spec').toBeUndefined();
   });
 
   it('draws every <Question> whose table the snapshot answered, keyed by node id, and skips the rest', async () => {

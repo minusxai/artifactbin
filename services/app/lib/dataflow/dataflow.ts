@@ -29,6 +29,7 @@ import type { JsonValue, JsxAttribute, JsxElement, JsxNode, ValidationError } fr
 import {parseDatasetColumn} from '@artifactbin/utils/shape';
 import { inferColumns, type ColumnType, type DatasetColumn } from './dataset-shape';
 import { reactiveNames, type ReactiveExpression } from '@/lib/jsx/reactive';
+import { attributeSignals } from '@/lib/jsx/template';
 import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 import { builtinInput, READ_ONLY_REF_ATTRS, reservedDeclarationName, VIEWER, VIEWER_ID } from './builtins';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
@@ -379,6 +380,8 @@ interface RefNameUse extends Span {
   expects: RefKind;
   /** True where the reference is only READ — the positions a built-in (`$_me.id`) may sit in. */
   readOnly?: boolean;
+  /** A first-row cell (`{$tiles.cheap_v}`): `name` is the table, this its column, checked once the queries compile. */
+  column?: string;
 }
 
 // ── parsing the two Helmet children ─────────────────────────────────────────
@@ -682,9 +685,15 @@ export function parseDeclaration(el: JsxElement): Declaration | { errors: Valida
 const REGISTERED_COMPONENT_NAMES: ReadonlySet<string> = new Set(JSX_STORY_COMPONENT_NAMES);
 export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
   const out: RefNameUse[] = [];
+  /** One read of the page: a value (or built-in), or a query's first-row cell (`tiles.cheap_v`), which reads a table. */
+  const read = (name: string, span: Span, tag: string, attr: string) => {
+    const dot = name.indexOf('.');
+    if (dot > 0 && !name.startsWith('_')) out.push({name: name.slice(0, dot), column: name.slice(dot + 1), tag, attr, expects: 'table', readOnly: true, start: span.start, end: span.end});
+    else out.push({name, tag, attr, expects: 'scalar', readOnly: true, start: span.start, end: span.end});
+  };
   const expressionUses = (expression: ReactiveExpression | undefined, span: Span, tag: string, attr: string) => {
     // A reactive expression only reads: `{$_me.id ? … : …}` never writes anything.
-    if (expression) for (const name of reactiveNames(expression).signals) out.push({name, tag, attr, expects: 'scalar', readOnly: true, start: span.start, end: span.end});
+    if (expression) for (const name of reactiveNames(expression).signals) read(name, span, tag, attr);
   };
   const visit = (nodes: JsxNode[]) => {
     for (const n of nodes) {
@@ -705,6 +714,8 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
         const name = refName(a.value.json);
         if (name) out.push({name,tag:n.tag,attr:a.name,expects:'any',readOnly:true,start:a.start,end:a.end});
       }
+      // A template in a string the reader sees (`title="For {$region}"`, `{$tiles.cheap_v}`, a chart spec) reads like an expression.
+      for (const a of n.attributes) if (a.value.static) for (const name of attributeSignals(n.tag, a.name, n.isComponent, a.value.json, scriptComponent)) read(name, a, n.tag, a.name);
       // `set=` WRITES its keys (declared scalar Values) and READS its sources; `args=` only reads.
       for (const a of n.attributes) {
         if ((a.name !== SET_ATTR && a.name !== ARGS_ATTR) || !a.value.static) continue;

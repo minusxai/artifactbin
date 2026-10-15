@@ -50,6 +50,8 @@ const EDIT_LAYOUT_ATTR = 'data-mx-parent-layout';
 const EDIT_MODE_CSS = [
   '.ProseMirror { outline: none; white-space: pre-wrap; overflow-wrap: break-word; }',
   '.ProseMirror [data-mx-placeholder]::before { content: attr(data-mx-placeholder); float: left; height: 0; opacity: .35; pointer-events: none; }',
+  // A template in prose (lib/editor-engine/model `template`): one chip naming its source, never typed into.
+  '.ProseMirror [data-mx-template] { display: inline-block; padding: 0 .4em; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: .4em; background: color-mix(in srgb, currentColor 7%, transparent); font: 500 .85em/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; user-select: all; cursor: default; }',
   // A prose region's blocks sit inside the editor root (a focusable box: with `display: contents`
   // it cannot take focus), not in their authored parent. Under a flex or grid parent the root takes the
   // parent's place in full and inherits its layout through the box-less region wrappers, so a flex

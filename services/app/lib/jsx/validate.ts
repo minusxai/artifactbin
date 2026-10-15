@@ -17,6 +17,7 @@ import { immutableSet } from '@/lib/jsx/immutable-set';
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
 import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl, urlListUrls } from './url-attrs';
 import { DANGEROUS_TAGS } from './dangerous-tags';
+import { deepHasValueHole, hasValueHole, isTemplatedObjectProp, templatePosition, templateRefusal } from './template';
 import { DENIED_JSX_ATTRS } from './denied-attrs';
 import { STORY_COMPONENT_NAMES } from './story-components';
 import { canonicalComponent, STORY_SVG_TAGS } from './component-names';
@@ -327,6 +328,21 @@ function validateElement(
         end: a.end,
       });
       continue;
+    }
+    // Templates (`{$name}`, `{$query.column}`): read in any string the reader sees, refused where a value would
+    // change identity, run or frame something, or a structure fixed at publish (lib/jsx/template).
+    const position = templatePosition(el.tag, a.name, el.isComponent, isScriptComponent(el));
+    if (position !== 'literal') {
+      const json = a.value.json;
+      const holes = typeof json === 'string' ? hasValueHole(json) : deepHasValueHole(json);
+      if (holes && position === 'refuse') {
+        errors.push({ message: `Attribute "${a.name}" on <${el.tag}> cannot hold a template ({$…}): ${templateRefusal(el.tag, a.name, el.isComponent)}`, attr: a.name, tag: el.tag, start: a.start, end: a.end });
+        continue;
+      }
+      if (holes && typeof json !== 'string' && !isTemplatedObjectProp(el.tag, a.name, el.isComponent)) {
+        errors.push({ message: `Attribute "${a.name}" on <${el.tag}> cannot hold a template ({$…}) inside an object: templates are read in strings, a <Question> viz, <DataTable> columns and style`, attr: a.name, tag: el.tag, start: a.start, end: a.end });
+        continue;
+      }
     }
     // Dangerous URL schemes in URL-bearing attributes (list-valued ones checked per entry).
     if (typeof a.value.json === 'string') {

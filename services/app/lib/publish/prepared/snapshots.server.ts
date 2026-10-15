@@ -333,7 +333,9 @@ async function revalidateKey(key: SnapshotKey, given?: Recipe & { build?: string
   const results = sharedResults({ tables: pick(state.tables, answered), errors: pick(state.errors, answered) });
   const { page } = await preparedPageFor(row, null, { nodes: true });
   // Drawing with vega is CPU-bound and never yields (a heavy chart set held the request thread ~15 s): on a prepare thread when this process has them.
-  const chartOptions = { colorMode: page.data.colorMode, template: page.data.template };
+  // A templated chart spec reads page values the shared queries may not: drawn at the declared defaults under the keyed ones.
+  const chartValues = { ...Object.fromEntries((flow?.values ?? []).flatMap((v) => (v.kind === 'scalar' ? [[v.name, v.default]] : []))), ...values };
+  const chartOptions = { colorMode: page.data.colorMode, template: page.data.template, values: chartValues };
   const threads = prepareWorkers();
   const drawings = threads ? await threads.drawCharts(page.data.nodes, results, chartOptions) : await drawSnapshotCharts(page.data.nodes, results, chartOptions);
   const snapshot: DataSnapshot = {

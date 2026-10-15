@@ -16,7 +16,8 @@ import { Number as KitNumber, Select, DataTable, Question } from '../kit/data';
 import { loadSelectPopup } from '../kit/select';
 import { type TableResult, type CompiledDataflow, initialTables, initialValues, runLocalStateMutation } from '@/lib/dataflow';
 import { rowsDigest } from '../digest';
-import { DRAWING_CLASS } from '../chart';
+import { DRAWING_CLASS, drawingIsCurrent } from '../chart';
+import { specDigest } from '@/lib/jsx/template';
 import { createIslandRuntime } from '../rt';
 import { createDataflowStore, type DataflowStore, type QueryTransport } from '@/lib/page-store/store';
 import { Button } from '../kit/basic';
@@ -740,6 +741,37 @@ describe('data widget parity with the live reader', () => {
       await vi.waitFor(() => expect((host.querySelector('svg') as SVGSVGElement).style.position).toBe('absolute'));
       expect((host.querySelector('svg') as SVGSVGElement).style.height).toBe('100%');
     } finally { rect.mockRestore(); }
+  });
+
+  it('Question with a templated spec keeps only a drawing of its own spec and remounts when the spec changes', async () => {
+    const mounts: unknown[] = [];
+    const destroy = vi.fn();
+    const loadChart = vi.fn(async () => ({ mountChart: (input: { envelope: unknown }) => { mounts.push(input.envelope); return { update: vi.fn(), destroy }; } }));
+    const [title, setTitle] = createSignal('Cost');
+    const viz = () => ({ kind: 'vega-lite', spec: { mark: 'line', title: title() } });
+    const current = { ...(await drawnFor(monthly.rows)), spec: specDigest(viz()) };
+    const { host } = mount(island(), () => <Question data="$monthly" viz={viz()} templated drawn={current} chart={loadChart} />);
+    const slot = host.querySelector('[role="graphics-document"]')!;
+    const served = slot.firstElementChild;
+    await new Promise((r) => setTimeout(r, 20));
+    // The served drawing is this spec's: kept while the engine loads.
+    expect(slot.firstElementChild).toBe(served);
+    await vi.waitFor(() => expect(mounts).toHaveLength(1));
+    setTitle('Time');
+    await vi.waitFor(() => expect(mounts).toHaveLength(2));
+    expect(destroy).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(mounts[1])).toContain('"title":"Time"');
+  });
+
+  it('Question never keeps a served drawing of another spec', async () => {
+    const loadChart = vi.fn(async () => ({ mountChart: () => ({ destroy() {} }) }));
+    const viz = { kind: 'vega-lite', spec: { mark: 'line', title: 'Time' } };
+    const stale = { ...(await drawnFor(monthly.rows)), spec: specDigest({ ...viz, spec: { ...viz.spec, title: 'Cost' } }) };
+    expect(await drawingIsCurrent(stale, monthly.rows, specDigest(viz))).toBe(false);
+    expect(await drawingIsCurrent(stale, monthly.rows, null)).toBe(true);
+    const { host } = mount(island(), () => <Question data="$monthly" viz={viz} templated drawn={stale} chart={loadChart} />);
+    expect(host.querySelector('[data-drawn]')).toBeNull();
+    await vi.waitFor(() => expect(loadChart).toHaveBeenCalledTimes(1));
   });
 
   it('Question feeds a chart drawn here the rows of every later result', async () => {

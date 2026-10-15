@@ -15,6 +15,7 @@ import type { ModuleRef, ModuleStore } from '@/lib/compiled-page/contract';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import { compileDataflow, prepareCompile } from '@/lib/dataflow/server';
+import type { Scalar } from '@/lib/dataflow';
 
 const source = process.argv[2]!;
 const parsed = parseJsx(source) as { nodes: JsxNode[] };
@@ -44,10 +45,13 @@ const templateSha = /\/islands\/t\/([0-9a-f]{16})\.json/.exec(browserCode)?.[1];
 const templateResource = templateSha ? new TextDecoder().decode((await createTemplateResourceStore().get(templateSha))!) : null;
 // `--results=<json>`: render again as the serve path does once the server has answered the queries.
 const served = process.argv.find((arg) => arg.startsWith('--results='));
+// `--values=<json>`: the reader's link values over the declared ones (url-values), as the serve path renders them.
+const linked = process.argv.find((arg) => arg.startsWith('--values='));
 let html = built.html;
-if (served) {
+if (served || linked) {
   const ssr = await ssrModuleOf(new TextDecoder().decode(stored.get(built.ssr!.sha)), 'served');
   const tail = built.html.indexOf('<script type="application/json" data-mx-island-literals');
-  html = ssr.render({ values: declaredValues(flow), results: JSON.parse(served.slice('--results='.length)), mermaidImages: {}, drawings: {} }) + built.html.slice(tail);
+  const values = { ...declaredValues(flow), ...(linked ? JSON.parse(linked.slice('--values='.length)) as Record<string, Scalar> : {}) };
+  html = ssr.render({ values, results: served ? JSON.parse(served.slice('--results='.length)) : null, mermaidImages: {}, drawings: {} }) + built.html.slice(tail);
 }
 process.stdout.write(JSON.stringify({ html, islands: generated.islands, browserCode, templateResource, islandRefs: generated.islandRefs, flow }));

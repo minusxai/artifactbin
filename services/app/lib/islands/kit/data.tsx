@@ -35,7 +35,8 @@ import type { IslandChart, IslandChartModule } from '../contract';
 import { DRAWING_CLASS, drawingIsCurrent } from '../chart';
 import { rowsDigest } from '../digest';
 import type { CellScope } from './cells';
-import { CHART_SLOT_ATTR, CHART_STATE_ATTR, type DrawnChart } from '@/lib/story-runtime/contract';
+import { CHART_SLOT_ATTR, CHART_SPEC_ATTR, CHART_STATE_ATTR, type DrawnChart } from '@/lib/story-runtime/contract';
+import { specDigest } from '@/lib/jsx/template';
 
 const nameOf = (raw: unknown) => refName(raw) ?? '';
 /** The authored identity the former adapters put on their outer element: the id and the compiler's `data-*` stamps, never the chart slot marker. */
@@ -252,7 +253,7 @@ function DataGrid(props: DataTableProps & { table: () => TableResult | undefined
   </div></Show>;
 }
 
-interface QuestionProps { data: unknown; viz?: Record<string, unknown>; title?: string; height?: number | string; id?: string; drawn?: DrawnChart; chart?: () => Promise<IslandChartModule>; refData?: RefDataMap; recipeData?: unknown; inGridItem?: boolean; className?: string; [key: `data-${string}`]: unknown }
+interface QuestionProps { data: unknown; viz?: Record<string, unknown>; title?: string; height?: number | string; id?: string; drawn?: DrawnChart; chart?: () => Promise<IslandChartModule>; refData?: RefDataMap; recipeData?: unknown; inGridItem?: boolean; className?: string; templated?: boolean; [key: `data-${string}`]: unknown }
 
 const fmt = (v: unknown): string => typeof v === 'number' ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(v) : String(v ?? '');
 /** The `aria-label` Vega gives its container: the spec's description, or vega-parser's default. */
@@ -281,6 +282,8 @@ export function Chart(props: QuestionProps) {
     return props.recipeData && typeof recipe === 'string' && recipe.startsWith('ref:') ? { ...props.refData, [recipe.slice(4)]: props.recipeData as RefDataMap[string] } : props.refData;
   };
   const envelope = createMemo(() => { const t = table(); return t ? questionEnvelope(props.viz ?? {}, t.columns, refData()) : null; });
+  // A spec that reads the page (lib/jsx/template) is named by its digest: a drawing of another spec is never kept.
+  const spec = createMemo(() => (props.templated ? specDigest(props.viz ?? {}) : null));
   const state = () => (pending() ? 'pending' : undefined);
   const empty = (message: JSX.Element) => <div class="flex h-full w-full items-center justify-center p-4 text-sm text-muted-foreground" aria-label="Chart placeholder">{message}</div>;
   const sample = () => <Show when={table()?.truncated}><div aria-label="Sample notice" class="shrink-0 border-t border-border px-3 py-1 font-mono text-[11px] text-muted-foreground">showing the first {new Intl.NumberFormat().format(table()!.rows.length)} of {new Intl.NumberFormat().format(table()!.totalRows ?? table()!.rows.length)} rows</div></Show>;
@@ -319,7 +322,7 @@ export function Chart(props: QuestionProps) {
         <div class="flex h-full w-full flex-col" aria-label="Question embed body" {...attr('data-mx-chart-state', state())}>
           <Show when={props.title}><div class="border-b border-border px-3 py-2 font-mono text-sm font-medium">{props.title}</div></Show>
           <div class="flex min-h-0 flex-1 flex-col"><div class="relative min-h-0 w-full flex-1 overflow-hidden">
-            <ChartSlot slot={props[CHART_SLOT_ATTR] as string | undefined} table={name} envelope={env} rows={() => table()?.rows ?? []} drawn={props.drawn} chart={props.chart} />
+            <ChartSlot slot={props[CHART_SLOT_ATTR] as string | undefined} table={name} envelope={env} spec={spec} rows={() => table()?.rows ?? []} drawn={props.drawn} chart={props.chart} />
           </div></div>
           {sample()}
         </div>
@@ -349,10 +352,11 @@ const VEGA_CONTAINER: Record<string, string> = { role: 'graphics-document', 'ari
  * stored before that (in the flow, at its nominal height) would hold a smaller box open: it is taken
  * out of the flow here instead, the one layout change such an old drawing still costs.
  */
-function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnvelope; rows: () => Row[]; drawn?: DrawnChart; chart?: () => Promise<IslandChartModule> }) {
+function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnvelope; spec: () => string | null; rows: () => Row[]; drawn?: DrawnChart; chart?: () => Promise<IslandChartModule> }) {
   const island = useIsland();
   let el!: HTMLDivElement;
   let controller: IslandChart | undefined;
+  let engine: IslandChartModule | undefined;
   let started = false;
   let disposed = false;
   const [showLoading, setShowLoading] = createSignal(false);
@@ -377,6 +381,7 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
       let module: IslandChartModule;
       try { module = await (props.chart ?? island.loadChart)(); } catch { if (before) el.setAttribute(CHART_STATE_ATTR, before); started = false; stopLoading(); return; } // a failed chunk fetch: keep what is shown; the next trigger retries
       if (disposed) return;
+      engine = module;
       controller = module.mountChart({ element: el, envelope: props.envelope(), rows: props.rows() });
     })(); });
   };
@@ -384,7 +389,8 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
     readiness = new MutationObserver(() => { if (el.getAttribute(CHART_STATE_ATTR) === 'ready') stopLoading(); });
     readiness.observe(el, { attributes: true, attributeFilter: [CHART_STATE_ATTR] });
     el.removeAttribute(CHART_SLOT_ATTR);
-    if (props.drawn?.svg && !el.firstElementChild) { el.innerHTML = props.drawn.svg; el.setAttribute(CHART_STATE_ATTR, 'ready'); }
+    el.removeAttribute(CHART_SPEC_ATTR);
+    if (props.drawn?.svg && !el.firstElementChild && (!props.spec() || props.drawn.spec === props.spec())) { el.innerHTML = props.drawn.svg; el.setAttribute(CHART_STATE_ATTR, 'ready'); }
     const served = el.getAttribute(CHART_STATE_ATTR) === 'ready' && !!el.firstElementChild;
     if (!served) { void draw(); return; }
     // Legacy-only compatibility stays behind a lazy browser boundary; current snapshots already fit.
@@ -393,18 +399,25 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
       void import('./fit-drawing').then(module => { if (!disposed) module.fitDrawing(el); }).catch(() => { /* Preserve the visible snapshot if compatibility cannot load. */ });
     }
     const rows = props.rows();
-    drawing = props.drawn ? Promise.resolve(props.drawn) : rowsDigest(rows).then(digest => ({ svg: '', table: props.table, rows: digest }), () => null);
+    // A drawing the assembler served is of this spec: it fills a templated slot only with a matching one.
+    const resolved = props.spec();
+    drawing = props.drawn ? Promise.resolve(props.drawn) : rowsDigest(rows).then(digest => ({ svg: '', table: props.table, rows: digest, ...(resolved ? { spec: resolved } : {}) }), () => null);
     // Schedule the large controller only after reader readiness and visibility; the SVG stays in place.
     void draw();
   });
   createEffect(on(props.rows, rows => {
     if (controller) { controller.update?.(rows); return; }
     if (started) return;
-    void drawing.then(async current => { if (!started && !disposed && !(await drawingIsCurrent(current, rows))) void draw(); });
+    void drawing.then(async current => { if (!started && !disposed && !(await drawingIsCurrent(current, rows, props.spec()))) void draw(); });
+  }, { defer: true }));
+  // A templated spec that resolves anew (a value or a cell changed) is another chart: drawn again, never re-fed.
+  createEffect(on(props.spec, () => {
+    if (controller && engine) { controller.destroy(); controller = engine.mountChart({ element: el, envelope: props.envelope(), rows: props.rows() }); return; }
+    if (!started) void draw();
   }, { defer: true }));
   onCleanup(() => { disposed = true; cancelDraw(); readiness?.disconnect(); stopLoading(); controller?.destroy(); });
   return <>
-    <div ref={el} {...attr(CHART_SLOT_ATTR, isServer ? props.slot : undefined)} {...{ [CHART_STATE_ATTR]: 'pending' }} aria-label={chartLabel(props.envelope())} class="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block" {...VEGA_CONTAINER} style="cursor: default;" onPointerEnter={() => void draw()} onClick={() => void draw()} />
+    <div ref={el} {...attr(CHART_SLOT_ATTR, isServer ? props.slot : undefined)} {...attr(CHART_SPEC_ATTR, isServer ? props.spec() ?? undefined : undefined)} {...{ [CHART_STATE_ATTR]: 'pending' }} aria-label={chartLabel(props.envelope())} class="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block" {...VEGA_CONTAINER} style="cursor: default;" onPointerEnter={() => void draw()} onClick={() => void draw()} />
     <Show when={showLoading()}><span role="status" aria-label="Chart loading; interactions available when ready" class="pointer-events-none absolute right-2 top-2 z-10 flex size-6 items-center justify-center rounded-full border border-border bg-background/85 text-muted-foreground shadow-sm"><span aria-hidden="true" class="size-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent motion-reduce:animate-none" /></span></Show>
   </>;
 }

@@ -4,6 +4,7 @@
 import { parseJsx, serializeJsx, type JsxNode, type JsxElement } from '@/lib/jsx';
 import { storyBodyFor } from '@/lib/document/body';
 import { rawBuildProps } from '@/lib/story-ui/interpreter-primitives';
+import { readsPage } from '@/lib/jsx/template';
 
 const identity = (node: JsxElement) => node.attributes.find((a) => a.name === 'id')?.value;
 const key = (node: JsxElement): string | null => {
@@ -11,8 +12,10 @@ const key = (node: JsxElement): string | null => {
 };
 const withoutIds = (node: JsxNode): JsxNode => node.type === 'element' ? { ...node, attributes: node.attributes.filter((a) => a.name !== 'id'), children: node.children.map(withoutIds) } : node;
 const signature = (node: JsxElement): string => serializeJsx([withoutIds(node)]);
+/** Reads the page: a component, a condition, a `$` expression, or a templated string (`title="For {$region}"`), which only the compiler fills. */
 const dynamic = (node: JsxElement): boolean => node.isComponent || (!!node.control && node.control.kind !== 'fragment')
-  || node.attributes.some((a) => !a.value.static) || node.children.some((child) => child.type === 'expression' && !child.value.static);
+  || node.attributes.some((a) => !a.value.static || readsPage(node.tag, a.name, node.isComponent, a.value.json))
+  || node.children.some((child) => child.type === 'expression' && !child.value.static);
 const shape = (nodes: JsxNode[]): unknown => nodes.map((node): unknown => node.type === 'element'
   ? [node.tag, node.attributes.filter((a) => a.name !== 'id').map((a) => [a.name, a.value]), node.control, shape(node.children)]
   : node.type);

@@ -28,7 +28,7 @@ import { isQueryFailure } from '@artifactbin/contracts';
 import type { JsxNode, ValidationError } from '@/lib/jsx';
 import { BUILTIN_TABLES, builtinInput, CLOCK_FUNCTIONS, isBuiltinTable, rowField, VIEWER, VIEWER_ID } from './builtins';
 import type { BuiltinInput, BuiltinTable, CompiledDataflow, CompiledImport, CompiledMutation, CompiledNotify, CompiledQuery, CompiledReads, CompiledValue } from './compiled-dataflow';
-import { ARGS_ATTR, bindingMap, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
+import { ARGS_ATTR, bindingMap, collectRefNameUses, MUTATION_TAG, QUERY_TAG, refName, scalarMatches, SET_ATTR, type Dataflow, type MutationDecl, type QueryDecl } from './dataflow';
 import { analyzeRowScopes } from '@/lib/jsx/row-scope';
 import { datasetSqlParams } from './sql-parameters';
 import { dateCastRefusal, editDistance, withSqliteHint } from './sqlite-hints';
@@ -626,6 +626,13 @@ function checkBindings(flow: CompiledDataflow, body: JsxNode[]): { errors: Valid
     }
   };
   visit(body, undefined, false, undefined);
+  // A template's cell (`{$tiles.cheap_v}`) reads the first row of a table: that column must be one it returns.
+  for (const use of collectRefNameUses(body)) {
+    const known = use.column === undefined ? undefined : columns[use.name];
+    if (known && !known.some((c) => c.name === use.column)) {
+      errors.push({ message: `{$${use.name}.${use.column}} in <${use.tag}${use.attr === 'value' ? '' : ` ${use.attr}`}> — $${use.name} has no column ${use.column}${known.length ? ` (it has ${known.map((c) => c.name).join(', ')})` : ''}`, tag: use.tag, attr: use.attr, start: use.start, end: use.end });
+    }
+  }
   // A row action nothing runs has no row to read: said once, at the declaration.
   for (const m of flow.mutations) {
     const context = m.reads.builtins.find((b) => rowField(b) || b === '_value');

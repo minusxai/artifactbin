@@ -12,7 +12,7 @@ import { speculationRulesOf } from '../speculation';
 import { agentDiscovery, agentDiscoveryHead, agentDiscoveryTail } from '../agent-discovery';
 import { SIGNED_IN_HINT_ATTR, SPECULATION_RULES_HEADER, type AssembleInput, type CompiledPage } from '../contract';
 import type { DataSnapshot } from '@/lib/publish/prepared/snapshots.server';
-import { CHART_SLOT_ATTR, ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
+import { CHART_SLOT_ATTR, CHART_SPEC_ATTR, ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
 
 const build = { id: 'b'.repeat(16), manifest: { '@mx/rt': '/islands/rt-4444dddd.js', '@mx/deck': '/islands/deck-6666ffff.js' } };
 const compiled = (over: Partial<CompiledPage> = {}): CompiledPage => ({
@@ -169,6 +169,16 @@ describe('chart slots', () => {
   it('matches the slot id as the browser reads the attribute, entities decoded', () => {
     const page = place(story('a&quot;b&amp;c'), { 'a"b&c': drawn(SVG) });
     expect(page.querySelector('svg')).toBeTruthy();
+  });
+
+  it('fills a templated chart\'s slot only with a drawing of the spec this request resolved', () => {
+    const slot = (spec: string) => `<div ${CHART_SLOT_ATTR}="c" ${CHART_SPEC_ATTR}="${spec}"><i></i></div>`;
+    const same = assembleReaderPage(input({ story: slot('aaaa'), snapshot: snapshot({ c: { ...drawn(SVG), spec: 'aaaa' } }) })).html;
+    expect(same).toContain('data-mx-chart-state="ready"');
+    for (const drawing of [{ ...drawn(SVG), spec: 'bbbb' }, drawn(SVG)]) {
+      const other = assembleReaderPage(input({ story: slot('aaaa'), snapshot: snapshot({ c: drawing }) })).html;
+      expect(other).not.toContain('<svg');
+    }
   });
 
   it('rewrites a declared state rather than adding a second one', () => {

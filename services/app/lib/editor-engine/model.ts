@@ -7,6 +7,24 @@ import { validateClipboardAst } from './clipboard-ast';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { fixHtmlNesting } from '@/lib/document/nesting';
 import type { JsxNode, JsxElement, JsxAttribute } from '@/lib/jsx';
+import { reactiveSource } from '@/lib/jsx/reactive';
+
+/**
+ * A template in prose (`{$region}`, `{$tiles.cheap_v}`): the page's value, which the editor shows as ONE atomic
+ * chip naming its source. Only a plain read is prose; a condition or a row field stays the renderer's.
+ */
+type TemplateExpression = Extract<JsxNode, { type: 'expression' }>;
+const templateName = (node: JsxNode): string | null =>
+  node.type === 'expression' && !node.value.static && node.value.reactive?.kind === 'signal' ? node.value.reactive.name : null;
+const cellQuery = (name: string): string | null => {
+  const dot = name.indexOf('.');
+  return dot > 0 && !name.startsWith('_') ? name.slice(0, dot) : null;
+};
+function templateExpression(name: string): TemplateExpression {
+  const reactive = { kind: 'signal' as const, name };
+  const source = reactiveSource(reactive);
+  return { type: 'expression', value: { static: false, exprType: name.includes('.') ? 'MemberExpression' : 'Identifier', source, reactive }, source, start: 0, end: 0 };
+}
 
 const metadata = {
   source: { default: null },
@@ -138,6 +156,25 @@ export const editorSchema = new Schema({
       selectable: false,
       toDOM: node => ['input', { ...domAttributes(node), type: 'checkbox', disabled: '', 'aria-label': 'Task completed', ...(node.attrs.checked ? { checked: '' } : {}) }],
     },
+    /**
+     * A template (`{$tiles.cheap_v}`): one uneditable chip labelled by its source and linked to the query a cell reads
+     * (`data-mx-template-query`); typing around it cannot split or rewrite it.
+     */
+    template: {
+      attrs: { ...metadata, tag: { default: 'span' }, name: { default: '' } },
+      inline: true,
+      atom: true,
+      group: 'inline',
+      selectable: true,
+      toDOM: (node) => {
+        const name = String(node.attrs.name);
+        const query = cellQuery(name);
+        return ['span', {
+          contenteditable: 'false', 'data-mx-template': name, ...(query ? { 'data-mx-template-query': query } : {}),
+          class: 'mx-template-chip', 'aria-label': query ? `${name}, from the query ${query}` : `the value ${name}`,
+        }, name];
+      },
+    },
     /** A childless inline element — a colour swatch, an icon box — is content the reader draws. */
     inline_atom: {
       attrs: metadata,
@@ -177,6 +214,7 @@ export const editorSchema = new Schema({
 
 export function isProseTree(node: JsxNode): boolean {
   if (node.type === 'text') return true;
+  if (node.type === 'expression') return templateName(node) !== null;
   if (node.type !== 'element' || node.control || node.isComponent) return false;
   // Parsed trees are never mutated: a table's thousands of cells are checked once, not at every pause and region walk.
   const kept = proseTrees.get(node);
@@ -211,6 +249,8 @@ function taskCheckbox(node: JsxElement): boolean {
 function inline(nodes: JsxNode[], marks: Mark[] = []): EditorNode[] {
   return nodes.flatMap((n) => {
     if (n.type === 'text') return n.value ? [editorSchema.text(n.value, marks)] : [];
+    const template = templateName(n);
+    if (template !== null) return [editorSchema.nodes.template.create({ name: template }, null, marks)];
     if (n.type !== 'element') return [];
     if (n.tag === 'input' && taskCheckbox(n)) return [editorSchema.nodes.task_checkbox.create({ source: sourceMetadata(n), checked: n.attributes.some(a => a.name === 'checked' && a.value.static && a.value.json === true) })];
     if (n.tag === 'br') return [editorSchema.nodes.hard_break.create({ source: sourceMetadata(n) }, null, marks)];
@@ -269,6 +309,7 @@ function textblock(tag: string, children: JsxNode[]): EditorNode[] {
 function blocks(nodes: JsxNode[]): EditorNode[] {
   return nodes.flatMap((n) => {
     if (n.type === 'text') return n.value.trim() ? [editorSchema.nodes.paragraph.create(null, textblock('p', [n]))] : [];
+    if (templateName(n) !== null) return [editorSchema.nodes.paragraph.create(null, textblock('p', [n]))];
     if (n.type !== 'element') return [];
     if (n.tag === 'hr')
       return [
@@ -298,7 +339,7 @@ function blocks(nodes: JsxNode[]): EditorNode[] {
       run = [];
     };
     for (const child of n.children) {
-      if (child.type === 'text' || (child.type === 'element' && (inlineTags.has(child.tag) || child.tag === 'br' || (child.tag === 'input' && taskCheckbox(child)))))
+      if (child.type === 'text' || templateName(child) !== null || (child.type === 'element' && (inlineTags.has(child.tag) || child.tag === 'br' || (child.tag === 'input' && taskCheckbox(child)))))
         run.push(child);
       else {
         flush();
@@ -339,6 +380,7 @@ export function sourceNodes(doc: EditorNode): JsxNode[] {
     }
     let source: JsxNode;
     if (n.isText) source = { type: 'text', value: n.text!, start: 0, end: 0 };
+    else if (n.type === editorSchema.nodes.template) source = templateExpression(String(n.attrs.name));
     else if (n.type === editorSchema.nodes.task_checkbox) {
       const checkbox = element('input', [], n.attrs.source);
       checkbox.attributes = [...checkbox.attributes.filter(a => !['type', 'checked', 'disabled', 'aria-label'].includes(a.name)),
@@ -402,7 +444,7 @@ export function normalizeIdentities(tr: Transaction, mintMissing = false): Trans
   };
   const marks = new Map<Mark, { mark: Mark; end: number }>();
   tr.doc.descendants((node, pos) => {
-    if (!node.isText && !node.attrs.synthetic) {
+    if (!node.isText && !node.attrs.synthetic && node.type !== editorSchema.nodes.template) {
       const tag = node.type.name === 'hard_break' ? 'br' : node.type.name === 'horizontal_rule' ? 'hr' : node.attrs.tag;
       const source = identify(node.attrs.source, tag);
       if (source !== node.attrs.source) tr.setNodeMarkup(pos, undefined, { ...node.attrs, source });
