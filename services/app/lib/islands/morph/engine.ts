@@ -414,8 +414,9 @@ function move(parent: Element, node: Node, ref: Node | null): void {
 /**
  * What a move restarts. Without `moveBefore` (Safari, Firefox before it) a move is a removal and an insertion, and a
  * node that leaves the document loses what it holds: an iframe, object or embed loads its page again (the author's
- * map, video player or sign-in starts over), and the reader's focus and caret are dropped. Each such element and
- * every ancestor up to `root`: the morph moves their siblings instead. Found once, the first time a morph has to move
+ * map, video player or sign-in starts over), and the reader's focus, caret and selection are dropped (a selection
+ * whose words leave the document collapses, and the comment bubble on it closes). Each such node and every ancestor up
+ * to `root`: the morph moves their siblings instead. Found once, the first time a morph has to move
  * anything (most morphs move nothing). A playing <audio>/<video> and a canvas's pixels survive a move made in one
  * task (measured in Chromium, WebKit and Firefox), so neither is held.
  */
@@ -425,10 +426,15 @@ function heldNodes(root: Element): (node: Node) => boolean {
   return (node) => {
     if (!held) {
       const found = held = new Set<Node>();
-      const hold = (el: Element) => { for (let at: Element | null = el; at && at !== root && !found.has(at); at = at.parentElement) found.add(at); };
+      const hold = (node: Node | null | undefined) => {
+        if (!node || !root.contains(node)) return;
+        for (let at: Node | null = node; at && at !== root && !found.has(at); at = at.parentNode) found.add(at);
+      };
       for (const el of root.querySelectorAll(HELD_SELECTOR)) hold(el);
-      const focused = root.ownerDocument.activeElement;
-      if (focused && focused !== root && root.contains(focused)) hold(focused);
+      const doc = root.ownerDocument;
+      hold(doc.activeElement);
+      const selection = doc.defaultView?.getSelection();
+      if (selection && selection.rangeCount && !selection.isCollapsed) { hold(selection.anchorNode); hold(selection.focusNode); }
     }
     return held.has(node);
   };
@@ -436,9 +442,11 @@ function heldNodes(root: Element): (node: Node) => boolean {
 
 /**
  * Make `nodes` the children of `parent` in this order, from the left, moving as few as it can: the ones already
- * children in an order that agrees with `nodes` stay (the heaviest increasing run of their current places, a held
- * node outweighing every other together, so its siblings move around it), every other one is moved or inserted
- * before the node that follows it. Children `nodes` does not name are left where they are (the caller removes them).
+ * children in an order that agrees with `nodes` stay (the heaviest increasing run of their current places), every
+ * other one is moved or inserted before the node that follows it. The weights rank what a move costs: a held node
+ * outweighs every other together, so its siblings move around it; an element or text outweighs every comment
+ * together, so the server render's block markers (`<!--$-->`, matched by kind and shifted by a block inserted ahead)
+ * move, never the blocks. Children `nodes` does not name are left where they are (the caller removes them).
  */
 function arrange(parent: Element, nodes: readonly Node[], held: (node: Node) => boolean): void {
   const place = new Map<Node, number>();
@@ -447,7 +455,9 @@ function arrange(parent: Element, nodes: readonly Node[], held: (node: Node) => 
   const present = nodes.filter((node) => place.has(node));
   let ordered = true;
   for (let i = 1; i < present.length && ordered; i++) ordered = place.get(present[i - 1]!)! < place.get(present[i]!)!;
-  const stays = ordered ? new Set(present) : heaviestIncreasing(present, place, (node) => (held(node) ? present.length + 1 : 1), index);
+  const tier = present.length + 1;
+  const weight = (node: Node) => (held(node) ? tier * tier : node.nodeType === 8 ? 1 : tier);
+  const stays = ordered ? new Set(present) : heaviestIncreasing(present, place, weight, index);
   let ref: Node | null = null;
   for (let i = nodes.length - 1; i >= 0; i--) {
     const node = nodes[i]!;

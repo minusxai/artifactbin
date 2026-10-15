@@ -635,6 +635,38 @@ describe('a node holding a frame or the reader\'s focus stays where it is', () =
     expect(holding(removed, frame!)).toEqual([]);
   });
 
+  it('a block inserted at the top of blocks the server marks with comments moves the markers, never the blocks, and the reader\'s selection stays', async () => {
+    // Solid's server render wraps each block in `<!--$-->…<!--/-->`. Matched by kind, the markers shift by one block
+    // when one is inserted ahead: the order moves either the markers or every block after the insertion.
+    const blocks = (ids: string[]) => ids.map((id) => `<!--$--><p id="${id}" data-mx-ast="0.1${id}">${id === 'sel' ? 'Words to select' : id}</p><!--/-->`).join('');
+    load(served({ edit: 'e1', extra: blocks(['i3', 'i2', 'sel', 'i1']) }));
+    start();
+    const paragraphs = ['i3', 'i2', 'sel', 'i1'].map($);
+    const text = $('sel')!.firstChild!;
+    const range = document.createRange();
+    range.setStart(text, 0); range.setEnd(text, 'Words'.length);
+    window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+    const removed = await removals(() => morph(window, { fetch: answer(served({ edit: 'e2', extra: blocks(['i4', 'i3', 'i2', 'sel', 'i1']) })) }));
+    expect(['i3', 'i2', 'sel', 'i1'].map($)).toEqual(paragraphs);
+    expect(removed.filter((node) => node.nodeType === 1)).toEqual([]);
+    expect($('w')!.innerHTML).toContain(blocks(['i4', 'i3', 'i2', 'sel', 'i1']));
+    expect(window.getSelection()!.toString()).toBe('Words');
+  });
+
+  it('a selection keeps its block in place even against the order\'s cheapest moves', async () => {
+    // [sel, a, b] → [a, b, sel]: moving one block is cheapest, but that block holds the reader's selection.
+    const p = (id: string) => `<p id="${id}" data-mx-ast="0.1${id}">${id === 'sel' ? 'Words to select' : id}</p>`;
+    load(served({ edit: 'e1', extra: ['sel', 'a', 'b'].map(p).join('') }));
+    start();
+    const range = document.createRange();
+    range.setStart($('sel')!.firstChild!, 0); range.setEnd($('sel')!.firstChild!, 'Words'.length);
+    window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+    const removed = await removals(() => morph(window, { fetch: answer(served({ edit: 'e2', extra: ['a', 'b', 'sel'].map(p).join('') })) }));
+    expect(holding(removed, $('sel')!)).toEqual([]);
+    expect([...$('w')!.children].map((el) => el.id)).toEqual(['h', 'lede', 'a', 'b', 'sel', 's', 'tail']);
+    expect(window.getSelection()!.toString()).toBe('Words');
+  });
+
   it('deleting a block above the control the reader is typing in leaves it, and their focus, in place', async () => {
     load(served({ edit: 'e1', extra: '<p id="gone" data-mx-ast="0.1a">deleted next</p><input id="q" data-mx-ast="0.1b">' }));
     start();
@@ -651,10 +683,11 @@ describe('a node holding a frame or the reader\'s focus stays where it is', () =
     let seed = 7;
     const random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
     const pick = <T,>(items: T[]) => items[Math.floor(random() * items.length)]!;
-    const block = (id: string) => id.startsWith('f') ? `<div id="${id}"><iframe title="${id}"></iframe></div>` : id.startsWith('t') ? `${id} ` : id.startsWith('a') ? `<p>${id}</p>` : `<p id="${id}">${id}</p>`;
+    const block = (id: string) => id.startsWith('f') ? `<div id="${id}"><iframe title="${id}"></iframe></div>` : id.startsWith('t') ? `${id} `
+      : id.startsWith('c') ? `<!--${id}-->` : id.startsWith('a') ? `<p>${id}</p>` : `<p id="${id}">${id}</p>`;
     for (let trial = 0; trial < 300; trial++) {
       const count = 1 + Math.floor(random() * 9);
-      const before = ['f0', ...Array.from({ length: count }, (_, i) => pick(['p', 'a', 't']) + i)].sort(() => random() - 0.5);
+      const before = ['f0', ...Array.from({ length: count }, (_, i) => pick(['p', 'a', 't', 'c']) + i)].sort(() => random() - 0.5);
       const after = before.filter((id) => id === 'f0' || random() < 0.6).concat(Array.from({ length: Math.floor(random() * 3) }, (_, i) => `n${i}`)).sort(() => random() - 0.5);
       const root = document.createElement('div');
       root.innerHTML = before.map(block).join('');
