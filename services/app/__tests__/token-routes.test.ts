@@ -134,7 +134,8 @@ describe('token routes served by the app', () => {
     const fresh = await mintToken('fresh', user.id);
     const db = await harness.db();
     await db.query('UPDATE tokens SET last_used_at = now() WHERE id = $1', [used.id]);
-    await db.query("UPDATE tokens SET expires_at = now() - interval '1 minute' WHERE id = $1", [expired.id]);
+    // Minted back to back, two tokens can share a created_at; the expired one is made the older so the order is decided.
+    await db.query("UPDATE tokens SET expires_at = now() - interval '1 minute', created_at = created_at - interval '1 second' WHERE id = $1", [expired.id]);
 
     const res = await listMine(request('/api/my/tokens', { actor }));
     expect(res.status).toBe(200);
