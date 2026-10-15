@@ -228,8 +228,11 @@ describe('isEditableTextHost', () => {
     expect(isEditableTextHost(el('<p>Deep <span><Question data="ref:abc123" /></span> one</p>'))).toBe(false);
   });
 
-  it('rejects components themselves and <style> hosts', () => {
-    expect(isEditableTextHost(el('<CardTitle>Title</CardTitle>'))).toBe(false);
+  it('rejects components that draw their own content and <style> hosts; a kit text component is its text', () => {
+    expect(isEditableTextHost(el('<Button>Go</Button>'))).toBe(false);
+    expect(isEditableTextHost(el('<Question data="$q" title="T" />'))).toBe(false);
+    expect(isEditableTextHost(el('<CardTitle>{$q.rows[0].title}</CardTitle>'))).toBe(false);
+    expect(isEditableTextHost(el('<CardTitle>Title</CardTitle>'))).toBe(true);
     expect(isEditableTextHost(el('<style>p &#123; color: red &#125;</style>'))).toBe(false);
   });
 
