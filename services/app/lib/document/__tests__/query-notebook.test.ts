@@ -68,8 +68,8 @@ describe('what a query powers', () => {
   it('lists every element bound to the query by BODY path, with its title when it has one', () => {
     const [sales, unused] = queryCells(BOUND_SOURCE, null);
     expect(sales!.bound).toEqual([
-      { tag: 'Question', label: 'Revenue by region', path: '0.1' },
-      { tag: 'Number', label: null, path: '0.3' },
+      { tag: 'Chart', label: 'Revenue by region', path: '0.1' },
+      { tag: 'Cell', label: null, path: '0.3' },
       { tag: 'select', label: null, path: '0.4' },
     ]);
     expect(unused!.bound).toEqual([]);
@@ -77,7 +77,7 @@ describe('what a query powers', () => {
 
   it('paths are body paths even when the document has no Helmet offset to subtract', () => {
     const [sales] = queryCells('<Question data="$sales" /><Helmet><Query name="sales">{`select 1`}</Query></Helmet>', null);
-    expect(sales!.bound).toEqual([{ tag: 'Question', label: null, path: '0' }]);
+    expect(sales!.bound).toEqual([{ tag: 'Chart', label: null, path: '0' }]);
   });
 });
 

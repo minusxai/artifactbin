@@ -14,7 +14,7 @@
  * page's inline story and the served /raw document), in document order up to a
  * first screen's worth of text:
  *   - a heading (h1–h6) paints the DISPLAY slot;
- *   - code, pre, kbd, samp, a `font-mono` utility and a `<Question>` title paint MONO;
+ *   - code, pre, kbd, samp, a `font-mono` utility and a `<Chart>` title paint MONO;
  *   - any other text paints BODY;
  *   - `font-sans` / `font-serif` are the system stacks in a story: no face;
  *   - em, i, cite, dfn, var, address, `italic`, and the tags a theme sets
@@ -67,7 +67,7 @@ const CLOSED_COMPONENTS = new Set([
 /** Component props a kit component sets as text, in the body face unless named below. */
 const TEXT_PROPS = new Set(['title', 'label', 'description', 'caption']);
 /** Components that set a text prop in the mono face. */
-const MONO_TITLE_COMPONENTS = new Set(['Question']);
+const MONO_TITLE_COMPONENTS = new Set(['Chart']);
 
 /** Tags a theme's structural CSS sets italic (`& blockquote { font-style: italic }`). */
 const THEME_ITALIC_TAGS: Record<string, ReadonlySet<string>> = Object.fromEntries(STORY_THEMES.map((t) => [

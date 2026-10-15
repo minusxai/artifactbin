@@ -6,15 +6,17 @@ export function formatMarkupSource(source:string):string {
  const edits:Array<{start:number;end:number;text:string}>=[];
  const walk=(nodes:JsxNode[])=>{for(const node of nodes){if(node.type!=='element')continue;
   if(!node.control){
-   const last=node.attributes.at(-1)?.end??node.start+1+node.tag.length;
+   // The tag as written: an earlier component name (lib/jsx/component-names COMPONENT_ALIASES) keeps its spelling.
+   const tag=node.authoredTag??node.tag;
+   const last=node.attributes.at(-1)?.end??node.start+1+tag.length;
    const end=source.indexOf('>',last)+1;
    if(end<=last)throw new Error('Could not locate the opening tag.');
    const attrs=node.attributes.map(a=>source.slice(a.start,a.end).trim().replace(/^([^=\s]+)\s*=\s*/, '$1='));
    const suffix=node.selfClosing?' />':'>';
-   const line=`<${node.tag}${attrs.length?' '+attrs.join(' '):''}${suffix}`;
+   const line=`<${tag}${attrs.length?' '+attrs.join(' '):''}${suffix}`;
    const column=node.start-(source.lastIndexOf('\n',node.start)+1);
    const indent=' '.repeat(column+2);
-   const text=line.length+column<=100||attrs.length<2?line:`<${node.tag}\n${attrs.map(x=>indent+x).join('\n')}\n${' '.repeat(column)}${node.selfClosing?'/>':'>'}`;
+   const text=line.length+column<=100||attrs.length<2?line:`<${tag}\n${attrs.map(x=>indent+x).join('\n')}\n${' '.repeat(column)}${node.selfClosing?'/>':'>'}`;
    edits.push({start:node.start,end,text});
   }
   walk(node.children);

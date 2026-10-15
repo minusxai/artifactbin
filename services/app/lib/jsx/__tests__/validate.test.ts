@@ -66,11 +66,11 @@ describe('validateJsx — security', () => {
 
 describe('validateJsx — component registry', () => {
   it('rejects an unregistered component', () => {
-    const errs = errors(`<Chart />`, { components: ['Question'] });
-    expect(errs.some((e) => e.tag === 'Chart')).toBe(true);
+    const errs = errors(`<Gauge />`, { components: ['Question'] });
+    expect(errs.some((e) => e.tag === 'Gauge')).toBe(true);
   });
   it('accepts a component once registered', () => {
-    expect(errors(`<Chart />`, { components: ['Question', 'Chart'] })).toEqual([]);
+    expect(errors(`<Gauge />`, { components: ['Question', 'Gauge'] })).toEqual([]);
   });
   it('restricts HTML tags when allowedHtmlTags is provided', () => {
     expect(errors(`<marquee>x</marquee>`, { components: ['Question'], allowedHtmlTags: ['div', 'p'] }).length).toBeGreaterThan(0);
@@ -118,13 +118,13 @@ describe('validateJsx — no-inline-style policy', () => {
 
 describe('validateJsx — unknown-component error guidance', () => {
   it('keeps the stable "Unknown component" prefix', () => {
-    const errs = errors(`<Chart />`, { components: ['Question'] });
-    expect(errs[0].message).toMatch(/^Unknown component <Chart> — not in the component registry/);
+    const errs = errors(`<Gauge />`, { components: ['Question'] });
+    expect(errs[0].message).toMatch(/^Unknown component <Gauge> — not in the component registry/);
   });
 
   it('lists the registered components so the model can recover', () => {
-    const errs = errors(`<Chart />`, { components: ['Question', 'Card'] });
-    expect(errs[0].message).toContain('Question');
+    const errs = errors(`<Gauge />`, { components: ['Chart', 'Card'] });
+    expect(errs[0].message).toContain('Chart');
     expect(errs[0].message).toContain('Card');
   });
 
@@ -142,7 +142,7 @@ describe('validateJsx — unknown-component error guidance', () => {
   });
 
   it('does not emit legacy guidance for an ordinary unknown component', () => {
-    const errs = errors(`<Chart />`, { components: JSX_STORY_COMPONENT_NAMES });
+    const errs = errors(`<Gauge />`, { components: JSX_STORY_COMPONENT_NAMES });
     expect(errs[0].message).not.toMatch(/legacy/i);
   });
 });

@@ -295,8 +295,8 @@ export const REF_ATTRS: {
   html: Record<string, Record<string, RefKind>>;
 } = {
   components: {
-    Question: { data: 'table' },
-    Number: { data: 'table' },
+    Chart: { data: 'table' },
+    Cell: { data: 'table' },
     DataTable: { data: 'table' },
     DeckGL: { data: 'table' },
     Isometric: { spread: 'scalar' },

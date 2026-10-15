@@ -1,5 +1,5 @@
 /**
- * The adapter between what a `<Question>` STORES and what the encoding helpers
+ * The adapter between what a `<Chart>` STORES and what the encoding helpers
  * EDIT.
  *
  *   stored prop   {kind: 'vega-lite', spec: {...}}
@@ -20,7 +20,7 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { isBlankSpec } from './encoding-edit';
 import type { VizColumnKind } from './types';
 
-/** The flat shape stored in `<Question viz={…}>`. */
+/** The flat shape stored in `<Chart viz={…}>`. */
 export interface QuestionVizProp {
   kind: string;
   spec?: Record<string, unknown>;
@@ -59,7 +59,7 @@ export function vizPropToEnvelope(viz: unknown): VizEnvelope {
  * Flatten an envelope back to the stored prop.
  *
  * Returns `undefined` for a BLANK spec (no mark, no encoding, no composition —
- * `isBlankSpec`) — that is the "no chart" state, and a `<Question>` with no
+ * `isBlankSpec`) — that is the "no chart" state, and a `<Chart>` with no
  * `viz` renders the themed table. Writing `{kind:'vega-lite', spec:{}}` instead
  * would render an empty chart frame, which looks broken rather than deliberate.
  * A composed spec (layer/facet/concat) carries its marks a level down and must

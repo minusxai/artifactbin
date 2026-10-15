@@ -1,5 +1,5 @@
 /**
- * THE LAZY CHART MODULE. A `<Question>` island's drawing box arrives drawn by the server (the
+ * THE LAZY CHART MODULE. A `<Chart>` island's drawing box arrives drawn by the server (the
  * assembler finds it by `data-mx-chart-slot`, its handle only — the island removes the attribute on
  * mount); Vega loads in the browser after reader readiness when the chart becomes visible (or at
  * idle), when its table changes, or when the reader interacts. `loadChart` imports

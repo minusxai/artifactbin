@@ -232,8 +232,8 @@ describe('collectRefNameUses', () => {
     );
     const uses = collectRefNameUses(body).map((u) => `${u.tag}.${u.attr}=${u.name}:${u.expects}`);
     expect(uses).toEqual([
-      'Question.data=sales:table',
-      'Number.data=sales:table',
+      'Chart.data=sales:table',
+      'Cell.data=sales:table',
       'DataTable.data=top:table',
       'select.value=region:scalar',
       'select.options=regions:table',

@@ -22,7 +22,7 @@ order: 1
 </Helmet>
 
 <Select label="Region" value="$region" options="$regions" placeholder="All regions" />
-<Question title="Revenue by region" data="$by_region" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" />
+<Chart title="Revenue by region" data="$by_region" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" />
 ```
 
 [Write forms](markup-data-example.md). [Attachments](markup-upload.md).
@@ -66,7 +66,7 @@ First read [chart authoring](markup-data-authoring.md).
 
 ## Bindings: embeds (body)
 
-- `<Question data="$q" viz={…} height="430px" />` — a chart. `viz` needs `kind`:
+- `<Chart data="$q" viz={…} height="430px" />` — a chart. `viz` needs `kind`:
   `{"kind":"vega-lite","spec":{…}}` (encoding fields checked against the result
   at publish), `{"kind":"table"}` (the default), `{"kind":"single_value",
   "yCols":["revenue"],"singleValueConfig":{"label":"Revenue","prefix":"$","format":",.0f"}}`
@@ -77,8 +77,8 @@ First read [chart authoring](markup-data-authoring.md).
   `minusx/radar@1`, `minusx/combo@1`, `minusx/single-value@1`, and the deprecated
   `minusx/choropleth@1` and `minusx/point-map@1` ([maps](markup-maps.md)); slots
   in [chart authoring](markup-data-authoring.md).
-- `<Number data="$q" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
-  — live inline figure. `agg` defaults to `first` (first row's cell);
+- `<Cell data="$q" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
+  — one live value, inline; text shows as written. `agg` defaults to `first`;
   a total is `sum`, and `last`, `avg`, `median`, `min`, `max`, `count` exist. [[ computedFigureRule ]]
 - `<DataTable data="$q" rowKey="id" columns={[…]} height="420px" />` — sortable,
   virtualised; `columns` picks `{col, title, fmt, align, bar, colorScale, width, kind: "image"}`,

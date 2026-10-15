@@ -59,7 +59,7 @@ import {
 import { readUrlValues } from '@/lib/dataflow';
 import { servedResultsFor } from './served-results.server';
 import type { ServedStoryRuntime } from './prepared-runtime';
-import type { JsxNode } from '@/lib/jsx';
+import { canonicalNodes, type JsxNode } from '@/lib/jsx';
 import type { StoryIslandData, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { prepareWorkers } from './prepare-workers.server';
@@ -400,6 +400,7 @@ async function settleWhole(row: ArtifactRow, at: ArchivedRender | null, slot: st
   )).rows[0];
   if (!stored?.page.compiled) return null;
   const page: PreparedPage = { ...stored.page, pageFormat: stored.page_format ?? 0, handoverContract: stored.handover_contract ?? 0, cssVersion: stored.css_version };
+  page.data = { ...page.data, nodes: canonicalNodes(page.data.nodes) };
   if (fixHtmlNesting(page.data.nodes) !== page.data.nodes) {
     const repaired = await prepareNow(row, at);
     await store(row, slot, repaired, key);
@@ -454,7 +455,8 @@ export async function preparedPageFor<const P extends PreparedParts = typeof WHO
     if (whole || !found.legacy) {
       const page: PreparedView<P> = whole ? narrow(whole, want) : {
         ...found.page!, pageFormat: found.page_format ?? 0, handoverContract: found.handover_contract ?? 0, cssVersion: found.css_version,
-        data: { ...found.page!.data, ...(want.nodes ? { nodes: found.nodes! } : {}) }, ...(want.compiled ? { compiled: found.compiled! } : {}),
+        // A tree prepared before a component rename says the earlier name (lib/jsx/component-names): read as a parse would.
+        data: { ...found.page!.data, ...(want.nodes ? { nodes: canonicalNodes(found.nodes!) } : {}) }, ...(want.compiled ? { compiled: found.compiled! } : {}),
       } as PreparedView<P>;
       // A page an earlier deployment prepared by dropping its script without a word is prepared again below, once.
       if (!droppedSilently(row, page)) {
@@ -545,7 +547,7 @@ export async function recompilePage(row: ArtifactRow, at: ArchivedRender | null,
     "SELECT COALESCE(page #> '{data,nodes}', nodes) AS nodes FROM prepared_pages WHERE artifact_id = $1 AND slot = $2 AND page_key = $3", [row.id, slotOf(at), keyOf(row)],
   )).rows[0]?.nodes;
   if (!nodes) return null;
-  const compiled = await compiledFor(row, { ...page, data: { ...page.data, nodes } }, await refDataForRow(row), compiler);
+  const compiled = await compiledFor(row, { ...page, data: { ...page.data, nodes: canonicalNodes(nodes) } }, await refDataForRow(row), compiler);
   page.pageFormat = PAGE_FORMAT;
   page.handoverContract = MIN_HANDOVER_CONTRACT;
   page.compiled = compiled;

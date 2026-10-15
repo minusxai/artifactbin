@@ -12,6 +12,7 @@ import { Parser } from 'acorn';
 import jsxPlugin from 'acorn-jsx';
 import type { JsxNode, JsxElement, JsxAttribute, StaticValue, JsonValue, ParseResult } from './types';
 import { reactiveExpression, reactiveRefusal } from './reactive';
+import { canonicalComponent } from './component-names';
 
 const JsxParser = Parser.extend(jsxPlugin());
 const WRAP_OPEN = '<>';
@@ -93,7 +94,9 @@ function normalizeNode(node: AnyNode): JsxNode | null {
 
 function normalizeElement(node: AnyNode): JsxElement {
   const opening = node.openingElement as AnyNode;
-  const tag = jsxNameToString(opening.name as AnyNode);
+  const authored = jsxNameToString(opening.name as AnyNode);
+  // THE ALIAS POINT (component-names COMPONENT_ALIASES): the tree carries the canonical name, the spelling rides along.
+  const tag = canonicalComponent(authored);
   const attributes: JsxAttribute[] = [];
   for (const a of (opening.attributes as AnyNode[]) ?? []) {
     if (a.type === 'JSXSpreadAttribute') {
@@ -105,6 +108,7 @@ function normalizeElement(node: AnyNode): JsxElement {
   return {
     type: 'element',
     tag,
+    ...(authored !== tag ? { authoredTag: authored } : {}),
     isComponent: /^[A-Z]/.test(tag),
     attributes,
     children: normalizeChildren((node.children as AnyNode[]) ?? []),

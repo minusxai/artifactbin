@@ -453,8 +453,8 @@ export default function InPlaceEditor(props: InPlaceEditorProps): JSX.Element {
     return { x: frame.x + at.x, y: frame.y + at.y, width: at.width, height: at.height };
   };
   const embedPath = createMemo(() => { const s = selection(); return s?.kind === 'embed' ? bodyPathToSourcePath(source(), s.path) : null; });
-  const chart = createMemo(() => { const p = embedPath(); return p && selection()?.tag === 'Question' ? readQuestionChart(source(), p) : null; });
-  const numberEmbed = createMemo(() => { const p = embedPath(); return p && selection()?.tag === 'Number' ? readNumberEmbed(source(), p) : null; });
+  const chart = createMemo(() => { const p = embedPath(); return p && selection()?.tag === 'Chart' ? readQuestionChart(source(), p) : null; });
+  const numberEmbed = createMemo(() => { const p = embedPath(); return p && selection()?.tag === 'Cell' ? readNumberEmbed(source(), p) : null; });
   const mermaidEmbed = createMemo(() => { const p = embedPath(); return p && selection()?.tag === 'Mermaid' ? readMermaidEmbed(source(), p) : null; });
   const inspector = createMemo(() => (chart() ? 'chart' : numberEmbed() ? 'number' : mermaidEmbed() ? 'diagram' : null) as 'chart' | 'number' | 'diagram' | null);
   const tables = createMemo(() => tableChoices(source(), dataflowState()));

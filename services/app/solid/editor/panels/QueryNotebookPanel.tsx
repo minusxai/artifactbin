@@ -45,7 +45,7 @@ interface QueryNotebookPanelProps {
 }
 
 /** What a reader calls the thing: the kit's tags in plain words, the rest as written. */
-const KIND: Record<string, string> = { Question: 'chart', Number: 'number', DataTable: 'table', select: 'select', Select: 'select' };
+const KIND: Record<string, string> = { Chart: 'chart', Cell: 'cell', DataTable: 'table', select: 'select', Select: 'select' };
 const kindOf = (tag: string) => KIND[tag] ?? tag.toLowerCase();
 
 /** The rows a cell shows: enough to recognise the shape, few enough for the rail. */

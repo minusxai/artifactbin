@@ -1,6 +1,7 @@
 /** Ordered literal packing shared by legacy trees and normalized graph nodes. */
 import {parseJsx} from '../jsx/parse';
 import type {JsxNode} from '../jsx/types';
+import {canonicalNodes} from '../jsx/component-names';
 type Packed = ['value', unknown] | ['string16', string] | ['array', Packed[]] | ['object', Array<[string | Packed, Packed]>];
 import type {DocumentTree as StoredTree} from '@artifactbin/contracts';
 export type {DocumentTree as StoredTree} from '@artifactbin/contracts';
@@ -33,6 +34,7 @@ function decode(v:unknown):unknown {
 }
 export const encodeDocumentNodes=(nodes:JsxNode[]):StoredTree=>({schema:1,kind:'jsx',roots:encode(nodes) as unknown[]});
 export function decodeDocumentNodes(tree:StoredTree):JsxNode[]{
- if(tree.kind==='jsx')return decode(tree.roots) as JsxNode[];
+ // A tree stored before a component rename still says the earlier name: revived as the parser would read it.
+ if(tree.kind==='jsx')return canonicalNodes(decode(tree.roots) as JsxNode[]);
  const parsed=parseJsx(tree.source);if(!parsed.ok)throw new Error(parsed.error);return parsed.nodes;
 }

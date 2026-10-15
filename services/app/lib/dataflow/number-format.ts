@@ -2,7 +2,7 @@
  * Number format specs, in ONE place — the publish door asks "is this valid",
  * every renderer asks "format this", and neither can throw.
  *
- * A spec is author input (`<Number format>`, `<DataTable columns[].fmt>`,
+ * A spec is author input (`<Cell format>`, `<DataTable columns[].fmt>`,
  * `singleValueConfig.format`), in d3-format's grammar. An agent guesses that
  * grammar — Pi wrote `",0"` on production for ",.0f" — and d3's parser THROWS
  * on a guess. Publish accepted it, and the throw landed inside SSR: every

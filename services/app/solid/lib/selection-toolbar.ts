@@ -23,7 +23,7 @@
  *    text vocabulary (no size, weight, colour or link — it has no text), and
  *    keeps the layout half of `format` (alignment, spacing).
  *
- * Components with richer editing (a <Question>'s chart, a <Number>) keep
+ * Components with richer editing (a <Chart>'s chart, a <Cell>) keep
  * their own inspector panels — those open BESIDE this toolbar, they do not
  * replace it.
  */

@@ -27,12 +27,18 @@ export interface JsxAttribute {
   end: number;
 }
 
-/** An element: `<div …>`, `<Question …>`. `isComponent` ⇔ tag starts uppercase. */
+/** An element: `<div …>`, `<Chart …>`. `isComponent` ⇔ tag starts uppercase. */
 export interface JsxElement {
   /** Parser-owned structural nodes. Never emitted as tags or given source IDs. */
   control?: {kind: 'fragment'} | {kind: 'and' | 'conditional'; test: ReactiveExpression};
   type: 'element';
+  /** The canonical name: an earlier name the source used (`Question`, `Number`) is already its new one (component-names COMPONENT_ALIASES). */
   tag: string;
+  /**
+   * The earlier name the source spelled this element with, present only when it differs from `tag`. Only code that
+   * writes source back reads it, so an edit keeps the author's spelling; everything else dispatches on `tag`.
+   */
+  authoredTag?: string;
   isComponent: boolean;
   attributes: JsxAttribute[];
   children: JsxNode[];
@@ -41,7 +47,7 @@ export interface JsxElement {
   end: number;
 }
 
-/** Raw text content (e.g. a `<Question>`'s SQL, or story prose). */
+/** Raw text content (e.g. a `<Query>`'s SQL, or story prose). */
 export interface JsxText {
   type: 'text';
   value: string;

@@ -62,5 +62,6 @@ export { imageRefData, rawUrl, resolveRefProps } from './ref-data';
 export { imageReferenceId } from './image-source';
 export { REFERENCE_POSITIONS } from './reference-positions';
 
-// Number display.
+// Cell display.
 export type { NumberAgg } from './number-aggregation';
+export { NUMERIC_AGGS } from './number-aggregation';

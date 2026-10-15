@@ -20,7 +20,7 @@ import { immutableSet } from '@/lib/jsx/immutable-set';
  * Components that may live INSIDE editable prose: they render inline, and are
  * spliced back verbatim on commit (locked islands while editing).
  */
-const TEXT_HOST_INLINE_EMBEDS = immutableSet(['Number', 'Icon']);
+const TEXT_HOST_INLINE_EMBEDS = immutableSet(['Cell', 'Icon']);
 
 const SVG_TAGS_LOWER = immutableSet<string>(STORY_SVG_TAGS.map((t) => t.toLowerCase()));
 
@@ -98,7 +98,7 @@ type KitTextHost = { editable: true } | { editable: false; lock: TextLock | null
  * A kit text component (`KIT_TEXT_ELEMENTS`) is a text host when what it renders is the author's text and
  * nothing else: every attribute static, and its children text, static string or number literals and the inline
  * marks its element accepts (static, recursively). Text that comes from data or is computed, a component inside
- * (a `<Number>`, a `<Badge>`) or a block inside keeps it locked; `lock` says why, when the reason is the text
+ * (a `<Cell>`, a `<Badge>`) or a block inside keeps it locked; `lock` says why, when the reason is the text
  * itself (a block or a component of its own is a container, not a locked text). Any other component is never a
  * text host: it draws its own content.
  */
@@ -136,8 +136,8 @@ export function textLockOf(node: JsxNode | null): TextLock | null {
       const host = kitTextHost(node);
       return host.editable ? null : host.lock;
     }
-    // A <Number> is text the reader reads, formatted from its data.
-    if (node.tag === 'Number') return 'data';
+    // A <Cell> is text the reader reads, formatted from its data.
+    if (node.tag === 'Cell') return 'data';
     const showsText = node.children.some((c) => (c.type === 'text' && c.value.trim().length > 0) || c.type === 'expression');
     return showsText ? stronger(subtreeLock({ ...node, attributes: [] }), 'component') : null;
   }

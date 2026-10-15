@@ -106,9 +106,9 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Tabs: { mod: 'tabs', island: true, api: ['defaultValue', 'value', 'orientation', 'dir'] }, TabsList: { mod: 'tabs', api: ['variant'] }, TabsTrigger: { mod: 'tabs', api: ['value', 'disabled'] }, TabsContent: { mod: 'tabs', api: ['value', 'forceMount'] },
   Accordion: { mod: 'accordion', island: true, api: ['type', 'collapsible', 'defaultValue', 'value', 'orientation'] }, AccordionItem: { mod: 'accordion', api: ['value', 'disabled'] }, AccordionTrigger: { mod: 'accordion' }, AccordionContent: { mod: 'accordion', api: ['forceMount'] },
   // Store adapters: the DOM carries only the node's identity (id, data-mx-ast).
-  // Number, Select and DataTable read the author's class as `className` (kit/data), never the compiler's `class`.
-  Number: { mod: 'data', island: true, api: ['data', 'col', 'agg', 'prefix', 'suffix', 'format', 'className'], dom: 'identity' },
-  Question: { mod: 'data', island: true, api: ['data', 'viz', 'title', 'height', 'recipeData'], dom: 'identity', grid: true },
+  // Cell, Select and DataTable read the author's class as `className` (kit/data), never the compiler's `class`.
+  Cell: { mod: 'data', island: true, api: ['data', 'col', 'agg', 'prefix', 'suffix', 'format', 'className'], dom: 'identity' },
+  Chart: { mod: 'data', island: true, api: ['data', 'viz', 'title', 'height', 'recipeData'], dom: 'identity', grid: true },
   // The live grid puts the author's class on its `data-slot="data-table"` box (recipes/data), and its adapter wrapper takes `id`/`data-*`.
   DataTable: { mod: 'data', island: true, api: ['data', 'columns', 'sort', 'height', 'sticky', 'rowKey', 'templates', 'className'], dom: 'identity', grid: true, noChildren: true },
   Files: { mod: 'files', island: true, api: ['data', 'variant', 'glyphs'], dom: 'identity' },
@@ -154,7 +154,7 @@ const KIT_CHUNK: ReadonlySet<string> = new Set([
   'Button', 'File', 'Isometric', ...Object.keys(KIT).filter((tag) => /^Slide(?:Deck)?$/.test(tag)),
 ]);
 /** The rail's miniature stubs its embeds. */
-const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Question: 'chart', Number: '#', DataTable: 'table' };
+const PREVIEW_EMBEDS: Readonly<Record<string, string>> = { Chart: 'chart', Cell: '#', DataTable: 'table' };
 const PREVIEW_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', minHeight: 120, border: '1px solid var(--border, rgba(128,128,128,0.35))', borderRadius: 6, background: 'color-mix(in srgb, var(--muted-foreground, gray) 6%, transparent)', font: '500 11px/1 var(--font-mono, ui-monospace, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground, graytext)' };
 /** Components whose HTML is rendered at compile time but whose BEHAVIOUR is not ported (reported as partial). None: every registered component with behaviour has its island. */
 const PARTIAL: ReadonlySet<string> = new Set<string>([]);
@@ -590,7 +590,7 @@ export function generate(input: GenerateInput): Generated {
     const classes = peopleClasses(node.tag, props);
     if (classes) props.classes = classes;
     const viz = props.viz as { recipe?: unknown } | undefined;
-    if (node.tag === 'Question' && typeof viz?.recipe === 'string' && viz.recipe.startsWith('ref:')) props.recipeData = refData[viz.recipe.slice(4)] ?? null;
+    if (node.tag === 'Chart' && typeof viz?.recipe === 'string' && viz.recipe.startsWith('ref:')) props.recipeData = refData[viz.recipe.slice(4)] ?? null;
     const api: Props = Object.fromEntries((meta.api ?? []).filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));
     // Class strings come from the recipes index AT COMPILE TIME: readers never download cva or tailwind-merge.
     const recipe = RECIPES[node.tag];
@@ -600,8 +600,8 @@ export function generate(input: GenerateInput): Generated {
     let dom: Props = { ...props };
     for (const k of [...(meta.api ?? []), 'className']) delete dom[k];
     if (meta.dom) dom = Object.fromEntries(Object.entries(dom).filter(([k]) => k === 'id' || k === AST || k === SOURCE_NODE_ID_ATTR || (node.tag === 'DataTable' && k.startsWith('data-'))));
-    // A `<Question>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
-    if (node.tag === 'Question') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
+    // A `<Chart>`'s chart box: the assembler puts the snapshot's drawing inside it (contract CHART_SLOT_ATTR).
+    if (node.tag === 'Chart') dom[CHART_SLOT_ATTR] = typeof dom.id === 'string' && dom.id ? dom.id : path;
     if (inGrid) api.inGridItem = true;
     const attrs = elementAttrs('div', dom).filter(([n]) => n !== 'class');
     return { props, api, recipe, inGrid, cls, attrs, cellsJsx };

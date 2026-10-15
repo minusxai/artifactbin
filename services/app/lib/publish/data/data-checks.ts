@@ -18,7 +18,7 @@ import { placeholderSession, viewerMutationPolicy } from '@/lib/datasets/policy/
 import { importedTables } from '@/lib/datasets/catalog';
 import { schemaLoaderFor, type ServerRefLoader } from '@/lib/datasets/schema-loader';
 import { dataflowOf, splitHelmet } from '../../document';
-import { refName, isEmptyDataflow, type CompiledDataflow, bindParams, bindTypes, importRef, mutationParams, mutationReads, valueTypes } from '@/lib/dataflow';
+import { NUMERIC_AGGS, type NumberAgg, refName, isEmptyDataflow, type CompiledDataflow, bindParams, bindTypes, importRef, mutationParams, mutationReads, valueTypes } from '@/lib/dataflow';
 import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, writeRefusal, type BoundColumn, type RefLoader, compileDataflow, prepareCompile } from '@/lib/dataflow/server';
 import { getTemplate, VIZ_TEMPLATES } from '@/lib/viz/viz-templates';
 import { normalize, type TopLevelSpec } from 'vega-lite';
@@ -95,7 +95,7 @@ export function vegaLiteStructureError(spec: Record<string, unknown>): string | 
   catch (error) { return error instanceof Error ? error.message : String(error); }
 }
 
-/** Every `<Question data="$q" viz>` checked against q's result columns (encodings, or recipe slots). */
+/** Every `<Chart data="$q" viz>` checked against q's result columns (encodings, or recipe slots). */
 async function validateQueryBindings(body: JsxNode[], columns: Record<string, BoundColumn[]>, load: RefLoader): Promise<string[]> {
   const out: string[] = [];
   const questions: Array<{ name: string; viz: Record<string, unknown> }> = [];
@@ -113,7 +113,19 @@ async function validateQueryBindings(body: JsxNode[], columns: Record<string, Bo
           }
         }
       }
-      if (n.isComponent && n.tag === 'Question') {
+      if (n.isComponent && n.tag === 'Cell') {
+        const value = (name: string) => { const v = n.attributes.find((a) => a.name === name)?.value; return v?.static && typeof v.json === 'string' ? v.json : undefined; };
+        const table = refName(value('data'));
+        const agg = value('agg') as NumberAgg | undefined;
+        const col = value('col') ?? (table ? columns[table]?.[0]?.name : undefined);
+        const type = table && col ? columns[table]?.find((c) => c.name === col)?.type : null;
+        // A numeric aggregate over a column the compiler KNOWS is text reads no numbers and shows "—"; an untyped column
+        // (the compiler could not tell) is left to the reader's rows, which may well be numbers.
+        if (agg && NUMERIC_AGGS.has(agg) && type && type !== 'number' && type !== 'boolean') {
+          out.push(`query $${table}: <${n.authoredTag ?? n.tag} col="${col}" agg="${agg}"> reads numbers, but "${col}" is ${type} — a text cell shows one value: agg first, last or count`);
+        }
+      }
+      if (n.isComponent && n.tag === 'Chart') {
         const data = n.attributes.find((a) => a.name === 'data')?.value;
         const viz = n.attributes.find((a) => a.name === 'viz')?.value;
         const name = data?.static ? refName(data.json) : null;

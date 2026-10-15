@@ -1,5 +1,5 @@
 /**
- * The `<Number>` inspector's lens (the chart inspector's story-viz.ts, for the
+ * The `<Cell>` inspector's lens (the chart inspector's story-viz.ts, for the
  * inline figure: data="$name", col, agg, prefix, suffix, format — the props
  * InlineNumber renders from). Pure (client + server safe).
  */
@@ -10,7 +10,7 @@ import { questionTable } from './story-viz';
 /** The aggregations InlineNumber computes; 'first' is its default when the attr is absent. */
 export { NUMBER_AGGS } from '@/lib/dataflow/number-aggregation';
 
-/** What the Number panel renders from: the `<Number>` at `astPath`, or null if there is none. */
+/** What the Number panel renders from: the `<Cell>` at `astPath`, or null if there is none. */
 export interface NumberEmbedBinding {
   /** From `data="$name"` — the declared table; null when unbound. */
   table: string | null;
@@ -25,7 +25,7 @@ export function readNumberEmbed(source: string, astPath: string): NumberEmbedBin
   const parsed = parseJsx(source);
   if (!parsed.ok) return null;
   const node = resolveJsxNodeAtPath(parsed.nodes, astPath);
-  if (!node || node.type !== 'element' || !node.isComponent || node.tag !== 'Number') return null;
+  if (!node || node.type !== 'element' || !node.isComponent || node.tag !== 'Cell') return null;
   const attr = (name: string) => node.attributes.find((a) => a.name === name)?.value;
   const str = (name: string) => {
     const v = attr(name);
@@ -61,7 +61,7 @@ export function updateNumberEmbedInJsx(source: string, astPath: string, edit: Nu
   // A blank table name is a slip, not an unbind (the unbind is an explicit null) — mirror
   // updateQuestionDataInJsx and refuse the whole edit rather than write a dangling ref.
   if (typeof edit.table === 'string' && !edit.table.trim()) return source;
-  return updateJsxElementAtPath(source, astPath, 'Number', (el) => {
+  return updateJsxElementAtPath(source, astPath, 'Cell', (el) => {
     if (edit.table !== undefined) {
       const name = edit.table?.trim();
       setStaticJsxAttr(el, 'data', name ? (name.startsWith('$') ? name : `$${name}`) : undefined);

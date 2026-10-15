@@ -22,7 +22,7 @@ export { validateJsx } from './validate';
 
 // The vocabulary validation checks against. Every module here is pure and browser-safe, so the
 // barrel stays loadable in the reader; a node-only leaf never belongs in it.
-export { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS, STORY_SVG_TAGS } from './component-names';
+export { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS, STORY_SVG_TAGS, COMPONENT_ALIASES, canonicalComponent, canonicalNodes } from './component-names';
 export { STORY_COMPONENT_NAMES } from './story-components';
 export { mermaidSourceError, mermaidDiagramKind, mermaidImageKey } from './mermaid-source';
 export { validateDeckMap } from './deck-spec';

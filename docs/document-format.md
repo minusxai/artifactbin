@@ -4,7 +4,7 @@ An agent sends `markup` — there is no second document tier:
 
 | In a document | What it is |
 |---|---|
-| Components | The kit — `<Card>`, `<Slide>`, `<Question>`, `<Grid>`, … + Tailwind classes |
+| Components | The kit — `<Card>`, `<Slide>`, `<Chart>`, `<Cell>`, `<Grid>`, … + Tailwind classes |
 | HTML | Ordinary tags for everything else, prose included (`<h1>`, `<p>`, `<table>`, inline SVG) |
 | `<Helmet>` | At most one per document: `<title>`, one `<style>`, one `<script>`, `<meta name content>`, and the data |
 | Data | In `<Helmet>`: `<Import>` a dataset, `<Value>` page values, `<Query>` in SQLite, `<Mutation>` writes. The body binds them by name: `data="$q"`, `value="$v"`, `run="$m"`, `set={{…}}` |

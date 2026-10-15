@@ -78,7 +78,7 @@ export function needsAuthoringContext(source:string):boolean {
  const parsed=parseJsx(source);if(!parsed.ok)return false;
  const needs=(nodes:JsxNode[]):boolean=>nodes.some(node=>{
   if(node.type!=='element')return false;
-  if(['Icon','Query','Mutation','Question'].includes(node.tag))return true;
+  if(['Icon','Query','Mutation','Chart'].includes(node.tag))return true;
   if(node.tag==='meta'&&node.attributes.some(a=>a.name==='name'&&a.value.static&&String(a.value.json).startsWith('font-')))return true;
   if(node.attributes.some(a=>a.value.static&&typeof a.value.json==='string'&&a.value.json.startsWith('ref:')))return true;
   return needs(node.children);

@@ -18,7 +18,7 @@ import type { StoredMermaidImage } from '@artifactbin/contracts';
 export const CHART_VIZ_KINDS: ReadonlySet<string> = new Set(['vega', 'vega-lite', 'recipe']);
 
 export interface LazyCode {
-  /** A `<Question>` draws a chart, so the document imports the chart module. */
+  /** A `<Chart>` draws a chart, so the document imports the chart module. */
   chart: boolean;
   /** The Mermaid diagram kinds it draws WITH THE ENGINE (lib/jsx/mermaid-source), each once, in document order. */
   mermaid: string[];
@@ -38,7 +38,7 @@ export interface LazyCode {
 interface StoredDrawings { images?: Readonly<Record<string, StoredMermaidImage>>; mode: 'light' | 'dark' }
 
 /**
- * Only `<Question>` imports the chart bundle, and only for the kinds above: a
+ * Only `<Chart>` imports the chart bundle, and only for the kinds above: a
  * question with no `viz`, or one whose kind is `table` or `single_value`,
  * renders inline and never touches it. Only a `<Mermaid>` with a static code
  * string the kit will draw imports the diagram engine, and then only its kind.
@@ -50,7 +50,7 @@ export function lazyCodeOf(nodes: JsxNode[], stored?: StoredDrawings): LazyCode 
   const walk = (list: JsxNode[]) => {
     for (const n of list) {
       if (n.type !== 'element') continue;
-      if (n.isComponent && n.tag === 'Question') {
+      if (n.isComponent && n.tag === 'Chart') {
         const viz = n.attributes.find((a) => a.name === 'viz')?.value;
         const kind = viz?.static && viz.json && typeof viz.json === 'object' && !Array.isArray(viz.json)
           ? viz.json.kind : null;

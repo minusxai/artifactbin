@@ -225,7 +225,7 @@ export const SCRIPT_FAILURE_ATTR = 'data-mx-script-failure';
  */
 export const STORY_VERSION_DRAWN_EVENT = 'mx:version-drawn';
 /**
- * A `<Question>` island's inner drawing box in the compiled HTML, by the question's
+ * A `<Chart>` island's inner drawing box in the compiled HTML, by the question's
  * node id (or path) — the ASSEMBLER's handle only: it puts the snapshot's SVG
  * inside the box and marks it `data-mx-chart-state="ready"`. The island removes
  * the attribute when it mounts (the served DOM then matches the former render), and
@@ -244,7 +244,7 @@ export const LITERALS_ATTR = 'data-mx-island-literals';
 export const ISLANDS_PATH = '/islands';
 export const DOCUMENT_MODULE_PATH = `${ISLANDS_PATH}/d`;
 
-/** A `<Question>` drawn on the server, keyed by the question's node id (or path when it has none). */
+/** A `<Chart>` drawn on the server, keyed by the question's node id (or path when it has none). */
 export interface DrawnChart {
   svg: string;
   /** The table it was drawn from and the digest of the rows, so a client re-draw can tell whether it is stale. */

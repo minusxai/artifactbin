@@ -303,7 +303,7 @@ describe('compilePage', () => {
     const page = await compilePage(await inputOf(fixture('dashboard.jsx').replaceAll('{{sales}}', 'SALES1'), 'dashboard'), loadCompilerBuild());
     expect(page.plan).not.toBeNull();
     expect(page.plan!.queries.map((q) => q.name)).toEqual(['regions', 'monthly', 'by_product']);
-    expect(page.islands.flatMap((i) => i.kit)).toEqual(expect.arrayContaining(['Select', 'Number', 'Question', 'DataTable']));
+    expect(page.islands.flatMap((i) => i.kit)).toEqual(expect.arrayContaining(['Select', 'Cell', 'Chart', 'DataTable']));
     expect(page.islands.every((i) => i.readsData)).toBe(true);
     expect(dom(page.html).querySelector('#AVkX')?.hasAttribute(CHART_SLOT_ATTR)).toBe(false);
   });

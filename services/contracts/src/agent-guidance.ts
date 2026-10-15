@@ -16,8 +16,8 @@ export const PHONE_AUTHORING_RULE =
  * The rule whose absence produced a report that contradicted its own data.
  *
  * Codex published a revenue report whose prose read "totals 19400" beside a
- * <Number> that computed 19,300 from the same rows. The embed was right; the
- * arithmetic in the agent's head was not. Both surfaces described what <Number>
+ * <Number> (now <Cell>) that computed 19,300 from the same rows. The embed was right; the
+ * arithmetic in the agent's head was not. Both surfaces described what the embed
  * IS and neither said when to reach for it, so the agent treated it as a
  * decorative alternative to typing the figure out.
  *
@@ -27,7 +27,7 @@ export const PHONE_AUTHORING_RULE =
  * prevent.
  */
 export const COMPUTED_FIGURE_RULE =
-  'NEVER type a figure into prose that the data can compute — <Number> inline instead; ' +
+  'NEVER type a figure into prose that the data can compute — <Cell> inline instead; ' +
   'typed figures go stale and are often simply wrong.';
 
 /**
@@ -91,7 +91,7 @@ export const MARKUP_FIELD_GUIDANCE = [
   'Start with <div data-design="tw" className="@container …">. Use theme tokens, e.g. bg-muted.',
   'onClick= is rejected; inline style= is allowed. ONE <Helmet> holds <style> and a <script>: an ES module in the document, declared names bound as Solid signals with signal/query/mutation from page.',
   'Read `afbin help markup` or the installed references/markup.md first.',
-  'Data: <Import name="d" src="ref:<id>" /><Query name="q">{`select … from d.rows`}</Query> (SQLite) in Helmet, then <Question data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
+  'Data: <Import name="d" src="ref:<id>" /><Query name="q">{`select … from d.rows`}</Query> (SQLite) in Helmet, then <Chart data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
   'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body; $x in SQL.',
   COMPUTED_FIGURE_RULE,
 ].join(' ');

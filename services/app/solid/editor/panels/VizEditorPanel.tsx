@@ -4,7 +4,7 @@
  *
  * Pick a table (a <Query> or table <Value> the document declares), a chart type, and what goes on each axis.
  *
- * A `<Question>`'s data binding and visualisation are just PROPS, so this panel
+ * A `<Chart>`'s data binding and visualisation are just PROPS, so this panel
  * is a lens over them: envelope in, `onChange(viz, table)` out. It holds no
  * state of its own beyond what the popover needs — the source of truth stays the
  * document, which is what makes the live preview honest rather than a copy that
@@ -251,7 +251,7 @@ export default function VizEditorPanel(props: VizEditorPanelProps): JSX.Element 
                 value={chartType()}
                 onChange={(type) => {
                   // "table" is the absence of a chart, not a chart type: clearing the
-                  // spec is what makes <Question> fall back to the themed table.
+                  // spec is what makes <Chart> fall back to the themed table.
                   emit(type === 'table' ? vizPropToEnvelope(undefined) : setVizType(envelope(), type as never));
                 }}
                 options={CHART_TYPES.map((t) => ({ value: t, label: t }))}

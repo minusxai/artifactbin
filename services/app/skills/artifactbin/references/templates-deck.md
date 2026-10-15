@@ -58,7 +58,7 @@ Skeleton of the runtime pieces (publishable as is; the slides are yours):
       </Slide>
       <Slide title="The takeaway, spoken" className="border-b border-border py-14">
         <h2 className="t-display-m max-w-3xl">The headline is the takeaway, spoken aloud</h2>
-        <div className="mt-10 max-w-5xl"><Question data="$q" viz={{"kind":"vega-lite","spec":{}}} height="440px" /></div>
+        <div className="mt-10 max-w-5xl"><Chart data="$q" viz={{"kind":"vega-lite","spec":{}}} height="440px" /></div>
         <p className="mt-4 t-body-s max-w-prose">One line under the chart: what to remember when the slide is gone.</p>
       </Slide>
     </SlideDeck>
@@ -74,7 +74,7 @@ SLIDE TYPES (pick per beat; each stays one idea):
 - Columns (2 or 3): equal cells on one gutter, each opening under a rule;
   collapse to one column on phones (`@2xl:grid-cols-3`).
 - Quadrants: a 2×2 with hairline cross rules and tiny muted axis labels.
-- Chart slide: a claim headline, ONE `<Question>` (430 to 460px, most of the
+- Chart slide: a claim headline, ONE `<Chart>` (430 to 460px, most of the
   width), one takeaway line under it. Gray series, one accented element,
   direct labels. Never two charts on a slide.
 - Big number: one enormous accent figure from a styled single-value embed

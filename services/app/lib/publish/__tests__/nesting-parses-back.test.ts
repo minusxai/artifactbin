@@ -263,7 +263,7 @@ const SWEEP_HELMET = '<Helmet><Value name="q" type="table" value={[{"n":1,"label
 const SWEEP: Record<string, string> = {
   Badge: '<Badge>b</Badge>',
   Icon: '<Icon name="check" />',
-  Number: '<Number data="$q" col="n" />',
+  Cell: '<Cell data="$q" col="n" />',
   Button: '<Button>go</Button>',
   RunButton: '<Button set={{"s":"b"}}>set</Button>',
   Tooltip: '<TooltipProvider><Tooltip><TooltipTrigger>t</TooltipTrigger><TooltipContent>tip</TooltipContent></Tooltip></TooltipProvider>',
@@ -299,7 +299,7 @@ const SWEEP: Record<string, string> = {
   Switch: '<Switch label="On" checked="$flag" />',
   DatePicker: '<DatePicker label="Since" value="$day" />',
   FileUpload: '<FileUpload dataset="q" value="$s" busy="$flag" label="Files" />',
-  Question: '<Question title="Chart" data="$q" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"label","type":"nominal"},"y":{"field":"n","type":"quantitative"}}}}} />',
+  Chart: '<Chart title="Chart" data="$q" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"label","type":"nominal"},"y":{"field":"n","type":"quantitative"}}}}} />',
   DataTable: '<DataTable data="$q"><Column col="n" title="N" /></DataTable>',
   Files: '<Files data="$q" />',
   Mermaid: '<Mermaid code="flowchart LR; A --> B" />',

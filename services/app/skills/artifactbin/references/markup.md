@@ -34,7 +34,7 @@ Start from the [complete root example](../SKILL.md#example), then [editorial](te
 Kit components ([[ components | length ]]):
 `[[ components | join(' ') ]]`
 
-Also: `Question` `Number`; Helmet: `Import` `Value` `Query` `Mutation` `Notify`
+Also: `Chart` `Cell` (earlier names `Question` `Number` still work); Helmet: `Import` `Value` `Query` `Mutation` `Notify`
 `Context`. Unknown names fail; unknown props are ignored. Bindings and Column
 contracts are checked at publish.
 
