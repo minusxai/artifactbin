@@ -18,7 +18,9 @@
  *  3. MORPH the story keyed by element ids: a matched static element keeps its node and takes the new
  *     attributes and children; text is updated in place; a kept island's nodes are moved into place
  *     untouched (their hydration keys renamed when the island's position changed); a changed or new
- *     island is the new page's served markup.
+ *     island is the new page's served markup. Nodes move as little as the new order allows, and a node holding
+ *     an author's iframe or the reader's focus not at all while its siblings can move around it (`arrange`):
+ *     without `moveBefore` a moved iframe loads its page again.
  *  4. HYDRATE the changed and new islands on the SAME context: the store (with the new declarations,
  *     `replaceFlow`, only when they changed), the reader's values and the snapshot rows survive.
  *
@@ -177,7 +179,7 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
 
   const override = options.mode?.() ?? readerMode(win);
   syncAttributes(root, nextRoot, override);
-  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].filter((rid) => rid !== 'd-').flatMap((rid) => oldUnits.get(rid) ?? [])), preserveLiveData: !!newModule && newModule === oldModule });
+  morphChildren(root, nextRoot, { keep, oldUnits, used: new Set(), kept: new Set([...keep.values()].filter((rid) => rid !== 'd-').flatMap((rid) => oldUnits.get(rid) ?? [])), held: heldNodes(root), preserveLiveData: !!newModule && newModule === oldModule });
 
   syncHead(doc, next, { adopted: !!options.adopted, override });
   const data = next.getElementById(ISLAND_DATA_ID);
@@ -377,10 +379,12 @@ interface MorphContext {
   keep: ReadonlyMap<string, string>;
   /** The running islands' top-level nodes in the current tree. */
   oldUnits: ReadonlyMap<string, Element[]>;
-  /** Current nodes already placed in the new tree. */
+  /** Current nodes already claimed by a node of the new tree. */
   used: Set<Node>;
   /** Every node of a kept island: moved into place, never removed with its old parent. */
   kept: ReadonlySet<Node>;
+  /** Whether a move would restart this node (`heldNodes`): its siblings move around it. */
+  held: (node: Node) => boolean;
   /** The same browser module still owns live data widgets and charts after a prose-only edit. */
   preserveLiveData?: boolean;
   /** Unchanged authored components whose painted root survives a draft compile. */
@@ -407,6 +411,82 @@ function move(parent: Element, node: Node, ref: Node | null): void {
   parent.insertBefore(node, ref);
 }
 
+/**
+ * What a move restarts. Without `moveBefore` (Safari, Firefox before it) a move is a removal and an insertion, and a
+ * node that leaves the document loses what it holds: an iframe, object or embed loads its page again (the author's
+ * map, video player or sign-in starts over), and the reader's focus and caret are dropped. Each such element and
+ * every ancestor up to `root`: the morph moves their siblings instead. Found once, the first time a morph has to move
+ * anything (most morphs move nothing). A playing <audio>/<video> and a canvas's pixels survive a move made in one
+ * task (measured in Chromium, WebKit and Firefox), so neither is held.
+ */
+const HELD_SELECTOR = 'iframe, object, embed';
+function heldNodes(root: Element): (node: Node) => boolean {
+  let held: Set<Node> | null = null;
+  return (node) => {
+    if (!held) {
+      const found = held = new Set<Node>();
+      const hold = (el: Element) => { for (let at: Element | null = el; at && at !== root && !found.has(at); at = at.parentElement) found.add(at); };
+      for (const el of root.querySelectorAll(HELD_SELECTOR)) hold(el);
+      const focused = root.ownerDocument.activeElement;
+      if (focused && focused !== root && root.contains(focused)) hold(focused);
+    }
+    return held.has(node);
+  };
+}
+
+/**
+ * Make `nodes` the children of `parent` in this order, from the left, moving as few as it can: the ones already
+ * children in an order that agrees with `nodes` stay (the heaviest increasing run of their current places, a held
+ * node outweighing every other together, so its siblings move around it), every other one is moved or inserted
+ * before the node that follows it. Children `nodes` does not name are left where they are (the caller removes them).
+ */
+function arrange(parent: Element, nodes: readonly Node[], held: (node: Node) => boolean): void {
+  const place = new Map<Node, number>();
+  let index = 0;
+  for (let child = parent.firstChild; child; child = child.nextSibling) place.set(child, index++);
+  const present = nodes.filter((node) => place.has(node));
+  let ordered = true;
+  for (let i = 1; i < present.length && ordered; i++) ordered = place.get(present[i - 1]!)! < place.get(present[i]!)!;
+  const stays = ordered ? new Set(present) : heaviestIncreasing(present, place, (node) => (held(node) ? present.length + 1 : 1), index);
+  let ref: Node | null = null;
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const node = nodes[i]!;
+    if (!stays.has(node)) move(parent, node, ref);
+    ref = node;
+  }
+}
+
+/**
+ * The heaviest subsequence of `nodes` whose current places increase: O(n log n), a Fenwick tree over places keeping,
+ * for every prefix of places, the heaviest run ending there.
+ */
+function heaviestIncreasing(nodes: readonly Node[], place: ReadonlyMap<Node, number>, weight: (node: Node) => number, size: number): Set<Node> {
+  const best = new Float64Array(size + 1);
+  const end = new Int32Array(size + 1).fill(-1);
+  const total = new Float64Array(nodes.length);
+  const previous = new Int32Array(nodes.length);
+  let top = -1;
+  nodes.forEach((node, i) => {
+    const at = place.get(node)!;
+    let heaviest = 0, from = -1;
+    for (let k = at; k > 0; k -= k & -k) if (best[k]! > heaviest) { heaviest = best[k]!; from = end[k]!; }
+    total[i] = heaviest + weight(node);
+    previous[i] = from;
+    for (let k = at + 1; k <= size; k += k & -k) if (total[i]! > best[k]!) { best[k] = total[i]!; end[k] = i; }
+    if (top < 0 || total[i]! > total[top]!) top = i;
+  });
+  const stays = new Set<Node>();
+  for (let i = top; i >= 0; i = previous[i]!) stays.add(nodes[i]!);
+  return stays;
+}
+
+/**
+ * `from`'s children become `to`'s, in three passes. MATCH each new child to the current node that will stand for it
+ * (nothing moves yet); ARRANGE those in the new order, moving as few as possible and never a held node its siblings
+ * can move around (`arrange`); then UPDATE each in place, its own children morphed where it now stands (a kept island
+ * that enters a node drawn anew moves into a connected parent, so `moveBefore` keeps it whole). The current children
+ * nothing matched go last.
+ */
 function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
   const doc = from.ownerDocument;
   const olds = [...from.childNodes];
@@ -423,11 +503,16 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
     const old = path ? ctx.stableElementPaths?.get(path) : undefined;
     return old === undefined ? undefined : byPath.get(old);
   };
-  let at: ChildNode | null = from.firstChild;
-  const place = (node: Node) => {
+  // Where an unnamed node looks for its match: the first current child nothing has claimed yet.
+  let cursor = 0;
+  /** Each new child's node, in order, and what is left to make it the new one once it stands in its place. */
+  const nodes: Node[] = [];
+  const updates: Array<() => void> = [];
+  const take = (node: Node, update?: () => void) => {
     ctx.used.add(node);
-    if (node === at) { at = at.nextSibling; return; }
-    move(from, node, at);
+    nodes.push(node);
+    if (update) updates.push(update);
+    while (cursor < olds.length && ctx.used.has(olds[cursor]!)) cursor++;
   };
   const placedIslands = new Set<string>();
   const nextIds = new Set<string>();
@@ -436,7 +521,7 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
   for (const next of [...to.childNodes]) {
     // A kept editor, as it is: never compared, synced or rebuilt.
     const editor = ctx.editRegions?.size && next.nodeType === 1 ? ctx.editRegions.get((next as Element).getAttribute(EDIT_REGION_ATTR) ?? '') : undefined;
-    if (editor) { place(editor); continue; }
+    if (editor) { take(editor); continue; }
     const rid = renderIdOf(next);
     if (rid) {
       const oldRid = ctx.keep.get(rid);
@@ -445,8 +530,8 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
         const stable = id && ctx.stableElementIds?.has(id) ? byId.get(id) : undefined;
         const byStablePath = stableAt((next as Element).getAttribute(AST_PATH_ATTR));
         const retained = stable ?? byStablePath;
-        if (retained && sameKind(retained, next)) { adoptHydrationKeys(retained, next as Element); place(retained); }
-        else place(doc.importNode(next, true));
+        if (retained && sameKind(retained, next)) take(retained, () => adoptHydrationKeys(retained, next as Element));
+        else take(doc.importNode(next, true));
         continue;
       }
       // A kept island: every node it runs, where the new page has it, once.
@@ -454,7 +539,7 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
       placedIslands.add(rid);
       for (const node of ctx.oldUnits.get(oldRid) ?? []) {
         if (rid !== oldRid) renameIsland(node, oldRid, rid);
-        place(node);
+        take(node);
       }
       continue;
     }
@@ -464,36 +549,44 @@ function morphChildren(from: Element, to: Element, ctx: MorphContext): void {
     const path = next.nodeType === 1 ? (next as Element).getAttribute(AST_PATH_ATTR) : null;
     const byStablePath = stableAt(path);
     const match = byOwnId && !ctx.used.has(byOwnId) ? byOwnId
-      : byStablePath && !ctx.used.has(byStablePath) ? byStablePath : softMatch(at, next, ctx, nextIds);
+      : byStablePath && !ctx.used.has(byStablePath) ? byStablePath : softMatch(olds, cursor, next, ctx, nextIds);
     if (match && !ctx.used.has(match) && sameKind(match, next)) {
-      if (match.nodeType === 1) {
-        const oldElement = match as Element;
-        const newElement = next as Element;
-        // Same-module data adapters retain reactive rows, numbers and settled errors. Incoming SSR
-        // placeholders must not overwrite DOM whose unchanged store has no reason to redraw it.
-        const sameLiveData = ctx.preserveLiveData && (oldElement.hasAttribute(LIVE_DATA_ATTR) && newElement.hasAttribute(LIVE_DATA_ATTR)
-          || oldElement.getAttribute('aria-label') === 'Question embed'
-          && newElement.getAttribute('aria-label') === 'Question embed'
-        )
-          && oldElement.getAttribute(AST_PATH_ATTR) === newElement.getAttribute(AST_PATH_ATTR);
-        if (!sameLiveData && !ctx.stableElementIds?.has(oldElement.id)
-          && !(path && ctx.stableElementPaths?.has(path))) {
-          // An element the new version draws exactly as it is (a table the edit did not touch) stays as it is: one
-          // native comparison instead of a walk over every cell.
-          if (!oldElement.isEqualNode(newElement)) {
-            syncAttributes(oldElement, newElement, null);
-            morphChildren(oldElement, newElement, ctx);
-          }
-        } else if (!sameLiveData) adoptHydrationKeys(oldElement, newElement);
-      } else if (match.nodeValue !== next.nodeValue) {
-        match.nodeValue = next.nodeValue;
-      }
-      place(match);
+      take(match, () => update(match, next, path, ctx));
       continue;
     }
-    place(fresh(doc, next, ctx));
+    // A new node that matched nothing: an element is built through the morph, so a kept island inside it still lands.
+    const made = doc.importNode(next, false);
+    take(made, next.nodeType === 1 ? () => morphChildren(made as Element, next as Element, ctx) : undefined);
   }
+  arrange(from, nodes, ctx.held);
+  for (const run of updates) run();
   for (const node of olds) if (!ctx.used.has(node) && !ctx.kept.has(node) && node.parentNode === from) from.removeChild(node);
+}
+
+/** A matched current node (`match`) made the new one (`next`, at `path` in the new tree), where it stands. */
+function update(match: Node, next: Node, path: string | null, ctx: MorphContext): void {
+  if (match.nodeType !== 1) {
+    if (match.nodeValue !== next.nodeValue) match.nodeValue = next.nodeValue;
+    return;
+  }
+  const oldElement = match as Element;
+  const newElement = next as Element;
+  // Same-module data adapters retain reactive rows, numbers and settled errors. Incoming SSR
+  // placeholders must not overwrite DOM whose unchanged store has no reason to redraw it.
+  const sameLiveData = ctx.preserveLiveData && (oldElement.hasAttribute(LIVE_DATA_ATTR) && newElement.hasAttribute(LIVE_DATA_ATTR)
+    || oldElement.getAttribute('aria-label') === 'Question embed'
+    && newElement.getAttribute('aria-label') === 'Question embed'
+  )
+    && oldElement.getAttribute(AST_PATH_ATTR) === newElement.getAttribute(AST_PATH_ATTR);
+  if (!sameLiveData && !ctx.stableElementIds?.has(oldElement.id)
+    && !(path && ctx.stableElementPaths?.has(path))) {
+    // An element the new version draws exactly as it is (a table the edit did not touch) stays as it is: one
+    // native comparison instead of a walk over every cell.
+    if (!oldElement.isEqualNode(newElement)) {
+      syncAttributes(oldElement, newElement, null);
+      morphChildren(oldElement, newElement, ctx);
+    }
+  } else if (!sameLiveData) adoptHydrationKeys(oldElement, newElement);
 }
 
 /**
@@ -540,7 +633,7 @@ export function morphDraftDom(root: HTMLElement, next: HTMLElement, stableCompon
   }
   const kept = new Set<Node>([...[...keep.values()].flatMap((rid) => oldUnits.get(rid) ?? []), ...editRegions.values()]);
   syncAttributes(root, next, null);
-  morphChildren(root, next, { keep, oldUnits, used: new Set(), kept, stableElementIds: stableComponentIds,
+  morphChildren(root, next, { keep, oldUnits, used: new Set(), kept, held: heldNodes(root), stableElementIds: stableComponentIds,
     stableElementPaths: pathMap(stableComponentPaths), stableOldPaths: oldPathsOf(stableComponentPaths), editRegions });
 }
 
@@ -670,20 +763,13 @@ export async function hydrateDraftIslands(
   }
 }
 
-/** A new node that matched nothing: an element is built through the morph, so a kept island inside it still lands. */
-function fresh(doc: Document, next: Node, ctx: MorphContext): Node {
-  if (next.nodeType !== 1) return doc.importNode(next, false);
-  const element = doc.importNode(next, false) as Element;
-  morphChildren(element, next as Element, ctx);
-  return element;
-}
-
 /**
- * The next unplaced current sibling a node can be when its id matched nothing: same type and tag, not an
- * island, and not an element the new version still names by its own id (that one waits for its match).
+ * The first unclaimed current child from `cursor` a node can be when its id matched nothing: same type and tag, not
+ * an island, and not an element the new version still names by its own id (that one waits for its match).
  */
-function softMatch(from: ChildNode | null, next: Node, ctx: MorphContext, nextIds: ReadonlySet<string>): Node | null {
-  for (let node = from; node; node = node.nextSibling) {
+function softMatch(olds: readonly ChildNode[], cursor: number, next: Node, ctx: MorphContext, nextIds: ReadonlySet<string>): Node | null {
+  for (let i = cursor; i < olds.length; i++) {
+    const node = olds[i]!;
     if (ctx.used.has(node) || ctx.kept.has(node) || renderIdOf(node)) continue;
     if (node.nodeType === 1 && (node as Element).id && nextIds.has((node as Element).id)) continue;
     if (sameKind(node, next)) return node;

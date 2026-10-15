@@ -16,6 +16,8 @@
  *   agent      an agent rewrites a shared link: a hydrating document is morphed in place (chart element kept,
  *              never navigated, place kept); a prose one too; the reader's dark mode outlives both kinds of
  *              write, and a reload and the next document open in it from the first paint (formerly gate-live-reader).
+ *   embed      an agent deletes, inserts and reorders blocks around an author's iframe, read in a browser without
+ *              `moveBefore` (as Safari): the iframe keeps its element and never loads again.
  *   watched    a reader watches an agent write, then presses edit: the editor opens on the LIVE document, not
  *              the page it was rendered with (formerly gate-inplace-edit, section 3's second half).
  *   reader     the authored theme, a bound select re-running its query live, the owner's Edit control, and one
@@ -363,6 +365,47 @@ async function agentProse() {
   });
 }
 
+/**
+ * 2b. An author's embed outlives the writes around it. Safari (and Firefox before `moveBefore`) reloads an iframe
+ * that is taken out of the document even for a moment, so a write that deletes, inserts or reorders blocks above an
+ * embed must move those blocks, never the embed (lib/islands/morph/engine `arrange`). This Chromium is made such a
+ * browser: every frame loses `moveBefore` before any script runs. The map's page is a local stand-in, counted.
+ */
+const MAP_URL = 'https://www.openstreetmap.org/export/embed.html?bbox=-0.1,51.5,-0.09,51.51&amp;layer=mapnik';
+const MAP = `<iframe title="Map" width="400" height="200" src="${MAP_URL}"></iframe>`;
+const EMBED_VERSIONS = [
+  `<p>A block the next write deletes.</p>${MAP}<p id="below">below the map</p>`,
+  `${MAP}<p id="below">below the map</p>`,
+  `<p id="added">a block inserted above the map</p>${MAP}<p id="below">below the map</p>`,
+  `<p id="below">below the map</p>${MAP}<p id="added">a block moved below the map</p>`,
+];
+const embedded = (n) => `<div className="p-10"><h1 id="h">Embed</h1>${EMBED_VERSIONS[n]}<p id="ver">embed version ${n}</p></div>`;
+async function agentEmbed() {
+  const { must, run } = lane(check, 'agent embed');
+  await run(async () => {
+    const doc = await publishLive(embedded(0));
+    const ctx = await browser.newContext();
+    await ctx.addInitScript(() => { delete Element.prototype.moveBefore; });
+    let mapLoads = 0;
+    await ctx.route('https://www.openstreetmap.org/**', (route) => { mapLoads++; return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>map</title><p>map</p>' }); });
+    const page = await ctx.newPage({ viewport: { width: 1200, height: 900 } });
+    await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+    must(await docText(page, /embed version 0/, 20000), 'the reader saw the embed');
+    must(await until(() => docEval(page, () => !!document.querySelector('iframe[title="Map"]')), Boolean), 'the embed is drawn');
+    await sleep(1500);
+    const loadsBefore = mapLoads;
+    await docEval(page, () => { document.querySelector('iframe[title="Map"]').__probe = 'kept'; });
+    for (const [n, write] of [[1, 'a block above it deleted'], [2, 'a block inserted above it'], [3, 'blocks reordered around it']]) {
+      await doc.write(embedded(n));
+      const drawn = await docText(page, new RegExp(`embed version ${n}`), 25000);
+      await sleep(800);
+      const kept = await docEval(page, () => document.querySelector('iframe[title="Map"]')?.__probe ?? null).catch(() => null);
+      check(drawn && kept === 'kept' && mapLoads === loadsBefore, `${write}: the embed kept its frame and never loaded again (${mapLoads - loadsBefore} loads)`);
+    }
+    await ctx.close();
+  });
+}
+
 /** 3. The reader's mode override outlives the author's writes. */
 async function agentMode() {
   const { must, run } = lane(check, 'agent mode');
@@ -599,7 +642,7 @@ const started = Date.now();
 // the dataset page (/api/page/session) and the sharing controls never appeared — reproduced on a host server and in
 // the gate container, cause not yet established; the original sequential gate never met it.
 await shareLeg();
-await Promise.all([votesLeg(), agentHydrates(), agentProse(), agentMode(), agentProseMode(), agentGround(), watchedLeg(), readerLeg()]);
-check.note(`nine legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+await Promise.all([votesLeg(), agentHydrates(), agentProse(), agentEmbed(), agentMode(), agentProseMode(), agentGround(), watchedLeg(), readerLeg()]);
+check.note(`ten legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 await browser.close();
 check.done();

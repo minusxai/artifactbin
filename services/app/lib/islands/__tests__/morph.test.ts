@@ -12,7 +12,7 @@ import { boot, type IslandEntry, type MorphableIslandDocument } from '../boot';
 import { getNextElement, insert, template } from '../rt';
 import { useIsland } from '../context';
 import { islandDocumentOf } from '../handover';
-import { morphStory, MorphRefused, type MorphOptions } from '../morph/engine';
+import { morphDraftDom, morphStory, MorphRefused, type MorphOptions } from '../morph/engine';
 import { updateCompiledStory } from '../live-update';
 import { persistReaderMode, takeReloadAnchor } from '@/lib/story-runtime/reader-mode';
 import type { CompiledDataflow } from '@/lib/dataflow';
@@ -573,6 +573,108 @@ describe('the live morph', () => {
     await morph(win, { fetch: answer(next) });
     expect(scrollBy).toHaveBeenCalledWith({ top: 100 });
     rect.mockRestore();
+  });
+});
+
+/**
+ * Without `Element.moveBefore` (Safari, Firefox) a node taken out of the document and put back restarts what it holds:
+ * an author's iframe loads its page again (its state, a sign-in in it, a playing video gone), and the reader's focus is
+ * lost. The morph moves the blocks around such a node, never the node itself.
+ */
+describe('a node holding a frame or the reader\'s focus stays where it is', () => {
+  /** Every node taken out of the document while `run` runs (a move without moveBefore is a removal and an insertion). */
+  async function removals(run: () => Promise<void> | void): Promise<Node[]> {
+    const removed: Node[] = [];
+    const observer = new MutationObserver((records) => { for (const record of records) removed.push(...record.removedNodes); });
+    observer.observe(document.body, { childList: true, subtree: true });
+    try {
+      await run();
+      for (const record of observer.takeRecords()) removed.push(...record.removedNodes);
+    } finally { observer.disconnect(); }
+    return removed;
+  }
+  const embed = (path: string) => `<figure id="embed" data-mx-ast="${path}"><iframe id="frame" src="about:blank" title="Map"></iframe></figure>`;
+  const holding = (removed: Node[], node: Node) => removed.filter((gone) => gone === node || gone.contains(node));
+
+  it('has no moveBefore here, as in Safari and Firefox', () => {
+    expect('moveBefore' in Element.prototype).toBe(false);
+  });
+
+  it('deleting a block above an embed leaves the embed\'s frame in the document', async () => {
+    load(served({ edit: 'e1', extra: `<p id="gone" data-mx-ast="0.1a">deleted next</p>${embed('0.1b')}` }));
+    start();
+    const [figure, frame] = [$('embed'), $('frame')];
+    const removed = await removals(() => morph(window, { fetch: answer(served({ edit: 'e2', extra: embed('0.1a') })) }));
+    expect($('gone')).toBeNull();
+    expect($('embed')).toBe(figure);
+    expect($('frame')).toBe(frame);
+    expect(figure!.previousElementSibling).toBe($('lede'));
+    expect(holding(removed, frame!)).toEqual([]);
+  });
+
+  it('deleting the block before the section that holds the frame leaves the section, and the frame, where they are', async () => {
+    const page = (edit: string, before: string) => served({ edit, extra: `${before}<section id="box" data-mx-ast="0.1c"><p id="caption">A map</p>${embed('0.1c.1')}</section>` });
+    load(page('e1', '<p id="one" data-mx-ast="0.1a">one</p><p id="two" data-mx-ast="0.1b">two</p>'));
+    start();
+    const frame = $('frame');
+    const removed = await removals(() => morph(window, { fetch: answer(page('e2', '<p id="two" data-mx-ast="0.1b">two</p>')) }));
+    expect($('one')).toBeNull();
+    expect($('box')!.previousElementSibling).toBe($('two'));
+    expect(holding(removed, frame!)).toEqual([]);
+  });
+
+  it('blocks moved across an embed move around it: the embed keeps its place, the new order is drawn', async () => {
+    const page = (edit: string, blocks: string) => served({ edit, extra: blocks });
+    const x = '<p id="x" data-mx-ast="0.1x">x</p>', y = '<p id="y" data-mx-ast="0.1y">y</p>';
+    load(page('e1', `${embed('0.1e')}${x}${y}`));
+    start();
+    const [figure, frame, px, py] = ['embed', 'frame', 'x', 'y'].map($);
+    const removed = await removals(() => morph(window, { fetch: answer(page('e2', `${x}${y}${embed('0.1e')}`)) }));
+    expect([$('embed'), $('frame'), $('x'), $('y')]).toEqual([figure, frame, px, py]);
+    expect([...$('w')!.children].map((el) => el.id)).toEqual(['h', 'lede', 'x', 'y', 'embed', 's', 'tail']);
+    expect(holding(removed, frame!)).toEqual([]);
+  });
+
+  it('deleting a block above the control the reader is typing in leaves it, and their focus, in place', async () => {
+    load(served({ edit: 'e1', extra: '<p id="gone" data-mx-ast="0.1a">deleted next</p><input id="q" data-mx-ast="0.1b">' }));
+    start();
+    const input = $('q') as HTMLInputElement;
+    input.focus();
+    const removed = await removals(() => morph(window, { fetch: answer(served({ edit: 'e2', extra: '<input id="q" data-mx-ast="0.1a">' })) }));
+    expect($('q')).toBe(input);
+    expect(document.activeElement).toBe(input);
+    expect(holding(removed, input)).toEqual([]);
+  });
+
+  it('draws exactly the next version, keeping every node it names and never taking out the one holding a frame (any edit)', () => {
+    // A small seeded generator: the same cases every run.
+    let seed = 7;
+    const random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const pick = <T,>(items: T[]) => items[Math.floor(random() * items.length)]!;
+    const block = (id: string) => id.startsWith('f') ? `<div id="${id}"><iframe title="${id}"></iframe></div>` : id.startsWith('t') ? `${id} ` : id.startsWith('a') ? `<p>${id}</p>` : `<p id="${id}">${id}</p>`;
+    for (let trial = 0; trial < 300; trial++) {
+      const count = 1 + Math.floor(random() * 9);
+      const before = ['f0', ...Array.from({ length: count }, (_, i) => pick(['p', 'a', 't']) + i)].sort(() => random() - 0.5);
+      const after = before.filter((id) => id === 'f0' || random() < 0.6).concat(Array.from({ length: Math.floor(random() * 3) }, (_, i) => `n${i}`)).sort(() => random() - 0.5);
+      const root = document.createElement('div');
+      root.innerHTML = before.map(block).join('');
+      document.body.append(root);
+      const next = document.createElement('div');
+      next.innerHTML = after.map(block).join('');
+      const named = new Map(after.filter((id) => id.startsWith('p') || id === 'f0').map((id) => [id, root.querySelector(`#${id}`)]));
+      const frame = root.querySelector('iframe')!;
+      const removed: Node[] = [];
+      const observer = new MutationObserver((records) => { for (const record of records) removed.push(...record.removedNodes); });
+      observer.observe(root, { childList: true, subtree: true });
+      morphDraftDom(root, next, new Set());
+      for (const record of observer.takeRecords()) removed.push(...record.removedNodes);
+      observer.disconnect();
+      const label = `${before.join(',')} → ${after.join(',')}`;
+      expect(root.innerHTML, label).toBe(next.innerHTML);
+      for (const [id, node] of named) expect(root.querySelector(`#${id}`), `${label}: #${id}`).toBe(node);
+      expect(holding(removed, frame), label).toEqual([]);
+      root.remove();
+    }
   });
 });
 
