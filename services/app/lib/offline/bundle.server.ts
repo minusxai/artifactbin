@@ -16,7 +16,7 @@ import { retainedIslandFile } from '@/lib/compiled-page';
 import { loadOfflineHalf, packCompiledBrowserModule } from './compiled-bundle.server';
 import type { ArtifactFile } from './file-format';
 import type { ArtifactFileParts } from './file-html';
-import type { JsxNode } from '@/lib/jsx';
+import { canonicalComponent, type JsxNode } from '@/lib/jsx';
 
 type OfflineBundleKind = 'solid';
 
@@ -99,13 +99,15 @@ export async function offlineFileParts(file: ArtifactFile): Promise<ArtifactFile
   const code = await offlineBundle('solid');
   if (!file.compiled) return { file, code };
   const sqlite = !!file.island.dataflow?.hold?.length;
-  // A compiled Chart can be a table; those have no Vega drawing to update.
+  // A compiled Chart can be a table; those have no Vega drawing to update. A file compiled before the rename names
+  // it `Question` in both places (lib/jsx/component-names COMPONENT_ALIASES).
+  const isChart = (tag: string): boolean => canonicalComponent(tag) === 'Chart';
   const hasChart = (nodes: JsxNode[]): boolean => nodes.some((node) => node.type === 'element' && (
-    (node.tag === 'Chart' && node.attributes.some((attribute) => attribute.name === 'viz'
+    (isChart(node.tag) && node.attributes.some((attribute) => attribute.name === 'viz'
       && attribute.value.static && typeof attribute.value.json === 'object' && attribute.value.json !== null
       && 'kind' in attribute.value.json && attribute.value.json.kind === 'vega-lite')) || hasChart(node.children)
   ));
-  const chart = file.compiled.kit.islands.includes('Chart') && hasChart(file.island.nodes);
+  const chart = file.compiled.kit.islands.some(isChart) && hasChart(file.island.nodes);
   const packed = await packedModule(file.compiled, sqlite, chart);
   const wasmUrl = file.compiled.sharedBuild?.sqliteWasm;
   const wasmName = /^\/islands\/(sqlite3-[0-9a-f]{16}\.wasm)$/.exec(wasmUrl ?? '')?.[1];
