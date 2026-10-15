@@ -61,7 +61,8 @@ describe('startLoopbackProxy', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['set-cookie']).toEqual(['afbin_pages=1; Path=/; HttpOnly; SameSite=Lax']);
     expect(JSON.parse(await text(response))).toEqual({ host: `6162.lvh.me:${port}`, url: '/a/b?c=1', cookie: 'afbin_pages=0' });
-    expect(asked).toEqual([]);
+    // The resolver is asked first (it fails here, as offline) and loopback answers.
+    expect(asked).toEqual(['6162.lvh.me']);
   });
 
   it('streams: an event stream\'s first event arrives while the stream is still open', async () => {
@@ -85,7 +86,7 @@ describe('startLoopbackProxy', () => {
     });
     await new Promise((resolve) => socket.on('end', resolve));
     expect(received).toContain(`"host":"app.localhost:${port}"`);
-    expect(asked).toEqual([]);
+    expect(asked).toEqual(['app.localhost']);
   });
 
   it('asks the resolver for any other name, and answers 502 when it cannot be reached', async () => {
