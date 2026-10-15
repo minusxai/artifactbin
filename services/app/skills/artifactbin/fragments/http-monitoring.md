@@ -1,1 +1,1 @@
-After every accepted write, unasked, keep one background [comment monitor]([[ references ]]monitoring.md) running past your reply; answer each comment with the change and a reply.
+After each accepted write, unasked, keep one comment monitor past your reply that wakes you on each new comment (not a plain background job; else poll between work steps; see monitoring below); answer each with the change and a reply.

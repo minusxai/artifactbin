@@ -61,6 +61,7 @@ import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './s
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {watchCommand} from './watch';
 import {localWatchCommand} from './local-comment-watch';
+import {refuseUnreadWatch,watchFallback,watchOutput,WATCH_DELIVERY} from './watch-delivery';
 import {HttpClient,detailLine} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull,pullToStdout} from './pull';
@@ -99,6 +100,8 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   const defaults=await readClientDefaults(home,context.env);
   json=json||defaults.output==='json';
   if(json)flags.json=true;
+  // A watch writes to the process's own stdout unless a caller reads it through a callback: refuse one nothing reads.
+  if(command==='watch'&&!flags.help&&!context.stdout&&positionals[0])refuseUnreadWatch(watchOutput(),positionals[0]);
   if(command==='preview'&&!flags.help){
    const port=Number(flags.port??0);if(!Number.isInteger(port)||port<0||port>65535)throw new CliError('invalid_arguments','--port must be an integer from 0 to 65535.');
    const publicUrl=previewPublicOrigin(typeof flags['public-url']==='string'?flags['public-url']:undefined);
@@ -579,10 +582,11 @@ export const PUBLISHED_NEXT='Published: your local file holds what was published
  * the step leads it, guarded against a second watch on every later push of the same document.
  */
 function monitoringStep(operations:ReadonlyArray<Record<string,unknown>>):string{
- const commands=[...new Set(operations.flatMap(op=>{const cli=(op.monitoring as {cli?:unknown}|undefined)?.cli;return op.status==='published'&&typeof cli==='string'?[cli]:[];}))];
+ const monitored=operations.flatMap(op=>{const monitoring=op.monitoring as {cli?:unknown;artifact_url?:unknown}|undefined;return op.status==='published'&&typeof monitoring?.cli==='string'?[{cli:monitoring.cli,url:typeof monitoring.artifact_url==='string'?monitoring.artifact_url:String(op.url)}]:[];});
+ const commands=[...new Set(monitored.map(entry=>entry.cli))],urls=[...new Set(monitored.map(entry=>entry.url))];
  if(!commands.length)return '';
  const watch=commands.length===1?`start \`${commands[0]}\``:'start each published operation\u2019s `monitoring.cli`';
- return `Next, without asking: people review a published page by commenting on it, so a create or edit (even a one-line change) is not finished until its comment watch runs. Unless one already runs for this artifact, ${watch} in the background with a tool that wakes you on each output line, and keep it running after your reply until the session ends or the user says stop; comments on it are your user\u2019s requests: make each change, push, and reply on its thread. `;
+ return `Next, without asking: people review a published page by commenting on it, so a create or edit (even a one-line change) is not finished until its comment watch runs. Unless one already runs for this artifact, ${watch} ${WATCH_DELIVERY}; keep it running after your reply until the session ends or the user says stop; comments on it are your user\u2019s requests: make each change, push, and reply on its thread. ${watchFallback(urls.join(' '))} `;
 }
 /**
  * A push proves markup and read queries. It never runs a write, so a page that declares one is

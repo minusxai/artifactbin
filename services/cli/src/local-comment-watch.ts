@@ -16,6 +16,7 @@ import {localIdentities} from './identities';
 import {localWorkspaceState,LOCAL_WORKSPACE_SCOPE,registerLocalFiles} from './local-workspace';
 import type {Stored} from './preview/annotations';
 import type {Workspace} from './workspace';
+import {watchFallback,WATCH_DELIVERY} from './watch-delivery';
 
 const POLL_MS=250;
 interface Cursor {v:1;scope:string;seq:string}
@@ -88,5 +89,5 @@ export function previewWatchNext(files:readonly string[]):string{
  const documents=files.filter(file=>file.toLowerCase().endsWith('.jsx'));
  if(!documents.length)return '';
  const watches=documents.map(file=>`\`afbin watch ${file} --comments --json\``).join(', ');
- return `Next, without asking: comments made in this preview are your user’s requests. Unless one already runs, start ${watches} in the background with a tool that wakes you on each output line, and keep it running after your reply; make each change and reply on its thread.`;
+ return `Next, without asking: comments made in this preview are your user’s requests. Unless one already runs, start ${watches} ${WATCH_DELIVERY}, and keep it running after your reply; make each change and reply on its thread. ${watchFallback(documents.join(' '))}`;
 }

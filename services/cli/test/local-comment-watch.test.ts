@@ -131,7 +131,8 @@ test('a running preview names the watch that follows its comments, as a push nam
  const next=previewWatchNext(['report.jsx','notes/plan.jsx']);
  assert.match(next,/afbin watch report\.jsx --comments --json/);
  assert.match(next,/afbin watch notes\/plan\.jsx --comments --json/);
- assert.match(next,/in the background with a tool that wakes you on each output line/);
+ assert.match(next,/with a tool that wakes you on each output line \(a monitor\), not as a plain background job, whose output lands in a log nobody reads/);
+ assert.match(next,/Without such a tool, check `afbin comment report\.jsx notes\/plan\.jsx --json` between work steps instead/);
  assert.match(next,/your user.s requests/);
  assert.equal(previewWatchNext([]),'');
  // Only documents take comments: a dataset preview names no watch.
