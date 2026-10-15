@@ -9,9 +9,10 @@
  * and its own server render, so it has to be a function, not a behaviour.
  */
 import { describe, expect, it } from 'vitest';
+import { collectRefNameUses } from '../ref-name-uses';
 import { type JsxNode } from '@/lib/jsx';
 import {
-  carriesRef, collectRefNameUses, isTemplateRefPosition, REF_ATTRS, resolveRefTemplate, templateRefNames,
+  carriesRef, isTemplateRefPosition, REF_ATTRS, resolveRefTemplate, templateRefNames,
   validateDataflow, type Dataflow, type Scalar,
 } from '../dataflow';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';

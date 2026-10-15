@@ -5,9 +5,10 @@
  * Button names it; nothing else may).
  */
 import { describe, expect, it } from 'vitest';
+import { collectRefNameUses } from '@/lib/dataflow/ref-name-uses';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
-  EMPTY_DATAFLOW, MUTATION_TAG, collectRefNameUses, isEmptyDataflow, parseMutationDecl, validateDataflow, type Dataflow,
+  EMPTY_DATAFLOW, MUTATION_TAG, isEmptyDataflow, parseMutationDecl, validateDataflow, type Dataflow,
 } from '@/lib/dataflow/dataflow';
 import { dataflowOf, declaresLiveData, declaresMutations, splitHelmet, validateHelmet } from '@/lib/document/helmet';
 import { storyUpdateParts } from '@/lib/document/update-parts';

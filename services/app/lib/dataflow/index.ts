@@ -21,8 +21,9 @@ export { EMPTY_COMPILED_DATAFLOW, readerDataflow } from './compiled-dataflow';
 
 // Reference syntax (`$name`, bindings, controls) and the declarations.
 export {
-  carriesRef, collectRefNameUses, controlOptions, EMPTY_DATAFLOW, isEmptyDataflow, REF_ATTRS, refName, scalarMatches,
+  carriesRef, controlOptions, EMPTY_DATAFLOW, isEmptyDataflow, REF_ATTRS, refName, scalarMatches,
 } from './dataflow';
+export { collectRefNameUses } from './ref-name-uses';
 export { coerceScalarInput } from './scalar-input';
 
 // Built-ins: the platform's own inputs and tables, and the reader's zone.

@@ -5,3 +5,5 @@
  * graph and local validation do. The publish-time checks over these uses are in `./server`.
  */
 export { collectRefUses, findBrokenEmbeds } from './refs';
+/** Every `$name` the markup reads or writes, templates in strings included (./ref-name-uses). */
+export { collectRefNameUses } from './ref-name-uses';
