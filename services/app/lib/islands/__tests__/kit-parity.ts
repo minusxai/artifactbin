@@ -21,6 +21,11 @@ interface ParityData { tables?: Record<string, TableResult>; values?: Record<str
 let oracle: Record<string, string> | null = null;
 /** Shared reader layout contracts added after the retired React reader was captured. */
 export function applyCurrentLayoutContracts(html: string): string {
+  // Segmented options now mark the chosen one with the system's primary fill, look clickable and show focus.
+  const segment = 'relative h-8 cursor-pointer rounded-[5px] px-3 text-sm transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
+  html = html
+    .replaceAll('class="h-8 rounded-[5px] px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 bg-background text-foreground shadow-xs"', `class="${segment} bg-primary text-primary-foreground shadow-xs"`)
+    .replaceAll('class="h-8 rounded-[5px] px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 text-muted-foreground hover:text-foreground"', `class="${segment} text-muted-foreground enabled:hover:bg-foreground/10 enabled:hover:text-foreground"`);
   // The pending diagnostics chunk starts with readable text during SSR and initial hydration.
   // It adds the same spinner after loading; settled tables never download that chunk.
   html = html.replace(/(<div\b[^>]*aria-label="DataTable embed"[^>]*>)<span(?: data-hk="[^"]*")? aria-hidden="true" class="size-\[22px\] animate-spin rounded-full border-2 border-border border-t-primary motion-reduce:animate-none"><\/span><span(?: data-hk="[^"]*")? class="font-mono text-\[11px\] font-medium uppercase tracking-\[0\.08em\] text-muted-foreground">loading data…<\/span>/g, '$1loading data…');

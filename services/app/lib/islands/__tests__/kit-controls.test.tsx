@@ -125,6 +125,28 @@ describe('controls', () => {
     dispose();
   });
 
+  // The selected option takes the design system's own fill pair (primary on primary-foreground): a
+  // background-on-muted face vanished where a system's page ground and muted are near-identical.
+  it('Segmented marks the chosen option with the primary fill and makes every option look interactive', () => {
+    const { host, dispose } = mount(fakeIsland({ size: 'M' }), () => <Segmented label="Size" value="$size" options={['S','M','L']} />);
+    try {
+      const options = [...host.querySelectorAll<HTMLButtonElement>('[role="group"] button')];
+      const tokens = (b: HTMLButtonElement) => [...b.classList];
+      const chosen = options.filter(b => b.getAttribute('aria-pressed') === 'true');
+      expect(chosen.map(b => b.textContent)).toEqual(['M']);
+      expect(tokens(chosen[0]!)).toEqual(expect.arrayContaining(['bg-primary', 'text-primary-foreground']));
+      for (const other of options.filter(b => b.getAttribute('aria-pressed') === 'false')) {
+        expect(tokens(other)).not.toContain('bg-primary');
+        expect(tokens(other)).not.toContain('text-primary-foreground');
+        expect(tokens(other)).toEqual(expect.arrayContaining(['text-muted-foreground', 'enabled:hover:bg-foreground/10', 'enabled:hover:text-foreground']));
+      }
+      for (const option of options) {
+        expect(option.disabled).toBe(false);
+        expect(tokens(option)).toEqual(expect.arrayContaining(['cursor-pointer', 'focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-ring/50', 'disabled:cursor-not-allowed', 'disabled:opacity-50']));
+      }
+    } finally { dispose(); }
+  });
+
   it('DatePicker opens a calendar', async () => {
     await loadDatePickerPopup();
     const island = fakeIsland({ when: '2026-09-28' }); island.setValue = vi.fn();
