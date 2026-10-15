@@ -23,7 +23,8 @@ import { COMMENT_TARGET_UNSAVED, type AnnotationCommentWire } from '@artifactbin
 import { anchorIndex, snippetOf, type AnchorEntry as Anchored } from '@/lib/document/anchors';
 import { BackendRequestError } from '@/lib/artifact-backend/errors';
 import type { ArtifactBackend, BackendFeature, EditAnswer, FlushResponse, LoadedArtifact } from '@/lib/artifact-backend/types';
-import { compileStoryCss } from '@/lib/data/story/story-css.server';
+import { compileStoryCss, compileStoryCssWithExtras } from '@/lib/data/story/story-css.server';
+import { fileRuntimeClasses } from './runtime-classes';
 import { parseJsx } from '@/lib/jsx/parse';
 import { serializeJsx } from '@/lib/jsx/serialize';
 import type { JsxElement, JsxNode } from '@/lib/jsx/types';
@@ -275,7 +276,8 @@ async function derive(
   { css, priorStyle }: { css: boolean; priorStyle: (style: string | null) => boolean },
 ): Promise<Pick<ArtifactFile, 'css' | 'island' | 'derivedFrom'>> {
   const parts = storyUpdateParts(source, isWebUrl);
-  const compiled = css || !file.css.compiled ? await compileStoryCss(source, { force: true }) : file.css.compiled;
+  // The rows the file carries bring their classes, as at export (./runtime-classes).
+  const compiled = css || !file.css.compiled ? await compileStoryCssWithExtras(source, fileRuntimeClasses(source, file.snapshot)) : file.css.compiled;
   const island: StoryIslandData = {
     ...file.island,
     ...(parts ? { nodes: withInlinedAssets(parts.nodes, assets) } : {}),

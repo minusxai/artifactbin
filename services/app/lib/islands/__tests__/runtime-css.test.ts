@@ -19,7 +19,7 @@ const order = () => [...document.head.children].map((el) => el.getAttributeNames
 const pendingRule = () => document.head.querySelector(`style[${RUNTIME_PENDING_ATTR}]`)?.textContent ?? null;
 
 let stop = () => {};
-const answer = (css: string, ok = true) => vi.fn(async () => new Response(css, { status: ok ? 200 : 404 }));
+const answer = (css: string, ok = true) => vi.fn(async (_url: string, _init?: RequestInit) => new Response(css, { status: ok ? 200 : 404 }));
 
 beforeEach(() => { vi.useFakeTimers(); head(); });
 afterEach(() => { stop(); stop = () => {}; vi.useRealTimers(); document.head.innerHTML = ''; document.body.innerHTML = ''; });

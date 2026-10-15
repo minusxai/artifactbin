@@ -15,6 +15,7 @@ import { commentMetadata, instanceDomId } from '@/lib/story-ui/repeat-identity';
 import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap } from '@/lib/story-ui/icon-contract';
 
 import { createRowActions } from '../row-actions';
+import { noteClasses } from '../runtime-css';
 import { ACCESS_PENDING, hydratedRead } from './store-read';
 
 // Mirrors lib/jsx/validate hasDangerousScheme without importing the validator into the browser kit.
@@ -28,6 +29,8 @@ export function rowAttrs(attrs: Readonly<Record<string, unknown>>, row: Record<s
   for (const [name, raw] of Object.entries(attrs)) {
     const lower = name.toLowerCase();
     const value = row && lower !== 'id' ? substituteRow(raw, row) : raw;
+    // A class the row filled in: one the document's sheet lacks is hidden until the sheet has it (../runtime-css).
+    if (row && value !== raw && /^class(?:name)?$/.test(lower)) noteClasses(value);
     if (value === null || value === undefined || value === false) continue;
     if (typeof value === 'string' && (URL_LIST_ATTRS.has(lower) ? urlListUrls(value, lower).some(dangerous) : URL_ATTRS.has(lower) && dangerous(value))) continue;
     out[name] = value === true ? '' : String(value);

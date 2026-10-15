@@ -11,7 +11,7 @@
 // ---- Compiled page: compile a document and assemble the reader page, as the hosted app does.
 export { compilePage } from '../compiled-page/compiler';
 export {
-  assembleReaderPage, bindModuleCode, type CompiledPage, type CompileInput, type CompilerBuild,
+  assembleReaderPage, type AssembleOverlay, bindModuleCode, type CompiledPage, type CompileInput, type CompilerBuild,
   createModuleStore, createSpeculationRulesStore, loadCompilerBuild, SPECULATION_RULES_HEADER,
   withStoredCarriers,
 } from '../compiled-page';
@@ -23,7 +23,9 @@ export { prepareStoryRuntime } from '../publish/prepared/prepare-runtime.server'
 export type { PreparedStoryRuntime } from '../publish/prepared/prepared-runtime';
 export { ISLANDS_PATH } from '../story-runtime/contract';
 export type { ServedResults, StoryIslandData } from '../story-runtime/contract';
-export { compileStoryCss } from '../data/story/story-css.server';
+export { compileStoryCss, compileStoryCssWithExtras } from '../data/story/story-css.server';
+export { fileRuntimeClasses } from '../offline/runtime-classes';
+export { askedRuntimeClasses, renderedRuntimeClasses, runtimeCssPageData } from '../serving/runtime-css.server';
 
 // ---- Offline file: the self-contained `.html` artifact file's parts, HTML and fonts.
 export { offlineFileParts } from '../offline/bundle.server';

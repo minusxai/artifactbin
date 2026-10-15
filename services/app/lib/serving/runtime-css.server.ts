@@ -37,14 +37,24 @@ const IMMUTABLE = 'max-age=31536000, immutable';
  * the door (the document's own origin; '' for a same-origin relative door). `extras`: what the served sheet already
  * compiled in (the snapshot's classes), which the page must not ask for again.
  */
-export function runtimeCssData(row: Pick<ArtifactRow, 'id' | 'version' | 'source'>, origin: string, extras: readonly string[] = []): NonNullable<IslandPageData['css']> | null {
-  if (!row.source || !hasRuntimeClasses(row.source)) return null;
+export function runtimeCssData(row: Pick<ArtifactRow, 'id' | 'version' | 'source'>, origin: string, extras: readonly string[] = []): RuntimeCssPageData | null {
   const { version, compile } = RUNTIME_CSS_PARAMS;
-  return {
-    url: `${origin.replace(/\/+$/, '')}${runtimeCssPath(row.id)}?${version}=${row.version}&${compile}=${storyCssCompileVersion()}`,
-    known: extractClassCandidates(row.source),
-    ...(extras.length ? { extras: [...extras] } : {}),
-  };
+  return runtimeCssPageData(row.source, `${origin.replace(/\/+$/, '')}${runtimeCssPath(row.id)}?${version}=${row.version}&${compile}=${storyCssCompileVersion()}`, extras);
+}
+
+type RuntimeCssPageData = NonNullable<IslandPageData['css']>;
+
+/** The page data `css` of `source` asking at `url` (a host's own door: the local preview's), else null. */
+export function runtimeCssPageData(source: string | null | undefined, url: string, extras: readonly string[] = []): RuntimeCssPageData | null {
+  if (!source || !hasRuntimeClasses(source)) return null;
+  return { url, known: extractClassCandidates(source), ...(extras.length ? { extras: [...extras] } : {}) };
+}
+
+/** The classes a door's URL asks for (`x`, space-separated), sorted and deduped; null when one is not a class or there are too many. */
+export function askedRuntimeClasses(url: URL): string[] | null {
+  const tokens = (url.searchParams.get(RUNTIME_CSS_PARAMS.extras) ?? '').split(' ').filter(Boolean);
+  if (tokens.length > RUNTIME_CLASS_LIMIT || !tokens.every(isRuntimeClassToken)) return null;
+  return [...new Set(tokens)].sort();
 }
 
 /**
@@ -67,10 +77,9 @@ export function parseRuntimeCssRequest(url: URL): RuntimeCssRequest {
   const params = url.searchParams;
   const version = Number(params.get(RUNTIME_CSS_PARAMS.version));
   if (!Number.isInteger(version) || version < 1) return { error: 'invalid_version' };
-  const tokens = (params.get(RUNTIME_CSS_PARAMS.extras) ?? '').split(' ').filter(Boolean);
-  if (tokens.length > RUNTIME_CLASS_LIMIT) return { error: 'too_many_classes' };
-  if (!tokens.every(isRuntimeClassToken)) return { error: 'invalid_class' };
-  return { version, compile: params.get(RUNTIME_CSS_PARAMS.compile), extras: [...new Set(tokens)].sort() };
+  const extras = askedRuntimeClasses(url);
+  if (!extras) return { error: 'invalid_classes' };
+  return { version, compile: params.get(RUNTIME_CSS_PARAMS.compile), extras };
 }
 
 /** The door's answer for a version the reader may read. */

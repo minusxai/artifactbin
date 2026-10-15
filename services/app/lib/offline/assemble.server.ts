@@ -31,7 +31,8 @@ import { getUserById, type AccessActor } from '@/lib/accounts';
 import { getArtifactById, retainDownloadedVersion } from '@/lib/artifacts';
 import { type ImportTables, placeDataflow, type DataflowState, type CompiledDataflow } from '@/lib/dataflow';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { currentStoryCss } from '@/lib/data/story/story-css.server';
+import { currentStoryCss, compileStoryCssWithExtras } from '@/lib/data/story/story-css.server';
+import { fileRuntimeClasses } from './runtime-classes';
 import { getDb } from '@/lib/platform/db';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
@@ -396,6 +397,9 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
   const imageRefs = new Set(Object.entries(refData).filter(([, r]) => r.kind === 'image').map(([id]) => id));
   const inliner = new Inliner(origin, imageRefs, maxFileBytes);
   const snapshot = { at: new Date().toISOString(), state, held, variants, frozen };
+  // No server is left to ask for a class the file's rows bring: its sheet is compiled with them (./runtime-classes).
+  const rowClasses = fileRuntimeClasses(source, snapshot);
+  const fileCss = rowClasses.length ? await timed(timings, 'css', () => compileStoryCssWithExtras(source, rowClasses)) : compiledCss;
   let inlined: { css: ArtifactFile['css']; island: StoryIslandData; compiled: NonNullable<ArtifactFile['compiled']>; snapshot: ArtifactFile['snapshot']; threads: AnnotationWire[] };
   // Everything the file can draw: the font subsets no character of it reaches are left out (lib/offline/font-faces).
   const downloadedBy = await downloaderLabel(actor);
@@ -405,7 +409,7 @@ export async function assembleArtifactFile(input: AssembleArtifactFileInput): Pr
     inlined = await timed(timings, 'inline', async () => ({
       css: {
         base: await css(parts.runtime.baseCss + '\n' + DOCUMENT_UI_FONT_CSS),
-        compiled: compiledCss ? await css(compiledCss) : null,
+        compiled: fileCss ? await css(fileCss) : null,
         author: parts.runtime.authorCss ? await css(parts.runtime.authorCss) : null,
       },
       island: JSON.parse(await inliner.json(JSON.stringify(island))) as StoryIslandData,

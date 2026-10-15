@@ -98,3 +98,11 @@ test('a never-published local export names its real server and says it is not pu
   assert.match(text,/reference: https:\/\/artifacts\.example\/llms\.txt/);assert.doesNotMatch(text,/http:\/\/localhost/);
  }finally{process.chdir(cwd);}
 }));
+
+test('the offline file compiles the classes its rows bring into its sheet: it has no server to ask',()=>fixture(async(root,home)=>{
+ await writeFile(join(root,'report.jsx'),'<Helmet><Value name="items" type="table" value={[{id: 1, status: "ok"}, {id: 2, status: "late"}]} /><Query name="rows">{`select id, case when status = \'ok\' then \'bg-lime-500 hover:bg-sky-600\' else \'md:w-64 w-[37%]\' end as cls from items`}</Query></Helmet><For each={$rows} keyBy="id"><span id="badge" className="px-2 {$_row.cls}">x</span></For>');
+ const cwd=process.cwd();try{
+  const file=readArtifactFileHtml((await exportLocalHtml({cwd:root,home,path:'report.jsx'},resolve('../app'))).toString());
+  for(const selector of ['.bg-lime-500','.hover\\:bg-sky-600','.md\\:w-64','.w-\\[37\\%\\]'])assert.ok(file.css.compiled!.includes(selector),selector);
+ }finally{process.chdir(cwd);}
+}));

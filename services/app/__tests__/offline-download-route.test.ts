@@ -96,3 +96,18 @@ describe('GET /a/<id>/download', () => {
     expect(html.indexOf('id="afbin-file"')).toBeLessThan(html.indexOf('id="afbin-code"'));
   });
 });
+
+describe('the offline file has no server to ask for a class its rows bring', () => {
+  it('compiles the classes of every row it carries into its sheet at export', async () => {
+    const token = await owner('runtime-classes');
+    const source = '<Helmet><Value name="items" type="table" value={[{id: 1, status: "ok"}, {id: 2, status: "late"}]} />'
+      + '<Query name="rows">{`select id, case when status = \'ok\' then \'bg-lime-500 hover:bg-sky-600\' else \'md:w-64 w-[37%]\' end as cls from items`}</Query></Helmet>'
+      + '<For each={$rows} keyBy="id"><span className="px-2 {$_row.cls}">x</span></For>';
+    const id = await publish(token, 'private', source);
+    const file = fileOf(await (await download(request(`/a/${id}/download`, { token }), params(id))).text());
+    for (const selector of ['.bg-lime-500', '.hover\\:bg-sky-600', '.md\\:w-64', '.w-\\[37\\%\\]']) expect(file.css.compiled).toContain(selector);
+    // A document whose classes are all literal carries its stored sheet, words of its rows never compiled in.
+    const plainId = await publish(token, 'private', '<Helmet><Value name="items" type="table" value={[{id: 1, cls: "bg-lime-500"}]} /></Helmet><For each={$items} keyBy="id"><span className="px-2">x</span></For>');
+    expect(fileOf(await (await download(request(`/a/${plainId}/download`, { token }), params(plainId))).text()).css.compiled).not.toContain('.bg-lime-500');
+  });
+});
