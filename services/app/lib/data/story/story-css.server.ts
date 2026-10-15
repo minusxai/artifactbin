@@ -15,7 +15,7 @@ import { STORY_WYSIWYG_CLASSES } from './typography';
 import { storyMotionKitCss } from './motion';
 import { storyThemeCss } from './story-themes';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
-import { extractClassCandidates } from './story-css';
+import { extractClassCandidates, isRuntimeClassToken, RUNTIME_CLASS_LIMIT } from './story-css';
 
 // The stylesheet each story is compiled against. `dark:` keys off the `.dark` class
 // `buildStoryDocument` stamps on the document <html> (Tailwind's default is
@@ -318,12 +318,38 @@ export function unionStoryCss(): Promise<string> {
   return unionMemo.css;
 }
 
-async function compileStoryCssUncached(story: string): Promise<string | null> {
+/**
+ * The document's WHOLE sheet with the classes it only names at runtime compiled in (story-css.ts RUNTIME CLASSES):
+ * its own candidates, the recipe union and `extras`, in one compile, so every rule stands where Tailwind orders it —
+ * byte for byte the sheet the document would have compiled had it named the extras itself, and with none, its
+ * stored compile. Extras are untrusted: a malformed token and anything past RUNTIME_CLASS_LIMIT is dropped.
+ */
+// eslint-disable-next-line no-restricted-syntax -- process-lifetime memo keyed by full input (environment, extras, source); no per-request scope
+const extrasMemo = new Map<string, Promise<string | null>>();
+const EXTRAS_MEMO_CAP = 50;
+
+export async function compileStoryCssWithExtras(story: string | null | undefined, extras: readonly string[]): Promise<string | null> {
+  const wanted = [...new Set(extras.filter(isRuntimeClassToken))].sort().slice(0, RUNTIME_CLASS_LIMIT);
+  if (!story || wanted.length === 0) return compileStoryCss(story);
+  const memoKey = `${storyCssCompileVersion()}|${wanted.join(' ')}|${story}`;
+  const memoized = extrasMemo.get(memoKey);
+  if (memoized) { extrasMemo.delete(memoKey); extrasMemo.set(memoKey, memoized); return memoized; }
+  const result = compileStoryCssUncached(story, wanted);
+  if (extrasMemo.size >= EXTRAS_MEMO_CAP) {
+    const oldest = extrasMemo.keys().next().value;
+    if (oldest !== undefined) extrasMemo.delete(oldest);
+  }
+  extrasMemo.set(memoKey, result);
+  result.catch(() => extrasMemo.delete(memoKey));
+  return result;
+}
+
+async function compileStoryCssUncached(story: string, extras: readonly string[] = []): Promise<string | null> {
   // EVERY compiled story gets the shadcn token layer + the registry recipe classes unioned in:
   // component chrome classes never appear in story markup, and the compiled sheet is the
   // embeds' ONLY style source.
   const compiler = await tailwindCompiler(TW_INPUT_STORY);
-  let candidates = [...new Set([...extractClassCandidates(story), ...STORY_RECIPE_UNION])].sort();
+  let candidates = [...new Set([...extractClassCandidates(story), ...STORY_RECIPE_UNION, ...extras])].sort();
   const { css, dropped } = buildSalvaging(c => compiler.build(c), candidates);
   if (dropped.length > 0) {
     console.warn(`[story-css] dropped ${dropped.length} uncompilable class candidate(s):`, dropped.join(' '));

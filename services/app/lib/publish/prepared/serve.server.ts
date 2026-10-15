@@ -108,6 +108,15 @@ export interface CompiledReaderRequest {
   footer?: { html: string; css: string } | null;
   /** A document served by itself: the standalone stylesheets, byte for byte (AssembleInput.sheets). */
   sheets?: AssembleInput['sheets'];
+  /**
+   * A version that fills classes at runtime (lib/serving/runtime-css.server): its page data `css`, and `restyle`, which
+   * answers the standalone sheets with the classes the story as drawn carries and the sheet lacks compiled in (null:
+   * none) — so rows the server draws are styled in the first byte, and the page never asks for them again.
+   */
+  runtimeCss?: {
+    data: NonNullable<AssembleOverlay['css']>;
+    restyle(story: string): Promise<{ extras: string[]; sheets: NonNullable<AssembleInput['sheets']> } | null>;
+  } | null;
   /** Behaviour chunks this path adds to the version's own (`page`: the compiled /raw page's behaviour, lib/islands/page). */
   behaviors?: readonly string[];
   /**
@@ -463,6 +472,8 @@ export async function compiledPageFor(row: ArtifactRow, page: Prepared, reader: 
       build, flow,
     });
 
+    // The classes the drawn rows brought, compiled into the served sheet (none for a document that fills no class at runtime).
+    const restyled = reader.runtimeCss ? await reader.runtimeCss.restyle(story) : null;
     const colorMode = reader.colorMode ?? page.data.colorMode;
     const bare = reader.documentChrome === false;
     const behaviors = [...new Set([...(reader.behaviors ?? []), ...compiled.behaviors])].filter((b) => !(bare && b === DECK_BEHAVIOR));
@@ -480,14 +491,17 @@ export async function compiledPageFor(row: ArtifactRow, page: Prepared, reader: 
       colorMode,
       // A capture's answers ride as the snapshot the page starts from: the islands then ask for nothing.
       snapshot: reader.results ? { ...(served ?? emptySnapshot(row)), results: reader.results } : served,
-      overlay: { values, state: failedState, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), readOnly: reader.readOnly ?? null, hold, sqliteWasm },
+      overlay: {
+        values, state: failedState, mermaidImages, signedIn: reader.signedIn, doors: doorsFor(compiled, reader.doors), ...(reader.assetsUrl ? { assetsUrl: reader.assetsUrl } : {}), readOnly: reader.readOnly ?? null, hold, sqliteWasm,
+        ...(reader.runtimeCss ? { css: { ...reader.runtimeCss.data, ...(restyled ? { extras: restyled.extras } : {}) } } : {}),
+      },
       build,
       head: reader.head,
       live: reader.live,
       footer: reader.footer ?? null,
       // Every copy of a version whose script did not build says so: /raw, the framed document, a domain post, a capture, the morph's fragment.
       scriptFailed: !!page.authorScriptErrors,
-      sheets: reader.sheets ?? null,
+      sheets: restyled?.sheets ?? reader.sheets ?? null,
       appOrigin: reader.appOrigin ?? null,
     });
     return { mode: 'compiled', html: assembled.html, headers: assembled.headers };

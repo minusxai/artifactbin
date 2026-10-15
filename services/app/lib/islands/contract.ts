@@ -279,4 +279,12 @@ export interface IslandPageData {
    * loads the same runtime for `window.page`.
    */
   vendor?: Readonly<Record<string, string>>;
+  /**
+   * Present only on a version that fills classes at runtime (`className="{$_row.cls}"`, lib/data/story/story-css
+   * RUNTIME CLASSES): where the page asks for its whole sheet again with the classes its data brought
+   * (`url`, the version's door, lib/serving/runtime-css.server), the classes its sheet was compiled from (`known`),
+   * and the ones the served sheet already added for the rows the server drew (`extras`). Absent: every class the
+   * page can render has its rule, and the page never asks (lib/islands/runtime-css).
+   */
+  css?: { url: string; known: readonly string[]; extras?: readonly string[] };
 }

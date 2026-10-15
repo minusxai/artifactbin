@@ -34,7 +34,8 @@ import { serveStoredFile } from '@/lib/datasets/file-store';
 import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store/pdf-store';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { currentStoryCss } from '@/lib/data/story/story-css.server';
+import { compileStoryCssWithExtras, currentStoryCss } from '@/lib/data/story/story-css.server';
+import { renderedRuntimeClasses, runtimeCssData } from '@/lib/serving/runtime-css.server';
 import { declaresMutations, displayTitle } from '@/lib/document';
 import { appendCspExtensions, assetsPath, buildDocumentCsp, documentStyleSheets, markupCsp, mutatePath, queryPath } from '@/lib/page-styles';
 import { pagesRequestOf } from '@/lib/http/pages-origin';
@@ -367,6 +368,21 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
         if (etag && held) return notModified(held);
         // Only an answer with a body uses the document's sheet (a stale one is compiled from the source here).
         const compiledCss = await currentStoryCss(meta, row.source);
+        const standaloneSheets = (tailwind: string | null) => documentSheets(documentStyleSheets({
+          compiledCss: tailwind, chrome, bare: !!domain, theme: design.theme,
+          docFonts: prepared.page.base.fonts, systemCss: prepared.page.base.systemCss ?? '', authorCss: prepared.page.authorCss,
+        }));
+        // A version that fills classes at runtime: the door the page asks again at, and the rows the server draws styled
+        // in the first byte (lib/serving/runtime-css.server). The app page's story carries its one isolated sheet instead.
+        const servedVersion = { id: artifact.id, version: at?.version ?? artifact.version, source: row.source };
+        const runtimeData = appStory ? null : runtimeCssData(servedVersion, pages ? pages.self : '');
+        const runtimeCss = runtimeData ? {
+          data: runtimeData,
+          restyle: async (story: string) => {
+            const extras = renderedRuntimeClasses(row.source, story);
+            return extras.length ? { extras, sheets: await standaloneSheets(await compileStoryCssWithExtras(row.source, extras)) } : null;
+          },
+        } : null;
         const answer = await compiledPageFor(prepared.row, prepared.page, {
           at,
           search: new URL(request.url).search,
@@ -415,10 +431,8 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
           footer: domain ? { html: domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`).html, css: '' } : null,
           // The standalone document's stylesheets, byte for byte (lib/page-styles/document-styles); the app
           // page's story carries its one isolated sheet instead (the assembler's `css`).
-          sheets: appStory ? null : await documentSheets(documentStyleSheets({
-            compiledCss, chrome, bare: !!domain, theme: design.theme,
-            docFonts: prepared.page.base.fonts, systemCss: prepared.page.base.systemCss ?? '', authorCss: prepared.page.authorCss,
-          })),
+          sheets: appStory ? null : await standaloneSheets(compiledCss),
+          runtimeCss,
         });
         if (answer.mode === 'compiled') {
           // A fragment carries its version's own source nodes: the morph hands them to the document's selections and
