@@ -23,6 +23,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
+import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { POST as createArtifact, GET as listArtifacts } from '@/app/api/artifacts/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
@@ -192,6 +193,22 @@ describe('the bounds, each by name', () => {
     const body = await res.json();
     expect(body.error).toBe('asset_fetch_failed');
     expect(body.code).toBe('forbidden_address');
+  });
+
+  it('refuses a loopback NAME the server resolves itself (as server.ts does): *.localhost and lvh.me', async () => {
+    const doc = await publicDoc();
+    useLoopbackLookup();
+    setWebIngestPolicyForTests(null);
+    try {
+      for (const url of ['https://anything.localhost/iam.png', 'https://x.lvh.me/iam.png']) {
+        const res = await ask(doc.id, url);
+        expect(res.status, url).toBe(400);
+        const body = await res.json();
+        expect(body.code, url).toBe('forbidden_address');
+      }
+    } finally {
+      setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
+    }
   });
 
   it('refuses a response that is not an image, decided by the bytes', async () => {

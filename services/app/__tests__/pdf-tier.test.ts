@@ -25,6 +25,7 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
+import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -198,6 +199,13 @@ describe('a PDF by URL', () => {
       const res = await create(t.token, { pdfUrl: 'http://127.0.0.1:1/secret.pdf' });
       expect(res.status).toBe(400);
       expect((await res.json()).error).toBe('pdf_fetch_failed');
+      // Nor a loopback NAME the server resolves itself (server.ts installs the loopback lookup).
+      useLoopbackLookup();
+      for (const pdfUrl of ['https://anything.localhost/secret.pdf', 'https://x.lvh.me/secret.pdf']) {
+        const named = await create(t.token, { pdfUrl });
+        expect(named.status, pdfUrl).toBe(400);
+        expect((await named.json()).error, pdfUrl).toBe('pdf_fetch_failed');
+      }
     } finally {
       setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
     }

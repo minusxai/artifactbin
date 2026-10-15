@@ -17,7 +17,7 @@
  */
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
-import { lookup as dnsLookup } from 'node:dns';
+import dns from 'node:dns';
 import type { LookupFunction } from 'node:net';
 import { WEB_INGEST_ALLOW_PRIVATE, WEB_INGEST_TIMEOUT_MS } from '@/lib/platform/config';
 import { isForbiddenIp, parseWebUrl, WebIngestError, type WebIngestPolicy } from './guard';
@@ -61,6 +61,11 @@ export const webIngestAllowsHttp = (): boolean => activePolicy().allowHttp;
 /**
  * A lookup that vets EVERY resolved address before any socket dials it.
  *
+ * It resolves through this process's `dns.lookup` AT CALL TIME — on the app server that is the shared loopback
+ * lookup (utils/node/loopback-lookup), which answers `*.localhost` and `(*.)lvh.me` with loopback without asking
+ * DNS — and judges whatever comes back: a loopback name is refused as the loopback address it is, never trusted
+ * for its name. (A named import of `lookup` would be a snapshot taken before the entry point installs it.)
+ *
  * The callback shape MUST follow what the caller asked for: Node's
  * `autoSelectFamily` (on by default since 20) calls lookup with `all: true`
  * and expects the ARRAY back — answering with a single address there fails the
@@ -69,7 +74,7 @@ export const webIngestAllowsHttp = (): boolean => activePolicy().allowHttp;
  */
 const guardedLookup = (policy: WebIngestPolicy): LookupFunction =>
   ((hostname: string, options: { all?: boolean }, callback: (...args: unknown[]) => void) => {
-    dnsLookup(hostname, { ...options, all: true, verbatim: true }, (err, addresses) => {
+    dns.lookup(hostname, { ...options, all: true, verbatim: true }, (err, addresses) => {
       if (err || !Array.isArray(addresses) || addresses.length === 0) {
         callback(new WebIngestError('dns_failed', `"${hostname}" does not resolve`));
         return;
