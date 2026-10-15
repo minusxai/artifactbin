@@ -19,7 +19,7 @@ import {
   type JsxLayoutEdit,
 } from '@/lib/data/story/jsx-edit';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
-import { isEditableTextHost, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
+import { isEditableTextHost, resolveJsxNodeAtPath, textOwnerPath } from '@/lib/story-ui/host-classify';
 
 /**
  * THE DOCUMENT COUNTS FROM THE BODY; THE SOURCE COUNTS FROM THE TOP.
@@ -104,6 +104,10 @@ export function composeSource(source: string, pending: PendingEdits): string {
    * author's source. The one kind of component that is a host is a kit text
    * component whose children are plain text (lib/story-ui/host-classify), and
    * the write-back keeps what it is given to the text and marks it accepts.
+   * Text that binds data or computes anything — `Total: {$x}`, a `<Cell>` —
+   * is no host either: its DOM holds the expression's rendered value, and an
+   * edit written back would replace the binding with a snapshot of it. A mark
+   * inside a text is part of that text, never addressed on its own.
    */
   const parsed = parseJsx(source);
   const offset = parsed.ok ? helmetOffset(parsed.nodes) : 0;
@@ -117,12 +121,12 @@ export function composeSource(source: string, pending: PendingEdits): string {
   const addressable = (astPath: string) => {
     if (!parsed.ok) return false;
     const node = resolveJsxNodeAtPath(parsed.nodes, astPath);
-    return !!node && node.type === 'element' && isEditableTextHost(node);
+    return !!node && node.type === 'element' && isEditableTextHost(node) && textOwnerPath(parsed.nodes, astPath) === astPath;
   };
   const withText = applyDomEditsToJsx(
     source,
     [...pending.text]
-      .map(([astPath, innerHtml]) => ({ astPath: at(astPath), innerHtml }))
+      .map(([astPath, innerHtml]) => ({ astPath: at(astPath), stampPath: astPath, innerHtml }))
       .filter((e) => addressable(e.astPath)),
   ).source;
   const withFormat = applyFormatEditsToJsx(

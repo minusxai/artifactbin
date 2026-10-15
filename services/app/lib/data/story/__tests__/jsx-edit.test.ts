@@ -148,17 +148,14 @@ describe('applyDomEditsToJsx — attribute canonicalization', () => {
 });
 
 describe('applyDomEditsToJsx — embed/component preservation', () => {
-  it('preserves a <Number id={5}/> inside the edited paragraph verbatim (from the AST, not the DOM)', () => {
+  it('refuses an edit to a paragraph holding a <Number>: its DOM is the formatted value, never the binding', () => {
     const src = '<p>Revenue <Number id={5} suffix="%" /> up</p>';
     const { source, errors } = applyDomEditsToJsx(src, [{
       astPath: '0',
-      // The embed's rendered DOM chrome is NOT parseable back to JSX — the data-mx-ast stamp
-      // marks it and the ORIGINAL AST child is spliced back in its place.
       innerHtml: 'Revenue was <span data-mx-ast="0.1" contenteditable="false">42%</span> way up',
     }]);
-    expect(errors).toEqual([]);
-    expect(source).toBe('<p>Revenue was <Number id={5} suffix="%" /> way up</p>');
-    expectValidStoryJsx(source);
+    expect(source).toBe(src);
+    expect(errors.map((e) => e.message)).toEqual(['<p> at AST path "0" is not text to edit — edit skipped']);
   });
 
   it('preserves an <Icon/> whose rendered chrome is an svg root (the stamp wins over the svg allowlist)', () => {
@@ -170,6 +167,29 @@ describe('applyDomEditsToJsx — embed/component preservation', () => {
     expect(errors).toEqual([]);
     expect(source).toBe('<p>All done <Icon name="circle-check" /> for real</p>');
     expectValidStoryJsx(source);
+  });
+});
+
+describe('applyDomEditsToJsx — data bindings in text', () => {
+  it.each([
+    ['<p>Total: {$x}</p>', 'Total: 42 total'],
+    ['<p>Total: {$q.rows[0].total} items</p>', 'Total: 1,204 items, updated'],
+    ['<p>Total: {1 + 2}</p>', 'Total: 3!'],
+    ['<p>See <strong>{$x}</strong> here</p>', 'See <strong>42</strong> here'],
+    ['<p>Go <a href={$q.rows[0].url}>there</a></p>', 'Go <a href="https://example.com/x">there</a> now'],
+  ])('never writes the rendered value over the binding in %s', (src, innerHtml) => {
+    const { source, errors } = applyDomEditsToJsx(src, [{ astPath: '0', innerHtml }]);
+    expect(source).toBe(src);
+    expect(errors).toHaveLength(1);
+  });
+
+  it('a stamp only splices back the host\'s own static embed: a forged one never copies source from elsewhere', () => {
+    const src = '<p>Done <Icon name="circle-check" /> now</p><Alert id="al"><AlertTitle>Heads up</AlertTitle></Alert><p>Total <Number id={5} /></p>';
+    const { source } = applyDomEditsToJsx(src, [{
+      astPath: '0',
+      innerHtml: 'Done <svg data-mx-ast="0.1"></svg> <span data-mx-ast="1">Alert</span> <span data-mx-ast="2.1">5</span> <svg data-mx-ast="0.1"></svg>',
+    }]);
+    expect(source).toBe('<p>Done <Icon name="circle-check" />   <Icon name="circle-check" /></p><Alert id="al"><AlertTitle>Heads up</AlertTitle></Alert><p>Total <Number id={5} /></p>');
   });
 });
 
@@ -216,10 +236,13 @@ describe('isEditableTextHost', () => {
     expect(isEditableTextHost(el('<div><p>text</p></div>'))).toBe(false);
   });
 
-  it('accepts hosts carrying INLINE embeds — the embed is spliced back, the prose is editable', () => {
-    expect(isEditableTextHost(el('<p>Revenue <Number id={5} /> up</p>'))).toBe(true);
-    expect(isEditableTextHost(el('<p>Deep <span><Number id={5} /></span> one</p>'))).toBe(true);
+  it('accepts hosts carrying a static inline embed — the <Icon> is spliced back, the prose is editable', () => {
     expect(isEditableTextHost(el('<p>Done <Icon name="circle-check" /> now</p>'))).toBe(true);
+  });
+
+  it('rejects hosts reading data through a <Number>, however deep — its text is the formatted value', () => {
+    expect(isEditableTextHost(el('<p>Revenue <Number id={5} /> up</p>'))).toBe(false);
+    expect(isEditableTextHost(el('<p>Deep <span><Number id={5} /></span> one</p>'))).toBe(false);
   });
 
   it('rejects hosts with BLOCK component descendants (their chrome stays locked)', () => {

@@ -17,33 +17,31 @@ import { kitTextAcceptsLinks, kitTextElement, STORY_SVG_TAGS } from '@/lib/jsx/c
 import { immutableSet } from '@/lib/jsx/immutable-set';
 
 /**
- * Components that may live INSIDE editable prose: they render inline, and are
- * spliced back verbatim on commit (locked islands while editing).
+ * Components that sit INSIDE a line of text: the reader draws them inline. A text holding one is still text —
+ * its marks are part of it — but only a static one keeps it editable.
  */
-const TEXT_HOST_INLINE_EMBEDS = immutableSet(['Cell', 'Icon']);
+const TEXT_EMBEDS = immutableSet(['Cell', 'Icon']);
+/**
+ * The embeds a plain HTML host's edit keeps: drawn from static props alone, they are a locked island while editing and
+ * spliced back verbatim from the source by their stamp on commit. A `<Cell>` reads data: it locks its text instead.
+ */
+const SPLICED_EMBEDS = immutableSet(['Icon']);
+
+/** Whether `node`, stamped inside an edited plain HTML host, is spliced back from the source. */
+export const isSplicedEmbed = (node: JsxNode | null): boolean =>
+  node?.type === 'element' && node.isComponent && SPLICED_EMBEDS.has(node.tag);
 
 const SVG_TAGS_LOWER = immutableSet<string>(STORY_SVG_TAGS.map((t) => t.toLowerCase()));
 
-function hasLockingComponentDescendant(node: JsxElement): boolean {
+/** A component in `node` that draws its own content: anything but an inline embed or a condition's branches. */
+function hasBlockingComponentDescendant(node: JsxElement): boolean {
   return node.children.some((c) => c.type === 'element'
-    && ((c.isComponent && !TEXT_HOST_INLINE_EMBEDS.has(c.tag)) || hasLockingComponentDescendant(c)));
+    && ((c.isComponent && !c.control && !TEXT_EMBEDS.has(c.tag)) || hasBlockingComponentDescendant(c)));
 }
 
-/**
- * A text host is where the caret goes and what the write-back may replace the children of. Two kinds:
- *
- * - an HTML element with real text of its own whose component descendants, if any, are all inline embeds.
- *   Any other component keeps the host locked — its chrome is render output, and an edit could not be
- *   written back. `<style>` is text-shaped but is CSS, not prose. SVG is DRAWING: contenteditable inside an
- *   `<svg>` subtree is undefined browser behaviour, so the whole subset stays atomic.
- * - a kit text component (`KIT_TEXT_ELEMENTS`) whose children are plain text: `kitTextHost`.
- */
+/** Whether `node` takes a caret: `textHost` says it is text to type in. */
 export function isEditableTextHost(node: JsxElement): boolean {
-  if (node.isComponent) return kitTextHost(node).editable;
-  if (node.tag.toLowerCase() === 'style') return false;
-  if (SVG_TAGS_LOWER.has(node.tag.toLowerCase())) return false;
-  const hasText = node.children.some((c) => c.type === 'text' && c.value.trim().length > 0);
-  return hasText && !hasLockingComponentDescendant(node);
+  return textHost(node).editable;
 }
 
 /**
@@ -74,6 +72,7 @@ export function kitTextMarkAllowed(hostTag: string, tag: string): boolean {
 
 /** A data reference in an expression or a static attribute: `$query…`, `$value`, `$_row…`. */
 const DATA_REF = /\$[A-Za-z_]/;
+const ROW_TEXT = /\{\s*\$_row\./;
 const valueLock = (value: JsxAttribute['value']): TextLock | null => {
   if (!value.static) return DATA_REF.test(value.source) ? 'data' : 'computed';
   return typeof value.json === 'string' && /^\s*\$[A-Za-z_]/.test(value.json) ? 'data' : null;
@@ -84,15 +83,24 @@ const stronger = (a: TextLock | null, b: TextLock | null): TextLock | null =>
 
 /** The lock a subtree carries: what binds data or computes anything in it. */
 function subtreeLock(node: JsxNode): TextLock | null {
-  if (node.type === 'text') return null;
+  // A row template's text substitutes `{$_row.…}` in place (the compiler's `rt.sub`).
+  if (node.type === 'text') return ROW_TEXT.test(node.value) ? 'data' : null;
   if (node.type === 'expression') return valueLock(node.value);
+  // A <Cell> (once <Number>) is text the reader reads, formatted from its data, whatever its props say.
+  if (node.isComponent && node.tag === 'Cell') return 'data';
   let lock: TextLock | null = node.control ? 'computed' : null;
   for (const attr of node.attributes) lock = stronger(lock, valueLock(attr.value));
   for (const child of node.children) lock = stronger(lock, subtreeLock(child));
   return lock;
 }
 
-type KitTextHost = { editable: true } | { editable: false; lock: TextLock | null };
+/**
+ * What a node's text is to the editor: text to type in (`editable`); text that takes no caret, and why (`lock`); or
+ * not text at all (`lock: null`) — a container, a drawing, a component's own content — whose parts are decided one by one.
+ */
+export type TextHost = { editable: true } | { editable: false; lock: TextLock | null };
+const EDITABLE: TextHost = { editable: true };
+const NOT_TEXT: TextHost = { editable: false, lock: null };
 
 /**
  * A kit text component (`KIT_TEXT_ELEMENTS`) is a text host when what it renders is the author's text and
@@ -102,8 +110,8 @@ type KitTextHost = { editable: true } | { editable: false; lock: TextLock | null
  * itself (a block or a component of its own is a container, not a locked text). Any other component is never a
  * text host: it draws its own content.
  */
-export function kitTextHost(node: JsxElement): KitTextHost {
-  if (!node.isComponent || !kitTextElement(node.tag)) return { editable: false, lock: null };
+export function kitTextHost(node: JsxElement): TextHost {
+  if (!node.isComponent || !kitTextElement(node.tag)) return NOT_TEXT;
   // The shape first, from the children alone: a block or a component that is not an inline embed makes it a
   // container, decided without walking what it holds (a card's table of thousands of cells).
   let hasText = false, embeds = false;
@@ -115,14 +123,74 @@ export function kitTextHost(node: JsxElement): KitTextHost {
       return true;
     }
     if (child.control) return true;
-    if (child.isComponent) { embeds = true; return TEXT_HOST_INLINE_EMBEDS.has(child.tag); }
+    if (child.isComponent) { embeds = true; return TEXT_EMBEDS.has(child.tag); }
     return kitTextMarkAllowed(node.tag, child.tag) && phrasing(child.children);
   });
-  if (!phrasing(node.children)) return { editable: false, lock: null };
+  if (!phrasing(node.children)) return NOT_TEXT;
   // Text-shaped: what binds data or computes anything in it locks it, and says which.
   const lock = subtreeLock(node);
   if (lock) return { editable: false, lock };
-  return hasText && !embeds ? { editable: true } : { editable: false, lock: null };
+  return hasText && !embeds ? EDITABLE : NOT_TEXT;
+}
+
+const literalText = (json: unknown): boolean => (typeof json === 'string' || typeof json === 'number') && String(json).trim().length > 0;
+
+/**
+ * A plain HTML element is text when it shows text of its own — a word, a static literal, or an expression or a
+ * condition whose value the reader writes in its place — and every component in it is an inline embed. Its marks
+ * and any other elements inside are part of that text. It takes a caret only when nothing in its children binds data
+ * or computes anything: the reader writes an expression's VALUE into the line with nothing around it, so typing
+ * beside one and saving would write the value over the binding (or drop it). Its own attributes stay where they are
+ * on a text edit (only the children are written), so they never lock it. `<style>` is CSS, not prose; SVG is drawing:
+ * contenteditable inside an `<svg>` subtree is undefined browser behaviour, so the whole subset stays atomic.
+ */
+function htmlTextHost(node: JsxElement): TextHost {
+  const lower = node.tag.toLowerCase();
+  if (lower === 'style' || SVG_TAGS_LOWER.has(lower)) return NOT_TEXT;
+  let hasText = false, shown = false;
+  for (const child of node.children) {
+    if (child.type === 'text') hasText ||= child.value.trim().length > 0;
+    else if (child.type === 'expression') {
+      if (child.value.static) hasText ||= literalText(child.value.json);
+      else shown = true;
+    } else if (child.control) shown = true;
+  }
+  if (!hasText && !shown) return NOT_TEXT;
+  // Another component's chrome is render output: it makes this a container, its parts decided one by one.
+  if (hasBlockingComponentDescendant(node)) return NOT_TEXT;
+  let lock: TextLock | null = null;
+  for (const child of node.children) lock = stronger(lock, subtreeLock(child));
+  if (lock) return { editable: false, lock };
+  return hasText ? EDITABLE : NOT_TEXT;
+}
+
+/**
+ * THE text-host rule, one for kit text components (`kitTextHost`) and plain HTML (`htmlTextHost`): a node takes a
+ * caret only when its text is the author's — text, static literals, marks (and, in plain HTML, static inline embeds)
+ * — and an expression, a data component or a condition in it locks it with the reason. Any other component draws its
+ * own content and is never a text host.
+ */
+export function textHost(node: JsxElement): TextHost {
+  return node.isComponent ? kitTextHost(node) : htmlTextHost(node);
+}
+
+/** Whether `host` is text, editable or locked: its marks are part of it, never hosts or selections of their own. */
+export const isText = (host: TextHost): boolean => host.editable || host.lock !== null;
+
+/**
+ * The path of the text the node at `path` is part of: its outermost ancestor that is text (a mark in a paragraph is
+ * the paragraph, a link in a card title is the title), or `path` itself.
+ */
+export function textOwnerPath(roots: JsxNode[], path: string): string {
+  const parts = path.split('.');
+  let list = roots;
+  for (let depth = 0; depth < parts.length - 1; depth++) {
+    const node = list[Number(parts[depth])];
+    if (!node || node.type !== 'element') return path;
+    if (isText(textHost(node))) return parts.slice(0, depth + 1).join('.');
+    list = node.children;
+  }
+  return path;
 }
 
 /**
@@ -130,20 +198,17 @@ export function kitTextHost(node: JsxElement): KitTextHost {
  * text host, holds no text of its own, or is a container whose parts are edited one by one.
  */
 export function textLockOf(node: JsxNode | null): TextLock | null {
-  if (!node || node.type !== 'element' || isEditableTextHost(node)) return null;
-  if (node.isComponent) {
-    if (kitTextElement(node.tag)) {
-      const host = kitTextHost(node);
-      return host.editable ? null : host.lock;
-    }
+  if (!node || node.type !== 'element') return null;
+  const host = textHost(node);
+  if (host.editable) return null;
+  if (host.lock) return host.lock;
+  if (node.isComponent && !kitTextElement(node.tag)) {
     // A <Cell> is text the reader reads, formatted from its data.
     if (node.tag === 'Cell') return 'data';
     const showsText = node.children.some((c) => (c.type === 'text' && c.value.trim().length > 0) || c.type === 'expression');
     return showsText ? stronger(subtreeLock({ ...node, attributes: [] }), 'component') : null;
   }
-  // Plain HTML: a computed text child is its lock (a host with text of its own is editable already).
-  const own = node.children.reduce<TextLock | null>((lock, c) => c.type === 'expression' ? stronger(lock, valueLock(c.value)) : lock, null);
-  return own ?? (node.control ? 'computed' : null);
+  return null;
 }
 
 /** Resolve an interpreter AST path (`data-mx-ast`). Mirrors the interpreter's indexing: ALL JsxNodes count. */

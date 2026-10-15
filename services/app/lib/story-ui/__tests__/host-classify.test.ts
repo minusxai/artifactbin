@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import type { JsxElement } from '@/lib/jsx';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
-import { isEditableTextHost, kitTextHost, kitTextMarkAllowed, textLockOf } from '../host-classify';
+import { isEditableTextHost, kitTextHost, kitTextMarkAllowed, textHost, textLockOf, textOwnerPath } from '../host-classify';
 
 const element = (source: string): JsxElement => {
   const node = parseJsxOrThrow(source).nodes[0];
@@ -41,6 +41,8 @@ describe('kit text components', () => {
     ['<TableCell data-x={1 + 2}>Wed</TableCell>', 'computed'],
     ['<TableCell>Total <Number data="$q" col="total" /></TableCell>', 'data'],
     ['<TableCell>{$_row.name}</TableCell>', 'data'],
+    // A <Number> reads data whatever its props say.
+    ['<TableCell>Total <Number id={5} suffix="%" /></TableCell>', 'data'],
   ] as const)('%s stays locked: %s', (source, lock) => {
     expect(isEditableTextHost(element(source))).toBe(false);
     expect(kitTextHost(element(source))).toEqual({ editable: false, lock });
@@ -88,5 +90,54 @@ describe('kit text components', () => {
     expect(isEditableTextHost(element('<td>Wed</td>'))).toBe(true);
     expect(textLockOf(element('<td>{$q.rows[0].x}</td>'))).toBe('data');
     expect(textLockOf(element('<div><p>x</p></div>'))).toBeNull();
+  });
+});
+
+describe('one rule for plain HTML text', () => {
+  it.each([
+    '<p>Hello <strong>bold</strong> and <abbr title="x">abbr</abbr></p>',
+    '<p>{"lit"} and {7}</p>',
+    '<p>Done <Icon name="circle-check" /> now</p>',
+    '<p className={$dark ? "a" : "b"}>Own attributes stay where they are on a text edit</p>',
+    '<td>Wed</td>',
+  ])('%s is a text host', (source) => {
+    expect(isEditableTextHost(element(source))).toBe(true);
+    expect(textLockOf(element(source))).toBeNull();
+  });
+
+  it.each([
+    ['<p>Total: {$x}</p>', 'data'],
+    ['<p>Total: {$q.rows[0].total} items</p>', 'data'],
+    ['<p>Total: {1 + 2}</p>', 'computed'],
+    ['<p>Revenue <Number id={5} suffix="%" /> up</p>', 'data'],
+    ['<p>Deep <span><Number data="$q" col="total" /></span> one</p>', 'data'],
+    ['<p>See <strong>{$x}</strong> here</p>', 'data'],
+    ['<p>Go <a href={$q.rows[0].url}>there</a></p>', 'data'],
+    ['<p>Go <a href="$url">there</a></p>', 'data'],
+    ['<p>Hi {$show ? "a" : "b"}</p>', 'computed'],
+    ['<p>Hi {$show && <strong>there</strong>}</p>', 'computed'],
+    ['<p>{$x}</p>', 'data'],
+  ] as const)('%s stays locked: %s', (source, lock) => {
+    expect(isEditableTextHost(element(source))).toBe(false);
+    expect(textHost(element(source))).toEqual({ editable: false, lock });
+    expect(textLockOf(element(source))).toBe(lock);
+  });
+
+  it('a paragraph holding another component is a container: the component is decided on its own', () => {
+    for (const source of ['<p>Chart <Question data="ref:abc123" /> here</p>', '<h1>Status <Badge>live</Badge></h1>', '<h1>Status {$x} <Badge>live</Badge></h1>']) {
+      expect(textHost(element(source))).toEqual({ editable: false, lock: null });
+      expect(textLockOf(element(source))).toBeNull();
+    }
+  });
+
+  it('a mark is part of the text it sits in, editable or locked, plain or kit', () => {
+    const nodes = (source: string) => parseJsxOrThrow(source).nodes;
+    expect(textOwnerPath(nodes('<p>Total {$x} <strong>bold</strong></p>'), '0.2')).toBe('0');
+    expect(textOwnerPath(nodes('<p>Hello {"there"} <em><strong>bold</strong></em></p>'), '0.2.0')).toBe('0');
+    expect(textOwnerPath(nodes('<CardTitle><b>Net</b> revenue</CardTitle>'), '0.0')).toBe('0');
+    expect(textOwnerPath(nodes('<div><p>x <em>y</em></p></div>'), '0.0.1')).toBe('0.0');
+    expect(textOwnerPath(nodes('<div><p>x</p></div>'), '0.0')).toBe('0.0');
+    // A container's parts are their own.
+    expect(textOwnerPath(nodes('<h1>Status <Badge>live <b>now</b></Badge></h1>'), '0.1.1')).toBe('0.1');
   });
 });
