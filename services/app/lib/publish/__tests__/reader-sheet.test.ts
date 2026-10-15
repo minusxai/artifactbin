@@ -32,7 +32,7 @@ const sheetFor = async (source: string, theme: string | null) => {
 describe('the reader sheet', () => {
   it('keeps the runtime dark-mode palette even when prose has no authored dark class', async () => {
     const { reader } = await sheetFor(PROSE, null);
-    expect(rules(reader).find(rule => rule.startsWith('.dark{') && rule.includes('--background:'))).toBeDefined();
+    expect(rules(reader).find(rule => rule.startsWith('.dark:where(:not([data-theme])){') && rule.includes('--background:'))).toBeDefined();
   });
 
   it('drops the recipes of components a story does not use and keeps the ones it does', async () => {

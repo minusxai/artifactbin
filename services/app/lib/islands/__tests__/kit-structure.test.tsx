@@ -87,6 +87,32 @@ describe('tabs', () => {
       expect(list.getAttribute('tabindex')).toBe('0');
     } finally { host.remove(); }
   });
+  // The chosen tab takes the design system's own fill pair, as Segmented's chosen option does: a background-on-muted
+  // face vanished wherever a system paints its page ground and muted tint near-identically, in either mode.
+  it('marks the chosen tab with the primary fill in both modes, and makes every tab look interactive', () => {
+    const { host } = mount(view);
+    const tokens = (id: string) => [...host.querySelector(`#${id}`)!.classList];
+    const check = (chosen: string, idle: string) => {
+      expect(host.querySelector(`#${chosen}`)?.getAttribute('data-state')).toBe('active');
+      expect(host.querySelector(`#${idle}`)?.getAttribute('data-state')).toBe('inactive');
+      for (const id of [chosen, idle]) {
+        const own = tokens(id);
+        expect(own).toEqual(expect.arrayContaining(['data-[state=active]:bg-primary', 'data-[state=active]:text-primary-foreground', 'data-[state=active]:shadow-xs']));
+        expect(own).toEqual(expect.arrayContaining(['text-muted-foreground', 'data-[state=inactive]:hover:bg-foreground/10', 'data-[state=inactive]:hover:text-foreground']));
+        expect(own).toEqual(expect.arrayContaining(['cursor-pointer', 'focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-ring/50', 'disabled:pointer-events-none', 'disabled:opacity-50']));
+        // Nothing repaints the chosen tab in dark: the fill pair is the design system's own in both modes.
+        expect(own.filter((token) => /^dark:.*data-\[state=active\]:(bg|text|border)-/.test(token))).toEqual([]);
+        expect(own).not.toContain('data-[state=active]:bg-background');
+      }
+    };
+    check('t1', 't2');
+    (host.querySelector('#t2') as HTMLButtonElement).click();
+    check('t2', 't1');
+  });
+  it('keeps the line variant\'s chosen tab unfilled, in ink, underlined in the primary colour', () => {
+    const own = cls('TabsTrigger').split(' ');
+    expect(own).toEqual(expect.arrayContaining(['group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent', 'group-data-[variant=line]/tabs-list:data-[state=active]:text-foreground', 'group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none', 'group-data-[variant=line]/tabs-list:data-[state=active]:after:opacity-100', 'after:bg-primary']));
+  });
   it('switches on click and on arrow keys, like Radix', () => {
     const { host } = mount(view);
     (host.querySelector('#t2') as HTMLButtonElement).click();

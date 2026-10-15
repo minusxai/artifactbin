@@ -210,7 +210,8 @@ describe('shadcn token preamble + recipe base sheet', () => {
   it('includes neutral :root/.dark token defaults so themeless stories look right', async () => {
     const css = (await compileStoryCss('<div className="bg-card">x</div>'))!;
     expect(css).toMatch(/:root\s*\{[^}]*--card:/);
-    expect(css).toMatch(/\.dark\s*\{[^}]*--card:/);
+    // Themeless only: an element naming a design takes its design's dark palette (story-root-tokens.ui.test).
+    expect(css).toMatch(/\.dark:where\(:not\(\[data-theme\]\)\)\s*\{[^}]*--card:/);
     expect(css).toMatch(/--radius:/);
   });
 
