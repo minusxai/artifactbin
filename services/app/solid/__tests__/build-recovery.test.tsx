@@ -78,6 +78,23 @@ describe('a missing chunk', () => {
     await waitFor(() => expect(host.location.reload).toHaveBeenCalledTimes(1));
   });
 
+  it('a page that is being left is not reloaded: the imports a navigation aborts are not a missing build', async () => {
+    load('aaaaaaaaaaaa');
+    host.dispatchEvent(new Event('beforeunload')); // the reader (or a test) navigates away; in-flight imports fail as it goes
+    failingPage(CHUNK_404);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(host.location.reload, 'a reload here would cancel the navigation the reader asked for').not.toHaveBeenCalled();
+    expect(storage.size, 'and spends no automatic reload').toBe(0);
+    cleanup();
+
+    // A navigation that was cancelled (the page is still here) leaves recovery as it was.
+    load('aaaaaaaaaaaa');
+    host.dispatchEvent(new Event('beforeunload'));
+    host.dispatchEvent(new Event('pageshow'));
+    failingPage(CHUNK_404);
+    await waitFor(() => expect(host.location.reload).toHaveBeenCalledTimes(1));
+  });
+
   it('waits for registered unsaved work to flush before it reloads', async () => {
     load('aaaaaaaaaaaa');
     let release!: () => void;

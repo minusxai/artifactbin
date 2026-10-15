@@ -41,6 +41,14 @@ let host: BuildHost | null = typeof window === 'undefined' ? null : window;
 let own: string | null = null;
 const [stale, setStale] = createSignal(false);
 const flushes = new Set<() => unknown>();
+/**
+ * The page is being left (beforeunload/pagehide): imports in flight fail as the navigation aborts them, in the same
+ * words as a missing chunk, and a reload then would cancel the navigation the reader asked for. A navigation that is
+ * cancelled leaves the page here: it counts as staying after LEAVING_MS, or at once on pageshow.
+ */
+let leaving = false;
+let leavingTimer: ReturnType<typeof setTimeout> | undefined;
+const LEAVING_MS = 3_000;
 
 /** Whether the server is known to serve a newer build than this page is. */
 export const buildStale = stale;
@@ -77,6 +85,8 @@ async function settle(): Promise<void> {
 export function reloadForNewBuild(): 'reloading' | 'exhausted' {
   const target = host;
   if (!target) return 'exhausted';
+  // Leaving: the next page is on its way, and it is the new build's if there is one.
+  if (leaving) return 'reloading';
   const from = own ?? 'unknown';
   try {
     const storage = target.sessionStorage;
@@ -85,7 +95,7 @@ export function reloadForNewBuild(): 'reloading' | 'exhausted' {
     if (last?.from === from && (own !== null || Date.now() - Number(last.at) < UNKNOWN_BUILD_WINDOW_MS)) return 'exhausted';
     storage.setItem(RELOAD_KEY, JSON.stringify({ from, at: Date.now() }));
   } catch { return 'exhausted'; }
-  void settle().then(() => target.location.reload());
+  void settle().then(() => { if (!leaving) target.location.reload(); });
   return 'reloading';
 }
 
@@ -106,12 +116,26 @@ export function watchAppBuild(target: BuildHost = window): () => void {
   host = target;
   own = target.document.querySelector(`meta[name="${APP_BUILD_META}"]`)?.getAttribute('content') || null;
   setStale(false);
+  leaving = false;
   // Not prevented: the import still rejects, and the boundary that catches it decides (isChunkLoadError).
-  const onPreloadError = () => setStale(true);
+  const onPreloadError = () => { if (!leaving) setStale(true); };
+  const onLeave = () => {
+    leaving = true;
+    clearTimeout(leavingTimer);
+    leavingTimer = setTimeout(() => { leaving = false; }, LEAVING_MS);
+  };
+  const onStay = () => { leaving = false; clearTimeout(leavingTimer); };
   target.addEventListener('vite:preloadError', onPreloadError);
+  target.addEventListener('beforeunload', onLeave);
+  target.addEventListener('pagehide', onLeave);
+  target.addEventListener('pageshow', onStay);
   const stopLive = observeLiveBuild(noteServerBuild);
   return () => {
     target.removeEventListener('vite:preloadError', onPreloadError);
+    target.removeEventListener('beforeunload', onLeave);
+    target.removeEventListener('pagehide', onLeave);
+    target.removeEventListener('pageshow', onStay);
+    clearTimeout(leavingTimer);
     stopLive();
   };
 }
