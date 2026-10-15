@@ -318,7 +318,8 @@ describe('the app page and the one renderer', () => {
     const frame = doc.body.child('*', { 'data-mx-framed': true })?.child('iframe', { 'data-mx-document-frame': true });
     expect(frame?.attr('src')).toContain('_pt=');
     expect(doc.title).toBe('Perf C dashboard');
-    expect(doc.find('meta', { property: 'og:image' })?.attr('content')).toContain(`/a/${id}/export?mode=card`);
+    // The card's URL names the version: chat apps cache an unfurl image by URL, so a new card must be a new URL.
+    expect(doc.find('meta', { property: 'og:image' })?.attr('content')).toMatch(new RegExp(`/a/${id}/export\\?mode=card&v=\\d+&r=`));
     expect(storyText(rawHtml)).toContain('$744,503');
   });
 });
