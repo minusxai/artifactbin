@@ -12,9 +12,13 @@ import { createPageDataStore, type PageDataSnapshot } from '@/solid/lib/page-dat
 import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
 import { homeBootstrapKey } from './home-resource';
 import { useSession } from './session';
+import { noteServerBuild } from './app-build';
+import { APP_BUILD_HEADER } from '@/lib/http/app-build';
 
 async function fetchPageData<T>(url: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(url, { credentials: 'same-origin', signal });
+  // The server's build rides on every answer: a deploy since this page loaded makes the next navigation a full load.
+  noteServerBuild(response.headers?.get(APP_BUILD_HEADER));
   if (!response.ok) throw Object.assign(new Error('Could not load page'), { status: response.status });
   return response.json() as Promise<T>;
 }

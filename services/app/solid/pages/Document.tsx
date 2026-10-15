@@ -14,6 +14,7 @@ import { createHttpBackend } from '@/lib/artifact-backend/http';
 import { loginHref } from '@/lib/http/login-href';
 import { takeBootstrap } from '@/solid/lib/bootstrap';
 import { adoptServedFrame } from '@/solid/lib/served-frame';
+import { registerBeforeReload } from '@/solid/lib/app-build';
 import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
 import { NotFoundPage } from './NotFound';
@@ -197,6 +198,8 @@ export function DocumentPage(): JSX.Element {
   /** The document is editable (the loading bar ends). */
   const editorReady = () => lifecycle.phase() !== 'entering';
   onCleanup(lifecycle.registerFlush(() => editorFlush.current?.() ?? Promise.resolve()));
+  // A navigation for a new build (solid/lib/app-build) commits the editor's typing first, as leaving edit mode does.
+  onCleanup(registerBeforeReload(() => editorFlush.current?.()));
 
   // ── the live document, while reading (the editor holds its own stream while editing) ──
   // The framed document hears its own stream (lib/islands/live on its origin) and draws its own new versions: this
