@@ -17,7 +17,7 @@ export interface CaptureSession {
 /** Permission cancellation returns to selection; superseded requests must not change the current tool. */
 export type CaptureStartResult = 'ready' | 'unavailable' | 'cancelled' | 'superseded';
 type CaptureFailure = 'unsupported' | 'cancelled' | 'wrong-source' | 'ended' | 'timeout' | 'geometry';
-export type CaptureStage = 'permission' | 'playback' | 'initial-frame' | 'paint' | 'track-frame' | 'full-frame' | 'encode';
+export type CaptureStage = 'permission' | 'playback' | 'initial-frame' | 'paint' | 'track-frame' | 'full-frame';
 export class CaptureError extends Error {
   constructor(public readonly code: CaptureFailure, public readonly stage?: CaptureStage) { super(code); this.name = 'CaptureError'; }
 }

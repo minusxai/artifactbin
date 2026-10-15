@@ -5,8 +5,8 @@
  * shard (LPT) using the per-file CI times in scripts/ci/test-timings.json, so every shard job computes
  * the same assignment from the same checkout and each file runs exactly once.
  *
- * A shard that also runs work outside Vitest (the node job's integration project on shard 1, the CLI
- * suite on shard 3) starts with that work as a reserve, so the packer gives it fewer files.
+ * Every shard job runs Vitest and nothing else, so every shard starts empty: work outside Vitest (the
+ * integration project, the CLI source suite) is a job of its own in ci.yml, never a reserve on a shard.
  * Unknown files (new since the timings were recorded) weigh the project's median.
  * Inside a shard (and in local runs) files start longest-first, so the slowest file never starts last.
  */
@@ -16,7 +16,7 @@ import { BaseSequencer } from 'vitest/node';
 
 const TIMINGS = path.resolve(import.meta.dirname, '../ci/test-timings.json');
 
-/** @typedef {{ files: Record<string, Record<string, number>>, reserve?: Record<string, Record<string, number>> }} Timings */
+/** @typedef {{ files: Record<string, Record<string, number>> }} Timings */
 
 /** @returns {Timings} */
 export function readTimings(file = TIMINGS) {
@@ -54,11 +54,10 @@ export function weigher(timings) {
  * ties break by key, so every shard job derives the same assignment.
  * @param {{ key: string, weight: number }[]} items
  * @param {number} count
- * @param {Record<string, number>} [reserve] preloaded ms per 1-based shard index
  * @returns {string[][]} keys per shard (index 0 is shard 1)
  */
-export function pack(items, count, reserve = {}) {
-  const loads = Array.from({ length: count }, (_, i) => Number(reserve[String(i + 1)] ?? 0));
+export function pack(items, count) {
+  const loads = Array.from({ length: count }, () => 0);
   const shards = Array.from({ length: count }, () => []);
   const ordered = [...items].sort((a, b) => b.weight - a.weight || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   for (const item of ordered) {
@@ -84,11 +83,8 @@ export default class TimedSequencer extends BaseSequencer {
 
   async shard(files) {
     const { index, count } = this.ctx.config.shard;
-    // One reserve table per project set: the node job shards only `node`.
-    const projects = [...new Set(files.map((spec) => spec.project.name))].sort().join('+');
-    const reserve = this.#timings.reserve?.[projects] ?? {};
     const byKey = new Map(files.map((spec) => [`${spec.project.name}:${this.#key(spec)}`, spec]));
-    const shards = pack(files.map((spec) => ({ key: `${spec.project.name}:${this.#key(spec)}`, weight: this.#weight(spec) })), count, reserve);
+    const shards = pack(files.map((spec) => ({ key: `${spec.project.name}:${this.#key(spec)}`, weight: this.#weight(spec) })), count);
     return shards[index - 1].map((key) => byKey.get(key));
   }
 

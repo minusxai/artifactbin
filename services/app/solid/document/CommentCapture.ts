@@ -1,5 +1,6 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { beginCapture } from '@/lib/capture/screen';
+import { encodePng } from '@/lib/capture/png';
 import { CaptureError, type CaptureStartResult, type CaptureSession, type CapturedImage, type CaptureRect } from '@/lib/capture/contract';
 import { COMMENT_IMAGE_LIMITS, type BrushStroke, type CommentImageMetadata } from '../../../contracts/src/comment-image';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
@@ -99,8 +100,9 @@ export function createCommentCapture(backend: ArtifactBackend, editId?: string |
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
         canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-        if (!blob) throw new Error('Could not read this image.');
+        // Encoded at once: Chromium's toBlob waits for main-thread idle time (lib/capture/png).
+        let blob: Blob;
+        try { blob = encodePng(canvas); } catch { throw new Error('Could not read this image.'); }
         const image: CapturedImage = { blob, width: canvas.width, height: canvas.height, rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, viewport: { width: canvas.width, height: canvas.height }, method: 'upload', capturedAt: new Date().toISOString() };
         if (mine === generation) { setDraft({ image, preview: blob, strokes: [], editId: revision()! }); setRequired(true); }
       } finally { bitmap.close(); }

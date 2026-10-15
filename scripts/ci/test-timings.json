@@ -769,11 +769,5 @@
    "services/utils/src/__tests__/escape.test.ts": 6,
    "services/utils/src/__tests__/sha256.test.ts": 8
   }
- },
- "reserve": {
-  "node": {
-   "1": 145000,
-   "3": 180000
-  }
  }
 }

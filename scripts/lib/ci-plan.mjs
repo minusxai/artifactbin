@@ -4,7 +4,12 @@ import { createHash } from 'node:crypto';
  * Dependencies include test/composition edges, not just package dependencies.
  * Unknown paths and shared configuration must select everything.
  */
-export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'cli', 'cli-bootstrap', 'reference-compatibility'];
+/**
+ * Every conditional job in ci.yml, each one runner set the `test` roll-up requires when selected. `integration`
+ * (the Docker/Chromium Vitest project) and `cli-tests` (the CLI source suite) are jobs of their own, not steps
+ * appended to a node shard: run serially there, they made that one shard the longest job of the run.
+ */
+export const CI_JOBS = ['checks', 'node', 'integration', 'cli-tests', 'ui', 'build', 'api', 'gates', 'cli', 'cli-bootstrap', 'reference-compatibility'];
 
 /**
  * The tracked release files carry only version changes. Teaching is generated
@@ -97,7 +102,7 @@ export const CI_MODULES = {
  * build alone is 4.5 minutes, the proofs behind it another 3.5), and they proved bytes nobody was
  * about to ship: the publisher (`release-cli.yml`) only uploads when the CLI version changed. So
  * `cliRelease` — the CLI version differs between base and head — is what selects them; an
- * ordinary CLI change gets the bundle build and the CLI source suite in the node job (`cliTests`).
+ * ordinary CLI change gets the bundle build and the CLI source suite (`cli-tests`).
  * The "Release afbin" workflow pushes the branch that flips the version.
  */
 export function planCi(paths, { full = false, cliRelease = false, versionOnly = false, nightly = false, testedRun = null, testedPatch = false } = {}) {
@@ -105,13 +110,13 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
   // A TREE THIS REPOSITORY ALREADY TESTED. PR CI recorded it under its own hash when every selected
   // job passed; the push that merges it is the same bytes, so there is nothing left to learn — not
   // even `checks`, whose whole cost would be paid to re-typecheck a tree that already typechecked.
-  if (testedRun) return { full: false, cliRelease, cliPack: testedPatch, companyContainer: false, cliTests: false, jobs: nothing, nodeRoots: [], testedRun, selection: testedPatch ? 'tested patch, current-tree package' : 'tested tree' };
+  if (testedRun) return { full: false, cliRelease, cliPack: testedPatch, companyContainer: false, jobs: nothing, nodeRoots: [], testedRun, selection: testedPatch ? 'tested patch, current-tree package' : 'tested tree' };
   // The nightly exists so the release-only CLI matrix cannot rot unseen between releases (and so its
   // caches stay warm on the default branch, which is what makes a release build fast).
-  if (nightly) return { full: false, cliRelease: true, cliPack: true, companyContainer: false, cliTests: false, jobs: { ...nothing, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'nightly CLI matrix' };
+  if (nightly) return { full: false, cliRelease: true, cliPack: true, companyContainer: false, jobs: { ...nothing, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'nightly CLI matrix' };
   // A VERSION BUMP AND NOTHING ELSE: the code under it is the code that just passed. Pack the
   // npm artifact (with native acceptance), typecheck, and skip the suite the unchanged tree already answered.
-  if (versionOnly) return { full: false, cliRelease: true, cliPack: true, companyContainer: true, cliTests: false, jobs: { ...nothing, checks: true, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'version-only release' };
+  if (versionOnly) return { full: false, cliRelease: true, cliPack: true, companyContainer: true, jobs: { ...nothing, checks: true, cli: true, 'cli-bootstrap': true }, nodeRoots: [], testedRun: null, selection: 'version-only release' };
   const changed = new Set();
   // Scanner configuration and its contract tests never enter a product bundle.
   // Keep workflow checks; mixed source or unknown inputs retain their normal selection.
@@ -153,6 +158,10 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
     jobs.node = affected.size > 0 || scannerContracts;
     for (const job of ['ui', 'build', 'api', 'gates']) jobs[job] = app;
   }
+  // The integration project runs wherever the node project does (it holds the scripts' Docker and Chromium proofs).
+  jobs.integration = jobs.node;
+  // The CLI source suite guards every CLI change, release or not.
+  jobs['cli-tests'] = full || affected.has('cli');
   // The npm artifact is proved on every supported consumer for a release, and for any change to the CLI
   // or to services/utils, its Node runtime layer (filesystem privacy, processes, transport): code whose
   // behaviour differs by platform never reaches Windows or macOS otherwise. Neither requires a version.
@@ -160,14 +169,12 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
   // The standard-user bootstrap and distribution conformance prove an installer, so they stay release-only.
   jobs['cli-bootstrap'] = cliRelease;
   jobs['reference-compatibility'] = cliRelease;
-  // The CLI source suite (node job, shard 3) still guards every CLI change.
-  const cliTests = full || affected.has('cli');
   const nodeRoots = full ? [] : [
     ...(affected.size || scannerContracts ? ['scripts/'] : []),
     ...[...affected].filter((module) => module !== 'cli').map((module) => `services/${module}/`),
   ].sort();
   const companyContainer = cliRelease || paths.some(path => path.startsWith('deploy/company/'));
-  return { full, cliRelease, cliPack: jobs.cli || companyContainer, companyContainer, cliTests, jobs, nodeRoots, testedRun: null, selection: full ? 'full suite' : 'affected modules' };
+  return { full, cliRelease, cliPack: jobs.cli || companyContainer, companyContainer, jobs, nodeRoots, testedRun: null, selection: full ? 'full suite' : 'affected modules' };
 }
 
 /** A selected job must succeed; only an unselected job may be skipped. */

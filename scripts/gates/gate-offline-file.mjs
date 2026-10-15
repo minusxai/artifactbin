@@ -1013,17 +1013,27 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
           entry.error = typeof body.error === 'string' ? body.error : body.error?.code;
         }).catch(() => {});
       };
+      const sent = [];
+      const recordSent = request => { const path = new URL(request.url()).pathname; if (request.method() === 'POST') sent.push({ path, sentMs: Date.now() - started }); };
       page.on('response', recordWrite);
+      page.on('request', recordSent);
       try {
         await page.getByLabel('Save annotation', { exact: true }).click();
         await expect(page.getByRole('dialog', { name: 'Annotation composer' })).toHaveCount(0);
+        // The save's budget is the 5s above. Times since the click: when the image upload left the page (after the
+        // drawing's PNG encode, lib/capture/png), when each write answered, and when the composer closed.
+        const at = ({ path, ...time }) => ({ [path.slice(path.lastIndexOf('/') + 1)]: time.sentMs ?? time.elapsedMs });
+        check.note(`${name}: saved in ${Date.now() - started}ms; sent ${JSON.stringify(sent.filter(({ path }) => /\/(?:comment-images|annotations)$/.test(path)).map(at))}, answered ${JSON.stringify(writes.map(at))}`);
       } catch (error) {
-        console.error(name, { phase: 'save screenshot comment', writes,
-          alerts: await page.getByRole('alert').allTextContents(),
-          saveDisabled: await page.getByLabel('Save annotation', { exact: true }).isDisabled(),
-        });
+        const state = async () => ({ elapsedMs: Date.now() - started, writes: [...writes], sent: [...sent],
+          alerts: await page.getByRole('alert').allTextContents(), status: await page.getByRole('status').allTextContents(),
+          saveDisabled: await page.getByLabel('Save annotation', { exact: true }).isDisabled().catch(() => null),
+          composer: await page.getByRole('dialog', { name: 'Annotation composer' }).count() });
+        console.error(name, { phase: 'save screenshot comment', ...await state() });
+        const closed = await expect(page.getByRole('dialog', { name: 'Annotation composer' })).toHaveCount(0, { timeout: 30000 }).then(() => true, () => false);
+        console.error(name, { phase: 'save screenshot comment, later', closed, ...await state() });
         throw error;
-      } finally { page.off('response', recordWrite); }
+      } finally { page.off('response', recordWrite); page.off('request', recordSent); }
       await page.reload();
       await openArtifactControls(page); await page.getByRole('button', { name: 'Toggle comments', exact: true }).click();
       await expect(doc.locator('#capturebox')).toHaveCSS('background-color', 'rgb(220, 30, 30)');

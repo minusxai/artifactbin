@@ -90,6 +90,9 @@ host. Test accounts use the `mxmx_test_*` prefix and disposable state.
   "Current-attempt artifact timed out" and a hint naming this section. A 404 or 5xx on an artifact the
   listing already reports is retried for up to 60 seconds, which absorbs the delay before a new blob is
   downloadable.
+- A new push to a pull request cancels that PR's earlier, unfinished CI runs through the `supersede` job
+  (`scripts/lib/ci-supersede.mjs`). Nothing waits for the cancellation, so the new run starts at once. A
+  workflow-level `concurrency` group would hold it pending until the old run had fully stopped.
 - Pull requests run a reduced CLI matrix (Linux x64, macOS 14 and Windows on Node 22.22.3: 12 cells);
   main, the nightly and dispatch run all 28. Release PRs therefore prove fewer platforms before merge,
   and main still proves the rest.

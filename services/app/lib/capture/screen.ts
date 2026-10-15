@@ -1,5 +1,6 @@
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import {CaptureError, type CaptureRect, type CaptureSession, type CaptureStage} from './contract';
+import {encodePng} from './png';
 
 interface CaptureTrack extends MediaStreamTrack {
   getCaptureHandle?: () => {handle?: string} | null;
@@ -127,7 +128,8 @@ export async function beginCapture(): Promise<CaptureSession> {
       const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(source.width*scale));canvas.height=Math.max(1,Math.round(source.height*scale));
       const ctx=canvas.getContext('2d');if(!ctx)throw new CaptureError('unsupported');
       ctx.drawImage(bitmap??video!,source.x,source.y,source.width,source.height,0,0,canvas.width,canvas.height);
-      const blob=await bounded(new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new CaptureError('geometry')),'image/png')),'encode');
+      // Synchronous: Chromium's toBlob waits for main-thread idle time (./png.ts).
+      let blob:Blob;try{blob=encodePng(canvas);}catch{throw new CaptureError('geometry');}
       return {blob,width:canvas.width,height:canvas.height,rect,viewport:bounds,capturedAt:new Date().toISOString(),method:'canvas'};
     } finally {bitmap?.close();window.removeEventListener('scroll',invalidate,true);window.removeEventListener('resize',resize);dispose();}
   }};

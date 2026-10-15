@@ -24,20 +24,14 @@ describe('timed shard packing', () => {
     expect(reversed).toEqual(forward);
   });
 
-  it('gives a shard with reserved non-Vitest work fewer files', () => {
-    const weights = { a: 10, b: 10, c: 10, d: 10 };
-    const shards = pack(items(weights), 2, { 1: 25 });
-    expect(shards[0]).toHaveLength(1);
-    expect(shards[1]).toHaveLength(3);
-  });
-
   it('packs by the recorded CI times, not an empty table (every file at the 1 s default would pack by count)', () => {
     const timings = readTimings();
     const count = (project) => Object.keys(timings.files[project] ?? {}).length;
     // `api-isolated` is the handful of api files that mock modules; it shards inside the api job.
     for (const project of ['api', 'api-isolated', 'node']) expect(count(project), project).toBeGreaterThan(0);
     for (const job of [['api', 'api-isolated'], ['node']]) expect(job.reduce((sum, project) => sum + count(project), 0), job.join('+')).toBeGreaterThan(10);
-    expect(timings.reserve?.node).toBeTruthy();
+    // Every shard job runs Vitest alone (integration and the CLI suite are jobs of their own): no shard is preloaded.
+    expect(Object.keys(timings)).toEqual(['files']);
   });
 
   it('weighs an unmeasured file at its project median', () => {
@@ -70,19 +64,18 @@ describe('timed shard packing', () => {
   });
 
   it('moves a file measured under another project out of the one it was recorded under', () => {
-    const merged = mergeTimings({ files: { 'api-isolated': { 'a.test.ts': 9000, 'b.test.ts': 4000 }, api: { 'c.test.ts': 1000 } }, reserve: { node: { 3: 5 } } },
+    const merged = mergeTimings({ files: { 'api-isolated': { 'a.test.ts': 9000, 'b.test.ts': 4000 }, api: { 'c.test.ts': 1000 } } },
       { api: { 'a.test.ts': 7000 } });
-    expect(merged).toEqual({ files: { 'api-isolated': { 'b.test.ts': 4000 }, api: { 'a.test.ts': 7000, 'c.test.ts': 1000 } }, reserve: { node: { 3: 5 } } });
+    expect(merged).toEqual({ files: { 'api-isolated': { 'b.test.ts': 4000 }, api: { 'a.test.ts': 7000, 'c.test.ts': 1000 } } });
   });
 
-  it('reports each job\'s shard loads with the reserve, every file counted once', () => {
+  it('reports each job\'s shard loads, every file counted once', () => {
     const loads = shardLoads({
       files: { node: { 'a.test.mjs': 50, 'b.test.mjs': 40, 'c.test.mjs': 30, 'd.test.mjs': 20, 'e.test.mjs': 10 }, api: { 'x.test.ts': 8 }, 'api-isolated': { 'y.test.ts': 4 } },
-      reserve: { node: { 3: 100 } },
     });
     expect(loads.node.map((shard) => shard.files).reduce((a, b) => a + b)).toBe(5);
-    expect(loads.node[2]).toEqual({ files: 0, ms: 100 });
-    expect(loads.node.reduce((sum, shard) => sum + shard.ms, 0)).toBe(250);
+    expect(loads.node.map((shard) => shard.ms)).toEqual([50, 40, 30, 30]);
+    expect(loads.node.reduce((sum, shard) => sum + shard.ms, 0)).toBe(150);
     expect(loads.api.reduce((sum, shard) => sum + shard.ms, 0)).toBe(12);
   });
 });
