@@ -362,8 +362,12 @@ export const withIsland = (Component: Component, context: IslandContext): JSX.El
  * unmounts its computations and leaves its DOM as static markup (never Solid's `render` disposer,
  * which empties the parent) — or null when the page has no such island.
  *
- * A root the served markup does not match (a hydration miss, or a non-hydratable build) comes back
- * as a fresh node; it replaces the served root, still leaving the siblings alone.
+ * A root built fresh rather than claimed (a non-hydratable build) replaces the served root, still
+ * leaving the siblings alone. A hydration that THROWS met a served tree other than the one it walks
+ * (the HTML parser moved a node: lib/document/nesting); it leaves the served markup exactly as it is,
+ * static, and reports it. Never a fresh render there: the browser module carries none of the
+ * server-only static runs (`NoHydration`), so a fresh document tree draws every heading and paragraph
+ * empty — a blank page for one moved node.
  */
 export function hydrateIsland(renderId: string, Component: Component, context: IslandContext, parent: ParentNode = document): (() => void) | null {
   if (isServer || !RENDER_ID_PATTERN.test(renderId)) return null;
@@ -398,14 +402,21 @@ export function hydrateIsland(renderId: string, Component: Component, context: I
       return (() => children.map((node) => node === root ? (typeof live === 'function' ? (live as () => unknown)() : live) : node)) as unknown as JSX.Element;
     }), host, { renderId });
   } catch (error) {
-    // Solid's development build refuses to create nodes while hydrating (a mismatch); render the
-    // island fresh instead, as the production build does on its own.
     disposeIsland();
+    // Claimed (Solid records every served node it adopts): hydratable code walked the served tree and
+    // met another shape. Keep what was served, as static markup. (The message reuses words the kit's
+    // class reach already holds: a new literal here flips every story's CSS version, recipe-classes.ts.)
+    if (g._$HY.completed?.has(root)) {
+      console.error('[islands] island failed: its markup is static', renderId, error);
+      return () => {};
+    }
+    // Never claimed: a non-hydratable build, which Solid's development build refuses to create nodes for
+    // while hydrating; render the island fresh instead, as the production build does on its own.
     output = undefined;
     createRoot((dispose) => {
       mount(dispose);
-      // A non-hydratable or mismatched root still needs Solid's insertion effect: a
-      // one-time replacement would strand a later placeholder-to-content switch.
+      // A non-hydratable root still needs Solid's insertion effect: a one-time replacement would
+      // strand a later placeholder-to-content switch.
       solidInsert(host, () => live as JSX.Element, root.nextSibling, [root]);
     });
   }

@@ -10,6 +10,7 @@ import { mermaidSourceError } from './mermaid-source';
 import { markdownContent, markdownSource } from '@/lib/markdown/content';
 import { validateDeckMap } from './deck-spec';
 import { parseRowRef } from './row-scope';
+import { expressionHint } from './parse';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
 import { immutableSet } from '@/lib/jsx/immutable-set';
 // Shared with the render-time gate in lib/story-ui/interpreter-primitives — see
@@ -95,7 +96,7 @@ function walk(
       return;
     }
     if (!node.value.static && !(inColumn && parseRowRef(node.source.trim()))) {
-      errors.push({ message: `Expression child must be a JSON literal, got ${node.value.exprType}`, start: node.start, end: node.end });
+      errors.push({ message: `Expression child must be a JSON literal, got ${node.value.exprType}${expressionHint(node.value.source)}`, start: node.start, end: node.end });
     }
     return;
   }
@@ -301,7 +302,7 @@ function validateElement(
       if (isScriptComponent(el) && a.value.reactive?.kind === 'signal') continue;
       if (REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive)) continue;
       errors.push({
-        message: `Attribute "${a.name}" must be a JSON literal, got ${a.value.exprType}`,
+        message: `Attribute "${a.name}" must be a JSON literal, got ${a.value.exprType}${expressionHint(a.value.source)}`,
         attr: a.name, tag: el.tag, start: a.start, end: a.end,
       });
       continue;

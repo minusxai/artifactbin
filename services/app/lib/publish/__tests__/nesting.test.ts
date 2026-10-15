@@ -117,16 +117,32 @@ describe('what it must not touch', () => {
     expect(fix('<Card><div>x</div></Card>')).toBe('<Card><div>x</div></Card>');
   });
 
-  it('leaves a component child of a paragraph alone', () => {
-    // A component's rendered box is not knowable from the AST, and `<Number>`
-    // is deliberately inline. Rewriting here would change the typography of
-    // every paragraph carrying an inline metric.
+  it('leaves a paragraph holding a phrasing component alone', () => {
+    // `<Number>` is deliberately inline. Rewriting here would change the
+    // typography of every paragraph carrying an inline metric.
     expect(fix('<p>up <Number data="$q" /> today</p>')).toBe('<p>up <Number data="$q" /> today</p>');
+    // A tooltip on a word is prose too: its served boxes are spans.
+    const tip = '<p>a <Tooltip><TooltipTrigger>word</TooltipTrigger><TooltipContent>why</TooltipContent></Tooltip> b</p>';
+    expect(fix(tip)).toBe(tip);
   });
 
   it('keeps attributes, expression children and self-closing form intact', () => {
     const src = '<p data-x={{"a":1}} className="c"><div>{{"b":2}}</div></p>';
     expect(fix(src)).toBe('<div data-x={{"a":1}} className="c"><div>{{"b":2}}</div></div>');
+  });
+});
+
+describe('a component inside a paragraph counts by what it renders', () => {
+  it('rewrites for a block component, a script component\'s mount and a block inside a phrasing one', () => {
+    expect(fix('<p className="c">a <Card>x</Card></p>')).toBe('<div className="c">a <Card>x</Card></div>');
+    expect(fix('<p>a <Sparkline points="$q">fallback</Sparkline></p>')).toBe('<div>a <Sparkline points="$q">fallback</Sparkline></div>');
+    expect(fix('<p>a <Tooltip><TooltipTrigger>w</TooltipTrigger><TooltipContent><p>why</p></TooltipContent></Tooltip></p>'))
+      .toBe('<div>a <Tooltip><TooltipTrigger>w</TooltipTrigger><TooltipContent><p>why</p></TooltipContent></Tooltip></div>');
+  });
+
+  it('looks through a condition, which draws no box of its own', () => {
+    expect(fix('<p>a {$on && <div>x</div>}</p>')).toBe('<div>a {$on && (<><div>x</div></>)}</div>');
+    expect(fix('<p>a {$on ? <b>x</b> : <i>y</i>}</p>')).toMatch(/^<p>/);
   });
 });
 

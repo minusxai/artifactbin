@@ -44,6 +44,24 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
 ] as const;
 
 /**
+ * The registered components a paragraph may hold: what each one renders is phrasing content — a `<span>`, a
+ * `<button>`, an `<img>`, an `<svg>` — or no box of its own (a Tooltip, a Popover, a Dialog are their parts), so
+ * the HTML parser leaves an open `<p>` around it open. Their CHILDREN still count: a Tooltip whose content holds a
+ * `<p>` closes the paragraph as that `<p>` would. Every other component — a block kit component, a script
+ * component's mount, a `<For>`'s wrapper — renders a box that closes an open `<p>`, so lib/document/nesting makes
+ * such a paragraph a `<div>`. Checked against the real renderer and parser, component by component
+ * (lib/publish/__tests__/nesting-parses-back.test.ts): a kit change that puts a `<div>` in one of these fails there.
+ */
+export const PHRASING_COMPONENTS: ReadonlySet<string> = new Set([
+  'Badge', 'Button', 'Icon', 'Number',
+  'Avatar', 'AvatarImage', 'AvatarFallback', 'AvatarBadge',
+  'User', 'UserImage', 'UserHandle', 'SignIn',
+  'TooltipProvider', 'Tooltip', 'TooltipTrigger', 'TooltipContent',
+  'Popover', 'PopoverTrigger',
+  'Dialog', 'DialogTrigger',
+]);
+
+/**
  * The tags whose `id` names a PERSON rather than an element — the seam
  * the compiler takes `id` out at, and the set lib/artifacts
  * `drawsPeople` and lib/dataflow/dataflow REF_ATTRS answer for. Names only, so
