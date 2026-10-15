@@ -9,7 +9,10 @@ import http from 'node:http';
 import { isIP } from 'node:net';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loopbackLookup, useLoopbackLookup } from '../loopback-lookup';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { hostsFileNames, loopbackLookup, useLoopbackLookup } from '../loopback-lookup';
 
 type Answer = { error: NodeJS.ErrnoException | null; address?: unknown; family?: number };
 /** Call a lookup the way `net` does and collect what it answers. */
@@ -34,7 +37,7 @@ const offline = (() => {
 })();
 
 describe('loopbackLookup', () => {
-  const lookup = loopbackLookup(offline.lookup);
+  const lookup = loopbackLookup(offline.lookup, () => false);
   beforeEach(() => { offline.asked.length = 0; });
 
   it('answers a loopback name with IPv4 loopback, in every calling shape net and http use, without asking the resolver', async () => {
@@ -101,5 +104,29 @@ describe('useLoopbackLookup', () => {
     const installed = dns.lookup;
     useLoopbackLookup();
     expect(dns.lookup).toBe(installed);
+  });
+});
+
+describe('a loopback name the hosts file maps', () => {
+  it('goes to the resolver, which answers from the hosts file (a container routing app.lvh.me to its host)', async () => {
+    const asked: string[] = [];
+    const hostGateway = ((hostname: string, options: unknown, callback?: unknown) => {
+      asked.push(hostname);
+      const cb = (typeof options === 'function' ? options : callback) as (e: null, a: string, f: number) => void;
+      process.nextTick(cb, null, '172.17.0.1', 4);
+    }) as unknown as typeof dns.lookup;
+    const lookup = loopbackLookup(hostGateway, (name) => name === 'app.lvh.me');
+    expect(await ask(lookup, 'app.lvh.me')).toEqual({ error: null, address: '172.17.0.1', family: 4 });
+    expect(asked).toEqual(['app.lvh.me']);
+    // Other loopback names the file does not list still answer loopback without asking.
+    expect(await ask(lookup, 'abc123.lvh.me')).toEqual({ error: null, address: '127.0.0.1', family: 4 });
+    expect(asked).toEqual(['app.lvh.me']);
+  });
+
+  it('reads the names a hosts file maps away from loopback, ignoring comments and case, and none from a missing file', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hosts-')), 'hosts');
+    fs.writeFileSync(file, '# comment 10.0.0.9 app.lvh.me\n127.0.0.1\tlocalhost\n::1 localhost ip6-localhost\n127.0.1.1 box.lvh.me\n172.17.0.1 App.LVH.me other.test # trailing\n\n');
+    expect([...hostsFileNames(file)].sort()).toEqual(['app.lvh.me', 'other.test']);
+    expect(hostsFileNames(path.join(file, 'missing')).size).toBe(0);
   });
 });
