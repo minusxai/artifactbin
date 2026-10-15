@@ -52,6 +52,37 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
 export const PERSON_TAGS: ReadonlySet<string> = new Set(['User', 'UserImage', 'UserHandle']);
 
 /**
+ * The kit components whose TEXT is the author's, typed in place like a paragraph's: each renders its children,
+ * unchanged, as the content of the one element named here (the compiled reader's static kit HTML, stamped with
+ * the node's `data-mx-ast`), so a caret in that element types into exactly the children the source holds.
+ *
+ * Opt-in, and the one declaration: the editor's text-host rule (lib/story-ui/host-classify), the write-back
+ * (lib/data/story/jsx-edit) and the toolbar read it. A kit component missing here stays locked — its DOM is render
+ * output. `compiled-page/__tests__/kit-text-hosts.test.ts` proves each entry renders as declared. Layout shells
+ * (Card, CardHeader, Alert, the Table sections), controls (Button, the triggers), islands and components that draw
+ * their own content (BreadcrumbEllipsis, Separator) are deliberately absent.
+ *
+ * The element also decides which inline marks the text may carry: phrasing marks everywhere, links only where
+ * the element is not a link itself.
+ */
+export const KIT_TEXT_ELEMENTS: Readonly<Record<string, 'td' | 'th' | 'caption' | 'div' | 'span' | 'a'>> = {
+  TableHead: 'th', TableCell: 'td', TableCaption: 'caption',
+  CardTitle: 'div', CardDescription: 'div', CardContent: 'div', CardFooter: 'div',
+  AlertTitle: 'div', AlertDescription: 'div',
+  Badge: 'span', BreadcrumbLink: 'a', BreadcrumbPage: 'span',
+};
+
+/** The element kit text component `tag` renders its text in; undefined for any other tag. */
+export const kitTextElement = (tag: string): string | undefined =>
+  Object.hasOwn(KIT_TEXT_ELEMENTS, tag) ? KIT_TEXT_ELEMENTS[tag] : undefined;
+
+/** Whether the text of kit text component `tag` may carry links (its element is not a link already). */
+export const kitTextAcceptsLinks = (tag: string): boolean => {
+  const element = kitTextElement(tag);
+  return !!element && element !== 'a';
+};
+
+/**
  * The inline-SVG DRAWING subset (canonical casing — SVG tags are case-sensitive
  * in the DOM, so consumers that create or match elements must use THESE names;
  * the validator compares case-insensitively). Deliberately minimal: no

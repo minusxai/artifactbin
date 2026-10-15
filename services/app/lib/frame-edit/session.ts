@@ -23,6 +23,7 @@ import { toggleInline, pasteFragment } from '@/lib/editor-engine/model';
 import { clipboardAst } from '@/lib/editor-engine/clipboard';
 import { SELECTION_PRESENTATION } from '@/lib/editor-engine/selection-presentation';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
+import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import type { RuntimeChannel, StoryEditFrameMessage, StoryEditFramePost, StoryEditParentMessage } from '@/lib/edit-protocol';
 import { ancestorCrumbs } from './describe-selection';
 import { collectTextRegions, createRegionGeometry, navigateAcrossRegions } from './arrow-navigation';
@@ -268,10 +269,35 @@ export function createFrameEditSession({
     },
   };
 
+  /**
+   * A kit text component's host (lib/story-ui/host-classify): its element holds one line of text and marks,
+   * never blocks. Hosts are text hosts already, so a component among them is one of these.
+   */
+  const kitHost = (host: ActiveHost): boolean => {
+    const node = resolveJsxNodeAtPath(nodes, host.path);
+    return node?.type === 'element' && node.isComponent;
+  };
+
   // ── keyboard ──────────────────────────────────────────────────────────────
   const regionGeometry = createRegionGeometry(win);
   const onKeyDown = (event: KeyboardEvent) => {
     if (!root.contains(event.target as Node)) return;
+    if (active && active.el.contains(event.target as Node) && !event.isComposing) {
+      // Select-all selects the text being edited, never the page (the prose editor's `selectBlockText`).
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        const range = doc.createRange();
+        range.selectNodeContents(active.el);
+        win.getSelection()?.removeAllRanges();
+        win.getSelection()?.addRange(range);
+        return;
+      }
+      // Enter would split a kit text into blocks its element cannot hold; Shift-Enter's line break is a mark it takes.
+      if (event.key === 'Enter' && !event.shiftKey && kitHost(active)) {
+        event.preventDefault();
+        return;
+      }
+    }
     // An arrow on a region's edge line continues into the next text region.
     // Block selection keeps its own arrow behaviour.
     if (
@@ -329,12 +355,28 @@ export function createFrameEditSession({
     post,
   });
   const onLegacyPaste = (event: ClipboardEvent) => {
-    if (
-      event.defaultPrevented ||
-      !active?.el.contains(event.target as Node) ||
-      !event.clipboardData?.getData('text/html')
-    )
+    if (event.defaultPrevented || !active?.el.contains(event.target as Node)) return;
+    if (kitHost(active)) {
+      // A kit text takes the paste as its plain text, on one line, where the caret is: whatever markup came with
+      // it is not the author's to keep, and a line break would split it into blocks.
+      event.preventDefault();
+      const text = (event.clipboardData?.getData('text/plain') ?? '').replace(/\s+/g, ' ').trim();
+      const selection = win.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      if (!text || !range || !active.el.contains(range.commonAncestorContainer)) return;
+      range.deleteContents();
+      const typed = doc.createTextNode(text);
+      range.insertNode(typed);
+      range.setStartAfter(typed);
+      range.collapse(true);
+      selection!.removeAllRanges();
+      selection!.addRange(range);
+      active.el.normalize();
+      active.userEdited = true;
+      reportTyping(true);
       return;
+    }
+    if (!event.clipboardData?.getData('text/html')) return;
     event.preventDefault();
     post({
       type: 'mx:edit-error',
@@ -351,7 +393,7 @@ export function createFrameEditSession({
   post({ type: 'mx:edit-ready' });
 
   // ── parent → frame ────────────────────────────────────────────────────────
-  const format = createFormatLink({ win, root, views, channel, post, republishRect: selection.republishRect });
+  const format = createFormatLink({ win, root, views, channel, post, republishRect: selection.republishRect, nodes: () => nodes });
 
   return {
     canApplyDraft() { return !typingReported && !active?.userEdited && !markdown.busy(); },
@@ -463,7 +505,10 @@ export function createFrameEditSession({
           if (view) {
             view.dispatch(toggleInline(view.state, message.tag).setMeta('mx-command', true));
             view.focus();
+            break;
           }
+          // A text host's selected words, wrapped (or unwrapped) where the caret is.
+          if (active) format.applyInline(active.path, message.tag);
           break;
         case 'mx:paste':
           if (md) { md.paste(message.value, message.kind); break; }

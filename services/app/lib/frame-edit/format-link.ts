@@ -7,7 +7,9 @@
  * ProseMirror transaction (the flow reports it as an ordinary edit); on a plain text host the
  * host's new HTML goes back through the text-edit channel.
  */
-import type { JsxElement } from '@/lib/jsx';
+import type { JsxElement, JsxNode } from '@/lib/jsx';
+import { kitTextAcceptsLinks } from '@/lib/jsx/component-names';
+import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 import { setLink } from '@/lib/editor-engine/links';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
@@ -22,6 +24,8 @@ interface FormatLinkOptions {
   post: (message: StoryEditFramePost) => void;
   /** Re-send the selection: a format changes what the toolbar shows for it. */
   republishRect: () => void;
+  /** The rendered source: what a host is, so a link goes only where its text takes one. */
+  nodes: () => JsxNode[];
 }
 
 interface FormatLink {
@@ -29,9 +33,14 @@ interface FormatLink {
   applyFormat(path: string, className?: string, style?: string): void;
   /** Wrap the live text selection inside the host at `path` in a link, or unwrap it (`href` null). */
   applyLink(path: string, href: string | null): void;
+  /** Toggle bold, italic or underline on the live text selection inside the plain text host at `path`. */
+  applyInline(path: string, tag: 'strong' | 'em' | 'u'): void;
 }
 
-export function createFormatLink({ win, root, views, channel, post, republishRect }: FormatLinkOptions): FormatLink {
+/** The elements each toolbar mark is spelled as in a host's HTML (an author's `<b>` is bold too). */
+const MARK_SPELLINGS: Readonly<Record<'strong' | 'em' | 'u', string>> = { strong: 'strong, b', em: 'em, i', u: 'u' };
+
+export function createFormatLink({ win, root, views, channel, post, republishRect, nodes }: FormatLinkOptions): FormatLink {
   const doc = win.document;
   const at = (path: string) => root.querySelector<HTMLElement>(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
 
@@ -86,6 +95,9 @@ export function createFormatLink({ win, root, views, channel, post, republishRec
     if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0);
     if (!host.contains(range.commonAncestorContainer)) return;
+    // A kit text whose element is a link takes no link inside it (lib/jsx/component-names KIT_TEXT_ELEMENTS).
+    const node = resolveJsxNodeAtPath(nodes(), path);
+    if (href && node?.type === 'element' && node.isComponent && !kitTextAcceptsLinks(node.tag)) return;
     if (href) {
       /*
        * VALIDATED HERE, not only where it was typed.
@@ -130,5 +142,34 @@ export function createFormatLink({ win, root, views, channel, post, republishRec
     post({ type: 'mx:text-edit', path, innerHtml: channel.innerHtmlOf(host) });
   };
 
-  return { applyFormat, applyLink };
+  const applyInline = (path: string, tag: 'strong' | 'em' | 'u') => {
+    const host = at(path);
+    const selection = win.getSelection();
+    if (!host || !selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!host.contains(range.commonAncestorContainer)) return;
+    const inside = range.commonAncestorContainer.nodeType === 1
+      ? range.commonAncestorContainer as Element
+      : range.commonAncestorContainer.parentElement;
+    const mark = inside?.closest(MARK_SPELLINGS[tag]);
+    if (mark && mark !== host && host.contains(mark)) {
+      const first = mark.firstChild, last = mark.lastChild;
+      mark.replaceWith(...Array.from(mark.childNodes));
+      if (first && last) { range.setStartBefore(first); range.setEndAfter(last); selection.removeAllRanges(); selection.addRange(range); }
+    } else {
+      if (range.collapsed) return;
+      const wrap = doc.createElement(tag);
+      try {
+        range.surroundContents(wrap);
+      } catch {
+        return; // a selection across elements: nothing is half-wrapped
+      }
+      range.selectNodeContents(wrap);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    post({ type: 'mx:text-edit', path, innerHtml: channel.innerHtmlOf(host) });
+  };
+
+  return { applyFormat, applyLink, applyInline };
 }

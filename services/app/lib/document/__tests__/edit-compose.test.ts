@@ -141,3 +141,64 @@ describe('body paths versus source paths', () => {
     expect(out).toContain('<h1 className="text-5xl">Title</h1>');
   });
 });
+
+describe('composeSource — kit text components', () => {
+  /** A dashboard: a card title, a kit table (one cell typed, one from data) and an alert. */
+  const KIT = '<Card id="card"><CardHeader id="hd"><CardTitle id="ct" className="text-lg">Revenue</CardTitle></CardHeader>'
+    + '<CardContent id="cc"><Table id="t"><TableBody id="tb"><TableRow id="r"><TableCell id="eVAF">Wed</TableCell><TableCell id="tot">{$q.rows[0].total}</TableCell></TableRow></TableBody></Table></CardContent></Card>'
+    + '<Alert id="al" variant="destructive"><AlertTitle id="at">Heads up</AlertTitle><AlertDescription id="ad">Numbers are provisional.</AlertDescription></Alert>';
+  const CELL = '0.1.0.0.0.0', DATA_CELL = '0.1.0.0.0.1', TITLE = '0.0.0', ALERT_TITLE = '1.0';
+  const nodeAt = (source: string, path: string) => {
+    const parsed = parseJsx(source);
+    if (!parsed.ok) throw new Error('output does not parse');
+    let list = parsed.nodes, node = null as (typeof parsed.nodes)[number] | null;
+    for (const index of path.split('.').map(Number)) { node = list[index] ?? null; list = node?.type === 'element' ? node.children : []; }
+    if (node?.type !== 'element') throw new Error(`no element at ${path}`);
+    return node;
+  };
+
+  it('writes only the children: <TableCell id="eVAF">Wed</TableCell> becomes Thu, id and every prop unchanged', () => {
+    expect(composeSource(KIT, pending({ text: new Map([[CELL, 'Thu']]) }))).toBe(KIT.replace('>Wed<', '>Thu<'));
+  });
+
+  it('edits a card title and an alert title in one commit, keeping their props', () => {
+    const out = composeSource(KIT, pending({ text: new Map([[TITLE, 'Net revenue'], [ALERT_TITLE, 'Careful']]) }));
+    expect(out).toBe(KIT.replace('>Revenue<', '>Net revenue<').replace('>Heads up<', '>Careful<'));
+  });
+
+  it('keeps the inline marks the component accepts', () => {
+    const out = composeSource(KIT, pending({ text: new Map([[CELL, '<b>Thu</b>rsday <a href="https://example.com/notes">notes</a>']]) }));
+    expect(out).toContain('<TableCell id="eVAF"><b>Thu</b>rsday <a href="https://example.com/notes">notes</a></TableCell>');
+  });
+
+  it('a link component takes no link inside it: the link\'s words stay, the link goes', () => {
+    const crumb = '<BreadcrumbList id="bl"><BreadcrumbItem id="bi"><BreadcrumbLink id="bk" href="/reports">Reports</BreadcrumbLink></BreadcrumbItem></BreadcrumbList>';
+    const out = composeSource(crumb, pending({ text: new Map([['0.0.0', '<em>All</em> <a href="https://example.com">reports</a>']]) }));
+    expect(out).toBe('<BreadcrumbList id="bl"><BreadcrumbItem id="bi"><BreadcrumbLink id="bk" href="/reports"><em>All</em> reports</BreadcrumbLink></BreadcrumbItem></BreadcrumbList>');
+  });
+
+  it('never writes markup, script, handlers, styles or another component into the text', () => {
+    const hostile = '<div onclick="steal()">Thu</div><script>alert(1)</script><img src="x" onerror="steal()"><span data-mx-ast="1">alert</span>'
+      + '<strong style="color:red" onmouseover="steal()">day</strong><p>next</p>';
+    const out = composeSource(KIT, pending({ text: new Map([[CELL, hostile]]) }));
+    const cell = nodeAt(out, CELL);
+    expect(cell.attributes.map((a) => [a.name, a.value])).toEqual([['id', { static: true, json: 'eVAF' }]]);
+    expect(out).toContain('<TableCell id="eVAF">Thu<strong>day</strong>next</TableCell>');
+    expect(out).not.toMatch(/<script|alert|steal|onclick|onerror|onmouseover|style=|<img|<div|<p>/);
+    // The Alert the hostile stamp pointed at is still exactly where it was, once.
+    expect(out.match(/<Alert /g)).toHaveLength(1);
+  });
+
+  it('escapes typed angle brackets and braces: they stay text through save and reparse', () => {
+    const out = composeSource(KIT, pending({ text: new Map([[CELL, 'a &lt;b&gt; {c} &amp; d']]) }));
+    const cell = nodeAt(out, CELL);
+    expect(cell.children).toHaveLength(1);
+    expect(cell.children[0]).toMatchObject({ type: 'text', value: 'a <b> {c} & d' });
+  });
+
+  it('refuses text for a cell whose text comes from data, and for a layout shell', () => {
+    expect(composeSource(KIT, pending({ text: new Map([[DATA_CELL, '42']]) }))).toBe(KIT);
+    expect(composeSource(KIT, pending({ text: new Map([['0', 'flattened']]) }))).toBe(KIT);
+    expect(composeSource(KIT, pending({ text: new Map([['1', 'flattened']]) }))).toBe(KIT);
+  });
+});

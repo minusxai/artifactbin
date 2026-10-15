@@ -18,8 +18,9 @@ type EditChromeKind = 'text' | 'block' | 'container';
 /** Parts of a line, not blocks: a grip on them would pick up a word. Mirrors the session's selection rule. */
 const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u']);
 const SVG_NS = 'http://www.w3.org/2000/svg';
-/** A table moves as one: its sections, rows and cells are never picked up alone by a grip. */
-const TABLE_PART_TAGS = new Set(['thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption', 'colgroup', 'col']);
+/** A table moves as one: its sections, rows and cells — plain or kit — are never picked up alone by a grip. */
+const TABLE_PART_TAGS = new Set(['thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption', 'colgroup', 'col',
+  'TableHeader', 'TableBody', 'TableFooter', 'TableRow', 'TableHead', 'TableCell', 'TableCaption']);
 
 /**
  * Text is where the caret goes: a text block in a ProseMirror flow region, or
