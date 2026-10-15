@@ -21,16 +21,17 @@ import { authorHandle, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
-import { changedSince } from '@/lib/publish/prepared/served-results.server';
-import { LIVE_KEEPALIVE_EVENT, LIVE_KEEPALIVE_MS } from '@/lib/http';
+import { changedSince, marksOf, marksOfToken, tokenOf } from '@/lib/publish/prepared/served-results.server';
+import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
 
-/**
- * The heartbeat: keeps proxies from closing an idle stream AND tells the
- * client the stream is alive. A NAMED event, not a `: comment` line — a
- * comment never reaches script, and the client (lib/live-stream) treats
- * LIVE_SILENCE_MS without any event as a dead stream and reopens it.
+/*
+ * The heartbeat (lib/http/app-build liveKeepaliveFrame): keeps proxies from
+ * closing an idle stream AND tells the client the stream is alive. A NAMED
+ * event, not a `: comment` line — a comment never reaches script, and the
+ * client (lib/live-stream) treats LIVE_SILENCE_MS without any event as a dead
+ * stream and reopens it. It names the server's build, which is how an open
+ * tab learns a deploy happened.
  */
-const KEEPALIVE_FRAME = `event: ${LIVE_KEEPALIVE_EVENT}\ndata: {}\n\n`;
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -80,12 +81,27 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   let closed = false;
   let unsubscribe: (() => Promise<void>) | undefined;
 
+  /**
+   * WHERE THIS READER STANDS: the mark of every dataset the stream follows (lib/publish/prepared/served-results
+   * `marksOf`), sent as the SSE `id:` of every document and data frame. A connection that is cut (an idle proxy, a
+   * deploy, a sleeping laptop) reopens with `?since=<the last id>` (lib/http/live-stream), and the `since` catch-up
+   * below sends the `data` frame for every dataset that moved in the gap — once: the cursor a frame carries already
+   * includes the change it announces. Marks are taken after the dataset is subscribed, so a write after the mark
+   * always wakes the stream. A `since` the reader brings seeds them, so the opening frame never claims a position
+   * past a change the catch-up has not sent yet.
+   */
+  const marks = marksOfToken(new URL(request.url).searchParams.get('since'));
+  const position = () => {
+    for (const datasetId of [...marks.keys()]) if (!datasetUnsubs.has(datasetId)) marks.delete(datasetId);
+    return marks.size ? `id: ${tokenOf(marks)}\n` : '';
+  };
+
   const send = (event: ArtifactVersionPing) =>
-    writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)).catch(() => { /* client gone */ });
+    writer.write(encoder.encode(`${position()}data: ${JSON.stringify(event)}\n\n`)).catch(() => { /* client gone */ });
 
   /** A DATA wakeup: this dataset changed, re-run what reads it. */
   const sendData = (event: ArtifactDataEvent) =>
-    writer.write(encoder.encode(`event: ${STORY_DATA_EVENT}\ndata: ${JSON.stringify(event)}\n\n`)).catch(() => { /* client gone */ });
+    writer.write(encoder.encode(`${position()}event: ${STORY_DATA_EVENT}\ndata: ${JSON.stringify(event)}\n\n`)).catch(() => { /* client gone */ });
 
   /**
    * ANNOTATIONS, FOR AN ANNOTATOR'S CONNECTION ONLY. The stream serves plain
@@ -114,7 +130,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   let annotationsUnsub: (() => Promise<void>) | undefined;
 
   const keepalive = setInterval(() => {
-    writer.write(encoder.encode(KEEPALIVE_FRAME)).catch(() => { /* client gone */ });
+    writer.write(encoder.encode(liveKeepaliveFrame())).catch(() => { /* client gone */ });
   }, LIVE_KEEPALIVE_MS);
 
   /**
@@ -149,7 +165,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     const row = await getArtifactById(id);
     if (!row) return void close();
     if (!(await canReadArtifact(row, actor))) return void close();
-    const dataset = await getArtifactById(datasetId);
+    const [dataset, now] = await Promise.all([getArtifactById(datasetId), datasetUnsubs.has(datasetId) ? marksOf([datasetId]) : null]);
+    const mark = now?.get(datasetId);
+    if (mark) marks.set(datasetId, mark);
     void sendData({ datasets: [datasetId], version: dataset?.version ?? 0 });
   };
 
@@ -171,6 +189,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       datasetUnsubs.delete(datasetId);
       await drop().catch(() => {});
     }
+    const added: string[] = [];
     for (const datasetId of wanted) {
       if (datasetUnsubs.has(datasetId)) continue;
       try {
@@ -180,6 +199,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         const drop = await subscribeToArtifact(datasetId, () => void wakeDataset(datasetId), listenerLost);
         if (closed) { await drop().catch(() => {}); datasetUnsubs.delete(datasetId); return; }
         datasetUnsubs.set(datasetId, drop);
+        added.push(datasetId);
       } catch (error) {
         // At capacity: the document itself still streams. Data updates then
         // arrive on the reader's next interaction rather than on their own.
@@ -187,6 +207,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         if (!(error instanceof TooManyLiveChannels)) throw error;
       }
     }
+    // Newly followed: marked now that they are subscribed (a mark the reader brought is kept for the catch-up).
+    if (added.length) for (const [datasetId, mark] of await marksOf(added)) if (!marks.has(datasetId)) marks.set(datasetId, mark);
   };
 
   // Last stylesheet sent on THIS connection, so repeats can be skipped.

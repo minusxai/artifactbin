@@ -9,6 +9,7 @@ import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
 import { OnboardingGate } from './components/OnboardingGate';
 import { InboxProvider } from './lib/notifications';
 import { dropServedFrameOnRoute, servedDocumentFrame } from '@/solid/lib/served-frame';
+import { PageFailure, StaleBuildNavigation } from './components/BuildRecovery';
 
 // Workspace menus and dialogs are not part of a document reader's startup bundle.
 const WorkspaceShell = lazy(() => import('./components/WorkspaceShell'));
@@ -71,7 +72,9 @@ function Root(props: RouteSectionProps): JSX.Element {
     <OnboardingGate>
       <ChromeVisibilityContext.Provider value={setShowChrome}>
         <Show when={!documentRoute() && showChrome()}><PageChrome /></Show>
-        <ErrorBoundary fallback={(_, reset) => <main class="mx-auto max-w-5xl px-4 py-10" role="alert">Could not load this page. <button aria-label="Retry loading page" onClick={reset}>Retry</button></main>}>
+        {/* A deploy while this tab was open: a missing chunk loads the new build; a page known stale navigates fresh. */}
+        <StaleBuildNavigation />
+        <ErrorBoundary fallback={(error, reset) => <PageFailure error={error} reset={reset} />}>
           <Show when={workspaceRoute()} fallback={<Suspense fallback={<PendingPage />}>{props.children}</Suspense>}><Suspense fallback={<PendingPage />}><WorkspaceShell><Suspense fallback={<PendingPage />}>{props.children}</Suspense></WorkspaceShell></Suspense></Show>
         </ErrorBoundary>
       </ChromeVisibilityContext.Provider>

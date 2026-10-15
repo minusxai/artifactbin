@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Hono } from 'hono';
@@ -13,6 +14,16 @@ function allowedFiles(webDir: string): Set<string> {
     const files = Object.values(manifest).flatMap(chunk => [chunk.file, ...(chunk.css ?? []), ...(chunk.assets ?? [])]);
     return new Set(files.filter(file => typeof file === 'string' && isBuildAssetPath('/' + file)).map(file => '/' + file));
   } catch { return new Set(); }
+}
+
+/**
+ * The build this tree is (lib/http/app-build): the manifest's hash. Every chunk is named by its content, so any
+ * change to what the page can load changes the manifest; a tree with no manifest (development, tests) is no build.
+ */
+export function appBuildId(webDir: string): string | null {
+  try {
+    return createHash('sha256').update(readFileSync(path.join(webDir, '.vite/manifest.json'))).digest('hex').slice(0, 12);
+  } catch { return null; }
 }
 
 /** App-owned manifest admission and bytes (or their build-time brotli/gzip sibling); never fall through to content routes. */

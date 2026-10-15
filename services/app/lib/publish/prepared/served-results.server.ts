@@ -111,6 +111,17 @@ const TOKEN_PART = /^([A-Za-z0-9]+)\.([A-Za-z0-9_-]{12})$/;
 /** `id.mark~id.mark` — what a page hands its live stream (`?since=`). */
 export const tokenOf = (marks: Map<string, string>): string => [...marks].sort(([a], [b]) => a.localeCompare(b)).map(([id, mark]) => `${id}.${mark}`).join('~');
 
+/** The marks a token names (`id.mark~id.mark`); one that does not parse names nothing. */
+export function marksOfToken(since: string | null): Map<string, string> {
+  const then = new Map<string, string>();
+  if (!since || since.length > 4096) return then;
+  for (const part of since.split('~')) {
+    const m = TOKEN_PART.exec(part);
+    if (m) then.set(m[1]!, m[2]!);
+  }
+  return then;
+}
+
 /**
  * The datasets among `followed` whose mark has moved since `since` (a token a
  * served page carried). Only ids the token names are judged: a dataset the
@@ -118,12 +129,7 @@ export const tokenOf = (marks: Map<string, string>): string => [...marks].sort((
  * parse names nothing.
  */
 export async function changedSince(since: string | null, followed: Iterable<string>): Promise<string[]> {
-  if (!since || since.length > 4096) return [];
-  const then = new Map<string, string>();
-  for (const part of since.split('~')) {
-    const m = TOKEN_PART.exec(part);
-    if (m) then.set(m[1]!, m[2]!);
-  }
+  const then = marksOfToken(since);
   const judged = [...new Set(followed)].filter((id) => then.has(id));
   if (!judged.length) return [];
   const now = await marksOf(judged);

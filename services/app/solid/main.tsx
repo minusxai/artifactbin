@@ -8,8 +8,11 @@ import '@/solid/lib/heal-address';
 import { captureServedFrame } from '@/solid/lib/served-frame';
 import { configureTrustedUiFromShell } from '@/lib/islands/trusted-ui-styles';
 import { App } from './App';
+import { watchAppBuild } from './lib/app-build';
 
 captureInstallPrompt(window);
+// Which build this page is, and every sign the server has moved on (a deploy while the tab is open).
+watchAppBuild(window);
 captureServedFrame();
 // The app's own sheet, re-scoped into every trusted shadow root (solid/components/TrustedUi).
 configureTrustedUiFromShell(document);

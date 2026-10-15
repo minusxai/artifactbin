@@ -102,6 +102,34 @@ describe('GET /a/<id>/events hears the document\'s datasets', () => {
     expect(data!.data).toMatchObject({ datasets: [folder] });
   });
 
+  it('names its position on every frame, and a reconnect from that position hears exactly the writes that fell in the gap', async () => {
+    const t = await mintToken('t');
+    const ds = (await create(t.token, { dataset: ROWS, access: 'readwrite' })).id;
+    const doc = (await create(t.token, {
+      markup: `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>`,
+    })).id;
+    const first = new AbortController();
+    const res = await eventsRoute(new Request(request(`/a/${doc}/events`), { signal: first.signal }), params({ id: doc }));
+    const [opening] = await readEvents(res.body!, 1);
+    expect(opening!.event).toBe('message');
+    const cursor = opening!.id;
+    expect(cursor, 'the opening frame names where the reader stands').toMatch(new RegExp(`^${ds}\\.[A-Za-z0-9_-]{12}$`));
+    first.abort(); // the connection is cut (an idle proxy, a deploy)
+
+    // Nothing moved: a reconnect from the cursor is the head and nothing else.
+    const quiet = await eventsRoute(request(`/a/${doc}/events?since=${encodeURIComponent(cursor!)}`), params({ id: doc }));
+    expect((await readEvents(quiet.body!, 2, 800)).filter((e) => e.event === 'data')).toEqual([]);
+
+    // A write while disconnected: the reconnect from the cursor hears it, once.
+    expect((await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `insert into public.rows (choice) values ('tacos')` } }), params({ id: ds }))).status).toBe(200);
+    const again = await eventsRoute(request(`/a/${doc}/events?since=${encodeURIComponent(cursor!)}`), params({ id: doc }));
+    const events = await readEvents(again.body!, 3, 1500);
+    const data = events.filter((e) => e.event === 'data');
+    expect(data.map((e) => e.data.datasets)).toEqual([[ds]]);
+    expect(data[0]!.id, 'the catch-up moves the cursor past the write').toMatch(new RegExp(`^${ds}\\.`));
+    expect(data[0]!.id).not.toBe(cursor);
+  });
+
   it('a document that does not read the dataset hears nothing; a whole-dataset PUT wakes readers too', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS })).id;

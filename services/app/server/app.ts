@@ -40,7 +40,7 @@ import { spaPaths } from '@/lib/http/app-pages';
 import { ANONYMOUS_ACTOR, ownerUsername, sessionActor } from '@/lib/accounts';
 import { AGENT_COOKIE } from '@/lib/accounts';
 import { canEdit } from '@artifactbin/contracts';
-import { baseUrl, json } from '@/lib/http';
+import { APP_BUILD_HEADER, APP_BUILD_META, baseUrl, json, setAppBuild } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/platform';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
 import { exportAssetResponse } from '@/lib/export/assets';
@@ -52,7 +52,7 @@ import { createListingPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
 import { DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
 import { enableSnapshotRevalidations, installStoryCommitHooks } from '@/lib/publish/prepared';
-import { mountBuildAssets } from './build-assets';
+import { appBuildId, mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
@@ -337,9 +337,25 @@ const serverTiming = async (c: Context, next: () => Promise<void>): Promise<void
   }
 };
 
+/**
+ * `x-artifactbin-build` on every response (lib/http/app-build): the build this server serves NOW, which a page left
+ * open across a deploy compares with the build it is. Same immutable-headers fallback as `serverTiming`.
+ */
+const buildHeader = (build: string) => async (c: Context, next: () => Promise<void>): Promise<void> => {
+  await next();
+  try { c.res.headers.set(APP_BUILD_HEADER, build); } catch {
+    try { const copy = new Response(c.res.body, c.res); copy.headers.set(APP_BUILD_HEADER, build); c.res = copy; } catch { /* a protocol switch */ }
+  }
+};
+
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
   app.use('*', serverTiming);
+  const webDir = opts.webDir ?? path.resolve('dist/web');
+  // The build this server serves: the built tree's (production); development's Vite-served shell is none.
+  const build = opts.indexHtml ? null : appBuildId(webDir);
+  setAppBuild(build);
+  if (build) app.use('*', buildHeader(build));
   // A page route that reads a stored document the current code does not serve answers its 410 by name (lib/artifacts/servable), never a bare 500.
   app.onError((error, c) => {
     if (error instanceof UnservableDocument) return error.response();
@@ -366,7 +382,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   /** The policy every app page carries: strict, framing only the pages origins. */
   const appPageCsp = appPagePolicy(pagesSite);
   const pageCsp = (url: string): string => (opts.devHmrPort !== undefined ? developmentAppCsp(appPageCsp, url, opts.devHmrPort) : appPageCsp);
-  const webDir = opts.webDir ?? path.resolve('dist/web');
   let indexCache: string | null = null;
   /** The app shell: the one Solid entry (web/solid-app.html) for every address the app answers. */
   const index = async (url: string): Promise<string> => {
@@ -439,7 +454,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const fonted = withShellFonts(listing ? preloadListing(discovered, listing) : discovered);
     const shell = frame ? withDocumentFrame(fonted, frame) : withGenericSocial(fonted, baseUrl(c.req.raw));
     // The address search engines index a document under (lib/custom-domains canonicalDocumentUrl).
-    const indexed = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;
+    const linked = canonical ? shell.replace('</head>', () => `<link rel="canonical" href="${escapeHtml(canonical)}"></head>`) : shell;
+    // The build this page is (lib/http/app-build), which the page compares with what the server says later.
+    const indexed = build ? linked.replace('</head>', () => `<meta name="${APP_BUILD_META}" content="${build}"></head>`) : linked;
     // Last, so the pointer is the page's final line whatever else was inlined.
     // Brotli for a client that takes it (server/content-encoding); identity otherwise, as before.
     const inlined = data;

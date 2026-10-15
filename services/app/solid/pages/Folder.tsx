@@ -6,6 +6,7 @@ import type { GroupSummary } from '@artifactbin/contracts';
 import type { FolderPage as FolderData } from '@/lib/workspace/folders';
 import { type ArtifactRole, canEdit } from '@artifactbin/contracts';
 import type { AccountWorkspace } from '@/lib/workspace/dashboard';
+import { openLiveStream } from '@/lib/http/live-stream';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
 import { PAGE_COLUMN } from '../ui/ui';
@@ -36,9 +37,10 @@ export function FolderPage(props: FolderProps): JSX.Element {
   };
   createEffect(() => {
     const id = folderId();
-    const source = new EventSource(`/a/${id}/events`);
-    source.addEventListener(STORY_DATA_EVENT, reread);
-    onCleanup(() => { source.removeEventListener(STORY_DATA_EVENT, reread); source.close(); });
+    // Reconnecting (lib/http/live-stream): a cut stream reopens with backoff, and the listing is read again when it
+    // delivers — a child filed while it was down only NOTIFYs, so nothing else would bring it.
+    const stream = openLiveStream({ url: `/a/${id}/events`, events: { [STORY_DATA_EVENT]: reread }, onReconnect: reread });
+    onCleanup(() => stream.close());
   });
   const save = () => {
     const title = draft().trim();

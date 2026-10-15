@@ -9,4 +9,6 @@ export async function cleanupSharedJsdom(): Promise<void> {
   // A redirected/disposed Solid lazy route still finishes importing its dependencies.
   // Keep this environment alive until those imports finish, rather than suppressing teardown errors.
   await vi.dynamicImportSettled();
+  // Each test is a fresh tab: what a page keeps for its tab (drafts, solid/lib/draft-store) does not reach the next test.
+  try { sessionStorage.clear(); } catch { /* storage unavailable */ }
 }
