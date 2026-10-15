@@ -58,6 +58,9 @@ checkbox). During a re-run embeds keep their old rows and show “updating…”
   defaults once the write COMMITS; a refused write changes nothing.
 - `set=` on a Button writes values on click, no SQL: `set={{"step": 2}}`, a
   literal, `"$other"`, or in a row `"$_row.<column>"`.
+- A class may come from the data: `className="px-2 {$_row.tone}"` with SQL
+  `case status when 'ok' then 'bg-lime-500' else 'bg-rose-500 md:w-64' end as tone`.
+  Any Tailwind class is styled, variants and `w-[30rem]` included.
 
 Local SQL is per loaded document: it creates no version and changes no stored
 rows. Reload resets inline tables to their declared rows; a `url={false}`
