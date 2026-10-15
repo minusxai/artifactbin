@@ -7,7 +7,7 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import { DEFAULT_SERVER as CONTRACT_DEFAULT_SERVER } from "@artifactbin/contracts";
 
-import {credentialPaths,credentialOrigin,readCredentials,saveCredentials,observeCredentialAccount as observeAccount,observedCredentialAccount as observedAccount} from '@artifactbin/utils/node/credentials';
+import {credentialPaths,credentialOrigin,privateCredentialStore,readCredentials,saveCredentials,observeCredentialAccount as observeAccount,observedCredentialAccount as observedAccount} from '@artifactbin/utils/node/credentials';
 
 /** Where afbin talks when nothing selects a server (spelled once, in contracts). */
 export const DEFAULT_SERVER = CONTRACT_DEFAULT_SERVER;
@@ -125,6 +125,10 @@ export async function loadConnectionFor(
     if (saved) return {...saved, server: identity.canonical};
   }
   return null;
+}
+/** The home store's private directories for signing in to `server`, made private together before the first home write. */
+export async function privateConnectionStore(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  await privateCredentialStore(server, configDir(home, env));
 }
 export async function saveConnection(
   connection: Connection,

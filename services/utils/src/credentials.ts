@@ -4,8 +4,8 @@ import {lstat,readFile,readlink,symlink} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {normalizeOrigin,API_RESOURCE_PATH} from '@artifactbin/contracts';
 import {atomicWrite} from './atomic-file';
-import {privateDirectory} from './private-directory';
-import {withStateLock} from './state-lock';
+import {privateDirectories,privateDirectory} from './private-directory';
+import {lockDirectory,withStateLock} from './state-lock';
 export interface Credentials {server:string;token:string;refreshToken?:string;clientId?:string;expiresAt?:number}
 export function credentialOrigin(value:string):string{
  const origin=normalizeOrigin(value);if(!origin)throw new Error('Use an HTTPS server origin, or HTTP on a local development host (localhost, 127.0.0.1, [::1], *.localhost, *.lvh.me, *.test).');return origin;
@@ -58,7 +58,15 @@ export async function readCredentials(server:string,root:string):Promise<Credent
  const expiresAt=Number(saved.ARTIFACTBIN_EXPIRES_AT);
  return {server:paths.origin,token:saved.ARTIFACTBIN_TOKEN,...(saved.ARTIFACTBIN_REFRESH_TOKEN&&saved.ARTIFACTBIN_CLIENT_ID?{refreshToken:saved.ARTIFACTBIN_REFRESH_TOKEN,clientId:saved.ARTIFACTBIN_CLIENT_ID,...(Number.isSafeInteger(expiresAt)&&expiresAt>0?{expiresAt}:{})}:{})};
 }
+/**
+ * Every private directory a sign-in to `server` writes under `root`: the store, its locks, the credential hosts and
+ * this server's backing directory, made private together (one PowerShell launch on a fresh Windows home, none after).
+ */
+export async function privateCredentialStore(server:string,root:string):Promise<void>{
+ await privateDirectories([root,lockDirectory(root),join(root,'hosts'),credentialPaths(server,root).backingDirectory]);
+}
 export async function saveCredentials(connection:Credentials,root:string):Promise<void>{
+ await privateCredentialStore(connection.server,root);
  return withStateLock(root,'home',()=>writeCredentials(connection,root));
 }
 async function writeCredentials(connection:Credentials,root:string):Promise<void>{

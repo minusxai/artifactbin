@@ -26,6 +26,7 @@ import {SERVER_IDENTITY_PATH, normalizeOrigin, parseServerIdentityDocument, type
 import {CLI_VERSION} from './version';
 import {HOME_SCOPE} from './state';
 import {readState, stateFor} from './state-access';
+import {privateConnectionStore} from './config';
 
 export interface ServerIdentity {
   /** The origin the person selected, normalized. */
@@ -146,6 +147,9 @@ async function readCache(selected: string, options: IdentityOptions): Promise<Ca
 
 async function writeCache(selected: string, value: CachedIdentity, options: IdentityOptions): Promise<void> {
   try {
+    // On a fresh home this is a command's first home-store write, and a command that resolves a server may sign in
+    // to it next: its credential directories join the store's in one batch (one PowerShell launch on Windows, not three).
+    await privateConnectionStore(value.canonical, options.home, options.env ?? process.env);
     (await stateFor(options.home, options.env ?? process.env)).put(HOME_SCOPE, 'server-identity', selected, value);
   } catch { /* A cache that cannot be written is a cache miss next time, never a failed command. */ }
 }

@@ -4,7 +4,7 @@ import {spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {mkdtemp,writeFile,readFile} from 'node:fs/promises';
 import {removeTerminalWorkspace} from './terminal-workspace-cleanup.mjs';
-import {powershellLaunchCounter} from './powershell-launch-counter.mjs';
+import {powershellLaunchCounter} from './windows-private-state.mjs';
 import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
 
