@@ -13,9 +13,10 @@
  *     anything `validateJsxSource` would reject (dangerous tags, `on*` handlers, denied
  *     attrs, dangerous URL schemes) is DROPPED, not saved — a paste is an injection path
  *     and gets no editor trust;
- *  3. nested elements still carrying `data-mx-ast` that map to a COMPONENT in the original
- *     AST (embeds — their DOM is render chrome, not source) are spliced back verbatim from
- *     the ORIGINAL tree; plain HTML carriers just lose the stamp (the edited DOM copy wins);
+ *  3. nested elements still carrying `data-mx-ast` that map to one of the host's own static
+ *     inline embeds in the original AST (an `<Icon>` — its DOM is render chrome, not source)
+ *     are spliced back verbatim from the ORIGINAL tree; the host's own HTML carriers (its
+ *     marks) just lose the stamp (the edited DOM copy wins); anything else stamped is dropped;
  *  4. replace the host's children and re-serialize the whole tree (serializeJsx).
  *
  * Pure module — no DOM APIs — so the write-back is unit-testable in the node project.
@@ -29,7 +30,7 @@ import { validateJsx, hasDangerousScheme, listHasDangerousScheme } from '@/lib/j
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/jsx/component-names';
 import { immutableSet } from '@/lib/jsx/immutable-set';
-import { isEditableTextHost, kitTextMarkAllowed, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
+import { isEditableTextHost, isSplicedEmbed, kitTextMarkAllowed, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 
 /*
  * Classification lives in a leaf module (lib/story-ui/host-classify) so the
@@ -47,6 +48,11 @@ interface JsxDomEdit {
   astPath: string;
   /** The host's edited innerHTML (contenteditable output — rich inline HTML, possibly hostile). */
   innerHtml: string;
+  /**
+   * The host's path as the document's stamps spell it, when that differs from `astPath`: the document stamps
+   * body-relative paths, and a source that declares data (`<Helmet>`) shifts the body. Defaults to `astPath`.
+   */
+  stampPath?: string;
 }
 
 interface ApplyDomEditsResult {
@@ -145,15 +151,6 @@ function setCanonicalClassAttr(el: JsxElement, value: string): void {
   el.attributes.splice(first === -1 ? el.attributes.length : first, 0, attr);
 }
 
-/**
- * A text host is an HTML element whose direct children include at least one non-whitespace
- * text node and whose component/embed descendants, if any, are ALL inline embeds
- * (TEXT_HOST_INLINE_EMBEDS — spliced back verbatim on commit, locked islands while editing).
- * Any other component in the subtree keeps the whole host locked (its chrome is render
- * output; an edit could not be written back). `<style>` is text-shaped but is CSS, not
- * prose — never editable. SVG elements are DRAWING, not prose: contenteditable inside an
- * `<svg>` subtree is undefined browser behavior, so the whole subset stays atomic.
- */
 // ---------------------------------------------------------------------------
 // AST path resolution (mirrors the interpreter's indexing: ALL JsxNodes count)
 // ---------------------------------------------------------------------------
@@ -665,20 +662,30 @@ function sanitizeAttrs(el: TmpElement, errors: ValidationError[]): JsxAttribute[
   return out;
 }
 
-function tmpToJsxNodes(tmp: TmpNode[], originalRoots: JsxNode[], errors: ValidationError[]): JsxNode[] {
+/** Where an edited host is, in the source (`path`) and as the document stamps it (`stamp`). */
+interface HostAt { path: string; stamp: string }
+
+function tmpToJsxNodes(tmp: TmpNode[], originalRoots: JsxNode[], host: HostAt, errors: ValidationError[]): JsxNode[] {
   const out: JsxNode[] = [];
   for (const n of tmp) {
     if (n.kind === 'text') {
       out.push({ type: 'text', value: n.value, start: 0, end: 0 });
       continue;
     }
-    // Elements still stamped with their AST path: a COMPONENT's DOM is render chrome — splice
-    // the ORIGINAL AST child back verbatim. Plain HTML carriers just lose the stamp below.
+    // Elements still stamped with their AST path. One of the host's own static inline embeds is render
+    // chrome: splice the ORIGINAL AST child back verbatim. The host's own HTML carriers (its marks) just
+    // lose the stamp below — the edited DOM copy wins. Anything else stamped — another node of the
+    // document, a component's chrome — is not this text's: dropped whole, never copied into it.
     const astAttr = n.attrs.find(a => a.name.toLowerCase() === AST_PATH_DOM_ATTR);
     if (astAttr && typeof astAttr.value === 'string') {
-      const original = resolveByPath(originalRoots, astAttr.value);
-      if (original && original.type === 'element' && original.isComponent) {
+      const own = astAttr.value.startsWith(`${host.stamp}.`);
+      const original = own ? resolveByPath(originalRoots, host.path + astAttr.value.slice(host.stamp.length)) : null;
+      if (original && isSplicedEmbed(original)) {
         out.push(structuredClone(original));
+        continue;
+      }
+      if (!own || (original?.type === 'element' && original.isComponent)) {
+        errors.push({ message: `Dropped <${n.tag}> stamped "${astAttr.value}": not part of this text`, tag: n.tag });
         continue;
       }
     }
@@ -686,7 +693,7 @@ function tmpToJsxNodes(tmp: TmpNode[], originalRoots: JsxNode[], errors: Validat
       errors.push({ message: `Dropped pasted <${n.tag}> element`, tag: n.tag });
       continue;
     }
-    const children = tmpToJsxNodes(n.children, originalRoots, errors);
+    const children = tmpToJsxNodes(n.children, originalRoots, host, errors);
     if (!ALLOWED_HTML.has(n.tag)) { // not story markup, not dangerous: unwrap, keep the content
       errors.push({ message: `Unwrapped pasted <${n.tag}> element (not in the story tag allowlist)`, tag: n.tag });
       out.push(...children);
@@ -751,13 +758,14 @@ export function applyDomEditsToJsx(source: string, edits: JsxDomEdit[]): ApplyDo
       errors.push({ message: `No element at AST path "${edit.astPath}" — edit skipped` });
       continue;
     }
-    // A component's children are written only when it is a kit text component whose children are its text,
-    // and then only as text and the marks it accepts: never a block, a component or anything its props hold.
-    if (host.isComponent && !isEditableTextHost(host)) {
-      errors.push({ message: `<${host.tag}> at AST path "${edit.astPath}" draws its own content — edit skipped`, tag: host.tag });
+    // Children are written only for a text host (lib/story-ui/host-classify): a component that draws its own content
+    // is never one, and text that binds data or computes anything is locked — its DOM holds the rendered VALUE of
+    // each expression, and writing it back would replace the binding with a snapshot or drop it.
+    if (!isEditableTextHost(host)) {
+      errors.push({ message: `<${host.tag}> at AST path "${edit.astPath}" is not text to edit — edit skipped`, tag: host.tag });
       continue;
     }
-    const converted = tmpToJsxNodes(parseHtmlFragment(edit.innerHtml), parsed.nodes, errors);
+    const converted = tmpToJsxNodes(parseHtmlFragment(edit.innerHtml), parsed.nodes, { path: edit.astPath, stamp: edit.stampPath ?? edit.astPath }, errors);
     const children = host.isComponent ? kitTextChildren(host.tag, converted, errors) : converted;
     // Belt-and-braces: the sanitizer must have produced nodes clean by the PUBLISH door's
     // rules (stylePolicy included — an edit that composes but cannot save is still a

@@ -15,7 +15,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
 // The leaf classification module, NOT the write-back path: importing the
 // latter pulled the validator and the component tables into this chunk (75 KB
 // gzipped to ask "is this a paragraph").
-import { crumbHint, isEditableTextHost, resolveJsxNodeAtPath, TEXT_LOCK_REASONS, textLockOf } from '@/lib/story-ui/host-classify';
+import { crumbHint, isEditableTextHost, resolveJsxNodeAtPath, TEXT_LOCK_REASONS, textLockOf, textOwnerPath } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR, SOURCE_NODE_ID_ATTR } from '@/lib/story-ui/ast-path';
 import { isComponentPart } from './edit-chrome';
 import type { StoryEditCrumb, StoryEditSelection } from '@/lib/edit-protocol';
@@ -57,6 +57,19 @@ export function ancestorCrumbs(el: Element, nodes: JsxNode[]): StoryEditCrumb[] 
     if (isSelectableAncestor(path, node, nodes)) out.push({ path, tag: node.tag, hint: crumbHint(p.getAttribute('class') ?? '') });
   }
   return out.reverse();
+}
+
+/**
+ * The stamped element a pointer on `el` means: the text `el` is part of (a mark in a paragraph or a card title is
+ * that paragraph or title, editable or locked), or `el` itself.
+ */
+export function textOwnerElement(el: Element, nodes: JsxNode[]): Element {
+  const path = el.getAttribute(AST_PATH_ATTR);
+  if (!path) return el;
+  const owner = textOwnerPath(nodes, path);
+  if (owner === path) return el;
+  for (let p = el.parentElement; p; p = p.parentElement) if (p.getAttribute(AST_PATH_ATTR) === owner) return p;
+  return el;
 }
 
 /** The kind `describeSelection` gives `el` (null: it describes none), without reading its geometry. */

@@ -6,7 +6,7 @@ import { serializeJsx, type JsxNode } from '@/lib/jsx';
 import { editorDocument, isProseTree, sourceNodes } from '@/lib/editor-engine/model';
 import type { EditorSelectionChange } from '@/lib/editor-engine/bookmark';
 import type { EditorView } from 'prosemirror-view';
-import { isEditableTextHost } from '@/lib/story-ui/host-classify';
+import { isText, textHost } from '@/lib/story-ui/host-classify';
 import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import { STORY_GRID_EDIT_CSS } from '@/lib/story-ui/grid-css';
 import type { StoryLayoutRect } from '@/lib/edit-protocol';
@@ -440,7 +440,8 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
       if (isScriptComponent(node)) { index++; continue; }
       if (!isBlock(node)) {
         hosts.push(() => mountGrid(node, path));
-        if (node.type === 'element' && isEditableTextHost(node)) {
+        const text = node.type === 'element' ? textHost(node) : null;
+        if (text?.editable) {
           const host = at(path);
           if (host) hosts.push(() => {
             host.contentEditable = 'true';
@@ -458,8 +459,8 @@ export function mountCompiledEditRegions(root: HTMLElement, nodes: JsxNode[], ca
             });
           });
         }
-        // A kit text component's marks are its text, typed in through it: never hosts of their own.
-        if (node.type === 'element' && !(node.isComponent && isEditableTextHost(node))) visit(node.children, path);
+        // A text's marks are its text — typed in through it, or locked with it: never hosts of their own.
+        if (node.type === 'element' && !isText(text!)) visit(node.children, path);
         index++;
         continue;
       }

@@ -202,3 +202,27 @@ describe('composeSource — kit text components', () => {
     expect(composeSource(KIT, pending({ text: new Map([['1', 'flattened']]) }))).toBe(KIT);
   });
 });
+
+describe('composeSource — data bindings in plain HTML text', () => {
+  /** A document that declares data: every path the document reports is body-relative. */
+  const DOC = '<Helmet><Value name="x" type="number" default={42} /></Helmet>'
+    + '<div id="main"><p id="tot">Total: {$x} items</p><p id="mix">Mixed <strong id="mst">bold</strong> next to {$x}</p>'
+    + '<p id="ic">Done <Icon id="icn" name="circle-check" /> now</p><p id="num">Revenue <Number id="nm" data="$q" col="total" /></p></div>';
+  const TOTAL = '0.0', MIX = '0.1', MARK = '0.1.1', ICON_P = '0.2', NUMBER_P = '0.3';
+
+  it('refuses the rendered value typed over a binding — the source keeps {$x}', () => {
+    // What the hosted editor wrote before the rule: the expression replaced by its value.
+    expect(composeSource(DOC, pending({ text: new Map([[TOTAL, 'Total: 42 items total']]) }))).toBe(DOC);
+    expect(composeSource(DOC, pending({ text: new Map([[NUMBER_P, 'Revenue <span data-mx-ast="0.3.1">1,204</span> up']]) }))).toBe(DOC);
+  });
+
+  it('a mark inside text is part of it: never addressed on its own, even when it holds no binding', () => {
+    expect(composeSource(DOC, pending({ text: new Map([[MIX, 'Mixed <strong>bold</strong> next to 42 now']]) }))).toBe(DOC);
+    expect(composeSource(DOC, pending({ text: new Map([[MARK, 'bolder']]) }))).toBe(DOC);
+  });
+
+  it('a static embed\'s own stamp splices it back where the document reports it, under a Helmet', () => {
+    const out = composeSource(DOC, pending({ text: new Map([[ICON_P, 'All done <svg data-mx-ast="0.2.1" contenteditable="false"></svg> for real']]) }));
+    expect(out).toBe(DOC.replace('Done <Icon', 'All done <Icon').replace('/> now</p>', '/> for real</p>'));
+  });
+});

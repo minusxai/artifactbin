@@ -22,7 +22,7 @@ import { resolveJsxNodeAtPath, textLockOf } from '@/lib/story-ui/host-classify';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { nodeName } from '@/lib/story-ui/node-names';
 import type { StoryEditFramePost, StoryEditParentMessage, StoryEditRect, StoryEditSelection } from '@/lib/edit-protocol';
-import { describedKind, describeSelection } from './describe-selection';
+import { describedKind, describeSelection, textOwnerElement } from './describe-selection';
 import { captureSelection } from './selection-range';
 import { markdownEditorFor } from '@/lib/markdown/editor';
 import { canResize, editChromeKind, gripTarget, isComponentPart, isTablePart } from './edit-chrome';
@@ -280,7 +280,8 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
   const selectableAt = (target: EventTarget | null): Element | null => {
     const element = target as Element | null;
     if (!element?.closest || !root.contains(element) || element.closest(DOCUMENT_CHROME)) return null;
-    const stamped = element.closest(`[${AST_PATH_ATTR}]`);
+    const mark = element.closest(`[${AST_PATH_ATTR}]`);
+    const stamped = mark && textOwnerElement(mark, nodes());
     return stamped && describeSelection(stamped, nodes()) ? stamped : null;
   };
 
@@ -346,18 +347,22 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
       stampSelection();
       return;
     }
-    const stamped = target.closest(`[${AST_PATH_ATTR}]`);
-    if (!stamped) {
+    const mark = target.closest(`[${AST_PATH_ATTR}]`);
+    if (!mark) {
       reportSelection(null);
       return;
     }
-    const chromeKind = editChromeKind(stamped);
-    // Nothing to type in a chart or an image: a click selects it.
+    // A click on a mark is a click on the text it is part of.
+    const stamped = textOwnerElement(mark, nodes());
+    // Text that takes no caret (it comes from data, is computed, is the component's) is selected itself, so the
+    // page can say why — even when its marks are stamped, which makes it read as a container. Text being typed in
+    // (a host, prose, a Markdown editor) keeps its caret.
+    const path = stamped.getAttribute(AST_PATH_ATTR);
+    const locked = !!path && !!textLockOf(resolveJsxNodeAtPath(nodes(), path));
+    const shape = editChromeKind(stamped);
+    const chromeKind = locked && shape === 'container' ? 'block' : shape;
+    // Nothing to type in a chart or an image: a click selects it; anything else selects the block its grip moves.
     if (chromeKind === 'block') {
-      // Text that takes no caret (it comes from data, is computed, is the component's) is selected itself, so the
-      // page can say why; anything else selects the block its grip moves.
-      const path = stamped.getAttribute(AST_PATH_ATTR);
-      const locked = !!path && !!textLockOf(resolveJsxNodeAtPath(nodes(), path));
       if (describeSelection(stamped, nodes())) selectBlock(stamped, locked);
       return;
     }

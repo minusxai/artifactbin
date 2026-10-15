@@ -50,12 +50,12 @@ afterEach(()=>{dispose?.();dispose=undefined;vi.unstubAllGlobals();document.body
 interface Page {emit(data:Record<string,unknown>):void; saved():Promise<string>}
 
 /** The hosted editor page over BODY, its document runtime faked. */
-async function hosted():Promise<Page>{
+async function hosted(body=BODY):Promise<Page>{
  const NONCE='n'.repeat(24);
  let onEvent:((data:unknown)=>void)|null=null;
  const runtimeRef:DocumentRuntimeRef={current:{send:(msg:{type?:string})=>{if(msg.type==='mx:commit')queueMicrotask(()=>onEvent?.({type:'mx:committed',nonce:NONCE}));},subscribe:(fn:(data:unknown)=>void)=>{onEvent=fn;return()=>{onEvent=null;};},getViewportRect:()=>new DOMRect()} as never};
  const {default:InPlaceEditor}=await import('@/solid/editor/InPlaceEditor');
- const art={id:'doc12345',version:3,edit_id:'edit-3',title:'Dashboard',theme:null,template:null,colorMode:null,markup:BODY,
+ const art={id:'doc12345',version:3,edit_id:'edit-3',title:'Dashboard',theme:null,template:null,colorMode:null,markup:body,
   document:{schema:3 as const,kind:'graph' as const,policy:'',nodes:{},claimedIds:{},bytes:0}};
  const host=document.createElement('div');document.body.append(host);
  dispose=render(()=> <Router><Route path="/" component={()=> <InPlaceEditor art={art} backend={fakeBackend()} runtimeRef={runtimeRef} sessionNonce={NONCE} />} /></Router>,host);
@@ -65,13 +65,13 @@ async function hosted():Promise<Page>{
 }
 
 /** The local preview over BODY (`afbin preview`), its document controller faked. */
-async function preview():Promise<Page>{
+async function preview(body=BODY):Promise<Page>{
  document.body.innerHTML=`<div id="${STORY_ROOT_ID}"></div>`;
  vi.stubGlobal('location',{pathname:'/workspace/dashboard.jsx',search:'',reload});
  fetch_.mockImplementation(async(path:string,init?:RequestInit)=>path==='/save'?json({body:JSON.parse(String(init!.body)).body,revision:'saved'}):json({}));
  vi.stubGlobal('fetch',fetch_);
  const {Toolbar}=await import('../../../cli/src/preview/client');
- const initial={body:BODY,revision:'observed-revision',metadata:{title:'Dashboard'},data:{nodes:[]}} as unknown as PreviewDocument;
+ const initial={body,revision:'observed-revision',metadata:{title:'Dashboard'},data:{nodes:[]}} as unknown as PreviewDocument;
  const host=document.createElement('div');document.body.append(host);
  dispose=render(()=> <Toolbar initial={initial} />,host);
  fireEvent.click(screen.getByRole('button',{name:'Edit'}));
@@ -105,5 +105,23 @@ describe.each([['the hosted editor',hosted],['the local preview',preview]] as co
   // A forged edit to the data cell is refused by the same composition on both pages.
   page.emit({type:'mx:text-edit',path:DATA_CELL,innerHtml:'42'});
   expect(await page.saved()).toBe(BODY.replace('>Wed<','><b>Thu</b>rsday<'));
+ });
+});
+
+/** Plain HTML: a paragraph bound to data beside a paragraph of the author's text. */
+const PLAIN='<div id="m"><p id="tot">Total: {$x} items</p><p id="pl">Plain <strong id="ps">bold</strong> words</p></div>';
+const BOUND='0.0',TEXT='0.1';
+const BOUND_SELECTION={kind:'element',mode:'block',path:BOUND,tag:'p',nodeId:'tot',rect:RECT,className:'',style:'',ancestors:[],textLock:'Text comes from data'};
+
+describe.each([['the hosted editor',hosted],['the local preview',preview]] as const)('a paragraph bound to data in %s',(_name,open)=>{
+ it('says why it takes no caret, refuses its rendered value, and saves the text beside it with the binding intact',async()=>{
+  const page=await open(PLAIN);
+  page.emit({type:'mx:selection',selection:BOUND_SELECTION});
+  expect((await screen.findByRole('note',{name:'Why this text is not editable'})).textContent).toBe('Text comes from data');
+  // The rendered value typed over the binding (what the editor saved before the rule), and a mark addressed alone.
+  page.emit({type:'mx:text-edit',path:BOUND,innerHtml:'Total: 42 items total'});
+  page.emit({type:'mx:text-edit',path:`${TEXT}.1`,innerHtml:'forged'});
+  page.emit({type:'mx:text-edit',path:TEXT,innerHtml:'Plain <strong id="ps">bold</strong> words, edited'});
+  expect(await page.saved()).toBe(PLAIN.replace('words</p>','words, edited</p>'));
  });
 });

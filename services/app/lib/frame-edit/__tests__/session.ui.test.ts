@@ -303,12 +303,12 @@ describe('kit text components in the edit session', () => {
   it('a kit cell, a card title and a breadcrumb link take a caret; a cell from data does not', async () => {
     const { at } = await open(KIT.replace('>Revenue<', '><b>Net</b> revenue<'), KIT_DOM.replace('>Revenue<', '><b data-mx-ast="0.0.0.0">Net</b> revenue<'));
     // Its marks are its text, typed in through it: not hosts of their own.
-    expect(at('0.0.0.0').getAttribute('contenteditable')).toBeNull();
+    expect(at('0.0.0.0').contentEditable).not.toBe('true');
     expect(at(CELL).contentEditable).toBe('true');
     expect(at('0.0.0').contentEditable).toBe('true');
     expect(at('1.0.0.0').contentEditable).toBe('true');
-    expect(at('0.1.0.0.0.1').getAttribute('contenteditable')).toBeNull();
-    expect(at('0').getAttribute('contenteditable')).toBeNull();
+    expect(at('0.1.0.0.0.1').contentEditable).not.toBe('true');
+    expect(at('0').contentEditable).not.toBe('true');
   });
 
   it('focusing a kit cell reports a TEXT selection on it; typing then leaving posts its new text', async () => {
@@ -418,5 +418,48 @@ describe('kit text components in the edit session', () => {
     session!.onParentMessage({ type: 'mx:apply-link', path: '1.0.0.0', href: 'https://example.com' });
     expect(link.querySelector('a')).toBeNull();
     expect(of('mx:text-edit')).toHaveLength(0);
+  });
+});
+
+describe('plain HTML text in the edit session', () => {
+  // Each paragraph holds an expression, so none is a prose block: each is a text host of its own, or locked text.
+  const PLAIN = '<div id="m"><p id="a">Hello {"there"} <strong id="s">bold</strong> words</p><p id="b">Total: {$x} <em id="e">items</em></p></div>';
+  const PLAIN_DOM = '<div id="m" data-mx-ast="0"><p id="a" data-mx-ast="0.0">Hello there <strong id="s" data-mx-ast="0.0.3">bold</strong> words</p>'
+    + '<p id="b" data-mx-ast="0.1">Total: 42 <em id="e" data-mx-ast="0.1.3">items</em></p></div>';
+
+  // jsdom does not reflect `contentEditable` to the attribute: the property is what the mounter set.
+  it('a paragraph of text takes a caret and its marks are its text; a paragraph bound to data takes none', async () => {
+    const { at } = await open(PLAIN, PLAIN_DOM);
+    expect(at('0.0').contentEditable).toBe('true');
+    expect(at('0.0.3').contentEditable).not.toBe('true');
+    expect(at('0.1').contentEditable).not.toBe('true');
+    expect(at('0.1.3').contentEditable).not.toBe('true');
+  });
+
+  it('the pointer over a mark is over the text it is part of, editable or locked', async () => {
+    const { at } = await open(PLAIN, PLAIN_DOM);
+    for (const [mark, text] of [['0.0.3', '0.0'], ['0.1.3', '0.1']]) {
+      at(mark).dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+      expect(at(text).hasAttribute('data-mx-edit-hover')).toBe(true);
+      expect(at(mark).hasAttribute('data-mx-edit-hover')).toBe(false);
+    }
+  });
+
+  it('a click on bound text, or on a mark in it, selects that text and says why it takes no caret', async () => {
+    const { of, at } = await open(PLAIN, PLAIN_DOM);
+    for (const path of ['0.1', '0.1.3']) {
+      at(path).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      expect(of('mx:selection').at(-1)?.selection).toMatchObject({ kind: 'element', path: '0.1', tag: 'p', mode: 'block', textLock: 'Text comes from data' });
+    }
+  });
+});
+
+describe('a Markdown editor in the edit session', () => {
+  it('a click in its text keeps the caret there: its component lock never turns it into a block selection', async () => {
+    const { of, root } = await open('<Markdown id="md">{"Hello there"}</Markdown>', '<div id="md" data-mx-ast="0" data-mx-markdown></div>');
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const text = root.querySelector('[data-mx-lexical] p, [data-mx-lexical] span') ?? root.querySelector('[data-mx-lexical]')!;
+    text.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(of('mx:selection').map((m) => (m.selection as { mode?: string } | null)?.mode)).not.toContain('block');
   });
 });
