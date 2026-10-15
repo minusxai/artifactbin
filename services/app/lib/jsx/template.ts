@@ -222,18 +222,4 @@ export function substituteViz<T>(viz: T, read: HoleReader): T {
   return deepHasValueHole(viz) || JSON.stringify(viz ?? null).includes('$_row.') ? visit(viz, null, 0) as T : viz;
 }
 
-/**
- * A short, stable digest of a resolved chart spec (FNV-1a, 64 bits as hex): what a served drawing records as
- * the spec it drew, so a reader whose values resolve the spec differently never keeps it. Synchronous, so the
- * server render, the snapshot and the browser compute it alike.
- */
-export function specDigest(value: unknown): string {
-  const s = JSON.stringify(value ?? null);
-  let h1 = 0x811c9dc5, h2 = 0x01000193 ^ 0x9e3779b9;
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
-    h2 = Math.imul(h2 ^ c, 0x5bd1e995) >>> 0;
-  }
-  return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
-}
+export { specDigest } from './spec-digest';

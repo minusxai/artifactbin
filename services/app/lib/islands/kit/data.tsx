@@ -36,7 +36,7 @@ import { DRAWING_CLASS, drawingIsCurrent } from '../chart';
 import { rowsDigest } from '../digest';
 import type { CellScope } from './cells';
 import { CHART_SLOT_ATTR, CHART_SPEC_ATTR, CHART_STATE_ATTR, type DrawnChart } from '@/lib/story-runtime/contract';
-import { specDigest } from '@/lib/jsx/template';
+import { specDigest } from '@/lib/jsx/spec-digest';
 
 const nameOf = (raw: unknown) => refName(raw) ?? '';
 /** The authored identity the former adapters put on their outer element: the id and the compiler's `data-*` stamps, never the chart slot marker. */
