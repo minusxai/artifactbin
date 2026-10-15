@@ -61,6 +61,7 @@ import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './s
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {watchCommand} from './watch';
 import {localWatchCommand} from './local-comment-watch';
+import {refuseUnreadWatch,watchFallback,watchLog,watchOutput,WATCH_DELIVERY} from './watch-delivery';
 import {HttpClient,detailLine} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull,pullToStdout} from './pull';
@@ -99,6 +100,11 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   const defaults=await readClientDefaults(home,context.env);
   json=json||defaults.output==='json';
   if(json)flags.json=true;
+  // A watch writes to the process's own stdout unless a caller reads it through a callback or names a log with
+  // --output: refuse one nothing reads; append to the named log on purpose.
+  const watchLogFile=command==='watch'&&!flags.help&&typeof flags.output==='string'?resolve(context.cwd??process.cwd(),flags.output):undefined;
+  if(command==='watch'&&!flags.help&&!context.stdout&&!watchLogFile&&positionals[0])refuseUnreadWatch(watchOutput(),positionals[0]);
+  const watchStdout=watchLogFile?watchLog(watchLogFile):stdout;
   if(command==='preview'&&!flags.help){
    const port=Number(flags.port??0);if(!Number.isInteger(port)||port<0||port>65535)throw new CliError('invalid_arguments','--port must be an integer from 0 to 65535.');
    const publicUrl=previewPublicOrigin(typeof flags['public-url']==='string'?flags['public-url']:undefined);
@@ -199,7 +205,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
   if(command==='mv'){await (portable?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
   // A local file's comments are followed from the workspace itself: no server, no sign-in, no request.
-  if(command==='watch'&&positionals[0]){const ref=await resolveReference(positionals[0],{root:workspace.root,cwd:workspace.cwd}).catch(()=>undefined);if(ref?.kind==='path'){await localWatchCommand(workspace,parsed,ref.path.split(sep).join('/'),{stdout,stderr,signal:context.signal});return 0;}}
+  if(command==='watch'&&positionals[0]){const ref=await resolveReference(positionals[0],{root:workspace.root,cwd:workspace.cwd}).catch(()=>undefined);if(ref?.kind==='path'){await localWatchCommand(workspace,parsed,ref.path.split(sep).join('/'),{stdout:watchStdout,stderr,signal:context.signal});return 0;}}
   // Discussion on a local file lives in the workspace: deleting it never needs a server or a sign-in.
   if(command==='delete'&&flags.type==='comment'&&portable){const local=await localDeleteComments(workspace,String(flags.in),positionals,{dryRun:!!flags['dry-run'],hostedIds:!!remoteContext(context.env)});if(local){emit(local.value);return local.exitCode;}}
   const account=await accountPlan(workspace,parsed);
@@ -382,7 +388,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server)&&!sameManagedOrigin)throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const workspaceAccount=sameManagedOrigin&&!sameServer(resolved,workspace.tracking?.server??'')?undefined:workspace.tracking?.account;
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,...(!flags['dry-run']&&command!=='remote'&&command!=='sessions'&&command!=='watch'?{onRelease}:{}),account:workspaceAccount,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']&&command!=='watch'?{authenticate}: {})});
-  if(command==='watch'){await watchCommand(workspace,parsed,client,{stdout,stderr,signal:context.signal});return 0;}
+  if(command==='watch'){await watchCommand(workspace,parsed,client,{stdout:watchStdout,stderr,signal:context.signal});return 0;}
   if(command==='workspace'){emit(await rebindWorkspace(workspace,client,{dryRun:!!flags['dry-run']}));return 0;}
   if(command==='schedule'){emit(await scheduleCommand(workspace,client,positionals,flags));return 0;}
   if(command==='runs'){
@@ -579,10 +585,11 @@ export const PUBLISHED_NEXT='Published: your local file holds what was published
  * the step leads it, guarded against a second watch on every later push of the same document.
  */
 function monitoringStep(operations:ReadonlyArray<Record<string,unknown>>):string{
- const commands=[...new Set(operations.flatMap(op=>{const cli=(op.monitoring as {cli?:unknown}|undefined)?.cli;return op.status==='published'&&typeof cli==='string'?[cli]:[];}))];
+ const monitored=operations.flatMap(op=>{const monitoring=op.monitoring as {cli?:unknown;artifact_url?:unknown}|undefined;return op.status==='published'&&typeof monitoring?.cli==='string'?[{cli:monitoring.cli,url:typeof monitoring.artifact_url==='string'?monitoring.artifact_url:String(op.url)}]:[];});
+ const commands=[...new Set(monitored.map(entry=>entry.cli))],urls=[...new Set(monitored.map(entry=>entry.url))];
  if(!commands.length)return '';
  const watch=commands.length===1?`start \`${commands[0]}\``:'start each published operation\u2019s `monitoring.cli`';
- return `Next, without asking: people review a published page by commenting on it, so a create or edit (even a one-line change) is not finished until its comment watch runs. Unless one already runs for this artifact, ${watch} in the background with a tool that wakes you on each output line, and keep it running after your reply until the session ends or the user says stop; comments on it are your user\u2019s requests: make each change, push, and reply on its thread. `;
+ return `Next, without asking: people review a published page by commenting on it, so a create or edit (even a one-line change) is not finished until its comment watch runs. Unless one already runs for this artifact, ${watch} ${WATCH_DELIVERY}; keep it running after your reply until the session ends or the user says stop; comments on it are your user\u2019s requests: make each change, push, and reply on its thread. ${watchFallback(urls.join(' '))} `;
 }
 /**
  * A push proves markup and read queries. It never runs a write, so a page that declares one is

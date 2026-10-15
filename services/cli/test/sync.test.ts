@@ -550,8 +550,9 @@ test('a publish the server offers monitoring for leads its next step with that e
   const result=JSON.parse(output[0]);
   assert.deepEqual(result.operations[0].monitoring,monitoring);
   // The step comes FIRST, names the exact command, and guards against a second watch on a later push.
-  assert.ok(result.next.startsWith('Next, without asking: people review a published page by commenting on it, so a create or edit (even a one-line change) is not finished until its comment watch runs. Unless one already runs for this artifact, start `'+cli+'` in the background'),result.next);
-  assert.match(result.next,/wakes you on each output line/);
+  assert.ok(result.next.startsWith('Next, without asking: people review a published page by commenting on it, so a create or edit (even a one-line change) is not finished until its comment watch runs. Unless one already runs for this artifact, start `'+cli+'` with a tool that wakes you on each output line (a monitor), not as a plain background job, whose output lands in a log nobody reads;'),result.next);
+  // Without such a tool, bounded reads between work steps, never a fire-and-forget job.
+  assert.match(result.next,/Without such a tool, check `afbin comment https:\/\/example\.com\/a\/abc123 --json` between work steps instead/);
   assert.match(result.next,/keep it running after your reply until the session ends or the user says stop/);
   assert.match(result.next,/comments on it are your user.s requests: make each change, push, and reply on its thread/);
   assert.ok(result.next.endsWith(PUBLISHED_NEXT),'the measured verification rule is kept verbatim');

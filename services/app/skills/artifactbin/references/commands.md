@@ -9,9 +9,9 @@ Run `afbin -h` for the command list and `afbin <command> -h` for exact invocatio
 ## watch
 
 ```text
-afbin watch <url|id|file> --comments --json
+afbin watch <url|id|file> --comments --json [--output <file>]
 
-Follow new human comments, replies and edits as NDJSON until cancelled; a local file is followed offline from the workspace; --cursor resumes an explicit checkpoint.
+Follow new human comments, replies and edits as NDJSON until cancelled; a local file is followed offline from the workspace; --cursor resumes an explicit checkpoint. Run it with a tool that wakes you on each output line; a stdout that is a file or discarded is refused, and --output appends the events to a log file on purpose instead.
 
   -h, --help
     Show local command help.
@@ -27,10 +27,13 @@ Follow new human comments, replies and edits as NDJSON until cancelled; a local 
     Follow new human comments, replies and edits.
   --cursor <CURSOR>
     Continue from a returned next_cursor.
+  -o, --output <PATH>
+    Write resulting content to this file or directory.
 
 Examples:
   afbin watch abc123 --comments --json
   afbin watch report.jsx --comments --json
+  afbin watch report.jsx --comments --json --output comments.ndjson
 ```
 
 Use `--server <origin>` to select the artifact server; keep any returned cursor with that origin and artifact. Ctrl-C cancels the foreground stream. See [monitoring](monitoring.md) for checkpoint and notification rules.

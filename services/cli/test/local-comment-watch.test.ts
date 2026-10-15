@@ -114,6 +114,22 @@ test('afbin watch <file> --comments --json follows the local feed with no networ
  }finally{await f.cleanup();}
 });
 
+test('afbin watch --output <file> appends each event to that file on purpose and leaves stdout empty',async()=>{
+ const f=await fixture();try{
+  const cursor=(await f.feed()).read('now',100).next_cursor;
+  const root=await f.say('para','Log me');
+  await writeFile(join(f.root,'events.ndjson'),'{"earlier":true}\n');
+  const out:string[]=[],err:string[]=[];const controller=new AbortController();
+  const code=await runCli(['watch','report.jsx','--comments','--json','--cursor',cursor,'--output','events.ndjson'],{home:f.home,cwd:f.root,interactive:false,signal:controller.signal,
+   stdout:value=>{out.push(value);},stderr:value=>{err.push(value);if(value.includes('"checkpoint"'))controller.abort();}});
+  assert.equal(code,0,err.join(''));
+  assert.deepEqual(out,[],'events go to the named file, not stdout');
+  const lines=(await readFile(join(f.root,'events.ndjson'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));
+  assert.deepEqual(lines[0],{earlier:true},'the log is appended to, never truncated');
+  assert.deepEqual(lines.slice(1).map(e=>[e.comment_id,e.body]),[[root.id,'Log me']]);
+ }finally{await f.cleanup();}
+});
+
 test('a comment written through the preview server reaches a watcher reading the same workspace',async()=>{
  const f=await fixture();let session:Awaited<ReturnType<typeof startPreview>>|undefined;try{
   const cursor=(await f.feed()).read('now',100).next_cursor;
@@ -131,8 +147,12 @@ test('a running preview names the watch that follows its comments, as a push nam
  const next=previewWatchNext(['report.jsx','notes/plan.jsx']);
  assert.match(next,/afbin watch report\.jsx --comments --json/);
  assert.match(next,/afbin watch notes\/plan\.jsx --comments --json/);
- assert.match(next,/in the background with a tool that wakes you on each output line/);
+ assert.match(next,/with a tool that wakes you on each output line \(a monitor\), not as a plain background job, whose output lands in a log nobody reads/);
+ assert.match(next,/Without such a tool, check `afbin comment report\.jsx notes\/plan\.jsx --json` between work steps instead/);
  assert.match(next,/your user.s requests/);
+ // A reply on a local file is local too: the agent that keeps a page unpublished still answers the person.
+ assert.match(next,/reply on its thread with `afbin comment <file> --thread ANNOTATION_ID --body 'What changed'`; replies stay local and publish nothing/);
+ assert.match(previewWatchNext(['report.jsx']),/`afbin comment report\.jsx --thread ANNOTATION_ID --body 'What changed'`/);
  assert.equal(previewWatchNext([]),'');
  // Only documents take comments: a dataset preview names no watch.
  assert.equal(previewWatchNext(['sales.csv']),'');

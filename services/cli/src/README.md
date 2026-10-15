@@ -50,7 +50,7 @@ One row per command `dispatch.ts` routes. Handler modules are listed in the orde
 | `update` | `update.ts`, `update-progress.ts`, `skill-install.ts` | `updateCli` |
 | `upload` | `upload.ts` | `uploadAttachment` |
 | `validate` | `validation.ts`, `local-verification.ts`, `sync.ts`, `account-workspace.ts` | local `validateFiles` and `verifyLocalDocuments`; `--remote` a dry-run push |
-| `watch` | `local-comment-watch.ts`, `watch.ts` | a local file first (`localWatchCommand`, offline), then `watchCommand`: new comments as NDJSON until cancelled |
+| `watch` | `watch-delivery.ts`, `local-comment-watch.ts`, `watch.ts` | refused first when stdout is a file or discarded (`refuseUnreadWatch`), then a local file (`localWatchCommand`, offline), then `watchCommand`: new comments as NDJSON until cancelled |
 | `workspace` | `workspace-rebind.ts` | `rebindWorkspace` |
 
 ## Import groups
@@ -142,6 +142,7 @@ What `dispatch.ts` calls to do a command's work.
 | `testuser.ts` | `testuser`: mint and erase test users. |
 | `browser-sessions.ts` | `sessions`: live browser sessions. |
 | `watch.ts` | `watch`: follow new comments as NDJSON. |
+| `watch-delivery.ts` | `watch`: refuses a watch whose stdout nothing reads; the one rule every watch hint states. |
 | `remote-launch.ts` | Launch a background remote agent. |
 | `remote-state.ts` | Stop a remote agent and reconcile its exit. |
 | `attach.ts` | Attach to a live remote relay. |

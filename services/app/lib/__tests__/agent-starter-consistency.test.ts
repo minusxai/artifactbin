@@ -441,6 +441,32 @@ it('keeps live comment tracking from blocking existing work or waiting for proce
  expect(guide).toContain('Save the returned cursor');
 });
 
+/**
+ * A WATCH NOTHING READS ANSWERS NOTHING. In the preview-then-monitor eval every run that started the watch with a tool
+ * that wakes the agent per output line answered the comment; every run that started it as a plain background job did
+ * not. Every surface that tells an agent to watch says so in harness-neutral words, with the bounded fallback.
+ */
+it('teaches every surface to watch with a tool that wakes the agent, never a plain background job, and to poll without one', () => {
+ const {instruction} = (monitoringGuidance(DEFAULT_SERVER, 'abc123', 'markup') as {monitoring:{instruction:string}}).monitoring;
+ const section = (text:string) => text.split('\n## Monitor\n')[1]!.split('\n## ')[0]!;
+ const skill = skillTree().get('artifactbin/SKILL.md')!;
+ const surfaces = {
+  instruction,
+  cliSkill: section(renderSkill(skill, {base: DEFAULT_SERVER, transport: 'cli'})),
+  httpSkill: section(renderSkill(skill, {base: DEFAULT_SERVER, transport: 'http'})),
+  guide: publicGuideText('monitoring', DEFAULT_SERVER)!.split('\n## CLI')[0]!,
+ };
+ for (const [name, text] of Object.entries(surfaces)) {
+  expect(text, name).toMatch(/wakes you on each (?:output line|new comment)/);
+  expect(text, name).toContain('plain background job');
+  expect(text, name).toContain('between work steps');
+ }
+ expect(surfaces.cliSkill).toContain('`afbin comment <url|file> --json`');
+ // Replying is never publishing: an agent asked to keep a page local answered by editing alone and never replied.
+ expect(surfaces.cliSkill).toContain('push it if the page is published');
+ expect(surfaces.cliSkill).toContain('a reply on a local file stays local');
+});
+
 it('reuses an executable HTTP dataset creation example in both guides', async () => {
  const guides=['http-api','publishing-datasets'].map(topic=>publicGuideText(topic,BASE)!);
  const bodies=guides.map(guide=>{
