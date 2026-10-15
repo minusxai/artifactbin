@@ -42,6 +42,7 @@ import { createIslandRuntime, hydrateIsland } from './rt';
 import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from './module';
 import { installIslandDocument } from './handover';
 import { createWriteStatusFeed } from './writes';
+import { startRuntimeCss } from './runtime-css';
 import { loadChart } from './chart';
 
 /**
@@ -132,6 +133,8 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   const transport = !flow ? null : direct
     ? createFetchTransport(data.queryUrl!, undefined, data.mutateUrl, { session: data.signedIn, credentials: 'include' })
     : createDocumentTransport(win, data.queryUrl, undefined, data.mutateUrl, { session: data.signedIn });
+  // A version that fills classes at runtime: a class its rows bring and its sheet lacks is fetched before it is painted (./runtime-css).
+  const stopRuntimeCss = data.css ? startRuntimeCss(win, data.css, { credentials: direct ? 'include' : 'same-origin' }) : () => {};
   /** What a top-level page holds itself — its stream and `window.page` — a document on its own origin holds framed too. */
   const holdsOwn = win.parent === win || direct;
   /*
@@ -283,6 +286,7 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      stopRuntimeCss();
       stopAuthor();
       disposeIslands();
       stopLive();
