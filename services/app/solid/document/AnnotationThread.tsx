@@ -30,6 +30,7 @@ import { AnnotationReplyBox } from './AnnotationReplyBox';
 import { CommentFoldingBody } from './CommentFoldingBody';
 import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
+import { persistedText, readDraft, writeDraft } from '../lib/draft-store';
 import { CommentScreenshot } from './CommentScreenshot';
 import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
 
@@ -105,7 +106,8 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
   });
 
   // The reply draft — words and image — belongs to the thread, so folding the thread away keeps it.
-  const [reply, setReply] = createSignal('');
+  // Kept for this tab too (solid/lib/draft-store): a reload — the page loading a new build — gives it back.
+  const [reply, setReply] = persistedText(`${props.artifactId}:thread-reply:${props.a.id}`);
   const replyImage = createCommentImageDraft();
   createEffect(on(() => hasReplyText(reply()), (typed) => props.onReplyDraftChange?.(typed)));
   onCleanup(() => props.onReplyDraftChange?.(false));
@@ -127,8 +129,12 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
       || props.backend.canEditLocalComment?.(comment) === true;
   };
   // ONE comment of this thread is edited at a time, in place of its body; the draft survives a refused save.
-  const [editing, setEditing] = createSignal<string | null>(null);
-  const [editDraft, setEditDraft] = createSignal('');
+  // The comment being rewritten and its words, kept for this tab: a reload reopens the edit where it was.
+  const editKey = `${props.artifactId}:edit:${props.a.id}`;
+  const kept = (() => { try { return JSON.parse(readDraft(editKey) || 'null') as { comment?: unknown; body?: unknown } | null; } catch { return null; } })();
+  const [editing, setEditing] = createSignal<string | null>(typeof kept?.comment === 'string' && typeof kept.body === 'string' ? kept.comment : null);
+  const [editDraft, setEditDraft] = createSignal(editing() ? String(kept?.body) : '');
+  createEffect(() => { const comment = editing(); writeDraft(editKey, comment ? JSON.stringify({ comment, body: editDraft() }) : ''); });
   const [editError, setEditError] = createSignal('');
   const [saving, setSaving] = createSignal(false);
   const startEdit = (comment: AnnotationCommentWire) => {

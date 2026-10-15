@@ -52,6 +52,7 @@ import { createCommentCapture } from './CommentCapture';
 import { CommentImagesProvider, createCommentImageDraft, createImageDropTarget, ImageDropTarget, preloadScreenshotEditor, type CommentImageAttachment } from './CommentImageAttach';
 import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
+import { draftsUnder, persistedText, writeDraft } from '../lib/draft-store';
 import { PersonMentionProvider } from './PersonMention';
 
 // The upload fallback is a lazy chunk (an intentional exception to top-level imports): it keeps ui/Field off the reader page.
@@ -186,9 +187,11 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   /** The hover card that shows: the pinned one, else the one under the pointer. */
   const previewId = () => pinnedId() ?? hoverId();
   /** Unsent hover-card replies per thread, for this page session: closing a card never loses one. */
-  const [replyDrafts, setReplyDrafts] = createSignal<Record<string, string>>({});
+  // Kept for this tab too (solid/lib/draft-store): a reload — the page loading a new build — gives them back.
+  const [replyDrafts, setReplyDrafts] = createSignal<Record<string, string>>(draftsUnder(`${props.id}:reply:`));
   const setReplyDraft = (id: string, value: string) => setReplyDrafts((current) => {
     if ((current[id] ?? '') === value) return current;
+    writeDraft(`${props.id}:reply:${id}`, value);
     const next = { ...current };
     if (value) next[id] = value; else delete next[id];
     return next;
@@ -217,7 +220,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   let resumeSelectAfterCompose = false;
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen covers the document. */
   const phoneRail = createIsPhoneViewport();
-  const [draft, setDraft] = createSignal('');
+  // The composer's words, kept for this tab: after a reload they are back in the composer when it next opens.
+  const [draft, setDraft] = persistedText(`${props.id}:comment`);
   const replaceDraft = setDraft;
   const drafting = createMemo(() => selection() !== null || hasReplyText(draft())
     || Object.values(replyDrafts()).some(hasReplyText) || threadReplies().size > 0);
