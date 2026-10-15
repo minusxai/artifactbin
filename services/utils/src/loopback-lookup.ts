@@ -12,8 +12,15 @@
  * unchanged. `useLoopbackLookup` installs it as `dns.lookup`, which `net` (and so `http`, `https` and `fetch`)
  * reads on every connection: each Node entry point (the CLI, the app server, the gate tooling) calls it once,
  * first thing, so every HTTP client in the process shares the one answer.
+ *
+ * A loopback name the machine's hosts file lists is the machine's own answer, not ours: a container routes
+ * `app.lvh.me` to its host with `extra_hosts` (the server repo's hosted agents reach the proxy that way), and
+ * loopback there is the container itself. Those names go to the resolver, which reads the hosts file locally,
+ * so they still answer offline.
  */
 import dns from 'node:dns';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { isLoopbackName } from '@artifactbin/contracts/loopback-names';
 
 type LookupCallback = (error: NodeJS.ErrnoException | null, address?: string | dns.LookupAddress[], family?: number) => void;
@@ -27,11 +34,35 @@ function familyOf(options: unknown): number {
   return family === 4 || family === 'IPv4' ? 4 : family === 6 || family === 'IPv6' ? 6 : 0;
 }
 
-/** A `dns.lookup` that answers the loopback names itself and asks `fallback` for every other name. */
-export function loopbackLookup(fallback: typeof dns.lookup = dns.lookup): typeof dns.lookup {
+/** This machine's hosts file: `/etc/hosts`, or Windows' under `%SystemRoot%`. */
+const HOSTS_FILE = process.platform === 'win32'
+  ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'drivers', 'etc', 'hosts')
+  : '/etc/hosts';
+
+/** The names a hosts file lists (lowercased), or none when it cannot be read. */
+export function hostsFileNames(file: string = HOSTS_FILE): ReadonlySet<string> {
+  let text = '';
+  try { text = readFileSync(file, 'utf8'); } catch { return new Set(); }
+  const names = new Set<string>();
+  for (const line of text.split(/\r?\n/)) {
+    const fields = line.replace(/#.*/, '').trim().split(/\s+/);
+    for (const name of fields.slice(1)) if (name) names.add(name.toLowerCase());
+  }
+  return names;
+}
+
+/** Whether this machine's hosts file lists `hostname`; the file is read once, on the first loopback name. */
+let listedNames: ReadonlySet<string> | undefined;
+const listedInHostsFile = (hostname: string): boolean => (listedNames ??= hostsFileNames()).has(hostname.toLowerCase());
+
+/**
+ * A `dns.lookup` that answers the loopback names itself and asks `fallback` for every other name, and for a loopback
+ * name `listed` says the hosts file maps.
+ */
+export function loopbackLookup(fallback: typeof dns.lookup = dns.lookup, listed: (hostname: string) => boolean = listedInHostsFile): typeof dns.lookup {
   const lookup = (hostname: string, options: unknown, callback?: unknown): void => {
     const done = (typeof options === 'function' ? options : callback) as LookupCallback;
-    if (typeof hostname !== 'string' || !isLoopbackName(hostname)) {
+    if (typeof hostname !== 'string' || !isLoopbackName(hostname) || listed(hostname)) {
       (fallback as (...args: unknown[]) => void).call(dns, hostname, ...(typeof options === 'function' ? [options] : [options, callback]));
       return;
     }
