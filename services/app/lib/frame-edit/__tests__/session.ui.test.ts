@@ -453,3 +453,13 @@ describe('plain HTML text in the edit session', () => {
     }
   });
 });
+
+describe('a Markdown editor in the edit session', () => {
+  it('a click in its text keeps the caret there: its component lock never turns it into a block selection', async () => {
+    const { of, root } = await open('<Markdown id="md">{"Hello there"}</Markdown>', '<div id="md" data-mx-ast="0" data-mx-markdown></div>');
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const text = root.querySelector('[data-mx-lexical] p, [data-mx-lexical] span') ?? root.querySelector('[data-mx-lexical]')!;
+    text.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(of('mx:selection').map((m) => (m.selection as { mode?: string } | null)?.mode)).not.toContain('block');
+  });
+});

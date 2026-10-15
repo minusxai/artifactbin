@@ -355,10 +355,12 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     // A click on a mark is a click on the text it is part of.
     const stamped = textOwnerElement(mark, nodes());
     // Text that takes no caret (it comes from data, is computed, is the component's) is selected itself, so the
-    // page can say why — even when its marks are stamped, which would make it read as a container.
+    // page can say why — even when its marks are stamped, which makes it read as a container. Text being typed in
+    // (a host, prose, a Markdown editor) keeps its caret.
     const path = stamped.getAttribute(AST_PATH_ATTR);
     const locked = !!path && !!textLockOf(resolveJsxNodeAtPath(nodes(), path));
-    const chromeKind = locked ? 'block' : editChromeKind(stamped);
+    const shape = editChromeKind(stamped);
+    const chromeKind = locked && shape === 'container' ? 'block' : shape;
     // Nothing to type in a chart or an image: a click selects it; anything else selects the block its grip moves.
     if (chromeKind === 'block') {
       if (describeSelection(stamped, nodes())) selectBlock(stamped, locked);
