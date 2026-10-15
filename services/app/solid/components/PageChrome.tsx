@@ -1,4 +1,5 @@
 /* @jsxImportSource solid-js */
+import { isChunkLoadError, reloadForNewBuild } from '../lib/app-build';
 import { createContext, createEffect, createSignal, For, on, Show, useContext, type Accessor, type JSX, type Setter } from 'solid-js';
 /** Shared Solid app chrome. One owner closes one panel before another opens. */
 import { Bell, ChevronRight, CircleUser, SlidersVertical, X } from 'lucide-solid';
@@ -92,7 +93,8 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
     if (props.onMode) props.onMode(next); else chooseTheme(next);
   };
   const [panels, setPanels] = createSignal<Panels>();
-  createEffect(() => { if (panel() && !panels()) void loadPanels().then(setPanels, () => {}); });
+  // A panel's code missing after a deploy (solid/lib/app-build): the press loads the new build rather than doing nothing.
+  createEffect(() => { if (panel() && !panels()) void loadPanels().then(setPanels, (error: unknown) => { if (isChunkLoadError(error)) reloadForNewBuild(); }); });
   const unread = () => Boolean(inbox?.state()?.unread);
   // Whatever closes a panel (Escape, scrim, its own close button, a link) returns focus to the bar button that opened it.
   createEffect(on(panel, (now, before) => { if (!now && before && opener?.isConnected) opener.focus(); }, { defer: true }));
