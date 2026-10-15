@@ -20,17 +20,18 @@ const runnerSettings=new Set(['RUNNER__SERVICE_URL','CONTRACT__ACTOR_SECRET']);
 const listensLocally=(host:string)=>host==='::1'||isLocalDevelopmentHost(host);
 /**
  * Every document is served on its own origin, `<hex id>.<pages host>` (APP__PAGES_HOST, which the app
- * server refuses to boot without), and that host must be SAME SITE as the public URL: the frame's pages
- * cookie is SameSite=Lax. An operator value wins. Otherwise a loopback public URL (`usesDevOutbox`:
- * loopback or lvh.me) gets development's `lvh.me`, every name under which resolves to 127.0.0.1 — same
- * site only for an app at an lvh.me name, which is why `afbin serve` generates `http://app.lvh.me:<port>`
- * (serve-config) — and a named host gets
- * `pages.<its hostname>`, a subdomain and so same site by construction. An IP address has no subdomain
- * to derive, so it has to name one.
+ * server refuses to boot without), and over http that host must be SAME SITE as the public URL: the frame's
+ * pages cookie is SameSite=Lax there. An operator value wins. Otherwise a name under `localhost` (loopback
+ * with no DNS, RFC 6761) gets `pages.<its hostname>` like any named host — a subdomain, so same site by
+ * construction, where `lvh.me` would be another site; any other loopback public URL (`usesDevOutbox`: an
+ * address, `localhost` or lvh.me) gets development's `lvh.me`, every name under which resolves to 127.0.0.1
+ * — same site only for an app at an lvh.me name, which is why `afbin serve` generates
+ * `http://app.lvh.me:<port>` (serve-config). An IP address has no subdomain to derive, so it has to name one.
  */
 function teamPagesHost(publicUrl:URL,configured:string|undefined):string{
  if(configured?.trim())return configured.trim();
  const name=publicUrl.hostname.toLowerCase().replace(/\.$/,'');
+ if(name.endsWith('.localhost'))return 'pages.'+name;
  if(usesDevOutbox(publicUrl.origin))return 'lvh.me';
  if(name.startsWith('[')||/^\d+\.\d+\.\d+\.\d+$/.test(name))throw new Error(`Team APP__PUBLIC_BASE_URL ${publicUrl.origin} is an IP address, so no pages host can be derived from it: set APP__PAGES_HOST to a hostname on the same site that resolves to this server (documents are served at <id>.<that host>).`);
  return 'pages.'+name;

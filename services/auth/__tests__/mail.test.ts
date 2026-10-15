@@ -46,6 +46,10 @@ describe('resendMailer', () => {
     for (const url of ['http://app.lvh.me:11001', 'http://lvh.me:3030']) expect(usesDevOutbox(url), url).toBe(true);
     for (const url of ['https://lvh.me.example.com', 'https://evil-lvh.me', 'https://app.example.com']) expect(usesDevOutbox(url), url).toBe(false);
   });
+  it('counts every name under localhost as loopback (RFC 6761), and nothing that merely contains it', () => {
+    for (const url of ['http://app.localhost:7445', 'http://app.afbin.localhost:7445', 'http://localhost:3030']) expect(usesDevOutbox(url), url).toBe(true);
+    for (const url of ['https://localhost.example.com', 'https://notlocalhost', 'https://app.test']) expect(usesDevOutbox(url), url).toBe(false);
+  });
 
   it('refuses to send without a key, and reports a failed send with its status', async () => {
     await expect(resendMailer({ from: 'x' }).send({ to: 'a', kind: 'other', subject: 's', text: 't' })).rejects.toBeInstanceOf(MailNotConfigured);

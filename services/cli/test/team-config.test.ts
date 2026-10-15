@@ -146,6 +146,10 @@ test('team settings give the host a pages host on the public URL\'s site, keep a
   assert.equal(await pages(shape('http://localhost:7445','127.0.0.1')),'lvh.me');
   assert.equal(await pages(shape('http://[::1]:7445','::1')),'lvh.me');
   assert.equal(await pages(shape('http://app.lvh.me:7445','127.0.0.1')),'lvh.me');
+  // A name under localhost is loopback without DNS (RFC 6761) and its own site: its pages host is a subdomain of it,
+  // never lvh.me, which would be a different site and keep the frame's pages cookie out.
+  assert.equal(await pages(shape('http://app.afbin.localhost:7445','127.0.0.1')),'pages.app.afbin.localhost');
+  assert.equal(await pages(shape('http://app.localhost:7445','127.0.0.1')),'pages.app.localhost');
   assert.equal(await pages(shape('https://Team.Example.test')+login),'pages.team.example.test');
   assert.equal(await pages(shape('https://team.example.test')+login+'APP__PAGES_HOST=docs.example.test\n'),'docs.example.test');
   await writeFile(file,shape('https://203.0.113.7')+login);

@@ -18,6 +18,7 @@
     "./sha256": "./src/sha256.ts",
     "./runtime-id": "./src/runtime-id.ts",
     "./node/credentials": "./src/credentials.ts",
+    "./node/loopback-lookup": "./src/loopback-lookup.ts",
     "./node/state-lock": "./src/state-lock.ts",
     "./node/private-directory": "./src/private-directory.ts",
     "./comment-watch": "./src/comment-watch.ts"

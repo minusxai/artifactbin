@@ -101,6 +101,17 @@ describe('token routes served by the app', () => {
     expect(rows[0]).toEqual(grant);
     expect((await mintInternal(request('/api/internal/tokens',{method:'POST',actor,json:{...grant,audience:'https://artifactbin.example/mcp'}}))).status).toBe(400);
   });
+  it('a plain-http API audience is accepted only on a loopback name: localhost, lvh.me and every name under either', async () => {
+    const user = await createUser({ email: 'loopback-audience@example.com' });
+    const actor = { credential: 'session' as const, userId: user.id, email: 'loopback-audience@example.com', emailVerified: true };
+    const mint = (audience: string) => mintInternal(request('/api/internal/tokens', { method: 'POST', actor, json: { audience, scope: 'artifacts' } }));
+    for (const audience of ['http://localhost:7445/api', 'http://127.0.0.1:7445/api', 'http://app.lvh.me:7445/api', 'http://app.localhost:7445/api', 'http://app.afbin.localhost:7445/api']) {
+      expect((await mint(audience)).status, audience).toBe(201);
+    }
+    for (const audience of ['http://artifactbin.example/api', 'http://evil-lvh.me/api', 'http://localhost.example.com/api', 'http://app.test/api']) {
+      expect((await mint(audience)).status, audience).toBe(400);
+    }
+  });
   it('GET /api/my/tokens lists only this account\'s live tokens; 401 without a session', async () => {
     expect((await listMine(request('/api/my/tokens'))).status).toBe(401);
     const user = await createUser({ email: 'b@example.com' });

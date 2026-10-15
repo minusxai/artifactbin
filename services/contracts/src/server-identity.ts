@@ -17,6 +17,8 @@
  * Both halves read it through here so there is exactly one origin rule.
  */
 
+import { isLoopbackName } from './loopback-names';
+
 /** The public identity document's path. Spelled once. */
 export const SERVER_IDENTITY_PATH = '/api/server';
 
@@ -35,8 +37,8 @@ export interface ServerIdentityDocument {
  * Takes a WHATWG `URL.hostname`, so IPv6 arrives bracketed and names lowercased.
  */
 export function isLocalDevelopmentHost(hostname: string): boolean {
-  return ['localhost', '127.0.0.1', '[::1]', 'lvh.me'].includes(hostname)
-    || ['.localhost', '.lvh.me', '.test'].some((suffix) => hostname.length > suffix.length && hostname.endsWith(suffix));
+  return isLoopbackName(hostname) || hostname === '127.0.0.1' || hostname === '[::1]'
+    || (hostname.length > '.test'.length && hostname.endsWith('.test'));
 }
 
 /**

@@ -1,6 +1,7 @@
 /** CI-only: the same remote-host conformance against a packaged foreground OSS team server. */
 import {spawn} from 'node:child_process';
 import {stopTeamHost} from './team-host-process.mjs';
+import {useLoopbackLookup} from '@artifactbin/utils/node/loopback-lookup';
 import {createServer} from 'node:http';
 import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir,homedir} from 'node:os';
@@ -12,6 +13,8 @@ const executable=resolve(process.argv[2]??'dist/afbin.mjs');
 const root=await mkdtemp(join(tmpdir(),'afbin-team-product-')),operator=join(root,'team'),home=join(root,'client');
 await mkdir(operator);await mkdir(home);
 const reserve=createServer();await new Promise(resolve=>reserve.listen(0,'127.0.0.1',resolve));const port=reserve.address().port;await new Promise(resolve=>reserve.close(resolve));
+// The packaged CLI resolves app.lvh.me itself; this process's own readiness probe does the same, never through DNS.
+useLoopbackLookup();
 const origin='http://app.lvh.me:'+port,outbox=join(operator,'mail.jsonl');
 const env={...process.env,HOME:home,USERPROFILE:home,ARTIFACTBIN_SKILLS:'off',ARTIFACTBIN_HOME:join(operator,'data/runtime'),CLI__AUTO_UPDATE:'0',EMAIL__DEV_OUTBOX_PATH:outbox};
 delete env.ARTIFACTBIN_TOKEN;delete env.ARTIFACTBIN_URL;

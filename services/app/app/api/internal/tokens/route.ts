@@ -16,7 +16,7 @@
  * NO rate limit here, on purpose — a door is enforced in exactly one place:
  * the proxy counts the OAuth doors in front of the approval that reaches this.
  */
-import {API_RESOURCE_PATH,ARTIFACT_SCOPE} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,ARTIFACT_SCOPE,isLoopbackName} from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';
 import { agentContract } from '@/lib/serving';
 import { canAuthenticateUser, hasCreatedDocument, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sessionActor, sourcedTokenName } from '@/lib/accounts';
@@ -41,8 +41,9 @@ export async function POST(request: Request) {
     if (actor.credential !== 'session' || typeof body.audience !== 'string' || body.scope !== ARTIFACT_SCOPE) return json({ error: 'invalid_audience' }, 400);
     try {
       const target = new URL(body.audience);
-      // `lvh.me` names resolve to 127.0.0.1: development's same-site app host when documents have their own origins.
-      const loopback = target.protocol === 'http:' && (['localhost', '127.0.0.1', '::1', '[::1]'].includes(target.hostname) || target.hostname === 'lvh.me' || target.hostname.endsWith('.lvh.me'));
+      // Plain http only on loopback: an address literal or a loopback name (contracts `isLoopbackName`:
+      // localhost, lvh.me and every name under either), development's app host.
+      const loopback = target.protocol === 'http:' && (isLoopbackName(target.hostname) || ['127.0.0.1', '::1', '[::1]'].includes(target.hostname));
       if ((target.protocol !== 'https:' && !loopback) || target.pathname !== API_RESOURCE_PATH || target.search || target.hash || target.username || target.password) return json({ error: 'invalid_audience' }, 400);
       audience = target.href;
       scope = body.scope;

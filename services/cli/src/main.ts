@@ -1,6 +1,10 @@
 import {installForegroundShutdown,installForegroundSupervisorShutdown} from './foreground-process';
 import {TEAM_HOST_ARG,PREVIEW_HOST_ARG,LOCAL_IMAGE_ARG,LOCAL_HTML_ARG,REMOTE_WORKER_ARG,REMOTE_CONTEXT_ARG} from './entry-args';
 import {reportStartupFailure} from './operator-error';
+import {useLoopbackLookup} from '@artifactbin/utils/node/loopback-lookup';
+// Every process this entry starts (the client, `serve`'s host, preview, workers) reaches a loopback name
+// (`app.lvh.me`, `*.localhost`) without asking DNS: offline, or on a stalling resolver, it still connects.
+useLoopbackLookup();
 if(process.argv[2]===PREVIEW_HOST_ARG||process.argv[2]===TEAM_HOST_ARG)installForegroundShutdown();
 else if(process.argv[2]==='preview'||process.argv[2]==='serve')installForegroundSupervisorShutdown();
 // Intentional process-composition boundary: importing CLI/application modules before selecting the
