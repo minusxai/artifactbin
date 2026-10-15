@@ -11,7 +11,7 @@
 import { Parser } from 'acorn';
 import jsxPlugin from 'acorn-jsx';
 import type { JsxNode, JsxElement, JsxAttribute, StaticValue, JsonValue, ParseResult } from './types';
-import { reactiveExpression } from './reactive';
+import { reactiveExpression, reactiveRefusal } from './reactive';
 
 const JsxParser = Parser.extend(jsxPlugin());
 const WRAP_OPEN = '<>';
@@ -34,6 +34,19 @@ export function parseJsx(source: string): ParseResult {
     return { ok: true, nodes: normalizeChildren(rawChildren as AnyNode[]) };
   } catch (e) {
     return syntaxFailure(e);
+  }
+}
+
+/**
+ * The fix for a recorded non-static expression, as a suffix for the diagnostic that refuses it (`: …`), or '' when
+ * there is nothing more specific to say than its type. Only the refusal path parses the source again.
+ */
+export function expressionHint(source: string): string {
+  try {
+    const why = reactiveRefusal(JsxParser.parseExpressionAt(source, 0, { ecmaVersion: 'latest' }));
+    return why ? `: ${why}` : '';
+  } catch {
+    return '';
   }
 }
 

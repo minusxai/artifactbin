@@ -8,7 +8,8 @@ order: 2
 
 Scalar Values hold choices and flags, inline table Values hold temporary rows,
 Queries derive the view. Markup conditions (`{$editing && …}`, `{$step > 1 ?
-… : …}`) read declared scalars only; anything computed belongs in the
+… : …}`, `{$mode === "edit" && …}`) read declared scalars only and compare
+strictly (`===`, `!==`; `==` is refused); anything computed belongs in the
 [script](markup-scripts.md).
 
 Custom scripts can also use ordinary Solid local state. A native comment

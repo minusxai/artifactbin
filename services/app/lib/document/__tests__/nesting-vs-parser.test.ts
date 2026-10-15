@@ -89,20 +89,21 @@ describe('the nesting rule agrees with a real HTML parser on every shape', () =>
       shapes.push([`phrasing:${p}`, body(p)]);
       shapes.push([`span>${p}`, `<span>${body(p)}</span>`]);
     }
-    // Components: never rewritten for, whatever they wrap.
-    for (const c of ['<Number data="$q" />', '<Card><CardContent>c</CardContent></Card>', '<Icon name="star" />']) {
-      shapes.push([`component:${c.slice(0, 12)}`, c]);
-      shapes.push([`span>component:${c.slice(0, 12)}`, `<span>${c}</span>`]);
+    // Components: the raw-HTML oracle cannot see what one renders, so these state the rule's answer and
+    // nesting-parses-back.test.ts checks it against the real renderer: phrasing ones keep the paragraph,
+    // block ones rewrite it, wherever they sit inside it.
+    const components: Array<[string, boolean]> = [['<Number data="$q" />', false], ['<Icon name="star" />', false], ['<Card><CardContent>c</CardContent></Card>', true]];
+    for (const [c, block] of components) {
+      shapes.push([`component${block ? '-block' : ''}:${c.slice(0, 12)}`, c]);
+      shapes.push([`span>component${block ? '-block' : ''}:${c.slice(0, 12)}`, `<span>${c}</span>`]);
     }
 
     const wrong: string[] = [];
     for (const [name, inner] of shapes) {
       const mustRewrite = parserClosesParagraph(inner);
       const didRewrite = rewrites(inner);
-      // A component's rendered box is unknowable from the AST, so the rule
-      // deliberately never fires for one — the oracle cannot judge those.
       if (name.includes('component')) {
-        if (didRewrite) wrong.push(`${name}: rewrote for a component`);
+        if (didRewrite !== name.includes('component-block')) wrong.push(`${name}: rule rewrites=${didRewrite}`);
         continue;
       }
       if (mustRewrite !== didRewrite) wrong.push(`${name}: parser closes p=${mustRewrite}, rule rewrites=${didRewrite}`);

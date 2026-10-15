@@ -5,7 +5,7 @@
  * hydration key, `insert` adopts the served text): the served root must come back as the SAME node,
  * updates must land in it, and disposing must leave it as static markup.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createIslandRuntime, getNextElement, hydrateIsland, insert, template } from '../rt';
 import { useIsland } from '../context';
 import { createDataflowStore } from '@/lib/page-store/store';
@@ -54,5 +54,37 @@ describe('hydrateIsland (hydratable island code)', () => {
     expect(hydrateIsland('s9-', Island, rt.context, host)).toBeNull();
     expect(hydrateIsland('s0-"]', Island, rt.context, host)).toBeNull();
     expect(rt.store).toBeNull();
+  });
+
+  it('keeps the served markup, static runs and all, when the served tree is not the one the island walks', () => {
+    // The shape behind a blank page: the HTML parser moved a node out of the paragraph the island's template walks,
+    // so the walk meets null and throws. A fresh render would draw every server-only static run empty (the browser
+    // module has none of their content), so the served markup stays, as static markup, and the failure is reported.
+    const walked = template('<div id="island"><p>a<span></span><b></b></p></div>');
+    function Walker() {
+      const island = useIsland();
+      const el = getNextElement(walked);
+      const b = (el.firstChild as Element).firstChild!.nextSibling!.nextSibling as Element;
+      insert(b, () => String(island.value('region')));
+      return el;
+    }
+    const host = document.createElement('div');
+    document.body.append(host);
+    // Served `<p>a<div>…</div><b>All</b></p>`: the parser closed the paragraph at the block.
+    host.innerHTML = '<p id="before">static</p><div data-hk="s0-0000" id="island"><p>a<div>moved by the parser</div><b>All</b></p></div><p id="after">static</p>';
+    const [before, served, after] = [...host.children];
+    const rt = createIslandRuntime({ dataflow: { flow } }, (df) => createDataflowStore(df));
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const dispose = hydrateIsland('s0-', Walker, rt.context, host);
+
+    expect([...host.children]).toEqual([before, served, after]);
+    expect(host.children[1]).toBe(served);
+    expect(served!.textContent).toBe('amoved by the parserAll');
+    expect(errors).toHaveBeenCalledWith('[islands] island failed: its markup is static', 's0-', expect.any(Error));
+    expect(dispose).toBeTypeOf('function');
+    dispose!();
+    expect(host.children).toHaveLength(3);
+    errors.mockRestore(); host.remove();
   });
 });

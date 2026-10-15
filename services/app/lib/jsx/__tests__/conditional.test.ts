@@ -17,6 +17,17 @@ describe('conditional JSX as structural data', () => {
     expect(validate(serialized)).toEqual([]);
     expect(serializeJsx(nodes(serialized))).toBe(serialized);
   });
+  it('names the strict operator when a condition is written with == or !=', () => {
+    const messages = (source: string) => validate(source).map((e) => e.message);
+    expect(messages('{$bench == "Zstd" && <p>Z</p>}')).toEqual(['Expression child must be a JSON literal, got LogicalExpression: markup compares strictly: write `===` instead of `==`']);
+    expect(messages('{$bench != "Zstd" ? <p>A</p> : <p>B</p>}')).toEqual(['Expression child must be a JSON literal, got ConditionalExpression: markup compares strictly: write `!==` instead of `!=`']);
+    expect(messages('<details open={$step == 2}><summary>s</summary></details>')).toEqual(['Attribute "open" must be a JSON literal, got BinaryExpression: markup compares strictly: write `===` instead of `==`']);
+    expect(messages('{$a + 1 > 2 && <p>x</p>}')[0]).toMatch(/: `\+` is not a markup operator \(use `&&`, `\|\|`, `===`, `!==`, `<`, `<=`, `>`, `>=` or `!`\)$/);
+    // Nothing operator-shaped to name: the message stays the type it got.
+    expect(messages('{fn($x) && <p>x</p>}')).toEqual(['Expression child must be a JSON literal, got LogicalExpression']);
+    // The strict spellings are the contract and validate.
+    expect(validate('{$bench === "Zstd" && <p>Z</p>}')).toEqual([]);
+  });
   it('indexes and stamps real elements in BOTH branches, not structural wrappers', () => {
     const stamped = stampNodeIds('{$show ? <p>Yes</p> : <p>No</p>}');
     expect(stamped.ids).toHaveLength(2);

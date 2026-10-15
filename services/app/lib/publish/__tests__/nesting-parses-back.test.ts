@@ -188,19 +188,13 @@ describe('the served document', () => {
 });
 
 /**
- * The one deliberate hole in the rule, measured rather than assumed.
- *
- * A component's rendered box is not knowable from the AST, so the rewrite
- * ignores component children of a `<p>` — which is only safe while the
- * components agents actually put there render as phrasing content. On
- * production that is exactly one component, `<Number>`, appearing 19 times
- * across two documents (`<p>up <Number data="$q" /> today</p>`). Treating
- * components as block would have rewritten all 19 paragraphs for nothing.
- *
- * So the claim "`<Number>` renders inline" is load-bearing, and it is checked
- * here against the real renderer instead of taken from reading its source.
+ * A component inside a paragraph. What a registered component renders is a fact of the kit, so the rule
+ * reads it from one declaration (lib/jsx/component-names PHRASING_COMPONENTS) instead of stepping around
+ * every component: a phrasing one (`<Number>`, `<Badge>`, a `<Tooltip>` on a word) leaves the paragraph
+ * alone, and anything else — a block kit component, a script component's mount, a `<For>`'s wrapper —
+ * makes the `<p>` a `<div>`, the same repair `<p><div>` gets.
  */
-describe('a component inside a paragraph — the case the rule steps around', () => {
+describe('a component inside a paragraph', () => {
   it('<Number> renders as phrasing content, so leaving the <p> alone is correct', async () => {
     const html = await serve('<Helmet><Value name="q" type="table" value={[{"n":1}]} /></Helmet>'
       + '<div><p className="lede">up <Number data="$q" col="n" /> today</p></div>');
@@ -232,16 +226,140 @@ describe('a component inside a paragraph — the case the rule steps around', ()
     expect(holder.querySelector(':scope > [data-mx-ast="0.0.0"]')).not.toBeNull();
   });
 
-  it('is why component children are ignored: a block one would still be a fault', async () => {
-    /*
-     * Stated, not hidden. `<Card>` renders a div, so a `<p>` holding one is
-     * still re-parented — the rule does not claim to catch it, and no
-     * production document does it. If one ever does, THIS test is where the
-     * decision gets revisited, with the failure written down rather than
-     * discovered in a screenshot.
-     */
+  it('rewrites a paragraph holding a block component, so the parser moves nothing', async () => {
     const html = await serve('<div><p className="x"><Card><CardContent>c</CardContent></Card></p></div>');
-    expect(reparented(html).length).toBeGreaterThan(0);
+    expect(reparented(html)).toEqual([]);
+    const { document } = new JSDOM(html).window;
+    expect(document.querySelector('.x')!.tagName.toLowerCase()).toBe('div');
+    expect(document.querySelector('.x [data-slot="card"]')).not.toBeNull();
+  });
+
+  it('keeps a Tooltip on a word inside its paragraph, every node of it where it was rendered (the blank-page report)', async () => {
+    const html = await serve('<div data-design="tw"><h1 id="headline">Static headline must render</h1>'
+      + '<p id="lead">Before <Tooltip><TooltipTrigger className="underline">medium</TooltipTrigger><TooltipContent>Explanation here.</TooltipContent></Tooltip> after.</p>'
+      + '<p id="second">Another static paragraph that must render.</p></div>');
+    const { document } = new JSDOM(html).window;
+    const lead = document.getElementById('lead')!;
+    // Still the author's paragraph, and the parser closed it nowhere: the trigger, the served content and the
+    // text after the tooltip are all inside it, and no stray empty paragraph follows.
+    expect(lead.tagName.toLowerCase()).toBe('p');
+    expect(lead.querySelector('[data-slot="tooltip-trigger"]')?.textContent).toBe('medium');
+    expect(lead.querySelector('[role="tooltip"]')?.textContent).toContain('Explanation here.');
+    expect(lead.textContent).toMatch(/^Before medium.*after\.$/s);
+    expect(document.querySelectorAll('p')).toHaveLength(2);
+    expect(document.getElementById('headline')?.textContent).toBe('Static headline must render');
+    expect(document.getElementById('second')?.textContent).toBe('Another static paragraph that must render.');
+  });
+});
+
+/**
+ * The declaration is checked against the real renderer and a real parser, two-sided, the way the tag list is above:
+ * every registered component is served in a `<div>` (where nothing closes) and in a `<p>`. If its rendered markup,
+ * put in a paragraph, closes it, the rule must rewrite that paragraph; if not, it must leave it alone. One document
+ * serves every case. Components that need a parent are served inside the smallest one that gives them their context.
+ */
+const SWEEP_HELMET = '<Helmet><Value name="q" type="table" value={[{"n":1,"label":"a"}]} /><Value name="s" type="string" default="a" />'
+  + '<Value name="num" type="number" default={1} /><Value name="flag" type="boolean" default={false} /><Value name="day" type="date" default="2026-01-01" /><Value name="on" type="boolean" default={true} /></Helmet>';
+const SWEEP: Record<string, string> = {
+  Badge: '<Badge>b</Badge>',
+  Icon: '<Icon name="check" />',
+  Number: '<Number data="$q" col="n" />',
+  Button: '<Button>go</Button>',
+  RunButton: '<Button set={{"s":"b"}}>set</Button>',
+  Tooltip: '<TooltipProvider><Tooltip><TooltipTrigger>t</TooltipTrigger><TooltipContent>tip</TooltipContent></Tooltip></TooltipProvider>',
+  TooltipTrigger: '<Tooltip><TooltipTrigger>t</TooltipTrigger></Tooltip>',
+  Avatar: '<Avatar><AvatarImage src="https://example.com/a.png" alt="a" /><AvatarFallback>AB</AvatarFallback><AvatarBadge /></Avatar>',
+  AvatarGroup: '<AvatarGroup><Avatar><AvatarFallback>A</AvatarFallback></Avatar><AvatarGroupCount>+1</AvatarGroupCount></AvatarGroup>',
+  User: '<User userId="$_me.id" fallback="a guest" />',
+  UserImage: '<UserImage userId="$_me.id" fallback="no picture" />',
+  UserHandle: '<UserHandle userId="$_me.id" fallback="no handle" />',
+  SignIn: '<SignIn>Sign in</SignIn>',
+  Alert: '<Alert><AlertTitle>t</AlertTitle><AlertDescription>d</AlertDescription></Alert>',
+  AlertTitle: '<AlertTitle>t</AlertTitle>',
+  AlertDescription: '<AlertDescription>d</AlertDescription>',
+  Progress: '<Progress value={30} />',
+  Separator: '<Separator />',
+  Skeleton: '<Skeleton className="h-4 w-8" />',
+  Card: '<Card><CardHeader><CardTitle>t</CardTitle><CardDescription>d</CardDescription><CardAction>a</CardAction></CardHeader><CardContent>c</CardContent><CardFooter>f</CardFooter></Card>',
+  CardTitle: '<CardTitle>t</CardTitle>',
+  Table: '<Table><TableCaption>c</TableCaption><TableHeader><TableRow><TableHead>h</TableHead></TableRow></TableHeader><TableBody><TableRow><TableCell>1</TableCell></TableRow></TableBody><TableFooter><TableRow><TableCell>f</TableCell></TableRow></TableFooter></Table>',
+  Breadcrumb: '<Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbLink href="#a">a</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbEllipsis /></BreadcrumbItem><BreadcrumbItem><BreadcrumbPage>p</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>',
+  Tabs: '<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger></TabsList><TabsContent value="one">pane</TabsContent></Tabs>',
+  Accordion: '<Accordion type="single" collapsible><AccordionItem value="a"><AccordionTrigger>A</AccordionTrigger><AccordionContent>open</AccordionContent></AccordionItem></Accordion>',
+  Collapsible: '<Collapsible><CollapsibleTrigger>more</CollapsibleTrigger><CollapsibleContent>details</CollapsibleContent></Collapsible>',
+  Popover: '<Popover><PopoverAnchor /><PopoverTrigger>open</PopoverTrigger><PopoverContent><PopoverHeader><PopoverTitle>t</PopoverTitle><PopoverDescription>d</PopoverDescription></PopoverHeader></PopoverContent></Popover>',
+  PopoverTrigger: '<Popover><PopoverTrigger>open</PopoverTrigger></Popover>',
+  Dialog: '<Dialog><DialogTrigger>open</DialogTrigger><DialogContent aria-label="d">body<DialogClose>close</DialogClose></DialogContent></Dialog>',
+  DialogTrigger: '<Dialog><DialogTrigger>open</DialogTrigger></Dialog>',
+  Input: '<Input label="Title" value="$s" />',
+  Textarea: '<Textarea label="Note" value="$s" rows={2} />',
+  Select: '<Select label="Pick" value="$s" options={["a","b"]} />',
+  Segmented: '<Segmented label="Seg" value="$s" options={["a","b"]} />',
+  Slider: '<Slider label="Min" value="$num" min={0} max={10} />',
+  Switch: '<Switch label="On" checked="$flag" />',
+  DatePicker: '<DatePicker label="Since" value="$day" />',
+  FileUpload: '<FileUpload dataset="q" value="$s" busy="$flag" label="Files" />',
+  Question: '<Question title="Chart" data="$q" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"label","type":"nominal"},"y":{"field":"n","type":"quantitative"}}}}} />',
+  DataTable: '<DataTable data="$q"><Column col="n" title="N" /></DataTable>',
+  Files: '<Files data="$q" />',
+  Mermaid: '<Mermaid code="flowchart LR; A --> B" />',
+  DeckGL: '<DeckGL data="$q" basemap="none" layers={[]} />',
+  Isometric: '<Isometric parts={[]} width={100} height={80} />',
+  File: '<File src="https://example.com/a.pdf" />',
+  Markdown: '<Markdown>{`**bold**`}</Markdown>',
+  Grid: '<Grid><GridItem x={0} y={0} w={4} h={1}>cell</GridItem></Grid>',
+  For: '<For each={$q}>{$_row.label}</For>',
+  ScriptComponent: '<Sparkline points="$q">fallback</Sparkline>',
+  // A condition draws no box of its own: what it shows decides (served true here, so the parser sees it).
+  Condition: '{$on && <div>shown</div>}',
+  InlineCondition: '{$on && <b>shown</b>}',
+};
+
+/** A deck makes the whole document a deck, so its case is served on its own. */
+const SWEEP_ALONE: Record<string, string> = {
+  SlideDeck: '<SlideDeck><Slide title="One">s</Slide></SlideDeck>',
+};
+
+describe('which components close a paragraph is the renderer\'s answer, not a guess', () => {
+  const scratch = new JSDOM('<!DOCTYPE html><body></body>').window.document;
+  const count = (parent: string, inner: string): number => {
+    scratch.body.innerHTML = `<${parent} id="host">${inner}</${parent}>`;
+    return scratch.querySelectorAll('#host *').length;
+  };
+  /** Per case: does the parser close a paragraph around its rendered markup, and did the rule rewrite it? */
+  const verdicts = async (cases: Array<[string, string]>) => {
+    const body = cases.map(([, markup], i) => `<section id="case-${i}"><div id="probe-${i}">x${markup}y</div><p id="lead-${i}">x${markup}y</p></section>`).join('');
+    const source = `${SWEEP_HELMET}<div>${body}</div>`;
+    // Served as a reader gets it, with the declared values in force (the condition shows its branch).
+    const html = await compiledDocument({
+      source, compiledCss: null, theme: null, colorMode: null, refData: {}, title: 'sweep',
+      dataflow: { flow: await compiledSource(source), state: { values: { on: true }, tables: {}, errors: {} } },
+    });
+    const served = new JSDOM(html).window.document;
+    return cases.map(([name], i) => {
+      const inner = served.getElementById(`probe-${i}`)!.innerHTML;
+      return { name, closes: count('p', inner) !== count('div', inner), rewrote: served.getElementById(`lead-${i}`)!.tagName.toLowerCase() !== 'p' };
+    });
+  };
+
+  it('rewrites for exactly the components whose rendered markup a paragraph cannot hold', async () => {
+    const all = [
+      ...await verdicts(Object.entries(SWEEP)),
+      ...(await Promise.all(Object.entries(SWEEP_ALONE).map((entry) => verdicts([entry])))).flat(),
+    ];
+    const wrong = all.filter((v) => v.closes !== v.rewrote).map((v) => `${v.name}: the parser closes the p=${v.closes}, we rewrite=${v.rewrote}`);
+    expect(wrong).toEqual([]);
+    // Both sides of the rule are exercised: a sweep that agreed on "never" or "always" proves nothing.
+    expect(all.filter((v) => v.closes).length).toBeGreaterThan(10);
+    expect(all.filter((v) => !v.closes).length).toBeGreaterThan(5);
+  });
+
+  it('serves every registered component in the sweep', async () => {
+    const { STORY_UI_COMPONENT_NAME_LIST, PHRASING_COMPONENTS } = await import('@/lib/jsx/component-names');
+    const swept = [...Object.values(SWEEP), ...Object.values(SWEEP_ALONE)].join('');
+    const missing = STORY_UI_COMPONENT_NAME_LIST.filter((tag) => tag !== 'Column' && !new RegExp(`<${tag}[\\s/>]`).test(swept));
+    expect(missing).toEqual([]);
+    expect([...PHRASING_COMPONENTS].filter((tag) => !new RegExp(`<${tag}[\\s/>]`).test(swept))).toEqual([]);
   });
 });
 

@@ -151,7 +151,7 @@ function TooltipSpanTrigger(props: JSX.HTMLAttributes<HTMLSpanElement>) {
     on:pointermove={e => { if (e.pointerType !== 'touch' && !movedOpen) { ctx.enter(); movedOpen = true; } }} on:pointerleave={() => { ctx.leave(); movedOpen = false; }}
     on:focus={() => ctx.openNow()} on:blur={() => ctx.close()} on:click={() => ctx.openNow()}>{props.children}</span>;
 }
-export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { side?: Side; align?: Align; sideOffset?: number; forceMount?: boolean }) {
+export function TooltipContent(props: JSX.HTMLAttributes<HTMLSpanElement> & { side?: Side; align?: Align; sideOffset?: number; forceMount?: boolean }) {
   const ctx = useContext(TooltipContext)!; const island = useIsland();
   const [local, rest] = splitProps(props, ['id', 'children', 'side', 'align', 'sideOffset', 'forceMount']);
   // Radix: an authored id is the content's id, and so what the trigger names.
@@ -163,7 +163,7 @@ export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
     onCleanup(() => window.removeEventListener('scroll', onScroll, { capture: true }));
   });
   if (local.forceMount) {
-    let holder!: HTMLDivElement;
+    let holder!: HTMLSpanElement;
     onMount(() => {
       const home = document.createComment('tooltip-home'); holder.before(home);
       createEffect(() => {
@@ -173,15 +173,20 @@ export function TooltipContent(props: JSX.HTMLAttributes<HTMLDivElement> & { sid
       });
       onCleanup(() => home.remove());
     });
-    return <div ref={holder} hidden={!ctx.open()}><TooltipPopper ctx={ctx} side={local.side} align={local.align} sideOffset={local.sideOffset} rest={rest}>{local.children}</TooltipPopper></div>;
+    return <span ref={holder} hidden={!ctx.open()}><TooltipPopper ctx={ctx} side={local.side} align={local.align} sideOffset={local.sideOffset} rest={rest}>{local.children}</TooltipPopper></span>;
   }
   return <Show when={ctx.open() && !isServer}>
     <Portal mount={overlayDestination(island) ?? document.body}>{storyPortalHost(<TooltipPopper ctx={ctx} side={local.side} align={local.align} sideOffset={local.sideOffset} rest={rest}>{local.children}</TooltipPopper>)}</Portal>
   </Show>;
 }
-/** The portaled content: placed once ITS OWN elements exist (a portal renders after hydration, so never from the owner's mount). */
-function TooltipPopper(p: { ctx: TooltipState; side?: Side; align?: Align; sideOffset?: number; rest: JSX.HTMLAttributes<HTMLDivElement>; children?: JSX.Element }) {
-  const ctx = p.ctx; let wrapper!: HTMLDivElement; let content!: HTMLDivElement; let arrow!: HTMLSpanElement;
+/**
+ * The portaled content: placed once ITS OWN elements exist (a portal renders after hydration, so never from the owner's mount).
+ * Every box is a `<span>`: a served (forceMount) tooltip sits where the author wrote it, often on a word inside a `<p>`,
+ * and a `<div>` there would close the paragraph in the HTML parser (lib/jsx/component-names PHRASING_COMPONENTS).
+ * The fixed wrapper is a block box by its position; the content is one by its recipe's `block`.
+ */
+function TooltipPopper(p: { ctx: TooltipState; side?: Side; align?: Align; sideOffset?: number; rest: JSX.HTMLAttributes<HTMLSpanElement>; children?: JSX.Element }) {
+  const ctx = p.ctx; let wrapper!: HTMLSpanElement; let content!: HTMLSpanElement; let arrow!: HTMLSpanElement;
   onMount(() => createEffect(() => {
     if (!ctx.open()) return;
     const anchor = ctx.trigger(); if (!anchor) return;
@@ -195,17 +200,17 @@ function TooltipPopper(p: { ctx: TooltipState; side?: Side; align?: Align; sideO
     onCleanup(() => { live = false; cancel(); stop(); ctx.setPlaced(undefined); });
   }));
   const side = () => ctx.placed()?.side ?? 'top';
-  return <div data-mx-theme-host="">
-    <div ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content' }}>
-      <div ref={content} data-side={ctx.placed()?.side} data-align={ctx.placed()?.align} data-state={ctx.state()} role="tooltip" id={ctx.contentId()} data-slot="tooltip-content" data-story-floating="" {...p.rest}
+  return <span data-mx-theme-host="">
+    <span ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content' }}>
+      <span ref={content} data-side={ctx.placed()?.side} data-align={ctx.placed()?.align} data-state={ctx.state()} role="tooltip" id={ctx.contentId()} data-slot="tooltip-content" data-story-floating="" {...p.rest}
         style={{ '--radix-tooltip-content-transform-origin': 'var(--radix-popper-transform-origin)', '--radix-tooltip-content-available-width': 'var(--radix-popper-available-width)', '--radix-tooltip-content-available-height': 'var(--radix-popper-available-height)', '--radix-tooltip-trigger-width': 'var(--radix-popper-anchor-width)', '--radix-tooltip-trigger-height': 'var(--radix-popper-anchor-height)', ...(ctx.placed() ? {} : { animation: 'none' }) }}>
         {p.children}
         <span ref={arrow} style={{ position: 'absolute', ...(ctx.placed()?.arrowX !== undefined ? { left: `${ctx.placed()!.arrowX}px` } : {}), ...(ctx.placed()?.arrowY !== undefined ? { top: `${ctx.placed()!.arrowY}px` } : {}), [OPPOSITE[side()]]: '0px', 'transform-origin': ARROW_ORIGIN[side()] || undefined, transform: ARROW_TRANSFORM[side()], ...(ctx.placed()?.hideArrow ? { visibility: 'hidden' } : {}) }}>
           <svg stroke="var(--color-edge-bright)" stroke-width="1" stroke-linejoin="round" class="z-[100] fill-surface" width="10" height="5" viewBox="0 0 30 10" preserveAspectRatio="none" style="display: block;"><polygon points="0,0 30,0 15,10" /></svg>
         </span>
-      </div>
-    </div>
-  </div>;
+      </span>
+    </span>
+  </span>;
 }
 export function PopoverAnchor(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-anchor" {...props} />; }
 export function PopoverHeader(props: JSX.HTMLAttributes<HTMLDivElement>) { return <div data-slot="popover-header" {...props} />; }
@@ -255,6 +260,6 @@ export function MutationHint(props: { reason: string | null; fullWidth?: boolean
     <TooltipSpanTrigger class={props.fullWidth ? 'inline-flex w-full' : 'inline-flex'} tabindex={props.reason ? '0' : undefined} aria-description={props.reason ?? undefined}>
       <span style={{ display: 'contents', 'pointer-events': props.reason ? 'none' : undefined }}>{props.children}</span>
     </TooltipSpanTrigger>
-    <TooltipContent class="pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md bg-foreground px-2.5 py-1.5 text-left text-xs leading-normal text-background shadow-md">{props.reason}</TooltipContent>
+    <TooltipContent class="block pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md bg-foreground px-2.5 py-1.5 text-left text-xs leading-normal text-background shadow-md">{props.reason}</TooltipContent>
   </Tooltip>;
 }

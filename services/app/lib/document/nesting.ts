@@ -33,8 +33,17 @@
  * intersected with our tag allowlist. It is deliberately not "everything that
  * is not phrasing content" — over-rewriting a `<p>` that never needed it would
  * change a document's typography for nothing.
+ *
+ * Components count by what they RENDER, which the kit decides and
+ * lib/jsx/component-names `PHRASING_COMPONENTS` declares: a phrasing one (a
+ * `<Number>`, a `<Tooltip>` on a word) leaves the paragraph a paragraph; any
+ * other — a `<Card>`, a control, a script component's mount — draws a box that
+ * closes it, and a served paragraph the parser closes is one the hydrating
+ * document cannot adopt (its whole tree came back blank, with only the islands
+ * redrawn). Unregistered and future components default to that safe side.
  */
 import type { JsxElement, JsxNode } from '@/lib/jsx';
+import { PHRASING_COMPONENTS } from '@/lib/jsx/component-names';
 
 /**
  * Tags whose START tag closes an open `<p>` (HTML Standard, "in body"
@@ -93,18 +102,21 @@ const isElement = (n: JsxNode): n is JsxElement => n.type === 'element';
  * paragraph exactly as `<p><div>…` does; the parser is looking at its stack of
  * open elements, not at one level of nesting.
  *
- * It stops at two things. A component, because what it renders is unknowable
- * from here (see the module header) — except `<For>`, which is the
- * interpreter's own control element and draws a wrapper `<div>` around its
- * rows (lib/compiled-page/compiler). Inside `<svg>` that wrapper is a `<g>`,
- * which closes nothing, so there the search goes on into the row template. And
- * a button-scope element, because that is precisely where the parser stops
- * looking too.
+ * A component is judged by what it renders (see the module header). A phrasing
+ * one, and a condition (`{$x && …}`, which draws no box of its own), are
+ * searched through like an inline element. `<For>` draws a wrapper `<div>`
+ * around its rows (lib/compiled-page/compiler); inside `<svg>` that wrapper is a
+ * `<g>`, which closes nothing, so there the search goes on into the row
+ * template. Any other component closes the paragraph — inside `<svg>` too, since
+ * none of them renders SVG content. The search stops at a button-scope element,
+ * because that is precisely where the parser stops looking too.
  */
 function breaksParagraph(nodes: JsxNode[], inSvg = false): boolean {
   return nodes.some((n) => {
     if (!isElement(n)) return false;
-    if (n.isComponent) return n.tag === 'For' && (!inSvg || breaksParagraph(n.children, inSvg));
+    if (n.control) return breaksParagraph(n.children, inSvg);
+    if (n.tag === 'For') return !inSvg || breaksParagraph(n.children, inSvg);
+    if (n.isComponent) return !PHRASING_COMPONENTS.has(n.tag) || breaksParagraph(n.children, inSvg);
     const tag = n.tag.toLowerCase();
     if ((inSvg ? CLOSES_OPEN_P_IN_SVG : CLOSES_OPEN_P).has(tag)) return true;
     if (BUTTON_SCOPE.has(tag)) return false;

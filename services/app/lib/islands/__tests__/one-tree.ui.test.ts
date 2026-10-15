@@ -26,6 +26,9 @@ const SOURCES = {
   branch: '<Helmet><Value name="open" type="boolean" default={false} /></Helmet><section id="case">{$open && <p aria-label="Positive">positive</p>}</section>',
   siblings: '<Helmet><Value name="name" type="string" default="Ada" /></Helmet><h1 id="heading">Static heading</h1><p id="live">{$name}</p><footer id="end">Static footer</footer>',
   rows: `<Helmet><Value name="flag" type="boolean" default={false} /></Helmet><Tabs defaultValue="one"><TabsList><TabsTrigger value="one">One</TabsTrigger><TabsTrigger value="two">Two</TabsTrigger></TabsList><TabsContent value="one"><p id="first">First panel</p></TabsContent><TabsContent value="two">${rows}</TabsContent></Tabs><Switch label="Live switch" checked="$flag" id="live-switch" />`,
+  // Stored before the nesting repair (lib/document/nesting), never canonicalized here: the parser closes the live
+  // paragraph at the block inside it, so the served tree is not the one the document's module walks.
+  misnested: '<Helmet><Value name="name" type="string" default="Ada" /></Helmet><h1 id="heading">Static heading</h1><p id="live">Hello {$name}<div id="inner">block</div> after</p><footer id="end">Static footer</footer>',
   bound: '<Helmet><Value name="region" type="string" default="west" /><Value name="pick" type="string" default="https://example.test/a.png" /></Helmet><input aria-label="Region" value="$region" /><img src="$pick" alt="the pick" />',
 };
 const compiled = new Map<string, Fixture>();
@@ -224,5 +227,31 @@ describe('one tree SSR to hydrate', () => {
     // The image island owns the source from here (resolution through the asset door: bound-image.test).
     expect(host.querySelector('img[alt="the pick"]')).toBe(image);
     dispose?.(); runtime.dispose(); host.remove();
+  });
+
+  it('keeps every static run of a document whose served tree the parser reshaped, instead of drawing it blank', async () => {
+    const server = fixture(SOURCES.misnested);
+    const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
+    const heading = host.querySelector('#heading');
+    const footer = host.querySelector('#end');
+    expect(heading?.textContent).toBe('Static heading');
+    const manifest = loadCompilerBuild().manifest;
+    const shippedRt = await import(/* @vite-ignore */ pathToFileURL(path.resolve(ROOT, 'services/app/public', manifest['@mx/rt']!.slice(1))).href) as Record<string, unknown>;
+    let tree: Component | null = null;
+    await evaluateModule(server.browserCode, spec => spec.includes('/rt-') ? shippedRt
+      : spec.includes('/boot-') ? { boot: (module: { TREE: Component }) => { tree = module.TREE; } }
+      : (() => { throw new Error(`unexpected import ${spec}`); })(), 'test/one-tree-misnested.js');
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow, values: { name: 'Ada' } } }, shippedRt.createDataflowStore as typeof createDataflowStore);
+    const dispose = (shippedRt.hydrateIsland as typeof rt.hydrateIsland)('d-', tree!, runtime.context, host);
+    // The production runtime: the document reads as served — the same nodes, with their text.
+    expect(host.querySelector('#heading')).toBe(heading);
+    expect(heading?.textContent).toBe('Static heading');
+    expect(host.querySelector('#end')).toBe(footer);
+    expect(footer?.textContent).toBe('Static footer');
+    expect(host.querySelector('#inner')?.textContent).toBe('block');
+    expect(host.textContent).toContain('Hello Ada');
+    expect(errors).toHaveBeenCalledWith('[islands] island failed: its markup is static', 'd-', expect.any(Error));
+    dispose?.(); runtime.dispose(); host.remove(); errors.mockRestore();
   });
 });

@@ -51,6 +51,29 @@ export function reactiveExpression(node: unknown, depth = 0): ReactiveExpression
   }
   return null;
 }
+/** The operator a markup expression may not use, with the one it should, for the diagnostic that refuses it. */
+const STRICT: Readonly<Record<string, string>> = {'==': '===', '!=': '!=='};
+
+/**
+ * Why an Acorn expression is not reactive, when the reason is an operator outside the vocabulary: the first one met,
+ * depth-first through conditions and operands. Null when no operator is to blame (a call, an unknown name).
+ * Markup compares strictly, so `==` and `!=` are named with their replacements rather than accepted with JavaScript's
+ * coercions.
+ */
+export function reactiveRefusal(node: unknown, depth = 0): string | null {
+  if (depth > 32 || !object(node)) return null;
+  if ((node.type === 'BinaryExpression' || node.type === 'LogicalExpression') && typeof node.operator === 'string' && !OPS.has(node.operator)) {
+    const strict = STRICT[node.operator];
+    return strict
+      ? `markup compares strictly: write \`${strict}\` instead of \`${node.operator}\``
+      : `\`${node.operator}\` is not a markup operator (use ${[...OPS].map((op) => `\`${op}\``).join(', ')} or \`!\`)`;
+  }
+  for (const key of ['test', 'left', 'right', 'argument', 'consequent', 'alternate']) {
+    const found = reactiveRefusal(node[key], depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
 export { evaluateReactive } from './reactive-eval';
 
 export function reactiveSource(expression: ReactiveExpression): string {
