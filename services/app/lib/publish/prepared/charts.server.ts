@@ -33,6 +33,7 @@ import type { ServedResults } from '@/lib/story-runtime/contract';
 import { DRAWING_CLASS } from '@/lib/islands';
 import { gridCols, gridItemRect, gridRowHeight } from '@/lib/story-ui/grid-layout';
 import type { DrawnChart } from '@/lib/story-runtime/contract';
+import { deepHasValueHole, deepTemplateSignals, holeReader, specDigest, substituteViz } from '@/lib/jsx/template';
 
 /** The largest drawing served in the HTML; a chart that draws more (thousands of marks) is drawn by its island. */
 const MAX_DRAWING_BYTES = 512 * 1024;
@@ -226,6 +227,24 @@ export interface SnapshotChartOptions {
   width?: number;
   /** The reading wrapper's bounded width for plan documents. */
   template?: string | null;
+  /** The page values the snapshot was run with (declared defaults under the keyed ones): what a templated spec reads. */
+  values?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * A templated `viz` (lib/jsx/template) resolved as a reader at the snapshot's values would see it: page values, and
+ * each `{$query.column}` from the first row the snapshot answered.
+ */
+function resolvedViz(viz: Record<string, unknown>, results: Pick<ServedResults, 'tables'>, values: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const signals: Record<string, unknown> = {};
+  for (const name of deepTemplateSignals(viz)) {
+    const dot = name.indexOf('.');
+    if (dot > 0 && !name.startsWith('_')) {
+      const row = results.tables[name.slice(0, dot)]?.rows[0];
+      if (row && Object.hasOwn(row, name.slice(dot + 1))) signals[name] = row[name.slice(dot + 1)];
+    } else if (Object.hasOwn(values, name)) signals[name] = values[name];
+  }
+  return substituteViz(viz, holeReader(signals));
 }
 
 /**
@@ -277,7 +296,7 @@ function chartLayout(ancestors: readonly JsxNode[], options: SnapshotChartOption
  * draws it in the browser.
  */
 export async function drawSnapshotCharts(nodes: JsxNode[], results: Pick<ServedResults, 'tables' | 'errors'>, options: SnapshotChartOptions): Promise<Record<string, DrawnChart>> {
-  const jobs: Array<{ key: string; name: string; viz: Record<string, unknown>; height: number; width: number }> = [];
+  const jobs: Array<{ key: string; name: string; viz: Record<string, unknown>; height: number; width: number; spec?: string }> = [];
   const walk = (list: readonly JsxNode[], prefix: string | null, ancestors: readonly JsxNode[]) => {
     list.forEach((node, i) => {
       const path = prefix === null ? String(i) : `${prefix}.${i}`;
@@ -291,7 +310,10 @@ export async function drawSnapshotCharts(nodes: JsxNode[], results: Pick<ServedR
           const titled = typeof staticAttr(node, 'title') === 'string' && staticAttr(node, 'title') !== '';
           const layout = chartLayout(ancestors, options);
           const height = (layout.tileHeight ?? questionEmbedHeightPx(staticAttr(node, 'height'), false)) - (titled ? TITLE_BAR_PX : 0);
-          jobs.push({ key: typeof id === 'string' && id ? id : path, name, viz, height, width: layout.width });
+          // A spec that reads the page is drawn as resolved at the snapshot's values, and records which spec it is.
+          const templated = deepHasValueHole(viz);
+          const drawn = templated ? resolvedViz(viz, results, options.values ?? {}) : viz;
+          jobs.push({ key: typeof id === 'string' && id ? id : path, name, viz: drawn, height, width: layout.width, ...(templated ? { spec: specDigest(drawn) } : {}) });
         }
       }
       walk(node.children, path, [...ancestors, node]);
@@ -303,12 +325,13 @@ export async function drawSnapshotCharts(nodes: JsxNode[], results: Pick<ServedR
     if (Object.hasOwn(drawings, job.key)) continue;
     const table = results.tables[job.name]!;
     try {
-      drawings[job.key] = await drawChart({
+      const drawing = await drawChart({
         viz: job.viz, table, name: job.name, colorMode: options.colorMode,
         width: job.width, height: job.height,
         ...(options.refData ? { refData: options.refData } : {}),
         ...(options.palette !== undefined ? { palette: options.palette } : {}),
       });
+      drawings[job.key] = job.spec ? { ...drawing, spec: job.spec } : drawing;
     } catch {
       // Not drawable on the server: the island draws it, as every undrawn chart is.
     }

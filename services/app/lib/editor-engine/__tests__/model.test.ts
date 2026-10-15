@@ -192,3 +192,41 @@ describe('reading-mode parity of the parsed document', () => {
     expect(spec[1].style).toBe('display: contents');
   });
 });
+
+describe('templates in prose', () => {
+  const chips = (s: EditorState) => {
+    const found: Array<{ name: string; pos: number }> = [];
+    s.doc.descendants((n, pos) => { if (n.type === editorSchema.nodes.template) found.push({ name: n.attrs.name as string, pos }); });
+    return found;
+  };
+  it('holds each template as one atomic chip naming its source, and writes it back as written', () => {
+    const s = state('<p id="p">Cheapest: {$tiles.cheap_v} in {$region}</p>');
+    expect(chips(s).map((c) => c.name)).toEqual(['tiles.cheap_v', 'region']);
+    const chip = s.doc.nodeAt(chips(s)[0]!.pos)!;
+    expect(chip.isAtom && chip.isInline).toBe(true);
+    expect(source(s)).toBe('<p id="p">Cheapest: {$tiles.cheap_v} in {$region}</p>');
+  });
+  it('draws the chip as an uneditable label of its source, linked to the query it reads', () => {
+    const s = state('<p id="p">Cheapest: {$tiles.cheap_v}</p>');
+    const chip = s.doc.nodeAt(chips(s)[0]!.pos)!;
+    const [tag, attrs, label] = chip.type.spec.toDOM!(chip) as [string, Record<string, string>, string];
+    expect(tag).toBe('span');
+    expect(attrs.contenteditable).toBe('false');
+    expect(attrs['data-mx-template']).toBe('tiles.cheap_v');
+    expect(attrs['data-mx-template-query']).toBe('tiles');
+    expect(label).toBe('tiles.cheap_v');
+    const value = state('<p id="p">Hi {$region}</p>').doc.firstChild!.lastChild!;
+    expect((value.type.spec.toDOM!(value) as [string, Record<string, string>])[1]['data-mx-template-query']).toBeUndefined();
+  });
+  it('keeps the chip whole while text is typed and deleted around it', () => {
+    let s = state('<p id="p">A {$region} B</p>');
+    const at = chips(s)[0]!.pos;
+    s = s.apply(s.tr.insertText('x', at));
+    s = s.apply(s.tr.insertText('y', at + 2));
+    expect(source(s)).toBe('<p id="p">A x{$region}y B</p>');
+    s = s.apply(s.tr.delete(1, 3));
+    expect(source(s)).toBe('<p id="p">x{$region}y B</p>');
+    s = s.apply(s.tr.delete(chips(s)[0]!.pos, chips(s)[0]!.pos + 1));
+    expect(source(s)).toBe('<p id="p">xy B</p>');
+  });
+});

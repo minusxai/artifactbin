@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { drawChart, drawSnapshotCharts } from '../charts.server';
+import { specDigest } from '@/lib/jsx/template';
 import { DRAWING_CLASS } from '@/lib/islands/chart';
 import { STORY_UI_RECIPE_BASE, STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
 import { prepareStoryParts } from '../prepare-runtime.server';
@@ -127,7 +128,7 @@ describe('drawChart refuses what it cannot draw safely or faithfully', () => {
 
 describe('drawSnapshotCharts', () => {
   it('draws a full-width chart and 4/6/8-column flow cells at their desktop slot widths', async () => {
-    const chart = (id: string) => `<Question id="${id}" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} />`;
+    const chart = (id: string) => `<Chart id="${id}" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} />`;
     const source = `<div className="@container px-4 @2xl:px-8">${chart('full')}<Grid mode="flow"><GridItem w={4}>${chart('four')}</GridItem><GridItem w={6}>${chart('six')}</GridItem><GridItem w={8}>${chart('eight')}</GridItem></Grid></div>`;
     const { runtime } = await prepareStoryParts({ source, compiledCss: null, theme: null, colorMode: 'light', title: 'widths', template: 'dashboard', refData: {}, assetUrls: new Set() });
     const results = { tables: { monthly: { rows, columns } }, errors: {} };
@@ -136,17 +137,28 @@ describe('drawSnapshotCharts', () => {
   });
 
   it('uses a positioned tile height and width for a chart that fills the tile', async () => {
-    const source = '<div className="@container px-4 @2xl:px-8"><Grid><GridItem w={4} h={3}><Question id="fixed" title="Sales" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} /></GridItem></Grid></div>';
+    const source = '<div className="@container px-4 @2xl:px-8"><Grid><GridItem w={4} h={3}><Chart id="fixed" title="Sales" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} /></GridItem></Grid></div>';
     const { runtime } = await prepareStoryParts({ source, compiledCss: null, theme: null, colorMode: 'light', title: 'tile', template: 'dashboard', refData: {}, assetUrls: new Set() });
     const drawing = (await drawSnapshotCharts(runtime.data.nodes, { tables: { monthly: { rows, columns } }, errors: {} }, { colorMode: 'light', template: 'dashboard' })).fixed!;
     expect(drawing.svg).toMatch(/<svg[^>]*width="452"[^>]*height="215"/);
   });
 
   it('accounts for a bounded plan column and card content padding', async () => {
-    const source = '<div className="p-10"><Card><CardContent><Question id="inside" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} /></CardContent></Card></div>';
+    const source = '<div className="p-10"><Card><CardContent><Chart id="inside" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} /></CardContent></Card></div>';
     const { runtime } = await prepareStoryParts({ source, compiledCss: null, theme: null, colorMode: 'light', title: 'plan', template: 'plan', refData: {}, assetUrls: new Set() });
     const drawing = (await drawSnapshotCharts(runtime.data.nodes, { tables: { monthly: { rows, columns } }, errors: {} }, { colorMode: 'light', template: 'plan' })).inside!;
     expect(drawing.svg).toMatch(/<svg[^>]*width="990"/);
+  });
+
+  it('draws a templated spec with the snapshot\'s values and cells, and records the spec it drew', async () => {
+    const source = '<Chart id="t" data="$monthly" viz={{"kind":"vega-lite","spec":{"title":"Revenue, {$region} ({$monthly.month})","mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} /><Chart id="p" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} />';
+    const { runtime } = await prepareStoryParts({ source, compiledCss: null, theme: null, colorMode: 'light', title: 'templated', template: null, refData: {}, assetUrls: new Set() });
+    const results = { tables: { monthly: { rows, columns } }, errors: {} };
+    const drawings = await drawSnapshotCharts(runtime.data.nodes, results, { colorMode: 'light', values: { region: 'West' } });
+    expect(drawings.t!.svg).toContain('Revenue, West (2025-01-01)');
+    const resolved = { kind: 'vega-lite', spec: { title: 'Revenue, West (2025-01-01)', mark: 'line', encoding: { x: { field: 'month', type: 'temporal' }, y: { field: 'revenue', type: 'quantitative' } } } };
+    expect(drawings.t!.spec).toBe(specDigest(resolved));
+    expect(drawings.p!.spec, 'an untemplated chart records no spec').toBeUndefined();
   });
 
   it('draws every <Question> whose table the snapshot answered, keyed by node id, and skips the rest', async () => {

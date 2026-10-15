@@ -232,6 +232,11 @@ export const STORY_VERSION_DRAWN_EVENT = 'mx:version-drawn';
  * re-draws only when its table changes or the reader interacts (Vega loads then).
  */
 export const CHART_SLOT_ATTR = 'data-mx-chart-slot';
+/**
+ * A templated chart's slot names the spec this request resolved (lib/jsx/template `specDigest`): the assembler fills it
+ * only with a drawing of that spec (`DrawnChart.spec`). Absent on a chart whose spec reads nothing.
+ */
+export const CHART_SPEC_ATTR = 'data-mx-chart-spec';
 /** A chart slot's drawing state, set by the assembler and updated by the island runtime (`drawn`, `pending`, `live`). */
 export const CHART_STATE_ATTR = 'data-mx-chart-state';
 /** Set on `<html>` when every island has hydrated (or at DOMContentLoaded on a page with no module): the lab's ready marker. */
@@ -250,6 +255,8 @@ export interface DrawnChart {
   /** The table it was drawn from and the digest of the rows, so a client re-draw can tell whether it is stale. */
   table: string;
   rows: string;
+  /** For a templated spec only: the digest of the spec it was drawn from, so a reader who resolves another never keeps it. */
+  spec?: string;
 }
 
 /** `GET /a/:id/viewer?<$values>` — what only this reader decides, answered with the query door's admission (w3-viewer-writes). */

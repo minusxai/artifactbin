@@ -7,9 +7,10 @@
 import { describe, expect, it } from 'vitest';
 import { type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
-  bindingMap, coerceScalarInput, collectRefNameUses, parseImportDecl, parseQueryDecl, parseValueDecl, refName, resolveBindings, rowBound, validateDataflow,
+  bindingMap, coerceScalarInput, parseImportDecl, parseQueryDecl, parseValueDecl, refName, resolveBindings, rowBound, validateDataflow,
   type Dataflow, type ImportDecl, type QueryDecl, type ValueDecl,
 } from '@/lib/dataflow/dataflow';
+import { collectRefNameUses } from '@/lib/dataflow/ref-name-uses';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {

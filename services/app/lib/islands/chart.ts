@@ -29,7 +29,10 @@ export function loadChart(): Promise<IslandChartModule> {
   return controller;
 }
 
-/** Whether the server's drawing is of exactly these rows (same digest), so the island keeps it and loads no Vega. */
-export async function drawingIsCurrent(drawing: DrawnChart | null | undefined, rows: readonly Record<string, unknown>[]): Promise<boolean> {
-  return !!drawing && drawing.rows === (await rowsDigest(rows));
+/**
+ * Whether the server's drawing is of exactly these rows (same digest) and, for a templated chart, of the spec the reader
+ * resolves now (`spec`, lib/jsx/template `specDigest`), so the island keeps it and loads no Vega.
+ */
+export async function drawingIsCurrent(drawing: DrawnChart | null | undefined, rows: readonly Record<string, unknown>[], spec?: string | null): Promise<boolean> {
+  return !!drawing && (!spec || drawing.spec === spec) && drawing.rows === (await rowsDigest(rows));
 }

@@ -33,9 +33,10 @@ export function reactiveExpression(node: unknown, depth = 0): ReactiveExpression
   if (node.type === 'MemberExpression' && !node.computed && object(node.object) && object(node.property)
     && node.object.type === 'Identifier' && node.object.name === '$_row' && node.property.type === 'Identifier'
     && typeof node.property.name === 'string') return {kind: 'row', field: node.property.name};
-  // A built-in's field (`$_me.id`) reads like any value; which fields exist is the validator's to say.
+  // A query's first-row cell (`$tiles.cheap_v`) and a built-in's field (`$_me.id`) read like any value; which
+  // columns and fields exist is the publish door's to say (lib/dataflow).
   if (node.type === 'MemberExpression' && !node.computed && object(node.object) && object(node.property)
-    && node.object.type === 'Identifier' && typeof node.object.name === 'string' && /^\$_[A-Za-z]\w*$/.test(node.object.name)
+    && node.object.type === 'Identifier' && typeof node.object.name === 'string' && /^\$[A-Za-z_]\w*$/.test(node.object.name)
     && node.property.type === 'Identifier' && typeof node.property.name === 'string' && /^[A-Za-z_]\w*$/.test(node.property.name)) return {kind: 'signal', name: `${node.object.name.slice(1)}.${node.property.name}`};
   if (node.type === 'UnaryExpression') {
     const value = reactiveExpression(node.argument, depth + 1);

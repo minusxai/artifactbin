@@ -423,7 +423,8 @@ describe('kit text components in the edit session', () => {
 
 describe('plain HTML text in the edit session', () => {
   // Each paragraph holds an expression, so none is a prose block: each is a text host of its own, or locked text.
-  const PLAIN = '<div id="m"><p id="a">Hello {"there"} <strong id="s">bold</strong> words</p><p id="b">Total: {$x} <em id="e">items</em></p></div>';
+  // The bound paragraph's text comes from data through a <Cell>: a plain `{$x}` read is a template chip instead (below).
+  const PLAIN = '<div id="m"><p id="a">Hello {"there"} <strong id="s">bold</strong> words</p><p id="b">Total: <Cell id="c" data="$q" col="n" /> <em id="e">items</em></p></div>';
   const PLAIN_DOM = '<div id="m" data-mx-ast="0"><p id="a" data-mx-ast="0.0">Hello there <strong id="s" data-mx-ast="0.0.3">bold</strong> words</p>'
     + '<p id="b" data-mx-ast="0.1">Total: 42 <em id="e" data-mx-ast="0.1.3">items</em></p></div>';
 
@@ -443,6 +444,19 @@ describe('plain HTML text in the edit session', () => {
       expect(at(text).hasAttribute('data-mx-edit-hover')).toBe(true);
       expect(at(mark).hasAttribute('data-mx-edit-hover')).toBe(false);
     }
+  });
+
+  it('a paragraph reading a value is prose with the value as one uneditable chip naming its source', async () => {
+    const { at } = await open('<div id="m"><p id="a">Hello {"there"}</p><p id="b">Total: {$tiles.n} <em id="e">items</em></p></div>',
+      '<div id="m" data-mx-ast="0"><p id="a" data-mx-ast="0.0">Hello there</p><p id="b" data-mx-ast="0.1">Total: 42 <em id="e" data-mx-ast="0.1.3">items</em></p></div>');
+    const editor = root!.querySelector<HTMLElement>('.ProseMirror')!;
+    expect(editor).not.toBeNull();
+    const chip = editor.querySelector<HTMLElement>('[data-mx-template="tiles.n"]')!;
+    expect(chip.getAttribute('contenteditable')).toBe('false');
+    expect(chip.getAttribute('data-mx-template-query')).toBe('tiles');
+    expect(chip.textContent).toBe('tiles.n');
+    expect(editor.textContent).not.toContain('42');
+    expect(at('0.0').contentEditable).toBe('true');
   });
 
   it('a click on bound text, or on a mark in it, selects that text and says why it takes no caret', async () => {

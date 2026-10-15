@@ -89,8 +89,8 @@ First read [chart authoring](markup-data-authoring.md).
   — comparing a few items across measures: rows (≤ 6) become columns, metrics
   rows, best bold. [Comparisons](markup-compare.md).
 - `<For each={$q} keyBy="id">…{$_row.name}…</For>` — a template per row. [Keyed repeats](markup-repeat.md).
-- `{($_row.is_open) && (<Button …/>)}` shows markup only while a value or row
-  field is true. [Conditions](markup-state.md).
+- `{($_row.is_open) && (<Button …/>)}` shows markup when a value or row field
+  is true; text reads `{$x}`. [More](markup-state.md).
 - `<User userId="$_me.id" />`, `<User userId="$_row.booked_by" />` — person by account id.
 
 ## Bindings: controls (body)

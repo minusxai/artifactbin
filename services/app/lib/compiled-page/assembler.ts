@@ -29,7 +29,7 @@ import { agentDiscoveryHead, agentDiscoveryTail } from './agent-discovery';
 import { LIVE_DIRECT_ATTR, type IslandPageData } from '@/lib/islands';
 import { AUTHOR_VENDOR_EXPORTS } from '@/lib/author-script/contract';
 import { renderOutlineRail } from '@/lib/reader-chrome';
-import { CHART_SLOT_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SCRIPT_FAILURE_ATTR, STORY_ROOT_ID, type DrawnChart } from '@/lib/story-runtime/contract';
+import { CHART_SLOT_ATTR, CHART_SPEC_ATTR, CHART_STATE_ATTR, ISLAND_DATA_ID, SCRIPT_FAILURE_ATTR, STORY_ROOT_ID, type DrawnChart } from '@/lib/story-runtime/contract';
 import { inlineStoryElement, SCRIPT_FAILURE_CSS, SCRIPT_FAILURE_NOTICE } from './story-element';
 import { escapeHtml, scriptJson } from '@artifactbin/utils/escape';
 import { DOCUMENT_ROOT_CSS, documentRootAttributes, fontPreloadTags } from '@/lib/page-styles';
@@ -344,6 +344,9 @@ function fillChartSlots(html: string, drawings: Readonly<Record<string, DrawnCha
     const id = decodeAttr(slot.value);
     const drawing = Object.hasOwn(drawings, id) ? drawings[id] : undefined;
     if (!drawing || !isInertSvg(drawing.svg)) continue;
+    // A templated chart's slot names the spec this request resolved: only a drawing of that spec fills it.
+    const spec = tag.attrs.find((attr) => attr.name === CHART_SPEC_ATTR);
+    if (spec && drawing.spec !== decodeAttr(spec.value ?? '')) continue;
     const close = matchingClose(tags, k);
     if (close < 0) continue;
     const state = tag.attrs.find((attr) => attr.name === CHART_STATE_ATTR);

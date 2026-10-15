@@ -17,6 +17,7 @@ import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import * as rt from '../rt';
+import * as templates from '../kit/templates';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import type { CompiledDataflow } from '@/lib/dataflow';
@@ -71,6 +72,8 @@ describe('a compiled island through the runtime', () => {
     let tree: () => unknown = () => null;
     await evaluateModule(server.browserCode, spec => {
       if (spec === '/islands/rt.js') return rt as unknown as Record<string, unknown>;
+      // `data-note="{$name}"` is a template: its element resolves through the template chunk.
+      if (spec === '/islands/kit-templates.js') return templates as unknown as Record<string, unknown>;
       if (spec === '/islands/boot.js') return { boot: (value: { TREE: () => unknown }) => { tree = value.TREE; } };
       throw new Error(`unexpected island import ${spec}`);
     }, 'test/shipped.js');
@@ -80,6 +83,7 @@ describe('a compiled island through the runtime', () => {
     expect(host.querySelector('#static')).toBe(served);
     runtime.context.setValue('name', 'Grace');
     expect(host.querySelector('#box')?.textContent).toContain('Grace');
+    expect(host.querySelector('#box')?.getAttribute('data-note')).toBe('Grace');
     dispose?.(); runtime.dispose(); host.remove(); vi.unstubAllGlobals();
   });
   it('opens a dialog from the shipped module after hydration', async () => {

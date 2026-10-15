@@ -6,6 +6,10 @@ test('artifact source rejects local paths instead of discovering files or rewrit
  for(const source of ['<a href="./appendix.jsx">Appendix</a>','<img src="./photo.png" />','<img srcSet="./photo.png 1x, ./large.png 2x" />','<Helmet><Import name="sales" src="./sales.csv" /><Query name="q">{`select * from sales.rows`}</Query></Helmet><p>Sales</p>'])assert.ok(validateMarkupStructure(source).errors.some(error=>error.message.includes('Local file references')));
  assert.deepEqual(validateMarkupStructure('<a href="/a/abc123">Appendix</a><img src="ref:def456" />').errors,[]);
 });
+test('a link that opens with a template is the page value, not a local file',()=>{
+ assert.deepEqual(validateMarkupStructure('<Helmet><Value name="link" type="string" /></Helmet><a href="{$link}">Go</a>').errors,[]);
+ assert.ok(validateMarkupStructure('<a href="./{$link}">Go</a>').errors.some(error=>error.message.includes('Local file references')));
+});
 test('standalone files still choose the correct upload format',()=>{
  for(const [filename,format] of [['photo.png','image'],['logo.svg','image'],['scan.pdf','pdf'],['clip.mp4','file'],['art.avif','file']] as const){assert.equal(assetFormatOf(filename),format);assert.equal(Object.keys(assetInput(filename,Buffer.from('bytes')))[0],format);}
 });

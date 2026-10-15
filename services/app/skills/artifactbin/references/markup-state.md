@@ -1,14 +1,14 @@
 ---
 name: markup-state
 description: >-
-  Explains local state.
+  Explains local state, and templates: values and query cells in any string.
 order: 2
 ---
 ## Read first
 
 Scalar Values hold choices and flags, inline table Values hold temporary rows,
 Queries derive the view. Markup conditions (`{$editing && …}`, `{$step > 1 ?
-… : …}`, `{$mode === "edit" && …}`) read declared scalars only and compare
+… : …}`, `{$mode === "edit" && …}`) read declared scalars and query cells (`$q.col`) and compare
 strictly (`===`, `!==`; `==` is refused); anything computed belongs in the
 [script](markup-scripts.md).
 
@@ -63,3 +63,36 @@ Local SQL is per loaded document: it creates no version and changes no stored
 rows. Reload resets inline tables to their declared rows; a `url={false}`
 scalar returns to its default. A Query or Mutation over an `<Import>` is a
 stored-dataset operation with its normal permissions.
+
+## Templates in any string
+
+One rule: inside any string the reader sees, `{$name}` is that Value,
+`{$query.column}` is that column of the query's first row, and inside a
+`<For>` or `<Column>` `{$_row.column}` is the row's. Text, attributes,
+kit props (`title`, `label`, `prefix`) and chart specs follow every change.
+
+```jsx
+<h2>Revenue in {$region}</h2>
+<p>Cheapest: {$tiles.cheap_v}</p>
+<a href="/a/{$tiles.doc_id}">Open {$region}</a>
+<div className="h-2 rounded bg-primary" style="width:{$share.pct}%" />
+<Chart data="$by_month" title="Revenue, {$region}" viz={{"kind":"vega-lite",
+  "spec":{"title":"{$region} by month","mark":"line",
+  "transform":[{"filter":"datum.region === {$region}"}],"encoding":{…}}}} />
+```
+
+- Raw values only: no calls, no `{$x | format}`. Format in SQL
+  (`printf('%.1f%%', pct) as label`) or with `<Cell format>`.
+- In a chart spec, `"{$max}"` alone keeps the value's type; in expression
+  strings (`filter`, `calculate`, `test`, `expr`, `signal`, `labelExpr`)
+  a value is inserted as a quoted literal.
+- Never read in SQL (bind `$name`), `<Mermaid code>`, `id`, `<iframe src>`,
+  `<Icon name>`, `Grid`/`GridItem`, or binding props (`value=`, `data=`,
+  `options=`): publish names the position. A missing column fails publish.
+  An `<img src>` reads values (`{$pick}`), not cells.
+- An unsafe value renders inert: a `javascript:` link drops the attribute
+  (so does an empty value in a URL), and a `style` value holding `;`,
+  braces, quotes or `url(` is left out.
+- Use `style` for value-driven sizes and colours, and design-system or
+  `<style>` classes in `className`; Tailwind utilities built from a value
+  (`w-{$n}`) have no CSS yet.

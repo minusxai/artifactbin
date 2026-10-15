@@ -30,7 +30,7 @@ describe('buildIslands', () => {
   const written = JSON.parse(readFileSync(path.join(outDir, 'manifest.json'), 'utf8'));
   const first = { ...written, closure: (urls) => closureOf(written.files, urls) };
   it('names every specifier a compiled page may import', () => {
-    expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', '@mx/row-class', '@mx/kit/image', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
+    expect(ISLAND_SPECIFIERS).toEqual(expect.arrayContaining(['@mx/rt', '@mx/boot', '@mx/deck', '@mx/row-class', '@mx/kit/image', '@mx/kit/templates', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)]));
     // Generated code reaches Solid only through @mx/rt; the bare Solid specifiers are the author script's vendor entries.
     expect(ISLAND_SPECIFIERS.filter((s) => s.startsWith('solid-js'))).toEqual(['solid-js', 'solid-js/web', 'solid-js/store']);
     expect([...AUTHOR_VENDOR_SPECIFIERS].sort()).toEqual(['solid-js', 'solid-js/store', 'solid-js/web']);
@@ -69,7 +69,7 @@ describe('buildIslands', () => {
   it('writes the server half: one file, a namespace per runtime and kit specifier, only Solid external, no lazy engine', () => {
     const { ssr } = first;
     expect(ssr.url).toMatch(/^\/islands\/ssr-[0-9a-f]{16}\.js$/);
-    expect(Object.keys(ssr.exports).sort()).toEqual(['@mx/rt', '@mx/row-class', '@mx/kit/image', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)].sort());
+    expect(Object.keys(ssr.exports).sort()).toEqual(['@mx/rt', '@mx/row-class', '@mx/kit/image', '@mx/kit/templates', ...KIT_FAMILIES.map((f) => `@mx/kit/${f}`)].sort());
     const text = readFileSync(path.join(outDir, ssr.url.slice('/islands/'.length)), 'utf8');
     const specifiers = [...new Set([...text.matchAll(/^import\s[^;]*?from\s*["']([^"']+)["']/gm)].map((m) => m[1]))].sort();
     expect(specifiers.every((s) => /^solid-js(\/web|\/store)?$/.test(s)), specifiers.join(', ')).toBe(true);

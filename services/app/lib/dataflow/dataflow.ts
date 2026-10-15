@@ -25,13 +25,11 @@ import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
  *  - it is only read from the attributes in REF_ATTRS (below); anywhere else
  *    a `$…` string is a literal.
  */
-import type { JsonValue, JsxAttribute, JsxElement, JsxNode, ValidationError } from '@/lib/jsx';
+import type { JsonValue, JsxAttribute, JsxElement, ValidationError } from '@/lib/jsx';
 import {parseDatasetColumn} from '@artifactbin/utils/shape';
 import { inferColumns, type ColumnType, type DatasetColumn } from './dataset-shape';
-import { reactiveNames, type ReactiveExpression } from '@/lib/jsx/reactive';
 import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
-import { builtinInput, READ_ONLY_REF_ATTRS, reservedDeclarationName, VIEWER, VIEWER_ID } from './builtins';
-import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
+import { builtinInput, reservedDeclarationName, VIEWER, VIEWER_ID } from './builtins';
 
 // ── declarations ────────────────────────────────────────────────────────────
 
@@ -284,7 +282,7 @@ export function resolveRefTemplate(value: string, get: (name: string) => Scalar 
 export { coerceScalarInput } from './scalar-input';
 
 /** What a reference position expects: a table, a scalar, or (on `run=`) a mutation. */
-type RefKind = 'table' | 'scalar' | 'mutation' | 'any';
+export type RefKind = 'table' | 'scalar' | 'mutation' | 'any';
 
 /**
  * Where a `$name` is READ, and what kind it must name. Components are matched
@@ -371,15 +369,8 @@ export const isTemplateRefPosition = (tag: string, attr: string, isComponent: bo
   !!(isComponent ? TEMPLATE_REF_ATTRS.components[tag] : TEMPLATE_REF_ATTRS.html[tag.toLowerCase()])
     ?.has(isComponent ? attr : attr.toLowerCase());
 
-/** One `$name` occurrence in the body. */
-interface RefNameUse extends Span {
-  name: string;
-  tag: string;
-  attr: string;
-  expects: RefKind;
-  /** True where the reference is only READ — the positions a built-in (`$_me.id`) may sit in. */
-  readOnly?: boolean;
-}
+export type { RefNameUse } from './ref-name-uses';
+import type { RefNameUse } from './ref-name-uses';
 
 // ── parsing the two Helmet children ─────────────────────────────────────────
 
@@ -674,66 +665,6 @@ export function parseDeclaration(el: JsxElement): Declaration | { errors: Valida
     case NOTIFY_TAG: return declared('notify', parseNotifyDecl(el));
     default: return null;
   }
-}
-
-// ── the reference graph ─────────────────────────────────────────────────────
-
-/** Every `$name` reference in the BODY, from the REF_ATTRS positions only. */
-const REGISTERED_COMPONENT_NAMES: ReadonlySet<string> = new Set(JSX_STORY_COMPONENT_NAMES);
-export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
-  const out: RefNameUse[] = [];
-  const expressionUses = (expression: ReactiveExpression | undefined, span: Span, tag: string, attr: string) => {
-    // A reactive expression only reads: `{$_me.id ? … : …}` never writes anything.
-    if (expression) for (const name of reactiveNames(expression).signals) out.push({name, tag, attr, expects: 'scalar', readOnly: true, start: span.start, end: span.end});
-  };
-  const visit = (nodes: JsxNode[]) => {
-    for (const n of nodes) {
-      if (n.type === 'expression' && !n.value.static) expressionUses(n.value.reactive, n, 'expression', 'value');
-      if (n.type !== 'element') continue;
-      if (n.control && n.control.kind !== 'fragment') expressionUses(n.control.test, n, 'condition', 'test');
-      const scriptComponent = n.isComponent && !REGISTERED_COMPONENT_NAMES.has(n.tag);
-      if (n.tag === 'FileUpload') {
-        const dataset = n.attributes.find(a => a.name === 'dataset');
-        if (dataset?.value.static && typeof dataset.value.json === 'string') out.push({name: dataset.value.json, tag:n.tag, attr:'dataset', expects:'any', readOnly:true, start:dataset.start, end:dataset.end});
-      }
-      for (const a of n.attributes) if (!a.value.static) {
-        if(n.tag === 'For' && a.name === 'each' && a.value.reactive?.kind === 'signal') out.push({name:a.value.reactive.name,tag:n.tag,attr:a.name,expects:'table',start:a.start,end:a.end});
-        // A script component's prop binds the declared signal, whatever its kind; the runtime hands it over as one.
-        else if (scriptComponent && a.value.reactive?.kind === 'signal') out.push({name:a.value.reactive.name,tag:n.tag,attr:a.name,expects:'any',readOnly:true,start:a.start,end:a.end});
-        else expressionUses(a.value.reactive, a, n.tag, a.name);
-      } else if (scriptComponent && typeof a.value.json === 'string') {
-        const name = refName(a.value.json);
-        if (name) out.push({name,tag:n.tag,attr:a.name,expects:'any',readOnly:true,start:a.start,end:a.end});
-      }
-      // `set=` WRITES its keys (declared scalar Values) and READS its sources; `args=` only reads.
-      for (const a of n.attributes) {
-        if ((a.name !== SET_ATTR && a.name !== ARGS_ATTR) || !a.value.static) continue;
-        for (const [key, source] of Object.entries(bindingMap(a.value.json) ?? {})) {
-          if (a.name === SET_ATTR) out.push({ name: key, tag: n.tag, attr: a.name, expects: 'scalar', start: a.start, end: a.end });
-          if ('ref' in source && !source.ref.startsWith('_row.')) out.push({ name: source.ref, tag: n.tag, attr: a.name, expects: 'scalar', readOnly: true, start: a.start, end: a.end });
-        }
-      }
-      const table = n.isComponent ? REF_ATTRS.components[n.tag] : REF_ATTRS.html[n.tag.toLowerCase()];
-      if (table) {
-        for (const a of n.attributes) {
-          const expects = table[n.isComponent ? a.name : a.name.toLowerCase()];
-          if (!expects || !a.value.static) continue;
-          const readOnly = !!(n.isComponent && READ_ONLY_REF_ATTRS[n.tag]?.has(a.name));
-          const name = refName(a.value.json);
-          if (name) { out.push({ name, tag: n.tag, attr: a.name, expects, readOnly, start: a.start, end: a.end }); continue; }
-          // …and, in the one position that reads it, every `{$name}` inside the
-          // string. Same kind, same checks, same refusal — one use per name.
-          if (!isTemplateRefPosition(n.tag, a.name, n.isComponent)) continue;
-          for (const templated of templateRefNames(a.value.json)) {
-            out.push({ name: templated, tag: n.tag, attr: a.name, expects, readOnly, start: a.start, end: a.end });
-          }
-        }
-      }
-      visit(n.children);
-    }
-  };
-  visit(body);
-  return out;
 }
 
 /**

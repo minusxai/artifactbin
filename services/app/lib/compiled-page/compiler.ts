@@ -39,6 +39,8 @@ import { parseRowRef } from '@/lib/jsx/row-scope';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { collectRefNameUses, REF_ATTRS, carriesRef, refName, type Scalar, resolveRefProps } from '@/lib/dataflow';
 import { substituteRow } from '@/lib/jsx/row-scope';
+import { deepHasValueHole, hasValueHole, holeReader, readsPage, substitutes, TEMPLATE_CALLS, templateImports } from '@/lib/jsx/template';
+import { resolveAttribute } from '@/lib/jsx/template-attrs';
 import { createPreviewPropsAllocator } from './preview-props';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { cn, peopleClasses, RECIPES } from '@/lib/islands';
@@ -221,6 +223,13 @@ function mountParts(node: JsxElement): { props: Record<string, unknown>; bind: R
   return { props, bind, ...(id !== undefined ? { id } : {}), ...(cls !== undefined ? { cls } : {}) };
 }
 
+/**
+ * Does an attribute of this element read the page through a template (`title="For {$region}"`, `{$q.col}`, a chart
+ * spec's strings)? Only a value or cell hole counts: row templates keep their row paths, and a page without one
+ * compiles exactly as before.
+ */
+const templated = (node: JsxElement): boolean => node.attributes.some((a) => a.value.static && readsPage(node.tag, a.name, node.isComponent, a.value.json, isScriptComponent(node)));
+
 function selfDynamic(node: JsxNode): boolean {
   if (node.type === 'text') return false;
   if (node.type === 'expression') return !node.value.static;
@@ -230,6 +239,7 @@ function selfDynamic(node: JsxNode): boolean {
   if (isScriptComponent(node)) return false;
   if (ISLAND_TAGS.has(node.tag)) return true;
   if (node.attributes.some((a) => !a.value.static)) return true;
+  if (templated(node)) return true;
   if (node.attributes.some((a) => ['run', 'set', 'args'].includes(a.name))) return true;
   const refs = node.isComponent ? REF_ATTRS.components[node.tag] : REF_ATTRS.html[node.tag.toLowerCase()];
   if (refs && node.attributes.some((a) => refs[a.name.toLowerCase()] && a.value.static && (refName(a.value.json) || carriesRef(a.value.json)))) return true;
@@ -243,6 +253,7 @@ function readsDataNode(node: JsxNode): boolean {
   if (node.control && node.control.kind !== 'fragment') return true;
   if (node.tag === 'For') return true;
   if (node.attributes.some((a) => !a.value.static || refName(a.value.json) !== null || carriesRef(a.value.json))) return true;
+  if (templated(node)) return true;
   return node.children.some(readsDataNode);
 }
 
@@ -364,6 +375,34 @@ export function generate(input: GenerateInput): Generated {
   const useKit = (tag: string, mode: Mode, ctx: Ctx): void => {
     (mode === 'browser' ? kitUsed.islands : kitUsed.skeleton).add(tag);
     ctx.island?.kit.add(tag);
+  };
+  /**
+   * An element's serialized attributes split into the ones it keeps as written and the ones that read the page
+   * through a template, which resolve (guarded) in `rt.valueAttrs`. Without a template the first is all of them.
+   */
+  const holdTemplates = (node: JsxElement, attrs: Attr[], ctx: Ctx): [Attr[], Attr[]] => {
+    if (ctx.preview) return [attrs, []];
+    const held = attrs.filter(([n, v]) => hasValueHole(v) && substitutes(node.tag, n, node.isComponent));
+    return held.length ? [attrs.filter((a) => !held.includes(a)), held] : [attrs, []];
+  };
+  const heldJsx = (held: Attr[], ctx: Ctx): string => (held.length ? ` {...${TEMPLATE_CALLS.attrs}(${json(Object.fromEntries(held))}, ${ctx.row ?? 'undefined'})}` : '');
+  /** A kit component's API prop as JSX: a templated string or chart spec resolves at run time, a row's string per row. */
+  const apiValue = (node: JsxElement, k: string, v: unknown, ctx: Ctx): string => {
+    const reads = !ctx.preview && readsPage(node.tag, k, true, v);
+    if (typeof v === 'string') return reads ? `${TEMPLATE_CALLS.text}(${lit(v)}, ${ctx.row ?? 'undefined'})` : ctx.row ? `rt.sub(${lit(v)}, ${ctx.row})` : lit(v);
+    return reads ? `${TEMPLATE_CALLS.viz}(${json(v)}, ${ctx.row ?? 'undefined'})` : json(v);
+  };
+  /** A deck rail miniature reads the declared values: its templated strings are filled with them (guarded like the page's). */
+  const previewFill = (props: Props, values: Record<string, Scalar>): Props => {
+    const read = holeReader(values);
+    let out: Props | null = null;
+    for (const [k, v] of Object.entries(props)) {
+      let next: unknown = v;
+      if (typeof v === 'string' && k !== 'id' && hasValueHole(v)) next = resolveAttribute(k, v, read) ?? undefined;
+      else if (k === 'style' && v && typeof v === 'object' && deepHasValueHole(v)) next = Object.fromEntries(Object.entries(v).map(([p, css]) => [p, typeof css === 'string' ? resolveAttribute(k, css, read) : css]));
+      if (next !== v) (out ??= { ...props })[k] = next;
+    }
+    return out ?? props;
   };
 
   /** Emit one node as a JSX child. */
@@ -563,6 +602,7 @@ export function generate(input: GenerateInput): Generated {
     const props = rawBuildProps(node.attributes, true, node.tag, path, undefined, ctx.preview?.values ?? {});
     if (!ctx.preview && ['TabsContent', 'AccordionContent', 'CollapsibleContent', 'PopoverContent', 'TooltipContent'].includes(node.tag)) props.forceMount = true;
     if (ctx.preview) Object.assign(props, ctx.preview.rewrite(props));
+    if (ctx.preview) Object.assign(props, previewFill(props, ctx.preview.values));
     if (node.tag === 'File') Object.assign(props, resolveRefProps(node, props, refData));
     // Decided here, never read from the author (interpreter BUTTON_TRIGGERS).
     if (node.tag === 'DialogTrigger' || node.tag === 'DialogClose') props.wrapsControl = wrapsControl(node);
@@ -593,6 +633,8 @@ export function generate(input: GenerateInput): Generated {
     const viz = props.viz as { recipe?: unknown } | undefined;
     if (node.tag === 'Chart' && typeof viz?.recipe === 'string' && viz.recipe.startsWith('ref:')) props.recipeData = refData[viz.recipe.slice(4)] ?? null;
     const api: Props = Object.fromEntries((meta.api ?? []).filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));
+    // A chart whose spec reads the page keeps a served drawing only of the spec it resolves (kit/data ChartSlot).
+    if (node.tag === 'Chart' && !ctx.preview && readsPage(node.tag, 'viz', true, props.viz)) api.templated = true;
     // Class strings come from the recipes index AT COMPILE TIME: readers never download cva or tailwind-merge.
     const recipe = RECIPES[node.tag];
     // In a fixed grid's tile the tile owns the size: the recipe and the port both know.
@@ -640,19 +682,21 @@ export function generate(input: GenerateInput): Generated {
       const parts = kitParts(node, path, mode, ctx, meta);
       if (typeof parts === 'string') return parts;
       const { props, api, recipe, inGrid, cls, attrs, cellsJsx } = parts;
-      const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeAttr(k)}={${typeof v === 'string' ? ctx.row ? `rt.sub(${lit(v)}, ${ctx.row})` : lit(v) : json(v)}}`).join('');
+      const apiJsx = Object.entries(api).map(([k, v]) => ` ${safeAttr(k)}={${apiValue(node, k, v, ctx)}}`).join('');
       const authorClass = typeof props.className === 'string' ? props.className : '';
       const rowClass = !!ctx.row && !!authorClass;
       if (rowClass) usesRowClass = true;
       const rowBase = rowClass ? node.tag === 'Icon' ? ICON_BASE_CLASS : recipe ? cn(recipe({ ...props, className: undefined, ...(inGrid ? { inGridItem: true } : {}) })) : '' : '';
+      const clsReads = !ctx.preview && hasValueHole(authorClass);
       const clsJsx = rowClass
-        ? ` class={$rowClass(${lit(rowBase)}, ${lit(authorClass)}, ${ctx.row})}`
-        : cls ? ` class={${lit(cls)}}` : '';
+        ? clsReads ? ` class={$rowClass(${lit(rowBase)}, ${TEMPLATE_CALLS.text}(${lit(authorClass)}, ${ctx.row}), ${ctx.row})}` : ` class={$rowClass(${lit(rowBase)}, ${lit(authorClass)}, ${ctx.row})}`
+        : cls ? clsReads ? ` class={${TEMPLATE_CALLS.text}(${lit(cls)}, ${ctx.row ?? 'undefined'})}` : ` class={${lit(cls)}}` : '';
       const tag = safeTag(node.tag === 'Skeleton' ? 'StaticSkeleton' : node.tag);
       // A row action writes with its row (a Button with `run`/`set`).
       const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';
-      if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})}>${children()}</${tag}>`;
-      return `<${tag}${apiJsx}${cellsJsx}${clsJsx}${jsxAttrs(attrs)}>${meta.noChildren ? '' : children()}</${tag}>`;
+      const [plain, held] = holdTemplates(node, attrs, ctx);
+      if (ctx.row) return `<${tag}${apiJsx}${rowJsx}${clsJsx} {...${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(plain))}, ${ctx.row}, ${ctx.scope})}${heldJsx(held, ctx)}>${children()}</${tag}>`;
+      return `<${tag}${apiJsx}${cellsJsx}${clsJsx}${jsxAttrs(plain)}${heldJsx(held, ctx)}>${meta.noChildren ? '' : children()}</${tag}>`;
     }
     const lower = node.tag.toLowerCase();
     const tag = safeTag(SVG_TAG_CASE[lower] ?? lower);
@@ -666,8 +710,10 @@ export function generate(input: GenerateInput): Generated {
       }
       useKit('BoundImage', mode, ctx);
       const props = rawBuildProps(node.attributes.filter((a) => a !== source), false, node.tag, path, undefined, {});
-      const attrs = json(Object.fromEntries(elementAttrs(tag, props)));
-      return `<BoundImage template={${lit(source.value.json)}} props={${ctx.row ? `${rowAttrsFn(mode, ctx)}(${attrs}, ${ctx.row}, ${ctx.scope})` : attrs}}${ctx.row ? ` row={${ctx.row}}` : ''} />`;
+      const [plain, held] = holdTemplates(node, elementAttrs(tag, props), ctx);
+      const attrs = json(Object.fromEntries(plain));
+      const own = ctx.row ? `${rowAttrsFn(mode, ctx)}(${attrs}, ${ctx.row}, ${ctx.scope})` : attrs;
+      return `<BoundImage template={${lit(source.value.json)}} props={${held.length ? `{ ...${own},${heldJsx(held, ctx).slice(2, -1)} }` : own}}${ctx.row ? ` row={${ctx.row}}` : ''} />`;
     }
     // A `$`-bound native form control (interpreter boundAttrs).
     const boundTable = ['input', 'select', 'textarea'].includes(lower) ? REF_ATTRS.html[lower] : null;
@@ -683,12 +729,13 @@ export function generate(input: GenerateInput): Generated {
       useKit('BoundNative', mode, ctx);
       const bind = Object.fromEntries(boundAttrs.map((a) => [a.name.toLowerCase(), refName(a.value.static ? a.value.json : null)]));
       const props = rawBuildProps(node.attributes.filter((a) => !boundAttrs.includes(a)), false, node.tag, path, undefined, {});
-      return `<BoundNative tag={${lit(lower)}} bind={${json(bind)}}${jsxAttrs(elementAttrs(tag, props))}>${children()}</BoundNative>`;
+      const [plain, held] = holdTemplates(node, elementAttrs(tag, props), ctx);
+      return `<BoundNative tag={${lit(lower)}} bind={${json(bind)}}${jsxAttrs(plain)}${heldJsx(held, ctx)}>${children()}</BoundNative>`;
     }
     let props = rawBuildProps(node.attributes, false, node.tag, path, undefined, ctx.preview?.values ?? {});
     const patch = resolveRefProps(node, props, refData);
     if (patch) props = { ...props, ...patch };
-    if (ctx.preview) props = ctx.preview.rewrite(props);
+    if (ctx.preview) props = previewFill(ctx.preview.rewrite(props), ctx.preview.values);
     // A static wrapper with live descendants is already served. Its id may be minted
     // anew by an edit; leaving it to the DOM keeps the browser module reusable.
     if (mode === 'browser' && !ctx.row && !ctx.liveKit && !ctx.branch && !selfDynamic(node) && needsBrowser(node)) {
@@ -711,8 +758,9 @@ export function generate(input: GenerateInput): Generated {
     }
     const booleanJsx = reactive.map((a) => ` {...(rt.expr(${json(a.value.static ? null : a.value.reactive)}, ${ctx.row ?? 'undefined'}) ? { ${safeAttr(a.name)}: true } : {})}`).join('');
     if (ctx.row && lower === 'img') (mode === 'static' ? kitUsed.skeleton : kitUsed.islands).add('rowImageAttrs');
-    const rowAttrs = ctx.row ? `${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(attrs))}, ${ctx.row}, ${ctx.scope})` : '';
-    const open = ctx.row ? `<${tag} {...${lower === 'img' ? `rowImageAttrs(${rowAttrs})` : rowAttrs}}${booleanJsx}>` : `<${tag}${jsxAttrs(attrs)}${booleanJsx}>`;
+    const [plain, held] = holdTemplates(node, attrs, ctx);
+    const rowAttrs = ctx.row ? `${rowAttrsFn(mode, ctx)}(${json(Object.fromEntries(plain))}, ${ctx.row}, ${ctx.scope})` : '';
+    const open = ctx.row ? `<${tag} {...${lower === 'img' ? `rowImageAttrs(${rowAttrs})` : rowAttrs}}${booleanJsx}${heldJsx(held, ctx)}>` : `<${tag}${jsxAttrs(plain)}${booleanJsx}${heldJsx(held, ctx)}>`;
     if (VOID.test(lower)) return open.replace(/>$/, ' />');
     if (lower === 'textarea' && (props.defaultValue !== undefined || props.value !== undefined)) return `${open}{${lit(String(props.defaultValue ?? props.value))}}</${tag}>`;
     const content = children(inner);
@@ -966,7 +1014,7 @@ export function generate(input: GenerateInput): Generated {
     let props = rawBuildProps(node.attributes, false, node.tag, path, undefined, preview.values);
     const patch = resolveRefProps(node, props, refData);
     if (patch) props = { ...props, ...patch };
-    props = preview.rewrite(props);
+    props = previewFill(preview.rewrite(props), preview.values);
     const selectedValue = lower === 'select' ? props.defaultValue ?? props.value : undefined;
     const inner = lower === 'svg' ? { ...ctx, svg: true } : selectedValue !== undefined ? { ...ctx, selectValue: String(selectedValue) } : ctx;
     const attrs = elementAttrs(tag, props);
@@ -1063,7 +1111,7 @@ export function generate(input: GenerateInput): Generated {
     return `const $d${i} = $moduleData[${index}];\n`;
   }).join('');
   const usesRowAttrs = root.includes('$rowAttrs(') || browserRoot.includes('$rowAttrs(');
-  const rowImports = `${usesRowAttrs ? "import { rowAttrs as $rowAttrs } from '@mx/kit/basic';\n" : ''}${usesRowClass ? "import { rowClass as $rowClass } from '@mx/row-class';\n" : ''}`;
+  const rowImports = `${usesRowAttrs ? "import { rowAttrs as $rowAttrs } from '@mx/kit/basic';\n" : ''}${usesRowClass ? "import { rowClass as $rowClass } from '@mx/row-class';\n" : ''}${templateImports(root + browserRoot)}`;
   const skeleton = `import * as rt from '@mx/rt';\n${rowImports}${kitImports(kitUsed.skeleton)}${dataConsts}export function Document() { return ${root}; }\n`;
   const browserSource = `import * as rt from '@mx/rt';\n${rowImports}${kitImports(kitUsed.islands)}${dataConsts}export function Document() { return ${browserRoot}; }\n`;
   return {
