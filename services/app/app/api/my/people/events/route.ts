@@ -3,7 +3,7 @@ import {unauthorized} from '@/lib/http';
 import { membershipInbox } from '@/lib/document-data';
 import {notificationChannel} from '@/lib/notifications';
 import {subscribeChannel} from '@/lib/publish/realtime/live';
-import {LIVE_KEEPALIVE_EVENT,LIVE_KEEPALIVE_MS} from '@/lib/http';
+import {LIVE_KEEPALIVE_MS,liveKeepaliveFrame} from '@/lib/http';
 /** Recipient-scoped wakeups, using the same database transport as artifact live updates. */
 export async function GET(request:Request){
  const actor=await sessionActor(request);
@@ -16,7 +16,7 @@ export async function GET(request:Request){
  const stream=new ReadableStream<Uint8Array>({
   async start(controller){
    const send=()=>{if(!closed)controller.enqueue(encoder.encode('data: {}\n\n'));};
-   const beat=()=>{if(!closed)controller.enqueue(encoder.encode(`event: ${LIVE_KEEPALIVE_EVENT}\ndata: {}\n\n`));};
+   const beat=()=>{if(!closed)controller.enqueue(encoder.encode(liveKeepaliveFrame()));};
    const close=()=>{if(closed)return;closed=true;clearInterval(timer);void stop?.();controller.close();};
    request.signal.addEventListener('abort',close,{once:true});
    // A lost database listener ends the stream: the client reconnects (lib/live-stream) and re-reads.

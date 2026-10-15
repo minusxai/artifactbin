@@ -15,6 +15,13 @@
  *  - When the page becomes visible again or the browser comes back online, a stream that has been
  *    silent past `LIVE_STALE_MS` (or is waiting out a backoff) is reopened at once; a stream that is
  *    demonstrably alive instead asks its owner to check the head itself (`onWake`).
+ *  - RESUMING: a door that names its position (the SSE `id:` field — the document door's dataset
+ *    marks, app/a/[id]/events) is asked on reopen for what moved since (`?since=<last id>`), so a
+ *    `data` wakeup that fell into the gap arrives on reconnect rather than never. A reopened stream's
+ *    first event tells the owner it is delivering again (`onReconnect`): what it shows may need a re-read.
+ *  - THE BUILD: the heartbeat names the deployment's build (`{"build":…}`, lib/http/app-build); every
+ *    stream reports it to the page's build observers (`observeLiveBuild`), which is how an open tab
+ *    learns a deploy happened before one of its lazy chunks is missing.
  */
 
 /** The named event both live doors send as their heartbeat. Old clients ignore an unknown event name. */
@@ -51,6 +58,8 @@ interface LiveStreamOptions {
   onWake?: () => void;
   /** The stream broke (error, close or heartbeat silence) and a reopen is scheduled. */
   onError?: () => void;
+  /** A stream that broke is delivering again: its first event after a reopen. */
+  onReconnect?: () => void;
   host?: LiveStreamHost;
   random?: () => number;
 }
@@ -67,6 +76,33 @@ type Source = {
   close(): void;
 };
 
+const buildObservers = new Set<(build: string) => void>();
+
+/** Hear the build every live stream's heartbeat names (lib/http/app-build). Returns the stop. */
+export function observeLiveBuild(observer: (build: string) => void): () => void {
+  buildObservers.add(observer);
+  return () => { buildObservers.delete(observer); };
+}
+
+function heardHeartbeat(data: unknown): void {
+  if (!buildObservers.size || typeof data !== 'string') return;
+  let build: unknown;
+  try { build = (JSON.parse(data) as { build?: unknown } | null)?.build; } catch { return; }
+  if (typeof build !== 'string' || !build) return;
+  for (const observer of [...buildObservers]) observer(build);
+}
+
+/** `url` asking for what moved since `cursor` (replacing whatever `since` it carried). */
+function resumeUrl(url: string, cursor: string): string {
+  const hash = url.indexOf('#');
+  const base = hash === -1 ? url : url.slice(0, hash);
+  const query = base.indexOf('?');
+  const path = query === -1 ? base : base.slice(0, query);
+  const params = new URLSearchParams(query === -1 ? '' : base.slice(query + 1));
+  params.set('since', cursor);
+  return `${path}?${params.toString()}`;
+}
+
 export function openLiveStream(options: LiveStreamOptions): LiveStream {
   const host: LiveStreamHost | undefined = options.host ?? (typeof window === 'undefined' ? undefined : window);
   const EventSourceCtor = (globalThis as { EventSource?: new (url: string) => Source }).EventSource;
@@ -76,16 +112,22 @@ export function openLiveStream(options: LiveStreamOptions): LiveStream {
   let lastEvent = Date.now();
   let retry: ReturnType<typeof setTimeout> | undefined;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
+  /** The door's position, from the last frame that named one (SSE `id:`). */
+  let cursor = '';
+  /** The stream broke since it last delivered: its next event is a reconnect. */
+  let broken = false;
 
   const armWatchdog = () => {
     clearTimeout(watchdog);
     watchdog = setTimeout(fail, LIVE_SILENCE_MS);
   };
   /** Anything arrived: the server answered and is streaming, so the backoff starts over. */
-  const heard = () => {
+  const heard = (event?: MessageEvent) => {
     lastEvent = Date.now();
     attempt = 0;
     armWatchdog();
+    if (event?.lastEventId) cursor = event.lastEventId;
+    if (broken) { broken = false; options.onReconnect?.(); }
   };
 
   function open() {
@@ -93,17 +135,17 @@ export function openLiveStream(options: LiveStreamOptions): LiveStream {
     clearTimeout(retry);
     retry = undefined;
     source?.close();
-    const current = new EventSourceCtor(options.url);
+    const current = new EventSourceCtor(cursor ? resumeUrl(options.url, cursor) : options.url);
     source = current;
     // `lastEvent` is NOT reset here: a reopen that hangs while connecting has heard nothing, and a
     // page coming back online must treat it as stale rather than as a live stream.
     const mine = () => source === current && !closed;
     current.onopen = () => { if (mine()) armWatchdog(); };
-    current.onmessage = (event) => { if (!mine()) return; heard(); options.onMessage?.(String(event.data)); };
+    current.onmessage = (event) => { if (!mine()) return; heard(event); options.onMessage?.(String(event.data)); };
     for (const [name, handler] of Object.entries(options.events ?? {})) {
-      current.addEventListener(name, (event) => { if (!mine()) return; heard(); handler(String(event.data)); });
+      current.addEventListener(name, (event) => { if (!mine()) return; heard(event); handler(String(event.data)); });
     }
-    current.addEventListener(LIVE_KEEPALIVE_EVENT, () => { if (mine()) heard(); });
+    current.addEventListener(LIVE_KEEPALIVE_EVENT, (event) => { if (!mine()) return; heard(event); heardHeartbeat(event.data); });
     current.onerror = () => { if (mine()) fail(); };
     // A connect that hangs (offline, a black-holed route) is bounded by the same silence rule.
     armWatchdog();
@@ -114,6 +156,7 @@ export function openLiveStream(options: LiveStreamOptions): LiveStream {
     clearTimeout(watchdog);
     source?.close();
     source = null;
+    broken = true;
     clearTimeout(retry);
     retry = setTimeout(open, liveBackoffDelay(attempt++, options.random));
     options.onError?.();
@@ -123,6 +166,7 @@ export function openLiveStream(options: LiveStreamOptions): LiveStream {
     if (closed) return;
     if (!source || Date.now() - lastEvent > LIVE_STALE_MS) {
       attempt = 0;
+      broken = true;
       open();
       return;
     }

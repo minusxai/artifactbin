@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  LIVE_BACKOFF_MAX_MS, LIVE_KEEPALIVE_EVENT, LIVE_SILENCE_MS, LIVE_STALE_MS, liveBackoffDelay, openLiveStream, type LiveStreamHost,
+  LIVE_BACKOFF_MAX_MS, LIVE_KEEPALIVE_EVENT, LIVE_SILENCE_MS, LIVE_STALE_MS, liveBackoffDelay, liveKeepaliveFrame, observeLiveBuild, openLiveStream, setAppBuild, type LiveStreamHost,
 } from '@/lib/http';
 
 class FakeEventSource extends EventTarget {
@@ -18,8 +18,8 @@ class FakeEventSource extends EventTarget {
   constructor(public url: string) { super(); FakeEventSource.made.push(this); }
   close() { this.closed = true; }
   open() { this.onopen?.(new Event('open')); }
-  message(data: string) { this.onmessage?.(new MessageEvent('message', { data })); }
-  named(name: string, data = '{}') { this.dispatchEvent(new MessageEvent(name, { data })); }
+  message(data: string, lastEventId = '') { this.onmessage?.(new MessageEvent('message', { data, lastEventId })); }
+  named(name: string, data = '{}', lastEventId = '') { this.dispatchEvent(new MessageEvent(name, { data, lastEventId })); }
   /** What the browser reports for a dropped connection, a refused one, or a 502/503 answer alike. */
   fail() { this.onerror?.(new Event('error')); }
 }
@@ -184,5 +184,70 @@ describe('openLiveStream', () => {
     page.online();
     page.show();
     expect(FakeEventSource.made).toHaveLength(1);
+  });
+
+  it('resumes from the last event id it heard: a reopen asks for what changed since, never the page-load mark again', () => {
+    const stream = openLiveStream({ url: '/a/x/events?since=D1.served', events: { data: () => {} }, host: fakeHost().host, random: noJitter });
+    expect(latest().url).toBe('/a/x/events?since=D1.served');
+    latest().open();
+    latest().message('{"editId":"e1"}', 'D1.aaaaaaaaaaaa~D2.bbbbbbbbbbbb');
+    latest().named('data', '{"datasets":["D2"]}', 'D1.aaaaaaaaaaaa~D2.cccccccccccc');
+    latest().fail();
+    vi.advanceTimersByTime(1000);
+    expect(new URL(latest().url, 'http://x').searchParams.get('since'), 'the cursor of the last frame, not the served one').toBe('D1.aaaaaaaaaaaa~D2.cccccccccccc');
+    expect(new URL(latest().url, 'http://x').pathname).toBe('/a/x/events');
+    // A frame without an id keeps the cursor it has.
+    latest().message('{"editId":"e1"}');
+    latest().fail();
+    vi.advanceTimersByTime(1000);
+    expect(new URL(latest().url, 'http://x').searchParams.get('since')).toBe('D1.aaaaaaaaaaaa~D2.cccccccccccc');
+    stream.close();
+  });
+
+  it('tells its owner when a broken stream delivers again (the reopen is the catch-up), never on the first connection', () => {
+    const onReconnect = vi.fn();
+    const stream = openLiveStream({ url: '/a/x/events', host: fakeHost().host, random: noJitter, onReconnect });
+    latest().open();
+    latest().message('{}');
+    expect(onReconnect).not.toHaveBeenCalled();
+    latest().fail();
+    vi.advanceTimersByTime(1000);
+    latest().open();
+    expect(onReconnect, 'opening is not delivering').not.toHaveBeenCalled();
+    latest().named(LIVE_KEEPALIVE_EVENT);
+    latest().message('{}');
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+    stream.close();
+  });
+
+  it('reports the build the server names in its heartbeat to every build observer', () => {
+    const seen: string[] = [];
+    const stop = observeLiveBuild((build) => seen.push(build));
+    const stream = openLiveStream({ url: '/a/x/events', host: fakeHost().host });
+    latest().named(LIVE_KEEPALIVE_EVENT, '{}');
+    latest().named(LIVE_KEEPALIVE_EVENT, 'not json');
+    latest().named(LIVE_KEEPALIVE_EVENT, '{"build":"0123456789ab"}');
+    expect(seen).toEqual(['0123456789ab']);
+    stop();
+    latest().named(LIVE_KEEPALIVE_EVENT, '{"build":"ba9876543210"}');
+    expect(seen).toEqual(['0123456789ab']);
+    stream.close();
+  });
+});
+
+describe('the doors\' heartbeat frame', () => {
+  afterEach(() => setAppBuild(null));
+  it('names the server\'s build, which a page\'s stream hears; a server with no build sends the bare beat', () => {
+    expect(liveKeepaliveFrame()).toBe(`event: ${LIVE_KEEPALIVE_EVENT}\ndata: {}\n\n`);
+    setAppBuild('0123456789ab');
+    const frame = liveKeepaliveFrame();
+    expect(frame).toBe(`event: ${LIVE_KEEPALIVE_EVENT}\ndata: {"build":"0123456789ab"}\n\n`);
+    const seen: string[] = [];
+    const stop = observeLiveBuild((build) => seen.push(build));
+    const stream = openLiveStream({ url: '/api/my/people/events', host: fakeHost().host });
+    latest().named(LIVE_KEEPALIVE_EVENT, /data: (.*)\n/.exec(frame)![1]!);
+    expect(seen).toEqual(['0123456789ab']);
+    stop();
+    stream.close();
   });
 });

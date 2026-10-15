@@ -17,6 +17,8 @@
 interface SseEvent {
   event: string;
   data: Record<string, unknown>;
+  /** The block's `id:` (the door's resume position), when it named one. */
+  id?: string;
 }
 
 interface SseStream {
@@ -46,13 +48,15 @@ export function sseStream(body: ReadableStream<Uint8Array>): SseStream {
       for (const block of blocks) {
         let event = 'message';
         let data = '';
+        let id: string | undefined;
         for (const line of block.split('\n')) {
           if (line.startsWith('event: ')) event = line.slice(7);
           else if (line.startsWith('data: ')) data += line.slice(6);
+          else if (line.startsWith('id: ')) id = line.slice(4);
         }
         // A keepalive comment carries no data, and a non-JSON payload is not a frame.
         if (!data) continue;
-        try { out.push({ event, data: JSON.parse(data) }); } catch { /* keepalive or partial */ }
+        try { out.push({ event, data: JSON.parse(data), ...(id !== undefined ? { id } : {}) }); } catch { /* keepalive or partial */ }
       }
     };
     drain();
