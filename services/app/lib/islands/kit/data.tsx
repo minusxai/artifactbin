@@ -262,14 +262,11 @@ const PINNED = 'sticky left-0 z-[1] bg-card';
  * the footer says what was left out.
  */
 function ComparisonGrid(props: DataTableProps & { table: () => TableResult | undefined }) {
-  const model = createMemo(() => {
-    const t = props.table();
-    const metrics = props.metrics === undefined ? null : parseMetricSpecs(props.metrics);
-    const header = typeof props.header === 'string' && props.header ? props.header : undefined;
-    const columns = t?.columns ?? [];
-    const named = header ?? columns.find(c => c.type === 'string')?.name ?? columns[0]?.name;
-    return compareTable({ rows: t?.rows ?? [], columns, header, edge: props.edge === true, metrics: metrics ?? columns.filter(c => c.name !== named).map(c => ({ col: c.name })) });
-  });
+  const model = createMemo(() => compareTable({
+    rows: props.table()?.rows ?? [], columns: props.table()?.columns ?? [], edge: props.edge === true,
+    header: typeof props.header === 'string' ? props.header : undefined,
+    metrics: props.metrics === undefined ? null : parseMetricSpecs(props.metrics),
+  }));
   const total = () => Math.max(model().total, props.table()?.totalRows ?? 0);
   const right = css({ 'text-align': 'right' });
   const left = css({ 'text-align': 'left' });

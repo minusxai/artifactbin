@@ -98,6 +98,8 @@ describe('compareTable', () => {
     const plain = compareTable({ rows: ROWS, columns: COLUMNS, metrics: [{ col: 'cost' }] });
     expect(plain.rows[0]!.title).toBe('cost');
     expect(plain.items).toEqual(['Go', 'Rust', 'Ruby']);
+    // Without metrics, every column but the header is one.
+    expect(compareTable({ rows: ROWS, columns: COLUMNS, header: 'name' }).rows.map((r) => r.col)).toEqual(['cost', 'score', 'cost_rank', 'cost_range']);
   });
 
   it('caps the items it shows and reports the total, so the reader can say what was left out', () => {

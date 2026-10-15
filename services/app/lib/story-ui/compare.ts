@@ -95,12 +95,16 @@ function edgeOf(values: Array<{ name: string; n: number }>, better: 'high' | 'lo
   return { lead: a.name, rest: `${by}${values.length > 2 ? ` vs ${b.name}` : ''}` };
 }
 
-/** The comparison a transposed DataTable draws, from its table and its authored props. */
-export function compareTable(input: { rows: Row[]; columns: DatasetColumn[]; header?: string; metrics: CompareMetricSpec[]; edge?: boolean; max?: number }): Comparison {
-  const header = input.header ?? input.columns.find((c) => c.type === 'string')?.name ?? input.columns[0]?.name ?? '';
+/**
+ * The comparison a transposed DataTable draws, from its table and its authored props. Without a `header`
+ * the first text column heads the items; without `metrics` every other column is one.
+ */
+export function compareTable(input: { rows: Row[]; columns: DatasetColumn[]; header?: string; metrics?: CompareMetricSpec[] | null; edge?: boolean; max?: number }): Comparison {
+  const header = input.header || (input.columns.find((c) => c.type === 'string')?.name ?? input.columns[0]?.name ?? '');
   const shown = input.rows.slice(0, input.max ?? MAX_COMPARE_ITEMS);
   const items = shown.map((row) => (empty(row[header]) ? COMPARE_EMPTY : plain(row[header])));
-  const rows = input.metrics.map((metric): CompareRow => {
+  const metrics: CompareMetricSpec[] = input.metrics ?? input.columns.filter((c) => c.name !== header).map((c) => ({ col: c.name }));
+  const rows = metrics.map((metric): CompareRow => {
     const values = shown.flatMap((row, i) => { const n = numeric(row[metric.col]); return n === null ? [] : [{ name: items[i]!, n }]; });
     const best = metric.better && values.length >= 2
       ? (metric.better === 'high' ? Math.max : Math.min)(...values.map((v) => v.n))
