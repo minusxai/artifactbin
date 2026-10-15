@@ -4,8 +4,6 @@ description: Chart authoring.
 ---
 ## Read first
 
-Compare items side by side: `<DataTable transpose>` ([comparisons](markup-compare.md)).
-
 <!--bundle:skip-->
 ## Theme, legends and labels
 
