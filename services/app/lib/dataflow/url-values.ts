@@ -241,3 +241,13 @@ export function urlSelection(search: string, flow: Declared | null): UrlSelectio
     token: named.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([n, v]) => `${n}=${v}`).join('&'),
   };
 }
+
+/**
+ * The link's selection as a suffix for the document's social card URL (`&$region=EU`, or `''` at rest): a shared
+ * link unfurls showing the values it carries. Canonical, as `urlSelection` reads it, so junk params never reach the
+ * card's URL and every spelling of one selection shares its cached image.
+ */
+export function cardSelectionQuery(search: string, flow: Declared | null): string {
+  const { search: selected } = urlSelection(search, flow);
+  return selected ? `&${selected}` : '';
+}

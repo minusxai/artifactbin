@@ -52,6 +52,13 @@ describe('the served document unfurls on its own', () => {
     expect(html).toContain('name="twitter:card" content="summary_large_image"');
   });
 
+  it('points the card at the link\'s declared values, so the unfurl shows what the link selects', async () => {
+    const row = await publish('<Helmet><Value name="region" type="string" /></Helmet><h1>Region {$region}</h1>', 'Regions');
+    const card = (html: string) => decodeURIComponent(html.match(/property="og:image" content="([^"]*)"/)![1]!.replace(/&amp;/g, '&'));
+    expect(card(await serve(row.id, '?$region=EU&$junk=1'))).toBe(`${BASE}/a/${row.id}/export?mode=card&v=${row.version}&r=3&$region=EU`);
+    expect(card(await serve(row.id))).toBe(`${BASE}/a/${row.id}/export?mode=card&v=${row.version}&r=3`);
+  });
+
   it('follows the document\'s own heading when nothing named it, like the tab does', async () => {
     const row = await publish('<h1>Named By Heading</h1>', null);
     expect(await serve(row.id)).toContain('property="og:title" content="Named By Heading"');

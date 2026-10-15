@@ -50,7 +50,7 @@ export { runLocalStateMutation } from './local-state';
 export { LocalStateInputError, localTableOverrides, parseLocalTables } from './local-tables';
 
 // URL values and query values.
-export { readUrlValues, urlSelection } from './url-values';
+export { cardSelectionQuery, readUrlValues, urlSelection } from './url-values';
 export { validateQueryValues } from './query-values';
 
 // The evaluator: runs a compiled dataflow's queries against a SQL service (contracts and siblings only).

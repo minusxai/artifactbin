@@ -69,6 +69,18 @@ describe('the export route through the browser seam', () => {
     expect(lastRequest().format).toBe('jpg');
   });
 
+  it('a card follows the link\'s declared values, so a shared ?$region=EU unfurls showing EU, and drops undeclared ones', async () => {
+    browser();
+    const t = await mintToken('card-values');
+    const row = await createArtifact(t.id, t.userId, {
+      format: 'markup', source: '<Helmet><Value name="region" type="string" /></Helmet><p>Region {$region}</p>',
+      meta: {}, title: 'regions', description: null, visibility: 'public',
+    });
+    await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=card&$region=EU&$junk=1`), params(row.id));
+    expect(decodeURIComponent(lastRequest().url)).toContain('$region=EU');
+    expect(decodeURIComponent(lastRequest().url)).not.toContain('junk');
+  });
+
   it('forwards a saved social-preview crop to the browser', async () => {
     browser();
     const t = await mintToken('crop');
