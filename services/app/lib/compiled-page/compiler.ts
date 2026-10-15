@@ -690,7 +690,7 @@ export function generate(input: GenerateInput): Generated {
       const clsReads = !ctx.preview && hasValueHole(authorClass);
       const clsJsx = rowClass
         ? clsReads ? ` class={$rowClass(${lit(rowBase)}, ${TEMPLATE_CALLS.text}(${lit(authorClass)}, ${ctx.row}), ${ctx.row})}` : ` class={$rowClass(${lit(rowBase)}, ${lit(authorClass)}, ${ctx.row})}`
-        : cls ? clsReads ? ` class={${TEMPLATE_CALLS.text}(${lit(cls)}, ${ctx.row ?? 'undefined'})}` : ` class={${lit(cls)}}` : '';
+        : cls ? clsReads ? ` class={${TEMPLATE_CALLS.cls}(${lit(cls)}, ${ctx.row ?? 'undefined'})}` : ` class={${lit(cls)}}` : '';
       const tag = safeTag(node.tag === 'Skeleton' ? 'StaticSkeleton' : node.tag);
       // A row action writes with its row (a Button with `run`/`set`).
       const rowJsx = node.tag === 'Button' && (api.run !== undefined || api.set !== undefined) ? ` row={${ctx.row}} rowScope={${ctx.scope}}` : '';

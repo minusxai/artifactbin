@@ -138,7 +138,7 @@ export const substitutes = (tag: string, attr: string, isComponent: boolean, scr
  * as literals in the compiler: its string literals are a story class source (scripts/generate-story-ui-classes
  * EXTRA_CLASS_SOURCES), and a new one would join the recipe class union and recompile every story's CSS.
  */
-export const TEMPLATE_CALLS = { text: 'tplText', attrs: 'tplAttrs', viz: 'tplViz' } as const;
+export const TEMPLATE_CALLS = { text: 'tplText', cls: 'tplClass', attrs: 'tplAttrs', viz: 'tplViz' } as const;
 /**
  * The import a compiled page adds for the template calls it makes (lib/islands/kit/templates, `@mx/kit/templates`): a page
  * without a template downloads none of this module, as one without a row class never loads `@mx/row-class`.

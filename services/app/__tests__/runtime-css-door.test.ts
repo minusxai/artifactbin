@@ -82,6 +82,23 @@ describe('a document whose rows bring their classes', () => {
     expect(css.extras).toEqual(expect.arrayContaining(['bg-lime-500', 'hover:bg-sky-600', 'md:w-64', 'w-[37%]']));
   });
 
+  it('a class a page value fills (`className="{$tone}"`, a Tailwind utility the source never names) is in the first byte, and the door names it for the control that changes it', async () => {
+    const w = await world();
+    const id = await w.publish('<Helmet><Value name="tone" type="string" default="bg-fuchsia-600" /></Helmet>'
+      + '<Select id="pick" value="$tone" options={["bg-fuchsia-600", "bg-teal-700"]} /><p id="toned" className="p-2 {$tone}">Toned</p>', 'public');
+    await drainPreparedPageWarmups();
+    const self = pagesOriginFor(id, site);
+    const html = await (await framing().request(`${self}/`)).text();
+    expect(html).toMatch(/class="p-2 bg-fuchsia-600"/);
+    expect(html).toMatch(rule('.bg-fuchsia-600'));
+    const css = island(html)!.css as CssData;
+    expect(css.extras).toEqual(['bg-fuchsia-600']);
+    // The control's other choice is asked for at the door when chosen: the whole sheet, with it.
+    const door = await framing().request(`${css.url}&x=${encodeURIComponent('bg-teal-700')}`, { headers: { origin: self } });
+    expect(door.status).toBe(200);
+    expect(await door.text()).toMatch(rule('.bg-teal-700'));
+  });
+
   it('a document whose classes are all literal carries no door and is served as before', async () => {
     const w = await world();
     const id = await w.publish(STATIC, 'public');
