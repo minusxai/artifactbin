@@ -7,10 +7,11 @@
  * (foreground and background) a regular file; Codex's shell gives a pipe, OpenCode's a socket, Pi's a pipe.
  *
  * So a watch whose stdout is a file or discarded refuses at once. Exiting is also the one thing a background shell
- * reports back to its agent, so the refusal is how that agent learns to start the watch the right way. A person who
- * wants a log as well pipes through `tee`. The same rule, in words, leads every `next` that names a watch.
+ * reports back to its agent, so the refusal is how that agent learns to start the watch the right way. A person or an
+ * automation that keeps a log on purpose says so with `--output <file>`: events are appended to that file instead of
+ * stdout, and nothing is refused. The same rule, in words, leads every `next` that names a watch.
  */
-import {fstatSync,statSync} from 'node:fs';
+import {appendFileSync,fstatSync,statSync} from 'node:fs';
 import {CliError} from './errors';
 
 export type WatchOutput='stream'|'file'|'discarded';
@@ -38,5 +39,11 @@ export function refuseUnreadWatch(output:WatchOutput,ref:string):void{
  if(output==='stream')return;
  const where=output==='file'?'stdout here is a file':'stdout here is discarded';
  throw new CliError('watch_output_unread',`afbin watch writes each new comment to stdout, and ${where}: nothing wakes you when a comment arrives, so it would go unanswered.`,
-  `Start \`afbin watch ${ref} --comments --json\` ${WATCH_DELIVERY}. ${watchFallback(ref)}`);
+  `Start \`afbin watch ${ref} --comments --json\` ${WATCH_DELIVERY}. ${watchFallback(ref)} To log events to a file on purpose, add --output <file>.`);
+}
+
+/** `--output <file>`: the deliberate log. Appends each event line to the file, created at once so a bad path fails before any wait. */
+export function watchLog(path:string):(value:string)=>void{
+ appendFileSync(path,'');
+ return value=>appendFileSync(path,value);
 }

@@ -61,7 +61,7 @@ import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './s
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {watchCommand} from './watch';
 import {localWatchCommand} from './local-comment-watch';
-import {refuseUnreadWatch,watchFallback,watchOutput,WATCH_DELIVERY} from './watch-delivery';
+import {refuseUnreadWatch,watchFallback,watchLog,watchOutput,WATCH_DELIVERY} from './watch-delivery';
 import {HttpClient,detailLine} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull,pullToStdout} from './pull';
@@ -100,8 +100,11 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   const defaults=await readClientDefaults(home,context.env);
   json=json||defaults.output==='json';
   if(json)flags.json=true;
-  // A watch writes to the process's own stdout unless a caller reads it through a callback: refuse one nothing reads.
-  if(command==='watch'&&!flags.help&&!context.stdout&&positionals[0])refuseUnreadWatch(watchOutput(),positionals[0]);
+  // A watch writes to the process's own stdout unless a caller reads it through a callback or names a log with
+  // --output: refuse one nothing reads; append to the named log on purpose.
+  const watchLogFile=command==='watch'&&!flags.help&&typeof flags.output==='string'?resolve(context.cwd??process.cwd(),flags.output):undefined;
+  if(command==='watch'&&!flags.help&&!context.stdout&&!watchLogFile&&positionals[0])refuseUnreadWatch(watchOutput(),positionals[0]);
+  const watchStdout=watchLogFile?watchLog(watchLogFile):stdout;
   if(command==='preview'&&!flags.help){
    const port=Number(flags.port??0);if(!Number.isInteger(port)||port<0||port>65535)throw new CliError('invalid_arguments','--port must be an integer from 0 to 65535.');
    const publicUrl=previewPublicOrigin(typeof flags['public-url']==='string'?flags['public-url']:undefined);
@@ -202,7 +205,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
   if(command==='mv'){await (portable?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
   // A local file's comments are followed from the workspace itself: no server, no sign-in, no request.
-  if(command==='watch'&&positionals[0]){const ref=await resolveReference(positionals[0],{root:workspace.root,cwd:workspace.cwd}).catch(()=>undefined);if(ref?.kind==='path'){await localWatchCommand(workspace,parsed,ref.path.split(sep).join('/'),{stdout,stderr,signal:context.signal});return 0;}}
+  if(command==='watch'&&positionals[0]){const ref=await resolveReference(positionals[0],{root:workspace.root,cwd:workspace.cwd}).catch(()=>undefined);if(ref?.kind==='path'){await localWatchCommand(workspace,parsed,ref.path.split(sep).join('/'),{stdout:watchStdout,stderr,signal:context.signal});return 0;}}
   // Discussion on a local file lives in the workspace: deleting it never needs a server or a sign-in.
   if(command==='delete'&&flags.type==='comment'&&portable){const local=await localDeleteComments(workspace,String(flags.in),positionals,{dryRun:!!flags['dry-run'],hostedIds:!!remoteContext(context.env)});if(local){emit(local.value);return local.exitCode;}}
   const account=await accountPlan(workspace,parsed);
@@ -385,7 +388,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server)&&!sameManagedOrigin)throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const workspaceAccount=sameManagedOrigin&&!sameServer(resolved,workspace.tracking?.server??'')?undefined:workspace.tracking?.account;
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,...(!flags['dry-run']&&command!=='remote'&&command!=='sessions'&&command!=='watch'?{onRelease}:{}),account:workspaceAccount,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']&&command!=='watch'?{authenticate}: {})});
-  if(command==='watch'){await watchCommand(workspace,parsed,client,{stdout,stderr,signal:context.signal});return 0;}
+  if(command==='watch'){await watchCommand(workspace,parsed,client,{stdout:watchStdout,stderr,signal:context.signal});return 0;}
   if(command==='workspace'){emit(await rebindWorkspace(workspace,client,{dryRun:!!flags['dry-run']}));return 0;}
   if(command==='schedule'){emit(await scheduleCommand(workspace,client,positionals,flags));return 0;}
   if(command==='runs'){
