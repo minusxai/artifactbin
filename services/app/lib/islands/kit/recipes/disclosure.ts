@@ -6,9 +6,10 @@ export const RECIPES: Record<string, Recipe> = {
   PopoverHeader: props => cn("flex flex-col gap-1 text-sm", props.className as string | undefined),
   PopoverTitle: props => cn("font-medium", props.className as string | undefined),
   PopoverDescription: props => cn("text-muted-foreground", props.className as string | undefined),
-  // solid/ui/Tooltip TooltipContent, portalled (a story's default): twMerge(clsx(base, portalled surface, className)),
+  // solid/ui/Tooltip TooltipContent's shape, portalled (a story's default), painted with the page's popover tokens like
+  // PopoverContent: the app chrome's surface/fg/edge tokens do not exist in a story sheet, so they drew it transparent.
   // plus `block`: the kit's content is a <span>, so a served tooltip on a word keeps its paragraph (kit/disclosure TooltipPopper).
-  TooltipContent: props => cn("block pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md px-2.5 py-1.5 text-left text-xs leading-normal shadow-md", "border border-edge-bright bg-surface text-fg", props.className as string | undefined),
+  TooltipContent: props => cn("block pointer-events-none z-[100] w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-md px-2.5 py-1.5 text-left text-xs leading-normal shadow-md", "border border-border bg-popover text-popover-foreground", props.className as string | undefined),
   Avatar: props => cn("group/avatar relative flex size-8 shrink-0 overflow-hidden rounded-full select-none data-[size=lg]:size-10 data-[size=sm]:size-6", props.className as string | undefined),
   AvatarImage: props => cn("aspect-square size-full", props.className as string | undefined),
   AvatarFallback: props => cn("flex size-full items-center justify-center rounded-full bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs", props.className as string | undefined),
