@@ -42,7 +42,7 @@ import { createIslandRuntime, hydrateIsland } from './rt';
 import { lazyEngine, normalizeIslandModule, type IslandModuleInput } from './module';
 import { installIslandDocument } from './handover';
 import { createWriteStatusFeed } from './writes';
-import { startRuntimeCss } from './runtime-css';
+import { watchClasses } from './runtime-css';
 import { loadChart } from './chart';
 
 /**
@@ -133,8 +133,18 @@ export function boot(input: IslandModuleInput, win: Window = window): IslandDocu
   const transport = !flow ? null : direct
     ? createFetchTransport(data.queryUrl!, undefined, data.mutateUrl, { session: data.signedIn, credentials: 'include' })
     : createDocumentTransport(win, data.queryUrl, undefined, data.mutateUrl, { session: data.signedIn });
-  // A version that fills classes at runtime: a class its rows bring and its sheet lacks is fetched before it is painted (./runtime-css).
-  const stopRuntimeCss = data.css ? startRuntimeCss(win, data.css, { credentials: direct ? 'include' : 'same-origin' }) : () => {};
+  // A version that fills classes at runtime: a class its rows bring and its sheet lacks is hidden, fetched and swapped in
+  // (./runtime-css-session, loaded behind boot; what is noted before it loads waits in this watch).
+  let stopRuntimeCss = () => {};
+  if (data.css) {
+    const css = data.css;
+    const watch = { known: new Set([...css.known, ...(css.extras ?? [])]), pending: new Set<string>(), noted() {} };
+    watchClasses(watch);
+    stopRuntimeCss = () => watchClasses(null);
+    void import('./runtime-css-session').then(({ startRuntimeCss }) => {
+      if (!disposed) stopRuntimeCss = startRuntimeCss(win, css, { credentials: direct ? 'include' : 'same-origin', watch });
+    }).catch((error: unknown) => console.error('[islands] runtime css did not load', error));
+  }
   /** What a top-level page holds itself — its stream and `window.page` — a document on its own origin holds framed too. */
   const holdsOwn = win.parent === win || direct;
   /*

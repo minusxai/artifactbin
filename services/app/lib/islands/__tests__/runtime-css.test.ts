@@ -4,7 +4,8 @@
  * all its parts where it stood, ahead of the sheets that follow it. A page whose classes are all known never asks.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { noteClasses, RUNTIME_PENDING_ATTR, startRuntimeCss, swapTailwindSheet } from '../runtime-css';
+import { noteClasses } from '../runtime-css';
+import { RUNTIME_PENDING_ATTR, startRuntimeCss, swapTailwindSheet } from '../runtime-css-session';
 import { rowClass } from '../row-class';
 import { boot } from '../boot';
 import { STORY_VERSION_DRAWN_EVENT } from '@/lib/story-runtime/contract';
@@ -110,7 +111,11 @@ describe('runtime classes', () => {
     document.body.innerHTML = '<div data-mx-story-root="" id="mx-story-root"></div>'
       + `<script type="application/json" id="mx-story-data">${JSON.stringify({ values: {}, results: null, signedIn: false, hold: [], mermaidImages: {}, readOnly: null, css: DATA })}</script>`;
     const running = boot({ ISLANDS: [] });
+    // Noted before the session has loaded: it waits in boot's watch and is asked for once the session takes over.
     noteClasses('bg-lime-500');
+    noteClasses('px-2');
+    await vi.dynamicImportSettled();
+    expect(pendingRule()).toBe('.bg-lime-500{visibility:hidden!important}');
     await vi.runAllTimersAsync();
     expect(fetch.mock.calls.filter(([url]) => String(url).startsWith('/a/doc1/css'))).toHaveLength(1);
     running.dispose();
