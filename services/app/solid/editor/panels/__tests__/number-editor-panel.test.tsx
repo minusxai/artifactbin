@@ -106,7 +106,7 @@ describe('unbound', () => {
   it('offers the column as a free text field until a table is picked', () => {
     panel({ binding: UNBOUND });
     expect(triggerText('Table')).toContain('pick a table');
-    const col = screen.getByLabelText('Number column') as HTMLInputElement;
+    const col = screen.getByLabelText('Cell column') as HTMLInputElement;
     expect(col.value).toBe('v');
     fireEvent.input(col, { target: { value: 'total' } });
     fireEvent.blur(col);
