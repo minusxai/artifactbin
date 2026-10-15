@@ -5,6 +5,7 @@
  * document's doors — anywhere. With the setting off, nothing changes.
  */
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
+import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachActor } from '@artifactbin/utils';
 import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
@@ -600,14 +601,16 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
     const w = await world();
     const app = framing();
     setWebIngestPolicyForTests({ allowPrivate: false, allowHttp: false });
-    const id = await declaring(w, ['https://api.example.org', 'https://127.0.0.1', 'https://10.0.0.7']);
+    const id = await declaring(w, ['https://api.example.org', 'https://127.0.0.1', 'https://10.0.0.7', 'https://anything.localhost', 'https://x.lvh.me']);
+    // The server resolves loopback names itself (server.ts installs the loopback lookup): a declared one is still loopback.
+    useLoopbackLookup();
     const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, id)}`;
     const self = pagesOriginFor(id, site);
     const door = (url: string, init: RequestInit = {}) => app.request(`${self}/a/${id}/fetch?url=${encodeURIComponent(url)}`, { ...init, headers: { origin: self, cookie, ...(init.headers ?? {}) } });
     const undeclared = await door('https://evil.example.net/steal');
     expect(undeclared.status).toBe(403);
     expect(((await undeclared.json()) as { error: string }).error).toBe('undeclared_host');
-    for (const url of ['https://127.0.0.1/admin', 'https://10.0.0.7/']) {
+    for (const url of ['https://127.0.0.1/admin', 'https://10.0.0.7/', 'https://anything.localhost/admin', 'https://x.lvh.me/admin']) {
       const res = await door(url);
       expect(res.status, url).toBe(403);
       expect(((await res.json()) as { error: string }).error, url).toBe('forbidden_address');

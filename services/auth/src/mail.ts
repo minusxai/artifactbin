@@ -3,6 +3,7 @@ import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { createTransport } from 'nodemailer';
+import { isLoopbackName } from '@artifactbin/contracts';
 import type { ConnectionOptions } from 'node:tls';
 import type { Mailer, OutgoingMail } from './auth/human';
 
@@ -91,9 +92,9 @@ export function devOutboxMailer(opts: DevOutboxOptions = {}): Mailer {
 export function usesDevOutbox(publicBaseUrl: string): boolean {
   try {
     const host = new URL(publicBaseUrl).hostname;
-    // `lvh.me` and every name under it resolve to 127.0.0.1 in public DNS: development's same-site host
-    // for documents on their own origins (APP__PAGES_HOST, CONTRIBUTING.md) is loopback too.
-    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1' || host === 'lvh.me' || host.endsWith('.lvh.me');
+    // The loopback names (contracts `isLoopbackName`): localhost and every name under it (RFC 6761), and
+    // lvh.me and every name under it (127.0.0.1 in public DNS, development's app and pages host).
+    return isLoopbackName(host) || host === '127.0.0.1' || host === '[::1]' || host === '::1';
   } catch {
     return false;
   }

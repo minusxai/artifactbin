@@ -53,7 +53,7 @@ import { expect } from 'playwright/test';
 import sharp from 'sharp';
 import { createChecker } from './lib/assert.mjs';
 import { lane } from './lib/lane.mjs';
-import { launchChromium, PAGES_HOST } from './lib/browser.mjs';
+import { launchChromium, launchWebKit, PAGES_HOST } from './lib/browser.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { documentLocator } from './lib/page-facts.mjs';
@@ -933,7 +933,7 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
     must(published.ok, `publish: ${published.status}`);
     const docHost = `${Buffer.from(seed.id, 'utf8').toString('hex')}.${PAGES_HOST}`;
     // The app is at app.lvh.me and the document on <hex id>.lvh.me (lib/browser.mjs): Chromium is told the mapping by
-    // flag, Firefox by its resolver prefs; WebKit has neither and resolves lvh.me (public DNS: loopback).
+    // flag, Firefox by its resolver prefs, and WebKit connects through the gate's loopback proxy: none asks DNS.
     const local = [new URL(BASE).hostname, PAGES_HOST, docHost].join(',');
     // Both origins are plain http here, which is not a secure context off localhost: screen capture needs one (as it
     // has in production, over https), so Chromium is told to treat these two as secure.
@@ -942,7 +942,7 @@ async function screenshotComment(engineName, dpr, selectionWidth, selectionHeigh
       ? await launchChromium({ channel: 'chromium', args: [`--unsafely-treat-insecure-origin-as-secure=${secure}`, '--enable-usermedia-screen-capturing', '--auto-select-tab-capture-source-by-title=Screenshot capture gate', '--allow-http-screen-capture', '--autoplay-policy=no-user-gesture-required'] })
       : engineName === 'firefox'
         ? await firefox.launch({ firefoxUserPrefs: { 'network.dns.localDomains': local, 'network.dns.forceResolve': '127.0.0.1' } })
-        : await webkit.launch();
+        : await launchWebKit();
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: dpr });
     const page = await context.newPage();
     await page.addInitScript(() => { window.__captureTrace = []; const native = navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices); if (native) navigator.mediaDevices.getDisplayMedia = async (...args) => { try { const stream = await native(...args); window.__captureTrace.push({ event: 'stream', surface: stream.getVideoTracks()[0]?.getSettings().displaySurface }); const reference = document.createElement('video'); reference.muted = true; reference.srcObject = stream; window.__captureReference = reference; void reference.play(); return stream; } catch (e) { window.__captureTrace.push({ event: 'error', message: e.message }); throw e; } }; });

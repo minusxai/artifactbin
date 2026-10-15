@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { ingestImageFromUrl } from '../image';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
+import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
@@ -94,5 +95,15 @@ describe('ingestImageFromUrl', () => {
     const res = await ingestImageFromUrl('https://169.254.169.254/latest/meta-data');
     if (!(res instanceof Response)) throw new Error('should refuse');
     expect((await res.json()).code).toBe('forbidden_address');
+  });
+
+  it('refuses a loopback NAME the server resolves itself (as server.ts does): *.localhost and lvh.me', async () => {
+    setWebIngestPolicyForTests(null);
+    useLoopbackLookup();
+    for (const url of ['https://anything.localhost/a.png', 'https://x.lvh.me/a.png']) {
+      const res = await ingestImageFromUrl(url);
+      if (!(res instanceof Response)) throw new Error(`should refuse ${url}`);
+      expect((await res.json()).code, url).toBe('forbidden_address');
+    }
   });
 });

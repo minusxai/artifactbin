@@ -13,6 +13,11 @@ import { developmentPagesHosts, developmentViteOptions } from './services/app/li
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
 import { ensureAuthSchema, authEnvNamesRead, authParts, readEnv, mailerForRuntime, mailSettingsOf, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/auth';
+import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
+
+// The server's own outbound calls (the exporter, a session's cookie jar, its public URL) may name a loopback
+// host (`app.lvh.me`, `<hex id>.lvh.me`, `*.localhost`): resolved here, never asked of DNS.
+useLoopbackLookup();
 
 async function main(): Promise<void> {
   const env = process.env;

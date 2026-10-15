@@ -13,6 +13,10 @@ import {createRunner} from '../../runner/src/local';
 import {runnerHttp} from '../../runner/src/http';
 import {hostCapabilities,runnerIdentity,boundedJson} from '../../runner/src/capabilities';
 import {overHttp} from '@artifactbin/utils';
+import {useLoopbackLookup} from '@artifactbin/utils/node/loopback-lookup';
+
+// This process fetches the host at app.lvh.me as the CLI does: never through DNS.
+useLoopbackLookup();
 
 test('foreground team process serves real login and excludes another database owner until shutdown',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'afbin-team-process-'));

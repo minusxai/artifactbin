@@ -26,6 +26,11 @@ import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 import { containmentExpectation, containmentObserved } from './lib/session-containment.mjs';
 import { startMailSink } from '../lib/mail-login.mjs';
+import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
+
+// The one gate that launches no browser (lib/browser.mjs installs this for the rest): its fetches reach the
+// server at app.lvh.me without asking DNS.
+useLoopbackLookup();
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const origin = new URL(base).origin;

@@ -10,14 +10,20 @@ import { afterAll, beforeAll, afterEach, describe, expect, it } from 'vitest';
 import { fetchWebResource, setWebIngestPolicyForTests } from '../fetch';
 import { WebIngestError } from '../guard';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
+import dns from 'node:dns';
+import { isIP } from 'node:net';
+import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
 let server: RunningServer;
 let base: string;
+/** Every request this server has answered: a refusal must leave it unchanged. */
+let hits = 0;
 
 beforeAll(async () => {
   server = await withHttpServer((req, res) => {
+    hits++;
     const url = new URL(req.url ?? '/', 'http://x');
     switch (url.pathname) {
       case '/ok.png':
@@ -210,5 +216,48 @@ describe('fetchWebResource', () => {
   it('refuses an unresolvable name as dns_failed', async () => {
     lax();
     expect(await code(fetchWebResource('https://definitely-not-a-real-host.invalid/x', { maxBytes: 1000 }))).toBe('dns_failed');
+  });
+});
+
+/**
+ * THE APP SERVER RESOLVES LOOPBACK NAMES ITSELF (server.ts installs utils/node/loopback-lookup): `*.localhost` and
+ * `(*.)lvh.me` answer 127.0.0.1 with no DNS. A caller-supplied URL naming one must still be refused — the guard
+ * judges the RESOLVED address, and resolves through that very lookup. The resolver underneath fails every name (an
+ * offline machine), so a `forbidden_address` here can only come from the loopback lookup's answer being vetted.
+ */
+describe('fetchWebResource on a server that resolves loopback names itself', () => {
+  const original = dns.lookup;
+  const asked: string[] = [];
+  beforeAll(() => {
+    dns.lookup = ((hostname: string, options: unknown, callback?: unknown) => {
+      if (isIP(hostname)) return (original as (...args: unknown[]) => void).call(dns, hostname, options, callback);
+      asked.push(hostname);
+      const cb = (typeof options === 'function' ? options : callback) as (error: Error) => void;
+      process.nextTick(cb, Object.assign(new Error(`getaddrinfo ENOTFOUND ${hostname}`), { code: 'ENOTFOUND' }));
+    }) as unknown as typeof dns.lookup;
+    useLoopbackLookup();
+  });
+  afterAll(() => { dns.lookup = original; });
+
+  it('refuses https to any name under localhost or lvh.me as the loopback address it resolves to', async () => {
+    for (const url of ['https://anything.localhost/x', 'https://a.b.localhost/x', 'https://x.lvh.me/x', 'https://lvh.me/x', 'https://localhost/x']) {
+      expect(await code(fetchWebResource(url, { maxBytes: 1000 })), url).toBe('forbidden_address');
+    }
+    expect(asked).toEqual([]);
+  });
+
+  it('with plain http allowed but not private addresses, a loopback name never reaches the live local server', async () => {
+    setWebIngestPolicyForTests({ allowPrivate: false, allowHttp: true });
+    const before = hits;
+    for (const host of ['anything.localhost', 'x.lvh.me']) {
+      expect(await code(fetchWebResource(`http://${host}:${server.port}/ok.png`, { maxBytes: 1000 })), host).toBe('forbidden_address');
+    }
+    expect(hits).toBe(before);
+  });
+
+  it('a development policy that admits private addresses reaches it: the refusal above is the guard\'s, not a failed lookup', async () => {
+    lax();
+    const got = await fetchWebResource(`http://x.lvh.me:${server.port}/ok.png`, { maxBytes: 1000 });
+    expect(got.bytes.equals(PNG)).toBe(true);
   });
 });

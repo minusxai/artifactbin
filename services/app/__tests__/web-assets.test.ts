@@ -20,6 +20,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { useAppHarness } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
+import { useLoopbackLookup } from '@artifactbin/utils/node/loopback-lookup';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
@@ -193,6 +194,13 @@ describe('importWebAsset', () => {
     await expect(importWebAsset(`${base}/gone.png`, actor)).rejects.toMatchObject({ code: 'bad_status' });
     await expect(importWebAsset(`${base}/not-an-image.png`, actor)).rejects.toMatchObject({ code: 'unsupported_type' });
     await expect(importWebAsset('https://169.254.169.254/latest/meta-data', actor)).rejects.toBeInstanceOf(WebAssetRefused);
+    // A loopback NAME the server resolves itself (server.ts installs the loopback lookup) is refused as loopback.
+    setWebIngestPolicyForTests(null);
+    useLoopbackLookup();
+    for (const url of ['https://anything.localhost/a.png', 'https://x.lvh.me/a.png']) {
+      await expect(importWebAsset(url, actor), url).rejects.toMatchObject({ code: 'forbidden_address' });
+    }
+    allowLocal();
     const db = await getDb();
     expect((await db.query<{ n: string }>('select count(*)::text as n from web_assets')).rows[0].n).toBe('0');
   });
