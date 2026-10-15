@@ -99,13 +99,13 @@ export async function offlineFileParts(file: ArtifactFile): Promise<ArtifactFile
   const code = await offlineBundle('solid');
   if (!file.compiled) return { file, code };
   const sqlite = !!file.island.dataflow?.hold?.length;
-  // A compiled Question can be a table; those have no Vega drawing to update.
+  // A compiled Chart can be a table; those have no Vega drawing to update.
   const hasChart = (nodes: JsxNode[]): boolean => nodes.some((node) => node.type === 'element' && (
-    (node.tag === 'Question' && node.attributes.some((attribute) => attribute.name === 'viz'
+    (node.tag === 'Chart' && node.attributes.some((attribute) => attribute.name === 'viz'
       && attribute.value.static && typeof attribute.value.json === 'object' && attribute.value.json !== null
       && 'kind' in attribute.value.json && attribute.value.json.kind === 'vega-lite')) || hasChart(node.children)
   ));
-  const chart = file.compiled.kit.islands.includes('Question') && hasChart(file.island.nodes);
+  const chart = file.compiled.kit.islands.includes('Chart') && hasChart(file.island.nodes);
   const packed = await packedModule(file.compiled, sqlite, chart);
   const wasmUrl = file.compiled.sharedBuild?.sqliteWasm;
   const wasmName = /^\/islands\/(sqlite3-[0-9a-f]{16}\.wasm)$/.exec(wasmUrl ?? '')?.[1];

@@ -123,8 +123,10 @@ export function stampNodeIdsInPlace(source: string, options: NodeIdOptions = {})
     const text = `id="${escapeHtml(id)}"`;
     if (replaces) { edits.push({ start: replaces.start, end: replaces.end, text }); continue; }
     const authored = node.attributes.filter((attribute) => attribute.end > attribute.start && attribute.start > node.start);
-    const at = authored.length ? Math.max(...authored.map((attribute) => attribute.end)) : node.start + 1 + node.tag.length;
-    if (!authored.length && source.slice(node.start + 1, at) !== node.tag) return { source: serializeJsx(nodes), ...result };
+    // The tag as written, which an earlier component name (lib/jsx/component-names) keeps.
+    const written = node.authoredTag ?? node.tag;
+    const at = authored.length ? Math.max(...authored.map((attribute) => attribute.end)) : node.start + 1 + written.length;
+    if (!authored.length && source.slice(node.start + 1, at) !== written) return { source: serializeJsx(nodes), ...result };
     edits.push({ start: at, end: at, text: ` ${text}` });
   }
   let out = source;

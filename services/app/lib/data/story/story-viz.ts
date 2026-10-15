@@ -36,7 +36,7 @@ export function updateQuestionVizInJsx(
   astPath: string,
   viz: VizEnvelopeValue | undefined,
 ): string {
-  return updateJsxElementAtPath(source, astPath, 'Question', (el) => {
+  return updateJsxElementAtPath(source, astPath, 'Chart', (el) => {
     setStaticJsxAttr(el, 'viz', viz as JsonValue | undefined);
   });
 }
@@ -56,14 +56,14 @@ export function updateQuestionVizInJsx(
  */
 export function updateQuestionDataInJsx(source: string, astPath: string, table: string | null): string {
   if (table === null) {
-    return updateJsxElementAtPath(source, astPath, 'Question', (el) => {
+    return updateJsxElementAtPath(source, astPath, 'Chart', (el) => {
       setStaticJsxAttr(el, 'data', undefined);
     });
   }
   const name = table.trim();
   if (!name) return source;
   const ref = name.startsWith('$') ? name : `$${name}`;
-  return updateJsxElementAtPath(source, astPath, 'Question', (el) => {
+  return updateJsxElementAtPath(source, astPath, 'Chart', (el) => {
     setStaticJsxAttr(el, 'data', ref);
   });
 }
@@ -93,7 +93,7 @@ export function updateQuestionChartInJsx(
  */
 export function updateQuestionTitleInJsx(source: string, astPath: string, title: string | null): string {
   const trimmed = title?.trim() ?? '';
-  return updateJsxElementAtPath(source, astPath, 'Question', (el) => {
+  return updateJsxElementAtPath(source, astPath, 'Chart', (el) => {
     setStaticJsxAttr(el, 'title', trimmed ? title! : undefined);
   });
 }
@@ -119,7 +119,7 @@ export function readQuestionChart(source: string, astPath: string): QuestionChar
   const parsed = parseJsx(source);
   if (!parsed.ok) return null;
   const node = resolveJsxNodeAtPath(parsed.nodes, astPath);
-  if (!node || node.type !== 'element' || !node.isComponent || node.tag !== 'Question') return null;
+  if (!node || node.type !== 'element' || !node.isComponent || node.tag !== 'Chart') return null;
   const attr = (name: string) => node.attributes.find((a) => a.name === name)?.value;
   const viz = attr('viz');
   const data = attr('data');

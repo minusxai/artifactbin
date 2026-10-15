@@ -24,7 +24,9 @@ describe('parseJsx', () => {
     const el = firstElement(
       `<Question connection="github" viz={{"type":"bar","xCols":["actor_login"]}} limit={5}>SELECT 1</Question>`,
     );
-    expect(el.tag).toBe('Question');
+    // An earlier name parses to its canonical tag and keeps its spelling (component-names COMPONENT_ALIASES).
+    expect(el.tag).toBe('Chart');
+    expect(el.authoredTag).toBe('Question');
     expect(el.isComponent).toBe(true);
     expect(el.selfClosing).toBe(false);
     expect(attr(el, 'connection')).toEqual({ static: true, json: 'github' });

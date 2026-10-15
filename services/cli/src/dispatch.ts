@@ -599,7 +599,7 @@ async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array
  for(const file of await inspectWorkspace(workspace,paths)){
   if(!file.document||!file.bytes)continue;
   const {split}=validateMarkupStructure(file.document.body);if(!split)continue;
-  let charts=0;const count=(nodes:JsxNode[])=>{for(const n of nodes){if(n.type!=='element')continue;if(n.tag==='Question')charts++;count(n.children);}};count(split.body);
+  let charts=0;const count=(nodes:JsxNode[])=>{for(const n of nodes){if(n.type!=='element')continue;if(n.tag==='Chart')charts++;count(n.children);}};count(split.body);
   const queries=split.content.queries.map(query=>query.name);
   const writes=(split.content.mutations??[]).map(mutation=>mutation.name);
   out.push({path:file.path,title:split.content.title??file.document.metadata.title??null,queries,charts,...(writes.length?{writes}:{}),

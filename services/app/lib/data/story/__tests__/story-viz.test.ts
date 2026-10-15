@@ -27,7 +27,7 @@ function attrOf(source: string, name: string): unknown {
   while (stack.length) {
     const n = stack.shift()!;
     if (n.type === 'element') {
-      if (n.tag === 'Question') {
+      if (n.tag === 'Chart') {
         const v = n.attributes.find((a) => a.name === name)?.value;
         return v && v.static ? v.json : undefined;
       }
@@ -69,6 +69,9 @@ describe('updateQuestionVizInJsx', () => {
     const out = updateQuestionVizInJsx(doc('<Question data="$sales" />'), PATH, BAR);
     expect(parseJsx(out).ok).toBe(true);
     expect((attrOf(out, 'viz') as typeof BAR).spec.encoding.y.type).toBe('quantitative');
+    // The author's earlier name survives the edit (lib/jsx/component-names COMPONENT_ALIASES); a new one is kept too.
+    expect(out).toMatch(/<Question data="\$sales" viz=/);
+    expect(updateQuestionVizInJsx(doc('<Chart data="$sales" />'), PATH, BAR)).toMatch(/<Chart data="\$sales" viz=/);
   });
 });
 

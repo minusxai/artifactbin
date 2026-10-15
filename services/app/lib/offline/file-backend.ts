@@ -243,7 +243,7 @@ function authoringInputs(source: string): Set<string> {
       for (const attr of node.attributes) {
         if (attr.value.static && typeof attr.value.json === 'string' && attr.value.json.startsWith('ref:')) out.add(`ref:${attr.value.json}`);
       }
-      if (['Query', 'Mutation', 'Question'].includes(node.tag)) {
+      if (['Query', 'Mutation', 'Chart'].includes(node.tag)) {
         const binding = node.attributes.find((a) => a.name === 'source')?.value;
         if (binding) out.add(`bind:${JSON.stringify(binding.static ? binding.json : binding.source)}`);
       }

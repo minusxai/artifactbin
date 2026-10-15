@@ -20,7 +20,7 @@ import { useIsland } from '../context';
 import { deferEngine } from '../defer-engine';
 import { refName } from '@/lib/dataflow/dataflow';
 import type { TableResult, NumberAgg, Row, RefDataMap } from '@/lib/dataflow';
-import { aggregateNumber } from '@/lib/dataflow/number-aggregation';
+import { cellValue } from '@/lib/dataflow/number-aggregation';
 import { numberFormatter } from '@/lib/dataflow/number-format';
 import { barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows, type SortSpec } from '@/lib/story-ui/data-table';
 import { commentMetadata, keyedRowsError } from '@/lib/story-ui/repeat-identity';
@@ -45,14 +45,19 @@ const attr = (name: string, value: string | null | undefined | false): Record<st
 const css = (decls: Record<string, string | null | undefined>): string =>
   Object.entries(decls).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `${k}: ${v};`).join(' ');
 
-export function Number(props: { data: unknown; col?: string; agg?: NumberAgg; prefix?: string; suffix?: string; format?: string; className?: string; id?: string }) {
+/**
+ * `<Cell>` — one value of a table (lib/dataflow/number-aggregation `cellValue`): a number through `format`, a text
+ * cell as written (`format` does not apply), prefix and suffix around either. The DOM is the former NumberAdapter's.
+ */
+export function Cell(props: { data: unknown; col?: string; agg?: NumberAgg; prefix?: string; suffix?: string; format?: string; className?: string; id?: string }) {
   const island = useIsland();
   const table = () => island.table(nameOf(props.data));
   const text = () => {
     const rows = table()?.rows;
     if (!rows) return '—';
-    const value = aggregateNumber(rows, props.col ?? Object.keys(rows[0] ?? {})[0] ?? '', props.agg ?? 'first');
-    return `${props.prefix ?? ''}${globalThis.Number.isFinite(value) ? numberFormatter(props.format)(value) : '—'}${props.suffix ?? ''}`;
+    const value = cellValue(rows, props.col ?? Object.keys(rows[0] ?? {})[0] ?? '', props.agg ?? 'first');
+    const shown = value === null ? '—' : value.kind === 'text' ? value.value : numberFormatter(props.format)(value.value);
+    return `${props.prefix ?? ''}${shown}${props.suffix ?? ''}`;
   };
   // The former NumberAdapter: the figure stays while its query re-runs, and the wrapper says so.
   const busy = () => !!nameOf(props.data) && island.pending(nameOf(props.data));
@@ -256,12 +261,12 @@ const chartLabel = (envelope: VizEnvelope): string => {
 };
 
 /**
- * `<Question>` — the former QuestionAdapter wrapper (`aria-label="Question embed"`, the shared height
+ * `<Chart>` — the former QuestionAdapter wrapper (`aria-label="Question embed"`, the shared height
  * contract) around the former QuestionEmbed: its placeholders, the KPI tile, the plain table, and the
  * chart. The chart's drawing box is VegaChart's container, and it is the ONLY element carrying the
  * chart slot marker, so the server's drawing lands inside it and the title is in the first paint.
  */
-export function Question(props: QuestionProps) {
+export function Chart(props: QuestionProps) {
   const island = useIsland();
   const name = nameOf(props.data);
   const table = () => (name ? island.tableSnapshot(name) : undefined);
@@ -401,3 +406,10 @@ function ChartSlot(props: { slot?: string; table: string; envelope: () => VizEnv
     <Show when={showLoading()}><span role="status" aria-label="Chart loading; interactions available when ready" class="pointer-events-none absolute right-2 top-2 z-10 flex size-6 items-center justify-center rounded-full border border-border bg-background/85 text-muted-foreground shadow-sm"><span aria-hidden="true" class="size-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent motion-reduce:animate-none" /></span></Show>
   </>;
 }
+
+/**
+ * The earlier names, exported for good: a page compiled before the rename imports `Number` and `Question` from
+ * `@mx/kit/data` BY NAME and is served against the newest kit without a recompile (lib/compiled-page/runtime-binding).
+ * Removing them breaks every such page; new compiles import `Cell` and `Chart` (lib/jsx/component-names COMPONENT_ALIASES).
+ */
+export { Cell as Number, Chart as Question };

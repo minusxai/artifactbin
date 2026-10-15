@@ -65,11 +65,13 @@ function nodeToSource(node: JsxNode): string {
     const yes = nodeToSource(el.children[0]);
     return el.control.kind === 'and' ? `{${test} && (${yes})}` : `{${test} ? (${yes}) : (${nodeToSource(el.children[1])})}`;
   }
+  // What the author wrote (an earlier component name stays as written: lib/jsx/component-names COMPONENT_ALIASES).
+  const tag = el.authoredTag ?? el.tag;
   const attrs = el.attributes.map(attrToSource).join(' ');
-  const open = attrs ? `${el.tag} ${attrs}` : el.tag;
+  const open = attrs ? `${tag} ${attrs}` : tag;
   if (el.selfClosing && el.children.length === 0) return `<${open} />`;
   const inner = el.children.map(nodeToSource).join('');
-  return `<${open}>${inner}</${el.tag}>`;
+  return `<${open}>${inner}</${tag}>`;
 }
 
 /** Serialize an AST (list of root nodes) to jsx text. */

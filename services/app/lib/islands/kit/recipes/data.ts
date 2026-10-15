@@ -4,8 +4,8 @@ import type { Recipe } from '.';
 const author = (props: Record<string, unknown>) => typeof props.className === 'string' ? props.className : undefined;
 
 export const RECIPES: Record<string, Recipe> = {
-  Number: props => cn(author(props)),
+  Cell: props => cn(author(props)),
   Select: props => cn('mx-control relative inline-flex flex-col gap-1.5 align-top', author(props)),
   DataTable: props => cn('flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card text-sm', author(props)),
-  Question: props => cn('flex h-full w-full flex-col', author(props)),
+  Chart: props => cn('flex h-full w-full flex-col', author(props)),
 };

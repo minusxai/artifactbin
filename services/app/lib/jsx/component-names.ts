@@ -4,6 +4,41 @@
  * The compiler (lib/compiled-page/compiler.ts) renders these tags directly or maps them to shared kit components.
  */
 
+import type { JsxElement, JsxNode } from './types';
+
+/**
+ * THE DATA COMPONENTS' EARLIER NAMES, accepted forever: `<Question>` is `<Chart>` and `<Number>` is `<Cell>`.
+ * Stored documents keep the names they were written with (no migration rewrites them), so the parser is the one
+ * alias point: it gives every element its canonical `tag` and keeps the author's spelling as `authoredTag`, which
+ * only the code that writes source back reads (lib/jsx/serialize, the in-place id stamp). A tree stored before the
+ * rename and revived without a parse (the document graph, a prepared page) goes through {@link canonicalNodes}.
+ * Everything that teaches or generates markup uses the new names.
+ */
+export const COMPONENT_ALIASES: Readonly<Record<string, string>> = Object.freeze({ Question: 'Chart', Number: 'Cell' });
+const ALIASES: ReadonlyMap<string, string> = new Map(Object.entries(COMPONENT_ALIASES));
+
+/** The registered name a tag is spelled for: itself unless it is an earlier name. */
+export const canonicalComponent = (tag: string): string => ALIASES.get(tag) ?? tag;
+
+/**
+ * A stored tree with every earlier name canonicalised (the spelling kept as `authoredTag`), copying only the
+ * elements on a path to one; the same array when it names none.
+ */
+export function canonicalNodes(nodes: JsxNode[]): JsxNode[] {
+  let changed = false;
+  const next = nodes.map((node) => {
+    if (node.type !== 'element') return node;
+    const children = canonicalNodes(node.children);
+    const tag = canonicalComponent(node.tag);
+    if (children === node.children && tag === node.tag) return node;
+    changed = true;
+    const element: JsxElement = { ...node, tag, children };
+    if (tag !== node.tag) element.authoredTag = node.tag;
+    return element;
+  });
+  return changed ? next : nodes;
+}
+
 /** The shadcn component tags a new-format (`format:'jsx'`) story may use. */
 export const STORY_UI_COMPONENT_NAME_LIST = [
   'Markdown',
@@ -53,7 +88,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
  * (lib/publish/__tests__/nesting-parses-back.test.ts): a kit change that puts a `<div>` in one of these fails there.
  */
 export const PHRASING_COMPONENTS: ReadonlySet<string> = new Set([
-  'Badge', 'Button', 'Icon', 'Number',
+  'Badge', 'Button', 'Icon', 'Cell',
   'Avatar', 'AvatarImage', 'AvatarFallback', 'AvatarBadge',
   'User', 'UserImage', 'UserHandle', 'SignIn',
   'TooltipProvider', 'Tooltip', 'TooltipTrigger', 'TooltipContent',

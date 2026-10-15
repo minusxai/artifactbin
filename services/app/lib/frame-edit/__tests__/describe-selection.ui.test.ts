@@ -99,7 +99,7 @@ describe('describeSelection', () => {
 
   it('describes a component as an embed', () => {
     const at = mount();
-    expect(describeSelection(at('0.2'), nodes)).toMatchObject({ kind: 'embed', tag: 'Question' });
+    expect(describeSelection(at('0.2'), nodes)).toMatchObject({ kind: 'embed', tag: 'Chart' });
   });
 
   it('describes NOTHING for a stale path — the parent must not act on a moved node', () => {

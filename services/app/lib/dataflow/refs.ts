@@ -355,7 +355,7 @@ export function validateRecipeUse(
 /**
  * Embeds that cannot possibly resolve.
  *
- * ChatGPT published a chart as `<Question source="ref:…" question="…" />`
+ * ChatGPT published a chart as `<Question source="ref:…" question="…" />` (the name `<Chart>` had then)
  * — plausible prop names, and wrong: the adapter reads `data` and `viz`. We
  * accepted it, and the page rendered "data unavailable — the referenced dataset
  * did not resolve". The `ref:` was even valid; nothing was reading it.
@@ -371,19 +371,19 @@ export function validateRecipeUse(
  * which publishes exactly that).
  */
 const EMBED_DATA_PROP: Record<string, { required: string; usage: string; table?: boolean }> = {
-  Question: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet> — plus viz={{"kind":"vega-lite","spec":{…}}}', table: true },
-  Number: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
+  Chart: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet> — plus viz={{"kind":"vega-lite","spec":{…}}}', table: true },
+  Cell: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
   DataTable: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
   Files: { required: 'data', usage: 'Use data="$name" — a <Query> over a folder\'s children (<Import name="files" src="ref:<folderId>" />, select * from files.rows)', table: true },
   File: { required: 'src', usage: 'Use src="ref:<pdf id>" — the id create_artifact returned for a pdf — or src="<public https link to a .pdf>" (+ optionally title="…")' },
 };
 
-/** Every format spec an embed carries that d3 cannot parse: `<Number format>` and `<DataTable columns[].fmt>`. */
+/** Every format spec an embed carries that d3 cannot parse: `<Cell format>` and `<DataTable columns[].fmt>`. */
 function invalidNumberFormats(el: JsxElement): Array<{ attr: string; spec: string; start: number; end: number }> {
   const out: Array<{ attr: string; spec: string; start: number; end: number }> = [];
   for (const a of el.attributes) {
     if (!a.value.static) continue;
-    if (el.tag === 'Number' && a.name === 'format' && typeof a.value.json === 'string' && !isNumberFormat(a.value.json)) {
+    if (el.tag === 'Cell' && a.name === 'format' && typeof a.value.json === 'string' && !isNumberFormat(a.value.json)) {
       out.push({ attr: a.name, spec: a.value.json, start: a.start, end: a.end });
     }
     if (el.tag === 'DataTable' && a.name === 'columns' && Array.isArray(a.value.json)) {
@@ -403,13 +403,15 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
   walk(parsed.nodes, (el) => {
     const rule = EMBED_DATA_PROP[el.tag];
     if (!rule) return;
-    if (el.tag === 'Number') {
+    // Errors name the element as the author wrote it: `<Number agg>` for a document that says Number.
+    const written = el.authoredTag ?? el.tag;
+    if (el.tag === 'Cell') {
       const agg = el.attributes.find((a) => a.name === 'agg');
       const aggValue = agg?.value.static ? agg.value.json : undefined;
       if (agg && !NUMBER_AGGS.some((value) => value === aggValue)) {
         errors.push({
-          message: `<Number agg>: expected one of ${NUMBER_AGGS.join(', ')} ("mean" is avg; the final row's cell is last).`,
-          tag: el.tag, attr: 'agg', start: agg.start, end: agg.end,
+          message: `<${written} agg>: expected one of ${NUMBER_AGGS.join(', ')} ("mean" is avg; the final row's cell is last).`,
+          tag: written, attr: 'agg', start: agg.start, end: agg.end,
         });
       }
     }
@@ -417,15 +419,15 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
     // render of the document, from a publish that succeeded. Pi wrote format=",0" on production.
     for (const bad of invalidNumberFormats(el)) {
       errors.push({
-        message: `<${el.tag} ${bad.attr}=${JSON.stringify(bad.spec)}>: ${JSON.stringify(bad.spec)} is not a number format — write ${NUMBER_FORMAT_HINT}.`,
-        tag: el.tag, attr: bad.attr, start: bad.start, end: bad.end,
+        message: `<${written} ${bad.attr}=${JSON.stringify(bad.spec)}>: ${JSON.stringify(bad.spec)} is not a number format — write ${NUMBER_FORMAT_HINT}.`,
+        tag: written, attr: bad.attr, start: bad.start, end: bad.end,
       });
     }
     const required = rule.required;
     // A KPI tile written the way an agent guesses it — `singleValueConfig` on
     // the element, or inside `viz` without the kind — publishes as a two-row
     // TABLE, which reads as a bug. Name the one shape that works.
-    if (el.tag === 'Question') {
+    if (el.tag === 'Chart') {
       const topLevel = el.attributes.find((a) => a.name === 'singleValueConfig');
       const vizAttr = el.attributes.find((a) => a.name === 'viz');
       const vizJson = vizAttr?.value.static && vizAttr.value.json && typeof vizAttr.value.json === 'object' && !Array.isArray(vizAttr.value.json)
@@ -434,10 +436,10 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
       if (topLevel || inVizWithoutKind) {
         const at = topLevel ?? vizAttr!;
         errors.push({
-          message: '<Question> KPI tile: singleValueConfig lives INSIDE viz with kind "single_value" — '
+          message: `<${written}> KPI tile: singleValueConfig lives INSIDE viz with kind "single_value" — `
             + 'viz={{"kind":"single_value","yCols":["<numeric column>"],"singleValueConfig":{"label":"…","prefix":"$","suffix":"","format":",.0f"}}} '
             + '(the column is summed over the table\'s rows; format is a d3-format spec). Written any other way it renders as a table.',
-          tag: el.tag, attr: at.name, start: at.start, end: at.end,
+          tag: written, attr: at.name, start: at.start, end: at.end,
         });
         return;
       }
@@ -455,9 +457,9 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
       const bareSpec = vizJson && !('spec' in vizJson) && ('mark' in vizJson || 'encoding' in vizJson);
       if (bareSpec) {
         errors.push({
-          message: '<Question viz={…}> is the ENVELOPE, not the spec: a top-level "mark"/"encoding" renders a blank chart. '
+          message: `<${written} viz={…}> is the ENVELOPE, not the spec: a top-level "mark"/"encoding" renders a blank chart. `
             + 'Wrap it — viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{…}}}}.',
-          tag: el.tag, attr: vizAttr!.name, start: vizAttr!.start, end: vizAttr!.end,
+          tag: written, attr: vizAttr!.name, start: vizAttr!.start, end: vizAttr!.end,
         });
         return;
       }
@@ -471,11 +473,11 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
       const json = attr.value.static ? attr.value.json : undefined;
       const got = attr.value.static ? JSON.stringify(json) : attr.value.exprType;
       errors.push({
-        message: `<${el.tag} data=${got.length > 40 ? got.slice(0, 40) + '…' : got}> does not name a declared table. ${rule.usage}` +
+        message: `<${written} data=${got.length > 40 ? got.slice(0, 40) + '…' : got}> does not name a declared table. ${rule.usage}` +
           (typeof json === 'string' && json.startsWith('ref:')
             ? ` — a dataset is read through SQL: <Import name="data" src="${json}" /><Query name="rows">{\`select * from data.rows\`}</Query>, then data="$rows".`
             : '.'),
-        tag: el.tag, attr: attr.name, start: attr.start, end: attr.end,
+        tag: written, attr: attr.name, start: attr.start, end: attr.end,
       });
       return;
     }
@@ -484,10 +486,10 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
     const used = [...names].filter((n) => n !== 'title' && n !== 'height' && n !== 'classname');
     errors.push({
       message:
-        `<${el.tag}> has no "${required}" prop, so nothing resolves and the embed renders empty. ` +
+        `<${written}> has no "${required}" prop, so nothing resolves and the embed renders empty. ` +
         rule.usage +
         (used.length ? `. Found: ${used.join(', ')}.` : '.'),
-      tag: el.tag,
+      tag: written,
       start: el.start,
       end: el.end,
     });

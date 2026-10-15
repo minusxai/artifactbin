@@ -26,7 +26,7 @@ const SERVER_CHECKS='server checks not run; afbin validate --remote adds them';
 function questions(nodes:JsxNode[],out:Array<{query:string|null;viz:Record<string,unknown>|null}>=[]){
  for(const node of nodes){
   if(node.type!=='element')continue;
-  if(node.tag==='Question'){
+  if(node.tag==='Chart'){
    const data=node.attributes.find(attr=>attr.name==='data')?.value,viz=node.attributes.find(attr=>attr.name==='viz')?.value;
    const json=viz?.static?viz.json:null;
    out.push({query:data?.static?refName(data.json):null,viz:json&&typeof json==='object'&&!Array.isArray(json)?json as Record<string,unknown>:null});

@@ -282,7 +282,7 @@ export async function drawSnapshotCharts(nodes: JsxNode[], results: Pick<ServedR
     list.forEach((node, i) => {
       const path = prefix === null ? String(i) : `${prefix}.${i}`;
       if (node.type !== 'element') return;
-      if (node.isComponent && node.tag === 'Question') {
+      if (node.isComponent && node.tag === 'Chart') {
         const raw = staticAttr(node, 'viz');
         const viz = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
         const name = refName(staticAttr(node, 'data'));

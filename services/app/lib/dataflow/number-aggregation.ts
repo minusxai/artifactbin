@@ -1,4 +1,4 @@
-/** Shared by publishing, the renderer and the number inspector. In lib/dataflow because the reference checks (./refs) validate `agg` against it. */
+/** Shared by publishing, the renderer and the Cell inspector. In lib/dataflow because the reference checks (./refs) validate `agg` against it. */
 export const NUMBER_AGGS = ['first', 'last', 'sum', 'avg', 'median', 'min', 'max', 'count'] as const;
 export type NumberAgg = typeof NUMBER_AGGS[number];
 
@@ -20,3 +20,31 @@ export function aggregateNumber(rows: ReadonlyArray<Record<string, unknown>>, co
     case 'first': return nums[0]!;
   }
 }
+
+/** What a `<Cell>` shows: a number to format, a text cell as written, or nothing. */
+export type CellValue = { kind: 'number'; value: number } | { kind: 'text'; value: string } | null;
+
+/** Text a cell shows as written: a string with content that is not a number (`"42"` stays numeric, `""` reads 0). */
+const isText = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '' && !Number.isFinite(Number(value));
+
+/**
+ * ONE VALUE of a column, for `<Cell>` (renderer and inspector alike). `first`/`last` read the first/last cell that
+ * holds a number or text, and text is shown as written; over a column with no text that is exactly
+ * {@link aggregateNumber}. Every other aggregate is numeric: `count` counts rows, the rest read the numeric cells.
+ */
+export function cellValue(rows: ReadonlyArray<Record<string, unknown>>, column: string, agg: NumberAgg): CellValue {
+  if (agg === 'first' || agg === 'last') {
+    for (let i = 0; i < rows.length; i++) {
+      const value = rows[agg === 'first' ? i : rows.length - 1 - i]?.[column];
+      if (isText(value)) return { kind: 'text', value };
+      const n = Number(value);
+      if (Number.isFinite(n)) return { kind: 'number', value: n };
+    }
+    return null;
+  }
+  const value = aggregateNumber(rows, column, agg);
+  return Number.isFinite(value) ? { kind: 'number', value } : null;
+}
+
+/** The aggregates that read numbers: over a column the query types as text they show nothing. */
+export const NUMERIC_AGGS: ReadonlySet<NumberAgg> = new Set(['sum', 'avg', 'median', 'min', 'max']);

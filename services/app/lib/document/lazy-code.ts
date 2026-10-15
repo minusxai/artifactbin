@@ -50,7 +50,7 @@ export function lazyCodeOf(nodes: JsxNode[], stored?: StoredDrawings): LazyCode 
   const walk = (list: JsxNode[]) => {
     for (const n of list) {
       if (n.type !== 'element') continue;
-      if (n.isComponent && n.tag === 'Question') {
+      if (n.isComponent && n.tag === 'Chart') {
         const viz = n.attributes.find((a) => a.name === 'viz')?.value;
         const kind = viz?.static && viz.json && typeof viz.json === 'object' && !Array.isArray(viz.json)
           ? viz.json.kind : null;

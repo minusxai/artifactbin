@@ -19,7 +19,7 @@ import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl, urlLis
 import { DANGEROUS_TAGS } from './dangerous-tags';
 import { DENIED_JSX_ATTRS } from './denied-attrs';
 import { STORY_COMPONENT_NAMES } from './story-components';
-import { STORY_SVG_TAGS } from './component-names';
+import { canonicalComponent, STORY_SVG_TAGS } from './component-names';
 import type { JsxNode, JsxElement, ValidationError, ValidateOptions } from './types';
 
 // The retired legacy story design-system tags (<PageHeader>, <Eyebrow>, …). When one of
@@ -63,13 +63,14 @@ let JSX_REGISTERED: ReadonlySet<string> = new Set<string>();
 
 export function validateJsx(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {
   scriptComponents = options.scriptComponents ?? new Set<string>();
-  JSX_REGISTERED = new Set(options.components);
+  JSX_REGISTERED = new Set([...options.components].map(canonicalComponent));
   try { return validateJsxNodes(nodes, options); }
   finally { scriptComponents = new Set<string>(); }
 }
 
 function validateJsxNodes(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {
-  const components = new Set(options.components);
+  // A caller's list may still name an earlier spelling; the tree carries canonical tags.
+  const components = new Set([...options.components].map(canonicalComponent));
   // Case-insensitive: tags are compared lowercased below, so an allowlist may
   // carry canonical SVG casing (`clipPath`) and still match authored variants.
   const allowedHtml = options.allowedHtmlTags ? new Set([...options.allowedHtmlTags].map(t => t.toLowerCase())) : null;

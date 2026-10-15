@@ -25,7 +25,6 @@ const NODE_NAMES: Record<string, string> = {
   h5: 'Heading 5',
   h6: 'Heading 6',
   GridItem: 'Grid cell',
-  Question: 'Chart',
 };
 
 export const nodeName = (tag: string): string => NODE_NAMES[tag] ?? tag;
