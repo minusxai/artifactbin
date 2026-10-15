@@ -58,9 +58,12 @@ npm run dev                              # then open http://app.lvh.me:<port>
 ```
 
 `lvh.me` and every name under it resolve to 127.0.0.1 in public DNS, so no hosts-file edit is needed;
-the login outbox and the CLI's device mint treat them as loopback. `npm run setup -- --pages-host <host>`
+the login outbox and the CLI's device mint treat them as loopback. Node never asks DNS for them (nor for
+`localhost` and its names): the CLI, the server and the gate tooling resolve them to loopback themselves
+(`@artifactbin/utils/node/loopback-lookup`), and the gates' WebKit connects through a loopback proxy, so a
+machine or container without a network still reaches its own server. `npm run setup -- --pages-host <host>`
 names another host (production over https: preferably a registrable domain of its own, such as `example-content.com`). The dev
 server tells Vite `allowedHosts: ['.<pages host>', <app host>]` (its DNS-rebinding guard refuses unknown `Host`s, and
 every document is a new one) and `cors: false` (the app's origin gate, not Vite, answers CORS). The browser proof is
-`node scripts/gates/gate-own-origin-script.mjs <base>`; the gate runner's own servers use `pages.localhost`, and the gates
-that need the pages cookie boot their own server at `app.lvh.me` from `dist/server.mjs`.
+`node scripts/gates/gate-own-origin-script.mjs <base>`; the gate runner's own servers serve the app at `app.lvh.me` and
+documents under `lvh.me` from `dist/server.mjs`.
