@@ -45,13 +45,19 @@ export const Textarea = (p: Props) => <TextField {...p} multiline />;
 function options(p: Props) { const n = nameOf(p,'options'); return normalize(p.options, n ? useIsland().table(n) : undefined); }
 const nullable = (p: Props) => { const name = nameOf(p); return !!name && useIsland().nullable(name); };
 const choiceValue = (p: Props) => nameOf(p) ? valueOf(p) == null ? null : String(valueOf(p)) : lit(p.value);
+// The chosen option takes the system's own fill pair (primary, primary-foreground) like a chosen calendar day: a
+// background-on-muted face vanished wherever a system paints its page ground and muted tint near-identically. Idle options
+// tint with the ink on hover, the one wash that reads in every system and mode. The ring sits above the next option.
+const segmentClass = 'relative h-8 cursor-pointer rounded-[5px] px-3 text-sm transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
+const segmentChosen = 'bg-primary text-primary-foreground shadow-xs';
+const segmentIdle = 'text-muted-foreground enabled:hover:bg-foreground/10 enabled:hover:text-foreground';
 export function Segmented(p: Props) {
   // "All" only when the bound Value's declared default is null;
   // without the declarations (no store), the static face's rule: a bound value may offer it.
   const island = useIsland(); const entries = () => [...(nullable(p) ? [{ value: null, label: str(p.placeholder) ?? 'All' }] : []), ...options(p)];
   return <Shell authored={p}><div role="group" aria-label={str(p.label)} class="inline-flex w-fit items-center gap-0.5 rounded-md border border-input bg-muted/40 p-0.5 shadow-xs"><For each={entries()}>{o =>
     <button type="button" aria-pressed={o.value === choiceValue(p)} disabled={!active(p)} on:click={() => { const n = nameOf(p); if (n) island.setValue(n,o.value,undefined); }}
-      class={join('h-8 rounded-[5px] px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',o.value === choiceValue(p) ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>{o.label}</button>}</For></div></Shell>;
+      class={join(segmentClass,o.value === choiceValue(p) ? segmentChosen : segmentIdle)}>{o.label}</button>}</For></div></Shell>;
 }
 export function Switch(p: Props) {
   const island = useIsland(); const checked = () => { const n = nameOf(p,'checked'); const value = n ? island.value(n) : p.checked; return value === true || value === 'true'; };
