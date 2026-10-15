@@ -337,7 +337,8 @@ export function createHoverSelect({ win, root, nodes, views, activePath, commitA
     // Chrome the document draws for itself (the deck rail and its slide previews) re-renders the
     // slide's own nodes, so ids and AST stamps appear twice — a click there must never select the copy.
     if (target.closest(DOCUMENT_CHROME)) return;
-    if (target.closest('.ProseMirror, [data-mx-lexical]') && target.closest('a')) event.preventDefault();
+    // A link being typed in (prose, Markdown, a text host such as a kit BreadcrumbLink) is text, never a navigation.
+    if (target.closest('.ProseMirror, [data-mx-lexical], [contenteditable="true"]') && target.closest('a')) event.preventDefault();
     // A drag ends with a click on the common ancestor. It is still a text selection, never an
     // instruction to resize that entire container.
     const native = win.getSelection();

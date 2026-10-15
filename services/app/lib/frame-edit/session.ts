@@ -507,8 +507,12 @@ export function createFrameEditSession({
             view.focus();
             break;
           }
-          // A text host's selected words, wrapped (or unwrapped) where the caret is.
-          if (active) format.applyInline(active.path, message.tag);
+          // A text host's selected words, wrapped (or unwrapped) where they are: the host being typed in, or (the
+          // page's toolbar took the focus) the one selected; the words must still be inside it.
+          {
+            const path = active?.path ?? selection.selectedPath();
+            if (path) format.applyInline(path, message.tag);
+          }
           break;
         case 'mx:paste':
           if (md) { md.paste(message.value, message.kind); break; }

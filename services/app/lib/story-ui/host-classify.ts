@@ -104,19 +104,25 @@ type KitTextHost = { editable: true } | { editable: false; lock: TextLock | null
  */
 export function kitTextHost(node: JsxElement): KitTextHost {
   if (!node.isComponent || !kitTextElement(node.tag)) return { editable: false, lock: null };
-  const lock = subtreeLock(node);
-  if (lock) return { editable: false, lock };
-  let hasText = false;
+  // The shape first, from the children alone: a block or a component that is not an inline embed makes it a
+  // container, decided without walking what it holds (a card's table of thousands of cells).
+  let hasText = false, embeds = false;
   const phrasing = (children: JsxNode[]): boolean => children.every((child) => {
     if (child.type === 'text') { hasText ||= child.value.trim().length > 0; return true; }
     if (child.type === 'expression') {
       const json = child.value.static ? child.value.json : undefined;
-      if (typeof json === 'string' || typeof json === 'number') { hasText ||= String(json).trim().length > 0; return true; }
-      return json === null || typeof json === 'boolean';
+      hasText ||= (typeof json === 'string' || typeof json === 'number') && String(json).trim().length > 0;
+      return true;
     }
-    return !child.isComponent && !child.control && kitTextMarkAllowed(node.tag, child.tag) && phrasing(child.children);
+    if (child.control) return true;
+    if (child.isComponent) { embeds = true; return TEXT_HOST_INLINE_EMBEDS.has(child.tag); }
+    return kitTextMarkAllowed(node.tag, child.tag) && phrasing(child.children);
   });
-  return phrasing(node.children) && hasText ? { editable: true } : { editable: false, lock: null };
+  if (!phrasing(node.children)) return { editable: false, lock: null };
+  // Text-shaped: what binds data or computes anything in it locks it, and says which.
+  const lock = subtreeLock(node);
+  if (lock) return { editable: false, lock };
+  return hasText && !embeds ? { editable: true } : { editable: false, lock: null };
 }
 
 /**

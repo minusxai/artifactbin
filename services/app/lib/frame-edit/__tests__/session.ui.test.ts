@@ -384,6 +384,29 @@ describe('kit text components in the edit session', () => {
     expect(of('mx:text-edit').at(-1)).toMatchObject({ path: CELL, innerHtml: 'Wed' });
   });
 
+  it('bold from the page\'s toolbar still lands when the click there took the focus from the kit text', async () => {
+    const { of, at } = await open(KIT, KIT_DOM);
+    const title = at('0.0.0');
+    focus(title);
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    title.blur();
+    title.dispatchEvent(new FocusEvent('blur'));
+    session!.onParentMessage({ type: 'mx:inline', tag: 'em' });
+    expect(of('mx:text-edit').at(-1)).toMatchObject({ path: '0.0.0', innerHtml: '<em>Revenue</em>' });
+  });
+
+  it('a click in a breadcrumb link being edited is a caret, never a navigation', async () => {
+    const { at } = await open(KIT, KIT_DOM);
+    const link = at('1.0.0.0');
+    focus(link);
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+  });
+
   it('a breadcrumb link takes no link inside it', async () => {
     const { of, at } = await open(KIT, KIT_DOM);
     const link = at('1.0.0.0');

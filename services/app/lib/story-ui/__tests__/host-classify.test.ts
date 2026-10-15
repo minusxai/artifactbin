@@ -54,6 +54,15 @@ describe('kit text components', () => {
     }
   });
 
+  it('a container is decided from its children alone, without walking what they hold', () => {
+    const cells = Array.from({ length: 50 }, (_, i) => `<TableCell>{$q.rows[${i}].x}</TableCell>`).join('');
+    const card = element(`<CardContent><Table><TableBody><TableRow>${cells}</TableRow></TableBody></Table></CardContent>`);
+    // Data deep inside a container is the cells' lock, not the container's.
+    expect(kitTextHost(card)).toEqual({ editable: false, lock: null });
+    expect(textLockOf(card)).toBeNull();
+    expect(kitTextHost(element('<TableCell>See <Icon name="check" /></TableCell>'))).toEqual({ editable: false, lock: null });
+  });
+
   it('a link inside a link component is not its text: BreadcrumbLink takes marks but no links', () => {
     expect(isEditableTextHost(element('<BreadcrumbLink href="/a"><strong>Reports</strong></BreadcrumbLink>'))).toBe(true);
     expect(isEditableTextHost(element('<BreadcrumbLink href="/a">See <a href="/b">b</a></BreadcrumbLink>'))).toBe(false);
