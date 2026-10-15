@@ -69,7 +69,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
   const columns = () => [...(bound()?.columns ?? [])].sort((a, b) => (a.type === 'number' ? 0 : 1) - (b.type === 'number' ? 0 : 1));
 
   return (
-    <div class="flex flex-col gap-3" aria-label="Number editor">
+    <div class="flex flex-col gap-3" aria-label="Cell editor">
       <div class="flex flex-col gap-1">
         <span class="font-mono text-2xs text-faint">data</span>
         <Select size="sm"
@@ -82,7 +82,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
             { value: '', label: '— pick a table —' },
             ...props.tables.map((d) => ({ value: d.name, label: `$${d.name}` })),
             // A bound name the document does not declare — see VizEditorPanel:
-            // the placeholder would claim the Number is unbound, and the next
+            // the placeholder would claim the Cell is unbound, and the next
             // edit would write that claim into the source.
             ...(props.binding.table && !bound() ? [{ value: props.binding.table, label: `$${props.binding.table} (not declared)` }] : []),
           ]}
@@ -91,7 +91,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
       <BoundQuery table={bound()} onOpenQuery={props.onOpenQuery} />
       <Show when={props.binding.table && !bound()}>
         <p class="font-sans text-2xs text-danger" aria-label="Missing table notice">
-          This number points at a table the document does not declare.
+          This cell points at a table the document does not declare.
         </p>
       </Show>
 
@@ -100,7 +100,7 @@ export default function NumberEditorPanel(props: NumberEditorPanelProps): JSX.El
         fallback={
           // Inline rows / unbound: the columns are not catalogued anywhere, so the
           // author names one directly.
-          <TextField label="column" aria="Number column" value={props.binding.col} placeholder="— first column —" onCommit={(v) => props.onChange({ col: v })} />
+          <TextField label="column" aria="Cell column" value={props.binding.col} placeholder="— first column —" onCommit={(v) => props.onChange({ col: v })} />
         }
       >
         <div class="flex flex-col gap-1">

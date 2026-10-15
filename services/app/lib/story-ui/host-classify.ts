@@ -140,7 +140,8 @@ const literalText = (json: unknown): boolean => (typeof json === 'string' || typ
  * condition whose value the reader writes in its place — and every component in it is an inline embed. Its marks
  * and any other elements inside are part of that text. It takes a caret only when nothing in its children binds data
  * or computes anything: the reader writes an expression's VALUE into the line with nothing around it, so typing
- * beside one and saving would write the value over the binding (or drop it). Its own attributes stay where they are
+ * beside one and saving would write the value over the binding (or drop it). (In a prose block the editor instead carries a
+ * plain read, `{$x}` or `{$q.col}`, as one uneditable chip: lib/editor-engine/model.ts.) Its own attributes stay where they are
  * on a text edit (only the children are written), so they never lock it. `<style>` is CSS, not prose; SVG is drawing:
  * contenteditable inside an `<svg>` subtree is undefined browser behaviour, so the whole subset stays atomic.
  */
