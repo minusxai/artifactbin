@@ -462,6 +462,9 @@ it('teaches every surface to watch with a tool that wakes the agent, never a pla
   expect(text, name).toContain('between work steps');
  }
  expect(surfaces.cliSkill).toContain('`afbin comment <url|file> --json`');
+ // Replying is never publishing: an agent asked to keep a page local answered by editing alone and never replied.
+ expect(surfaces.cliSkill).toContain('push it if the page is published');
+ expect(surfaces.cliSkill).toContain('a reply on a local file stays local');
 });
 
 it('reuses an executable HTTP dataset creation example in both guides', async () => {

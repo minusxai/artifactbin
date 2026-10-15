@@ -134,6 +134,9 @@ test('a running preview names the watch that follows its comments, as a push nam
  assert.match(next,/with a tool that wakes you on each output line \(a monitor\), not as a plain background job, whose output lands in a log nobody reads/);
  assert.match(next,/Without such a tool, check `afbin comment report\.jsx notes\/plan\.jsx --json` between work steps instead/);
  assert.match(next,/your user.s requests/);
+ // A reply on a local file is local too: the agent that keeps a page unpublished still answers the person.
+ assert.match(next,/reply on its thread with `afbin comment <file> --thread ANNOTATION_ID --body 'What changed'`; replies stay local and publish nothing/);
+ assert.match(previewWatchNext(['report.jsx']),/`afbin comment report\.jsx --thread ANNOTATION_ID --body 'What changed'`/);
  assert.equal(previewWatchNext([]),'');
  // Only documents take comments: a dataset preview names no watch.
  assert.equal(previewWatchNext(['sales.csv']),'');

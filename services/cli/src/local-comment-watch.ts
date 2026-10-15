@@ -89,5 +89,5 @@ export function previewWatchNext(files:readonly string[]):string{
  const documents=files.filter(file=>file.toLowerCase().endsWith('.jsx'));
  if(!documents.length)return '';
  const watches=documents.map(file=>`\`afbin watch ${file} --comments --json\``).join(', ');
- return `Next, without asking: comments made in this preview are your user’s requests. Unless one already runs, start ${watches} ${WATCH_DELIVERY}, and keep it running after your reply; make each change and reply on its thread. ${watchFallback(documents.join(' '))}`;
+ return `Next, without asking: comments made in this preview are your user’s requests. Unless one already runs, start ${watches} ${WATCH_DELIVERY}, and keep it running after your reply; make each change, then reply on its thread with \`afbin comment ${documents.length===1?documents[0]:'<file>'} --thread ANNOTATION_ID --body 'What changed'\`; replies stay local and publish nothing. ${watchFallback(documents.join(' '))}`;
 }
