@@ -90,6 +90,8 @@ const ENTRIES = [
   { specifier: '@mx/page', name: 'page', file: () => islandModule('page') },
   // Image bindings load only on pages that author a data-selected image.
   { specifier: '@mx/kit/image', name: 'kit-image', file: () => islandModule('kit/image') },
+  // Templates in strings (lib/jsx/template) load only on pages that author one.
+  { specifier: '@mx/kit/templates', name: 'kit-templates', file: () => islandModule('kit/templates') },
   ...KIT_FAMILIES.map((family) => ({ specifier: `@mx/kit/${family}`, name: `kit-${family}`, file: () => islandModule(`kit/${family}`) })),
   // The author script's runtime (lib/islands/page-runtime): the declared names as Solid signals over the page's store,
   // and the mounts for the components the script exports. The script's `solid-js`, `solid-js/web` and `solid-js/store`

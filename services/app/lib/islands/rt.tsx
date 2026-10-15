@@ -24,7 +24,6 @@ import { hydrate, insert as solidInsert, isServer } from 'solid-js/web';
 import type { ReactiveExpression } from '@/lib/jsx/reactive';
 import { evaluateReactive } from '@/lib/jsx/reactive-eval';
 import { substituteRow } from '@/lib/jsx/row-scope';
-import { holeReader, parseTemplate, resolveAttributes, resolveTemplate, STYLE_ATTR_KEY, substituteViz } from '@/lib/jsx/template';
 import { keyedRowsError } from '@/lib/story-ui/row-key';
 import type { CompiledDataflow, DataflowState, Row, Scalar, TableResult } from '@/lib/dataflow';
 import { ACCESS_PENDING, type DataflowStore } from '@/lib/page-store/store';
@@ -274,7 +273,7 @@ const cellOf = (name: string): [string, string] | null => {
 };
 
 /** What a reactive expression or template reads: every value, each query's first-row cells, and the viewer built-in `_me.id`. Tracked per name. */
-const signalsOf = (() => {
+export const signalsOf = (() => {
   const cache = new WeakMap<IslandContext, Record<string, unknown>>();
   return (island: IslandContext): Record<string, unknown> => {
     let signals = cache.get(island);
@@ -319,23 +318,6 @@ export const text = (e: ReactiveExpression, row?: Record<string, unknown>, islan
 /** A static value with `$_row.f` references filled from `row` (lib/jsx/row-scope). */
 export const sub = <T,>(value: T, row: Record<string, unknown>): T => substituteRow(value, row);
 
-/* Templates in strings (lib/jsx/template): the same pure resolver the SSR render runs, over the island's values. */
-/** A templated string prop or class, filled from the page (values, first-row cells) and `row`. */
-export const tpl = (value: string, row?: Record<string, unknown>, island: IslandContext = useIsland()): string => {
-  const parts = parseTemplate(value);
-  return parts ? resolveTemplate(parts, holeReader(signalsOf(island), row)) : value;
-};
-/**
- * An element's templated attributes, resolved and guarded (`resolveAttributes`): a dangerous URL or a hole
- * without a value drops the attribute, an unsafe `style` value is left out. `style` is spread as an attribute.
- */
-export const valueAttrs = (attrs: Readonly<Record<string, string>>, row?: Record<string, unknown>, island: IslandContext = useIsland()): Record<string, string> => {
-  const out = resolveAttributes(attrs, holeReader(signalsOf(island), row));
-  if (Object.hasOwn(out, 'style')) { out[STYLE_ATTR_KEY] = out.style!; delete out.style; }
-  return out;
-};
-/** A chart's templated spec, filled (lib/jsx/template `substituteViz`). */
-export const viz = <T,>(value: T, row?: Record<string, unknown>, island: IslandContext = useIsland()): T => substituteViz(value, holeReader(signalsOf(island), row));
 
 interface RepeatProps {
   /** The table (or table value) whose rows repeat. */

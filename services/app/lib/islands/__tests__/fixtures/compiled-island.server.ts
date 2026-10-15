@@ -34,7 +34,7 @@ const store: ModuleStore = {
 };
 const generated = generate({ nodes: parsed.nodes, colorMode: 'light', template: null, chrome: true, refData: {}, flow });
 // `--shipped`: the shared island build's real manifest, for islands that import kit families.
-const build = process.argv[3] === '--shipped' ? loadCompilerBuild() : { id: 'test', manifest: { '@mx/rt': '/islands/rt.js', '@mx/boot': '/islands/boot.js', '@mx/kit/basic': '/islands/kit-basic.js', '@mx/kit/dialog': '/islands/kit-dialog.js' } };
+const build = process.argv[3] === '--shipped' ? loadCompilerBuild() : { id: 'test', manifest: { '@mx/rt': '/islands/rt.js', '@mx/boot': '/islands/boot.js', '@mx/kit/basic': '/islands/kit-basic.js', '@mx/kit/dialog': '/islands/kit-dialog.js', '@mx/kit/templates': '/islands/kit-templates.js' } };
 const built = await buildDocumentModules(generated, {
   build,
   flow, values: declaredValues(flow), store, ssrStore: store,

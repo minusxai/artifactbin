@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  deepHasValueHole, deepTemplateSignals, fillTemplate, hasValueHole, holeReader, parseTemplate, resolveAttribute,
-  resolveAttributes, specDigest, substituteViz, templateSignals,
+  deepHasValueHole, deepTemplateSignals, fillTemplate, hasValueHole, holeReader, parseTemplate, specDigest, substituteViz, templateSignals,
 } from '../template';
+import { resolveAttribute, resolveAttributes } from '../template-attrs';
 
 const read = (signals: Record<string, unknown>, row?: Record<string, unknown>) => holeReader(signals, row);
 

@@ -5,15 +5,14 @@
  * one pure resolver the server render and the browser both run, so the served markup and the hydrated
  * page agree byte for byte. A hole is the parser's own reactive expression (lib/jsx/reactive): a signal
  * (`region`, a query cell `tiles.cheap_v`, a built-in `_me.id`) or a row field. RAW values only: no
- * calls, no format syntax — formatting stays in SQL or in a `<Number>`.
+ * calls, no format syntax — formatting stays in SQL or in a `<Cell>`.
  *
- * Attribute values are guarded after substitution with the row attributes' rules (kit/basic rowAttrs): a
+ * Attribute values are guarded after substitution (lib/jsx/template-attrs) with the row attributes' rules (kit/basic rowAttrs): a
  * URL attribute whose result has a dangerous scheme, or a hole without a value, resolves to no attribute
  * at all; an SVG paint reference must stay local; a value substituted into `style` that could end the
  * declaration or fetch something (`;`, braces, quotes, backslashes, newlines, `url(`…) is not substituted.
  */
 import type { ReactiveExpression } from './reactive';
-import { SVG_PAINT_ATTRS, URL_ATTRS, URL_LIST_ATTRS, paintHasExternalUrl, urlListUrls } from './url-attrs';
 
 /** One hole: a page value, a query's first-row cell, a built-in's field (`signal`), or a row field. */
 type TemplateHole = Extract<ReactiveExpression, { kind: 'signal' } | { kind: 'row' }>;
@@ -80,20 +79,20 @@ export function deepTemplateSignals(value: unknown, out: string[] = [], depth = 
  * Mermaid diagram's code, a script component's data — and stays exactly as written.
  */
 export type TemplatePosition = 'substitute' | 'refuse' | 'literal';
-const DECLARATION_TAGS: ReadonlySet<string> = new Set(['Helmet', 'Value', 'Query', 'Mutation', 'Import', 'Notify', 'Context']);
+const DECLARATION_TAGS: ReadonlySet<string> = /* @__PURE__ */ new Set(['Helmet', 'Value', 'Query', 'Mutation', 'Import', 'Notify', 'Context']);
 /** Kit props that bind a declared name (`value="$x"`, `data="$q"`, `run="$m"`): a template is never a binding. */
-const BINDING_PROPS: ReadonlySet<string> = new Set(['data', 'value', 'checked', 'options', 'run', 'set', 'args', 'busy', 'open', 'userId', 'spread', 'dataset']);
+const BINDING_PROPS: ReadonlySet<string> = /* @__PURE__ */ new Set(['data', 'value', 'checked', 'options', 'run', 'set', 'args', 'busy', 'open', 'userId', 'spread', 'dataset']);
 /** Kit props that pick a recipe's classes when the page is published (lib/islands RECIPES). */
-const RECIPE_PROPS: ReadonlySet<string> = new Set(['variant', 'size', 'orientation']);
+const RECIPE_PROPS: ReadonlySet<string> = /* @__PURE__ */ new Set(['variant', 'size', 'orientation']);
 /** Kit props the compiler reads once: a glyph, a key, a column, an aggregate, a repeat. */
 const COMPILED_PROPS: Readonly<Record<string, ReadonlySet<string>>> = {
-  Icon: new Set(['name']), Column: new Set(['col']), DataTable: new Set(['rowKey']), Number: new Set(['col', 'agg', 'format']),
-  For: new Set(['keyBy', 'each']), Mermaid: new Set(['colorMode']),
+  Icon: /* @__PURE__ */ new Set(['name']), Column: /* @__PURE__ */ new Set(['col']), DataTable: /* @__PURE__ */ new Set(['rowKey']), Cell: /* @__PURE__ */ new Set(['col', 'agg', 'format']),
+  For: /* @__PURE__ */ new Set(['keyBy', 'each']), Mermaid: /* @__PURE__ */ new Set(['colorMode']),
 };
 /** Compile-time layout macros and static prose regions: no prop of theirs is read at run time. */
-const COMPILED_TAGS: ReadonlySet<string> = new Set(['Grid', 'GridItem', 'Markdown']);
+const COMPILED_TAGS: ReadonlySet<string> = /* @__PURE__ */ new Set(['Grid', 'GridItem', 'Markdown']);
 const HTML_BINDINGS: Readonly<Record<string, ReadonlySet<string>>> = {
-  input: new Set(['value', 'checked', 'run']), textarea: new Set(['value', 'run']), select: new Set(['value', 'options', 'run']),
+  input: /* @__PURE__ */ new Set(['value', 'checked', 'run']), textarea: /* @__PURE__ */ new Set(['value', 'run']), select: /* @__PURE__ */ new Set(['value', 'options', 'run']),
 };
 
 export function templatePosition(tag: string, attr: string, isComponent: boolean, script = false): TemplatePosition {
@@ -114,7 +113,7 @@ export function templatePosition(tag: string, attr: string, isComponent: boolean
 
 /** The object props whose string leaves are read: a `style` object, a chart's spec and a table's column specs. */
 export const isTemplatedObjectProp = (tag: string, attr: string, isComponent: boolean): boolean =>
-  attr === 'style' || (isComponent && ((tag === 'Question' && attr === 'viz') || (tag === 'DataTable' && attr === 'columns')));
+  attr === 'style' || (isComponent && ((tag === 'Chart' && attr === 'viz') || (tag === 'DataTable' && attr === 'columns')));
 
 /** The page names one authored attribute value reads where it is substituted (values, cells, built-ins). */
 export function attributeSignals(tag: string, attr: string, isComponent: boolean, json: unknown, script = false): string[] {
@@ -139,7 +138,15 @@ export const substitutes = (tag: string, attr: string, isComponent: boolean, scr
  * as literals in the compiler: its string literals are a story class source (scripts/generate-story-ui-classes
  * EXTRA_CLASS_SOURCES), and a new one would join the recipe class union and recompile every story's CSS.
  */
-export const TEMPLATE_CALLS = { text: 'rt.tpl', attrs: 'rt.valueAttrs', viz: 'rt.viz' } as const;
+export const TEMPLATE_CALLS = { text: 'tplText', attrs: 'tplAttrs', viz: 'tplViz' } as const;
+/**
+ * The import a compiled page adds for the template calls it makes (lib/islands/kit/templates, `@mx/kit/templates`): a page
+ * without a template downloads none of this module, as one without a row class never loads `@mx/row-class`.
+ */
+export function templateImports(source: string): string {
+  const used = Object.values(TEMPLATE_CALLS).filter((call) => source.includes(`${call}(`)).sort();
+  return used.length ? `import { ${used.join(', ')} } from '@mx/kit/templates';\n` : '';
+}
 
 /** Why a position refuses a template, for the publish error. */
 export function templateRefusal(tag: string, attr: string, isComponent: boolean): string {
@@ -165,14 +172,14 @@ const own = (record: Record<string, unknown> | null | undefined, name: string): 
 export const holeReader = (signals: Record<string, unknown>, row?: Record<string, unknown> | null): HoleReader =>
   (hole) => (hole.kind === 'row' ? own(row, hole.field) : own(signals, hole.name));
 
-const text = (value: unknown): string => {
+export const holeText = (value: unknown): string => {
   const v = scalarOf(value);
   return v === null ? '' : String(v);
 };
 
 /** A templated string as text: every hole's value, an absent one as nothing. */
 export function resolveTemplate(parts: readonly TemplatePart[], read: HoleReader): string {
-  return parts.map((p) => (typeof p === 'string' ? p : text(read(p)))).join('');
+  return parts.map((p) => (typeof p === 'string' ? p : holeText(read(p)))).join('');
 }
 
 /** A string with its holes filled, or the string itself when it has none. */
@@ -181,51 +188,12 @@ export function fillTemplate(value: string, read: HoleReader): string {
   return parts ? resolveTemplate(parts, read) : value;
 }
 
-// eslint-disable-next-line no-control-regex -- browsers remove controls and spaces within URL schemes
-const dangerousUrl = (url: string): boolean => /^(?:javascript:|vbscript:|data:(?!image\/))/i.test(url.replace(/[\x00-\x20]/g, ''));
-/** A value that could end a declaration, open a block, escape, or fetch: never substituted into `style`. */
-const UNSAFE_CSS = /[;{}\\"'<>\r\n\u2028\u2029]|\/\*|@import|(?:url|image|image-set|cross-fade|element|expression|src|paint|env)\s*\(/i;
-/** What one hole contributes to a `style` attribute: its value when inert, else nothing. */
-const cssValue = (value: unknown): string => {
-  const v = text(value);
-  return UNSAFE_CSS.test(v) ? '' : v;
-};
-
-/**
- * One templated attribute's value, guarded: null when the attribute must not be written (a URL with a
- * dangerous scheme or a hole without a value, an external paint reference). `id` is never templated.
- */
-export function resolveAttribute(name: string, value: string, read: HoleReader): string | null {
-  const parts = parseTemplate(value);
-  if (!parts) return value;
-  const lower = name.toLowerCase();
-  if (lower === 'id') return value;
-  if (lower === 'style') return parts.map((p) => (typeof p === 'string' ? p : cssValue(read(p)))).join('');
-  const url = URL_ATTRS.has(lower) || URL_LIST_ATTRS.has(lower);
-  if (url && parts.some((p) => typeof p !== 'string' && text(read(p)) === '')) return null;
-  const out = resolveTemplate(parts, read);
-  if (URL_LIST_ATTRS.has(lower) ? urlListUrls(out, lower).some(dangerousUrl) : URL_ATTRS.has(lower) && dangerousUrl(out)) return null;
-  if (SVG_PAINT_ATTRS.has(lower) && paintHasExternalUrl(out)) return null;
-  return out;
-}
-
-/** Every templated attribute of an element, resolved and guarded (`resolveAttribute`); dropped ones are absent. */
-export function resolveAttributes(attrs: Readonly<Record<string, unknown>>, read: HoleReader): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [name, raw] of Object.entries(attrs)) {
-    if (typeof raw !== 'string') continue;
-    const value = resolveAttribute(name, raw, read);
-    if (value !== null) out[name] = value;
-  }
-  return out;
-}
-
 /**
  * Where a chart spec's string is a Vega EXPRESSION (`"filter": "datum.lang === {$lang}"`): a hole there is
  * inserted as a literal of its type — a string quoted (`"rust"`), a number or boolean as written, nothing as
  * `null` — so a value is always data, never expression syntax.
  */
-const VIZ_EXPRESSION_KEYS: ReadonlySet<string> = new Set(['filter', 'calculate', 'test', 'expr', 'signal', 'update', 'init', 'labelExpr']);
+const VIZ_EXPRESSION_KEYS: ReadonlySet<string> = /* @__PURE__ */ new Set(['filter', 'calculate', 'test', 'expr', 'signal', 'update', 'init', 'labelExpr']);
 
 const literal = (value: unknown): string => {
   const v = scalarOf(value);

@@ -8,7 +8,7 @@ import { parseJsx } from '../parse';
 import { validateJsx } from '../validate';
 import { templatePosition } from '../template';
 
-const COMPONENTS = ['Isometric', 'Question', 'Card', 'CardTitle', 'Badge', 'Icon', 'DataTable', 'Column', 'Number', 'Grid', 'GridItem', 'Markdown', 'Mermaid', 'Slider', 'Select', 'For', 'Helmet', 'Value', 'Query'];
+const COMPONENTS = ['Isometric', 'Chart', 'Cell', 'Question', 'Card', 'CardTitle', 'Badge', 'Icon', 'DataTable', 'Column', 'Number', 'Grid', 'GridItem', 'Markdown', 'Mermaid', 'Slider', 'Select', 'For', 'Helmet', 'Value', 'Query'];
 const messages = (src: string) => {
   const r = parseJsx(src);
   if (!r.ok) throw new Error(r.error);
@@ -21,7 +21,7 @@ describe('accepted', () => {
     expect(messages(`<div style="width:{$share.pct}%" className="rounded {$tone}" aria-label="{$tiles.label}" />`)).toEqual([]);
     expect(messages(`<Badge className="{$tone}">{$tiles.cheap_v}</Badge>`)).toEqual([]);
     expect(messages(`<Slider label="Year {$year}" value="$year" />`)).toEqual([]);
-    expect(messages(`<Question data="$q" title="Score by {$sx}" viz={{"kind":"vega-lite","spec":{"title":"{$sx}","transform":[{"filter":"datum.lang === {$lang}"}]}}} />`)).toEqual([]);
+    expect(messages(`<Chart data="$q" title="Score by {$sx}" viz={{"kind":"vega-lite","spec":{"title":"{$sx}","transform":[{"filter":"datum.lang === {$lang}"}]}}} />`)).toEqual([]);
   });
   it('keeps a Mermaid diagram\'s literal `{$` and a script component\'s data as written', () => {
     expect(messages(`<Mermaid code="graph TD; A[{$x}] --> B" />`).some((m) => m.includes('template'))).toBe(false);
@@ -36,6 +36,7 @@ describe('refused', () => {
       ['<Icon name="{$icon}" />', 'name'],
       ['<Badge variant="{$tone}">x</Badge>', 'variant'],
       ['<DataTable data="$q" rowKey="{$k}" />', 'rowKey'],
+      ['<Cell data="$q" col="{$c}" />', 'col'],
       ['<Number data="$q" col="{$c}" />', 'col'],
       ['<Grid cols={12} className="{$x}"><GridItem x={0} y={0} w={6} h={2}>a</GridItem></Grid>', 'Grid'],
       ['<Select label="R" value="{$region}" options="$regions" />', 'value'],
@@ -47,7 +48,7 @@ describe('refused', () => {
   });
   it('refuses templates inside object props other than a chart spec, column specs and style', () => {
     expect(messages(`<DataTable data="$q" columns={[{"col":"a","title":"A {$x}"}]} />`)).toEqual([]);
-    expect(messages(`<Question data="$q" viz={{"kind":"recipe","recipe":"minusx/trend@1","params":{"label":"{$x}"}}} />`)).toEqual([]);
+    expect(messages(`<Chart data="$q" viz={{"kind":"recipe","recipe":"minusx/trend@1","params":{"label":"{$x}"}}} />`)).toEqual([]);
     expect(messages(`<Card style={{"width":"{$w}%"}} />`)).toEqual([]);
     expect(messages(`<Isometric parts={[{"key":"{$x}","kind":"slab"}]} />`).some((m) => m.includes('{$') && m.includes('object'))).toBe(true);
   });
@@ -65,8 +66,11 @@ describe('templatePosition', () => {
     expect(templatePosition('iframe', 'src', false)).toBe('refuse');
     expect(templatePosition('Mermaid', 'code', true)).toBe('literal');
     expect(templatePosition('Query', 'name', true)).toBe('literal');
-    expect(templatePosition('Question', 'viz', true)).toBe('substitute');
-    expect(templatePosition('Question', 'data', true)).toBe('refuse');
+    expect(templatePosition('Chart', 'viz', true)).toBe('substitute');
+    expect(templatePosition('Chart', 'data', true)).toBe('refuse');
+    // An earlier name is the component it names once parsed: `<Question viz>` reads its spec like `<Chart viz>`.
+    expect(messages(`<Question data="$q" viz={{"kind":"vega-lite","spec":{"title":"{$sx}"}}} />`)).toEqual([]);
+    expect(messages(`<Number data="$q" agg="{$a}" />`).some((m) => m.includes('agg'))).toBe(true);
     expect(templatePosition('img', 'src', false)).toBe('literal');
   });
 });

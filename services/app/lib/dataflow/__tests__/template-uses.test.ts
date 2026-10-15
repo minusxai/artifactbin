@@ -29,7 +29,7 @@ const compileErrors = async (body: string) => {
 
 describe('template uses', () => {
   it('collects values and query cells from text, attribute strings and chart specs', () => {
-    const { body } = declared(`${HELMET}<h1 title="For {$region}">Cheapest: {$tiles.cheap_v}</h1><Question data="$tiles" viz={{"kind":"vega-lite","spec":{"title":"{$tiles.label}"}}} />`);
+    const { body } = declared(`${HELMET}<h1 title="For {$region}">Cheapest: {$tiles.cheap_v}</h1><Chart data="$tiles" viz={{"kind":"vega-lite","spec":{"title":"{$tiles.label}"}}} />`);
     const uses = collectRefNameUses(body).map((u) => [u.name, u.column ?? null, u.expects]);
     expect(uses).toEqual(expect.arrayContaining([['region', null, 'scalar'], ['tiles', 'cheap_v', 'table'], ['tiles', 'label', 'table']]));
   });

@@ -39,7 +39,8 @@ import { parseRowRef } from '@/lib/jsx/row-scope';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { collectRefNameUses, REF_ATTRS, carriesRef, refName, type Scalar, resolveRefProps } from '@/lib/dataflow';
 import { substituteRow } from '@/lib/jsx/row-scope';
-import { deepHasValueHole, hasValueHole, holeReader, readsPage, resolveAttribute, substitutes, TEMPLATE_CALLS } from '@/lib/jsx/template';
+import { deepHasValueHole, hasValueHole, holeReader, readsPage, substitutes, TEMPLATE_CALLS, templateImports } from '@/lib/jsx/template';
+import { resolveAttribute } from '@/lib/jsx/template-attrs';
 import { createPreviewPropsAllocator } from './preview-props';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import { cn, peopleClasses, RECIPES } from '@/lib/islands';
@@ -633,7 +634,7 @@ export function generate(input: GenerateInput): Generated {
     if (node.tag === 'Chart' && typeof viz?.recipe === 'string' && viz.recipe.startsWith('ref:')) props.recipeData = refData[viz.recipe.slice(4)] ?? null;
     const api: Props = Object.fromEntries((meta.api ?? []).filter((k) => props[k] !== undefined).map((k) => [k, props[k]]));
     // A chart whose spec reads the page keeps a served drawing only of the spec it resolves (kit/data ChartSlot).
-    if (node.tag === 'Question' && !ctx.preview && readsPage(node.tag, 'viz', true, props.viz)) api.templated = true;
+    if (node.tag === 'Chart' && !ctx.preview && readsPage(node.tag, 'viz', true, props.viz)) api.templated = true;
     // Class strings come from the recipes index AT COMPILE TIME: readers never download cva or tailwind-merge.
     const recipe = RECIPES[node.tag];
     // In a fixed grid's tile the tile owns the size: the recipe and the port both know.
@@ -1110,7 +1111,7 @@ export function generate(input: GenerateInput): Generated {
     return `const $d${i} = $moduleData[${index}];\n`;
   }).join('');
   const usesRowAttrs = root.includes('$rowAttrs(') || browserRoot.includes('$rowAttrs(');
-  const rowImports = `${usesRowAttrs ? "import { rowAttrs as $rowAttrs } from '@mx/kit/basic';\n" : ''}${usesRowClass ? "import { rowClass as $rowClass } from '@mx/row-class';\n" : ''}`;
+  const rowImports = `${usesRowAttrs ? "import { rowAttrs as $rowAttrs } from '@mx/kit/basic';\n" : ''}${usesRowClass ? "import { rowClass as $rowClass } from '@mx/row-class';\n" : ''}${templateImports(root + browserRoot)}`;
   const skeleton = `import * as rt from '@mx/rt';\n${rowImports}${kitImports(kitUsed.skeleton)}${dataConsts}export function Document() { return ${root}; }\n`;
   const browserSource = `import * as rt from '@mx/rt';\n${rowImports}${kitImports(kitUsed.islands)}${dataConsts}export function Document() { return ${browserRoot}; }\n`;
   return {

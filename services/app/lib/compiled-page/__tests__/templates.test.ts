@@ -39,7 +39,8 @@ describe('only the templated element is live', () => {
     const generated = generate({ ...input, kitServer: await loadKitServer() });
     expect(generated.staticHtml.join('')).toContain('Static heading');
     expect(generated.staticHtml.join('')).toContain('Static paragraph');
-    expect(generated.browserIslands).toContain('rt.valueAttrs(');
+    expect(generated.browserIslands).toContain('tplAttrs(');
+    expect(generated.browserIslands).toContain("from '@mx/kit/templates'");
     expect(generated.browserIslands).not.toContain('Static heading');
     const page = await compilePage(input, loadCompilerBuild());
     const doc = new JSDOM(page.html).window.document;
@@ -49,16 +50,16 @@ describe('only the templated element is live', () => {
   });
 
   it('fills a chart title and spec reactively, and flags the chart as templated', async () => {
-    const input = await inputOf(`${HELMET}<Question id="q" data="$share" title="Share, {$region}" viz={{"kind":"vega-lite","spec":{"title":"{$region}","mark":"bar","encoding":{"x":{"field":"pct","type":"quantitative"}}}}} />`);
+    const input = await inputOf(`${HELMET}<Chart id="q" data="$share" title="Share, {$region}" viz={{"kind":"vega-lite","spec":{"title":"{$region}","mark":"bar","encoding":{"x":{"field":"pct","type":"quantitative"}}}}} />`);
     const generated = generate({ ...input, kitServer: await loadKitServer() });
-    expect(generated.browserIslands).toContain('rt.tpl(');
-    expect(generated.browserIslands).toContain('rt.viz(');
+    expect(generated.browserIslands).toContain('tplText(');
+    expect(generated.browserIslands).toContain('tplViz(');
     expect(generated.browserIslands).toMatch(/ templated=\{/);
   });
 
   it('leaves a page without value templates on its old paths', async () => {
     const plain = await inputOf(`${HELMET}<section><h2>Static</h2><a href="https://example.test/{x}">Open {"{$literal}"}</a></section><For each={$share}><p title="{$_row.pct}">{$_row.pct}</p></For>`);
     const generated = generate({ ...plain, kitServer: await loadKitServer() });
-    for (const call of ['rt.valueAttrs(', 'rt.tpl(', 'rt.viz(']) expect(generated.browserIslands).not.toContain(call);
+    for (const call of ['tplAttrs(', 'tplText(', 'tplViz(', '@mx/kit/templates']) expect(generated.browserIslands).not.toContain(call);
   });
 });

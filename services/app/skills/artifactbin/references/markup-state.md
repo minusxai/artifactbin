@@ -8,7 +8,7 @@ order: 2
 
 Scalar Values hold choices and flags, inline table Values hold temporary rows,
 Queries derive the view. Markup conditions (`{$editing && …}`, `{$step > 1 ?
-… : …}`, `{$mode === "edit" && …}`) read declared scalars only and compare
+… : …}`, `{$mode === "edit" && …}`) read declared scalars and query cells (`$q.col`) and compare
 strictly (`===`, `!==`; `==` is refused); anything computed belongs in the
 [script](markup-scripts.md).
 
@@ -89,6 +89,7 @@ kit props (`title`, `label`, `prefix`) and chart specs follow every change.
 - Never read in SQL (bind `$name`), `<Mermaid code>`, `id`, `<iframe src>`,
   `<Icon name>`, `Grid`/`GridItem`, or binding props (`value=`, `data=`,
   `options=`): publish names the position. A missing column fails publish.
+  An `<img src>` reads values (`{$pick}`), not cells.
 - An unsafe value renders inert: a `javascript:` link drops the attribute
   (so does an empty value in a URL), and a `style` value holding `;`,
   braces, quotes or `url(` is left out.

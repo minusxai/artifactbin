@@ -340,7 +340,7 @@ function validateElement(
         continue;
       }
       if (holes && typeof json !== 'string' && !isTemplatedObjectProp(el.tag, a.name, el.isComponent)) {
-        errors.push({ message: `Attribute "${a.name}" on <${el.tag}> cannot hold a template ({$…}) inside an object: templates are read in strings, a <Question> viz, <DataTable> columns and style`, attr: a.name, tag: el.tag, start: a.start, end: a.end });
+        errors.push({ message: `Attribute "${a.name}" on <${el.tag}> cannot hold a template ({$…}) inside an object: templates are read in strings, a <Chart> viz, <DataTable> columns and style`, attr: a.name, tag: el.tag, start: a.start, end: a.end });
         continue;
       }
     }

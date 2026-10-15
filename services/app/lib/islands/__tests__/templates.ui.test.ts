@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import type { Component } from 'solid-js';
 import * as rt from '../rt';
+import * as templates from '../kit/templates';
 import { createDataflowStore } from '@/lib/page-store/store';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
 import type { CompiledDataflow } from '@/lib/dataflow';
@@ -41,6 +42,7 @@ async function hydrateFixture(fixture: Fixture, values: Record<string, unknown>)
   let tree: Component | null = null;
   await evaluateModule(fixture.browserCode, (spec) => {
     if (/\/rt[-.]/.test(spec)) return rt as unknown as Record<string, unknown>;
+    if (/\/kit-templates[-.]/.test(spec)) return templates as unknown as Record<string, unknown>;
     if (/\/boot[-.]/.test(spec)) return { boot: (module: { TREE: Component }) => { tree = module.TREE; } };
     throw new Error(`unexpected import ${spec}`);
   }, `test/templates-${Math.random()}.js`);
