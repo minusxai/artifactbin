@@ -190,12 +190,18 @@ export const STORY_RECIPE_UNION: readonly string[] = [
  * blocks are unaffected (custom-property VALUES, not utilities), so theme
  * switching keeps working; the fluid shim stays ahead by carrying its own
  * `!important` and being injected after this sheet.
+ *
+ * The neutral dark palette never lands on an element that names a design (`[data-theme]`): a designed
+ * document's tokens live on its document element (storyThemeCss), and the story root, which carries the
+ * same mode class and design, inherits them. Matching it there would re-declare every neutral token
+ * beneath the story root, over the design's own dark palette and any authored `:root` override.
+ * `:where` keeps the block at `.dark`'s weight, so it still follows `:root` and yields to an authored `.dark`.
  */
 const TW_INPUT_STORY = `${TW_INPUT.replace('@import "tailwindcss";', '@import "tailwindcss" important;')}
 ${SHADCN_THEME_MAPPING}
 ${storyMotionKitCss()}
 :root ${withAppCharts(SHADCN_NEUTRAL_LIGHT_BODY)}
-.dark ${withAppCharts(SHADCN_NEUTRAL_DARK_BODY)}
+.dark:where(:not([data-theme])) ${withAppCharts(SHADCN_NEUTRAL_DARK_BODY)}
 `;
 
 /**
