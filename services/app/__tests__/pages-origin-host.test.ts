@@ -455,20 +455,36 @@ describe('a first URL loaded twice', () => {
     expect(await pagesSessionActor(minted, w.secret)).toMatchObject({ userId: w.user.id });
   });
 
-  it('a first view on a browser holding a dead cookie, whose response never arrived: asking again serves the document with the same session', async () => {
+  it('hands nothing to a browser whose cookie proves nothing: a dead one, or one a document\'s author could have planted', async () => {
     const w = await world();
     const app = framing();
+    // A dead cookie (signed out since): the spent ticket stays spent, as for a browser that held nothing.
     const dead = await pagesCookie(app, w.actor, w.secret);
     await clearSession(as(`${APP}/api/session/token`, w.actor, { method: 'DELETE' }));
-    expect(await pagesSessionActor(dead, w.secret)).toBeNull();
     const src = (await frameSrc(app, w.actor, w.secret)).href;
-    const lost = await app.request(src, held(dead));
-    expect(lost.status).toBe(200);
-    const minted = cookieOf(lost)!;
+    expect((await app.request(src, held(dead))).status).toBe(200);
     const again = await app.request(src, held(dead));
-    expect(again.status).toBe(200);
-    expect(cookieOf(again)).toBe(minted);
-    expect(await again.text()).toContain('Private plan');
+    expect(again.status).toBe(404);
+    expect(again.headers.get('set-cookie')).toBeNull();
+    // The author's own live session for their unlisted document, planted by its script in a guest's browser (document.cookie
+    // can write the pages name while no HttpOnly cookie is held). The visitor signs in and opens it: the script reads the
+    // ticket from its location, and the author holds the planted value. Together they buy nothing.
+    const open = await w.publish('<h1>Open</h1>', 'unlisted');
+    await drainPreparedPageWarmups();
+    const planted = await pagesCookie(app, w.actor, open);
+    const visitor = await createUser({ email: 'mxmx_test_pages_visitor@example.com' });
+    const visitorActor: Actor = { credential: 'session', userId: visitor.id, email: visitor.email!, emailVerified: true };
+    const visit = new URL(await frameSrc(app, visitorActor, open));
+    const first = await app.request(visit.href, held(planted));
+    expect(first.status).toBe(200);
+    const visitorCookie = cookieOf(first)!;
+    expect(await pagesSessionActor(visitorCookie, open)).toMatchObject({ userId: visitor.id });
+    for (const init of [held(planted), {}]) {
+      const replay = await app.request(visit.href, init);
+      expect(replay.headers.get('set-cookie')).toBeNull();
+      expect(await replay.text()).not.toContain(visitor.id);
+    }
+    expect(await exchangePagesTicket(visit.searchParams.get('_pt')!, { ...bindingOf(open), held: planted })).toBeNull();
   });
 
   it('hands that session to nobody else: no cookie, another cookie, another document, after the window, after sign-out', async () => {

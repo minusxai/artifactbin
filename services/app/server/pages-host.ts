@@ -16,9 +16,9 @@
  *       `_pt=<ticket>`  a ticket minted for THIS document and origin: a new session replaces whatever the browser
  *                       held — and serves the document in the same response, unless the browser held a live session of the
  *                       SAME reader (a repeat view), when it is a 302 to the same URL without `_pt` so the clean address
- *                       revalidates (304). The SAME browser asking again for the same URL within seconds (its first response
- *                       was lost: WebKit reloads a moved frame, a retry, a prefetch) presents the cookie it held then, and
- *                       gets the same answer with the same session (lib/accounts/pages-sessions). A replayed, expired or
+ *                       revalidates (304). The SAME browser asking again for that repeat view's URL within seconds (its
+ *                       first response was lost: a retry, a prefetch) presents the live session it held then, and gets the
+ *                       same answer with the same session (lib/accounts/pages-sessions). A replayed, expired or
  *                       foreign ticket mints nothing and renders as what the browser's own cookie says, or nobody (a back
  *                       navigation replaying the frame's first URL).
  *       `_pt=-`         the app page decided "nobody": the document renders as nobody even if a cookie is held,
@@ -132,7 +132,7 @@ export function pagesHost(site: PagesSite): MiddlewareHandler {
         if (cookie) { await endPagesSession(cookie); setCookie = cookieLine(site, '', true); }
       } else if (request.method === 'GET') {
         // The new session replaces whatever the browser held (ended in the same step), and carries the app page's current
-        // decisions. A browser asking again for the same first URL (its first response was lost) is handed the same session.
+        // decisions. A repeat view asked again (its first response was lost) is handed the same session.
         const minted = await exchangePagesTicket(marker, { artifactId: id, origin: pagesOriginFor(id, site), held: cookie });
         if (minted) {
           const line = cookieLine(site, minted.cookie);

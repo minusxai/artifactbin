@@ -14,8 +14,8 @@
  *     database), a ticket minted for another document or origin is refused, and a `pages_sessions` row bound
  *     to this document is written for a new random cookie value. Only that value's sha256 is stored. The
  *     reader is resolved again at the exchange, so a token revoked since the page was served never renders.
- *     A browser whose response was lost may ask again with the same ticket and the cookie it held, and is handed
- *     the same session; nobody else is (see the function).
+ *     A browser whose response was lost may ask again with the same ticket and the live session of the same
+ *     account it held, and is handed the same session; nobody else is (see the function).
  *
  * The cookie is the document origin's alone (host-only): `pagesSessionOf(cookie, …, { artifactId })` accepts a
  * session only for the document it was minted for. `endPagesSession(cookie)` ends one; `endPagesSessionsFor`
@@ -150,13 +150,18 @@ function sealed(value: string, ticket: string): string {
  *
  * A LOAD THE BROWSER CUT OFF. The response that carries the new cookie can be lost after the ticket is spent — WebKit
  * reloads a frame the page moves, a prefetch or a retried connection asks twice — and the browser asks again with the same
- * ticket and the cookie it held before. So when the browser held a cookie, the exchange is one transaction that also records
- * the redemption (REDEEMED_KIND, keyed by the ticket's hash, REDEEM_AGAIN_MS): the sha256 of the cookie presented, and the
- * new value sealed under the ticket. The same ticket presented again within the window WITH THAT SAME COOKIE is handed the
- * same session — nothing is minted twice, and a session ended since (sign-out, a revoked token) is handed to nobody.
- * The ticket without that cookie (what a document's script reads from its location, a log, a history entry) buys nothing:
- * the cookie is HttpOnly, host-only and partitioned, readable by no script and sent by no other browser. A browser that held
- * nothing has nothing to prove it is the same one: its spent ticket stays spent, as always.
+ * ticket and the cookie it held before. When that cookie names a LIVE session of the SAME account for this document (a
+ * repeat view), the exchange is one transaction that also records the redemption (REDEEMED_KIND, keyed by the ticket's hash,
+ * REDEEM_AGAIN_MS): the sha256 of the cookie presented, and the new value sealed under the ticket. The same ticket presented
+ * again within the window WITH THAT SAME COOKIE is handed the same session — nothing is minted twice, and a session ended
+ * since (sign-out, a revoked token) is handed to nobody.
+ *
+ * Why only then: the cookie is the proof that the second request comes from the browser that made the first, so it must be
+ * a value nobody else can know. A live session of this reader is one — the server wrote it HttpOnly, host-only and
+ * partitioned, and stores only its hash. Any other cookie is not: a document's own script may PLANT a cookie under the
+ * pages name while the browser holds none (a signed-out view), and read the ticket from its location; recording that value
+ * would hand the next reader's session to the document's author. So a browser that held nothing, a dead cookie, another
+ * reader's or a guest's keeps the old rule: its spent ticket stays spent, and it reads as its cookie says, or nobody.
  */
 export async function exchangePagesTicket(ticket: string, exchange: PagesExchange, now = Date.now()): Promise<PagesExchanged | null> {
   if (!SECRET.test(ticket)) return null;
@@ -173,12 +178,14 @@ export async function exchangePagesTicket(ticket: string, exchange: PagesExchang
     return { cookie, ...session, repeat: false };
   }
   // The reader is resolved before the transaction (its reads are not the transaction's), and the claim is inside it: a
-  // second request for the same ticket waits on the claim and then finds the redemption, never the gap before it.
+  // second request for the same ticket waits on the claim and then finds the redemption (if any), never the gap before it.
   const payload = await store.peekByHash({ kind: TICKET_KIND, code: ticket, now }) as TicketPayload | null;
   if (!payload) return redeemedAgain(ticket, binding, held, now);
   const session = await ticketReader(payload, binding);
   const before = session ? await pagesSessionOf(held, now, binding.artifactId) : null;
   const repeat = !!before && !!session && sameReader(before.actor, session.actor);
+  // Only a live session of the same ACCOUNT proves the browser (see above): two guests' sessions are "the same reader" too.
+  const recorded = repeat && session!.actor.credential !== 'none';
   const cookie = randomSecret(32);
   const spent = await db.transaction(async (tx) => {
     const codesTx = createCodeStore(tx);
@@ -186,7 +193,7 @@ export async function exchangePagesTicket(ticket: string, exchange: PagesExchang
     if (!session) return true;
     await writeSession(tx, cookie, payload, binding.artifactId, now);
     await tx.query('DELETE FROM pages_sessions WHERE id_hash = $1', [sha256(held)]);
-    await codesTx.issue({ kind: REDEEMED_KIND, secret: ticket, payload: { ...binding, holder: sha256(held), seal: sealed(cookie, ticket), repeat }, ttlMs: REDEEM_AGAIN_MS, now });
+    if (recorded) await codesTx.issue({ kind: REDEEMED_KIND, secret: ticket, payload: { ...binding, holder: sha256(held), seal: sealed(cookie, ticket), repeat }, ttlMs: REDEEM_AGAIN_MS, now });
     return true;
   });
   if (!spent) return redeemedAgain(ticket, binding, held, now);
