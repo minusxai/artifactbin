@@ -93,6 +93,7 @@ kit props (`title`, `label`, `prefix`) and chart specs follow every change.
 - An unsafe value renders inert: a `javascript:` link drops the attribute
   (so does an empty value in a URL), and a `style` value holding `;`,
   braces, quotes or `url(` is left out.
-- Use `style` for value-driven sizes and colours, and design-system or
-  `<style>` classes in `className`; Tailwind utilities built from a value
-  (`w-{$n}`) have no CSS yet.
+- A class may come from a value, a cell or a row: any Tailwind utility a
+  template fills into `className` is styled, variants and `w-[30rem]`
+  included: `className="px-2 {$tone}"`, or `{$_row.tone}` with SQL
+  `case status when 'ok' then 'bg-lime-500' else 'bg-rose-500' end as tone`.

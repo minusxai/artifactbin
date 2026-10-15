@@ -14,7 +14,7 @@ import {previewAnnotations} from './preview/annotations';
 import {previewGraph,referenceIds} from './preview/graph';
 import {fileContentType,collectRefUses,imageReferenceId,dataflowOf,splitHelmet,parseJsx,type JsxNode,validateMarkupStructure,resolveStoredStoryDesign,type RefDataMap,sourceDigest,type ArtifactFile,type ImportTables} from '../../app/lib/cli-toolkit';
 import {compileLocal,runLocal} from './local-dataflow';
-import {prepareStoryRuntime,compileStoryCss,withStoredCarriers,offlineFileParts,renderArtifactFileHtml,type StoryIslandData,DOCUMENT_UI_FONT_CSS,withoutUnusedFaces} from '../../app/lib/cli-toolkit/host.server';
+import {prepareStoryRuntime,compileStoryCssWithExtras,fileRuntimeClasses,withStoredCarriers,offlineFileParts,renderArtifactFileHtml,type StoryIslandData,DOCUMENT_UI_FONT_CSS,withoutUnusedFaces} from '../../app/lib/cli-toolkit/host.server';
 import {compileDocument,renderStoryHtml,compilerBuild} from './preview/compiled';
 
 const MAX_BYTES=25*1024*1024;
@@ -86,7 +86,7 @@ export async function exportLocalHtml(options:LocalHtmlOptions,assetsRoot:string
  const input=await prepareLocalHtml(options),{document,flow,refData}=input;
  process.chdir(resolve(assetsRoot));
  const design=resolveStoredStoryDesign(document.metadata.theme,document.metadata.colorMode);
- const prepared=await prepareStoryRuntime({source:document.body,compiledCss:await compileStoryCss(document.body,{force:true}),theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode,refData,title:document.metadata.title??input.path,chrome:true,dataflow:{flow,hold:Object.keys(input.held)}});
+ const prepared=await prepareStoryRuntime({source:document.body,compiledCss:await compileStoryCssWithExtras(document.body,fileRuntimeClasses(document.body,{state:input.state,held:input.held})),theme:design.theme,template:document.metadata.template??null,colorMode:design.colorMode,refData,title:document.metadata.title??input.path,chrome:true,dataflow:{flow,hold:Object.keys(input.held)}});
  const island:StoryIslandData={...prepared.data,refData,dataflow:{flow,hold:Object.keys(input.held)}};
  delete island.queryUrl;delete island.mutateUrl;delete island.assetsUrl;delete island.sqliteWasm;
  let compiled=await compileDocument({data:island,flow,authorScript:prepared.authorScript,capture:false});

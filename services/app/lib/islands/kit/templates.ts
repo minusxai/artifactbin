@@ -9,11 +9,29 @@ import { resolveAttributes } from '@/lib/jsx/template-attrs';
 import { useIsland } from '../context';
 import type { IslandContext } from '../contract';
 import { signalsOf } from '../rt';
+import { noteClasses } from '../runtime-css';
 
 /** A templated string prop or class, filled from the page (values, first-row cells) and `row`. */
 export const tplText = (value: string, row?: Record<string, unknown>, island: IslandContext = useIsland()): string => {
   const parts = parseTemplate(value);
   return parts ? resolveTemplate(parts, holeReader(signalsOf(island), row)) : value;
+};
+
+/**
+ * What a template filled into a class is noted (../runtime-css): one the document's sheet lacks is hidden until the sheet
+ * has it. Only the filled tokens: the written ones (a kit recipe merged in at compile time) are the sheet's already.
+ */
+const noteFilled = (template: string | undefined, out: string | undefined): void => {
+  if (!template || !out) return;
+  const written = new Set(template.split(/\s+/));
+  noteClasses(out.split(/\s+/).filter((token) => !written.has(token)).join(' '));
+};
+
+/** A templated class, filled like any string prop, its filled classes noted. */
+export const tplClass = (value: string, row?: Record<string, unknown>, island: IslandContext = useIsland()): string => {
+  const out = tplText(value, row, island);
+  noteFilled(value, out);
+  return out;
 };
 
 /**
@@ -23,6 +41,7 @@ export const tplText = (value: string, row?: Record<string, unknown>, island: Is
  */
 export const tplAttrs = (attrs: Readonly<Record<string, string>>, row?: Record<string, unknown>, island: IslandContext = useIsland()): Record<string, string> => {
   const out = resolveAttributes(attrs, holeReader(signalsOf(island), row));
+  noteFilled(attrs.class ?? attrs.className, out.class ?? out.className);
   if (Object.hasOwn(out, 'style')) { out[STYLE_ATTR_KEY] = out.style!; delete out.style; }
   return out;
 };

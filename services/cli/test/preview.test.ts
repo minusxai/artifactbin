@@ -522,3 +522,28 @@ test('a document that does not compile answers a readable page naming the file a
   assert.match(session.failure()??'',/Invalid JSX: Expected corresponding JSX closing tag/);
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
+
+test('a document whose rows bring their classes: a capture is styled in its first byte, and the reader asks the preview\'s /css door for the rest',async()=>{
+ const appDir=join(import.meta.dirname,'../../app');
+ const cwd=process.cwd();process.chdir(appDir);
+ const root=await mkdtemp(join(tmpdir(),'preview-runtime-css-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined,reader:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  await writeFile(join(root,'report.jsx'),'<Helmet><Value name="items" type="table" value={[{id: 1, status: "ok"}, {id: 2, status: "late"}]} /><Query name="rows">{`select id, case when status = \'ok\' then \'bg-lime-500 hover:bg-sky-600\' else \'md:w-64 w-[37%]\' end as cls from items`}</Query></Helmet><For each={$rows} keyBy="id"><span id="badge" className="md:w-1/2 {$_row.cls}">x</span></For>');
+  session=await startPreview({root,files:['report.jsx'],home:join(root,'home'),assets:root,publicAssets:join(appDir,'public'),capture:true});
+  const html=await (await fetch(session.url+'/workspace/report.jsx?capture=1')).text();
+  assert.match(html,/bg-lime-500 hover:bg-sky-600/);
+  assert.match(html,/<style data-mx-tw>[^<]*\.bg-lime-500\s*\{/);
+  assert.match(html,/<style data-mx-tw>[^<]*\.w-\\\[37\\%\\\]\s*\{/);
+  reader=await startPreview({root,files:['report.jsx'],home:join(root,'home-reader'),assets:root,publicAssets:join(appDir,'public')});
+  const page=await (await fetch(reader.url+'/workspace/report.jsx')).text();
+  const data=JSON.parse(/<script type="application\/json" id="mx-story-data">([^<]*)<\/script>/.exec(page)![1]!) as {css?:{url:string;known:string[]}};
+  assert.equal(data.css?.url,'/css?file=report.jsx');
+  assert.ok(data.css?.known.includes('md:w-1/2'));
+  const door=await fetch(reader.url+data.css!.url+'&x='+encodeURIComponent('bg-rose-500 w-full'));
+  assert.equal(door.status,200);assert.match(door.headers.get('content-type')??'',/^text\/css/);
+  const css=await door.text();
+  // The whole sheet: the runtime `w-full` stands before the static `md:w-1/2`, so the breakpoint still wins.
+  assert.match(css,/\.bg-rose-500\s*\{/);assert.ok(css.search(/\.w-full\s*\{/)>=0&&css.search(/\.w-full\s*\{/)<css.indexOf('.md\\:w-1\\/2'));
+  assert.equal((await fetch(reader.url+'/css?file=report.jsx&x='+encodeURIComponent('a"b'))).status,400);
+ }finally{await session?.close();await reader?.close();await rm(root,{recursive:true,force:true});process.chdir(cwd);}
+});

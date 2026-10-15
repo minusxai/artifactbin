@@ -104,6 +104,13 @@ export const mutatePath = (id: string): string => `/a/${id}/mutate`;
 export const assetsPath = (id: string): string => `/a/${id}/assets`;
 
 /**
+ * …and the one it asks for its own stylesheet again at: the document's whole compiled Tailwind with the classes
+ * it only names at runtime compiled in (app/a/[id]/css, lib/serving/runtime-css.server) — a `className` its rows
+ * fill. Admitted on the same terms: path-exact, the same read ACL as the page, and its answer is CSS.
+ */
+export const runtimeCssPath = (id: string): string => `/a/${id}/css`;
+
+/**
  * …and the one static directory: the boundary geometry the geo charts fetch
  * (`loadGeoFeatures` → `/geojson/<file>.json`, an allowlisted registry of
  * public files under `public/`). A trailing slash makes a CSP source a
@@ -166,7 +173,7 @@ export function markupCsp(origin: string, id: string, assetOrigin?: string, opti
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
   const viewer = options.compiled ? ` ${self}${viewerPath(id)} ${self}${storyFragmentPath(id)}` : '';
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}/a/${id}/fetch${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data: ${MODULE_CDNS.join(' ')}`;
+  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}/a/${id}/fetch ${self}${runtimeCssPath(id)}${viewer} ${self}${GEOJSON_DIR_PATH} ${self}${BASEMAP_PATH} ${self}${ISLANDS_DIR_PATH} ${self}${FONTS_DIR_PATH} blob: data: ${MODULE_CDNS.join(' ')}`;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // The hosted library directory stays explicit for documents that import a

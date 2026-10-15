@@ -19,7 +19,7 @@
  * declared host is reached through the document's `/fetch` door. Each is re-checked with the publish grammar
  * (`parseCspOrigin`: an https origin, or a whole leading `*.` label); anything else is refused, never quoted into the header.
  */
-import { assetsPath, mutatePath, queryPath } from './markup-csp';
+import { assetsPath, mutatePath, queryPath, runtimeCssPath } from './markup-csp';
 import { STYLESHEET_PATH } from './shared-paths';
 import { FONT_FILES, FRAME_HOSTS, FONT_STYLES, MODULE_CDNS } from '@/lib/story-ui/document-sources';
 import { EMPTY_CSP_EXTENSIONS, parseCspOrigin, type CspExtensions } from '@/lib/document';
@@ -62,7 +62,7 @@ export function buildDocumentCsp({ self, app, id, assetOrigin = null, extensions
     frame: httpsOrigins(extensions.frame ?? []), media: httpsOrigins(extensions.media ?? []),
   };
   void ext.connect; // validated like the rest; reached through `/fetch`, never connected to
-  const appDoors = [queryPath(id), mutatePath(id), eventsPath(id), fetchPath(id), ...(asset.length ? [assetsPath(id)] : [])].map((path) => `${appOrigin}${path}`);
+  const appDoors = [queryPath(id), mutatePath(id), eventsPath(id), fetchPath(id), runtimeCssPath(id), ...(asset.length ? [assetsPath(id)] : [])].map((path) => `${appOrigin}${path}`);
   return [
     "default-src 'none'",
     join('script-src', "'self'", 'blob:', "'wasm-unsafe-eval'", MODULE_CDNS, asset, ext.script),

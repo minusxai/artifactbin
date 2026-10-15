@@ -9,7 +9,7 @@
  * export capture and the offline file all render through: no I/O, no database, no clock. This module's
  * whole job is building its input from a local file instead of an artifact row.
  */
-import {compilePage,loadCompilerBuild,assembleReaderPage,createModuleStore,createSpeculationRulesStore,loadSsrModule,bindModuleCode,ISLANDS_PATH,SPECULATION_RULES_HEADER,type CompileInput,type CompiledPage,type CompilerBuild,type PreparedStoryRuntime,DOCUMENT_UI_FONT_CSS,documentStyleSheets,type StoryIslandData,type ServedResults} from '../../../app/lib/cli-toolkit/host.server';
+import {compilePage,loadCompilerBuild,assembleReaderPage,type AssembleOverlay,createModuleStore,createSpeculationRulesStore,loadSsrModule,bindModuleCode,ISLANDS_PATH,SPECULATION_RULES_HEADER,type CompileInput,type CompiledPage,type CompilerBuild,type PreparedStoryRuntime,DOCUMENT_UI_FONT_CSS,documentStyleSheets,type StoryIslandData,type ServedResults} from '../../../app/lib/cli-toolkit/host.server';
 import type {Scalar} from '../../../contracts/src/index';
 
 export {ISLANDS_PATH};
@@ -102,6 +102,10 @@ interface AssembleDocumentInput {
  capture: boolean;
  /** Pre-rendered story HTML (`renderStoryHtml`'s), for a capture with baked rows. Defaults to the declared skeleton. */
  story?: string;
+ /** The document's Tailwind with the classes the baked rows brought compiled in (session.ts), in place of the prepared one. */
+ compiledCss?: string | null;
+ /** Where a document that fills classes at runtime asks for its sheet again (the session's `/css` door, IslandPageData.css). */
+ runtimeCss?: AssembleOverlay['css'] | null;
  values?: Record<string, Scalar>;
 }
 
@@ -149,7 +153,7 @@ export function assembleDocument(input: AssembleDocumentInput): {html: string; h
   capture: input.capture,
   css: '',
   sheets: [...documentStyleSheets({
-   compiledCss: input.prepared.compiledCss, chrome: !input.capture, bare: false, theme: input.prepared.theme,
+   compiledCss: input.compiledCss === undefined ? input.prepared.compiledCss : input.compiledCss, chrome: !input.capture, bare: false, theme: input.prepared.theme,
    docFonts: input.prepared.base.fonts, systemCss: input.prepared.base.systemCss ?? '', authorCss: input.prepared.authorCss,
   }), ...(input.capture ? [] : [{ attr: 'data-afbin-ui-fonts', css: DOCUMENT_UI_FONT_CSS }])],
   fontPreloads: input.prepared.fontPreloads ?? [],
@@ -164,6 +168,7 @@ export function assembleDocument(input: AssembleDocumentInput): {html: string; h
    // Capture keeps its query door too: session.ts's POST /query stays open in capture mode
    // (read-only otherwise), for a document whose rows a baked SSR render did not settle.
    doors: {queryUrl: `/query?file=${file}`, assetsUrl: `/image?file=${file}`},
+   ...(input.runtimeCss ? {css: input.runtimeCss} : {}),
   },
   build,
   head: null,

@@ -14,6 +14,6 @@ export { STYLESHEET_PATH } from './shared-paths';
 export { splitStoryCss, storyCssBase, type StoryCssBase } from './story-css-split';
 export { firstScreenFonts, fontPreloadTags } from './first-screen-fonts';
 export { inlineStoryCss, inlineStoryNodes } from './inline-css';
-export { appendCspExtensions, assetsPath, markupCsp, mutatePath, queryPath } from './markup-csp';
+export { appendCspExtensions, assetsPath, markupCsp, mutatePath, queryPath, runtimeCssPath } from './markup-csp';
 export { STORY_BASE_SHEETS, storyBaseCss, type StoryBaseCssRecipe } from './story-base-css';
 export { styleOverrides, type StyleOverride } from './style-overrides';

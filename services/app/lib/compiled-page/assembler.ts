@@ -182,6 +182,7 @@ function islandData(input: AssembleInput): IslandPageData {
     signedIn: overlay.signedIn,
     hold: [...(overlay.hold ?? [])],
     ...(overlay.sqliteWasm ? { sqliteWasm: overlay.sqliteWasm } : {}),
+    ...(overlay.css ? { css: overlay.css } : {}),
     mermaidImages: overlay.mermaidImages,
     readOnly: overlay.readOnly ?? null,
     // The version's author script rides as DATA (escaped by scriptJson): boot hands it to the page runtime,

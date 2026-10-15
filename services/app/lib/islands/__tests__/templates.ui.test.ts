@@ -12,6 +12,7 @@ import type { Component } from 'solid-js';
 import * as rt from '../rt';
 import * as templates from '../kit/templates';
 import { createDataflowStore } from '@/lib/page-store/store';
+import { watchClasses } from '../runtime-css';
 import { evaluateModule } from '@/lib/compiled-page/bundle.server';
 import type { CompiledDataflow } from '@/lib/dataflow';
 
@@ -24,6 +25,9 @@ const CRAFTED = { link: 'javascript:alert(1)', c: 'red;background:url(https://x.
 const CELLS = '<Helmet><Value name="tiles" type="table" value={[{"cheap_v": 3.5, "label": "Rust"}]} columns={[{"name":"cheap_v","type":"number"},{"name":"label","type":"string"}]} /></Helmet>'
   + '<p id="cell">Cheapest: {$tiles.cheap_v}</p><div id="labelled" title="{$tiles.label} costs {$tiles.cheap_v}">x</div>';
 
+const TONE = '<Helmet><Value name="tone" type="string" default="bg-fuchsia-600" /></Helmet>'
+  + '<p id="tone" className="p-2 {$tone}">Toned</p>';
+
 const compiled = new Map<string, Fixture>();
 const compile = async (key: string, source: string, values?: Record<string, unknown>) => {
   const { stdout } = await promisify(execFile)(path.join(ROOT, 'node_modules/.bin/tsx'),
@@ -32,7 +36,7 @@ const compile = async (key: string, source: string, values?: Record<string, unkn
   compiled.set(key, JSON.parse(stdout) as Fixture);
 };
 beforeAll(async () => {
-  await Promise.all([compile('crafted', SECURITY, CRAFTED), compile('cells', CELLS)]);
+  await Promise.all([compile('crafted', SECURITY, CRAFTED), compile('cells', CELLS), compile('tone', TONE)]);
 }, 120_000);
 
 async function hydrateFixture(fixture: Fixture, values: Record<string, unknown>) {
@@ -97,5 +101,31 @@ describe('a query cell', () => {
     expect(host.querySelector('#cell')!.textContent).toBe('Cheapest: 3.5');
     expect(host.querySelector('#labelled')!.getAttribute('title')).toBe('Rust costs 3.5');
     dispose?.(); runtime.dispose(); host.remove();
+  });
+});
+
+describe('a class a template fills (lib/islands/runtime-css)', () => {
+  it('is drawn on the server from the default, and a control that changes the value notes only the filled class', async () => {
+    const fixture = compiled.get('tone')!;
+    const doc = new DOMParser().parseFromString(fixture.html, 'text/html');
+    expect(doc.querySelector('#tone')!.getAttribute('class')).toBe('p-2 bg-fuchsia-600');
+    // The page's watch: the served sheet already has the default (`css.extras`), and the document names `p-2` itself.
+    const noted = vi.fn();
+    const watch = { known: new Set(['p-2', 'bg-fuchsia-600']), pending: new Set<string>(), noted };
+    watchClasses(watch);
+    const { host, tree, runtime } = await hydrateFixture(fixture, {});
+    const dispose = rt.hydrateIsland('d-', tree, runtime.context, host);
+    expect(noted).not.toHaveBeenCalled();
+    runtime.context.setValue('tone', 'bg-teal-700 md:w-64');
+    expect(host.querySelector('#tone')!.getAttribute('class')).toBe('p-2 bg-teal-700 md:w-64');
+    expect([...watch.pending].sort()).toEqual(['bg-teal-700', 'md:w-64']);
+    expect(noted).toHaveBeenCalled();
+    // A component's templated class (compiled with its recipe merged in): only the filled tokens are noted, never the recipe's.
+    watch.pending.clear();
+    expect(templates.tplClass('inline-flex rounded-md px-2 {$tone}', undefined, runtime.context)).toBe('inline-flex rounded-md px-2 bg-teal-700 md:w-64');
+    runtime.context.setValue('tone', 'bg-rose-600');
+    expect(templates.tplClass('inline-flex rounded-md px-2 {$tone}', undefined, runtime.context)).toBe('inline-flex rounded-md px-2 bg-rose-600');
+    expect([...watch.pending].sort()).toEqual(['bg-rose-600', 'bg-teal-700', 'md:w-64']);
+    watchClasses(null); dispose?.(); runtime.dispose(); host.remove();
   });
 });

@@ -16,7 +16,7 @@ import type {DocumentMetadata} from '../document';
 import {createServer} from 'node:http';
 import {readFile,mkdir,realpath} from 'node:fs/promises';
 import {join,relative} from 'node:path';
-import {type PreparedStoryRuntime,prepareStoryRuntime,compileStoryCss} from '../../../app/lib/cli-toolkit/host.server';
+import {type PreparedStoryRuntime,prepareStoryRuntime,compileStoryCss,compileStoryCssWithExtras,askedRuntimeClasses,renderedRuntimeClasses,runtimeCssPageData} from '../../../app/lib/cli-toolkit/host.server';
 import {State} from '../state';
 import {networkInterfaces} from 'node:os';
 import {randomUUID} from 'node:crypto';
@@ -211,6 +211,13 @@ export async function startPreview(options:{root:string;files:string[];home:stri
    let parsed:unknown;try{parsed=JSON.parse(raw);}catch{throw new Refusal(400,'Invalid query request');}
    return json(await runQuery(file,parsed as Record<string,unknown>));
   }
+  if(req.method==='GET'&&target.pathname==='/css'){
+   // The document's whole sheet with the classes its rows brought (lib/islands/runtime-css asks; lib/serving/runtime-css.server answers online).
+   const asked=askedRuntimeClasses(target);if(!asked)throw new Refusal(400,'Invalid classes');
+   const current=await read(file);
+   res.setHeader('Content-Type','text/css; charset=utf-8');res.setHeader('Cache-Control','no-store');
+   return res.end((await compileStoryCssWithExtras(current.body,asked))??'');
+  }
   if(req.method==='GET'&&(target.pathname==='/image'||/^\/a\/[A-Za-z0-9]{6,12}\/raw$/.test(target.pathname))){
    // The compiled Select/image kit hardcodes a row-sourced ref's own URL as `/a/<id>/raw`, production's
    // artifact-bytes route (lib/islands/kit/image.tsx) — never `/image?u=`, which only a document's own
@@ -294,7 +301,11 @@ export async function startPreview(options:{root:string;files:string[];home:stri
     if(Object.keys(ran.errors).length)failure=Object.values(ran.errors).join('; ');
     values=ran.values;story=await renderStoryHtml(compiled,{values:ran.values,results:{tables:ran.tables,errors:ran.errors}});
    }
-   const assembled=assembleDocument({compiled,prepared:current.prepared,colorMode:current.data.colorMode,file,capture:!!options.capture,story,values});
+   // Rows drawn here (a capture's) are styled in the first byte; the reader asks its `/css` door for the rest.
+   const extras=renderedRuntimeClasses(current.body,story??compiled.html);
+   const compiledCss=extras.length?await compileStoryCssWithExtras(current.body,extras):undefined;
+   const runtimeCss=runtimeCssPageData(current.body,`/css?file=${encodeURIComponent(file)}`,extras);
+   const assembled=assembleDocument({compiled,prepared:current.prepared,colorMode:current.data.colorMode,file,capture:!!options.capture,story,values,compiledCss,runtimeCss});
    let html=assembled.html;
    // A capture is the document alone, as /a/:id/raw serves it. The editor's chrome sheet is the app's own
    // globals, whose `body` rules (a mono family, 14px) would restyle every element the design's root family

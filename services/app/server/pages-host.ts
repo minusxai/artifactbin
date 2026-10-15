@@ -46,7 +46,7 @@ import { GET as rawGet, HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { compressDynamic } from './content-encoding';
 
 /** A document's own sub-paths: the doors its page calls, and nothing else of the app. */
-const DOORS = ['query', 'mutate', 'events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch'] as const;
+const DOORS = ['query', 'mutate', 'events', 'events/frame', 'story', 'viewer', 'assets', 'resolve', 'fetch', 'css'] as const;
 /** Public, content-addressed (or static) bytes any origin may load: the runtime, fonts, boundaries, images. */
 const STATIC = /^\/(?:islands|fonts|geojson|libraries|basemap|story|assets)\/|^\/favicon\.ico$/;
 

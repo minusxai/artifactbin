@@ -25,6 +25,7 @@ import type { OutlineEntry } from '@/lib/reader-chrome';
 import type { DrawnChart, ServedResults } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
 import type { AgentDiscovery } from './agent-discovery';
+import type { IslandPageData } from '@/lib/islands';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * How a response names its reader path
@@ -370,6 +371,8 @@ export interface AssembleOverlay {
   hold?: string[];
   /** The page's SQLite engine wasm (IslandPageData.sqliteWasm), when `hold` is not empty. */
   sqliteWasm?: string | null;
+  /** Where a version that fills classes at runtime asks for its sheet again (IslandPageData.css); absent: it never asks. */
+  css?: IslandPageData['css'];
 }
 
 export interface AssembleInput {
