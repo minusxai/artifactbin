@@ -376,7 +376,9 @@ export async function exportImageResponse(
     }
   }
   if (imageOverview) return json({ error: 'image_unavailable' }, 404);
-  const selection = capture === 'card' || capture === 'preview' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
+  // A card follows the link's values like the whole page does: a shared `?$region=EU` unfurls showing EU (its key
+  // carries the canonical selection). Only the editor's framing overview is of the document as authored.
+  const selection = capture === 'preview' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
 
   const version = q.version ?? null;
   const options:ImageOptions = {

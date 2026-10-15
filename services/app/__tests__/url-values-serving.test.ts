@@ -166,11 +166,11 @@ describe('GET /a/<id>/export with a selection', () => {
     expect(shot(1)).toContain('chrome=0');
   });
 
-  it('the og CARD keeps the defaults — an unfurl is of the document, not of one reader\'s view', async () => {
+  it('the og CARD shows the link\'s selection — a shared ?$region=NA unfurls as NA, the view its sharer chose', async () => {
     const { id, token } = await published();
     const res = await exportRoute(request(`/a/${id}/export?mode=card&$region=NA`, { token }), params(id));
     expect(res.status).toBe(200);
-    expect(shot(0)).not.toContain('$region');
+    expect(shot(0)).toContain('$region=NA');
   });
 });
 

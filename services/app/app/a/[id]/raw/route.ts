@@ -39,7 +39,7 @@ import { renderedRuntimeClasses, runtimeCssData } from '@/lib/serving/runtime-cs
 import { declaresMutations, displayTitle } from '@/lib/document';
 import { appendCspExtensions, assetsPath, buildDocumentCsp, documentStyleSheets, markupCsp, mutatePath, queryPath } from '@/lib/page-styles';
 import { pagesRequestOf } from '@/lib/http/pages-origin';
-import { readUrlValues } from '@/lib/dataflow';
+import { cardSelectionQuery, readUrlValues } from '@/lib/dataflow';
 import { CARD_RENDER_GENERATION } from '@artifactbin/contracts';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
@@ -422,7 +422,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
             ? {
               description: row.description,
               canonical,
-              social: { title: displayTitle(row), description: row.description, image: `${domain ? PUBLIC_BASE_URL.replace(/\/+$/, '') : base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}` },
+              social: { title: displayTitle(row), description: row.description, image: `${domain ? PUBLIC_BASE_URL.replace(/\/+$/, '') : base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}${cardSelectionQuery(new URL(request.url).search, flow)}` },
               help: reader ? agentDiscovery(base) : null,
             }
             : null,

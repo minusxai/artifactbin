@@ -44,6 +44,7 @@ import {
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
 import {ARTIFACT_FORMATS, type ArtifactFormat, canAnnotate, canEdit, CARD_RENDER_GENERATION, isStartPlaceholder} from '@artifactbin/contracts';
 import {getGroupById} from '@/lib/groups';
+import { cardSelectionQuery } from '@/lib/dataflow';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
@@ -374,7 +375,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     head: {
       title: prepared.page.title,
       description: row.description,
-      image: `${baseUrl(request)}/a/${artifact.id}/export?mode=card&r=${CARD_RENDER_GENERATION}`,
+      // `v`: a new card is a new URL. Chat apps cache an unfurl's image by its URL, so a card that changed (a new share
+      // image, an edit) under the same URL kept showing the old one; the raw door's head already carried it.
+      image: `${baseUrl(request)}/a/${artifact.id}/export?mode=card&v=${at?.version ?? artifact.version}&r=${CARD_RENDER_GENERATION}${cardSelectionQuery(new URL(request.url).search, prepared.page.declared?.flow ?? null)}`,
     },
   } : null;
   const surface = {
