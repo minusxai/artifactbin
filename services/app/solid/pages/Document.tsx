@@ -31,7 +31,6 @@ import { DocumentSharing } from '../document/DocumentSharing';
 import { createFramedStory, fetchFrameNodes, framedDocumentFor, onFirstPressInto, type FramedStory } from '../document/create-framed-story';
 import { answerFrameNavigation } from '../document/frame-navigation';
 import { createEditLifecycle, createEditorPartLoader } from '../document/create-edit-lifecycle';
-import { moveInto } from '@/lib/islands/island-controller';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createWideEditViewport, editPanelWidth, readEditPanelCollapsed } from '../editor/create-edit-panel';
 import { EditEntryChrome } from '../editor/EditEntryChrome';
@@ -176,7 +175,8 @@ export function DocumentPage(): JSX.Element {
     const hash = window.location.hash;
     if (hash && hash !== '#edit') postToFrame({ type: STORY_FRAME_HASH_MESSAGE, hash });
   };
-  let host!: HTMLDivElement;
+  /** The viewport: the served frame's own host, where the server drew it (see the adoption below). */
+  const [host, setHost] = createSignal<HTMLElement>();
 
   const chooseMode = (next: 'light' | 'dark') => {
     // One reader choice, two surfaces: the app shell (its stored preference) and the document in its frame.
@@ -264,8 +264,9 @@ export function DocumentPage(): JSX.Element {
   // edit mode's toolbar is drawn OVER the frame, and the document reserves that height itself (`setTopInset`, below),
   // scrolling by it in the same task, so entering or leaving edit mode moves nothing the reader sees.
   createEffect(() => {
-    if (!host) return;
-    Object.assign(host.style, {
+    const viewport = host();
+    if (!viewport) return;
+    Object.assign(viewport.style, {
       position: 'fixed', top: `${APP_BAR_H}px`, left: '0px', right: railInset() ? `${railInset()}px` : '0px', bottom: '0px',
       display: 'flex', flexDirection: 'column', background: DOCUMENT_GROUND[documentMode()], padding: '0px', minHeight: '0px',
     });
@@ -331,13 +332,16 @@ export function DocumentPage(): JSX.Element {
     const served = adoptServedFrame();
     const framed = served ? framedDocumentFor(served, framedOrigin) : null;
     if (!served || !framed) return;
-    // The served frame keeps loading where it is: moved, never re-created (moveBefore where the browser has it).
+    // The served frame is never moved: it stays where the server drew it, a child of <body>. A frame taken out of the
+    // document and put back is a NEW frame that loads its first URL again — every browser without `moveBefore` (Safari,
+    // Firefox) does that — and that URL's one-time ticket was spent by the first load. So the page lays out around the
+    // frame instead: the frame's host is the viewport (the effect above), and the notices' slot is drawn in it, above the frame.
     const slot = document.createElement('div');
     slot.setAttribute('data-mx-frame-slot', '');
     slot.style.flex = '0 0 auto';
-    host.appendChild(slot);
-    moveInto(host, served);
-    Object.assign(served.style, { position: 'relative', inset: 'auto', top: 'auto', flex: '1 1 auto', minHeight: '0px' });
+    served.insertBefore(slot, served.firstChild);
+    served.setAttribute('aria-label', 'Artifact viewport');
+    setHost(served);
     setFrameSlot(slot);
     setDocumentFrame(framed.frame);
     // The tree the frame's controller classifies comments, selections and edits against is its own request (not in the
@@ -454,7 +458,6 @@ export function DocumentPage(): JSX.Element {
         onEdit={() => { close(); enterEdit(); }} onEditIntent={intendEdit}
         onShare={() => { close(); setSharingOpen(true); }}
         onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />} />
-    <div ref={host} aria-label="Artifact viewport" />
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
       <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc' && (!editing() || !editorCodeOpen())}>

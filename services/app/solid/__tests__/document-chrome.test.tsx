@@ -136,14 +136,42 @@ it.each([['owner', 'app'], ['commenter', 'doc']])('omits the small agent button 
   expect(trusted().queryByRole('button', { name: 'Copy for agent' })).toBeNull();
 });
 
-it('adopts the served frame into the page instead of rendering the document', () => {
+it('adopts the served frame where the server drew it instead of rendering the document: its host is the viewport', () => {
   const { host, frame } = mount();
   const viewport = screen.getByLabelText('Artifact viewport');
-  expect(viewport).toContainElement(host);
-  expect(host).toContainElement(frame);
-  expect(viewport.querySelector('[data-mx-frame-slot]')).not.toBeNull();
+  expect(viewport).toBe(host);
+  expect(host.parentElement).toBe(document.body);
+  expect(frame.parentElement).toBe(host);
+  // The notices' row is drawn above the frame, inside its host.
+  expect(host.firstElementChild).toBe(viewport.querySelector('[data-mx-frame-slot]'));
+  expect(host.lastElementChild).toBe(frame);
   expect(viewport.style.position).toBe('fixed');
   expect(viewport.style.top).toBe('44px');
+});
+
+it('never takes the served frame out of the document: a moved iframe loads its spent first URL again (WebKit, Firefox)', async () => {
+  // No `moveBefore` here, as in Safari and Firefox: any removal and re-insertion of the frame (or its host) is a reload.
+  expect('moveBefore' in Element.prototype).toBe(false);
+  const moved: Node[] = [];
+  const observer = new MutationObserver((records) => {
+    for (const record of records) for (const node of record.removedNodes) moved.push(node);
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  try {
+    mockRole = 'viewer';
+    const { host, frame } = mount();
+    // What the page does around its frame: a notice takes its row above the frame, and is dismissed.
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+    await settle();
+    expect(host.querySelector('[data-mx-frame-slot]')!.childElementCount).toBe(1);
+    fireEvent.click(within(host.querySelector<HTMLElement>('[data-mx-frame-slot] [data-trusted-ui]')!.shadowRoot!.querySelector<HTMLElement>('[data-trusted-ui-root]')!).getByRole('button', { name: 'Dismiss comment access notice' }));
+    await settle();
+    expect(host.querySelector('[data-mx-frame-slot]')!.childElementCount).toBe(0);
+    observer.takeRecords().forEach((record) => record.removedNodes.forEach((node) => moved.push(node)));
+    expect(moved.filter((node) => node === frame || node === host || node.contains(frame))).toEqual([]);
+    expect(frame.parentElement).toBe(host);
+    expect(host.parentElement).toBe(document.body);
+  } finally { observer.disconnect(); }
 });
 
 it('opens the artifact controls and the menu from the app bar', async () => {
