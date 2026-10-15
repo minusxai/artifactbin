@@ -5,22 +5,48 @@ import {createHmac} from 'node:crypto';
 import {lstat,mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+/**
+ * Preloaded into each installed CLI process: one JSON line per event, by pid. `boot` is when Node reached the preload
+ * (process start-up), `exit` when the process ended, and each PowerShell launch records its start, its duration and
+ * the directories its script was given, all in milliseconds since that process started.
+ */
 const SPAWN_COUNTER=`const cp=require('node:child_process'),{promisify}=require('node:util'),{appendFileSync}=require('node:fs'),{syncBuiltinESMExports}=require('node:module');
-const note=file=>{if(/powershell/i.test(String(file)))appendFileSync(process.env.AFBIN_SPAWN_LOG,String(file)+'\\n');};
+const log=value=>appendFileSync(process.env.AFBIN_SPAWN_LOG,JSON.stringify({pid:process.pid,...value})+'\\n');
+log({event:'boot',at:performance.now()});process.on('exit',()=>log({event:'exit',at:performance.now()}));
+const launch=(file,args)=>{
+ if(!/powershell/i.test(String(file)))return null;
+ const at=performance.now();let paths=null,bytes=0;
+ try{const index=Array.isArray(args)?args.indexOf('-EncodedCommand'):-1;if(index>=0){const script=Buffer.from(String(args[index+1]),'base64').toString('utf16le');bytes=script.length;
+  const list=script.match(/\\$paths=@\\(((?:'(?:[^']|'')*',?)*)\\)/);if(list)paths=[...list[1].matchAll(/'((?:[^']|'')*)'/g)].map(match=>match[1].replace(/''/g,"'"));}}catch{}
+ let ended=false;return ()=>{if(ended)return;ended=true;log({event:'powershell',at,ms:performance.now()-at,paths,bytes});};
+};
 for(const name of ['execFile','execFileSync','spawn','spawnSync','exec','execSync']){const original=cp[name];if(typeof original!=='function')continue;
- const wrapped=function(file,...rest){note(file);return original.call(this,file,...rest);};
- if(original[promisify.custom])wrapped[promisify.custom]=function(file,...rest){note(file);return original[promisify.custom].call(this,file,...rest);};
+ const wrapped=function(file,...rest){const done=launch(file,rest[0]);const result=original.call(this,file,...rest);if(done){if(result&&typeof result.once==='function')result.once('exit',done);else done();}return result;};
+ if(original[promisify.custom])wrapped[promisify.custom]=function(file,...rest){const done=launch(file,rest[0]);const promise=original[promisify.custom].call(this,file,...rest);if(done)promise.then(done,done);return promise;};
  cp[name]=wrapped;}
 syncBuiltinESMExports();
 `;
-/** `env(label)` adds the preload and a per-label log to a child's environment; `count(label)` reads its launches. */
+/**
+ * `env(label)` adds the preload and a per-label log to a child's environment; `count(label)` reads its PowerShell
+ * launches; `timeline(label)` splits the first process's life into start-up, each launch, and the rest.
+ */
 export async function powershellLaunchCounter(){
  const directory=await mkdtemp(join(tmpdir(),'afbin-spawns-')),counter=join(directory,'count.cjs');await writeFile(counter,SPAWN_COUNTER);
  const log=label=>join(directory,`${label}.log`);
+ const events=async label=>(await readFile(log(label),'utf8').catch(()=>'')).split('\n').filter(Boolean).map(line=>JSON.parse(line));
+ const round=value=>value===undefined?null:Math.round(value);
  return {
   // NODE_OPTIONS reads backslashes as escapes, so the preload is named with forward slashes.
   env:label=>({NODE_OPTIONS:`${process.env.NODE_OPTIONS??''} --require "${counter.replaceAll('\\','/')}"`.trim(),AFBIN_SPAWN_LOG:log(label)}),
-  count:async label=>(await readFile(log(label),'utf8').catch(()=>'')).split('\n').filter(Boolean).length,
+  count:async label=>(await events(label)).filter(event=>event.event==='powershell').length,
+  timeline:async label=>{
+   const all=await events(label),pid=all.find(event=>event.event==='boot')?.pid,own=all.filter(event=>event.pid===pid);
+   const boot=own.find(event=>event.event==='boot')?.at,exit=own.find(event=>event.event==='exit')?.at,launches=own.filter(event=>event.event==='powershell');
+   const launched=launches.reduce((sum,event)=>sum+event.ms,0);
+   return {startup_ms:round(boot),before_launch_ms:launches.length?round(launches[0].at-boot):null,launch_ms:launches.map(event=>round(event.ms)),
+    rest_ms:exit===undefined||boot===undefined?null:round(exit-boot-launched),process_ms:round(exit),
+    launches:launches.map(event=>({paths:event.paths?.length??null,script_chars:event.bytes,directories:event.paths}))};
+  },
   close:()=>rm(directory,{recursive:true,force:true}),
  };
 }

@@ -34,7 +34,7 @@ async function windowsPrivateState(cwd,home,args){
  const launches=await powershellLaunchCounter();
  const run=async(label,args)=>{
   const started=performance.now(),output=JSON.parse(await command(cwd,home,args,180000,launches.env(label)));
-  return {output,ms:Math.round(performance.now()-started),powershell:await launches.count(label)};
+  return {output,ms:Math.round(performance.now()-started),powershell:await launches.count(label),timeline:await launches.timeline(label)};
  };
  // The same command again: it walks the same private directories, now warm, and keeps the same ids.
  const fresh=await run('fresh',args),next=await run('next',args);
@@ -45,7 +45,8 @@ async function windowsPrivateState(cwd,home,args){
  // (localWorkspaceState and its State) and the store's lock directory (withLocalLock). It never opens the home store.
  const store=join(cwd,'.artifactbin'),directories=[store,join(store,'locks')];
  const profile=await assertWindowsPrivate(home,directories);
- console.log(JSON.stringify({windows_private_state:{fresh_ms:fresh.ms,fresh_powershell:fresh.powershell,next_ms:next.ms,next_powershell:next.powershell,protected:directories.length+1,local_app_data:profile}}));
+ console.log(JSON.stringify({windows_private_state:{fresh_ms:fresh.ms,fresh_powershell:fresh.powershell,next_ms:next.ms,next_powershell:next.powershell,protected:directories.length+1,local_app_data:profile,
+  fresh_timeline:fresh.timeline,next_timeline:next.timeline}}));
  await launches.close();
  return fresh.output;
 }
