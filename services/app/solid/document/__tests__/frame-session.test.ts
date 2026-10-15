@@ -68,6 +68,16 @@ it('a reloaded document whose hello came before its load event is left alone', a
   expect(remint).not.toHaveBeenCalled();
 });
 
+it('a slow document whose hello came long before its load event (images still arriving) is left alone', async () => {
+  hello(); await vi.advanceTimersByTimeAsync(10_000); load(); // the served document: hello at 0, load at 10 s
+  await vi.advanceTimersByTimeAsync(10_000);
+  hello(); // the frame reloads: the new document's door opens at once…
+  await vi.advanceTimersByTimeAsync(10_000);
+  load(); // …and its load event waits 10 s for its images
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(remint, 'a hello after the previous load is this document\'s').not.toHaveBeenCalled();
+});
+
 it('never loops: a document that stays unreachable is re-minted at most twice in five minutes, and a refused mint changes nothing', async () => {
   hello(); load();
   for (let i = 0; i < 5; i++) { load(); await vi.advanceTimersByTimeAsync(3_000); await flush(); }

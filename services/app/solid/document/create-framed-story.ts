@@ -44,7 +44,7 @@ export async function freshFrameSrc(id: string, search = typeof window === 'unde
   } catch { return null; }
 }
 
-/** How long after its load a reloaded document has to say `hello` (its door opens before the load event). */
+/** Grace after a reloaded document's load event for its first message (its door normally says `hello` before it). */
 const FRAME_HELLO_MS = 3_000;
 /** At most this many fresh tickets per window: a document that stays unreachable is left as it is. */
 const FRAME_REMINTS = 2;
@@ -84,6 +84,8 @@ export function keepFrameSession(options: FrameSessionOptions): () => void {
   let spoke = false;
   let lastHello = -Infinity;
   let lastMessage = -Infinity;
+  /** The frame's last load event: a hello after it belongs to the document that loaded next. */
+  let previousLoad = -Infinity;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let reminting = false;
   let stopped = false;
@@ -110,10 +112,14 @@ export function keepFrameSession(options: FrameSessionOptions): () => void {
   const onLoad = () => {
     clearTimeout(timer);
     if (readable(frame)) { void recover(); return; }
-    if (!spoke) return;
     const loadedAt = Date.now();
+    const before = previousLoad;
+    previousLoad = loadedAt;
+    if (!spoke) return;
+    // The new document's door says hello as it opens — before its load event, which waits for every image — or, at
+    // the latest, it speaks within the grace period after it.
     timer = setTimeout(() => {
-      if (lastHello >= loadedAt - FRAME_HELLO_MS || lastMessage > loadedAt) return;
+      if (lastHello > before || lastMessage > loadedAt) return;
       void recover();
     }, FRAME_HELLO_MS);
   };

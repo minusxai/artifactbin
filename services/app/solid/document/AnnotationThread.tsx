@@ -31,6 +31,7 @@ import { CommentFoldingBody } from './CommentFoldingBody';
 import { CommentSubmitHint } from './CommentMarkdown';
 import { CommentMarkdownField } from './LazyCommentField';
 import { persistedText, readDraft, writeDraft } from '../lib/draft-store';
+import { isChunkLoadError, reloadForNewBuild } from '../lib/app-build';
 import { CommentScreenshot } from './CommentScreenshot';
 import { createCommentImageDraft, type CommentImageAttachment } from './CommentImageAttach';
 
@@ -267,8 +268,9 @@ export function AnnotationThread(props: AnnotationThreadProps): JSX.Element {
                     </Tooltip>
                   );
                   // A chunk that cannot be fetched (the local preview restarted while it loaded, a dropped connection) leaves the
-                  // trigger standing, unavailable until the page loads again, instead of an uncaught error.
-                  return <ErrorBoundary fallback={trigger({ disabled: true })}><Suspense fallback={trigger()}>
+                  // trigger standing, unavailable until the page loads again, instead of an uncaught error. One a deploy removed
+                  // loads the new build (solid/lib/app-build; the thread's drafts are kept).
+                  return <ErrorBoundary fallback={(error) => { if (isChunkLoadError(error)) reloadForNewBuild(); return trigger({ disabled: true }); }}><Suspense fallback={trigger()}>
                     <Menu label={index() === 0 ? 'Annotation action menu' : 'Comment action menu'}
                       items={[
                         ...(canEdit(c()) ? [{ label: 'Edit comment', text: 'edit', icon: () => <Pencil size={12} strokeWidth={1.75} />, disabled: props.busy || saving(), onSelect: () => startEdit(c()) }] : []),
