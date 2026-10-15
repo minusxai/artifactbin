@@ -55,3 +55,24 @@ export async function* watchComments(options:CommentWatchOptions):AsyncGenerator
   cursor=page.next_cursor;immediate=page.has_more;
  }
 }
+
+/** One row of a comment feed, as either producer (hosted SQL, the local workspace store) holds it. Positions share one sequence. */
+export interface CommentFeedRow {
+ id:string;rootId:string|null;authorKind:string;label:string|null;userId:string|null;body:string;createdAt:string;editedAt:string|null;
+ /** Where the comment was created, and where it now sits: its creation, or a person's latest edit. */
+ seq:bigint;key:bigint;
+ /** The comment's author is the watcher's own user. */
+ you:boolean;
+}
+/**
+ * THE ONE MAPPING from a feed row to its event, for a reader at position `from`: a comment created past it is the plain
+ * new-comment event with its current words; one created before it and since edited by a person is an edit event with its
+ * own ID. Agent comments are never events. Both producers call this; the shape cannot drift between them.
+ */
+export function commentChangeEvent(row:CommentFeedRow,artifactId:string,from:bigint):CommentChangeEvent|null{
+ if(row.authorKind!=='human')return null;
+ const created=row.seq>from;
+ return {type:'artifactbin.comment',event_id:created?row.id:`${row.id}:${row.key}`,artifact_id:artifactId,annotation_id:row.rootId??row.id,comment_id:row.id,
+  author:{kind:'human',label:row.label,user_id:row.userId,you:row.you},body:row.body,created_at:row.createdAt,
+  ...(created?{}:{change:'edited' as const,edited_at:row.editedAt??row.createdAt})};
+}

@@ -14,6 +14,7 @@ import type { AccessActor } from '@/lib/accounts';
 import { commentMonitorScope } from '@/lib/artifacts';
 import { getDb } from '@/lib/platform/db';
 import { subscribeToAnnotations, TooManyLiveChannels } from '@/lib/publish/realtime/live';
+import { commentChangeEvent } from '@artifactbin/utils/comment-watch';
 
 export class InvalidCommentCursor extends Error {}
 export class CommentWaitCapacityError extends Error {}
@@ -94,11 +95,12 @@ export async function readCommentChangesFor(actor: AccessActor, id: string, opti
        FROM annotations WHERE artifact_id=$1 AND (seq>$2::bigint OR change_seq>$2::bigint) ORDER BY ${KEY_SQL} LIMIT $3`, [id, position, options.limit + 1]);
     const scanned = result.rows.slice(0, options.limit);
     if (scanned.length) position = scanned[scanned.length - 1]!.key;
-    const events: CommentChangeEvent[] = scanned.filter(row => row.author_kind === 'human' && !row.deleted_at).map(row => ({
-      type: 'artifactbin.comment', event_id: BigInt(row.seq) > from ? row.id : `${row.id}:${row.key}`, artifact_id: id, annotation_id: row.root_id ?? row.id, comment_id: row.id,
-      author: {kind: 'human', label: row.author_label, user_id: row.author_user_id}, body: row.body, created_at: row.created_at,
-      ...(BigInt(row.seq) > from ? {} : {change: 'edited' as const, edited_at: row.edited_at!}),
-    }));
+    const events = scanned.filter(row => !row.deleted_at).flatMap(row => commentChangeEvent({
+      id: row.id, rootId: row.root_id, authorKind: row.author_kind, label: row.author_label, userId: row.author_user_id, body: row.body,
+      createdAt: row.created_at, editedAt: row.edited_at, seq: BigInt(row.seq), key: BigInt(row.key),
+      // Viewer-relative: is this the watching account's own user? A comment from anyone else is a third party's.
+      you: !!actor.userId && row.author_user_id === actor.userId,
+    }, id, from) ?? []);
     checkAbort();
     return await authorized() ? page(events, result.rows.length > options.limit) : null;
   };

@@ -42,6 +42,7 @@ export type StateKind =
   | 'server-identity'   // key: selected origin; value: {canonical, aliases, checkedAt} (server-identity.ts)
   | 'preview-thread'    // key: thread id; value: local production annotation wire
   | 'preview-thread-request' // key: file and idempotency key; value: thread id
+  | 'preview-comment-seq' // key: 'current'; value: the last local comment feed position handed out (local-comment-watch.ts)
   | 'preview-comment'   // key: comment id; value: selected-file/node attribution and text
   | 'archive';           // key: <kind>/<id>  value: anything kept for forensics, never read by commands
 

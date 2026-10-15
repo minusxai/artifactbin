@@ -50,7 +50,7 @@ One row per command `dispatch.ts` routes. Handler modules are listed in the orde
 | `update` | `update.ts`, `update-progress.ts`, `skill-install.ts` | `updateCli` |
 | `upload` | `upload.ts` | `uploadAttachment` |
 | `validate` | `validation.ts`, `local-verification.ts`, `sync.ts`, `account-workspace.ts` | local `validateFiles` and `verifyLocalDocuments`; `--remote` a dry-run push |
-| `watch` | `watch.ts` | `watchCommand`: new comments as NDJSON until cancelled |
+| `watch` | `local-comment-watch.ts`, `watch.ts` | a local file first (`localWatchCommand`, offline), then `watchCommand`: new comments as NDJSON until cancelled |
 | `workspace` | `workspace-rebind.ts` | `rebindWorkspace` |
 
 ## Import groups
@@ -117,6 +117,7 @@ What `dispatch.ts` calls to do a command's work.
 | `markdown.ts` | One-time Markdown to JSX conversion on push. |
 | `local-html-import.ts` | Import an exported HTML file as data. |
 | `local-comments-command.ts` | `comment` over the portable annotation store. |
+| `local-comment-watch.ts` | `watch <file>`: the comment changes feed over the portable annotation store, offline. |
 | `local-history.ts` | Portable local versions. |
 | `local-query.ts` | `query` against local engines. |
 | `local-document-query.ts` | Run a local document's declared query. |

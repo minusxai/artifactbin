@@ -139,3 +139,28 @@ it('allocates an edit\'s feed position only after locking the artifact', async (
   expect(lock).toBeGreaterThanOrEqual(0);
   expect(lock).toBeLessThan(allocate);
 });
+
+it('says which comments are from the watching account\'s own user: author.you', async () => {
+  const f = await fixture();
+  const { createUser, claimToken } = await import('@/lib/accounts');
+  const { updateSharingFor } = await import('@/lib/artifacts');
+  const { identityForUser } = await import('@/lib/accounts');
+  const colleague = await createUser({ email: 'mxmx_test_feed_colleague@example.com' });
+  const colleagueToken = await mintAccountToken('feed-colleague', colleague.id); await claimToken(colleague.id, colleagueToken.token);
+  await updateSharingFor(identityForUser(f.t.userId!, f.t.id), f.doc.id, { shares: [{ email: colleague.email!, role: 'commenter' }] });
+  const cursor = await f.now();
+  const mine = await f.comment('From the owner');
+  const theirs = await createComment(request(`/api/my/artifacts/${f.doc.id}/annotations`, { method: 'POST', actor: { credential: 'session', userId: colleague.id, email: colleague.email!, emailVerified: true }, json: { node_id: 'intro', body: 'From a colleague' } }), params({ id: f.doc.id, annId: '' }));
+  expect(theirs.status).toBe(201);
+  const page = await f.read(cursor);
+  expect(page.events.map((e) => [e.body, e.author.you])).toEqual([['From the owner', true], ['From a colleague', false]]);
+  expect(page.events[0]!.comment_id).toBe(mine.id);
+  // The colleague watching the same document sees it the other way round.
+  const theirView = await changes(request(`/api/artifacts/${f.doc.id}/annotations/changes?after=${encodeURIComponent(cursor)}&wait=0`, { token: colleagueToken.token }), params({ id: f.doc.id, annId: '' }));
+  expect(theirView.status).toBe(400); // a checkpoint is the account's own; the colleague starts from its own baseline
+  const base = await changes(request(`/api/artifacts/${f.doc.id}/annotations/changes?after=now&wait=0`, { token: colleagueToken.token }), params({ id: f.doc.id, annId: '' }));
+  const colleagueCursor = (await base.json()).next_cursor as string;
+  await f.edit(mine.id, 'From the owner, edited');
+  const seen = await (await changes(request(`/api/artifacts/${f.doc.id}/annotations/changes?after=${encodeURIComponent(colleagueCursor)}&wait=0`, { token: colleagueToken.token }), params({ id: f.doc.id, annId: '' }))).json() as CommentChangesPage;
+  expect(seen.events.map((e) => [e.body, e.change, e.author.you])).toEqual([['From the owner, edited', 'edited', false]]);
+});

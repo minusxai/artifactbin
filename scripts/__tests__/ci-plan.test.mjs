@@ -329,6 +329,36 @@ describe('GitHub CI adapter', () => {
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
+  it('a PR that changes CLI source without a bump is refused even when main released after the PR opened (#666)', () => {
+    // GitHub runs a pull_request on the MERGE commit of the head into today's main, while the event's base.sha
+    // can still name the main the PR was opened on. Comparing those two read main's own release as this PR's.
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-stale-base-'));
+    try {
+      const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.name', 'CI fixture');
+      git('config', 'user.email', 'mxmx_test_ci@example.com');
+      mkdirSync(path.join(cwd, 'services/cli/src'), { recursive: true });
+      const pkg = (version) => writeFileSync(path.join(cwd, 'services/cli/package.json'), JSON.stringify({ name: 'afbin', version }));
+      pkg('0.5.42'); git('add', '.'); git('commit', '-q', '-m', 'base');
+      const staleBase = git('rev-parse', 'HEAD');
+      git('checkout', '-q', '-b', 'feature');
+      writeFileSync(path.join(cwd, 'services/cli/src/watch.ts'), 'change'); git('add', '.'); git('commit', '-q', '-m', 'source only');
+      git('checkout', '-q', 'main');
+      pkg('0.5.43'); git('add', '.'); git('commit', '-q', '-m', 'another PR released');
+      git('merge', '-q', '--no-ff', '-m', 'merge', 'feature');
+      const merge = git('rev-parse', 'HEAD');
+      const output = path.join(cwd, 'outputs');
+      execFileSync(process.execPath, [script, 'plan'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, CI__EVENT: 'pull_request', CI__BASE_SHA: staleBase, CI__HEAD_SHA: merge, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: '' } });
+      const outputs = readFileSync(output, 'utf8');
+      expect(outputs).toContain('cli-bump=true\n');
+      // Not a release: main's own release is not this PR's, and only the PR's own path is its change.
+      expect(outputs).toContain('reference-compatibility=false\n');
+      expect(JSON.parse(outputs.split('\n').find((line) => line.startsWith('plan=')).slice(5))).toMatchObject({ cliRelease: false, full: false });
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+
   /** A repository whose release files carry one version, bumped by `move`. */
   const releaseFixture = (cwd, version) => {
     mkdirSync(path.join(cwd, 'services/cli/src'), { recursive: true });
