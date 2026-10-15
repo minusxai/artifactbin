@@ -6,7 +6,8 @@
  */
 import dns from 'node:dns';
 import http from 'node:http';
-import { isIP, type AddressInfo } from 'node:net';
+import { isIP } from 'node:net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loopbackLookup, useLoopbackLookup } from '../loopback-lookup';
 
@@ -64,18 +65,17 @@ describe('loopbackLookup', () => {
 
 describe('useLoopbackLookup', () => {
   const original = dns.lookup;
-  let server: http.Server;
+  let server: RunningServer;
   let port = 0;
   beforeEach(async () => {
     dns.lookup = offline.lookup;
     offline.asked.length = 0;
-    server = http.createServer((request, response) => response.end(`hello ${request.headers.host}`));
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    port = (server.address() as AddressInfo).port;
+    server = await withHttpServer((request, response) => response.end(`hello ${request.headers.host}`));
+    port = server.port;
   });
   afterEach(async () => {
     dns.lookup = original;
-    await new Promise((resolve) => server.close(resolve));
+    await server.close();
   });
 
   it('without it, an offline resolver leaves fetch unable to reach app.lvh.me', async () => {

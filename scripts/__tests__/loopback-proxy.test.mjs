@@ -7,6 +7,7 @@ import dns from 'node:dns';
 import http from 'node:http';
 import net from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { withHttpServer } from '@artifactbin/test-support/net';
 import { startLoopbackProxy } from '../gates/lib/loopback-proxy.mjs';
 
 const asked = [];
@@ -37,7 +38,7 @@ describe('startLoopbackProxy', () => {
   beforeEach(async () => {
     dns.lookup = offline;
     asked.length = 0;
-    origin = http.createServer((request, response) => {
+    origin = await withHttpServer((request, response) => {
       if (request.url === '/stream') {
         response.writeHead(200, { 'content-type': 'text/event-stream' });
         response.write('data: first\n\n');
@@ -46,14 +47,12 @@ describe('startLoopbackProxy', () => {
       response.setHeader('set-cookie', 'afbin_pages=1; Path=/; HttpOnly; SameSite=Lax');
       response.end(JSON.stringify({ host: request.headers.host, url: request.url, cookie: request.headers.cookie ?? null }));
     });
-    await new Promise((resolve) => origin.listen(0, '127.0.0.1', resolve));
-    port = origin.address().port;
+    port = origin.port;
     proxy = await startLoopbackProxy();
   });
   afterEach(async () => {
     dns.lookup = original;
-    origin.closeAllConnections();
-    await new Promise((resolve) => origin.close(resolve));
+    await origin.close();
     await proxy.close();
   });
 
