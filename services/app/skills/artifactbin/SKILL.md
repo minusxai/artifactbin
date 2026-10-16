@@ -49,6 +49,10 @@ Note: Public reads and local-only authoring need no login.
 
 [% if transport == "http" %]Publish self-contained HTML and kit JSX in JSON `markup` (create) or `source` (prepare). Metadata belongs in JSON request fields. Do not send a YAML metadata fence.[% else %]Publish editable `.jsx`: a YAML metadata fence followed by self-contained HTML and kit JSX.[% endif %] Style elements with Tailwind utilities using `className`, for example `className="px-6 py-8"`.
 
+Bind components to a named query's rows with `data="$name"`, declared with `<Query>` in `<Helmet>` over a dataset. See [data markup](references/markup-data.md).
+
+Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name. No CDN scripts; `<Helmet>` holds CSS.
+
 ### Edit
 
 [% include workflows.editing %]
@@ -68,13 +72,13 @@ Share its returned URL. [[ urlReplyRule ]]
 - See [markup](references/markup.md) for the rich and powerful kit components we offer.
 
 These are the common references. For but Artifactbin supports a long tail of rich features, whose guides can be read as necessary.
-- For shared signup, voting or RSVP flows, read [apps](references/apps.md) before choosing the data model; use accounts, not typed names, for identity.
+- For shared apps with friends or a team (signup, voting or RSVP), read [apps](references/apps.md) before choosing the data model; use accounts, not typed names, for identity.
 - For data apps, dashboard/query mechanics, mutations: [data-markup](references/markup-data.md)
 
 
 ## 4. Save, share and verify
 [% include workflows.operations %]
-Check the changed content for a text edit. For a new page or layout change, check the whole document and phone layout. Use [live sessions](references/live-sessions.md) for changed interactions: test each identity’s authorized isolated copy, then the original as guest (writes off). Reuse one session and close it afterward. Report which checks passed and anything unverified; do not repeat unchanged QA.
+Check the changed content for a text edit. For a new page or layout change, check the whole document and phone layout. Use [live sessions](references/live-sessions.md) for browser/UI QA of newly authored or changed `<Mutation>`, local state and row/cell context actions. Test each identity’s authorized isolated copy, then the original as guest (writes off). One session at a time; reuse it and close it afterward. Stop once each works once per identity. Report which checks passed and anything unverified; do not repeat unchanged QA.
 
 On refusal, follow [publishing](references/publishing.md) and [errors](references/errors.md). Conflicts preserve files; after an uncertain write repeat the same command and arguments, not a new artifact.
 
@@ -87,9 +91,7 @@ On refusal, follow [publishing](references/publishing.md) and [errors](reference
 - [[ progressiveAuthoringRule ]]
 - Always finish and fix at the same URL.
 - Every body element keeps its persistent `id` for its lifetime. Move with the same id; never reuse an id. Only allowlisted tags; no `<form>`.
-[% if transport != "http" %]- Bind components to a named query's rows with `data="$name"` (declared in Helmet over a dataset; example below).
-[% endif %]- Use `<Markdown>` for long prose on any page type: headings, paragraphs and lists together; HTML for individually designed text.
-- Use Helmet `<script>` (Solid, npm) for behaviour; exported components mount by name. No CDN scripts; `<Helmet>` holds CSS.
+- Use `<Markdown>` for long prose on any page type: headings, paragraphs and lists together; HTML for individually designed text.
 - Preserve exactly the identity fields returned; never add `version` when absent (an optional historical selection, not `head_version`). Fork: remove `id`, `edit_id`, `head_version`, `state`, `version`.
 - [[ phoneAuthoringRule ]]
 - One of the main goals of every artifact is to impress. Never finish with a meh looking artifact. Use visuals (images, mermaid, chart, wireframe, svg animations etc), color and playful design to your advantage.
