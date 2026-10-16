@@ -457,7 +457,10 @@ it('teaches every surface to watch with a tool that wakes the agent, never a pla
   guide: publicGuideText('monitoring', DEFAULT_SERVER)!.split('\n## CLI')[0]!,
  };
  for (const [name, text] of Object.entries(surfaces)) {
-  expect(text, name).toContain('only when requested');
+  expect(text, name).toContain('After the first successful save or local preview');
+  expect(text, name).toContain('do not ask first');
+  expect(text, name).toContain('until the session ends or the user says stop');
+  expect(text, name).not.toContain('only when requested');
   expect(text, name).toMatch(/wakes you on each (?:output line|new comment)/);
   expect(text, name).toContain('plain background job');
   expect(text, name).toContain('between work steps');
@@ -497,18 +500,14 @@ it('HTTP authentication is direct and reuses the existing rotating credential st
  for(const part of ['ARTIFACTBIN_HOME','credentials.env','alias','serialized','grant_type','invalid_grant'])expect(guide).toContain(part);
 });
 
-it('keeps connection and monitoring conditional across root guides and operation receipts', () => {
+it('keeps sign-in conditional across root guides and discovery', () => {
  for (const text of [buildQuickSheet(BASE), llmsText(BASE)]) {
   expect(text).toContain('Missing credentials do not mean a new user');
   expect(text).not.toContain('Install CLI only when requested');
   expect(text).toContain('If sign-in is required');
   expect(text).toContain('email already provided');
-  expect(text).toContain('only when requested');
  }
  expect(agentDiscovery(BASE).instruction).toContain('If sign-in is required');
- const hint=monitoringGuidance(BASE,'abc123','markup') as {monitoring:{instruction:string}};
- expect(hint.monitoring.instruction).toContain('only when requested');
- expect(publicGuideText('monitoring',BASE)).toContain('only when requested');
 });
 
 it('lists every shipped reference in the main reference tree', () => {
