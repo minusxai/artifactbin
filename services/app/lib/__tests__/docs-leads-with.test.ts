@@ -84,7 +84,7 @@ describe('the brief — the one text every agent reads', () => {
   it('keeps the worked example and its rules, with design selection in the content step', () => {
     const rules = sheet.indexOf('self-contained');
     const example = sheet.indexOf('```jsx');
-    const data = sheet.indexOf('<Query');
+    const data = sheet.indexOf('<Query', example);
     const bodyRules = sheet.indexOf('static JSX', example);
     const theme = sheet.indexOf('references/design-systems.md', sheet.indexOf('## 3. Shape the content'));
     expect(rules).toBeGreaterThan(-1);

@@ -33,7 +33,7 @@ describe('the installed short skill',()=>{
   expect(sheet).toContain('Push confirms source acceptance');
   expect(sheet).toContain('do not pull, diff or grep just to reconfirm it');
   expect(sheet).toContain('Publishing does not verify appearance');
-  const native=sheet.split('\n').find(line=>line.startsWith('- Use Helmet `<script>`'))!;
+  const native=sheet.split('\n').find(line=>/^(?:- )?Use Helmet `<script>`/.test(line))!;
   for(const text of ['(Solid, npm)','for behaviour','exported components mount by name'])expect(native).toContain(text);
   expect(teaching.files['SKILL.md']).toContain(native);
   expect(sheet).not.toContain('<Iframe>');
