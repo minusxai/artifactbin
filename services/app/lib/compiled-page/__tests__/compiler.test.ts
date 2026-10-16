@@ -67,6 +67,18 @@ describe('compilePage', () => {
     expect(bound.unported).toEqual([]);
   });
 
+  it('hydrates angle/flow controls and renders hollow geometry from the compact spec', async () => {
+    const parts = [{ key: 'cup', kind: 'revolve', origin: [0, 0, 0], profile: [[0, 0], [10, 0], [14, 30], [12, 30], [8, 3], [0, 3]], rotation: { axis: [0, 1, 0], origin: [0, 0, 0], range: [-4, 10] } }];
+    const figure = `<Isometric title="Cup" parts={${JSON.stringify(parts)}} angle="$angle" flow="$flow" />`;
+    const source = '<Helmet><Value name="angle" type="number" default={6}/><Value name="flow" type="boolean" default={true}/></Helmet>' + figure;
+    const page = await compilePage(await inputOf(source), loadCompilerBuild());
+    expect(page.module?.specifiers).toContain('@mx/kit/isometric');
+    expect(dom(page.html).querySelectorAll('[data-part="cup"] path').length).toBeGreaterThan(24);
+    expect(page.unported).toEqual([]);
+    const staticFlow = await compilePage(await inputOf(`<Isometric title="Cup" parts={${JSON.stringify(parts)}} flow={true} />`), loadCompilerBuild());
+    expect(staticFlow.module?.specifiers).toContain('@mx/kit/isometric');
+  });
+
   it('compiles Markdown as static HTML without a reader module or shared kit dependency', async () => {
     const input = await inputOf('<Markdown id="body" className="text-lg">{`# Notes\n\nKeep **formatting** together.`}</Markdown>');
     const page = await compilePage(input, loadCompilerBuild());

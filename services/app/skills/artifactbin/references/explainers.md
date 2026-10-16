@@ -1,147 +1,152 @@
 ---
 name: explainers
-description: Mechanism-led explanatory figures for articles, reports and technical stories, with the built-in Isometric figure and custom SVG.
+description: "Mechanism-led explanatory figures using compact Isometric specs: extrusions, revolved bodies, swept pipes, assemblies, rotation and sketch linework."
 ---
 ## Read first
 
-Use a crafted figure when seeing a mechanism would explain the central idea.
-Choose a real object or an explicitly labelled analogy whose behaviour maps
-to the concept: a wind-tunnel balance for lift, a sliding gauge for measurement,
-or a reservoir for a rate limiter. A flowchart or wireframe remains a better
-choice when sequence or interface layout is the subject.
+Choose a mechanism that explains the central idea. Write what the reader
+changes, what moves, and what that change teaches.
+
+**Author the recipe, not its rendered paths.** Like a chart spec, `<Isometric>`
+takes static geometry data; the kit constructs surfaces, projects them, draws
+contours and animates controls. Keep the compact `parts` in the document.
+Do not paste generated SVG meshes or a second projection/geometry engine into
+an author script for shapes this component supports. Rendered SVG belongs to
+the renderer, not the editable source. No installation or external import.
 
 ## Contents
 
-- [Design the explanation](#design-the-explanation)
-- [State is the page's signals](#state-is-the-pages-signals)
-- [Built-in isometric figures](#built-in-isometric-figures)
-- [Custom mechanisms](#custom-mechanisms)
-- [Make it usable](#make-it-usable)
+- [Shapes](#shape-vocabulary) · [Controls](#controls-and-motion) · [Style](#clean-technical-drawing-style)
 
-## Design the explanation
+## Compose the explanation
 
-- Write what the reader changes, what moves and what that change teaches.
-  Keep controls, motion and numerical readouts driven by the same model.
-  Separate measured facts, computed values and illustrative behaviour.
-- Give the object coherent construction: supports, joints, visible thickness,
-  connected parts and consistent perspective. Detail should explain assembly
-  or operation; an arbitrary part count does not establish quality.
-- Use one focal mechanism with a readable silhouette at phone size. Put prose
-  and a finding-led caption outside the drawing. Identify controls and units.
-- The selected design system still owns the page. Derive drawing tones and
-  highlights from its tokens; an isometric figure is an optional drawing
-  treatment, not a second page theme.
+Use one focal mechanism readable at phone size. Include supports, joints and
+thickness. Put prose, labels, units and controls outside the drawing. Use the
+selected design system’s tones. Distinguish measured facts, computed results
+and illustrative motion: changing a wing's incidence is geometry; animated
+dashes alone do not simulate airflow or calculate lift.
 
-## State is the page's signals
-
-Declare reader-controlled parameters and time in `<Value>`. Bind Kit controls
-with `value="$angle"`; read or update the same state in the author script with
-`signal('$angle')` from `page`. Derive geometry and numerical readouts from
-those signals. Keep drag-hover bookkeeping local; do not create a second store
-for parameters already declared on the page.
-
-```jsx
-<Helmet>
-  <Value name="angle" type="number" default={30} />
-  <script>{`
-    import { signal } from 'page';
-    import { createEffect } from 'solid-js';
-    const [angle] = signal('$angle');
-    createEffect(() => {
-      const radians = angle() * Math.PI / 180;
-      const vector = document.getElementById('direction-vector');
-      vector.setAttribute('x2', String(50 + 90 * Math.cos(radians)));
-      vector.setAttribute('y2', String(110 - 90 * Math.sin(radians)));
-      document.getElementById('direction-readout').textContent = angle() + '°';
-    });
-  `}</script>
-</Helmet>
-<figure>
-  <svg viewBox="0 0 180 140" role="img" aria-label="Direction measured from the horizontal">
-    <path d="M50 20V110H150" fill="none" stroke="var(--muted-foreground)" />
-    <line id="direction-vector" x1="50" y1="110" x2="127.94" y2="65" stroke="var(--primary)" strokeWidth="3" />
-  </svg>
-  <Slider label="Direction in degrees" value="$angle" min={0} max={90} step={1} />
-  <figcaption>FIG. 01 — The vector turns through <span id="direction-readout">30°</span>.</figcaption>
-</figure>
-```
-
-For an exported Solid component, reactive JSX reads the signals or its bound
-props. Canvas/WebGL redraw in `createEffect` from the same signals. A playback
-loop advances a time Value; a scrubber sets that same Value. Integrate a
-simulation separately only when its equations require accumulated state;
-keep its controls bound to the page. Stop loops on cleanup and offscreen.
-
-Choose rendering by the explanation: SVG for geometric transformations and
-labelled diagrams, Canvas for many moving marks, WebGL for spatial models,
-and `Isometric` for projected assemblies. These share state and controls,
-not a universal scene format. Follow [scripts](markup-scripts.md) for lifecycle
-and [motion](markup-motion.md) for playback and reduced motion.
-
-## Built-in isometric figures
-
-Use `<Isometric>` for assemblies made from slabs, cylinders, extruded outlines
-and lines. It provides projection, visible faces, shading and responsive SVG,
-in the selected design system's colours. Static figures render without a
-client module; a bound separation control makes the same drawing interactive.
-No library download, external import or installation is needed.
+## A compact assembly
 
 ```jsx
 <Helmet><Value name="spread" type="number" default={0} /></Helmet>
 <figure>
-  <Isometric title="A shaft seated in a bearing on a base plate" spread="$spread"
-    parts={[
-      {"key":"base","kind":"slab","x":-60,"y":-40,"z":0,"width":120,"depth":80,"height":8,"radius":5},
-      {"key":"bearing","kind":"cylinder","x":0,"y":0,"z":8,"radius":20,"height":12,"tone":"muted","separation":[0,0,20]},
-      {"key":"shaft","kind":"cylinder","x":0,"y":0,"z":20,"radius":7,"height":55,"tone":"accent","separation":[0,0,55]}
+  <Isometric title="A cup and curved feed pipe" appearance="outline"
+    motion="smooth" spread="$spread" parts={[
+      {"key":"base","kind":"slab","x":-30,"y":-30,"z":0,"width":85,"depth":60,"height":5,"radius":4},
+      {"key":"vessel","kind":"group","separation":[0,0,35],"parts":[
+        {"key":"cup","kind":"revolve","origin":[0,0,5],"profile":[ [0,0],[12,0],[18,32],[15,32],[10,3],[0,3] ],"tone":"accent"},
+        {"key":"pipe","kind":"sweep","points":[ [38,0,8],[38,0,55],[0,0,55],[0,0,40] ],"curve":"bezier","radius":2,"tone":"secondary"}
+      ]}
     ]} />
   <Slider label="Separate the assembly" value="$spread" min={0} max={1} step={0.01} />
-  <figcaption>FIG. 01 — The bearing supports the shaft above the base plate.</figcaption>
+  <figcaption>The hollow vessel and feed pipe move together above the base.</figcaption>
 </figure>
 ```
 
-Coordinates share one unit: x/y are the ground plane; z points up. Draw parts
-back to front in array order; this is a projected assembly, not a general
-3D occlusion engine. Give each part a unique `key`:
+The kit produces a meaningful static drawing for exports and without scripts.
+Bound controls hydrate the same component. The title is the drawing's
+accessible name. Its 640×400 default frame scales with its container; set
+`width`/`height` (up to 4096), `azimuth` (0–360°, default 45°) and `elevation`
+(5–85°, default 30°) for composition. x/y are the ground plane; z points up.
+Use one unit throughout.
 
-| kind | Geometry |
+## Shape vocabulary
+
+Every part and child has a globally unique short `key`. `tone` is `neutral`
+(default), `accent`, `secondary` or `muted`.
+
+| kind | Compact geometry |
 | --- | --- |
-| `slab` | `x`, `y`, `z`, `width`, `depth`, `height`; optional corner `radius` |
-| `cylinder` | centre `x`, `y`, bottom `z`, `radius`, `height` |
-| `prism` | simple non-self-intersecting `points: [ [x,y], … ]`, bottom `z`, `height` |
-| `line` | `points: [ [x,y,z], … ]`; optional `dashed: true` |
+| `slab` | `x,y,z,width,depth,height`; optional rounded corner `radius` |
+| `cylinder` | centre `x,y`, bottom `z`, `radius,height` |
+| `prism` | closed, simple 2D outline `points: [ [x,y], … ]`, bottom `z`, extrusion `height` |
+| `revolve` | `origin: [x,y,z]`, `profile: [ [radius,height], … ]`; optional `axis` (default `[0,0,1]`) and `segments` (default 32) |
+| `sweep` | `points: [ [x,y,z], … ]`, `radius`; optional `curve:"bezier"` for exactly four control points, `steps` (default 24 for bezier), `segments` (default 12) |
+| `line` | 3D `points`; optional `curve:"bezier"` (four control points), `dashed:true`, `arrow:true` |
+| `group` | `parts:[…]` containing shapes that move as one assembly; no nested groups |
 
-Optional `tone`: `neutral` (default), `accent`, `secondary` or `muted`.
-Optional `separation: [dx,dy,dz]` is that part's full displacement at
-`spread={1}`. `spread={0}` is assembled; `spread="$name"` reads a numeric
-Value shared with a Slider or other control. The camera fits both end states
-so moving the control does not zoom the scene. Parts are static JSON, up to
-300 parts and 256 points per outline or line. Keep outlines simple and verify
-overlap at both extremes; separation explains assembly, not simulated physics.
+**Extrude:** a prism preserves concave notches. Outline order may be clockwise
+or counterclockwise. It must enclose area without self-intersection. A wing
+starts with a thin airfoil section, extruded along its span; use `orientation`
+to turn that local extrusion into the scene's coordinates.
 
-The figure defaults to a 640×400 coordinate frame, azimuth 45° and elevation
-30°. Set `width`, `height`, `azimuth` (0–360°), `elevation` (5–85°) to compose it;
-the SVG scales to its container. Put labels, prose, controls and captions
-outside the drawing. A title provides its accessible name.
+**Revolve:** each pair gives radius and distance along the axis. A boiler can
+start at radius zero, follow its outside and end at zero. For a hollow cup,
+continue across the rim and down the inside to the floor, as above. Do not
+cap its mouth with a disc. Use an arbitrary nonzero `axis` for a horizontal
+shaft or a vertically mounted dial.
 
-## Custom mechanisms
+**Sweep:** a polyline follows its supplied points; a cubic bezier uses start,
+first handle, second handle, end. The kit transports circular sections along
+the centreline and closes the ends. Use gentle bends with radius smaller than
+the bend radius; self-intersecting tubes are not boolean solids.
 
-Use inline SVG and the existing [Helmet script](markup-scripts.md) when the
-subject needs deformation, rotating airfoils, curved pipes, bespoke labels or
-a different projection. Keep the meaningful initial pose in markup, CSS in
-Helmet style, and behaviour in script. Compute the static geometry during
-authoring; include only the geometry functions needed for moving parts.
-Follow the supported [SVG subset](markup-svg.md). The built-in figure is an
-option, not a requirement to force every subject into an exploded assembly.
+**Repeat:** add `repeat:{count:8,step:[10,0,0]}` for ribs or grille cells.
+For radial copies, replace `step` with
+`rotation:{axis:[0,0,1],origin:[0,0,0],degrees:45}`. Both can combine.
+Copies rotate then translate, after orientation; keep one definition.
 
-## Make it usable
+**Orient:** any shape can add
+`orientation:{axis:[1,0,0],origin:[0,0,0],degrees:90}`. This is a fixed rotation
+about an axis through `origin` (default zero), applied before repetition.
+Use the scene's angle control below for reader-controlled rotation.
 
-Give each interaction a visible control usable by keyboard and touch;
-hover can enhance it. Start with a meaningful static pose that survives
-exports and unavailable scripts. Follow [motion guidance](markup-motion.md):
-respect reduced motion, pause continuous work offscreen, and keep prose still.
+The component bounds cost: at most 300 parts including group children,
+256 points per prism/line, 128 profile or sweep points, 8–64 radial segments,
+2–128 bezier steps and 1–64 repeated copies. The whole scene has a 20,000
+surface/line-segment budget. Prefer a few well-shaped profiles over increasing
+resolution. Smooth surfaces have contour and crease strokes, not mesh edges.
 
-Check the published artifact at desktop and phone widths, at control
-extremes, and in both colour modes. Inspect joints, layering and labels at
-close range. Verify that readouts and moving parts agree, and that a reader
-can understand the explanation without operating the control.
+## Controls and motion
+
+Declare parameters as page `<Value>`s. Bind the Isometric and its controls to
+the same values; no author script is needed for these interactions.
+
+- **Separate:** a top-level part/group's `separation:[dx,dy,dz]` is its full
+  displacement at `spread={1}`. `spread={0}` assembles it; `spread="$spread"`
+  binds a numeric Value. Group children inherit the group's movement.
+- **Rotate:** add `rotation:{axis:[0,1,0],origin:[0,0,40],range:[-4,10]}` to a
+  top-level part/group. Bind the figure's `angle="$angle"` and a Slider to the
+  same numeric Value in degrees. The axis passes through `origin`. The angle
+  clamps to the declared `range` (default −15–15°). Fixed supports stay still.
+- **Flow:** dashed lines can animate with `flow={true}` or `flow="$flow"`
+  bound to a boolean Value. This is illustrative dash motion, not physics.
+- **Ease:** `motion="smooth"` eases spread and angle;
+  the default `motion="instant"` updates directly. Reduced motion snaps and
+  stops flowing dashes. The component stops work offscreen and cleans up.
+
+Use `Button set={{"angle":0}}` for a reset and
+`Button set={{"flow":false}}` / `set={{"flow":true}}` for pause/play.
+The angle Slider's min/max should match the rotating group's range.
+
+The camera fits the declared motion envelope once; scrubbing does not zoom.
+Top-level parts draw in array order, back to front. Within a group, surfaces
+are sorted by depth. Put overlapping components in the same group when they
+need that shared ordering. This is a projected illustration, not a general
+3D boolean or intersecting-solid engine. Check both motion extremes.
+
+## Clean technical drawing style
+
+The default `appearance="outline"` gives ink contours, fine creases and pale
+opaque washes. Use `appearance="solid"` for stronger colour and shading.
+Prism `section:true` accents its end caps. Lines accept `width` (up to 6px)
+and `opacity` (0–1) for ribs, flow and force arrows.
+Keep most hardware neutral; reserve accent colour for the subject and a
+secondary colour for force/flow. Opaque fills hide rear edges. Do not stroke
+every polygon of a curved surface: those are tessellation edges, not seams.
+Add intentional seams as `line` shapes. Labels, captions and a quiet grid can
+live in the surrounding markup/CSS. Read [complex shapes](explainer-shapes.md)
+for section design, layering and an airfoil construction recipe.
+
+## Other renderers and verification
+
+Use author-script SVG, Canvas or WebGL for needs outside this spec, such as
+continuous deformation, a numerical field or a freely orbiting 3D scene.
+Follow [scripts](markup-scripts.md) and [motion](markup-motion.md); keep state
+in page Values and stop loops on cleanup/offscreen. Do not expand a supported
+Isometric spec into raw SVG as an escape hatch.
+
+Check desktop and 390px, light/dark modes, control extremes, keyboard input
+and reduced motion. Inspect rims, joints and occlusion. Keep source compact
+and the explanation understandable without animation.
