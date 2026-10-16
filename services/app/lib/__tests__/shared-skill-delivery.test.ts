@@ -1,7 +1,7 @@
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
 import {describe,it,expect} from 'vitest';
 import {llmsText} from '@/lib/serving/agent-references.server';
-import {skillTree} from '../skills';
+import {skillTree,SKILL_MAIN_MAX_BYTES,SKILL_FILE_MAX_BYTES} from '../skills';
 import {renderSkill} from '../skills/render';
 
 describe('one root for installed and direct HTTP agents',()=>{
@@ -75,8 +75,8 @@ describe('installable shared skill folder',()=>{
  });
  it('keeps public root and guide projections within the reading budget',()=>{
   const base='https://app.artifactbin.dev';
-  expect(Buffer.byteLength(llmsText(base))).toBeLessThanOrEqual(8192);
-  for(const file of skillTree().files.filter(file=>file.ref&&file.kind==='guide'))expect(Buffer.byteLength(publicGuideText(file.file.replace(/\.md$/,''),base)!),file.path).toBeLessThanOrEqual(8192);
+  expect(Buffer.byteLength(llmsText(base))).toBeLessThanOrEqual(SKILL_MAIN_MAX_BYTES);
+  for(const file of skillTree().files.filter(file=>file.ref&&file.kind==='guide'))expect(Buffer.byteLength(publicGuideText(file.file.replace(/\.md$/,''),base)!),file.path).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
  });
  it('leaves room in the packaged data guide for origin expansion',()=>{
   const files=skillPackageFiles(skillTree(),'https://app.artifactbin.dev');

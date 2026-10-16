@@ -18,7 +18,7 @@ import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import {projectSkillLinks} from '@/lib/skills/serve';
 import { renderTree, skillExample, skillTree } from '@/lib/skills';
-import { buildQuickSheet } from '@/test/helpers/skill-docs';
+import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
 import { createUser, mintToken } from '@/lib/accounts';
 import { POST as createCommentRoute, GET as listCommentsRoute } from '@/app/api/artifacts/[id]/annotations/route';
 import { PATCH as editCommentRoute, POST as actOnCommentRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
@@ -419,7 +419,7 @@ describe('shared instructions after missing credentials and before publishing cl
   for(const origin of ['https://app.artifactbin.dev','https://artifacts.acme.example']) {
    const text=llmsText(origin);
    console.info('Hosted root bytes',origin,Buffer.byteLength(text));
-   expect(Buffer.byteLength(text),origin).toBeLessThanOrEqual(8192);
+   expect(Buffer.byteLength(text),origin).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
   }
  });
  it('grounds numerical claims and comparisons in query results and labels assumptions',()=>{

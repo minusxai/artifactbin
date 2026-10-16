@@ -12,7 +12,7 @@
  * hostname cannot move a byte count.
  */
 import { describe, it, expect } from 'vitest';
-import { buildSkillTree, expectedSkillName, readFirstBlock, renderSkill, mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, SKILL_FILE_MAX_BYTES, SKILL_LISTING_MAX_BYTES } from '../skills';
+import { buildSkillTree, expectedSkillName, readFirstBlock, renderSkill, mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, SKILL_FILE_MAX_BYTES, SKILL_MAIN_MAX_BYTES, SKILL_LISTING_MAX_BYTES } from '../skills';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
 import { STORY_THEMES } from '../data/story/story-themes';
 import { STORY_TEMPLATES } from '../data/story/story-templates';
@@ -148,13 +148,24 @@ describe('the rules, each seen to fire on a literal tree', () => {
     const tree = buildSkillTree({ 'artifactbin/SKILL.md': ok('artifactbin', '## Read first\n\n[[ basee ]]/api\n') });
     expect(() => render(tree.files[0])).toThrow(/artifactbin\/SKILL.md/);
   });
-  it('size: ≤ 8,192 B and ≤ 500 lines rendered; over 100 lines needs a Contents; the listing is capped', () => {
+  it('allows a larger main skill while retaining the reference budget', () => {
+    const sources = {
+      'artifactbin/SKILL.md': ok('artifactbin', `## Read first\nShort intro.\n## Body\n${'x'.repeat(9000)}`),
+      'artifactbin/references/markup.md': ok('markup', `## Read first\nShort intro.\n## Body\n${'x'.repeat(9000)}`),
+    };
+    const problems = validateSkillTree(buildSkillTree(sources), render);
+    expect(problems.some(problem => problem.startsWith('artifactbin/SKILL.md:') && problem.includes('B rendered'))).toBe(false);
+    expect(problems).toContainEqual(expect.stringMatching(/references\/markup\.md: \d+ B rendered, cap 8192/));
+    sources['artifactbin/SKILL.md'] = ok('artifactbin', `## Read first\nShort intro.\n## Body\n${'x'.repeat(21000)}`);
+    expect(validateSkillTree(buildSkillTree(sources), render)).toContainEqual(expect.stringMatching(/artifactbin\/SKILL.md: \d+ B rendered, cap 20480/));
+  });
+  it('size: main ≤ 20,480 B, references ≤ 8,192 B and ≤ 500 lines rendered; over 100 lines needs a Contents; the listing is capped', () => {
     const tree = buildSkillTree({
-      'artifactbin/SKILL.md': ok('artifactbin', `## Read first\n\n${'y'.repeat(9000)}\n`),
+      'artifactbin/SKILL.md': ok('artifactbin', `## Read first\n\n${'y'.repeat(21000)}\n`),
       'artifactbin/references/markup.md': ok('markup', `## Read first\n${'line\n'.repeat(120)}## A\n## B\n`),
     });
     const problems = validateSkillTree(tree, render, SKILL_LISTING_MAX_BYTES + 1);
-    expect(problems).toContainEqual(expect.stringMatching(/artifactbin\/SKILL.md: 90\d\d B rendered, cap 8192/));
+    expect(problems).toContainEqual(expect.stringMatching(/artifactbin\/SKILL.md: 210\d\d B rendered, cap 20480/));
     expect(problems).toContainEqual(expect.stringContaining('artifactbin/references/markup.md: 124 lines and 3 sections without a "## Contents"'));
     expect(problems).toContainEqual(expect.stringContaining(`the /docs listing is ${SKILL_LISTING_MAX_BYTES + 1} B`));
   });
@@ -224,7 +235,7 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
    * over the rendered tree covers every one of them, and covers a file added tomorrow too.
    */
   it('keeps every rendered guide — the brief and every reference — within its reading budget',()=>{
-    for(const transport of ['cli','http'] as const)for(const file of tree.files)if(file.kind==='guide')expect(Buffer.byteLength(renderSkill(file,{base:SIZE_BASE,transport})),`${transport}: ${file.path}`).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
+    for(const transport of ['cli','http'] as const)for(const file of tree.files)if(file.kind==='guide')expect(Buffer.byteLength(renderSkill(file,{base:SIZE_BASE,transport})),`${transport}: ${file.path}`).toBeLessThanOrEqual(file.ref ? SKILL_FILE_MAX_BYTES : SKILL_MAIN_MAX_BYTES);
     expect(tree.files.length).toBeGreaterThan(10);
     expect(tree.files.some(file=>!file.ref),'the brief itself must be in the sweep').toBe(true);
   });

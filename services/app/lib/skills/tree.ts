@@ -24,7 +24,7 @@
  *   ADDRESS is `[[ base ]]/docs/…`, never a bare `/docs/` path or a
  *   hard-coded host, and never `{{ base` (the old delimiter, which would
  *   render literally);
- * - every rendered file ≤ 8,192 B and ≤ 500 lines; over 100 lines with three
+ * - rendered main skills ≤ 20,480 B, references ≤ 8,192 B; every file ≤ 500 lines; over 100 lines with three
  *   or more sections carries a `## Contents`; the listing is capped.
  *
  * `validateSkillTree` answers PROBLEMS as strings, so the guard test prints
@@ -35,7 +35,8 @@ import path from 'node:path';
 import YAML from 'yaml';
 
 export const SKILL_FILE_NAME = 'SKILL.md';
-/** The always-read cap, per file: an agent pays for every byte on every turn it holds a page. */
+/** Main workflows include navigation; individual reference guides remain compact. */
+export const SKILL_MAIN_MAX_BYTES = 20_480;
 export const SKILL_FILE_MAX_BYTES = 8192;
 const SKILL_FILE_MAX_LINES = 500;
 const SKILL_CONTENTS_THRESHOLD_LINES = 100;
@@ -265,7 +266,8 @@ export function validateSkillTree(tree: SkillTree, rendered: (f: SkillFile) => s
     if (f.kind === 'data') continue;
     const bytes = Buffer.byteLength(text);
     const lines = text.split('\n').length;
-    if (bytes > SKILL_FILE_MAX_BYTES) problems.push(`${at}: ${bytes} B rendered, cap ${SKILL_FILE_MAX_BYTES}`);
+    const maxBytes = f.ref ? SKILL_FILE_MAX_BYTES : SKILL_MAIN_MAX_BYTES;
+    if (bytes > maxBytes) problems.push(`${at}: ${bytes} B rendered, cap ${maxBytes}`);
     if (lines > SKILL_FILE_MAX_LINES) problems.push(`${at}: ${lines} lines, cap ${SKILL_FILE_MAX_LINES}`);
     const sections = (text.match(/^## /gm) ?? []).length;
     if (lines > SKILL_CONTENTS_THRESHOLD_LINES && sections >= 3 && !/^## Contents$/m.test(text)) problems.push(`${at}: ${lines} lines and ${sections} sections without a "## Contents"`);

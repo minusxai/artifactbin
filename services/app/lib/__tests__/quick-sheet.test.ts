@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {skillExample,stripBundleMarkers,condenseForBundle} from '../skills';
-import {buildQuickSheet,renderDoc} from '@/test/helpers/skill-docs';
+import {QUICK_SHEET_MAX_BYTES,buildQuickSheet,renderDoc} from '@/test/helpers/skill-docs';
 import teaching from '../../../cli/src/generated/teaching.json';
 const sheet=buildQuickSheet('https://artifactbin.dev');
 describe('the installed short skill',()=>{
@@ -47,7 +47,7 @@ describe('the installed short skill',()=>{
   expect(httpAuthoring).toContain(progression);
   expect(httpAuthoring).toContain('URL-only requests get the URL alone.');
   expect(httpAuthoring).toContain('At 390px, fix overflow, clipping and unreachable controls.');
-  expect(Buffer.byteLength(sheet)).toBeLessThan(8192);
+  expect(Buffer.byteLength(sheet)).toBeLessThan(QUICK_SHEET_MAX_BYTES);
   expect(Buffer.byteLength(httpAuthoring)).toBeLessThan(8192);
   // Countable, not exhortative: a number of calls and a named payload for the first push.
   expect(fewTurns).toMatch(/metadata, title, real opening copy and one substantive section/);
