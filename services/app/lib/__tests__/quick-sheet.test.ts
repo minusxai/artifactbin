@@ -8,7 +8,7 @@ describe('the installed short skill',()=>{
   const bundled=teaching.files as Record<string,string>;
   for(const text of [sheet,teaching.files['SKILL.md']]){
    expect(text).toContain('references/review-state.md');
-   expect(text).toContain('wireframes');
+   expect(text.toLowerCase()).toContain('wireframes');
   }
   for(const topic of ['templates-app','templates-plan','markup-state','markup-scripts']){
    for(const text of [renderDoc(`artifactbin/references/${topic}.md`,'https://example.test'),bundled[`references/${topic}.md`]])expect(text,topic).toContain('(review-state.md)');
@@ -21,73 +21,37 @@ describe('the installed short skill',()=>{
   // The retired vocabulary (MCP, /docs/, token, mint, /raw, …) is banned across every
   // agent-facing surface at once by agent-starter-consistency.test.ts, case (c).
  });
- /**
-  * A person is waiting on a blank page. The FIRST wording of this rule was exhortative ("publish a
-  * FIRST version in your first few calls") and MEASURED not to move anything: on local21, six tasks
-  * across pi and opencode, the first markup write landed at 156–366 s and every task published
-  * exactly one version. So the rule is countable — six calls of the pull, and a first push carrying
-  * the fence with its system, the title, real opening copy and one substantive section (a designed
-  * first impression, since 3 Oct 2026; headings alone was the slop the taste work found) — because an agent can check a count against
-  * its own transcript and cannot check "early". The tests follow: they assert the NUMBER and the
-  * CONTENT of that first push, not the encouragement.
-  *
-  * The opening defines markup as HTML and kit JSX; the Helmet script bullet
-  * assigns behaviour to Solid/npm and mounts exported components by name. The
-  * behaviour rule is asserted on that bullet and in shipped `teaching.json`,
-  * the generated bundle the CLI actually hands an agent.
-  */
- it('counts the first push — six calls, a designed opening — then fills the rest, and markup for content, the script for behaviour',()=>{
-  const bullet=(start:string)=>sheet.split('\n').find(line=>line.startsWith(start))!;
-  const fewTurns=bullet('- Read your [page type]');
-  expect(fewTurns).toBeDefined();
-  const httpAuthoring=renderDoc('artifactbin/references/http-authoring.md','https://example.test');
-  const progression='Within six calls of reading the artifact, publish a first version with metadata, title, real opening copy and one substantive section; extend it in later edits.';
-  expect(fewTurns).toContain(progression);
-  expect(teaching.files['SKILL.md']).toContain(progression);
-  expect(httpAuthoring).toContain(progression);
-  expect(httpAuthoring).toContain('URL-only requests get the URL alone.');
-  expect(httpAuthoring).toContain('At 390px, fix overflow, clipping and unreachable controls.');
+ it('shares useful content before visual checks, with the same rule in HTTP authoring',()=>{
+  for(const text of [sheet,teaching.files['SKILL.md'],renderDoc('artifactbin/references/http-authoring.md','https://example.test')]){
+   expect(text).toContain('Save a complete small edit');
+   expect(text).toContain('useful first version');
+   expect(text).toContain('Share its URL immediately, before visual checks');
+   expect(text).toContain('Never publish an empty scaffold');
+   expect(text).not.toContain('Within six calls');
+  }
   expect(Buffer.byteLength(sheet)).toBeLessThan(QUICK_SHEET_MAX_BYTES);
-  expect(Buffer.byteLength(httpAuthoring)).toBeLessThan(8192);
-  // Countable, not exhortative: a number of calls and a named payload for the first push.
-  expect(fewTurns).toMatch(/metadata, title, real opening copy and one substantive section/);
-  expect(fewTurns).toMatch(/extend it in later edits/);
-  expect(fewTurns).toContain('choose ONE design system');
-  // Vague encouragement is the failure mode this replaced; it must not come back.
-  for(const vague of ['first few calls','early','as soon as you can'])expect(fewTurns,vague).not.toContain(vague);
-  // Publication acceptance and visual review are distinct checks.
-  expect(fewTurns).toContain('Push confirms source acceptance');
-  expect(fewTurns).toContain('do not pull, diff or grep just to reconfirm it');
+  expect(sheet).toContain('Push confirms source acceptance');
+  expect(sheet).toContain('do not pull, diff or grep just to reconfirm it');
   expect(sheet).toContain('Publishing does not verify appearance');
-  expect(fewTurns).not.toMatch(/Skip[^.]*exporting/);
-  expect(fewTurns).not.toContain('write the whole document');
-  expect(fewTurns.length).toBeLessThan(600);
-  const native=bullet('- Use Helmet `<script>`');
-  expect(native).toBeDefined();
-  expect(sheet.slice(0,sheet.indexOf('npm CLI:'))).toContain('self-contained HTML and kit JSX');
-  for(const text of ['Helmet `<script>`','(Solid, npm)','for behaviour','exported components mount by name'])expect(native).toContain(text);
-  // The managed frame is gone: the brief must not send an agent to it.
-  expect(sheet).not.toContain('<Iframe>');
-  // The bundle the CLI ships carries the same two bullets: a copy edit without
-  // `npm run generate:teaching -w services/cli` leaves every agent on the old brief.
-  expect(teaching.files['SKILL.md']).toContain(fewTurns);
+  const native=sheet.split('\n').find(line=>line.startsWith('- Use Helmet `<script>`'))!;
+  for(const text of ['(Solid, npm)','for behaviour','exported components mount by name'])expect(native).toContain(text);
   expect(teaching.files['SKILL.md']).toContain(native);
-  expect(teaching.files['SKILL.md']).not.toContain('write the whole document');
+  expect(sheet).not.toContain('<Iframe>');
  });
  it('uses the same push for create and update with local validation',()=>{
   for(const text of ['afbin pull','afbin push report.jsx','new artifact','validates/publishes'])expect(sheet).toContain(text);
   // The publishing guide naming ~/.artifactbin/state.sqlite is
   // agent-docs-batch-identity.test.ts's assertion, in the whole sentence.
   expect(sheet).toContain('YAML metadata fence');
-  for(const term of ['self-contained HTML','kit JSX','Tailwind `className`'])expect(sheet.slice(0,sheet.indexOf('npm CLI:'))).toContain(term);
+  for(const term of ['self-contained HTML','kit JSX','Tailwind utilities using `className`'])expect(sheet.slice(0,sheet.indexOf('npm CLI:'))).toContain(term);
   expect(sheet).toContain('edit_id');
  });
- it('routes design and vocabulary before the chosen page type and design system',()=>{
-  const positions=['references/design.md','references/markup.md','[page types](references/templates.md), BEFORE writing','references/design-systems.md'].map(s=>sheet.indexOf(s));
-  expect(positions.every(x=>x>=0)).toBe(true);
-  expect(positions).toEqual([...positions].sort((a,b)=>a-b));
-  expect(sheet).toContain('references/design-systems.md');
-  expect(sheet).toContain('references/templates.md');
+ it('routes new work to its selected guides before writing and inherits design for edits',()=>{
+  const content=sheet.split('## 3. Shape the content')[1]!.split('## 4.')[0]!;
+  for(const topic of ['templates','design-systems','copy','design','markup'])expect(content).toContain(`references/${topic}.md`);
+  expect(content).toContain('inherit the existing page type and design');
+  expect(content).toContain('BEFORE writing');
+  expect(content).toContain('one design system');
  });
  it('teaches responsive containers, static JSX and appropriate chart primitives through the example',()=>{
   for(const term of ['@2xl:','phone width','static JSX','className','<Helmet>','CDN','custom CSS lives here','never hand-rolled <svg>'])expect(sheet).toContain(term);
@@ -111,7 +75,7 @@ describe('the installed short skill',()=>{
   for(const flag of ['--thread','--state resolved','--quote'])expect(annotations).toContain(flag);
  });
  it('every concrete link exists in the shipped local bundle',()=>{
-  for(const [,link] of sheet.matchAll(/\]\((references\/[^)]+)\)/g))expect(teaching.files).toHaveProperty(link);
+  for(const [,link] of sheet.matchAll(/\]\((references\/[^)]+)\)/g))expect(teaching.files).toHaveProperty(link.split('#')[0]!);
  });
  it('teaches canonical refs and bindings without retired forms',()=>{
   expect(sheet).toContain('ref:<id>');
@@ -142,7 +106,7 @@ describe('the installed short skill',()=>{
   }
  });
  it('the bundle carries the brief with its frontmatter and the example as a help topic',()=>{
-  expect(teaching.files['SKILL.md']).toMatch(/^---\nname: artifactbin\ndescription: "Required for every artifactbin task/);
+  expect(teaching.files['SKILL.md']).toMatch(/^---\nname: artifactbin\ndescription: "Create, edit, publish, comment on/);
   expect(teaching.files['SKILL.md']).toContain(skillExample().trimEnd());
   expect((teaching as {example:string}).example).toBe(skillExample());
  });

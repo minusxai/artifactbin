@@ -6,7 +6,7 @@ export const MARKUP_STYLE_RULE =
 /** Shared authoring guidance rendered in both the CLI skill and HTTP references. */
 export const URL_REPLY_RULE = 'URL-only requests get the URL alone.';
 export const PROGRESSIVE_AUTHORING_RULE =
-  'Within six calls of reading the artifact, publish a first version with metadata, title, real opening copy and one substantive section; extend it in later edits.';
+  'Save a complete small edit, or a useful first version of larger work with real content. Share its URL immediately, before visual checks. Say checks are continuing. Never publish an empty scaffold just to get a link.';
 export const NATIVE_TABLE_AUTHORING_RULE =
   'DataTable and native HTML tables already own their scroll boxes. Avoid a pixel width or min-width on the table. At 390px, check .mx-doc fits and the last column is reachable. Recheck after the final edit.';
 export const PHONE_AUTHORING_RULE =

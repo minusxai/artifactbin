@@ -1,7 +1,7 @@
 ---
 name: artifactbin
 description: >-
-  Create, edit, publish, query or export Artifactbin artifacts. Use for artifactbin.dev (or self-hosted) links, afbin commands, and work on an Artifactbin document, dashboard, deck, dataset, plan, landing page or app. Use the documented npm CLI or authenticated HTTP API contracts.
+  Create, edit, publish, comment on, query or export Artifactbin artifacts. Use for artifactbin.dev (or self-hosted) links, afbin commands, and work on an Artifactbin document, dashboard, deck, dataset, plan, landing page or app. Use the documented npm CLI or authenticated HTTP API contracts.
 ---
 ## Read first
 
@@ -27,10 +27,15 @@ There are two ways to interact with Artifactbin - CLI and HTTP. Here's how to de
 ```text
 Runnable afbin CLI installed?
 |-- Yes: use CLI and its installed skill.
-`-- No: Do you already have an artifactbin token either at the prescribed location or in your token store?
-    |-- Yes: you likely used HTTP before, so use HTTP with remote skill.
-    `-- No: It is likely this is the first time the user is using afbin. Are you in a local environment or persistable compute (cloud env might be cleared, so CLI might ask for auth each time, which is bad)? Ask the user if they want to install the CLI. If they do, use CLI or if no, or if installation fails, you can use HTTP.
+`-- No: saved credentials for this server in a supported store?
+    |-- Yes: use HTTP and reuse those credentials.
+    `-- No: persistent local environment where installation is allowed?
+        |-- Yes: ask whether to install CLI; try setup once if agreed.
+        |   `-- Declined or failed: use HTTP.
+        `-- No / uncertain: use HTTP.
 ```
+
+Missing credentials do not mean a new user. Keep the selected method unless a capability failure blocks the task.
 
 [% include workflows.introduction %]
 
@@ -41,6 +46,8 @@ Runnable afbin CLI installed?
 Note: Public reads and local-only authoring need no login.
 
 ## 2. Understand create and edit
+
+[% if transport == "http" %]Publish self-contained HTML and kit JSX in JSON `markup` (create) or `source` (prepare). Metadata belongs in JSON request fields. Do not send a YAML metadata fence.[% else %]Publish editable `.jsx`: a YAML metadata fence followed by self-contained HTML and kit JSX.[% endif %] Style elements with Tailwind utilities using `className`, for example `className="px-6 py-8"`.
 
 ### Edit
 
@@ -56,8 +63,8 @@ Share its returned URL. [[ urlReplyRule ]]
 
 - **Edit:** inherit the existing page type and design unless asked to change them. So you can choose which references among templates, design systems, copy, design, apps are relevant to read.
 - **Create:** identify the reader and message; choose a page type ([templates](references/templates.md))
-  and one design system ([design-systems](references/design-systems.md)). Read only the chosen guides - they maybe large.
-- Use [copy](references/copy.md) for writing style guidance and [design](references/design.md) for composition guidance.
+  and one design system ([design-systems](references/design-systems.md)). Read only the chosen guides BEFORE writing; they may be large.
+- Use [copy](references/copy.md) for writing style guidance and [design](references/design.md) for composition guidance. Check numerical claims against query results: values, ratios and ranges. Charts encode every named series. Label assumptions separately from dataset facts.
 - See [markup](references/markup.md) for the rich and powerful kit components we offer.
 
 These are the common references. For but Artifactbin supports a long tail of rich features, whose guides can be read as necessary.
@@ -67,11 +74,17 @@ These are the common references. For but Artifactbin supports a long tail of ric
 
 ## 4. Save, share and verify
 [% include workflows.operations %]
-Follow [publishing](references/publishing.md)
+Check the changed content for a text edit. For a new page or layout change, check the whole document and phone layout. Use [live sessions](references/live-sessions.md) for changed interactions: test each identity’s authorized isolated copy, then the original as guest (writes off). Reuse one session and close it afterward. Report which checks passed and anything unverified; do not repeat unchanged QA.
+
+On refusal, follow [publishing](references/publishing.md) and [errors](references/errors.md). Conflicts preserve files; after an uncertain write repeat the same command and arguments, not a new artifact.
+
+### Monitoring
+
+[% include workflows.monitoring %]
 
 
 ## Some Important Notes
-- Save a complete small edit, or a useful first version of larger work with real content. Share its URL immediately, before visual checks. Say checks are continuing. Never publish an empty scaffold just to get a link.
+- [[ progressiveAuthoringRule ]]
 - Always finish and fix at the same URL.
 - Every body element keeps its persistent `id` for its lifetime. Move with the same id; never reuse an id. Only allowlisted tags; no `<form>`.
 [% if transport != "http" %]- Bind components to a named query's rows with `data="$name"` (declared in Helmet over a dataset; example below).
@@ -149,6 +162,7 @@ CLI: `afbin help <filename-without-.md>`. HTTP: `<origin>/llms/<filename-without
 - **Authoring and features**
   - [markup.md](references/markup.md) — JSX syntax and allowed elements
   - [markdown.md](references/markdown.md) — Markdown import
+  - [markup-compare.md](references/markup-compare.md) — Side-by-side comparison tables
   - [markup-components.md](references/markup-components.md) — Layout and UI components
   - [markup-editing.md](references/markup-editing.md) — Source edits and persistent IDs
   - [markup-data.md](references/markup-data.md) — Datasets, queries and mutations

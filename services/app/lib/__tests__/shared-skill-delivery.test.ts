@@ -11,7 +11,7 @@ describe('one root for installed and direct HTTP agents',()=>{
   const cli=withTeachingOrigin(teaching.files['SKILL.md'],origin);
   for(const operation of ['POST /api/artifacts','GET /api/artifacts/<id>','POST /api/artifacts/<id>/prepare','POST /api/artifacts/<id>/edits'])expect(http).toContain(operation);
   for(const field of ['expectedVersion','document_update','refresh_token','client_id','persistent secret store'])expect(http).toContain(field);
-  expect(http).toContain('If there are no saved credentials, you must ask the user for their email to complete authentication. Do not invent an email.');
+  expect(http).toContain('If sign-in is required, reuse an email already provided; otherwise ask the user for their email. Do not invent an email.');
   expect(http).not.toContain('afbin pull');expect(http).not.toContain('afbin push');
   expect(cli).toContain('afbin pull');expect(cli).toContain('afbin push');
   expect(cli).not.toContain('POST /api/artifacts/<id>/prepare');
@@ -132,8 +132,9 @@ it('teaches direct HTTP monitoring with baseline, cursor progression and bounded
 it('offers the complete Markdown skill archive from the HTTP root',()=>{
  const origin='https://guides.example';
  expect(llmsText(origin)).not.toContain('Optional [setup]');
- expect(llmsText(origin)).toContain('An installed afbin CLI has its own skill; npx downloads the CLI.');
- expect(llmsText(origin)).toContain('[Download all skill guides](/skills/artifactbin.zip) to extract and search locally');
+ expect(llmsText(origin)).toContain('If CLI was selected, follow its installed skill');
+ expect(llmsText(origin)).toContain('npx downloads the CLI');
+ expect(llmsText(origin)).toContain('[download all skill guides](/skills/artifactbin.zip) for local search');
 });
 it('keeps credential recovery references consistent with direct HTTP authentication',()=>{
  const origin='https://guides.example';

@@ -1,1 +1,1 @@
-After each accepted write, unasked, keep one comment monitor past your reply that wakes you on each new comment (not a plain background job; else poll between work steps; see monitoring below); answer each with the change and a reply.
+Monitor new comments only when requested. Use one monitor with a tool that wakes you on each new comment, not a plain background job. Without that support, make bounded polls between work steps during the requested review; do not wait indefinitely. Follow [monitoring]([[ references ]]monitoring.md) for replies, cursors and stopping.

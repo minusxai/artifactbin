@@ -263,9 +263,9 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
   });
   it('selects installed CLI or HTTP without prompting an unnecessary installation, and preserves the returned fence',()=>{
     const brief=buildQuickSheet(BASE);
-    expect(brief).toContain('already installed runnable CLI');
-    expect(brief).toContain('otherwise use');
-    expect(brief).toContain('Install CLI only');
+    expect(brief).toContain('Runnable afbin CLI installed?');
+    expect(brief).toContain('No / uncertain: use HTTP');
+    expect(brief).toContain('try setup once if agreed');
     expect(brief).not.toContain('CLI chosen and');
     for(const text of [brief,render(tree.get('artifactbin/references/publishing.md')!)]){
       expect(text).toContain('exactly the identity fields returned');
@@ -283,7 +283,7 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
     expect(example(http)).toContain('<title>Q3 sales review</title>');
     expect(example(cli)).toContain(example(http));
     expect(http).toContain('Metadata belongs in JSON request fields.');
-    expect(http).not.toContain('YAML metadata fence');
+    expect(http).toContain('Do not send a YAML metadata fence.');
     expect(cli).toContain('YAML metadata fence');
   });
   it.each([BASE, 'https://artifactbin.dev', 'https://app.artifactbin.dev', 'https://artifacts.company.example'])('keeps both transport roots within budget at %s',base=>{
