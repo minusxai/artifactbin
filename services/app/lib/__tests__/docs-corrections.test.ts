@@ -504,8 +504,11 @@ describe('the skill review corrections', () => {
   it('routes an HTTP agent to the page-type guides and the system files by links it can follow', () => {
     const llms = llmsText(HOST);
     expect(llms).not.toContain('`references/templates-<name>.md`');
-    expect(llms).toMatch(/\]\(https:\/\/app\.artifactbin\.example\/llms\/templates\)[^\n]*BEFORE writing/);
-    expect(buildQuickSheet(BASE)).toMatch(/\]\(references\/templates\.md\)[^\n]*BEFORE writing/);
+    for (const [text, link] of [[llms, `${HOST}/llms/templates`], [buildQuickSheet(BASE), 'references/templates.md']]) {
+      const create = text.match(/- \*\*Create:\*\*[^]*?(?=\n- |\n\n|$)/)?.[0];
+      expect(create).toContain(`](${link})`);
+      expect(create).toContain('Read only the chosen guides BEFORE writing');
+    }
     const catalogue = publicGuideText('design-systems', HOST)!;
     for (const slug of STORY_SYSTEM_NAMES) expect(catalogue, slug).toContain(`](${HOST}/llms/system-${slug})`);
   });

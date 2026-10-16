@@ -18,7 +18,7 @@ import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import {projectSkillLinks} from '@/lib/skills/serve';
 import { renderTree, skillExample, skillTree } from '@/lib/skills';
-import { buildQuickSheet } from '@/test/helpers/skill-docs';
+import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
 import { createUser, mintToken } from '@/lib/accounts';
 import { POST as createCommentRoute, GET as listCommentsRoute } from '@/app/api/artifacts/[id]/annotations/route';
 import { PATCH as editCommentRoute, POST as actOnCommentRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
@@ -35,7 +35,7 @@ const BOOTSTRAP = 'npx --yes @afbin/cli@latest setup';
 
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
-const CLI_ONLY_RETIRED = ['token','mint','claim'];
+const CLI_ONLY_RETIRED = ['mint','claim'];
 const httpDiscovery=(name:string)=>name==='the 401 hint'||name==='skills/artifactbin/llms.txt'||name==='skills/artifactbin/SKILL.md'||name==='lib/compiled-page/agent-discovery meta';
 const linkedInstaller = (name: string) => name==='skills/artifactbin/SKILL.md'||name==='skills/artifactbin/llms.txt'|| name === 'lib/agent-copy existingPaste' || name.endsWith(' prompt') ;
 
@@ -132,7 +132,7 @@ describe('every agent-facing starter says the same thing', () => {
     const skill = buildQuickSheet(BASE);
     expect(skill.split(ALLOWED_SENTENCE)).toHaveLength(2);
     // And it is a prohibition, not an offer: nothing around it tells an agent where to get one.
-    expect(withoutTheException(skill).toLowerCase()).not.toContain('token');
+    expect(withoutTheException(skill).toLowerCase()).not.toMatch(/mint.*token|print.*token|tokens\/new/);
   });
 
   it('the starter includes the question for the user and is identical everywhere it is handed over', async () => {
@@ -204,12 +204,12 @@ describe('the brief', () => {
     for (const trigger of ['artifactbin.dev', 'afbin', 'publish', 'edit', 'comment', 'query', 'export', 'dashboard', 'deck', 'dataset']) {
       expect(brief.description).toContain(trigger);
     }
-    expect(brief.description).toMatch(/^Required for every artifactbin task/);
+    expect(brief.description).toContain('Use for artifactbin.dev');
   });
 
-  it('opens with what artifactbin and an artifact are, then the CLI loop, then the example, then the references', () => {
+  it('teaches the task, connection, authoring and verification steps before the example and reference tree', () => {
     const at = (s: string) => { const i = sheet.indexOf(s); expect(i, s).toBeGreaterThanOrEqual(0); return i; };
-    const order = [at('Publish editable `.jsx`'), at('YAML metadata'), at('afbin pull'), at('## Example'), at('```jsx'), at('## Read next'), at('references/design.md')];
+    const order = ['## 0. Understand user need','## 1. Get connected','## 2. Understand create and edit','afbin pull','## 3. Shape the content','## 4. Save, share and verify','## Example','```jsx','## Reference tree'].map(at);
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
@@ -404,8 +404,8 @@ it('HTTP guidance preserves rotating credentials across tasks and renews without
 describe('shared instructions after missing credentials and before publishing claims',()=>{
  it('asks for the real recipient email before sending an OTP rather than inventing an identity',()=>{
   const guide=publicGuideText('http-auth',BASE)!;
-  expect(guide).toContain('you must ask the user for their email');
-  expect(guide.indexOf('you must ask the user for their email')).toBeLessThan(guide.indexOf('POST /api/auth/email-otp/send-verification-otp'));
+  expect(guide).toContain('otherwise ask the user for their email');
+  expect(guide.indexOf('otherwise ask the user for their email')).toBeLessThan(guide.indexOf('POST /api/auth/email-otp/send-verification-otp'));
   expect(guide).toContain('Do not invent an email');
   expect(guide).toContain('No CLI installation or downloaded script is needed.');
  });
@@ -419,7 +419,7 @@ describe('shared instructions after missing credentials and before publishing cl
   for(const origin of ['https://app.artifactbin.dev','https://artifacts.acme.example']) {
    const text=llmsText(origin);
    console.info('Hosted root bytes',origin,Buffer.byteLength(text));
-   expect(Buffer.byteLength(text),origin).toBeLessThanOrEqual(8192);
+   expect(Buffer.byteLength(text),origin).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
   }
  });
  it('grounds numerical claims and comparisons in query results and labels assumptions',()=>{
@@ -448,7 +448,7 @@ it('keeps live comment tracking from blocking existing work or waiting for proce
  */
 it('teaches every surface to watch with a tool that wakes the agent, never a plain background job, and to poll without one', () => {
  const {instruction} = (monitoringGuidance(DEFAULT_SERVER, 'abc123', 'markup') as {monitoring:{instruction:string}}).monitoring;
- const section = (text:string) => text.split('\n## Monitor\n')[1]!.split('\n## ')[0]!;
+ const section = (text:string) => text.split('\n### Monitoring\n')[1]!.split('\n## ')[0]!;
  const skill = skillTree().get('artifactbin/SKILL.md')!;
  const surfaces = {
   instruction,
@@ -457,6 +457,10 @@ it('teaches every surface to watch with a tool that wakes the agent, never a pla
   guide: publicGuideText('monitoring', DEFAULT_SERVER)!.split('\n## CLI')[0]!,
  };
  for (const [name, text] of Object.entries(surfaces)) {
+  expect(text, name).toContain('After the first successful save or local preview');
+  expect(text, name).toContain('do not ask first');
+  expect(text, name).toContain('until the session ends or the user says stop');
+  expect(text, name).not.toContain('only when requested');
   expect(text, name).toMatch(/wakes you on each (?:output line|new comment)/);
   expect(text, name).toContain('plain background job');
   expect(text, name).toContain('between work steps');
@@ -494,4 +498,21 @@ it('HTTP authentication is direct and reuses the existing rotating credential st
  }
  for(const field of ['ARTIFACTBIN_URL','ARTIFACTBIN_TOKEN','ARTIFACTBIN_REFRESH_TOKEN','ARTIFACTBIN_CLIENT_ID','ARTIFACTBIN_EXPIRES_AT'])expect(guide).toContain(field);
  for(const part of ['ARTIFACTBIN_HOME','credentials.env','alias','serialized','grant_type','invalid_grant'])expect(guide).toContain(part);
+});
+
+it('keeps sign-in conditional across root guides and discovery', () => {
+ for (const text of [buildQuickSheet(BASE), llmsText(BASE)]) {
+  expect(text).toContain('Missing credentials do not mean a new user');
+  expect(text).not.toContain('Install CLI only when requested');
+  expect(text).toContain('If sign-in is required');
+  expect(text).toContain('email already provided');
+ }
+ expect(agentDiscovery(BASE).instruction).toContain('If sign-in is required');
+});
+
+it('lists every shipped reference in the main reference tree', () => {
+ const tree=buildQuickSheet(BASE).split('## Reference tree')[1]!;
+ for (const file of skillTree().files.filter(file=>file.ref && file.audience==='agent')) {
+  expect(tree,file.path).toContain(`](references/${file.file})`);
+ }
 });

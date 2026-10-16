@@ -81,15 +81,12 @@ describe('the brief — the one text every agent reads', () => {
   it('does not forbid h-screen / vh — the platform rewrites both on every path', () => {
     expect(sheet).not.toMatch(/never vh/i);
   });
-  it('keeps the hard rules with the example they govern, and routes the page type and the design system AFTER both', () => {
-    // The brief is: Read first (what an artifact is, the CLI loop), then ONE example that carries
-    // the data block AND the document rules as comments beside the lines they govern, then the
-    // reference list. That ORDER is the rule; how many bytes each part takes is editorial.
+  it('keeps the worked example and its rules, with design selection in the content step', () => {
     const rules = sheet.indexOf('self-contained');
     const example = sheet.indexOf('```jsx');
-    const data = sheet.indexOf('<Query');
+    const data = sheet.indexOf('<Query', example);
     const bodyRules = sheet.indexOf('static JSX', example);
-    const theme = sheet.indexOf('references/design-systems.md', sheet.indexOf('## Read next'));
+    const theme = sheet.indexOf('references/design-systems.md', sheet.indexOf('## 3. Shape the content'));
     expect(rules).toBeGreaterThan(-1);
     expect(example).toBeGreaterThan(rules);
     // Nothing about themes or templates sits between the rules and the example.
@@ -97,7 +94,8 @@ describe('the brief — the one text every agent reads', () => {
     expect(sheet.indexOf('## Example')).toBeLessThan(example);
     expect(data).toBeGreaterThan(example);
     expect(bodyRules).toBeGreaterThan(data);
-    expect(theme).toBeGreaterThan(bodyRules);
+    expect(theme).toBeGreaterThan(rules);
+    expect(theme).toBeLessThan(example);
   });
 });
 

@@ -5,5 +5,5 @@ export function monitoringGuidance(base:string,id:string,format:string):Record<s
  return {monitoring:{artifact_url:url,guide:`${origin}/llms/monitoring`,
   cli:`afbin watch ${url} --server ${origin} --comments --json`,
   http:`${origin}/api/artifacts/${id}/annotations/changes?after=now&wait=60`,
-  instruction:'Handle existing comments and continue the task. Monitor new human comments with one watch started by a tool that wakes you on each output line, not as a plain background job whose output nobody reads; never wait for it to exit. Without such a tool, make bounded polls between work steps. Follow the guide for replies, checkpoints and stopping.'}};
+  instruction:'After the first successful save or local preview, start one comment monitor automatically; do not ask first. Keep it active until the session ends or the user says stop. Handle existing comments and continue the task. Use a tool that wakes you on each output line, not as a plain background job whose output nobody reads; never wait for it to exit. Without such a tool, make bounded polls between work steps and tell the user monitoring stops when your work ends. Follow the guide for replies, checkpoints and stopping.'}};
 }

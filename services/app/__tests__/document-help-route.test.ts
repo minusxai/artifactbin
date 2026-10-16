@@ -58,7 +58,7 @@ describe('GET /a/:id (the document itself)', () => {
     const text = await llms.text();
     expect(text).toBe(llmsText(BASE));
     expect(text).toMatch(/^## Read first/);
-    expect(text).toContain('[Download all skill guides](/skills/artifactbin.zip)');
+    expect(text).toMatch(/\[download all skill guides\]\(\/skills\/artifactbin\.zip\)/i);
     expect(text).not.toContain('@afbin/cli@latest setup');
     expect((await app.request(`${BASE}/getting-started.md`)).status).toBe(404);
     for (const topic of ['http-api', 'http-auth', 'http-authoring', 'http-document-graph']) {

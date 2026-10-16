@@ -1,7 +1,7 @@
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
 import {describe,it,expect} from 'vitest';
 import {llmsText} from '@/lib/serving/agent-references.server';
-import {skillTree} from '../skills';
+import {skillTree,SKILL_MAIN_MAX_BYTES,SKILL_FILE_MAX_BYTES} from '../skills';
 import {renderSkill} from '../skills/render';
 
 describe('one root for installed and direct HTTP agents',()=>{
@@ -11,7 +11,7 @@ describe('one root for installed and direct HTTP agents',()=>{
   const cli=withTeachingOrigin(teaching.files['SKILL.md'],origin);
   for(const operation of ['POST /api/artifacts','GET /api/artifacts/<id>','POST /api/artifacts/<id>/prepare','POST /api/artifacts/<id>/edits'])expect(http).toContain(operation);
   for(const field of ['expectedVersion','document_update','refresh_token','client_id','persistent secret store'])expect(http).toContain(field);
-  expect(http).toContain('If there are no saved credentials, you must ask the user for their email to complete authentication. Do not invent an email.');
+  expect(http).toContain('If sign-in is required, reuse an email already provided; otherwise ask the user for their email. Do not invent an email.');
   expect(http).not.toContain('afbin pull');expect(http).not.toContain('afbin push');
   expect(cli).toContain('afbin pull');expect(cli).toContain('afbin push');
   expect(cli).not.toContain('POST /api/artifacts/<id>/prepare');
@@ -75,8 +75,8 @@ describe('installable shared skill folder',()=>{
  });
  it('keeps public root and guide projections within the reading budget',()=>{
   const base='https://app.artifactbin.dev';
-  expect(Buffer.byteLength(llmsText(base))).toBeLessThanOrEqual(8192);
-  for(const file of skillTree().files.filter(file=>file.ref&&file.kind==='guide'))expect(Buffer.byteLength(publicGuideText(file.file.replace(/\.md$/,''),base)!),file.path).toBeLessThanOrEqual(8192);
+  expect(Buffer.byteLength(llmsText(base))).toBeLessThanOrEqual(SKILL_MAIN_MAX_BYTES);
+  for(const file of skillTree().files.filter(file=>file.ref&&file.kind==='guide'))expect(Buffer.byteLength(publicGuideText(file.file.replace(/\.md$/,''),base)!),file.path).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
  });
  it('leaves room in the packaged data guide for origin expansion',()=>{
   const files=skillPackageFiles(skillTree(),'https://app.artifactbin.dev');
@@ -132,8 +132,9 @@ it('teaches direct HTTP monitoring with baseline, cursor progression and bounded
 it('offers the complete Markdown skill archive from the HTTP root',()=>{
  const origin='https://guides.example';
  expect(llmsText(origin)).not.toContain('Optional [setup]');
- expect(llmsText(origin)).toContain('An installed afbin CLI has its own skill; npx downloads the CLI.');
- expect(llmsText(origin)).toContain('[Download all skill guides](/skills/artifactbin.zip) to extract and search locally');
+ expect(llmsText(origin)).toContain('If CLI was selected, follow its installed skill');
+ expect(llmsText(origin)).toContain('npx downloads the CLI');
+ expect(llmsText(origin)).toContain('[download all skill guides](/skills/artifactbin.zip) for local search');
 });
 it('keeps credential recovery references consistent with direct HTTP authentication',()=>{
  const origin='https://guides.example';

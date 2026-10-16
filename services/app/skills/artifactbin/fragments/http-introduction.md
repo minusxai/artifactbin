@@ -1,3 +1,3 @@
-Use HTTP at [[ base ]]. An installed afbin CLI has its own skill; npx downloads the CLI.
+If HTTP was selected, use [[ base ]] and continue below. If CLI was selected, follow its installed skill; [setup]([[ references ]]npm-local.md) applies only when installation was selected above. Check `afbin --version` directly; npx downloads the CLI.
 
-[Download all skill guides](/skills/artifactbin.zip) to extract and search locally, or follow the reference links below.
+Optionally [download all skill guides](/skills/artifactbin.zip) for local search, or follow the reference links below.

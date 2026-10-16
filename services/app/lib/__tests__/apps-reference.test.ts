@@ -26,10 +26,11 @@ describe('the skill’s first page', () => {
 
   it('keeps the measured rule for documents, and says a push does not verify a write', () => {
     expect(sheet).toContain('Push confirms source acceptance');
-    expect(sheet).toContain('Sessions are browser/UI QA for newly authored or changed `<Mutation>`');
-    const writes = bullets.find((b) => b.includes('<Mutation>') && /live session/i.test(b));
+    const writes = sheet.split('## 4. Save, share and verify')[1]?.split('### Monitoring')[0];
     expect(writes).toBeDefined();
-    expect(writes).toContain('--as guest');
+    expect(writes).toContain('browser/UI QA of newly authored or changed `<Mutation>`');
+    expect(writes).toContain('each identity’s authorized isolated copy');
+    expect(writes).toContain('original as guest (writes off)');
     expect(writes).toContain('(references/live-sessions.md)');
   });
 });
@@ -140,7 +141,7 @@ describe('testing identities in live sessions', () => {
   });
 
   it('carries the same rule on the skill’s first page', () => {
-    const writes = sheet.split('\n').find((b) => b.startsWith('- ') && b.includes('<Mutation>') && /live session/i.test(b))!;
+    const writes = sheet.split('## 4. Save, share and verify')[1]?.split('### Monitoring')[0];
     expect(writes).toContain('One session at a time');
     expect(writes).toContain('Stop once each works once per identity');
     expect(writes).not.toContain('until clean');

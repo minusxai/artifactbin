@@ -11,7 +11,7 @@ import { gettingStarted } from '@/lib/serving/getting-started';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin CLI if installed, or HTTP: https://x.test/llms.txt. If there are no saved credentials, you must ask the user for their email to complete authentication.\n\nIf the user hasn't specified a task, ask what artifact they'd like to build.";
+const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin CLI if installed, or HTTP: https://x.test/llms.txt. If sign-in is required, reuse an email already provided; otherwise ask the user for their email.\n\nIf the user hasn't specified a task, ask what artifact they'd like to build.";
 
 describe('the tokenless paste', () => {
   it('offers one full installer command per platform on the selected host', () => {

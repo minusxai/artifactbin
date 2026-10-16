@@ -1,3 +1,4 @@
+import {SKILL_MAIN_MAX_BYTES} from '@/lib/skills';
 import { createUser } from '@/lib/accounts';
 import { artifactQuery } from '@/lib/artifacts/table';
 import {observedRequest} from '@/__tests__/conditional-request';
@@ -206,12 +207,12 @@ describe('CLI and HTTP discovery',()=>{
   const response=await getLlmsTxt(request('/llms.txt'));const text=await response.text();
   expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('text/plain');
   expect(text).toMatch(/^## Read first/);
-  expect(text).toContain('[Download all skill guides](/skills/artifactbin.zip)');
+  expect(text).toMatch(/\[download all skill guides\]\(\/skills\/artifactbin\.zip\)/i);
   expect(text).toContain('POST /api/artifacts/<id>/edits');expect(text).not.toMatch(/@afbin\/cli@latest|ensure-node|releases\/download|npm install/);
-  expect(Buffer.byteLength(text)).toBeLessThanOrEqual(8192);
+  expect(Buffer.byteLength(text)).toBeLessThanOrEqual(SKILL_MAIN_MAX_BYTES);
   for(const topic of ['http-api','http-auth','http-authoring','live-sessions'])
     expect(text).toContain(`http://localhost:3000/llms/${topic}`);
-  expect(text).toContain('## Example');expect(text).toContain('## Read next');
+  expect(text).toContain('## Example');expect(text).toContain('## Reference tree');
   expect(text).not.toContain('## Direct HTTP API');
  });
 });

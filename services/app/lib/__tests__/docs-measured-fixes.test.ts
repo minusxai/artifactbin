@@ -36,11 +36,11 @@ const BASE = 'https://example.test';
 describe('the deck FRAME: the brief routes to it, the template file carries it', () => {
   it('the brief tells a genre author to read the template file BEFORE writing, naming the cost of skipping', () => {
     const sheet = buildQuickSheet(BASE);
-    const readTemplate = sheet.indexOf('Read your [page type]');
+    const readTemplate = sheet.indexOf('Read only the chosen guides BEFORE writing');
     expect(readTemplate).toBeGreaterThanOrEqual(0);
     expect(readTemplate).toBeLessThan(sheet.indexOf('## Example'));
     // A link, not a backticked path: over HTTP only a link is re-addressed to /llms/templates.
-    expect(sheet).toContain("Read your page type's guide, linked from [page types](references/templates.md), BEFORE writing");
+    expect(sheet).toContain("[templates](references/templates.md)");
     expect(sheet).not.toContain('`references/templates-<name>.md`');
     expect(sheet).toContain('Keep content away from viewport edges.');
   });
