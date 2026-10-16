@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { loadCompilerBuild } from '@/lib/compiled-page/build.server';
 import { morphDraftDom } from '../morph/engine';
 import { delegateEvents, hydrate } from 'solid-js/web';
+import { ISLANDS_READY_EVENT } from '../contract';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 type Fixture = { html: string; browserCode: string; flow: CompiledDataflow };
@@ -30,6 +31,7 @@ const SOURCES = {
   // paragraph at the block inside it, so the served tree is not the one the document's module walks.
   misnested: '<Helmet><Value name="name" type="string" default="Ada" /></Helmet><h1 id="heading">Static heading</h1><p id="live">Hello {$name}<div id="inner">block</div> after</p><footer id="end">Static footer</footer>',
   bound: '<Helmet><Value name="region" type="string" default="west" /><Value name="pick" type="string" default="https://example.test/a.png" /></Helmet><input aria-label="Region" value="$region" /><img src="$pick" alt="the pick" />',
+  isometric: '<Helmet><Value name="spread" type="number" default={0} /></Helmet><Isometric id="drawing" title="Deferred assembly" spread="$spread" parts={[{"key":"shaft","kind":"cylinder","x":0,"y":0,"z":0,"radius":5,"height":20,"separation":[0,0,20]}]} />',
 };
 const compiled = new Map<string, Fixture>();
 beforeAll(async () => {
@@ -43,6 +45,35 @@ beforeAll(async () => {
 const fixture = (source: string): Fixture => compiled.get(source) ?? (() => { throw new Error('a source outside SOURCES'); })();
 
 describe('one tree SSR to hydrate', () => {
+  it('keeps the served isometric drawing until readiness, then applies the latest Value through the lazy renderer', async () => {
+    const server = fixture(SOURCES.isometric);
+    const host = document.createElement('div'); host.innerHTML = server.html; document.body.append(host);
+    const manifest = loadCompilerBuild().manifest;
+    const shipped = async (specifier: string): Promise<Record<string, unknown>> => import(/* @vite-ignore */ pathToFileURL(path.resolve(ROOT, 'services/app/public', manifest[specifier]!.slice(1))).href);
+    const [shippedRt, kit] = await Promise.all([shipped('@mx/rt'), shipped('@mx/kit/isometric')]);
+    let tree: Component | null = null;
+    await evaluateModule(server.browserCode, spec => spec.includes('/rt-') ? shippedRt
+      : spec.includes('/kit-isometric-') ? kit
+      : spec.includes('/boot-') ? { boot: (module: { TREE: Component }) => { tree = module.TREE; } }
+      : (() => { throw new Error(`unexpected import ${spec}`); })(), 'test/isometric-deferred.js');
+    const runtime = (shippedRt.createIslandRuntime as typeof rt.createIslandRuntime)({ dataflow: { flow: server.flow } }, shippedRt.createDataflowStore as typeof createDataflowStore);
+    const svg = host.querySelector('svg')!;
+    const before = host.querySelector('[data-part]')!.getAttribute('transform');
+    const dispose = (shippedRt.hydrateIsland as typeof rt.hydrateIsland)('d-', tree!, runtime.context, host);
+    try {
+      expect(host.querySelector('svg')).toBe(svg);
+      expect(svg.querySelectorAll('path').length).toBeGreaterThan(0);
+      runtime.context.setValue('spread', 1);
+      expect(host.querySelector('[data-part]')!.getAttribute('transform')).toBe(before);
+      document.dispatchEvent(new Event(ISLANDS_READY_EVENT));
+      await vi.waitFor(() => expect(host.querySelector('[data-part]')!.getAttribute('transform')).not.toBe(before));
+      expect(host.querySelectorAll('svg')).toHaveLength(1);
+      expect(host.querySelector('svg')!.getAttribute('aria-label')).toBe('Deferred assembly');
+      runtime.context.setValue('spread', 0);
+      expect(host.querySelector('[data-part]')!.getAttribute('transform')).toBe(before);
+    } finally { dispose?.(); runtime.dispose(); host.remove(); }
+  });
+
   it('keeps authored prose present while a draft replaces a hydrated document tree', async () => {
     const before = fixture(SOURCES.flagBefore);
     const after = fixture(SOURCES.flagAfter);

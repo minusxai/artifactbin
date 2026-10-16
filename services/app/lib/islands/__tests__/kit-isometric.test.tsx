@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { Isometric } from '../kit/isometric';
+import { Isometric } from '../kit/isometric-server';
 import { IslandProvider } from '../context';
 import { fakeIsland } from './context.test';
 import type { IsometricPart } from '@/lib/jsx/isometric-spec';

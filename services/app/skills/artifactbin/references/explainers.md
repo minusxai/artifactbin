@@ -7,12 +7,10 @@ description: "Mechanism-led explanatory figures using compact Isometric specs: e
 Choose a mechanism that explains the central idea. Write what the reader
 changes, what moves, and what that change teaches.
 
-**Author the recipe, not its rendered paths.** Like a chart spec, `<Isometric>`
-takes static geometry data; the kit constructs surfaces, projects them, draws
-contours and animates controls. Keep the compact `parts` in the document.
-Do not paste generated SVG meshes or a second projection/geometry engine into
-an author script for shapes this component supports. Rendered SVG belongs to
-the renderer, not the editable source. No installation or external import.
+**Author the recipe, not rendered paths.** `<Isometric>` takes static `parts`;
+the kit constructs surfaces, projects contours and animates controls. Do not
+paste generated SVG or another geometry engine into the document for supported
+shapes. No installation or external import.
 
 ## Contents
 
@@ -20,11 +18,10 @@ the renderer, not the editable source. No installation or external import.
 
 ## Compose the explanation
 
-Use one focal mechanism readable at phone size. Include supports, joints and
-thickness. Put prose, labels, units and controls outside the drawing. Use the
-selected design system’s tones. Distinguish measured facts, computed results
-and illustrative motion: changing a wing's incidence is geometry; animated
-dashes alone do not simulate airflow or calculate lift.
+Use one mechanism readable at phone size, with supports, joints and thickness.
+Keep prose, labels and controls outside the drawing. Use the design system’s
+tones. Distinguish measured facts, computed results and illustrative motion:
+rotating a wing changes geometry; moving dashes do not calculate airflow or lift.
 
 ## A compact assembly
 
@@ -44,9 +41,9 @@ dashes alone do not simulate airflow or calculate lift.
 </figure>
 ```
 
-The kit produces a meaningful static drawing for exports and without scripts.
-Bound controls hydrate the same component. The title is the drawing's
-accessible name. Its 640×400 default frame scales with its container; set
+Static drawings work in exports and without scripts; bound controls hydrate
+the same component. The title is its accessible name. The default 640×400
+frame scales with its container; set
 `width`/`height` (up to 4096), `azimuth` (0–360°, default 45°) and `elevation`
 (5–85°, default 30°) for composition. x/y are the ground plane; z points up.
 Use one unit throughout.
@@ -66,10 +63,9 @@ Every part and child has a globally unique short `key`. `tone` is `neutral`
 | `line` | 3D `points`; optional `curve:"bezier"` (four control points), `dashed:true`, `arrow:true` |
 | `group` | `parts:[…]` containing shapes that move as one assembly; no nested groups |
 
-**Extrude:** a prism preserves concave notches. Outline order may be clockwise
-or counterclockwise. It must enclose area without self-intersection. A wing
-starts with a thin airfoil section, extruded along its span; use `orientation`
-to turn that local extrusion into the scene's coordinates.
+**Extrude:** a prism preserves concave notches and accepts either winding.
+Its outline must enclose area without self-intersection. Extrude an airfoil
+section along its span, then use `orientation` to place it in the scene.
 
 **Revolve:** each pair gives radius and distance along the axis. A boiler can
 start at radius zero, follow its outside and end at zero. For a hollow cup,
