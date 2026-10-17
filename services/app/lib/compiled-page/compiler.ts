@@ -117,7 +117,7 @@ export const KIT: Readonly<Record<string, KitMeta>> = {
   Files: { mod: 'files', island: true, api: ['data', 'variant', 'glyphs'], dom: 'identity' },
   Select: { mod: 'data', island: true, api: ['label', 'placeholder', 'value', 'options', 'className'] },
   Button: { mod: 'basic', api: ['variant', 'size', 'run', 'set', 'args'] },
-  Isometric: { mod: 'isometric', api: ['parts', 'title', 'width', 'height', 'azimuth', 'elevation', 'spread'], noChildren: true },
+  Isometric: { mod: 'isometric', api: ['parts', 'title', 'width', 'height', 'azimuth', 'elevation', 'spread', 'angle', 'flow', 'appearance', 'motion'], noChildren: true },
   Mermaid: { mod: 'mermaid', island: true, api: ['code', 'title', 'colorMode'], grid: true },
   FileUpload: { mod: 'upload', island: true, api: ['dataset', 'value', 'busy', 'multiple', 'accept', 'label', 'maxFiles', 'disabled', 'className'] },
   Input: { mod: 'controls', island: true, api: ['label', 'placeholder', 'value', 'type', 'min', 'max', 'step', 'aria-label'] },
@@ -238,6 +238,7 @@ function selfDynamic(node: JsxNode): boolean {
   // A mount is static markup: its bindings are data the runtime reads, never an island's.
   if (isScriptComponent(node)) return false;
   if (ISLAND_TAGS.has(node.tag)) return true;
+  if (node.tag === 'Isometric' && node.attributes.some(a => a.name === 'flow' && a.value.static && a.value.json === true)) return true;
   if (node.attributes.some((a) => !a.value.static)) return true;
   if (templated(node)) return true;
   if (node.attributes.some((a) => ['run', 'set', 'args'].includes(a.name))) return true;

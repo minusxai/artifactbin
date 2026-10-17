@@ -148,6 +148,9 @@ describe('buildIslands', () => {
     // The new optional geometry family adds at most 4 KB; preserve the existing families' budget.
     const geometryBytes = staticUrls.filter(url => !existingUrls.includes(url)).reduce((sum, url) => sum + files[url].br, 0);
     expect(geometryBytes).toBeLessThanOrEqual(4 * 1024);
+    const geometryEngine = 'story-ui/isometric.ts';
+    expect(Object.values(outputInputs).flat().some(input => input.endsWith(geometryEngine)), 'interactive geometry is shipped').toBe(true);
+    expect(staticUrls.flatMap(url => outputInputs[url] ?? []).some(input => input.endsWith(geometryEngine)), 'the served drawing does not need the interactive engine before readiness').toBe(false);
     // 81 KB since kit view state (Tabs, Accordion, Collapsible, Dialog) registers as comment state: one shared
     // chunk for lib/islands/comment-state + lib/story-runtime/comment-state, ~0.7 KB brotli, beside those families.
     // 82 KB since <DataTable transpose> (kit/data/comparison + lib/story-ui/compare, ~1.5 KB brotli, the data family

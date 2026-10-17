@@ -1,34 +1,35 @@
 /* @jsxImportSource solid-js */
-import { createMemo, For, Show, splitProps, type JSX } from 'solid-js';
-import { isometricScene } from '@/lib/story-ui/isometric';
-import type { IsometricSpec } from '@/lib/jsx/isometric-spec';
-import { useIsland } from '../context';
+import { getOwner, onCleanup, onMount, splitProps } from 'solid-js';
+import { render } from 'solid-js/web';
+import { deferEngine } from '../defer-engine';
+import { ISOMETRIC_PROPS, type IsometricProps } from './isometric-props';
 
-const ink = 'var(--ds-hand-ink, var(--foreground))';
-const tones = {
-  neutral: 'var(--ds-hand-ground, var(--card))',
-  accent: 'var(--ds-hand-fill, var(--primary))',
-  secondary: 'var(--ds-hand-fill2, var(--chart-2))',
-  muted: 'var(--ds-hand-muted, var(--muted))',
-};
-export function Isometric(props: IsometricSpec & JSX.HTMLAttributes<HTMLDivElement>) {
-  const [p, rest] = splitProps(props, ['parts', 'title', 'width', 'height', 'azimuth', 'elevation', 'spread', 'children']);
-  const island = typeof p.spread === 'string' ? useIsland() : null;
-  // Fitting includes assembled AND separated positions. A slider never zooms the camera.
-  const scene = createMemo(() => isometricScene(p));
-  const drawing = createMemo(() => scene().draw(Number(typeof p.spread === 'string' ? island?.value(p.spread.slice(1)) : p.spread ?? 0)));
-  return <div {...rest} data-slot="isometric">
-    <svg viewBox={`0 0 ${scene().width} ${scene().height}`} role="img" aria-label={p.title} class="block h-auto w-full" fill="none" stroke-linejoin="round">
-      <title>{p.title}</title>
-      <For each={drawing()}>{part => <g data-part={part.key}>
-        <Show when={part.solid}>{solid => <>
-          <path d={solid().fill} fill={tones[part.tone]} />
-          <For each={solid().shades}>{(d, index) => <path d={d} fill={`color-mix(in srgb, ${ink} ${18 - index() * 4}%, ${tones[part.tone]})`} />}</For>
-          <path d={solid().outline} stroke={ink} stroke-width="1" />
-          <path d={solid().crease} stroke={ink} stroke-width="0.6" />
-        </>}</Show>
-        <Show when={part.line}>{d => <path d={d()} stroke={part.tone === 'neutral' ? ink : tones[part.tone]} stroke-width="1" stroke-dasharray={part.dashed ? '5 5' : undefined} />}</Show>
-      </g>}</For>
-    </svg>
-  </div>;
+/** Adopt the server's SVG without rebuilding it during hydration. The interactive renderer
+ * intentionally loads after reader readiness; prose and the initial drawing need no engine. */
+export function Isometric(props: IsometricProps) {
+  const [drawing, rest] = splitProps(props, ISOMETRIC_PROPS);
+  const owner = getOwner();
+  let host!: HTMLDivElement;
+  onMount(() => {
+    let disposed = false;
+    let unmount = () => {};
+    const cancel = deferEngine(host, () => {
+      void import('./isometric-drawing').then(({ IsometricDrawing }) => {
+        if (disposed) return;
+        // Build before replacing the served SVG, so a loading failure leaves the drawing visible.
+        const stage = host.ownerDocument.createElement('div');
+        // Keep the page's Value context when mounting outside the original hydration task.
+        unmount = render(() => <IsometricDrawing {...drawing} />, stage, undefined, { owner });
+        host.replaceChildren(...stage.childNodes);
+      }).catch(() => {
+        if (disposed) return;
+        const message = host.ownerDocument.createElement('p');
+        message.setAttribute('role', 'status');
+        message.textContent = 'Interactive drawing could not load. Reload to try again.';
+        host.append(message);
+      });
+    });
+    onCleanup(() => { disposed = true; cancel(); unmount(); });
+  });
+  return <div {...rest} ref={host} data-slot="isometric" />;
 }

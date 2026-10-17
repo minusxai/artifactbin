@@ -8,7 +8,7 @@ const ISLANDS = 'lib/islands';
  * STANDALONE_LAZY, FRAME_EDITOR, OFFLINE_LAZY): their exports are the compiled-page ABI. */
 const ISLAND_ENTRIES = [
   `${ISLANDS}/{rt,boot,deck,row-class,page,page-runtime,frame-editor,sqlite-engine,url-sync,chart-controller}.{ts,tsx}`,
-  `${ISLANDS}/kit/{image,basic,tabs,accordion,dialog,disclosure,controls,upload,data,files,people,mermaid,embed,cells,static}.tsx`,
+  `${ISLANDS}/kit/{image,basic,tabs,accordion,dialog,disclosure,controls,upload,data,files,people,mermaid,isometric,isometric-server,embed,cells,static}.tsx`,
   `${ISLANDS}/kit/image-map.ts`, `${ISLANDS}/kit/templates.ts`, `${ISLANDS}/morph/engine.ts`, `${ISLANDS}/vendor/*.ts`,
   'lib/offline/{compiled-boot,compiled-sqlite}.ts',
 ];

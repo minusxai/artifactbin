@@ -297,7 +297,7 @@ export const REF_ATTRS: {
     Cell: { data: 'table' },
     DataTable: { data: 'table' },
     DeckGL: { data: 'table' },
-    Isometric: { spread: 'scalar' },
+    Isometric: { spread: 'scalar', angle: 'scalar', flow: 'scalar' },
     // A folder's listing, bound to the children table its <Query> reads.
     Files: { data: 'table' },
     // The kit CONTROL components: the same

@@ -136,6 +136,7 @@ CLI: `afbin help <filename-without-.md>`. HTTP: `<origin>/llms/<filename-without
   - [design.md](references/design.md) — Composition and hierarchy
   - [worked-briefs.md](references/worked-briefs.md) — Examples of design decisions
   - [explainers.md](references/explainers.md) — Explain mechanisms visually
+    - [explainer-shapes.md](references/explainer-shapes.md) — Complex isometric shapes and assemblies
   - [themes.md](references/themes.md) — Legacy theme compatibility
   - [templates.md](references/templates.md) — Choose a page type
     - [templates-doc.md](references/templates-doc.md) — Documents

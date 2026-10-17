@@ -235,7 +235,9 @@ export function solidPlugin({ generate = 'dom', hydratable = true } = {}) {
       build.onResolve({ filter: /^@mx\/(rt|boot|deck|page|row-class|kit\/[a-z-]+)$/ }, (args) => {
         const entry = ENTRIES.find((e) => e.specifier === args.path);
         if (!entry) return { errors: [{ text: `build-islands: unknown island specifier ${args.path}` }] };
-        return { path: entry.file() };
+        // Isometric serves a complete SVG, then adopts it with a small browser shell.
+        // Its interactive geometry is an intentional lazy chunk, excluded from reader readiness.
+        return { path: generate === 'ssr' && args.path === '@mx/kit/isometric' ? islandModule('kit/isometric-server') : entry.file() };
       });
       build.onLoad({ filter: /\.[jt]sx$/ }, async (args) => {
         if (!args.path.startsWith(ISLANDS_SRC + path.sep)) return undefined;
