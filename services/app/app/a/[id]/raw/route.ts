@@ -45,7 +45,7 @@ import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform';
 import { canonicalDocumentUrl, servesDocument } from '@/lib/serving';
-import type { StorySurface } from '@/lib/story-runtime/story-fragment';
+import { storyFragmentView, type StorySurface } from '@/lib/story-runtime/story-fragment';
 import { readerModeOf, STORY_NODES_ID } from '@/lib/story-runtime/contract';
 import { scriptJson } from '@artifactbin/utils/escape';
 import { compiledPageFor, documentEtag, domainFooter, linkedDocumentSheets } from '@/lib/publish/prepared';
@@ -386,6 +386,8 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
         const answer = await compiledPageFor(prepared.row, prepared.page, {
           at,
           search: new URL(request.url).search,
+          // Only the live morph's fragment is drawn at the reader's view state: a page is served at its defaults, as it hydrates.
+          view: fragment ? storyFragmentView(new URL(request.url).search) : null,
           drawings,
           colorMode: shownMode,
           // On its own origin the copy carries its reader's pages session, an account's or a guest owner's.

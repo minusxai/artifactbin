@@ -26,10 +26,11 @@
  *
  * Anything it cannot do throws, and the caller reloads keeping the reader's place (../live-update).
  */
-import { storyFragmentUrl, type StorySurface } from '@/lib/story-runtime/story-fragment';
+import { fragmentView, storyFragmentUrl, type StorySurface } from '@/lib/story-runtime/story-fragment';
 import { applyAnchor, currentAnchor } from '@/lib/story-runtime/anchor';
 import { applyColorMode, readerMode } from '@/lib/story-runtime/reader-mode';
 import { writeUrlValues } from '@/lib/dataflow/url-values';
+import { viewCommentState, withPendingCommentState } from '@/lib/story-runtime/comment-state-io';
 import type { CompiledDataflow } from '@/lib/dataflow';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { ISLAND_DOCUMENT_KEY, LINKED_BASE_SELECTOR, LIVE_DIRECT_ATTR, LIVE_EDIT_ATTR, LIVE_ID_ATTR, RENDER_ID_PATTERN, STORY_ROOT_SELECTOR, type IslandHost } from '../contract';
@@ -97,10 +98,13 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
   if (running && running.mode() !== 'read') throw refuse('the document is being edited');
 
   // The fragment is rendered at the reader's CURRENT values (as a link to them would be), so an island it
-  // hydrates matches the store it joins; the page's own query string rides along (`reader=`, the rest).
+  // hydrates matches the store it joins; the page's own query string rides along (`reader=`, the rest). And at
+  // their current VIEW STATE (the chosen tab, an open disclosure: lib/story-runtime/comment-state), so the DOM
+  // drawn under a kept tree is the one its running signals hold, and a tree hydrated from it starts there too.
   const store = running?.store ?? null;
   const search = store ? writeUrlValues(win.location.search, store.flow, store.getState().values) : win.location.search;
-  const next = await fetchFragment(win, storyFragmentUrl(id, search, surface), options.fetch ?? win.fetch.bind(win), surface);
+  const view = seam ? fragmentView(viewCommentState(doc)) : {};
+  const next = await fetchFragment(win, storyFragmentUrl(id, search, surface, view), options.fetch ?? win.fetch.bind(win), surface);
   const nextRoot = next.querySelector<HTMLElement>(STORY_ROOT_SELECTOR);
   if (!nextRoot) throw refuse('the fragment carries no story');
   const nextEdit = next.body.getAttribute(LIVE_EDIT_ATTR);
@@ -200,7 +204,7 @@ export async function morphStory(win: Window, options: MorphOptions = {}): Promi
     for (const [rid, oldRid] of keep) { const island = byOld.get(oldRid); if (island) seam.islands.set(rid, island); }
     if (incoming) {
       if (incoming.FLOW && store && !sameDataflow(incoming.FLOW, store.flow)) store.replaceFlow({ flow: incoming.FLOW });
-      for (const entry of incoming.ISLANDS) if (!keep.has(entry[0])) seam.hydrate(entry);
+      withPendingCommentState(doc, view, () => { for (const entry of incoming.ISLANDS) if (!keep.has(entry[0])) seam.hydrate(entry); });
     }
   } else if (newModuleHref) {
     // The page ran no islands (prose until now): the new version's module boots them on this very DOM.

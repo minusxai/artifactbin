@@ -6,7 +6,7 @@
  */
 import { createContext, createSignal, getOwner, onCleanup, untrack, useContext, type Signal, type SignalOptions } from 'solid-js';
 import type { ReviewJson } from '@artifactbin/contracts';
-import { registerCommentState } from '@/lib/story-runtime/comment-state';
+import { registerCommentState, renderedCommentState } from '@/lib/story-runtime/comment-state';
 
 /** The source node a script component mounts at (page-runtime mountComponents provides it). */
 export const MountScope = createContext<string | null>(null);
@@ -18,14 +18,21 @@ export function commentStateKey(name: string, id?: string | null): string | null
   return scope ? `${scope}:${name}` : null;
 }
 
+const kindOf = (value: unknown): string => (value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value);
+
 /**
- * A Solid signal registered as comment state under `key`: plain when it has no key or renders on the server. A pending
- * restore sets it as it registers. Unregistered with its owner; without one (a module-level signal), `removals` keeps
+ * A Solid signal registered as comment state under `key`: plain when it has no key. On the server it starts at the view
+ * state the render asks for (`renderAtCommentState`), else its default; in the browser a pending restore sets it as it registers. Unregistered with its owner; without one (a module-level signal), `removals` keeps
  * the remover for the module's stop.
  */
 export function commentSignal<T>(key: string | null, value: T, options?: SignalOptions<T>, removals?: Set<() => void>): Signal<T> {
+  if (key && typeof document === 'undefined') {
+    // The request names it: only a value of the default's own kind is taken (a tab's string, a disclosure's boolean).
+    const rendered = renderedCommentState(key);
+    return createSignal<T>(rendered !== undefined && kindOf(rendered) === kindOf(value) ? rendered as T : value, options);
+  }
   const [get, set] = createSignal<T>(value, options);
-  if (!key || typeof document === 'undefined') return [get, set];
+  if (!key) return [get, set];
   const remove = registerCommentState(document, key, { get: () => untrack(get), set: (next: ReviewJson) => { set(() => next as T); } });
   if (getOwner()) onCleanup(remove); else removals?.add(remove);
   return [get, set];
