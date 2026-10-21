@@ -17,3 +17,14 @@ export interface ConversionResult {
   identities: Record<string, string>;
   capabilities: string[];
 }
+/** Canonical archived graph v3 stores source fragments around ordered children. */
+export interface LegacyDocumentGraphNode {
+  parts: string[];
+  children: string[];
+  parent?: string | null;
+}
+export interface LegacyDocumentGraph {
+  kind: "graph";
+  schema: 3;
+  nodes: Record<string, LegacyDocumentGraphNode>;
+}

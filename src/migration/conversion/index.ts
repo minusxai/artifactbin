@@ -292,23 +292,83 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
   result.html = `<!doctype html><html${input.designSystem ? ` data-af-design-system="${esc(input.designSystem)}"` : ""}><head><script src="${esc(input.coreUrl)}" data-af="core"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${head.join("")}${styles.map((s) => `<style>${s}</style>`).join("")}${fields.length ? `<script type="application/json" data-af="state">${json(state)}</script>` : ""}</head><body>${body}${script}</body></html>`;
   return result;
 }
-/** Structured legacy documents need extraction by the archived codec; never guess their source shape. */
-export function convertLegacyDocument(
-  _document: unknown,
-  _input: Omit<ConversionInput, "source">,
-): ConversionResult {
-  return {
-    classification: "manual-blocked",
-    html: null,
-    identities: {},
-    capabilities: [],
-    issues: [
-      {
-        code: "document-codec",
-        message:
-          "Extract canonical source using the archived document codec before conversion",
-        path: "root",
-      },
-    ],
+/** Reconstruct canonical graph source using the archived graphSource contract.
+ * Source fragments are authoritative; ast fields and sibling positions are not identities.
+ */
+export function legacyDocumentSource(document: unknown): string {
+  if (!document || typeof document !== "object")
+    throw new Error("Missing canonical document");
+  const graph = document as {
+    kind?: unknown;
+    schema?: unknown;
+    nodes?: unknown;
   };
+  if (
+    graph.kind !== "graph" ||
+    graph.schema !== 3 ||
+    !graph.nodes ||
+    typeof graph.nodes !== "object" ||
+    Array.isArray(graph.nodes)
+  )
+    throw new Error("Expected canonical document graph schema 3");
+  const nodes = graph.nodes as Record<string, unknown>;
+  const seen = new Set<string>();
+  const visit = (key: string, depth: number): string => {
+    if (depth > 512)
+      throw new Error("Canonical graph nesting exceeds migration limit");
+    if (seen.has(key))
+      throw new Error("Canonical graph contains a cycle or repeated child");
+    seen.add(key);
+    if (!Object.hasOwn(nodes, key))
+      throw new Error("Canonical graph references a missing child");
+    const node = nodes[key] as { parts?: unknown; children?: unknown };
+    if (
+      !node ||
+      typeof node !== "object" ||
+      !Array.isArray(node.parts) ||
+      !node.parts.every((p) => typeof p === "string") ||
+      !Array.isArray(node.children) ||
+      !node.children.every((c) => typeof c === "string")
+    )
+      throw new Error("Invalid canonical graph node");
+    const parts = node.parts as string[],
+      children = node.children as string[];
+    if (parts.length !== children.length + 1)
+      throw new Error("Invalid canonical source boundaries");
+    return (
+      parts[0]! +
+      children
+        .map((child, index) => visit(child, depth + 1) + parts[index + 1]!)
+        .join("")
+    );
+  };
+  return visit("$root", 0);
+}
+export function convertLegacyDocument(
+  document: unknown,
+  input: Omit<ConversionInput, "source">,
+): ConversionResult {
+  try {
+    return convertLegacyJsx({
+      ...input,
+      source: legacyDocumentSource(document),
+    });
+  } catch (error) {
+    return {
+      classification: "manual-blocked",
+      html: null,
+      identities: {},
+      capabilities: [],
+      issues: [
+        {
+          code: "document-codec",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Invalid canonical document graph",
+          path: "root",
+        },
+      ],
+    };
+  }
 }

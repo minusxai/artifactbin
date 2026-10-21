@@ -110,3 +110,65 @@ test("rejects malformed trailing syntax and unknown bindings", () => {
       "manual-blocked",
     );
 });
+
+test("canonical stored graph with null source reconstructs nested source without flattening literals", async () => {
+  const { convertLegacyDocument } = await import(
+    "../src/migration/conversion/index.ts"
+  );
+  const document = {
+    kind: "graph",
+    schema: 3,
+    nodes: {
+      $root: { parts: ["", ""], children: ["head"] },
+      head: {
+        parts: [
+          '<><Helmet><style>{`p { color: red; }`}</style></Helmet><p id="Ab12" title="a &amp; b">',
+          "</p></>",
+        ],
+        children: ["text"],
+      },
+      text: { parts: ['{"<hello>"}'], children: [] },
+    },
+  };
+  const converted = convertLegacyDocument(document, {
+    coreUrl: "/af/v1/core.js",
+  });
+  assert.equal(converted.classification, "renderable");
+  assert.match(converted.html!, /title="a &amp; b"/);
+  assert.match(converted.html!, /&lt;hello&gt;/);
+  assert.match(converted.html!, /data-af-id="Ab12"/);
+  assert.match(converted.html!, /p \{ color: red; \}/);
+});
+test("canonical graph preserves adapter state and rejects corrupted boundaries or cycles", async () => {
+  const { convertLegacyDocument } = await import(
+    "../src/migration/conversion/index.ts"
+  );
+  const graph = {
+    kind: "graph",
+    schema: 3,
+    nodes: {
+      $root: {
+        parts: [
+          '<Helmet><Value name="count" type="number" default={0}/></Helmet><Button set="count" value={1}>One</Button><p>{$count}</p>',
+        ],
+        children: [],
+      },
+    },
+  };
+  assert.equal(
+    convertLegacyDocument(graph, { coreUrl: "/af/v1/core.js" }).classification,
+    "functional",
+  );
+  for (const bad of [
+    null,
+    {},
+    { ...graph, schema: 2 },
+    { ...graph, nodes: { $root: { parts: [""], children: ["$root"] } } },
+    { ...graph, nodes: { $root: { parts: ["", ""], children: ["missing"] } } },
+  ]) {
+    const converted = convertLegacyDocument(bad, { coreUrl: "/af/v1/core.js" });
+    assert.equal(converted.classification, "manual-blocked");
+    assert.equal(converted.html, null);
+    assert.equal(converted.issues[0]?.code, "document-codec");
+  }
+});
