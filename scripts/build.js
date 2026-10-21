@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { chromeCSS } from "../src/chrome-assets.js";
 import { build } from "esbuild";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -102,3 +103,11 @@ await build({
   target: "es2022",
   external: ["/account.js", "/sharing.js", "/navigation.js", "/identity.js"],
 });
+
+// Pack the install-only executable for registry-independent npx installation.
+const packedInstaller = spawnSync("npm", ["pack", "--json", "--pack-destination", "../dist"], {
+  cwd: "installer", encoding: "utf8",
+});
+if (packedInstaller.status !== 0) throw Error(packedInstaller.stderr || "Installer packaging failed");
+const installerFilename = JSON.parse(packedInstaller.stdout)[0].filename;
+writeFileSync("dist/artefactbin-skill.tgz", readFileSync(`dist/${installerFilename}`));

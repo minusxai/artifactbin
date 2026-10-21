@@ -9,7 +9,7 @@ A Artifactbin page is a normal HTML file. Write it the way you'd write any web p
 
 ## Installation
 
-Install this skill with `npx artefactbin-skill` and restart your coding agent. This command only installs the skill; use the HTTP API and scripts below to author pages. For another server, install with `--origin https://your-server.example`. Credentials are stored separately per server origin; signing in to one server never signs you in to another.
+Install this skill with `npx https://app.artefactbin.dev/skills/artefactbin-skill.tgz` and restart your coding agent. This command only installs the skill; use the HTTP API and scripts below to author pages. For another server, install with `--origin https://your-server.example`. Credentials are stored separately per server origin; signing in to one server never signs you in to another.
 
 ## Core concept
 

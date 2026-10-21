@@ -75,3 +75,6 @@ for (const defect of ["corrupt", "missing-manifest", "unrelated-root", "symlink"
     assert.equal(existsSync(join(home, ".claude/skills/unrelated")), false);
   }));
 }
+
+// Packed npm execution belongs to the local integration tier.
+import "../installer/integration.test.mjs";

@@ -25,7 +25,7 @@ export function installScript(origin: string): string {
   const base = origin.replace(/\/+$/, "");
   const folders = SKILL_FOLDERS.map((f) => `"${f.folder}" "${f.markers[0]}" "${f.markers[1] ?? f.markers[0]}"`).join(" ");
   return `#!/bin/sh
-# Installs the Pagegi author skill (pagegi-author) for your coding agents.
+# Installs the Artifactbin author skill for your coding agents.
 # Usage: curl -fsSL ${base}/install.sh | sh
 set -eu
 archive="${base}${SKILL_ARCHIVE_PATH}"
@@ -83,7 +83,7 @@ while [ $# -ge 3 ]; do
     mv "$stage/pagegi-author" "$folder/pagegi-author"
     rm -rf "$stage"
     stage=
-    echo "Installed pagegi-author in $folder"
+    echo "Installed Artifactbin author skill in $folder"
     installed=$((installed + 1))
   fi
 done

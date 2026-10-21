@@ -6,5 +6,5 @@
   "bin": { "artefactbin-skill": "install.mjs" },
   "files": ["install.mjs", "README.md"],
   "engines": { "node": ">=20.10" },
-  "license": "MIT"
+  "license": "Apache-2.0"
 }

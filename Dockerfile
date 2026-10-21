@@ -4,6 +4,7 @@ COPY package*.json ./
 RUN npm ci
 COPY src ./src
 COPY scripts ./scripts
+COPY installer ./installer
 # The whole author skill is served at /skills/pagegi-author.tgz; its design systems are served
 # at /af/v1/design-systems/ and its todo example is the home page's example.
 COPY skills/pagegi-author ./skills/pagegi-author

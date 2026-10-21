@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { homePage } from "../home-page.js";
 import { SKILL_ARCHIVE_PATH } from "../af-contracts.ts";
+import { installerArchive } from "./installer-archive.ts";
+import { INSTALLER_ARCHIVE_PATH } from "./installer-archive-contracts.ts";
 import { skillArchive } from "./skill-archive.ts";
 import type {
   PlatformAssets,
@@ -64,6 +66,7 @@ export function createPlatformAssets(
             "; base-uri 'none'",
         );
       // The author skill for an agent to install; cacheable, unlike the rest of the platform.
+      if (url.pathname === INSTALLER_ARCHIVE_PATH) return installerArchive();
       if (url.pathname === SKILL_ARCHIVE_PATH) return skillArchive();
       return null;
     },
