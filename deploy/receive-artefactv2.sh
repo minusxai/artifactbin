@@ -30,6 +30,7 @@ docker build --label "org.opencontainers.image.revision=$revision" -t "$image" "
 backend_image="artefactv2-backend:$revision"
 docker build -t "$backend_image" "$release/src/backend/container"
 # The composition is the release's, never a host-edited copy.
+install -m 0644 "$release/deploy/init-artefactv2-database.sh" "$root/init-database.sh"
 cp "$release/deploy/compose.artefactv2.yaml" "$root/compose.yaml.tmp"
 mv "$root/compose.yaml.tmp" "$root/compose.yaml"
 previous=$(cat "$root/current-image" 2>/dev/null || printf 'artefactv2:local')
@@ -93,7 +94,7 @@ systemctl daemon-reload && systemctl enable --now artefactv2-sandbox-egress.serv
 "$egress_script"
 "${compose[@]}" up -d --wait --wait-timeout 90 postgres
 backup="$root/backups/$(date +%s%N).dump"
-(umask 077; "${compose[@]}" exec -T postgres pg_dump -U artefactv2 -d artefactv2 -Fc > "$backup.tmp")
+(umask 077; "${compose[@]}" exec -T postgres pg_dump -U artefactv2_admin -d artefactv2 -Fc > "$backup.tmp")
 mv "$backup.tmp" "$backup"
 export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image"
 if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 120; then
