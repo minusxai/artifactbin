@@ -4,8 +4,9 @@ import {prepareForSave} from '../page/page-model.ts';
 import {normalizePath} from '../path-model.ts';
 import type {ImportDestination,MigrationManifest,MigrationMaps,PlannedPage,SqlReader} from './contracts.ts';
 import type {DestinationOptions,DestinationPreparation} from './postgres-contracts.ts';
+import {destinationSchemas} from './destination-schema.ts';
+import type {DestinationSchemas} from './destination-schema.ts';
 const digest=(s:string)=>createHash('sha256').update(s).digest('hex');
-const identifier=(s:string)=>{if(!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(s))throw new Error('Invalid explicit destination schema');return '"'+s+'"'};
 export function buildAccountMaps(manifest:MigrationManifest):MigrationMaps {
  const users:Record<string,string>={};
  for(const user of manifest.tables.users??[]){if(typeof user.email!=='string'||!user.email.trim())continue;const email=user.email.trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))continue;users[String(user.id)]=email;}
@@ -29,16 +30,16 @@ export class PostgresMigrationDestination implements ImportDestination {
  private namespace='';
  private readonly db:SqlReader;
  private readonly options:DestinationOptions;
- constructor(db:SqlReader,options:DestinationOptions,maps?:MigrationMaps){this.db=db;this.options=options;if(maps)this.maps=maps;}
- private get schema(){return identifier(this.options.schema)}
- private get archive(){return identifier(this.options.schema+'_migration')}
+ private readonly names:DestinationSchemas;
+ constructor(db:SqlReader,options:DestinationOptions,maps?:MigrationMaps){this.names=destinationSchemas(options.schema);this.db=db;this.options={...options};if(maps)this.maps=maps;}
+ private get schema(){return this.names.runtime}
+ private get archive(){return this.names.archive}
  private async transaction<T>(operation:()=>Promise<T>):Promise<T>{
   if(!this.options.isolated)throw new Error('An explicitly isolated destination is required');
   await this.db.query('BEGIN');try{await this.db.query(`SET LOCAL search_path TO ${this.schema}`);const value=await operation();await this.db.query('COMMIT');return value;}catch(error){await this.db.query('ROLLBACK');throw error;}
  }
  async prepare(input:DestinationPreparation):Promise<void>{
   if(!this.options.isolated)throw new Error('An explicitly isolated destination is required');
-  if(['public','pg_catalog','information_schema'].includes(this.options.schema))throw new Error('Destination must use a dedicated schema');
   this.maps=input.maps;this.namespace=input.manifest.sourceNamespace;
   const schemaSql=await readFile(new URL('../schema.sql',import.meta.url),'utf8');
   await this.transaction(async()=>{

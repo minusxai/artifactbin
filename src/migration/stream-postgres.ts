@@ -1,10 +1,10 @@
 import type {LegacyRow,SqlReader} from './contracts.ts';
 import type {StreamArchiveDestination,StreamPart} from './stream-contracts.ts';
-const ident=(s:string)=>{if(!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(s))throw new Error('Invalid archive schema');return '"'+s+'"'};
+import {destinationSchemas} from './destination-schema.ts';
 /** Migration-only storage. Runtime never queries or evaluates legacy records. */
 export class PostgresStreamArchive implements StreamArchiveDestination {
  private db:SqlReader;private schema:string;private isolated:boolean;
- constructor(db:SqlReader,schema:string,isolated:boolean){this.db=db;this.schema=ident(schema+'_migration');this.isolated=isolated;}
+ constructor(db:SqlReader,schema:string,isolated:boolean){this.schema=destinationSchemas(schema).archive;this.db=db;this.isolated=isolated;}
  async initialize():Promise<void>{
   if(!this.isolated)throw new Error('Explicit isolated destination required');
   await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);

@@ -1,3 +1,4 @@
+import {destinationSchemas} from '../../src/migration/destination-schema.ts';
 import {readFile,writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {planMigration,applyMigration} from '../../src/migration/import.ts';
@@ -6,6 +7,7 @@ import {convertMigrationContent} from '../../src/migration/convert.ts';
 import type {MigrationManifest,MigrationMaps} from '../../src/migration/contracts.ts';
 const [manifestPath,schema,reportPath,...flags]=process.argv.slice(2);
 if(!manifestPath||!schema||!reportPath)throw new Error('Usage: node --experimental-strip-types scripts/migration/import.ts <private-manifest.json> <dedicated-schema> <new-private-report.json> [--apply-isolated] [--editor-manage-restricted]');
+destinationSchemas(schema); // Validate before reading source content, connecting, or initializing archives.
 if(flags.some(f=>!['--apply-isolated','--editor-manage-restricted'].includes(f)))throw new Error('Unknown import flag');
 const manifest=JSON.parse(await readFile(manifestPath,'utf8')) as MigrationManifest;
 const maps:MigrationMaps=buildAccountMaps(manifest);

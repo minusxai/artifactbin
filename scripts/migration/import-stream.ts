@@ -1,3 +1,4 @@
+import {destinationSchemas} from '../../src/migration/destination-schema.ts';
 import {createRequire} from 'node:module';
 import {open,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -11,6 +12,7 @@ import {rewriteMigrationLinks} from '../../src/migration/links.ts';
 import type {MigrationManifest} from '../../src/migration/contracts.ts';
 const [directory,indexDirectory,schema,reportPath,...flags]=process.argv.slice(2);
 if(!directory||!indexDirectory||!schema||!reportPath)throw new Error('Usage: node --experimental-strip-types scripts/migration/import-stream.ts <private-export-directory> <private-index-directory> <dedicated-schema> <new-private-report.ndjson> [--apply-isolated] [--editor-manage-restricted]');
+destinationSchemas(schema); // Validate before reading source content, connecting, or initializing archives.
 if(flags.some(f=>!['--apply-isolated','--editor-manage-restricted'].includes(f)))throw new Error('Unknown import flag');
 const manifest=await readStreamManifest(directory);
 try{const indexed=JSON.parse(await readFile(join(indexDirectory,'manifest.json'),'utf8'));if(JSON.stringify(indexed)!==JSON.stringify(manifest))throw new Error('Index belongs to another source snapshot');}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;await indexStreamArchive(directory,indexDirectory,manifest);}
