@@ -42,11 +42,11 @@ export function createCollaborationService({
         hash(credential),
         async (loaded) => {
           const { document: file, session } = loaded;
-          const {
-            actor,
-            owner,
-            permissions: grant,
-          } = authority.document({ document: file, session }, credential, id);
+          const { actor, permissions: grant } = authority.document(
+            { document: file, session },
+            credential,
+            id,
+          );
           if (!file) fail(404, "File not found");
           let documentChanges: import("./collaboration-contracts.ts").CollaborationMutation<unknown>["documentChanges"];
           const execute = async (): Promise<CollaborationResult> => {
@@ -56,7 +56,7 @@ export function createCollaborationService({
                 authority.account(session);
                 if (command.kind === "change-sharing") {
                   if (!grant.manage)
-                    fail(403, "Only owners and editors can manage access.");
+                    fail(403, "Only owners can manage access.");
                   file.access = updatePolicy(
                     file,
                     command.policy,
@@ -132,8 +132,7 @@ export function createCollaborationService({
                   },
                 };
               case "revoke": {
-                if (!owner)
-                  fail(403, "Only owners and editors can revoke sharing");
+                if (!grant.manage) fail(403, "Only owners can revoke sharing");
                 const share = randomBytes(32).toString("base64url");
                 file.shareHash = hash(share);
                 file.share = share;

@@ -30,7 +30,7 @@ test("all invitation/link role combinations preserve scoped and anonymous bounda
                 read: rank >= 0,
                 comment: rank >= 1,
                 edit: rank >= 2 && !scoped,
-                manage: rank >= 2 && !scoped,
+                manage: false,
               },
               JSON.stringify({ visibility, linkRole, namedRole, link, scoped }),
             );

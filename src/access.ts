@@ -46,7 +46,7 @@ export function permissions(
     read: !!role,
     comment: !!actor && rank >= 1,
     edit: !!actor && rank >= 2 && !scoped,
-    manage: !!actor && rank >= 2 && !scoped,
+    manage: false,
   };
 }
 export function updatePolicy(

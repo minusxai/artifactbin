@@ -514,6 +514,7 @@ export interface FilePermissions {
   read: boolean;
   comment: boolean;
   edit: boolean;
+  /** Account owner only; scoped page grants cannot change sharing. */
   manage: boolean;
 }
 export type AccessPatch =

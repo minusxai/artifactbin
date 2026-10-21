@@ -210,3 +210,30 @@ test("presence checks historical source availability before committing an epheme
   });
   assert.equal(f.presence.get("doc")!.s!.snapshot!.sourceRevision, revision);
 });
+
+test("editors cannot change policy or revoke the share capability", async () => {
+  const f = fixture();
+  const issued = createIdentityAuthority().issue("editor@example.com");
+  f.db().tokens[issued.tokenHash] = issued.session;
+  const file = f.db().files.doc!;
+  file.access = {
+    visibility: "private",
+    linkRole: "viewer",
+    shares: { "editor@example.com": "editor" },
+    version: 0,
+  };
+  for (const command of [
+    {
+      kind: "change-sharing" as const,
+      policy: { ...file.access, visibility: "public" as const },
+      expectedVersion: 0,
+    },
+    { kind: "revoke" as const },
+  ])
+    await assert.rejects(f.service.execute("doc", issued.credential, command), {
+      status: 403,
+    });
+  assert.equal(f.db().files.doc!.generation, file.generation);
+  assert.equal(f.db().files.doc!.shareHash, file.shareHash);
+  assert.deepEqual(f.db().files.doc!.access, file.access);
+});

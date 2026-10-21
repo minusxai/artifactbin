@@ -191,7 +191,7 @@ test("scoped document grants retain app editing without source or sharing author
         read: true,
         comment: editor,
         edit: editor,
-        manage: editor,
+        manage: actor === "owner",
       },
       appEdit: editor,
     });

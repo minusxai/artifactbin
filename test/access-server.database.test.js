@@ -99,6 +99,58 @@ test("private invitations, link roles, public discovery and concurrent sharing w
     assert.equal(entries.data.sharedFiles[0].fileId, pub.id);
     await patch({ email: "editor@example.com", role: "editor" });
     assert.equal((await req(base + "/sharing", editor)).status, 200);
+    const editorSharing = await req(base + "/sharing", editor);
+    assert.equal(editorSharing.data.permissions.edit, true);
+    assert.equal(editorSharing.data.permissions.manage, false);
+    assert.deepEqual(editorSharing.data.policy.shares, {});
+    assert.equal(
+      (
+        await req(base + "/sharing", editor, { visibility: "public" }, "PUT", {
+          "If-Match": String(sharing.data.policy.version),
+        })
+      ).status,
+      403,
+    );
+    assert.equal((await req(base + "/revoke", editor, {})).status, 403);
+    assert.equal((await req(base, editor, null, "DELETE")).status, 404);
+    const editable = await req(base + "/source", editor);
+    assert.equal(editable.status, 200);
+    assert.equal(
+      (
+        await req(
+          base + "/source",
+          editor,
+          { source: editable.data.source },
+          "PUT",
+          {
+            "If-Match": editable.headers.get("etag"),
+          },
+        )
+      ).status,
+      200,
+      "an invited editor can still publish page source externally",
+    );
+    const ownerPaths = await req("/api/paths", owner);
+    const original = ownerPaths.data.entries.find(
+      (entry) => entry.fileId === pub.id,
+    );
+    assert.ok(original);
+    assert.equal(
+      (
+        await req("/api/paths", editor, {
+          kind: "move",
+          from: original.path,
+          path: "/moved.html",
+        })
+      ).status,
+      404,
+    );
+    assert.equal(
+      (await req("/api/paths", owner)).data.entries.find(
+        (entry) => entry.fileId === pub.id,
+      ).path,
+      original.path,
+    );
     const version = sharing.data.policy.version;
     const writes = await Promise.all(
       ["public", "unlisted"].map((visibility) =>
