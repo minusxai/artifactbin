@@ -17,11 +17,11 @@ export function publicationPath(page:PlannedPage):string {
  const ancestors=Array.isArray(page.original.ancestor_ids)?page.original.ancestor_ids.map(value=>'folder-'+digest(String(value)).slice(0,16)):[];
  return '/imported/'+[...ancestors,segment(page.original.title)+'-'+page.pageId+'.html'].join('/');
 }
-export function destinationAccess(page:PlannedPage):Record<string,unknown>{
+export function destinationAccess(page:PlannedPage,maps?:MigrationMaps):Record<string,unknown>{
  if(!['public','private','unlisted'].includes(page.access.visibility))throw new Error('Unsupported visibility');
  const roles=['viewer','commenter','editor'];if(!roles.includes(page.access.linkRole))throw new Error('Unsupported link role');
  const shares:Record<string,string>={};
- for(const row of page.access.shares){const email=String(row.email??'').trim().toLowerCase();if(!email||!roles.includes(String(row.role)))throw new Error('Unsupported named role');shares[email]=String(row.role);}
+ for(const row of page.access.shares){const resolved=row.user_id!==null&&row.user_id!==undefined;const email=resolved?maps?.users[String(row.user_id)]:String(row.email??'').trim().toLowerCase();if(!email)throw new Error('Unmapped resolved share identity');if(!roles.includes(String(row.role)))throw new Error('Unsupported named role');const role=String(row.role);if(!shares[email]||roles.indexOf(role)>roles.indexOf(shares[email]!))shares[email]=role;}
  return {visibility:page.access.visibility,linkRole:page.access.linkRole,shares,version:0};
 }
 export class PostgresMigrationDestination implements ImportDestination {
@@ -29,7 +29,7 @@ export class PostgresMigrationDestination implements ImportDestination {
  private namespace='';
  private readonly db:SqlReader;
  private readonly options:DestinationOptions;
- constructor(db:SqlReader,options:DestinationOptions){this.db=db;this.options=options;}
+ constructor(db:SqlReader,options:DestinationOptions,maps?:MigrationMaps){this.db=db;this.options=options;if(maps)this.maps=maps;}
  private get schema(){return identifier(this.options.schema)}
  private get archive(){return identifier(this.options.schema+'_migration')}
  private async transaction<T>(operation:()=>Promise<T>):Promise<T>{
@@ -51,6 +51,13 @@ export class PostgresMigrationDestination implements ImportDestination {
    if(old&&old.digest!==digest(text))throw new Error('Source archive changed; use a new migration namespace');
    if(!old)await this.db.query(`INSERT INTO ${this.archive}.archives VALUES($1,$2,$3::jsonb,$4::jsonb)`,[this.namespace,digest(text),text,JSON.stringify(input.maps)]);
    for(const actor of new Set([...Object.values(input.maps.users),...Object.values(input.maps.tokens)]))await this.db.query('INSERT INTO accounts(actor) VALUES($1) ON CONFLICT(actor) DO NOTHING',[actor]);
+   for(const user of input.manifest.tables.users??[]){
+    const actor=input.maps.users[String(user.id)];if(!actor)continue;
+    if(typeof user.name==='string')await this.db.query('UPDATE accounts SET name=COALESCE(name,$2) WHERE actor=$1',[actor,user.name]);
+    const handle=typeof user.username==='string'?user.username.toLowerCase():null;
+    if(handle&&/^[a-z0-9]+(-[a-z0-9]+)*$/.test(handle)&&handle.length>=3&&handle.length<=32)await this.db.query('UPDATE accounts SET handle=$2 WHERE actor=$1 AND handle IS NULL AND NOT EXISTS(SELECT 1 FROM accounts WHERE handle=$2)',[actor,handle]);
+   }
+
    for(const folder of input.manifest.artifacts.filter(a=>a.format==='folder'&&!a.deleted_at)){
     const actor=folder.user_id?input.maps.users[folder.user_id]:undefined;if(!actor||folder.group_id)continue;
     const path='/imported/'+[...(Array.isArray(folder.ancestor_ids)?folder.ancestor_ids:[]),folder.id].map(value=>'folder-'+digest(String(value)).slice(0,16)).join('/');
@@ -59,7 +66,7 @@ export class PostgresMigrationDestination implements ImportDestination {
   });
  }
  supportsExactAccess(page:PlannedPage):boolean {
-  try{destinationAccess(page);normalizePath(publicationPath(page));}catch{return false;}
+  try{destinationAccess(page,this.maps);normalizePath(publicationPath(page));}catch{return false;}
   if(page.owner?.kind!=='user'&&page.owner?.kind!=='token')return false;
   if(page.original.deleted_at)return false;
   if(!this.options.editorManageRestricted&&(page.access.linkRole==='editor'||page.access.shares.some(s=>s.role==='editor')))return false;
@@ -82,7 +89,7 @@ export class PostgresMigrationDestination implements ImportDestination {
    const normalized=page.revisions.map(r=>({version:r.version,prepared:prepareForSave(r.conversion.html!,{id:page.pageId,version:r.version,origin:this.options.origin,knownOrigins:[],reserved:nodeIds})}));
    const preparedHead=normalized.find(r=>String(r.version)===head)!.prepared;
    const nextNodeId=Number(preparedHead.meta.nextNodeId??1);
-   await this.db.query('INSERT INTO files(id,owner,share_hash,generation,head,sequence,path,access,next_node_id,source_digest) VALUES($1,$2,$3,1,$4,0,$5,$6::jsonb,$7,$8)',[page.pageId,owner,digest(randomBytes(32).toString('hex')),head,path,JSON.stringify(destinationAccess(page)),nextNodeId,digest(preparedHead.source)]);
+   await this.db.query('INSERT INTO files(id,owner,share_hash,generation,head,sequence,path,access,next_node_id,source_digest) VALUES($1,$2,$3,1,$4,0,$5,$6::jsonb,$7,$8)',[page.pageId,owner,digest(randomBytes(32).toString('hex')),head,path,JSON.stringify(destinationAccess(page,this.maps)),nextNodeId,digest(preparedHead.source)]);
    await this.db.query('UPDATE files SET seed=$2::jsonb WHERE id=$1',[page.pageId,JSON.stringify(preparedHead.state)]);
    for(const r of normalized)await this.db.query('INSERT INTO sources(file_id,revision,content,node_ids,digest) VALUES($1,$2,$3,$4::jsonb,$5)',[page.pageId,String(r.version),r.prepared.source,JSON.stringify(r.prepared.nodeIds),digest(r.prepared.source)]);
    const parts=path.split('/').slice(1,-1);for(let i=1;i<=parts.length;i++)await this.db.query('INSERT INTO folders(owner,path) VALUES($1,$2) ON CONFLICT DO NOTHING',[owner,'/'+parts.slice(0,i).join('/')]);

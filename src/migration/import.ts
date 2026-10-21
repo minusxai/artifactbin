@@ -10,9 +10,18 @@ function pageId(namespace:string,id:string,occupied:Set<string>):string {
  for(let i=0;i<10000;i++){const candidate=BigInt('0x'+hash(`${namespace}:${id}:${i}`).slice(0,12)).toString(36).padStart(6,'0').slice(-6);if(!occupied.has(candidate))return candidate;}
  throw new Error('Page identity space exhausted');
 }
+export function allocateMigrationMaps(namespace:string,ids:readonly string[],initial:MigrationMaps):MigrationMaps {
+ const maps=structuredClone(initial);const occupied=new Set(Object.values(maps.pages));
+ if(occupied.size!==Object.values(maps.pages).length||[...occupied].some(id=>!(/^[a-zA-Z0-9]{6}$/).test(id)))throw new Error('Invalid or duplicate page identity map');
+ const sorted=[...new Set(ids)].sort();
+ // Reserve valid legacy addresses before assigning replacements so generated IDs cannot steal them.
+ for(const id of sorted)if(!maps.pages[id]&&/^[a-zA-Z0-9]{6}$/.test(id)&&!occupied.has(id)){maps.pages[id]=id;occupied.add(id);}
+ for(const id of sorted)if(!maps.pages[id]){maps.pages[id]=pageId(namespace,id,occupied);occupied.add(maps.pages[id]!);}
+ return maps;
+}
 export async function planMigration(manifest:MigrationManifest, options:{maps:MigrationMaps;convert:Converter;coreUrl:string}):Promise<MigrationPlan> {
  if(manifest.schemaVersion!==1)throw new Error('Unsupported manifest schema');
- const maps=structuredClone(options.maps); const occupied=new Set(Object.values(maps.pages));
+ const maps=allocateMigrationMaps(manifest.sourceNamespace,manifest.artifacts.map(a=>a.id),options.maps); const occupied=new Set(Object.values(maps.pages));
  if(occupied.size!==Object.values(maps.pages).length || [...occupied].some(id=>!(/^[a-zA-Z0-9]{6}$/).test(id)))throw new Error('Invalid or duplicate page identity map');
  const pages:PlannedPage[]=[];const seen=new Set<string>();
  for(const artifact of [...manifest.artifacts].sort((a,b)=>a.id.localeCompare(b.id))){

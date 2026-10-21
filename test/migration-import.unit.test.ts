@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planMigration, applyMigration } from '../src/migration/import.ts';
+import { planMigration, applyMigration, allocateMigrationMaps } from '../src/migration/import.ts';
 import type { MigrationManifest, Converter, ImportDestination } from '../src/migration/contracts.ts';
 const manifest: MigrationManifest = {schemaVersion:1,sourceNamespace:'fixture',exportedAt:'2026-01-01T00:00:00Z',tables:{artifact_versions:[{artifact_id:'longIdentifier',version:1,format:'markup',source:'old'}],annotations:[{id:'c1',artifact_id:'longIdentifier',anchor_key:'retired',deleted_at:'2026-01-01'}],artifact_source_ids:[{artifact_id:'longIdentifier',source_id:'retired',retired_version:2}]},tokenOwners:[],artifacts:[{id:'longIdentifier',format:'markup',version:2,user_id:'u1',group_id:null,token_id:'t1',source:'new',document:null,visibility:'private',link_role:'viewer'}]};
 const converter: Converter = ({source})=>({classification:'renderable',html:`<html>${source}</html>`,issues:[],identities:{}});
@@ -26,4 +26,10 @@ test('repeat imports have the same receipt key and digest',async()=>{
  const plan=await planMigration(manifest,{maps,convert:converter,coreUrl:'/af/v1/core.js'});const receipts=new Map<string,string>();
  const destination:ImportDestination={supportsExactAccess:()=>true,importPage:async(key,digest)=>{if(receipts.has(key)){assert.equal(receipts.get(key),digest);return 'unchanged'}receipts.set(key,digest);return 'created'}};
  assert.equal((await applyMigration(plan,destination,{dryRun:false})).created,1); assert.equal((await applyMigration(plan,destination,{dryRun:false})).unchanged,1);
+});
+
+test('valid legacy addresses are preserved before replacements allocate and collisions stay explicit',()=>{
+ const maps=allocateMigrationMaps('fixture',['abc123','long-legacy-id'],{pages:{},users:{},groups:{},tokens:{}});
+ assert.equal(maps.pages.abc123,'abc123');assert.notEqual(maps.pages['long-legacy-id'],'abc123');
+ const conflict=allocateMigrationMaps('fixture',['abc123'],{pages:{existing:'abc123'},users:{},groups:{},tokens:{}});assert.notEqual(conflict.pages.abc123,'abc123');
 });

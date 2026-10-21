@@ -7,3 +7,10 @@ test('accounts map only verified user email identity and token ownership resolve
 test('path uses ancestry identities and bounded sanitized names, avoiding duplicate titles',()=>{const page={pageId:'abc123',legacyId:'old',original:{ancestor_ids:['a','b'],title:'A / title'}} as unknown as PlannedPage;assert.match(publicationPath(page),/^\/imported\/folder-[a-f0-9]{16}\/folder-[a-f0-9]{16}\/a-title-abc123.html$/);});
 test('ACL preserves private reach and rejects unknown roles instead of widening access',()=>{const page={access:{visibility:'private',linkRole:'viewer',shares:[{email:'Reader@Example.test',role:'editor'}]}} as unknown as PlannedPage;assert.deepEqual(destinationAccess(page),{visibility:'private',linkRole:'viewer',shares:{'reader@example.test':'editor'},version:0});page.access.linkRole='owner';assert.throws(()=>destinationAccess(page),/role/);});
 test('destination refuses nonisolated writes before SQL',async()=>{let n=0;const destination=new PostgresMigrationDestination({query:async()=>{n++;return {rows:[]}}},{schema:'copy',origin:'http://localhost:8787',isolated:false,editorManageRestricted:false});await assert.rejects(destination.prepare({maps:buildAccountMaps(m),manifest:m}),/isolated/);assert.equal(n,0);});
+
+test('resolved shares follow current account identity, unresolved invites follow email, collisions retain strongest role',()=>{
+ const page={access:{visibility:'private',linkRole:'viewer',shares:[{email:'old@example.test',user_id:'u1',role:'editor'},{email:'current@example.test',user_id:null,role:'viewer'}]}} as unknown as PlannedPage;
+ const maps={users:{u1:'current@example.test'},tokens:{},groups:{},pages:{}};
+ assert.deepEqual(destinationAccess(page,maps),{visibility:'private',linkRole:'viewer',shares:{'current@example.test':'editor'},version:0});
+ assert.throws(()=>destinationAccess(page,{...maps,users:{}}),/Unmapped resolved/);
+});

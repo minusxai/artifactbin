@@ -15,7 +15,7 @@ const require=createRequire(import.meta.url);const {Client}=require('pg');
 const db=apply?new Client({connectionString:process.env.MIGRATION_DESTINATION_DATABASE_URL}):null;
 if(apply&&!process.env.MIGRATION_PUBLIC_ORIGIN)throw new Error('Explicit MIGRATION_PUBLIC_ORIGIN required for normalized HTML sources');
 if(apply&&!process.env.MIGRATION_DESTINATION_DATABASE_URL)throw new Error('Explicit MIGRATION_DESTINATION_DATABASE_URL required');
-const destination=new PostgresMigrationDestination(db??{query:async()=>{throw new Error('Dry run cannot query destination')}},{schema,origin:process.env.MIGRATION_PUBLIC_ORIGIN??'http://localhost:8787',isolated:apply,editorManageRestricted:flags.includes('--editor-manage-restricted')});
+const destination=new PostgresMigrationDestination(db??{query:async()=>{throw new Error('Dry run cannot query destination')}},{schema,origin:process.env.MIGRATION_PUBLIC_ORIGIN??'http://localhost:8787',isolated:apply,editorManageRestricted:flags.includes('--editor-manage-restricted')},plan.maps);
 for(const page of plan.pages)if(!destination.supportsExactAccess(page)){page.disposition='blocked';page.issues.push('Destination cannot preserve exact access or deletion state');}
 const inventory:Record<string,{total:number;ready:number;blocked:number}>={};
 for(const page of plan.pages){const format=page.original.format;const row=inventory[format]??={total:0,ready:0,blocked:0};row.total++;if(page.disposition==='ready'&&destination.supportsExactAccess(page))row.ready++;else row.blocked++;}
