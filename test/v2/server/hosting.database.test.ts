@@ -119,7 +119,7 @@ test("one command installs the skill for every coding agent on the machine, from
     for (const folder of [".claude/skills", ".pi/agent/skills"]) {
       assert.equal(readFileSync(join(home, folder, "pagegi-author/SKILL.md"), "utf8"), skillFile("SKILL.md"), folder);
       assert.ok(statSync(join(home, folder, "pagegi-author/scripts/publish.mjs")).mode & 0o100, `${folder}: scripts stay executable`);
-      assert.ok(output.includes(`Installed pagegi-author in ${join(home, folder)}`));
+      assert.ok(output.includes(`Installed Artifactbin author skill in ${join(home, folder)}`));
     }
     assert.ok(!existsSync(join(home, ".agents")) && !existsSync(join(home, ".config/opencode")), "no folders for absent harnesses");
     assert.match(output, /Done: the skill is in 2 folder\(s\)/);

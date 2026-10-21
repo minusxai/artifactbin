@@ -793,9 +793,9 @@ try {
   await local.getByRole("heading", { name: "Team todo list", exact: true }).waitFor();
   await local.locator("nav#pg-bar").getByRole("button", { name: "Connect", exact: true }).waitFor();
   await local.close();
-  await page.getByLabel("Search documents").fill("does not exist");
+  await page.getByLabel("Search artifacts").fill("does not exist");
   await page.getByText("No documents match your search.").waitFor();
-  await page.getByLabel("Search documents").fill("");
+  await page.getByLabel("Search artifacts").fill("");
   // Files Publish HTML cannot take are refused in plain words, before any upload.
   for (const [name, body, expected] of [
     ["notes.txt", "just text", "Choose an HTML file (.html or .htm)."],

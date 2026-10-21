@@ -17,7 +17,7 @@ const bundle = await build({
 });
 const author = `<style>html{padding-top:7px}body{margin:64px auto;padding:16px;max-width:704px;font:18px/1.5 system-ui}button{margin:4px;padding:10px 16px;border:3px dashed red;background:pink}body button{box-shadow:1px 1px red}body .button{margin:8px}nav{line-height:3}button::before{content:'author'}@media(max-width:500px){html{padding-top:11px}body{padding:24px}}</style><h1 id="heading">Author content</h1><button id="author">Author button</button>`;
 const ui =
-  '<nav id="pg-bar" class="pg-bar" data-pagegi-ui><span class="pg-brand">Pagegi</span><span id="pg-status"></span><button id="pg-connect">Connect</button><button id="pg-settings" class="pg-bar-action" aria-label="Page settings">⚙</button><button id="pg-return" hidden>Return</button></nav>';
+  '<nav id="pg-bar" class="pg-bar" data-pagegi-ui><span class="pg-brand">artifactbin</span><span id="pg-status"></span><button id="pg-connect">Connect</button><button id="pg-settings" class="pg-bar-action" aria-label="Page settings">⚙</button><button id="pg-return" hidden>Return</button></nav>';
 for (const [name, engine] of Object.entries(browserEngines)) {
   const browser = await engine.launch();
   try {

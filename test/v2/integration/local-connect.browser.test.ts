@@ -84,11 +84,11 @@ for (const [name, engine] of engines) {
       page.on("pageerror", (error) => errors.push(error.message));
       await page.goto(pathToFileURL(file).href);
 
-      // The platform bar, as in the hosted view: brand, Documents, status, settings, account menu, Connect.
+      // The platform bar, as in the hosted view: brand, Artifacts, status, settings, account menu, Connect.
       const bar = page.locator("nav#pg-bar");
       await bar.waitFor();
-      await bar.getByText("Pagegi", { exact: true }).waitFor();
-      await bar.getByRole("button", { name: "Documents", exact: true }).waitFor();
+      await bar.getByText("artifactbin", { exact: true }).waitFor();
+      await bar.getByRole("button", { name: "Artifacts", exact: true }).waitFor();
       await bar.getByRole("button", { name: "Connect", exact: true }).waitFor();
       await page.locator("#pg-status").filter({ hasText: "Local file" }).waitFor();
       assert.equal(await page.locator("af-download").count(), 0, "the bar replaces the file's own download control");
