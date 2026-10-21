@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { createBackendHost } from "./container-host.ts";
 import { createExecutionService } from "./execution-service.ts";
 import { dockerCommand, reapBackendContainers } from "./reaper.ts";
+const deploymentNamespace = process.env.PAGEGI_DEPLOYMENT_NAMESPACE;
 const secretFile = process.env.PAGEGI_EXECUTION_SECRET_FILE;
 if (!secretFile) throw Error("PAGEGI_EXECUTION_SECRET_FILE is required");
 const bind = process.env.PAGEGI_EXECUTION_BIND ?? "127.0.0.1";
@@ -11,6 +12,7 @@ if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
   throw Error("Invalid execution port");
 const service = createExecutionService({
   host: createBackendHost({
+    deploymentNamespace,
     image: process.env.PAGEGI_BACKEND_IMAGE,
     sandboxNetwork: process.env.PAGEGI_SANDBOX_NETWORK || undefined,
   }),
@@ -25,7 +27,7 @@ server.maxConnections = 64;
 // Containers a previous controller left behind are removed before any request is admitted;
 // a cleanup that cannot be verified keeps the controller closed.
 try {
-  const reaped = await reapBackendContainers(dockerCommand);
+  const reaped = await reapBackendContainers(dockerCommand, { deploymentNamespace });
   console.log(JSON.stringify({ execution: "cleanup verified", reaped }));
 } catch {
   console.error("Execution container cleanup failed; admission must remain stopped");

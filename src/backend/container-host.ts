@@ -1,3 +1,4 @@
+import { deploymentIdentity } from "./deployment-identity.ts";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { debuglog, promisify } from "node:util";
@@ -34,23 +35,18 @@ const exec = promisify(execFile);
 const debug = debuglog("pagegi");
 const FRAME_BYTES = 1500000;
 type FailureCode = ConstructorParameters<typeof BackendHostError>[0];
-const LABEL = "label=pagegi.backend=1";
-/** The names this host gives its containers, as `docker ps --format {{.Names}}` lists them. */
-const NAME = /^pagegi-backend-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
-/** The sandbox bridge's default name; its Linux interface is `pagegi-sbx` (deploy/receive.sh filters it). */
-const SANDBOX_NETWORK = "pagegi-sandbox";
 /**
  * Every sandbox container, one-shot or warm, is created with exactly these
  * limits. Compilation gets no network; an invocation gets the sandbox bridge,
  * where workerd lets the lambda reach public addresses only.
  */
-const containerArguments = (name: string, imageId: string, network: string) => [
+const containerArguments = (name: string, imageId: string, network: string, label: string) => [
   "create",
   "--pull=never",
   "--name",
   name,
   "--label",
-  "pagegi.backend=1",
+  label,
   "-i",
   "--memory=256m",
   "--memory-swap=256m",
@@ -108,7 +104,8 @@ export function createBackendHost(
 ): BackendHost {
   const image =
     options.image ?? process.env.PAGEGI_BACKEND_IMAGE ?? "pagegi-backend:local";
-  const network = options.sandboxNetwork ?? SANDBOX_NETWORK;
+  const identity = deploymentIdentity(options.deploymentNamespace);
+  const network = options.sandboxNetwork ?? identity.network;
   if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(network))
     throw Error("Invalid sandbox network");
   // The host owns its package client, and close() drains it through the client's own close().
@@ -176,11 +173,11 @@ export function createBackendHost(
       if (gone.includes(false)) throw Error("a container could not be removed");
       const listing = await exec(
         "docker",
-        ["ps", "-a", "--filter", LABEL, "--format", "{{.Names}}"],
+        ["ps", "-a", "--filter", identity.filter, "--format", "{{.Names}}"],
         { timeout: 5000 },
       );
       const listed = listing.stdout.split("\n").filter(Boolean);
-      if (listed.length > 1024 || listed.some((name) => !NAME.test(name)))
+      if (listed.length > 1024 || listed.some((name) => !identity.name.test(name)))
         throw Error("unexpected container inventory");
       if (names.some((name) => listed.includes(name)))
         throw Error("a container remains");
@@ -270,10 +267,10 @@ export function createBackendHost(
             "create",
             "--driver=bridge",
             "--ipv6=false",
-            "--label=pagegi.sandbox=1",
+            "--label=" + identity.namespace + ".sandbox=1",
             "--opt=com.docker.network.bridge.enable_icc=false",
-            ...(network === SANDBOX_NETWORK
-              ? ["--opt=com.docker.network.bridge.name=pagegi-sbx"]
+            ...(network === identity.network
+              ? ["--opt=com.docker.network.bridge.name=" + identity.bridge]
               : []),
             network,
           ],
@@ -289,12 +286,12 @@ export function createBackendHost(
       found?.Driver !== "bridge" ||
       found?.EnableIPv6 !== false ||
       options["com.docker.network.bridge.enable_icc"] !== "false" ||
-      (network === SANDBOX_NETWORK &&
-        options["com.docker.network.bridge.name"] !== "pagegi-sbx")
+      (network === identity.network &&
+        options["com.docker.network.bridge.name"] !== identity.bridge)
     ) {
       log(
         `sandbox network ${network} is not an IPv4-only bridge without inter-container traffic` +
-          (network === SANDBOX_NETWORK ? " on interface pagegi-sbx" : "") +
+          (network === identity.network ? " on interface " + identity.bridge : "") +
           "; lambdas stay unavailable until it is removed or fixed",
       );
       throw Error("sandbox network mismatch");
@@ -327,7 +324,7 @@ export function createBackendHost(
       release();
       throw new BackendHostError("backend_unavailable");
     }
-    const name = "pagegi-backend-" + randomUUID();
+    const name = identity.namePrefix + randomUUID();
     let createAttempted = false,
       createAcknowledged = false;
     let child: ChildProcess | undefined;
@@ -347,7 +344,7 @@ export function createBackendHost(
       const imageId = await currentImage();
       if (failure) throw failure;
       createAttempted = true;
-      await exec("docker", containerArguments(name, imageId, "none"), {
+      await exec("docker", containerArguments(name, imageId, "none", identity.label), {
         timeout: 5000,
       });
       createAcknowledged = true;
@@ -448,10 +445,10 @@ export function createBackendHost(
     serve: unknown,
   ): Promise<Sandbox> {
     await ensureNetwork();
-    let name = "pagegi-backend-" + randomUUID();
+    let name = identity.namePrefix + randomUUID();
     let acknowledged = false;
     try {
-      await exec("docker", containerArguments(name, imageId, network), {
+      await exec("docker", containerArguments(name, imageId, network, identity.label), {
         timeout: 5000,
       });
       acknowledged = true;
@@ -465,9 +462,9 @@ export function createBackendHost(
       ) {
         networkReady = undefined;
         await ensureNetwork();
-        name = "pagegi-backend-" + randomUUID();
+        name = identity.namePrefix + randomUUID();
         try {
-          await exec("docker", containerArguments(name, imageId, network), {
+          await exec("docker", containerArguments(name, imageId, network, identity.label), {
             timeout: 5000,
           });
           acknowledged = true;

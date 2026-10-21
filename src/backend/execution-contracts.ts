@@ -44,7 +44,7 @@ export type DockerCommand = (
 
 /**
  * The execution controller's startup cleanup: removes the backend containers a
- * previous controller on this engine left behind (label `pagegi.backend=1`,
+ * previous controller of this deployment left behind (legacy label `pagegi.backend=1`,
  * generated names), verifying ownership of every one before removing any and
  * that none remain after. Resolves the number removed; rejects on any doubt,
  * and the controller must then stay closed. Up to 1024 candidates are inspected
@@ -54,6 +54,8 @@ export type DockerCommand = (
  * cleanup has a 30-second budget, including command time.
  */
 export interface ReaperOptions {
+  /** Validated deployment identity; defaults to legacy pagegi. */
+  deploymentNamespace?: string;
   /** Monotonic milliseconds, injected for deadline tests. Defaults to performance.now. */
   now?: () => number;
 }

@@ -182,3 +182,39 @@ test("a final listing that comes back empty just past the deadline still proves 
     assert.deepEqual(fake.removed(), [["rm", "-f", ID]]);
   }
 });
+
+test("deployment cleanup selects only its namespace and refuses legacy containers", async () => {
+  const { reapBackendContainers } = await reaper();
+  const isolated = fakeDocker({
+    inspected: [
+      owned({
+        Name: NAME.replace("pagegi-", "artefactv2-"),
+        Config: { Labels: { "artefactv2.backend": "1" } },
+      }),
+    ],
+  });
+  assert.equal(
+    await reapBackendContainers(isolated.docker, {
+      deploymentNamespace: "artefactv2",
+    }),
+    1,
+  );
+  assert.equal(isolated.calls[0]?.args.at(-1), "label=artefactv2.backend=1");
+  const legacy = fakeDocker();
+  await assert.rejects(
+    reapBackendContainers(legacy.docker, { deploymentNamespace: "artefactv2" }),
+    /ownership/,
+  );
+  assert.deepEqual(legacy.removed(), []);
+});
+test("invalid deployment identities fail before Docker is called", async () => {
+  const { reapBackendContainers } = await reaper();
+  for (const deploymentNamespace of ["", "A", "a;rm", "a/b", "a".repeat(13)]) {
+    const fake = fakeDocker();
+    await assert.rejects(
+      reapBackendContainers(fake.docker, { deploymentNamespace }),
+      /namespace/,
+    );
+    assert.equal(fake.calls.length, 0);
+  }
+});

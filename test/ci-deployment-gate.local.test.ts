@@ -14,7 +14,7 @@ function eligible(context: DeploymentGateContext): boolean {
 }
 function context(): DeploymentGateContext {
   return {
-    github: { ref: "refs/heads/main", event_name: "push" },
+    github: { ref: "refs/heads/artefactv2", event_name: "push" },
     inputs: { "codeql-proof-only": false },
     needs: {
       fast: { result: "success" },
@@ -43,13 +43,13 @@ test("deployment waits directly for every test and security job", () => {
   assert.equal(eligible(context()), true);
 });
 
-test("only successful main push or manual runs deploy their exact tested SHA", () => {
+test("only successful product branch push or manual runs deploy their exact tested SHA", () => {
   const input = context();
   input.github.event_name = "workflow_dispatch";
   assert.equal(eligible(input), true);
   input.github.ref = "refs/heads/feature";
   assert.equal(eligible(input), false);
-  input.github.ref = "refs/heads/main";
+  input.github.ref = "refs/heads/artefactv2";
   input.github.event_name = "pull_request";
   assert.equal(eligible(input), false);
   assert.match(deploy, /git archive --format=tar\.gz "\$GITHUB_SHA"/);
@@ -196,11 +196,24 @@ test("pull requests run only the dependency-light fast gate while main retains f
 });
 
 test("superseded pull requests cancel while main and manual runs finish their evidence", () => {
-  assert.match(workflow, /group: pagegi-\$\{\{ github.ref \}\}/);
+  assert.match(workflow, /group: artefactv2-\$\{\{ github.ref \}\}/);
   const condition = workflow.match(/cancel-in-progress: \$\{\{ (.+) \}\}/)?.[1];
   assert.ok(condition);
   for (const event of ["pull_request", "push", "workflow_dispatch"]) {
     const input = context(); input.github.event_name = event;
     assert.equal(Boolean(runInNewContext(condition, input)), event === "pull_request");
   }
+});
+
+
+test("the independent deployment never deploys main or falls back to legacy credentials", () => {
+  const input = context();
+  input.github.ref = "refs/heads/main";
+  assert.equal(eligible(input), false);
+  assert.match(deploy, /environment: artefactv2/);
+  for (const key of ["DEPLOY_KEY", "DEPLOY_KNOWN_HOSTS"])
+    assert.ok(deploy.includes(`secrets.ARTEFACTV2_${key}`));
+  for (const key of ["DEPLOY_HOST", "DEPLOY_USER", "PUBLIC_ORIGIN"])
+    assert.ok(deploy.includes(`vars.ARTEFACTV2_${key}`));
+  assert.doesNotMatch(deploy, /secrets\.DEPLOY_|vars\.(DEPLOY_|PUBLIC_ORIGIN)/);
 });

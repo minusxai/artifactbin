@@ -1,7 +1,7 @@
-name: Check and deploy
+name: Check and deploy HTML product
 on:
   push:
-    branches: [main]
+    branches: [artefactv2]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: pagegi-${{ github.ref }}
+  group: artefactv2-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   fast:
@@ -127,7 +127,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   deploy:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !(github.event_name == 'workflow_dispatch' && inputs['codeql-proof-only']) && needs.fast.result == 'success' && needs.security.result == 'success' && needs.node.result == 'success'
+    environment: artefactv2
+    if: github.ref == 'refs/heads/artefactv2' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !(github.event_name == 'workflow_dispatch' && inputs['codeql-proof-only']) && needs.fast.result == 'success' && needs.security.result == 'success' && needs.node.result == 'success'
     needs: [fast, node, security]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -135,14 +136,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Deploy the checked commit
         env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
-          PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
+          DEPLOY_KEY: ${{ secrets.ARTEFACTV2_DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.ARTEFACTV2_DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.ARTEFACTV2_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.ARTEFACTV2_DEPLOY_USER }}
+          PUBLIC_ORIGIN: ${{ vars.ARTEFACTV2_PUBLIC_ORIGIN }}
         shell: bash
         run: |
           set -euo pipefail
+          : "${DEPLOY_KEY:?configure the independent deployment key}"
+          : "${DEPLOY_KNOWN_HOSTS:?configure pinned host keys}"
+          : "${DEPLOY_HOST:?configure the independent deployment host}"
+          : "${DEPLOY_USER:?configure the deployment user}"
+          : "${PUBLIC_ORIGIN:?configure the independent public origin}"
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/pagegi
           chmod 600 ~/.ssh/pagegi

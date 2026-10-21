@@ -154,6 +154,8 @@ export interface BackendHostOptions {
    * Compilation always runs with no network.
    */
   sandboxNetwork?: string;
+  /** Validated deployment identity; defaults to legacy pagegi. */
+  deploymentNamespace?: string;
   /**
    * Loads npm modules at compile time (default: esm.sh, src/backend/packages.ts).
    * The host owns it: closing the host closes it and waits for its close().

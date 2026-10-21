@@ -1,0 +1,97 @@
+# The production composition; deploy/receive-artefactv2.sh copies this file beside the host's
+# env files on every deployment, so the host never carries its own edited copy.
+# Mounted host paths are relative to that directory (/opt/artefactv2).
+services:
+  pagegi:
+    build: .
+    image: ${PAGEGI_IMAGE:-artefactv2:local}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: '1000:1000'
+    mem_limit: 512m
+    cpus: 1
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    ports: ['127.0.0.1:8897:8787']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      execution:
+        condition: service_healthy
+    env_file: .env.production
+    environment:
+      # The execution service below, over the project network; this overrides any socket in .env.production.
+      PAGEGI_EXECUTION_ENDPOINT: http://execution:8788/v1/execute
+      PAGEGI_EXECUTION_SOCKET: ''
+    volumes:
+      - ./execution-secret:/run/pagegi-execution-secret:ro
+      - ./resource-config:/run/pagegi-resource-config:ro
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+
+  # Backend compilation and invocation. This is the one service with the Docker
+  # socket: it creates the per-request sandbox containers (src/backend/README.md),
+  # which is host-level authority, so it holds no application credential (no
+  # env_file), is reachable only inside the project, and admits requests only
+  # with the shared transport secret. The app never gets the socket.
+  execution:
+    image: ${PAGEGI_IMAGE:-artefactv2:local}
+    command: ['node', 'src/backend/execution-main.ts']
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: '1000:1000'
+    group_add: ['${DOCKER_GID:-986}']
+    mem_limit: 256m
+    cpus: 0.5
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    # The controller's own shutdown watchdog is 20 seconds; give it time to remove its containers.
+    stop_grace_period: 25s
+    environment:
+      PAGEGI_EXECUTION_BIND: 0.0.0.0
+      PAGEGI_EXECUTION_PORT: '8788'
+      PAGEGI_EXECUTION_SECRET_FILE: /run/pagegi-execution-secret/transport-secret
+      PAGEGI_BACKEND_IMAGE: ${PAGEGI_BACKEND_IMAGE:-artefactv2-backend:local}
+      # Lambdas run on this dedicated bridge (created by the service on first use, interface
+      # artefactv2-sb, no inter-container traffic, isolated from this project's network); workerd lets
+      # them reach public addresses only, and deploy/receive-artefactv2.sh drops private ranges on it too.
+      PAGEGI_DEPLOYMENT_NAMESPACE: artefactv2
+      PAGEGI_SANDBOX_NETWORK: artefactv2-sandbox
+      DOCKER_CONFIG: /tmp/docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./execution-secret:/run/pagegi-execution-secret:ro
+    healthcheck:
+      # Unauthenticated requests are answered 401 before anything else; that is the controller admitting requests.
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:8788/v1/execute',{method:'POST'}).then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+
+  postgres:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1
+    env_file: .env.database
+    environment:
+      POSTGRES_USER: artefactv2
+      POSTGRES_DB: artefactv2
+    volumes: ['./postgres-data:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U artefactv2 -d artefactv2']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
