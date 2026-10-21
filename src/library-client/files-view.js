@@ -32,6 +32,17 @@ export function mountFiles({
   const nameOf = (path) => path.split("/").at(-1);
   const folderURL = (path) =>
     path === "/" ? "/" : "/?folder=" + encodeURIComponent(path);
+  /** @type {import("./contracts.ts").LibraryLayout} */
+  let layout = "gallery";
+  function setLayout(next) {
+    layout = next;
+    $("files").dataset.layout = layout;
+    for (const mode of ["gallery", "list"])
+      $("layout-" + mode).setAttribute("aria-pressed", String(layout === mode));
+  }
+  $("layout-gallery").onclick = () => setLayout("gallery");
+  $("layout-list").onclick = () => setLayout("list");
+  setLayout(layout);
   let pathChange = null;
   let selection = { paths: [], anchor: null },
     visiblePaths = [];
@@ -322,7 +333,7 @@ export function mountFiles({
     const missing = listing.state === "missing";
     $("library-title").textContent =
       folder === "/"
-        ? "Your documents"
+        ? "Artifacts"
         : missing
           ? "Folder not found"
           : nameOf(folder);
@@ -345,6 +356,7 @@ export function mountFiles({
         row = document.createElement("article");
       row.className = "file";
       row.dataset.path = path;
+      row.dataset.kind = isFile ? "artifact" : "folder";
       row.draggable = true;
       const check = document.createElement("input");
       check.type = "checkbox";
@@ -364,12 +376,25 @@ export function mountFiles({
       mark.innerHTML = isFile
         ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3H5v18h14V8zM14 3v5h5M8 12h8M8 16h6"/></svg>'
         : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7V5h6l2 3h10v12H3z"/></svg>';
+      if (isFile && entry.previewUrl) {
+        const preview = document.createElement("img");
+        preview.src = entry.previewUrl;
+        preview.alt = "";
+        preview.loading = "lazy";
+        preview.referrerPolicy = "no-referrer";
+        preview.className = "artifact-preview";
+        preview.onerror = () => preview.remove();
+        mark.append(preview);
+      }
       const info = document.createElement("div");
       info.className = "file-info";
       const link = document.createElement("a");
       link.href = isFile ? entry.url : folderURL(path);
       link.className = "file-title";
-      link.textContent = nameOf(path);
+      link.textContent = isFile
+        ? decode(entry.title || "") || nameOf(path)
+        : nameOf(path);
+      link.setAttribute("aria-label", nameOf(path));
       info.append(link);
       const meta = document.createElement("span");
       meta.className = "file-meta";
@@ -414,10 +439,13 @@ export function mountFiles({
     updateSelection();
     // Only what applies: rows with their search and header, the empty card,
     // "no matches", or a folder that does not exist.
-    const hasEntries = listing.state === "rows" || listing.state === "no-results";
+    const hasEntries =
+      listing.state === "rows" || listing.state === "no-results";
     $("empty").hidden = listing.state !== "empty";
     $("empty").querySelector("h2").textContent =
-      folder === "/" ? "A place for your documents." : "This folder is empty.";
+      folder === "/"
+        ? "Let’s create your first artifact."
+        : "This folder is empty.";
     $("folder-missing").hidden = !missing;
     $("library-actions").hidden = missing;
     $("library-toolbar").hidden = !hasEntries && !selection.paths.length;

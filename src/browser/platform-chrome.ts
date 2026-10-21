@@ -25,9 +25,9 @@ export function createPlatformChrome(
   bar.id = "pg-bar";
   bar.className = "pg-bar";
   bar.dataset.pagegiUi = "";
-  bar.setAttribute("aria-label", "Pagegi");
+  bar.setAttribute("aria-label", "artifactbin");
   bar.innerHTML =
-    '<span class="pg-brand">Pagegi</span><button id="pg-library" hidden>Documents</button><span id="pg-status" role="status"></span><div id="pg-people"></div><button id="pg-return" hidden>Return</button><button id="pg-connect">Connect</button><button id="pg-settings" aria-label="Page settings" aria-expanded="false" class="pg-bar-action"></button><button id="pg-me" aria-label="Account menu" aria-expanded="false" class="pg-bar-action">?</button><section id="pg-popover" class="pg-popover pg-panel" hidden></section>';
+    '<span class="pg-brand">artifactbin</span><button id="pg-library" hidden>Artifacts</button><span id="pg-status" role="status"></span><div id="pg-people"></div><button id="pg-return" hidden>Return</button><button id="pg-connect">Connect</button><button id="pg-settings" aria-label="Page settings" aria-expanded="false" class="pg-bar-action"></button><button id="pg-me" aria-label="Account menu" aria-expanded="false" class="pg-bar-action">?</button><section id="pg-popover" class="pg-popover pg-panel" hidden></section>';
   const control = (id: string) => bar.querySelector<HTMLElement>("#pg-" + id)!;
   const settings = control("settings"),
     account = control("me"),
@@ -106,7 +106,7 @@ export function createPlatformChrome(
   function accountMenu() {
     const view = options.read(),
       p = open(account, "Account options");
-    para("Pagegi", p, "pg-panel-brand");
+    para("artifactbin", p, "pg-panel-brand");
     para(view.actor ? "Connected as " + view.actor : "Not signed in", p);
     if (view.remote) {
       command("Account & profile", { kind: "account" }, p, "user");
@@ -309,7 +309,7 @@ export function createPlatformChrome(
       if (disposed) return;
       const p = open(account, "Account options");
       para(
-        "Publish this file to your Pagegi server. Your account will be used to sync its local comments.",
+        "Publish this file to your artifactbin server. Your account will be used to sync its local comments.",
         p,
       );
       const label = document.createElement("label");

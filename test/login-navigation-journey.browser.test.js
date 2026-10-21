@@ -36,18 +36,18 @@ try {
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
       const dialog = page.getByRole("dialog");
       await dialog.getByLabel("Email address").fill(email);
-      await dialog.getByRole("button", { name: "Send code", exact: true }).click();
+      await dialog.getByRole("button", { name: "Log in with email", exact: true }).click();
       await dialog.getByLabel("Email code").waitFor();
       assert.match(delivered.get(email) ?? "", /^\d{6}$/);
       await dialog.getByLabel("Email code").fill(delivered.get(email));
-      await dialog.getByRole("button", { name: "Sign in", exact: true }).click();
+      await dialog.getByRole("button", { name: "Log in", exact: true }).click();
       await page.waitForURL(origin + path);
       await page.frameLocator("#pg-frame").locator("#destination").waitFor();
       assert.equal(await page.frameLocator("#pg-frame").locator("#destination").textContent(), "Private document destination");
       assert.ok((await page.context().cookies()).some((cookie) => cookie.name === "pagegi_account" && cookie.httpOnly));
       for (const rejected of ["//external.example/af/v1/ids/abcdef", "/af/v1/ids/%2e%2e/account", "/d/abcdef"]) {
         await page.goto(origin + "/?next=" + encodeURIComponent(rejected));
-        await page.getByRole("heading", { name: "Your documents", exact: true }).waitFor();
+        await page.getByRole("heading", { name: "Artifacts", exact: true }).waitFor();
         assert.equal(new URL(page.url()).origin, origin);
         assert.equal(new URL(page.url()).pathname, "/");
       }

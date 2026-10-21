@@ -1,4 +1,5 @@
 // @ts-check
+import { workspaceNavigation } from "./library-client/workspace-navigation.ts";
 import { mountLogin } from "./library-client/login-view.js";
 import { mountFiles } from "./library-client/files-view.js";
 import { createLibraryViewState } from "./library-client/view-state.ts";
@@ -49,7 +50,9 @@ const session = createLibrarySession({
   // The server marks a home page requested without the account cookie.
   signedOut:
     !embedded &&
-    document.querySelector('meta[name="pagegi-session"]')?.getAttribute("content") === "none",
+    document
+      .querySelector('meta[name="pagegi-session"]')
+      ?.getAttribute("content") === "none",
   sharing: Boolean(sharingId),
   changed() {
     view.invalidate();
@@ -91,12 +94,24 @@ function showScreen() {
     $("sharing-page").hidden = true;
     $("sharing-page").replaceChildren();
   }
+  const navigation = workspaceNavigation(screen);
+  $("workspace-nav").hidden = !navigation.visible || embedded;
+  $("workspace-shell").classList.toggle(
+    "has-workspace",
+    navigation.visible && !embedded,
+  );
+  for (const section of ["artifacts", "account"]) {
+    const link = $("workspace-" + section);
+    if (navigation.active === section)
+      link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
   const errorHeading = $("load-error").querySelector("h1");
   const errorDetail = $("load-error").querySelector("p");
   if (errorHeading)
     errorHeading.textContent = viewState.error
       ? "Couldn’t load this view"
-      : "Couldn’t load Pagegi";
+      : "Couldn’t load artifactbin";
   if (errorDetail)
     errorDetail.textContent =
       viewState.error || "Your session could not be checked. Please try again.";
@@ -104,7 +119,7 @@ function showScreen() {
   $("account-menu").hidden = sessionState !== "signed-in";
   $("footer").hidden = screen !== "welcome";
   $("page-crumb").textContent =
-    screen === "account" ? "Account" : screen === "library" ? "Documents" : "";
+    screen === "account" ? "Account" : screen === "library" ? "Artifacts" : "";
   if (embedded && sessionState === "signed-out") {
     $("welcome").hidden = true;
     if (!dialog.open) loginView.open();
@@ -115,8 +130,8 @@ function showScreen() {
     (screen === "account"
       ? "Account"
       : screen === "library"
-        ? "Your documents"
-        : "Pagegi") + " · Pagegi";
+        ? "Artifacts"
+        : "artifactbin") + " · artifactbin";
 }
 async function load() {
   const result = await session.load();
@@ -159,10 +174,21 @@ async function load() {
   if (rendered) frameEvent("ready");
 }
 $("retry").onclick = load;
+$("workspace-create").onclick = () => $("new-page").click();
+$("workspace-skill").onclick = () => $("new-page").click();
+$("workspace-folder").onclick = () => $("new-folder").click();
+$("workspace-upload").onclick = () => $("publish").click();
+$("workspace-toggle").onclick = () => {
+  const expanded =
+    $("workspace-toggle").getAttribute("aria-expanded") !== "true";
+  $("workspace-toggle").setAttribute("aria-expanded", String(expanded));
+  $("workspace-nav").classList.toggle("expanded", expanded);
+};
 // Signed out, the welcome hands the same instructions to the person's coding
 // agent; the agent asks for the email address when it signs in.
 const welcomeCopy = "Copy agent instructions";
-/** @type {HTMLTextAreaElement} */ ($("welcome-agent-text")).value = agentHandoff(location.origin);
+/** @type {HTMLTextAreaElement} */ ($("welcome-agent-text")).value =
+  agentHandoff(location.origin);
 $("welcome-agent-copy").onclick = async () => {
   try {
     if (!navigator.clipboard?.writeText) throw Error("No clipboard");

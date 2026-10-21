@@ -59,7 +59,7 @@ async function signIn(page, email) {
     ]);
     await page.goto(origin);
     await page
-      .getByRole("heading", { name: "Your documents", exact: true })
+      .getByRole("heading", { name: "Artifacts", exact: true })
       .waitFor();
     return;
   }
@@ -68,17 +68,17 @@ async function signIn(page, email) {
     .getByRole("button", { name: "Sign in with your email", exact: true })
     .click();
   await page.getByLabel("Email address").fill(email);
-  await page.getByRole("button", { name: "Send code", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Log in with email", exact: true })
+    .click();
   await page.getByLabel("Email code").waitFor();
   assert.ok(codes.get(email), "real email delivery adapter received OTP");
   await page.getByLabel("Email code").fill(codes.get(email));
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "Sign in", exact: true })
+    .getByRole("button", { name: "Log in", exact: true })
     .click();
-  await page
-    .getByRole("heading", { name: "Your documents", exact: true })
-    .waitFor();
+  await page.getByRole("heading", { name: "Artifacts", exact: true }).waitFor();
 }
 async function menu(page, name) {
   await page.getByRole("button", { name: "Account menu", exact: true }).click();

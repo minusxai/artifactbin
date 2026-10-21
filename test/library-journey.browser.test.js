@@ -139,7 +139,7 @@ try {
     .locator("#welcome")
     .getByRole("button", { name: "Sign in with your email", exact: true })
     .click();
-  await page.getByRole("dialog", { name: "Welcome to Pagegi" }).waitFor();
+  await page.getByRole("dialog", { name: "Log in to artifactbin" }).waitFor();
   await page.getByRole("button", { name: "Close sign-in" }).click();
   await page
     .locator("nav.pg-bar")
@@ -160,13 +160,13 @@ try {
     await page.reload();
   } else {
     await page.getByLabel("Email address").fill("library@example.com");
-    await page.getByRole("button", { name: "Send code", exact: true }).click();
+    await page.getByRole("button", { name: "Log in with email", exact: true }).click();
     await page.getByLabel("Email code").waitFor();
     await page.getByLabel("Email code").fill(code);
     await page.route("**/api/auth/email/verify", htmlError, { times: 1 });
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: "Sign in", exact: true })
+      .getByRole("button", { name: "Log in", exact: true })
       .click();
     await page
       .getByRole("dialog")
@@ -175,12 +175,14 @@ try {
       .waitFor();
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: "Sign in", exact: true })
+      .getByRole("button", { name: "Log in", exact: true })
       .click();
   }
   await page
-    .getByRole("heading", { name: "Your documents", exact: true })
+    .getByRole("heading", { name: "Artifacts", exact: true })
     .waitFor();
+  assert.equal(await page.locator("#workspace-nav").isVisible(), true);
+  assert.equal(await page.locator("#workspace-artifacts").getAttribute("aria-current"), "page");
   let releaseSession;
   const sessionGate = new Promise((resolve) => {
     releaseSession = resolve;
@@ -205,7 +207,7 @@ try {
   await page.unroute("**/api/library");
 
   await page
-    .getByRole("heading", { name: "Your documents", exact: true })
+    .getByRole("heading", { name: "Artifacts", exact: true })
     .waitFor();
   let releaseProfile;
   const profileGate = new Promise((resolve) => {
@@ -223,7 +225,7 @@ try {
   await page.getByLabel("Display name", { exact: true }).waitFor();
   await page.unroute("**/api/library/profile");
   assert.equal(await page.locator("#library").isVisible(), false);
-  await page.getByRole("link", { name: "Documents", exact: true }).click();
+  await page.getByRole("link", { name: "Artifacts", exact: true }).click();
   await page.getByRole("button", { name: "Account menu", exact: true }).click();
   await page
     .getByRole("link", { name: "Account & profile", exact: true })
@@ -380,7 +382,7 @@ try {
   await page.evaluate(() => {
     window.__copyFails = true;
   });
-  await page.getByRole("button", { name: "New page", exact: true }).click();
+  await page.getByRole("button", { name: "Create artifact", exact: true }).click();
   await agentDialog
     .getByRole("button", { name: "Copy agent instructions", exact: true })
     .click();
@@ -679,7 +681,7 @@ try {
     !readFileSync(savedPath, "utf8").includes(boot.token),
     "Scoped host session excluded from Save file",
   );
-  await page.getByRole("button", { name: "Documents", exact: true }).click();
+  await page.getByRole("button", { name: "Artifacts", exact: true }).click();
   await page.getByText("2 comments", { exact: true }).waitFor();
   const downloadEvents = [];
   const downloadStarted = Date.now();
@@ -824,7 +826,7 @@ try {
     .frameLocator("#pg-frame")
     .getByRole("heading", { name: "Research", exact: true })
     .waitFor();
-  await page.getByRole("button", { name: "Documents", exact: true }).click();
+  await page.getByRole("button", { name: "Artifacts", exact: true }).click();
   await page
     .getByRole("link", { name: "research.html", exact: true })
     .waitFor();
@@ -862,7 +864,7 @@ try {
     .frameLocator("#pg-frame")
     .getByRole("heading", { name: "Research", exact: true })
     .waitFor();
-  await page.getByRole("button", { name: "Documents", exact: true }).click();
+  await page.getByRole("button", { name: "Artifacts", exact: true }).click();
   await page.screenshot({
     path: `test-output/library-desktop-${engine}.png`,
     fullPage: true,

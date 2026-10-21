@@ -27,15 +27,17 @@ test("real email sign-in survives sharing failure and retries without changing a
       .getByRole("button", { name: "Sign in with your email", exact: true })
       .click();
     await page.getByLabel("Email address").fill("view-review@example.com");
-    await page.getByRole("button", { name: "Send code", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Log in with email", exact: true })
+      .click();
     await page.getByLabel("Email code").waitFor();
     await page.getByLabel("Email code").fill(code);
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: "Sign in", exact: true })
+      .getByRole("button", { name: "Log in", exact: true })
       .click();
     await page
-      .getByRole("heading", { name: "Your documents", exact: true })
+      .getByRole("heading", { name: "Artifacts", exact: true })
       .waitFor();
     const published = await page.evaluate(async () => {
       const response = await fetch("/api/library/example", {

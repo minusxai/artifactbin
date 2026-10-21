@@ -8,6 +8,8 @@ export interface LibraryFile {
   title: string;
   url: string;
   commentCount: number;
+  /** Optional server-generated cover image. Absence keeps a neutral HTML cover. */
+  previewUrl?: string;
 }
 export interface LibraryData {
   username: string;
@@ -59,7 +61,11 @@ export interface LibrarySessionOptions {
 export interface LibrarySession {
   getSnapshot(): LibrarySnapshot;
   load(): Promise<LibrarySnapshot | undefined>;
-  request<T = unknown>(path: string, body?: unknown, method?: string): Promise<T>;
+  request<T = unknown>(
+    path: string,
+    body?: unknown,
+    method?: string,
+  ): Promise<T>;
   verify(email: string, code: string): Promise<boolean>;
   logout(): Promise<boolean>;
   token(): string | null;
@@ -86,3 +92,5 @@ export interface LibraryActionsOptions {
   request<T>(path: string, body: unknown): Promise<T>;
   id(): string;
 }
+
+export type LibraryLayout = "gallery" | "list";

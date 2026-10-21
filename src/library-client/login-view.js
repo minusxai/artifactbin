@@ -27,7 +27,7 @@ export function mountLogin({ $, request, session, load, frameEvent }) {
       $("resend").hidden = !sent;
       $("resend").disabled = state.busy;
       button.disabled = state.busy;
-      button.textContent = sent ? "Sign in" : "Send code";
+      button.textContent = sent ? "Log in" : "Log in with email";
       form.querySelector("[role=alert]").textContent = state.message;
       if (!sent) form.code.value = "";
       if (!state.busy) (sent ? form.code : form.email).focus();

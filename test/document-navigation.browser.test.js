@@ -31,7 +31,7 @@ test("mobile documents remain reachable and page settings exposes commenting", a
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     assert.equal(
       await page
-        .getByRole("button", { name: "Documents", exact: true })
+        .getByRole("button", { name: "Artifacts", exact: true })
         .isVisible(),
       true,
     );

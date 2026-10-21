@@ -52,12 +52,14 @@ try {
       .getByRole("button", { name: "Sign in with your email", exact: true })
       .click();
     await page.getByLabel("Email address").fill("mxmx_test_files@example.com");
-    await page.getByRole("button", { name: "Send code", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Log in with email", exact: true })
+      .click();
     await page.getByLabel("Email code").waitFor();
     await page.getByLabel("Email code").fill(code);
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: "Sign in", exact: true })
+      .getByRole("button", { name: "Log in", exact: true })
       .click();
   }
   await page.locator("#library").waitFor();
@@ -101,6 +103,22 @@ try {
     assert.equal(r.status(), 201);
   }
   await page.reload();
+  await page.getByRole("button", { name: "List view", exact: true }).click();
+  assert.equal(
+    await page.locator("#files").getAttribute("data-layout"),
+    "list",
+  );
+  await page.getByRole("button", { name: "Gallery view", exact: true }).click();
+  assert.equal(
+    await page.locator("#files").getAttribute("data-layout"),
+    "gallery",
+  );
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Gallery view", exact: true })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
   await page.getByLabel("Select brief.html", { exact: true }).check();
   await page.getByLabel("Select notes.html", { exact: true }).check();
   assert.equal(

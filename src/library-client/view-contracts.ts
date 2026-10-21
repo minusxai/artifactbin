@@ -35,3 +35,8 @@ export interface FilesView {
   update(data: LibraryData): void;
   renderDiscovered(container: HTMLElement, entries: LibraryFile[]): void;
 }
+/** Navigation presentation follows the resolved session screen, never a pending account. */
+export interface WorkspaceNavigation {
+  visible: boolean;
+  active: "artifacts" | "account";
+}
