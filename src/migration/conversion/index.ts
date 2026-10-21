@@ -1,7 +1,12 @@
 /** Offline-only source conversion. Never import this module from the product runtime. */
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
-import type { ConversionInput, ConversionResult } from "./contracts.ts";
+import type {
+  ConversionInput,
+  ConversionResult,
+  ConversionInventoryRow,
+  ConversionInventory,
+} from "./contracts.ts";
 export type {
   ConversionInput,
   ConversionResult,
@@ -109,7 +114,14 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
         issue("spread", "Spread attributes require an explicit adapter", path);
         continue;
       }
-      const name = a.name.name;
+      const name =
+        a.name.type === "JSXNamespacedName"
+          ? a.name.namespace.name + ":" + a.name.name.name
+          : a.name.name;
+      if (typeof name !== "string") {
+        issue("attribute", "Unsupported attribute name", path);
+        continue;
+      }
       if (/^on/i.test(name) || /^srcdoc$/i.test(name)) {
         issue("event", "Authored event handlers require rewriting", path);
         continue;
@@ -207,6 +219,51 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
       return "";
     }
     const a = attrs(node, path);
+    if (["object", "embed"].includes(name.toLowerCase())) {
+      issue(
+        "active-embed",
+        "Executable embedded resources require an explicit adapter",
+        path,
+      );
+      return "";
+    }
+    for (const [attribute, value] of Object.entries(a)) {
+      const key = attribute.toLowerCase();
+      if (
+        typeof value !== "string" ||
+        ![
+          "href",
+          "src",
+          "action",
+          "formaction",
+          "poster",
+          "data",
+          "xlink:href",
+          "codebase",
+          "background",
+        ].includes(key)
+      )
+        continue;
+      const normalized = value
+        .replace(/[\u0000-\u0020\u007f]/g, "")
+        .toLowerCase();
+      if (
+        /^(javascript|vbscript|blob):/.test(normalized) ||
+        (normalized.startsWith("data:") &&
+          !(
+            name === "img" &&
+            key === "src" &&
+            /^data:image\/(png|jpeg|gif|webp|avif|x-icon);base64,/.test(
+              normalized,
+            )
+          ))
+      )
+        issue(
+          "active-uri",
+          "Active or opaque resource URI requires rewriting",
+          path,
+        );
+    }
     if (name === "Helmet") {
       node.children.forEach((c: Node, i: number) => {
         const h = render(c, path + "." + i, true);
@@ -440,4 +497,36 @@ export function convertLegacyDocument(
       ],
     };
   }
+}
+
+/** Privacy-safe aggregate inventory; intentionally excludes row identifiers and issue messages. */
+export function inventoryLegacyConversions(
+  rows: Iterable<ConversionInventoryRow>,
+  input: Omit<ConversionInput, "source">,
+): ConversionInventory {
+  const inventory: ConversionInventory = {
+    total: 0,
+    classifications: { renderable: 0, functional: 0, "manual-blocked": 0 },
+    issueDocuments: {},
+    issueOccurrences: {},
+    capabilities: {},
+  };
+  for (const row of rows) {
+    const converted =
+      typeof row.source === "string" && row.source.trim()
+        ? convertLegacyJsx({ ...input, source: row.source })
+        : convertLegacyDocument(row.document, input);
+    inventory.total++;
+    inventory.classifications[converted.classification]++;
+    for (const code of new Set(converted.issues.map((issue) => issue.code)))
+      inventory.issueDocuments[code] =
+        (inventory.issueDocuments[code] ?? 0) + 1;
+    for (const issue of converted.issues)
+      inventory.issueOccurrences[issue.code] =
+        (inventory.issueOccurrences[issue.code] ?? 0) + 1;
+    for (const capability of new Set(converted.capabilities))
+      inventory.capabilities[capability] =
+        (inventory.capabilities[capability] ?? 0) + 1;
+  }
+  return inventory;
 }

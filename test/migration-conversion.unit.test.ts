@@ -226,3 +226,55 @@ test("adapter binding ids cannot collide with authored ids and authored unusual 
   assert.equal(new Set(ids).size, ids.length);
   assert.doesNotMatch(converted.html!, /querySelector\(/);
 });
+
+test("active URL schemes and executable embedded resources need explicit rewriting", () => {
+  for (const source of [
+    '<a href="javascript:alert(1)">x</a>',
+    '<a href=" java&#x73;cript:alert(1)">x</a>',
+    '<iframe src="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;"/>',
+    '<object data="data:text/html,x"/>',
+    '<embed src="https://example.com/plugin"/>',
+    '<script src="https://example.com/x.js"/>',
+  ])
+    assert.equal(
+      convertLegacyJsx({ source, coreUrl: "/af/v1/core.js" }).classification,
+      "manual-blocked",
+      source,
+    );
+  const image = convertLegacyJsx({
+    source:
+      '<img src="data:image/png;base64,aGVsbG8="/><a href="https://example.com/">Link</a>',
+    coreUrl: "/af/v1/core.js",
+  });
+  assert.equal(image.classification, "renderable");
+});
+
+test("inventory aggregates canonical conversion outcomes without including private row content", async () => {
+  const { inventoryLegacyConversions } = await import(
+    "../src/migration/conversion/index.ts"
+  );
+  const document = {
+    kind: "graph",
+    schema: 3,
+    nodes: {
+      $root: { parts: ["<p>Private synthetic title</p>"], children: [] },
+    },
+  };
+  const result = inventoryLegacyConversions(
+    [
+      { document },
+      { source: "<Chart/><Chart/>" },
+      { source: "<script>private payload</script>" },
+    ],
+    { coreUrl: "/af/v1/core.js" },
+  );
+  assert.equal(result.total, 3);
+  assert.equal(result.classifications.renderable, 1);
+  assert.equal(result.classifications["manual-blocked"], 2);
+  assert.equal(result.issueDocuments.component, 1);
+  assert.equal(result.issueOccurrences.component, 2);
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    /Private|private|payload|Chart|<p>/,
+  );
+});
