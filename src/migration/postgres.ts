@@ -1,0 +1,104 @@
+import {createHash,randomBytes} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {prepareForSave} from '../page/page-model.ts';
+import {normalizePath} from '../path-model.ts';
+import type {ImportDestination,MigrationManifest,MigrationMaps,PlannedPage,SqlReader} from './contracts.ts';
+import type {DestinationOptions,DestinationPreparation} from './postgres-contracts.ts';
+const digest=(s:string)=>createHash('sha256').update(s).digest('hex');
+const identifier=(s:string)=>{if(!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(s))throw new Error('Invalid explicit destination schema');return '"'+s+'"'};
+export function buildAccountMaps(manifest:MigrationManifest):MigrationMaps {
+ const users:Record<string,string>={};
+ for(const user of manifest.tables.users??[]){if(typeof user.email!=='string'||!user.email.trim())continue;const email=user.email.trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))continue;users[String(user.id)]=email;}
+ const tokens:Record<string,string>={};for(const token of manifest.tokenOwners){const actor=token.user_id?users[token.user_id]:undefined;if(actor)tokens[token.id]=actor;}
+ return {users,tokens,groups:{},pages:{}};
+}
+const segment=(value:unknown)=>String(value??'').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu,'-').replace(/^-|-$/g,'').slice(0,60)||'untitled';
+export function publicationPath(page:PlannedPage):string {
+ const ancestors=Array.isArray(page.original.ancestor_ids)?page.original.ancestor_ids.map(value=>'folder-'+digest(String(value)).slice(0,16)):[];
+ return '/imported/'+[...ancestors,segment(page.original.title)+'-'+page.pageId+'.html'].join('/');
+}
+export function destinationAccess(page:PlannedPage):Record<string,unknown>{
+ if(!['public','private','unlisted'].includes(page.access.visibility))throw new Error('Unsupported visibility');
+ const roles=['viewer','commenter','editor'];if(!roles.includes(page.access.linkRole))throw new Error('Unsupported link role');
+ const shares:Record<string,string>={};
+ for(const row of page.access.shares){const email=String(row.email??'').trim().toLowerCase();if(!email||!roles.includes(String(row.role)))throw new Error('Unsupported named role');shares[email]=String(row.role);}
+ return {visibility:page.access.visibility,linkRole:page.access.linkRole,shares,version:0};
+}
+export class PostgresMigrationDestination implements ImportDestination {
+ private maps:MigrationMaps={users:{},tokens:{},groups:{},pages:{}};
+ private namespace='';
+ private readonly db:SqlReader;
+ private readonly options:DestinationOptions;
+ constructor(db:SqlReader,options:DestinationOptions){this.db=db;this.options=options;}
+ private get schema(){return identifier(this.options.schema)}
+ private get archive(){return identifier(this.options.schema+'_migration')}
+ private async transaction<T>(operation:()=>Promise<T>):Promise<T>{
+  if(!this.options.isolated)throw new Error('An explicitly isolated destination is required');
+  await this.db.query('BEGIN');try{await this.db.query(`SET LOCAL search_path TO ${this.schema}`);const value=await operation();await this.db.query('COMMIT');return value;}catch(error){await this.db.query('ROLLBACK');throw error;}
+ }
+ async prepare(input:DestinationPreparation):Promise<void>{
+  if(!this.options.isolated)throw new Error('An explicitly isolated destination is required');
+  if(['public','pg_catalog','information_schema'].includes(this.options.schema))throw new Error('Destination must use a dedicated schema');
+  this.maps=input.maps;this.namespace=input.manifest.sourceNamespace;
+  const schemaSql=await readFile(new URL('../schema.sql',import.meta.url),'utf8');
+  await this.transaction(async()=>{
+   await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);await this.db.query(`SET LOCAL search_path TO ${this.schema}`);
+   await this.db.query(schemaSql);
+   await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.archive}`);
+   await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.archives(namespace text PRIMARY KEY,digest text NOT NULL,manifest jsonb NOT NULL,maps jsonb NOT NULL)`);
+   await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.receipts(key text PRIMARY KEY,digest text NOT NULL,page_id text NOT NULL,imported_at timestamptz NOT NULL DEFAULT now())`);
+   const text=JSON.stringify(input.manifest);const old=(await this.db.query(`SELECT digest FROM ${this.archive}.archives WHERE namespace=$1 FOR UPDATE`,[this.namespace])).rows[0];
+   if(old&&old.digest!==digest(text))throw new Error('Source archive changed; use a new migration namespace');
+   if(!old)await this.db.query(`INSERT INTO ${this.archive}.archives VALUES($1,$2,$3::jsonb,$4::jsonb)`,[this.namespace,digest(text),text,JSON.stringify(input.maps)]);
+   for(const actor of new Set([...Object.values(input.maps.users),...Object.values(input.maps.tokens)]))await this.db.query('INSERT INTO accounts(actor) VALUES($1) ON CONFLICT(actor) DO NOTHING',[actor]);
+   for(const folder of input.manifest.artifacts.filter(a=>a.format==='folder'&&!a.deleted_at)){
+    const actor=folder.user_id?input.maps.users[folder.user_id]:undefined;if(!actor||folder.group_id)continue;
+    const path='/imported/'+[...(Array.isArray(folder.ancestor_ids)?folder.ancestor_ids:[]),folder.id].map(value=>'folder-'+digest(String(value)).slice(0,16)).join('/');
+    await this.db.query('INSERT INTO folders(owner,path) VALUES($1,$2) ON CONFLICT DO NOTHING',[actor,path]);
+   }
+  });
+ }
+ supportsExactAccess(page:PlannedPage):boolean {
+  try{destinationAccess(page);normalizePath(publicationPath(page));}catch{return false;}
+  if(page.owner?.kind!=='user'&&page.owner?.kind!=='token')return false;
+  if(page.original.deleted_at)return false;
+  if(!this.options.editorManageRestricted&&(page.access.linkRole==='editor'||page.access.shares.some(s=>s.role==='editor')))return false;
+  return true;
+ }
+ async importPage(key:string,checksum:string,page:PlannedPage):Promise<'created'|'unchanged'>{
+  if(!this.namespace||key!==this.namespace+':'+page.legacyId)throw new Error('Destination preparation/key mismatch');
+  if(page.disposition!=='ready'||!this.supportsExactAccess(page)||!page.owner)throw new Error('Page cannot preserve source access/content');
+  return this.transaction(async()=>{
+   await this.db.query('SELECT pg_advisory_xact_lock(hashtext($1))',[key]);
+   const old=(await this.db.query(`SELECT digest,page_id FROM ${this.archive}.receipts WHERE key=$1`,[key])).rows[0];
+   if(old){if(old.digest!==checksum||old.page_id!==page.pageId)throw new Error('Migration receipt conflicts with changed content');return 'unchanged';}
+   const owner=page.owner!.id;const head=String(page.original.version);const current=page.revisions.find(r=>String(r.version)===head);
+   if(!current?.conversion.html)throw new Error('Missing converted head');
+   // IDs are reserved with ordinary INSERT: existing destination identities can never be overwritten.
+   await this.db.query('INSERT INTO file_ids(id,owner,kind,published,created_at) VALUES($1,$2,\'page\',true,$3)',[page.pageId,owner,Number(new Date(String(page.original.created_at??0)))||0]);
+   const path=publicationPath(page);const nodeIds=new Set<string>();
+   for(const r of page.revisions)for(const id of Object.values(r.conversion.identities))nodeIds.add(id);
+   for(const row of page.identities)if(typeof row.source_id==='string')nodeIds.add(row.source_id);
+   const normalized=page.revisions.map(r=>({version:r.version,prepared:prepareForSave(r.conversion.html!,{id:page.pageId,version:r.version,origin:this.options.origin,knownOrigins:[],reserved:nodeIds})}));
+   const preparedHead=normalized.find(r=>String(r.version)===head)!.prepared;
+   const nextNodeId=Number(preparedHead.meta.nextNodeId??1);
+   await this.db.query('INSERT INTO files(id,owner,share_hash,generation,head,sequence,path,access,next_node_id,source_digest) VALUES($1,$2,$3,1,$4,0,$5,$6::jsonb,$7,$8)',[page.pageId,owner,digest(randomBytes(32).toString('hex')),head,path,JSON.stringify(destinationAccess(page)),nextNodeId,digest(preparedHead.source)]);
+   await this.db.query('UPDATE files SET seed=$2::jsonb WHERE id=$1',[page.pageId,JSON.stringify(preparedHead.state)]);
+   for(const r of normalized)await this.db.query('INSERT INTO sources(file_id,revision,content,node_ids,digest) VALUES($1,$2,$3,$4::jsonb,$5)',[page.pageId,String(r.version),r.prepared.source,JSON.stringify(r.prepared.nodeIds),digest(r.prepared.source)]);
+   const parts=path.split('/').slice(1,-1);for(let i=1;i<=parts.length;i++)await this.db.query('INSERT INTO folders(owner,path) VALUES($1,$2) ON CONFLICT DO NOTHING',[owner,'/'+parts.slice(0,i).join('/')]);
+   const comments=page.comments.filter(c=>!c.deleted_at);let sequence=0;
+   for(const c of comments){
+    const revision=String(c.anchor_version??head);if(!page.revisions.some(r=>String(r.version)===revision))throw new Error('Comment references missing historical source');
+    const author=this.maps.users[String(c.author_user_id)]??this.maps.tokens[String(c.author_token_id)];if(!author)throw new Error('Unmapped comment author');
+    const root=c.root_id?comments.find(r=>r.id===c.root_id):c;if(!root)throw new Error('Comment references missing root');
+    const originalAnchor=typeof root.anchor_key==='string'?root.anchor_key:null;
+    const mapped=originalAnchor?(current.conversion.identities[originalAnchor]??originalAnchor):null;
+    const snapshot=c.view_state===null||c.view_state===undefined?null:'legacy-'+String(c.id);
+    if(snapshot)await this.db.query('INSERT INTO snapshots(file_id,id,source_revision,schema_version,state,view,rendered) VALUES($1,$2,$3,1,$4::jsonb,$5::jsonb,NULL)',[page.pageId,snapshot,revision,'{}',JSON.stringify(c.view_state)]);
+    await this.db.query('INSERT INTO comments(file_id,id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',[page.pageId,String(c.id),mapped,String(c.quote??c.snippet??''),String(c.body??''),revision,c.root_id??null,snapshot,author,String(c.created_at),Number(c.revision??1),root.status==='resolved',digest(JSON.stringify(c)),++sequence]);
+   }
+   await this.db.query('UPDATE files SET sequence=$2 WHERE id=$1',[page.pageId,sequence]);
+   await this.db.query(`INSERT INTO ${this.archive}.receipts(key,digest,page_id) VALUES($1,$2,$3)`,[key,checksum,page.pageId]);return 'created';
+  });
+ }
+}
