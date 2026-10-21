@@ -24,9 +24,9 @@ export const FILE_ID_ALPHABET =
 export const MAX_PAGE_SOURCE = 4e6;
 
 /** The default public host the skill writes. Servers rewrite this prefix to their own origin on save. */
-export const DEFAULT_AF_ORIGIN = "https://pagegi.artifactbin.dev";
+export const DEFAULT_AF_ORIGIN = "https://app.artefactbin.dev";
 /** Hosts the skill used to write. Every server keeps rewriting them, so pages published with them keep working. */
-export const LEGACY_AF_ORIGINS: readonly string[] = ["https://artifactbin.dev"];
+export const LEGACY_AF_ORIGINS: readonly string[] = ["https://artifactbin.dev", "https://pagegi.artifactbin.dev"];
 /** Every origin a server rewrites to its own on save, besides the ones it is configured with. */
 export const KNOWN_AF_ORIGINS: readonly string[] = [DEFAULT_AF_ORIGIN, ...LEGACY_AF_ORIGINS];
 /** Every platform-served path lives under this prefix. */

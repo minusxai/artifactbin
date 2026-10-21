@@ -1,21 +1,25 @@
 ---
-name: pagegi-author
-description: Write a Pagegi page. It's a normal HTML file; keep all page state in @afbin/apollo local state, and share data through backends.
+name: artifactbin-author
+description: Write a Artifactbin page. It's a normal HTML file; keep all page state in @afbin/apollo local state, and share data through backends.
 ---
 
-# Author a Pagegi page
+# Author a Artifactbin page
 
-A Pagegi page is a normal HTML file. Write it the way you'd write any web page, with any scripts, styles and libraries. The platform adds saving, sharing, comments, presence, design systems and history on top.
+A Artifactbin page is a normal HTML file. Write it the way you'd write any web page, with any scripts, styles and libraries. The platform adds saving, sharing, comments, presence, design systems and history on top.
+
+## Installation
+
+Install this skill with `npx artefactbin-skill` and restart your coding agent. This command only installs the skill; use the HTTP API and scripts below to author pages. For another server, install with `--origin https://your-server.example`. Credentials are stored separately per server origin; signing in to one server never signs you in to another.
 
 ## Core concept
 
-A Pagegi page is a normal HTML file with one extra line: the core script.
+A Artifactbin page is a normal HTML file with one extra line: the core script.
 
 ```html
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="https://pagegi.artifactbin.dev/af/v1/core.js"></script>
+  <script src="https://app.artefactbin.dev/af/v1/core.js"></script>
   <title>My Page</title>
 </head>
 <body>
@@ -24,7 +28,7 @@ A Pagegi page is a normal HTML file with one extra line: the core script.
 </html>
 ```
 
-The core is what makes this a Pagegi page. It provides the `@afbin/*` libraries (see Local state contract), and it adds saving, sharing, comments, presence and design systems around your page. Always include it, first in `<head>` before any other script, so it's ready before your code runs. (If a file arrives without it, the platform adds it there as a fallback.) When a page is downloaded, the platform inlines the core, the design system and the downloading viewer's local state, and records on the core tag which server the file came from and which version it is, so the file works on its own: opened from disk, its state is kept in that browser across reloads, and a small "Download page" button saves it again with its current state. Opened while that server is reachable, the file shows the same platform bar as the hosted page: it reads the page's comments, tells the viewer when the server has a newer version, and offers Connect, which signs the viewer in on the server, in a window of the server's own, never in the file. Connected, the viewer comments, sees who else is there, shares, and calls backends as they would on the hosted page, and the bar's "Download HTML" saves the file with its current state. Without the server, backend calls settle as `offline`. The file never holds an account token.
+The core is what makes this a Artifactbin page. It provides the `@afbin/*` libraries (see Local state contract), and it adds saving, sharing, comments, presence and design systems around your page. Always include it, first in `<head>` before any other script, so it's ready before your code runs. (If a file arrives without it, the platform adds it there as a fallback.) When a page is downloaded, the platform inlines the core, the design system and the downloading viewer's local state, and records on the core tag which server the file came from and which version it is, so the file works on its own: opened from disk, its state is kept in that browser across reloads, and a small "Download page" button saves it again with its current state. Opened while that server is reachable, the file shows the same platform bar as the hosted page: it reads the page's comments, tells the viewer when the server has a newer version, and offers Connect, which signs the viewer in on the server, in a window of the server's own, never in the file. Connected, the viewer comments, sees who else is there, shares, and calls backends as they would on the hosted page, and the bar's "Download HTML" saves the file with its current state. Without the server, backend calls settle as `offline`. The file never holds an account token.
 
 Don't build your own toolbar, comments, sign-in, dark-mode switch or design-system picker; the platform already provides them.
 
@@ -78,13 +82,13 @@ node scripts/add.mjs backends/billing.ts backends/crm.ts
 Then link each one from `<head>` by its ID, and give it a name:
 
 ```html
-<link rel="af-backend" href="https://pagegi.artifactbin.dev/af/v1/ids/Bk7Qa2" data-af-name="billing">
-<link rel="af-backend" href="https://pagegi.artifactbin.dev/af/v1/ids/Cr4mZ9" data-af-name="contacts">
+<link rel="af-backend" href="https://app.artefactbin.dev/af/v1/ids/Bk7Qa2" data-af-name="billing">
+<link rel="af-backend" href="https://app.artefactbin.dev/af/v1/ids/Cr4mZ9" data-af-name="contacts">
 ```
 
-Every Pagegi file has one short ID (six letters and digits). A backend file's address is `https://pagegi.artifactbin.dev/af/v1/ids/<id>`; linking by it keeps working if the file is renamed or moved, and two pages can link the same backend. On a page connected to a different server, the server rewrites the address to its own host on save.
+Every Artifactbin file has one short ID (six letters and digits). A backend file's address is `https://app.artefactbin.dev/af/v1/ids/<id>`; linking by it keeps working if the file is renamed or moved, and two pages can link the same backend. On a page connected to a different server, the server rewrites the address to its own host on save.
 
-A page's address, the `url` a publish returns, is `https://pagegi.artifactbin.dev/a/<id>`. Anything after the ID and a hyphen is ignored, so `https://pagegi.artifactbin.dev/a/<id>-<title>` opens the same page with a readable link. If your account has chosen a handle (`references/http-api.md`, Handle), a page with a path in your library also opens at `https://pagegi.artifactbin.dev/@<handle>/<path>` (the path is the one `GET /api/paths` lists), until it is renamed or moved or the handle changes; share `url` when in doubt. `https://pagegi.artifactbin.dev/af/v1/ids/<id>` opens any file by ID as well. Every form behaves the same: a private page asks a signed-out visitor to sign in, and anything unknown is 404.
+A page's address, the `url` a publish returns, is `https://app.artefactbin.dev/a/<id>`. Anything after the ID and a hyphen is ignored, so `https://app.artefactbin.dev/a/<id>-<title>` opens the same page with a readable link. If your account has chosen a handle (`references/http-api.md`, Handle), a page with a path in your library also opens at `https://app.artefactbin.dev/@<handle>/<path>` (the path is the one `GET /api/paths` lists), until it is renamed or moved or the handle changes; share `url` when in doubt. `https://app.artefactbin.dev/af/v1/ids/<id>` opens any file by ID as well. Every form behaves the same: a private page asks a signed-out visitor to sign in, and anything unknown is 404.
 
 A page can link any number of backend files. `data-af-name` is required and must be unique on the page; it's the namespace the page queries the file's fields under (see Remote state contract).
 
@@ -220,7 +224,7 @@ The core adds the design system's CSS to the page for you. Don't add it yourself
 It's a link to the design system's file:
 
 ```html
-<link rel="stylesheet" href="https://pagegi.artifactbin.dev/af/v1/design-systems/dossier.css" data-af="design-system">
+<link rel="stylesheet" href="https://app.artefactbin.dev/af/v1/design-systems/dossier.css" data-af="design-system">
 ```
 
 When the viewer picks another design system, the core changes the link to that system's file.
@@ -241,7 +245,7 @@ Page metadata lives in one JSON block in `<head>`. This is how you set or update
 
 ```html
 <head>
-  <script src="https://pagegi.artifactbin.dev/af/v1/core.js"></script>
+  <script src="https://app.artefactbin.dev/af/v1/core.js"></script>
   <script type="application/json" data-af="meta">
   {
     "version": 5,
@@ -270,7 +274,7 @@ Then a comment on product 42 stays on product 42, even after the list is re-sort
 
 ## Publishing and comments
 
-Use the scripts. Sign in once with `node scripts/auth.mjs --email <address>`, then run it again with `--code <code>` from the email; the other scripts then use the saved token for `AF_SERVER` (default `https://pagegi.artifactbin.dev`). If a harness set `AF_TOKEN` and `AF_SERVER`, skip signing in: the scripts use them instead.
+Use the scripts. Sign in once with `node scripts/auth.mjs --email <address>`, then run it again with `--code <code>` from the email; the other scripts then use the saved token for `AF_SERVER` (default `https://app.artefactbin.dev`). If a harness set `AF_TOKEN` and `AF_SERVER`, skip signing in: the scripts use them instead.
 
 ```sh
 node scripts/publish.mjs page.html                     # publish, or save your changes

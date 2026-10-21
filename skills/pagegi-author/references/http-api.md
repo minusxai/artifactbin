@@ -2,7 +2,7 @@
 
 Everything an agent needs to publish and work on a page over HTTP. Send JSON, and pass your account token as `Authorization: Bearer <token>`. Errors come back as `{ "error": "message" }` with a 4xx or 5xx status.
 
-The server is `https://pagegi.artifactbin.dev`. If `AF_SERVER` and `AF_TOKEN` are set in your environment (a test harness may set them), use `AF_SERVER` as the server and `AF_TOKEN` as the token, and skip signing in.
+The server is `https://app.artefactbin.dev`. If `AF_SERVER` and `AF_TOKEN` are set in your environment (a test harness may set them), use `AF_SERVER` as the server and `AF_TOKEN` as the token, and skip signing in.
 
 ## Signing in
 
@@ -29,7 +29,7 @@ The server is `https://pagegi.artifactbin.dev`. If `AF_SERVER` and `AF_TOKEN` ar
 - **`id` in the meta block:** leave it out for a new page. An ID there must be one you reserved with `POST /api/ids` and haven't published yet; any other ID (someone else's, already published, unknown) is rejected with `422` naming it, so a copied page is never published under a new ID by accident.
 - **Without a token:** `POST /api/ids`, `POST /api/publish`, `DELETE /api/files/:id` and `/api/paths` answer `401`; the page routes under `/api/files/:id/` (source, comments, sharing, backends, graphql) answer `403`, even on an unlisted page. Only the page's address (the hosted view) works for anyone with the link.
 - **`source` in the response:** the page exactly as the platform saved it, with the header metadata block (`id`, `version`) and every `data-af-id` filled in. Replace your local file with it.
-- **`url` in the response:** the page's address, `https://pagegi.artifactbin.dev/a/<id>` (see Addresses).
+- **`url` in the response:** the page's address, `https://app.artefactbin.dev/a/<id>` (see Addresses).
 - **`If-Match`:** a save is rejected with `409` if someone else saved first. The `409` body is `{ error, version, source }`: the current version and its source. Merge your change into that source and save again with the new version.
 - **Deleting:** `DELETE` removes the page, all its versions, comments and its starting state. Its ID is never used again, and every request for it returns `404`, including its address. Backend files the page linked are separate files, so they stay published; other pages can still link them. A publish with the deleted page's old `requestId` creates a new page (with `id` taken out of the meta block; the deleted ID is refused like any other). Anyone except the owner gets `404`; a missing or expired token gets `401`.
 - **Downloading:** `GET /a/:id?download=1` returns the page as one HTML file that works on its own, with the core inlined and the page's starting state (its `data-af="state"` block). Local state belongs to each viewer, so the server doesn't have it; a viewer who downloads from the page gets their own state in the file. The file records the server it came from and its version on the core tag, next to the `id` and `version` in its metadata block, so a browser that can reach the server shows the platform bar in it and the viewer can connect to the page (see SKILL.md). It carries no credential.
@@ -41,7 +41,7 @@ The server is `https://pagegi.artifactbin.dev`. If `AF_SERVER` and `AF_TOKEN` ar
 
 | Method and path | Returns |
 |---|---|
-| `GET /a/<id>` | The page, hosted. `https://pagegi.artifactbin.dev/a/<id>-<title>` is the same page: anything after the ID and a hyphen is ignored. |
+| `GET /a/<id>` | The page, hosted. `https://app.artefactbin.dev/a/<id>-<title>` is the same page: anything after the ID and a hyphen is ignored. |
 | `GET /@<handle>/<path>` | The page at that path in the library of the account with that handle, exactly as `/a/<id>`. Only accounts that chose a handle have these addresses (see Handle); the path is as `GET /api/paths` lists it, percent-encoded. 404 once the page is renamed or moved, or the handle changes. |
 | `GET /af/v1/ids/<id>` | Any file by ID: a page as `/a/<id>`; a backend file as `{ id, kind, version }` to its owner only. |
 

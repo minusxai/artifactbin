@@ -101,9 +101,9 @@ export function refusedMessage(token: Pick<ResolvedToken, "origin" | "source" | 
   return `${token.origin} refused the saved token (401). Run node scripts/auth.mjs --email ${token.email || "<address>"} to sign in again.`;
 }
 
-/** `origin` answered 404 to `path`, a route every Pagegi server has: it is not a Pagegi server. */
+/** `origin` answered 404 to `path`, a route every Artifactbin server has: it is not an Artifactbin server. */
 export function notPagegiMessage(origin: string, path: string): string {
-  return `${origin} does not look like a Pagegi server: ${path} answered 404. Set ${AF_SERVER_ENV} to your Pagegi server's address (the default is ${DEFAULT_AF_ORIGIN}).`;
+  return `${origin} does not look like an Artifactbin server: ${path} answered 404. Set ${AF_SERVER_ENV} to your Artifactbin server's address (the default is ${DEFAULT_AF_ORIGIN}).`;
 }
 
 interface Answer {
@@ -222,7 +222,7 @@ async function request(run: Run, email: string): Promise<number> {
 async function save(run: Run, email: string, path: string, body: Record<string, string>): Promise<number> {
   const answer = await call(run.context, run.server, "POST", path, { body });
   if (answer.status === 404) {
-    // Only the test-token route is ever 404 on a Pagegi server; the session route tells that apart from no server at all.
+    // Only the test-token route is ever 404 on an Artifactbin server; the session route tells that apart from no server at all.
     const session = path.endsWith("/test-token") ? await call(run.context, run.server, "GET", SESSION_PATH).catch(() => null) : null;
     if (!session || session.status === 404) throw new Failure(EXIT.usage, notPagegiMessage(run.server, path));
     throw new Failure(EXIT.refused, `${run.server} does not issue test tokens (404). Sign in with node scripts/auth.mjs --email ${email} instead.`);

@@ -228,7 +228,7 @@ test("a missing token exits 2 naming AF_TOKEN and AF_SERVER; a refused one asks 
   assert.equal(fs.under(`${DIR}/.af`).length, 0, "a refused create leaves no journal");
 });
 
-test("a server that answers 404 to the API and the session route is not a Pagegi server: exit 2 naming AF_SERVER", async () => {
+test("a server that answers 404 to the API and the session route is not an Artifactbin server: exit 2 naming AF_SERVER", async () => {
   const fs = new MemoryFs();
   fs.files.set(FILE, page("<h1>Plan</h1>"));
   const urls: string[] = [];
@@ -240,7 +240,7 @@ test("a server that answers 404 to the API and the session route is not a Pagegi
   });
   const outcome = await publishPage("page.html", "publish", { env: { AF_TOKEN: "t", AF_SERVER: "https://example.invalid" }, cwd: DIR, ports });
   assert.equal(outcome.code, 2);
-  assert.match(outcome.json.message, /https:\/\/example\.invalid does not look like a Pagegi server/);
+  assert.match(outcome.json.message, /https:\/\/example\.invalid does not look like an Artifactbin server/);
   assert.match(outcome.json.message, /AF_SERVER/);
   assert.deepEqual(urls, ["/api/publish", "/api/auth/session"], "one probe of the session route, no retries");
 });

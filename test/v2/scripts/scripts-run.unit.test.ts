@@ -79,7 +79,7 @@ test("add exits 3 on a server error and on an unreachable server, after the shar
 
   const foreign = io(async () => ({ status: 404, json: async () => ({ error: "not_found" }) }), env);
   assert.equal(await run("add", ["a.ts"], { ...foreign.io, ports: { fs } }), 2, "a server without the API is an environment error, like a bad token");
-  assert.match(foreign.out.stderr, /http:\/\/server\.test does not look like a Pagegi server/);
+  assert.match(foreign.out.stderr, /http:\/\/server\.test does not look like an Artifactbin server/);
   assert.match(foreign.out.stderr, /AF_SERVER/);
 });
 

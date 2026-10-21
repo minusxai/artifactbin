@@ -8,7 +8,7 @@ Give files an ID before you reference them. Prints one line per file:
 its path, then its ID. Publishing keeps the same ID. A path that
 already has an ID in .af/ids.json keeps it. Sign in first with
 auth.mjs, or set AF_TOKEN; uses AF_SERVER (default
-https://pagegi.artifactbin.dev).
+https://app.artefactbin.dev).
 
 Flags
   --json   print machine-readable output
@@ -68,7 +68,7 @@ for you to review, or, if they overlap with yours, the latest version
 is written to <page>.remote.html and both sides' changes to
 <page>.conflict.diff. Keep the .af/ folder next to the page. Sign in
 first with auth.mjs, or set AF_TOKEN; uses AF_SERVER (default
-https://pagegi.artifactbin.dev).
+https://app.artefactbin.dev).
 
 Flags
   --pull          replace the file with the published page (a changed
@@ -94,7 +94,7 @@ Examples
 List a page's comment threads, see what a commenter saw, reply,
 comment, resolve, or watch for new comments. Sign in first with
 auth.mjs, or set AF_TOKEN; uses AF_SERVER (default
-https://pagegi.artifactbin.dev).
+https://app.artefactbin.dev).
 
 Flags
   --context <comment>             save the page and state as the
@@ -121,7 +121,7 @@ Examples
 `,
   auth: `Usage: node scripts/auth.mjs [flags]
 
-Sign in to AF_SERVER (default https://pagegi.artifactbin.dev) and save the
+Sign in to AF_SERVER (default https://app.artefactbin.dev) and save the
 token for add.mjs, publish.mjs and comments.mjs. With no flags, list
 each saved server, its account, and whether its token still works.
 
@@ -152,7 +152,7 @@ Examples
 Manage the account secrets that backend lambdas you own read as env.
 With no command, list each secret's name and when it was last set;
 values are never shown. Sign in first with auth.mjs, or set AF_TOKEN;
-uses AF_SERVER (default https://pagegi.artifactbin.dev).
+uses AF_SERVER (default https://app.artefactbin.dev).
 
 Commands
   set <NAME>      store a secret, reading its value from standard

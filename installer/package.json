@@ -1,0 +1,10 @@
+{
+  "name": "artefactbin-skill",
+  "version": "0.1.0",
+  "description": "Install the Artifactbin author skill for coding agents",
+  "type": "module",
+  "bin": { "artefactbin-skill": "install.mjs" },
+  "files": ["install.mjs", "README.md"],
+  "engines": { "node": ">=20.10" },
+  "license": "MIT"
+}

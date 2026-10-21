@@ -3,7 +3,7 @@
 Seven scripts for working on a page, each doing one job. They need Node.js 20.10+ and nothing to install, and run from any folder. `scripts/lib/` holds code they share.
 
 - `auth.mjs` signs you in and saves your token.
-- `add.mjs`, `publish.mjs`, `comments.mjs` and `secrets.mjs` talk to the server at `AF_SERVER` (default `https://pagegi.artifactbin.dev`), with `AF_TOKEN` from your environment or else the token `auth.mjs` saved.
+- `add.mjs`, `publish.mjs`, `comments.mjs` and `secrets.mjs` talk to the server at `AF_SERVER` (default `https://app.artefactbin.dev`), with `AF_TOKEN` from your environment or else the token `auth.mjs` saved.
 - `check.mjs` works offline.
 - `shot.mjs` needs Chrome or Chromium (set `CHROME_PATH` if it isn't found) and loads the core from `AF_SERVER`. If that server can't be reached it says so and shows only the page's static content.
 
@@ -12,7 +12,7 @@ Seven scripts for working on a page, each doing one job. They need Node.js 20.10
 ```text
 Usage: node scripts/auth.mjs [flags]
 
-Sign in to AF_SERVER (default https://pagegi.artifactbin.dev) and save the
+Sign in to AF_SERVER (default https://app.artefactbin.dev) and save the
 token for add.mjs, publish.mjs and comments.mjs. With no flags, list
 each saved server, its account, and whether its token still works.
 
@@ -45,21 +45,21 @@ Sign in once per server. The code arrives by email:
 $ node scripts/auth.mjs --email you@example.com
 Sent a sign-in code to you@example.com. Run node scripts/auth.mjs --email you@example.com --code <code> with the code from the email.
 $ node scripts/auth.mjs --email you@example.com --code 123456
-Signed in to https://pagegi.artifactbin.dev as you@example.com. The token is saved in /home/you/.af/credentials.json.
+Signed in to https://app.artefactbin.dev as you@example.com. The token is saved in /home/you/.af/credentials.json.
 $ node scripts/auth.mjs
-https://pagegi.artifactbin.dev (current): signed in as you@example.com.
+https://app.artefactbin.dev (current): signed in as you@example.com.
 ```
 
 The token is saved in `~/.af/credentials.json` (in the `AF_HOME` folder when that is set), under the server's address. Only you can read the file. It is not the `.af/` folder next to a page.
 
 ```json
-{ "https://pagegi.artifactbin.dev": { "token": "…", "email": "you@example.com", "savedAt": "2026-10-21T10:00:00.000Z" } }
+{ "https://app.artefactbin.dev": { "token": "…", "email": "you@example.com", "savedAt": "2026-10-21T10:00:00.000Z" } }
 ```
 
 `add.mjs`, `publish.mjs`, `comments.mjs` and `secrets.mjs` pick their token in this order:
 
 1. `AF_TOKEN`, if it is set.
-2. Else the saved token for `AF_SERVER` (default `https://pagegi.artifactbin.dev`).
+2. Else the saved token for `AF_SERVER` (default `https://app.artefactbin.dev`).
 3. Else they stop with exit code 2 and tell you to run `auth.mjs`.
 
 If the server refuses the token (it expired or was revoked), the script stops with exit code 2 and asks you to sign in again, and `auth.mjs` with no flags shows that server as signed out. `--logout` forgets the saved token for `AF_SERVER`; it does not touch `AF_TOKEN`. No script prints a token or writes one into a page or the `.af/` folder.
@@ -88,7 +88,7 @@ Give files an ID before you reference them. Prints one line per file:
 its path, then its ID. Publishing keeps the same ID. A path that
 already has an ID in .af/ids.json keeps it. Sign in first with
 auth.mjs, or set AF_TOKEN; uses AF_SERVER (default
-https://pagegi.artifactbin.dev).
+https://app.artefactbin.dev).
 
 Flags
   --json   print machine-readable output
@@ -102,7 +102,7 @@ Example
   node scripts/add.mjs backends/billing.ts backends/stats.ts
 ```
 
-Use the ID in the backend file's link address, for example `https://pagegi.artifactbin.dev/af/v1/ids/Bk7Qa2`:
+Use the ID in the backend file's link address, for example `https://app.artefactbin.dev/af/v1/ids/Bk7Qa2`:
 
 ```text
 $ node scripts/add.mjs backends/billing.ts backends/stats.ts
@@ -112,7 +112,7 @@ backends/stats.ts    Cr4mZ9
 
 Run it in the page's folder: it records each ID in `.af/ids.json`, which is how `publish.mjs` finds the file to send. A path that already has an ID there keeps it (the script prints the ID again and says so on stderr), and a path that doesn't exist is refused with exit code 2 before anything is reserved.
 
-If the server answers 404 to the API, it isn't a Pagegi server: every script that talks to it stops with exit code 2 and tells you to set `AF_SERVER`.
+If the server answers 404 to the API, it isn't a Artifactbin server: every script that talks to it stops with exit code 2 and tells you to set `AF_SERVER`.
 
 ## check.mjs
 
@@ -188,7 +188,7 @@ for you to review, or, if they overlap with yours, the latest version
 is written to <page>.remote.html and both sides' changes to
 <page>.conflict.diff. Keep the .af/ folder next to the page. Sign in
 first with auth.mjs, or set AF_TOKEN; uses AF_SERVER (default
-https://pagegi.artifactbin.dev).
+https://app.artefactbin.dev).
 
 Flags
   --pull          replace the file with the published page (a changed
@@ -215,7 +215,7 @@ A new page is published; a published one is saved. The file is then replaced wit
 ```text
 $ node scripts/publish.mjs page.html
 Published page.html as mO4rv1, version 1. page.html now holds the saved source.
-https://pagegi.artifactbin.dev/a/mO4rv1
+https://app.artefactbin.dev/a/mO4rv1
 $ node scripts/publish.mjs page.html
 page.html is unchanged since version 1; nothing to save.
 ```
@@ -238,10 +238,10 @@ Someone else saved mO4rv1 first (now version 4). page.html is unchanged; the ove
 
 ```text
 $ node scripts/publish.mjs page.html
-No answer from https://pagegi.artifactbin.dev after 3 tries (fetch failed), so it is not known whether the save applied. Run publish.mjs page.html again: it resends the same request, which the server applies at most once.
+No answer from https://app.artefactbin.dev after 3 tries (fetch failed), so it is not known whether the save applied. Run publish.mjs page.html again: it resends the same request, which the server applies at most once.
 $ node scripts/publish.mjs page.html
 Resolved the earlier save: Saved mO4rv1, version 7. page.html now holds the saved source.
-https://pagegi.artifactbin.dev/a/mO4rv1
+https://app.artefactbin.dev/a/mO4rv1
 ```
 
 **Taking the published page.** `--pull` replaces your file with the published page, backing up your copy first if it had changes:
@@ -258,7 +258,7 @@ $ node scripts/publish.mjs page.html
 You can't save page mO4rv1 with this token (403: You do not have access to this document.). To publish page.html as a new page of your own, run publish.mjs page.html --new.
 $ node scripts/publish.mjs page.html --new
 Published page.html as lOUAug, version 1. page.html now holds the saved source.
-https://pagegi.artifactbin.dev/a/lOUAug
+https://app.artefactbin.dev/a/lOUAug
 ```
 
 `--force` saves your file over a page that changed since you started, after backing up the published version in `.af/backups/`. `--delete --yes` deletes the page for everyone (only its owner can) and removes its records from `.af/`.
@@ -273,7 +273,7 @@ Usage: node scripts/comments.mjs <page.html | page ID> [flags]
 List a page's comment threads, see what a commenter saw, reply,
 comment, resolve, or watch for new comments. Sign in first with
 auth.mjs, or set AF_TOKEN; uses AF_SERVER (default
-https://pagegi.artifactbin.dev).
+https://app.artefactbin.dev).
 
 Flags
   --context <comment>             save the page and state as the
@@ -326,7 +326,7 @@ Usage: node scripts/secrets.mjs [set <NAME> | remove <NAME>] [--json]
 Manage the account secrets that backend lambdas you own read as env.
 With no command, list each secret's name and when it was last set;
 values are never shown. Sign in first with auth.mjs, or set AF_TOKEN;
-uses AF_SERVER (default https://pagegi.artifactbin.dev).
+uses AF_SERVER (default https://app.artefactbin.dev).
 
 Commands
   set <NAME>      store a secret, reading its value from standard

@@ -99,7 +99,7 @@ test("--context writes what the commenter saw to a file and prints its path", as
   assert.equal(parsed.source, ".af/context/c1.html");
 });
 
-test("a server that answers 404 to the API and the session route is not a Pagegi server: exit 2 naming AF_SERVER", async () => {
+test("a server that answers 404 to the API and the session route is not an Artifactbin server: exit 2 naming AF_SERVER", async () => {
   const { fs } = await setup();
   const out = { stdout: "", stderr: "" };
   const code = await runComments("page.html", { kind: "list" }, false, {
@@ -110,7 +110,7 @@ test("a server that answers 404 to the API and the session route is not a Pagegi
     stderr: (text) => (out.stderr += text),
   });
   assert.equal(code, 2);
-  assert.match(out.stderr, /https:\/\/example\.invalid does not look like a Pagegi server/);
+  assert.match(out.stderr, /https:\/\/example\.invalid does not look like an Artifactbin server/);
   assert.match(out.stderr, /AF_SERVER/);
 });
 

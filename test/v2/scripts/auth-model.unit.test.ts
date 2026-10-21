@@ -95,24 +95,24 @@ test("--email asks the server to send a code and saves nothing", async () => {
   assert.equal((await run({ kind: "request", email: "you@example.test" })).code, 3);
 });
 
-test("a server that answers 404 to sign-in routes is not a Pagegi server: exit 2 naming AF_SERVER, and status says so", async () => {
+test("a server that answers 404 to sign-in routes is not an Artifactbin server: exit 2 naming AF_SERVER, and status says so", async () => {
   const server = new AuthServer();
   server.forced.set(ORIGIN, 404);
   const { run } = cli(server);
   const request = await run({ kind: "request", email: "you@example.test" }, true);
   assert.equal(request.code, 2);
   assert.equal(request.json().email, "you@example.test");
-  assert.match(request.json().message, /http:\/\/server\.test does not look like a Pagegi server/);
+  assert.match(request.json().message, /http:\/\/server\.test does not look like an Artifactbin server/);
   assert.match(request.json().message, /AF_SERVER/);
   const verify = await run({ kind: "verify", email: "you@example.test", code: "123456" });
   assert.equal(verify.code, 2);
-  assert.match(verify.stderr, /does not look like a Pagegi server.*AF_SERVER/s);
+  assert.match(verify.stderr, /does not look like an Artifactbin server.*AF_SERVER/s);
   const testToken = await run({ kind: "test-token", email: "dev@example.test" });
   assert.equal(testToken.code, 2, "a 404 from a server without the session route is not 'no test tokens'");
-  assert.match(testToken.stderr, /does not look like a Pagegi server/);
+  assert.match(testToken.stderr, /does not look like an Artifactbin server/);
   const status = await run({ kind: "status" }, false, { AF_TOKEN: "t" });
   assert.equal(status.code, 1);
-  assert.match(status.stdout, /does not look like a Pagegi server.*AF_SERVER/s);
+  assert.match(status.stdout, /does not look like an Artifactbin server.*AF_SERVER/s);
 
   // A Pagegi server without test login still answers the session route: that 404 means no test tokens.
   const production = new AuthServer();
@@ -279,7 +279,7 @@ test("tokens resolve as AF_TOKEN, else the file's entry for AF_SERVER, else exit
     assert.equal(error.code, 2);
     assert.equal(
       error.message,
-      "Not signed in to https://pagegi.artifactbin.dev. To publish pages, run node scripts/auth.mjs --email <address> to sign in, or set AF_TOKEN to an account token (and AF_SERVER for a server other than https://pagegi.artifactbin.dev).",
+      "Not signed in to https://app.artefactbin.dev. To publish pages, run node scripts/auth.mjs --email <address> to sign in, or set AF_TOKEN to an account token (and AF_SERVER for a server other than https://app.artefactbin.dev).",
     );
     return true;
   });
@@ -336,4 +336,12 @@ test("the real file port writes credentials 0600 in a 0700 directory, tightening
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("default author origin never reuses credentials from the previous service", async () => {
+  const fs = new MemoryFs();
+  fs.files.set(FILE, JSON.stringify({ "https://pagegi.artifactbin.dev": { token: "old-token", email: "old@example.invalid", savedAt: new Date(NOW).toISOString() } }));
+  await assert.rejects(resolveToken({ HOME }, fs, "publish"), /Not signed in to https:\/\/app\.artefactbin\.dev/);
+  const explicit = await resolveToken({ HOME, AF_SERVER: "https://pagegi.artifactbin.dev" }, fs, "publish");
+  assert.equal(explicit.token, "old-token");
 });
