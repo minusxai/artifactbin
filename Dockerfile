@@ -8,7 +8,8 @@ COPY installer ./installer
 # The whole author skill is served at /skills/pagegi-author.tgz; its design systems are served
 # at /af/v1/design-systems/ and its todo example is the home page's example.
 COPY skills/pagegi-author ./skills/pagegi-author
-RUN npm run build && npm prune --omit=dev
+# Migration converters are offline tooling, excluded before copying the production filesystem.
+RUN npm run build && npm prune --omit=dev && rm -rf src/migration scripts/migration
 # The static Docker CLI the execution service (compose.yaml) drives sandbox containers with.
 FROM docker:29-cli@sha256:5ebe9898293f8e1062ed0b65078c24486fb32a99dd4895d0dba0251948a7c775 AS docker-cli
 FROM node:22.22.3-bookworm-slim

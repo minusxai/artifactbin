@@ -17,9 +17,12 @@ export interface BoundaryPolicy {
   /** Host adapters may be embedded locally, but never shipped in an isolated app runner. */
   hostOnly?(id: string): boolean;
   isolatedEntry?(id: string): boolean;
+  /** Offline tooling must never enter the deployed product graph. */
+  offlineOnly?(id: string): boolean;
 }
 export interface BoundaryViolation {
   rule:
+    | "offline-dependency"
     | "pure-dependency"
     | "pure-effect"
     | "app-authority"
@@ -85,6 +88,7 @@ const ambient = new Set([
 ]);
 
 export const productPolicy: BoundaryPolicy = {
+  offlineOnly: (id) => /^src\/migration\//.test(id) || /^(?:.*node_modules\/)?acorn-jsx(?:\/|$)/.test(id),
   hostOnly: (id) => /^src\/browser\/(?:connection-coordinator|backend-connection|collaboration-transport)\.ts$/.test(id),
   isolatedEntry: (id) => /^src\/browser\/(?:runner|bridge)\.[jt]s$/.test(id),
   role(id) {
@@ -330,6 +334,10 @@ export function checkBoundaries(
       message: `${rule}: ${path.join(" → ")} (${detail})`,
     });
   for (const module of modules) {
+    if (!policy.offlineOnly?.(module.id))
+      for (const edge of module.imports)
+        if (policy.offlineOnly?.(edge.target))
+          add("offline-dependency", [module.id, edge.target], "offline migration tooling cannot enter product code");
     for (const edge of module.imports)
       if (edge.target.startsWith("unresolved:"))
         add(
@@ -442,6 +450,9 @@ export function checkBuiltApp(
   function walk(id: string, path: string[]) {
     if (seen.has(id)) return;
     seen.add(id);
+    if (policy.offlineOnly?.(id))
+      violations.push({ rule: "offline-dependency", path,
+        message: `offline-dependency: ${path.join(" → ")} (offline tooling in emitted product closure)` });
     if (
       serverDependency(id) ||
       ["credential", "server"].includes(policy.role(id)) ||

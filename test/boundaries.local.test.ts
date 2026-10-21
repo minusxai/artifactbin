@@ -276,3 +276,27 @@ test("trusted connection and private pairing exchange cannot enter local app cod
     );
   }
 });
+
+ test("offline migration modules and JSX parser cannot enter product source or emitted bundles", () => {
+  for (const statement of [
+    'export { convert } from "../migration/convert.ts";',
+    'import("../migration/convert.ts");',
+    'import type { Convert } from "../migration/convert.ts";',
+    'import jsx from "acorn-jsx";',
+  ]) {
+    const sources = {
+      "src/server/route.ts": statement,
+      "src/migration/convert.ts": "export const convert = 1; export type Convert = number;",
+    };
+    assert.ok(checkBoundaries(inspectSources(sources)).some((v) => v.rule === "offline-dependency"));
+  }
+  assert.deepEqual(checkBoundaries(inspectSources({
+    "src/migration/convert.ts": 'import jsx from "acorn-jsx";',
+  })), []);
+  for (const dependency of ["src/migration/convert.ts", "node_modules/acorn-jsx/index.js"]) {
+    assert.ok(checkBuiltApp({ inputs: {
+      "src/browser/runner.js": { imports: [{ path: dependency }] },
+      [dependency]: { imports: [] },
+    }}, "src/browser/runner.js").some((v) => v.rule === "offline-dependency"));
+  }
+});
