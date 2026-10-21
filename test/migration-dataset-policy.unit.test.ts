@@ -231,3 +231,81 @@ test("token creators bypass joins only for their own document; test users remain
     true,
   );
 });
+test("group role lookup requires an own property with a supported role", () => {
+  for (const groupId of ["constructor", "toString", "__proto__"]) {
+    const groupOwner = { userId: null, tokenId: null, groupId };
+    const document = {
+      id: "document",
+      editId: "edit",
+      owner: groupOwner,
+      visibility: "private",
+      format: "markup",
+      deleted: false,
+      ownerIsTestUser: false,
+      acceptedJoinUserIds: ["reader"],
+    };
+    for (const groupRoles of [
+      {},
+      Object.create({ [groupId]: "editor" }),
+      { [groupId]: "unexpected" },
+    ]) {
+      const untrustedFacts = { ...facts, groupRoles } as AuthorizationFacts;
+      assert.equal(
+        allows(
+          { owner: groupOwner, visibility: "private" },
+          { facts: untrustedFacts },
+        ),
+        false,
+      );
+      assert.equal(allows({}, { facts: untrustedFacts, document }), false);
+      assert.equal(
+        allows(
+          {},
+          {
+            action: "insert",
+            facts: untrustedFacts,
+            document,
+            requestedDocument: { id: "document", editId: "edit" },
+          },
+        ),
+        false,
+      );
+      assert.equal(
+        allows(
+          {
+            owner: groupOwner,
+            policy: {
+              version: 2,
+              allow: [{ actions: ["insert"], from: { user: "$owner" } }],
+            },
+          },
+          { action: "insert", facts: untrustedFacts },
+        ),
+        false,
+      );
+    }
+    assert.equal(
+      allows(
+        { owner: groupOwner, visibility: "private" },
+        { facts: { ...facts, groupRoles: { [groupId]: "viewer" } } },
+      ),
+      true,
+    );
+    assert.equal(
+      allows(
+        {
+          owner: groupOwner,
+          policy: {
+            version: 2,
+            allow: [{ actions: ["insert"], from: { user: "$owner" } }],
+          },
+        },
+        {
+          action: "insert",
+          facts: { ...facts, groupRoles: { [groupId]: "editor" } },
+        },
+      ),
+      true,
+    );
+  }
+});

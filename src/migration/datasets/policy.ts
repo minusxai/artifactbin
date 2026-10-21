@@ -79,12 +79,20 @@ function owns(owner: Principal, caller: Principal): boolean {
       ? owner.userId === caller.userId
       : !!caller.tokenId && owner.tokenId === caller.tokenId;
 }
+function groupRole(
+  facts: AuthorizationFacts,
+  groupId: string,
+): "viewer" | "editor" | undefined {
+  if (!Object.hasOwn(facts.groupRoles, groupId)) return undefined;
+  const role = facts.groupRoles[groupId];
+  return role === "viewer" || role === "editor" ? role : undefined;
+}
 function readable(
   row: { id: string; owner: Principal; visibility: string },
   f: AuthorizationFacts,
 ): boolean {
   return (
-    !!(row.owner.groupId && f.groupRoles[row.owner.groupId]) ||
+    !!(row.owner.groupId && groupRole(f, row.owner.groupId)) ||
     owns(row.owner, f.caller) ||
     row.visibility !== "private" ||
     (!!f.caller.userId && f.sharedArtifactIds.includes(row.id))
@@ -148,7 +156,7 @@ export function permitsDatasetAction(
           return (
             (target === "$owner" &&
               !!dataset.owner.groupId &&
-              f.groupRoles[dataset.owner.groupId] === "editor") ||
+              groupRole(f, dataset.owner.groupId) === "editor") ||
             person(target, f.caller, dataset.owner)
           );
         if (!doc) return false;
