@@ -263,6 +263,16 @@ try {
   await reader
     .getByRole("heading", { name: "Shared with you", exact: true })
     .waitFor();
+  assert.equal(await reader.locator("#library-toolbar").isVisible(), true);
+  assert.equal(await reader.locator("#empty").isVisible(), false);
+  await reader.getByRole("searchbox", { name: "Search artifacts", exact: true }).fill("does-not-match-any-artifact");
+  await reader.locator("#no-results").waitFor();
+  assert.equal(await reader.locator("#shared-documents").isVisible(), false);
+  await reader.getByRole("searchbox", { name: "Search artifacts", exact: true }).fill("");
+  await reader.getByRole("button", { name: "List view", exact: true }).click();
+  assert.equal(await reader.locator("#shared-files").getAttribute("data-layout"), "list");
+  await reader.getByRole("button", { name: "Gallery view", exact: true }).click();
+  assert.equal(await reader.locator("#shared-files").getAttribute("data-layout"), "gallery");
   await reader.locator(`#shared-files a[href="${documentPath}"]`).click();
   // Local state belongs to each viewer: the owner's count stays the owner's.
   await reader

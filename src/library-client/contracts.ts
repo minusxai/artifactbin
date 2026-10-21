@@ -94,3 +94,13 @@ export interface LibraryActionsOptions {
 }
 
 export type LibraryLayout = "gallery" | "list";
+/** Search applies to owned and shared artifacts using the same path/title fields. */
+export interface LibrarySearchEntry {
+  path: string;
+  title?: string;
+}
+export interface LibrarySurface {
+  onboarding: boolean;
+  toolbar: boolean;
+  noResults: boolean;
+}

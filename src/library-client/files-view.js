@@ -1,5 +1,9 @@
 import { createLibraryActions } from "./actions.ts";
-import { libraryListing } from "./listing.ts";
+import {
+  libraryListing,
+  filterLibraryEntries,
+  librarySurface,
+} from "./listing.ts";
 import { UNREACHABLE } from "./transport.ts";
 import { agentHandoff } from "./agent-handoff.ts";
 import { selectPaths, movePaths, canMoveTo } from "../file-browser.js";
@@ -36,7 +40,8 @@ export function mountFiles({
   let layout = "gallery";
   function setLayout(next) {
     layout = next;
-    $("files").dataset.layout = layout;
+    for (const id of ["files", "shared-files", "public-files"])
+      $(id).dataset.layout = layout;
     for (const mode of ["gallery", "list"])
       $("layout-" + mode).setAttribute("aria-pressed", String(layout === mode));
   }
@@ -291,25 +296,57 @@ export function mountFiles({
     });
     return details;
   }
+  function previewMark(file) {
+    const mark = document.createElement("span");
+    mark.className = "document-mark";
+    mark.setAttribute("aria-hidden", "true");
+    mark.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3H5v18h14V8zM14 3v5h5M8 12h8M8 16h6"/></svg>';
+    if (file.previewUrl) {
+      const preview = document.createElement("img");
+      preview.src = file.previewUrl;
+      preview.alt = "";
+      preview.loading = "lazy";
+      preview.referrerPolicy = "no-referrer";
+      preview.className = "artifact-preview";
+      preview.onerror = () => preview.remove();
+      mark.append(preview);
+    }
+    return mark;
+  }
   function renderDiscovered(container, entries) {
     container.replaceChildren();
     for (const file of entries) {
       const row = document.createElement("article");
       row.className = "file";
+      row.dataset.kind = "artifact";
+      const info = document.createElement("div");
+      info.className = "file-info";
       const link = document.createElement("a");
       link.className = "file-title";
       link.href = file.url;
       link.textContent = decode(file.title) || nameOf(file.path);
-      row.append(link);
+      info.append(link);
+      const meta = document.createElement("span");
+      meta.className = "file-meta";
+      meta.textContent =
+        file.commentCount +
+        " " +
+        (file.commentCount === 1 ? "comment" : "comments");
+      row.append(previewMark(file), info, meta);
       container.append(row);
     }
   }
   function render() {
-    renderDiscovered($("shared-files"), sharedFiles);
-    $("shared-documents").hidden = !sharedFiles.length;
     const list = $("files");
     list.replaceChildren();
     const query = $("search").value.toLowerCase();
+    const visibleShared = filterLibraryEntries(
+      sharedFiles.map((file) => ({ ...file, title: decode(file.title || "") })),
+      query,
+    );
+    renderDiscovered($("shared-files"), visibleShared);
+    $("shared-documents").hidden = !visibleShared.length;
     let count = 0;
     const crumbs = $("breadcrumbs");
     crumbs.replaceChildren();
@@ -370,21 +407,12 @@ export function mountFiles({
         });
         updateSelection();
       };
-      const mark = document.createElement("span");
-      mark.className = isFile ? "document-mark" : "folder-mark";
-      mark.setAttribute("aria-hidden", "true");
-      mark.innerHTML = isFile
-        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3H5v18h14V8zM14 3v5h5M8 12h8M8 16h6"/></svg>'
-        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7V5h6l2 3h10v12H3z"/></svg>';
-      if (isFile && entry.previewUrl) {
-        const preview = document.createElement("img");
-        preview.src = entry.previewUrl;
-        preview.alt = "";
-        preview.loading = "lazy";
-        preview.referrerPolicy = "no-referrer";
-        preview.className = "artifact-preview";
-        preview.onerror = () => preview.remove();
-        mark.append(preview);
+      const mark = isFile ? previewMark(entry) : document.createElement("span");
+      if (!isFile) {
+        mark.className = "folder-mark";
+        mark.setAttribute("aria-hidden", "true");
+        mark.innerHTML =
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7V5h6l2 3h10v12H3z"/></svg>';
       }
       const info = document.createElement("div");
       info.className = "file-info";
@@ -439,18 +467,21 @@ export function mountFiles({
     updateSelection();
     // Only what applies: rows with their search and header, the empty card,
     // "no matches", or a folder that does not exist.
-    const hasEntries =
-      listing.state === "rows" || listing.state === "no-results";
-    $("empty").hidden = listing.state !== "empty";
+    const surface = librarySurface(
+      listing.state,
+      sharedFiles.length,
+      visibleShared.length,
+    );
+    $("empty").hidden = !surface.onboarding;
     $("empty").querySelector("h2").textContent =
       folder === "/"
         ? "Let’s create your first artifact."
         : "This folder is empty.";
     $("folder-missing").hidden = !missing;
     $("library-actions").hidden = missing;
-    $("library-toolbar").hidden = !hasEntries && !selection.paths.length;
+    $("library-toolbar").hidden = !surface.toolbar && !selection.paths.length;
     $("list-heading").hidden = count === 0;
-    $("no-results").hidden = listing.state !== "no-results";
+    $("no-results").hidden = !surface.noResults;
   }
   $("search").oninput = render;
   $("files").addEventListener("keydown", (e) => {
