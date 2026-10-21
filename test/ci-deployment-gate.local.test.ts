@@ -217,3 +217,22 @@ test("the independent deployment never deploys main or falls back to legacy cred
     assert.ok(deploy.includes(`vars.ARTEFACTV2_${key}`));
   assert.doesNotMatch(deploy, /secrets\.DEPLOY_|vars\.(DEPLOY_|PUBLIC_ORIGIN)/);
 });
+
+test("public deployment health requires HTTP200 and the exact healthy JSON without following redirects", async () => {
+  const probe = deploy.match(/<<'HEALTH'\n([\s\S]*?)\n          HEALTH/)?.[1];
+  assert.ok(probe, "public health probe exists");
+  const check = (status: number, body: unknown) => runInNewContext(`(async () => {${probe}\n})()`, {
+    process: { env: { PUBLIC_ORIGIN: "https://platform.example" } },
+    AbortSignal,
+    fetch: async (url: string, options: { redirect: string }) => {
+      assert.equal(url, "https://platform.example/health");
+      assert.equal(options.redirect, "error");
+      return { status, json: async () => body };
+    },
+  }) as Promise<void>;
+  await check(200, { ok: true });
+  for (const status of [201, 204, 301, 302, 307, 308, 500])
+    await assert.rejects(check(status, { ok: true }), /HTTP200/);
+  for (const body of [null, [], {}, { ok: false }, { ok: "true" }, { ok: true, other: "old-server" }])
+    await assert.rejects(check(200, body), /health JSON/);
+});

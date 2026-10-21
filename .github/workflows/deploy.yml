@@ -154,4 +154,12 @@ jobs:
           chmod 600 ~/.ssh/pagegi
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
           git archive --format=tar.gz "$GITHUB_SHA" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/pagegi "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA"
-          curl --fail --silent --show-error --retry 3 "$PUBLIC_ORIGIN/health"
+          node --input-type=module <<'HEALTH'
+          const response = await fetch(`${process.env.PUBLIC_ORIGIN}/health`, {
+            redirect: "error", signal: AbortSignal.timeout(10000),
+          });
+          if (response.status !== 200) throw Error("Public deployment must return HTTP200");
+          const body = await response.json();
+          if (!body || Array.isArray(body) || Object.keys(body).length !== 1 || body.ok !== true)
+            throw Error("Public deployment returned unexpected health JSON");
+          HEALTH
