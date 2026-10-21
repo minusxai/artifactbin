@@ -5,3 +5,5 @@
 !src/**
 !scripts/**
 !skills/pagegi-author/**
+
+!installer/**
