@@ -73,7 +73,7 @@ export async function installSkill({home,origin,archive}, fs={mkdir,mkdtemp,writ
  return installed;
 }
 async function main(args) {
- if(args.includes('--help')) { console.log('Usage: npx artefactbin-skill [--origin https://your-server.example]\nInstalls only the Artifactbin author skill. Restart your coding agent afterward.'); return; }
+ if(args.includes('--help')) { console.log('Usage: npx https://app.artefactbin.dev/skills/artefactbin-skill.tgz [--origin https://your-server.example]\nInstalls only the Artifactbin author skill. Restart your coding agent afterward.'); return; }
  let origin=process.env.AF_SERVER||DEFAULT_ORIGIN;
  if(args.length) { if(args.length!==2||args[0]!=='--origin') throw Error('Unknown arguments. Use --help.'); origin=args[1]; }
  origin=normalizeOrigin(origin);

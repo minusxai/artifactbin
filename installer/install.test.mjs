@@ -45,3 +45,12 @@ test('restore failure retains a recoverable backup',()=>fixture(async home=>{
  await assert.rejects(installSkill({home,origin:'https://example.invalid',archive:valid()},{...fs,rename:async (from,to)=>{if(from.endsWith('/next')||from.endsWith('/previous'))throw Error('failure');return fs.rename(from,to);}}),/previous skill retained/);
  const [stage]=await readdir(parent); assert.equal(await readFile(join(parent,stage,'previous/old'),'utf8'),'keep');
 }));
+
+test('help gives the canonical installation command and explains its install-only role',async()=>{
+ const {spawnSync}=await import('node:child_process');
+ const result=spawnSync(process.execPath,[new URL('./install.mjs',import.meta.url).pathname,'--help'],{encoding:'utf8'});
+ assert.equal(result.status,0,result.stderr);
+ assert.match(result.stdout,/npx https:\/\/app\.artefactbin\.dev\/skills\/artefactbin-skill\.tgz/);
+ assert.match(result.stdout,/Installs only the Artifactbin author skill/);
+ assert.doesNotMatch(result.stdout,/npx artefactbin-skill/);
+});
