@@ -18,6 +18,11 @@ export function commentStateKey(name: string, id?: string | null): string | null
   return scope ? `${scope}:${name}` : null;
 }
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __mx_server_render__: boolean | undefined;
+}
+
 const kindOf = (value: unknown): string => (value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value);
 
 /**
@@ -26,13 +31,14 @@ const kindOf = (value: unknown): string => (value === null ? 'null' : Array.isAr
  * the remover for the module's stop.
  */
 export function commentSignal<T>(key: string | null, value: T, options?: SignalOptions<T>, removals?: Set<() => void>): Signal<T> {
-  if (key && typeof document === 'undefined') {
+  // Only the server half is built with this true (build-islands SERVER_DEFINE): browser chunks drop the branch.
+  if (key && globalThis.__mx_server_render__) {
     // The request names it: only a value of the default's own kind is taken (a tab's string, a disclosure's boolean).
     const rendered = renderedCommentState(key);
     return createSignal<T>(rendered !== undefined && kindOf(rendered) === kindOf(value) ? rendered as T : value, options);
   }
   const [get, set] = createSignal<T>(value, options);
-  if (!key) return [get, set];
+  if (!key || typeof document === 'undefined') return [get, set];
   const remove = registerCommentState(document, key, { get: () => untrack(get), set: (next: ReviewJson) => { set(() => next as T); } });
   if (getOwner()) onCleanup(remove); else removals?.add(remove);
   return [get, set];
