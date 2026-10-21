@@ -83,6 +83,36 @@ describe('the story fragment', () => {
     expect(page.getElementById('mx-story-nodes'), 'the page attaches with them from the app page instead').toBeNull();
   });
 
+  it('draws kit elements at the view state the morph names, and the page itself at its defaults', async () => {
+    // The live morph keeps the reader's running tabs and disclosures (lib/islands/morph/engine): the version it draws must show them.
+    const markup = '<Tabs defaultValue="x" id="inner"><TabsList><TabsTrigger value="x" id="i-x">X</TabsTrigger><TabsTrigger value="y" id="i-y">Y</TabsTrigger></TabsList>'
+      + '<TabsContent value="x" id="i-cx"><p>Panel X</p></TabsContent><TabsContent value="y" id="i-cy"><p>Panel Y</p></TabsContent></Tabs>'
+      + '<Collapsible id="more"><CollapsibleTrigger>More</CollapsibleTrigger><CollapsibleContent id="more-body"><p>Details</p></CollapsibleContent></Collapsible>'
+      + '<Dialog id="dlg"><DialogTrigger id="dlg-open">Open</DialogTrigger><DialogContent><p>Dialog body</p></DialogContent></Dialog>';
+    const { id } = await publish({ title: 'Tabs', markup });
+    const view = { 'inner:value': 'y', 'more:open': true };
+    const shown = (doc: Document) => ({
+      tab: doc.querySelector('[role="tab"][aria-selected="true"]')?.id,
+      panel: doc.querySelector('[role="tabpanel"]:not([hidden])')?.id,
+      open: doc.getElementById('more')?.getAttribute('data-state'),
+    });
+    const atView = (await (await storyRoute(request(storyFragmentUrl(id, '?reader=compiled', 'raw', view)), params(id))).text());
+    expect(shown(parse(atView))).toEqual({ tab: 'i-y', panel: 'i-cy', open: 'open' });
+    expect(shown(parse(await (await story(id, '?reader=compiled')).text()))).toEqual({ tab: 'i-x', panel: 'i-cx', open: 'closed' });
+    // The page is served at its defaults, as its tree hydrates; and a view state out of bounds is no view state.
+    const page = await rawRoute(request(`/a/${id}/raw?reader=compiled&mx-view=${encodeURIComponent(JSON.stringify(view))}`), params(id));
+    expect(shown(parse(await page.text()))).toEqual({ tab: 'i-x', panel: 'i-cx', open: 'closed' });
+    // A value of another kind than the element's own is not its state; an open dialog is drawn as the server draws one.
+    const mistyped = await storyRoute(request(storyFragmentUrl(id, '?reader=compiled', 'raw', { 'inner:value': 7, 'more:open': 'yes' })), params(id));
+    expect(shown(parse(await mistyped.text()))).toEqual({ tab: 'i-x', panel: 'i-cx', open: 'closed' });
+    const dialog = await storyRoute(request(storyFragmentUrl(id, '?reader=compiled', 'raw', { 'dlg:open': true })), params(id));
+    expect(dialog.status).toBe(200);
+    expect(parse(await dialog.text()).querySelector('#dlg dialog')?.getAttribute('role')).toBe('dialog');
+    expect(parse(atView).querySelector('#dlg dialog')?.hasAttribute('role'), 'closed when the view state does not name it').toBe(false);
+    const unbounded = await storyRoute(request(`/a/${id}/story?surface=raw&reader=compiled&mx-view=${encodeURIComponent('{"inner:value":')}`), params(id));
+    expect(shown(parse(await unbounded.text()))).toEqual({ tab: 'i-x', panel: 'i-cx', open: 'closed' });
+  });
+
   it('is never a view (the page it updates already was one)', async () => {
     const { id } = await publish({ title: 'Prose', markup: fixture('prose.jsx') });
     await story(id, '?reader=compiled');

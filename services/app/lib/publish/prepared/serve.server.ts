@@ -52,6 +52,8 @@ import type { AccessActor } from '@/lib/accounts';
 import { mermaidImagesForCodes } from '@/lib/mermaid-images/store';
 import type { ServedResults } from '@/lib/story-runtime/contract';
 import type { StoredMermaidImage } from '@artifactbin/contracts';
+import type { ReviewJson } from '@artifactbin/contracts';
+import { renderAtCommentState } from '@/lib/story-runtime/story-fragment';
 import { type Scalar, readUrlValues } from '@/lib/dataflow';
 import { recompilePage, type PreparedView } from './prepared-page.server';
 
@@ -76,6 +78,8 @@ export interface CompiledReaderRequest {
   at: ArchivedRender | null;
   /** The request's query string: the reader's `$` values. */
   search: string;
+  /** The live morph's fragment only: the reader's view state its kit elements are drawn at (story-fragment STORY_VIEW_PARAM). */
+  view?: Readonly<Record<string, ReviewJson>> | null;
   /** Which of the version's stored Mermaid drawings this surface shows (lib/mermaid-images), or none (`?mermaid=engine`, a domain post). */
   drawings: 'document' | 'inline' | null;
   /** A capture's colour (`color=` under a verified export key); a reader gets the version's. */
@@ -339,6 +343,8 @@ interface StoryInput {
   build?: CompilerBuild;
   /** The version's declared dataflow: a stored story re-rendered for a newer half starts, as its compile did, from the declared values. */
   flow?: NonNullable<Prepared['declared']>['flow'] | null;
+  /** The view state kit elements start at instead of their defaults (the live morph's fragment, `renderAtCommentState`). */
+  view?: Readonly<Record<string, ReviewJson>> | null;
 }
 
 /** The declared state: every scalar at its default — what the compile rendered `html` with (compiler declaredValues). */
@@ -346,7 +352,8 @@ const declaredValuesOf = (flow: StoryInput['flow']): Record<string, Scalar> =>
   Object.fromEntries((flow?.values ?? []).filter((v) => v.kind === 'scalar').map((v) => [v.name, (v as { default: Scalar }).default]));
 
 export async function storyOf(compiled: CompiledPage, input: StoryInput): Promise<string> {
-  const plain = !input.state && !input.assetsUrl && !input.results && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
+  const view = input.view && Object.keys(input.view).length ? input.view : null;
+  const plain = !input.state && !input.assetsUrl && !input.results && !view && !Object.keys(input.values).length && !Object.keys(input.mermaidImages).length;
   if (!compiled.ssr) return compiled.html;
   const half = input.build?.ssr;
   // The stored story is what the half that compiled it rendered. It is served as it is only while that is
@@ -357,7 +364,7 @@ export async function storyOf(compiled: CompiledPage, input: StoryInput): Promis
   if (plain && current) return compiled.html;
   const values = plain ? declaredValuesOf(input.flow) : input.values;
   const cacheKey = input.resultsId === null && input.results ? null
-    : `${compiled.build}:${half?.url ?? '-'}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(values))}:${digest(input.state ?? null)}:${digest(sorted(input.mermaidImages))}:${input.assetsUrl ?? ''}`;
+    : `${compiled.build}:${half?.url ?? '-'}:${compiled.ssr.sha}:${input.resultsId ?? '-'}:${digest(sorted(values))}:${digest(input.state ?? null)}:${digest(sorted(input.mermaidImages))}:${input.assetsUrl ?? ''}:${digest(view ? sorted(view) : null)}`;
   const cached = cacheKey ? renders.get(cacheKey) : undefined;
   if (cached !== undefined) {
     renders.delete(cacheKey!);
@@ -370,7 +377,7 @@ export async function storyOf(compiled: CompiledPage, input: StoryInput): Promis
   const { loadSsrModule } = await import('@/lib/compiled-page/bundle.server');
   const live = (() => { try { return loadCompilerBuild().ssr?.url; } catch { return undefined; } })();
   const module = await loadSsrModule(compiled.ssr, undefined, undefined, half && half.url !== live ? half : undefined);
-  const rendered = module.render({ values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings });
+  const rendered = renderAtCommentState(view, () => module.render({ values, state: input.state, assetsUrl: input.assetsUrl, results: input.results, mermaidImages: input.mermaidImages, drawings: input.drawings }));
   // The SSR module renders only the document tree. Its browser literals and large module data
   // are version-owned inert siblings stored with the first render; keep them for snapshot renders.
   const html = compiled.islands[0]?.renderId === 'd-' ? withStoredCarriers(rendered, compiled.html) : rendered;
@@ -469,7 +476,7 @@ export async function compiledPageFor(row: ArtifactRow, page: Prepared, reader: 
     const story = await storyOf(compiled, {
       values, state: failedState, results, assetsUrl: reader.assetsUrl ?? reader.doors?.assetsUrl, mermaidImages, drawings: served?.drawings ?? {},
       resultsId: served ? `${keyString(served.key)}:${served.computedAt}` : null,
-      build, flow,
+      build, flow, view: reader.view,
     });
 
     // The classes the drawn rows brought, compiled into the served sheet (none for a document that fills no class at runtime).

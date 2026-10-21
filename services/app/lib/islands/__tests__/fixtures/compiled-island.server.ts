@@ -16,6 +16,7 @@ import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dataflowOf, splitHelmet } from '@/lib/document/helmet';
 import { compileDataflow, prepareCompile } from '@/lib/dataflow/server';
 import type { Scalar } from '@/lib/dataflow';
+import { renderAtCommentState } from '@/lib/story-runtime/story-fragment';
 
 const source = process.argv[2]!;
 const parsed = parseJsx(source) as { nodes: JsxNode[] };
@@ -47,11 +48,14 @@ const templateResource = templateSha ? new TextDecoder().decode((await createTem
 const served = process.argv.find((arg) => arg.startsWith('--results='));
 // `--values=<json>`: the reader's link values over the declared ones (url-values), as the serve path renders them.
 const linked = process.argv.find((arg) => arg.startsWith('--values='));
+// `--view=<json>`: the reader's view state (the live morph's fragment, story-fragment STORY_VIEW_PARAM), as the serve path renders it.
+const view = process.argv.find((arg) => arg.startsWith('--view='));
 let html = built.html;
-if (served || linked) {
+if (served || linked || view) {
   const ssr = await ssrModuleOf(new TextDecoder().decode(stored.get(built.ssr!.sha)), 'served');
   const tail = built.html.indexOf('<script type="application/json" data-mx-island-literals');
   const values = { ...declaredValues(flow), ...(linked ? JSON.parse(linked.slice('--values='.length)) as Record<string, Scalar> : {}) };
-  html = ssr.render({ values, results: served ? JSON.parse(served.slice('--results='.length)) : null, mermaidImages: {}, drawings: {} }) + built.html.slice(tail);
+  html = renderAtCommentState(view ? JSON.parse(view.slice('--view='.length)) as Record<string, never> : null,
+    () => ssr.render({ values, results: served ? JSON.parse(served.slice('--results='.length)) : null, mermaidImages: {}, drawings: {} })) + built.html.slice(tail);
 }
 process.stdout.write(JSON.stringify({ html, islands: generated.islands, browserCode, templateResource, islandRefs: generated.islandRefs, flow }));

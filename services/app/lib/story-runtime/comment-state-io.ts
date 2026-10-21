@@ -1,5 +1,5 @@
 /** Capture and restore over the comment state slot (./comment-state): the frame editor's and page runtime's half, kept out of kit chunks. */
-import type { CommentViewState, ReviewJson } from '../../../contracts/src/comment-view-state';
+import { COMMENT_VALUES_KEY, parseCommentViewState, type CommentViewState, type ReviewJson } from '../../../contracts/src/comment-view-state';
 import { commentStateSlot } from './comment-state';
 
 /** A part owns what it is handed: no object is shared between the pending snapshot and live state. */
@@ -36,6 +36,21 @@ export function captureCommentState(owner: object): CommentViewState | null {
   return { v: 2, state };
 }
 
+/**
+ * The page's VIEW STATE: every registered part but the declared Values (which travel as `$` link values), as bounded
+ * plain JSON, without a word about a part that is not (it is left out). Empty when nothing is registered or the whole
+ * exceeds the contract's bounds.
+ */
+export function viewCommentState(owner: object): Record<string, ReviewJson> {
+  const state: Record<string, ReviewJson> = {};
+  for (const [key, part] of commentStateSlot(owner).parts) {
+    if (key === COMMENT_VALUES_KEY) continue;
+    const value = part.get();
+    if (plain(value)) state[key] = value;
+  }
+  return parseCommentViewState({ v: 2, state })?.state ?? {};
+}
+
 /** Set every live part a validated snapshot names, each from its own copy; the snapshot stays pending for parts registered later. Throws when a part refuses its value. */
 export function restoreCommentState(owner: object, saved: CommentViewState): void {
   const slot = commentStateSlot(owner);
@@ -50,4 +65,16 @@ export function restoreCommentState(owner: object, saved: CommentViewState): voi
     }
   });
   if (refused.length) throw new Error(`Saved state could not be restored: ${refused.join(', ')}`);
+}
+
+/**
+ * Run `run` (a synchronous mount or hydration) with `state` pending over the last restore: a part that registers inside
+ * it starts at its value, so a tree drawn from markup rendered at that state (the live morph's fragment) hydrates
+ * matching it. The last restore's own values are pending again afterwards.
+ */
+export function withPendingCommentState<T>(owner: object, state: Readonly<Record<string, ReviewJson>>, run: () => T): T {
+  const slot = commentStateSlot(owner);
+  const before = slot.pending;
+  slot.pending = { ...before, ...state };
+  try { return run(); } finally { slot.pending = before; }
 }

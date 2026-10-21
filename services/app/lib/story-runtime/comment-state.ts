@@ -39,3 +39,25 @@ export function registerCommentState(owner: object, key: string, part: CommentSt
 
 /** Forget the last restore: nothing registered later takes its values. */
 export function clearPendingCommentState(owner: object): void { commentStateSlot(owner).pending = {}; }
+
+// The server half renders kit elements in this process, built apart from it: the state of one render is shared by symbol.
+const RENDERING = Symbol.for('artifactbin.comment-state.render');
+type RenderRealm = { [RENDERING]?: Readonly<Record<string, ReviewJson>> | null };
+
+/**
+ * Server rendering: run a synchronous render with `state` as the view state its kit elements start from (a key it does
+ * not name starts at its default). The live morph asks for its fragment at the reader's view state this way, as it asks
+ * at their Values, so the DOM it draws matches the tree it keeps running.
+ */
+export function renderAtCommentState<T>(state: Readonly<Record<string, ReviewJson>> | null | undefined, run: () => T): T {
+  const realm = globalThis as RenderRealm;
+  const before = realm[RENDERING];
+  realm[RENDERING] = state ?? null;
+  try { return run(); } finally { realm[RENDERING] = before; }
+}
+
+/** The value the server render in progress starts `key` at, or undefined (none in progress, or it names no such key). */
+export function renderedCommentState(key: string): ReviewJson | undefined {
+  const state = (globalThis as RenderRealm)[RENDERING];
+  return state && Object.hasOwn(state, key) ? state[key] : undefined;
+}

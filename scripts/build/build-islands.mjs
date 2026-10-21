@@ -36,6 +36,11 @@ import { precompressTree, describePrecompression } from '../../services/app/scri
 import { readLucideIcons } from '../../services/app/scripts/lucide-icons.mjs';
 import { normalisedLock } from '../lib/lock-fingerprint.mjs';
 
+// Build-time constants. `__mx_server_render__` marks the server half (generate: 'ssr'): kit code behind it is dropped
+// from every browser chunk, so the static budget never carries server-only branches.
+const BROWSER_DEFINE = { 'process.env.NODE_ENV': '"production"', 'globalThis.__mx_server_render__': 'false' };
+const SERVER_DEFINE = { ...BROWSER_DEFINE, 'globalThis.__mx_server_render__': 'true' };
+
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const APP = path.join(ROOT, 'services/app');
 const ISLANDS_SRC = path.join(APP, 'lib/islands');
@@ -161,7 +166,7 @@ async function buildFrameEditor() {
     absWorkingDir: ROOT, entryPoints: [{ in: FRAME_EDITOR.file(), out: FRAME_EDITOR.name }], outdir: 'frame-editor-out', write: false,
     bundle: true, splitting: true, format: 'esm', platform: 'browser', target: 'es2022', minify: true, metafile: true,
     entryNames: '[name]-[hash]', chunkNames: 'frame-editor-chunk-[hash]', alias: { '@': APP },
-    define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'error', plugins: [editorSolidPlugin],
+    define: BROWSER_DEFINE, logLevel: 'error', plugins: [editorSolidPlugin],
   });
   const renamed = new Map(result.outputFiles.map((file) => {
     const oldName = path.basename(file.path);
@@ -199,7 +204,7 @@ async function buildStandaloneLazy() {
   return Promise.all(STANDALONE_LAZY.map(async (lazy) => {
     const result = await esbuild.build({
       absWorkingDir: ROOT, entryPoints: [lazy.file()], write: false, bundle: true, format: 'esm', platform: 'browser', target: 'es2022',
-      minify: true, metafile: true, alias: { '@': APP }, define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'error',
+      minify: true, metafile: true, alias: { '@': APP }, define: BROWSER_DEFINE, logLevel: 'error',
     });
     const inputs = Object.keys(result.metafile.inputs);
     const solid = inputs.filter((i) => /node_modules\/solid-js\//.test(i));
@@ -301,7 +306,7 @@ export async function buildIslands({ outDir = DEFAULT_OUT_DIR } = {}) {
     entryNames: '[name]-[hash]',
     chunkNames: 'chunk-[hash]',
     alias: { '@': APP },
-    define: { 'process.env.NODE_ENV': '"production"' },
+    define: BROWSER_DEFINE,
     logLevel: 'error',
     plugins: [standaloneLazyPlugin([...standalone, editor]), solidPlugin({ generate: 'dom', hydratable: true })],
   });
@@ -442,7 +447,7 @@ async function buildServerHalf() {
     metafile: true,
     external: ['solid-js', 'solid-js/web', 'solid-js/store'],
     alias: { '@': APP },
-    define: { 'process.env.NODE_ENV': '"production"' },
+    define: SERVER_DEFINE,
     logLevel: 'error',
     plugins: [browserOnlyLazy, solidPlugin({ generate: 'ssr', hydratable: true })],
   });
@@ -492,7 +497,7 @@ async function buildOfflineHalf() {
     entryNames: '[name]-[hash]',
     chunkNames: 'chunk-[hash]',
     alias: { '@': APP },
-    define: { 'process.env.NODE_ENV': '"production"' },
+    define: BROWSER_DEFINE,
     logLevel: 'error',
     plugins: [offlineWithoutEditor, solidPlugin({ generate: 'dom', hydratable: true })],
   });
