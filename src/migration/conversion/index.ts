@@ -45,16 +45,16 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
   };
   let root: Node;
   try {
-    root = Parser.extend(jsx()).parseExpressionAt(
-      "<>" + input.source + "</>",
-      0,
-      { ecmaVersion: "latest" },
-    ) as Node;
+    const wrapped = "<>" + input.source + "</>";
+    root = Parser.extend(jsx()).parseExpressionAt(wrapped, 0, {
+      ecmaVersion: "latest",
+    }) as Node;
+    if (root.end !== wrapped.length) throw new Error("Trailing source");
   } catch {
     issue("syntax", "Cannot parse legacy JSX source", "root");
     return { ...result, classification: "manual-blocked" };
   }
-  const state: Record<string, unknown> = {},
+  const state: Record<string, unknown> = Object.create(null),
     styles = [...(input.styles ?? [])],
     head: string[] = [],
     bindings: Array<{
@@ -64,6 +64,15 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
       value?: unknown;
     }> = [];
   let sequence = 0;
+  const reservedIds = new Set<string>();
+  const freshId = () => {
+    let id: string;
+    do {
+      id = "migration-binding-" + ++sequence;
+    } while (reservedIds.has(id));
+    reservedIds.add(id);
+    return id;
+  };
   function literal(node: Node): unknown {
     if (node.type === "Literal") return node.value;
     if (node.type === "TemplateLiteral" && !node.expressions.length)
@@ -75,6 +84,22 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
       typeof node.argument.value === "number"
     )
       return -node.argument.value;
+    if (node.type === "ObjectExpression")
+      return Object.fromEntries(
+        node.properties.map((p: Node) => {
+          if (
+            p.type !== "Property" ||
+            p.computed ||
+            p.method ||
+            p.kind !== "init"
+          )
+            throw new Error("Nonstatic property");
+          return [
+            p.key.type === "Identifier" ? p.key.name : literal(p.key),
+            literal(p.value),
+          ];
+        }),
+      );
     throw new Error("Nonstatic expression");
   }
   function attrs(node: Node, path: string): Record<string, unknown> {
@@ -85,7 +110,7 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
         continue;
       }
       const name = a.name.name;
-      if (/^on[A-Z]/.test(name) || /^on[a-z]/.test(name)) {
+      if (/^on/i.test(name) || /^srcdoc$/i.test(name)) {
         issue("event", "Authored event handlers require rewriting", path);
         continue;
       }
@@ -106,6 +131,10 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
     return values;
   }
   function scan(node: Node, path: string) {
+    if (node.type === "JSXElement") {
+      const a = attrs(node, path);
+      if (typeof a.id === "string") reservedIds.add(a.id);
+    }
     if (
       node.type === "JSXElement" &&
       node.openingElement.name.name === "Value"
@@ -114,6 +143,9 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
       if (
         typeof a.name !== "string" ||
         !/^[_a-zA-Z][_a-zA-Z0-9]*$/.test(a.name) ||
+        a.name.startsWith("__") ||
+        ["constructor", "prototype"].includes(a.name) ||
+        Object.hasOwn(state, a.name) ||
         !["number", "string", "boolean"].includes(String(a.type))
       ) {
         issue("value", "Only typed scalar local values have an adapter", path);
@@ -146,13 +178,13 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
         /^\$[A-Za-z_]\w*$/.test(node.expression.name)
       ) {
         const field = node.expression.name.slice(1),
-          id = "migration-binding-" + ++sequence;
-        if (!(field in state)) {
+          id = freshId();
+        if (!Object.hasOwn(state, field)) {
           issue("reference", "Unknown local state reference", path);
           return "";
         }
         bindings.push({ id, field, kind: "text" });
-        return `<span data-af-id="${id}">${esc(state[field])}</span>`;
+        return `<span id="${esc(id)}" data-af-id="${esc(id)}">${esc(state[field])}</span>`;
       }
       try {
         return esc(literal(node.expression));
@@ -227,7 +259,7 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
       if (
         a.run ||
         typeof a.set !== "string" ||
-        !(a.set in state) ||
+        !Object.hasOwn(state, a.set) ||
         !("value" in a) ||
         typeof a.value !== typeof state[a.set]
       ) {
@@ -238,8 +270,7 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
         );
         return "";
       }
-      const id =
-        typeof a.id === "string" ? a.id : "migration-binding-" + ++sequence;
+      const id = typeof a.id === "string" ? a.id : freshId();
       a.id = id;
       bindings.push({ id, field: a.set, kind: "set", value: a.value });
       delete a.set;
@@ -265,6 +296,44 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
     const attributes = Object.entries(a)
       .map(([k, v]) => {
         const key = k === "className" ? "class" : k === "htmlFor" ? "for" : k;
+        if (k === "style" && v && typeof v === "object" && !Array.isArray(v)) {
+          const unitless = new Set(
+            "animationIterationCount aspectRatio borderImageOutset borderImageSlice borderImageWidth boxFlex boxFlexGroup boxOrdinalGroup columnCount columns flex flexGrow flexPositive flexShrink flexNegative flexOrder gridArea gridRow gridRowEnd gridRowSpan gridRowStart gridColumn gridColumnEnd gridColumnSpan gridColumnStart fontWeight lineClamp lineHeight opacity order orphans scale tabSize widows zIndex zoom fillOpacity floodOpacity stopOpacity strokeDasharray strokeDashoffset strokeMiterlimit strokeOpacity strokeWidth".split(
+              " ",
+            ),
+          );
+          const css = Object.entries(v)
+            .map(([p, value]) => {
+              if (value === null || value === false || value === true)
+                return "";
+              if (typeof value !== "number" && typeof value !== "string") {
+                issue("style", "Unsupported CSS property value", path);
+                return "";
+              }
+              const property = p.startsWith("--")
+                ? p
+                : p
+                    .replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())
+                    .replace(/^ms-/, "-ms-");
+              const suffix =
+                typeof value === "number" &&
+                value !== 0 &&
+                !p.startsWith("--") &&
+                !unitless.has(
+                  p.replace(/^(Webkit|Moz|ms|O)([A-Z])/, (_m, prefix, c) =>
+                    c.toLowerCase(),
+                  ),
+                )
+                  ? "px"
+                  : "";
+              return property + ":" + value + suffix;
+            })
+            .filter(Boolean)
+            .join(";");
+          return ` style="${esc(css)}"`;
+        }
+        if (v && typeof v === "object")
+          issue("attribute", "Object attribute requires an adapter", path);
         if (typeof v === "boolean") return v ? ` ${key}` : "";
         return ` ${key}="${esc(v)}"`;
       })
@@ -286,7 +355,7 @@ export function convertLegacyJsx(input: ConversionInput): ConversionResult {
     return { ...result, classification: "manual-blocked" };
   const fields = Object.keys(state);
   const script = bindings.length
-    ? `<script type="module">import {client,gql} from '@afbin/apollo';\nconst query=gql\`{ ${fields.join(" ")} }\`;const bindings=${json(bindings)};\nclient.watchQuery({query}).subscribe(({data})=>{for(const b of bindings){if(b.kind==='text'){const el=document.querySelector('[data-af-id="'+b.id+'"]');if(el)el.textContent=String(data[b.field]??'');}}});\nfor(const b of bindings){if(b.kind==='set'){document.querySelector('[data-af-id="'+b.id+'"]').addEventListener('click',()=>client.updateQuery({query},data=>({...data,[b.field]:b.value})));}}\n</script>`
+    ? `<script type="module">import {client,gql} from '@afbin/apollo';\nconst query=gql\`{ ${fields.join(" ")} }\`;const bindings=${json(bindings)};\nclient.watchQuery({query}).subscribe(({data})=>{for(const b of bindings){if(b.kind==='text'){const el=document.getElementById(b.id);if(el)el.textContent=String(data[b.field]??'');}}});\nfor(const b of bindings){if(b.kind==='set'){document.getElementById(b.id).addEventListener('click',()=>client.updateQuery({query},data=>({...data,[b.field]:b.value})));}}\n</script>`
     : "";
   result.classification = bindings.length ? "functional" : "renderable";
   result.html = `<!doctype html><html${input.designSystem ? ` data-af-design-system="${esc(input.designSystem)}"` : ""}><head><script src="${esc(input.coreUrl)}" data-af="core"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${head.join("")}${styles.map((s) => `<style>${s}</style>`).join("")}${fields.length ? `<script type="application/json" data-af="state">${json(state)}</script>` : ""}</head><body>${body}${script}</body></html>`;

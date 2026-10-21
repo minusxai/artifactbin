@@ -68,7 +68,7 @@ test("generated local adapter subscribes, updates through Apollo and renders sub
   let click: () => void = () => {};
   const text = { textContent: "" };
   const document = {
-    querySelector: (selector: string) =>
+    getElementById: (selector: string) =>
       selector.includes("btn1")
         ? {
             addEventListener: (_event: string, callback: () => void) => {
@@ -171,4 +171,58 @@ test("canonical graph preserves adapter state and rejects corrupted boundaries o
     assert.equal(converted.html, null);
     assert.equal(converted.issues[0]?.code, "document-codec");
   }
+});
+
+test("native JSX object styles and static attributes preserve browser semantics", () => {
+  const converted = convertLegacyJsx({
+    source:
+      '<label htmlFor="a" style={{fontSize: 14, lineHeight: 1.5, "--x": "2px"}}>X<input id="a" disabled={false} checked={true} data-n={3}/></label>',
+    coreUrl: "/af/v1/core.js",
+  });
+  assert.equal(converted.classification, "renderable");
+  assert.match(converted.html!, /for="a"/);
+  assert.match(
+    converted.html!,
+    /style="font-size:14px;line-height:1.5;--x:2px"/,
+  );
+  assert.match(converted.html!, / checked/);
+  assert.doesNotMatch(converted.html!, / disabled/);
+});
+test("conversion refuses partial parse tails and active attributes regardless of case", () => {
+  for (const source of [
+    "<p>kept</p></>;globalThis.x=1;//",
+    '<p ONCLICK="alert(1)">x</p>',
+    '<p oNclick="alert(1)">x</p>',
+    '<iframe srcDoc="<script>alert(1)</script>"/>',
+  ])
+    assert.equal(
+      convertLegacyJsx({ source, coreUrl: "/af/v1/core.js" }).classification,
+      "manual-blocked",
+      source,
+    );
+});
+test("local adapter refuses reserved state keys and inherited bindings", () => {
+  for (const source of [
+    "<p>{$constructor}</p>",
+    '<Helmet><Value name="__proto__" type="string" default="x"/></Helmet>',
+    '<Button set="constructor" value="x">x</Button>',
+  ])
+    assert.equal(
+      convertLegacyJsx({ source, coreUrl: "/af/v1/core.js" }).classification,
+      "manual-blocked",
+      source,
+    );
+});
+test("adapter binding ids cannot collide with authored ids and authored unusual ids are safe", () => {
+  const converted = convertLegacyJsx({
+    source:
+      '<Helmet><Value name="n" type="number" default={0}/></Helmet><i id="migration-binding-1"/><Button id={"a\\\"b"} set="n" value={1}>Set</Button><p>{$n}</p>',
+    coreUrl: "/af/v1/core.js",
+  });
+  assert.equal(converted.classification, "functional");
+  const ids = [...converted.html!.matchAll(/<[^>]*data-af-id="([^"]+)"/g)].map(
+    (x) => x[1],
+  );
+  assert.equal(new Set(ids).size, ids.length);
+  assert.doesNotMatch(converted.html!, /querySelector\(/);
 });
