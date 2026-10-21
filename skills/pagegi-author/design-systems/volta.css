@@ -1,0 +1,110 @@
+/*
+ * design-systems/volta.css
+ *
+ * A risograph print of a dashboard: calm paper and ink, then one hit of electric vermilion where the eye should land. Hard edges and hard shadows; no blur and no gradients.
+ * Suits: analytics and operational dashboards, pricing and launch pages, any screen where one number or action must dominate.
+ * Avoid for: long reading, luxury or institutional subjects, pages that need more than one loud element.
+ * Fonts: installed system faces only, nothing is downloaded: Arial Black for display, the system sans for text, the system monospace for code. Opens in light mode.
+ *
+ * The core loads this file when <html data-af-design-system="volta">.
+ */
+:root[data-af-design-system="volta"] {
+  /* Grounds */
+  --ds-paper: #f3eee4; /* Page ground. The default surface for everything. */
+  --ds-paper-raised: #fbf8f2; /* Cards, fields, menus: anything that sits on paper. */
+  --ds-paper-sunk: #e7dfcf; /* Wells, code blocks, inactive tracks, table stripes. */
+  --ds-line: #d3c9b5; /* Hairline dividers and quiet borders. Never the sole edge of a control. */
+  /* Ink */
+  --ds-edge: #14110f; /* The hard 2px edge on controls and cards, and the hard offset shadow. */
+  --ds-ink: #14110f; /* Primary text and icons on every paper ground. */
+  --ds-ink-muted: #5a5348; /* Secondary text, captions, placeholders. */
+  /* Brand */
+  --ds-volt: #ff4d1a; /* The brand. Primary actions and the one number that must be seen. Fill only. */
+  --ds-on-volt: #14110f; /* Text and icons on volt fills. */
+  --ds-volt-ink: #b5300a; /* Volt as text: links and inline emphasis on paper. */
+  --ds-volt-soft: #ffd9cb; /* Tinted ground for volt tags and selected rows; text on it is volt-ink. */
+  --ds-acid: #d6f43a; /* The highlighter: new tags, the active tab marker, one insight card. Never body text. */
+  --ds-on-acid: #14110f; /* Text on acid fills. */
+  --ds-cobalt: #2236d1; /* Data and focus: the first chart series, the focus ring, info callouts. */
+  --ds-on-cobalt: #ffffff; /* Text on cobalt fills. */
+  --ds-cobalt-soft: #dde1ff; /* Ground for info callouts; text on it is ink. */
+  /* Status */
+  --ds-positive: #16683f; /* Positive deltas and success text, always with a ▲ or a word. */
+  --ds-positive-soft: #d5efdf; /* Ground for success callouts and positive tags. */
+  --ds-caution: #7d5900; /* Warnings, always with a word. */
+  --ds-caution-soft: #fbedc4; /* Ground for warning callouts. */
+  --ds-negative: #b5300a; /* Negative deltas and errors. Shares volt-ink: errors are loud, not a separate red. */
+  --ds-negative-soft: #ffd9cb; /* Ground for error callouts. */
+  /* Standard names */
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-volt);
+  --primary-foreground: var(--ds-on-volt);
+  --secondary: var(--ds-volt-soft);
+  --secondary-foreground: var(--ds-volt-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-paper-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-paper);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-cobalt);
+  --chart-1: var(--ds-cobalt);
+  --chart-2: var(--ds-volt);
+  --chart-3: var(--ds-ink-muted);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --radius: 4px;
+  --shadow-hard: 4px 4px 0 0 #14110f;
+  --shadow-hard-lg: 8px 8px 0 0 #14110f;
+  --focus-ring: 0 0 0 2px #f3eee4, 0 0 0 4px #2236d1;
+  --chip-radius: 4px;
+  /* Fonts */
+  --font-display: "Arial Black", "Helvetica Neue", system-ui, sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-af-design-system="volta"][data-af-dark="true"] {
+  --ds-paper: #121110;
+  --ds-paper-raised: #1c1a18;
+  --ds-paper-sunk: #0a0908;
+  --ds-line: #34302a;
+  --ds-edge: #f3eee4;
+  --ds-ink: #f3eee4;
+  --ds-ink-muted: #a69e90;
+  --ds-volt: #ff5f2e;
+  --ds-on-volt: #14110f;
+  --ds-volt-ink: #ff8a63;
+  --ds-volt-soft: #3d1a0f;
+  --ds-acid: #d6f43a;
+  --ds-on-acid: #14110f;
+  --ds-cobalt: #7484ff;
+  --ds-on-cobalt: #0a0908;
+  --ds-cobalt-soft: #161c45;
+  --ds-positive: #5fd394;
+  --ds-positive-soft: #0f2a1c;
+  --ds-caution: #f2c14e;
+  --ds-caution-soft: #2e2405;
+  --ds-negative: #ff8a63;
+  --ds-negative-soft: #3d1a0f;
+  --shadow-hard: 4px 4px 0 0 #ff5f2e;
+  --shadow-hard-lg: 8px 8px 0 0 #ff5f2e;
+  --focus-ring: 0 0 0 2px #121110, 0 0 0 4px #7484ff;
+}
+/* Text styles */
+:root[data-af-design-system="volta"] .t-display-xl { font-family: var(--font-display); font-size: clamp(56px, 9vw, 112px); line-height: .9; font-weight: 800; letter-spacing: -0.035em; } /* One per page, at most. Hero headlines and covers. */
+:root[data-af-design-system="volta"] .t-display-l { font-family: var(--font-display); font-size: clamp(36px, 5vw, 60px); line-height: .95; font-weight: 800; letter-spacing: -0.03em; } /* Section openers, empty-state headlines. */
+:root[data-af-design-system="volta"] .t-display-m { font-family: var(--font-display); font-size: 40px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em; } /* Page titles. */
+:root[data-af-design-system="volta"] .t-title { font-family: var(--font-display); font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: -0.01em; } /* Card and dialog titles. */
+:root[data-af-design-system="volta"] .t-body-l { font-family: var(--font-sans); font-size: 18px; line-height: 28px; font-weight: 400; } /* Lead paragraphs. */
+:root[data-af-design-system="volta"] .t-body { font-family: var(--font-sans); font-size: 15px; line-height: 22px; font-weight: 400; } /* Default UI and reading text. */
+:root[data-af-design-system="volta"] .t-body-s { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 400; } /* Captions, helper text, dense table cells. */
+:root[data-af-design-system="volta"] .t-label { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; } /* Eyebrows, tab labels, tag text. Caps come from CSS, never the copy. */
+:root[data-af-design-system="volta"] .t-numeral { font-family: var(--font-mono); font-size: 40px; line-height: 44px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; } /* Numeric KPI figures. Tabular by nature: digits never jump. For prose KPI values, use a text role such as t-title or t-body, rather than the large mono numeral. */
+:root[data-af-design-system="volta"] .t-mono { font-family: var(--font-mono); font-size: 13px; line-height: 20px; font-weight: 400; } /* Code, SQL, IDs, table numbers. */

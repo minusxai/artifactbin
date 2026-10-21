@@ -1,0 +1,151 @@
+name: Check and deploy
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      codeql-proof-only:
+        description: Run security proof without uploading SARIF or deploying
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: pagegi-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  fast:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [validate, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+          cache: npm
+      - run: npm ci
+      - name: Restore incremental type-check metadata
+        if: matrix.check == 'validate'
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/pagegi/typecheck
+          key: typecheck-${{ runner.os }}-${{ runner.arch }}-node22.22.3-${{ hashFiles('package-lock.json', 'tsconfig.json', 'src/browser/tsconfig.json', 'scripts/ci/validate.ts') }}-${{ github.sha }}
+          restore-keys: |
+            typecheck-${{ runner.os }}-${{ runner.arch }}-node22.22.3-${{ hashFiles('package-lock.json', 'tsconfig.json', 'src/browser/tsconfig.json', 'scripts/ci/validate.ts') }}-
+      - run: npm run ${{ matrix.check }}
+  node:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+        with:
+          kind: node
+          shard: ${{ matrix.shard }}
+      - run: bash scripts/ci/run-container.sh node ${{ matrix.shard }} 4
+      - name: Preserve browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-diagnostics-${{ matrix.shard }}
+          path: ${{ runner.temp }}/pagegi-browser-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop the test database
+        if: always()
+        run: docker rm --force pagegi-test-db || true
+  security:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            partition: a
+          - language: javascript-typescript
+            partition: b
+          - language: javascript-typescript
+            partition: c
+          - language: python,actions
+            partition: full
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          check-latest: false
+      - name: Configure the standard security suite
+        id: config
+        run: node --experimental-strip-types scripts/ci/prepare-codeql.ts ${{ matrix.partition }}
+      - uses: github/codeql-action/init@v4
+        id: codeql
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          config-file: ${{ steps.config.outputs.config }}
+      - name: Prove complete installed JavaScript query coverage
+        if: matrix.language == 'python,actions'
+        run: node --experimental-strip-types scripts/ci/prove-codeql-coverage.ts "${{ steps.codeql.outputs.codeql-path }}"
+      - uses: github/codeql-action/analyze@v4
+        id: analysis
+        with:
+          category: security-${{ matrix.language }}-${{ matrix.partition }}
+          output: results
+          upload-database: false
+          wait-for-processing: false
+          upload: ${{ github.event_name == 'workflow_dispatch' && inputs['codeql-proof-only'] && 'never' || 'always' }}
+      - name: Verify stored security analysis
+        if: github.event_name != 'workflow_dispatch' || !inputs['codeql-proof-only']
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CODEQL_SARIF_ID: ${{ steps.analysis.outputs.sarif-id }}
+          CODEQL_SARIF_OUTPUT: ${{ steps.analysis.outputs.sarif-output }}
+          CODEQL_CATEGORY: security-${{ matrix.language }}-${{ matrix.partition }}
+        run: node --experimental-strip-types scripts/ci/verify-codeql-upload.ts "$CODEQL_SARIF_ID" "$CODEQL_CATEGORY" "$CODEQL_SARIF_OUTPUT"
+      - name: Preserve proof security results
+        if: github.event_name == 'workflow_dispatch' && inputs['codeql-proof-only']
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-proof-${{ matrix.language }}-${{ matrix.partition }}
+          path: results/*.sarif
+          if-no-files-found: error
+          retention-days: 7
+  deploy:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !(github.event_name == 'workflow_dispatch' && inputs['codeql-proof-only']) && needs.fast.result == 'success' && needs.security.result == 'success' && needs.node.result == 'success'
+    needs: [fast, node, security]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy the checked commit
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/pagegi
+          chmod 600 ~/.ssh/pagegi
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          git archive --format=tar.gz "$GITHUB_SHA" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/pagegi "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA"
+          curl --fail --silent --show-error --retry 3 "$PUBLIC_ORIGIN/health"

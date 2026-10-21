@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test.mjs && node packaging-test.mjs && node browser-test.mjs",
+    "typecheck": "tsc --noEmit --allowJs --checkJs --strictNullChecks --target ES2022 --module NodeNext --skipLibCheck --allowImportingTsExtensions codec.mjs contracts.ts api-check.ts capture.mjs css-policy.mjs packaging.mjs"
+  },
+  "dependencies": {
+    "acorn": "8.15.0",
+    "css-tree": "3.1.0",
+    "parse5": "7.3.0"
+  }
+}

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en" data-af-design-system="signout">
+<head>
+  <script src="https://pagegi.artifactbin.dev/af/v1/core.js"></script>
+  <script type="application/json" data-af="meta">
+  { "name": "Shared notes" }
+  </script>
+  <link rel="af-backend" href="https://pagegi.artifactbin.dev/af/v1/ids/Nt7eS2" data-af-name="notes">
+  <style>
+    body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); max-width: 36rem; margin: 2rem auto; padding: 0 1rem; }
+    header { margin-bottom: 1.5rem; }
+    header p { color: var(--muted-foreground); margin: .5rem 0 0; }
+    .sheet { background: var(--card); color: var(--card-foreground); border: 2px solid var(--foreground); border-radius: var(--radius); padding: 1rem 1.25rem; }
+    form, .find { display: flex; gap: .5rem; margin-bottom: 1rem; }
+    input, button { font: inherit; color: inherit; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .7rem; }
+    #text, #search { flex: 1; }
+    form button { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+    #hint { background: var(--accent); color: var(--accent-foreground); border-radius: var(--radius); padding: .75rem 1rem; margin-bottom: 1rem; }
+    ol { list-style: none; padding: 0; margin: 0; counter-reset: note; }
+    li { display: grid; grid-template-columns: 2.5rem 1fr; gap: .5rem; padding: .6rem 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+    li::before { counter-increment: note; content: counter(note, decimal-leading-zero); font-family: var(--font-mono); color: var(--muted-foreground); }
+    #count { color: var(--muted-foreground); margin: 1rem 0 0; }
+    #status { color: var(--muted-foreground); min-height: 1.5em; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 class="t-display-l">Shared notes</h1>
+    <p>Everyone who signs in sees the same notes. They're kept in a database that the notes backend reaches, never in this page.</p>
+  </header>
+  <section class="sheet">
+    <form id="new">
+      <input id="text" placeholder="Write a note" maxlength="500" required>
+      <button>Add</button>
+    </form>
+    <p id="hint" hidden>Sign in to see and add notes.</p>
+    <div class="find">
+      <input id="search" type="search" placeholder="Find a note" aria-label="Find a note">
+    </div>
+    <ol id="list"></ol>
+    <p id="count" class="t-label"></p>
+  </section>
+  <p id="status" role="status"></p>
+
+  <script type="module">
+    import { gql, client } from '@afbin/apollo';
+
+    // Shared by everyone signed in: the notes, kept in a database by the notes backend.
+    const WHO = gql`{ notes { viewer } }`;
+    const LIST = gql`{ notes { list { id text } } }`;
+    const ADD = gql`mutation Add($text: String!) { notes { add(text: $text) { id } } }`;
+    // This viewer's own: whether they're signed in, the notes they last loaded, their search, their unsent note.
+    const VIEW = gql`{ signedIn loaded { id text } search draft }`;
+    const SIGNED_IN = gql`{ signedIn }`;
+    const SEEN = gql`{ loaded { id text } }`;
+    const SEARCH = gql`{ search }`;
+    const DRAFT = gql`{ draft }`;
+
+    const form = document.querySelector('#new');
+    const hint = document.querySelector('#hint');
+    const list = document.querySelector('#list');
+    const input = document.querySelector('#text');
+    const search = document.querySelector('#search');
+    const count = document.querySelector('#count');
+    const status = document.querySelector('#status');
+
+    // Viewers who aren't signed in can't reach the database, so ask the backend
+    // who's calling once: true or false, or null when it can't be reached.
+    async function whoIsViewing() {
+      const { data, errors } = await client.query({ query: WHO });
+      if (errors?.length || !data.notes) return null;
+      const signedIn = data.notes.viewer !== null;
+      await client.updateQuery({ query: SIGNED_IN }, () => ({ signedIn }));
+      return signedIn;
+    }
+
+    async function refresh() {
+      const { data, errors } = await client.query({ query: LIST });
+      if (errors?.length || !data.notes) {
+        status.textContent = 'Offline: showing the notes as you last saw them.';
+        return;
+      }
+      status.textContent = '';
+      await client.updateQuery({ query: SEEN }, () => ({ loaded: data.notes.list }));
+    }
+
+    client.watchQuery({ query: VIEW }).subscribe(({ data }) => {
+      const signedIn = data.signedIn !== false;
+      form.hidden = !signedIn;
+      hint.hidden = signedIn;
+      if (input.value !== (data.draft ?? '')) input.value = data.draft ?? '';
+      if (search.value !== (data.search ?? '')) search.value = data.search ?? '';
+      const term = (data.search ?? '').trim().toLowerCase();
+      const loaded = data.loaded ?? [];
+      const shown = loaded.filter((note) => !term || note.text.toLowerCase().includes(term));
+      list.replaceChildren(...shown.map((note) => {
+        const li = document.createElement('li');
+        li.dataset.afId = 'note-' + note.id;
+        li.textContent = note.text;
+        return li;
+      }));
+      count.textContent = !signedIn ? ''
+        : !loaded.length ? 'No notes yet'
+        : term ? `${shown.length} of ${loaded.length} notes`
+        : `${loaded.length} notes`;
+    });
+
+    search.oninput = () => client.updateQuery({ query: SEARCH }, () => ({ search: search.value }));
+    input.oninput = () => client.updateQuery({ query: DRAFT }, () => ({ draft: input.value }));
+
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      // The same rule the backend enforces, checked here so the viewer sees why.
+      const text = input.value.trim();
+      if (text.length < 1 || text.length > 500) {
+        status.textContent = 'A note is 1 to 500 characters.';
+        return;
+      }
+      await client.updateQuery({ query: DRAFT }, () => ({ draft: '' }));
+      const result = await client.mutate({ mutation: ADD, variables: { text } });
+      const outcome = result.extensions?.outcomes?.['notes.add'];
+      if (outcome === 'rejected') status.textContent = 'Sign in to add a note.';
+      else if (outcome !== 'committed') status.textContent = 'That did not go through; try again.';
+      await refresh();
+    };
+
+    const signedIn = await whoIsViewing();
+    if (signedIn === null) status.textContent = 'Offline: showing the notes as you last saw them.';
+    else if (signedIn) {
+      await refresh();
+      setInterval(refresh, 5000);
+    }
+  </script>
+</body>
+</html>

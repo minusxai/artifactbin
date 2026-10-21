@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="https://artifactbin.dev/af/v1/core.js"></script>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>A little reading room</title>
+  <style>
+    body { margin: 0; color: var(--foreground); background: var(--background); font: 17px/1.65 system-ui; }
+    main { max-width: 760px; margin: auto; padding: 60px 24px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 data-af-id="title">A little reading room.</h1>
+    <p data-af-id="intro">A counter for journeys: each viewer keeps their own count.</p>
+    <button id="count" data-af-id="counter">Count: 0</button>
+  </main>
+  <script type="module">
+    import { gql, client } from '@afbin/apollo';
+    const COUNT = gql`{ count }`;
+    const button = document.querySelector('#count');
+    client.watchQuery({ query: COUNT }).subscribe(({ data }) => {
+      button.textContent = 'Count: ' + (data.count ?? 0);
+    });
+    button.onclick = () => client.updateQuery({ query: COUNT }, (data) => ({ count: (data.count ?? 0) + 1 }));
+  </script>
+</body>
+</html>

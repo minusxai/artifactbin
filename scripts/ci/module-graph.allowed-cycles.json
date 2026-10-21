@@ -1,4 +1,0 @@
-{
-  "$comment": "Written by node scripts/ci/module-graph.mjs --write-allowed. Every edge inside a module cycle; the list only shrinks.",
-  "cycles": []
-}

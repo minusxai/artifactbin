@@ -1,78 +1,11 @@
 node_modules/
-.next/
-/data/
+dist/
+.pagegi/
+test-output/
+*.sqlite*
 .env
-.env.*
-!.env.example
-*.tsbuildinfo
-next-env.d.ts
-# incremental tsc program graph (npm run validate / validate:shared). Under
-# node_modules, so already ignored — named explicitly because it is a build
-# input the tsconfigs point at, not a stray artifact.
-node_modules/.cache/tsc/
-# the standalone CLI build's Chromium archive cache (scripts/chromium-native.mjs), ~170 MB
-/services/cli/.cache/
-# vendored runtime assets — copied from node_modules on postinstall
-**/public/monaco/
-.artifact-objects/
-.artifactbin/
-tmp/
-**/lib/build-assets/
-**/lib/story-runtime/dist/
-**/public/fonts/
-**/lib/data/story/story-font-manifest.json
-# landing illustration SOURCES — 1254px PNG, ~2.8 MB each, 34 MB for the set.
-# Nothing serves them: the page references only the WebP derived from
-# them, and those ARE committed.
-# Kept on disk rather than deleted, because they are the only thing the
-# renderings can be regenerated from if a size or a crop ever changes.
-**/public/landing/*.png
 
-# agent evals: run output (rows, screenshots, transcripts)
-# Every run directory, not just the default one: `--out evals/.metrics-pi` is how two
-# local legs avoid clobbering each other, and a bare `evals/.metrics/` let 139 files of
-# transcripts and ledgers into a commit via `git add -A`.
-# …and at any depth, because `npm run eval` CHDIRS to services/app before it
-# resolves --out (evals/preload.cjs), so `--out evals/.metrics/x` writes to
-# services/app/evals/.metrics/x — which the root-anchored rule did not cover, and
-# a run directory's transcript carries the run's bearer token in plaintext.
-**/evals/.metrics*/
-# The evals themselves are the private minusxai/artifactbin-evals repository, placed here for a
-# run; an agent under evaluation can clone a public repository and read its own rubric.
-/evals/
-
-# Build output — the image builds these; they are never committed.
-/dist/
-services/app/dist/
-services/app/data/
-video/
-services/cli/dist/
-
-# Optional hosted browser libraries (built with story runtime)
-services/app/public/libraries/
-
-
-# agent worktrees (local only)
-.claude/worktrees/
-.agent/
-
-# The install cache key CI derives from the lockfile (`node scripts/ci/ci.mjs lock-fingerprint`).
-.ci-cache-key/
-
-# Finder metadata is never a project asset.
-.DS_Store
-
-# Built from authored references and command registries.
-/services/cli/src/generated/teaching.json
-/services/cli/src/generated/teaching.json.*.tmp
-
-# the shared island build (scripts/build/build-islands.mjs) — content-addressed chunks + manifest
-**/public/islands/
-
-# Bundled shared skill credential runtime (generate:teaching)
-services/app/skills/artifactbin/scripts/credentials.mjs
-
-services/app/skills/artifactbin/scripts/watch-comments.mjs
-
-# Untracked artifactbin page sources kept at the root: afbin tracks them by path and refuses paths outside the workspace; knip honours this file.
-/*.jsx
+.env.production
+data/
+postgres-data/
+.env.database

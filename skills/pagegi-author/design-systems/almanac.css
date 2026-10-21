@@ -1,0 +1,101 @@
+/*
+ * design-systems/almanac.css
+ *
+ * A warm field guide: warm paper, one green ink for text, one terracotta word for emphasis, very light hairlines, and big serif numbers.
+ * Suits: explainers, landing pages for small makers and civic projects, long reads, annual and impact reports.
+ * Avoid for: dense operational dashboards, dev tools, anything that should feel fast or cold.
+ * Fonts: installed system faces only, nothing is downloaded: Iowan Old Style or Georgia for display, the system sans for text, the system monospace for code. Opens in light mode.
+ *
+ * The core loads this file when <html data-af-design-system="almanac">.
+ */
+:root[data-af-design-system="almanac"] {
+  /* Grounds */
+  --ds-paper: #F2E7D6; /* Page ground: warm, uncoated. In Night the ink becomes the ground. */
+  --ds-card: #F8F1E6; /* Cards, tickets, dialogs: a lighter sheet on the paper. */
+  --ds-band: #E7CFB4; /* The hero band and arch panels: a deeper warm ground that holds one big thing. */
+  --ds-screen: #C8D1A9; /* The soft green ground inside a device or a figure. */
+  --ds-paper-sunk: #E8DBC6; /* Wells, code, inactive tracks, stripes. */
+  --ds-line: #CBBFA9; /* Hairlines at a quarter strength. The only border in the system. */
+  /* Ink */
+  --ds-ink: #374836; /* Forest green: all text, all rules, the first series. */
+  --ds-ink-muted: #6B7A69; /* Secondary text at 65%: captions, notes, metadata. */
+  /* Brand */
+  --ds-accent: #B44E30; /* Terracotta: the one word in a headline, the filled button, the progress bar, the second series. */
+  --ds-on-accent: #F2E7D6; /* Text on terracotta. */
+  --ds-accent-soft: #F0D9CD; /* Ground for accent tags and the selected state. */
+  --ds-mauve: #846B94; /* The third series and nothing else. */
+  /* Status */
+  --ds-positive: #3E6B3C; /* Success text and the kept share, with a word. */
+  --ds-positive-soft: #DCE6C9; /* Ground for success callouts and positive tags. */
+  --ds-caution: #8C6A1E; /* Warnings as text: an ochre on paper. */
+  --ds-caution-soft: #F3E5BE; /* Ground for warning callouts. */
+  --ds-negative: #B44E30; /* Errors share the terracotta; there is no second red. */
+  --ds-negative-soft: #F0D9CD; /* Ground for error callouts. */
+  /* Standard names */
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-card);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-card);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-accent);
+  --primary-foreground: var(--ds-on-accent);
+  --secondary: var(--ds-band);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-accent-soft);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-accent);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-accent);
+  --chart-1: var(--ds-ink);
+  --chart-2: var(--ds-accent);
+  --chart-3: var(--ds-mauve);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --radius: 4px;
+  --shadow-soft: 23px 23px 0 0 #b44e3020;
+  --shadow-soft-sm: 12px 12px 0 0 #b44e3020;
+  --chip-radius: 0;
+  /* Fonts */
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-af-design-system="almanac"][data-af-dark="true"] {
+  --ds-paper: #1B241B;
+  --ds-card: #243024;
+  --ds-band: #2E3B2E;
+  --ds-screen: #3A4A36;
+  --ds-paper-sunk: #141B14;
+  --ds-line: #3C4A3C;
+  --ds-ink: #F2E7D6;
+  --ds-ink-muted: #A9B5A6;
+  --ds-accent: #E07A58;
+  --ds-on-accent: #1B241B;
+  --ds-accent-soft: #4A2A1E;
+  --ds-mauve: #B7A3C4;
+  --ds-positive: #8FC28C;
+  --ds-positive-soft: #263A26;
+  --ds-caution: #E0B65A;
+  --ds-caution-soft: #3E3218;
+  --ds-negative: #E07A58;
+  --ds-negative-soft: #4A2A1E;
+  --shadow-soft: 23px 23px 0 0 #e07a5826;
+  --shadow-soft-sm: 12px 12px 0 0 #e07a5826;
+}
+/* Text styles */
+:root[data-af-design-system="almanac"] .t-display-xl { font-family: var(--font-display); font-size: clamp(64px, 10.4vw, 160px); line-height: .92; font-weight: 400; letter-spacing: -0.055em; } /* One per page. The display serif at 400 with the tracking pulled tight; the italic carries the emphasised word. */
+:root[data-af-design-system="almanac"] .t-display-l { font-family: var(--font-display); font-size: clamp(40px, 5.5vw, 78px); line-height: .98; font-weight: 400; letter-spacing: -0.045em; } /* Section openers and chapter heads. */
+:root[data-af-design-system="almanac"] .t-display-m { font-family: var(--font-display); font-size: 40px; line-height: 42px; font-weight: 400; letter-spacing: -0.03em; } /* Card titles and page titles. */
+:root[data-af-design-system="almanac"] .t-title { font-family: var(--font-sans); font-size: 24px; line-height: 1.2; font-weight: 500; letter-spacing: -0.03em; } /* Sub-heads inside steps and features. */
+:root[data-af-design-system="almanac"] .t-numeral-xl { font-family: var(--font-display); font-size: clamp(72px, 9vw, 120px); line-height: 1; font-weight: 400; letter-spacing: -0.07em; font-variant-numeric: tabular-nums; } /* The outcome numbers. The display serif, tracked to -.07em, one per block. */
+:root[data-af-design-system="almanac"] .t-body-l { font-family: var(--font-sans); font-size: 18px; line-height: 1.7; font-weight: 400; } /* Step paragraphs and lead copy at a generous 1.7 leading. */
+:root[data-af-design-system="almanac"] .t-body { font-family: var(--font-sans); font-size: 16px; line-height: 1.6; font-weight: 400; } /* Default reading and UI text. */
+:root[data-af-design-system="almanac"] .t-body-s { font-family: var(--font-sans); font-size: 13px; line-height: 1.5; font-weight: 400; } /* Captions, notes, footer lines. */
+:root[data-af-design-system="almanac"] .t-label { font-family: var(--font-mono); font-size: 11px; line-height: 1.6; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; } /* Eyebrows, nav links, legends, chapter numbers. Caps from CSS. */
+:root[data-af-design-system="almanac"] .t-numeral { font-family: var(--font-display); font-size: 48px; line-height: 1; font-weight: 400; letter-spacing: -0.06em; font-variant-numeric: tabular-nums; } /* KPI figures in tiles and tickets. */
+:root[data-af-design-system="almanac"] .t-mono { font-family: var(--font-mono); font-size: 12px; line-height: 1.6; font-weight: 400; } /* Code, IDs, table figures. */

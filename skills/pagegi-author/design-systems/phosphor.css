@@ -1,0 +1,103 @@
+/*
+ * design-systems/phosphor.css
+ *
+ * A terminal with the lies removed: one monospace face at every size, light that glows instead of shadows, a prompt instead of a hero.
+ * Suits: CI dashboards, log viewers, status pages, developer docs, release notes.
+ * Avoid for: marketing, long prose, consumer subjects, pages where more than two colours carry meaning.
+ * Fonts: installed system faces only, nothing is downloaded: the system monospace for display, the system monospace for text, the system monospace for code. Opens in dark mode.
+ *
+ * The core loads this file when <html data-af-design-system="phosphor">.
+ */
+:root[data-af-design-system="phosphor"] {
+  /* Grounds */
+  --ds-glass: #f2f5ec; /* Page ground. Black glass in Night; a printout in Paper. */
+  --ds-glass-raised: #fbfcf7; /* Panels, fields, menus. */
+  --ds-glass-sunk: #e3e9d9; /* Log wells, code, inactive tracks. */
+  --ds-line: #c9d3bf; /* Hairline rules between log lines and table rows. */
+  /* Ink */
+  --ds-edge: #0f7a3a; /* The 1px outline on controls and panels. In Night it is the phosphor itself. */
+  --ds-ink: #0f1f12; /* Primary text. Pale green-white in Night so the glow has somewhere to go. */
+  --ds-ink-muted: #4c6b52; /* Secondary text, timestamps, dimmed log lines. */
+  /* Brand */
+  --ds-green: #0f7a3a; /* The brand and the pass state. Primary actions, the prompt, the cursor. */
+  --ds-on-green: #f2f5ec; /* Text on green fills. */
+  --ds-green-ink: #0b6a31; /* Green as text: links, the active line. */
+  --ds-green-soft: #d9f0dc; /* Ground for pass rows and selected lines. */
+  --ds-amber: #9a6a00; /* The attention colour: focus ring, warnings, the one thing running now. */
+  --ds-on-amber: #1a1000; /* Text on amber fills. */
+  --ds-amber-soft: #f6e9c4; /* Ground for warning rows. */
+  /* Status */
+  --ds-positive: #0f7a3a; /* Pass. Shares green: in Phosphor, green means it worked. */
+  --ds-caution: #9a6a00; /* Flaky, pending, retrying. */
+  --ds-negative: #b3261e; /* Fail. The only red on the screen. */
+  --ds-negative-soft: #f6d9d6; /* Ground for failed rows and error callouts. */
+  /* Chart */
+  --ds-cyan: #0b6e7a; /* Second chart series and the diff-added colour. Never for state. */
+  --ds-violet: #5b3fb0; /* Third chart series. */
+  /* Standard names */
+  --background: var(--ds-glass);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-glass-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-glass-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-green);
+  --primary-foreground: var(--ds-on-green);
+  --secondary: var(--ds-green-soft);
+  --secondary-foreground: var(--ds-green-ink);
+  --muted: var(--ds-glass-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-glass-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-glass);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-amber);
+  --chart-1: var(--ds-green);
+  --chart-2: var(--ds-cyan);
+  --chart-3: var(--ds-amber);
+  --chart-4: var(--ds-violet);
+  --chart-5: var(--ds-ink-muted);
+  --radius: 0px;
+  --glow: none;
+  --glow-amber: none;
+  --chip-radius: 0px;
+  /* Fonts */
+  --font-display: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --font-sans: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-af-design-system="phosphor"][data-af-dark="true"] {
+  --ds-glass: #060a06;
+  --ds-glass-raised: #0c130c;
+  --ds-glass-sunk: #030503;
+  --ds-line: #1b2a1b;
+  --ds-edge: #3dff7a;
+  --ds-ink: #d7ffe0;
+  --ds-ink-muted: #7fb48f;
+  --ds-green: #3dff7a;
+  --ds-on-green: #04140a;
+  --ds-green-ink: #5fff93;
+  --ds-green-soft: #0f2a18;
+  --ds-amber: #ffb000;
+  --ds-on-amber: #1a1000;
+  --ds-amber-soft: #2a1e00;
+  --ds-positive: #3dff7a;
+  --ds-caution: #ffb000;
+  --ds-negative: #ff5c5c;
+  --ds-negative-soft: #2d0e0e;
+  --ds-cyan: #5ee1f0;
+  --ds-violet: #b79cff;
+  --glow: 0 0 12px rgba(61,255,122,.45);
+  --glow-amber: 0 0 12px rgba(255,176,0,.5);
+}
+/* Text styles */
+:root[data-af-design-system="phosphor"] .t-display-xl { font-family: var(--font-display); font-size: clamp(44px, 7vw, 88px); line-height: .95; font-weight: 700; letter-spacing: -0.02em; } /* One per page. Covers and the headline state of a system. */
+:root[data-af-design-system="phosphor"] .t-display-l { font-family: var(--font-display); font-size: clamp(30px, 4vw, 48px); line-height: 1; font-weight: 700; letter-spacing: -0.02em; } /* Section openers and page titles. */
+:root[data-af-design-system="phosphor"] .t-title { font-family: var(--font-display); font-size: 20px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; } /* Panel titles, job names. */
+:root[data-af-design-system="phosphor"] .t-body { font-family: var(--font-sans); font-size: 15px; line-height: 24px; font-weight: 400; } /* Default reading text. Everything is mono; the rhythm comes from leading. */
+:root[data-af-design-system="phosphor"] .t-body-s { font-family: var(--font-sans); font-size: 13px; line-height: 20px; font-weight: 400; } /* Timestamps, captions, helper text. */
+:root[data-af-design-system="phosphor"] .t-label { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; } /* Eyebrows and column heads. Caps through CSS. */
+:root[data-af-design-system="phosphor"] .t-numeral { font-family: var(--font-mono); font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; } /* KPI figures. Tabular. */
+:root[data-af-design-system="phosphor"] .t-log { font-family: var(--font-mono); font-size: 13px; line-height: 20px; font-weight: 400; } /* Log lines and commands. Prefixed by a prompt glyph, never a box. */

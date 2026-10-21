@@ -1,0 +1,90 @@
+/*
+ * design-systems/broadsheet.css
+ *
+ * A newspaper front page: a blackletter masthead, a bold serif headline with one red word, body text in columns with a drop cap.
+ * Suits: features and long reads, reports, newsletters and digests.
+ * Avoid for: interactive tools, dashboards, anything skimmed, subjects where colour must carry meaning.
+ * Fonts: installed system faces only, nothing is downloaded: Times New Roman for display, Times New Roman for text, Courier New for code, Old English Text MT for the masthead, Franklin Gothic or Arial Narrow for headlines. Opens in light mode.
+ *
+ * The core loads this file when <html data-af-design-system="broadsheet">.
+ */
+:root[data-af-design-system="broadsheet"] {
+  /* Grounds */
+  --ds-newsprint: #f6efe0; /* Page ground: newsprint by day; the late edition by night. */
+  --ds-newsprint-raised: #fbf6ea; /* Boxes, plates, fields. */
+  --ds-newsprint-sunk: #ebe2cd; /* Tint boxes, the classifieds, code. */
+  --ds-line: #cfc3a6; /* Column rules and hairlines. */
+  /* Ink */
+  --ds-ink: #1f1b16; /* Printer’s ink: text, rules, the masthead. */
+  --ds-ink-muted: #5c5345; /* Secondary text, datelines, the small print. */
+  /* Brand */
+  --ds-red: #b8371f; /* One ranunculus red: the second word in a headline, the pull figure, the link. Never a fill larger than a word. */
+  --ds-on-red: #f6efe0; /* Text on red fills (rare). */
+  --ds-red-soft: #f3dcd5; /* Ground for the one tinted box per page. */
+  /* Status */
+  --ds-positive: #2f6b3a; /* Continued, approved. In the ledger only. */
+  --ds-positive-soft: #dcebd8; /* Ground for positive rows. */
+  --ds-caution: #8a5a00; /* Provisional, small sample. */
+  --ds-caution-soft: #f3e5c0; /* Ground for caveats. */
+  --ds-negative: #b8371f; /* Declined, failed. Shares the red. */
+  --ds-negative-soft: #f3dcd5; /* Ground for negative rows. */
+  /* Standard names */
+  --background: var(--ds-newsprint);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-newsprint-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-newsprint-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-red);
+  --primary-foreground: var(--ds-on-red);
+  --secondary: var(--ds-red-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-newsprint-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-newsprint-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-newsprint);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-red);
+  --chart-1: var(--ds-ink);
+  --chart-2: var(--ds-red);
+  --chart-3: var(--ds-ink-muted);
+  --chart-4: var(--ds-line);
+  --chart-5: var(--ds-positive);
+  --radius: 0px;
+  --chip-radius: 0px;
+  /* Fonts */
+  --font-display: "Times New Roman", Times, serif;
+  --font-sans: "Times New Roman", Times, serif;
+  --font-mono: "Courier New", Courier, monospace;
+  --font-masthead: "Old English Text MT", "Times New Roman", serif;
+  --font-franklin: "Franklin Gothic Medium", "Arial Narrow", Arial, sans-serif;
+}
+:root[data-af-design-system="broadsheet"][data-af-dark="true"] {
+  --ds-newsprint: #141210;
+  --ds-newsprint-raised: #1d1a16;
+  --ds-newsprint-sunk: #0e0c0a;
+  --ds-line: #3a342b;
+  --ds-ink: #efe6d2;
+  --ds-ink-muted: #ada28b;
+  --ds-red: #ff6a4d;
+  --ds-on-red: #141210;
+  --ds-red-soft: #3a1812;
+  --ds-positive: #8ed29a;
+  --ds-positive-soft: #15301b;
+  --ds-caution: #f2c14e;
+  --ds-caution-soft: #332508;
+  --ds-negative: #ff6a4d;
+  --ds-negative-soft: #3a1812;
+}
+/* Text styles */
+:root[data-af-design-system="broadsheet"] .t-masthead { font-family: var(--font-masthead); font-size: clamp(40px, 7vw, 84px); line-height: 1; font-weight: 700; } /* The masthead, once, centred, between a double rule. Blackletter is for the name only. */
+:root[data-af-design-system="broadsheet"] .t-display-xl { font-family: var(--font-display); font-size: clamp(44px, 6.5vw, 80px); line-height: 1; font-weight: 700; letter-spacing: -0.015em; } /* The headline. The old-style serif, bold; the second line may carry the one red word. */
+:root[data-af-design-system="broadsheet"] .t-display-l { font-family: var(--font-display); font-size: clamp(30px, 4vw, 48px); line-height: 1.08; font-weight: 700; letter-spacing: -0.01em; } /* Section heads and crossheads. */
+:root[data-af-design-system="broadsheet"] .t-deck { font-family: var(--font-display); font-size: clamp(19px, 2.2vw, 24px); line-height: 1.35; font-weight: 400; } /* The deck under the headline. The old-style serif in italic. */
+:root[data-af-design-system="broadsheet"] .t-body { font-family: var(--font-sans); font-size: 17px; line-height: 27px; font-weight: 400; } /* Body text, in columns where the width allows. A drop cap opens the piece. */
+:root[data-af-design-system="broadsheet"] .t-small { font-family: var(--font-franklin); font-size: 11px; line-height: 15px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; } /* Datelines, figure labels, folios, the small print. Franklin caps. */
+:root[data-af-design-system="broadsheet"] .t-numeral { font-family: var(--font-display); font-size: clamp(44px, 6vw, 72px); line-height: .95; font-weight: 700; font-variant-numeric: tabular-nums; } /* Pull figures, set large in the margin with a Franklin caption. */
+:root[data-af-design-system="broadsheet"] .t-wire { font-family: var(--font-mono); font-size: 13px; line-height: 20px; font-weight: 400; } /* Wire copy, tables of figures, datelines in the old style. Courier. */

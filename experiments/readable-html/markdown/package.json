@@ -1,0 +1,17 @@
+{
+  "name": "markdown-validation-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test renderer.test.mjs",
+    "test:browser": "node browser.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm test && npm run test:browser"
+  },
+  "dependencies": {
+    "markdown-it": "14.3.3"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2"
+  }
+}

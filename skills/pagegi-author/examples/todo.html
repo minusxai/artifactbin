@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="https://pagegi.artifactbin.dev/af/v1/core.js"></script>
+  <script type="application/json" data-af="meta">
+  { "name": "Team todo list" }
+  </script>
+  <link rel="af-backend" href="https://pagegi.artifactbin.dev/af/v1/ids/Td4sK9" data-af-name="team">
+  <style>
+    body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+    form, nav { display: flex; gap: .5rem; margin-bottom: 1rem; }
+    input, button { font: inherit; color: inherit; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius); padding: .4rem .6rem; }
+    #text { flex: 1; }
+    nav button[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
+    ul { list-style: none; padding: 0; }
+    li { display: flex; align-items: center; gap: .5rem; padding: .5rem 0; border-bottom: 1px solid var(--border); }
+    li span { flex: 1; }
+    li.done span { text-decoration: line-through; color: var(--muted-foreground); }
+    #status { color: var(--muted-foreground); min-height: 1.5em; }
+  </style>
+</head>
+<body>
+  <h1>Team todo list</h1>
+  <form id="new">
+    <input id="text" placeholder="Add a task" required>
+    <button>Add</button>
+  </form>
+  <nav id="filters" aria-label="Show">
+    <button type="button" data-filter="all">All</button>
+    <button type="button" data-filter="open">Open</button>
+    <button type="button" data-filter="done">Done</button>
+  </nav>
+  <ul id="list"></ul>
+  <p id="status" role="status"></p>
+
+  <script type="module">
+    import { gql, client } from '@afbin/apollo';
+
+    // Shared by everyone: the list, kept by the team backend.
+    const LIST = gql`{ team { list { id text done } } }`;
+    const ADD = gql`mutation Add($text: String!) { team { add(text: $text) { id } } }`;
+    const TOGGLE = gql`mutation Toggle($id: ID!) { team { toggle(id: $id) { id } } }`;
+    const REMOVE = gql`mutation Remove($id: ID!) { team { remove(id: $id) } }`;
+    // This viewer's own: the last list they loaded, their filter, their unsent text.
+    const VIEW = gql`{ todos { id text done } filter draft }`;
+    const SEEN = gql`{ todos { id text done } }`;
+    const FILTER = gql`{ filter }`;
+    const DRAFT = gql`{ draft }`;
+
+    const list = document.querySelector('#list');
+    const input = document.querySelector('#text');
+    const status = document.querySelector('#status');
+
+    // A refresh only clears its own offline notice; an action's outcome stays until the next action.
+    let offline = false;
+    async function refresh() {
+      const { data, errors } = await client.query({ query: LIST });
+      if (errors?.length || !data.team) {
+        offline = true;
+        status.textContent = 'Offline: showing the list as you last saw it.';
+        return;
+      }
+      if (offline) {
+        offline = false;
+        status.textContent = '';
+      }
+      await client.updateQuery({ query: SEEN }, () => ({ todos: data.team.list }));
+    }
+
+    async function run(mutation, variables, path) {
+      status.textContent = '';
+      const result = await client.mutate({ mutation, variables });
+      const outcome = result.extensions?.outcomes?.[path];
+      if (outcome === 'rejected') status.textContent = 'Only editors can do that.';
+      else if (outcome !== 'committed') status.textContent = 'That did not go through; try again.';
+      await refresh();
+    }
+
+    client.watchQuery({ query: VIEW }).subscribe(({ data }) => {
+      const filter = data.filter ?? 'all';
+      for (const button of document.querySelectorAll('#filters button'))
+        button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
+      if (input.value !== (data.draft ?? '')) input.value = data.draft ?? '';
+      const shown = (data.todos ?? []).filter((t) => filter === 'all' || (filter === 'done') === t.done);
+      list.replaceChildren(...shown.map((todo) => {
+        const li = document.createElement('li');
+        li.dataset.afId = 'todo-' + todo.id;
+        li.className = todo.done ? 'done' : '';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = todo.done;
+        box.setAttribute('aria-label', 'Done: ' + todo.text);
+        box.onchange = () => run(TOGGLE, { id: todo.id }, 'team.toggle');
+        const text = document.createElement('span');
+        text.textContent = todo.text;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = 'Remove';
+        remove.onclick = () => run(REMOVE, { id: todo.id }, 'team.remove');
+        li.append(box, text, remove);
+        return li;
+      }));
+    });
+
+    for (const button of document.querySelectorAll('#filters button'))
+      button.onclick = () => client.updateQuery({ query: FILTER }, () => ({ filter: button.dataset.filter }));
+    input.oninput = () => client.updateQuery({ query: DRAFT }, () => ({ draft: input.value }));
+
+    document.querySelector('#new').onsubmit = async (event) => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      await client.updateQuery({ query: DRAFT }, () => ({ draft: '' }));
+      await run(ADD, { text }, 'team.add');
+    };
+
+    await refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>

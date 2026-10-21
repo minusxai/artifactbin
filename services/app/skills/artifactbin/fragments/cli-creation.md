@@ -1,1 +1,0 @@
-For a new artifact, write report.jsx, then `afbin push report.jsx`. Push validates/publishes and returns the URL. `afbin add <files> --json` assigns local IDs; `afbin preview report.jsx` runs until Ctrl+C.

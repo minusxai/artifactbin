@@ -1,0 +1,117 @@
+.pg-sharing {
+  padding: 20px;
+  background: var(--pg-bg);
+  color: var(--pg-fg);
+  font: 14px/1.5 var(--pg-sans);
+}
+.pg-sharing h2,
+.pg-sharing-header h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+.pg-sharing h3 {
+  font: 12px var(--pg-mono);
+  color: var(--pg-muted);
+  margin: 0 0 12px;
+}
+.pg-sharing-copy {
+  width: 100%;
+}
+.pg-sharing-error {
+  color: var(--pg-danger);
+  overflow-wrap: anywhere;
+}
+.pg-sharing-visibility {
+  display: flex;
+  gap: 4px;
+}
+.pg-sharing-visibility button {
+  flex: 1;
+}
+.pg-sharing-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.pg-sharing-row > span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pg-sharing select {
+  padding: 6px;
+  min-width: 108px;
+  min-height: 36px;
+  font-size: 12px;
+}
+.pg-sharing-people {
+  border-top: 1px solid var(--pg-edge);
+  margin-top: 20px;
+  padding-top: 16px;
+}
+.pg-sharing-invite {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+.pg-sharing-invite input {
+  min-width: 100px;
+  width: 100%;
+}
+.pg-sharing-invite select {
+  flex: 1;
+}
+.pg-sharing-dialog {
+  padding: 0;
+  width: 440px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  border: 1px solid var(--pg-edge);
+  border-radius: 8px;
+  background: var(--pg-bg);
+  color: var(--pg-fg);
+}
+.pg-sharing-dialog::backdrop {
+  background: #0007;
+}
+.pg-sharing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--pg-edge);
+}
+.pg-sharing-header h2 {
+  margin: 0;
+}
+.pg-sharing-frame {
+  display: block;
+  width: 100%;
+  height: min(520px, calc(100dvh - 100px));
+  border: 0;
+  background: var(--pg-bg);
+}
+.pg-sharing select:focus-visible {
+  outline: 2px solid var(--pg-accent);
+  outline-offset: 2px;
+}
+@media (max-width: 450px) {
+  .pg-sharing {
+    padding: 16px;
+  }
+  .pg-sharing button {
+    min-height: 36px;
+  }
+}
+
+.pg-sharing-notice {
+  color: var(--pg-muted);
+  font-size: 12px;
+  margin: 18px 0 0;
+}
+
+.pg-embedded:has(#sharing-page:not([hidden])) main { padding: 0; }
+.pg-embedded .pg-sharing > h2 { display: none; }
+.pg-embedded body { background: var(--pg-bg); }

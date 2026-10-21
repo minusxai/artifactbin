@@ -1,0 +1,71 @@
+name: Prepare checked source
+description: Restore dependencies and overlap verified build, database, and browser setup
+inputs:
+  kind:
+    description: validate, node, or browser check group
+    default: validate
+  shard:
+    description: Zero based shard index
+    default: '0'
+  engine:
+    description: Matrix browser engine
+    default: chromium
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.22.3
+    - uses: actions/cache@v4
+      id: dependencies
+      with:
+        path: node_modules
+        key: dependencies-v1-${{ runner.os }}-${{ runner.arch }}-node22.22.3-${{ hashFiles('package-lock.json') }}
+    - if: steps.dependencies.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci --no-audit --no-fund
+    - name: Start independent setup and declare required browser engines
+      id: requirements
+      shell: bash
+      env:
+        CHECK_KIND: ${{ inputs.kind }}
+        CHECK_SHARD: ${{ inputs.shard }}
+        CHECK_ENGINE: ${{ inputs.engine }}
+        PAGEGI_DEFER_BACKEND: 'true'
+        PAGEGI_DEFER_BROWSERS: 'true'
+      run: |
+        set -euo pipefail
+        export NODE_COMPILE_CACHE="$RUNNER_TEMP/pagegi-node-cache"
+        printf 'NODE_COMPILE_CACHE=%s\n' "$NODE_COMPILE_CACHE" >> "$GITHUB_ENV"
+        node --import tsx scripts/ci/setup-requirements.ts "$CHECK_KIND" "$CHECK_SHARD" "$CHECK_ENGINE"
+        bash scripts/ci/background-setup.sh start "$CHECK_KIND" "$CHECK_SHARD" "$CHECK_ENGINE"
+    - name: Restore required host browser binaries
+      if: steps.requirements.outputs.host-browsers != ''
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: browsers-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}-${{ steps.requirements.outputs.host-browsers }}
+        restore-keys: browsers-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+    - name: Start browser setup after restoring required binaries
+      shell: bash
+      env:
+        CHECK_KIND: ${{ inputs.kind }}
+        CHECK_SHARD: ${{ inputs.shard }}
+        CHECK_ENGINE: ${{ inputs.engine }}
+      run: bash scripts/ci/background-setup.sh browsers "$CHECK_KIND" "$CHECK_SHARD" "$CHECK_ENGINE"
+    - name: Restore the exact backend image
+      if: steps.requirements.outputs.backend-key != ''
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/pagegi-backend-image.tar
+        key: backend-image-v1-${{ steps.requirements.outputs.backend-key }}
+    - name: Start backend setup after restoring its exact image
+      shell: bash
+      env:
+        CHECK_KIND: ${{ inputs.kind }}
+        CHECK_SHARD: ${{ inputs.shard }}
+        CHECK_ENGINE: ${{ inputs.engine }}
+      run: bash scripts/ci/background-setup.sh backend "$CHECK_KIND" "$CHECK_SHARD" "$CHECK_ENGINE"
+    - name: Await every independent setup result
+      shell: bash
+      run: bash scripts/ci/background-setup.sh await

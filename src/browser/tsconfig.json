@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "strict": true,
+    "skipLibCheck": true,
+    "target": "ES2022",
+    "module": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "noImplicitAny": false
+  },
+  "files": [
+    "document-session.js",
+    "hosted-startup.js",
+    "placement.js",
+    "surface.js",
+    "ui-style.js",
+    "runner.js",
+    "lifecycle.ts",
+    "replay.ts",
+    "runtime.js",
+    "runtime-globals.d.ts"
+  ]
+}

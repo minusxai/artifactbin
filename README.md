@@ -1,89 +1,109 @@
-# Artifactbin
+# Pagegi
 
-Interactive documents for people and agents. Create local files, preview and edit them in a browser, then publish and share. Use [app.artifactbin.dev](https://app.artifactbin.dev) or run your own server.
+A Pagegi page is a normal HTML file that loads one script, the core, first in `<head>`. The platform adds saving, sharing, comments, presence, design systems and history around it. How to write a page is specified by the author skill in [`skills/pagegi-author/`](skills/pagegi-author/SKILL.md); its [HTTP API reference](skills/pagegi-author/references/http-api.md) is the server's public surface, and [`src/server/af-api-contracts.ts`](src/server/af-api-contracts.ts) is the same surface as TypeScript, with status codes.
 
-## Install and use
+## Run a server
 
-macOS / Linux:
-
-```sh
-curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh
-```
-
-Windows PowerShell:
-
-```powershell
-Invoke-RestMethod https://app.artifactbin.dev/chat/install.ps1 | Invoke-Expression
-```
-
-Run one command for your platform. It reuses supported Node/npm or installs official Node LTS for your user, then installs afbin and agent skills. Open a new terminal afterward. npm is the sole CLI distribution. For Node only: `curl -fsSL https://app.artifactbin.dev/chat/install-node.sh | bash` (reopen the terminal), or `Invoke-RestMethod https://app.artifactbin.dev/chat/install-node.ps1 | Invoke-Expression`. With Node ready, `npx --yes @afbin/cli@latest setup` works directly (PowerShell: `npx.cmd --yes @afbin/cli@latest setup`). Where PowerShell scripts are disabled, use `afbin.cmd`.
+The server needs Node.js 22.18+ and Postgres.
 
 ```sh
-afbin add report.jsx sales.csv --json
-afbin preview report.jsx
-afbin push report.jsx
-```
-
-Add assigns stable workspace-local IDs without uploading or signing in. Use `ref:ID` for datasets/media and `/a/ID` for navigation; artifact references reject local paths. Preview edits selected local source files without cloud access or credentials. Carry the project's `.artifactbin` directory with its files to preserve local identity, comments, history and recovery.
-
-Push explicitly publishes a separate copy with remote IDs, preserving the originals and their local references. Its mapping lets later pushes update that publication. Local preview continues independently after publication. The default remote host is `app.artifactbin.dev`; CLI browser approval permits guests, while direct HTTP authentication requires email.
-
-The package includes SQLite. Chromium is downloaded lazily when rendering requires it. Prepare an exact npm version and browser assets before disconnecting; warmed npm execution supports `--offline`, while a cold cache needs internet. Connected commands may show update notices, but never replace software automatically. `afbin update` installs the newer version.
-
-For downloaded `.jsx.html` files, **Save** or **Cmd/Ctrl+S** keeps edits and comments. Start an empty server with `afbin preview --port 7474`, then choose **Connect to server**. See [portable files and server connections](docs/editing.md#edit-a-downloaded-html-file) for Save behavior, Windows commands and remote preview servers.
-
-## Run your own server
-
-```sh
-afbin serve --dir ./artifactbin-data --owner-email owner@example.com --port 7445
-# After the owner signs in and confirms a company group in the browser,
-# in another terminal:
-afbin config set host http://app.lvh.me:7445
-afbin auth
-afbin add report.jsx --json
-afbin preview report.jsx
-afbin push report.jsx
-```
-
-The first command creates a company server with private persistent settings. Replace `owner@example.com` with the operator's email. Open the printed origin, sign in as that verified owner, create or select a group where you are an editor, and confirm deployment setup. Other accounts cannot join until this confirmation. Invite colleagues to that company group before they sign in; company admission is invite-only by default. A document share alone does not admit a colleague.
-
-Use the origin the server prints (`http://app.lvh.me:7445` by default). Approval and login must happen at that exact origin; `localhost` and `127.0.0.1` are different origins and fail with `approval_origin_mismatch`. `lvh.me` and its subdomains resolve to loopback; app and document origins need the same site for private document cookies.
-
-`serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. On startup it prints the host teammates set, Node helper links and npm setup for this host, and where login codes appear. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; SQLite still handles document queries.
-
-Use `--server URL` for one command without changing defaults. `afbin config set host https://app.artifactbin.dev` restores the cloud default. Client host credentials and defaults live under `~/.artifactbin`, separately from server data. Published IDs belong to their host/account; local IDs belong to the portable workspace.
-
-For trusted local collaboration, `afbin preview report.jsx --share` allows anyone who can reach that preview to edit/comment on its selected files. Use the authenticated server for persistent team hosting. [Docker Compose company hosting](deploy/company/README.md), [hosting details](docs/extraction/team.md), and [team on a network](docs/extraction/team.md#team-on-a-network) for what a shared host needs: an HTTPS public URL, a login method and the URL teammates type.
-
-## Develop
-
-Requires Node.js 22 and npm; the default PGLite setup needs no Docker.
-
-```sh
-git clone https://github.com/minusxai/artifactbin.git
-cd artifactbin
 npm ci
-npm run setup -- --yes
-npm run dev
+npm run build                     # builds dist/core.js, served at /af/v1/core.js
+export PAGEGI_DATABASE_URL=postgres://pagegi:password@localhost:5432/pagegi
+npm start                         # node src/server-main.js
 ```
 
-Open the public URL printed by setup: http://app.lvh.me:3030 by default. For another instance, use a separate checkout/data directory and `npm run setup -- --yes --port 7445`. Local login codes come from `npm run dev:otp -- your@email.example`; no mail provider is needed. See [CONTRIBUTING.md](CONTRIBUTING.md) for development and testing rules.
+`src/server-main.js` reads its settings through `src/config.js`:
+
+| Variable | Meaning |
+|---|---|
+| `PAGEGI_HOST`, `PAGEGI_PORT` | Where to listen (default `127.0.0.1:8787`). |
+| `PAGEGI_DATABASE_URL`, `PAGEGI_DATABASE_SCHEMA` | Postgres connection and schema (default `public`). |
+| `PAGEGI_PLATFORM_ORIGIN`, `PAGEGI_RUNNER_ORIGIN` | Public origin, and the per-page runner origin pattern such as `https://{document}.runner.example` (see Deployment). |
+| `PAGEGI_KNOWN_ORIGINS` | Comma-separated origins rewritten to this server when a page is saved, besides `https://pagegi.artifactbin.dev` and the earlier `https://artifactbin.dev`. |
+| `PAGEGI_RESEND_API_KEY`, `PAGEGI_EMAIL_FROM` | Email-code sign-in through Resend. |
+| `PAGEGI_PASSWORD_LOGIN` | `false` disables the password route (set it in production). |
+| `PAGEGI_TEST_LOGIN` | `1` enables `POST /api/auth/test-token` for development and tests only. |
+| `PAGEGI_BACKEND_EXECUTOR` and friends | Backend execution; see [`src/backend/README.md`](src/backend/README.md). |
+| `PAGEGI_SECRETS_KEY` | 32 bytes, base64 or hex (`openssl rand -base64 32`), that encrypt account secrets at rest: the values an account stores on its Account page or with `scripts/secrets.mjs`, which its backend lambdas read as `env`. Without it `/api/secrets` answers 503 and every lambda gets an empty `env`; set it in production. Changing it makes stored secrets unreadable. |
+
+Every file, page or backend, has one six-character ID. A page's address is `<origin>/a/<id>` (anything after the ID and a hyphen, such as a title, is ignored); it also opens at `<origin>/@<handle>/<path>` while it has that path in its owner's library and the owner has chosen that handle (on the Account page or `PUT /api/account/handle`; an email address is never part of an address), and at `<origin>/af/v1/ids/<id>`, which opens any file by ID. A page's address opens it in the hosted view; `?download=1` returns a file that works on its own (the core inlined, the design system embedded, the page's state kept in a `data-af="state"` block, and the server and version it came from recorded on the core tag). Opened from disk while that server is reachable, the file shows the same platform bar as the hosted view, reads the page's comments, warns when the server has a newer version, and its Connect button reuses your website sign-in, in a window on the server, to comment, share presence and call backends as in the hosted view; the platform frame it talks to keeps every credential on the server's origin, so downloads exclude account tokens and the hosted session. Without the server it keeps working: state stays in the browser and a "Download page" control saves the file again. A backend file's address, `<origin>/af/v1/ids/<id>`, shows its ID and version to its owner and is 404 for everyone else. The server also serves `/af/v1/core.js`, `/af/v1/design-systems/<name>.css` and, for downloaded files, `/runtime.js` and `/platform-frame`.
+
+Presence settings are private to the reader’s browser on that origin and survive reopening a page. Showing other cursors or selections is independent from sharing your own; these choices are not part of document state or exported HTML. If browser storage is unavailable, they apply for the current session.
+
+## Install the author skill
+
+One command installs the skill for every coding agent on the machine (Claude Code always; Codex, Pi and OpenCode when they are installed), replacing an older copy:
 
 ```sh
-npm run validate
-npm test
+curl -fsSL https://pagegi.artifactbin.dev/install.sh | sh
 ```
 
-The local test wrapper runs affected tests within its file budget; broader suites, Docker and browser gates run in PR CI. A deferred local suite is not a pass.
+The script downloads `/skills/pagegi-author.tgz` from the server it came from and extracts it into each harness's skills folder (`~/.claude/skills`, `~/.agents/skills`, `~/.pi/agent/skills`, `~/.config/opencode/skills`). Restart the agent so it loads the skill. A self-hosted server serves its own `/install.sh`; its scripts then need `AF_SERVER` set to that server's origin for every script, including `auth.mjs`, which saves its token per server, since they default to `https://pagegi.artifactbin.dev`. The signed-in home page's "New page" button gives the same instructions as text to paste into an agent.
 
-## Modules and documentation
+## Signing in
 
-`services/cli` owns commands and local state; `services/app` owns the reader/editor and artifact APIs; `services/auth`, `services/sql`, `services/browser`, `services/events`, `services/runner`, `services/contracts` and `services/utils` provide shared capabilities. `afbin serve` composes the app services; lambdas use a separate runner. Source development includes a local runner.
+People sign in with an email code: `POST /api/auth/email/request` with `{ email }`, then `POST /api/auth/email/verify` with `{ email, code }`, which returns `{ token, username }`. The home page at `/` uses the same flow and keeps the session in an HttpOnly cookie. Account tokens never belong in a page, and page scripts never run on the platform origin.
 
-[CLI reference](services/cli/README.md) · [Document format](docs/document-format.md) · [Editing](docs/editing.md) · [Operations](docs/operations.md) · [Security](docs/serving-and-security.md) · [Ownership](docs/ownership.md)
+### Tokens for agent harnesses
 
-[OSS feature setup and first document](docs/oss-onboarding.md) · [Lambdas and schedules](services/runner/README.md) · [Remote review](docs/remote-review.md)
+A test harness can skip the email step. Start the server with `PAGEGI_TEST_LOGIN=1` (or `testLogin: true` in `createService`), mint a token, and give the agent the server and token. The exact local start, from a checkout, against the development Postgres below (the server creates its schema if it is missing; give each run its own schema and port):
 
-[Apache-2.0](LICENSE). Third-party license files remain with their runtime packages; the pinned Node runtime release includes its license.
+```sh
+npm ci
+npm run build                     # dist/core.js and the hosted runtime
+npm run build:backend             # only for pages with backend files (Docker)
+PAGEGI_TEST_LOGIN=1 \
+PAGEGI_DATABASE_URL=postgres://pagegi:pagegi-local@127.0.0.1:55432/pagegi \
+PAGEGI_DATABASE_SCHEMA=harness_1 \
+PAGEGI_PORT=8787 \
+PAGEGI_BACKEND_EXECUTOR=docker \
+node src/server-main.js &         # prints {"server":"http://127.0.0.1:8787"}
+SERVER_PID=$!
+TOKEN=$(curl -s -X POST http://127.0.0.1:8787/api/auth/test-token \
+  -H 'Content-Type: application/json' -d '{"email":"agent@example.test"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).token')
+AF_SERVER=http://127.0.0.1:8787 AF_TOKEN=$TOKEN your-agent
+kill $SERVER_PID                  # stop only the server this run started
+```
 
-The app root is the authenticated workspace. Logged-out visits redirect to `/login`. Marketing, examples, and hosted-service legal pages belong to the separate `artifactbin-web` repository and are not included in this toolkit.
+The agent then follows the skill: `node skills/pagegi-author/scripts/add.mjs …` reserves IDs, `POST /api/publish` publishes, pages open at `$AF_SERVER/a/<id>`, and `scripts/shot.mjs` loads the core from `AF_SERVER`. Leave out `PAGEGI_BACKEND_EXECUTOR` when no page links a backend.
+
+`POST /api/auth/test-token` with `{ email }` creates the account if needed and returns a normal session `{ token, username }`; with `browserSession: true` (same origin only) it sets the session cookie instead, like email sign-in. The route is 404 unless test login is enabled, and the server refuses to start with test login when `NODE_ENV=production`. The email-code flow stays the documented way to sign in.
+
+## Publishing, saving and comments
+
+`POST /api/publish` with `{ source, files?, requestId }` publishes a page and returns `{ id, version, url, path, source }`. The server adds the core tag if it is missing, rewrites known hosts to its own origin, gives every element in `<body>` a stable `data-af-id`, and writes `id`, `version` and `nextNodeId` into the page's `data-af="meta"` block; `source` in the response is the page exactly as saved. A page whose meta block names an ID the publisher reserved with `POST /api/ids` is published under that ID. Repeating a publish with the same `requestId` returns the first result.
+
+`PUT /api/files/:id/source` with `{ source }` and `If-Match: <version>` saves the next version; a stale version is `409` with the current `version`, and a missing `If-Match` is `428`. Removed node IDs are never reassigned. Linked backend files (`<link rel="af-backend">`) are published with the page through `files`; a page and its backend versions commit together.
+
+Comments, their context (the page version and state the commenter saw), sharing and paths work on six-character IDs; see the HTTP API reference. Top-level state written through `@afbin/apollo` belongs to each viewer (kept in their browser, never shared); data viewers share goes through backend files and their stores.
+
+## Deployment
+
+Configure `PAGEGI_PLATFORM_ORIGIN=https://platform.example` and `PAGEGI_RUNNER_ORIGIN=https://{document}.runner.example`. Route both hosts to this service and provision TLS for the runner subdomains; the runner domain must be separate from the platform host. Each page runs in its own runner origin (the label is the page ID in lowercase hex, since host names are case-insensitive). In local development the service starts a separate loopback runner port per page.
+
+The `Dockerfile` builds the image and runs `node src/server-main.js` on `0.0.0.0:8787`; [`compose.yaml`](compose.yaml) runs it with Postgres and the backend execution service, the same image started as `node src/backend/execution-main.ts`. Only that service gets the host's Docker socket, to create the sandbox containers backend files run in; see [`deploy/execution-service.md`](deploy/execution-service.md).
+
+This release is a clean break from the earlier 12-character document IDs, `/d/` and `/f/` addresses, the `pagegi` CLI and CLI pairing: start it on an empty database.
+
+## Development and tests
+
+```sh
+npm run validate      # TypeScript and architectural policy checks
+npm test              # pure tests: no browser, server, database or network
+```
+
+Database, browser and isolate tests need a disposable Postgres (default `postgres://pagegi:pagegi-local@127.0.0.1:55432/pagegi`; each test creates and drops its own schema), Playwright browsers and Docker:
+
+```sh
+docker run -d --name pagegi-postgres-dev -e POSTGRES_USER=pagegi -e POSTGRES_PASSWORD=pagegi-local -e POSTGRES_DB=pagegi -p 127.0.0.1:55432:5432 postgres:17-bookworm
+npx playwright install chromium firefox webkit
+npm run build:backend
+npm run test:local       # also test:database, test:browser, test:isolate
+npm run test:v2:all      # only the acceptance tests in test/v2, read straight from the skill
+npm run check            # validation and every stage
+```
+
+Every stage includes `test/v2`. Browser journeys are ordinary `*.browser.test.js` files in the browser stage.
+
+Define or update TypeScript interfaces first, write failing behavioral tests against them, then implement. See [the fast development loop](docs/development-validation.md) and [CI policy](docs/ci-policy.md).

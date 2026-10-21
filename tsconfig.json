@@ -1,45 +1,21 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
-    "allowJs": true,
-    "skipLibCheck": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
-    "jsxImportSource": "solid-js",
-    "incremental": true,
-    "tsBuildInfoFile": "node_modules/.cache/tsc/root.tsbuildinfo",
-    "paths": {
-      "@/*": [
-        "./services/app/*"
-      ],
-      "lucide-solid": [
-        "./services/app/solid/lucide-solid.d.ts"
-      ]
-    },
-    "types": [
-      "vitest/globals",
-      "node"
-    ],
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noUncheckedSideEffectImports": true
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ],
-  "exclude": [
-    "node_modules"
+    "src/**/*.ts",
+    "src/home.js",
+    "test/**/*.ts",
+    "scripts/testing/**/*.ts",
+    "scripts/ci/**/*.ts"
   ]
 }

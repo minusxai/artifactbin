@@ -1,0 +1,105 @@
+/*
+ * design-systems/nocturne.css
+ *
+ * A long read at night: a midnight background, cream type with generous spacing, and one pool of amber light where attention goes.
+ * Suits: essays and long features, culture and evening subjects, reports meant to be read slowly.
+ * Avoid for: operational tools, dense tables, anything read quickly or in daylight on a phone.
+ * Fonts: installed system faces only, nothing is downloaded: Iowan Old Style or Georgia for display, Iowan Old Style or Georgia for text, the system monospace for code, Trajan Pro or Optima for small capitals. Opens in dark mode.
+ *
+ * The core loads this file when <html data-af-design-system="nocturne">.
+ */
+:root[data-af-design-system="nocturne"] {
+  /* Grounds */
+  --ds-night: #f3e7ca; /* Page ground: midnight by night; by day, lamplit cream. */
+  --ds-night-raised: #faf1dc; /* Panels, cards and the lit stone of a panel. */
+  --ds-night-sunk: #e9dbb9; /* Wells, code, the unlit cells. */
+  --ds-line: #d3b98b; /* Hairline rules and quiet borders. */
+  /* Ink */
+  --ds-ink: #1d170f; /* Primary text: cream on night, ink on cream. */
+  --ds-ink-soft: #4a3d2c; /* Standfirsts and secondary reading text. Cool blue by night. */
+  --ds-ink-muted: #8a7a60; /* Captions, folios, placeholders. */
+  /* Brand */
+  --ds-lamp: #9a5a12; /* The brand: lamplight amber. Links, the lit cell, the one figure that glows, the primary action. */
+  --ds-on-lamp: #fff6e4; /* Text on lamp fills. */
+  --ds-lamp-hot: #b8661f; /* The hot centre of the lamp: the italic phrase in a headline, the filament. */
+  --ds-lamp-soft: #f3e5c2; /* Ground for highlighted rows and the halo behind a lit thing. */
+  --ds-ember: #b8551a; /* The accent: the lamp itself, the focus ring, the comparison series. */
+  --ds-on-ember: #fff6e4; /* Text on ember fills. */
+  --ds-cool: #3a5a8a; /* The cool counterweight: the second drawing fill, the second chart series, the sky wash. */
+  /* Status */
+  --ds-positive: #2b5a45; /* Open, continued, confirmed. Always with a word. */
+  --ds-positive-soft: #dcebe1; /* Ground for positive rows. */
+  --ds-caution: #8a5a00; /* Small sample, provisional, late. The lamp, slightly cooler. */
+  --ds-caution-soft: #f3e5c2; /* Ground for caveats. */
+  --ds-negative: #8a2d1c; /* Closed, declined, failed. Rust. */
+  --ds-negative-soft: #f4dcd8; /* Ground for negative rows. */
+  /* Standard names */
+  --background: var(--ds-night);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-night-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-night-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-lamp);
+  --primary-foreground: var(--ds-on-lamp);
+  --secondary: var(--ds-lamp-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-night-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-night-raised);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-night);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-ember);
+  --chart-1: var(--ds-lamp);
+  --chart-2: var(--ds-cool);
+  --chart-3: var(--ds-ember);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-ink-muted);
+  --radius: 2px;
+  --halo: 0 0 0 1px #d3b98b;
+  --glow-text: none;
+  --chip-radius: 999px;
+  /* Fonts */
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-sans: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --font-caps: "Trajan Pro", Optima, "Palatino Linotype", Georgia, serif;
+}
+:root[data-af-design-system="nocturne"][data-af-dark="true"] {
+  --ds-night: #050818;
+  --ds-night-raised: #111940;
+  --ds-night-sunk: #02040f;
+  --ds-line: #2a3568;
+  --ds-ink: #ece6d6;
+  --ds-ink-soft: #b9c8ee;
+  --ds-ink-muted: #8d98c0;
+  --ds-lamp: #ffc76e;
+  --ds-on-lamp: #1a1206;
+  --ds-lamp-hot: #ffe2a8;
+  --ds-lamp-soft: #241d30;
+  --ds-ember: #ff9440;
+  --ds-on-ember: #1a0e04;
+  --ds-cool: #b9c8ee;
+  --ds-positive: #6fcf97;
+  --ds-positive-soft: #10291e;
+  --ds-caution: #ffd27a;
+  --ds-caution-soft: #2e2306;
+  --ds-negative: #ff7a5c;
+  --ds-negative-soft: #3a1412;
+  --halo: 0 0 28px rgba(255,199,110,.32);
+  --glow-text: 0 0 30px rgba(255,170,70,.45);
+}
+/* Text styles */
+:root[data-af-design-system="nocturne"] .t-display-xl { font-family: var(--font-display); font-size: clamp(48px, 7.5vw, 104px); line-height: .92; font-weight: 300; letter-spacing: -0.03em; } /* One per page. The text serif, light, at display size; the emphasised phrase goes italic in lamp-hot. */
+:root[data-af-design-system="nocturne"] .t-display-l { font-family: var(--font-display); font-size: clamp(32px, 4.5vw, 56px); line-height: 1; font-weight: 300; letter-spacing: -0.02em; } /* Section openers and chapter heads. */
+:root[data-af-design-system="nocturne"] .t-display-italic { font-family: var(--font-display); font-size: clamp(32px, 4.5vw, 56px); line-height: 1; font-weight: 400; letter-spacing: -0.02em; } /* The emphasised phrase inside a headline, in lamp-hot with the text glow. */
+:root[data-af-design-system="nocturne"] .t-caps { font-family: var(--font-caps); font-size: 12px; line-height: 18px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; } /* Kickers, chapter marks, folios. The capitals face, widely tracked, with a 34px rule before it. */
+:root[data-af-design-system="nocturne"] .t-title { font-family: var(--font-display); font-size: 24px; line-height: 30px; font-weight: 500; } /* Panel and figure titles. */
+:root[data-af-design-system="nocturne"] .t-body-l { font-family: var(--font-sans); font-size: 21px; line-height: 34px; font-weight: 300; } /* Standfirsts and lead paragraphs. Light weight, long leading. */
+:root[data-af-design-system="nocturne"] .t-body { font-family: var(--font-sans); font-size: 18px; line-height: 30px; font-weight: 400; font-variant-numeric: oldstyle-nums proportional-nums; } /* Reading text, oldstyle numerals. Long reading is the point. */
+:root[data-af-design-system="nocturne"] .t-note { font-family: var(--font-sans); font-size: 15px; line-height: 22px; font-weight: 400; } /* Marginalia, figure notes, asides. */
+:root[data-af-design-system="nocturne"] .t-label { font-family: var(--font-mono); font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; } /* HUD counters, captions, table heads. Mono caps, small. */
+:root[data-af-design-system="nocturne"] .t-numeral { font-family: var(--font-mono); font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; } /* Figures. Tabular; lamp when it is the one that glows. */

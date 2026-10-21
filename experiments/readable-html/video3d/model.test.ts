@@ -1,0 +1,4 @@
+import {test} from 'node:test'; import assert from 'node:assert/strict';
+import {poseAt,frameAt,ROAD_Y,WHEEL_RADIUS} from './model.ts';
+test('all 288 frames remain on the lane and point along its tangent',()=>{for(let i=0;i<288;i++){const {pose}=frameAt(i); assert.ok(Math.abs(pose.x**2/64+pose.z**2/25-1)<1e-10); const t=.38+i/287*Math.PI*1.65; const p=poseAt(t),q=poseAt(t+1e-6); const heading=Math.atan2(q.x-p.x,q.z-p.z); assert.ok(Math.abs(Math.atan2(Math.sin(heading-p.yaw),Math.cos(heading-p.yaw)))<2e-6); }});
+test('seeking is pure, end points and invalid inputs explicit',()=>{const before=frameAt(71);frameAt(287);frameAt(0);assert.deepEqual(frameAt(71),before);assert.equal(frameAt(0).phase,0);assert.equal(frameAt(287).phase,2);for(const i of [-1,288,NaN,1.2])assert.throws(()=>frameAt(i));});

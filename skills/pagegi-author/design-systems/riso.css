@@ -1,0 +1,108 @@
+/*
+ * design-systems/riso.css
+ *
+ * Printed, not rendered: three fluorescent inks over a navy key, each slightly misregistered, on grainy uncoated paper.
+ * Suits: scrolly stories, picture-book explainers, chaptered long reads, posters and zines, warm launch pages.
+ * Avoid for: dense dashboards, institutional or legal subjects, neutral or UI-heavy apps.
+ * Fonts: installed system faces only, nothing is downloaded: Iowan Old Style or Georgia for display, Iowan Old Style or Georgia for text, the system monospace for code. Opens in light mode.
+ *
+ * The core loads this file when <html data-af-design-system="riso">.
+ */
+:root[data-af-design-system="riso"] {
+  /* Grounds */
+  --ds-paper: #F3ECDC; /* Page ground: uncoated stock. In Night the key plate becomes the page. */
+  --ds-sheet: #FBF6EA; /* Cards, step cards, proofs: a whiter sheet laid on the paper. */
+  --ds-paper-sunk: #E8DFC6; /* Wells, code, inactive tracks, table stripes. */
+  --ds-manila: #F1DFA6; /* Luggage tags and folio stock: physical card, the same in both modes. Text on it is on-yellow. */
+  --ds-line: #CFC5AD; /* Hairlines and quiet borders. The 2px key edge is the real border. */
+  /* Ink */
+  --ds-key: #1C2340; /* The key plate: text, edges, hard shadows. Every other ink sits on top of it. */
+  --ds-key-2: #3A3F5C; /* Secondary text, imprints, captions. */
+  /* Inks */
+  --ds-blue: #0078BF; /* Ink 1. Primary actions, the first series, the headline colour. */
+  --ds-on-blue: #FBF6EA; /* Text on blue. */
+  --ds-blue-soft: #CFE6F5; /* Ground for blue tags and selected rows. */
+  --ds-pink: #FF48B0; /* Ink 2. Fluorescent; the second series, the slipped plate behind a headline, badges. */
+  --ds-on-pink: #1C2340; /* Text on pink. */
+  --ds-pink-soft: #FFD3EA; /* Ground for pink tags and info callouts. */
+  --ds-yellow: #FFE800; /* Ink 3. Highlighter and ticker ground; never text, never a line. */
+  --ds-on-yellow: #1C2340; /* Text on yellow. */
+  /* Status */
+  --ds-positive: #00875A; /* Success text and the kept share, always with a word or a pip. */
+  --ds-positive-soft: #CDEEDD; /* Ground for success callouts and positive tags. */
+  --ds-caution: #8A6D00; /* Warnings as text: a dark ochre on paper, the yellow itself at night. */
+  --ds-caution-soft: #FFF3A0; /* Ground for warning callouts. */
+  --ds-negative: #E8322B; /* Errors and the lost share. A printer’s red, not pink. */
+  --ds-negative-soft: #FFD6D3; /* Ground for error callouts. */
+  /* Standard names */
+  --background: var(--ds-paper);
+  --foreground: var(--ds-key);
+  --card: var(--ds-sheet);
+  --card-foreground: var(--ds-key);
+  --popover: var(--ds-sheet);
+  --popover-foreground: var(--ds-key);
+  --primary: var(--ds-blue);
+  --primary-foreground: var(--ds-on-blue);
+  --secondary: var(--ds-yellow);
+  --secondary-foreground: var(--ds-on-yellow);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-key-2);
+  --accent: var(--ds-pink-soft);
+  --accent-foreground: var(--ds-key);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-paper);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-pink);
+  --chart-1: var(--ds-blue);
+  --chart-2: var(--ds-pink);
+  --chart-3: var(--ds-yellow);
+  --chart-4: var(--ds-key-2);
+  --chart-5: var(--ds-positive);
+  --radius: 0px;
+  --shadow-hard: 6px 6px 0 0 #1C2340;
+  --shadow-hard-lg: 9px 9px 0 0 #1C2340;
+  --chip-radius: 0;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* Fonts */
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-sans: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-af-design-system="riso"][data-af-dark="true"] {
+  --ds-paper: #1C2340;
+  --ds-sheet: #263054;
+  --ds-paper-sunk: #151b33;
+  --ds-manila: #F1DFA6;
+  --ds-line: #3A4470;
+  --ds-key: #F3ECDC;
+  --ds-key-2: #B9BED6;
+  --ds-blue: #2E9BE8;
+  --ds-on-blue: #1C2340;
+  --ds-blue-soft: #173555;
+  --ds-pink: #FF48B0;
+  --ds-on-pink: #1C2340;
+  --ds-pink-soft: #4A1E3A;
+  --ds-yellow: #FFE800;
+  --ds-on-yellow: #1C2340;
+  --ds-positive: #2FD27E;
+  --ds-positive-soft: #0F3A26;
+  --ds-caution: #FFE800;
+  --ds-caution-soft: #3A3400;
+  --ds-negative: #FF6B61;
+  --ds-negative-soft: #4A1512;
+  --shadow-hard: 6px 6px 0 0 #FF48B0;
+  --shadow-hard-lg: 9px 9px 0 0 #FF48B0;
+}
+/* Text styles */
+:root[data-af-design-system="riso"] .t-display-xl { font-family: var(--font-display); font-size: clamp(64px, 12vw, 160px); line-height: .82; font-weight: 900; letter-spacing: -0.045em; } /* One per page. The chapter word, the cover word. Soft, wonky, enormous. */
+:root[data-af-design-system="riso"] .t-display-l { font-family: var(--font-display); font-size: clamp(40px, 6.4vw, 84px); line-height: .9; font-weight: 900; letter-spacing: -0.03em; } /* Section openers and plate titles. */
+:root[data-af-design-system="riso"] .t-display-m { font-family: var(--font-display); font-size: 40px; line-height: 40px; font-weight: 900; letter-spacing: -0.02em; } /* Tag titles, stat blocks, page titles. */
+:root[data-af-design-system="riso"] .t-title { font-family: var(--font-display); font-size: 24px; line-height: 28px; font-weight: 900; letter-spacing: -0.01em; } /* Card and step titles. */
+:root[data-af-design-system="riso"] .t-deck { font-family: var(--font-display); font-size: clamp(20px, 2vw, 26px); line-height: 1.25; font-weight: 500; } /* The italic line under a headline, chapter subtitles, pull quotes. */
+:root[data-af-design-system="riso"] .t-body-l { font-family: var(--font-sans); font-size: 20px; line-height: 1.5; font-weight: 500; } /* Step cards and lead paragraphs. The serif at 500 reads at length. */
+:root[data-af-design-system="riso"] .t-body { font-family: var(--font-sans); font-size: 17px; line-height: 1.55; font-weight: 500; } /* Default reading and UI text. */
+:root[data-af-design-system="riso"] .t-body-s { font-family: var(--font-sans); font-size: 14px; line-height: 1.45; font-weight: 500; } /* Captions, imprints, helper text. */
+:root[data-af-design-system="riso"] .t-label { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 400; letter-spacing: 0.09em; text-transform: uppercase; } /* Eyebrows, folios, tag facts, running heads. Caps from CSS. */
+:root[data-af-design-system="riso"] .t-numeral { font-family: var(--font-mono); font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; } /* KPI figures and the numbers inside doors. Tabular. */
+:root[data-af-design-system="riso"] .t-mono { font-family: var(--font-mono); font-size: 13px; line-height: 20px; font-weight: 400; } /* Code, IDs, table figures. */

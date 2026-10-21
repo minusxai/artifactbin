@@ -1,0 +1,1 @@
+{"compilerOptions":{"target":"ES2022","module":"NodeNext","moduleResolution":"NodeNext","noEmit":true,"strict":true,"allowImportingTsExtensions":true,"skipLibCheck":true,"lib":["ES2022","DOM"]},"include":["contracts.ts","model.ts","fixture.ts","model.test.ts"]}

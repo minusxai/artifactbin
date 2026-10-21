@@ -1,0 +1,18 @@
+import {createStore} from '../graphql/store.ts';
+import {createServer,createReplica,enqueue,optimistic,applyOperation,reconcile} from '../replication/model.ts';
+import type {ClientProof} from './client-contracts.ts';
+const store=createStore({sdl:'type Query { count:Int! } type Mutation { set(value:Int!):Int! }',version:1,initial:{count:0},queries:{count:s=>s.count},mutations:{set:(s,a)=>s.count=a.value}});
+const historical=store.snapshot();const observed:number[]=[];
+const label=document.createElement('output');document.body.append(label);
+const offA=store.watch('{count}',r=>{label.textContent=String(r.data?.count)});
+const offB=store.watch('{count}',r=>{observed.push(r.data?.count as number)});
+let replica=createReplica(createServer());
+replica=enqueue(replica,{id:'browser-command',epoch:1,schema:1,baseVersion:0,key:'count',value:5,expiresAt:100});
+store.mutate('mutation($n:Int!){set(value:$n)}',{n:optimistic(replica).data.count});
+const result=applyOperation(createServer(),replica.pending[0],{canWrite:false},1);
+replica=reconcile(replica,result.server,[result.receipt]);
+store.mutate('mutation{set(value:0)}');
+const rejected=!!store.query('mutation{set(value:7)}').errors;
+offA();offB();store.mutate('mutation{set(value:2)}');store.dispose();
+window.phaseClientProof={observed,rejected,queued:replica.pending.length,confirmed:replica.confirmed.version,history:(historical.state as {count:number}).count,disposed:!!store.query('{count}').errors};
+if(label.textContent!=='0')throw Error('Disposed DOM subscription changed');

@@ -1,0 +1,11 @@
+# Host connector capability probe
+
+Run `node --test experiments/readable-html/connectors/connector.test.mjs` from the repository root. Requires the same disposable PostgreSQL service as repository tests; each run creates and removes a random schema using `test/postgres.js`. No external credentials or deployment required.
+
+`contracts.ts` defines the interface before the implementation; `host.mjs` implements it and `host.d.mts` publishes its TypeScript surface. Bindings are trusted deployment configuration. Invocation caller context is authenticated by the host and captured before any async work. Isolates supply only binding ID, operation ID and bounded JSON input. Operation functions inject tenant IDs into static parameterized SQL. This probe does not expose raw SQL, arbitrary URLs, caller-supplied authentication headers, connections, or secrets to app code.
+
+Defaults: 1 second per operation/transaction, 64 KiB JSON, depth 32, at most 100 operations per transaction, 16 active invocations and 16 outstanding pool acquisitions. A host-wide pool is shared; deployment must configure connection acquisition timeout. Cancellation destroys a checked-out client; late checkout after cancellation is destroyed too. Shutdown aborts active work and drains owned pools. The host owns pools, so do not share them with an unrelated service that outlives it.
+
+All connector failures conservatively carry `outcome: 'unknown'`. In particular, a lost COMMIT or HTTP response does not prove the write rolled back. There are no automatic retries. A mutation requiring retry must have an operation ID and durable idempotency receipt in the transaction at the application/replication layer. Errors contain stable codes, not provider messages or credentials.
+
+Only host-configured HTTP paths are permitted, redirects are rejected, response bodies are bounded, and identity is injected separately from input. Local HTTP is used by tests; deployments configure HTTPS endpoints and keep credentials server-side. HTTP credential transport TLS and arbitrary database drivers are not claimed by a localhost probe. The selected shipping contract is HTTP JSON + PostgreSQL via host-managed node-postgres, not “every database driver can run in an isolate.”

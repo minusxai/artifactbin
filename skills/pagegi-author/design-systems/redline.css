@@ -1,0 +1,94 @@
+/*
+ * design-systems/redline.css
+ *
+ * A poster that makes a decision: one condensed word filling the surface, one big number, one red. Paper, red and ink surfaces alternate.
+ * Suits: decision briefs, launch and campaign pages, one-page proposals, posters.
+ * Avoid for: long reading, dashboards with many numbers, subjects that need warmth or several colours.
+ * Fonts: installed system faces only, nothing is downloaded: Avenir Next Condensed or Impact for display, the system sans for text, the system monospace for code. Opens in light mode.
+ *
+ * The core loads this file when <html data-af-design-system="redline">.
+ */
+:root[data-af-design-system="redline"] {
+  /* Grounds */
+  --ds-paper: #EEEADE; /* Page ground and the paper slide surface. */
+  --ds-paper-raised: #F6F3EA; /* Cards, fields, the paper stage inside an ink page. */
+  --ds-paper-sunk: #E2DDCC; /* Wells, tracks, table stripes, off dots. */
+  --ds-line: #C9C3B0; /* Hairline rules: list rows, footers, the slide foot. */
+  /* Ink */
+  --ds-ink: #20201D; /* Type, rules, the ink slide surface, the ink half of the split bar. */
+  --ds-ink-soft: #5C5A52; /* Secondary text, captions, muted eyebrows. */
+  --ds-on-ink: #EEEADE; /* Type on an ink surface. */
+  /* Brand */
+  --ds-red: #EC402B; /* The one colour. The red slide surface, the primary button, the accent half of a bar, the on dots. Unchanged in Night. */
+  --ds-on-red: #20201D; /* Type on red: ink, never paper, so red surfaces stay printed, not glowing. */
+  --ds-red-ink: #C8321F; /* Red as text on paper: one word in a headline, a link, a delta. */
+  --ds-red-soft: #F9D5CF; /* Ground for selected rows and red callouts; text on it is ink. */
+  /* Status */
+  --ds-positive: #2A9D5C; /* Up, done, approved. Always with a word or a glyph. */
+  --ds-positive-soft: #D7EFE0; /* Ground for success callouts. */
+  --ds-caution: #B8841A; /* Pending, waiting, at capacity. */
+  --ds-caution-soft: #FAECC9; /* Ground for warning callouts. */
+  --ds-negative: #EC402B; /* Down, failed, refused. The same red: errors are loud, there is one red. */
+  --ds-negative-soft: #F9D5CF; /* Ground for error callouts. */
+  /* Standard names */
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-red);
+  --primary-foreground: var(--ds-on-red);
+  --secondary: var(--ds-ink);
+  --secondary-foreground: var(--ds-on-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-soft);
+  --accent: var(--ds-red-soft);
+  --accent-foreground: var(--ds-red-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-red);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-red);
+  --chart-1: var(--ds-red);
+  --chart-2: var(--ds-ink);
+  --chart-3: var(--ds-ink-soft);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --radius: 0px;
+  --chip-radius: 0px;
+  /* Fonts */
+  --font-display: "Avenir Next Condensed", Impact, "Arial Narrow", sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-af-design-system="redline"][data-af-dark="true"] {
+  --ds-paper: #20201D;
+  --ds-paper-raised: #2A2A26;
+  --ds-paper-sunk: #171715;
+  --ds-line: #3D3D37;
+  --ds-ink: #EEEADE;
+  --ds-ink-soft: #B3B0A3;
+  --ds-on-ink: #20201D;
+  --ds-red: #EC402B;
+  --ds-on-red: #20201D;
+  --ds-red-ink: #FF6A55;
+  --ds-red-soft: #4A1D17;
+  --ds-positive: #5EC98A;
+  --ds-positive-soft: #143524;
+  --ds-caution: #F0BD57;
+  --ds-caution-soft: #42310A;
+  --ds-negative: #EC402B;
+  --ds-negative-soft: #4A1D17;
+}
+/* Text styles */
+:root[data-af-design-system="redline"] .t-display-xl { font-family: var(--font-display); font-size: clamp(80px, 18vw, 240px); line-height: .82; font-weight: 700; letter-spacing: -0.025em; text-transform: uppercase; } /* The cover word. One per deck or page; it may run off the stage. */
+:root[data-af-design-system="redline"] .t-display-l { font-family: var(--font-display); font-size: clamp(48px, 7.5vw, 104px); line-height: .9; font-weight: 700; letter-spacing: -0.025em; text-transform: uppercase; } /* Slide titles and section openers. */
+:root[data-af-design-system="redline"] .t-display-m { font-family: var(--font-display); font-size: 44px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em; text-transform: uppercase; } /* Page titles, big labels beside a number. */
+:root[data-af-design-system="redline"] .t-title { font-family: var(--font-display); font-size: 24px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; text-transform: uppercase; } /* Card titles, list heads, feature titles. */
+:root[data-af-design-system="redline"] .t-body-l { font-family: var(--font-sans); font-size: 19px; line-height: 1.5; font-weight: 400; } /* Decks and the one sentence under a number. */
+:root[data-af-design-system="redline"] .t-body { font-family: var(--font-sans); font-size: 16px; line-height: 1.55; font-weight: 400; } /* Reading and interface text. */
+:root[data-af-design-system="redline"] .t-body-s { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 400; } /* Captions, sources, the slide foot. */
+:root[data-af-design-system="redline"] .t-label { font-family: var(--font-mono); font-size: 11px; line-height: 16px; font-weight: 400; letter-spacing: 0.09em; text-transform: uppercase; } /* Eyebrows, toplines, list numbers, stamp text. Mono caps through CSS. */
+:root[data-af-design-system="redline"] .t-numeral { font-family: var(--font-display); font-size: 64px; line-height: 56px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; } /* KPI figures and the giant slide number. Condensed, tabular. */
+:root[data-af-design-system="redline"] .t-mono { font-family: var(--font-mono); font-size: 13px; line-height: 20px; font-weight: 400; } /* Code, ratios, list figures. */

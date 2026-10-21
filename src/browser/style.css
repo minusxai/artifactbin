@@ -1,0 +1,410 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr);
+  background: var(--pg-bg);
+}
+#pg-bar {
+  position: relative;
+}
+#pg-status {
+  flex: 1;
+  min-width: 0;
+  color: var(--pg-muted);
+  font: 11px var(--pg-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#pg-frame {
+  border: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+#pg-layer,
+#pg-cursors {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+#pg-people {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 16px;
+  padding-right: 16px;
+  border-right: 1px solid var(--pg-edge);
+}
+.pg-person {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+}
+.pg-person .pg-face {
+  width: 24px;
+  height: 24px;
+}
+.pg-rail {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 60px;
+  overflow-y: auto;
+  pointer-events: none;
+  scrollbar-width: thin;
+}
+.pg-pin {
+  position: absolute;
+  pointer-events: auto;
+  border-radius: 50% 50% 50% 3px;
+  width: 36px;
+  height: 36px;
+  padding: 0 7px;
+  right: 12px;
+  justify-content: flex-start;
+  background: var(--pg-raised);
+  border: 1px solid transparent;
+  box-shadow: 0 4px 6px -1px #0002;
+  z-index: 3;
+}
+.pg-pin .pg-face {
+  width: 22px;
+  height: 22px;
+  font-size: 9px;
+}
+.pg-pin[data-count] {
+  width: 44px;
+}
+.pg-pin[data-count="many"] {
+  width: 48px;
+}
+.pg-resolved-toggle {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  pointer-events: auto;
+  z-index: 3;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--pg-raised);
+  border: 1px solid transparent;
+  box-shadow: 0 4px 6px -1px #0002;
+  font-size: 12px;
+}
+.pg-count {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font: 700 10px var(--pg-mono);
+}
+.pg-bubble {
+  position: fixed;
+  pointer-events: auto;
+  z-index: 2;
+  width: 288px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 68px);
+  overflow: auto;
+  color: var(--pg-fg);
+  background: var(--pg-comment);
+  border: 1px solid var(--pg-edge-bright);
+  border-radius: 5px;
+  padding: 10px 12px;
+  box-shadow:
+    0 20px 25px -5px #0002,
+    0 8px 10px -6px #0002;
+}
+/* Hover previews leave pins clickable; an open card owns its controls. */
+.pg-bubble:has(.pg-close:not([hidden])) {
+  z-index: 4;
+}
+.pg-bubble[data-expanded="false"] {
+  min-height: 108px;
+}
+.pg-bubble header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 4px;
+}
+.pg-comment-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font: 600 11px/16px var(--pg-sans);
+  flex: 1;
+}
+.pg-comment-author strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+.pg-comment-author .pg-person {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.pg-comment-author .pg-face {
+  width: 22px;
+  height: 22px;
+  font-size: 9px;
+}
+.pg-comment-author time {
+  font: 400 10px/14px var(--pg-mono);
+  color: var(--pg-muted);
+  white-space: nowrap;
+  margin-left: auto;
+}
+.pg-bubble .pg-close {
+  min-height: 24px;
+  width: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  flex-shrink: 0;
+}
+.pg-close svg {
+  width: 13px;
+  height: 13px;
+}
+.pg-message {
+  padding-top: 6px;
+}
+.pg-message + .pg-message {
+  padding-top: 12px;
+}
+.pg-message p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 14px/1.375 var(--pg-sans);
+  margin: 4px 0;
+}
+.pg-bubble[data-expanded="false"] .pg-message > p:first-of-type {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pg-comment-sync {
+  font: 10px/14px var(--pg-mono) !important;
+  color: var(--pg-muted);
+}
+.pg-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.pg-actions button {
+  min-height: 24px;
+  border: 0;
+  background: transparent;
+  padding: 0 4px;
+  font: 10px var(--pg-mono);
+  gap: 4px;
+}
+.pg-actions button:hover {
+  background: var(--pg-raised);
+  color: var(--pg-accent);
+}
+.pg-continuation {
+  font: 10px/14px var(--pg-mono);
+  color: var(--pg-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pg-participants {
+  display: flex;
+  padding-left: 4px;
+}
+.pg-participants .pg-face {
+  width: 18px;
+  height: 18px;
+  margin-left: -4px;
+  outline: 1px solid var(--pg-comment);
+  font-size: 8px;
+}
+.pg-replies {
+  border-top: 1px solid var(--pg-edge);
+  margin-top: 8px;
+  padding-top: 4px;
+}
+.pg-reply {
+  position: sticky;
+  bottom: -10px;
+  background: var(--pg-comment);
+  margin: 8px -12px -10px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--pg-edge);
+}
+.pg-bubble textarea {
+  width: 100%;
+  min-height: 60px;
+  resize: vertical;
+  font: 13px/1.5 var(--pg-sans);
+  padding: 8px;
+  display: block;
+}
+.pg-send-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.pg-send-row button {
+  min-height: 28px;
+  font: 12px var(--pg-mono);
+  padding: 0 10px;
+}
+.pg-shortcut {
+  font: 10px var(--pg-mono);
+  color: var(--pg-muted);
+}
+.pg-quote {
+  border-left: 2px solid var(--pg-edge);
+  padding-left: 8px;
+  font: 12px/1.5 var(--pg-sans);
+  color: var(--pg-muted);
+  max-height: 60px;
+  overflow: hidden;
+}
+.pg-caption {
+  font: 11px/1.5 var(--pg-sans);
+  color: var(--pg-muted);
+}
+.pg-cursor {
+  position: absolute;
+  color: var(--pg-accent);
+  font: 11px var(--pg-mono);
+  background: var(--pg-bg);
+  padding: 2px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.pg-context {
+  position: fixed;
+  z-index: 50;
+  width: 200px;
+  background: var(--pg-bg);
+  border: 1px solid var(--pg-edge);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px #0002;
+}
+.pg-context button {
+  justify-content: flex-start;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+.pg-context button:hover {
+  background: var(--pg-raised);
+}
+#pg-popover {
+  pointer-events: auto;
+}
+#pg-me {
+  border: 0;
+  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+#pg-popover .pg-appearance button[aria-pressed="true"] {
+  background: var(--pg-accent-soft);
+  color: var(--pg-accent);
+  border-color: var(--pg-accent);
+}
+@media (max-width: 639px) {
+  #pg-status {
+    display: block;
+    position: absolute;
+    left: 12px;
+    bottom: 2px;
+    max-width: calc(100vw - 190px);
+    font-size: 9px;
+  }
+  #pg-library {
+    align-self: flex-start;
+    margin-top: 3px;
+    padding: 2px 6px;
+    font-size: 11px;
+    min-height: 24px;
+  }
+  #pg-bar .pg-brand {
+    margin-right: auto;
+    align-self: flex-start;
+    margin-top: 5px;
+  }
+  #pg-people {
+    margin-right: 8px;
+    padding-right: 8px;
+    max-width: 96px;
+    overflow: auto;
+  }
+  .pg-bubble .pg-actions button {
+    min-height: 32px;
+  }
+  .pg-bubble .pg-close {
+    min-height: 32px;
+    width: 28px;
+  }
+  .pg-comment-author time {
+    font-size: 9px;
+  }
+}
+
+/* Inert paint in trusted chrome preserves app backgrounds and native input. */
+.pg-targets {
+  position: fixed;
+  inset: 44px 0 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.pg-target {
+  position: absolute;
+  box-sizing: border-box;
+  outline: 1px solid rgba(245, 158, 11, 0.15);
+  outline-offset: 3px;
+  pointer-events: none;
+}
+.pg-target[data-emphasis="active"] {
+  outline: 1px solid rgba(245, 158, 11, 0.85);
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 9999px rgba(245, 158, 11, 0.08);
+}
+
+.pg-bubble header .pg-resolve {
+  min-height: 24px;
+  border: 0;
+  background: transparent;
+  padding: 0 4px;
+  font: 10px var(--pg-mono);
+  gap: 4px;
+  flex-shrink: 0;
+}
+.pg-bubble header .pg-resolve svg {
+  width: 12px;
+  height: 12px;
+}
+.pg-bubble header .pg-resolve:hover {
+  background: var(--pg-raised);
+  color: var(--pg-accent);
+}

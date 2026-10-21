@@ -1,0 +1,92 @@
+/*
+ * design-systems/signout.css
+ *
+ * The workshop sign-out sheet, made clickable: kraft paper, a marker-black grid, hazard tape, and a stamp when you sign.
+ * Suits: booking and reservation tools, sign-up forms, rosters and shift sheets, inventories and loan logs.
+ * Avoid for: reading-heavy pages, luxury or editorial subjects, dashboards with many metrics.
+ * Fonts: installed system faces only, nothing is downloaded: Avenir Next Condensed or Arial Narrow for display, the system sans for text, the system monospace for code. Opens in light mode.
+ *
+ * The core loads this file when <html data-af-design-system="signout">.
+ */
+:root[data-af-design-system="signout"] {
+  /* Grounds */
+  --ds-kraft: #f3ecdc; /* Page ground: kraft paper by day; the chalkboard at night. */
+  --ds-kraft-raised: #faf6ec; /* Sheets, slots, fields. */
+  --ds-kraft-sunk: #e8dfca; /* Wells, column heads, code. */
+  --ds-line: #c9bc9c; /* Hairline rules; the grid of the sheet; the hatch. */
+  /* Ink */
+  --ds-ink: #16140f; /* Marker by day, chalk by night: all text, the 2px grid, the stamp outline. */
+  --ds-ink-muted: #5b5344; /* Secondary text, timestamps, the small print. */
+  /* Brand */
+  --ds-vermilion: #e5481b; /* The pick: your slot, the primary action, the stamp. One per view. */
+  --ds-on-vermilion: #16140f; /* Text on vermilion fills. */
+  --ds-vermilion-soft: #f9d9cc; /* Ground for the selected row and the picked slot halo. */
+  --ds-hazard: #f2b705; /* Hazard tape: the top stripe, warnings, the thing that needs care. Text on it is ink. */
+  --ds-hazard-soft: #f8ecc0; /* Ground for warnings. */
+  /* Status */
+  --ds-caution: #7a5a00; /* Warnings as text: hazard darkened on kraft, the tape itself on the chalkboard. */
+  --ds-open: #1f7a4d; /* Open, available, confirmed: the stamp green. Always with a word. */
+  --ds-open-soft: #d9ebdf; /* Ground for confirmed bookings. */
+  --ds-booked: #5b5344; /* Signed out by someone else: hatched, never red. */
+  --ds-negative: #b3261e; /* Failed, overdue, broken. */
+  --ds-negative-soft: #f3d4d0; /* Ground for failures. */
+  /* Standard names */
+  --background: var(--ds-kraft);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-kraft-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-kraft-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-vermilion);
+  --primary-foreground: var(--ds-on-vermilion);
+  --secondary: var(--ds-vermilion-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-kraft-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-kraft-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-kraft);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-vermilion);
+  --chart-1: var(--ds-ink);
+  --chart-2: var(--ds-vermilion);
+  --chart-3: var(--ds-hazard);
+  --chart-4: var(--ds-open);
+  --chart-5: var(--ds-ink-muted);
+  --radius: 0px;
+  --chip-radius: 0px;
+  /* Fonts */
+  --font-display: "Avenir Next Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-af-design-system="signout"][data-af-dark="true"] {
+  --ds-kraft: #14201a;
+  --ds-kraft-raised: #1b2a22;
+  --ds-kraft-sunk: #0e1712;
+  --ds-line: #35493d;
+  --ds-ink: #ede6d6;
+  --ds-ink-muted: #a9b3a4;
+  --ds-vermilion: #ff6a3d;
+  --ds-on-vermilion: #16140f;
+  --ds-vermilion-soft: #3a1d14;
+  --ds-hazard: #f2b705;
+  --ds-hazard-soft: #3a2f08;
+  --ds-caution: #f2b705;
+  --ds-open: #7fd99f;
+  --ds-open-soft: #17352a;
+  --ds-booked: #a9b3a4;
+  --ds-negative: #ff6a5a;
+  --ds-negative-soft: #3a1a14;
+}
+/* Text styles */
+:root[data-af-design-system="signout"] .t-display-xl { font-family: var(--font-display); font-size: clamp(56px, 9vw, 120px); line-height: .86; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; } /* One per sheet. The condensed face at 800 in caps: a marker on kraft. */
+:root[data-af-design-system="signout"] .t-display-l { font-family: var(--font-display); font-size: clamp(36px, 5vw, 64px); line-height: .9; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; } /* Section and panel titles. */
+:root[data-af-design-system="signout"] .t-display-m { font-family: var(--font-display); font-size: 28px; line-height: 28px; font-weight: 700; text-transform: uppercase; } /* Row titles: the machine, the person, the item. */
+:root[data-af-design-system="signout"] .t-body { font-family: var(--font-sans); font-size: 16px; line-height: 24px; font-weight: 400; } /* Instructions and reading text. The system sans, plain. */
+:root[data-af-design-system="signout"] .t-body-s { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 400; } /* Specs, captions, helper text. */
+:root[data-af-design-system="signout"] .t-label { font-family: var(--font-display); font-size: 12px; line-height: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; } /* Column heads, slot labels, stamps. Condensed caps. */
+:root[data-af-design-system="signout"] .t-numeral { font-family: var(--font-mono); font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; } /* Counts: open slots, members, hours. Mono, tabular. */
+:root[data-af-design-system="signout"] .t-mono { font-family: var(--font-mono); font-size: 13px; line-height: 20px; font-weight: 400; } /* Booking ids, times, the shop log. */

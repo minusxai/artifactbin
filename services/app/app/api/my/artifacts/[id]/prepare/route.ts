@@ -1,8 +1,0 @@
-import {browserActor} from '@/lib/accounts';
-import {readJson,json} from '@/lib/http';
-import {prepareDocumentAuthoringContext} from '@/lib/publish/publish';
-export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){
- const actor=await browserActor(request);if(actor instanceof Response)return actor;
- const body=await readJson(request),{id}=await ctx.params;
- return body?prepareDocumentAuthoringContext(actor,id,body):json({error:'invalid_json'},400);
-}

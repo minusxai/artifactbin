@@ -1,0 +1,14 @@
+{
+  "name": "pagegi-graphql-planning-proof",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --import tsx --test store.test.ts",
+    "typecheck": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions contracts.ts store.ts store.test.ts benchmark.ts",
+    "check": "npm run typecheck && npm test && node negative-controls.mjs",
+    "benchmark": "node --import tsx benchmark.ts"
+  },
+  "dependencies": {
+    "graphql": "16.11.0"
+  }
+}

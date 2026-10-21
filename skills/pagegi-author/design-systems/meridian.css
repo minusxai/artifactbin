@@ -1,0 +1,118 @@
+/*
+ * design-systems/meridian.css
+ *
+ * Quiet product software: a grey canvas, white surfaces with hairlines instead of shadows, 14 px sans throughout, and one blue used once per view.
+ * Suits: product dashboards, settings and billing screens, product docs, SaaS marketing, changelogs.
+ * Avoid for: editorial or narrative subjects, anything that wants warmth or texture, pages meant to be remembered rather than used.
+ * Fonts: installed system faces only, nothing is downloaded: the system sans for display, the system sans for text, the system monospace for code. Opens in light mode.
+ *
+ * The core loads this file when <html data-af-design-system="meridian">.
+ */
+:root[data-af-design-system="meridian"] {
+  /* Grounds */
+  --ds-canvas: #f4f4f5; /* Page ground. Visibly a step below the surfaces by day; true near-black by night. */
+  --ds-surface: #ffffff; /* Cards, fields, menus, the rail. Separated from canvas by a hairline and a 1px top highlight, never a drop shadow. */
+  --ds-surface-sunk: #eeeef0; /* Code wells, table header, inactive tracks, the inside of a keyboard key, the row hover tint. */
+  --ds-hairline: #e4e4e7; /* Every border. One weight, one colour, everywhere. */
+  --ds-hairline-strong: #c9c9ce; /* Borders on hover, the active field, the table header rule, the top of a glass card. */
+  /* Ink */
+  --ds-ink: #111114; /* Primary text and icons. */
+  --ds-ink-soft: #5a5b63; /* Secondary text, labels, placeholders, captions. */
+  --ds-ink-faint: #8e8f98; /* Tertiary text: timestamps, helper text, disabled labels, the drawing line. */
+  /* Brand */
+  --ds-blue: #2e5bff; /* The one colour. Primary actions, links, the focus ring, the first series. One fill per view. */
+  --ds-on-blue: #ffffff; /* Text and icons on blue fills. */
+  --ds-blue-soft: #e9eeff; /* Tinted ground for the active nav item, selected rows, info callouts. */
+  --ds-blue-ink: #2449d0; /* Blue as text: links, the active nav label, the selected tab. */
+  /* Status */
+  --ds-positive: #15803d; /* Success text and the up-delta. Always paired with a word or a dot. */
+  --ds-positive-soft: #e6f6ec; /* Ground for success tags. */
+  --ds-caution: #a16207; /* Warnings and pending states. */
+  --ds-caution-soft: #fdf4d8; /* Ground for warning tags. */
+  --ds-negative: #dc2626; /* Errors, destructive actions, the down-delta. */
+  --ds-negative-soft: #fde8e8; /* Ground for error tags and callouts. */
+  /* Chart */
+  --ds-violet: #7c5cff; /* Second chart series only. */
+  --ds-teal: #0d9488; /* Third chart series only. */
+  /* Standard names */
+  --background: var(--ds-canvas);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-surface);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-surface);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-blue);
+  --primary-foreground: var(--ds-on-blue);
+  --secondary: var(--ds-blue-soft);
+  --secondary-foreground: var(--ds-blue-ink);
+  --muted: var(--ds-surface-sunk);
+  --muted-foreground: var(--ds-ink-soft);
+  --accent: var(--ds-surface-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-blue);
+  --border: var(--ds-hairline);
+  --input: var(--ds-hairline);
+  --ring: var(--ds-blue);
+  --chart-1: var(--ds-blue);
+  --chart-2: var(--ds-violet);
+  --chart-3: var(--ds-teal);
+  --chart-4: var(--ds-ink-faint);
+  --chart-5: var(--ds-caution);
+  --radius: 8px;
+  --shadow-tile: inset 0 1px 0 rgba(255,255,255,.7), 0 1px 2px rgba(17,17,20,.04);
+  --shadow-float: 0 1px 2px rgba(17,17,20,.06), 0 16px 40px -12px rgba(17,17,20,.22);
+  --shadow-key: inset 0 -2px 0 #e4e4e7, 0 1px 0 #c9c9ce;
+  --btn-ring: inset 0 0 0 1px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.18);
+  --glow: radial-gradient(600px 300px at 30% 0%, rgba(46,91,255,.10), transparent 70%);
+  --glass: linear-gradient(180deg, #c9c9ce, #e4e4e7);
+  --glow-a: .12;
+  --focus-ring: 0 0 0 2px #f4f4f5, 0 0 0 4px #2e5bff;
+  --chip-radius: 999px;
+  /* Fonts */
+  --font-display: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-af-design-system="meridian"][data-af-dark="true"] {
+  --ds-canvas: #0b0c0f;
+  --ds-surface: #14161b;
+  --ds-surface-sunk: #1c1f26;
+  --ds-hairline: #262a33;
+  --ds-hairline-strong: #3a3f4b;
+  --ds-ink: #f2f2f4;
+  --ds-ink-soft: #a0a3ad;
+  --ds-ink-faint: #6b6f7a;
+  --ds-blue: #7a9bff;
+  --ds-on-blue: #0b0c0f;
+  --ds-blue-soft: #182040;
+  --ds-blue-ink: #9db5ff;
+  --ds-positive: #4ade80;
+  --ds-positive-soft: #0f2a1a;
+  --ds-caution: #facc15;
+  --ds-caution-soft: #2d2408;
+  --ds-negative: #f87171;
+  --ds-negative-soft: #2f1313;
+  --ds-violet: #a78bfa;
+  --ds-teal: #2dd4bf;
+  --shadow-tile: inset 0 1px 0 rgba(255,255,255,.05), 0 1px 2px rgba(0,0,0,.4);
+  --shadow-float: 0 1px 2px rgba(0,0,0,.5), 0 24px 60px -16px rgba(0,0,0,.8);
+  --shadow-key: inset 0 -2px 0 #262a33, 0 1px 0 #3a3f4b;
+  --btn-ring: inset 0 0 0 1px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.16);
+  --glow: radial-gradient(600px 300px at 30% 0%, rgba(122,155,255,.18), transparent 70%);
+  --glass: linear-gradient(180deg, #3a3f4b, rgba(58,63,75,0));
+  --glow-a: .22;
+  --focus-ring: 0 0 0 2px #0b0c0f, 0 0 0 4px #7a9bff;
+}
+/* Text styles */
+:root[data-af-design-system="meridian"] .t-display-xl { font-family: var(--font-display); font-size: clamp(48px, 7vw, 96px); line-height: .98; font-weight: 600; letter-spacing: -0.045em; } /* One per page. Hero headlines. Semibold, never bold: the presence comes from size and tracking, not weight. */
+:root[data-af-design-system="meridian"] .t-display-l { font-family: var(--font-display); font-size: clamp(32px, 4.2vw, 52px); line-height: 1.04; font-weight: 600; letter-spacing: -0.04em; } /* Section openers. */
+:root[data-af-design-system="meridian"] .t-display-m { font-family: var(--font-display); font-size: 28px; line-height: 32px; font-weight: 600; letter-spacing: -0.03em; } /* Page titles. */
+:root[data-af-design-system="meridian"] .t-title { font-family: var(--font-display); font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: -0.015em; } /* Card titles, dialog titles, table group heads. */
+:root[data-af-design-system="meridian"] .t-body-l { font-family: var(--font-sans); font-size: 18px; line-height: 28px; font-weight: 400; letter-spacing: -0.01em; } /* Lead paragraphs and marketing copy. */
+:root[data-af-design-system="meridian"] .t-body { font-family: var(--font-sans); font-size: 14px; line-height: 22px; font-weight: 400; } /* Default UI and reading text. 14px: product density, not a blog. */
+:root[data-af-design-system="meridian"] .t-body-s { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 400; } /* Captions, helper text, dense cells. */
+:root[data-af-design-system="meridian"] .t-label { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.01em; } /* Field labels, column heads, stat labels. Medium weight, sentence case: Meridian never shouts. */
+:root[data-af-design-system="meridian"] .t-eyebrow { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.02em; } /* Section eyebrows and breadcrumbs in the mono, with a dot. The only place the mono appears outside code. */
+:root[data-af-design-system="meridian"] .t-numeral { font-family: var(--font-sans); font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; } /* KPI figures in the sans, tabular, with the unit set smaller beside them. Mono is for code, not for money. */
+:root[data-af-design-system="meridian"] .t-mono { font-family: var(--font-mono); font-size: 13px; line-height: 20px; font-weight: 400; } /* Code, paths, IDs, keyboard keys. */
