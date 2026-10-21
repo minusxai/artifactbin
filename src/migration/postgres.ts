@@ -2,16 +2,14 @@ import {createHash,randomBytes} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {prepareForSave} from '../page/page-model.ts';
 import {normalizePath} from '../path-model.ts';
+import {planMigrationIdentities,isPreservedNonloginActor} from './identities.ts';
 import type {ImportDestination,MigrationManifest,MigrationMaps,PlannedPage,SqlReader} from './contracts.ts';
 import type {DestinationOptions,DestinationPreparation} from './postgres-contracts.ts';
 import {destinationSchemas} from './destination-schema.ts';
 import type {DestinationSchemas} from './destination-schema.ts';
 const digest=(s:string)=>createHash('sha256').update(s).digest('hex');
 export function buildAccountMaps(manifest:MigrationManifest):MigrationMaps {
- const users:Record<string,string>={};
- for(const user of manifest.tables.users??[]){if(typeof user.email!=='string'||!user.email.trim())continue;const email=user.email.trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))continue;users[String(user.id)]=email;}
- const tokens:Record<string,string>={};for(const token of manifest.tokenOwners){const actor=token.user_id?users[token.user_id]:undefined;if(actor)tokens[token.id]=actor;}
- return {users,tokens,groups:{},pages:{}};
+ return planMigrationIdentities(manifest).maps;
 }
 const segment=(value:unknown)=>String(value??'').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu,'-').replace(/^-|-$/g,'').slice(0,60)||'untitled';
 export function publicationPath(page:PlannedPage):string {
@@ -55,6 +53,7 @@ export class PostgresMigrationDestination implements ImportDestination {
    for(const user of input.manifest.tables.users??[]){
     const actor=input.maps.users[String(user.id)];if(!actor)continue;
     if(typeof user.name==='string')await this.db.query('UPDATE accounts SET name=COALESCE(name,$2) WHERE actor=$1',[actor,user.name]);
+    if(isPreservedNonloginActor(actor))continue;
     const handle=typeof user.username==='string'?user.username.toLowerCase():null;
     if(handle&&/^[a-z0-9]+(-[a-z0-9]+)*$/.test(handle)&&handle.length>=3&&handle.length<=32)await this.db.query('UPDATE accounts SET handle=$2 WHERE actor=$1 AND handle IS NULL AND NOT EXISTS(SELECT 1 FROM accounts WHERE handle=$2)',[actor,handle]);
    }

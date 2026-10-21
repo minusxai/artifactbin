@@ -34,16 +34,26 @@ export async function planMigration(manifest:MigrationManifest, options:{maps:Mi
   if(!newOwner)issues.push(`Unmapped ${ownerKind} owner`);
   const revisions:PlannedRevision[]=[];
   const oldRevisions=(manifest.tables.artifact_versions??[]).filter(r=>r.artifact_id===artifact.id);
+  const matchingArchives=oldRevisions.filter(r=>Number(r.version)===Number(artifact.version));
+  const contentFields=['format','source','document','title','description','meta','actor_user_id','actor_token_id'];
+  if(matchingArchives.length>1||matchingArchives.some(r=>contentFields.some(field=>canonical(r[field]??null)!==canonical(artifact[field]??null))))throw new Error('Conflicting archived and current source revision');
   const versions=new Set<number>();
-  for(const original of [...oldRevisions,artifact].sort((a,b)=>Number(a.version)-Number(b.version))){
+  for(const original of [...oldRevisions.filter(r=>!matchingArchives.includes(r)),artifact].sort((a,b)=>Number(a.version)-Number(b.version))){
    const version=Number(original.version); if(!Number.isSafeInteger(version)||version<1||versions.has(version))throw new Error('Invalid or duplicate source revision');versions.add(version);
    const format=String(original.format); let conversion;
-   if(format==='markup')conversion=await options.convert({source:typeof original.source==='string'?original.source:'',document:original.document,coreUrl:options.coreUrl});
+   if(format==='markup')conversion=await options.convert({source:typeof original.source==='string'?original.source:'',document:original.document,meta:original.meta&&typeof original.meta==='object'&&!Array.isArray(original.meta)?original.meta as Record<string,unknown>:undefined,coreUrl:options.coreUrl});
    else conversion={classification:'manual-blocked' as const,html:null,issues:[`Unsupported format: ${format}`],identities:{}};
    if(conversion.classification==='manual-blocked'||conversion.html===null)issues.push(`Revision ${version}: blocked format/conversion (${format})`);
-   revisions.push({version,original,conversion});
+   revisions.push({version,original,conversion,...(original===artifact&&matchingArchives.length?{matchingArchives}:{} )});
   }
   const rows=(name:string):LegacyRow[]=>(manifest.tables[name]??[]).filter(row=>row.artifact_id===artifact.id).sort((a,b)=>canonical(a).localeCompare(canonical(b)));
+  const liveComments=rows('annotations').filter(c=>!c.deleted_at);
+  const commentIds=new Set(liveComments.map(c=>c.id));
+  for(const comment of liveComments){
+   if(!(maps.users[String(comment.author_user_id)]??maps.tokens[String(comment.author_token_id)]))issues.push('Unmapped live comment author');
+   if(!versions.has(Number(comment.anchor_version??artifact.version)))issues.push('Comment references missing historical source');
+   if(comment.root_id&&!commentIds.has(comment.root_id))issues.push('Comment references missing root');
+  }
   pages.push({legacyId:artifact.id,pageId:id,owner:newOwner?{kind:ownerKind,id:newOwner}:null,disposition:issues.length?'blocked':'ready',issues,revisions,access:{visibility:artifact.visibility,linkRole:artifact.link_role??'viewer',shares:rows('artifact_shares')},original:artifact,comments:rows('annotations'),identities:rows('artifact_source_ids')});
  }
  return {schemaVersion:1,sourceNamespace:manifest.sourceNamespace,maps,pages,archive:manifest};

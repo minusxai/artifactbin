@@ -3,15 +3,18 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {planMigration,applyMigration} from '../../src/migration/import.ts';
 import {buildAccountMaps,PostgresMigrationDestination} from '../../src/migration/postgres.ts';
-import {convertMigrationContent} from '../../src/migration/convert.ts';
+import {createMigrationConverter} from '../../src/migration/convert.ts';
 import type {MigrationManifest,MigrationMaps} from '../../src/migration/contracts.ts';
 const [manifestPath,schema,reportPath,...flags]=process.argv.slice(2);
-if(!manifestPath||!schema||!reportPath)throw new Error('Usage: node --experimental-strip-types scripts/migration/import.ts <private-manifest.json> <dedicated-schema> <new-private-report.json> [--apply-isolated] [--editor-manage-restricted]');
+if(!manifestPath||!schema||!reportPath)throw new Error('Usage: node --experimental-strip-types scripts/migration/import.ts <private-manifest.json> <dedicated-schema> <new-private-report.json> [--apply-isolated] [--editor-manage-restricted] [--conversion-strategy=strict|archived-static]');
 destinationSchemas(schema); // Validate before reading source content, connecting, or initializing archives.
-if(flags.some(f=>!['--apply-isolated','--editor-manage-restricted'].includes(f)))throw new Error('Unknown import flag');
+if(flags.some(f=>!['--apply-isolated','--editor-manage-restricted','--conversion-strategy=strict','--conversion-strategy=archived-static'].includes(f)))throw new Error('Unknown import flag');
+if(flags.filter(f=>f.startsWith('--conversion-strategy=')).length>1)throw new Error('Choose one explicit conversion strategy');
+const conversionStrategy=flags.includes('--conversion-strategy=archived-static')?'archived-static':'strict';
+const convert=createMigrationConverter({strategy:conversionStrategy,legacyRoot:process.env.MIGRATION_ARCHIVED_ROOT});
 const manifest=JSON.parse(await readFile(manifestPath,'utf8')) as MigrationManifest;
 const maps:MigrationMaps=buildAccountMaps(manifest);
-const plan=await planMigration(manifest,{maps,convert:convertMigrationContent,coreUrl:'/af/v1/core.js'});
+const plan=await planMigration(manifest,{maps,convert,coreUrl:'/af/v1/core.js'});
 const apply=flags.includes('--apply-isolated');
 const require=createRequire(import.meta.url);const {Client}=require('pg');
 const db=apply?new Client({connectionString:process.env.MIGRATION_DESTINATION_DATABASE_URL}):null;
@@ -24,5 +27,5 @@ for(const page of plan.pages){const format=page.original.format;const row=invent
 let result;
 if(db){await db.connect();try{await destination.prepare({manifest,maps:plan.maps});result=await applyMigration(plan,destination,{dryRun:false});}finally{await db.end();}}
 else result=await applyMigration(plan,destination,{dryRun:true});
-await writeFile(reportPath,JSON.stringify({dryRun:!apply,inventory,result,maps:plan.maps,pages:plan.pages.map(p=>({legacyId:p.legacyId,pageId:p.pageId,issues:p.issues,conversion:p.revisions.map(r=>({version:r.version,classification:r.conversion.classification,issues:r.conversion.issues})),accessSupported:destination.supportsExactAccess(p)}))}),{mode:0o600,flag:'wx'});
-process.stdout.write(JSON.stringify({dryRun:!apply,inventory,result})+'\n');
+await writeFile(reportPath,JSON.stringify({dryRun:!apply,conversionStrategy,inventory,result,maps:plan.maps,pages:plan.pages.map(p=>({legacyId:p.legacyId,pageId:p.pageId,issues:p.issues,conversion:p.revisions.map(r=>({version:r.version,classification:r.conversion.classification,issues:r.conversion.issues})),accessSupported:destination.supportsExactAccess(p)}))}),{mode:0o600,flag:'wx'});
+process.stdout.write(JSON.stringify({dryRun:!apply,conversionStrategy,inventory,result})+'\n');

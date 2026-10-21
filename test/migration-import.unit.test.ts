@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planMigration, applyMigration, allocateMigrationMaps } from '../src/migration/import.ts';
 import type { MigrationManifest, Converter, ImportDestination } from '../src/migration/contracts.ts';
-const manifest: MigrationManifest = {schemaVersion:1,sourceNamespace:'fixture',exportedAt:'2026-01-01T00:00:00Z',tables:{artifact_versions:[{artifact_id:'longIdentifier',version:1,format:'markup',source:'old'}],annotations:[{id:'c1',artifact_id:'longIdentifier',anchor_key:'retired',deleted_at:'2026-01-01'}],artifact_source_ids:[{artifact_id:'longIdentifier',source_id:'retired',retired_version:2}]},tokenOwners:[],artifacts:[{id:'longIdentifier',format:'markup',version:2,user_id:'u1',group_id:null,token_id:'t1',source:'new',document:null,visibility:'private',link_role:'viewer'}]};
+const manifest: MigrationManifest = {schemaVersion:1,sourceNamespace:'fixture',exportedAt:'2026-01-01T00:00:00Z',tables:{artifact_versions:[{artifact_id:'longIdentifier',version:1,format:'markup',source:'old'}],annotations:[{id:'c1',artifact_id:'longIdentifier',anchor_key:'retired',author_user_id:'u1',deleted_at:'2026-01-01'}],artifact_source_ids:[{artifact_id:'longIdentifier',source_id:'retired',retired_version:2}]},tokenOwners:[],artifacts:[{id:'longIdentifier',format:'markup',version:2,user_id:'u1',group_id:null,token_id:'t1',source:'new',document:null,visibility:'private',link_role:'viewer'}]};
 const converter: Converter = ({source})=>({classification:'renderable',html:`<html>${source}</html>`,issues:[],identities:{}});
 const maps = {pages:{},users:{u1:'user-new'},groups:{},tokens:{}};
 test('planning preserves history, tombstones, lifetime nodes and stable six-character IDs', async()=>{
@@ -32,4 +32,17 @@ test('valid legacy addresses are preserved before replacements allocate and coll
  const maps=allocateMigrationMaps('fixture',['abc123','long-legacy-id'],{pages:{},users:{},groups:{},tokens:{}});
  assert.equal(maps.pages.abc123,'abc123');assert.notEqual(maps.pages['long-legacy-id'],'abc123');
  const conflict=allocateMigrationMaps('fixture',['abc123'],{pages:{existing:'abc123'},users:{},groups:{},tokens:{}});assert.notEqual(conflict.pages.abc123,'abc123');
+});
+
+test('identical head/archive overlap is classified once without dropping original archive rows',async()=>{
+ const m=structuredClone(manifest);m.tables.artifact_versions=[{...m.artifacts[0],artifact_id:m.artifacts[0]!.id}];
+ const p=await planMigration(m,{maps,convert:converter,coreUrl:'/af/v1/core.js'});
+ assert.equal(p.pages[0]?.revisions.length,1);assert.equal(p.pages[0]?.revisions[0]?.matchingArchives?.length,1);assert.equal(p.archive.tables.artifact_versions?.length,1);
+ const conflict=structuredClone(m);conflict.tables.artifact_versions![0]!.source='different';
+ await assert.rejects(planMigration(conflict,{maps,convert:converter,coreUrl:'/af/v1/core.js'}),/Conflicting archived and current/);
+});
+test('live comment relation failures block planning before destination mutation',async()=>{
+ const m=structuredClone(manifest);m.tables.annotations=[{id:'comment',artifact_id:'longIdentifier',body:'fixture',author_user_id:'missing',anchor_version:99,root_id:'missing-root'}];
+ const p=await planMigration(m,{maps,convert:converter,coreUrl:'/af/v1/core.js'});
+ assert.equal(p.pages[0]?.disposition,'blocked');assert.match(p.pages[0]!.issues.join(' '),/Unmapped live comment author/);assert.match(p.pages[0]!.issues.join(' '),/missing historical source/);assert.match(p.pages[0]!.issues.join(' '),/missing root/);
 });

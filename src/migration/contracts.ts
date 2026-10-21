@@ -24,12 +24,14 @@ export interface MigrationManifest {
 export interface SqlReader {
   query(sql: string, values?: unknown[]): Promise<{ rows: LegacyRow[] }>;
 }
-export interface ConversionInput { source: string; coreUrl: string; document?: unknown }
+export interface ConversionInput { source: string; coreUrl: string; document?: unknown; meta?: Record<string,unknown> }
 export interface ConversionOutput {
   classification: 'renderable' | 'functional' | 'manual-blocked';
   html: string | null;
   issues: readonly unknown[];
   identities: Record<string, string>;
+  strategy?: 'strict'|'archived-static';
+  provenance?: {compiler:string;build:string;mode:string};
 }
 export type Converter = (input: ConversionInput) => ConversionOutput | Promise<ConversionOutput>;
 export interface MigrationMaps {
@@ -41,6 +43,8 @@ export interface MigrationMaps {
 export interface PlannedRevision {
   version: number;
   original: LegacyRow;
+  /** Redundant legacy archive row sharing the exact head content/version. */
+  matchingArchives?: LegacyRow[];
   conversion: ConversionOutput;
 }
 export interface PlannedPage {

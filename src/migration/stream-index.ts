@@ -24,11 +24,14 @@ async function* lines(path:string):AsyncGenerator<LegacyRow>{
  const source=createReadStream(path);const reader=createInterface({input:source,crlfDelay:Infinity});try{for await(const line of reader)yield JSON.parse(line) as LegacyRow;}finally{reader.close();source.destroy();}
 }
 async function rowsIfExists(path:string):Promise<LegacyRow[]>{try{const rows=[];for await(const row of lines(path))rows.push(row);return rows;}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return [];throw error;}}
-export async function* indexedArtifactIds(indexDirectory:string):AsyncGenerator<string>{
- // A completed manifest is the commit marker. Partial indexes are never consumed.
+export async function* indexedArtifactHeaders(indexDirectory:string):AsyncGenerator<{id:string;format:string}>{
  await readFile(join(indexDirectory,'manifest.json'),'utf8');
- for await(const row of lines(join(indexDirectory,'artifacts.ndjson')))yield String(row.id);
+ for await(const row of lines(join(indexDirectory,'artifacts.ndjson')))yield {id:String(row.id),format:String(row.format)};
 }
+export async function* indexedArtifactIds(indexDirectory:string):AsyncGenerator<string>{
+ for await(const row of indexedArtifactHeaders(indexDirectory))yield row.id;
+}
+
 export async function readIndexedAccounts(indexDirectory:string):Promise<{users:LegacyRow[];tokenOwners:{id:string;user_id:string|null}[]}>{
  return {users:await rowsIfExists(join(indexDirectory,'users.ndjson')),tokenOwners:(await rowsIfExists(join(indexDirectory,'token_owners.ndjson'))).map(r=>({id:String(r.id),user_id:r.user_id===null?null:String(r.user_id)}))};
 }
