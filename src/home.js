@@ -131,7 +131,8 @@ function showScreen() {
       ? "Account"
       : screen === "library"
         ? "Artifacts"
-        : "artifactbin") + " · artifactbin";
+        : "artifactbin") +
+    (screen === "account" || screen === "library" ? " · artifactbin" : "");
 }
 async function load() {
   const result = await session.load();

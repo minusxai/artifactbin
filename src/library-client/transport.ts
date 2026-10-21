@@ -1,7 +1,7 @@
 import type { CreateLibraryTransport } from "./contracts.ts";
 /** The one sentence for any failure to get an answer from this server. */
 export const UNREACHABLE =
-  "Could not reach Pagegi. Check your connection and try again.";
+  "Could not reach artifactbin. Check your connection and try again.";
 export const createLibraryTransport: CreateLibraryTransport =
   (fetcher, timeoutMs = 15000) =>
   async (path, body, signal, token, method) => {

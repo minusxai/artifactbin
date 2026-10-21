@@ -9,23 +9,24 @@ const origin = "https://pagegi.example";
 
 test("the handoff names the server, the one-line install and how to sign in, and nothing else", () => {
   const text = agentHandoff(origin);
-  assert.match(text, /^Build me a Pagegi page and publish it to https:\/\/pagegi\.example\./);
-  assert.ok(text.includes(`curl -fsSL ${origin}/install.sh | sh`), "one-line install from this server");
-  assert.ok(text.includes("pagegi-author/SKILL.md"), "names the skill file to follow");
+  assert.match(text, /^Build me an HTML artifact and publish it to https:\/\/pagegi\.example\./);
+  assert.ok(text.includes(`npx ${origin}/skills/artefactbin-skill.tgz --origin ${origin}`), "one-line install from this server");
+  assert.ok(text.includes("artifactbin-author/SKILL.md"), "names the skill file to follow");
   assert.match(text, /scripts\/auth\.mjs --email <my email address>/);
   assert.match(text, /If I haven't said what to build, ask me\./);
   assert.doesNotMatch(text, /AF_TOKEN|Bearer|token/i, "tokenless");
-  assert.doesNotMatch(text, /tar |mkdir|\.tgz|~\/\./, "no manual install steps");
+  assert.doesNotMatch(text, /Pagegi|pagegi-author|curl|install\.sh/, "canonical public authoring instructions");
+  assert.doesNotMatch(text, /tar |mkdir|~\/\./, "no manual install steps");
   assert.ok(text.split("\n").filter(Boolean).length <= 4, "short enough to read at a glance");
 });
 
-test("AF_SERVER is named only for a server other than the skill's default", () => {
-  assert.ok(agentHandoff(origin).includes(`AF_SERVER=${origin}`));
-  assert.doesNotMatch(agentHandoff(DEFAULT_AF_ORIGIN), /AF_SERVER/);
+test("the installer explicitly selects another server, while the default needs no override", () => {
+  assert.ok(agentHandoff(origin).includes(`--origin ${origin}`));
+  assert.doesNotMatch(agentHandoff(DEFAULT_AF_ORIGIN), /--origin/);
 });
 
 test("every skill file the handoff names exists", () => {
-  for (const file of agentHandoff(origin).matchAll(/pagegi-author\/([\w./-]+\.(?:md|mjs))/g))
+  for (const file of agentHandoff(origin).matchAll(/artifactbin-author\/([\w./-]+\.(?:md|mjs))/g))
     assert.ok(existsSync(repositoryPath(`skills/pagegi-author/${file[1]}`)), file[1]);
 });
 

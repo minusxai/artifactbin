@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 const engine = process.argv[2] || "chromium";
-const UNREACHABLE = "Could not reach Pagegi. Check your connection and try again.";
+const UNREACHABLE = "Could not reach artifactbin. Check your connection and try again.";
 const htmlError = (route) =>
   route.fulfill({ status: 502, contentType: "text/html", body: "<html>502</html>" });
 const target = process.env.PAGEGI_TEST_ORIGIN;
@@ -88,13 +88,13 @@ try {
   const welcomeHandoff = await welcome
     .getByRole("textbox", { name: "Agent instructions" })
     .inputValue();
-  assert.ok(welcomeHandoff.includes("curl -fsSL " + origin + "/install.sh | sh"));
-  assert.ok(welcomeHandoff.includes("AF_SERVER=" + origin));
+  assert.ok(welcomeHandoff.includes("npx " + origin + "/skills/artefactbin-skill.tgz"));
+  assert.ok(welcomeHandoff.includes("--origin " + origin));
   assert.equal(
     await welcome
       .getByRole("link", { name: "Developer? Install the skill", exact: true })
       .getAttribute("href"),
-    "/install.sh",
+    "/skills/artefactbin-skill.tgz",
   );
   await welcome.getByText("Works with Claude Code, Codex, Pi and OpenCode").waitFor();
   assert.equal(
@@ -333,7 +333,7 @@ try {
   await page.reload();
   await page.locator("#account-menu img").waitFor();
   // The empty library hands the person to their coding agent: tokenless text
-  // naming this server, its skill archive and AF_SERVER, copied to the clipboard.
+  // naming this server, its skill installer and server origin, copied to the clipboard.
   await page.evaluate(() => {
     window.__copied = [];
     Object.defineProperty(navigator, "clipboard", {
@@ -357,8 +357,8 @@ try {
     name: "Agent instructions",
   });
   const handoff = await instructions.inputValue();
-  assert.ok(handoff.includes("curl -fsSL " + origin + "/install.sh | sh"));
-  assert.ok(handoff.includes("AF_SERVER=" + origin), "a test server is not the skill's default");
+  assert.ok(handoff.includes("npx " + origin + "/skills/artefactbin-skill.tgz"));
+  assert.ok(handoff.includes("--origin " + origin), "a test server is not the skill's default");
   assert.ok(handoff.includes("--email " + username));
   const accountCookie = (await context.cookies()).find(
     (c) => c.name === "pagegi_account",
@@ -373,9 +373,9 @@ try {
   assert.deepEqual(await page.evaluate(() => window.__copied), [handoff]);
   assert.equal(
     await agentDialog
-      .getByRole("link", { name: "install.sh", exact: true })
+      .getByRole("link", { name: "Download the installer", exact: true })
       .getAttribute("href"),
-    "/install.sh",
+    "/skills/artefactbin-skill.tgz",
   );
   await page.keyboard.press("Escape");
   await agentDialog.waitFor({ state: "hidden" });

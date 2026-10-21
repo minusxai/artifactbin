@@ -32,7 +32,7 @@ test("a proxy's HTML error page, a dropped connection and a timeout read as one 
     { message: UNREACHABLE },
   );
   await assert.rejects(call(hangs, undefined, 5), { message: UNREACHABLE });
-  assert.equal(UNREACHABLE, "Could not reach Pagegi. Check your connection and try again.");
+  assert.equal(UNREACHABLE, "Could not reach artifactbin. Check your connection and try again.");
 });
 test("the server's own JSON errors keep their words and status; a caller's abort stays an abort", async () => {
   await assert.rejects(call(respond(409, JSON.stringify({ error: "That path already exists." }))), (error: any) => {

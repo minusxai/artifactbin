@@ -101,9 +101,9 @@ export function serviceConfig(env = process.env) {
                 from,
                 to: [to],
                 // The same shape as Artifactbin's login email, which reaches inboxes at once.
-                subject: `${code} is your Pagegi sign-in code`,
-                text: `Your Pagegi sign-in code is ${code}\n\nIt expires in 10 minutes. If you didn't ask to sign in, ignore this email.`,
-                html: `<div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;line-height:1.6;color:#0b0e11"><p>Your Pagegi sign-in code is</p><p style="font-size:32px;font-weight:600;letter-spacing:0.18em;margin:16px 0">${code}</p><p style="color:#57606a">It expires in 10 minutes. If you didn't ask to sign in, ignore this email.</p></div>`,
+                subject: `${code} is your artifactbin sign-in code`,
+                text: `Your artifactbin sign-in code is ${code}\n\nIt expires in 10 minutes. If you didn't ask to sign in, ignore this email.`,
+                html: `<div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;line-height:1.6;color:#0b0e11"><p>Your artifactbin sign-in code is</p><p style="font-size:32px;font-weight:600;letter-spacing:0.18em;margin:16px 0">${code}</p><p style="color:#57606a">It expires in 10 minutes. If you didn't ask to sign in, ignore this email.</p></div>`,
               }),
             });
             if (!response.ok) throw Error("Email provider rejected delivery");
