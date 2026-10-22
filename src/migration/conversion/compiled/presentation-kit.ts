@@ -3,12 +3,31 @@ import type {
   PresentationKitTag,
 } from "./presentation-kit-contracts.ts";
 
-// The archived compiler forces AccordionContent and TooltipContent forceMount=true
+// The archived compiler forces TabsContent, AccordionContent and TooltipContent forceMount=true
 // in both served and browser output (compiler kitParts), preserving hidden identities.
 const definitions: Record<
   PresentationKitTag,
   Omit<PresentationKitCapability, "tag">
 > = {
+  Tabs: { identity: "direct", conditionalChildren: false, portal: false },
+  TabsList: {
+    identity: "direct",
+    conditionalChildren: false,
+    portal: false,
+    requiredAncestor: "Tabs",
+  },
+  TabsTrigger: {
+    identity: "direct",
+    conditionalChildren: false,
+    portal: false,
+    requiredAncestor: "Tabs",
+  },
+  TabsContent: {
+    identity: "direct",
+    conditionalChildren: false,
+    portal: false,
+    requiredAncestor: "Tabs",
+  },
   Accordion: { identity: "direct", conditionalChildren: false, portal: false },
   AccordionItem: {
     identity: "direct",
@@ -78,6 +97,10 @@ const definitions: Record<
   },
 };
 const api: Record<PresentationKitTag, readonly string[]> = {
+  Tabs: ["defaultValue", "value", "orientation", "dir"],
+  TabsList: ["variant"],
+  TabsTrigger: ["value", "disabled"],
+  TabsContent: ["value", "forceMount"],
   Accordion: ["type", "collapsible", "defaultValue", "value", "orientation"],
   AccordionItem: ["value", "disabled"],
   AccordionTrigger: [],
@@ -136,6 +159,20 @@ export function admitPresentationKit(
       throw Error("Executable presentation attribute");
     if (api[capability.tag].includes(key)) {
       if (
+        tag === "Dialog" &&
+        key === "open" &&
+        typeof value === "string" &&
+        /^\$[A-Za-z]\w*$/.test(value) &&
+        !["constructor", "prototype", "__proto__"].includes(value.slice(1))
+      ) {
+        capability.scalarBinding = {
+          tag: "Dialog",
+          binding: value.slice(1),
+          valueType: "boolean",
+        };
+        continue;
+      }
+      if (
         [
           "collapsible",
           "disabled",
@@ -155,7 +192,16 @@ export function admitPresentationKit(
         key === "orientation" &&
         !["vertical", "horizontal"].includes(value as string)
       )
-        throw Error("Invalid Accordion orientation");
+        throw Error("Invalid presentation orientation");
+      // The archived keyboard implementation is LTR; a dir attribute alone cannot add RTL behavior.
+      if (tag === "Tabs" && key === "dir" && value !== "ltr")
+        throw Error("Unsupported Tabs direction");
+      if (
+        tag === "TabsList" &&
+        key === "variant" &&
+        !["default", "line"].includes(value as string)
+      )
+        throw Error("Unsupported Tabs variant");
       continue;
     }
     const identity = key === "id" || /^data-af-(?:id|comment)$/.test(key);
@@ -175,8 +221,11 @@ export function admitPresentationKit(
     )
       throw Error("Invalid presentation DOM attribute");
   }
-  if (tag === "AccordionItem" && (!text(attrs.value) || !attrs.value))
-    throw Error("AccordionItem requires value");
+  if (
+    ["AccordionItem", "TabsTrigger", "TabsContent"].includes(tag) &&
+    (!text(attrs.value) || !attrs.value)
+  )
+    throw Error("Presentation item requires value");
   if (attrs.forceMount === true) {
     capability.conditionalChildren = false;
     if (capability.identity === "deferred") capability.identity = "direct";

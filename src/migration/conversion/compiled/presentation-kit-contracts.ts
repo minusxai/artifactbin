@@ -1,5 +1,9 @@
 /** Exact archived kit names; these are presentation components, never action adapters. */
 export type PresentationKitTag =
+  | "Tabs"
+  | "TabsList"
+  | "TabsTrigger"
+  | "TabsContent"
   | "Accordion"
   | "AccordionItem"
   | "AccordionTrigger"
@@ -22,10 +26,18 @@ export interface PresentationKitCapability {
   conditionalChildren: boolean;
   portal: boolean;
   requiredAncestor?: PresentationKitTag;
+  /** Exact viewer-local declared Value dependency; source traversal resolves its type. */
+  scalarBinding?: PresentationScalarBinding;
 }
 
 /** Source-derived transparent roots requiring a layout-neutral DOM identity host. */
 export interface PresentationIdentityHost {
   readonly tag: "Tooltip" | "TooltipProvider";
   readonly id: string;
+}
+
+export interface PresentationScalarBinding {
+  readonly tag: "Dialog";
+  readonly binding: string;
+  readonly valueType: "boolean";
 }
