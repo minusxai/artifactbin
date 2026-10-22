@@ -152,14 +152,16 @@ for (const [name, engine] of engines) {
         );
       };
       await documentFrame.waitForFunction(pendingVolta);
-      // From here on record every startup change, so showing the page before the release is caught in
-      // order, not by a timer.
+      // Record every startup change from here on, so a page shown before the release is caught in order.
       await page.evaluate(() => {
         const order: string[] = ((window as any).startupOrder = []);
         new MutationObserver(() => {
           if (document.documentElement.getAttribute("data-pagegi-startup") === "ready") order.push("ready");
         }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-pagegi-startup"] });
       });
+      // A justified negative wait: readiness that arrives on its own timer, independent of the held CSS,
+      // has no event to order against, so the page is given time to show wrongly before the check.
+      await page.waitForTimeout(400);
       assert.notEqual(
         await page.locator("html").getAttribute("data-pagegi-startup"),
         "ready",
