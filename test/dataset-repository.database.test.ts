@@ -26,7 +26,7 @@ const binding: DatasetBinding = {
     },
   ],
 };
-async function fixture() {
+async function fixture(savedBinding = binding) {
   const env = await testDatabase();
   for (const path of [
     "schema.sql",
@@ -53,13 +53,16 @@ async function fixture() {
     [access],
   );
   await env.pool.query(
-    "INSERT INTO af_backend_files(file_id,owner,head_version) VALUES('Bk0001','owner','backend-v1')",
+    "INSERT INTO af_backend_files(file_id,owner,head_version) VALUES('Bk0001','owner',$1)",
+    [savedBinding.backendVersion],
   );
   await env.pool.query(
-    "INSERT INTO af_backend_versions(file_id,version,page_id,page_version,type_defs,deployment) VALUES('Bk0001','backend-v1','Pg0001',1,'type Query { read: String }','{}')",
+    "INSERT INTO af_backend_versions(file_id,version,page_id,page_version,type_defs,deployment) VALUES('Bk0001',$1,'Pg0001',1,'type Query { read: String }','{}')",
+    [savedBinding.backendVersion],
   );
   await env.pool.query(
-    "INSERT INTO af_page_backends(page_id,page_version,position,name,file_id,version) VALUES('Pg0001',1,0,'bridge','Bk0001','backend-v1')",
+    "INSERT INTO af_page_backends(page_id,page_version,position,name,file_id,version) VALUES('Pg0001',1,0,'bridge','Bk0001',$1)",
+    [savedBinding.backendVersion],
   );
   const owner = { userId: "old-owner", tokenId: null };
   const page = {
@@ -86,16 +89,16 @@ async function fixture() {
   );
   await env.pool.query(
     "INSERT INTO dataset_versions VALUES('legacy','old-data',1,$1,'{}','[]')",
-    [JSON.stringify(binding.tables)],
+    [JSON.stringify(savedBinding.tables)],
   );
   await env.pool.query(
     "INSERT INTO dataset_pages VALUES('Pg0001',1,'legacy',$1)",
     [page],
   );
-  const { tables: _, ...descriptor } = binding;
+  const { tables: _, ...descriptor } = savedBinding;
   await env.pool.query(
-    "INSERT INTO dataset_bindings VALUES('Bk0001','backend-v1','Pg0001',1,'sales','legacy','old-data',1,$1)",
-    [descriptor],
+    "INSERT INTO dataset_bindings VALUES('Bk0001',$2,'Pg0001',1,'sales','legacy','old-data',1,$1)",
+    [descriptor, savedBinding.backendVersion],
   );
   await env.pool.query(
     "INSERT INTO dataset_principals VALUES('legacy','owner','user','old-owner','user',NULL),('legacy','member','user','old-member','user',NULL),('legacy','member','token','ownership-only-token','user',NULL)",
@@ -176,10 +179,26 @@ test("separate page/dataset ACL, group revocation and ambiguous legacy callers f
     await env.pool.query(
       "UPDATE files SET access=jsonb_set(access,'{shares}','{\"member\":\"viewer\"}')",
     );
-    await env.pool.query(
-      "INSERT INTO dataset_principals VALUES('legacy','member','user','ambiguous-second-user','user',NULL)",
+    await assert.rejects(
+      env.pool.query(
+        "INSERT INTO dataset_principals VALUES('legacy','member','user','ambiguous-second-user','user',NULL)",
+      ),
+      /unique/,
     );
-    assert.equal(await repository.authority(context, binding), null);
+    await env.pool.query("INSERT INTO accounts(actor) VALUES('other-member')");
+    await assert.rejects(
+      env.pool.query(
+        "INSERT INTO dataset_principals VALUES('legacy','other-member','user','old-member','user',NULL)",
+      ),
+      /unique/,
+    );
+    await assert.rejects(
+      env.pool.query(
+        "UPDATE dataset_principals SET actor='owner' WHERE actor='member' AND kind='user'",
+      ),
+      /immutable/,
+    );
+    assert.ok(await repository.authority(context, binding));
     await assert.rejects(
       env.pool.query("UPDATE dataset_versions SET catalog='[]'"),
       /immutable/,
@@ -277,3 +296,4 @@ test("deleting a page removes its binding metadata without rewriting the dataset
     await env.cleanup();
   }
 });
+

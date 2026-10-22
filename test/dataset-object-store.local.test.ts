@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -24,6 +25,8 @@ test("dataset object mount admits only bounded regular full-SHA objects, never t
     await mkdir(join(root, directory));
     await writeFile(join(root, huge), "");
     await truncate(join(root, huge), DATASET_OBJECT_BYTES + 1);
+    const fifo = "f".repeat(64);
+    execFileSync("mkfifo", [join(root, fifo)]);
     const store = createReadonlyDatasetObjectStore(root);
     const chunks: Uint8Array[] = [];
     for await (const chunk of await store.read(key)) chunks.push(chunk);
@@ -36,8 +39,20 @@ test("dataset object mount admits only bounded regular full-SHA objects, never t
       linked,
       directory,
       huge,
+      fifo,
     ])
       await assert.rejects(store.read(invalid), { code: "invalid_dataset" });
+    const early = (await store.read(key))[Symbol.asyncIterator]();
+    assert.equal((await early.next()).done, false);
+    await early.return?.();
+    assert.equal((await early.next()).done, true);
+    const midway = new AbortController();
+    const aborted = (await store.read(key, midway.signal))[
+      Symbol.asyncIterator
+    ]();
+    midway.abort();
+    await assert.rejects(aborted.next(), { name: "AbortError" });
+    assert.equal((await aborted.next()).done, true);
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(store.read(key, controller.signal), {

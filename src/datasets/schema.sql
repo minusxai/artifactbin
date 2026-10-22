@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS dataset_principals (
  legacy_id text NOT NULL, identity text NOT NULL CHECK(identity IN ('user','guest','testuser')), expires_at timestamptz,
  PRIMARY KEY(source_namespace,actor,kind,legacy_id)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS dataset_principals_legacy_identity ON dataset_principals(source_namespace,kind,legacy_id);
+CREATE UNIQUE INDEX IF NOT EXISTS dataset_principals_user_actor ON dataset_principals(source_namespace,actor) WHERE kind='user';
 CREATE TABLE IF NOT EXISTS dataset_groups (
  source_namespace text NOT NULL, owner text NOT NULL REFERENCES groups(owner), legacy_group_id text NOT NULL,
  PRIMARY KEY(source_namespace,legacy_group_id)
@@ -42,3 +44,7 @@ DROP TRIGGER IF EXISTS dataset_bindings_immutable ON dataset_bindings;
 CREATE TRIGGER dataset_bindings_immutable BEFORE UPDATE ON dataset_bindings FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
 DROP TRIGGER IF EXISTS dataset_pages_immutable ON dataset_pages;
 CREATE TRIGGER dataset_pages_immutable BEFORE UPDATE ON dataset_pages FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+
+-- Identity assignments cannot be rewritten; expiry alone may change to revoke eligibility.
+DROP TRIGGER IF EXISTS dataset_principals_identity_immutable ON dataset_principals;
+CREATE TRIGGER dataset_principals_identity_immutable BEFORE UPDATE OF source_namespace,actor,kind,legacy_id,identity ON dataset_principals FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();

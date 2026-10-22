@@ -17,7 +17,7 @@ export function createReadonlyDatasetObjectStore(
       try {
         handle = await open(
           resolve(root, key),
-          constants.O_RDONLY | constants.O_NOFOLLOW,
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
         );
         const stat = await handle.stat();
         if (!stat.isFile() || stat.size > DATASET_OBJECT_BYTES)
