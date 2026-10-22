@@ -87,6 +87,7 @@ test("Apollo boot applies atomic scalar writes and reprojects persisted state af
   let observer: any;
   let context: any;
   const hydrationValues: any[] = [];
+  const readyValues: unknown[] = [];
   const client = {
     watchQuery: () => ({
       subscribe: (fn: any) => {
@@ -118,6 +119,7 @@ test("Apollo boot applies atomic scalar writes and reprojects persisted state af
     "client",
     "gql",
     "hydrateIsland",
+    "markCompiledReady",
     "createSignal",
     source + ";return boot;",
   )(
@@ -127,10 +129,12 @@ test("Apollo boot applies atomic scalar writes and reprojects persisted state af
       context = c;
       hydrationValues.push(c.value("count"));
     },
+    () => readyValues.push(context.value("count")),
     createSignal,
   );
   boot({ TREE: () => null });
   assert.deepEqual(hydrationValues, [0]);
+  assert.deepEqual(readyValues, [7]);
   assert.equal(context.value("count"), 7);
   context.store().setValues({ count: 9, label: "clicked" });
   assert.deepEqual(saved.compiledPage, { count: 9, label: "clicked" });
@@ -219,6 +223,7 @@ test("local query projection ignores stale runs after later Apollo state changes
     "client",
     "gql",
     "hydrateIsland",
+    "markCompiledReady",
     "createSignal",
     "pageEngine",
     source + ";return boot;",
@@ -228,6 +233,7 @@ test("local query projection ignores stale runs after later Apollo state changes
     (_: any, _tree: any, c: any) => {
       context = c;
     },
+    () => {},
     createSignal,
     () => engine,
   );
@@ -320,6 +326,7 @@ test("table viewer state validates schema, reloads saved rows, and keeps scalar 
     "client",
     "gql",
     "hydrateIsland",
+    "markCompiledReady",
     "createSignal",
     source + ";return boot;",
   )(
@@ -328,6 +335,7 @@ test("table viewer state validates schema, reloads saved rows, and keeps scalar 
     (_: any, __: any, c: any) => {
       context = c;
     },
+    () => {},
     signal,
   );
   boot({ TREE: () => null });
