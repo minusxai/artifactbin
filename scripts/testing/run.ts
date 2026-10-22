@@ -83,6 +83,7 @@ async function main(): Promise<void> {
   if (needs.backend) {
     await run(["npm", "run", "build:backend"]);
     await run(["npm", "run", "build:dataset-sql"]);
+    await run(["npm", "run", "build:image-processor"]);
   }
   console.log(`Running ${tests.length} ${stage} test files`);
   await run([

@@ -33,11 +33,14 @@ docker build --label "org.opencontainers.image.revision=$revision" -t "$image" "
 # The sandbox image the execution service runs backend files on: the same revision as the app.
 backend_image="artefactv2-backend:$revision"
 docker build -t "$backend_image" "$release/src/backend/container"
+image_processor_image="artefactv2-image-processor:$revision"
+docker build -f "$release/src/media/image-processing/container/Dockerfile" -t "$image_processor_image" "$release"
 dataset_sql_image="artefactv2-dataset-sql:$revision"
 docker build -f "$release/src/datasets/sql/container/Dockerfile" -t "$dataset_sql_image" "$release"
 # Capture the last working composition before replacing it. The lock covers this snapshot and rollout.
 previous=$(cat "$root/current-image" 2>/dev/null || printf 'artefactv2:local')
 previous_backend=$(cat "$root/current-backend-image" 2>/dev/null || printf 'artefactv2-backend:local')
+previous_image_processor=$(cat "$root/current-image-processor-image" 2>/dev/null || printf 'artefactv2-image-processor:local')
 previous_dataset_sql=$(cat "$root/current-dataset-sql-image" 2>/dev/null || printf 'artefactv2-dataset-sql:local')
 previous_compose=$(mktemp "$root/.compose-before-rollout-XXXXXX")
 had_previous_compose=false
@@ -53,7 +56,7 @@ rollback_rollout() {
     echo 'Deployment failed; restoring previous composition and images' >&2
     cp -p "$previous_compose" "$root/compose.yaml.rollback"
     mv "$root/compose.yaml.rollback" "$root/compose.yaml"
-    export PAGEGI_IMAGE="$previous" PAGEGI_BACKEND_IMAGE="$previous_backend" PAGEGI_DATASET_SQL_IMAGE="$previous_dataset_sql"
+    export PAGEGI_IMAGE="$previous" PAGEGI_BACKEND_IMAGE="$previous_backend" PAGEGI_IMAGE_PROCESSOR_IMAGE="$previous_image_processor" PAGEGI_DATASET_SQL_IMAGE="$previous_dataset_sql"
     "${compose[@]}" up -d --no-build --wait --wait-timeout 120 || echo 'Previous rollout failed to recover; operator intervention required' >&2
   else
     echo 'Initial deployment failed; no previous composition exists' >&2
@@ -127,7 +130,7 @@ systemctl daemon-reload && systemctl enable --now artefactv2-sandbox-egress.serv
 backup="$root/backups/$(date +%s%N).dump"
 (umask 077; "${compose[@]}" exec -T postgres pg_dump -U artefactv2_admin -d artefactv2 -Fc > "$backup.tmp")
 mv "$backup.tmp" "$backup"
-export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image" PAGEGI_DATASET_SQL_IMAGE="$dataset_sql_image"
+export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image" PAGEGI_IMAGE_PROCESSOR_IMAGE="$image_processor_image" PAGEGI_DATASET_SQL_IMAGE="$dataset_sql_image"
 "${compose[@]}" up -d --no-build --wait --wait-timeout 120
 trap - ERR
 if [[ "$had_previous_compose" == true ]]; then
@@ -141,11 +144,14 @@ printf '%s\n' "$image" > "$root/current-image.tmp"
 mv "$root/current-image.tmp" "$root/current-image"
 printf '%s\n' "$backend_image" > "$root/current-backend-image.tmp"
 mv "$root/current-backend-image.tmp" "$root/current-backend-image"
+printf '%s\n' "$previous_image_processor" > "$root/previous-image-processor-image"
+printf '%s\n' "$image_processor_image" > "$root/current-image-processor-image.tmp"
+mv "$root/current-image-processor-image.tmp" "$root/current-image-processor-image"
 printf '%s\n' "$previous_dataset_sql" > "$root/previous-dataset-sql-image"
 printf '%s\n' "$dataset_sql_image" > "$root/current-dataset-sql-image.tmp"
 mv "$root/current-dataset-sql-image.tmp" "$root/current-dataset-sql-image"
 # Keep ordinary docker compose operations on the successful release too.
-printf 'PAGEGI_IMAGE=%s\nPAGEGI_BACKEND_IMAGE=%s\nPAGEGI_DATASET_SQL_IMAGE=%s\n' "$image" "$backend_image" "$dataset_sql_image" > "$root/.env.tmp"
+printf 'PAGEGI_IMAGE=%s\nPAGEGI_BACKEND_IMAGE=%s\nPAGEGI_IMAGE_PROCESSOR_IMAGE=%s\nPAGEGI_DATASET_SQL_IMAGE=%s\n' "$image" "$backend_image" "$image_processor_image" "$dataset_sql_image" > "$root/.env.tmp"
 mv "$root/.env.tmp" "$root/.env"
 # Only this receiver's timestamp namespace is eligible; named/protected backups survive.
 python3 "$release/deploy/backup-retention.py" "$root/backups" --apply

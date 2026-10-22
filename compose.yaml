@@ -57,6 +57,7 @@ services:
       PAGEGI_EXECUTION_PORT: '8788'
       PAGEGI_EXECUTION_SECRET_FILE: /run/pagegi-execution-secret/transport-secret
       PAGEGI_BACKEND_IMAGE: ${PAGEGI_BACKEND_IMAGE:-pagegi-backend:local}
+      PAGEGI_IMAGE_PROCESSOR_IMAGE: ${PAGEGI_IMAGE_PROCESSOR_IMAGE:-pagegi-image-processor:local}
       # Lambdas run on this dedicated bridge (created by the service on first use, interface
       # pagegi-sbx, no inter-container traffic, isolated from this project's network); workerd lets
       # them reach public addresses only, and deploy/receive.sh drops private ranges on it too.

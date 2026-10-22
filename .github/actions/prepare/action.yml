@@ -65,6 +65,12 @@ runs:
       with:
         path: ${{ runner.temp }}/pagegi-dataset-sql-image.tar
         key: dataset-sql-image-v1-${{ steps.requirements.outputs.dataset-sql-key }}
+    - name: Restore the exact image processor image
+      if: steps.requirements.outputs.image-processor-key != ''
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/pagegi-image-processor-image.tar
+        key: image-processor-image-v1-${{ steps.requirements.outputs.image-processor-key }}
     - name: Start backend setup after restoring its exact image
       shell: bash
       env:

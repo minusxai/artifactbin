@@ -1,3 +1,5 @@
+import { createImageJobExecutor } from "../media/image-processing/executor.ts";
+import { reapImageContainers } from "../media/image-processing/reaper.ts";
 import { createDatasetSqlExecutor } from "./dataset-sql-executor.ts";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
@@ -21,6 +23,10 @@ const service = createExecutionService({
     deploymentNamespace,
     image: process.env.PAGEGI_DATASET_SQL_IMAGE,
   }),
+  imageProcessor: createImageJobExecutor({
+    deploymentNamespace,
+    image: process.env.PAGEGI_IMAGE_PROCESSOR_IMAGE,
+  }),
   secret: readFileSync(secretFile, "utf8").trim(),
 });
 const server = createServer(
@@ -35,6 +41,7 @@ try {
   const reaped = await reapBackendContainers(dockerCommand, {
     deploymentNamespace,
   });
+  await reapImageContainers(dockerCommand, deploymentNamespace);
   console.log(JSON.stringify({ execution: "cleanup verified", reaped }));
 } catch {
   console.error(

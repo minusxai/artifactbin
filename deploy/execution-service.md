@@ -13,3 +13,17 @@ The sandbox image is `pagegi-backend:<sha>`, built by the deployment from the re
 For a dedicated execution host instead, run the same entry point with `PAGEGI_EXECUTION_BIND`/`PAGEGI_EXECUTION_PORT` or `PAGEGI_EXECUTION_SOCKET` and point the app's `PAGEGI_EXECUTION_ENDPOINT` or `PAGEGI_EXECUTION_SOCKET` at it: HTTP alone does not encrypt the bearer secret, so a separate host needs an authenticated encrypted private network or mutually authenticated TLS.
 
 Lambdas run on the Docker network `pagegi-sandbox` (`PAGEGI_SANDBOX_NETWORK` in the Compose file), which the service checks when it starts and creates if missing: an IPv4-only bridge (`--ipv6=false`) named `pagegi-sbx` with inter-container traffic disabled. A network of that name with other settings is refused and lambdas stay unavailable until it is removed; one removed while the service runs (`docker network prune`) is recreated on the next call; it is not the project network, so sandboxes cannot reach Postgres, the app or this service. workerd inside each sandbox allows public addresses only. `deploy/receive.sh` installs iptables (IPv4) rules on `pagegi-sbx` (no traffic to the host, to private, loopback or link-local ranges, or anywhere but DNS on the host's resolvers); the bridge has no IPv6, so there is nothing for ip6tables to filter. Every deployment writes the rules to `/usr/local/sbin/pagegi-sandbox-egress`, installs and enables the oneshot `pagegi-sandbox-egress.service` and runs the script. The unit runs after `docker.service` at boot and, being `PartOf=` and `WantedBy=docker.service`, again whenever Docker restarts or starts, so the rules survive reboots and Docker restarts; `systemctl restart pagegi-sandbox-egress` reapplies them by hand (for example after the host's resolvers change). Stopping the unit leaves the rules in place. The service fetches npm packages from `https://esm.sh` when it compiles, so it needs outbound HTTPS.
+
+Raster processing shares the authenticated execution transport at
+`POST /v1/image-process`. Only the execution controller creates decoder jobs;
+`PAGEGI_IMAGE_PROCESSOR_IMAGE` selects its fixed, release-versioned image. The app
+receives neither a native decoder nor the Docker socket. Jobs have one admission
+slot, no queue, a 15-second deadline and separate image container ownership labels.
+Startup verifies cleanup of these dedicated containers before listening; shutdown
+aborts incomplete uploads and waits for verified job removal.
+
+Both release receivers build the decoder image from the release source and keep
+`current-image-processor-image` and `previous-image-processor-image`. Successful
+rollouts pin the selected image in Compose `.env`; failed rollouts restore its
+previous pointer with the app and backend composition. CI caches this image using
+its source tree, lockfile, Dockerfile, Docker ignore rules and execution platform.

@@ -2,6 +2,7 @@ import { browserRuntimePlan } from "./browser-runtime.ts";
 import {
   backendContextFingerprint,
   datasetSqlContextFingerprint,
+  imageProcessorContextFingerprint,
 } from "./backend-cache.ts";
 import { appendFileSync } from "node:fs";
 import { setupRequirements } from "./inventory.ts";
@@ -36,4 +37,10 @@ if (requirements.backend)
   appendFileSync(
     process.env.GITHUB_OUTPUT,
     `dataset-sql-key=${datasetSqlContextFingerprint({ root: ".", platform: process.platform, architecture: process.arch })}\n`,
+  );
+
+if (requirements.backend)
+  appendFileSync(
+    process.env.GITHUB_OUTPUT,
+    `image-processor-key=${imageProcessorContextFingerprint({ root: ".", platform: process.platform, architecture: process.arch })}\n`,
   );

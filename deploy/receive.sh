@@ -27,11 +27,14 @@ docker build --label "org.opencontainers.image.revision=$revision" -t "$image" "
 # The sandbox image the execution service runs backend files on: the same revision as the app.
 backend_image="pagegi-backend:$revision"
 docker build -t "$backend_image" "$release/src/backend/container"
+image_processor_image="pagegi-image-processor:$revision"
+docker build -f "$release/src/media/image-processing/container/Dockerfile" -t "$image_processor_image" "$release"
 # The composition is the release's, never a host-edited copy.
 cp "$release/compose.yaml" "$root/compose.yaml.tmp"
 mv "$root/compose.yaml.tmp" "$root/compose.yaml"
 previous=$(cat "$root/current-image" 2>/dev/null || printf 'pagegi:local')
 previous_backend=$(cat "$root/current-backend-image" 2>/dev/null || printf 'pagegi-backend:local')
+previous_image_processor=$(cat "$root/current-image-processor-image" 2>/dev/null || printf 'pagegi-image-processor:local')
 compose=(docker compose --project-name pagegi --project-directory "$root" -f "$root/compose.yaml")
 # Backend sandboxes run on the Docker bridge `pagegi-sbx` (network pagegi-sandbox, created by the
 # execution service; src/backend/README.md) and may reach public addresses only. workerd enforces
@@ -93,10 +96,10 @@ systemctl daemon-reload && systemctl enable --now pagegi-sandbox-egress.service
 backup="$root/backups/$(date +%s%N).dump"
 (umask 077; "${compose[@]}" exec -T postgres pg_dump -U pagegi -d pagegi -Fc > "$backup.tmp")
 mv "$backup.tmp" "$backup"
-export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image"
+export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image" PAGEGI_IMAGE_PROCESSOR_IMAGE="$image_processor_image"
 if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 120; then
   echo 'Deployment failed; restoring previous images' >&2
-  export PAGEGI_IMAGE="$previous" PAGEGI_BACKEND_IMAGE="$previous_backend"
+  export PAGEGI_IMAGE="$previous" PAGEGI_BACKEND_IMAGE="$previous_backend" PAGEGI_IMAGE_PROCESSOR_IMAGE="$previous_image_processor"
   "${compose[@]}" up -d --no-build --wait --wait-timeout 120
   exit 1
 fi
@@ -106,8 +109,11 @@ printf '%s\n' "$image" > "$root/current-image.tmp"
 mv "$root/current-image.tmp" "$root/current-image"
 printf '%s\n' "$backend_image" > "$root/current-backend-image.tmp"
 mv "$root/current-backend-image.tmp" "$root/current-backend-image"
+printf '%s\n' "$previous_image_processor" > "$root/previous-image-processor-image"
+printf '%s\n' "$image_processor_image" > "$root/current-image-processor-image.tmp"
+mv "$root/current-image-processor-image.tmp" "$root/current-image-processor-image"
 # Keep ordinary docker compose operations on the successful release too.
-printf 'PAGEGI_IMAGE=%s\nPAGEGI_BACKEND_IMAGE=%s\n' "$image" "$backend_image" > "$root/.env.tmp"
+printf 'PAGEGI_IMAGE=%s\nPAGEGI_BACKEND_IMAGE=%s\nPAGEGI_IMAGE_PROCESSOR_IMAGE=%s\n' "$image" "$backend_image" "$image_processor_image" > "$root/.env.tmp"
 mv "$root/.env.tmp" "$root/.env"
 python3 - "$root" <<'PY'
 from pathlib import Path

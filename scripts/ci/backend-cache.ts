@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type {
   BackendContextFingerprintOptions,
   DatasetSqlContextFingerprintOptions,
+  ImageProcessorContextFingerprintOptions,
 } from "./contracts.ts";
 /** Include paths, modes, hidden files and bytes so a changed Docker context cannot reuse an older image. */
 export function backendContextFingerprint({
@@ -44,6 +45,21 @@ export function datasetSqlContextFingerprint(
     "src/datasets/sql",
     "src/datasets/mutation/contracts.ts",
   ])
+    hash.update(relative).update(
+      backendContextFingerprint({
+        ...options,
+        root: join(options.root, relative),
+      }),
+    );
+  return hash.digest("hex");
+}
+
+/** The fixed decoder image copies only its sandbox source tree. */
+export function imageProcessorContextFingerprint(
+  options: ImageProcessorContextFingerprintOptions,
+): string {
+  const hash = createHash("sha256");
+  for (const relative of [".dockerignore", "src/media/image-processing"])
     hash
       .update(relative)
       .update(

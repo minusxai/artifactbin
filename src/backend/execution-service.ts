@@ -1,3 +1,4 @@
+import { imageProcessingListener } from "../media/image-processing/listener.ts";
 import { datasetSqlListener } from "./dataset-sql-transport.ts";
 import { request as httpRequest, type RequestListener } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -116,12 +117,19 @@ export function createExecutionService(
   const datasetSql = options.datasetSql
     ? datasetSqlListener(options.datasetSql, options.secret)
     : undefined;
+  const imageProcessor = options.imageProcessor
+    ? imageProcessingListener(options.imageProcessor, options.secret)
+    : undefined;
   let active = 0;
   const expected = Buffer.from("Bearer " + options.secret);
   let closed = false,
     closePromise: Promise<void> | undefined;
   const owned = new Map<() => void, Promise<void>>();
   const listener: RequestListener = (req, res) => {
+    if (!closed && req.url === "/v1/image-process" && imageProcessor) {
+      imageProcessor(req, res);
+      return;
+    }
     if (
       !closed &&
       ["/v1/dataset-sql", "/v1/dataset-query"].includes(req.url ?? "") &&
@@ -333,6 +341,7 @@ export function createExecutionService(
         for (const cancel of owned.keys()) cancel();
         closePromise = Promise.allSettled([
           sqlCleanup,
+          imageProcessor?.close(),
           Promise.all(work).then(() => options.host.close?.()),
         ]).then((results) => {
           const failure = results.find((r) => r.status === "rejected");

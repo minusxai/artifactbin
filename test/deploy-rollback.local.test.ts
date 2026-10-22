@@ -18,6 +18,7 @@ interface ComposeCall {
   app?: string;
   backend?: string;
   sql?: string;
+  processor?: string;
 }
 const revision = "a".repeat(40);
 const stub = `#!${process.execPath}
@@ -25,7 +26,7 @@ const fs=require('node:fs'),path=require('node:path');const name=path.basename(p
 if(name==='docker'){
  if(args[0]==='build')process.exit(0);
  const config=fs.readFileSync(args[args.indexOf('-f')+1],'utf8');
- fs.appendFileSync(process.env.CALL_LOG,JSON.stringify({args,config,app:process.env.PAGEGI_IMAGE,backend:process.env.PAGEGI_BACKEND_IMAGE,sql:process.env.PAGEGI_DATASET_SQL_IMAGE})+'\\n');
+ fs.appendFileSync(process.env.CALL_LOG,JSON.stringify({args,config,app:process.env.PAGEGI_IMAGE,backend:process.env.PAGEGI_BACKEND_IMAGE,sql:process.env.PAGEGI_DATASET_SQL_IMAGE,processor:process.env.PAGEGI_IMAGE_PROCESSOR_IMAGE})+'\\n');
  if(args.includes('exec')){process.stdout.write('private-dump');process.exit(0);}
  if((process.env.FAIL_STAGE==='postgres'&&args.at(-1)==='postgres')||(process.env.FAIL_STAGE==='rollout'&&args.includes('--no-build')&&config==='new-composition\\n'))process.exit(17);
  process.exit(0);
@@ -61,6 +62,7 @@ for (const failure of ["rollout", "postgres", "", "initial"]) {
         "current-image": "old-app",
         "current-backend-image": "old-backend",
         "current-dataset-sql-image": "old-sql",
+        "current-image-processor-image": "old-processor",
       };
       for (const [name, value] of Object.entries(pointers))
         writeFileSync(join(root, name), value + "\n");
@@ -122,6 +124,7 @@ for (const failure of ["rollout", "postgres", "", "initial"]) {
         assert.equal(rollback.app, "old-app");
         assert.equal(rollback.backend, "old-backend");
         assert.equal(rollback.sql, "old-sql");
+        assert.equal(rollback.processor, "old-processor");
         for (const [name, value] of Object.entries(pointers))
           assert.equal(readFileSync(join(root, name), "utf8"), value + "\n");
         assert.equal(
@@ -143,6 +146,11 @@ for (const failure of ["rollout", "postgres", "", "initial"]) {
           `artefactv2-dataset-sql:${revision}\n`,
         );
       }
+      if (!failure)
+        assert.equal(
+          readFileSync(join(root, "current-image-processor-image"), "utf8"),
+          `artefactv2-image-processor:${revision}\n`,
+        );
       assert.ok(
         !existsSync(join(root, "postgres-data")),
         "harness never touches a database volume",

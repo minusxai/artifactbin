@@ -65,6 +65,7 @@ services:
       PAGEGI_EXECUTION_PORT: '8788'
       PAGEGI_EXECUTION_SECRET_FILE: /run/pagegi-execution-secret/transport-secret
       PAGEGI_BACKEND_IMAGE: ${PAGEGI_BACKEND_IMAGE:-artefactv2-backend:local}
+      PAGEGI_IMAGE_PROCESSOR_IMAGE: ${PAGEGI_IMAGE_PROCESSOR_IMAGE:-artefactv2-image-processor:local}
       PAGEGI_DATASET_SQL_IMAGE: ${PAGEGI_DATASET_SQL_IMAGE:-artefactv2-dataset-sql:local}
       # Lambdas run on this dedicated bridge (created by the service on first use, interface
       # artefactv2-sb, no inter-container traffic, isolated from this project's network); workerd lets

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import {
   backendContextFingerprint,
   datasetSqlContextFingerprint,
+  imageProcessorContextFingerprint,
 } from "../scripts/ci/backend-cache.ts";
 test("backend image cache tracks the complete context and execution platform", () => {
   const root = mkdtempSync(join(tmpdir(), "pagegi-ci-context-"));
@@ -41,6 +42,36 @@ test("backend image cache tracks the complete context and execution platform", (
     const nested = backendContextFingerprint(options);
     chmodSync(join(root, "nested", "future.mjs"), 0o755);
     assert.notEqual(backendContextFingerprint(options), nested);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("image processor cache changes with decoder sources, dependencies and platform", () => {
+  const root = mkdtempSync(join(tmpdir(), "image-cache-"));
+  try {
+    mkdirSync(join(root, "src/media/image-processing/container"), {
+      recursive: true,
+    });
+    writeFileSync(join(root, ".dockerignore"), "node_modules");
+    const options = { root, platform: "linux", architecture: "x64" };
+    let previous = imageProcessorContextFingerprint(options);
+    for (const file of [
+      "engine.ts",
+      "contracts.ts",
+      "container/entry.mjs",
+      "container/package-lock.json",
+      "container/Dockerfile",
+    ]) {
+      writeFileSync(join(root, "src/media/image-processing", file), "changed");
+      const current = imageProcessorContextFingerprint(options);
+      assert.notEqual(current, previous);
+      previous = current;
+    }
+    assert.notEqual(
+      imageProcessorContextFingerprint({ ...options, architecture: "arm64" }),
+      previous,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

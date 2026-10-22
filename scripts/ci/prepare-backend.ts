@@ -53,3 +53,34 @@ if (setupRequirements(kind!, Number(shard), Number(total), engine).backend) {
   }
   run(["image", "inspect", "--format", "{{.Id}}", "pagegi-dataset-sql:local"]);
 }
+
+if (setupRequirements(kind!, Number(shard), Number(total), engine).backend) {
+  const archive = process.env.RUNNER_TEMP
+    ? join(process.env.RUNNER_TEMP, "pagegi-image-processor-image.tar")
+    : undefined;
+  function run(args: string[]): void {
+    const result = spawnSync("docker", args, { stdio: "inherit" });
+    if (result.error) throw result.error;
+    if (result.status !== 0) process.exit(result.status ?? 1);
+  }
+  if (archive && existsSync(archive)) run(["load", "--input", archive]);
+  else {
+    run([
+      "build",
+      "-f",
+      "src/media/image-processing/container/Dockerfile",
+      "-t",
+      "pagegi-image-processor:local",
+      ".",
+    ]);
+    if (archive)
+      run(["save", "--output", archive, "pagegi-image-processor:local"]);
+  }
+  run([
+    "image",
+    "inspect",
+    "--format",
+    "{{.Id}}",
+    "pagegi-image-processor:local",
+  ]);
+}
