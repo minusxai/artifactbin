@@ -1,3 +1,6 @@
+import{createHash}from"node:crypto";
+import{validCompiledSourceQueries}from"./source-query-admission.ts";
+import type{CompiledSourceQueryBinding}from"./source-query-contracts.ts";
 import{validCompiledViewerBinding}from"./viewer-binding.ts";
 import type{CompiledViewerBinding}from"./viewer-contracts.ts";
 import { validCompiledMembersBinding } from "./members-binding.ts";
@@ -17,8 +20,15 @@ export async function prepareLocalFlow(
   membersBinding?: CompiledMembersBinding,
   viewerBinding?:CompiledViewerBinding,
   sourceAdmission?:import("./local-contracts.ts").CompiledSourceAdmission,
+  sourceQueries:readonly CompiledSourceQueryBinding[]=[],
 ): Promise<{ flow: any; results: any }> {
   validateBoundFlow(rawFlow, bindings, boundProofs);
+  if(!validCompiledSourceQueries(sourceQueries))throw Error("Invalid source query proof");
+  const remote=rawFlow.queries.filter((q:any)=>q.source);
+  if(remote.length||sourceQueries.length){
+   if(sourceAdmission!=="offline-prototype"||remote.length!==rawFlow.queries.length||remote.length!==sourceQueries.length||rawFlow.imports.length||bindings.length||rawFlow.mutations.length)throw Error("Unsupported source query composition");
+   for(const q of remote){const b=sourceQueries.find(b=>b.name===q.name&&b.sourceRef===`ref:${q.source}`&&b.sqlSha256===createHash("sha256").update(q.sql).digest("hex"));if(!b)throw Error("Source query proof mismatch");}
+  }
   if(viewerBinding!==undefined&&!validCompiledViewerBinding(viewerBinding))throw Error("Invalid viewer binding");
   if (
     membersBinding !== undefined &&
@@ -31,7 +41,11 @@ export async function prepareLocalFlow(
   );
   const ctx = await prepareCompile(rawFlow, async (ref: string) => {
     const selected = bindings.filter((b) => b.legacyRef === `ref:${ref}`);
-    if (!selected.length) return null;
+    if (!selected.length) {
+     const proofs=sourceQueries.filter(b=>b.sourceRef===`ref:${ref}`);if(!proofs.length)return null;
+     const {rewriteBuiltinFields}=await archived("lib/dataflow/compile-dataflow.ts");
+     return {kind:"postgres",tables:[],probe:async(sql:string)=>{const matches=remote.filter((q:any)=>q.source===ref&&rewriteBuiltinFields(q.sql).sql===sql);if(matches.length!==1)throw Error("Ambiguous source query proof");const proof=proofs.find(b=>b.name===matches[0].name)!;return{columns:proof.columns,params:Object.keys(proof.params)};}};
+    }
     if (
       selected.some(
         (b) =>
@@ -65,6 +79,10 @@ export async function prepareLocalFlow(
   const compiled = compileDataflow(rawFlow, ctx, body);
   if (!compiled.ok) throw Error("Local query compilation refused");
   const flow = publicBoundFlow(compiled.compiled, boundProofs);
+  if(sourceQueries.length){
+   if(flow.queries.some((q:any)=>!q.source||q.engine!=="postgres"||q.reads.queries.length||q.reads.imports.length))throw Error("Unsupported source query dependencies");
+   return{flow,results:{tables:{},errors:{}}};
+  }
   if (
     flow.mutations.length ||
     flow.imports.length !== bindings.length ||

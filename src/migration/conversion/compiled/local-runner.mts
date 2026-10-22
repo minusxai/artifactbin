@@ -169,6 +169,7 @@ if (input.datasetUnavailable) {
     input.membersBinding,
     input.viewerBinding,
     input.sourceAdmission,
+    input.sourceQueries??[],
   ));
 } else if (rawFlow.imports.length) throw Error("Import requires a query");
 if(!input.datasetUnavailable&&input.datasetMutations?.some(binding=>binding.valueParam))validateCompiledCellWriteContexts(input.source,flow,input.datasetMutations??[],input.sourceAdmission);
@@ -327,6 +328,7 @@ if (flow.queries.length && !input.datasetUnavailable) {
     throw Error("Embedded engine exceeds migration limit");
   sql = {
     flow,
+    sourceQueries:input.sourceQueries??[],
     wasm: {
       compression: "gzip",
       base64: packed.toString("base64"),
@@ -492,6 +494,7 @@ const bundled = await bundle({
         b.onLoad({filter:/.*/,namespace:"migration-mermaid"},async()=>({contents:mermaidSource,loader:"js",resolveDir:root}));
         b.onResolve({filter:/^migration-mermaid-theme$/},()=>({path:path.join(root,"services/app/lib/islands/kit/theme-watch.ts")}));
         b.onResolve({filter:/^migration-deck$/},()=>({path:path.join(import.meta.dirname,"deck-runtime.ts")}));
+        b.onResolve({filter:/^migration-source-queries$/},()=>({path:path.join(import.meta.dirname,"source-query-runtime.ts")}));
         b.onResolve({filter:/^migration-query-controller$/},()=>({path:path.join(import.meta.dirname,"query-controller.ts")}));
         b.onResolve({ filter: /^migration-readiness$/ }, () => ({
           path: path.join(import.meta.dirname, "readiness.ts"),

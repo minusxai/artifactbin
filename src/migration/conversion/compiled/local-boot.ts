@@ -24,6 +24,7 @@ export function localBootSource(
   declarations: LocalDeclaration[],
   sql?: {
     flow: unknown;
+    sourceQueries?:readonly import("./source-query-contracts.ts").CompiledSourceQueryBinding[];
     wasmBase64?: string;
     wasm?: CompiledWasmPayload;
     tables: unknown;
@@ -58,13 +59,14 @@ ${personBindings.length ? "import {createCompiledPeople} from 'migration-people'
 ${viewerBinding ? "import {createCompiledViewer} from 'migration-viewer';" : ""}
 ${members ? "import {createCompiledMembers} from 'migration-members';" : ""}
 ${imports ? "import {readCompiledDataset} from 'migration-datasets';" : ""}
+${sql?.sourceQueries?.length?"import {createCompiledSourceQueryEngine} from 'migration-source-queries';":""}
 ${sql ? "import {pageEngine} from 'migration-sqlite';import {createCompiledQueryController,compiledQueryClock} from 'migration-query-controller';" : ""}
 const decodeCompiledWasm=(()=>{const __name=f=>f;return ${decodeCompiledWasm.toString()};})();
 const declarations=${JSON.stringify(declarations)};
 const optionQueries=${JSON.stringify([...new Set([...cellOptionQueries,...controls.flatMap((p) => (p.kind === "select" && typeof p.options === "string" ? [p.options] : []))])])};
 const validLocalValue=(()=>{const __name=f=>f;return ${validLocalValue.toString()};})();
 ${datasetBootSetup(sql?.bindings ?? [])}
-${sql ? `const flow=${JSON.stringify(sql.flow)};const engine=pageEngine(async()=>${sql.wasm ? `decodeCompiledWasm(${JSON.stringify(sql.wasm)})` : `Uint8Array.from(atob(${JSON.stringify(sql.wasmBase64)}),c=>c.charCodeAt(0))`},${imports ? "readImport" : "async()=>{throw Error('Remote imports are unavailable');}"});` : ""}
+${sql?.sourceQueries?.length ? `const flow=${JSON.stringify(sql.flow)};const sourceQueryDocument=gql\`query SourceQuery($name:String!,$valuesJson:String!,$offset:Int!,$limit:Int!,$sortJson:String){legacyData{sourceQuery(name:$name,valuesJson:$valuesJson,offset:$offset,limit:$limit,sortJson:$sortJson)}}\`;const engine=createCompiledSourceQueryEngine(${JSON.stringify(sql.sourceQueries)},{read:async(binding,variables)=>{const result=await client.query({query:sourceQueryDocument,variables});if(result.errors?.length)throw Error('Source query unavailable');return result.data?.legacyData?.sourceQuery;}});` : sql ? `const flow=${JSON.stringify(sql.flow)};const engine=pageEngine(async()=>${sql.wasm ? `decodeCompiledWasm(${JSON.stringify(sql.wasm)})` : `Uint8Array.from(atob(${JSON.stringify(sql.wasmBase64)}),c=>c.charCodeAt(0))`},${imports ? "readImport" : "async()=>{throw Error('Remote imports are unavailable');}"});` : ""}
 const query=gql\`{ compiledPage }\`;
 export function boot({TREE}) {
  ${viewerBinding ? "const [viewer,setViewer]=createSignal(null);let viewerAvailable=false;" : ""}

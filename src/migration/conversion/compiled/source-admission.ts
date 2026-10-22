@@ -1,3 +1,4 @@
+import{validCompiledSourceQueries}from"./source-query-admission.ts";
 import {prepareCompiledFileUploads} from "./file-upload-admission.ts";
 import {readLegacyCellWriteSites} from "./cell-write-source.ts";
 import type {LegacyCellWriteSite} from "./cell-write-contracts.ts";
@@ -113,6 +114,9 @@ export const admitLocalSource: AdmitLocalSource = (input, mode="strict") => {
   if(input.viewerBinding && (historical || !validCompiledViewerBinding(input.viewerBinding)))return blocked("compiled-viewer-binding");
   const viewerAllowed=Boolean(input.viewerBinding)||historical;
   const backendLinks = new Map<string, string>();
+  if(!validCompiledSourceQueries(input.sourceQueries??[])||(input.sourceQueries?.length&&(!prototype||historical)))return blocked("compiled-source-query-binding");
+  for(const binding of input.sourceQueries??[]){if(backendLinks.has(binding.backendNamespace)&&backendLinks.get(binding.backendNamespace)!==binding.backendHref)return blocked("compiled-source-query-binding");backendLinks.set(binding.backendNamespace,binding.backendHref);}
+  if(input.viewerBinding&&backendLinks.has(input.viewerBinding.backendNamespace)&&backendLinks.get(input.viewerBinding.backendNamespace)!==input.viewerBinding.backendHref)return blocked("compiled-source-query-binding");
   if(input.viewerBinding)backendLinks.set(input.viewerBinding.backendNamespace,input.viewerBinding.backendHref);
   if (input.membersBinding) {
     if (historical || !validCompiledMembersBinding(input.membersBinding))
