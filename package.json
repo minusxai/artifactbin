@@ -30,6 +30,7 @@
     "test:v2:all": "node --import tsx scripts/testing/run.ts v2"
   },
   "dependencies": {
+    "@sqlite.org/sqlite-wasm": "3.53.4-build1",
     "acorn": "8.15.0",
     "css-tree": "3.1.0",
     "graphql": "16.11.0",
