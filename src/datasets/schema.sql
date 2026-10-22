@@ -48,3 +48,6 @@ CREATE TRIGGER dataset_pages_immutable BEFORE UPDATE ON dataset_pages FOR EACH R
 -- Identity assignments cannot be rewritten; expiry alone may change to revoke eligibility.
 DROP TRIGGER IF EXISTS dataset_principals_identity_immutable ON dataset_principals;
 CREATE TRIGGER dataset_principals_identity_immutable BEFORE UPDATE OF source_namespace,actor,kind,legacy_id,identity ON dataset_principals FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+
+-- Read-only is the safe default for metadata imported before mutation support.
+ALTER TABLE dataset_resources ADD COLUMN IF NOT EXISTS writable boolean NOT NULL DEFAULT false;

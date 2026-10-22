@@ -14,6 +14,8 @@ export interface DatasetImportMetadata {
   resources: readonly {
     legacyId: string;
     currentVersion: number;
+    /** Only authoritative legacy access=readwrite enables writes; absence denies. */
+    writable?: boolean;
     policyRevision: number;
     owner: string;
     generation: number;
