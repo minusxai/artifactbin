@@ -129,6 +129,8 @@ export default {
         let calls = 0,
           pending = 0,
           bytes = 0;
+        let effectfulDispatches = 0;
+        const invocationRefusals = new Set();
         const capability = async (request) => {
           validate(request);
           const body = JSON.stringify(request);
@@ -140,6 +142,17 @@ export default {
             new TextEncoder().encode(body).byteLength > 65536
           )
             throw Error("capability quota");
+          const effectful =
+            !(request.kind === "dataset" && request.operation === "read") &&
+            !(request.kind === "store" && request.operation === "get");
+          if (effectful) {
+            effectfulDispatches++;
+            // A later possible effect invalidates an earlier caught refusal:
+            // rethrowing it cannot prove the whole field saved nothing.
+            for (const error of invocationRefusals)
+              datasetMutationRejectedErrors.delete(error);
+            invocationRefusals.clear();
+          }
           pending++;
           try {
             const result = await capabilityService.fetch("http://capability/", {
@@ -148,14 +161,22 @@ export default {
             });
             const reply = await result.json();
             // A store write over the size limit is the one refusal named by code; resolvers may catch it.
+            if (
+              !reply.ok &&
+              reply.code === "dataset_mutation_rejected" &&
+              effectfulDispatches === 1 &&
+              effectful
+            ) {
+              const error = datasetMutationRejectedError();
+              invocationRefusals.add(error);
+              throw error;
+            }
             if (!reply.ok)
               throw reply.code === "store_limit"
                 ? storeLimitError()
                 : reply.code === "dataset_changed"
                   ? datasetChangedError()
-                  : reply.code === "dataset_mutation_rejected"
-                    ? datasetMutationRejectedError()
-                    : Error("capability rejected");
+                  : Error("capability rejected");
             validate(reply.value);
             return reply.value;
           } finally {
