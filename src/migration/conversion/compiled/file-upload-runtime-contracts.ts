@@ -3,6 +3,7 @@ import type {LegacyFileUploadSite} from "./file-upload-contracts.ts";
 export interface CompiledAttachmentBinding { backendNamespace: string; bindingName: string }
 export interface CompiledFileUploadSite extends LegacyFileUploadSite { backendNamespace:string }
 export interface CompiledUploadAuthority { generation:string; allowed:boolean }
+export interface NativeUploadAdvisoryStore { attachmentUnavailable?(valueName:string):string|null }
 export interface CompiledFileUploadPorts {
   sites: readonly CompiledFileUploadSite[];
   authority(): CompiledUploadAuthority | null;
