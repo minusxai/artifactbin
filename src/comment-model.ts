@@ -6,8 +6,8 @@ import { canonical, text } from "./model-values.ts";
 import { fail } from "./errors.ts";
 export function validateLoadedSnapshot(
   sourceExists: boolean,
-  snapshot: Snapshot | null,
-  revision: string,
+  snapshot: unknown,
+  revision: unknown,
 ): Snapshot | null {
   if (snapshot === null) return null;
   const copy = jsonCopy(snapshot) as Snapshot;

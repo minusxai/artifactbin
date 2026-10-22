@@ -28,7 +28,12 @@ export function permissions(
   groupFacts?: GroupAuthorityFacts,
 ): FilePermissions {
   const p = policyFor(file);
-  const authority = ownerAuthority(file.owner, file.ownerKind === "group", actor, groupFacts);
+  const authority = ownerAuthority(
+    file.owner,
+    file.ownerKind === "group",
+    actor,
+    groupFacts,
+  );
   if (authority.owns || authority.role === "editor")
     return {
       role: "owner",
@@ -56,7 +61,7 @@ export function permissions(
 }
 export function updatePolicy(
   file: Pick<SharedFile, "owner" | "access">,
-  patch: AccessPatch,
+  patch: AccessPatch | Record<string, unknown>,
   version: number,
 ): AccessPolicy {
   const old = policyFor(file);
@@ -64,19 +69,23 @@ export function updatePolicy(
     fail(412, "Sharing changed. Reload it before saving.");
   const p = { ...old, shares: { ...old.shares }, version: old.version + 1 };
   if ("visibility" in patch) {
-    if (!["public", "unlisted", "private"].includes(patch.visibility))
-      fail(422, "Invalid visibility");
-    p.visibility = patch.visibility;
+    const visibility = (["public", "unlisted", "private"] as const).find(
+      (value) => value === patch.visibility,
+    );
+    if (!visibility) fail(422, "Invalid visibility");
+    p.visibility = visibility;
   } else if ("linkRole" in patch) {
-    if (!roles.includes(patch.linkRole)) fail(422, "Invalid role");
-    p.linkRole = patch.linkRole;
+    const role = roles.find((value) => value === patch.linkRole);
+    if (!role) fail(422, "Invalid role");
+    p.linkRole = role;
   } else if ("email" in patch) {
     const email = emailAddress(patch.email);
     if (email === file.owner) fail(422, "The owner always retains access.");
     if (patch.role === null) delete p.shares[email];
     else {
-      if (!roles.includes(patch.role)) fail(422, "Invalid role");
-      p.shares[email] = patch.role;
+      const role = roles.find((value) => value === patch.role);
+      if (!role) fail(422, "Invalid role");
+      p.shares[email] = role;
     }
     if (Object.keys(p.shares).length > 200)
       fail(422, "A file can have up to 200 invited emails.");

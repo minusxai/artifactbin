@@ -11,7 +11,8 @@ import { createBackendStoreInvalidationReader } from "./persistence/backend-stor
 import { createServiceLifecycle } from "./server/service-lifecycle.ts";
 import { createTrashService } from "./trash/service.ts";
 // @ts-check
-import { parseRequestBody, parseFileRoute, readRequestText } from "./server/request.ts";
+import { parseApiCommand } from "./server/api-command.ts";
+import { parseRequestBody, readRequestText } from "./server/request.ts";
 import { createPlatformAssets } from "./server/assets.ts";
 import { createCollaborationService } from "./server/collaboration.ts";
 import { createIdentityAuthority } from "./server/identity.ts";
@@ -310,7 +311,7 @@ export function createService({
         });
       const raw = await readRequestText(req);
       // Command services validate their own fields after transport shape checking.
-      const input = /** @type {any} */ (parseRequestBody(raw));
+      const input = parseRequestBody(raw);
       const controller = new AbortController();
       res.once("close", () => {
         if (!res.writableEnded) controller.abort();
@@ -470,130 +471,114 @@ export function createService({
         live.changed(removed.id, true);
         return send(200, removed);
       }
-      const fileRoute = parseFileRoute(url.pathname);
-      if (!fileRoute) fail(404, "Not found");
-      const routeParts = fileRoute.parts;
-      const id = fileRoute.fileId,
-        route = routeParts[3],
-        method = req.method;
-      if (route === "backends" || route === "graphql") {
-        const routes = await backendRouteModule();
-        if (!routes) fail(503, "Backends are not available on this server");
-        const handled = await routes.handle({
-          method: method || "GET",
-          url,
-          credential: credential(req),
-          body: input,
-          signal: controller.signal,
-        });
-        if (!handled) fail(404, "Not found");
-        return send(handled.status, handled.body);
-      }
-      if (route === "source" && method === "GET") {
-        const current = await pages.readSource(credential(req), id);
-        res.setHeader("ETag", `"${current.version}"`);
-        return send(200, current);
-      }
-      if (route === "source" && method === "PUT") {
-        const header = req.headers["if-match"];
-        const saved = await pages.save(
-          credential(req),
-          id,
-          Array.isArray(header) ? header[0] : header,
-          input,
-          origin,
-          controller.signal,
-          idempotencyKey(req.headers["idempotency-key"]),
-        );
-        res.setHeader("ETag", `"${saved.value.version}"`);
-        if (saved.changed) live.changed(id, false);
-        return send(saved.status, saved.value);
-      }
-      if (route === "comments" && routeParts.length === 4) {
-        if (method === "GET")
-          return send(
-            200,
-            await comments.list(id, credential(req), url.searchParams.get("since")),
+      const command = parseApiCommand({
+        method: req.method || "GET",
+        url,
+        body: input,
+        headers: {
+          ifMatch: req.headers["if-match"],
+          idempotencyKey: req.headers["idempotency-key"],
+        },
+      });
+      if (!command) fail(404, "Not found");
+      const id = command.fileId;
+      switch (command.kind) {
+        case "backend": {
+          const routes = await backendRouteModule();
+          if (!routes) fail(503, "Backends are not available on this server");
+          const handled = await routes.handle({
+            method: command.method,
+            url,
+            credential: credential(req),
+            body: command.body,
+            signal: controller.signal,
+          });
+          if (!handled) fail(404, "Not found");
+          return send(handled.status, handled.body);
+        }
+        case "source.read": {
+          const current = await pages.readSource(credential(req), id);
+          res.setHeader("ETag", `"${current.version}"`);
+          return send(200, current);
+        }
+        case "source.save": {
+          const saved = await pages.save(
+            credential(req),
+            id,
+            command.ifMatch,
+            command.body,
+            origin,
+            controller.signal,
+            idempotencyKey(command.key),
           );
-        if (method === "POST") {
+          res.setHeader("ETag", `"${saved.value.version}"`);
+          if (saved.changed) live.changed(id, false);
+          return send(saved.status, saved.value);
+        }
+        case "comments.list":
+          return send(200, await comments.list(id, credential(req), command.since));
+        case "comments.add": {
           const created = await comments.add(
             id,
             credential(req),
-            input,
-            idempotencyKey(req.headers["idempotency-key"]),
+            command.body,
+            idempotencyKey(command.key),
           );
           live.changed(id, false);
           return send(201, created);
         }
-      }
-      if (route === "comments" && routeParts.length === 5 && method === "PUT") {
-        const header = req.headers["if-match"];
-        const edited = await comments.edit(
-          id,
-          credential(req),
-          routeParts[4] || "",
-          Array.isArray(header) ? header[0] : header,
-          input,
-        );
-        live.changed(id, false);
-        return send(200, edited);
-      }
-      if (route === "capture" && routeParts.length === 4 && method === "POST")
-        return send(
-          200,
-          await comments.capture(
+        case "comments.edit": {
+          const edited = await comments.edit(
             id,
             credential(req),
-            input?.sessionId,
-            presence.get(id) || {},
-          ),
-        );
-      if (route === "context" && routeParts.length === 5 && method === "GET")
-        return send(
-          200,
-          await comments.context(id, credential(req), routeParts[4] || "", origin),
-        );
-      /** @type {import("./server/collaboration-contracts.ts").CollaborationCommand | null} */
-      const command =
-        route === "permissions" && method === "GET"
-                  ? { kind: "permissions" }
-                  : route === "sharing" && method === "GET"
-                    ? { kind: "sharing" }
-                    : route === "sharing" && method === "PUT"
-                      ? {
-                          kind: "change-sharing",
-                          policy: input,
-                          expectedVersion: Number(
-                            String(req.headers["if-match"] ?? "").replace(
-                              /^"|"$/g,
-                              "",
-                            ),
-                          ),
-                        }
-                      : route === "profiles" && method === "GET"
-                        ? { kind: "profiles" }
-                        : route === "presence" && method === "GET"
-                          ? { kind: "presence" }
-                          : route === "presence" && method === "PUT"
-                            ? { kind: "update-presence", input }
-                            : route === "revoke" && method === "POST"
-                              ? { kind: "revoke" }
-                              : null;
-      if (!command) fail(404, "Not found");
-      const result = await collaboration.execute(id, credential(req), command);
-      if (result.changed === "presence")
-        live.presenceChanged(id, result.generation);
-      else if (result.changed)
-        live.changed(id, result.changed === "policy" ? "policy" : true);
-      send(
-        200,
-        command.kind === "sharing" || command.kind === "change-sharing"
-          ? {
-              .../** @type {object} */ (result.value),
-              url: fileAddress(origin, id),
-            }
-          : result.value,
-      );
+            command.commentId,
+            command.ifMatch,
+            command.body,
+          );
+          live.changed(id, false);
+          return send(200, edited);
+        }
+        case "comments.capture":
+          return send(
+            200,
+            await comments.capture(
+              id,
+              credential(req),
+              command.sessionId,
+              presence.get(id) || {},
+            ),
+          );
+        case "comments.context":
+          return send(
+            200,
+            await comments.context(id, credential(req), command.commentId, origin),
+          );
+        case "collaboration": {
+          const result = await collaboration.execute(
+            id,
+            credential(req),
+            command.command,
+          );
+          if (result.changed === "presence")
+            live.presenceChanged(id, result.generation);
+          else if (result.changed)
+            live.changed(id, result.changed === "policy" ? "policy" : true);
+          return send(
+            200,
+            command.command.kind === "sharing" ||
+              command.command.kind === "change-sharing"
+              ? {
+                  .../** @type {object} */ (result.value),
+                  url: fileAddress(origin, id),
+                }
+              : result.value,
+          );
+        }
+        default: {
+          /** @type {never} */ const unhandled = command;
+          throw Error("Unhandled API command");
+        }
+      }
     } catch (caught) {
       const e = caught instanceof Error ? caught : new Error("Request failed");
       const errorStatus =

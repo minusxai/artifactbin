@@ -289,3 +289,36 @@ test("injected code generation and clock preserve leading zeroes and exact expir
   assert.equal(f.state().emailChallenges!["test@example.test"]!.attempts, 1);
   assert.equal(f.state().accounts["test@example.test"], undefined);
 });
+
+test("untrusted password usernames cannot become repository identities and disabled login wins", async () => {
+  const f = fixture(),
+    authority = createIdentityAuthority();
+  const service = createAuthenticationService({
+    repository: f.repository,
+    authority,
+  });
+  for (const username of [null, 42, ["alice"], { username: "alice" }])
+    await assert.rejects(
+      service.execute({
+        kind: "password",
+        username,
+        password: "correct-password",
+        peer: "malformed",
+      }),
+      { status: 401, message: "Incorrect username or password" },
+    );
+  assert.deepEqual(f.state().tokens, {});
+  await assert.rejects(
+    createAuthenticationService({
+      repository: f.repository,
+      authority,
+      allowPasswordLogin: false,
+    }).execute({
+      kind: "password",
+      username: [],
+      password: "correct-password",
+      peer: "disabled",
+    }),
+    { status: 404, message: "Password sign-in is disabled" },
+  );
+});

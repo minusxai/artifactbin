@@ -25,20 +25,22 @@ export function createAuthenticationService({
       if (command.kind === "password") {
         if (!allowPasswordLogin) fail(404, "Password sign-in is disabled");
         attempt(command.peer, now());
-        return repository.withPasswordAccount(
-          command.username,
-          ({ account }) => {
-            passwordAccount(account, command.password, crypto);
-            const issued = authority.issue(command.username);
-            return {
-              issued,
-              value: {
-                status: 200,
-                value: { token: issued.credential, username: command.username },
-              },
-            };
-          },
-        );
+        if (typeof command.username !== "string") {
+          passwordAccount(null, command.password, crypto);
+          fail(401, "Incorrect username or password");
+        }
+        const username = command.username;
+        return repository.withPasswordAccount(username, ({ account }) => {
+          passwordAccount(account, command.password, crypto);
+          const issued = authority.issue(username);
+          return {
+            issued,
+            value: {
+              status: 200,
+              value: { token: issued.credential, username },
+            },
+          };
+        });
       }
       if (!sendCode) fail(503, "Email sign-in is not configured");
       const email = emailAddress(command.email);

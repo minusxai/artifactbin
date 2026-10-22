@@ -61,7 +61,7 @@ function fixture() {
             },
             session: draft.tokens[credentialHash] || null,
             sourceExists: async (revision) =>
-              Object.hasOwn(file.sources, revision),
+              Object.hasOwn(file.sources, revision as PropertyKey),
           });
           if (failed) throw Error("commit failed");
           Object.assign(file, result.documentChanges);
@@ -264,4 +264,72 @@ test("permissions issues caller markers only after fresh authorization and separ
     read(f.credential),
     /Sign in|revoked|access|permission/i,
   );
+});
+
+test("untrusted sharing and presence are validated only after current caller authority", async () => {
+  const f = fixture(),
+    version = f.db().files.doc!.access!.version;
+  for (const command of [
+    {
+      kind: "change-sharing" as const,
+      policy: { visibility: [] },
+      expectedVersion: Number.NaN,
+    },
+    {
+      kind: "update-presence" as const,
+      input: { sessionId: 42, snapshot: {}, sourceRevision: "missing" },
+    },
+  ])
+    await assert.rejects(f.service.execute("doc", "share", command), {
+      status: 401,
+    });
+  await assert.rejects(
+    f.service.execute("doc", f.credential, {
+      kind: "change-sharing",
+      policy: { visibility: [] },
+      expectedVersion: version + 1,
+    }),
+    { status: 412 },
+  );
+  await assert.rejects(
+    f.service.execute("doc", f.credential, {
+      kind: "change-sharing",
+      policy: { visibility: [] },
+      expectedVersion: version,
+    }),
+    { status: 422, message: "Invalid visibility" },
+  );
+  await assert.rejects(
+    f.service.execute("doc", f.credential, {
+      kind: "update-presence",
+      input: { sessionId: 42 },
+    }),
+    { status: 422, message: "Invalid text" },
+  );
+  await assert.rejects(
+    f.service.execute("doc", f.credential, {
+      kind: "update-presence",
+      input: { sessionId: 42, snapshot: {}, sourceRevision: "missing" },
+    }),
+    { status: 409, message: "Snapshot source is unavailable" },
+  );
+  for (const cursor of [
+    42,
+    [],
+    { x: "0.5", y: 0.5, nodeId: "n1" },
+    { x: Infinity, y: 0.5, nodeId: "n1" },
+  ])
+    await assert.rejects(
+      f.service.execute("doc", f.credential, {
+        kind: "update-presence",
+        input: {
+          sessionId: "s",
+          sourceRevision: f.db().files.doc!.head,
+          cursor,
+        },
+      }),
+      { status: 422, message: "Invalid cursor" },
+    );
+  assert.equal(f.db().files.doc!.access!.version, version);
+  assert.equal(f.presence.size, 0);
 });

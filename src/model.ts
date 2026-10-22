@@ -223,34 +223,46 @@ export const presenceUpdate: CollaborationModel["presenceUpdate"] = (
   clock,
 ) => {
   if (!actor) fail(401, "Sign in to share presence");
-  text(input.sessionId, 100);
-  const old = Object.hasOwn(entries, input.sessionId)
-    ? entries[input.sessionId]
-    : null;
+  const sessionId = text(input.sessionId, 100);
+  const old = Object.hasOwn(entries, sessionId) ? entries[sessionId] : null;
   if (old && old.actor !== actor)
     fail(403, "Session belongs to another viewer");
   const next = { ...entries };
   if (input.visible === false) {
-    delete next[input.sessionId];
+    delete next[sessionId];
     return next;
   }
-  text(input.sourceRevision, 100);
-  const cursor = input.shareCursor === false ? null : (input.cursor ?? null);
-  if (
-    cursor &&
-    (!Number.isFinite(cursor.x) ||
-      !Number.isFinite(cursor.y) ||
-      !isStableNodeId(cursor.nodeId) ||
-      cursor.x < 0 ||
-      cursor.x > 1 ||
-      cursor.y < 0 ||
-      cursor.y > 1)
-  )
-    fail(422, "Invalid cursor");
-  next[input.sessionId] = {
+  const sourceRevision = text(input.sourceRevision, 100);
+  const rawCursor = input.shareCursor === false ? null : (input.cursor ?? null);
+  let cursor: import("./contracts.ts").Cursor | null = null;
+  if (rawCursor) {
+    if (
+      typeof rawCursor !== "object" ||
+      !("x" in rawCursor) ||
+      !("y" in rawCursor) ||
+      !("nodeId" in rawCursor) ||
+      typeof rawCursor.x !== "number" ||
+      typeof rawCursor.y !== "number" ||
+      !Number.isFinite(rawCursor.x) ||
+      !Number.isFinite(rawCursor.y) ||
+      !isStableNodeId(rawCursor.nodeId) ||
+      rawCursor.x < 0 ||
+      rawCursor.x > 1 ||
+      rawCursor.y < 0 ||
+      rawCursor.y > 1
+    )
+      fail(422, "Invalid cursor");
+    cursor = {
+      ...rawCursor,
+      x: rawCursor.x,
+      y: rawCursor.y,
+      nodeId: rawCursor.nodeId,
+    };
+  }
+  next[sessionId] = {
     actor,
-    sessionId: input.sessionId,
-    sourceRevision: input.sourceRevision!,
+    sessionId,
+    sourceRevision,
     cursor: cursor ? { ...cursor } : null,
     selection:
       input.shareSelection === false

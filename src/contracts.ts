@@ -139,6 +139,8 @@ export interface PresenceInput extends Partial<SharingPreferences> {
   selection?: SelectionPresence | null;
   snapshot?: Snapshot | null;
 }
+/** Untrusted presence fields, validated after the caller is authorized. */
+export type PresenceRequest = Partial<Record<keyof PresenceInput, unknown>>;
 export interface PresenceEntry {
   actor: string;
   sessionId: Id;
@@ -330,7 +332,7 @@ export interface CollaborationModel {
   presenceUpdate(
     entries: Record<Id, PresenceEntry>,
     actor: string,
-    input: PresenceInput,
+    input: PresenceRequest,
     clock: PresenceClock,
   ): Record<Id, PresenceEntry>;
   visiblePresence(

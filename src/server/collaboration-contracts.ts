@@ -1,8 +1,7 @@
 import type { CollaborationCatalog } from "../persistence/document-catalog-contracts.ts";
 import type {
   PresenceEntry,
-  PresenceInput,
-  AccessPolicy,
+  PresenceRequest,
   SessionGrant,
 } from "../contracts.ts";
 import type { DocumentAuthorizationRecord } from "./document-authorization-contracts.ts";
@@ -19,10 +18,14 @@ import type { IdentityAuthority } from "./identity-contracts.ts";
 export type CollaborationCommand =
   | { kind: "permissions" }
   | { kind: "sharing" }
-  | { kind: "change-sharing"; policy: AccessPolicy; expectedVersion: number }
+  | {
+      kind: "change-sharing";
+      policy: Record<string, unknown>;
+      expectedVersion: number;
+    }
   | { kind: "profiles" }
   | { kind: "presence" }
-  | { kind: "update-presence"; input: PresenceInput }
+  | { kind: "update-presence"; input: PresenceRequest }
   | { kind: "revoke" };
 export interface CollaborationResult {
   value: unknown;
@@ -52,7 +55,7 @@ export interface CollaborationService {
 export interface CollaborationAuthorizationContext {
   document: CollaborationDocument | null;
   session: SessionGrant | null;
-  sourceExists(revision: string): Promise<boolean>;
+  sourceExists(revision: unknown): Promise<boolean>;
 }
 export type CollaborationContext = CollaborationAuthorizationContext;
 export interface CollaborationMutation<T> {

@@ -29,7 +29,7 @@ export interface IdentityAuthority {
   };
 }
 export type AuthenticationCommand =
-  | { kind: "password"; username: string; password: unknown; peer: string }
+  | { kind: "password"; username: unknown; password: unknown; peer: string }
   | { kind: "request-code"; email: unknown }
   | { kind: "verify-code"; email: unknown; code: unknown };
 export interface AuthenticationResult {
