@@ -62,7 +62,7 @@ export async function runMigrationJob(
   validateMigrationOwnershipOverride(
     options.ownershipOverride,
     source.manifest.sourceNamespace,
-    source.ids,
+    options.standaloneDatasetPages ? Object.keys(source.maps.pages) : source.ids,
   );
   // Validate every selected immutable head before dataset/backend preparation, including excluded pages.
   for (const entry of options.ownershipOverride?.entries ?? []) {
