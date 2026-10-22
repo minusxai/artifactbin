@@ -330,6 +330,7 @@ const bundled = await bundle({
             input.dataControls ?? [],
             input.dynamicIdentities,
             input.slideDeck,
+            input.personBindings ?? [],
           ),
           loader: "js",
         }));
@@ -386,6 +387,7 @@ const bundled = await bundle({
           path: path.join(import.meta.dirname, "dataset-reader.ts"),
         }));
         if(input.membersBinding)b.onLoad({filter:/[\\/]lib[\\/]page-store[\\/]page-engine\.ts$/},async(args:any)=>({contents:forwardArchivedMembersContext(await readFile(args.path,"utf8")),loader:"ts",resolveDir:path.dirname(args.path)}));
+        b.onResolve({ filter: /^migration-people$/ },()=>({path:path.join(import.meta.dirname,"person-runtime.ts")}));
         b.onResolve({ filter: /^migration-members$/ },()=>({path:path.join(import.meta.dirname,"members-runtime.ts")}));
         b.onResolve({ filter: /^migration-sqlite$/ }, () => {
           if (!sqlitePath) throw Error("No archived SQLite engine");

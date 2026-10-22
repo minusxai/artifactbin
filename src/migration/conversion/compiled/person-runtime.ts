@@ -1,3 +1,4 @@
+import { validCompiledPersonBindings } from "./person-binding.ts";
 import type {
   CompiledPersonBinding,
   CompiledPersonCard,
@@ -36,19 +37,7 @@ export function createCompiledPeople(
   bindings: readonly CompiledPersonBinding[],
   ports: CompiledPersonPorts,
 ) {
-  if (
-    !Array.isArray(bindings) ||
-    bindings.length > 256 ||
-    new Set(bindings.map((b) => b.valueName)).size !== bindings.length ||
-    bindings.some(
-      (b) =>
-        !b ||
-        Object.keys(b).sort().join(",") !== "backendNamespace,valueName" ||
-        b.backendNamespace !== "legacyData" ||
-        !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(b.valueName) ||
-        ["__proto__", "constructor", "prototype"].includes(b.valueName),
-    )
-  )
+  if (!validCompiledPersonBindings(bindings))
     throw Error("Unsupported person bindings");
   type Slot = {
     id: string;
