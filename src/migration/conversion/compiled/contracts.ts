@@ -5,6 +5,8 @@ import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 import type { ConversionResult } from "../contracts.ts";
 export interface CompiledMigrationInput {
   source: string;
+  /** Source-derived transparent presentation roots; never accepted as caller authority. */
+  presentationIdentities?: readonly import("./presentation-kit-contracts.ts").PresentationIdentityHost[];
   /** Internal source-admitted plan, overwritten before invoking the compiler. */
   dataControls?: readonly CompiledDataControl[];
   /** Derived from admitted source, never accepted as caller authority. */

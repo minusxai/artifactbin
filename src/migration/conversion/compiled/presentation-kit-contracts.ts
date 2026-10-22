@@ -23,3 +23,9 @@ export interface PresentationKitCapability {
   portal: boolean;
   requiredAncestor?: PresentationKitTag;
 }
+
+/** Source-derived transparent roots requiring a layout-neutral DOM identity host. */
+export interface PresentationIdentityHost {
+  readonly tag: "Tooltip" | "TooltipProvider";
+  readonly id: string;
+}

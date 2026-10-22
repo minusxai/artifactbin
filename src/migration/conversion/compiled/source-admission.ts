@@ -1,3 +1,5 @@
+import type { PresentationIdentityHost } from "./presentation-kit-contracts.ts";
+import { presentationKitComponent, admitPresentationKit } from "./presentation-kit.ts";
 import { admitScalarControl } from "./scalar-controls.ts";
 import type { CompiledScalarControl } from "./scalar-control-contracts.ts";
 import {readLocalReactiveExpression} from "./reactive-source.ts";
@@ -168,6 +170,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const tableNames = new Set<string>();
   const dataControls: CompiledDataControl[] = [];
   const scalarBindings = new Set<string>();
+  const presentationIdentities: PresentationIdentityHost[] = [];
   const scalarControls: CompiledScalarControl[] = [];
   const references = new Set<string>();
   const cellReferences = new Set<string>();
@@ -235,7 +238,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       return safeExpression(node);
     };
     const branch = (node: any, loopDepth: number, loopTable?: string): boolean => ["JSXElement", "JSXFragment"].includes(node.type) || readExpression(node, loopDepth, loopTable);
-    const walk = (node: any, parent?: any, loopDepth = 0, loopTable?: string) => {
+    const walk = (node: any, parent?: any, loopDepth = 0, loopTable?: string, ancestors: readonly string[] = []) => {
       let childLoopTable = loopTable;
       if (
         node.type === "JSXExpressionContainer" &&
@@ -245,6 +248,19 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       if (node.type === "JSXElement") {
         const name = node.openingElement.name.name;
         if (loopTable && !loopDepth && !["Column", "Button", "span", "strong", "em", "b", "i", "small", "code", "br", "p", "div", "a"].includes(name)) invalid = true;
+        if (presentationKitComponent(name)) {
+          const attributes = node.openingElement.attributes;
+          if (new Set(attributes.map((a:any)=>a.name?.name)).size !== attributes.length) invalid = true;
+          const presentationAttrs = Object.fromEntries(attributes.map((a:any)=> {
+            if (a.type !== "JSXAttribute" || typeof a.name?.name !== "string") throw Error("Invalid presentation attribute");
+            return [a.name.name, controlLiteral(a.value)];
+          }));
+          const capability = admitPresentationKit(name, presentationAttrs, ancestors);
+          if (capability.identity === "transparent" && typeof presentationAttrs.id === "string") {
+            if (name !== "Tooltip" && name !== "TooltipProvider") throw Error("Unsupported transparent identity host");
+            presentationIdentities.push({tag:name,id:presentationAttrs.id});
+          }
+        }
         if (name === "Column" && (parent?.type !== "JSXElement" || parent.openingElement.name.name !== "DataTable")) invalid = true;
         if (
           typeof name !== "string" ||
@@ -253,6 +269,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           ) ||
           (/^[A-Z]/.test(name) &&
             !allowed.has(name) &&
+            !presentationKitComponent(name) &&
             !author?.exports.includes(name))
         )
           invalid = true;
@@ -588,9 +605,9 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
         if (key === "start" || key === "end") continue;
         if (Array.isArray(value))
           value.forEach((v) => {
-            if (v && typeof v === "object") walk(v, node, loopDepth + (node.type === "JSXElement" && node.openingElement.name.name === "For" ? 1 : 0), childLoopTable);
+            if (v && typeof v === "object") walk(v, node, loopDepth + (node.type === "JSXElement" && node.openingElement.name.name === "For" ? 1 : 0), childLoopTable, node.type === "JSXElement" ? [...ancestors,node.openingElement.name.name] : ancestors);
           });
-        else if (value && typeof value === "object") walk(value, node, loopDepth + (node.type === "JSXElement" && node.openingElement.name.name === "For" ? 1 : 0), childLoopTable);
+        else if (value && typeof value === "object") walk(value, node, loopDepth + (node.type === "JSXElement" && node.openingElement.name.name === "For" ? 1 : 0), childLoopTable, node.type === "JSXElement" ? [...ancestors,node.openingElement.name.name] : ancestors);
       }
     };
     walk(tree);
@@ -647,7 +664,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     )
   )
     return blocked("compiled-data-control");
-  input = { ...input, dataControls, dynamicIdentities };
+  input = { ...input, dataControls, dynamicIdentities, presentationIdentities };
   return {
     ok: true,
     plan: {

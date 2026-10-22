@@ -72,3 +72,14 @@ test('registered row mutations require a durable renderer row scope and existing
  assert.equal(admitLocalSource({...input,source:head+'<Button run="$save">Delete</Button>'}).ok,false);
  assert.equal(admitLocalSource({...input,datasetMutations:[{...metadata,rowParams:{missing:{param:'row__missing',type:null}}}],source:head+'<For id="list" each={$rows} keyBy="key"><Button run="$save">Delete</Button></For>'}).ok,false);
 });
+
+test('presentation kit admission requires exact context and literal audited props',()=>{
+ const head='<Value name="n" type="number"/>';
+ for(const body of ['<Tooltip id="tip"><TooltipTrigger id="trigger">Help</TooltipTrigger><TooltipContent id="content">Details</TooltipContent></Tooltip>','<Dialog id="dialog"><DialogTrigger>Open</DialogTrigger><DialogContent><DialogClose>Close</DialogClose></DialogContent></Dialog>','<Avatar><AvatarFallback>AB</AvatarFallback></Avatar>'])assert.equal(admitLocalSource({...base,source:head+body}).ok,true,body);
+ for(const body of ['<TooltipTrigger>Missing context</TooltipTrigger>','<Dialog><DialogContent run="$save"/></Dialog>','<Tooltip open="$n"/>','<Accordion type="multiple"/>','<Avatar onClick="evil"/>'])assert.equal(admitLocalSource({...base,source:head+body}).ok,false,body);
+});
+
+test('presentation identity hosts are derived from source and replace supplied hosts',()=>{
+ const result=admitLocalSource({...base,source:'<Value name="n" type="number"/><Tooltip id="tip"><TooltipTrigger>Help</TooltipTrigger><TooltipContent>Details</TooltipContent></Tooltip>',presentationIdentities:[{tag:'Tooltip',id:'forged'}]});
+ assert.ok(result.ok);assert.deepEqual(result.plan.input.presentationIdentities,[{tag:'Tooltip',id:'tip'}]);
+});
