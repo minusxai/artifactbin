@@ -1,3 +1,4 @@
+import {reconcileMermaidHtml} from "./mermaid-output.ts";
 import {reconcileSlideDeckHtml} from "./slide-deck-output.ts";
 import {reconcileAuthorProps} from "./author/props.ts";
 import {initialDynamicIdentities,allowedInitialDynamicIdentities} from "./dynamic-identities.ts";
@@ -171,6 +172,7 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
     if(plan.input.slideDeck && node.content)visit(node.content);
   };
   visit(fragment);
+  if(!reconcileMermaidHtml(fragment,plan.input.mermaids??[],Boolean(plan.input.slideDeck)))return blocked("compiled-mermaid-output");
   if(!reconcileSlideDeckHtml(fragment,plan.input.slideDeck))return blocked("compiled-slide-output");
   const initialIdentities = new Set(initialDynamicIdentities(plan.dynamicIdentities, Object.fromEntries(plan.manifest.declarations.map(d => [d.name,d.default]))));
   const allowedIdentities = new Set(allowedInitialDynamicIdentities(plan.dynamicIdentities, Object.fromEntries(plan.manifest.declarations.map(d => [d.name,d.default]))));

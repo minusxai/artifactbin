@@ -5,6 +5,8 @@ import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 import type { ConversionResult } from "../contracts.ts";
 export interface CompiledMigrationInput {
   source: string;
+  /** Source-owned static diagrams, overwritten before offline preparation. */
+  mermaids?: readonly import("./mermaid-contracts.ts").CompiledMermaidPlan[];
   /** Public routing only; matched against trusted bound Value proofs at admission. */
   personBindings?: readonly import("./person-contracts.ts").CompiledPersonBinding[];
   /** Source-derived static slide navigation, overwritten at admission. */

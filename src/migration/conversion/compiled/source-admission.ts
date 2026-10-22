@@ -1,3 +1,4 @@
+import {readStaticMermaidPlans} from "./mermaid-source.ts";
 import {historicalSourceValueDeclaration} from "./historical-bound-value.ts";
 import {validateBoundPersonRouting} from "./person-admission.ts";
 import {readSlideDeckPlan} from "./slide-deck.ts";
@@ -33,7 +34,7 @@ const activeUri = (v: string) =>
     v.replace(/[\u0000-\u0020\u007f]/g, "").toLowerCase(),
   );
 const allowed = new Set(
-  "User SlideDeck Slide Helmet Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "Mermaid User SlideDeck Slide Helmet Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -158,6 +159,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const loopTables = new Set<string>();
   const loopKeys: {table:string;key:string}[] = [];
   const rowReads: {table:string;field:string}[] = [];
+  let mermaids: readonly import("./mermaid-contracts.ts").CompiledMermaidPlan[]=[];
   let slideDeck: import("./slide-deck-contracts.ts").CompiledSlideDeck | undefined;
   let dynamicIdentities: import("./reactive-source-contracts.ts").LocalDynamicIdentityPlan = {regions:[]};
   const queries = new Set<string>();
@@ -570,6 +572,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     if(historical&&[...usedPeople].some(name=>!boundValues.has(name)))invalid=true;
     if(proofs.some(p=>!boundValues.has(p.valueName))||people.some(p=>!usedPeople.has(p.valueName)||expectedDeclarations.find(d=>d.name===p.valueName)?.type!=="user"))invalid=true;
     if (scalarControls.some(control => expectedDeclarations.find(d => d.name === control.binding)?.type !== control.valueType)) invalid = true;
+    mermaids = readStaticMermaidPlans(tree);
     slideDeck = readSlideDeckPlan(tree);
     dynamicIdentities = readLocalIdentityPlan(tree);
     if (!validIdentityConditions(dynamicIdentities, expectedDeclarations)) invalid = true;
@@ -609,7 +612,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     [...imports].some((n) => declarations.has(n) || queries.has(n))
   )
     invalid = true;
-  if (invalid || (declarations.size === 0 && queries.size === 0 && !author && !slideDeck))
+  if (invalid || (declarations.size === 0 && queries.size === 0 && !author && !slideDeck && !mermaids.length))
     return blocked("compiled-capability");
   if (
     dataControls.some((p) =>
@@ -623,7 +626,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     )
   )
     return blocked("compiled-data-control");
-  input = { ...input, slideDeck, dataControls, dynamicIdentities, presentationIdentities };
+  input = { ...input, mermaids, slideDeck, dataControls, dynamicIdentities, presentationIdentities };
   return {
     ok: true,
     plan: {

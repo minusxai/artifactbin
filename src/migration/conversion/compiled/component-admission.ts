@@ -1,3 +1,4 @@
+import {admitMermaid} from "./mermaid-admission.ts";
 import {admitPersonAttributes} from "./person-admission.ts";
 import {admitSlideDeckComponent} from "./slide-deck.ts";
 import { admitScalarControl } from "./scalar-controls.ts";
@@ -54,7 +55,7 @@ export const admitLocalComponent: AdmitLocalComponent = (input, context) => {
   }
   if (
     !presentationKitComponent(tag) &&
-    !["Segmented", "Switch", "Slider", "Select", "DataTable", "SlideDeck", "Slide", "User"].includes(tag)
+    !["Segmented", "Switch", "Slider", "Select", "DataTable", "SlideDeck", "Slide", "User", "Mermaid"].includes(tag)
   )
     return null;
   const attrs = attributes(node);
@@ -68,6 +69,10 @@ export const admitLocalComponent: AdmitLocalComponent = (input, context) => {
     dataControls: [],
     presentationIdentityHosts: [],
   };
+  if(tag === "Mermaid"){
+    if(context.rowTable)throw Error("Row Mermaid context unsupported");
+    admitMermaid(attrs,children.length>0);return result;
+  }
   if (tag === "User") {
     const name=admitPersonAttributes(attrs,children.length>0);
     result.references=[name];result.scalarBindings=[name];result.selectedPerson=name;

@@ -83,6 +83,7 @@ export async function compileArchivedLocal(
     issues: [],
     capabilities: [
       "local-scalars",
+      ...(input.mermaids?.length ? ["offline-mermaid-flowcharts"] : []),
       ...(input.slideDeck ? ["slide-deck-navigation"] : []),
       "archived-kit",
       "inlined-fonts",

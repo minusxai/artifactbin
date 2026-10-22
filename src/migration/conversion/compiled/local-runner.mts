@@ -1,3 +1,5 @@
+import {prepareArchivedMermaid} from "./mermaid-prepare.ts";
+import {mermaidRuntimeSource} from "./mermaid-runtime.ts";
 import {readsLegacyMembers} from "./members-source.ts";
 import { preservePresentationHosts } from "./presentation-hosts.ts";
 import {forwardArchivedMembersContext} from "./members-engine.ts";
@@ -198,6 +200,49 @@ const rendered = (
   mermaidImages: {},
   drawings: {},
 });
+const sheets = documentStyleSheets({
+  compiledCss,
+  chrome: Boolean(input.slideDeck),
+  bare: false,
+  theme: input.theme ?? null,
+  docFonts: parts.docFonts,
+  systemCss: parts.baseRecipe.systemCss ?? "",
+  authorCss: parts.runtime.authorCss,
+});
+let css = sheets.map((sheet: { css: string }) => sheet.css).join("\n");
+// No network, old origin, asset endpoint or deployment host is carried into migrated styles.
+const { parse: parseCss, walk: walkCss } = await import("css-tree");
+const cssTree = parseCss(css, { positions: true });
+const urls: Array<{
+  value: string;
+  loc: { start: { offset: number }; end: { offset: number } };
+}> = [];
+walkCss(cssTree, (node: any) => {
+  if (node.type === "Url") urls.push(node);
+});
+const replacements: Array<{ start: number; end: number; text: string }> = [];
+for (const node of urls) {
+  const url = node.value;
+  if (url.startsWith("data:") || url.startsWith("#")) continue;
+  if (!/^\/fonts\/[A-Za-z0-9_.-]+\.woff2$/.test(url))
+    throw Error("Unresolved stylesheet resource");
+  const bytes = await readFile(path.join(root, "services/app/public", url));
+  replacements.push({
+    start: node.loc.start.offset,
+    end: node.loc.end.offset,
+    text: `url("data:font/woff2;base64,${bytes.toString("base64")}")`,
+  });
+}
+for (const replacement of replacements.sort((a, b) => b.start - a.start))
+  css =
+    css.slice(0, replacement.start) +
+    replacement.text +
+    css.slice(replacement.end);
+if (/@import\s/i.test(css))
+  throw Error("External stylesheet imports are not self-contained");
+const html = inlineStoryElement(rendered, parts.mode, input.theme ?? null);
+
+const preparedMermaids=await prepareArchivedMermaid(root,{html,css,plans:input.mermaids??[]});
 const { MODULE_DATA_READ_CODE } = await archived(
   "lib/compiled-page/carriers.ts",
 );
@@ -369,6 +414,12 @@ const bundled = await bundle({
             resolveDir: root,
           }),
         );
+        b.onResolve({filter:/^@mx\/kit\/mermaid$/},()=>{
+          if(!preparedMermaids.length)throw Error("Mermaid plan missing");
+          return {path:"mermaid",namespace:"migration-mermaid"};
+        });
+        b.onLoad({filter:/.*/,namespace:"migration-mermaid"},async()=>({contents:await transformSolid(mermaidRuntimeSource(preparedMermaids),{generate:"dom",hydratable:true},{moduleName:"solid-js/web"}),loader:"js",resolveDir:root}));
+        b.onResolve({filter:/^migration-mermaid-theme$/},()=>({path:path.join(root,"services/app/lib/islands/kit/theme-watch.ts")}));
         b.onResolve({filter:/^migration-deck$/},()=>({path:path.join(import.meta.dirname,"deck-runtime.ts")}));
         b.onResolve({ filter: /^migration-readiness$/ }, () => ({
           path: path.join(import.meta.dirname, "readiness.ts"),
@@ -406,7 +457,7 @@ const bundled = await bundle({
               author ||
               chartSources ||
               input.datasetMutations?.length ||
-              input.dataControls?.length || input.slideDeck) &&
+              input.dataControls?.length || input.slideDeck || input.mermaids?.length) &&
             args.path.startsWith("solid-js")
           ) {
             const suffix = args.path.slice("solid-js".length);
@@ -421,7 +472,7 @@ const bundled = await bundle({
               author ||
               chartSources ||
               input.datasetMutations?.length ||
-              input.dataControls?.length || input.slideDeck) &&
+              input.dataControls?.length || input.slideDeck || input.mermaids?.length) &&
             (args.path === "@mx/rt" || args.path.startsWith("@mx/kit/"))
           ) {
             const relative =
@@ -462,47 +513,6 @@ const modules = Object.entries(bundleOutput.inputs)
   });
 if (/\/api\/|\/islands\/|EventSource|WebSocket|@mx\/boot/.test(javascript))
   throw Error("Legacy platform transport in browser bundle");
-const sheets = documentStyleSheets({
-  compiledCss,
-  chrome: Boolean(input.slideDeck),
-  bare: false,
-  theme: input.theme ?? null,
-  docFonts: parts.docFonts,
-  systemCss: parts.baseRecipe.systemCss ?? "",
-  authorCss: parts.runtime.authorCss,
-});
-let css = sheets.map((sheet: { css: string }) => sheet.css).join("\n");
-// No network, old origin, asset endpoint or deployment host is carried into migrated styles.
-const { parse: parseCss, walk: walkCss } = await import("css-tree");
-const cssTree = parseCss(css, { positions: true });
-const urls: Array<{
-  value: string;
-  loc: { start: { offset: number }; end: { offset: number } };
-}> = [];
-walkCss(cssTree, (node: any) => {
-  if (node.type === "Url") urls.push(node);
-});
-const replacements: Array<{ start: number; end: number; text: string }> = [];
-for (const node of urls) {
-  const url = node.value;
-  if (url.startsWith("data:") || url.startsWith("#")) continue;
-  if (!/^\/fonts\/[A-Za-z0-9_.-]+\.woff2$/.test(url))
-    throw Error("Unresolved stylesheet resource");
-  const bytes = await readFile(path.join(root, "services/app/public", url));
-  replacements.push({
-    start: node.loc.start.offset,
-    end: node.loc.end.offset,
-    text: `url("data:font/woff2;base64,${bytes.toString("base64")}")`,
-  });
-}
-for (const replacement of replacements.sort((a, b) => b.start - a.start))
-  css =
-    css.slice(0, replacement.start) +
-    replacement.text +
-    css.slice(replacement.end);
-if (/@import\s/i.test(css))
-  throw Error("External stylesheet imports are not self-contained");
-const html = inlineStoryElement(rendered, parts.mode, input.theme ?? null);
 process.stdout.write(
   JSON.stringify({
     html,
