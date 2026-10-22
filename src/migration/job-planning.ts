@@ -34,6 +34,7 @@ export function createMigrationJobPlanner(
   const planArtifact = async (artifact: MigrationManifest) => {
     const plan = await planMigration(artifact, {
       maps,
+      historicalUnavailable: options.historicalUnavailable,
       ownershipOverride: options.ownershipOverride,
       convert,
       excludedNativeProgramSources: options.excludedNativeProgramSources,
@@ -143,6 +144,7 @@ export async function planMigrationJob(
   const conversionStrategy = options.conversionStrategy;
   const reportPath = options.reportPath;
   const conversionProvenance: Record<string, number> = {};
+  const historicalUnavailable = { pages: 0, revisions: 0 };
   const exclusions: import("./programs/native-contracts.ts").NativeProgramExclusion[] =
     [];
   const report = await open(reportPath, "wx", 0o600);
@@ -180,6 +182,13 @@ export async function planMigrationJob(
               );
             }
             for (const page of plan.pages) {
+              const unavailableCount = page.revisions.filter(
+                r => r.conversion.classification === "historical-unavailable",
+              ).length;
+              if (unavailableCount) {
+                historicalUnavailable.pages++;
+                historicalUnavailable.revisions += unavailableCount;
+              }
               for (const revision of page.revisions) {
                 const p = revision.conversion.provenance;
                 const key = JSON.stringify({
@@ -276,6 +285,12 @@ export async function planMigrationJob(
                     ...("sourceRecovery" in r.conversion
                       ? { sourceRecovery: r.conversion.sourceRecovery }
                       : {}),
+                    ...("historicalUnavailable" in r.conversion
+                      ? { historicalUnavailable: r.conversion.historicalUnavailable }
+                      : {}),
+                    ...("sourceNormalization" in r.conversion
+                      ? { sourceNormalization: r.conversion.sourceNormalization }
+                      : {}),
                     issues: r.conversion.issues,
                   })),
                   result,
@@ -329,6 +344,7 @@ export async function planMigrationJob(
         complete: true,
         sourceNamespace: manifest.sourceNamespace,
         readiness,
+        historicalUnavailable,
         ...(exclusions.length
           ? { exclusions, totalExcluded: exclusions.length }
           : {}),
@@ -358,6 +374,7 @@ export async function planMigrationJob(
     await report.sync();
     return {
       inventory,
+      historicalUnavailable,
       ...(exclusions.length
         ? { exclusions, totalExcluded: exclusions.length }
         : {}),

@@ -16,6 +16,7 @@ import type {
 } from "./dependency-contracts.ts";
 import type { MigrationMediaIndex } from "./media-contracts.ts";
 export interface MigrationJobOptions {
+  historicalUnavailable?: import("./historical-unavailable-contracts.ts").HistoricalUnavailablePolicy;
   sourceQueryRegistrations?: readonly import("../datasets/source-query/contracts.ts").MigrationSourceQueryRegistration[];
   ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride;
   excludedNativeProgramSources?: readonly import("./programs/native-contracts.ts").NativeProgramExclusionDecision[];
@@ -82,6 +83,7 @@ export type MigrationPagePlanner = (
   artifact: MigrationManifest,
 ) => Promise<MigrationPlan>;
 export interface MigrationJobPlan {
+  historicalUnavailable?: import("./historical-unavailable-contracts.ts").HistoricalUnavailableCounts;
   exclusions?: readonly import("./programs/native-contracts.ts").NativeProgramExclusion[];
   totalExcluded?: number;
   inventory: JobInventory;
@@ -95,6 +97,7 @@ export interface MigrationJobPlan {
 }
 
 export interface MigrationJobSummary {
+  historicalUnavailable?: import("./historical-unavailable-contracts.ts").HistoricalUnavailableCounts;
   exclusions?: readonly import("./programs/native-contracts.ts").NativeProgramExclusion[];
   totalExcluded?: number;
   complete: true;

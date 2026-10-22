@@ -1,3 +1,4 @@
+import { migrationPageDigest } from "./import.ts";
 import {projectMigrationCommentState} from "./comment-state.ts";
 import {legacyDocumentSource} from "./conversion/index.ts";
 import { migrationCommentAssetRecords } from "./assets/comment-records.ts";
@@ -28,6 +29,13 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
   const ready = new Set<string>();
   for await (const page of input.pages) {
     ready.add(page.pageId);
+    if (page.revisions.some(r => r.conversion.historicalUnavailable || "sourceNormalization" in r.conversion)) {
+      equal(
+        (await db.query(`SELECT page_id,digest FROM ${archive}.receipts WHERE page_id=$1`, [page.pageId])).rows,
+        [{page_id: page.pageId, digest: migrationPageDigest(page)}],
+        "historical preservation and source normalization receipt provenance",
+      );
+    }
     const owner = page.owner?.id;
     const normalized = prepareMigrationPageSources(page, input.origin);
     const preparedHead = normalized.find(

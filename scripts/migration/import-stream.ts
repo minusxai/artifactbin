@@ -10,13 +10,14 @@ const [sourceDirectory, indexDirectory, schema, reportPath, ...flags] =
   process.argv.slice(2);
 if (!sourceDirectory || !indexDirectory || !schema || !reportPath)
   throw new Error(
-    "Usage: node --experimental-strip-types scripts/migration/import-stream.ts <private-export-directory> <private-index-directory> <dedicated-schema> <new-private-report.ndjson> [--apply-isolated|--verify-isolated] [--editor-manage-restricted] [--conversion-strategy=strict|archived-static|archived-functional] [--concurrency=1|2|3|4|5|6|7|8]",
+    "Usage: node --experimental-strip-types scripts/migration/import-stream.ts <private-export-directory> <private-index-directory> <dedicated-schema> <new-private-report.ndjson> [--apply-isolated|--verify-isolated] [--editor-manage-restricted] [--preserve-unavailable-history] [--conversion-strategy=strict|archived-static|archived-functional] [--concurrency=1|2|3|4|5|6|7|8]",
   );
 destinationSchemas(schema);
 const allowed = [
   "--apply-isolated",
   "--verify-isolated",
   "--measure-storage",
+  "--preserve-unavailable-history",
   "--offline-prototype-source-admission",
   "--editor-manage-restricted",
   "--conversion-strategy=strict",
@@ -71,6 +72,9 @@ if (Boolean(fontBundleDirectory) !== Boolean(fontBundleManifestSha256))
     "Font bundle directory and manifest digest must be supplied together",
   );
 const options: MigrationJobOptions = {
+  historicalUnavailable: flags.includes("--preserve-unavailable-history")
+    ? "preserve"
+    : undefined,
   sourceQueryRegistrations: process.env.MIGRATION_SOURCE_QUERY_REGISTRATIONS
     ? JSON.parse(process.env.MIGRATION_SOURCE_QUERY_REGISTRATIONS)
     : undefined,

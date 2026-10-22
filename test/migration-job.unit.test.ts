@@ -10,6 +10,7 @@ async function fixture(
   directory: string,
   bad = false,
   count = 3,
+  history = false,
 ): Promise<MigrationJobOptions> {
   let table = "";
   let fetched = false;
@@ -18,7 +19,7 @@ async function fixture(
   ).map((id) => ({
     id,
     format: "markup",
-    version: bad ? 0 : 1,
+    version: bad ? 0 : history ? 2 : 1,
     user_id: "u",
     group_id: null,
     token_id: "",
@@ -31,7 +32,7 @@ async function fixture(
     {
       query: async (sql) => {
         if (sql.startsWith("DECLARE")) {
-          table = sql.includes('"users"') ? "users" : "artifacts";
+          table = sql.includes('"users"') ? "users" : sql.includes('"artifact_versions"') ? "artifact_versions" : "artifacts";
           fetched = false;
         }
         if (sql.startsWith("FETCH")) {
@@ -41,7 +42,7 @@ async function fixture(
             rows:
               table === "users"
                 ? [{ id: "u", email: "owner@example.test" }]
-                : artifacts,
+                : table === "artifact_versions" ? artifacts.map(a=>({artifact_id:a.id,version:1,format:"markup",source:"unsupported"})) : artifacts,
           };
         }
         return { rows: [] };
@@ -53,7 +54,7 @@ async function fixture(
       directory: join(directory, "source"),
       now: () => new Date(0),
     },
-    ["users", "artifacts"],
+    history ? ["users", "artifacts", "artifact_versions"] : ["users", "artifacts"],
   );
   return {
     sourceDirectory: join(directory, "source"),
@@ -242,4 +243,15 @@ test("typed job passes the trusted runtime owner only to destination preparation
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("explicit historical policy reports unavailable revisions separately while keeping the exact working head ready", async () => {
+ const directory=await mkdtemp(join(tmpdir(),"migration-history-job-"));
+ try {
+ const options=await fixture(directory,false,1,true);options.historicalUnavailable="preserve";
+ const result=await runMigrationJob(options,{convert:({source})=>source==="unsupported"?{classification:"manual-blocked",html:null,issues:[{code:"compiled-source"}],identities:{}}:{classification:"functional",html:"<p>Working current head</p>",issues:[],identities:{}}});
+ assert.deepEqual(result.historicalUnavailable,{pages:1,revisions:1});assert.equal(result.inventory.markup!.ready,1);assert.equal(result.inventory.markup!.blocked,0);
+ const report=JSON.parse((await readFile(options.reportPath,"utf8")).trim());assert.deepEqual(report.revisions.map((r:{classification:string})=>r.classification),["historical-unavailable","functional"]);assert.equal(report.revisions[0].historicalUnavailable.version,1);
+ const readiness=JSON.parse(await readFile(result.readinessReport,"utf8"));assert.deepEqual(readiness.historicalUnavailable,{pages:1,revisions:1});assert.equal(readiness.readiness.ready.length,1);
+ } finally {await rm(directory,{recursive:true,force:true});}
 });

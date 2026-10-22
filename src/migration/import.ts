@@ -1,3 +1,4 @@
+import { preserveUnavailableHistoricalRevision } from "./historical-unavailable.ts";
 import { resolveMigrationOwnership } from "./ownership-override.ts";
 import type { BoundValueColumnProof } from "./conversion/compiled/bound-value-contracts.ts";
 import { preservedOrphanActor } from "./orphans.ts";
@@ -79,6 +80,7 @@ export function allocateMigrationMaps(
 export async function planMigration(
   manifest: MigrationManifest,
   options: {
+    historicalUnavailable?: import("./historical-unavailable-contracts.ts").HistoricalUnavailablePolicy;
     ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride;
     maps: MigrationMaps;
     convert: Converter;
@@ -349,6 +351,14 @@ export async function planMigration(
             ],
           };
       }
+      if (
+        version !== artifact.version &&
+        options.historicalUnavailable === "preserve" &&
+        (conversion.classification === "manual-blocked" || conversion.html === null)
+      )
+        conversion = preserveUnavailableHistoricalRevision(
+          original, conversion, options.coreUrl,
+        );
       if (
         conversion.classification === "manual-blocked" ||
         conversion.html === null

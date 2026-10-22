@@ -51,6 +51,7 @@ export interface ConversionInput {
 export interface ConversionOutput {
   /** Source-only normalization receipt; original source/document remain untouched. */
   sourceNormalization?: import("./conversion/compiled/legacy-script-contracts.ts").LegacyScriptNormalizationReceipt;
+  historicalUnavailable?: import("./historical-unavailable-contracts.ts").HistoricalUnavailableReceipt;
   /** Explicit migration receipt; the retained document is never modified. */
   sourceRecovery?: {
     kind: "retained-graph-empty-separators" | "retained-graph-missing-root-content" | "retired-source-wrapper";
@@ -67,7 +68,7 @@ export interface ConversionOutput {
     inputSha256: string;
     outputSha256: string;
   };
-  classification: "renderable" | "functional" | "manual-blocked";
+  classification: "renderable" | "functional" | "manual-blocked" | "historical-unavailable";
   html: string | null;
   outputBytes?: number;
   issues: readonly unknown[];
@@ -76,7 +77,8 @@ export interface ConversionOutput {
     | "strict"
     | "archived-static"
     | "archived-functional"
-    | "media-wrapper";
+    | "media-wrapper"
+    | "historical-unavailable";
   provenance?: { compiler: string; build: string; mode: string };
 }
 export type Converter = (

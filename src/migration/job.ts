@@ -28,6 +28,10 @@ export async function runMigrationJob(
   options: MigrationJobOptions,
   ports: MigrationJobPorts = {},
 ): Promise<MigrationJobSummary> {
+  if (
+    options.historicalUnavailable !== undefined &&
+    options.historicalUnavailable !== "preserve"
+  ) throw Error("Unknown historical preservation policy");
   const sourceAdmission = validateMigrationSourceAdmission(options);
   validateNativeProgramExclusions(options.excludedNativeProgramSources);
   destinationSchemas(options.schema);
@@ -175,6 +179,7 @@ export async function runMigrationJob(
     complete: true,
     dryRun: !options.apply,
     inventory: planned.inventory,
+    historicalUnavailable: planned.historicalUnavailable,
     ...(planned.exclusions?.length
       ? { exclusions: planned.exclusions, totalExcluded: planned.totalExcluded }
       : {}),
