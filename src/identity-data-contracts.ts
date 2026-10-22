@@ -7,6 +7,8 @@ export interface Account {
   password?: string;
 }
 export interface SessionGrant {
+  /** Transaction-local fresh group facts; never persisted in sessions. */
+  groupAuthority?: import("./group-authority-contracts.ts").GroupAuthorityFacts;
   /** Account sessions omit purpose; scoped grants never inherit another purpose. */
   purpose?: "collaboration" | "document" | "backend";
   /** Backend grants authorize only this immutable deployment version. */

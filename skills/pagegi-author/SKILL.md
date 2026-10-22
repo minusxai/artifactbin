@@ -286,6 +286,7 @@ node scripts/comments.mjs page.html --reply c1 --body "Fixed."
 - **`publish.mjs`** replaces the file with the page exactly as saved, with the metadata block and every `data-af-id` filled in. If it can't tell whether a save worked, run it again: it resends the same request, which is applied at most once.
 - **If someone else saved first,** `publish.mjs` merges their changes into your file and stops. Review the file and run it again. If your edits overlap theirs, it leaves your file alone and writes theirs to `page.remote.html` and both sides' changes to `page.conflict.diff`; combine them in `page.html` and run it again.
 - **Keep the `.af/` folder** the scripts write next to the page, and don't edit it. It holds what the server last saved, so they can merge and retry safely.
+- **Imported group pages retain their group owner:** active group editors can edit, share and delete them; viewers can read. Group membership never grants account secrets. Group backend files and execution are unsupported; see `references/http-api.md`.
 - **New pages are unlisted:** anyone with the link can view them. To change that, see Sharing in `references/http-api.md`.
 - **Keep the token out of the page.**
 

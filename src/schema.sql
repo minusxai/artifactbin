@@ -70,3 +70,30 @@ DO $$ BEGIN
     ), false));
   END IF;
 END $$;
+-- Non-login group principals preserve ownership while keeping real actors distinct.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS principal_kind text NOT NULL DEFAULT 'user' CHECK (principal_kind IN ('user','group'));
+CREATE TABLE IF NOT EXISTS groups (owner text PRIMARY KEY REFERENCES accounts(actor), active boolean NOT NULL DEFAULT true);
+CREATE TABLE IF NOT EXISTS group_memberships (owner text NOT NULL REFERENCES groups(owner), actor text NOT NULL REFERENCES accounts(actor), role text NOT NULL CHECK (role IN ('viewer','editor')), PRIMARY KEY(owner,actor));
+CREATE INDEX IF NOT EXISTS group_memberships_actor ON group_memberships(actor,owner);
+CREATE OR REPLACE FUNCTION enforce_group_principal() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+ IF NEW.principal_kind='group' AND (NEW.actor NOT LIKE 'group:%' OR NEW.salt IS NOT NULL OR NEW.password IS NOT NULL) THEN RAISE EXCEPTION 'Groups cannot have login credentials'; END IF;
+ IF TG_OP='UPDATE' AND NEW.principal_kind<>OLD.principal_kind THEN RAISE EXCEPTION 'Principal kinds are immutable'; END IF;
+ RETURN NEW; END $$;
+DROP TRIGGER IF EXISTS group_principal_guard ON accounts;
+CREATE TRIGGER group_principal_guard BEFORE INSERT OR UPDATE ON accounts FOR EACH ROW EXECUTE FUNCTION enforce_group_principal();
+CREATE OR REPLACE FUNCTION enforce_person_session() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM accounts WHERE actor=NEW.actor AND principal_kind='user') THEN RAISE EXCEPTION 'Only users can authenticate'; END IF;
+ RETURN NEW; END $$;
+DROP TRIGGER IF EXISTS person_session_guard ON sessions;
+CREATE TRIGGER person_session_guard BEFORE INSERT OR UPDATE ON sessions FOR EACH ROW EXECUTE FUNCTION enforce_person_session();
+CREATE OR REPLACE FUNCTION enforce_group_membership() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+ IF TG_TABLE_NAME='groups' THEN
+  IF NOT EXISTS(SELECT 1 FROM accounts WHERE actor=NEW.owner AND principal_kind='group') THEN RAISE EXCEPTION 'Group requires a group principal'; END IF;
+ ELSE
+  IF NOT EXISTS(SELECT 1 FROM accounts WHERE actor=NEW.actor AND principal_kind='user') THEN RAISE EXCEPTION 'Group member requires a user principal'; END IF;
+ END IF;
+ RETURN NEW; END $$;
+DROP TRIGGER IF EXISTS group_owner_guard ON groups;
+CREATE TRIGGER group_owner_guard BEFORE INSERT OR UPDATE ON groups FOR EACH ROW EXECUTE FUNCTION enforce_group_membership();
+DROP TRIGGER IF EXISTS group_member_guard ON group_memberships;
+CREATE TRIGGER group_member_guard BEFORE INSERT OR UPDATE ON group_memberships FOR EACH ROW EXECUTE FUNCTION enforce_group_membership();

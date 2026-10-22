@@ -113,7 +113,7 @@ export const productPolicy: BoundaryPolicy = {
     if (/^src\/browser\/(?:lifecycle|activity|document-host|viewer-roster|document-view|comment-command|comment-composer|platform-status)\.[jt]s$/.test(id)) return "pure";
     if (
       /^src\/(?:domain|app-state|graphql|page|apollo|ids)\//.test(id) ||
-      /^src\/(?:json|errors|model|model-values|comment-model|publication-model|access|email|path-model|chrome-model|durability|file-browser|navigation)\.[jt]s$/.test(
+      /^src\/(?:json|errors|model|model-values|comment-model|publication-model|group-authority|access|email|path-model|chrome-model|durability|file-browser|navigation)\.[jt]s$/.test(
         id,
       )
     )

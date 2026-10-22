@@ -6,6 +6,7 @@ import {
   loadSession,
 } from "../persistence/document-records.ts";
 import { authorizeDocument } from "./document-authorization.ts";
+import { fail } from "../errors.ts";
 import { hash } from "./text.ts";
 
 /**
@@ -22,6 +23,8 @@ export function createPageCaller(now: () => number = Date.now) {
     const nobody: PageCaller = { pageId, subject: null, role: null };
     const document = await loadDocumentHeader(client, pageId);
     if (!document) return nobody;
+    if (document.ownerKind === "group")
+      fail(403, "Group-owned pages do not support backend execution");
     const tokenHash = credential ? hash(credential) : null;
     const session = tokenHash ? await loadSession(client, tokenHash) : null;
     // Refusals (expired or revoked credentials, no access) pass through with

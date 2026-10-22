@@ -73,6 +73,10 @@ Saves (`PUT /source`) and new comments and replies (`POST /comments`) accept an 
 - A key is kept for 24 hours for that page and your account. Requests that fail are not recorded, so you can retry them with the same key.
 - Without the header, requests behave as before.
 
+### Imported group ownership
+
+Imported group pages retain a distinct non-login group owner. An active group editor can read, edit, manage sharing and delete its pages; an active group viewer can read them. Membership is checked again for each operation, including document grants. Named invitations and link access still apply; an invited editor gains no ownership management authority. Group pages appear in members’ shared library. Group creation, membership administration, group path management and group backend publication/execution are not exposed by this API. Group membership grants no access to any user’s account secrets.
+
 ## Sharing
 
 | Method and path | Body | Returns |

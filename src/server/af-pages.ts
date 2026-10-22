@@ -504,7 +504,7 @@ export function createPageService({
         ).rows[0]?.next_node_id;
         return {
           replay: null,
-          base: { actor: decision.actor, version, reserved, nextNodeId: Number(next) || 0 },
+          base: { actor: decision.actor, owner: document.owner, ownerKind: document.ownerKind, version, reserved, nextNodeId: Number(next) || 0 },
         };
       });
       if (first.replay) return first.replay;
@@ -519,6 +519,8 @@ export function createPageService({
         previousNextNodeId: base.nextNodeId,
         reserved: base.reserved,
       });
+      if (base.ownerKind === "group" && (prepared.backends.length || Object.keys(files).length))
+        fail(422, "Group-owned pages do not support backend files");
       const backends = await backendsFor(prepared.backends, files);
       if (backends)
         await database.transaction((client) =>
@@ -588,11 +590,15 @@ export function createPageService({
     remove(credential: string, id: string): Promise<DeleteResponse> {
       if (!isFileId(id)) fail(404, "File not found");
       return database.transaction(async (client) => {
-        const actor = account(await loadSession(client, hash(credential)));
-        // Path changes lock the owner's paths, then file rows: take them in that order.
-        await pathLock(client, actor);
+        const session = await loadSession(client, hash(credential));
+        const actor = account(session);
+        const header = await loadDocumentHeader(client, id);
+        if (!header || !permissions(header, actor, false, false, session?.groupAuthority).manage)
+          fail(404, "File not found");
+        await pathLock(client, header.owner);
         const document = await lockDocumentHeader(client, id);
-        if (!document || document.owner !== actor) fail(404, "File not found");
+        if (!document || !permissions(document, actor, false, false, session?.groupAuthority).manage)
+          fail(404, "File not found");
         for (const statement of [
           "DELETE FROM idempotency_keys WHERE file_id=$1",
           "DELETE FROM comments WHERE file_id=$1",
@@ -669,7 +675,7 @@ export function createPageService({
         }
         const document = await loadDocumentHeader(client, id);
         if (!document) fail(404, "Not found");
-        const grant = readable(document, actor);
+        const grant = readable(document, actor, session);
         if (!grant)
           throw Object.assign(new Error("Not found"), {
             status: 404,
@@ -707,11 +713,12 @@ export function createPageService({
         if (!record?.published || record.kind !== "page") fail(404, "Not found");
         const document = await loadDocumentHeader(client, id);
         if (!document) fail(404, "Not found");
+        const session = await loadSession(client, hash(credential));
         let actor: string | null = null;
         try {
-          actor = account(await loadSession(client, hash(credential)));
+          actor = account(session);
         } catch {}
-        return { id, path: readable(document, actor) ? apiPath(document.path ?? id) : null };
+        return { id, path: readable(document, actor, session) ? apiPath(document.path ?? id) : null };
       });
     },
 
@@ -725,10 +732,11 @@ export function createPageService({
     grant(credential: string, id: string): Promise<{ token: string; username: string }> {
       if (!isFileId(id)) fail(404, "Not found");
       return database.transaction(async (client) => {
-        const actor = account(await loadSession(client, hash(credential)));
+        const session = await loadSession(client, hash(credential));
+        const actor = account(session);
         const document = await lockDocumentHeader(client, id);
         if (!document) fail(404, "Not found");
-        if (!readable(document, actor)) fail(403, "You do not have access to this page.");
+        if (!readable(document, actor, session)) fail(403, "You do not have access to this page.");
         const issued = authority.issue(actor, id, document.generation);
         await client.query(
           "INSERT INTO sessions(token_hash,actor,file_id,generation,expires,purpose) VALUES($1,$2,$3,$4,$5,'document')",
@@ -767,7 +775,7 @@ export function createPageService({
         // A page grant for this page (a connected downloaded file) opens it as its account too.
         const granted = !actor && documentGrant(session, id, document, now());
         if (granted) actor = session!.actor;
-        const grant = readable(document, actor);
+        const grant = readable(document, actor, session);
         if (!grant)
           fail(actor ? 403 : 401, "You need an invitation to open this document.");
         const row = (
@@ -860,8 +868,8 @@ function documentGrant(session: SessionGrant | null, id: string, document: Docum
     session.expires > now
   );
 }
-function readable(document: DocumentHeader, actor: string | null): FilePermissions | null {
-  const grant = permissions(document, actor, true);
+function readable(document: DocumentHeader, actor: string | null, session: SessionGrant | null): FilePermissions | null {
+  const grant = permissions(document, actor, true, false, session?.groupAuthority);
   return grant.read ? grant : null;
 }
 function nextNodeId(prepared: PreparedPage): number {

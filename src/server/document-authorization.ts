@@ -1,3 +1,4 @@
+import type { FilePermissions } from "../contracts.ts";
 import { permissions, policyFor } from "../access.ts";
 import { fail } from "../errors.ts";
 import type {
@@ -28,6 +29,7 @@ export function authorizeDocument({
     actor,
     !!valid || capability || policyFor(f).visibility === "public",
     !!session?.fileId,
+    valid ? session.groupAuthority : undefined,
   );
   if (!grant.read) fail(403, "You do not have access to this document.");
   const appEdit =
@@ -35,6 +37,17 @@ export function authorizeDocument({
     (!!valid &&
       session.purpose === "document" &&
       session.fileId === fileId &&
-      permissions(f, actor, true).edit);
+      permissions(f, actor, true, false, valid ? session.groupAuthority : undefined).edit);
   return { actor, owner: grant.edit, permissions: grant, appEdit };
+}
+
+/** Read a page-addressed resource using its own policy, never a parent page's. */
+export function authorizePageRead({ document, session, fileId, now }: import("./document-authorization-contracts.ts").PageReadAuthorizationInput): FilePermissions {
+  const file = document ?? fail(404, "File not found");
+  if (session && (session.purpose === "backend" || session.expires <= now ||
+      (session.fileId && (session.fileId !== fileId || session.generation !== file.generation))))
+    fail(403, "Access expired or revoked");
+  const grant = permissions(file, session?.actor ?? null, true, !!session?.fileId, session?.groupAuthority);
+  if (!grant.read) fail(403, "You do not have access to this document.");
+  return grant;
 }

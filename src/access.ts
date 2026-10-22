@@ -7,6 +7,8 @@ import type {
 } from "./contracts.ts";
 import { fail } from "./errors.ts";
 import { emailAddress } from "./email.ts";
+import { ownerAuthority } from "./group-authority.ts";
+import type { GroupAuthorityFacts } from "./group-authority-contracts.ts";
 const roles: ShareRole[] = ["viewer", "commenter", "editor"];
 export function policyFor(file: Pick<SharedFile, "access">): AccessPolicy {
   return (
@@ -19,13 +21,15 @@ export function policyFor(file: Pick<SharedFile, "access">): AccessPolicy {
   );
 }
 export function permissions(
-  file: Pick<SharedFile, "owner" | "access">,
+  file: Pick<SharedFile, "owner" | "access"> & { ownerKind?: "user" | "group" },
   actor: string | null,
   link: boolean,
   scoped = false,
+  groupFacts?: GroupAuthorityFacts,
 ): FilePermissions {
   const p = policyFor(file);
-  if (actor === file.owner)
+  const authority = ownerAuthority(file.owner, file.ownerKind === "group", actor, groupFacts);
+  if (authority.owns || authority.role === "editor")
     return {
       role: "owner",
       read: true,
@@ -38,6 +42,7 @@ export function permissions(
   const linked = link && p.visibility !== "private" ? p.linkRole : null;
   const rank = Math.max(
     roles.indexOf(named as ShareRole),
+    authority.role === "viewer" ? 0 : -1,
     roles.indexOf(linked as ShareRole),
   );
   const role = roles[rank] || null;

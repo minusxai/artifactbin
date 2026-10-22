@@ -2,6 +2,7 @@ import type { AccessPolicy, FilePermissions } from "../contracts.ts";
 import type { SessionGrant } from "../identity-data-contracts.ts";
 export interface DocumentAuthorizationRecord {
   owner: string;
+  ownerKind?: "user" | "group";
   shareHash: string;
   generation: number;
   access?: AccessPolicy;
@@ -28,4 +29,11 @@ export interface DocumentAuthorizationDecision {
   owner: boolean;
   permissions: FilePermissions;
   appEdit: boolean;
+}
+/** Addressed GET/HEAD reads carry link access, with fresh session membership facts. */
+export interface PageReadAuthorizationInput {
+  fileId: string;
+  document: DocumentAuthorizationRecord | null;
+  session: SessionGrant | null;
+  now: number;
 }

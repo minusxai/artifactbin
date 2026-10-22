@@ -1,3 +1,4 @@
+import { loadGroupAuthority } from "./group-memberships.ts";
 import type { SessionGrant } from "../identity-data-contracts.ts";
 import type { DocumentHeader } from "../server/document-authorization-contracts.ts";
 import type { SqlClient } from "./sql.ts";
@@ -26,12 +27,16 @@ export async function loadSession(
       [tokenHash],
     )
   ).rows[0];
-  return row ? decodeSessionGrant(row) : null;
+  if (!row) return null;
+  const session = decodeSessionGrant(row);
+  session.groupAuthority = await loadGroupAuthority(client, session.actor);
+  return session;
 }
 function decodeHeader(row: Record<string, unknown>): DocumentHeader {
   return {
     id: row.id as string,
     owner: row.owner as string,
+    ownerKind: row.principal_kind === "group" ? "group" : "user",
     shareHash: row.share_hash as string,
     generation: row.generation as number,
     head: row.head as string,
@@ -51,8 +56,8 @@ async function documentHeader(
 ): Promise<DocumentHeader | null> {
   const row = (
     await client.query(
-      "SELECT id,owner,share_hash,generation,head,sequence,share,path,access,source_digest FROM files WHERE id=$1" +
-        (locked ? " FOR UPDATE" : ""),
+      "SELECT f.id,f.owner,f.share_hash,f.generation,f.head,f.sequence,f.share,f.path,f.access,f.source_digest,a.principal_kind FROM files f JOIN accounts a ON a.actor=f.owner WHERE f.id=$1" +
+        (locked ? " FOR UPDATE OF f" : ""),
       [id],
     )
   ).rows[0];
