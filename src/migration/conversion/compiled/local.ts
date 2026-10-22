@@ -1,6 +1,7 @@
 /** Explicit offline route; never a fallback for blocked static conversion. */
 import { MAX_PAGE_SOURCE } from "../../../af-contracts.ts";
 import { Parser } from "acorn";
+import { validLocalValue } from "./local-state.ts";
 import { safeInlineModule } from "./module-safety.ts";
 import jsx from "acorn-jsx";
 import { parseFragment, serialize } from "parse5";
@@ -67,6 +68,10 @@ export async function compileArchivedLocal(
   if (
     strict.issues.some(
       (i) =>
+        !(
+          i.code === "attribute" &&
+          i.message === "Dynamic attribute requires an adapter: value"
+        ) &&
         ![
           "component",
           "value",
@@ -79,6 +84,8 @@ export async function compileArchivedLocal(
     return blocked("compiled-capability");
   let invalid = false;
   const declarations = new Set<string>();
+  const tableNames = new Set<string>();
+  const scalarBindings = new Set<string>();
   const references = new Set<string>();
   const queries = new Set<string>();
   const safeExpression = (node: any): boolean => {
@@ -100,6 +107,8 @@ export async function compileArchivedLocal(
         node.argument.type === "Literal" &&
         typeof node.argument.value === "number"
       );
+    if (node.type === "ArrayExpression")
+      return node.elements.every((v: any) => v && safeExpression(v));
     if (node.type === "ObjectExpression")
       return node.properties.every(
         (p: any) =>
@@ -137,6 +146,11 @@ export async function compileArchivedLocal(
         )
           invalid = true;
         for (const attr of node.openingElement.attributes) {
+          if (
+            attr.value?.expression?.type === "ArrayExpression" &&
+            !(name === "Value" && attr.name?.name === "value")
+          )
+            invalid = true;
           const attrName = attr.name?.name?.toLowerCase();
           const attrValue = attr.value?.value ?? attr.value?.expression?.value;
           if (
@@ -154,14 +168,22 @@ export async function compileArchivedLocal(
             ["value", "checked", "data"].includes(attr.name.name) &&
             typeof attr.value?.value === "string" &&
             attr.value.value.startsWith("$")
-          )
+          ) {
             references.add(attr.value.value.slice(1));
+            if (
+              ["Input", "Textarea", "input", "textarea", "select"].includes(
+                name,
+              )
+            )
+              scalarBindings.add(attr.value.value.slice(1));
+          }
           if (attr.type === "JSXAttribute" && attr.name.name === "set") {
             const object = attr.value?.expression;
             if (object?.type !== "ObjectExpression") invalid = true;
             else
               for (const prop of object.properties) {
                 references.add(prop.key?.name ?? prop.key?.value);
+                scalarBindings.add(prop.key?.name ?? prop.key?.value);
                 if (
                   typeof prop.value?.value === "string" &&
                   prop.value.value.startsWith("$")
@@ -211,10 +233,11 @@ export async function compileArchivedLocal(
             !/^[A-Za-z][A-Za-z0-9_]*$/.test(attrs.name) ||
             ["constructor", "prototype", "__proto__"].includes(attrs.name) ||
             declarations.has(attrs.name) ||
-            !["string", "number", "boolean"].includes(attrs.type)
+            !["string", "number", "boolean", "table"].includes(attrs.type)
           )
             invalid = true;
           declarations.add(attrs.name);
+          if (attrs.type === "table") tableNames.add(attrs.name);
         }
       }
       for (const [key, value] of Object.entries(node)) {
@@ -236,7 +259,11 @@ export async function compileArchivedLocal(
   } catch {
     return blocked("compiled-source");
   }
-  if ([...queries].some((q) => declarations.has(q))) invalid = true;
+  if (
+    [...queries].some((q) => declarations.has(q)) ||
+    [...scalarBindings].some((n) => tableNames.has(n))
+  )
+    invalid = true;
   if (invalid || (declarations.size === 0 && queries.size === 0))
     return blocked("compiled-capability");
   let output: ArchivedLocalOutput;
@@ -282,8 +309,8 @@ export async function compileArchivedLocal(
     if (
       !declarations.has(d.name) ||
       Object.hasOwn(state, d.name) ||
-      !["string", "number", "boolean"].includes(d.type) ||
-      (d.default !== null && typeof d.default !== d.type)
+      !["string", "number", "boolean", "table"].includes(d.type) ||
+      !validLocalValue(d, d.default)
     )
       return blocked("compiled-local-output");
     state[d.name] = d.default;
@@ -345,6 +372,7 @@ export async function compileArchivedLocal(
       "archived-kit",
       "inlined-fonts",
       ...(queries.size ? ["local-sql-queries"] : []),
+      ...(tableNames.size ? ["local-inline-tables"] : []),
     ],
     provenance: {
       compiler: "archived-local",

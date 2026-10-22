@@ -4,16 +4,23 @@ import type {
   CompiledMigrationOptions,
 } from "./contracts.ts";
 import type { ConversionResult } from "../contracts.ts";
-/** Only scalar page data. Queries, shared mutations and author code are excluded. */
+/** Mutable viewer data; queries are derived, never persisted. */
 export interface LocalScalarDeclaration {
   name: string;
   type: "string" | "number" | "boolean";
   default: string | number | boolean | null;
 }
+export interface LocalTableDeclaration {
+  name: string;
+  type: "table";
+  default: Record<string, string | number | boolean | null>[];
+  columns: { name: string; type: "string" | "number" | "boolean" }[];
+}
+export type LocalDeclaration = LocalScalarDeclaration | LocalTableDeclaration;
 export interface ArchivedLocalOutput extends ArchivedStaticOutput {
   javascript: string;
   queryNames?: string[];
-  declarations: LocalScalarDeclaration[];
+  declarations: LocalDeclaration[];
   /** Audited migration-time bundle inputs; no authored source or absolute paths. */
   modules: string[];
 }

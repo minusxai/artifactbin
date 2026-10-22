@@ -250,3 +250,101 @@ test("local HTML that exceeds the existing platform page source limit remains bl
   assert.equal(result.classification, "manual-blocked");
   assert.equal(result.issues[0]?.code, "compiled-page-limit");
 });
+
+test("inline tables retain declared rows and schema as Apollo viewer state", async () => {
+  const result = await compileArchivedLocal(
+    {
+      ...input,
+      source:
+        '<Helmet><Value name="rows" type="table" value={[{amount:2}]}/><Query name="total">{`select sum(amount) as total from rows`}</Query></Helmet><Number data="$total"/>',
+    },
+    {
+      compiler: {
+        compile: async () => ({
+          ...output,
+          queryNames: ["total"],
+          declarations: [
+            {
+              name: "rows",
+              type: "table",
+              default: [{ amount: 2 }],
+              columns: [{ name: "amount", type: "number" }],
+            },
+          ],
+        }),
+      },
+    },
+  );
+  assert.equal(result.classification, "functional");
+  assert.match(result.html!, /"rows":\[\{"amount":2\}\]/);
+});
+
+test("table viewer state validates schema, reloads saved rows, and keeps scalar queries separate", async () => {
+  const { localBootSource } = await import(
+    "../src/migration/conversion/compiled/local-boot.ts"
+  );
+  let data: any = { compiledPage: { rows: [{ amount: 7 }], n: 3 } },
+    context: any,
+    observe: any;
+  const client = {
+    watchQuery: () => ({
+      subscribe: (fn: any) => {
+        observe = fn;
+        fn({ data });
+      },
+    }),
+    updateQuery: (_: any, fn: any) => {
+      data = fn(data);
+      observe({ data });
+    },
+  };
+  const signal = (v: any) => [
+    () => v,
+    (next: any) => {
+      v = next;
+    },
+  ];
+  const source = localBootSource([
+    {
+      name: "rows",
+      type: "table",
+      default: [{ amount: 2 }],
+      columns: [{ name: "amount", type: "number" }],
+    },
+    { name: "n", type: "number", default: 1 },
+  ])
+    .replace(/^import .*;$/gm, "")
+    .replace("export function boot", "function boot");
+  const boot = Function(
+    "client",
+    "gql",
+    "hydrateIsland",
+    "createSignal",
+    source + ";return boot;",
+  )(
+    client,
+    () => ({}),
+    (_: any, __: any, c: any) => {
+      context = c;
+    },
+    signal,
+  );
+  boot({ TREE: () => null });
+  assert.deepEqual(context.values(), { n: 3 });
+  assert.deepEqual(context.table("rows"), {
+    rows: [{ amount: 7 }],
+    columns: [{ name: "amount", type: "number" }],
+  });
+  context.setValue("rows", [{ amount: 9 }]);
+  assert.deepEqual(data.compiledPage.rows, [{ amount: 9 }]);
+  assert.throws(
+    () => context.setValue("rows", [{ amount: "bad" }]),
+    /Invalid local scalar write/,
+  );
+  assert.throws(
+    () => context.setValue("rows", [{ amount: 1, extra: 2 }]),
+    /Invalid local scalar write/,
+  );
+  boot({ TREE: () => null });
+  assert.deepEqual(context.table("rows").rows, [{ amount: 9 }]);
+});

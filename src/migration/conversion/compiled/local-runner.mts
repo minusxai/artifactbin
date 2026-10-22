@@ -54,19 +54,29 @@ const parts = await prepareStoryParts({
 if (parts.runtime.authorScript || parts.runtime.authorScriptErrors?.length)
   throw Error("Author code is not supported");
 const build = loadCompilerBuild();
-const declarations = split.content.values.map((v: any) => ({
-  name: v.name,
-  type: v.type,
-  default: v.default,
-}));
-if (
-  declarations.some(
-    (v: any) =>
-      !["string", "number", "boolean"].includes(v.type) ||
-      (v.default !== null && typeof v.default !== v.type),
-  )
-)
-  throw Error("Unsupported value type");
+const declarations = split.content.values.map((v: any) =>
+  v.kind === "table"
+    ? {
+        name: v.name,
+        type: "table",
+        default: v.rows ?? [],
+        columns: v.columns ?? [],
+      }
+    : { name: v.name, type: v.type, default: v.default },
+);
+const { validLocalValue } = await import("./local-state.ts");
+if (declarations.some((v: any) => !validLocalValue(v, v.default)))
+  throw Error("Unsupported local value type");
+const scalarValues = Object.fromEntries(
+  declarations
+    .filter((d: any) => d.type !== "table")
+    .map((d: any) => [d.name, d.default]),
+);
+const localTables = Object.fromEntries(
+  declarations
+    .filter((d: any) => d.type === "table")
+    .map((d: any) => [d.name, d.default]),
+);
 const rawFlow = {
   imports: [],
   queries: split.content.queries,
@@ -109,10 +119,8 @@ if (rawFlow.queries.length) {
     flow,
     flow.queries.map((q: any) => q.name),
     {
-      values: Object.fromEntries(
-        declarations.map((d: any) => [d.name, d.default]),
-      ),
-      localTables: {},
+      values: scalarValues,
+      localTables,
       userId: null,
       now: new Date().toISOString(),
       tz: "UTC",
@@ -149,7 +157,8 @@ const rendered = (
     "migration-local",
   )
 ).render({
-  values: Object.fromEntries(declarations.map((d: any) => [d.name, d.default])),
+  values: scalarValues,
+  localTables,
   results,
   mermaidImages: {},
   drawings: {},
