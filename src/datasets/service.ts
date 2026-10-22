@@ -4,7 +4,7 @@ import {
   type DatasetReadPorts,
   type DatasetReadService,
   type DatasetReadRequest,
-  type DatasetBinding,
+  type DatasetResolvedBinding,
   type DatasetReadAuthority,
   type DatasetCallContext,
   type DatasetReadResult,
@@ -20,7 +20,16 @@ function requestOf(value: unknown): DatasetReadRequest {
       (k) => !Object.hasOwn(r, k),
     ) ||
     Object.keys(r).some(
-      (k) => !["binding", "schema", "table", "offset", "limit"].includes(k),
+      (k) =>
+        ![
+          "binding",
+          "schema",
+          "table",
+          "offset",
+          "limit",
+          "expectedVersion",
+          "expectedGeneration",
+        ].includes(k),
     ) ||
     ["binding", "schema", "table"].some(
       (k) => typeof r[k] !== "string" || !r[k] || String(r[k]).length > 128,
@@ -29,14 +38,22 @@ function requestOf(value: unknown): DatasetReadRequest {
     Number(r.offset) < 0 ||
     !Number.isSafeInteger(r.limit) ||
     Number(r.limit) < 1 ||
-    Number(r.limit) > 10000
+    Number(r.limit) > 10000 ||
+    (r.expectedVersion === undefined) !==
+      (r.expectedGeneration === undefined) ||
+    (r.expectedVersion !== undefined &&
+      (!Number.isSafeInteger(r.expectedVersion) ||
+        Number(r.expectedVersion) < 1 ||
+        !Number.isSafeInteger(r.expectedGeneration) ||
+        Number(r.expectedGeneration) < 1)) ||
+    (Number(r.offset) > 0 && r.expectedVersion === undefined)
   )
     throw new DatasetReadError("invalid_request");
   return r as unknown as DatasetReadRequest;
 }
 function authorized(
   context: DatasetCallContext,
-  b: DatasetBinding,
+  b: DatasetResolvedBinding,
   a: DatasetReadAuthority | null,
 ): boolean {
   return (
@@ -48,13 +65,35 @@ function authorized(
     a.page.id === b.page.legacyId &&
     a.page.editId === b.page.editId &&
     a.dataset.id === b.dataset.id &&
-    a.dataset.policyRevision === b.dataset.policyRevision &&
     (context.subject !== null ||
       (!a.facts.caller.userId &&
         !a.facts.caller.tokenId &&
         !a.facts.caller.groupId)) &&
     datasetReadable(a)
   );
+}
+function sameRevision(
+  b: DatasetResolvedBinding,
+  a: DatasetReadAuthority,
+): boolean {
+  return (
+    a.dataset.generation === b.revision.generation &&
+    a.dataset.policyRevision === b.revision.policyRevision &&
+    (b.mode === "live"
+      ? a.dataset.version === b.revision.version
+      : b.dataset.version === b.revision.version)
+  );
+}
+async function requireAuthority(
+  ports: DatasetReadPorts,
+  context: DatasetCallContext,
+  b: DatasetResolvedBinding,
+): Promise<void> {
+  const authority = await ports.authority(context, b);
+  if (!authority || !authorized(context, b, authority))
+    throw new DatasetReadError("denied");
+  if (!sameRevision(b, authority))
+    throw new DatasetReadError("dataset_changed");
 }
 export function createDatasetReadService(
   ports: DatasetReadPorts,
@@ -71,6 +110,14 @@ export function createDatasetReadService(
         b.backendId !== context.backendId ||
         b.backendVersion !== context.backendVersion ||
         b.page.id !== context.pageId ||
+        !["live", "pinned"].includes(b.mode) ||
+        !b.revision ||
+        !Number.isSafeInteger(b.revision.version) ||
+        b.revision.version < 1 ||
+        !Number.isSafeInteger(b.revision.generation) ||
+        b.revision.generation < 1 ||
+        !Number.isSafeInteger(b.revision.policyRevision) ||
+        b.revision.policyRevision < 0 ||
         !Number.isSafeInteger(b.dataset.version) ||
         b.dataset.version < 1
       )
@@ -81,18 +128,23 @@ export function createDatasetReadService(
       if (matches.length !== 1) throw new DatasetReadError("denied");
       const table = matches[0]!;
       validateTable(table);
-      if (!authorized(context, b, await ports.authority(context, b)))
-        throw new DatasetReadError("denied");
+      await requireAuthority(ports, context, b);
+      if (
+        r.expectedVersion !== undefined &&
+        (r.expectedVersion !== b.revision.version ||
+          r.expectedGeneration !== b.revision.generation)
+      )
+        throw new DatasetReadError("dataset_changed");
       const rows = await readRows(
         table,
         await ports.read(table.object.key, signal),
         signal,
       );
-      if (!authorized(context, b, await ports.authority(context, b)))
-        throw new DatasetReadError("denied");
+      await requireAuthority(ports, context, b);
       signal?.throwIfAborted();
       const result: DatasetReadResult = {
-        version: b.dataset.version,
+        version: b.revision.version,
+        generation: b.revision.generation,
         schema: r.schema,
         table: r.table,
         columns: table.columns.map((c) => ({ name: c.name, type: c.type })),

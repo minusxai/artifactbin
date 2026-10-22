@@ -133,6 +133,7 @@ test(
       const sha256 = createHash("sha256").update(bytes).digest("hex");
       await writeFile(join(directory, sha256), bytes);
       const binding: DatasetBinding = {
+        mode: "live",
         name: "sales",
         backendId: receipt.backendId,
         backendVersion: receipt.deployment.version,

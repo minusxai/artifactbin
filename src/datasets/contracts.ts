@@ -66,7 +66,11 @@ export interface DatasetReadResult {
 export interface DatasetReadAuthority {
   page: DocumentSnapshot;
   pageVersion: number;
-  dataset: DatasetSnapshot & { deleted: boolean; version: number; generation: number };
+  dataset: DatasetSnapshot & {
+    deleted: boolean;
+    version: number;
+    generation: number;
+  };
   /** Includes the server-derived legacy user/token principal mapping; never page input. */
   facts: AuthorizationFacts;
 }
@@ -96,7 +100,8 @@ export class DatasetReadError extends Error {
     | "denied"
     | "invalid_request"
     | "invalid_dataset"
-    | "result_limit";
+    | "result_limit"
+    | "dataset_changed";
   constructor(code: DatasetReadError["code"]) {
     super(code);
     this.code = code;

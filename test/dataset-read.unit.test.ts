@@ -3,13 +3,15 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createDatasetReadService } from "../src/datasets/service.ts";
 import type {
-  DatasetBinding,
+  DatasetResolvedBinding,
   DatasetReadAuthority,
   DatasetReadPorts,
 } from "../src/datasets/contracts.ts";
 const bytes = Buffer.from('[{"amount":1},{"amount":2}]');
 const sha256 = createHash("sha256").update(bytes).digest("hex");
-const binding: DatasetBinding = {
+const binding: DatasetResolvedBinding = {
+  mode: "live",
+  revision: { version: 2, generation: 1, policyRevision: 1 },
   name: "sales",
   backendId: "backend-file",
   backendVersion: "backend",
@@ -43,6 +45,8 @@ const authority: DatasetReadAuthority = {
   },
   dataset: {
     id: "dataset",
+    version: 2,
+    generation: 1,
     deleted: false,
     owner,
     visibility: "public",
@@ -224,9 +228,13 @@ test("legacy null and v1 reads use audience while v2 enforces saved original doc
 test("unsupported policies, changed revisions and private group prototype properties deny", async () => {
   for (const change of [
     { policy: { version: 3 } },
-    { policyRevision: 2 },
     {
-      policy: { version: 1, enforcement: "enabled", tables: [], execution: {} },
+      policy: {
+        version: 1,
+        enforcement: "enabled",
+        tables: [],
+        execution: { extensions: {} },
+      },
     },
     {
       visibility: "private",
@@ -388,6 +396,8 @@ test("response pagination reduces the window to fit the capability frame and res
   const second = await f.service.read(context, {
     ...request,
     offset: first.nextOffset,
+    expectedVersion: first.version,
+    expectedGeneration: first.generation,
     limit: 3,
   });
   assert.equal(second.rows.length, 1);
@@ -474,4 +484,88 @@ test("runtime object identity uses the full digest and excessive nesting is refu
   await assert.rejects(g.service.read(context, request), {
     code: "invalid_dataset",
   });
+});
+
+test("live read refuses changed heads during object I/O and mismatched paginated snapshot tokens", async () => {
+  let calls = 0;
+  const f = fixture({
+    authority: async () => {
+      calls++;
+      return {
+        ...authority,
+        dataset: {
+          ...authority.dataset,
+          version: calls > 1 ? 3 : 2,
+          generation: calls > 1 ? 2 : 1,
+        },
+      };
+    },
+  });
+  await assert.rejects(f.service.read(context, request), {
+    code: "dataset_changed",
+  });
+  const g = fixture();
+  await assert.rejects(g.service.read(context, { ...request, offset: 1 }), {
+    code: "invalid_request",
+  });
+  await assert.rejects(
+    g.service.read(context, {
+      ...request,
+      offset: 1,
+      expectedVersion: 2,
+      expectedGeneration: 2,
+    }),
+    { code: "dataset_changed" },
+  );
+  assert.equal(g.loads(), 0);
+  const page = await g.service.read(context, {
+    ...request,
+    offset: 1,
+    expectedVersion: 2,
+    expectedGeneration: 1,
+  });
+  assert.deepEqual(page.rows, [{ amount: 2 }]);
+  assert.equal(page.generation, 1);
+});
+
+test("read accepts supported execution function restrictions without turning them into SELECT restrictions", async () => {
+  for (const policy of [
+    {
+      version: 1,
+      enforcement: "enabled",
+      tables: [],
+      execution: { functions: { allow: ["count"], deny: ["random"] } },
+    },
+    {
+      version: 2,
+      allow: [{ actions: ["read"], from: { artifact: "document" } }],
+      execution: { functions: { allow: ["count"] } },
+    },
+  ]) {
+    const f = fixture({
+      authority: async () => ({
+        ...authority,
+        dataset: { ...authority.dataset, policy },
+      }),
+    });
+    assert.equal((await f.service.read(context, request)).rows.length, 1);
+  }
+});
+
+test("explicit pinned reads keep their original catalog version under fresh current authority", async () => {
+  const f = fixture({
+    binding: async () => ({
+      ...binding,
+      mode: "pinned",
+      revision: { ...binding.revision, generation: 2 },
+    }),
+    authority: async () => ({
+      ...authority,
+      dataset: { ...authority.dataset, version: 3, generation: 2 },
+    }),
+  });
+  const result = await f.service.read(context, request);
+  assert.equal(result.version, 2);
+  assert.equal(result.generation, 2);
+  assert.deepEqual(result.rows, [{ amount: 1 }]);
 });

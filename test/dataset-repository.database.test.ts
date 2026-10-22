@@ -12,6 +12,7 @@ const context = {
   subject: "member",
 };
 const binding: DatasetBinding = {
+  mode: "live",
   name: "sales",
   backendId: "Bk0001",
   backendVersion: "backend-v1",
@@ -119,7 +120,10 @@ async function fixture(savedBinding = binding) {
 test("trusted binding pins saved backend and page versions; authority refreshes current ACL, principals, joins and policy", async () => {
   const { env, repository } = await fixture();
   try {
-    assert.deepEqual(await repository.binding(context, "sales"), binding);
+    assert.deepEqual(await repository.binding(context, "sales"), {
+      ...binding,
+      revision: { version: 1, generation: 1, policyRevision: 0 },
+    });
     for (const change of [
       { backendVersion: "wrong" },
       { pageId: "wrong" },
@@ -212,7 +216,8 @@ test("separate page/dataset ACL, group revocation and ambiguous legacy callers f
 });
 
 test("fresh group memberships control dataset wrappers independently of the immutable pinned catalog", async () => {
-  const { env, repository } = await fixture();
+  const pinned = { ...binding, mode: "pinned" as const };
+  const { env, repository } = await fixture(pinned);
   try {
     await env.pool.query(
       "INSERT INTO accounts(actor,principal_kind) VALUES('group:qa','group')",
@@ -227,7 +232,7 @@ test("fresh group memberships control dataset wrappers independently of the immu
     await env.pool.query(
       "UPDATE dataset_resources SET owner='group:qa',access=jsonb_set(access,'{shares}','{}'),snapshot=jsonb_set(snapshot,'{owner}','{\"userId\":null,\"tokenId\":null,\"groupId\":\"old-group\"}')",
     );
-    const authority = await repository.authority(context, binding);
+    const authority = await repository.authority(context, pinned);
     assert.ok(authority);
     assert.equal(authority.facts.groupRoles["old-group"], "viewer");
     await env.pool.query(
@@ -238,13 +243,13 @@ test("fresh group memberships control dataset wrappers independently of the immu
       1,
     );
     assert.equal(
-      (await repository.authority(context, binding))?.dataset.policyRevision,
+      (await repository.authority(context, pinned))?.dataset.policyRevision,
       1,
     );
     await env.pool.query(
       "DELETE FROM group_memberships WHERE owner='group:qa' AND actor='member'",
     );
-    assert.equal(await repository.authority(context, binding), null);
+    assert.equal(await repository.authority(context, pinned), null);
   } finally {
     await env.cleanup();
   }
@@ -452,5 +457,92 @@ test("configured server GraphQL reads trusted dataset bytes and rechecks member 
     await app.close();
     await env.cleanup();
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("live bindings resolve the current immutable catalog while pinned bindings retain their original catalog", async () => {
+  const { createHash } = await import("node:crypto");
+  const { createDatasetReadService } = await import(
+    "../src/datasets/service.ts"
+  );
+  const { env, repository } = await fixture();
+  try {
+    const data = Buffer.from('[{"name":"new-a"},{"name":"new-b"}]');
+    const sha256 = createHash("sha256").update(data).digest("hex");
+    const tables = [
+      {
+        ...binding.tables[0]!,
+        object: { key: sha256, sha256, bytes: data.length },
+      },
+    ];
+    await env.pool.query(
+      "INSERT INTO dataset_versions VALUES('legacy','old-data',2,$1,'{}','[]')",
+      [JSON.stringify(tables)],
+    );
+    await env.pool.query(
+      "UPDATE dataset_resources SET current_version=2,generation=2",
+    );
+    const live = await repository.binding(context, "sales");
+    assert.equal(live?.dataset.version, 1);
+    assert.deepEqual(live?.revision, {
+      version: 2,
+      generation: 2,
+      policyRevision: 0,
+    });
+    assert.deepEqual(live?.tables, tables);
+    let reads = 0;
+    const service = createDatasetReadService({
+      ...repository,
+      read: async () => {
+        reads++;
+        return (async function* () {
+          yield data;
+        })();
+      },
+    });
+    const first = await service.read(context, {
+      binding: "sales",
+      schema: "public",
+      table: "rows",
+      offset: 0,
+      limit: 1,
+    });
+    assert.deepEqual(first.rows, [{ name: "new-a" }]);
+    assert.equal(first.version, 2);
+    assert.equal(first.generation, 2);
+    await env.pool.query(
+      "INSERT INTO dataset_versions VALUES('legacy','old-data',3,$1,'{}','[]')",
+      [JSON.stringify(tables)],
+    );
+    await env.pool.query(
+      "UPDATE dataset_resources SET current_version=3,generation=3",
+    );
+    await assert.rejects(
+      service.read(context, {
+        binding: "sales",
+        schema: "public",
+        table: "rows",
+        offset: 1,
+        limit: 1,
+        expectedVersion: first.version,
+        expectedGeneration: first.generation,
+      }),
+      { code: "dataset_changed" },
+    );
+    assert.equal(reads, 1);
+    const { tables: _, ...descriptor } = binding;
+    await env.pool.query(
+      "INSERT INTO dataset_bindings VALUES('Bk0001','backend-v1','Pg0001',1,'snapshot','legacy','old-data',1,$1)",
+      [{ ...descriptor, name: "snapshot", mode: "pinned" }],
+    );
+    const pinned = await repository.binding(context, "snapshot");
+    assert.deepEqual(pinned?.revision, {
+      version: 1,
+      generation: 3,
+      policyRevision: 0,
+    });
+    assert.deepEqual(pinned?.tables, binding.tables);
+  } finally {
+    await env.cleanup();
   }
 });

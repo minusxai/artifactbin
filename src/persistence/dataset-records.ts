@@ -12,6 +12,7 @@ export function decodeDatasetBinding(
   if (
     !descriptor ||
     descriptor.name !== name ||
+    !["live", "pinned"].includes(descriptor.mode) ||
     descriptor.backendId !== context.backendId ||
     descriptor.backendVersion !== context.backendVersion ||
     descriptor.page?.id !== context.pageId ||
