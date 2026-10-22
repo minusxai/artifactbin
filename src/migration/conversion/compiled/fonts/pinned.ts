@@ -9,6 +9,7 @@ import {
   MAX_FONT_FACES,
 } from "./contracts.ts";
 import type { ResolvePinnedFonts, PinnedFontFace } from "./contracts.ts";
+import { validateWoff2Bounds } from "./woff2.ts";
 import { inspectSfnt } from "./inspect.ts";
 /** Frozen lock + official package CSS bind typeface names, including variable-font CSS aliases.
  * Only existing pinned files are read. No arbitrary URL or conversion-time network port exists. */
@@ -163,6 +164,7 @@ export async function pinnedFontResolver(
           bytes.readUInt32BE(16) > 4_000_000
         )
           throw Error("Invalid pinned font container");
+        validateWoff2Bounds(bytes);
         const expanded = await decompress(bytes);
         if (expanded.byteLength !== bytes.readUInt32BE(16))
           throw Error("Pinned font expansion size mismatch");
