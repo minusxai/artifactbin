@@ -595,6 +595,16 @@ export function createDatasetMutationRepository({
           !same(receipt.operation, operation)
         )
           return { kind: "denied" };
+        const reg = await registered(client, context, operation.name, true);
+        if (!reg || !same(reg.operation, operation)) return { kind: "denied" };
+        const fresh = await currentHead(client, context, reg, now(), true);
+        if (!fresh) return { kind: "denied" };
+        let selected;
+        try {
+          selected = selectDatasetMutationPolicy(fresh, operation);
+        } catch {
+          return { kind: "denied" };
+        }
         if (receipt.state === "committed")
           return {
             kind: "committed",
@@ -602,22 +612,12 @@ export function createDatasetMutationRepository({
               receipt.result as import("../datasets/mutation/contracts.ts").DatasetMutationResult,
           };
         if (receipt.state !== "inflight") return { kind: "denied" };
-        const reg = await registered(client, context, operation.name, true);
-        if (!reg || !same(reg.operation, operation)) return { kind: "denied" };
-        const fresh = await currentHead(client, context, reg, now(), true);
-        if (!fresh) return { kind: "denied" };
         if (
           fresh.version !== head.version ||
           fresh.generation !== head.generation ||
           fresh.policyRevision !== head.policyRevision
         )
           return { kind: "conflict" };
-        let selected;
-        try {
-          selected = selectDatasetMutationPolicy(fresh, operation);
-        } catch {
-          return { kind: "denied" };
-        }
         if (
           !outcome.analysis ||
           !selected.operations.includes(outcome.analysis.operation)

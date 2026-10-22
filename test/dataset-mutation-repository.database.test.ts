@@ -235,7 +235,43 @@ test("durable mutation commits history, receipt and invalidation atomically; con
       ).rows[0].n,
       1,
     );
+    const pendingRequest = { ...request, requestId: "pending" };
+    const pending = await repo.begin(context, operation, pendingRequest);
+    assert.equal(pending.kind, "lease");
+    if (pending.kind !== "lease") throw Error();
+    const pendingHead = await repo.head(context, operation);
+    assert.ok(pendingHead);
     await env.pool.query("UPDATE dataset_resources SET writable=false");
+    assert.deepEqual(
+      await repo.commit({
+        context,
+        operation,
+        lease: pending.lease,
+        head: pendingHead,
+        object: stored,
+        outcome,
+      }),
+      { kind: "denied" },
+    );
+    assert.deepEqual(
+      await repo.commit({
+        context,
+        operation,
+        lease: (winner === 0 ? first : second).lease,
+        head,
+        object: stored,
+        outcome,
+      }),
+      { kind: "denied" },
+    );
+    await repo.refuse(pending.lease, "denied");
+    await env.pool.query("UPDATE dataset_resources SET writable=true");
+    assert.deepEqual(await repo.begin(context, operation, pendingRequest), {
+      kind: "refused",
+      code: "denied",
+    });
+    await env.pool.query("UPDATE dataset_resources SET writable=false");
+
     await assert.rejects(
       repo.begin(context, operation, {
         ...request,

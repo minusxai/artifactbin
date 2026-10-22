@@ -44,6 +44,7 @@ export function createDatasetMutationObjectStore(
           if (
             ++cells > limits.maxCells ||
             key.includes("\0") ||
+            Buffer.byteLength(key) > limits.outputBytes ||
             !(
               value === null ||
               typeof value === "string" ||
