@@ -181,6 +181,7 @@ export interface CommentInput {
   rendered?: string | null;
 }
 export interface CommentRecord {
+  attachments?: readonly import("../comment-attachment-contracts.ts").CommentAttachment[];
   context?: import("../contracts.ts").CommentContextStatus;
   id: string;
   nodeId: string | null;

@@ -53,6 +53,8 @@ export type CommentContextStatus =
   | { status: "available" }
   | { status: "unavailable"; originalRevision: string; reason: "not-retained" };
 export interface Comment extends Omit<CommentDraft, "sourceRevision"> {
+  /** Read-only imported images. Ordinary comment drafts cannot supply attachments. */
+  attachments?: readonly import("./comment-attachment-contracts.ts").CommentAttachment[];
   sourceRevision: SourceRevision | null;
   /** Absent on ordinary comments; unavailable historical context is never replayed. */
   context?: CommentContextStatus;

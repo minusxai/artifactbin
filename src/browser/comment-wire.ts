@@ -59,6 +59,7 @@ export function acceptedComment(
     nodeId: record.context?.status === "unavailable" ? null : record.nodeId,
     quote: record.quote,
     body: record.body,
+    ...(record.attachments?.length ? { attachments: record.attachments } : {}),
     parentId: record.parentId,
     sourceRevision: record.version === null ? null : revisionOf(record.version, page),
     ...(record.context ? { context: record.context } : {}),

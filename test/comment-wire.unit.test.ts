@@ -169,3 +169,17 @@ test("unavailable historical comments preserve their thread without borrowing th
   assert.equal(view.source, null);
   assert.equal(view.snapshot, null);
 });
+
+test("imported image metadata follows comments without changing body, thread or recorded anchor; ordinary posts cannot attach images", () => {
+  const attachments = [{ id: "image-1", name: "Screenshot", variants: [{ variant: "thumbnail", mimeType: "image/webp", width: 20, height: 10, bytes: 5, sha256: "a".repeat(64) }] }];
+  const original = { ...record("comment-1", 3), body: "Original body <b>plain text</b>", attachments };
+  const result = wireResult({ kind: "comments.list" }, { comments: [original], head: 3 }, page) as { comments: any[] };
+  const comment = result.comments[0]!;
+  assert.deepEqual(comment.attachments, attachments);
+  assert.equal(comment.body, original.body);
+  assert.equal(comment.nodeId, "n7");
+  assert.equal(comment.sourceRevision, "digest-3");
+  assert.equal(comment.parentId, null);
+  const posted = wireRequest({ kind: "comments.create", comment, snapshot: null }, page);
+  assert.equal(Object.hasOwn((posted.body as {comment: object}).comment, "attachments"), false);
+});
