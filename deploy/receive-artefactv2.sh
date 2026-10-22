@@ -132,6 +132,7 @@ systemctl daemon-reload && systemctl enable --now artefactv2-sandbox-egress.serv
 backup="$root/backups/$(date +%s%N).dump"
 python3 "$release/deploy/backup-schema.py" "$root/.env.backup" "$backup"
 export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image" PAGEGI_IMAGE_PROCESSOR_IMAGE="$image_processor_image" PAGEGI_DATASET_SQL_IMAGE="$dataset_sql_image"
+# Both execution and application healthchecks must pass inside this rollback boundary.
 "${compose[@]}" up -d --no-build --wait --wait-timeout 120
 trap - ERR
 if [[ "$had_previous_compose" == true ]]; then

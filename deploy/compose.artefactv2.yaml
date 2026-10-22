@@ -39,6 +39,13 @@ services:
       - ./media:/run/pagegi-media:ro
       # Private immutable dataset bytes are separate from media and never served statically.
       - ./datasets:/run/pagegi-datasets:ro
+    healthcheck:
+      # Compose --wait must verify the app before the receiver publishes image pointers.
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:8787/health',{redirect:'error',signal:AbortSignal.timeout(4000)}).then(async r=>{if(r.status!==200)throw Error('Unhealthy status');const body=await r.json();process.exit(body&&!Array.isArray(body)&&Object.keys(body).length===1&&body.ok===true?0:1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     logging:
       driver: json-file
       options: {max-size: 10m, max-file: '3'}

@@ -12,6 +12,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
 interface ComposeCall {
   args: string[];
   config: string;
@@ -28,7 +29,7 @@ if(name==='docker'){
  const config=fs.readFileSync(args[args.indexOf('-f')+1],'utf8');
  fs.appendFileSync(process.env.CALL_LOG,JSON.stringify({args,config,app:process.env.PAGEGI_IMAGE,backend:process.env.PAGEGI_BACKEND_IMAGE,sql:process.env.PAGEGI_DATASET_SQL_IMAGE,processor:process.env.PAGEGI_IMAGE_PROCESSOR_IMAGE})+'\\n');
  if(args.includes('exec')){process.stdout.write('private-dump');process.exit(0);}
- if((process.env.FAIL_STAGE==='rollout'&&args.includes('--no-build')&&config==='new-composition\\n'))process.exit(17);
+ if((['rollout','app-health'].includes(process.env.FAIL_STAGE)&&args.includes('--no-build')&&config==='new-composition\\n'))process.exit(17);
  process.exit(0);
 }
 if(name==='python3'&&args[0].endsWith('/backup-schema.py')){if(process.env.FAIL_STAGE==='backup')process.exit(17);fs.writeFileSync(args[2],'schema-backup');fs.writeFileSync(args[2]+'.verified','restore proof');process.exit(0);}
@@ -40,7 +41,7 @@ if(name==='install'){
 }
 process.exit(0);
 `;
-for (const failure of ["rollout", "backup", "", "initial"]) {
+for (const failure of ["rollout", "app-health", "backup", "", "initial"]) {
   test(`isolated receiver ${failure ? `recovers from ${failure} failure` : "retains previous composition after success"}`, () => {
     const dir = mkdtempSync(join(tmpdir(), "afv2-rollout-")),
       root = join(dir, "root"),
@@ -69,10 +70,18 @@ for (const failure of ["rollout", "backup", "", "initial"]) {
         "current-backend-image": "old-backend",
         "current-dataset-sql-image": "old-sql",
         "current-image-processor-image": "old-processor",
+        "previous-image": "retained-app",
+        "previous-backend-image": "retained-backend",
+        "previous-dataset-sql-image": "retained-sql",
+        "previous-image-processor-image": "retained-processor",
       };
       for (const [name, value] of Object.entries(pointers))
         writeFileSync(join(root, name), value + "\n");
       writeFileSync(join(root, ".env"), "old-environment\n");
+      writeFileSync(
+        join(root, "previous-compose.yaml"),
+        "retained-composition\n",
+      );
       for (const name of [
         "docker",
         "stat",
@@ -129,6 +138,20 @@ for (const failure of ["rollout", "backup", "", "initial"]) {
           readFileSync(join(root, "compose.yaml"), "utf8"),
           "old-composition\n",
         );
+        if (failure === "app-health") {
+          assert.equal(
+            calls.length,
+            2,
+            "app started under compose wait before health failure and rollback",
+          );
+          assert.equal(calls[0]!.app, `artefactv2:${revision}`);
+          assert.equal(calls[0]!.config, "new-composition\n");
+          assert.ok(calls[0]!.args.includes("--wait"));
+        }
+        assert.equal(
+          readFileSync(join(root, "previous-compose.yaml"), "utf8"),
+          "retained-composition\n",
+        );
         const rollback = calls.at(-1)!;
         assert.equal(rollback.config, "old-composition\n");
         assert.equal(rollback.app, "old-app");
@@ -170,3 +193,57 @@ for (const failure of ["rollout", "backup", "", "initial"]) {
     }
   });
 }
+
+test("application health probe requires exact healthy JSON and HTTP200 before Compose can publish rollout", async () => {
+  const compose = readFileSync("deploy/compose.artefactv2.yaml", "utf8");
+  const app = compose.split("  pagegi:\n")[1]!.split("\n  execution:")[0]!;
+  const encoded = app.match(/test: \['CMD', 'node', '-e', (".*")\]/)?.[1];
+  assert.ok(encoded, "application has a health probe used by compose --wait");
+  const probe = JSON.parse(encoded) as string;
+  const check = async (
+    status: number,
+    body: unknown,
+    failure?: "json" | "network",
+  ) => {
+    let exit: number | undefined;
+    await runInNewContext(probe, {
+      AbortSignal,
+      process: {
+        exit: (code: number) => {
+          exit = code;
+        },
+      },
+      fetch: async (
+        url: string,
+        options: { redirect: string; signal: AbortSignal },
+      ) => {
+        assert.equal(url, "http://127.0.0.1:8787/health");
+        assert.equal(options.redirect, "error");
+        assert.ok(options.signal instanceof AbortSignal);
+        if (failure === "network") throw Error("Connection refused");
+        return {
+          status,
+          json: async () => {
+            if (failure === "json") throw Error("Invalid JSON");
+            return body;
+          },
+        };
+      },
+    });
+    return exit;
+  };
+  assert.equal(await check(200, { ok: true }), 0);
+  for (const status of [201, 204, 301, 302, 307, 308, 500, 503])
+    assert.equal(await check(status, { ok: true }), 1, `HTTP${status}`);
+  for (const body of [
+    null,
+    [],
+    {},
+    { ok: false },
+    { ok: "true" },
+    { ok: true, other: "stale" },
+  ])
+    assert.equal(await check(200, body), 1);
+  for (const failure of ["json", "network"] as const)
+    assert.equal(await check(200, { ok: true }, failure), 1, failure);
+});
