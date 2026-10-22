@@ -38,7 +38,7 @@ export async function prepareMigrationJobDatasets(
     const hasImports = page.revisions.some(
       (r) =>
         r.version === head &&
-        (r.imports.length || r.readsMembers || r.readsViewer),
+        (r.imports.length || r.readsMembers || r.readsViewer || r.runsProgram),
     );
     if (hasImports && page.owner.kind === "group") {
       issues.set(page.legacyId, [
@@ -151,7 +151,15 @@ export async function prepareMigrationJobDatasets(
         pageId: r.pageId,
         pageVersion: r.pageVersion,
       }));
-    if (!pageBindings.length && !memberPages.length) continue;
+    const programPages = prepared.receipts
+      .filter((r) => r.pageLegacyId === page.legacyId && r.program)
+      .map((r) => ({
+        pageLegacyId: r.pageLegacyId,
+        pageId: r.pageId,
+        pageVersion: r.pageVersion,
+      }));
+    if (!pageBindings.length && !memberPages.length && !programPages.length)
+      continue;
     try {
       const artifact = await source.readArtifact(page.legacyId);
       const referenced = [
@@ -184,6 +192,7 @@ export async function prepareMigrationJobDatasets(
         receipts: source.datasets.receipts,
         bindings: pageBindings,
         memberPages,
+        programPages,
         relationProvenance: {
           exportedAt: source.datasets.provenance.relationExportedAt,
           manifestSha256: source.datasets.provenance.relationManifestSha256,
