@@ -10,7 +10,7 @@ export async function pathLock(client, owner) {
 export async function readPaths(client, owner) {
   return (
     await client.query(
-      'SELECT path,id AS "fileId" FROM files WHERE owner=$1 AND path IS NOT NULL UNION ALL SELECT path,NULL AS "fileId" FROM folders WHERE owner=$1',
+      'SELECT path,id AS "fileId" FROM files WHERE owner=$1 AND deleted_at IS NULL AND path IS NOT NULL UNION ALL SELECT path,NULL AS "fileId" FROM folders WHERE owner=$1',
       [owner],
     )
   ).rows.map((row) => ({

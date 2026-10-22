@@ -271,6 +271,7 @@ export function createPageService({
     if (row.fingerprint !== fingerprint)
       fail(409, "This requestId was already used for a different publish");
     const id = String(row.file_id);
+    if (!(await loadDocumentHeader(client, id))) fail(404, "File not found");
     return {
       id,
       version: 1,
@@ -581,13 +582,7 @@ export function createPageService({
       return value;
     },
 
-    /**
-     * DELETE /api/files/:id: the owner removes the page, its versions,
-     * comments, page state, keys, publish requestIds, document sessions and
-     * file ID, which is retired so it is never handed out again. Linked
-     * backend files are separate files and stay. No account token is 401;
-     * anyone but the owner gets 404, so the answer reveals nothing.
-     */
+    /** Move a managed page to recoverable trash, retaining every version and ID. */
     remove(credential: string, id: string): Promise<DeleteResponse> {
       if (!isFileId(id)) fail(404, "File not found");
       return database.transaction(async (client) => {
@@ -600,22 +595,7 @@ export function createPageService({
         const document = await lockDocumentHeader(client, id);
         if (!document || !permissions(document, actor, false, false, session?.groupAuthority).manage)
           fail(404, "File not found");
-        for (const statement of [
-          "DELETE FROM idempotency_keys WHERE file_id=$1",
-          "DELETE FROM comments WHERE file_id=$1",
-          "DELETE FROM snapshots WHERE file_id=$1",
-          "DELETE FROM sources WHERE file_id=$1",
-          "DELETE FROM publications WHERE file_id=$1",
-          "DELETE FROM sessions WHERE file_id=$1",
-          "DELETE FROM files WHERE id=$1",
-          "DELETE FROM file_ids WHERE id=$1",
-        ])
-          await client.query(statement, [id]);
-        await (await backendFiles())?.forgetPage(client, id);
-        await client.query(
-          "INSERT INTO retired_file_ids(id,retired_at) VALUES($1,$2) ON CONFLICT (id) DO NOTHING",
-          [id, now()],
-        );
+        await client.query("UPDATE files SET deleted_at=$2,trash_path=path WHERE id=$1", [id, now()]);
         return { id, deleted: true as const };
       });
     },

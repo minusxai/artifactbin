@@ -56,7 +56,7 @@ async function documentHeader(
 ): Promise<DocumentHeader | null> {
   const row = (
     await client.query(
-      "SELECT f.id,f.owner,f.share_hash,f.generation,f.head,f.sequence,f.share,f.path,f.access,f.source_digest,a.principal_kind FROM files f JOIN accounts a ON a.actor=f.owner WHERE f.id=$1" +
+      "SELECT f.id,f.owner,f.share_hash,f.generation,f.head,f.sequence,f.share,f.path,f.access,f.source_digest,a.principal_kind FROM files f JOIN accounts a ON a.actor=f.owner WHERE f.id=$1 AND f.deleted_at IS NULL" +
         (locked ? " FOR UPDATE OF f" : ""),
       [id],
     )

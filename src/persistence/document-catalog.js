@@ -34,7 +34,7 @@ export function createDocumentCatalog(sql) {
             `SELECT f.id, f.path, f.head, f.access->>'visibility' AS visibility, a.space, left(s.content,8192) AS content,
         (SELECT count(*)::int FROM comments c WHERE c.file_id=f.id) AS comments
         FROM files f JOIN accounts a ON a.actor=f.owner JOIN sources s ON s.file_id=f.id AND s.revision=f.head
-        WHERE f.owner=$1 ORDER BY f.id`,
+        WHERE f.owner=$1 AND f.deleted_at IS NULL ORDER BY f.id`,
             [actor],
           )
         ).rows;
@@ -52,8 +52,9 @@ export function createDocumentCatalog(sql) {
       }),
     sharedLink: (id) =>
       sql.transaction(async (client) => {
-        const r = (await client.query("SELECT id FROM files WHERE id=$1", [id]))
-          .rows[0];
+        const r = (
+          await client.query("SELECT id FROM files WHERE id=$1 AND deleted_at IS NULL", [id])
+        ).rows[0];
         return r ? address(String(r.id)) : null;
       }),
     resolveSharedPath: (space, path) =>
@@ -61,7 +62,7 @@ export function createDocumentCatalog(sql) {
         return /** @type {string|null} */ (
           (
             await client.query(
-              "SELECT f.id FROM files f JOIN accounts a ON a.actor=f.owner WHERE a.space=$1 AND f.path=$2",
+              "SELECT f.id FROM files f JOIN accounts a ON a.actor=f.owner WHERE f.deleted_at IS NULL AND a.space=$1 AND f.path=$2",
               [space, normalizePath(path)],
             )
           ).rows[0]?.id || null
@@ -74,7 +75,7 @@ export function createDocumentCatalog(sql) {
             `SELECT f.id,f.path,f.owner,f.head,f.access->>'visibility' AS visibility,a.space,left(s.content,8192) AS content,
        (SELECT count(*)::int FROM comments c WHERE c.file_id=f.id) AS comments
        FROM files f JOIN accounts a ON a.actor=f.owner JOIN sources s ON s.file_id=f.id AND s.revision=f.head
-       WHERE ${publicOnly ? "f.access->>'visibility'='public'" : "f.owner<>$1 AND (f.access->'shares' ? $1 OR EXISTS (SELECT 1 FROM group_memberships gm JOIN groups g ON g.owner=gm.owner WHERE gm.owner=f.owner AND gm.actor=$1 AND g.active))"} ORDER BY f.id`,
+       WHERE f.deleted_at IS NULL AND (${publicOnly ? "f.access->>'visibility'='public'" : "f.owner<>$1 AND (f.access->'shares' ? $1 OR EXISTS (SELECT 1 FROM group_memberships gm JOIN groups g ON g.owner=gm.owner WHERE gm.owner=f.owner AND gm.actor=$1 AND g.active))"}) ORDER BY f.id`,
             publicOnly ? [] : [actor],
           )
         ).rows;
@@ -97,7 +98,7 @@ export function createDocumentCatalog(sql) {
         return /** @type {string|null} */ (
           (
             await client.query(
-              "SELECT id FROM files WHERE owner=$1 AND path=$2",
+              "SELECT id FROM files WHERE owner=$1 AND path=$2 AND deleted_at IS NULL",
               [actor, normalizePath(path)],
             )
           ).rows[0]?.id || null
@@ -108,7 +109,7 @@ export function createDocumentCatalog(sql) {
         return /** @type {string|null} */ (
           (
             await client.query(
-              "SELECT path FROM files WHERE owner=$1 AND id=$2",
+              "SELECT path FROM files WHERE owner=$1 AND id=$2 AND deleted_at IS NULL",
               [actor, id],
             )
           ).rows[0]?.path || null

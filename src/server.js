@@ -1,3 +1,4 @@
+import { createTrashService } from "./trash/service.ts";
 // @ts-check
 import { parseRequestBody, parseFileRoute } from "./server/request.ts";
 import { createPlatformAssets } from "./server/assets.ts";
@@ -118,6 +119,7 @@ export function createService({
   });
   /** @type {import("./backend/af-backend-contracts.ts").BackendFilesPort | undefined} */
   let backendPort;
+  const trash = createTrashService(repository.sql, authority.account);
   const pages = createPageService({
     database: repository.sql,
     authority,
@@ -395,6 +397,16 @@ export function createService({
         url.pathname.startsWith("/api/library/")
       )
         return await library(req, res, url, input, origin);
+      if (url.pathname === "/api/trash" || url.pathname.startsWith("/api/trash/")) {
+        if (!credential(req) && req.headers["x-pagegi-home"] === "1") {
+          if (req.method !== "GET") sameOrigin(req);
+          req.headers.authorization = "Bearer " + cookieToken(req);
+        }
+        const result = await trash.handle(credential(req), url, req.method || "GET", input, now());
+        if (!result) fail(404, "Not found");
+        if ("deletedIds" in result) for (const id of result.deletedIds) live.changed(id, true);
+        return send(200, result);
+      }
       const deleteRoute = /^\/api\/files\/([A-Za-z0-9]{6})$/.exec(url.pathname);
       if (deleteRoute && req.method === "DELETE") {
         const removed = await pages.remove(credential(req), deleteRoute[1] || "");

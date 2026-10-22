@@ -407,24 +407,20 @@ test("the owner deletes a page: every route for its ID is 404 and linked backend
     const backend = await server.request(`/af/v1/ids/${backendId}`, { token: owner });
     assert.equal(backend.status, 200);
     assert.equal(((await backend.json()) as { kind: string }).kind, "backend");
-    // ...but the deleted page's link rows are gone with it.
+    // Backend links remain with retained page history for restoration.
     for (const table of ["af_page_backends", "af_backend_pages"]) {
       const { rows } = await server.query(`SELECT 1 FROM ${table} WHERE page_id = $1`, [pageId]);
-      assert.equal(rows.length, 0, `${table} still names the deleted page`);
+      assert.ok(rows.length > 0, `${table} retains the deleted page`);
     }
 
     // The deleted ID in a meta block is refused like any ID that is not an unpublished reservation.
     const stale = await server.request("/api/publish", { token: owner, body: { source, requestId: "doomed-stale" } });
     assert.equal(stale.status, 422);
     assert.match(((await stale.json()) as { error: string }).error, new RegExp(pageId));
-    // Without it, a new page can link the same backend, and the deleted ID is never handed out again.
-    const again = await server.request("/api/publish", {
-      token: owner,
-      body: { source: source.replace(`{"id":"${pageId}"}`, "{}"), requestId: "doomed" },
-    });
-    const reborn = (await again.json()) as PublishResponse & { error?: string };
-    assert.equal(again.status, 201, reborn.error);
-    assert.notEqual(reborn.id, pageId);
+    // A retained publish key cannot return the trashed source or silently create a new ID.
+    const again = await server.request('/api/publish', {token:owner,body:{source,files:{[backendId]:BACKEND},requestId:'doomed'}});
+    assert.equal(again.status,404);
+
   } finally {
     await server.close();
   }

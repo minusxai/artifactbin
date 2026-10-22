@@ -112,3 +112,10 @@ CREATE TABLE IF NOT EXISTS page_assets (
   PRIMARY KEY (page_id, revision, variant),
   FOREIGN KEY (page_id, revision) REFERENCES sources(file_id,revision) ON DELETE CASCADE
 );
+-- Trash keeps the original file, versions, IDs, and quota usage indefinitely.
+ALTER TABLE files ADD COLUMN IF NOT EXISTS deleted_at bigint;
+ALTER TABLE files ADD COLUMN IF NOT EXISTS trash_path text;
+DROP INDEX IF EXISTS files_owner_path;
+CREATE UNIQUE INDEX IF NOT EXISTS files_owner_path ON files(owner,path) WHERE deleted_at IS NULL;
+CREATE TABLE IF NOT EXISTS trash_folders (id text PRIMARY KEY,owner text NOT NULL REFERENCES accounts(actor),path text NOT NULL,deleted_at bigint NOT NULL,folders jsonb NOT NULL,file_ids jsonb NOT NULL);
+ALTER TABLE files ADD COLUMN IF NOT EXISTS trash_batch text;
