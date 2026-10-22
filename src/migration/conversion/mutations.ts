@@ -26,7 +26,14 @@ const literal = (node: any): unknown =>
       ? node.quasis[0]?.value.cooked
       : undefined;
 /** Only builtin tokens outside SQL strings, identifiers and comments are rewritten. */
-function builtinSql(text: string): { sql: string; nowLiteral: boolean } {
+function builtinSql(text: string): {
+  sql: string;
+  nowLiteral: boolean;
+  rowFields: string[];
+  ordinaryParams: string[];
+} {
+  const rowFields = new Set<string>(),
+    ordinaryParams = new Set<string>();
   let out = "",
     i = 0,
     nowLiteral = false;
@@ -59,11 +66,21 @@ function builtinSql(text: string): { sql: string; nowLiteral: boolean } {
     } else if (c === "$") {
       const field = /^\$(_[A-Za-z]\w*)\.([A-Za-z_]\w*)/.exec(text.slice(i));
       if (field) {
-        if (field[1] !== "_me" || field[2] !== "id")
-          throw Error("unsupported builtin");
-        out += "$_me__id";
+        if (
+          field[1] === "_row" &&
+          identifier.test(field[2]!) &&
+          !reserved.has(field[2]!) &&
+          field[2]!.length <= 123
+        ) {
+          rowFields.add(field[2]!);
+          out += "$row__" + field[2];
+        } else if (field[1] === "_me" && field[2] === "id") out += "$_me__id";
+        else throw Error("unsupported builtin");
+        if (text[i + field[0].length] === ".") throw Error("nested builtin");
         i += field[0].length;
       } else {
+        const param = /^\$([A-Za-z_]\w*)/.exec(text.slice(i));
+        if (param) ordinaryParams.add(param[1]!);
         out += c;
         i++;
       }
@@ -72,7 +89,12 @@ function builtinSql(text: string): { sql: string; nowLiteral: boolean } {
       i++;
     }
   }
-  return { sql: out, nowLiteral };
+  return {
+    sql: out,
+    nowLiteral,
+    rowFields: [...rowFields],
+    ordinaryParams: [...ordinaryParams],
+  };
 }
 export async function extractLegacyMutations(
   source: string,
@@ -275,11 +297,24 @@ export async function extractLegacyMutations(
         if (d.reset.some((name: string) => !params.get(name)))
           throw Error("reset requires declared scalar");
         const paramTypes: Record<string, any> = {};
+        const rowParams: Record<string, { param: string; type: null }> = {};
+        for (const field of d.rowFields as string[]) {
+          const param = "row__" + field;
+          if (params.has(param) || d.ordinaryParams.includes(param))
+            throw Error("row parameter collision");
+          rowParams[field] = { param, type: null };
+        }
+        const rowKeys = new Set(Object.values(rowParams).map((r) => r.param));
         for (const p of a.params) {
           if (p === "_me__id" || p === "_now") continue;
-          if (!identifier.test(p) || reserved.has(p) || !params.get(p))
+          if (
+            !identifier.test(p) ||
+            p.length > 128 ||
+            reserved.has(p) ||
+            (params.has(p) && !params.get(p))
+          )
             throw Error();
-          paramTypes[p] = params.get(p);
+          paramTypes[p] = rowKeys.has(p) ? null : (params.get(p) ?? null);
         }
         result.mutations.push({
           name: d.name,
@@ -289,6 +324,7 @@ export async function extractLegacyMutations(
           sqlSchema: catalog.name,
           sql: d.sql,
           paramTypes,
+          ...(Object.keys(rowParams).length ? { rowParams } : {}),
           ...(d.reset.length ? { reset: d.reset } : {}),
           ...(d.expected !== undefined ? { expectedAffected: d.expected } : {}),
           conflictMode: "refuse",

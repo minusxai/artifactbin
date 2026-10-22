@@ -38,11 +38,10 @@ test("literal mutation is analyzed without executing, with canonical target and 
     },
   ]);
 });
-test("SQLite analysis rejects extra statements, unknown tables, cross-import reads and undeclared parameters", async () => {
+test("SQLite analysis rejects extra statements, unknown tables, cross-import reads", async () => {
   for (const sql of [
     "delete from bookings.rows; delete from bookings.rows",
     "update bookings.missing set id=1",
-    "update bookings.rows set id=$unknown",
     "update bookings.rows set id=(select id from other.rows limit 1)",
     "select * from bookings.rows",
   ]) {
@@ -121,5 +120,44 @@ test("literal reset preserves only declared scalar names and rejects dynamic/tab
     );
     assert.ok(bad.issues.length);
     assert.deepEqual(bad.mutations, []);
+  }
+});
+
+test("fixed SQL row arguments preserve nullable scalar bindings without transmitting unrelated row fields", async () => {
+  const result = await extractLegacyMutations(
+    wrap("update bookings.rows set who=$argument where id=$_row.id"),
+    catalogs,
+  );
+  assert.deepEqual(result.issues, []);
+  assert.equal(
+    result.mutations[0]?.sql,
+    "update bookings.rows set who=$argument where id=$row__id",
+  );
+  assert.deepEqual(result.mutations[0]?.paramTypes, {
+    argument: null,
+    row__id: null,
+  });
+  assert.deepEqual(result.mutations[0]?.rowParams, {
+    id: { param: "row__id", type: null },
+  });
+});
+test("row token rewriting excludes literals and comments and rejects collisions and unsupported builtin forms", async () => {
+  const sql =
+    "update bookings.rows set who='$_row.id' where id=$_row.id /* $_row.secret */";
+  const good = await extractLegacyMutations(wrap(sql), catalogs);
+  assert.deepEqual(good.issues, []);
+  assert.equal(
+    good.mutations[0]?.sql,
+    sql.replace("id=$_row.id", "id=$row__id"),
+  );
+  for (const bad of [
+    "update bookings.rows set id=$_row.id+$row__id",
+    "update bookings.rows set id=$_row.constructor",
+    "update bookings.rows set id=$_value",
+    "update bookings.rows set id=$_row.id.other",
+  ]) {
+    const result = await extractLegacyMutations(wrap(bad), catalogs);
+    assert.ok(result.issues.length);
+    assert.deepEqual(result.mutations, []);
   }
 });

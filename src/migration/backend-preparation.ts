@@ -1,3 +1,7 @@
+import {
+  validDatasetMutationParameterMap,
+  validDatasetMutationRowParameters,
+} from "../datasets/mutation/parameter-scalars.ts";
 import { createHash } from "node:crypto";
 import { FILE_ID_ALPHABET, FILE_ID_PATTERN } from "../af-contracts.ts";
 import { createBackendHost } from "../backend/container-host.ts";
@@ -153,19 +157,10 @@ export async function prepareMigrationBackends(
           (mutation.expectedAffected !== undefined &&
             (!Number.isSafeInteger(mutation.expectedAffected) ||
               mutation.expectedAffected < 0)) ||
-          !mutation.paramTypes ||
-          Object.entries(mutation.paramTypes).some(
-            ([name, type]) =>
-              !/^[A-Za-z][A-Za-z0-9_]*$/.test(name) ||
-              ["constructor", "prototype", "__proto__"].includes(name) ||
-              ![
-                "number",
-                "string",
-                "boolean",
-                "date",
-                "timestamp",
-                "user",
-              ].includes(type),
+          !validDatasetMutationParameterMap(mutation.paramTypes) ||
+          !validDatasetMutationRowParameters(
+            mutation.rowParams,
+            mutation.paramTypes,
           )
         )
           invalid();
@@ -269,7 +264,15 @@ export async function prepareMigrationBackends(
                 mutation.reset ?? [],
               ]),
             ),
-            paramTypes: { ...mutation.paramTypes },
+            paramTypes: Object.fromEntries(
+              Object.entries(mutation.paramTypes).filter(
+                ([name]) =>
+                  !Object.values(mutation.rowParams ?? {}).some(
+                    (row) => row.param === name,
+                  ),
+              ),
+            ),
+            ...(mutation.rowParams ? { rowParams: mutation.rowParams } : {}),
             ...(mutation.reset?.length ? { reset: [...mutation.reset] } : {}),
           },
         });

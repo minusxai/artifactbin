@@ -268,6 +268,38 @@ test("named mutations pin trusted SQL to exact backend, page revision and bindin
   assert.ok(!JSON.stringify(prepared.browserMutations).includes("delete from"));
   const scope = prepared.browserMutations[0]!.mutation.recoveryScope;
   assert.match(scope, /^[a-f0-9]{64}$/);
+  const rowMutation = {
+    ...mutation,
+    sql: "delete from sales.rows where id=$row__id",
+    paramTypes: { row__id: null },
+    rowParams: { id: { param: "row__id", type: null } },
+  };
+  const rowPrepared = await prepareMigrationBackends(
+    {
+      ...revised,
+      pages: [
+        {
+          ...revised.pages[0]!,
+          revisions: [
+            { ...revised.pages[0]!.revisions[0]!, mutations: [rowMutation] },
+          ],
+        },
+      ],
+    },
+    { host },
+  );
+  assert.deepEqual(rowPrepared.browserMutations[0]!.mutation.paramTypes, {});
+  assert.deepEqual(
+    rowPrepared.browserMutations[0]!.mutation.rowParams,
+    rowMutation.rowParams,
+  );
+  assert.notEqual(
+    rowPrepared.browserMutations[0]!.mutation.recoveryScope,
+    scope,
+  );
+  assert.deepEqual(rowPrepared.operations[0]!.operation.paramTypes, {
+    row__id: null,
+  });
   const nextDeployment = sealDeployment(
     generatedDatasetBackendSource,
     "new compiled bundle",
