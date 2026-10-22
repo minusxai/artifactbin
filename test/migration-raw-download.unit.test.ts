@@ -149,7 +149,7 @@ test("planner scopes new aliases per exact saved source while preserving unaffec
   const baseline = { "/a/abc123/raw?v=2": target };
   const inputs: any[] = [];
   const source = '<a href="/a/abc123/raw">PDF</a>';
-  const manifest = {
+  const manifest: import("../src/migration/contracts.ts").MigrationManifest = {
     schemaVersion: 1 as const,
     sourceNamespace: "fixture",
     exportedAt: "2026-01-01T00:00:00Z",
@@ -165,6 +165,10 @@ test("planner scopes new aliases per exact saved source while preserving unaffec
         format: "markup",
         version: 2,
         user_id: "viewer",
+        group_id: null,
+        token_id: null,
+        document: null,
+        link_role: "viewer",
         source: "<p>Unchanged</p>",
         visibility: "private",
       },
