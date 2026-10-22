@@ -171,3 +171,32 @@ test("source query receipt replay refuses removed or modified operations", async
       );
   }
 });
+test("source availability rechecks exact named registration and access without issuing SQL", async () => {
+  let allowed = true;
+  let connections = 0;
+  const service = createSourceQueryService({
+    registry: async (_c, name) =>
+      name === registration.name ? registration : null,
+    authority: async () =>
+      allowed
+        ? {
+            generation: "stable",
+            userId: null,
+            now: "2026-01-01T00:00:00Z",
+            tz: "UTC",
+          }
+        : null,
+    pool: () => ({
+      connect: async () => {
+        connections++;
+        throw Error("must not execute");
+      },
+      end: async () => {},
+    }),
+  });
+  assert.equal(await service.availability(context, { name: "answer" }), true);
+  allowed = false;
+  assert.equal(await service.availability(context, { name: "answer" }), false);
+  assert.equal(await service.availability(context, { name: "other" }), false);
+  assert.equal(connections, 0);
+});

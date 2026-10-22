@@ -89,6 +89,10 @@ function checkedCapabilityFrame(
       return { id, request: { kind: "dataset", operation: req.operation } };
     }
     const input = req.input;
+    if(req.operation === "sourceQueryAvailability"){
+      if(Object.keys(req).sort().join()!=="input,kind,operation"||!record(input)||Object.keys(input).join()!=="name"||typeof input.name!=="string")throw Error();
+      return{id,request:{kind:"dataset",operation:"sourceQueryAvailability",input:{name:input.name}}};
+    }
     if (req.operation === "sourceQuery") {
       if(Object.keys(req).sort().join()!=="input,kind,operation"||!record(input)||Object.keys(input).some(k=>!["name","valuesJson","offset","limit","sortJson"].includes(k))||typeof input.name!=="string"||typeof input.valuesJson!=="string"||!Number.isSafeInteger(input.offset)||!Number.isSafeInteger(input.limit)||(input.sortJson!=null&&typeof input.sortJson!=="string"))throw Error();
       return {id,request:{kind:"dataset",operation:"sourceQuery",input:input as unknown as import("../datasets/source-query/contracts.ts").SourceQueryRequest}};

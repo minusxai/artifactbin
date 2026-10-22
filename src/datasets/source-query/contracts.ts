@@ -54,6 +54,11 @@ export interface SourceQueryPorts {
   pool(resource: string): PgPool | undefined;
 }
 export interface SourceQueryService {
+  availability(
+    context: DatasetCallContext,
+    input: unknown,
+    signal?: AbortSignal,
+  ): Promise<boolean>;
   query(
     context: DatasetCallContext,
     input: unknown,

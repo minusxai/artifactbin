@@ -26,6 +26,32 @@ export function createSourceQueryService(
   ports: SourceQueryPorts,
 ): SourceQueryService {
   return {
+    async availability(context, input, signal) {
+      signal?.throwIfAborted();
+      if (
+        !input ||
+        typeof input !== "object" ||
+        Array.isArray(input) ||
+        Object.keys(input).join() !== "name" ||
+        typeof (input as { name?: unknown }).name !== "string"
+      )
+        invalid();
+      const name = (input as { name: string }).name;
+      const r = await ports.registry(context, name, signal);
+      if (
+        !r ||
+        r.name !== name ||
+        r.backendId !== context.backendId ||
+        r.backendVersion !== context.backendVersion ||
+        r.pageId !== context.pageId ||
+        !ports.pool(r.resource)
+      )
+        return false;
+      validateSourceRegistration(r);
+      const authority = await ports.authority(context, signal);
+      signal?.throwIfAborted();
+      return !!authority;
+    },
     async query(context, input, signal) {
       signal?.throwIfAborted();
       if (!input || typeof input !== "object" || Array.isArray(input))

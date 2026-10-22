@@ -34,7 +34,9 @@ export function datasetCapabilityHandler(
       throw new DatasetReadError("denied");
     let result;
     try {
-      if (request.operation === "sourceQuery" && sourceQueries)
+      if(request.operation === "sourceQueryAvailability" && sourceQueries)
+        result=await sourceQueries.availability(bound,request.input,signal);
+      else if (request.operation === "sourceQuery" && sourceQueries)
         result = await sourceQueries.query(bound, request.input, signal);
       else if (request.operation === "read")
         result = await service.read(bound, request.input, signal);

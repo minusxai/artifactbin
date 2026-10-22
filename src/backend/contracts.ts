@@ -93,6 +93,7 @@ export type BackendCapabilityRequest =
       operations: { operation: string; input: BackendJson }[];
     }
   | BackendStoreRequest
+  | { kind: "dataset"; operation: "sourceQueryAvailability"; input:{name:string} }
   | { kind: "dataset"; operation: "sourceQuery"; input: import("../datasets/source-query/contracts.ts").SourceQueryRequest }
   | { kind: "dataset"; operation: "members" }
   | { kind: "dataset"; operation: "viewer" }
