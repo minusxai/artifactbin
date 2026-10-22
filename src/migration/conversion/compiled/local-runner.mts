@@ -133,6 +133,7 @@ if (input.datasetUnavailable) {
     scalarValues,
     localTables,
     input.datasetBindings ?? [],
+    input.boundValueColumns ?? [],
   ));
 } else if (rawFlow.imports.length) throw Error("Import requires a query");
 const hasCharts = (nodes: readonly any[]): boolean =>

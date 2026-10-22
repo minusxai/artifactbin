@@ -1,3 +1,5 @@
+import type { BoundValueColumnProof } from "./bound-value-contracts.ts";
+import { validateBoundFlow, publicBoundFlow } from "./bound-flow.ts";
 import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 /** Offline schema compilation. Import contents are deliberately unavailable here. */
 export async function prepareLocalFlow(
@@ -7,9 +9,9 @@ export async function prepareLocalFlow(
   values: Record<string, unknown>,
   localTables: Record<string, unknown>,
   bindings: readonly CompiledDatasetBinding[],
+  boundProofs: readonly BoundValueColumnProof[] = [],
 ): Promise<{ flow: any; results: any }> {
-  if (rawFlow.values.some((v: any) => v.kind === "scalar" && v.source))
-    throw Error("Sourced values unsupported");
+  validateBoundFlow(rawFlow, bindings, boundProofs);
   if (!rawFlow.queries.length) throw Error("A local query is required");
   const { prepareCompile, compileDataflow } = await archived(
     "lib/dataflow/compile-dataflow.ts",
@@ -29,13 +31,27 @@ export async function prepareLocalFlow(
       kind: "dataset",
       tables: selected[0]!.tables.map((t) => ({
         name: t.table,
-        columns: t.columns,
+        columns: t.columns.map((c) => {
+          const proof = boundProofs.find(
+            (p) =>
+              p.sourceRef === `ref:${ref}` &&
+              p.schema === t.schema &&
+              p.table === t.table &&
+              p.column === c.name,
+          );
+          return {
+            ...c,
+            ...(proof?.constraints === undefined
+              ? {}
+              : { constraints: structuredClone(proof.constraints) }),
+          };
+        }),
       })),
     };
   });
   const compiled = compileDataflow(rawFlow, ctx, body);
   if (!compiled.ok) throw Error("Local query compilation refused");
-  const flow = compiled.compiled;
+  const flow = publicBoundFlow(compiled.compiled, boundProofs);
   if (
     flow.mutations.length ||
     flow.imports.length !== bindings.length ||
