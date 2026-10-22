@@ -217,3 +217,63 @@ test(
     }
   },
 );
+
+test(
+  "official archived grammar refuses control bindings, timers and document selectors",
+  { skip: !root },
+  async () => {
+    const { parse } = await import(
+      pathToFileURL(path.join(root!, "node_modules/vega/build/vega.module.js"))
+        .href
+    );
+    const compile = (signal: Record<string, unknown>) => {
+      const spec = { signals: [signal], data: [{ name: "main" }], marks: [] };
+      const viz = { kind: "vega", spec };
+      return compileChartPlan(
+        {
+          viz,
+          columns: [],
+          rows: [],
+          width: 100,
+          height: 100,
+          colorMode: "light",
+        },
+        {
+          envelope: () => ({ source: viz }),
+          resolve: () => ({ ok: true }),
+          infer: () => [],
+          plan: () => ({ vegaSpec: spec }),
+          parse,
+        },
+      );
+    };
+    for (const signal of [
+      {
+        name: "choice",
+        value: 0,
+        bind: {
+          input: "text",
+          onfocus: "document.body.setAttribute('data-injected','yes')",
+        },
+      },
+      {
+        name: "timer",
+        value: 0,
+        on: [{ events: { type: "timer", throttle: 10 }, update: "1" }],
+      },
+      {
+        name: "selector",
+        value: 0,
+        on: [{ events: { source: "body", type: "click" }, update: "1" }],
+      },
+    ])
+      assert.throws(() => compile(signal));
+    assert.doesNotThrow(() =>
+      compile({
+        name: "local",
+        value: 0,
+        on: [{ events: { source: "view", type: "click" }, update: "1" }],
+      }),
+    );
+  },
+);
