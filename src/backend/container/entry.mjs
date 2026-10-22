@@ -143,7 +143,7 @@ export default {
           const effectful =
             !(
               request.kind === "dataset" &&
-              ["read", "members", "person", "viewer"].includes(request.operation)
+              ["read", "members", "person", "viewer", "mutationAvailability"].includes(request.operation)
             ) && !(request.kind === "store" && request.operation === "get");
           if (effectful) {
             effectfulDispatches++;
@@ -210,6 +210,7 @@ export default {
               },
               read: async (input) =>
                 capability({ kind: "dataset", operation: "read", input }),
+              mutationAvailability: async (input) => capability({kind:"dataset",operation:"mutationAvailability",input}),
               mutate: async (input) =>
                 capability({ kind: "dataset", operation: "mutate", input }),
             }),

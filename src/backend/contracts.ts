@@ -95,6 +95,7 @@ export type BackendCapabilityRequest =
   | BackendStoreRequest
   | { kind: "dataset"; operation: "members" }
   | { kind: "dataset"; operation: "viewer" }
+  | { kind: "dataset"; operation: "mutationAvailability"; input: {operation:string} }
   | {
       kind: "dataset";
       operation: "person";

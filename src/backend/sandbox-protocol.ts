@@ -89,6 +89,10 @@ function checkedCapabilityFrame(
       return { id, request: { kind: "dataset", operation: req.operation } };
     }
     const input = req.input;
+    if (req.operation === "mutationAvailability") {
+      if(Object.keys(req).sort().join()!=="input,kind,operation"||!record(input)||Object.keys(input).join()!=="operation"||typeof input.operation!=="string"||!input.operation||input.operation.length>128||["__proto__","constructor","prototype"].includes(input.operation))throw Error();
+      return {id,request:{kind:"dataset",operation:"mutationAvailability",input:{operation:input.operation}}};
+    }
     if (req.operation === "person") {
       if (
         Object.keys(req).sort().join() !== "input,kind,operation" ||

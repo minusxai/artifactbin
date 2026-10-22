@@ -612,3 +612,14 @@ export function createDatasetMutationRepository({
       }),
   };
 }
+
+/** Metadata-only advisory snapshot: no lease, object read, SQL execution or receipt. */
+export function createDatasetMutationAvailabilityRepository(database: import('./sql-contracts.ts').SqlDatabase, now=Date.now): import('../datasets/mutation/availability-contracts.ts').DatasetMutationAvailabilityPorts {
+ return {snapshot:(context,name,signal)=>database.transaction(async client=>{
+  if(context.subject)await loadGroupAuthority(client,context.subject);
+  const reg=await registered(client,context,name,true);
+  if(!reg)return null;
+  const head=await currentHead(client,context,reg,now());
+  return head?{operation:reg.operation,head}:null;
+ },{timeoutMs:1000,signal})};
+}

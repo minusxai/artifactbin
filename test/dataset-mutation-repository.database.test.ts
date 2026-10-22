@@ -607,3 +607,21 @@ test("a changed accepted join snapshot cannot publish a staged membership-depend
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+import {createDatasetMutationAvailabilityRepository} from '../src/persistence/dataset-mutations.ts';
+import {createDatasetMutationAvailabilityService} from '../src/datasets/mutation/availability.ts';
+test('availability reads registered current authority without creating mutation receipts',async()=>{
+ const {env}=await fixture();try{
+  const database=createSqlDatabase({pool:env.pool,initialize:async()=>{},statementTimeoutMs:1000});
+  const analyzed={...operation,analysis:{operation:'update' as const,columns:['name']}};
+  await env.pool.query("UPDATE dataset_resources SET writable=true,access=jsonb_set(access,'{shares}','{\"member\":\"editor\"}')");
+  await database.transaction(c=>registerDatasetMutationOperations(c,[{sourceNamespace:'legacy',bindingName:'sales',operation:analyzed}]));
+  const service=createDatasetMutationAvailabilityService(createDatasetMutationAvailabilityRepository(database,()=>100));
+  assert.deepEqual(await service.mutationAvailability(context,{operation:'rename'}),{canAttempt:true});
+  assert.deepEqual(await service.mutationAvailability(context,{operation:'missing'}),{canAttempt:false});
+  assert.deepEqual(await service.mutationAvailability({...context,backendVersion:'old'},{operation:'rename'}),{canAttempt:false});
+  assert.equal((await env.pool.query('SELECT count(*)::int n FROM dataset_mutation_receipts')).rows[0].n,0);
+  await env.pool.query("UPDATE files SET access=jsonb_set(access,'{shares}','{}')");
+  assert.deepEqual(await service.mutationAvailability(context,{operation:'rename'}),{canAttempt:false});
+ }finally{await env.cleanup()}
+});

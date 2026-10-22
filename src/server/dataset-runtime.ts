@@ -1,3 +1,5 @@
+import {createDatasetMutationAvailabilityService} from "../datasets/mutation/availability.ts";
+import {createDatasetMutationAvailabilityRepository} from "../persistence/dataset-mutations.ts";
 import{createDatasetViewerService}from"../datasets/viewer.ts";
 import{createDatasetViewerRepository}from"../persistence/dataset-viewer.ts";
 import { createDatasetPersonService } from "../datasets/person.ts";
@@ -63,6 +65,7 @@ export function createDatasetRuntime(
   let closing: Promise<void> | undefined;
   return {
     reads,
+    availability:createDatasetMutationAvailabilityService(createDatasetMutationAvailabilityRepository(database,now)),
     person: createDatasetPersonService({
       ...createDatasetPersonRepository(database),
       reads,

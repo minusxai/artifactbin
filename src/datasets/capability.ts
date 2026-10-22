@@ -21,6 +21,7 @@ export function datasetCapabilityHandler(
   members?: import("./members-contracts.ts").DatasetMembersService,
   person?: import("./person-contracts.ts").DatasetPersonService,
   viewer?: import("./viewer-contracts.ts").DatasetViewerService,
+  availability?: import("./mutation/availability-contracts.ts").DatasetMutationAvailabilityService,
 ): BackendCapabilityHandler {
   const bound = Object.freeze({ ...context });
   return async (principal, request, signal) => {
@@ -40,6 +41,8 @@ export function datasetCapabilityHandler(
         result = await viewer.viewer(bound, signal);
       else if (request.operation === "person" && person)
         result = await person.person(bound, request.input, signal);
+      else if(request.operation === "mutationAvailability" && availability)
+        result=await availability.mutationAvailability(bound,request.input,signal);
       else if (request.operation === "mutate" && mutations)
         result = await mutations.mutate(bound, request.input, signal);
       else throw new DatasetReadError("denied");
