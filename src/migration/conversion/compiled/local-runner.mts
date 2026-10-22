@@ -1,3 +1,4 @@
+import{readsLegacyViewer}from"./viewer-source.ts";
 import {prepareArchivedMermaid} from "./mermaid-prepare.ts";
 import {mermaidRuntimeSource} from "./mermaid-runtime.ts";
 import {readsLegacyMembers} from "./members-source.ts";
@@ -131,9 +132,10 @@ const rawFlow = {
 };
 let flow: any = rawFlow;
 let results: any = null;
+if(input.viewerBinding&&!(await readsLegacyViewer(input.source)))throw Error("Unused viewer binding");
 if (input.datasetUnavailable) {
   const bound=rawFlow.values.some((v:any)=>v.kind==="scalar"&&typeof v.source==="string"&&v.source.length>0);
-  if(!rawFlow.imports.length&&!bound&&!(await readsLegacyMembers(input.source)))throw Error("Historical service dependency missing");
+  if(!rawFlow.imports.length&&!bound&&!(await readsLegacyMembers(input.source))&&!(await readsLegacyViewer(input.source)))throw Error("Historical service dependency missing");
   flow = { ...rawFlow, imports: [], queries: [], values:rawFlow.values.map((v:any)=>{
     const {source,column,constraints,...local}=v;void source;void column;void constraints;return local;
   }) };
@@ -148,6 +150,7 @@ if (input.datasetUnavailable) {
     input.datasetBindings ?? [],
     input.boundValueColumns ?? [],
     input.membersBinding,
+    input.viewerBinding,
   ));
 } else if (rawFlow.imports.length) throw Error("Import requires a query");
 const hasCharts = (nodes: readonly any[]): boolean =>
@@ -388,6 +391,7 @@ const bundled = await bundle({
             input.dynamicIdentities,
             input.slideDeck,
             input.personBindings ?? [],
+            input.viewerBinding,
           ),
           loader: "js",
         }));
@@ -451,6 +455,7 @@ const bundled = await bundle({
         }));
         if(input.membersBinding)b.onLoad({filter:/[\\/]lib[\\/]page-store[\\/]page-engine\.ts$/},async(args:any)=>({contents:forwardArchivedMembersContext(await readFile(args.path,"utf8")),loader:"ts",resolveDir:path.dirname(args.path)}));
         b.onResolve({ filter: /^migration-people$/ },()=>({path:path.join(import.meta.dirname,"person-runtime.ts")}));
+        b.onResolve({filter:/^migration-viewer$/},()=>({path:path.join(import.meta.dirname,"viewer-runtime.ts")}));
         b.onResolve({ filter: /^migration-members$/ },()=>({path:path.join(import.meta.dirname,"members-runtime.ts")}));
         b.onResolve({ filter: /^migration-sqlite$/ }, () => {
           if (!sqlitePath) throw Error("No archived SQLite engine");

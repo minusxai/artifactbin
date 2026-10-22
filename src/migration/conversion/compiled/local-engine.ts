@@ -1,3 +1,5 @@
+import{validCompiledViewerBinding}from"./viewer-binding.ts";
+import type{CompiledViewerBinding}from"./viewer-contracts.ts";
 import { validCompiledMembersBinding } from "./members-binding.ts";
 import type { CompiledMembersBinding } from "./members-contracts.ts";
 import type { BoundValueColumnProof } from "./bound-value-contracts.ts";
@@ -13,8 +15,10 @@ export async function prepareLocalFlow(
   bindings: readonly CompiledDatasetBinding[],
   boundProofs: readonly BoundValueColumnProof[] = [],
   membersBinding?: CompiledMembersBinding,
+  viewerBinding?:CompiledViewerBinding,
 ): Promise<{ flow: any; results: any }> {
   validateBoundFlow(rawFlow, bindings, boundProofs);
+  if(viewerBinding!==undefined&&!validCompiledViewerBinding(viewerBinding))throw Error("Invalid viewer binding");
   if (
     membersBinding !== undefined &&
     !validCompiledMembersBinding(membersBinding)
@@ -68,7 +72,7 @@ export async function prepareLocalFlow(
         q.engine !== "sqlite" ||
         q.source ||
         q.reads.builtins.some(
-          (b: string) => b !== "_members" || !membersBinding,
+          (b: string) => !(b === "_members" && membersBinding) && !(["_me","_me.id"].includes(b) && viewerBinding),
         ),
     ) ||
     flow.imports.some(
@@ -85,7 +89,7 @@ export async function prepareLocalFlow(
   )
     throw Error("Unused members binding");
   // Protected imported rows and their query results are never captured in HTML.
-  if (flow.imports.length || membersBinding)
+  if (flow.imports.length || membersBinding || viewerBinding)
     return { flow, results: { tables: {}, errors: {} } };
   const { createPageEngine } = await archived("lib/page-store/page-engine.ts");
   const engine = createPageEngine({

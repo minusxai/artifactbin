@@ -1,3 +1,4 @@
+import{viewerContentHtml}from"./viewer-gate.ts";
 /** Explicit offline compiler orchestration. Admission owns source capabilities
  * and output safety; this module invokes the compiler and packages the page. */
 import { compiledJavascriptMarkup } from "./javascript-payload.ts";
@@ -74,7 +75,8 @@ export async function compileArchivedLocal(
   const authorStatus = author
     ? '<p role="status" data-migration-author-status>Starting page components…</p>'
     : "";
-  const prefix = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}<title>${esc(output.title)}</title><style>${output.css}</style></head><body>${status}${authorStatus}${body}`;
+  const packagedBody=input.viewerBinding||input.viewerUnavailable?viewerContentHtml(body,Boolean(input.viewerUnavailable)):body;
+  const prefix = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}<title>${esc(output.title)}</title><style>${output.css}</style></head><body>${status}${authorStatus}${packagedBody}`;
   let html = prefix + compiledJavascriptMarkup(output.javascript) + "</body></html>";
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE) {
     try { html = prefix + compiledJavascriptMarkup(output.javascript, true) + "</body></html>"; }

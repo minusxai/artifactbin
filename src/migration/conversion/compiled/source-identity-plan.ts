@@ -3,14 +3,14 @@ import {readLocalReactiveExpression} from './reactive-source.ts';
 import type {LocalDynamicIdentityPlan,LocalIdentityRegion} from './reactive-source-contracts.ts';
 /** Derive deferred structure from source, never from the compiler's HTML. The
  * source admission walk separately validates every expression and attribute. */
-export function readLocalIdentityPlan(tree:unknown):LocalDynamicIdentityPlan {
+export function readLocalIdentityPlan(tree:unknown,viewer=false):LocalDynamicIdentityPlan {
   const visit=(node:any,depth=0):LocalIdentityRegion[]=>{
     if(!node||depth>128)throw Error('Identity structure limit');
     if(node.type==='JSXFragment')return node.children.flatMap((n:any)=>visit(n,depth+1));
     if(node.type==='JSXText')return [];
     if(node.type==='JSXExpressionContainer')return visit(node.expression,depth+1);
     if(node.type==='ConditionalExpression'||(node.type==='LogicalExpression'&&node.operator==='&&'&&['JSXElement','JSXFragment','ConditionalExpression'].includes(node.right?.type))){
-      const and=node.type==='LogicalExpression';const read=readLocalReactiveExpression(and?node.left:node.test);if(!read || read.signals.some(name => name.includes('.')))throw Error('Identity condition requires local scalar reads');
+      const and=node.type==='LogicalExpression';const read=readLocalReactiveExpression(and?node.left:node.test);if(!read || read.signals.some(name => name.includes('.') && !(viewer && name==='_me.id')))throw Error('Identity condition requires local scalar reads');
       return [{kind:'conditional',test:read.expression,yes:visit(and?node.right:node.consequent,depth+1),no:and?[]:visit(node.alternate,depth+1)}];
     }
     if(node.type!=='JSXElement')return [];
@@ -46,9 +46,9 @@ export function readLocalIdentityPlan(tree:unknown):LocalDynamicIdentityPlan {
 
 /** Branch previews may depend on admitted scalar defaults and scoped rows,
  * never a table object or a server query snapshot the source does not own. */
-export function validIdentityConditions(plan:LocalDynamicIdentityPlan,declarations:readonly import('./local-contracts.ts').LocalDeclaration[]):boolean {
+export function validIdentityConditions(plan:LocalDynamicIdentityPlan,declarations:readonly import('./local-contracts.ts').LocalDeclaration[],viewer=false):boolean {
   const scalar=(expression:import('./reactive-source-contracts.ts').LocalReactiveExpression):boolean=>{
-    if(expression.kind==='signal')return declarations.some(d=>d.name===expression.name&&d.type!=='table');
+    if(expression.kind==='signal')return (viewer&&expression.name==='_me.id')||declarations.some(d=>d.name===expression.name&&d.type!=='table');
     if(expression.kind==='not')return scalar(expression.value);
     if(expression.kind==='binary')return scalar(expression.left)&&scalar(expression.right);
     return true;

@@ -1,3 +1,5 @@
+import{validCompiledViewerBinding}from"./viewer-binding.ts";
+import{readsLegacyViewerMarkup}from"./viewer-source.ts";
 import {readStaticMermaidPlans} from "./mermaid-source.ts";
 import {historicalSourceValueDeclaration} from "./historical-bound-value.ts";
 import {validateBoundPersonRouting} from "./person-admission.ts";
@@ -98,10 +100,15 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const people=input.personBindings??[];
   if ((historical&&(proofs.length||people.length)) || !validateBoundPersonRouting(proofs,bindings,people)) return blocked("compiled-person-binding");
   const usedPeople=new Set<string>(),boundValues=new Set<string>();
+  const viewerMarkup=readsLegacyViewerMarkup(input.source);
+  if(input.viewerBinding && (historical || !validCompiledViewerBinding(input.viewerBinding)))return blocked("compiled-viewer-binding");
+  const viewerAllowed=Boolean(input.viewerBinding)||historical;
   const backendLinks = new Map<string, string>();
+  if(input.viewerBinding)backendLinks.set(input.viewerBinding.backendNamespace,input.viewerBinding.backendHref);
   if (input.membersBinding) {
     if (historical || !validCompiledMembersBinding(input.membersBinding))
       return blocked("compiled-members-binding");
+    if(backendLinks.has(input.membersBinding.backendNamespace)&&backendLinks.get(input.membersBinding.backendNamespace)!==input.membersBinding.backendHref)return blocked("compiled-viewer-binding");
     backendLinks.set(input.membersBinding.backendNamespace, input.membersBinding.backendHref);
   }
   if (
@@ -237,6 +244,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
         if (read.rowFields.length && !loopTable) return false;
         for (const field of read.rowFields) rowReads.push({table:loopTable!,field});
         for (const signal of read.signals) {
+          if(signal==="_me.id"){if(!viewerAllowed)return false;continue;}
           const base = signal.split(".")[0]!;
           references.add(base);
           if (signal.includes(".")) cellReferences.add(base);
@@ -592,8 +600,8 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     if (scalarControls.some(control => expectedDeclarations.find(d => d.name === control.binding)?.type !== control.valueType)) invalid = true;
     mermaids = readStaticMermaidPlans(tree);
     slideDeck = readSlideDeckPlan(tree);
-    dynamicIdentities = readLocalIdentityPlan(tree);
-    if (!validIdentityConditions(dynamicIdentities, expectedDeclarations)) invalid = true;
+    dynamicIdentities = readLocalIdentityPlan(tree,viewerAllowed);
+    if (!validIdentityConditions(dynamicIdentities, expectedDeclarations,viewerAllowed)) invalid = true;
     for (const reference of [...loopKeys.map(r => ({table:r.table,field:r.key})), ...rowReads]) {
       const declaration = expectedDeclarations.find(d => d.name === reference.table);
       if (declaration?.type === "table" && !declaration.columns.some(c => c.name === reference.field)) invalid = true;
@@ -626,12 +634,13 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     invalid = true;
   if (
     (!historical && imports.size !== bindings.length) ||
-    (historical && imports.size === 0 && queries.size === 0 && boundValues.size === 0) ||
+    (historical && imports.size === 0 && queries.size === 0 && boundValues.size === 0 && !viewerMarkup) ||
     [...imports].some((n) => declarations.has(n) || queries.has(n))
   )
     invalid = true;
+  if(input.viewerBinding&&!viewerMarkup&&queries.size===0)return blocked("compiled-viewer-binding");
   // Empty state is valid: audited static/presentation components need no dummy Value.
-  const stateless = !declarations.size && !queries.size && !author && !slideDeck && !mermaids.length;
+  const stateless = !declarations.size && !queries.size && !author && !slideDeck && !mermaids.length && !viewerMarkup;
   if (invalid || (hasSlideDeck && !slideDeck) || (stateless && !statelessChildrenSupported))
     return blocked("compiled-capability");
   if (
@@ -646,7 +655,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     )
   )
     return blocked("compiled-data-control");
-  input = { ...input, mermaids, slideDeck, dataControls, dynamicIdentities, presentationIdentities };
+  input = { ...input, viewerUnavailable:historical&&viewerMarkup, mermaids, slideDeck, dataControls, dynamicIdentities, presentationIdentities };
   return {
     ok: true,
     plan: {

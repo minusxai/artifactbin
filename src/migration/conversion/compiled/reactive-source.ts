@@ -12,6 +12,7 @@ export const readLocalReactiveExpression: ReadLocalReactiveExpression = (input) 
     if(node.type==='Identifier'&&typeof node.name==='string'&&/^\$[A-Za-z]\w*$/.test(node.name)&&!reserved.has(node.name.slice(1))){const name=node.name.slice(1);signals.add(name);return {kind:'signal',name};}
     if(node.type==='MemberExpression'&&!node.computed&&!node.optional&&node.object?.type==='Identifier'&&node.property?.type==='Identifier'&&identifier(node.property.name)){
       const field=node.property.name;
+      if(node.object.name==='$_me'&&field==='id'){signals.add('_me.id');return {kind:'signal',name:'_me.id'};}
       if(node.object.name==='$_row'){rowFields.add(field);return {kind:'row',field};}
       if(/^\$[A-Za-z]\w*$/.test(node.object.name)&&!reserved.has(node.object.name.slice(1))){const name=node.object.name.slice(1)+'.'+field;signals.add(name);return {kind:'signal',name};}
     }
