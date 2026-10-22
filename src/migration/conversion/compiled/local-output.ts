@@ -1,3 +1,4 @@
+import {reconcileCompiledOutputIdentities} from "./output-identities.ts";
 import {reconcileMermaidHtml} from "./mermaid-output.ts";
 import {reconcileSlideDeckHtml} from "./slide-deck-output.ts";
 import {reconcileAuthorProps} from "./author/props.ts";
@@ -114,6 +115,23 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
   const identities: Record<string, string> = Object.create(null);
   let unsafe = false;
   const fragment = parseFragment(output.html);
+  if (prototype) {
+    const idAttributes: {value: string}[] = [];
+    const collect = (node: any) => {
+      if (node.attrs) node.attrs=node.attrs.map((a:any)=>({...a}));
+      for (const attr of node.attrs ?? []) if (attr.name === "id") idAttributes.push(attr);
+      for (const child of node.childNodes ?? []) collect(child);
+      if (plan.input.slideDeck && node.content) collect(node.content);
+    };
+    collect(fragment);
+    const ids=idAttributes.map(a=>a.value);
+    idAttributes.forEach(a=>{a.value="";});
+    const htmlReferences=serialize(fragment);
+    idAttributes.forEach((a,index)=>{a.value=ids[index]!;});
+    const repaired = reconcileCompiledOutputIdentities({ids,sourceOwned:plan.renderedIdentities,source:plan.input.source,htmlReferences,javascript:output.javascript,css:output.css});
+    if (!repaired) return blocked("compiled-local-output");
+    repaired.forEach((id,index)=>{idAttributes[index]!.value=id;});
+  }
   const visit = (node: any) => {
     if (node.tagName) {
       if (!prototype && ["script", "iframe", "object", "embed"].includes(node.tagName))
