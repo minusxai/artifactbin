@@ -1,5 +1,7 @@
 import { archivedRuntimePlan } from "./runtime-plan.ts";
 import {archivedDialogMutationFormSource} from "./dialog-form-source.ts";
+import {prepareCompiledFileUploads} from "./file-upload-admission.ts";
+import {archivedFileUploadControlSource} from "./file-upload-kit-source.ts";
 import { archivedDialogFocusSource } from "./dialog-source.ts";
 import {readLegacyCellWriteSites} from "./cell-write-source.ts";
 import {validateCompiledTransport} from "./transport.ts";
@@ -43,6 +45,7 @@ for await (const chunk of process.stdin) {
 }
 const input = JSON.parse(text) as CompiledMigrationInput;
 const prototype=input.sourceAdmission==="offline-prototype";
+const attachmentSites=prepareCompiledFileUploads(input.source,input.datasetAttachments??[],input.datasetBindings??[]);
 const { storyBodyFor } = await archived("lib/document/body.ts");
 const split = storyBodyFor(input.source);
 if (
@@ -387,6 +390,7 @@ const bundled = await bundle({
           if (!args.path.startsWith(path.join(root, "services/app/")))
             throw Error("Unexpected TSX dependency");
           let source = await readFile(args.path, "utf8");
+          if(attachmentSites.length && args.path===path.join(root,"services/app/lib/islands/kit/upload/control.tsx"))source=archivedFileUploadControlSource(source);
           if (input.personBindings?.length && args.path === path.join(root,"services/app/lib/islands/kit/people.tsx")) source = archivedPersonProfileSource({source,coreUrl:input.coreUrl});
           if(input.datasetMutations?.some(binding=>binding.valueParam)&&args.path===path.join(root,"services/app/lib/islands/kit/cells.tsx"))source=archivedExplicitCellOptionsSource(source);
           if (args.path === path.join(root,"services/app/lib/islands/kit/dialog.tsx")) source = archivedDialogMutationFormSource(archivedDialogFocusSource(source,path.join(import.meta.dirname,"dialog-focus.ts")),path.join(import.meta.dirname,"dialog-form.ts"));
@@ -424,6 +428,7 @@ const bundled = await bundle({
             input.personBindings ?? [],
             input.viewerBinding,
             input.datasetMutations?.some(binding=>binding.valueParam)?readLegacyCellWriteSites(input.source).flatMap(site=>site.optionsQuery?[site.optionsQuery]:[]):[],
+            attachmentSites,
           ),
           loader: "js",
         }));
@@ -478,6 +483,7 @@ const bundled = await bundle({
         b.onResolve({ filter: /^migration-identities$/ }, () => ({
           path: path.join(import.meta.dirname, "dynamic-identity-dom.ts"),
         }));
+        b.onResolve({filter:/^migration-file-uploads$/},()=>({path:path.join(import.meta.dirname,"file-upload-runtime.ts")}));
         b.onResolve({filter:/^migration-mutation-availability$/},()=>({path:path.join(import.meta.dirname,"mutation-availability.ts")}));
         b.onResolve({ filter: /^migration-mutations$/ }, () => ({
           path: path.join(

@@ -1,3 +1,4 @@
+import {prepareCompiledFileUploads} from "./file-upload-admission.ts";
 import {readLegacyCellWriteSites} from "./cell-write-source.ts";
 import type {LegacyCellWriteSite} from "./cell-write-contracts.ts";
 import {readPrototypeSource} from "./prototype-source.ts";
@@ -40,7 +41,7 @@ const activeUri = (v: string) =>
     v.replace(/[\u0000-\u0020\u007f]/g, "").toLowerCase(),
   );
 const allowed = new Set(
-  "Mermaid User SlideDeck Slide Helmet Context Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "FileUpload Mermaid User SlideDeck Slide Helmet Context Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -103,6 +104,7 @@ export const admitLocalSource: AdmitLocalSource = (input, mode="strict") => {
   const bindings = input.datasetBindings ?? [];
   if (historical && bindings.length)
     return blocked("compiled-dataset-unavailable-mode");
+  try{prepareCompiledFileUploads(input.source,input.datasetAttachments??[],bindings);}catch{return blocked("compiled-attachment-binding");}
   const proofs=input.boundValueColumns??[];
   const people=input.personBindings??[];
   if ((historical&&(proofs.length||people.length)) || !validateBoundPersonRouting(proofs,bindings,people)) return blocked("compiled-person-binding");
@@ -293,6 +295,7 @@ export const admitLocalSource: AdmitLocalSource = (input, mode="strict") => {
         invalid = true;
       if (node.type === "JSXElement") {
         const name = node.openingElement.name.name;
+        if (name === "FileUpload") { if(historical||loopTable)invalid=true; const id=node.openingElement.attributes.find((a:any)=>a.name?.name==='id');if(id)presentationIdentities.push({tag:"FileUpload",id:controlLiteral(id.value) as string}); }
         if (name === "Dialog") dialogFocus = true;
         const editingCell = cellSites.get(node.start);
         if(editingCell){

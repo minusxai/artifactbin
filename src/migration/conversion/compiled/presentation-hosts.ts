@@ -9,7 +9,7 @@ export function preservePresentationHosts(
   const pending = new Map<string, PresentationIdentityHost>();
   for (const entry of plan) {
     if (
-      !["Tooltip", "TooltipProvider"].includes(entry.tag) ||
+      !["Tooltip", "TooltipProvider", "FileUpload"].includes(entry.tag) ||
       typeof entry.id !== "string" ||
       !entry.id ||
       entry.id.length > 256

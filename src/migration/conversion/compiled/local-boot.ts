@@ -1,3 +1,5 @@
+import {fileUploadBootSource} from "./file-upload-boot.ts";
+import type {CompiledFileUploadSite} from "./file-upload-runtime-contracts.ts";
 import{viewerBootSource}from"./viewer-boot.ts";
 import type{CompiledViewerBinding}from"./viewer-contracts.ts";
 import { personBootSource } from "./person-boot.ts";
@@ -38,10 +40,12 @@ export function localBootSource(
   personBindings: readonly CompiledPersonBinding[] = [],
   viewerBinding?:CompiledViewerBinding,
   cellOptionQueries: readonly string[] = [],
+  attachmentSites: readonly CompiledFileUploadSite[] = [],
 ): string {
   const imports = sql?.bindings?.length ?? 0;
   const members=Boolean(sql?.membersBinding);
   return `import {client,gql} from '@afbin/apollo';
+${attachmentSites.length ? "import {createCompiledFileUploads} from 'migration-file-uploads';" : ""}
 import {hydrateIsland} from '@mx/rt';
 import {markCompiledReady} from 'migration-readiness';
 ${deck ? "import {startDeck} from 'migration-deck';" : ""}
@@ -94,6 +98,7 @@ export function boot({TREE}) {
  ${sql ? `store.fetchPage=(name,page)=>queryController.fetchPage(name,page,table(name)?.columns??[]);` : ""}
  const unavailable=()=>Promise.reject(Error('Shared data is not supported by this migration'));
  ${mutations.length ? datasetMutationBoot(mutations, Boolean(imports)) : ""}
+ ${fileUploadBootSource(attachmentSites)}
  ${personBindings.length ? personBootSource(personBindings) : ""}
  const context={values, value:name=>values()[name],table,tableSnapshot:table,pending:()=>pending(),error:name=>queryErrors()[name],people:${personBindings.length ? "people" : "()=>({})"},setValue:store.setValue,mutate:unavailable,writesUnavailable:()=>null,mutationUnavailable:name=>{${unavailableQueries ? "return 'Historical shared data writes are unavailable.';" : mutations.length ? "mutationTick();return mutationAdapter.status(name)?.state==='unknown'?'Reconcile the previous save before saving again.':mutationBindings.some(binding=>binding.name===name&&binding.valueParam)?cellAvailability.unavailable(name):null;" : "return null;"}},mutating:name=>{${mutations.length ? "mutationTick();return mutationAdapter.pending(name);" : "return false;"}},assetsUrl:()=>null,viewer:${viewerBinding ? "viewer" : "()=>null"},drawings:()=>({}),valueType:name=>declarations.find(d=>d.name===name)?.type,nullable:name=>declarations.find(d=>d.name===name)?.default===null,declaresQueries:()=>${Boolean(sql)},writes:{current:()=>[],subscribe:()=>()=>{},dismiss:()=>{}},store:()=>store,trustedPortal:()=>null,loadChart:${charts ? "async()=>charts" : "unavailable"}};
  let ready=false;
