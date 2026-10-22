@@ -69,7 +69,7 @@ export async function verifyMigrationArchives(
         if (!batch.length)
           batch = (
             await db.query(
-              `SELECT ordinal::text,record FROM ${names.archive}.stream_rows WHERE namespace=$1 AND path=$2 AND ordinal >= $3 ORDER BY ordinal LIMIT 20`,
+              `SELECT ordinal::text,record FROM ${names.archive}.stream_rows WHERE namespace=$1 AND path=$2 AND ordinal >= $3 ORDER BY stream_rows.ordinal LIMIT 20`,
               [source.namespace, part.path, ordinal],
             )
           ).rows;

@@ -56,8 +56,9 @@ test(
         };
         if (kind === "base") {
           for (const path of ["artifacts-000000.ndjson", "artifact_source_ids-000000.ndjson"]) {
-            await writeFile(join(directory, path), text);
-            manifest.parts.push({ ...manifest.parts[0]!, path });
+            const rowsText = text.repeat(30);
+            await writeFile(join(directory, path), rowsText);
+            manifest.parts.push({ ...manifest.parts[0]!, path, rows: 30, bytes: Buffer.byteLength(rowsText), sha256: createHash("sha256").update(rowsText).digest("hex") });
           }
         }
         await writeFile(
@@ -74,7 +75,7 @@ test(
       assert.deepEqual(await verifyMigrationArchives(db, schema, sources), {
         manifests: 2,
         parts: 4,
-        rows: 4,
+        rows: 62,
         bytes: sources.reduce((n, s) => n + s.manifest.parts.reduce((m,p)=>m+p.bytes,0), 0),
       });
       await db.query(
