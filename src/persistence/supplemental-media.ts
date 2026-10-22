@@ -55,56 +55,64 @@ export function supplementalRepository(
   async function loadPerson(
     address: Extract<SupplementalAddress, { kind: "person" }>,
     credential: string,
+    signal?: AbortSignal,
   ) {
-    return database.transaction(async (client) => {
-      if (!(await permitted(client, address, credential))) return null;
-      let caller;
-      try {
-        caller = await createPageCaller(now)(
-          client,
-          address.pageId,
-          credential,
-        );
-      } catch(error) {
-        if(error && typeof error==="object" && "status" in error)return null;
-        throw error;
-      }
-      const rows = (
-        await client.query(
-          `SELECT a.*,b.backend_id,b.backend_version FROM profile_assets a
+    return database.transaction(
+      async (client) => {
+        if (!(await permitted(client, address, credential))) return null;
+        let caller;
+        try {
+          caller = await createPageCaller(now)(
+            client,
+            address.pageId,
+            credential,
+          );
+        } catch (error) {
+          if (error && typeof error === "object" && "status" in error)
+            return null;
+          throw error;
+        }
+        const rows = (
+          await client.query(
+            `SELECT a.*,b.backend_id,b.backend_version FROM profile_assets a
         JOIN dataset_public_profiles u ON u.source_namespace=a.source_namespace AND u.legacy_user_id=a.legacy_user_id AND u.image=a.asset_id
         JOIN dataset_person_bindings b ON b.source_namespace=a.source_namespace
         JOIN files f ON f.id=b.page_id AND f.head=b.page_version::text AND f.deleted_at IS NULL
         WHERE b.page_id=$1 AND b.value_name=$2 AND a.asset_id=$3
         AND EXISTS(SELECT 1 FROM af_page_backends p WHERE p.file_id=b.backend_id AND p.version=b.backend_version AND p.page_id=b.page_id AND p.page_version=b.page_version)`,
-          [address.pageId, address.valueName, address.assetId],
-        )
-      ).rows;
-      if (rows.length !== 1) return null;
-      return { row: rows[0]!, caller };
-    });
+            [address.pageId, address.valueName, address.assetId],
+          )
+        ).rows;
+        if (rows.length !== 1) return null;
+        return { row: rows[0]!, caller };
+      },
+      signal ? { signal, timeoutMs: 1000 } : undefined,
+    );
   }
   return {
     async read(address, credential, signal) {
       signal?.throwIfAborted();
       if (address.kind === "comment")
-        return database.transaction(async (client) => {
-          if (!(await permitted(client, address, credential))) return null;
-          const row = (
-            await client.query(
-              `SELECT a.* FROM comment_attachment_assets a JOIN comments c ON c.file_id=a.page_id AND c.id=a.comment_id WHERE a.page_id=$1 AND a.comment_id=$2 AND a.attachment_id=$3 AND a.variant=$4`,
-              [
-                address.pageId,
-                address.commentId,
-                address.attachmentId,
-                address.variant,
-              ],
-            )
-          ).rows[0];
-          signal?.throwIfAborted();
-          return row ? descriptor(address, row) : null;
-        });
-      const initial = await loadPerson(address, credential);
+        return database.transaction(
+          async (client) => {
+            if (!(await permitted(client, address, credential))) return null;
+            const row = (
+              await client.query(
+                `SELECT a.* FROM comment_attachment_assets a JOIN comments c ON c.file_id=a.page_id AND c.id=a.comment_id WHERE a.page_id=$1 AND a.comment_id=$2 AND a.attachment_id=$3 AND a.variant=$4`,
+                [
+                  address.pageId,
+                  address.commentId,
+                  address.attachmentId,
+                  address.variant,
+                ],
+              )
+            ).rows[0];
+            signal?.throwIfAborted();
+            return row ? descriptor(address, row) : null;
+          },
+          signal ? { signal, timeoutMs: 1000 } : undefined,
+        );
+      const initial = await loadPerson(address, credential, signal);
       if (!initial) return null;
       const card = await person.person(
         {
@@ -121,7 +129,7 @@ export function supplementalRepository(
       );
       signal?.throwIfAborted();
       if (card?.image !== supplementalAddress(address)) return null;
-      const fresh = await loadPerson(address, credential);
+      const fresh = await loadPerson(address, credential, signal);
       signal?.throwIfAborted();
       if (!fresh || JSON.stringify(fresh) !== JSON.stringify(initial))
         return null;

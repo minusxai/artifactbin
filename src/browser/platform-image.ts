@@ -8,17 +8,22 @@ export async function readPlatformImage(
   signal?: AbortSignal,
 ): Promise<PlatformImage> {
   if (!response.ok) {
-    await response.body?.cancel();
+    void response.body?.cancel().catch(() => {});
     throw Object.assign(Error("Image unavailable"), {
       status: response.status,
     });
   }
   if (response.headers.get("content-type")?.split(";")[0] !== "image/webp") {
-    await response.body?.cancel();
+    void response.body?.cancel().catch(() => {});
     throw Error("Invalid image response");
   }
   const reader = response.body?.getReader();
   if (!reader) throw Error("Empty image response");
+  const cancel = () => {
+    void reader.cancel().catch(() => {});
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
+  if (signal?.aborted) cancel();
   let length = 0;
   const chunks: Uint8Array[] = [];
   try {
@@ -32,7 +37,8 @@ export async function readPlatformImage(
       chunks.push(next.value);
     }
   } finally {
-    await reader.cancel().catch(() => {});
+    signal?.removeEventListener("abort", cancel);
+    cancel();
   }
   signal?.throwIfAborted();
   let raw = "";

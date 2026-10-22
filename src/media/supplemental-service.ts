@@ -1,3 +1,4 @@
+import { abortableMediaStore } from "./abortable-store.ts";
 import { createMediaService } from "./service.ts";
 import { supplementalAddress } from "./supplemental-address.ts";
 import type {
@@ -70,7 +71,7 @@ export function createSupplementalService({
             };
           },
         },
-        store,
+        abortableMediaStore(store, request.signal),
       ).read({
         address,
         credential: "",

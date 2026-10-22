@@ -208,3 +208,23 @@ test("final image owner aborts cancelled and stale live-epoch reads before emitt
   await assert.rejects(stale, /abort|cancel/i);
   session.dispose();
 });
+test("aborting a stalled body rejects promptly even when its underlying cancellation never settles", async () => {
+  let cancelled = false;
+  const response = new Response(
+    new ReadableStream({
+      pull() {
+        return new Promise(() => {});
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise(() => {});
+      },
+    }),
+    { headers: { "Content-Type": "image/webp" } },
+  );
+  const controller = new AbortController();
+  const pending = readPlatformImage(response, controller.signal);
+  controller.abort();
+  await assert.rejects(pending, /abort/i);
+  assert.equal(cancelled, true);
+});
