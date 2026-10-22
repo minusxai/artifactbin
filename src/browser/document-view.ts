@@ -132,6 +132,8 @@ export function createDocumentView(options: DocumentViewOptions): DocumentView {
     },
     async showComment(comment) {
       if (disposed || options.contextOnly) return;
+      if (comment.context?.status === "unavailable" || comment.sourceRevision === null)
+        throw Error("Original context unavailable: the original page version was not retained.");
       const token = ++selection;
       const cache = options.contexts.cached();
       let context: DocumentViewContext = {

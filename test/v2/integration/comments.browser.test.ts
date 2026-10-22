@@ -110,6 +110,7 @@ for (const [name, engine] of engines) {
         await server.request(`/api/files/${published.id}/context/${comment!.id}`, { token })
       ).json()) as ContextResponse;
       assert.equal(context.comment.id, comment!.id);
+      assert.ok(context.source !== null);
       assert.match(context.source, /Buy oat milk/);
 
       // And in the page: the saved context opens read-only, then returns.

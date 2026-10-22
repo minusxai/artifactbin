@@ -146,6 +146,7 @@ for (const [name, engine] of engines) {
         await server.request(`/api/files/${published.id}/context/${comments[0]!.id}`, { token })
       ).json()) as ContextResponse;
       assert.deepEqual(context.state, { filter: "done", draft: "Milk" });
+      assert.ok(context.url !== null);
       assert.deepEqual(readStateFragment(new URL(context.url).hash).state, { filter: "done", draft: "Milk" });
 
       // State in the address loads for Bob only, leaves the address bar, and stays after a reload.

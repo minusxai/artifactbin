@@ -14,10 +14,11 @@ import type {
 function decodeComment(r: Record<string, unknown>): AcceptedComment {
   return {
     id: r.id as string,
-    nodeId: r.node_id as string | null,
+    nodeId: r.context_status ? null : r.node_id as string | null,
     quote: r.quote as string,
     body: r.body as string,
-    sourceRevision: r.source_revision as string,
+    sourceRevision: r.source_revision as string | null,
+    ...(r.context_status ? { context: r.context_status as AcceptedComment["context"] } : {}),
     parentId: r.parent_id as string | null,
     appStateId: r.app_state_id as string | null,
     publishedBy: r.published_by as string,
@@ -214,10 +215,10 @@ export function createCommentRepository(
         const loaded = await access(c, baseRequest, false);
         const request = { ...baseRequest, ...prepare(loaded) };
         const note = await comment(c, request.fileId, request.commentId);
-        const storedSource = note
+        const storedSource = note?.sourceRevision
           ? await source(c, request.fileId, note.sourceRevision)
           : null;
-        const row = note?.appStateId
+        const row = note?.sourceRevision && note.appStateId
           ? (
               await c.query(
                 "SELECT * FROM snapshots WHERE file_id=$1 AND id=$2",

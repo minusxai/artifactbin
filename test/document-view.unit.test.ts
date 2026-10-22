@@ -245,3 +245,14 @@ test("malformed app state reports preserve the last valid export and remain reco
     assert.equal(f.view.snapshot?.state.count, 9);
   }
 });
+
+test("unavailable original context never fetches, mounts or replays the current page", async () => {
+  const f = fixture();
+  f.comment = async () => { throw Error("must not fetch unavailable history"); };
+  await assert.rejects(f.view.showComment({ id: "legacy", appStateId: null, sourceRevision: null,
+    context: { status: "unavailable", originalRevision: "17", reason: "not-retained" },
+  }), /Original context unavailable/);
+  assert.equal(f.mounts.length, 0);
+  assert.equal(f.view.historical, false);
+  assert.equal(f.view.revision, "live");
+});

@@ -265,7 +265,7 @@ test("deterministic interleavings: 1,000 duplicate deliveries never duplicate co
       result = acceptComment(
         server,
         step < 100 ? "alice" : "bob",
-        c,
+        { ...c, sourceRevision: c.sourceRevision! },
         local.snapshots[c.appStateId!]!,
         { digest, now: step },
       );

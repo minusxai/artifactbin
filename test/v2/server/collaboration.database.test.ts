@@ -43,6 +43,7 @@ test("comments live on six-character page IDs and context shows what the comment
     assert.equal(context.comment.id, comment.id);
     assert.equal(context.source, published.source);
     assert.deepEqual(context.state, { todos: [], filter: "done", draft: "Milk" }, "the commenter's own filter and draft");
+    assert.ok(context.url !== null);
     assert.ok(context.url.startsWith(published.url + "#af-state="), context.url);
     const read = readStateFragment(new URL(context.url).hash);
     assert.deepEqual(read.state, context.state, "opening the url loads exactly that state");

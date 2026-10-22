@@ -56,6 +56,8 @@ Each form takes `?download=1`. A private page sends a signed-out visitor to sign
 | `PUT /api/files/:id/comments/:commentId` | The change, for example `{ resolved: true }`, with header `If-Match: <revision>` | The updated comment |
 | `GET /api/files/:id/context/:commentId` | | `{ comment, source, state, url }`: the page source and the commenter's own local state when they commented |
 
+Imported comments whose original page version was not retained have `version: null`, `nodeId: null`, and `context: { status: "unavailable", originalRevision: "17", reason: "not-retained" }`. Their body, quote, author and thread remain intact. Their context response includes the same `context` metadata and `source: null`, `state: null`, `url: null`; there is no original view to replay or node to highlight. Never treat the current page as their original context.
+
 Use `context` before acting on a comment. It shows exactly what the commenter saw: `state` is their local state (their filters, open tab and drafts), and `url` is the page's address with `#af-state=` of that state, so opening it shows the page as they saw it.
 
 - **`comment`:** `{ nodeId, quote, body }`, where `nodeId` is the `data-af-id` the comment is on, or `null` for the whole page. To reply, add `parentId`: the ID of the comment you are answering.

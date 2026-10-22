@@ -41,9 +41,10 @@ export function revisionOf(version: number, page: PageVersion): string {
 }
 /** The server version for a UI revision key; undefined lets the server use its head. */
 export function versionOf(
-  revision: string,
+  revision: string | null,
   page: PageVersion,
 ): number | undefined {
+  if (revision === null) return undefined;
   if (revision === page.revision && page.version !== null) return page.version;
   return /^[1-9]\d{0,14}$/.test(revision) ? Number(revision) : undefined;
 }
@@ -55,11 +56,12 @@ export function acceptedComment(
 ): AcceptedComment {
   return {
     id: record.id,
-    nodeId: record.nodeId,
+    nodeId: record.context?.status === "unavailable" ? null : record.nodeId,
     quote: record.quote,
     body: record.body,
     parentId: record.parentId,
-    sourceRevision: revisionOf(record.version, page),
+    sourceRevision: record.version === null ? null : revisionOf(record.version, page),
+    ...(record.context ? { context: record.context } : {}),
     appStateId: null,
     publishedBy: record.author,
     createdAt: record.createdAt,
@@ -150,7 +152,7 @@ export function wireResult(
       const context = value as ContextResponse & { rendered?: string };
       const comment = acceptedComment(context.comment, page);
       const snapshot: Snapshot | null =
-        context.state || context.rendered
+        comment.sourceRevision && (context.state || context.rendered)
           ? {
               schema: 0,
               sourceRevision: comment.sourceRevision,

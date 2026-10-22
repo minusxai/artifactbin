@@ -1,7 +1,7 @@
 import type { Comment, DocumentState, Snapshot, Target } from "../contracts.ts";
 import type { ActivityReason } from "./activity-contracts.ts";
 export interface DocumentViewContext {
-  source: string;
+  source: string | null;
   snapshot: Snapshot | null;
 }
 export interface DocumentViewChange {
@@ -43,7 +43,7 @@ export interface DocumentView {
   start(): void;
   receiveView(message: { snapshot?: unknown; targets?: unknown }): boolean;
   showComment(
-    comment: Pick<Comment, "id" | "appStateId" | "sourceRevision">,
+    comment: Pick<Comment, "id" | "appStateId" | "sourceRevision" | "context">,
   ): Promise<void>;
   showViewer(sessionId: string): Promise<void>;
   returnLive(): boolean;

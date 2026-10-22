@@ -26,11 +26,12 @@ import { decodeCursor, encodeCursor } from "./idempotency.ts";
 export function commentRecord(comment: AcceptedComment): CommentRecord {
   return {
     id: comment.id,
-    nodeId: comment.nodeId,
+    nodeId: comment.context?.status === "unavailable" ? null : comment.nodeId,
     quote: comment.quote,
     body: comment.body,
     parentId: comment.parentId,
-    version: Number(comment.sourceRevision),
+    version: comment.sourceRevision === null ? null : Number(comment.sourceRevision),
+    ...(comment.context ? { context: comment.context } : {}),
     author: comment.publishedBy,
     createdAt: comment.createdAt,
     revision: comment.revision,
@@ -222,6 +223,8 @@ export function createCommentService({
         (context) => {
           authorize(fileId, credential, context);
           const comment = context.comment ?? fail(404, "Comment not found");
+          if (comment.context?.status === "unavailable")
+            return { comment: commentRecord(comment), context: comment.context, source: null, state: null, url: null };
           const source = context.source ?? fail(404, "Source unavailable");
           const state = (context.snapshot?.state as AfJsonObject | undefined) ?? null;
           const address = fileAddress(origin, fileId);

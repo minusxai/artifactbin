@@ -174,12 +174,13 @@ export interface CommentInput {
   rendered?: string | null;
 }
 export interface CommentRecord {
+  context?: import("../contracts.ts").CommentContextStatus;
   id: string;
   nodeId: string | null;
   quote: string;
   body: string;
   parentId: string | null;
-  version: number;
+  version: number | null;
   author: string;
   createdAt: string;
   /** Increments on every edit; PUT …/comments/:commentId sends it as If-Match. */
@@ -204,8 +205,9 @@ export interface CommentsResponse {
 /** GET /api/files/:id/context/:commentId: exactly what the commenter saw. */
 export interface ContextResponse {
   comment: CommentRecord;
-  /** The page source at comment.version. */
-  source: string;
+  context?: import("../contracts.ts").CommentContextStatus;
+  /** Null when the original version was not retained. */
+  source: string | null;
   /** The commenter's own local state when they commented (filters, open tabs, drafts). */
   state: AfJsonObject | null;
   /** The inert view the platform UI captured with the comment, when it sent one. */
@@ -214,7 +216,7 @@ export interface ContextResponse {
    * The page's address with `#af-state=` of `state`, so opening it shows the
    * page as the commenter saw it (the plain address when no state was saved).
    */
-  url: string;
+  url: string | null;
 }
 export interface ReserveIdsRequest {
   count: number;

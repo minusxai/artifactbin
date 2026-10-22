@@ -96,3 +96,29 @@ test("PostgreSQL failed staged comment write rolls back its snapshot and sequenc
     await f.close();
   }
 });
+
+test("historical comments without retained source serialize explicit unavailable context and retain threads", async () => {
+  const f = await fixture();
+  const context = { status: "unavailable", originalRevision: "17", reason: "not-retained" };
+  try {
+    for (const [id, parent, sequence] of [["legacy", null, 1], ["reply", "legacy", 2]])
+      await f.env.pool.query(
+        "INSERT INTO comments(file_id,id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence,context_status) VALUES('Pg4mQ2',$1,NULL,'Original quote','Original body',NULL,$2,NULL,'owner','2025-01-01',1,false,'legacy',$3,$4)",
+        [id, parent, sequence, context],
+      );
+    const list = await f.service.list("Pg4mQ2", "owner");
+    assert.equal(list.comments.length, 2);
+    assert.deepEqual(list.comments.map(c => [c.id, c.parentId, c.body, c.quote, c.author, c.version, c.nodeId, c.context]), [
+      ["legacy", null, "Original body", "Original quote", "owner", null, null, context],
+      ["reply", "legacy", "Original body", "Original quote", "owner", null, null, context],
+    ]);
+    const unavailable = await f.service.context("Pg4mQ2", "owner", "legacy", "https://example.test");
+    assert.deepEqual({ context: unavailable.context, source: unavailable.source, state: unavailable.state, url: unavailable.url }, { context, source: null, state: null, url: null });
+    await assert.rejects(f.env.pool.query("UPDATE comments SET node_id='current-anchor' WHERE id='legacy'"), /comments_context_status/);
+    await assert.rejects(f.env.pool.query("UPDATE comments SET context_status=NULL WHERE id='legacy'"), /comments_context_status/);
+    await assert.rejects(f.env.pool.query("UPDATE comments SET context_status='{}' WHERE id='legacy'"), /comments_context_status/);
+    const edited = await f.service.edit("Pg4mQ2", "owner", "legacy", "1", { body: "Edited body" });
+    assert.deepEqual(edited.context, context);
+    assert.equal(edited.body, "Edited body");
+  } finally { await f.close(); }
+});

@@ -214,6 +214,23 @@ test("comment panel owns composition, permission refresh, thread lifecycle and s
         });
       },
     );
+    await t.test("unavailable historical context is labeled without a replay action or node highlight", async () => {
+      const historical = await browser.newPage();
+      await historical.setContent('<div id="layer"></div>');
+      await historical.addScriptTag({ content: bundle.outputFiles[0].text });
+      await historical.evaluate(() => {
+        state.comments.push({ id: "legacy", nodeId: null, quote: "Original quote", body: "Original body", parentId: null,
+          publishedBy: "alice", createdAt: "2025-01-01", sourceRevision: null, appStateId: null,
+          context: { status: "unavailable", originalRevision: "17", reason: "not-retained" } });
+        panel.render();
+      });
+      await historical.locator(".pg-pin").click();
+      await historical.getByText("Original context unavailable", { exact: true }).waitFor();
+      assert.equal(await historical.getByRole("button", { name: "View context" }).count(), 0);
+      assert.equal(await historical.locator(".pg-comment-target").count(), 0);
+      assert.equal(await historical.getByText("Original body", { exact: true }).count(), 1);
+      await historical.close();
+    });
   } finally {
     await browser.close();
   }

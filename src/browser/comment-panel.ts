@@ -517,7 +517,9 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
         const reply = button("Reply", () => expand(true), actions);
         reply.prepend(icon("reply")!);
       }
-      button("View context", () => options.actions.view(c), actions);
+      if (c.context?.status === "unavailable")
+        para("Original context unavailable", actions, "pg-caption");
+      else button("View context", () => options.actions.view(c), actions);
       if (
         canComment() &&
         c.publishedBy &&
@@ -548,7 +550,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
           for (const entry of replies) showMessage(entry, list);
           bubble.append(list);
         }
-        if (!rectFor(c.nodeId))
+        if (c.context?.status !== "unavailable" && !rectFor(c.nodeId))
           para(
             "Target is unavailable in this view. Open the saved context.",
             bubble,

@@ -155,3 +155,17 @@ test("resolving and reopening a thread both PUT the comment with its revision", 
     headers: { "If-Match": "5" },
   });
 });
+
+test("unavailable historical comments preserve their thread without borrowing the current page revision", () => {
+  const context = { status: "unavailable" as const, originalRevision: "17", reason: "not-retained" as const };
+  const historical = { ...record("old", 3, "parent"), version: null, nodeId: null, context };
+  const list = wireResult({ kind: "comments.list" }, { comments: [historical], head: 3 }, page) as any;
+  assert.equal(list.comments[0].sourceRevision, null);
+  assert.equal(list.comments[0].nodeId, null);
+  assert.equal(list.comments[0].body, historical.body);
+  assert.equal(list.comments[0].parentId, "parent");
+  assert.deepEqual(list.comments[0].context, context);
+  const view = wireResult({ kind: "context.get", id: "old" }, { comment: historical, context, source: null, state: null, url: null }, page) as any;
+  assert.equal(view.source, null);
+  assert.equal(view.snapshot, null);
+});

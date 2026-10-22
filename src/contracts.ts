@@ -48,7 +48,13 @@ export interface CommentDraft {
   sourceRevision: SourceRevision;
   parentId: Id | null;
 }
-export interface Comment extends CommentDraft {
+export type CommentContextStatus =
+  | { status: "available" }
+  | { status: "unavailable"; originalRevision: string; reason: "not-retained" };
+export interface Comment extends Omit<CommentDraft, "sourceRevision"> {
+  sourceRevision: SourceRevision | null;
+  /** Absent on ordinary comments; unavailable historical context is never replayed. */
+  context?: CommentContextStatus;
   appStateId: Id | null;
   publishedBy: string | null;
   createdAt: string;
@@ -176,7 +182,7 @@ export interface CommentEdit {
 export interface Context {
   comment: Comment;
   snapshot: Snapshot | null;
-  source: string;
+  source: string | null;
 }
 export interface Capture {
   appStateId: Id;

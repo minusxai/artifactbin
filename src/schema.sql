@@ -54,3 +54,19 @@ CREATE TABLE IF NOT EXISTS account_secrets (actor text NOT NULL REFERENCES accou
 -- Account handles: the optional public name in /@<handle>/<path> addresses, stored lowercase (src/server/handles-contracts.ts). Existing accounts have none.
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS handle text CHECK (handle ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(handle) BETWEEN 3 AND 32);
 CREATE UNIQUE INDEX IF NOT EXISTS accounts_handle ON accounts(handle);
+
+-- Imported comments can outlive their original source; never attach them to another version.
+ALTER TABLE comments ALTER COLUMN source_revision DROP NOT NULL;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS context_status jsonb;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'comments'::regclass AND conname = 'comments_context_status') THEN
+    ALTER TABLE comments ADD CONSTRAINT comments_context_status CHECK (COALESCE((
+      (source_revision IS NOT NULL AND context_status IS NULL) OR
+      (source_revision IS NULL AND node_id IS NULL AND app_state_id IS NULL AND context_status IS NOT NULL
+       AND context_status->>'status' = 'unavailable'
+       AND context_status->>'reason' = 'not-retained'
+       AND jsonb_typeof(context_status->'originalRevision') = 'string'
+       AND length(context_status->>'originalRevision') > 0)
+    ), false));
+  END IF;
+END $$;
