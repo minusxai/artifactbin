@@ -319,6 +319,7 @@ const bundled = await bundle({
             Boolean(chartSources),
             input.datasetMutations ?? [],
             input.dataControls ?? [],
+            input.dynamicIdentities,
           ),
           loader: "js",
         }));
@@ -352,6 +353,9 @@ const bundled = await bundle({
             resolveDir: root,
           }),
         );
+        b.onResolve({ filter: /^migration-identities$/ }, () => ({
+          path: path.join(import.meta.dirname, "dynamic-identity-dom.ts"),
+        }));
         b.onResolve({ filter: /^migration-mutations$/ }, () => ({
           path: path.join(
             path.dirname(new URL(import.meta.url).pathname),
