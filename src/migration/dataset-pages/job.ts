@@ -1,3 +1,4 @@
+import { attestStandaloneDatasetModels } from "./models.ts";
 import {
   additiveAuthoritySha256,
   additiveRowSha256,
@@ -95,10 +96,12 @@ export async function prepareStandaloneDatasetJob(
         v.legacyId === page.legacyId &&
         v.version === artifact.artifacts[0]!.version,
     );
+    const models=page.revisions[0]!.standaloneDataset?.models;
+    if(version&&models)attestStandaloneDatasetModels(artifact.artifacts[0]!,version,models);
     if (
       !version ||
       (!page.revisions[0]!.standaloneExternalDataset &&
-        version.unavailableTables.length)
+        version.unavailableTables.length && !models?.length)
     ) {
       issues.set(page.legacyId, ["dataset-source-registration-required"]);
       continue;
@@ -149,6 +152,11 @@ export async function prepareStandaloneDatasetJob(
       prepared.receipts.filter((r) => r.pageLegacyId === page.legacyId),
     );
     for (const row of plan.browserBindings) {
+      if(models?.length){
+        const catalog=(artifact.artifacts[0]!.meta as {catalog:{tables:{schema:string;name:string}[]}}).catalog;
+        const order=new Map(catalog.tables.map((t,i)=>[JSON.stringify([t.schema,t.name]),i]));
+        row.binding={...row.binding,tables:[...row.binding.tables,...models.map(m=>({schema:m.schema,table:m.table,columns:m.columns}))].sort((a,b)=>order.get(JSON.stringify([a.schema,a.table]))!-order.get(JSON.stringify([b.schema,b.table]))!)};
+      }
       pageSources.set(
         migrationDatasetVersionKey(row.pageLegacyId, row.pageVersion),
         { kind: "stored", binding: row.binding },

@@ -1,3 +1,5 @@
+import { attestStandaloneDatasetModels } from "./models.ts";
+import { catalogVersion, receiptMap } from "../datasets/catalog.ts";
 import { attestMigrationSourceQueries } from "../source-query-preparation.ts";
 import { canonicalMigrationValue } from "../verification-values.ts";
 import { createHash } from "node:crypto";
@@ -44,6 +46,7 @@ export async function scanStandaloneDatasetPages(
     )
   )
     throw Error("Invalid standalone external admission");
+  if(new Set((admission.models??[]).map(m=>m.legacyId)).size!==(admission.models??[]).length||(admission.models??[]).some(m=>!admission.heads.some(h=>h.legacyId===m.legacyId&&h.version===m.version&&h.artifactSha256===m.artifactSha256)))throw Error("Invalid stored model admission scope");
   for (const expected of admission.heads) {
     if (
       unique.has(expected.legacyId) ||
@@ -98,6 +101,7 @@ export async function scanStandaloneDatasetPages(
         issues.set(head.id, ["external-registration-required"]);
         continue;
       }
+      if(admission.models?.some(m=>m.legacyId===head.id))throw Error("External dataset cannot receive stored model authority");
       const queries = attestMigrationSourceQueries(
         external.declarations,
         head.id,
@@ -144,6 +148,8 @@ export async function scanStandaloneDatasetPages(
     }
     if (admission.external?.some((e) => e.legacyId === head.id))
       throw Error("Standalone external source kind differs");
+    const modelAdmission=admission.models?.find(m=>m.legacyId===head.id);
+    const models=modelAdmission ? attestStandaloneDatasetModels(head,catalogVersion(head,head.id,receiptMap(source.datasets!.receipts)),modelAdmission.attestations) : undefined;
     pages.push({
       legacyId: head.id,
       pageId: source.maps.pages[head.id]!,
@@ -153,6 +159,7 @@ export async function scanStandaloneDatasetPages(
           version: head.version,
           editId: String(head.edit_id ?? ""),
           standaloneDataset: {
+            ...(models ? {models} : {}),
             sourceFormat: "dataset",
             legacyId: head.id,
             pageId: source.maps.pages[head.id]!,

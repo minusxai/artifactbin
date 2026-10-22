@@ -1,3 +1,10 @@
+import { createStoredModelResolver } from "../src/persistence/dataset-stored-models.ts";
+import { storedModelDependenciesSha256 } from "../src/datasets/stored-model/attestation.ts";
+import {
+  catalogVersion,
+  receiptMap,
+} from "../src/migration/datasets/catalog.ts";
+import { datasetPageArtifactSha256 } from "../src/migration/dataset-pages/scan.ts";
 import { createSourceQueryRepository } from "../src/persistence/source-queries.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,16 +29,56 @@ import { createMigrationJobPlanner } from "../src/migration/job-planning.ts";
 import { applyMigration } from "../src/migration/import.ts";
 import type { DatasetMigrationBatch } from "../src/migration/dataset-destination-contracts.ts";
 
-for (const [existingResource, external] of [
+for (const [existingResource, external, model] of [
   [true, false],
   [false, false],
   [true, true],
+  [true, false, true],
 ])
-  test(`additive normal publication ${existingResource ? "reuses" : "introduces an approved original"} ${external ? "external " : "stored "}resource, preserves base, replays and refuses changed authority`, async () => {
+  test(`additive normal publication ${existingResource ? "reuses" : "introduces an approved original"} ${external ? "external " : model ? "stored model " : "stored "}resource, preserves base, replays and refuses changed authority`, async () => {
     const db = await testDatabase();
     const client = await db.pool.connect();
     const dir = await mkdtemp(join(tmpdir(), "dataset-additive-"));
     const { source, options } = standaloneDatasetFixture(external);
+    if (model) {
+      const artifact = (await source.readArtifact("data01")).artifacts[0]!;
+      const catalog = (
+        artifact.meta as { catalog: { tables: Record<string, unknown>[] } }
+      ).catalog;
+      const sql = "SELECT COUNT(*) AS n FROM public.rows";
+      catalog.tables.push({
+        schema: "public",
+        name: "summary",
+        columns: [{ name: "n", type: "number" }],
+        sql,
+      });
+      const artifactSha256 = datasetPageArtifactSha256(artifact),
+        version = catalogVersion(
+          artifact,
+          artifact.id,
+          receiptMap(source.datasets!.receipts),
+        );
+      options.standaloneDatasetPages!.heads[0]!.artifactSha256 = artifactSha256;
+      options.standaloneDatasetPages!.models = [
+        {
+          legacyId: artifact.id,
+          version: artifact.version,
+          artifactSha256,
+          attestations: [
+            {
+              schema: "public",
+              table: "summary",
+              columns: [{ name: "n", type: "number" }],
+              modelSqlSha256: createHash("sha256").update(sql).digest("hex"),
+              sourceArtifactSha256: artifactSha256,
+              dependencyDescriptorSha256: storedModelDependenciesSha256(
+                version.tables,
+              ),
+            },
+          ],
+        },
+      ];
+    }
     if (external) {
       const artifact = (await source.readArtifact("data01")).artifacts[0]!;
       const sql = "SELECT 1 AS n";
@@ -199,6 +246,63 @@ for (const [existingResource, external] of [
         )
       ).rows;
       assert.equal(receiptRows.length, 1);
+      if (model) {
+        const resolver = createStoredModelResolver({
+            transaction: async (work) => work(client),
+          }),
+          binding = prepared.metadata.bindings[0]!,
+          resource = prepared.metadata.resources[0]!;
+        const resolved = {
+            ...binding,
+            revision: {
+              version: resource.currentVersion,
+              generation: resource.generation,
+              policyRevision: resource.policyRevision,
+            },
+          },
+          context = {
+            backendId: binding.backendId,
+            backendVersion: binding.backendVersion,
+            pageId: binding.page.id,
+            subject: "owner@example.test",
+          };
+        const registered = await resolver(context, resolved, {
+          schema: "public",
+          table: "summary",
+        });
+        assert.equal(registered?.sql, "SELECT COUNT(*) AS n FROM public.rows");
+        assert.deepEqual(registered?.dependencies, binding.tables);
+        assert.equal(
+          await resolver(
+            { ...context, backendVersion: "0".repeat(64) },
+            resolved,
+            { schema: "public", table: "summary" },
+          ),
+          null,
+        );
+        await assert.rejects(
+          () =>
+            client.query(
+              `UPDATE "${db.schema}".dataset_pages SET snapshot=jsonb_set(snapshot,'{standaloneDataset,models,0,modelSqlSha256}',to_jsonb($1::text))`,
+              ["0".repeat(64)],
+            ),
+          /immutable/,
+        );
+        assert.ok(
+          await resolver(context, resolved, {
+            schema: "public",
+            table: "summary",
+          }),
+        );
+        const withoutModels = {
+          ...batch,
+          additive: { ...batch.additive!, models: [] },
+        };
+        await assert.rejects(
+          () => verifyAdditiveDatasetBase(client, db.schema, withoutModels),
+          /exact stored model admission/,
+        );
+      }
       await assert.rejects(
         () =>
           metadata.import({

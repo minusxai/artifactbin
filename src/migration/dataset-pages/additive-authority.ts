@@ -156,6 +156,12 @@ export async function verifyAdditiveDatasetBase(
     )
   )
     throw Error("Invalid additive external scope");
+  const approvedModels=admission.models??[];
+  if(new Set(approvedModels.map(m=>m.legacyId)).size!==approvedModels.length||approvedModels.some(m=>!admission.heads.some(h=>h.legacyId===m.legacyId&&h.version===m.version&&h.artifactSha256===m.artifactSha256)))throw Error("Invalid additive model scope");
+  for(const page of batch.metadata.pages){
+    const expected=approvedModels.find(m=>m.legacyId===page.snapshot.id);
+    same(page.snapshot.standaloneDataset?.models??[],expected?.attestations??[],"exact stored model admission");
+  }
   const groups = batch.sourceQueryRegistrations ?? [];
   const expectedExternal = batch.metadata.pages.filter((p) =>
     externalPages.has(p.snapshot.id),

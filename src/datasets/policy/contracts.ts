@@ -19,7 +19,7 @@ export interface DatasetSnapshot {
 }
 export interface DocumentSnapshot {
   /** Trusted exact self-binding for a generated read-only dataset page; original format remains dataset. */
-  standaloneDataset?: { kind: "dataset-self-read-v1"; datasetId: string; version: number };
+  standaloneDataset?: { kind: "dataset-self-read-v1"; datasetId: string; version: number; models?: readonly import("../stored-model/contracts.ts").StoredModelAttestation[] };
   id: string;
   editId: string;
   owner: Principal;

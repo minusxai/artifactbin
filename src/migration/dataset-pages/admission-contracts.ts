@@ -12,6 +12,13 @@ export interface StandaloneDatasetJobAdmission {
   /** Entire frozen source-ID and base backend-ID inventory, including deleted/blocked source artifacts. */
   reservedFileIds: readonly string[];
   base: AdditiveDatasetBaseApproval;
+  /** Exact operator-reviewed stored SQL models; no connector authority. */
+  models?: readonly {
+    legacyId: string;
+    version: number;
+    artifactSha256: string;
+    attestations: readonly import("../../datasets/stored-model/contracts.ts").StoredModelAttestation[];
+  }[];
   /** Exact reviewed canonical declarations and notebook-expanded server registrations; never browser metadata. */
   external?: readonly {
     legacyId: string;
@@ -69,6 +76,7 @@ export interface AdditiveDatasetBaseApproval {
 /** All fields are pinned provenance, never a rewrite of the original format. */
 export interface StandaloneDatasetPageProvenance {
   sourceFormat: "dataset";
+  models?: readonly import("../../datasets/stored-model/contracts.ts").StoredModelAttestation[];
   legacyId: string;
   pageId: string;
   pageVersion: number;

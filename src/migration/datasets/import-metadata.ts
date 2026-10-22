@@ -1,3 +1,4 @@
+import { attestStandaloneDatasetModels } from "../dataset-pages/models.ts";
 import { datasetPageArtifactSha256 } from "../dataset-pages/scan.ts";
 import type { AccessPolicy, ShareRole } from "../../contracts.ts";
 import type { LegacyRow, LegacyArtifact, MigrationMaps } from "../contracts.ts";
@@ -288,7 +289,7 @@ export function planDatasetMetadata(
         owner: principal(page),
         visibility: page.visibility,
         format: b.standaloneDataset || b.standaloneExternalDataset ? "dataset" : "markup",
-        ...(b.standaloneDataset ? { standaloneDataset: { kind: "dataset-self-read-v1" as const, datasetId: page.id, version: b.pageVersion } } : {}),
+        ...(b.standaloneDataset ? { standaloneDataset: { kind: "dataset-self-read-v1" as const, datasetId: page.id, version: b.pageVersion, ...(b.standaloneDataset.models ? {models:b.standaloneDataset.models} : {}) } } : {}),
         deleted: !!page.deleted_at,
         ownerIsTestUser: users.get(String(page.user_id))?.kind === "testuser",
         acceptedJoinUserIds: joins,
@@ -405,6 +406,7 @@ export function planDatasetMetadata(
       throw Error("Invalid or unresolved dataset binding");
     if (b.standaloneDataset) {
       const p = b.standaloneDataset;
+      if(p.models)attestStandaloneDatasetModels(page,version,p.models);
       if (page.format !== "dataset" || p.sourceFormat !== "dataset" || b.pageLegacyId !== b.datasetLegacyId || p.legacyId !== page.id || p.pageId !== b.pageId || p.pageVersion !== b.pageVersion || p.editId !== page.edit_id || b.datasetVersion !== page.version || p.artifactSha256 !== datasetPageArtifactSha256(page)) throw Error("Invalid standalone dataset provenance");
     }
     const key = JSON.stringify([
