@@ -18,6 +18,8 @@ export interface DatasetSnapshot {
   policy: unknown;
 }
 export interface DocumentSnapshot {
+  /** Trusted exact self-binding for a generated read-only dataset page; original format remains dataset. */
+  standaloneDataset?: { kind: "dataset-self-read-v1"; datasetId: string; version: number };
   id: string;
   editId: string;
   owner: Principal;

@@ -37,7 +37,7 @@ export async function verifyMigrationJob(
     const raw = await verifyMigrationArchives(db, options.schema, archives);
     const runtime = await verifyMigrationRuntime(db, options.schema, {
       pages: readPreparedMigrationPages(source, options, planned, planner),
-      maps: source.maps,
+      maps: options.standaloneDatasetPages ? {...source.maps,pages:Object.fromEntries(options.standaloneDatasetPages.heads.map(h=>[h.legacyId,source.maps.pages[h.legacyId]!]))} : source.maps,
       origin: options.origin,
     });
     const actors = await verifyMigrationAuthority(
@@ -67,6 +67,7 @@ export async function verifyMigrationJob(
             options.schema,
             {
               ...source.datasets.provenance,
+              ...(options.standaloneDatasetPages ? {additive:options.standaloneDatasetPages} : {}),
               profileAssets: source.supplementalAssets?.profiles,
               queryRegistrations,
               ...(source.preparedDatasets.sourceQueryRegistrations?.length

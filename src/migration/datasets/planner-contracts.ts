@@ -18,6 +18,7 @@ export interface DatasetImportBindingInput {
   backendNamespace: string;
   name: string;
   mode?: "live" | "pinned";
+  standaloneDataset?: import("../dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance;
   legacyRef: string;
   datasetLegacyId: string;
   datasetVersion: number;

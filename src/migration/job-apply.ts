@@ -1,3 +1,4 @@
+import {verifyAdditiveDatasetBase} from "./dataset-pages/additive-authority.ts";
 import { projectMigrationOwnershipDatasetGrants } from "./ownership-dataset-grants.ts";
 import { migrationPageQueryRegistrations } from "./query-registrations.ts";
 import type { MigrationSavedQueryRegistration } from "./query-registrations.ts";
@@ -40,6 +41,11 @@ export async function applyMigrationJob(
       await stageMigrationMedia(media.assets, options.media?.stagingDirectory);
     }
 
+    if(options.standaloneDatasetPages){
+      if(!source.datasets||!source.preparedDatasets)throw Error("Additive dataset preparation missing");
+      await db.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      try{await verifyAdditiveDatasetBase(db,options.schema,{...source.datasets.provenance,metadata:source.preparedDatasets.metadata,additive:options.standaloneDatasetPages});await db.query("COMMIT");}catch(error){await db.query("ROLLBACK");throw error;}
+    }
     await archiveMigrationSources(
       db,
       options.schema,
@@ -111,6 +117,7 @@ export async function applyMigrationJob(
         options.sourceQueryRegistrations,
       ).import({
         ...source.datasets.provenance,
+        ...(options.standaloneDatasetPages ? {additive:options.standaloneDatasetPages} : {}),
         profileAssets: source.supplementalAssets?.profiles,
         queryRegistrations,
         ...(source.preparedDatasets.sourceQueryRegistrations?.length

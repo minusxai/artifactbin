@@ -1,3 +1,4 @@
+import {verifyAdditiveDatasetBase,additiveAuthoritySha256,additiveRowSha256,normalizeAdditiveRow} from "./dataset-pages/additive-authority.ts";
 import { verifySourceQueries } from "../persistence/source-queries.ts";
 import { validateMigrationSourceQueryBatch } from "./source-query-preparation.ts";
 import type { MigrationSourceQueryRegistration } from "../datasets/source-query/contracts.ts";
@@ -31,6 +32,7 @@ export async function verifyMigrationDatasetMetadata(
     sourceQueryRegistrations,
   );
   const { runtime, archive } = destinationSchemas(schema);
+  if(batch.additive) await verifyAdditiveDatasetBase(db,schema,batch);
   let count = 0;
   for (const plan of migrationDatasetTablePlans(batch)) {
     const key = (row: LegacyRow) =>
@@ -53,6 +55,7 @@ export async function verifyMigrationDatasetMetadata(
           row.joined_at = new Date(String(row.joined_at)).toISOString();
         const k = key(row);
         const wanted = expected.get(k);
+        if (!wanted && batch.additive?.base.inventory.tables.find(t=>t.table===plan.table)?.rows.some(r=>canonicalMigrationValue(r.key)===k && r.sha256===additiveRowSha256(normalizeAdditiveRow(row)))) continue;
         if (!wanted)
           throw Error(
             "Migration verification failed: unexpected dataset metadata",
@@ -97,6 +100,7 @@ export async function verifyMigrationDatasetMetadata(
         row.name,
       ]);
       const wanted = expected.get(k);
+      if (!wanted && batch.additive?.base.inventory.protectedRows.some(r=>r.table==="dataset_mutation_operations" && canonicalMigrationValue(r.key)===k && r.sha256===additiveRowSha256({...row,page_version:Number(row.page_version)}))) continue;
       if (!wanted)
         throw Error(
           "Migration verification failed: unexpected dataset operation",
@@ -139,6 +143,11 @@ export async function verifyMigrationDatasetMetadata(
     ],
     "dataset independent snapshot provenance",
   );
+  if(batch.additive){
+    const receipt=(await db.query(`SELECT fingerprint,base_fingerprint FROM ${archive}.dataset_additive_receipts WHERE source_namespace=$1 AND authority_sha256=$2`,[batch.metadata.sourceNamespace,additiveAuthoritySha256(batch.additive)])).rows;
+    const {createHash}=await import("node:crypto");
+    equal(receipt,[{fingerprint:createHash("sha256").update(canonicalMigrationValue({...batch,additive:additiveAuthoritySha256(batch.additive)})).digest("hex"),base_fingerprint:batch.additive.base.inventory.datasetFingerprint}],"additive dataset receipt");
+  }
   count += await verifyMigrationOwnershipDatasetGrantAudit(
     db,
     archive,

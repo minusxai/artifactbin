@@ -1,3 +1,4 @@
+import { datasetPageArtifactSha256 } from "../dataset-pages/scan.ts";
 import type { AccessPolicy, ShareRole } from "../../contracts.ts";
 import type { LegacyRow, LegacyArtifact, MigrationMaps } from "../contracts.ts";
 import type {
@@ -262,7 +263,7 @@ export function planDatasetMetadata(
   const pageKeys = new Set<string>();
   const addPage = (
     page: LegacyArtifact,
-    b: { pageId: string; pageVersion: number },
+    b: { pageId: string; pageVersion: number; standaloneDataset?: import("../dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance },
   ) => {
     if (typeof page.edit_id !== "string" || !page.edit_id)
       throw Error("Missing exact member page edit identity");
@@ -286,7 +287,8 @@ export function planDatasetMetadata(
         editId: page.edit_id,
         owner: principal(page),
         visibility: page.visibility,
-        format: "markup",
+        format: b.standaloneDataset ? "dataset" : "markup",
+        ...(b.standaloneDataset ? { standaloneDataset: { kind: "dataset-self-read-v1" as const, datasetId: page.id, version: b.pageVersion } } : {}),
         deleted: !!page.deleted_at,
         ownerIsTestUser: users.get(String(page.user_id))?.kind === "testuser",
         acceptedJoinUserIds: joins,
@@ -375,7 +377,7 @@ export function planDatasetMetadata(
     );
     if (
       !page ||
-      page.format !== "markup" ||
+      (page.format !== "markup" && !(page.format === "dataset" && b.standaloneDataset)) ||
       !dataset ||
       dataset.format !== "dataset" ||
       !version ||
@@ -392,6 +394,10 @@ export function planDatasetMetadata(
       !page.edit_id
     )
       throw Error("Invalid or unresolved dataset binding");
+    if (b.standaloneDataset) {
+      const p = b.standaloneDataset;
+      if (page.format !== "dataset" || p.sourceFormat !== "dataset" || b.pageLegacyId !== b.datasetLegacyId || p.legacyId !== page.id || p.pageId !== b.pageId || p.pageVersion !== b.pageVersion || p.editId !== page.edit_id || b.datasetVersion !== page.version || p.artifactSha256 !== datasetPageArtifactSha256(page)) throw Error("Invalid standalone dataset provenance");
+    }
     const key = JSON.stringify([
       b.pageId,
       b.pageVersion,

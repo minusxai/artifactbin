@@ -168,7 +168,7 @@ export async function prepareMigrationJobSource(
     manifest,
     base,
     maps,
-    ids,
+    ids: options.standaloneDatasetPages ? ids.filter(id=>options.standaloneDatasetPages!.heads.some(h=>h.legacyId===id)) : ids,
     identitySummary,
     groupSummary,
     media,

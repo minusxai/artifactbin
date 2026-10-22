@@ -20,11 +20,14 @@ export interface MigrationBackendPage {
     readsViewer?: true;
     /** Exact head declares a server handler; no code runs during preparation. */
     runsProgram?: true;
+    /** Only exact stored dataset self-bindings may select the read-only source. */
+    standaloneDataset?: import("./dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance;
     imports: readonly {
       name: string;
       legacyRef: string;
       datasetLegacyId: string;
       datasetVersion: number;
+      mode?: "live" | "pinned";
     }[];
   }[];
 }
@@ -46,6 +49,7 @@ export interface MigrationBackendReceipt {
   members?: { sourceNamespace: string };
   viewer?: { sourceNamespace: string };
   program?: true;
+  standaloneDataset?: import("./dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance;
   sourceQueries?: true;
   backendId: string;
   backendNamespace: "legacyData";

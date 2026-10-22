@@ -16,6 +16,7 @@ import type {
 } from "./dependency-contracts.ts";
 import type { MigrationMediaIndex } from "./media-contracts.ts";
 export interface MigrationJobOptions {
+  standaloneDatasetPages?: import("./dataset-pages/admission-contracts.ts").StandaloneDatasetJobAdmission;
   historicalUnavailable?: import("./historical-unavailable-contracts.ts").HistoricalUnavailablePolicy;
   sourceQueryRegistrations?: readonly import("../datasets/source-query/contracts.ts").MigrationSourceQueryRegistration[];
   ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride;

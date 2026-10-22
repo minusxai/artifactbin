@@ -1,3 +1,4 @@
+import { prepareStandaloneDatasetJob } from "./dataset-pages/job.ts";
 import { prepareMigrationOwnershipDatasetGrants } from "./ownership-dataset-grants.ts";
 import { projectMigrationDatasetOwnership } from "./job-dataset-ownership.ts";
 import { projectMigrationAttachmentBindings } from "./attachment-bindings.ts";
@@ -30,6 +31,7 @@ export async function prepareMigrationJobDatasets(
   options: MigrationJobOptions,
   ports: MigrationBackendPreparationPorts = {},
 ): Promise<MigrationJobDatasets | undefined> {
+  if (options.standaloneDatasetPages) return prepareStandaloneDatasetJob(source, options, ports);
   if (!source.datasets) {
     if (options.sourceQueryRegistrations?.length)
       throw Error("Source query registrations require dataset preparation");

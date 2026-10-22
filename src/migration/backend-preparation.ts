@@ -1,3 +1,4 @@
+import { standaloneDatasetBackendSource } from "./dataset-pages/backend.ts";
 import { generatedSourceQueryBackendSource } from "./source-query-backend.ts";
 import { validateSourceRegistration } from "../datasets/source-query/sql.ts";
 import { registerMigrationViewerBinding } from "./viewer-registration.ts";
@@ -65,8 +66,9 @@ function candidate(namespace: string, page: string, attempt: number): string {
 async function checkedDeployment(
   deployment: CompiledBackend,
   sourceQueries = false,
+  standaloneDataset = false,
 ) {
-  const expectedSource = sourceQueries
+  const expectedSource = standaloneDataset ? standaloneDatasetBackendSource : sourceQueries
     ? generatedSourceQueryBackendSource
     : generatedDatasetBackendSource;
   try {
@@ -139,6 +141,10 @@ export async function prepareMigrationBackends(
       )
         invalid();
       versions.add(revision.version);
+      if (revision.standaloneDataset) {
+        const p = revision.standaloneDataset;
+        if (p.sourceFormat !== "dataset" || p.legacyId !== page.legacyId || p.pageId !== page.pageId || p.pageVersion !== revision.version || p.editId !== revision.editId || !nonempty(p.editId) || !/^[a-f0-9]{64}$/.test(p.artifactSha256) || revision.imports.length !== 1 || revision.imports[0]!.datasetLegacyId !== page.legacyId || revision.imports[0]!.datasetVersion !== revision.version || revision.readsMembers || revision.readsViewer || revision.runsProgram || revision.sourceQueries?.length || revision.mutations?.length) invalid();
+      }
       const names = new Set<string>();
       for (const binding of revision.imports) {
         if (
@@ -233,20 +239,22 @@ export async function prepareMigrationBackends(
       deploymentNamespace: "afmigration",
       sandboxNetwork: "none",
     });
-  const deployments = new Map<boolean, CompiledBackend>();
+  const deployments = new Map<string, CompiledBackend>();
   try {
-    for (const sourceQueries of new Set(
+    for (const sourceKind of new Set(
       required.flatMap((page) =>
-        page.revisions.map((r) => Boolean(r.sourceQueries?.length)),
+        page.revisions.map((r) => r.standaloneDataset ? "standalone" : r.sourceQueries?.length ? "source-query" : "dataset"),
       ),
     )) {
+      const sourceQueries = sourceKind === "source-query";
+      const standaloneDataset = sourceKind === "standalone";
       const deployment = await host.compile(
-        sourceQueries
+        standaloneDataset ? standaloneDatasetBackendSource : sourceQueries
           ? generatedSourceQueryBackendSource
           : generatedDatasetBackendSource,
       );
-      await checkedDeployment(deployment, sourceQueries);
-      deployments.set(sourceQueries, deployment);
+      await checkedDeployment(deployment, sourceQueries, standaloneDataset);
+      deployments.set(sourceKind, deployment);
     }
   } finally {
     if (!ports.host) await host.close?.();
@@ -272,7 +280,7 @@ export async function prepareMigrationBackends(
       (a, b) => a.version - b.version,
     )) {
       const hasSourceQueries = Boolean(revision.sourceQueries?.length);
-      const deployment = deployments.get(hasSourceQueries)!;
+      const deployment = deployments.get(revision.standaloneDataset ? "standalone" : hasSourceQueries ? "source-query" : "dataset")!;
       const readsViewer = revision.readsViewer === true || hasSourceQueries;
       const readsMembers =
         revision.readsMembers ||
@@ -287,6 +295,7 @@ export async function prepareMigrationBackends(
           readsViewer ||
           revision.runsProgram === true,
         ...(revision.runsProgram ? { program: true as const } : {}),
+        ...(revision.standaloneDataset ? { standaloneDataset: revision.standaloneDataset } : {}),
         ...(hasSourceQueries ? { sourceQueries: true as const } : {}),
         ...(readsViewer
           ? { viewer: { sourceNamespace: input.sourceNamespace } }
@@ -364,6 +373,7 @@ export async function prepareMigrationBackends(
           backendVersion: deployment.version,
           backendNamespace: "legacyData",
           ...binding,
+          ...(revision.standaloneDataset ? { standaloneDataset: revision.standaloneDataset } : {}),
         });
     }
   }
@@ -404,7 +414,7 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
 ) => {
   const keys = new Set<string>();
   for (const receipt of receipts) {
-    await checkedDeployment(receipt.deployment, receipt.sourceQueries === true);
+    await checkedDeployment(receipt.deployment, receipt.sourceQueries === true, Boolean(receipt.standaloneDataset));
     if (
       !FILE_ID_PATTERN.test(receipt.pageId) ||
       !FILE_ID_PATTERN.test(receipt.backendId) ||
@@ -421,6 +431,8 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
         (!receipt.linked || !nonempty(receipt.viewer.sourceNamespace))) ||
       (receipt.members !== undefined &&
         (!receipt.linked || !nonempty(receipt.members.sourceNamespace))) ||
+      (receipt.standaloneDataset !== undefined &&
+        (!receipt.linked || receipt.sourceQueries || receipt.program || receipt.viewer || receipt.members || receipt.standaloneDataset.sourceFormat !== "dataset" || receipt.standaloneDataset.legacyId !== receipt.pageLegacyId || receipt.standaloneDataset.pageId !== receipt.pageId || receipt.standaloneDataset.pageVersion !== receipt.pageVersion || !nonempty(receipt.standaloneDataset.editId) || !/^[a-f0-9]{64}$/.test(receipt.standaloneDataset.artifactSha256))) ||
       !nonempty(receipt.owner) ||
       receipt.backendNamespace !== "legacyData" ||
       receipt.sourceSha256 !== digest(receipt.deployment.source) ||

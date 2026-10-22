@@ -1,3 +1,4 @@
+import { convertStandaloneDatasetPage } from "./dataset-pages/convert.ts";
 import { referencedLegacyRawMediaMappings } from "./raw-media.ts";
 import { legacyDocumentSource } from "./conversion/index.ts";
 import { preserveUnavailableHistoricalRevision } from "./historical-unavailable.ts";
@@ -124,6 +125,7 @@ export async function planMigration(
       legacyId: string,
       version: number,
     ) => readonly DatasetBrowserBinding[];
+    standaloneDatasetBinding?: (legacyId: string, version: number) => import("./conversion/compiled/dataset-contracts.ts").CompiledDatasetBinding | undefined;
     datasetUnavailable?: (legacyId: string, version: number) => boolean;
     nativeProgramBinding?: (
       legacyId: string,
@@ -324,6 +326,10 @@ export async function planMigration(
               : undefined,
           coreUrl: options.coreUrl,
         });
+      else if (format === "dataset" && options.standaloneDatasetBinding) {
+        const binding = options.standaloneDatasetBinding(artifact.id, version);
+        conversion = binding ? convertStandaloneDatasetPage({title:String(original.title??artifact.title??"Dataset"),coreUrl:options.coreUrl,source:{kind:"stored",binding}}) : {classification:"manual-blocked",html:null,issues:["dataset-page-exact-binding-required"],identities:{}};
+      }
       else if (format === "program")
         conversion = await convertNativeProgramPage({
           source: String(original.source ?? ""),

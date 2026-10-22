@@ -64,7 +64,10 @@ export function datasetReadable(authority: DatasetReadAuthority): boolean {
     dataset.deleted ||
     !["private", "public", "unlisted"].includes(dataset.visibility) ||
     page.deleted ||
-    page.format !== "markup" ||
+    !(page.format === "markup" || (page.format === "dataset" &&
+      page.standaloneDataset?.kind === "dataset-self-read-v1" &&
+      page.id === dataset.id && page.standaloneDataset.datasetId === dataset.id &&
+      page.standaloneDataset.version === authority.pageVersion)) ||
     !legacyAudienceReadable(page, facts)
   )
     return false;
@@ -99,7 +102,8 @@ export function datasetReadable(authority: DatasetReadAuthority): boolean {
       action: "read",
       facts,
       currentPolicyRevision: dataset.policyRevision,
-      document: page,
+      // A generated wrapper is not an original markup document and grants no artifact selectors.
+      document: page.format === "markup" ? page : undefined,
     })
   );
 }

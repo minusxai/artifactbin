@@ -1,3 +1,4 @@
+import {verifyAdditiveDatasetBase,additiveAuthoritySha256} from "./dataset-pages/additive-authority.ts";
 import {
   registerSourceQueries,
   verifySourceQueries,
@@ -38,6 +39,7 @@ function canonical(value: unknown): string {
 export class PostgresDatasetMetadataDestination
   implements DatasetMetadataDestination
 {
+  private readonly additiveSchema: string;
   private readonly names: ReturnType<typeof destinationSchemas>;
   private readonly db: SqlReader;
   private readonly ownershipOverride?: MigrationOwnershipOverride;
@@ -52,6 +54,7 @@ export class PostgresDatasetMetadataDestination
     this.sourceQueryRegistrations = sourceQueryRegistrations;
     this.db = db;
     this.names = destinationSchemas(schema);
+    this.additiveSchema = schema;
   }
   async import(
     batch: DatasetMigrationBatch,
@@ -92,7 +95,7 @@ export class PostgresDatasetMetadataDestination
         if (users.has(p.actor)) throw new Error("Ambiguous dataset user actor");
         users.add(p.actor);
       }
-    const digest = createHash("sha256").update(canonical(batch)).digest("hex");
+    const digest = createHash("sha256").update(canonical(batch.additive ? {...batch,additive:additiveAuthoritySha256(batch.additive)} : batch)).digest("hex");
     const result = { created: 0, unchanged: 0 };
     await this.db.query("BEGIN");
     try {
@@ -101,6 +104,7 @@ export class PostgresDatasetMetadataDestination
       await this.db.query(
         `LOCK TABLE ${[...plans.map((p) => this.names.runtime + "." + p.table), this.names.runtime + ".dataset_mutation_operations", this.names.runtime + ".dataset_source_queries", this.names.runtime + ".dataset_viewer_bindings"].join(",")} IN SHARE ROW EXCLUSIVE MODE`,
       );
+      if (batch.additive) await verifyAdditiveDatasetBase(this.db, this.additiveSchema, batch);
       for (const { receipt: r } of batch.sourceQueryRegistrations ?? []) {
         const authority = await this.db.query(
           `SELECT 1 FROM ${this.names.runtime}.af_backend_versions v JOIN ${this.names.runtime}.af_page_backends p ON p.file_id=v.file_id AND p.version=v.version JOIN ${this.names.runtime}.dataset_viewer_bindings b ON b.backend_id=v.file_id AND b.backend_version=v.version AND b.page_id=p.page_id AND b.page_version=p.page_version WHERE v.file_id=$1 AND v.version=$2 AND p.page_id=$3 AND p.page_version=$4 AND b.source_namespace=$5`,
@@ -192,11 +196,9 @@ export class PostgresDatasetMetadataDestination
       await this.db.query(
         `CREATE TABLE IF NOT EXISTS ${this.names.archive}.dataset_receipts (source_namespace text PRIMARY KEY, fingerprint text NOT NULL, base_manifest_sha256 text NOT NULL, relation_manifest_sha256 text NOT NULL, relation_exported_at text NOT NULL)`,
       );
-      const receipt = (
-        await this.db.query(
-          `SELECT fingerprint FROM ${this.names.archive}.dataset_receipts WHERE source_namespace=$1`,
-          [batch.metadata.sourceNamespace],
-        )
+      if(batch.additive) await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.names.archive}.dataset_additive_receipts (source_namespace text NOT NULL,authority_sha256 text NOT NULL,fingerprint text NOT NULL,base_fingerprint text NOT NULL,PRIMARY KEY(source_namespace,authority_sha256))`);
+      const receipt = batch.additive ? (await this.db.query(`SELECT fingerprint FROM ${this.names.archive}.dataset_additive_receipts WHERE source_namespace=$1 AND authority_sha256=$2`,[batch.metadata.sourceNamespace,additiveAuthoritySha256(batch.additive)])).rows[0] : (
+        await this.db.query(`SELECT fingerprint FROM ${this.names.archive}.dataset_receipts WHERE source_namespace=$1`,[batch.metadata.sourceNamespace])
       ).rows[0];
       if (receipt && receipt.fingerprint !== digest)
         throw new Error("Dataset migration receipt differs");
@@ -286,7 +288,8 @@ export class PostgresDatasetMetadataDestination
         },
         operations,
       );
-      if (!receipt)
+      if (!receipt && batch.additive) await this.db.query(`INSERT INTO ${this.names.archive}.dataset_additive_receipts VALUES ($1,$2,$3,$4)`,[batch.metadata.sourceNamespace,additiveAuthoritySha256(batch.additive),digest,batch.additive.base.inventory.datasetFingerprint]);
+      if (!receipt && !batch.additive)
         await this.db.query(
           `INSERT INTO ${this.names.archive}.dataset_receipts VALUES ($1,$2,$3,$4,$5)`,
           [
