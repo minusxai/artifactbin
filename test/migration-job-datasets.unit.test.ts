@@ -239,14 +239,18 @@ test("job prepares exact live head bindings and real compiled receipts without i
       if (id !== page.id) return artifact;
       const clone = structuredClone(artifact);
       clone.artifacts[0]!.source =
-        page.source +
-        '<Value name="files" type="string"/><FileUpload dataset="sales" value="$files" accept="image/png"/>';
+        page.source!.replace(
+          "</Helmet>",
+          '<Value name="files" type="string"/></Helmet>',
+        ) + '<FileUpload dataset="sales" value="$files" accept="image/png"/>';
       return clone;
     },
   };
   const uploads = await prepareMigrationJobDatasets(uploadSource, options, {
     host: { compile: async () => deployment, invoke: async () => null },
   });
+  assert.deepEqual([...uploads!.issues], []);
+  assert.equal(uploads!.metadata.operations?.length, 1);
   assert.equal(uploads!.metadata.attachments?.length, 1);
   assert.equal(uploads!.metadata.attachments![0]!.binding.page.version, 2);
   assert.deepEqual(
@@ -255,6 +259,30 @@ test("job prepares exact live head bindings and real compiled receipts without i
   );
   assert.equal(
     uploads!.datasetAttachments?.has(JSON.stringify(["abc123", 1])),
+    false,
+  );
+  const invalidUpload = await prepareMigrationJobDatasets(
+    {
+      ...source,
+      readArtifact: async (id: string) => {
+        const artifact = await source.readArtifact(id);
+        if (id !== page.id) return artifact;
+        const clone = structuredClone(artifact);
+        clone.artifacts[0]!.source =
+          page.source +
+          '<Value name="files" type="string"/><FileUpload dataset="sales" value="$files" accept="image/png"/>';
+        return clone;
+      },
+    },
+    options,
+    { host: { compile: async () => deployment, invoke: async () => null } },
+  );
+  assert.deepEqual(invalidUpload!.issues.get("abc123"), [
+    "mutation-publication",
+  ]);
+  assert.deepEqual(invalidUpload!.metadata.attachments, []);
+  assert.equal(
+    invalidUpload!.datasetAttachments?.has(JSON.stringify(["abc123", 2])),
     false,
   );
   const memberSource = {
