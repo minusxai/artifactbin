@@ -70,6 +70,7 @@ export function createMigrationConverter(
       resourceMap: input.resourceMap,
       datasetBindings: input.datasetBindings,
       datasetMutations: input.datasetMutations,
+      boundValueColumns: input.boundValueColumns,
       datasetUnavailable: input.datasetUnavailable,
       theme: typeof meta.theme === "string" ? meta.theme : null,
       template: typeof meta.template === "string" ? meta.template : null,

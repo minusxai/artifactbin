@@ -1,3 +1,4 @@
+import { prepareMigrationBoundValues } from "./job-bound-values.ts";
 import { prepareMigrationHeadMutations } from "./job-mutations.ts";
 import { createHash } from "node:crypto";
 import { scanMigrationDatasetImports } from "./dataset-scan.ts";
@@ -43,6 +44,11 @@ export async function prepareMigrationJobDatasets(
   const executable = await prepareMigrationHeadMutations(
     source,
     candidates,
+    issues,
+  );
+  const boundValueColumns = await prepareMigrationBoundValues(
+    source,
+    executable,
     issues,
   );
   const prepared = await prepareMigrationBackends(
@@ -172,6 +178,7 @@ export async function prepareMigrationJobDatasets(
   );
   return {
     metadata: accumulator.finish(),
+    boundValueColumns,
     scan,
     bindings,
     mutations,

@@ -73,6 +73,25 @@ test("private conversion cache varies full inputs/compiler, retries corrupt and 
       datasetBindings: [{ ...binding, version: 2 }],
     });
     assert.equal(calls, 6);
+    const proof = {
+      valueName: "who",
+      sourceRef: "ref:abc123",
+      version: 1,
+      bindingName: "rows",
+      schema: "public",
+      table: "rows" as const,
+      column: "who",
+      type: "user" as const,
+      constraints: { self: true },
+    };
+    await a.convert({ ...input, boundValueColumns: [proof] });
+    await a.convert({ ...input, boundValueColumns: [proof] });
+    assert.equal(calls, 7);
+    await a.convert({
+      ...input,
+      boundValueColumns: [{ ...proof, constraints: { self: false } }],
+    });
+    assert.equal(calls, 8);
     let attempts = 0;
     const flaky = cachedMigrationConverter(
       () => {

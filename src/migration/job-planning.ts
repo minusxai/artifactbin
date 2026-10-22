@@ -31,6 +31,10 @@ export function createMigrationJobPlanner(
     const plan = await planMigration(artifact, {
       maps,
       convert,
+      boundValueColumns: (id, version) =>
+        source.preparedDatasets?.boundValueColumns.get(
+          migrationDatasetVersionKey(id, version),
+        ) ?? [],
       datasetMutations: (id, version) =>
         source.preparedDatasets?.mutations.get(
           migrationDatasetVersionKey(id, version),

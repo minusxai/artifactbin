@@ -54,7 +54,10 @@ test("job prepares exact live head bindings and real compiled receipts without i
           {
             schema: "public",
             name: "rows",
-            columns: [{ name: "value", type: "number" }],
+            columns: [
+              { name: "value", type: "number" },
+              { name: "who", type: "user", constraints: { self: true } },
+            ],
             objectKey: "dataset/" + sha.slice(0, 32),
           },
         ],
@@ -185,4 +188,38 @@ test("job prepares exact live head bindings and real compiled receipts without i
     [false, true],
   );
   assert.match(plan.allocation.inventorySha256, /^[a-f0-9]{64}$/);
+  const boundSource = {
+    ...source,
+    readArtifact: async (id: string) => {
+      const artifact = await source.readArtifact(id);
+      if (id !== page.id) return artifact;
+      const clone = structuredClone(artifact);
+      clone.artifacts[0]!.source =
+        '<Helmet><Import name="sales" src="ref:data01"/><Value name="who" source="ref:data01" column="who"/></Helmet>';
+      return clone;
+    },
+  };
+  const bound = await prepareMigrationJobDatasets(boundSource, options, {
+    host: { compile: async () => deployment, invoke: async () => null },
+  });
+  assert.deepEqual(
+    bound!.boundValueColumns.get(JSON.stringify(["abc123", 2])),
+    [
+      {
+        valueName: "who",
+        sourceRef: "ref:data01",
+        version: 3,
+        bindingName: "sales",
+        schema: "public",
+        table: "rows",
+        column: "who",
+        type: "user",
+        constraints: { self: true },
+      },
+    ],
+  );
+  assert.equal(
+    bound!.boundValueColumns.has(JSON.stringify(["abc123", 1])),
+    false,
+  );
 });

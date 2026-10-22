@@ -1,3 +1,4 @@
+import type { BoundValueColumnProof } from "./conversion/compiled/bound-value-contracts.ts";
 import { preservedOrphanActor } from "./orphans.ts";
 import type { CompiledDatasetMutation } from "./conversion/compiled/dataset-mutations-contracts.ts";
 import type { DatasetBrowserBinding } from "./datasets/planner-contracts.ts";
@@ -76,6 +77,10 @@ export async function planMigration(
     convert: Converter;
     coreUrl: string;
     media?: MigrationMediaOptions;
+    boundValueColumns?: (
+      legacyId: string,
+      version: number,
+    ) => readonly BoundValueColumnProof[];
     datasetMutations?: (
       legacyId: string,
       version: number,
@@ -188,6 +193,13 @@ export async function planMigration(
             Number(original.version) !== artifact.version &&
             options.datasetUnavailable?.(artifact.id, Number(original.version))
               ? { reason: "historical-binding-unavailable" }
+              : undefined,
+          boundValueColumns:
+            Number(original.version) === artifact.version
+              ? options.boundValueColumns?.(
+                  artifact.id,
+                  Number(original.version),
+                )
               : undefined,
           datasetMutations:
             Number(original.version) === artifact.version

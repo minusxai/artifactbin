@@ -1,3 +1,4 @@
+import type { BoundValueColumnProof } from "./conversion/compiled/bound-value-contracts.ts";
 import type { CompiledDatasetMutation } from "./conversion/compiled/dataset-mutations-contracts.ts";
 import type { MigrationBackendReceipt } from "./backend-preparation-contracts.ts";
 import type { DatasetBrowserBinding } from "./datasets/planner-contracts.ts";
@@ -28,6 +29,8 @@ export interface SqlReader {
   query(sql: string, values?: unknown[]): Promise<{ rows: LegacyRow[] }>;
 }
 export interface ConversionInput {
+  /** Trusted offline catalog facts; included in cache provenance, never browser data. */
+  boundValueColumns?: readonly BoundValueColumnProof[];
   datasetUnavailable?: { reason: "historical-binding-unavailable" };
   datasetMutations?: readonly CompiledDatasetMutation[];
   datasetBindings?: readonly DatasetBrowserBinding[];
