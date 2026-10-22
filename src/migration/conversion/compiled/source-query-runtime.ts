@@ -94,7 +94,8 @@ export function createCompiledSourceQueryEngine(
     if (
       t.totalRows !== undefined &&
       (!Number.isSafeInteger(t.totalRows) ||
-        Number(t.totalRows) < request.offset + t.rows.length)
+        Number(t.totalRows) <
+          (t.rows.length ? request.offset + t.rows.length : 0))
     )
       throw Error("Invalid source query count");
     if (t.truncated === true && t.totalRows === undefined)
@@ -108,17 +109,25 @@ export function createCompiledSourceQueryEngine(
     async run(flow, names, evaluation) {
       const tables: Record<string, CompiledDisplayTable> = {},
         errors: Record<string, string> = {};
-      for (const name of names)
-        try {
-          tables[name] = await page(
-            flow,
-            name,
-            { offset: 0, limit: 1000 },
-            evaluation,
-          );
-        } catch {
-          errors[name] = "Source query unavailable";
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < names.length) {
+          const name = names[cursor++]!;
+          try {
+            tables[name] = await page(
+              flow,
+              name,
+              { offset: 0, limit: 1000 },
+              evaluation,
+            );
+          } catch {
+            errors[name] = "Source query unavailable";
+          }
         }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(4, names.length) }, worker),
+      );
       return { tables, errors };
     },
   };

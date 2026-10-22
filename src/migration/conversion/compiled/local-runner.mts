@@ -147,6 +147,7 @@ const rawFlow = {
   mutations: [],
   values: split.content.values,
 };
+if(input.sourceQueries?.length&&!rawFlow.queries.length)throw Error("Unused source query proof");
 let flow: any = rawFlow;
 let results: any = null;
 if(!prototype&&input.viewerBinding&&!(await readsLegacyViewer(input.source)))throw Error("Unused viewer binding");

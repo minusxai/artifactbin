@@ -50,3 +50,16 @@ export interface LegacySourceQuerySite {
   sql: string;
   sqlSha256: string;
 }
+/** Trusted offline catalog expansion; this text is stored only in server registrations. */
+export interface SourceQueryExpansion {
+  executionSql: string;
+  executionSqlSha256: string;
+  params: Readonly<Record<string, LocalColumnType>>;
+}
+export interface SourceQueryExpansionPorts {
+  compile(
+    sql: string,
+    values: Readonly<Record<string, unknown>>,
+    types: Readonly<Record<string, LocalColumnType>>,
+  ): { sql: string; values: unknown[] };
+}

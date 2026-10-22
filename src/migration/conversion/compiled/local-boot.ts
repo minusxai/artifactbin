@@ -83,7 +83,7 @@ export function boot({TREE}) {
  const stopControlRuns=()=>queryController?.dispose();
  window.addEventListener('pagehide',event=>{if(!event.persisted)stopControlRuns();});
  ${sql ? `setTables(Object.fromEntries(Object.entries(${JSON.stringify(sql.tables)}).filter(([name,t])=>!optionQueries.includes(name)||!t.truncated)));
- queryController=createCompiledQueryController({queries:flow.queries.map(q=>q.name),optionQueries,deadlineMs:${imports ? 15000 : 5000}},{
+ queryController=createCompiledQueryController({queries:flow.queries.map(q=>q.name),optionQueries,deadlineMs:${imports||sql.sourceQueries?.length ? 15000 : 5000}},{
  engine:{prepare:()=>engine.prepare(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"}),ready:()=>engine.ready(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"}),run:evaluation=>engine.run(flow,flow.queries.map(q=>q.name),evaluation),page:(name,page,evaluation)=>engine.page(flow,name,page,evaluation)},
  evaluation:async()=>{${members ? "const memberRows=(await membersAdapter.read()).rows;" : ""}return {values:values(),localTables:localTables(),userId:${viewerBinding ? "viewer()?.id??null" : "null"},now:new Date().toISOString(),tz:'UTC'${members ? ",members:memberRows" : ""}};},
  availability:()=>${viewerBinding ? "!viewerAvailable?'blocked':" : ""}${identities ? "identityFailed?'blocked':" : ""}${imports ? "datasetReadFailed?'failed':" : ""}'ready',

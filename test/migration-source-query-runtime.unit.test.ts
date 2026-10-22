@@ -90,3 +90,27 @@ test("source query responses reject extra schema, invalid types, truncation ambi
     denied.page(null, "rows", { offset: 0, limit: 10 }, evaluation),
   );
 });
+
+test("source query fanout stays bounded while independent queries can progress", async () => {
+  let active = 0,
+    peak = 0;
+  const engine = createCompiledSourceQueryEngine(
+    Array.from({ length: 9 }, (_, i) => ({ ...binding, name: "q" + i })),
+    {
+      read: async () => {
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise((r) => setImmediate(r));
+        active--;
+        return JSON.stringify(table);
+      },
+    },
+  );
+  const answer = await engine.run(
+    null,
+    Array.from({ length: 9 }, (_, i) => "q" + i),
+    evaluation,
+  );
+  assert.equal(Object.keys(answer.tables).length, 9);
+  assert.equal(peak, 4);
+});
