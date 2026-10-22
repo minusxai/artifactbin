@@ -18,7 +18,8 @@ export function evaluateLocalReactiveExpression(expr:LocalReactiveExpression,con
       if(expr.op==='&&')return left && evaluateLocalReactiveExpression(expr.right,context);
       if(expr.op==='||')return left || evaluateLocalReactiveExpression(expr.right,context);
       const right=evaluateLocalReactiveExpression(expr.right,context);
-      // The admitted grammar compares JSON scalar values with archived JS semantics.
+      if(expr.op!=='==='&&expr.op!=='!=='&& !((typeof left==='number'&&typeof right==='number')||(typeof left==='string'&&typeof right==='string')))return false;
+      // Archived relational operators compare only matching number/string types.
       switch(expr.op){
         case '===':return left===right;
         case '!==':return left!==right;

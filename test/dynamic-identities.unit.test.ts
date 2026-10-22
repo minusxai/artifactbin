@@ -16,3 +16,10 @@ test('expression evaluator keeps short circuit and row semantics',()=>{
  assert.equal(evaluateLocalReactiveExpression({kind:'binary',op:'&&',left:{kind:'signal',name:'open'},right:{kind:'row',field:'x'}},{values:{open:false},row:{x:3}}),false);
  assert.equal(evaluateLocalReactiveExpression({kind:'row',field:'missing'},{values:{},row:{}}),null);
 });
+
+test('relational branches reject mixed types and null without JS coercion',()=>{
+ for(const [left,right] of [[null,1],['2',3],[1,'2'],[false,1]] as const) {
+  assert.equal(evaluateLocalReactiveExpression({kind:'binary',op:'<',left:{kind:'literal',value:left},right:{kind:'literal',value:right}},{values:{}}),false);
+ }
+ assert.equal(evaluateLocalReactiveExpression({kind:'binary',op:'<',left:{kind:'literal',value:'a'},right:{kind:'literal',value:'b'}},{values:{}}),true);
+});
