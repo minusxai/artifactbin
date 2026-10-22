@@ -54,6 +54,9 @@ export interface CompiledLocalResult extends ConversionResult {
     contexts?: readonly import("./context-contracts.ts").CompiledContextReference[];
     fontResources?: readonly import("./fonts/contracts.ts").InlinedFontReceipt[];
     fontBundleResourceDigest?: string;
-    compatibility?: readonly import("./table-presentation-contracts.ts").TablePresentationCompatibility[];
+    compatibility?: readonly (
+      | import("./table-presentation-contracts.ts").TablePresentationCompatibility
+      | import("./data-control-contracts.ts").SelectCompatibility
+    )[];
   };
 }

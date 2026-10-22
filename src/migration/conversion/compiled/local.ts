@@ -86,7 +86,7 @@ export async function compileArchivedLocal(
   }
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE) return blocked("compiled-page-limit");
   const compatibility = [...new Set((input.dataControls ?? []).flatMap(p =>
-    p.kind === "table" ? p.compatibility ?? [] : []))];
+    p.compatibility ?? []))];
   return {
     classification: historical ? "renderable" : "functional",
     html,

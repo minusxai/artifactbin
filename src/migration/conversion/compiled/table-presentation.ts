@@ -9,6 +9,7 @@ export function readLegacyTablePresentation(
   attrs: Record<string, unknown>,
 ): LegacyTablePresentation {
   const compatibility = new Set<TablePresentationCompatibility>();
+  if (attrs.title !== undefined) compatibility.add("ignored-table-title");
   const height =
     attrs.height === "auto" || attrs.height === "100%" ? 420 : attrs.height;
   if (height !== attrs.height) compatibility.add("default-table-height");
@@ -43,9 +44,11 @@ export function readLegacyTablePresentation(
         if (
           typeof entry.col === "string" &&
           typeof entry.width === "string" &&
-          /^\d+(?:\.\d+)?%$/.test(entry.width) &&
-          parseFloat(entry.width) > 0 &&
-          parseFloat(entry.width) <= 100
+          (entry.width === "auto" ||
+            (/^\d+(?:\.\d+)?(?:%|px|rem|em|ch|vw|vh)?$/.test(entry.width) &&
+              parseFloat(entry.width) > 0 &&
+              parseFloat(entry.width) <=
+                (entry.width.endsWith("%") ? 100 : 4096)))
         ) {
           compatibility.add("ignored-column-width");
           const { width: _ignored, ...rest } = entry;

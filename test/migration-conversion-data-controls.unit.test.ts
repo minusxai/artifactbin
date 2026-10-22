@@ -21,9 +21,9 @@ test("query-backed and finite static Select options preserve scalar binding whil
     "select",
   );
   for (const props of [
-    { run: "$save" },
-    { multiple: true },
-    { allowCreate: true },
+    { run: "save()" },
+    { multiple: "true" },
+    { allowCreate: "true" },
     { value: "literal" },
     { options: [{ value: 1, run: "save" }] },
   ])

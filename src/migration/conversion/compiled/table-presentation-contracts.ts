@@ -2,7 +2,8 @@
 export type TablePresentationCompatibility =
   | "ignored-column-width"
   | "ignored-column-entry"
-  | "default-table-height";
+  | "default-table-height"
+  | "ignored-table-title";
 export interface LegacyTablePresentation {
   readonly columns?: readonly unknown[];
   readonly height?: unknown;

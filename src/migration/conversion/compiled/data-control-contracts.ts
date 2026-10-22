@@ -1,5 +1,10 @@
 export type CompiledDataControl =
-  | { kind: "select"; value: string; options: string | readonly unknown[] }
+  | {
+      kind: "select";
+      value: string;
+      options: string | readonly unknown[];
+      compatibility?: readonly SelectCompatibility[];
+    }
   | {
       kind: "table";
       data: string;
@@ -25,9 +30,16 @@ export interface CompiledDataColumn {
   title?: string;
   fmt?: string;
   align?: "left" | "right" | "center";
-  /** Percentage strings were ignored by the frozen renderer and remain ignored. */
+  /** Bounded literal CSS length strings were ignored by the frozen renderer and remain ignored. */
   width?: number | string;
   bar?: boolean;
   colorScale?: "sequential" | "diverging";
   hasContent: boolean;
 }
+
+/** Frozen behavior retained verbatim; these never grant mutation authority. */
+export type SelectCompatibility =
+  | "empty-select-pair-options"
+  | "ignored-select-run"
+  | "ignored-select-value-format"
+  | "ignored-select-allow-create";

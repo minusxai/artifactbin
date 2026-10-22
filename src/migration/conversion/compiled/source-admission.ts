@@ -461,7 +461,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
                 }
               }
           }
-          if (attr.name?.name === "run") {
+          if (attr.name?.name === "run" && !(!editingCell && name === "Select")) {
             const run = attr.value?.value;
             if (
               (!editingCell && name !== "Button") ||

@@ -29,7 +29,18 @@ export function admitDataControl(
     throw Error("Unsupported data control");
   const allowed =
     tag === "Select"
-      ? ["id", "label", "value", "options", "placeholder", "className"]
+      ? [
+          "id",
+          "label",
+          "value",
+          "options",
+          "placeholder",
+          "className",
+          "multiple",
+          "valueFormat",
+          "allowCreate",
+          "run",
+        ]
       : [
           "id",
           "data",
@@ -43,6 +54,7 @@ export function admitDataControl(
           "metrics",
           "edge",
           "sticky",
+          "title",
         ];
   if (
     Object.keys(attrs).some(
@@ -50,11 +62,34 @@ export function admitDataControl(
     )
   )
     throw Error("Unsupported data control attribute");
-  for (const key of ["id", "label", "placeholder", "className", "rowKey"])
+  for (const key of [
+    "id",
+    "label",
+    "placeholder",
+    "className",
+    "rowKey",
+    "title",
+  ])
     if (attrs[key] !== undefined && !text(attrs[key]))
       throw Error("Invalid data control text");
   if (tag === "Select") {
     if (!ref(attrs.value)) throw Error("Select requires a declared scalar");
+    const compatibility: import("./data-control-contracts.ts").SelectCompatibility[] =
+      [];
+    for (const key of ["multiple", "allowCreate"])
+      if (attrs[key] !== undefined && typeof attrs[key] !== "boolean")
+        throw Error("Invalid Select flag");
+    if (attrs.valueFormat !== undefined && attrs.valueFormat !== "json")
+      throw Error("Unsupported Select format");
+    if (attrs.run !== undefined && !ref(attrs.run))
+      throw Error("Unsupported Select run");
+    const pair = (o: unknown) =>
+      Array.isArray(o) &&
+      o.length === 2 &&
+      Object.hasOwn(o, 0) &&
+      Object.hasOwn(o, 1) &&
+      Object.keys(o).length === 2 &&
+      o.every(scalar);
     const options = attrs.options;
     if (
       !ref(options) &&
@@ -64,6 +99,7 @@ export function admitDataControl(
         options.every(
           (o: any) =>
             scalar(o) ||
+            pair(o) ||
             (o &&
               typeof o === "object" &&
               !Array.isArray(o) &&
@@ -75,8 +111,16 @@ export function admitDataControl(
       )
     )
       throw Error("Select requires finite options");
+    if (Array.isArray(options) && options.some(pair))
+      compatibility.push("empty-select-pair-options");
+    if (attrs.run !== undefined) compatibility.push("ignored-select-run");
+    if (attrs.valueFormat !== undefined)
+      compatibility.push("ignored-select-value-format");
+    if (attrs.allowCreate !== undefined)
+      compatibility.push("ignored-select-allow-create");
     return {
       kind: "select",
+      ...(compatibility.length ? { compatibility } : {}),
       value: (attrs.value as string).slice(1),
       options:
         typeof options === "string" ? options.slice(1) : (options as unknown[]),
