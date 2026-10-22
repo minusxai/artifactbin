@@ -1,4 +1,4 @@
-import type { DatasetMutationParameterType } from "./parameter-contracts.ts";
+import type { DatasetMutationParameterType, DatasetMutationRowParameters } from "./parameter-contracts.ts";
 /** Public scalar inputs only. Null metadata means an untyped scalar, never an
  * implicit string conversion and never an object/array/caller fact. */
 export function validDatasetMutationParameterType(
@@ -93,6 +93,7 @@ export const datasetMutationSystemParameter = (name: string) =>
 export function validDatasetMutationValueParameter(
   value: unknown,
   flat: Readonly<Record<string, DatasetMutationParameterType>>,
+  rows?: unknown,
 ): boolean {
   if (value === undefined) return true;
   return (
@@ -102,6 +103,8 @@ export function validDatasetMutationValueParameter(
     value.type !== null &&
     validDatasetMutationParameterType(value.type) &&
     Object.hasOwn(flat, value.param) &&
-    flat[value.param] === value.type
+    flat[value.param] === value.type &&
+    validDatasetMutationRowParameters(rows, flat) &&
+    (rows === undefined || !Object.values(rows as DatasetMutationRowParameters).some((row) => row.param === value.param))
   );
 }

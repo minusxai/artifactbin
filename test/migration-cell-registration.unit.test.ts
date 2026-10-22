@@ -41,6 +41,10 @@ test("publication validates immutable cell metadata before accessing a binding o
     );
     assert.equal(queries, 0);
   }
+  let overlapQueries = 0;
+  const overlapClient = { query: async () => { overlapQueries++; throw Error("must not query"); } } as unknown as SqlClient;
+  await assert.rejects(registerDatasetMutationOperations(overlapClient,[{sourceNamespace:"test",bindingName:"data",operation:{...operation,rowParams:{id:{param:"cell__value",type:"number"}}}}]),/denied/);
+  assert.equal(overlapQueries,0);
   let queries = 0;
   const client = {
     query: async () => {

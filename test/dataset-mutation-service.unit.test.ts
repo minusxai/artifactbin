@@ -492,3 +492,10 @@ test("cell registration rejects forged metadata and wrong scalar values before a
     f.result,
   );
 });
+
+test("row and cell generated parameters cannot own the same server slot", async () => {
+ const f=fixture();
+ f.ports.operation=async()=>({...operation,paramTypes:{cell__value:"number"},valueParam:{param:"cell__value",type:"number"},rowParams:{id:{param:"cell__value",type:"number"}}});
+ await assert.rejects(createDatasetMutationService(f.ports).mutate(context,{...request,params:{cell__value:1}}),/invalid_request/);
+ assert.deepEqual(f.calls,[]);
+});

@@ -66,7 +66,7 @@ export const registerDatasetMutationOperations: RegisterDatasetOperations =
         (o.readsMembers !== undefined && o.readsMembers !== true) ||
         !validDatasetMutationParameterMap(o.paramTypes) ||
         !validDatasetMutationRowParameters(o.rowParams, o.paramTypes) ||
-        !validDatasetMutationValueParameter(o.valueParam, o.paramTypes)
+        !validDatasetMutationValueParameter(o.valueParam, o.paramTypes, o.rowParams)
       )
         deny();
       const binding = (

@@ -90,6 +90,7 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
         !validDatasetMutationValueParameter(
           operation.valueParam,
           operation.paramTypes,
+          operation.rowParams,
         ) ||
         !validDatasetMutationRowParameters(
           operation.rowParams,
