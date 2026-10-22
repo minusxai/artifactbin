@@ -350,7 +350,25 @@ export function planDatasetMetadata(
           metadata.acceptedJoins as Array<
             DatasetImportMetadata["acceptedJoins"][number]
           >
-        ).push({ pageId: b.pageId, legacyUserId });
+        ).push({
+          pageId: b.pageId,
+          legacyUserId,
+          joinedAt: (() => {
+            const relation = (manifest.tables.relations ?? []).find(
+              (r) =>
+                r.subject_kind === "user" &&
+                r.verb === "join" &&
+                r.object_kind === "artifact" &&
+                r.object_id === page.id &&
+                r.subject_id === legacyUserId &&
+                r.status === "accepted",
+            );
+            const at = relation?.joined_at;
+            return typeof at === "string" && Number.isFinite(Date.parse(at))
+              ? new Date(at).toISOString()
+              : null;
+          })(),
+        });
     }
     const current = metadata.resources.find(
       (r) => r.legacyId === b.datasetLegacyId,

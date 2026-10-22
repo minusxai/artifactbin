@@ -159,6 +159,7 @@ test("accepted joins come only from exact accepted source relations, including l
       object_id: "document",
       status: "accepted",
       deleted_at: "2020-01-01",
+      joined_at: "2019-01-01T00:00:00Z",
     },
     {
       subject_kind: "user",
@@ -171,7 +172,11 @@ test("accepted joins come only from exact accepted source relations, including l
   ];
   const plan = planDatasetMetadata(a);
   assert.deepEqual(plan.metadata.acceptedJoins, [
-    { pageId: "Doc123", legacyUserId: "user" },
+    {
+      pageId: "Doc123",
+      legacyUserId: "user",
+      joinedAt: "2019-01-01T00:00:00.000Z",
+    },
   ]);
   assert.equal(
     plan.provenance.relationExportedAt,

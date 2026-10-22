@@ -48,5 +48,10 @@ export interface DatasetImportMetadata {
   }[];
   groups: readonly { owner: string; legacyGroupId: string }[];
   /** Current accepted joins; removals take effect on the next authority read. */
-  acceptedJoins: readonly { pageId: string; legacyUserId: string }[];
+  acceptedJoins: readonly {
+    pageId: string;
+    legacyUserId: string;
+    /** Original accepted join instant; absent legacy values are unavailable, never synthesized. */
+    joinedAt?: string | null;
+  }[];
 }

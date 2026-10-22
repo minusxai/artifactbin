@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS dataset_groups (
  PRIMARY KEY(source_namespace,legacy_group_id)
 );
 CREATE TABLE IF NOT EXISTS dataset_page_joins (
- page_id text NOT NULL REFERENCES files(id) ON DELETE CASCADE, source_namespace text NOT NULL, legacy_user_id text NOT NULL,
+ page_id text NOT NULL REFERENCES files(id) ON DELETE CASCADE, source_namespace text NOT NULL, legacy_user_id text NOT NULL, joined_at timestamptz,
  PRIMARY KEY(page_id,source_namespace,legacy_user_id)
 );
 -- A saved binding/catalog/page snapshot is append-only; policy lives on dataset_resources.
@@ -79,3 +79,16 @@ CREATE TABLE IF NOT EXISTS dataset_invalidations (
  version bigint NOT NULL, generation integer NOT NULL, created_at bigint NOT NULL,
  UNIQUE(source_namespace,dataset_id,version)
 );
+
+ALTER TABLE dataset_page_joins ADD COLUMN IF NOT EXISTS joined_at timestamptz;
+
+-- Serialize accepted-join insertions, removals and timestamp changes with readers
+-- holding the executing page row. This also closes phantom insert races.
+CREATE OR REPLACE FUNCTION lock_dataset_join_page() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP <> 'INSERT' THEN PERFORM id FROM files WHERE id=OLD.page_id FOR UPDATE; END IF;
+ IF TG_OP <> 'DELETE' THEN PERFORM id FROM files WHERE id=NEW.page_id FOR UPDATE; RETURN NEW; END IF;
+ RETURN OLD;
+END $$;
+DROP TRIGGER IF EXISTS dataset_join_page_lock ON dataset_page_joins;
+CREATE TRIGGER dataset_join_page_lock BEFORE INSERT OR UPDATE OR DELETE ON dataset_page_joins FOR EACH ROW EXECUTE FUNCTION lock_dataset_join_page();
