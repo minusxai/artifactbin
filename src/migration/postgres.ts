@@ -1,3 +1,5 @@
+import {projectMigrationAccountProfiles} from "./account-profiles.ts";
+import type {MigrationAccountProfileSummary} from "./account-profile-contracts.ts";
 import { migrationCommentAssetRecords } from "./assets/comment-records.ts";
 import {projectMigrationCommentContext} from "./comment-projection.ts";
 import {preservedOrphanActor} from "./orphans.ts";
@@ -8,7 +10,7 @@ import {readFile} from 'node:fs/promises';
 import {prepareMigrationPageSources} from "./page-source-preparation.ts";
 import {normalizePath} from '../path-model.ts';
 import {planMigrationGroups} from './groups.ts';
-import {planMigrationIdentities,isPreservedNonloginActor} from './identities.ts';
+import {planMigrationIdentities} from './identities.ts';
 import type {ImportDestination,MigrationManifest,MigrationMaps,PlannedPage,SqlReader} from './contracts.ts';
 import type {DestinationOptions,DestinationPreparation} from './postgres-contracts.ts';
 import {destinationSchemas} from './destination-schema.ts';
@@ -30,6 +32,7 @@ export function destinationAccess(page:PlannedPage,maps?:MigrationMaps):Record<s
  return {visibility:page.access.visibility,linkRole:page.access.linkRole,shares,version:0};
 }
 export class PostgresMigrationDestination implements ImportDestination {
+ accountProfileSummary?:MigrationAccountProfileSummary;
  private maps:MigrationMaps={users:{},tokens:{},groups:{},pages:{}};
  private namespace='';
  private readonly db:SqlReader;
@@ -63,13 +66,7 @@ export class PostgresMigrationDestination implements ImportDestination {
     if (!/^legacy-orphan:[a-f0-9]{64}$/.test(actor) || !account || account.principal_kind !== 'user' || account.salt !== null || account.password !== null || account.handle !== null)
      throw new Error('Orphan principal conflicts with existing account');
    }
-   for(const user of input.manifest.tables.users??[]){
-    const actor=input.maps.users[String(user.id)];if(!actor)continue;
-    if(typeof user.name==='string')await this.db.query('UPDATE accounts SET name=COALESCE(name,$2) WHERE actor=$1',[actor,user.name]);
-    if(isPreservedNonloginActor(actor))continue;
-    const handle=typeof user.username==='string'?user.username.toLowerCase():null;
-    if(handle&&/^[a-z0-9]+(-[a-z0-9]+)*$/.test(handle)&&handle.length>=3&&handle.length<=32)await this.db.query('UPDATE accounts SET handle=$2 WHERE actor=$1 AND handle IS NULL AND NOT EXISTS(SELECT 1 FROM accounts WHERE handle=$2)',[actor,handle]);
-   }
+   this.accountProfileSummary=await projectMigrationAccountProfiles(this.db,input.manifest.tables.users??[],input.maps.users,!old);
 
    for(const group of planMigrationGroups(input.manifest,input.maps.users).groups){
     if(input.maps.groups[group.legacyId]!==group.actor)throw new Error('Group mapping mismatch');

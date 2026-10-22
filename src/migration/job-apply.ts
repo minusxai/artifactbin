@@ -47,6 +47,13 @@ export async function applyMigrationJob(
       }),
     );
     await destination.prepare({ manifest: base, maps });
+    if (destination.accountProfileSummary)
+      for (const [key, value] of Object.entries(
+        destination.accountProfileSummary,
+      ))
+        source.identitySummary[
+          "accountProfile" + key[0]!.toUpperCase() + key.slice(1)
+        ] = value;
     for (const id of ids) {
       if (!ready.has(maps.pages[id]!)) continue;
       const plan = await planArtifact(await source.readArtifact(id));
