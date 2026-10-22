@@ -228,3 +228,21 @@ test("offline bound planning ignores unrelated unbound Value expressions", () =>
     1,
   );
 });
+
+import { hasLegacyBoundValueSource } from "../src/migration/conversion/compiled/bound-values.ts";
+test("historical bound-service classification follows JSX attributes without evaluating values", () => {
+  assert.equal(hasLegacyBoundValueSource(source), true);
+  assert.equal(
+    hasLegacyBoundValueSource(
+      '<Value name="person" source={dynamicSource} column="owner"/>',
+    ),
+    true,
+  );
+  for (const text of [
+    '<Value name="ordinary"/>',
+    "<p>source</p>",
+    '<script>const text="source"</script>',
+    "<Value",
+  ])
+    assert.equal(hasLegacyBoundValueSource(text), false);
+});

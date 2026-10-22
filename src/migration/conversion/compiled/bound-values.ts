@@ -14,6 +14,37 @@ import { MAX_COMPILED_SOURCE_BYTES } from "./contracts.ts";
 function refuse(): never {
   throw Error("Unsupported bound Value authority");
 }
+function containsBound(n: any): boolean {
+  if (!n || typeof n !== "object") return false;
+  if (
+    n.type === "JSXElement" &&
+    n.openingElement.name.name === "Value" &&
+    n.openingElement.attributes.some(
+      (a: any) => a.type === "JSXAttribute" && a.name?.name === "source",
+    )
+  )
+    return true;
+  return Object.values(n).some((v) =>
+    Array.isArray(v) ? v.some(containsBound) : containsBound(v),
+  );
+}
+/** Source-only classification for historical service availability; never grants authority. */
+export function hasLegacyBoundValueSource(source: string): boolean {
+  try {
+    if (
+      typeof source !== "string" ||
+      Buffer.byteLength(source) > MAX_COMPILED_SOURCE_BYTES
+    )
+      return false;
+    const text = "<> " + source + " </>",
+      tree = Parser.extend(jsx()).parseExpressionAt(text, 0, {
+        ecmaVersion: "latest",
+      }) as any;
+    return tree.end === text.length && containsBound(tree);
+  } catch {
+    return false;
+  }
+}
 /** Reads source literals and trusted metadata only; never source code, rows or memberships. */
 export const readBoundValueColumnProofs: ReadBoundValueColumnProofs = (
   source,
@@ -31,20 +62,6 @@ export const readBoundValueColumnProofs: ReadBoundValueColumnProofs = (
       ecmaVersion: "latest",
     }) as any;
   if (tree.end !== text.length) refuse();
-  const containsBound = (n: any): boolean => {
-    if (!n || typeof n !== "object") return false;
-    if (
-      n.type === "JSXElement" &&
-      n.openingElement.name.name === "Value" &&
-      n.openingElement.attributes.some(
-        (a: any) => a.type === "JSXAttribute" && a.name?.name === "source",
-      )
-    )
-      return true;
-    return Object.values(n).some((v) =>
-      Array.isArray(v) ? v.some(containsBound) : containsBound(v),
-    );
-  };
   if (!containsBound(tree)) return [];
   const imports = new Map<string, { ref: string; version?: number }>(),
     values: any[] = [];
@@ -59,6 +76,18 @@ export const readBoundValueColumnProofs: ReadBoundValueColumnProofs = (
             (a: any) => a.type === "JSXAttribute" && a.name?.name === "source",
           ))
       ) {
+        if (tag === "Import") {
+          const name = n.openingElement.attributes.find(
+            (a: any) => a.type === "JSXAttribute" && a.name?.name === "name",
+          );
+          let bindingName: unknown;
+          try {
+            bindingName = name?.value && readLocalSourceLiteral(name.value);
+          } catch {
+            return;
+          }
+          if (!catalogs.some((c) => c.bindingName === bindingName)) return;
+        }
         const attrs: Record<string, unknown> = Object.create(null);
         for (const a of n.openingElement.attributes) {
           if (a.type !== "JSXAttribute" || Object.hasOwn(attrs, a.name?.name))
