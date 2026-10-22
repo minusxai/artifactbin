@@ -1,5 +1,5 @@
-import {parsePageRevision} from "./server/page-revision.ts";
 // @ts-check
+import { parsePageRevision } from "./server/page-revision.ts";
 import { readFileSync } from "node:fs";
 import { hash } from "./server/text.ts";
 import { fail } from "./errors.ts";
@@ -40,7 +40,7 @@ export const exampleBackend = () =>
  * accounts: ReturnType<typeof import('./server/account-service.ts').createAccountService>,
  * pages: import('./server/af-pages.ts').PageService,
  * example(actor:string, requestId:unknown): Promise<{source:string, files?:Record<string,string>}>,
- * download(credential:string, id:string, res:import('node:http').ServerResponse, origin:string): Promise<void>}} options
+ * download(credential:string, id:string, res:import('node:http').ServerResponse, origin:string, selection:import('./server/page-revision-contracts.ts').PageRevisionSelection): Promise<void>}} options
  */
 export function libraryHandler({
   catalog,
@@ -153,8 +153,13 @@ export function libraryHandler({
       url.pathname,
     );
     if (downloadRoute && req.method === "GET") {
-      if (parsePageRevision(url.searchParams).kind === "saved") fail(400,"Download a saved version from its page address");
-      return download(credential, downloadRoute[1] || "", res, origin);
+      return download(
+        credential,
+        downloadRoute[1] || "",
+        res,
+        origin,
+        parsePageRevision(url.searchParams),
+      );
     }
     if (!representation || req.method !== "GET") fail(404, "Not found");
     const id = representation[1] || "";

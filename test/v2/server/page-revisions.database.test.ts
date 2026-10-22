@@ -53,7 +53,9 @@ test("saved version remains exact across address bootstrap, source API and reado
       token,
     });
     assert.equal((await api.json()).source, source);
-    const beforeGrants = await server.query("SELECT count(*)::int AS n FROM sessions WHERE purpose='document'");
+    const beforeGrants = await server.query(
+      "SELECT count(*)::int AS n FROM sessions WHERE purpose='document'",
+    );
     const hosted = await (
       await server.request(boot.stateUrl, { token })
     ).json();
@@ -67,7 +69,12 @@ test("saved version remains exact across address bootstrap, source API and reado
     assert.equal(hosted.state.contextOnly, true);
     assert.equal(hosted.state.remote, null);
     assert.equal(hosted.seed, null);
-    assert.deepEqual(await server.query("SELECT count(*)::int AS n FROM sessions WHERE purpose='document'"),beforeGrants);
+    assert.deepEqual(
+      await server.query(
+        "SELECT count(*)::int AS n FROM sessions WHERE purpose='document'",
+      ),
+      beforeGrants,
+    );
     const download = await server.request(`/a/${id}?version=1&download=1`);
     assert.equal(download.status, 200);
     const downloaded = await download.text();
@@ -121,6 +128,40 @@ test("invalid or missing saved versions fail consistently and private source aut
       `/api/library/${id}/host?version=1`,
     );
     assert.notEqual(privateHost.status, 200);
+  } finally {
+    await server.close();
+  }
+});
+
+test("library downloads select head or the exact saved revision", async () => {
+  const { server, token, id } = await fixture();
+  try {
+    const options = { token, headers: { "x-pagegi-home": "1" } };
+    const head = await server.request(`/api/library/${id}/download`, options);
+    assert.equal(head.status, 200);
+    assert.match(head.headers.get("content-disposition") || "", /attachment/);
+    const headSource = await head.text();
+    assert.match(headSource, /Current two/);
+    assert.doesNotMatch(headSource, /Saved one/);
+    const saved = await server.request(
+      `/api/library/${id}/download?version=1`,
+      options,
+    );
+    assert.equal(saved.status, 200);
+    const savedSource = await saved.text();
+    assert.match(savedSource, /Saved one/);
+    assert.doesNotMatch(savedSource, /Current two/);
+    for (const query of ["version=", "version=invalid", "version=1&version=2"])
+      assert.equal(
+        (await server.request(`/api/library/${id}/download?${query}`, options))
+          .status,
+        400,
+      );
+    assert.equal(
+      (await server.request(`/api/library/${id}/download?version=999`, options))
+        .status,
+      404,
+    );
   } finally {
     await server.close();
   }

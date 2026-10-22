@@ -717,7 +717,7 @@ export function createService({
         files: { [String(backendId)]: exampleBackend() },
       };
     },
-    async download(viewer, id, res, origin) {
+    async download(viewer, id, res, origin, selection) {
       const found = await pages.address(viewer, id, selection);
       if (found.kind !== "page") fail(404, "Not found");
       await sendDownload(res, found.page, origin);
