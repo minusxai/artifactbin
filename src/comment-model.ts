@@ -1,3 +1,4 @@
+import { isStableNodeId } from "./domain/stable-node-id.ts";
 import type { CommentModel } from "./comment-model-contracts.ts";
 import type { CommentDraft, Snapshot, Json } from "./contracts.ts";
 import { jsonCopy } from "./json.ts";
@@ -37,7 +38,7 @@ function validateDraft(draft: CommentDraft) {
   text(draft.id, 100);
   text(draft.body);
   text(draft.sourceRevision, 100);
-  if (draft.nodeId !== null && typeof draft.nodeId !== "string")
+  if (draft.nodeId !== null && !isStableNodeId(draft.nodeId))
     fail(422, "Invalid comment anchor");
   if (draft.parentId !== null && typeof draft.parentId !== "string")
     fail(422, "Invalid reply parent");

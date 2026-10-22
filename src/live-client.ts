@@ -1,3 +1,4 @@
+import { isStableNodeId } from "./domain/stable-node-id.ts";
 import type {
   LiveClient,
   LiveClientOptions,
@@ -80,7 +81,7 @@ export function connectLive(options: LiveClientOptions): LiveClient {
               return false;
             const cursor = viewer.cursor as Record<string, unknown>;
             return (
-              typeof cursor.nodeId === "string" &&
+              isStableNodeId(cursor.nodeId) &&
               typeof cursor.x === "number" &&
               Number.isFinite(cursor.x) &&
               typeof cursor.y === "number" &&

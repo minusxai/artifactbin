@@ -1,3 +1,4 @@
+import { isStableNodeId } from "./stable-node-id.ts";
 import type { SelectionPresence } from "../contracts.ts";
 const MAX_TEXT = 100000;
 export function selectionFingerprint(text: string): string {
@@ -17,9 +18,7 @@ export function validateSelection(input: unknown): SelectionPresence | null {
       !range ||
       typeof range.fingerprint !== "string" ||
       !/^[a-f0-9]{8}$/.test(range.fingerprint) ||
-      typeof range.nodeId !== "string" ||
-      !range.nodeId.length ||
-      range.nodeId.length > 100 ||
+      !isStableNodeId(range.nodeId) ||
       !Number.isInteger(range.start) ||
       !Number.isInteger(range.end) ||
       !Number.isInteger(range.length) ||

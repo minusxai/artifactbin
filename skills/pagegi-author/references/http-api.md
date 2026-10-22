@@ -74,6 +74,7 @@ Imported comments whose original page version was not retained have `version: nu
 Use `context` before acting on a comment. It shows exactly what the commenter saw: `state` is their local state (their filters, open tab and drafts), and `url` is the page's address with `#af-state=` of that state, so opening it shows the page as they saw it.
 
 - **`comment`:** `{ nodeId, quote, body }`, where `nodeId` is the `data-af-id` the comment is on, or `null` for the whole page. To reply, add `parentId`: the ID of the comment you are answering.
+- A `nodeId` is the exact `data-af-id`, kept unchanged: nonempty, well-formed Unicode without control characters, at most 16 KiB of UTF-8. Comments, cursor presence and text selections share this bound. Never shorten or re-encode an existing ID.
 - **Editing and resolving:** send the comment's `revision` as `If-Match`. Every edit adds one to it. If the comment changed since you read it, you get `409`; fetch the comments again and retry.
 - **Watching for new comments:** every list returns a `cursor`. Call `GET /api/files/:id/comments?since=<cursor>` to get only comments created or edited after it, with a new `cursor`. Each change comes back once, so a watcher that keeps its last cursor can stop and resume without duplicates. Replies are listed flat; group them by `parentId`. The cursor is opaque: don't build or change it.
 

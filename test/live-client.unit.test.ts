@@ -169,3 +169,44 @@ test("socket creation failures retry; send/auth exceptions do not escape", () =>
   assert.equal(client.send({ type: "cursor", cursor: null }), false);
   client.close();
 });
+
+test("live viewer cursors use the shared UTF-8 node identity bound", async () => {
+  const { STABLE_NODE_ID_MAX_BYTES } = await import(
+    "../src/domain/stable-node-id-contracts.ts"
+  );
+  const t = setup(),
+    s = t.sockets[0]!;
+  s.onopen!();
+  const send = (nodeId: string) =>
+    s.onmessage!({
+      data: JSON.stringify({
+        type: "viewers",
+        viewers: [
+          {
+            actor: "viewer",
+            sessionId: "s",
+            sourceRevision: "r",
+            shareView: true,
+            cursor: { nodeId, x: 0.1, y: 0.2 },
+          },
+        ],
+      }),
+    });
+  for (const id of [
+    "x".repeat(342),
+    "🙂".repeat(STABLE_NODE_ID_MAX_BYTES / 4),
+    "__proto__",
+  ])
+    send(id);
+  assert.equal(t.events.filter((e) => e === "viewers").length, 3);
+  for (const id of [
+    "x".repeat(STABLE_NODE_ID_MAX_BYTES + 1),
+    "🙂".repeat(STABLE_NODE_ID_MAX_BYTES / 4) + "x",
+    "\ud800",
+    "a\0b",
+    "",
+  ])
+    send(id);
+  assert.equal(t.events.filter((e) => e === "viewers").length, 3);
+  t.client.close();
+});

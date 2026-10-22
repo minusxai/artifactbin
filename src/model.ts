@@ -1,3 +1,4 @@
+import { isStableNodeId } from "./domain/stable-node-id.ts";
 import { validateSelection } from "./domain/selection-presence.ts";
 import { preparePublication } from "./publication-model.ts";
 import type {
@@ -33,7 +34,7 @@ function validateDraft(draft: CommentDraft) {
   text(draft.id, 100);
   text(draft.body);
   text(draft.sourceRevision, 100);
-  if (draft.nodeId !== null && typeof draft.nodeId !== "string")
+  if (draft.nodeId !== null && !isStableNodeId(draft.nodeId))
     fail(422, "Invalid comment anchor");
   if (draft.parentId !== null && typeof draft.parentId !== "string")
     fail(422, "Invalid reply parent");
@@ -239,7 +240,7 @@ export const presenceUpdate: CollaborationModel["presenceUpdate"] = (
     cursor &&
     (!Number.isFinite(cursor.x) ||
       !Number.isFinite(cursor.y) ||
-      typeof cursor.nodeId !== "string" ||
+      !isStableNodeId(cursor.nodeId) ||
       cursor.x < 0 ||
       cursor.x > 1 ||
       cursor.y < 0 ||

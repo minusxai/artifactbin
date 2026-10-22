@@ -1,3 +1,4 @@
+import { isStableNodeId } from "../domain/stable-node-id.ts";
 /**
  * Comments over the v2 HTTP API, on the existing comment repository and model.
  * The server chooses comment IDs; a comment keeps the page version and the
@@ -100,7 +101,7 @@ export function createCommentService({
       const parse = () => {
         const input = body.comment;
         if (!object(input)) fail(422, "Send { comment: { nodeId, quote, body } }");
-        if (input.nodeId !== null && (typeof input.nodeId !== "string" || !input.nodeId || input.nodeId.length > 200))
+        if (input.nodeId !== null && !isStableNodeId(input.nodeId))
           fail(422, "comment.nodeId must be a data-af-id or null");
         if (typeof input.body !== "string" || !input.body.trim() || input.body.length > 10000)
           fail(422, "comment.body must be text");
