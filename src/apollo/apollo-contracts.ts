@@ -41,12 +41,15 @@ export interface Subscription {
   unsubscribe(): void;
 }
 export interface ObservableQuery<T = AfJsonObject> {
-  /** Calls `next` straight away with the current data, then whenever a top-level field the query names changes. */
-  subscribe(next: (result: { data: T }) => void): Subscription;
+  /** Emits local fields synchronously (remote fields initially null), then complete results/errors after remote reads and invalidations. */
+  subscribe(next: (result: QueryResult<T>) => void): Subscription;
 }
 
 /** Local named mutations: `(draft, args) => result`. The resolver changes `draft` (the whole local document) directly. */
-export type LocalResolver = (draft: AfJsonObject, args: AfJsonObject) => AfJson | void;
+export type LocalResolver = (
+  draft: AfJsonObject,
+  args: AfJsonObject,
+) => AfJson | void;
 export interface LocalResolvers {
   Mutation?: Record<string, LocalResolver>;
 }
@@ -70,8 +73,10 @@ export interface AfClient {
    * "unknown" and the request is not retried.
    * A local resolver that throws saves nothing; its error is in `errors`.
    */
-  mutate<T = AfJsonObject>(options: MutationOptions): Promise<MutationResult<T>>;
-  /** Local fields only; a backend namespace in the query throws an Error. */
+  mutate<T = AfJsonObject>(
+    options: MutationOptions,
+  ): Promise<MutationResult<T>>;
+  /** Watches local fields and backend namespaces. Server invalidations and reconnects refresh remote data; no polling. */
   watchQuery<T = AfJsonObject>(options: QueryOptions): ObservableQuery<T>;
   /**
    * Local fields only. Calls `fn` with the data in the query's shape and saves
@@ -87,6 +92,8 @@ export interface AfClient {
     options: QueryOptions,
     fn: (data: T) => T,
   ): Promise<T>;
+  /** Stop all owned query subscriptions; pending completions cannot publish. */
+  dispose(): void;
   /** Register local named mutations. Later registrations of the same name replace earlier ones. */
   addResolvers(resolvers: LocalResolvers): void;
 }
@@ -126,6 +133,8 @@ export class RemoteUnreachable extends Error {
 /** The page's backend endpoint (POST /api/files/:id/graphql through the platform frame). */
 export interface RemotePort {
   online(): boolean;
+  /** Server invalidation/reconnect signal; contains no page data or credentials. */
+  subscribe?(listener: () => void): () => void;
   /**
    * The request holds only backend namespaces. Throws RemoteUnreachable only
    * when nothing was sent; any other throw means the outcome is unknown.
@@ -171,7 +180,10 @@ export interface StateFragment {
 /** Shape of src/apollo/client.ts. */
 export interface ApolloModule {
   /** Parses once; `${…}` substitutions must be DocumentNodes (fragments). */
-  gql(strings: TemplateStringsArray, ...fragments: DocumentNode[]): DocumentNode;
+  gql(
+    strings: TemplateStringsArray,
+    ...fragments: DocumentNode[]
+  ): DocumentNode;
   createClient(options: ClientOptions): AfClient;
   /** In-memory compare-and-swap store for a page not connected to a server. */
   createLocalStore(initial?: AfJsonObject): StatePort;

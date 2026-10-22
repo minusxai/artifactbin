@@ -119,3 +119,27 @@ test("the platform ignores malformed requests and refuses duplicates without sen
   await tick();
   assert.equal(posted.length, 1);
 });
+
+test("remote bridge invalidations notify owned query listeners and disposal removes them", () => {
+  const remote = createRemoteClient({
+    send() {},
+    id: () => "id",
+    online: () => true,
+    schedule: () => () => {},
+  });
+  let count = 0;
+  const stop = remote.port.subscribe!(() => {
+    count++;
+  });
+  remote.invalidate();
+  assert.equal(count, 1);
+  stop();
+  remote.invalidate();
+  assert.equal(count, 1);
+  remote.port.subscribe!(() => {
+    count++;
+  });
+  remote.dispose();
+  remote.invalidate();
+  assert.equal(count, 1);
+});

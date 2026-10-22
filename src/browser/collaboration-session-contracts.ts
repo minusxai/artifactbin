@@ -63,6 +63,8 @@ export interface CollaborationSessionOptions {
   contextReadsAllowed?(): boolean;
   onChange?(status: SessionStatus): void;
   onReady?(): void;
+  /** Authorized server change, before the collaboration snapshot refresh. */
+  onInvalidated?(): void;
   /** A posted comment was accepted under the server's ID; called before its state update. */
   onAcknowledged?(localId: string, serverId: string): void;
   clock?: SessionClock;
@@ -87,7 +89,11 @@ export interface CollaborationSession {
   ): Promise<OperationResults[O["kind"]]>;
   refreshProfiles(): Promise<void>;
   /** Resolve a thread; resolved false reopens it. */
-  resolveComment(id: string, revision: number, resolved?: boolean): Promise<void>;
+  resolveComment(
+    id: string,
+    revision: number,
+    resolved?: boolean,
+  ): Promise<void>;
   publishPresence(presence: PresenceInput): void;
   publishCursor(cursor: Cursor | null): void;
   /** Cancel outstanding operations without changing publication or transport placement. */

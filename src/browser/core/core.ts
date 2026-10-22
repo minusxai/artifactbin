@@ -130,10 +130,24 @@ function start(): void {
   // Where the viewer's picks and backend calls come from; a runtime attached later replaces both.
   let viewer: Pick<CoreHost, "viewer" | "subscribeViewer"> = host ?? standaloneHost();
   let remote: RemotePort = host ? host.remote() : unconnectedRemote;
+  const remoteListeners = new Set<() => void>();
+  let stopRemote = remote.subscribe?.(() => {
+    for (const listener of [...remoteListeners]) listener();
+  });
   const switchableRemote: RemotePort = {
+    subscribe(listener) {
+      remoteListeners.add(listener);
+      return () => { remoteListeners.delete(listener); };
+    },
     online: () => remote.online(),
     execute: (request) => remote.execute(request),
   };
+  addEventListener("pagehide", event => {
+    if ((event as PageTransitionEvent).persisted) return;
+    stopRemote?.();
+    remoteListeners.clear();
+    client?.dispose();
+  });
   let attached = false;
   let control: HTMLElement | null = null;
   const originalAttributes = [AF_DARK_ATTRIBUTE, AF_DESIGN_SYSTEM_ATTRIBUTE].map(
@@ -184,7 +198,12 @@ function start(): void {
             viewer = late;
             late.subscribeViewer(apply);
             apply();
+            stopRemote?.();
             remote = late.remote();
+            stopRemote = remote.subscribe?.(() => {
+              for (const listener of [...remoteListeners]) listener();
+            });
+            for (const listener of [...remoteListeners]) listener();
             control?.remove();
             control = null;
             return { state: state(), save, server, revision };

@@ -452,7 +452,13 @@ async function bootPlatform() {
       }
       draw();
     },
-    onReady: sendPresence,
+    onReady() {
+      sendPresence();
+      sendApp({ pagegi: true, kind: "remote-invalidated" });
+    },
+    onInvalidated() {
+      sendApp({ pagegi: true, kind: "remote-invalidated" });
+    },
     onAcknowledged: (from, to) => commentPanel.rename(from, to),
     onChange(next) {
       const change = host.observeCollaboration(next);

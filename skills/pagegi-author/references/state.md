@@ -16,6 +16,8 @@ To share data between viewers, use a backend. See [`backend.md`](backend.md) for
 
 `client.watchQuery({ query }).subscribe(callback)` calls `callback` straight away with the current data, then again whenever any field in the query changes. It returns a subscription; call `.unsubscribe()` to stop watching. `client.query({ query })` returns the current data once.
 
+A watch may also select backend namespaces, alongside local fields. Local fields emit immediately and backend fields initially emit `null`; the first remote response supplies their data. Authorized server changes and reconnects trigger fresh reads automatically, without a polling timer. Callback results include `errors` when a read fails or access is refused; the affected backend fields are `null`. Remote results never enter the viewer’s local state. Dispose subscriptions when removing a view (`subscription.unsubscribe()`); `client.dispose()` stops all watches. At most 16 remote watches may be active per client, each keeping one request and one coalesced invalidation.
+
 A field that has never been written is `null`, so give it a default when you read it: `data.products ?? []`.
 
 ## Writing

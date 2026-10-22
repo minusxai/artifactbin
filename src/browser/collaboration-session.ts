@@ -250,7 +250,10 @@ export function createCollaborationSession(
         if (changed) void refreshProfiles().catch(() => {});
       },
       changed() {
-        if (current()) void synchronize().catch(() => {});
+        if (current()) {
+          try { options.onInvalidated?.(); } catch {}
+          void synchronize().catch(() => {});
+        }
       },
       status(value, error) {
         if (!current()) return;
@@ -263,6 +266,7 @@ export function createCollaborationSession(
           });
         }
         if (value === "error") {
+          try { options.onInvalidated?.(); } catch {}
           cancelWork();
           emit({ sync: "error", message: error ?? "Connection failed" });
         }

@@ -4,6 +4,7 @@
  * core supplies the ports; this module never touches the DOM, network,
  * timers or storage.
  */
+import { createQueryWatch } from "./watch-query.ts";
 import { Kind, parse, print, valueFromASTUntyped, visit } from "graphql";
 import type {
   ASTNode,
@@ -269,6 +270,10 @@ export function createClient(options: ClientOptions): AfClient {
   const backends = new Set(options.backends);
   const state: StatePort = options.state;
   const remote = options.remote;
+  const invalidations = new Set<() => void>();
+  let remoteWatches = 0;
+  let disposed = false;
+  const subscriptions = new Set<() => void>();
   const maxAttempts = options.maxAttempts ?? DEFAULT_ATTEMPTS;
   if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1) throw new TypeError("maxAttempts must be a positive integer");
   const resolvers = new Map<string, LocalResolver>();
@@ -431,6 +436,7 @@ export function createClient(options: ClientOptions): AfClient {
       while (index < fields.length && isBackend(fields[index]!)) group.push(fields[index++]!);
       anyRemote = true;
       const settled = await runRemote(remote, op, group, "mutation");
+      for (const notify of [...invalidations]) notify();
       Object.assign(data, settled.data);
       errors.push(...settled.errors);
       Object.assign(outcomes, settled.outcomes);
@@ -441,30 +447,73 @@ export function createClient(options: ClientOptions): AfClient {
     return result;
   }
 
-  function watchQuery<T>({ query: document, variables }: { query: DocumentNode; variables?: Variables }): ObservableQuery<T> {
-    const { op, fields } = localOnly(document, variables, "watchQuery");
-    const names = [...new Set(fields.map((field) => field.name.value))];
-    read(fields, op, {});
-    const signature = (current: AfJsonObject) => names.map((name) => canonical(own(current, name))).join("\u0000");
+  function watchQuery<T>({
+    query: document,
+    variables,
+  }: {
+    query: DocumentNode;
+    variables?: Variables;
+  }): ObservableQuery<T> {
+    const op = operation(document, variables);
+    if (op.node.operation !== "query")
+      throw new LocalError("watchQuery takes a query");
+    const fields = fieldsOf(op.node.selectionSet, op);
+    const localFields = fields.filter((field) => !isBackend(field));
+    const remoteFields = fields.filter(isBackend);
+    const names = [...new Set(localFields.map((field) => field.name.value))];
+    read(localFields, op, {});
+    const watched = createQueryWatch<T>({
+      state,
+      signature: (current) =>
+        names.map((name) => canonical(own(current, name))).join("\u0000"),
+      local: (current) => read(localFields, op, current),
+      empty: Object.fromEntries(
+        remoteFields.map((field) => [responseKey(field), null]),
+      ),
+      ...(remoteFields.length
+        ? {
+            remote: {
+              acquire() {
+                if (remoteWatches >= 16)
+                  throw new Error("Too many remote query subscriptions");
+                remoteWatches++;
+                return () => {
+                  remoteWatches--;
+                };
+              },
+              subscribe(notify: () => void) {
+                invalidations.add(notify);
+                const stop = remote?.subscribe?.(notify);
+                return () => {
+                  invalidations.delete(notify);
+                  stop?.();
+                };
+              },
+              async fetch() {
+                const settled = await runRemote(
+                  remote,
+                  op,
+                  remoteFields,
+                  "query",
+                );
+                return settled.errors.length
+                  ? { data: settled.data, errors: settled.errors }
+                  : { data: settled.data };
+              },
+            },
+          }
+        : {}),
+    });
     return {
       subscribe(next) {
-        let active = true;
-        const first = state.read();
-        let last = signature(first);
-        const stop = state.subscribe((current) => {
-          if (!active) return;
-          const key = signature(current);
-          if (key === last) return;
-          last = key;
-          next({ data: read(fields, op, current) as T });
-        });
-        next({ data: read(fields, op, first) as T });
-        return {
-          unsubscribe() {
-            active = false;
-            stop();
-          },
+        if (disposed) throw new Error("Client disposed");
+        const subscription = watched.subscribe(next);
+        const stop = () => {
+          subscriptions.delete(stop);
+          subscription.unsubscribe();
         };
+        subscriptions.add(stop);
+        return { unsubscribe: stop };
       },
     };
   }
@@ -482,6 +531,11 @@ export function createClient(options: ClientOptions): AfClient {
     watchQuery: watchQuery as AfClient["watchQuery"],
     updateQuery: updateQuery as AfClient["updateQuery"],
     addResolvers,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      for (const stop of [...subscriptions]) stop();
+    },
   };
 }
 

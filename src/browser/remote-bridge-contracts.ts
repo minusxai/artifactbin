@@ -26,7 +26,11 @@ export interface RemoteBridgeResponse {
 }
 
 export interface RemoteClientOptions {
-  send(message: { kind: "remote-request"; id: string; request: RemoteBridgeRequest }): void;
+  send(message: {
+    kind: "remote-request";
+    id: string;
+    request: RemoteBridgeRequest;
+  }): void;
   id(): string;
   online(): boolean;
   schedule(callback: () => void, delay: number): () => void;
@@ -36,6 +40,8 @@ export interface RemoteClientOptions {
 export interface RemoteClient {
   port: RemotePort;
   receive(response: RemoteBridgeResponse): void;
+  /** Invalidate query snapshots after an authorized live change or reconnect. */
+  invalidate(): void;
   dispose(): void;
 }
 
@@ -45,7 +51,10 @@ export interface RemoteHostOptions {
   active(): boolean;
   online(): boolean;
   /** POST JSON with the viewer's own session; resolves with the HTTP status and parsed body. */
-  post(url: string, body: AfJsonObject): Promise<{ status: number; body: unknown }>;
+  post(
+    url: string,
+    body: AfJsonObject,
+  ): Promise<{ status: number; body: unknown }>;
   reply(response: RemoteBridgeResponse): void;
 }
 export interface RemoteHost {

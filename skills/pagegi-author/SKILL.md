@@ -201,7 +201,7 @@ const result = await client.mutate({
 - Other viewers' changes don't arrive by themselves. Query again to see them, for example every few seconds.
 - Write each query or mutation as one `gql` template. Don't insert one `gql` document into another; to fetch from several backends, put them all in the same template, as above.
 - Remote calls can fail, or the page can be offline, so check `errors`. Each backend mutation field's outcome is in `result.extensions.outcomes`, keyed by its path, for example `{ "billing.pay": "committed" }`.
-- `watchQuery` and `updateQuery` work on local state only.
+- `watchQuery` watches local fields and backend namespaces together. Server changes and reconnects refresh backend results automatically; no polling is needed. Subscribe to `{ data, errors }`; backend fields start as `null` until the first response and become `null` on a refused read. Unsubscribe when the view is removed. `updateQuery` works on local state only.
 - If a mutation's outcome is unknown (for example the connection dropped), don't assume it failed and don't retry it automatically.
 
 ## File states

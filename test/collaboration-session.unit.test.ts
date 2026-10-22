@@ -52,7 +52,7 @@ const accepted = (id: string): AcceptedComment => ({
 function fixture(handler?: (op: any, signal: AbortSignal) => Promise<any>) {
   let state = initial(),
     live: LiveCallbacks | undefined,
-    closes = 0;
+    closes = 0, invalidations = 0, readyNotifications = 0;
   const calls: string[] = [],
     changes: any[] = [];
   const transport: SessionTransport = {
@@ -87,6 +87,8 @@ function fixture(handler?: (op: any, signal: AbortSignal) => Promise<any>) {
     },
     authenticated: () => true,
     onChange: (s) => changes.push(s),
+    onInvalidated: () => { invalidations++; },
+    onReady: () => { readyNotifications++; },
   });
   session.attach(transport);
   return {
@@ -97,6 +99,8 @@ function fixture(handler?: (op: any, signal: AbortSignal) => Promise<any>) {
     get live() {
       return live!;
     },
+    get invalidations() { return invalidations; },
+    get readyNotifications() { return readyNotifications; },
     get closes() {
       return closes;
     },
@@ -510,3 +514,16 @@ test("historical context reads continue without publication and reject obsolete 
     "context.get",
   ]);
 });
+
+ test("authorized live changes and reconnect ready notify query refresh hooks; obsolete sockets do not", async () => {
+ const f=fixture(); const live=f.live;
+ live.ready(); await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(f.readyNotifications,1);
+ live.changed(); assert.equal(f.invalidations,1);
+ f.session.attach(f.transport);
+ live.changed(); assert.equal(f.invalidations,1);
+ f.live.ready(); await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(f.readyNotifications,2);
+ f.live.status("error","Connection rejected"); assert.equal(f.invalidations,2);
+ f.session.dispose(); f.live.changed(); assert.equal(f.invalidations,2);
+ });

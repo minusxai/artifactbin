@@ -286,6 +286,10 @@ export function installBridge(boot) {
       repaintSelections();
       return;
     }
+    if (m.kind === "remote-invalidated") {
+      remote.invalidate();
+      return;
+    }
     if (m.kind === "remote-response") {
       remote.receive(m.response);
       return;

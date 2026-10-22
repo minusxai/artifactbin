@@ -139,11 +139,12 @@ test("a dropped connection after sending is unknown and is not retried", async (
   assert.ok(result.errors?.length);
 });
 
-test("watchQuery and updateQuery are for local state only", async () => {
+test("remote watches do not write shared results into local state; updateQuery stays local only", async () => {
   const { gql, createClient, createLocalStore } = await apollo();
   const store = createLocalStore();
   const client = createClient({ backends: ["billing"], state: store, remote: remote(() => ({ data: null })).port });
-  assert.throws(() => client.watchQuery({ query: gql`{ billing { invoices { id } } }` }));
+  const watch = client.watchQuery({ query: gql`{ billing { invoices { id } } }` }).subscribe(() => {});
+  watch.unsubscribe();
   await assert.rejects(client.updateQuery({ query: gql`{ billing }` }, () => ({ billing: 1 }) as AfJsonObject));
   assert.deepEqual(store.read(), {});
 });
