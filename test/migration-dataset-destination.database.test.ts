@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { PostgresDatasetMetadataDestination } from "../src/migration/dataset-destination.ts";
+import { compileProgramResolver } from "../src/migration/programs/compiler.ts";
 import type { DatasetMigrationBatch } from "../src/migration/dataset-destination-contracts.ts";
 const { Client } = createRequire(import.meta.url)("pg");
 test(
@@ -255,13 +256,31 @@ test(
         savedContent,
         savedDigest,
       ]);
+      const mutationResolver = await compileProgramResolver(
+        "import {query,mutation} from 'page';const summary=query('$summary');const change=mutation('$change');export default async input=>{await summary.ready;return change(input)};",
+        {
+          values: [],
+          queries: ["summary"],
+          mutations: ["change"],
+          defaults: {},
+        },
+      );
       bound.queryRegistrations = [
         {
           sourceNamespace: "bound",
-          moduleSourceSha256: "c".repeat(64),
+          moduleSourceSha256: mutationResolver.scriptSha256,
           migrationProvenance: {
             flowSourceSha256: "d".repeat(64),
             compilerIdentity: "e".repeat(64),
+          },
+          program: {
+            resolver: mutationResolver,
+            manifest: {
+              values: [],
+              queries: ["summary"],
+              mutations: ["change"],
+              defaults: {},
+            },
           },
           plan: {
             registration: {

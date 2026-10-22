@@ -242,27 +242,6 @@ export class PostgresDatasetMetadataDestination
           group.queries,
         );
       }
-      for (const registration of batch.queryRegistrations ?? [])
-        await registerSavedQueries(
-          {
-            query: async (text, values) => ({
-              ...(await this.db.query(text, values ? [...values] : undefined)),
-              rowCount: null,
-            }),
-            release: () => {},
-          },
-          registration,
-        );
-      await registerDatasetAttachments({
-        client: {
-          query: async (text, values) => ({
-            ...(await this.db.query(text, values ? [...values] : undefined)),
-            rowCount: null,
-          }),
-          release: () => {},
-        },
-        registrations: batch.metadata.attachments ?? [],
-      });
       const operations = batch.metadata.operations ?? [];
       if (receipt)
         for (const { operation: o } of operations) {
@@ -288,6 +267,27 @@ export class PostgresDatasetMetadataDestination
         },
         operations,
       );
+      for (const registration of batch.queryRegistrations ?? [])
+        await registerSavedQueries(
+          {
+            query: async (text, values) => ({
+              ...(await this.db.query(text, values ? [...values] : undefined)),
+              rowCount: null,
+            }),
+            release: () => {},
+          },
+          registration,
+        );
+      await registerDatasetAttachments({
+        client: {
+          query: async (text, values) => ({
+            ...(await this.db.query(text, values ? [...values] : undefined)),
+            rowCount: null,
+          }),
+          release: () => {},
+        },
+        registrations: batch.metadata.attachments ?? [],
+      });
       if (!receipt && batch.additive) await this.db.query(`INSERT INTO ${this.names.archive}.dataset_additive_receipts VALUES ($1,$2,$3,$4)`,[batch.metadata.sourceNamespace,additiveAuthoritySha256(batch.additive),digest,batch.additive.base.inventory.datasetFingerprint]);
       if (!receipt && !batch.additive)
         await this.db.query(
