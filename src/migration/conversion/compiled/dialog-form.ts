@@ -38,7 +38,7 @@ export function createCompiledDialogForm(ports:CompiledDialogFormPorts):Compiled
    if(disposed||ports.authorizationContext()!==context||unavailable()!==null)throw Error('Form authority changed before saving');
    const result=await(reconcile?ports.reconcile():ports.mutate(args));
    if(!receipt(result))throw Error('The save was not confirmed.');
-   if(!disposed&&ports.authorizationContext()===context&&unavailable()===null)ports.close();
+   if(!disposed&&ports.authorizationContext()===context)ports.close();
   }catch(failure){
    if(!disposed&&ports.authorizationContext()===context)error=failure instanceof Error?failure.message:'That did not save';
   }finally{busy=false;if(!disposed)ports.busy(false);emit();}

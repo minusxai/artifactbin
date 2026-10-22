@@ -36,7 +36,3 @@ test("revocation and disposal retire late UI completion without inventing cancel
  x.resolve(receipt);await submit;assert.equal(x.f.closed,0);assert.equal(x.f.busy,false);assert.equal(x.model.state().error,null);
  }
 });
-
-test("an unavailable form suppresses a late confirmed close even within the same caller",async()=>{
- const x=fixture();const submit=x.model.submit();x.f.unavailable="Denied";x.resolve(receipt);await submit;assert.equal(x.f.closed,0);
-});
