@@ -297,3 +297,160 @@ test("deleting a page removes its binding metadata without rewriting the dataset
   }
 });
 
+test("configured server GraphQL reads trusted dataset bytes and rechecks member and guest access", async () => {
+  const { createHash } = await import("node:crypto");
+  const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { sealDeployment } = await import("../src/backend/deployment.ts");
+  const { createService } = await import("../src/server.js");
+  const { hash } = await import("../src/server/text.ts");
+  const { serviceConfig } = await import("../src/config.js");
+  const typeDefs = "type Query { read: String }";
+  const deployment = sealDeployment(
+    "export default {}",
+    "trusted in-process test host",
+    { typeDefs, fields: ["read"] },
+  );
+  const bytes = Buffer.from('[{"name":"visible"}]');
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const savedBinding = {
+    ...binding,
+    backendVersion: deployment.version,
+    tables: [
+      {
+        ...binding.tables[0]!,
+        object: { key: sha256, sha256, bytes: bytes.length },
+      },
+    ],
+  };
+  const { env } = await fixture(savedBinding);
+  const directory = await mkdtemp(join(tmpdir(), "dataset-graphql-"));
+  const host: import("../src/backend/contracts.ts").BackendHost = {
+    async compile() {
+      return deployment;
+    },
+    async invoke({ principal, capabilityHandler, signal }) {
+      assert.ok(capabilityHandler);
+      return JSON.stringify(
+        await capabilityHandler(
+          principal,
+          {
+            kind: "dataset",
+            operation: "read",
+            input: {
+              binding: "sales",
+              schema: "public",
+              table: "rows",
+              offset: 0,
+              limit: 1,
+            },
+          },
+          signal ?? new AbortController().signal,
+        ),
+      );
+    },
+  };
+  const app = createService({
+    ...serviceConfig({ PAGEGI_DATASET_DIRECTORY: directory }),
+    connectionString: env.connectionString,
+    schema: env.schema,
+    backendHost: host,
+  });
+  try {
+    assert.equal(serviceConfig({}).datasetDirectory, undefined);
+    await writeFile(join(directory, sha256), bytes);
+    await env.pool.query(
+      "UPDATE af_backend_versions SET type_defs=$1,deployment=$2",
+      [typeDefs, deployment],
+    );
+    await env.pool.query("INSERT INTO af_backend_pages VALUES('Pg0001',1)");
+    await env.pool.query(
+      "UPDATE files SET access=jsonb_set(access,'{visibility}','\"public\"')",
+    );
+    await env.pool.query(
+      "INSERT INTO sessions(token_hash,actor,expires) VALUES($1,'member',$2)",
+      [hash("fixture-member"), Date.now() + 60000],
+    );
+    await new Promise<void>((resolve) =>
+      app.server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = app.server.address();
+    assert.ok(address && typeof address !== "string");
+    const read = async (credential = "") => {
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/api/files/Pg0001/graphql`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(credential ? { Authorization: "Bearer " + credential } : {}),
+          },
+          body: JSON.stringify({ query: "{ bridge { read } }" }),
+        },
+      );
+      assert.equal(response.status, 200);
+      return (await response.json()) as {
+        data?: { bridge?: { read?: string | null } };
+        errors?: unknown[];
+      };
+    };
+    const member = await read("fixture-member");
+    assert.equal(member.errors, undefined);
+    assert.deepEqual(JSON.parse(member.data!.bridge!.read!).rows, [
+      { name: "visible" },
+    ]);
+    const guest = await read();
+    assert.ok(guest.errors?.length);
+    assert.equal(guest.data?.bridge?.read, null);
+    await env.pool.query(
+      "UPDATE dataset_resources SET access=jsonb_set(access,'{visibility}','\"public\"')",
+    );
+    assert.deepEqual(JSON.parse((await read()).data!.bridge!.read!).rows, [
+      { name: "visible" },
+    ]);
+    await env.pool.query(
+      "UPDATE dataset_resources SET access=jsonb_set(jsonb_set(access,'{visibility}','\"private\"'),'{shares}','{}')",
+    );
+    assert.ok((await read("fixture-member")).errors?.length);
+    await env.pool.query(
+      "UPDATE dataset_resources SET access=jsonb_set(access,'{visibility}','\"public\"')",
+    );
+    const unavailable = createService({
+      connectionString: env.connectionString,
+      schema: env.schema,
+      backendHost: host,
+    });
+    try {
+      await new Promise<void>((resolve) =>
+        unavailable.server.listen(0, "127.0.0.1", resolve),
+      );
+      const otherAddress = unavailable.server.address();
+      assert.ok(otherAddress && typeof otherAddress !== "string");
+      const response = await fetch(
+        `http://127.0.0.1:${otherAddress.port}/api/files/Pg0001/graphql`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: "{ bridge { read } }" }),
+        },
+      );
+      assert.equal(response.status, 200);
+      assert.ok(
+        ((await response.json()) as { errors?: unknown[] }).errors?.length,
+      );
+    } finally {
+      unavailable.server.closeAllConnections();
+      await new Promise<void>((resolve) =>
+        unavailable.server.close(() => resolve()),
+      );
+      await unavailable.close();
+    }
+  } finally {
+    app.server.closeAllConnections();
+    await new Promise<void>((resolve) => app.server.close(() => resolve()));
+    await app.close();
+    await env.cleanup();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

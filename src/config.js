@@ -79,7 +79,12 @@ export function serviceConfig(env = process.env) {
     );
   return {
     connectionString: env.PAGEGI_DATABASE_URL,
-    ...(env.PAGEGI_MEDIA_DIRECTORY ? { mediaDirectory: env.PAGEGI_MEDIA_DIRECTORY } : {}),
+    ...(env.PAGEGI_MEDIA_DIRECTORY
+      ? { mediaDirectory: env.PAGEGI_MEDIA_DIRECTORY }
+      : {}),
+    ...(env.PAGEGI_DATASET_DIRECTORY
+      ? { datasetDirectory: env.PAGEGI_DATASET_DIRECTORY }
+      : {}),
     ...(backendHost ? { backendHost } : {}),
     ...(secretsKey ? { secretsKey } : {}),
     schema: env.PAGEGI_DATABASE_SCHEMA || "public",

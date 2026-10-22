@@ -26,11 +26,14 @@ services:
       PAGEGI_EXECUTION_ENDPOINT: http://execution:8788/v1/execute
       PAGEGI_EXECUTION_SOCKET: ''
       PAGEGI_MEDIA_DIRECTORY: /run/pagegi-media
+      PAGEGI_DATASET_DIRECTORY: /run/pagegi-datasets
     volumes:
       - ./execution-secret:/run/pagegi-execution-secret:ro
       - ./resource-config:/run/pagegi-resource-config:ro
       # Immutable imported media; ACLs are checked by the application, never a static server.
       - ./media:/run/pagegi-media:ro
+      # Private immutable dataset bytes are separate from media and never served statically.
+      - ./datasets:/run/pagegi-datasets:ro
     logging:
       driver: json-file
       options: {max-size: 10m, max-file: '3'}

@@ -1,3 +1,7 @@
+import { createDatasetReadRepository } from "./persistence/datasets.ts";
+import { createReadonlyDatasetObjectStore } from "./datasets/object-store.ts";
+import { createDatasetReadService } from "./datasets/service.ts";
+import { DatasetReadError } from "./datasets/contracts.ts";
 import { createTrashService } from "./trash/service.ts";
 // @ts-check
 import { parseRequestBody, parseFileRoute } from "./server/request.ts";
@@ -85,6 +89,7 @@ export function createService({
   backendHost,
   secretsKey,
   mediaDirectory,
+  datasetDirectory,
   testLogin = false,
   knownOrigins = [DEFAULT_AF_ORIGIN],
   randomBytes = (count) => new Uint8Array(cryptoRandomBytes(count)),
@@ -155,6 +160,12 @@ export function createService({
   const ids = createIdReservationStore(repository.sql, { randomBytes, now });
   /** @type {Promise<import("./server/af-api-contracts.ts").AfRouteModule | null> | undefined} */
   let backendRoutes;
+  const datasets = datasetDirectory
+    ? createDatasetReadService({
+        ...createDatasetReadRepository(repository.sql, now),
+        read: createReadonlyDatasetObjectStore(datasetDirectory).read,
+      })
+    : { read: async () => { throw new DatasetReadError("denied"); } };
   const backendRouteModule = () =>
     (backendRoutes ||= backendFilesModule.optional().then((module) =>
       module
@@ -162,6 +173,7 @@ export function createService({
             database: repository.sql,
             host: backendHost,
             caller: createPageCaller(now),
+            datasets,
             secrets: secretsStore && ((client, owner) => secretsStore.env(client, owner)),
           })
         : null,

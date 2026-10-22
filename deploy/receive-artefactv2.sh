@@ -10,6 +10,8 @@ root=/opt/artefactv2
 # Compose execution must match the host Docker socket group.
 export DOCKER_GID="$(stat -c %g /var/run/docker.sock)"
 mkdir -p "$root/releases" "$root/backups"
+# The app reads this private persistent object mount as UID1000; deployments never replace its contents.
+install -d -o 1000 -g 1000 -m 0700 "$root/datasets"
 exec 9>"$root/deploy.lock"
 flock -w 300 9
 archive=$(mktemp)

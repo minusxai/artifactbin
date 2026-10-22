@@ -283,6 +283,8 @@ export interface AfServiceOptions {
   secretsKey?: Uint8Array;
   /** Private operator-staged immutable media directory, mounted read-only. No setting means media reads return 503. */
   mediaDirectory?: string;
+  /** Dedicated immutable dataset object mount; absent configuration denies dataset reads. */
+  datasetDirectory?: string;
   /** Random source for file IDs; tests may inject a deterministic one. */
   randomBytes?: (count: number) => Uint8Array;
 }
@@ -317,6 +319,7 @@ export interface ServerMainEnv {
   PAGEGI_KNOWN_ORIGINS?: string;
   PAGEGI_SECRETS_KEY?: string;
   PAGEGI_MEDIA_DIRECTORY?: string;
+  PAGEGI_DATASET_DIRECTORY?: string;
 }
 
 /** A route module brief C provides and brief B mounts before its own file routes. */
