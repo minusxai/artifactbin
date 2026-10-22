@@ -97,7 +97,23 @@ test("sharing redacts invitees, scoped pairing stays file-bound, and revocation 
     const scoped = host.body.boot.token;
     assert.equal((await request(base + "/source", scoped)).status, 200);
     assert.equal((await request(other + "/source", scoped)).status, 403);
-    assert.deepEqual((await request(base + "/permissions", scoped)).body, {
+    const scopedAccess = await request(base + "/permissions", scoped);
+    assert.equal(scopedAccess.status, 200);
+    const { authorizationContext, ...permissions } = scopedAccess.body;
+    assert.equal(typeof authorizationContext, "string");
+    assert.match(authorizationContext, /^[a-f0-9]{64}$/);
+    assert.doesNotMatch(authorizationContext, /reader|owner|example|https?:|@/);
+    for (const credential of [reader, owner, scoped, first.share])
+      if (credential) assert.notEqual(authorizationContext, credential);
+    assert.equal((await request(base + "/permissions", reader)).body.authorizationContext, authorizationContext,
+      "account and scoped grant identify the same caller on this page");
+    assert.equal((await request(base + "/permissions", scoped)).body.authorizationContext, authorizationContext,
+      "reauthorization preserves the same page/caller marker");
+    assert.notEqual((await request(other + "/permissions", reader)).body.authorizationContext, authorizationContext,
+      "another page cannot correlate the caller marker");
+    assert.notEqual((await request(base + "/permissions", owner)).body.authorizationContext, authorizationContext,
+      "another caller never inherits the scoped caller marker");
+    assert.deepEqual(permissions, {
       role: "editor",
       read: true,
       comment: true,
