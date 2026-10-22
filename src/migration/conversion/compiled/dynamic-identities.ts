@@ -38,6 +38,7 @@ export function initialDynamicIdentities(plan:LocalDynamicIdentityPlan,values:Re
   const visit=(regions:readonly LocalIdentityRegion[])=>{for(const region of regions){
     if(region.kind==='node')result.push(region.id);
     else if(region.kind==='repeat')result.push(region.owner);
+    else if(region.kind==='cell')continue;
     else visit(evaluateLocalReactiveExpression(region.test,{values})?region.yes:region.no);
   }};
   visit(plan.regions);

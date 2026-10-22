@@ -23,8 +23,14 @@ test('dynamic branches, keyed reorder and later mounts keep exact identities; co
    const duplicate=document.createElement('div');duplicate.id=rows[0]!.id;root.append(duplicate);await tick();
    const collision={errors,duplicate:duplicate.getAttribute('data-af-id'),original:rows[0]!.id};controller.dispose();
    root.replaceChildren();const invalid=document.createElement('div');invalid.id='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat','rows','index',0],'child']));root.append(invalid);const other=runtime.installDynamicIdentities(document,plan,()=>{});let invalidRefused=false;try{other.flush();}catch{invalidRefused=true;}other.dispose();
-   return {branchIdentity,reassigned,before,after,mountIdentity,removedIdentity,collision,invalidRefused,invalidIdentity:invalid.getAttribute('data-af-id')};
+   const invalidIdentity=invalid.getAttribute('data-af-id');root.replaceChildren();
+   const cellPlan={regions:[{kind:'node',id:'root'},{kind:'cell',owner:'root',table:'items',rowKey:'id',column:'name',children:[{kind:'node',id:'cell-link'}]}]};
+   const cellScope=(key:string|number,column='name')=>'mx-instance-'+encodeURIComponent(JSON.stringify([['table','root',typeof key,key,column],'cell-link']));
+   const cells=[1,'1'].map(key=>{const element=document.createElement('a');element.id=cellScope(key);root.append(element);return element;});
+   const cellController=runtime.installDynamicIdentities(document,cellPlan,()=>{});cellController.flush();const cellBefore=cells.map(element=>element.getAttribute('data-af-id'));root.prepend(cells[1]!);cellController.flush();const cellAfter=cells.map(element=>element.getAttribute('data-af-id'));
+   const wrongColumn=document.createElement('a');wrongColumn.id=cellScope(2,'other');root.append(wrongColumn);let wrongColumnRefused=false;try{cellController.flush();}catch{wrongColumnRefused=true;}cellController.dispose();
+   return {branchIdentity,reassigned,before,after,mountIdentity,removedIdentity,collision,invalidRefused,invalidIdentity,cellBefore,cellAfter,wrongColumnRefused,wrongColumnIdentity:wrongColumn.getAttribute('data-af-id')};
   });
-  assert.equal(result.branchIdentity,'branch');assert.equal(result.reassigned,'alternate');assert.deepEqual(result.before,result.after);assert.notEqual(result.before[0],result.before[1]);assert.equal(result.mountIdentity,'mount');assert.equal(result.removedIdentity,null);assert.equal(result.collision.errors.length,1);assert.equal(result.collision.duplicate,null);assert.equal(result.collision.original,result.before[0]);assert.equal(result.invalidRefused,true);assert.equal(result.invalidIdentity,null);
+  assert.equal(result.branchIdentity,'branch');assert.equal(result.reassigned,'alternate');assert.deepEqual(result.before,result.after);assert.notEqual(result.before[0],result.before[1]);assert.equal(result.mountIdentity,'mount');assert.equal(result.removedIdentity,null);assert.equal(result.collision.errors.length,1);assert.equal(result.collision.duplicate,null);assert.equal(result.collision.original,result.before[0]);assert.equal(result.invalidRefused,true);assert.equal(result.invalidIdentity,null);assert.deepEqual(result.cellBefore,result.cellAfter);assert.notEqual(result.cellBefore[0],result.cellBefore[1]);assert.equal(result.wrongColumnRefused,true);assert.equal(result.wrongColumnIdentity,null);
  }finally{await browser.close();}
 });

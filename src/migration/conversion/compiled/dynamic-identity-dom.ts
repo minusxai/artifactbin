@@ -5,15 +5,19 @@ import {archivedInstanceId} from './dynamic-identities.ts';
  * report to the caller. No collision repair ever changes an authored DOM id. */
 export function installDynamicIdentities(root:Document|Element,plan:LocalDynamicIdentityPlan,onError:(error:Error)=>void):DynamicIdentityController {
   const direct=new Set<string>();
-  const repeated=new Map<string,string>();
+  type Scope={tag:'repeat'|'table';owner:string;column?:string};
+  const repeated=new Map<string,Scope>();
   const sourceIds=new Set<string>();
   function source(id:string){if(!id||sourceIds.has(id))throw Error('Duplicate dynamic source identity');sourceIds.add(id);}
-  function collect(regions:readonly LocalIdentityRegion[],owner?:string){for(const region of regions){
+  function collect(regions:readonly LocalIdentityRegion[],scope?:Scope){for(const region of regions){
     if(region.kind==='node'){
       source(region.id);
-      if(owner)repeated.set(region.id,owner);else direct.add(region.id);
-    }else if(region.kind==='conditional'){collect(region.yes,owner);collect(region.no,owner);}
-    else {if(owner)throw Error('Nested repeat identity unsupported');source(region.owner);direct.add(region.owner);collect(region.children,region.owner);}
+      if(scope)repeated.set(region.id,scope);else direct.add(region.id);
+    }else if(region.kind==='conditional'){collect(region.yes,scope);collect(region.no,scope);}
+    else {if(scope)throw Error('Nested instance identity unsupported');
+      if(region.kind==='repeat'){source(region.owner);direct.add(region.owner);collect(region.children,{tag:'repeat',owner:region.owner});}
+      else collect(region.children,{tag:'table',owner:region.owner,column:region.column});
+    }
   }}
   collect(plan.regions);
   const assigned=new WeakMap<Element,string>();
@@ -25,9 +29,11 @@ export function installDynamicIdentities(root:Document|Element,plan:LocalDynamic
       const decoded:unknown=JSON.parse(decodeURIComponent(id.slice(12)));
       if(!Array.isArray(decoded)||decoded.length!==2)return false;
       const [scope,source]=decoded;
-      if(typeof source!=='string'||!Array.isArray(scope)||scope.length!==4)return false;
-      const [tag,owner,type,key]=scope;
-      if(tag!=='repeat'||repeated.get(source)!==owner)return false;
+      if(typeof source!=='string'||!Array.isArray(scope))return false;
+      const expected=repeated.get(source);if(!expected)return false;
+      const [tag,owner,type,key,column]=scope;
+      if(tag!==expected.tag||owner!==expected.owner)return false;
+      if(expected.tag==='repeat'?scope.length!==4:scope.length!==5||column!==expected.column)return false;
       if(!(type==='number'&&typeof key==='number'&&Number.isFinite(key))&&!(type==='string'&&typeof key==='string'&&key.length<=256&&!/[\u0000-\u001f]/.test(key)))return false;
       return archivedInstanceId(scope,source)===id;
     }catch{return false;}

@@ -23,3 +23,7 @@ test('relational branches reject mixed types and null without JS coercion',()=>{
  }
  assert.equal(evaluateLocalReactiveExpression({kind:'binary',op:'<',left:{kind:'literal',value:'a'},right:{kind:'literal',value:'b'}},{values:{}}),true);
 });
+test('preview emits Column header but defers all cell child identities',()=>{
+ const cells:LocalDynamicIdentityPlan={regions:[{kind:'node',id:'table'},{kind:'node',id:'column-header'},{kind:'cell',owner:'table',table:'items',rowKey:'id',column:'label',children:[{kind:'node',id:'label-link'}]}]};
+ assert.deepEqual(initialDynamicIdentities(cells,{}),['table','column-header']);
+});
