@@ -19,6 +19,7 @@ async function bound(
   client: SqlClient,
   context: DatasetCallContext,
   name: string,
+  locked = false,
 ) {
   return (
     (
@@ -27,7 +28,7 @@ async function bound(
      JOIN dataset_versions v ON v.source_namespace=b.source_namespace AND v.legacy_id=b.dataset_id AND v.version=b.dataset_version
      JOIN files f ON f.id=b.page_id AND f.head=b.page_version::text
      WHERE b.backend_id=$1 AND b.backend_version=$2 AND b.page_id=$3 AND b.name=$4
-     AND EXISTS(SELECT 1 FROM af_page_backends p WHERE p.page_id=b.page_id AND p.page_version=b.page_version AND p.file_id=b.backend_id AND p.version=b.backend_version)`,
+     AND EXISTS(SELECT 1 FROM af_page_backends p WHERE p.page_id=b.page_id AND p.page_version=b.page_version AND p.file_id=b.backend_id AND p.version=b.backend_version)${locked ? " FOR SHARE OF f" : ""}`,
         [context.backendId, context.backendVersion, context.pageId, name],
       )
     ).rows[0] ?? null
@@ -45,9 +46,22 @@ export function createDatasetReadRepository(
         return row ? decodeDatasetBinding(row, context, name) : null;
       }),
     authority: (context, binding) =>
-      database.transaction(async (client) => {
-        const timestamp = now();
-        const row = await bound(client, context, binding.name);
+      database.transaction((client) => loadDatasetAuthority(client, context, binding, now())),
+  };
+}
+/** Shared-client boundary for transaction-time write validation. Mutators lock
+ * group principals before page/resource rows, and use UPDATE on the resource. */
+export async function loadDatasetAuthority(
+  client: SqlClient,
+  context: DatasetCallContext,
+  binding: DatasetBinding,
+  now: number,
+  locked = false,
+) {
+        const timestamp = now;
+        const groupAuthority = context.subject
+          ? await loadGroupAuthority(client, context.subject) : undefined;
+        const row = await bound(client, context, binding.name, locked);
         const saved = row
           ? decodeDatasetBinding(row, context, binding.name)
           : null;
@@ -67,7 +81,7 @@ export function createDatasetReadRepository(
         if (!page) return null;
         const resource = (
           await client.query(
-            "SELECT r.*,a.principal_kind FROM dataset_resources r JOIN accounts a ON a.actor=r.owner WHERE r.source_namespace=$1 AND r.legacy_id=$2",
+            "SELECT r.*,a.principal_kind FROM dataset_resources r JOIN accounts a ON a.actor=r.owner WHERE r.source_namespace=$1 AND r.legacy_id=$2" + (locked ? " FOR SHARE OF r,a" : ""),
             [namespace, saved.dataset.id],
           )
         ).rows[0];
@@ -79,9 +93,6 @@ export function createDatasetReadRepository(
           )
         ).rows[0];
         if (!pageRow) return null;
-        const groupAuthority = context.subject
-          ? await loadGroupAuthority(client, context.subject)
-          : undefined;
         if (
           context.subject &&
           !(
@@ -127,7 +138,7 @@ export function createDatasetReadRepository(
         const mappings = context.subject
           ? (
               await client.query(
-                "SELECT legacy_id,identity,expires_at FROM dataset_principals WHERE source_namespace=$1 AND actor=$2 AND kind='user' ORDER BY legacy_id",
+                "SELECT legacy_id,identity,expires_at FROM dataset_principals WHERE source_namespace=$1 AND actor=$2 AND kind='user' ORDER BY legacy_id" + (locked ? " FOR SHARE" : ""),
                 [namespace, context.subject],
               )
             ).rows
@@ -192,7 +203,7 @@ export function createDatasetReadRepository(
           return null;
         const joins = (
           await client.query(
-            "SELECT legacy_user_id FROM dataset_page_joins WHERE page_id=$1 AND source_namespace=$2 ORDER BY legacy_user_id",
+            "SELECT legacy_user_id FROM dataset_page_joins WHERE page_id=$1 AND source_namespace=$2 ORDER BY legacy_user_id" + (locked ? " FOR SHARE" : ""),
             [context.pageId, namespace],
           )
         ).rows;
@@ -213,6 +224,5 @@ export function createDatasetReadRepository(
           },
           facts,
         };
-      }),
-  };
+
 }
