@@ -48,6 +48,15 @@ export interface DatasetImportMetadata {
   }[];
   groups: readonly { owner: string; legacyGroupId: string }[];
   /** Current accepted joins; removals take effect on the next authority read. */
+  /** Original public cards kept separately from mutable login accounts; never contains email or storage keys. */
+  profiles?: readonly {
+    legacyUserId: string;
+    name: string;
+    handle: string | null;
+    image: string | null;
+  }[];
+  /** Exact server-only registered bound Value column descriptors. */
+  personBindings?: readonly import("./person-contracts.ts").DatasetPersonBinding[];
   acceptedJoins: readonly {
     pageId: string;
     legacyUserId: string;

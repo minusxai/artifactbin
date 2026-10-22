@@ -100,3 +100,17 @@ CREATE TABLE IF NOT EXISTS dataset_member_bindings (
 );
 DROP TRIGGER IF EXISTS dataset_member_bindings_immutable ON dataset_member_bindings;
 CREATE TRIGGER dataset_member_bindings_immutable BEFORE UPDATE ON dataset_member_bindings FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+
+CREATE TABLE IF NOT EXISTS dataset_public_profiles (
+ source_namespace text NOT NULL, legacy_user_id text NOT NULL, name text NOT NULL, handle text, image text,
+ PRIMARY KEY(source_namespace,legacy_user_id)
+);
+DROP TRIGGER IF EXISTS dataset_profiles_immutable ON dataset_public_profiles;
+CREATE TRIGGER dataset_profiles_immutable BEFORE UPDATE ON dataset_public_profiles FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+CREATE TABLE IF NOT EXISTS dataset_person_bindings (
+ backend_id text NOT NULL, backend_version text NOT NULL, page_id text NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+ page_version bigint NOT NULL, value_name text NOT NULL, source_namespace text NOT NULL, descriptor jsonb NOT NULL,
+ PRIMARY KEY(backend_id,backend_version,page_id,page_version,value_name)
+);
+DROP TRIGGER IF EXISTS dataset_person_bindings_immutable ON dataset_person_bindings;
+CREATE TRIGGER dataset_person_bindings_immutable BEFORE UPDATE ON dataset_person_bindings FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
