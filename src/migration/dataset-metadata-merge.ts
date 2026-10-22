@@ -19,6 +19,7 @@ export function createDatasetMetadataAccumulator(namespace: string): {
   const result: DatasetImportMetadata = {
     sourceNamespace: namespace,
     bindings: [],
+    operations: [],
     pages: [],
     resources: [],
     versions: [],
@@ -27,6 +28,15 @@ export function createDatasetMetadataAccumulator(namespace: string): {
     acceptedJoins: [],
   };
   const keys = {
+    operations: (
+      r: NonNullable<DatasetImportMetadata["operations"]>[number],
+    ) => [
+      r.operation.backendId,
+      r.operation.backendVersion,
+      r.operation.page.id,
+      r.operation.page.version,
+      r.operation.name,
+    ],
     bindings: (r: DatasetImportMetadata["bindings"][number]) => [
       r.backendId,
       r.backendVersion,
@@ -65,7 +75,7 @@ export function createDatasetMetadataAccumulator(namespace: string): {
       if (part.sourceNamespace !== namespace)
         throw new Error("Dataset metadata namespace mismatch");
       for (const name of names)
-        for (const row of part[name]) {
+        for (const row of part[name] ?? []) {
           const rows = tables.get(name)!;
           const key = canonical((keys[name] as (r: unknown) => unknown)(row));
           const digest = canonical(row);

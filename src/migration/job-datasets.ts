@@ -1,3 +1,4 @@
+import { prepareMigrationHeadMutations } from "./job-mutations.ts";
 import { createHash } from "node:crypto";
 import { scanMigrationDatasetImports } from "./dataset-scan.ts";
 import { prepareMigrationBackends } from "./backend-preparation.ts";
@@ -26,7 +27,7 @@ export async function prepareMigrationJobDatasets(
   const issues = new Map(
     [...scan.issues].map(([id, reasons]) => [id, [...reasons]]),
   );
-  const executable = scan.pages.filter((page) => {
+  const candidates = scan.pages.filter((page) => {
     const head = scan.heads.get(page.legacyId)!;
     const hasImports = page.revisions.some(
       (r) => r.version === head && r.imports.length,
@@ -39,6 +40,11 @@ export async function prepareMigrationJobDatasets(
     }
     return hasImports;
   });
+  const executable = await prepareMigrationHeadMutations(
+    source,
+    candidates,
+    issues,
+  );
   const prepared = await prepareMigrationBackends(
     {
       sourceNamespace: source.manifest.sourceNamespace,
@@ -117,7 +123,14 @@ export async function prepareMigrationJobDatasets(
           manifestSha256: source.datasets.provenance.relationManifestSha256,
         },
       });
-      accumulator.add({ ...plan.metadata, principals: [], groups: [] });
+      accumulator.add({
+        ...plan.metadata,
+        principals: [],
+        groups: [],
+        operations: prepared.operations.filter(
+          (r) => r.operation.page.id === page.pageId,
+        ),
+      });
       for (const row of plan.browserBindings) {
         const key = migrationDatasetVersionKey(
           row.pageLegacyId,

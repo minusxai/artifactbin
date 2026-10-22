@@ -1,3 +1,4 @@
+import { registerDatasetMutationOperations } from "../persistence/dataset-mutations.ts";
 import { createHash } from "node:crypto";
 import type { SqlReader, LegacyRow } from "./contracts.ts";
 import type {
@@ -168,9 +169,10 @@ export class PostgresDatasetMetadataDestination
     const result = { created: 0, unchanged: 0 };
     await this.db.query("BEGIN");
     try {
+      await this.db.query(`SET LOCAL search_path TO ${this.names.runtime}`);
       // Locks serialize migration reruns against live revocations while comparing current authority.
       await this.db.query(
-        `LOCK TABLE ${plans.map((p) => this.names.runtime + "." + p.table).join(",")} IN SHARE ROW EXCLUSIVE MODE`,
+        `LOCK TABLE ${[...plans.map((p) => this.names.runtime + "." + p.table), this.names.runtime + ".dataset_mutation_operations"].join(",")} IN SHARE ROW EXCLUSIVE MODE`,
       );
       for (const binding of batch.metadata.bindings) {
         const compiled = await this.db.query(
@@ -265,6 +267,28 @@ export class PostgresDatasetMetadataDestination
         );
         result.created++;
       }
+      const operations = batch.metadata.operations ?? [];
+      if (receipt)
+        for (const { operation: o } of operations) {
+          const existing = await this.db.query(
+            `SELECT 1 FROM ${this.names.runtime}.dataset_mutation_operations WHERE backend_id=$1 AND backend_version=$2 AND page_id=$3 AND page_version=$4 AND name=$5`,
+            [o.backendId, o.backendVersion, o.page.id, o.page.version, o.name],
+          );
+          if (!existing.rows.length)
+            throw new Error(
+              "Dataset migration operation was removed after import",
+            );
+        }
+      await registerDatasetMutationOperations(
+        {
+          query: async (text, values) => {
+            const r = await this.db.query(text, values);
+            return { ...r, rowCount: null };
+          },
+          release: () => {},
+        },
+        operations,
+      );
       if (!receipt)
         await this.db.query(
           `INSERT INTO ${this.names.archive}.dataset_receipts VALUES ($1,$2,$3,$4,$5)`,

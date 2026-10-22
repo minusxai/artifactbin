@@ -29,7 +29,8 @@ test("job prepares exact live head bindings and real compiled receipts without i
     id: "abc123",
     version: 2,
     format: "markup",
-    source: '<Helmet><Import name="sales" src="ref:data01"/></Helmet>',
+    source:
+      '<Helmet><Import name="sales" src="ref:data01"/><Value name="n" type="number"/><Mutation name="updateValue">{`update sales.rows set value=$n`}</Mutation></Helmet>',
     document: null,
     user_id: "owner",
     group_id: null,
@@ -131,7 +132,7 @@ test("job prepares exact live head bindings and real compiled receipts without i
     "compiled fixture",
     {
       typeDefs: generatedDatasetBackendSource.split("`")[1]!,
-      fields: ["read"],
+      fields: ["read", "mutate"],
     },
   );
   const plan = await prepareMigrationJobDatasets(source, options, {
@@ -147,6 +148,11 @@ test("job prepares exact live head bindings and real compiled receipts without i
   assert.equal(compilations, 1);
   assert.equal(plan.omittedUnmappedTokenPrincipals, 1);
   assert.equal(plan.metadata.bindings.length, 1);
+  assert.equal(plan.metadata.operations?.length, 1);
+  assert.equal(
+    plan.metadata.operations?.[0]?.operation.page.editId,
+    "actual-head-edit",
+  );
   assert.equal(plan.metadata.bindings[0]!.mode, "live");
   assert.equal(plan.metadata.pages[0]!.snapshot.editId, "actual-head-edit");
   assert.equal(plan.bindings.has(JSON.stringify(["abc123", 1])), false);

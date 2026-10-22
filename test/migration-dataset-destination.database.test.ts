@@ -121,10 +121,48 @@ test(
           ],
         },
       };
+      const binding = bound.metadata.bindings[0]!;
+      bound.metadata.operations = [
+        {
+          sourceNamespace: "bound",
+          bindingName: "sales",
+          operation: {
+            name: "change",
+            backendId: binding.backendId,
+            backendVersion: binding.backendVersion,
+            page: binding.page,
+            datasetId: "dataset",
+            target: { schema: "public", table: "rows" },
+            sqlSchema: "sales",
+            sql: "delete from sales.rows",
+            paramTypes: {},
+            conflictMode: "refuse",
+          },
+        },
+      ];
       assert.deepEqual(await destination.import(bound), {
         created: 2,
         unchanged: 0,
       });
+      assert.equal(
+        (
+          await db.query(
+            "SELECT count(*)::int AS n FROM dataset_mutation_operations",
+          )
+        ).rows[0].n,
+        1,
+      );
+      await destination.import(bound);
+      await db.query("DELETE FROM dataset_mutation_operations");
+      await assert.rejects(destination.import(bound), /operation was removed/);
+      assert.equal(
+        (
+          await db.query(
+            "SELECT count(*)::int AS n FROM dataset_mutation_operations",
+          )
+        ).rows[0].n,
+        0,
+      );
       const wrong = structuredClone(bound);
       wrong.metadata.bindings = [
         { ...bound.metadata.bindings[0]!, backendVersion: "wrong-version" },

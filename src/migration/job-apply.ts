@@ -87,6 +87,16 @@ export async function applyMigrationJob(
         metadata: {
           ...metadata,
           bindings,
+          operations: metadata.operations?.filter((r) =>
+            bindings.some(
+              (b) =>
+                b.backendId === r.operation.backendId &&
+                b.backendVersion === r.operation.backendVersion &&
+                b.page.id === r.operation.page.id &&
+                b.page.version === r.operation.page.version &&
+                b.name === r.bindingName,
+            ),
+          ),
           pages: metadata.pages.filter((p) => ready.has(p.pageId)),
           resources: metadata.resources.filter((r) => datasets.has(r.legacyId)),
           versions: metadata.versions.filter((v) => datasets.has(v.legacyId)),
