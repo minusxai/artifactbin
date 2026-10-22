@@ -1,4 +1,6 @@
 import{readsLegacyViewer}from"./viewer-source.ts";
+import {validateCompiledCellWriteContexts} from "./cell-write-context.ts";
+import {archivedExplicitCellOptionsSource} from "./cell-kit-source.ts";
 import {prepareArchivedMermaid} from "./mermaid-prepare.ts";
 import {mermaidRuntimeSource} from "./mermaid-runtime.ts";
 import {readsLegacyMembers} from "./members-source.ts";
@@ -153,6 +155,7 @@ if (input.datasetUnavailable) {
     input.viewerBinding,
   ));
 } else if (rawFlow.imports.length) throw Error("Import requires a query");
+if(!input.datasetUnavailable&&input.datasetMutations?.some(binding=>binding.valueParam))validateCompiledCellWriteContexts(input.source,flow,input.datasetMutations??[]);
 const hasCharts = (nodes: readonly any[]): boolean =>
   nodes.some(
     (n) =>
@@ -359,6 +362,7 @@ const bundled = await bundle({
             throw Error("Unexpected TSX dependency");
           let source = await readFile(args.path, "utf8");
           if (input.personBindings?.length && args.path === path.join(root,"services/app/lib/islands/kit/people.tsx")) source = archivedPersonProfileSource({source,coreUrl:input.coreUrl});
+          if(input.datasetMutations?.some(binding=>binding.valueParam)&&args.path===path.join(root,"services/app/lib/islands/kit/cells.tsx"))source=archivedExplicitCellOptionsSource(source);
           const stripped = await stripTypes(source, {
             loader: "tsx",
             jsx: "preserve",

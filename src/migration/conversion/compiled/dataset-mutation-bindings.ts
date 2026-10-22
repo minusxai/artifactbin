@@ -1,10 +1,12 @@
 import {
   validDatasetMutationParameterMap,
   validDatasetMutationRowParameters,
+  validDatasetMutationValueParameter,
 } from "../../../datasets/mutation/parameter-scalars.ts";
 import type {
   DatasetMutationParameterType,
   DatasetMutationRowParameter,
+  DatasetMutationValueParameter,
 } from "../../../datasets/mutation/parameter-contracts.ts";
 import type {
   AdmitCompiledDatasetMutationBindings,
@@ -82,6 +84,24 @@ export const admitCompiledDatasetMutationBindings: AdmitCompiledDatasetMutationB
           });
         }
       }
+      let valueParam: DatasetMutationValueParameter | undefined;
+      if (binding.valueParam !== undefined) {
+        if (
+          !plain(binding.valueParam) ||
+          binding.valueParam.param !== "cell__value" ||
+          Object.hasOwn(flat, "cell__value")
+        )
+          refuse();
+        flat.cell__value = binding.valueParam
+          .type as DatasetMutationParameterType;
+        if (!validDatasetMutationValueParameter(binding.valueParam, flat))
+          refuse();
+        valueParam = Object.freeze({
+          param: "cell__value",
+          type: binding.valueParam
+            .type as DatasetMutationValueParameter["type"],
+        });
+      }
       if (
         Object.keys(flat).length > 240 ||
         !validDatasetMutationRowParameters(binding.rowParams, flat)
@@ -100,6 +120,7 @@ export const admitCompiledDatasetMutationBindings: AdmitCompiledDatasetMutationB
           ...(binding.reset === undefined
             ? {}
             : { reset: Object.freeze([...(binding.reset as string[])]) }),
+          ...(valueParam ? { valueParam } : {}),
           flatParamTypes: Object.freeze(flat),
         }),
       );

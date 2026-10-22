@@ -31,6 +31,23 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (source) => {
   }) as any;
   if (tree.end !== text.length) refuse();
   const out: LegacyCellWriteSite[] = [];
+  const hasCellWrite = (node: any, root = true): boolean => {
+    if (!node || typeof node !== "object") return false;
+    if (node.type === "JSXElement") {
+      const tag = node.openingElement.name.name;
+      if (!root && ["DataTable", "For"].includes(tag)) return false;
+      if (
+        tag !== "Button" &&
+        node.openingElement.attributes.some((a: any) => a.name?.name === "run")
+      )
+        return true;
+    }
+    return Object.values(node).some((value) =>
+      Array.isArray(value)
+        ? value.some((child) => hasCellWrite(child, false))
+        : hasCellWrite(value, false),
+    );
+  };
   const walk = (
     node: any,
     scope?: { dataName: string; rowKey: string; column?: string },
@@ -52,13 +69,14 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (source) => {
             : attr.value,
         );
       };
-      if (tag === "DataTable") {
+      if (tag === "DataTable" && hasCellWrite(node)) {
         const dataName = ref(selected("data"));
         const rowKey = selected("rowKey");
         next = dataName && name(rowKey) ? { dataName, rowKey } : undefined;
       }
       if (tag === "For") next = undefined;
-      if (tag === "Column") {
+      if (tag === "DataTable" && !hasCellWrite(node)) next = undefined;
+      if (tag === "Column" && hasCellWrite(node)) {
         const column = selected("col");
         next = scope && name(column) ? { ...scope, column } : undefined;
       }

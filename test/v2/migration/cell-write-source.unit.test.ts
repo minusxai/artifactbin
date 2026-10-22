@@ -60,3 +60,83 @@ test("editing cells refuse missing row identity, mismatched fields, ambient user
     ),
   );
 });
+test("offline compiled column inference must agree with every registered cell value type", async () => {
+  const { validateCompiledCellWriteContexts } = await import(
+    "../../../src/migration/conversion/compiled/cell-write-context.ts"
+  );
+  const flow = {
+    queries: [
+      {
+        name: "rows",
+        columns: [
+          { name: "id", type: "string" as const },
+          { name: "title", type: "string" as const },
+          { name: "tags", type: "string" as const },
+        ],
+      },
+    ],
+    values: [],
+  };
+  const bindings = ["save", "tags"].map((name) => ({
+    name,
+    backendNamespace: "legacyData",
+    recoveryScope: "a".repeat(64),
+    paramTypes: {},
+    valueParam: { param: "cell__value", type: "string" as const },
+  }));
+  assert.doesNotThrow(() =>
+    validateCompiledCellWriteContexts(source, flow, bindings),
+  );
+  assert.throws(() =>
+    validateCompiledCellWriteContexts(
+      source,
+      {
+        ...flow,
+        queries: [
+          {
+            name: "rows",
+            columns: flow.queries[0]!.columns.map((c) => ({
+              ...c,
+              type: null,
+            })),
+          },
+        ],
+      },
+      bindings,
+    ),
+  );
+  assert.throws(() =>
+    validateCompiledCellWriteContexts(
+      source,
+      flow,
+      bindings.map((b) => ({
+        ...b,
+        valueParam: { ...b.valueParam, type: "number" as const },
+      })),
+    ),
+  );
+  assert.throws(() =>
+    validateCompiledCellWriteContexts("<p>None</p>", flow, bindings),
+  );
+});
+test("explicit cell option source port never adds an ambient user listing", async () => {
+  const { archivedExplicitCellOptionsSource } = await import(
+    "../../../src/migration/conversion/compiled/cell-kit-source.ts"
+  );
+  const source =
+    "const [userOptions, setUserOptions] = createSignal(store?.getState().userOptions);\nif (store && !isServer) onCleanup(store.subscribe(() => setUserOptions(() => store.getState().userOptions)));";
+  const output = archivedExplicitCellOptionsSource(source);
+  assert.doesNotMatch(output, /getState|store.subscribe/);
+  assert.match(output, /createSignal\(undefined\)/);
+  assert.throws(() => archivedExplicitCellOptionsSource("changed source"));
+});
+
+test("unrelated read-only dynamic tables do not acquire editing scope restrictions", () => {
+  assert.deepEqual(
+    readLegacyCellWriteSites(
+      "<DataTable data={chooseRows()}><Column col={chooseColumn()}/></DataTable>" +
+        source,
+    ),
+    readLegacyCellWriteSites(source),
+  );
+});

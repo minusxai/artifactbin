@@ -1,3 +1,4 @@
+import { normalizeCompiledCellValue } from "./cell-write-value.ts";
 import { admitCompiledDatasetMutationBindings } from "./dataset-mutation-bindings.ts";
 import {
   datasetMutationScalar,
@@ -80,7 +81,20 @@ export function createCompiledDatasetMutations(
     const intent = attempt.intent,
       binding = intent && bindings.get(intent.name),
       current = context!();
+    let cellValid = true;
+    if (binding?.valueParam && intent) {
+      try {
+        const value = intent.params[binding.valueParam.param];
+        cellValid = Object.is(
+          value,
+          normalizeCompiledCellValue(binding.valueParam, value),
+        );
+      } catch {
+        cellValid = false;
+      }
+    }
     return (
+      cellValid &&
       !!intent &&
       intent.scope === binding?.recoveryScope &&
       !!current &&
@@ -241,7 +255,11 @@ export function createCompiledDatasetMutations(
         !args ||
         typeof args !== "object" ||
         Array.isArray(args) ||
-        Object.keys(args).some((k) => !Object.hasOwn(binding.paramTypes, k))
+        Object.keys(args).some(
+          (k) =>
+            !(k === "_value" && binding.valueParam) &&
+            !Object.hasOwn(binding.paramTypes, k),
+        )
       )
         throw Error("Invalid registered mutation arguments");
       restore();
@@ -270,6 +288,15 @@ export function createCompiledDatasetMutations(
         )
           throw Error("Invalid registered row mutation arguments");
         params[descriptor.param] = property.value;
+      }
+      if (binding.valueParam) {
+        const property = Object.getOwnPropertyDescriptor(args, "_value");
+        if (!property || !Object.hasOwn(property, "value"))
+          throw Error("Invalid registered cell value");
+        params[binding.valueParam.param] = normalizeCompiledCellValue(
+          binding.valueParam,
+          property.value,
+        );
       }
       if (prior?.status.state === "pending") {
         if (
