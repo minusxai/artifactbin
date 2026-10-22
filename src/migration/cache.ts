@@ -117,6 +117,11 @@ export async function archivedCompilerIdentity(
   }
   await tree(new URL("./conversion/", import.meta.url).pathname);
   hash.update(await readFile(new URL("./convert.ts", import.meta.url)));
+  // The migration compiler also bundles dependencies owned by this application (for example chart runtimes).
+  for (const name of ["package.json", "package-lock.json"]) {
+    hash.update("migration-package:" + name + "\0");
+    hash.update(await readFile(new URL("../../" + name, import.meta.url)));
+  }
   // Archived source and built islands both affect emitted CSS/HTML; hash bytes rather than assuming build labels are fresh.
   if (legacyRoot) {
     await tree(join(legacyRoot, "services/app/lib"));
