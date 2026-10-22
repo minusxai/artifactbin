@@ -20,6 +20,9 @@ export interface BackendContextFingerprintOptions {
   platform: string;
   architecture: string;
 }
+/** Project root plus platform identity for the complete SQL image COPY inputs. */
+export interface DatasetSqlContextFingerprintOptions
+  extends BackendContextFingerprintOptions {}
 export interface DeploymentGateContext {
   github: { ref: string; event_name: string };
   inputs: { "codeql-proof-only": boolean };

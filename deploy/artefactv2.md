@@ -9,3 +9,20 @@ Provision `/opt/artefactv2/.env.production`, `.env.database`, `execution-secret/
 The separate Compose project is `artefactv2`, release root `/opt/artefactv2`, images `artefactv2:<sha>` and `artefactv2-backend:<sha>`, loopback ingress8897. It has an independent PostgreSQL container and data directory, release lock, backups, current/previous image pointers and rollback. Its execution controller has deployment identity `artefactv2`, owning only `artefactv2.backend=1` containers, the `artefactv2-sandbox` network and `artefactv2-sb` bridge. Egress rules use `ARTEFACTV2-SANDBOX` and `artefactv2-sandbox-egress.service`. The legacy default identifiers remain unchanged for other installations. Queues and warm pools are controller-local. Both controllers still have host Docker authority; stronger isolation requires separate engines.
 
 Route public hosts to loopback8897 with the original Host header. Provision matching wildcard DNS/TLS for runner hostnames; a certificate for `*.example.test` does not cover `*.runner.example.test`. Validate nginx before reloading and preserve unrelated hosts. Credentials and concrete host topology belong in private provisioning, not committed configuration.
+
+The execution controller also uses the fixed SQL job image
+`artefactv2-dataset-sql:<sha>`, built from the release project context with
+`src/datasets/sql/container/Dockerfile`. Only execution receives
+`PAGEGI_DATASET_SQL_IMAGE`; the application has no Docker socket. Every gated
+release builds all three immutable images. Current/previous dataset SQL pointers
+and the Compose `.env` follow successful deployment and rollback alongside the
+existing app/backend pointers. No existing backend image tag is reused for SQL.
+CI caches SQL images independently by every copied SQL source and mutation wire
+contract, and prepares the image for all isolate suites. Local isolate setup builds
+it with `npm run build:dataset-sql`.
+
+Dataset mutation objects use a separate app-only writable overlay
+`./dataset-mutations` (UID1000, mode0700), configured by
+`PAGEGI_DATASET_MUTATION_DIRECTORY=/run/pagegi-dataset-mutations`. Imported
+dataset objects remain read-only. Neither execution nor SQL jobs mount this
+overlay; the fixed SQL job receives only bounded input through its transport.

@@ -25,11 +25,13 @@ services:
       # The execution service below, over the project network; this overrides any socket in .env.production.
       PAGEGI_EXECUTION_ENDPOINT: http://execution:8788/v1/execute
       PAGEGI_EXECUTION_SOCKET: ''
+      PAGEGI_DATASET_MUTATION_DIRECTORY: /run/pagegi-dataset-mutations
       PAGEGI_MEDIA_DIRECTORY: /run/pagegi-media
       PAGEGI_DATASET_DIRECTORY: /run/pagegi-datasets
     volumes:
       - ./execution-secret:/run/pagegi-execution-secret:ro
       - ./resource-config:/run/pagegi-resource-config:ro
+      - ./dataset-mutations:/run/pagegi-dataset-mutations:rw
       # Immutable imported media; ACLs are checked by the application, never a static server.
       - ./media:/run/pagegi-media:ro
       # Private immutable dataset bytes are separate from media and never served statically.
@@ -63,6 +65,7 @@ services:
       PAGEGI_EXECUTION_PORT: '8788'
       PAGEGI_EXECUTION_SECRET_FILE: /run/pagegi-execution-secret/transport-secret
       PAGEGI_BACKEND_IMAGE: ${PAGEGI_BACKEND_IMAGE:-artefactv2-backend:local}
+      PAGEGI_DATASET_SQL_IMAGE: ${PAGEGI_DATASET_SQL_IMAGE:-artefactv2-dataset-sql:local}
       # Lambdas run on this dedicated bridge (created by the service on first use, interface
       # artefactv2-sb, no inter-container traffic, isolated from this project's network); workerd lets
       # them reach public addresses only, and deploy/receive-artefactv2.sh drops private ranges on it too.

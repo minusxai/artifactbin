@@ -10,6 +10,8 @@ root=/opt/artefactv2
 # Compose execution must match the host Docker socket group.
 export DOCKER_GID="$(stat -c %g /var/run/docker.sock)"
 mkdir -p "$root/releases" "$root/backups"
+# Only the trusted application writes mutation objects; imported source stores stay read-only.
+install -d -o 1000 -g 1000 -m 0700 "$root/dataset-mutations"
 # The app reads this private persistent object mount as UID1000; deployments never replace its contents.
 install -d -o 1000 -g 1000 -m 0700 "$root/datasets"
 exec 9>"$root/deploy.lock"
@@ -31,12 +33,15 @@ docker build --label "org.opencontainers.image.revision=$revision" -t "$image" "
 # The sandbox image the execution service runs backend files on: the same revision as the app.
 backend_image="artefactv2-backend:$revision"
 docker build -t "$backend_image" "$release/src/backend/container"
+dataset_sql_image="artefactv2-dataset-sql:$revision"
+docker build -f "$release/src/datasets/sql/container/Dockerfile" -t "$dataset_sql_image" "$release"
 # The composition is the release's, never a host-edited copy.
 install -m 0644 "$release/deploy/init-artefactv2-database.sh" "$root/init-database.sh"
 cp "$release/deploy/compose.artefactv2.yaml" "$root/compose.yaml.tmp"
 mv "$root/compose.yaml.tmp" "$root/compose.yaml"
 previous=$(cat "$root/current-image" 2>/dev/null || printf 'artefactv2:local')
 previous_backend=$(cat "$root/current-backend-image" 2>/dev/null || printf 'artefactv2-backend:local')
+previous_dataset_sql=$(cat "$root/current-dataset-sql-image" 2>/dev/null || printf 'artefactv2-dataset-sql:local')
 compose=(docker compose --project-name artefactv2 --project-directory "$root" -f "$root/compose.yaml")
 # Backend sandboxes run on the Docker bridge `artefactv2-sb` (network artefactv2-sandbox, created by the
 # execution service; src/backend/README.md) and may reach public addresses only. workerd enforces
@@ -98,10 +103,10 @@ systemctl daemon-reload && systemctl enable --now artefactv2-sandbox-egress.serv
 backup="$root/backups/$(date +%s%N).dump"
 (umask 077; "${compose[@]}" exec -T postgres pg_dump -U artefactv2_admin -d artefactv2 -Fc > "$backup.tmp")
 mv "$backup.tmp" "$backup"
-export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image"
+export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image" PAGEGI_DATASET_SQL_IMAGE="$dataset_sql_image"
 if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 120; then
   echo 'Deployment failed; restoring previous images' >&2
-  export PAGEGI_IMAGE="$previous" PAGEGI_BACKEND_IMAGE="$previous_backend"
+  export PAGEGI_IMAGE="$previous" PAGEGI_BACKEND_IMAGE="$previous_backend" PAGEGI_DATASET_SQL_IMAGE="$previous_dataset_sql"
   "${compose[@]}" up -d --no-build --wait --wait-timeout 120
   exit 1
 fi
@@ -111,8 +116,11 @@ printf '%s\n' "$image" > "$root/current-image.tmp"
 mv "$root/current-image.tmp" "$root/current-image"
 printf '%s\n' "$backend_image" > "$root/current-backend-image.tmp"
 mv "$root/current-backend-image.tmp" "$root/current-backend-image"
+printf '%s\n' "$previous_dataset_sql" > "$root/previous-dataset-sql-image"
+printf '%s\n' "$dataset_sql_image" > "$root/current-dataset-sql-image.tmp"
+mv "$root/current-dataset-sql-image.tmp" "$root/current-dataset-sql-image"
 # Keep ordinary docker compose operations on the successful release too.
-printf 'PAGEGI_IMAGE=%s\nPAGEGI_BACKEND_IMAGE=%s\n' "$image" "$backend_image" > "$root/.env.tmp"
+printf 'PAGEGI_IMAGE=%s\nPAGEGI_BACKEND_IMAGE=%s\nPAGEGI_DATASET_SQL_IMAGE=%s\n' "$image" "$backend_image" "$dataset_sql_image" > "$root/.env.tmp"
 mv "$root/.env.tmp" "$root/.env"
 python3 - "$root" <<'PY'
 from pathlib import Path
