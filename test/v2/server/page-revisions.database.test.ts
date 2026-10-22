@@ -166,3 +166,27 @@ test("library downloads select head or the exact saved revision", async () => {
     await server.close();
   }
 });
+
+test("legacy address composition preserves exact selected downloads and raw source", async () => {
+  const { server, token, id, source } = await fixture();
+  try {
+    for (const suffix of ["app", "download", "raw"]) {
+      const result = await server.request(`/a/${id}/${suffix}?version=1`, { token });
+      assert.equal(result.status, 200, await result.clone().text());
+      const body = await result.text();
+      if (suffix === "app") assert.ok(body.includes("version=1"));
+      else { assert.ok(body.includes("Saved one")); assert.ok(!body.includes("Current two")); }
+      if (suffix === "raw") {
+        assert.equal(body, source);
+        assert.match(result.headers.get("content-disposition") || "", /attachment/);
+        assert.match(result.headers.get("content-security-policy") || "", /sandbox/);
+      }
+    }
+    const workspace = await server.request(`/workspace/${id}?version=1`, { token });
+    assert.equal(workspace.status, 200);
+    assert.ok((await workspace.text()).includes("version=1"));
+    for (const path of [`/a/${id}/raw?version=999`, `/a/${id}/unknown`])
+      assert.equal((await server.request(path, { token })).status, 404);
+    assert.equal((await server.request(`/a/${id}/raw?v=1&version=2`, { token })).status, 400);
+  } finally { await server.close(); }
+});

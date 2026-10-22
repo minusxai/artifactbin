@@ -1,3 +1,5 @@
+import { serveLegacyAddress } from "./server/legacy-addresses-http.ts";
+import { createLegacyRawRepository } from "./server/legacy-addresses-repository.ts";
 import {parsePageRevision,pageRevisionQuery} from "./server/page-revision.ts";
 import { createSavedProgramHost } from "./server/saved-program-host.ts";
 import { serveDatasetAttachments } from "./server/dataset-attachment-http.ts";
@@ -206,6 +208,7 @@ export function createService({
         : null,
     ));
   const assets = createPlatformAssets();
+  const legacyRaw = createLegacyRawRepository(repository.sql, now);
   const media = createMediaService(mediaRepository(repository.sql, now), readOnlyMediaStore(mediaDirectory));
   const supplemental = createSupplementalService({repository:supplementalRepository(repository.sql, now, datasetRuntime.person),store:readOnlyMediaStore(mediaDirectory)});
   const server = createServer(async (req, res) => {
@@ -258,6 +261,9 @@ export function createService({
         res.writeHead(legacy.status, legacy.headers);
         return res.end(legacy.body);
       }
+      if (await serveLegacyAddress(req, res, url, credential(req) || cookieToken(req),
+        { raw: legacyRaw, media },
+        (next, id) => address(req, res, next, origin, id))) return;
       // A page's address: /a/<id>, /a/<id>-<title> or /@<handle>/<path>.
       const pageAddress = parseAddressPath(url.pathname);
       if (pageAddress) {
