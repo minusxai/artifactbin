@@ -7,6 +7,7 @@ export function fileUploadBootSource(sites:readonly CompiledFileUploadSite[]):st
  store.attachmentUnavailable=name=>{attachmentTick();return attachmentAdapter.unavailable(name);};
  store.uploadAttachment=(name,binding,file)=>attachmentAdapter.upload(name,binding,file);
  store.attachmentFileUrl=(name,binding,ref)=>{attachmentTick();return attachmentAdapter.fileUrl(name,binding,ref);};
+ store.attachmentFileMetadata=(name,binding,ref)=>{attachmentTick();return attachmentAdapter.fileMetadata(name,binding,ref);};
  store.releaseAttachment=name=>attachmentAdapter.release(name);
  window.addEventListener('pageshow',event=>{if(event.persisted)attachmentAdapter.reconnect();});
  window.addEventListener('pagehide',event=>{if(!event.persisted)attachmentAdapter.dispose();});`;
