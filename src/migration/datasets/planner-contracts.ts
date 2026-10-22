@@ -38,6 +38,7 @@ export interface DatasetBrowserBinding {
 }
 export interface DatasetMetadataPlan {
   metadata: DatasetImportMetadata;
+  diagnostics: { unmappedTokenPrincipals: number };
   provenance: {
     baseExportedAt: string;
     relationExportedAt: string;

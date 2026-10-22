@@ -122,8 +122,14 @@ export function planDatasetMetadata(
   const userActors = new Set<string>();
   for (const row of manifest.tables.users ?? []) {
     const id = String(row.id ?? "");
-    const actor = maps.users[id];
-    if (!id || users.has(id) || !actor || userActors.has(actor))
+    const actor = Object.hasOwn(maps.users, id) ? maps.users[id] : undefined;
+    if (
+      !id ||
+      users.has(id) ||
+      typeof actor !== "string" ||
+      !actor ||
+      userActors.has(actor)
+    )
       throw Error("Ambiguous legacy user mapping");
     users.set(id, row);
     userActors.add(actor);
@@ -153,12 +159,19 @@ export function planDatasetMetadata(
       expiresAt: typeof row.expires_at === "string" ? row.expires_at : null,
     });
   }
+  let unmappedTokenPrincipals = 0;
   const seenTokens = new Set<string>();
   for (const token of manifest.tokenOwners) {
-    const actor = maps.tokens[token.id];
-    if (!token.id || seenTokens.has(token.id) || !actor)
+    const actor = Object.hasOwn(maps.tokens, token.id)
+      ? maps.tokens[token.id]
+      : undefined;
+    if (!token.id || seenTokens.has(token.id))
       throw Error("Ambiguous legacy token mapping");
     seenTokens.add(token.id);
+    if (typeof actor !== "string" || !actor) {
+      unmappedTokenPrincipals++;
+      continue;
+    }
     (
       metadata.principals as Array<DatasetImportMetadata["principals"][number]>
     ).push({
@@ -379,6 +392,7 @@ export function planDatasetMetadata(
   }
   return {
     metadata,
+    diagnostics: { unmappedTokenPrincipals },
     browserBindings,
     provenance: {
       baseExportedAt: manifest.exportedAt,

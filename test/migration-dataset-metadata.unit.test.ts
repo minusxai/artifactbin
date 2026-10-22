@@ -236,3 +236,11 @@ test("historical saved page uses only exact proven archived edit identity, never
   delete a.manifest.tables.artifact_versions!.at(-1)!.edit_id;
   assert.throws(() => planDatasetMetadata(a));
 });
+test("unrelated unmapped token provenance is counted, while an actual unmapped token owner fails closed", () => {
+  const a = input();
+  a.manifest.tokenOwners.push({ id: "orphan", user_id: null });
+  assert.equal(planDatasetMetadata(a).diagnostics.unmappedTokenPrincipals, 1);
+  a.manifest.artifacts[0]!.user_id = null;
+  a.manifest.artifacts[0]!.token_id = "orphan";
+  assert.throws(() => planDatasetMetadata(a));
+});
