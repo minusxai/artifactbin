@@ -131,6 +131,8 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const renderedIdentities = new Set<string>();
   const authorProps: AdmittedAuthorMountProps[] = [];
   let invalid = false;
+  let hasSlideDeck = false;
+  let statelessChildrenSupported = true;
   const registeredMutations = input.datasetMutations ?? [];
   try {
     if (
@@ -249,6 +251,15 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     const branch = (node: any, loopDepth: number, loopTable?: string): boolean => ["JSXElement", "JSXFragment"].includes(node.type) || readExpression(node, loopDepth, loopTable);
     const walk = (node: any, parent?: any, loopDepth = 0, loopTable?: string, ancestors: readonly string[] = []) => {
       let childLoopTable = loopTable;
+      if (node.type === "JSXExpressionContainer" && parent?.type !== "JSXAttribute") {
+        const expression = node.expression;
+        // The frozen compiler does not preserve arbitrary literal containers as
+        // body children. Static pages use only its scalar/text child contract.
+        if (!["Literal", "JSXEmptyExpression"].includes(expression.type) &&
+            !(expression.type === "TemplateLiteral" && !expression.expressions.length) &&
+            !(expression.type === "UnaryExpression" && ["-", "+"].includes(expression.operator) && expression.argument?.type === "Literal" && typeof expression.argument.value === "number"))
+          statelessChildrenSupported = false;
+      }
       if (
         node.type === "JSXExpressionContainer" &&
         !(parent?.type === "JSXAttribute" ? authorAttributes.has(parent) || safeExpression(node.expression) : readExpression(node.expression, loopDepth, loopTable))
@@ -256,6 +267,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
         invalid = true;
       if (node.type === "JSXElement") {
         const name = node.openingElement.name.name;
+        if (name === "SlideDeck") hasSlideDeck = true;
         if (loopTable && !loopDepth && !["Column", "Button", "span", "strong", "em", "b", "i", "small", "code", "br", "p", "div", "a"].includes(name)) invalid = true;
         const component = admitLocalComponent(node, {ancestors, parentTag: parent?.type === "JSXElement" ? parent.openingElement.name.name : undefined, rowTable:loopTable});
         if (component) {
@@ -618,7 +630,9 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     [...imports].some((n) => declarations.has(n) || queries.has(n))
   )
     invalid = true;
-  if (invalid || (declarations.size === 0 && queries.size === 0 && !author && !slideDeck && !mermaids.length))
+  // Empty state is valid: audited static/presentation components need no dummy Value.
+  const stateless = !declarations.size && !queries.size && !author && !slideDeck && !mermaids.length;
+  if (invalid || (hasSlideDeck && !slideDeck) || (stateless && !statelessChildrenSupported))
     return blocked("compiled-capability");
   if (
     dataControls.some((p) =>
