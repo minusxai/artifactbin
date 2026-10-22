@@ -10,6 +10,7 @@ export interface MigrationDatasetImportScan {
   statistics: {
     pagesWithImports: number;
     pagesWithMembers: number;
+    pagesWithViewer: number;
     headImports: number;
     historicalImports: number;
     groupOwnedPages: number;

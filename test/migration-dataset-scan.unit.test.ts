@@ -92,6 +92,7 @@ test("dataset scan retains literal dependencies and pins initial receipt to trus
   assert.deepEqual(result.statistics, {
     pagesWithImports: 1,
     pagesWithMembers: 0,
+    pagesWithViewer: 0,
     headImports: 1,
     historicalImports: 1,
     groupOwnedPages: 0,

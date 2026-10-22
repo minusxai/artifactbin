@@ -282,4 +282,44 @@ test("job prepares exact live head bindings and real compiled receipts without i
     member.membersBindings.has(JSON.stringify(["abc123", 1])),
     false,
   );
+  const viewerSource = {
+    ...source,
+    readArtifact: async (id: string) => {
+      const artifact = await source.readArtifact(id);
+      if (id !== page.id) return artifact;
+      const clone = structuredClone(artifact);
+      clone.artifacts[0]!.source = '<p data-af-id="reader">{$_me.id}</p>';
+      clone.tables.artifact_versions = [
+        {
+          artifact_id: page.id,
+          version: 1,
+          format: "markup",
+          source: "<p>{$_me.id}</p>",
+        },
+      ];
+      return clone;
+    },
+  };
+  const viewer = await prepareMigrationJobDatasets(viewerSource, options, {
+    host: { compile: async () => deployment, invoke: async () => null },
+  });
+  assert.ok(viewer);
+  assert.equal(viewer.issues.size, 0);
+  assert.equal(viewer.scan.statistics.pagesWithViewer, 1);
+  assert.equal(viewer.metadata.bindings.length, 0);
+  assert.equal(viewer.metadata.acceptedJoins.length, 0);
+  assert.equal(
+    viewer.metadata.principals.some(
+      (p) => p.kind === "user" && p.legacyId === "owner",
+    ),
+    true,
+  );
+  const viewerReceipts = viewer.backends.get("abc123")!;
+  assert.deepEqual(
+    viewerReceipts.map((r) => r.viewer),
+    [undefined, { sourceNamespace: "fixture" }],
+  );
+  assert.ok(viewer.viewerBindings.get(JSON.stringify(["abc123", 2])));
+  assert.equal(viewer.viewerBindings.has(JSON.stringify(["abc123", 1])), false);
+  assert.deepEqual(viewer.scan.historicalServiceVersions.get("abc123"), [1]);
 });

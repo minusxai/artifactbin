@@ -219,6 +219,13 @@ test(
         `UPDATE "${schema}".comment_attachment_assets SET width=10`,
       );
       await verify();
+      await db.query(
+        `INSERT INTO "${schema}".dataset_viewer_bindings VALUES('Back12','v1',$1,1,'unplanned')`,
+        [plan.pages[0]!.pageId],
+      );
+      await assert.rejects(verify(), /viewer backend registry/);
+      await db.query(`DELETE FROM "${schema}".dataset_viewer_bindings`);
+      await verify();
       const baseline = (
         await db.query(`SELECT * FROM "${schema}".files WHERE id=$1`, [
           plan.pages[0]!.pageId,

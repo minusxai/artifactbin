@@ -172,3 +172,43 @@ test("compiler provenance covers transitive source, dependency locks and generat
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("conversion cache includes current viewer routing without caching viewer identity", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "migration-viewer-cache-"));
+  try {
+    let calls = 0;
+    const cached = cachedMigrationConverter(
+      () => {
+        calls++;
+        return {
+          classification: "renderable",
+          html: "<p>fixture</p>",
+          issues: [],
+          identities: {},
+        };
+      },
+      { directory, compilerIdentity: "fixture", strategy: "functional" },
+    );
+    const input = {
+      source: "<p>{$_me.id}</p>",
+      coreUrl: "/af/v1/core.js",
+      viewerBinding: {
+        backendNamespace: "legacyData",
+        backendHref: "/af/v1/ids/Back12",
+      },
+    };
+    await cached.convert(input);
+    await cached.convert(input);
+    assert.equal(calls, 1);
+    await cached.convert({
+      ...input,
+      viewerBinding: {
+        ...input.viewerBinding,
+        backendHref: "/af/v1/ids/Back34",
+      },
+    });
+    assert.equal(calls, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

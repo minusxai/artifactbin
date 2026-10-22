@@ -72,6 +72,7 @@ export function createMigrationConverter(
       datasetMutations: input.datasetMutations,
       boundValueColumns: input.boundValueColumns,
       membersBinding: input.membersBinding,
+      viewerBinding: input.viewerBinding,
       personBindings: input.personBindings,
       datasetUnavailable: input.datasetUnavailable,
       theme: typeof meta.theme === "string" ? meta.theme : null,

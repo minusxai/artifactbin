@@ -81,6 +81,12 @@ export async function planMigration(
       legacyId: string,
       version: number,
     ) => readonly { valueName: string; backendNamespace: string }[];
+    viewerBinding?: (
+      legacyId: string,
+      version: number,
+    ) =>
+      | import("./conversion/compiled/viewer-contracts.ts").CompiledViewerBinding
+      | undefined;
     membersBinding?: (
       legacyId: string,
       version: number,
@@ -205,6 +211,10 @@ export async function planMigration(
           personBindings:
             Number(original.version) === artifact.version
               ? options.personBindings?.(artifact.id, Number(original.version))
+              : undefined,
+          viewerBinding:
+            Number(original.version) === artifact.version
+              ? options.viewerBinding?.(artifact.id, Number(original.version))
               : undefined,
           membersBinding:
             Number(original.version) === artifact.version

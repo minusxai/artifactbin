@@ -1,3 +1,4 @@
+import { readsMigrationViewer } from "./job-viewer.ts";
 import { hasLegacyBoundValueSource } from "./conversion/compiled/bound-values.ts";
 import { readsMigrationMembers } from "./job-members.ts";
 import {
@@ -21,6 +22,7 @@ export async function scanMigrationDatasetImports(
   const statistics = {
     pagesWithImports: 0,
     pagesWithMembers: 0,
+    pagesWithViewer: 0,
     headImports: 0,
     historicalImports: 0,
     groupOwnedPages: 0,
@@ -38,6 +40,7 @@ export async function scanMigrationDatasetImports(
     const revisions: MigrationBackendPage["revisions"][number][] = [];
     let hasImports = false;
     let hasMembers = false;
+    let hasViewer = false;
     for (const row of originals) {
       if ((row.format ?? head.format) !== "markup") continue;
       let text: string | null;
@@ -56,6 +59,7 @@ export async function scanMigrationDatasetImports(
         if (
           extracted.imports.length ||
           hasLegacyBoundValueSource(text) ||
+          (await readsMigrationViewer(source, text, [])) ||
           (await readsMigrationMembers(source, text, []))
         ) {
           const list = historicalServiceVersions.get(id) ?? [];
@@ -105,6 +109,11 @@ export async function scanMigrationDatasetImports(
           statistics.headImports += extracted.imports.length;
         else statistics.historicalImports += extracted.imports.length;
       }
+      const readsViewer = await readsMigrationViewer(source, text, imports);
+      if (readsViewer) {
+        hasViewer = true;
+        statistics.pagesWithViewer++;
+      }
       const readsMembers = await readsMigrationMembers(source, text, imports);
       if (readsMembers) {
         hasMembers = true;
@@ -114,9 +123,10 @@ export async function scanMigrationDatasetImports(
         version: Number(row.version),
         imports,
         ...(readsMembers ? { readsMembers: true as const } : {}),
+        ...(readsViewer ? { readsViewer: true as const } : {}),
       });
     }
-    if (!hasImports && !hasMembers) continue;
+    if (!hasImports && !hasMembers && !hasViewer) continue;
     if (hasImports) statistics.pagesWithImports++;
     heads.set(id, head.version);
     const kind = head.group_id ? "group" : head.user_id ? "user" : "token";

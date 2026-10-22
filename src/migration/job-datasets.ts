@@ -35,7 +35,9 @@ export async function prepareMigrationJobDatasets(
   const candidates = scan.pages.filter((page) => {
     const head = scan.heads.get(page.legacyId)!;
     const hasImports = page.revisions.some(
-      (r) => r.version === head && (r.imports.length || r.readsMembers),
+      (r) =>
+        r.version === head &&
+        (r.imports.length || r.readsMembers || r.readsViewer),
     );
     if (hasImports && page.owner.kind === "group") {
       issues.set(page.legacyId, [
@@ -78,6 +80,10 @@ export async function prepareMigrationJobDatasets(
     string,
     { valueName: string; backendNamespace: string }[]
   >();
+  const viewerBindings = new Map<
+    string,
+    import("./conversion/compiled/viewer-contracts.ts").CompiledViewerBinding
+  >();
   const membersBindings = new Map<
     string,
     { backendNamespace: string; backendHref: string }
@@ -111,6 +117,25 @@ export async function prepareMigrationJobDatasets(
   );
   accumulator.add({ ...global.metadata, profiles: profiles.profiles });
   for (const page of executable) {
+    const pageReceipts = prepared.receipts.filter(
+      (r) => r.pageLegacyId === page.legacyId,
+    );
+    if (pageReceipts.some((r) => r.viewer)) {
+      backends.set(page.legacyId, pageReceipts);
+      for (const receipt of pageReceipts)
+        if (receipt.viewer)
+          viewerBindings.set(
+            migrationDatasetVersionKey(
+              receipt.pageLegacyId,
+              receipt.pageVersion,
+            ),
+            {
+              backendNamespace: receipt.backendNamespace,
+              backendHref: receipt.backendHref,
+            },
+          );
+    }
+
     const pageBindings = prepared.bindings.filter(
       (b) => b.pageLegacyId === page.legacyId,
     );
@@ -248,6 +273,7 @@ export async function prepareMigrationJobDatasets(
     metadata: accumulator.finish(),
     boundValueColumns,
     membersBindings,
+    viewerBindings,
     personBindings,
     scan,
     bindings,

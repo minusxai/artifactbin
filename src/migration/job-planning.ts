@@ -35,6 +35,10 @@ export function createMigrationJobPlanner(
         source.preparedDatasets?.personBindings.get(
           migrationDatasetVersionKey(id, version),
         ) ?? [],
+      viewerBinding: (id, version) =>
+        source.preparedDatasets?.viewerBindings.get(
+          migrationDatasetVersionKey(id, version),
+        ),
       membersBinding: (id, version) =>
         source.preparedDatasets?.membersBindings.get(
           migrationDatasetVersionKey(id, version),

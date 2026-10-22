@@ -10,6 +10,10 @@ export interface MigrationJobDatasets {
     string,
     readonly { valueName: string; backendNamespace: string }[]
   >;
+  viewerBindings: ReadonlyMap<
+    string,
+    import("./conversion/compiled/viewer-contracts.ts").CompiledViewerBinding
+  >;
   membersBindings: ReadonlyMap<
     string,
     { backendNamespace: string; backendHref: string }
