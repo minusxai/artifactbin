@@ -314,6 +314,25 @@ export function liveHub({
           else scheduleBroadcast(id, false, true);
         }
     },
+    /** Awaitable durable invalidation dispatch; legacy changed callers stay fire-and-forget.
+     * @param {string} id */
+    async changedAndWait(id) {
+      const results = await Promise.allSettled([...clients].map(async ([ws, c]) => {
+        if (c.id !== id || !c.auth || ws.readyState !== WebSocket.OPEN) return;
+        try {
+          const auth = await refresh(ws, c);
+          if (auth && !stopped) send(ws, { type: "changed" });
+        } catch (error) {
+          if (error && typeof error === "object" && "status" in error && [401,403,404,410].includes(Number(error.status))) {
+            closeRevoked(ws, c);
+            return;
+          }
+          throw error;
+        }
+      }));
+      const failed = results.find(result => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+    },
     close() {
       stopped = true;
       broadcasts.clear();

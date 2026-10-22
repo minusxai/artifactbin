@@ -10,7 +10,7 @@ async function fixture(t, heartbeatMs = 20) {
   let time = 1000,
     reads = 0;
   const revoked = new Set();
-  let blocked = null;
+  let blocked = null, transient = false;
   const server = createServer(),
     presence = new Map();
   const hub = liveHub({
@@ -20,6 +20,7 @@ async function fixture(t, heartbeatMs = 20) {
     heartbeatMs,
     authorize: async (id, token, sourceRevision) => {
       reads++;
+      if (transient) { transient = false; throw Error("temporary authorization database failure"); }
       if (blocked) await blocked;
       if (token === "bad" || revoked.has(token))
         throw Object.assign(Error("Denied"), { status: 403 });
@@ -63,6 +64,7 @@ async function fixture(t, heartbeatMs = 20) {
   }
   return {
     connect,
+    failNext: () => { transient = true; },
     presence,
     hub,
     reads: () => reads,
@@ -238,3 +240,24 @@ test("invalid unauthenticated frames close without unhandled rejection or presen
     assert.equal(f.presence.size, 0);
   }
 });
+
+
+ test("durable change waits for dispatch and retries transient authorization failure without revoking a viewer", async t => {
+  const {createLiveInvalidationConsumer}=await import("../src/live-invalidation.ts");
+  const f=await fixture(t,100000), client=await f.connect();
+  await wait();
+  const consumer=createLiveInvalidationConsumer({autoStart:false,reader:{after:async sequence=>sequence==='0'?[{sequence:'1',pageIds:['file']}]:[]},changed:id=>f.hub.changedAndWait(id)});
+  t.after(()=>consumer.close());
+  f.failNext();
+  await assert.rejects(consumer.poll(),/temporary authorization database failure/);
+  assert.equal(consumer.sequence,'0');
+  assert.equal(client.ws.readyState,WebSocket.OPEN);
+  const changed=once(client.ws,'message');
+  await consumer.poll();
+  assert.equal(consumer.sequence,'1');
+  assert.equal(JSON.parse((await changed)[0]).type,'changed');
+  f.revoke('alice');
+  const closed=once(client.ws,'close');
+  await f.hub.changedAndWait('file');
+  assert.equal((await closed)[0],4403);
+ });

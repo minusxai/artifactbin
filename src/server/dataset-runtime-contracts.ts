@@ -1,4 +1,4 @@
-import type { SqlDatabase } from "../persistence/sql.ts";
+import type { SqlDatabase } from "../persistence/sql-contracts.ts";
 import type { DatasetSqlExecutor } from "../backend/dataset-sql-contracts.ts";
 import type { DatasetReadService } from "../datasets/contracts.ts";
 import type { DatasetMutationService } from "../datasets/mutation/contracts.ts";

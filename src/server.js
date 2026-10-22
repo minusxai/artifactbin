@@ -727,7 +727,7 @@ export function createService({
       invalidations.push(
         createLiveInvalidationConsumer({
           reader,
-          changed: (id) => live.changed(id),
+          changed: (id) => live.changedAndWait(id),
         }),
       );
   };
