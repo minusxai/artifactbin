@@ -33,6 +33,7 @@ export interface InlinedFontStylesheet {
 }
 export type ResolvePinnedFonts = (
   request: PinnedFontRequest,
+  context?: { readonly requestUrl: string; readonly requestSha256: string },
 ) => Promise<readonly PinnedFontFace[]>;
 export const MAX_FONT_BYTES = 2_000_000;
 export const MAX_FONT_TOTAL_BYTES = 8_000_000;

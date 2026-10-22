@@ -149,7 +149,10 @@ export async function inlinePinnedFontImports(
       throw Error("Unsupported font import rule");
     const raw = children[0].value,
       request = parsePinnedFontRequest(raw),
-      faces = await resolve(request);
+      faces = await resolve(request, {
+        requestUrl: raw,
+        requestSha256: createHash("sha256").update(raw).digest("hex"),
+      });
     if (!faces.length) throw Error("Pinned font faces unavailable");
     for (const family of request.families)
       if (

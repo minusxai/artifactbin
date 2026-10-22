@@ -53,6 +53,7 @@ export interface CompiledLocalResult extends ConversionResult {
     modules: string[];
     contexts?: readonly import("./context-contracts.ts").CompiledContextReference[];
     fontResources?: readonly import("./fonts/contracts.ts").InlinedFontReceipt[];
+    fontBundleResourceDigest?: string;
     compatibility?: readonly import("./table-presentation-contracts.ts").TablePresentationCompatibility[];
   };
 }

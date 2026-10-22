@@ -107,6 +107,7 @@ export async function externalCompile(
         path.join(root, "node_modules/tsx/dist/loader.mjs"),
         runner,
         root,
+        ...(options.fontBundle ? [JSON.stringify(options.fontBundle)] : []),
       ],
       {
         cwd: path.join(root, "services/app"),
@@ -290,6 +291,9 @@ export async function compileArchivedStatic(
       compiler: "archived-static",
       build: compiled.build,
       mode: "static-only",
+      ...(compiled.fontBundleResourceDigest
+        ? { fontBundleResourceDigest: compiled.fontBundleResourceDigest }
+        : {}),
       ...(compiled.fontResources?.length
         ? { fontResources: compiled.fontResources }
         : {}),

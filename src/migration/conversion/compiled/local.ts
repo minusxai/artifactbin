@@ -133,6 +133,7 @@ export async function compileArchivedLocal(
           : "local-scalars",
       modules: output.modules,
       ...(context.provenance.length ? {contexts:context.provenance} : {}),
+      ...(output.fontBundleResourceDigest ? {fontBundleResourceDigest:output.fontBundleResourceDigest}:{}),
       ...(output.fontResources?.length
         ? { fontResources: output.fontResources }
         : {}),

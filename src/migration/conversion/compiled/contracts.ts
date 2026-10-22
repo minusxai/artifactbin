@@ -45,6 +45,7 @@ export interface CompiledMigrationInput {
 export interface ArchivedStaticOutput {
   /** Offline verified font bytes only; no provider URLs. */
   fontResources?: readonly import("./fonts/contracts.ts").InlinedFontReceipt[];
+  fontBundleResourceDigest?: string;
   html: string;
   css: string;
   title: string;
@@ -57,6 +58,8 @@ export interface ArchivedCompilerPort {
   compile(input: CompiledMigrationInput): Promise<ArchivedStaticOutput>;
 }
 export interface CompiledMigrationOptions {
+  /** Explicit verified private offline font receipt bundle; never page authority. */
+  fontBundle?: import("./fonts/capture-contracts.ts").CapturedFontBundleInput;
   legacyRoot?: string;
   compiler?: ArchivedCompilerPort;
   timeoutMs?: number;
@@ -67,6 +70,7 @@ export interface CompiledMigrationResult extends ConversionResult {
     build: string;
     mode: "static-only";
     fontResources?: readonly import("./fonts/contracts.ts").InlinedFontReceipt[];
+    fontBundleResourceDigest?: string;
   };
 }
 export const MAX_COMPILED_SOURCE_BYTES = 8 * 1024 * 1024;

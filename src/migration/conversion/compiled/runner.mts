@@ -1,5 +1,5 @@
 import {inlinePinnedFontImports} from "./fonts/inline.ts";
-import {pinnedFontResolver} from "./fonts/pinned.ts";
+import {prepareArchivedFontResources} from "./fonts/captured.ts";
 /** Migration subprocess only: archived compiler dependencies never enter the product package graph. */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -92,7 +92,8 @@ const sheets = documentStyleSheets({
   authorCss: parts.runtime.authorCss,
 });
 let css = sheets.map((sheet: { css: string }) => sheet.css).join("\n");
-const fontResources = await inlinePinnedFontImports(css, await pinnedFontResolver(root));
+const archivedFonts = await prepareArchivedFontResources(root, process.argv[3] ? JSON.parse(process.argv[3]) : undefined);
+const fontResources = await inlinePinnedFontImports(css, archivedFonts.resolve);
 css = fontResources.css;
 // No network, old origin, asset endpoint or deployment host is carried into migrated styles.
 const { parse: parseCss, walk: walkCss } = await import("css-tree");
@@ -136,6 +137,7 @@ process.stdout.write(
       ...(input.theme ? { "data-theme": input.theme } : {}),
     },
     fontResources: fontResources.receipts,
+    ...(archivedFonts.resourceDigest ? {fontBundleResourceDigest:archivedFonts.resourceDigest} : {}),
     capabilities: ["static-layout", "inlined-fonts"],
   }),
 );
