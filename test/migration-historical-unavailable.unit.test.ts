@@ -184,3 +184,26 @@ test("policy never substitutes the current head and never changes supported hist
     undefined,
   );
 });
+
+test("converter output cannot bypass opt-in or mark an unavailable current head ready", async () => {
+  const injected: Converter = () => ({
+    classification: "historical-unavailable",
+    html: "<p>Unavailable</p>",
+    issues: [],
+    identities: {},
+  });
+  for (const historicalUnavailable of [undefined, "preserve"] as const) {
+    const plan = await planMigration(fixture(), {
+      maps,
+      convert: injected,
+      coreUrl: "/af/v1/core.js",
+      historicalUnavailable,
+    });
+    assert.equal(plan.pages[0]!.disposition, "blocked");
+    assert.equal(
+      plan.pages[0]!.revisions[1]!.conversion.classification,
+      "manual-blocked",
+    );
+    assert.equal(plan.pages[0]!.revisions[1]!.conversion.html, null);
+  }
+});

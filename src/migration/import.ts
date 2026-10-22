@@ -332,6 +332,16 @@ export async function planMigration(
           issues: [`Unsupported format: ${format}`],
           identities: {},
         };
+      // The fallback is planner-owned: a converter cannot make an unavailable head ready
+      // or bypass the explicit preservation policy by returning its classification.
+      if (conversion.classification === "historical-unavailable")
+        conversion = {
+          ...conversion,
+          historicalUnavailable: undefined,
+          classification: "manual-blocked",
+          html: null,
+          issues: [...conversion.issues, { code: "planner-owned-history-policy" }],
+        };
       if (conversion.html !== null) {
         const outputBytes = Buffer.byteLength(conversion.html);
         conversion = { ...conversion, outputBytes };
