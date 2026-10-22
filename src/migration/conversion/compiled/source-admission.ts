@@ -403,7 +403,8 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           )
             invalid = true;
           const attrName = attr.name?.name?.toLowerCase();
-          if (loopTable && ["set", "args"].includes(attrName)) invalid = true;
+          if (loopTable && attrName === "args") invalid = true;
+          if (loopTable && attrName === "set" && (name !== "Button" || node.openingElement.attributes.some((a:any)=>a.name?.name === "run"))) invalid = true;
           if (
             attrName === "data-migration-dataset-status" ||
             attrName?.startsWith("data-migration-author-") ||
@@ -452,8 +453,14 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
                 if (
                   typeof prop.value?.value === "string" &&
                   prop.value.value.startsWith("$")
-                )
-                  references.add(prop.value.value.slice(1));
+                ) {
+                  const value = prop.value.value;
+                  if (value.startsWith("$_row.")) {
+                    const field = value.slice(6);
+                    if (!loopTable || !/^[A-Za-z_]\w*$/.test(field) || ["constructor", "prototype", "__proto__"].includes(field)) invalid = true;
+                    else rowReads.push({table:loopTable,field});
+                  } else references.add(value.slice(1));
+                }
               }
           }
           if (attr.name?.name === "run") {

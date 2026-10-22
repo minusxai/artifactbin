@@ -45,7 +45,7 @@ test('read-only column markup preserves headers separately from durable cell ins
     '<DataTable id="table" data="$rows" rowKey="key"><Column col="label" hasContent/></DataTable>',
     '<DataTable id="table" data="$rows" rowKey="key"><p>mixed child</p></DataTable>',
     '<DataTable id="table" data="$rows"><Column col="label"><span>{$_row.label}</span></Column></DataTable>',
-    '<DataTable id="table" data="$rows" rowKey="key"><Column col="label"><Button set={{mode:"b"}}>write</Button></Column></DataTable>',
+    '<DataTable id="table" data="$rows" rowKey="key"><Column col="label"><Button args={{mode:"b"}}>write</Button></Column></DataTable>',
     '<DataTable id="table" data="$rows" rowKey="key"><Column col="label"><span>{$_row.missing}</span></Column></DataTable>',
   ])assert.equal(admitLocalSource({...base,source:prefix+markup}).ok,false,markup);
 });
@@ -82,4 +82,12 @@ test('presentation kit admission requires exact context and literal audited prop
 test('presentation identity hosts are derived from source and replace supplied hosts',()=>{
  const result=admitLocalSource({...base,source:'<Value name="n" type="number"/><Tooltip id="tip"><TooltipTrigger>Help</TooltipTrigger><TooltipContent>Details</TooltipContent></Tooltip>',presentationIdentities:[{tag:'Tooltip',id:'forged'}]});
  assert.ok(result.ok);assert.deepEqual(result.plan.input.presentationIdentities,[{tag:'Tooltip',id:'tip'}]);
+});
+
+test('row buttons may update viewer-local declared scalar state using scoped row fields',()=>{
+ const head='<Value name="selected"/><Value name="rows" type="table" value={[{key:"a",label:"First"}]}/>';
+ const body=(set:string)=>'<DataTable id="table" data="$rows" rowKey="key"><Column col="label"><Button id="pick" set={'+set+'}>Pick</Button></Column></DataTable>';
+ assert.equal(admitLocalSource({...base,source:head+body('{selected:"$_row.label"}')}).ok,true);
+ for(const value of ['{selected:"$_row.missing"}','{missing:"$_row.label"}','{selected:"$_value"}','{selected:"$_row.constructor"}'])assert.equal(admitLocalSource({...base,source:head+body(value)}).ok,false,value);
+ assert.equal(admitLocalSource({...base,source:head+'<Button set={{selected:"$_row.label"}}>Pick</Button>'}).ok,false);
 });
