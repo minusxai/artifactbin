@@ -149,7 +149,7 @@ const rawFlow = {
 };
 let flow: any = rawFlow;
 let results: any = null;
-if(input.viewerBinding&&!(await readsLegacyViewer(input.source)))throw Error("Unused viewer binding");
+if(!prototype&&input.viewerBinding&&!(await readsLegacyViewer(input.source)))throw Error("Unused viewer binding");
 if (input.datasetUnavailable) {
   const bound=rawFlow.values.some((v:any)=>v.kind==="scalar"&&typeof v.source==="string"&&v.source.length>0);
   if(!rawFlow.imports.length&&!bound&&!(await readsLegacyMembers(input.source))&&!(await readsLegacyViewer(input.source)))throw Error("Historical service dependency missing");

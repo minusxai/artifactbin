@@ -36,6 +36,8 @@ export interface ArchivedLocalOutput extends ArchivedStaticOutput {
   /** Audited migration-time bundle inputs; no authored source or absolute paths. */
   modules: string[];
 }
+/** Offline prototypes may retain validated, registered service bindings unused by the saved body.
+ * Strict admission requires each binding to correspond to a source dependency. */
 export type CompiledSourceAdmission = "strict" | "offline-prototype";
 export interface ArchivedLocalOptions
   extends Omit<CompiledMigrationOptions, "compiler"> {
