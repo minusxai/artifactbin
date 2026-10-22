@@ -1,3 +1,4 @@
+import {projectMigrationDatasetOwnership} from "./job-dataset-ownership.ts";
 import { projectMigrationAttachmentBindings } from "./attachment-bindings.ts";
 import { legacyDocumentSource } from "./conversion/index.ts";
 import { readLegacyPersonValueNames } from "./conversion/compiled/person-source.ts";
@@ -29,7 +30,7 @@ export async function prepareMigrationJobDatasets(
   ports: MigrationBackendPreparationPorts = {},
 ): Promise<MigrationJobDatasets | undefined> {
   if (!source.datasets) return undefined;
-  const scan = await scanMigrationDatasetImports(source);
+  const scan = await scanMigrationDatasetImports(source, options.ownershipOverride);
   const issues = new Map(
     [...scan.issues].map(([id, reasons]) => [id, [...reasons]]),
   );
@@ -255,7 +256,7 @@ export async function prepareMigrationJobDatasets(
           })),
       );
       accumulator.add({
-        ...plan.metadata,
+        ...projectMigrationDatasetOwnership(plan.metadata,artifact.artifacts[0]!,source,options.ownershipOverride),
         principals: [],
         groups: [],
         personBindings: registeredPersons,

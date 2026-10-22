@@ -1,3 +1,4 @@
+import {originalMigrationOwner,resolveMigrationOwnership} from "./ownership-override.ts";
 import { hasLegacyServerModule } from "./query-source.ts";
 import { compileNativeProgramResolver } from "./programs/native-compiler.ts";
 import { readsMigrationViewer } from "./job-viewer.ts";
@@ -14,6 +15,7 @@ import type { MigrationDatasetImportScan } from "./dataset-scan-contracts.ts";
 /** Source bodies are read and released one artifact at a time; only literal dependencies survive. */
 export async function scanMigrationDatasetImports(
   source: MigrationJobSource,
+  ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride,
 ): Promise<MigrationDatasetImportScan> {
   const pages: MigrationBackendPage[] = [];
   const issues = new Map<string, string[]>();
@@ -156,14 +158,9 @@ export async function scanMigrationDatasetImports(
     if (!hasImports && !hasMembers && !hasViewer && !hasProgram) continue;
     if (hasImports) statistics.pagesWithImports++;
     heads.set(id, head.version);
-    const kind = head.group_id ? "group" : head.user_id ? "user" : "token";
-    const key = String(head.group_id ?? head.user_id ?? head.token_id ?? "");
-    const owner =
-      source.maps[
-        kind === "group" ? "groups" : kind === "user" ? "users" : "tokens"
-      ][key];
-    if (kind === "group") statistics.groupOwnedPages++;
-    if (!owner)
+    const {owner} = resolveMigrationOwnership(head,source.manifest.sourceNamespace,originalMigrationOwner(head,source.manifest.sourceNamespace,source.maps),ownershipOverride);
+    if (owner?.kind === "group") statistics.groupOwnedPages++;
+    if (!owner || owner.kind === "orphan")
       issues.set(id, [
         ...(issues.get(id) ?? []),
         "Unmapped dataset page owner",
@@ -175,7 +172,7 @@ export async function scanMigrationDatasetImports(
     pages.push({
       legacyId: id,
       pageId: source.maps.pages[id]!,
-      owner: { kind, id: owner! },
+      owner: owner as MigrationBackendPage["owner"],
       revisions: revisions.sort((a, b) => a.version - b.version),
     });
   }

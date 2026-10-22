@@ -1,4 +1,6 @@
 import test from "node:test";
+import {projectMigrationDatasetOwnership} from "../src/migration/job-dataset-ownership.ts";
+import {migrationOwnershipSourceDigest,migrationOwnershipScopeDigest} from "../src/migration/ownership-override.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { prepareMigrationJobDatasets } from "../src/migration/job-datasets.ts";
@@ -394,5 +396,24 @@ test("job prepares exact live head bindings and real compiled receipts without i
   assert.equal(prototypePresentation!.metadata.operations?.length, 1);
   assert.equal(prototypePresentation!.metadata.operations?.[0]!.operation.valueParam?.type, 'user');
   assert.equal(prototypePresentation!.issues.has(page.id), false);
+
+  const legacyOwnedPage = {...page, user_id:null, token_id:'token'};
+  const ownershipSource = {
+    ...source,
+    base: {...source.base,tables:{...source.base.tables,users:[{id:'owner',kind:'user',email:'owner@example.test'}]}},
+    maps: {...source.maps,tokens:{...source.maps.tokens,token:'legacy-token:'+'c'.repeat(64)}},
+    readArtifact: async(id:string)=>{const artifact=structuredClone(await source.readArtifact(id));if(id===page.id)artifact.artifacts[0]=legacyOwnedPage;return artifact;},
+  };
+  const ownershipPolicyBase={schemaVersion:1 as const,sourceNamespace:'fixture',targetEmail:'owner@example.test',entries:[{legacyId:page.id,sourceSha256:migrationOwnershipSourceDigest(legacyOwnedPage)}]};
+  const ownershipPolicy={...ownershipPolicyBase,scopeSha256:migrationOwnershipScopeDigest(ownershipPolicyBase)};
+  const reassigned=await prepareMigrationJobDatasets(ownershipSource,{...options,ownershipOverride:ownershipPolicy},presentationHost);
+  assert.equal(reassigned!.backends.get(page.id)!.at(-1)!.owner,'owner@example.test');
+  assert.deepEqual(reassigned!.metadata.pages[0]!.snapshot.owner,{userId:'owner',tokenId:null});
+  assert.equal(reassigned!.metadata.pages[0]!.snapshot.ownerIsTestUser,false);
+  for (const users of [[],[{id:'owner',kind:'user',email:'owner@example.test'},{id:'other',kind:'user',email:'owner@example.test'}]]) {
+    assert.throws(()=>projectMigrationDatasetOwnership(reassigned!.metadata,legacyOwnedPage,{...ownershipSource,maps:{...ownershipSource.maps,users:{owner:'owner@example.test',other:'owner@example.test'}},base:{...ownershipSource.base,tables:{...ownershipSource.base.tables,users}}},ownershipPolicy),/one canonical source user/);
+  }
+  assert.equal(legacyOwnedPage.user_id,null);
+  assert.equal(reassigned!.metadata.operations?.[0]!.operation.page.editId,page.edit_id);
 
 });
