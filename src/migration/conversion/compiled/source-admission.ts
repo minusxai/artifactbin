@@ -1,3 +1,4 @@
+import {admitAuthorProps} from "./author/props.ts";
 import type { PresentationIdentityHost } from "./presentation-kit-contracts.ts";
 import { presentationKitComponent, admitPresentationKit } from "./presentation-kit.ts";
 import { admitScalarControl } from "./scalar-controls.ts";
@@ -48,32 +49,9 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   if (Buffer.byteLength(input.source) > MAX_COMPILED_SOURCE_BYTES)
     return blocked("compiled-limit");
   const strict = convertLegacyJsx(input);
-  if (
-    strict.issues.some(
-      (i) =>
-        !(
-          i.code === "attribute" &&
-          [
-            "Dynamic attribute requires an adapter: value",
-            "Dynamic attribute requires an adapter: viz",
-            "Dynamic attribute requires an adapter: options",
-            "Dynamic attribute requires an adapter: columns",
-            "Dynamic attribute requires an adapter: sort",
-            "Dynamic attribute requires an adapter: metrics",
-            "Dynamic attribute requires an adapter: each",
-          ].includes(i.message)
-        ) &&
-        ![
-          "expression",
-          "component",
-          "value",
-          "action-adapter",
-          "reference",
-          "data-adapter",
-        ].includes(i.code),
-    )
-  )
-    return blocked("compiled-capability");
+  const commonAttributeIssue = (issue: {code:string;message:string}) => issue.code === "attribute" && ["value", "viz", "options", "columns", "sort", "metrics", "each"].some(name => issue.message === "Dynamic attribute requires an adapter: " + name);
+  const genericIssueSupported = (issue: {code:string;message:string}) => commonAttributeIssue(issue) || ["expression", "component", "value", "action-adapter", "reference", "data-adapter"].includes(issue.code);
+  if (strict.issues.some(issue => !genericIssueSupported(issue) && !(input.authorPlan && ["attribute", "event"].includes(issue.code)))) return blocked("compiled-capability");
   const author = input.authorPlan;
   if (author) {
     try {
@@ -199,6 +177,21 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       ecmaVersion: "latest",
     }) as any;
     if (tree.end !== text.length) return blocked("compiled-source");
+    const authorPaths = new Set<string>();
+    const authorAttributes = new WeakSet<object>();
+    const admitMounts = (node:any,path="root",depth=0):void => {
+      if (depth > 128) throw Error("Author mount structure limit");
+      if (node.type === "JSXElement" && author?.exports.includes(node.openingElement.name.name)) {
+        const admitted = admitAuthorProps(node.openingElement.attributes);
+        for (const name of admitted.bindings) references.add(name);
+        for (const attribute of node.openingElement.attributes) authorAttributes.add(attribute);
+        authorPaths.add(path);
+      }
+      for (const [index,child] of (node.children ?? []).entries()) admitMounts(child,path+"."+index,depth+1);
+    };
+    admitMounts(tree);
+    if (strict.issues.some(issue => !genericIssueSupported(issue) && !(["attribute", "event"].includes(issue.code) && authorPaths.has(issue.path)))) return blocked("compiled-capability");
+
     const readExpression = (node: any, loopDepth: number, loopTable?: string): boolean => {
       const read = readLocalReactiveExpression(node);
       if (read) {
@@ -221,7 +214,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       let childLoopTable = loopTable;
       if (
         node.type === "JSXExpressionContainer" &&
-        !(parent?.type === "JSXAttribute" ? safeExpression(node.expression) : readExpression(node.expression, loopDepth, loopTable))
+        !(parent?.type === "JSXAttribute" ? authorAttributes.has(parent) || safeExpression(node.expression) : readExpression(node.expression, loopDepth, loopTable))
       )
         invalid = true;
       if (node.type === "JSXElement") {
@@ -374,6 +367,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           } else references.add(plan.data);
         }
         for (const attr of node.openingElement.attributes) {
+          if (authorAttributes.has(attr)) continue;
           if (
             attr.value?.expression?.type === "ArrayExpression" &&
             !(name === "Value" && attr.name?.name === "value") &&
