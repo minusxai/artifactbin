@@ -195,8 +195,13 @@ export function createExecutionService(
       if (frame && !res.destroyed) {
         try {
           res.end(encode(frame, config.maxFrameBytes));
-        } catch {
-          res.destroy();
+        } catch (error) {
+          // The result itself is past the frame bound: say so in an error frame, which always fits.
+          try {
+            res.end(encode(failure(error), config.maxFrameBytes));
+          } catch {
+            res.destroy();
+          }
         }
       } else if (!res.destroyed) res.destroy();
     };
