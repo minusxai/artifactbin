@@ -41,7 +41,7 @@ export class PostgresMigrationDestination implements ImportDestination {
  private readonly db:SqlReader;
  private readonly options:DestinationOptions;
  private readonly names:DestinationSchemas;
- constructor(db:SqlReader,options:DestinationOptions,maps?:MigrationMaps){this.names=destinationSchemas(options.schema);this.db=db;this.options={...options};if(maps)this.maps=maps;}
+ constructor(db:SqlReader,options:DestinationOptions,maps?:MigrationMaps){if(options.runtimeOwnerRole !== undefined && !/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(options.runtimeOwnerRole))throw Error("Invalid runtime owner role");this.names=destinationSchemas(options.schema);this.db=db;this.options={...options};if(maps)this.maps=maps;}
  private get schema(){return this.names.runtime}
  private get archive(){return this.names.archive}
  private async transaction<T>(operation:()=>Promise<T>):Promise<T>{
@@ -53,10 +53,21 @@ export class PostgresMigrationDestination implements ImportDestination {
   this.maps=input.maps;this.namespace=input.manifest.sourceNamespace;
   const schemaSql=await readFile(new URL('../schema.sql',import.meta.url),'utf8');
   await this.transaction(async()=>{
+   const runtimeOwner = this.options.runtimeOwnerRole;
+   let originalRole: string | undefined;
+   if (runtimeOwner) {
+    const row = (await this.db.query('SELECT current_user AS role')).rows[0];
+    if (typeof row?.role !== 'string' || !row.role) throw Error('Current migration role unavailable');
+    originalRole = row.role;
+    await this.db.query(`SET LOCAL ROLE "${runtimeOwner}"`);
+   }
    await ensureSchema(this.db, this.options.schema);await this.db.query(`SET LOCAL search_path TO ${this.schema}`);
    await this.db.query(schemaSql);
    await this.db.query(await readFile(new URL('../backend/af-schema.sql',import.meta.url),'utf8'));
    await this.db.query(await readFile(new URL('../datasets/schema.sql',import.meta.url),'utf8'));
+   // A failing runtime DDL aborts this transaction; ROLLBACK also restores the original LOCAL role.
+   // Restore explicitly on success before granting the migration role access to its private archive.
+   if (originalRole) await this.db.query(`SET LOCAL ROLE "${originalRole.replaceAll('"', '""')}"`);
    await ensureSchema(this.db, this.options.schema + "_migration");
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.archives(namespace text PRIMARY KEY,digest text NOT NULL,manifest jsonb NOT NULL,maps jsonb NOT NULL)`);
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.receipts(key text PRIMARY KEY,digest text NOT NULL,page_id text NOT NULL,imported_at timestamptz NOT NULL DEFAULT now())`);
