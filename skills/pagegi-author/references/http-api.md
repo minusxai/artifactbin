@@ -44,6 +44,7 @@ The server is `https://app.artefactbin.dev`. If `AF_SERVER` and `AF_TOKEN` are s
 | `GET /a/<id>` | The page, hosted. `https://app.artefactbin.dev/a/<id>-<title>` is the same page: anything after the ID and a hyphen is ignored. |
 | `GET /@<handle>/<path>` | The page at that path in the library of the account with that handle, exactly as `/a/<id>`. Only accounts that chose a handle have these addresses (see Handle); the path is as `GET /api/paths` lists it, percent-encoded. 404 once the page is renamed or moved, or the handle changes. |
 | `GET /af/v1/ids/<id>` | Any file by ID: a page as `/a/<id>`; a backend file as `{ id, kind, version }` to its owner only. |
+| `GET /@<handle>/<id>` or `/@<handle>/<id>-<title>` | A link the earlier product showed. When the handle's library has no such path, `308` to `/a/<id>` with the query kept; the target then applies the usual rules. |
 
 Each form takes `?download=1`. A private page sends a signed-out visitor to sign in; anything unknown, including a page the viewer may not read, is `404`.
 

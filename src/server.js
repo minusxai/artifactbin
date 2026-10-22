@@ -32,9 +32,10 @@ import {
   pageModelModule,
 } from "./server/page-ports.ts";
 import { hash, documentTitle } from "./server/text.ts";
-import { fileAddress, parseAddressPath } from "./ids/file-id.ts";
+import { fileAddress, legacyHandleAddressId, parseAddressPath } from "./ids/file-id.ts";
 import { emailAddress } from "./email.ts";
 import { AF_IDS_PATH, AF_PATH_PREFIX, DEFAULT_AF_ORIGIN, INSTALL_SCRIPT_PATH } from "./af-contracts.ts";
+import { legacyClientAnswer } from "./server/legacy-client.ts";
 import { installScript } from "./server/install-script.ts";
 import { hostedRequest } from "./hosted-policy.ts";
 import {
@@ -246,14 +247,28 @@ export function createService({
         res.writeHead(200, asset.headers);
         return res.end(asset.body);
       }
+      // The earlier product's CLI and skill paths: 410 with the way forward (src/server/legacy-client.ts).
+      const legacy = legacyClientAnswer(url.pathname, origin);
+      if (legacy) {
+        res.writeHead(legacy.status, legacy.headers);
+        return res.end(legacy.body);
+      }
       // A page's address: /a/<id>, /a/<id>-<title> or /@<handle>/<path>.
       const pageAddress = parseAddressPath(url.pathname);
       if (pageAddress) {
         if (req.method !== "GET") fail(404, "Not found");
-        const id =
-          pageAddress.kind === "id"
-            ? pageAddress.id
-            : await libraryPathId(pageAddress.handle, pageAddress.path);
+        let id;
+        if (pageAddress.kind === "id") id = pageAddress.id;
+        else {
+          id = await libraryPathId(pageAddress.handle, pageAddress.path);
+          if (id === null) {
+            // A link the earlier product showed, /@<handle>/<id>-<title>: send it to the ID address.
+            const legacyId = legacyHandleAddressId(pageAddress.path);
+            if (!legacyId) fail(404, "Not found");
+            res.writeHead(308, { Location: "/a/" + legacyId + url.search });
+            return res.end();
+          }
+        }
         return await address(req, res, url, origin, id);
       }
       if (url.pathname.startsWith(AF_PATH_PREFIX)) {
@@ -605,16 +620,16 @@ export function createService({
    * missing path and a malformed one all look the same.
    * @param {string} handle @param {string} path
    */
+  /** The page at `path` in the library of the account with `handle`, or null when either is unknown. */
   async function libraryPathId(handle, path) {
     const owner = await repository.sql.transaction((client) => handleStore.actor(client, handle));
-    if (!owner) fail(404, "Not found");
-    let id = null;
+    if (!owner) return null;
     try {
-      id = await repository.catalog.resolvePath(owner, path);
+      return await repository.catalog.resolvePath(owner, path);
     } catch (error) {
       if (!(error && typeof error === "object" && "status" in error && error.status === 422)) throw error;
+      return null;
     }
-    return id ?? fail(404, "Not found");
   }
   /**
    * A file's address (GET /a/<id>, /@<handle>/<path> or /af/v1/ids/<id>): a

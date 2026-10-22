@@ -16,6 +16,12 @@
  *                                      an account without a handle has no such address, and a
  *                                      renamed or missing path or a freed handle is 404
  *   `${origin}/af/v1/ids/<id>`         any file by ID; a backend file's only address
+ *
+ * One more form is accepted for continuity with links the earlier product
+ * showed: `${origin}/@<handle>/<id>` or `/@<handle>/<id>-<title>`, when the
+ * handle's library has no such path, answers 308 to `${origin}/a/<id>` (the
+ * query kept). The target applies the usual access rules, so the handle is not
+ * checked.
  */
 import type { FileId } from "../af-contracts.ts";
 
@@ -46,6 +52,11 @@ export interface FileIdModule {
    * path, an empty, `.` or `..` segment, or undecodable escapes.
    */
   parseAddressPath(pathname: string): PageAddress | null;
+  /**
+   * The ID a legacy handle address names: `path` (from a `{ kind: "path" }`
+   * address) is `/<id>` or `/<id>-<anything>` in one segment. Null otherwise.
+   */
+  legacyHandleAddressId(path: string): FileId | null;
 }
 
 /** Durable reservation of IDs for one account (src/server/af-ids.ts, Postgres). */

@@ -82,3 +82,10 @@ export function parseAddressPath(pathname: string): PageAddress | null {
   const [handle, ...path] = segments as string[];
   return { kind: "path", handle: handle!, path: "/" + path.join("/") };
 }
+
+export function legacyHandleAddressId(path: string): FileId | null {
+  if (!path.startsWith("/") || path.indexOf("/", 1) !== -1) return null;
+  const id = path.slice(1).split("-", 1)[0]!;
+  const rest = path.slice(1 + id.length);
+  return isFileId(id) && (rest === "" || rest.startsWith("-")) ? id : null;
+}
