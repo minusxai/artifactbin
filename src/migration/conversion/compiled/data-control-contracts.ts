@@ -1,6 +1,6 @@
 export type CompiledDataControl =
   | { kind: "select"; value: string; options: string | readonly unknown[] }
-  | { kind: "table"; data: string };
+  | { kind: "table"; data: string; comparison?: true };
 export interface CompiledDisplayTable {
   columns: readonly { name: string; type: string }[];
   rows: Record<string, unknown>[];

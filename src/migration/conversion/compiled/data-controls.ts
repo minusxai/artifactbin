@@ -25,7 +25,20 @@ export function admitDataControl(
   const allowed =
     tag === "Select"
       ? ["id", "label", "value", "options", "placeholder", "className"]
-      : ["id", "data", "rowKey", "height", "columns", "sort", "className"];
+      : [
+          "id",
+          "data",
+          "rowKey",
+          "height",
+          "columns",
+          "sort",
+          "className",
+          "transpose",
+          "header",
+          "metrics",
+          "edge",
+          "sticky",
+        ];
   if (
     Object.keys(attrs).some(
       (k) => !allowed.includes(k) && !/^data-af-(?:id|comment)$/.test(k),
@@ -63,6 +76,43 @@ export function admitDataControl(
       options:
         typeof options === "string" ? options.slice(1) : (options as unknown[]),
     };
+  }
+  for (const key of ["transpose", "edge", "sticky"])
+    if (attrs[key] !== undefined && typeof attrs[key] !== "boolean")
+      throw Error("Invalid table flag");
+  if (
+    attrs.transpose !== true &&
+    ["header", "metrics", "edge"].some((key) => attrs[key] !== undefined)
+  )
+    throw Error("Comparison props require transposed table");
+  if (attrs.transpose === true) {
+    if (attrs.columns !== undefined || attrs.sort !== undefined)
+      throw Error("Comparison does not accept sortable columns");
+    if (attrs.header !== undefined && (!text(attrs.header) || !attrs.header))
+      throw Error("Invalid comparison header");
+    const metrics = attrs.metrics;
+    if (
+      metrics !== undefined &&
+      (!Array.isArray(metrics) ||
+        metrics.length > 256 ||
+        metrics.some(
+          (m: any) =>
+            !m ||
+            typeof m !== "object" ||
+            Array.isArray(m) ||
+            !text(m.col) ||
+            !m.col ||
+            Object.keys(m).some(
+              (k) =>
+                !["col", "title", "fmt", "better", "rank", "sub"].includes(k),
+            ) ||
+            ["title", "fmt", "rank", "sub"].some(
+              (k) => m[k] !== undefined && !text(m[k]),
+            ) ||
+            (m.better !== undefined && !["high", "low"].includes(m.better)),
+        ))
+    )
+      throw Error("Invalid comparison metrics");
   }
   if (!ref(attrs.data)) throw Error("DataTable requires a declared table");
   if (
@@ -133,7 +183,11 @@ export function admitDataControl(
     )
   )
     throw Error("Unsupported table sort");
-  return { kind: "table", data: (attrs.data as string).slice(1) };
+  return {
+    kind: "table",
+    data: (attrs.data as string).slice(1),
+    ...(attrs.transpose === true ? { comparison: true as const } : {}),
+  };
 }
 /** Select must never quietly offer only a display window of a larger query. */
 export async function completeControlOptions(

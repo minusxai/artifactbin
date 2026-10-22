@@ -123,3 +123,37 @@ test("table paging preserves typed sort and bounds requests before engine execut
   ])
     assert.throws(() => controlPageRequest(page, [{ name: "id" }]));
 });
+test("read-only comparison preserves authored metrics and rejects silently ignored or dynamic fields", () => {
+  assert.deepEqual(
+    admitDataControl("DataTable", {
+      data: "$rows",
+      transpose: true,
+      header: "name",
+      edge: true,
+      metrics: [
+        {
+          col: "score",
+          title: "Score",
+          fmt: ".1f",
+          better: "high",
+          rank: "ranking",
+          sub: "range",
+        },
+      ],
+    }),
+    { kind: "table", data: "rows", comparison: true },
+  );
+  for (const patch of [
+    { metrics: [{ col: "score", run: "save" }] },
+    { metrics: [{ col: "score", better: "fast" }] },
+    { transpose: false, metrics: [] },
+    { transpose: true, columns: [] },
+  ])
+    assert.throws(() =>
+      admitDataControl("DataTable", {
+        data: "$rows",
+        transpose: true,
+        ...patch,
+      }),
+    );
+});
