@@ -49,4 +49,12 @@ const readiness = createCompiledReadiness({
 /** Exact archived kit edge adapter. Engines are already bundled; no legacy readiness events or transport. */
 export const deferEngine = (_host: Element, start: () => void) =>
   readiness.defer(start);
-export const markCompiledReady = () => readiness.ready();
+let announced = false;
+export const markCompiledReady = () => {
+  if (announced) return;
+  announced = true;
+  // Frozen kit widgets use both the latched marker and a one-time readiness event.
+  document.documentElement.setAttribute("data-mx-ready", "");
+  document.dispatchEvent(new Event("mx:ready"));
+  readiness.ready();
+};
