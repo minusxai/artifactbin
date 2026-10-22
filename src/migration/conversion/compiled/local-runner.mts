@@ -1,6 +1,7 @@
 import { archivedRuntimePlan } from "./runtime-plan.ts";
 import { archivedDialogFocusSource } from "./dialog-source.ts";
 import {readLegacyCellWriteSites} from "./cell-write-source.ts";
+import {validateCompiledTransport} from "./transport.ts";
 import {isolateArchivedThemeVariables} from "./legacy-theme.ts";
 import{readsLegacyViewer}from"./viewer-source.ts";
 import {validateCompiledCellWriteContexts} from "./cell-write-context.ts";
@@ -325,10 +326,14 @@ const sqlitePath = Object.keys(buildManifest.files).find((v: string) =>
 const { build: bundle, transform: stripTypes } = await import(
   pathToFileURL(path.join(root, "node_modules/esbuild/lib/main.js")).href
 );
+const mermaidSource=preparedMermaids.length?await transformSolid(mermaidRuntimeSource(preparedMermaids),{generate:"dom",hydratable:true},{moduleName:"solid-js/web"}):undefined;
 const bundled = await bundle({
-  stdin: { contents: source, resolveDir: path.join(root, "services/app") },
+  stdin: { contents: source, sourcefile:"migration-local-entry.js", resolveDir: path.join(root, "services/app") },
   bundle: true,
   write: false,
+  outfile:"migration-local.js",
+  sourcemap:preparedMermaids.length?"external":false,
+  sourcesContent:true,
   format: "esm",
   platform: "browser",
   alias: { "@": path.join(root, "services/app") },
@@ -454,7 +459,7 @@ const bundled = await bundle({
           if(!preparedMermaids.length)throw Error("Mermaid plan missing");
           return {path:"mermaid",namespace:"migration-mermaid"};
         });
-        b.onLoad({filter:/.*/,namespace:"migration-mermaid"},async()=>({contents:await transformSolid(mermaidRuntimeSource(preparedMermaids),{generate:"dom",hydratable:true},{moduleName:"solid-js/web"}),loader:"js",resolveDir:root}));
+        b.onLoad({filter:/.*/,namespace:"migration-mermaid"},async()=>({contents:mermaidSource,loader:"js",resolveDir:root}));
         b.onResolve({filter:/^migration-mermaid-theme$/},()=>({path:path.join(root,"services/app/lib/islands/kit/theme-watch.ts")}));
         b.onResolve({filter:/^migration-deck$/},()=>({path:path.join(import.meta.dirname,"deck-runtime.ts")}));
         b.onResolve({filter:/^migration-query-controller$/},()=>({path:path.join(import.meta.dirname,"query-controller.ts")}));
@@ -523,8 +528,8 @@ const bundled = await bundle({
     },
   ],
 });
-const javascript = bundled.outputFiles[0].text;
-const bundleOutput: any = Object.values(bundled.metafile.outputs)[0];
+const javascript = bundled.outputFiles.find((file:any)=>file.path.endsWith(".js"))!.text;
+const bundleOutput: any = Object.entries(bundled.metafile.outputs).find(([file])=>file.endsWith(".js"))![1];
 if (
   bundleOutput.imports.some(
     (v: any) => !v.external || v.path !== "@afbin/apollo",
@@ -542,8 +547,7 @@ const modules = Object.entries(bundleOutput.inputs)
       .match(/(?:^|\/)node_modules\/(vega-[^/]+\/.+)$/);
     return relative ? relative[1] : path.basename(v);
   });
-if (/\/api\/|\/islands\/|EventSource|WebSocket|@mx\/boot/.test(javascript))
-  throw Error("Legacy platform transport in browser bundle");
+validateCompiledTransport({javascript,...(mermaidSource?{sourceMap:bundled.outputFiles.find((file:any)=>file.path.endsWith(".map"))!.text,mermaid:{entry:{name:"migration-local-entry.js",source},runtime:{name:"migration-mermaid:mermaid",source:mermaidSource},plans:preparedMermaids}}:{})});
 process.stdout.write(
   JSON.stringify({
     html,
