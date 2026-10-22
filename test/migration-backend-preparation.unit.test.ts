@@ -271,7 +271,7 @@ test("named mutations pin trusted SQL to exact backend, page revision and bindin
   const nextDeployment = sealDeployment(
     generatedDatasetBackendSource,
     "new compiled bundle",
-    { typeDefs: moduleInfo.typeDefs, fields: deployment.fields },
+    { typeDefs: moduleInfo.typeDefs, fields: [...deployment.fields] },
   );
   assert.equal(
     (
