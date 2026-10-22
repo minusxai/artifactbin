@@ -26,3 +26,11 @@ Dataset mutation objects use a separate app-only writable overlay
 `PAGEGI_DATASET_MUTATION_DIRECTORY=/run/pagegi-dataset-mutations`. Imported
 dataset objects remain read-only. Neither execution nor SQL jobs mount this
 overlay; the fixed SQL job receives only bounded input through its transport.
+
+Before replacing the active composition, the receiver snapshots its exact bytes
+under the deployment lock. A failed rollout restores that composition atomically
+before recovering the previous app/backend/SQL images; current image pointers and
+`.env` stay unchanged. A successful rollout retains `previous-compose.yaml`
+beside the previous image pointers. An initial deployment has no prior services
+to recover and removes its failed candidate composition. Database backups remain
+separate; restoring composition never removes a database or object volume.

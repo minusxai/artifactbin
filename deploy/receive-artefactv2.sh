@@ -35,14 +35,38 @@ backend_image="artefactv2-backend:$revision"
 docker build -t "$backend_image" "$release/src/backend/container"
 dataset_sql_image="artefactv2-dataset-sql:$revision"
 docker build -f "$release/src/datasets/sql/container/Dockerfile" -t "$dataset_sql_image" "$release"
+# Capture the last working composition before replacing it. The lock covers this snapshot and rollout.
+previous=$(cat "$root/current-image" 2>/dev/null || printf 'artefactv2:local')
+previous_backend=$(cat "$root/current-backend-image" 2>/dev/null || printf 'artefactv2-backend:local')
+previous_dataset_sql=$(cat "$root/current-dataset-sql-image" 2>/dev/null || printf 'artefactv2-dataset-sql:local')
+previous_compose=$(mktemp "$root/.compose-before-rollout-XXXXXX")
+had_previous_compose=false
+if [[ -f "$root/compose.yaml" ]]; then
+  cp -p "$root/compose.yaml" "$previous_compose"
+  had_previous_compose=true
+fi
+compose=(docker compose --project-name artefactv2 --project-directory "$root" -f "$root/compose.yaml")
+rollback_rollout() {
+  status=$?
+  trap - ERR
+  if [[ "$had_previous_compose" == true ]]; then
+    echo 'Deployment failed; restoring previous composition and images' >&2
+    cp -p "$previous_compose" "$root/compose.yaml.rollback"
+    mv "$root/compose.yaml.rollback" "$root/compose.yaml"
+    export PAGEGI_IMAGE="$previous" PAGEGI_BACKEND_IMAGE="$previous_backend" PAGEGI_DATASET_SQL_IMAGE="$previous_dataset_sql"
+    "${compose[@]}" up -d --no-build --wait --wait-timeout 120 || echo 'Previous rollout failed to recover; operator intervention required' >&2
+  else
+    echo 'Initial deployment failed; no previous composition exists' >&2
+    rm -f "$root/compose.yaml"
+  fi
+  rm -f "$previous_compose"
+  exit "$status"
+}
+trap rollback_rollout ERR
 # The composition is the release's, never a host-edited copy.
 install -m 0644 "$release/deploy/init-artefactv2-database.sh" "$root/init-database.sh"
 cp "$release/deploy/compose.artefactv2.yaml" "$root/compose.yaml.tmp"
 mv "$root/compose.yaml.tmp" "$root/compose.yaml"
-previous=$(cat "$root/current-image" 2>/dev/null || printf 'artefactv2:local')
-previous_backend=$(cat "$root/current-backend-image" 2>/dev/null || printf 'artefactv2-backend:local')
-previous_dataset_sql=$(cat "$root/current-dataset-sql-image" 2>/dev/null || printf 'artefactv2-dataset-sql:local')
-compose=(docker compose --project-name artefactv2 --project-directory "$root" -f "$root/compose.yaml")
 # Backend sandboxes run on the Docker bridge `artefactv2-sb` (network artefactv2-sandbox, created by the
 # execution service; src/backend/README.md) and may reach public addresses only. workerd enforces
 # that for lambda code; these rules are the kernel backstop: from that bridge, nothing to the host
@@ -104,11 +128,12 @@ backup="$root/backups/$(date +%s%N).dump"
 (umask 077; "${compose[@]}" exec -T postgres pg_dump -U artefactv2_admin -d artefactv2 -Fc > "$backup.tmp")
 mv "$backup.tmp" "$backup"
 export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image" PAGEGI_DATASET_SQL_IMAGE="$dataset_sql_image"
-if ! "${compose[@]}" up -d --no-build --wait --wait-timeout 120; then
-  echo 'Deployment failed; restoring previous images' >&2
-  export PAGEGI_IMAGE="$previous" PAGEGI_BACKEND_IMAGE="$previous_backend" PAGEGI_DATASET_SQL_IMAGE="$previous_dataset_sql"
-  "${compose[@]}" up -d --no-build --wait --wait-timeout 120
-  exit 1
+"${compose[@]}" up -d --no-build --wait --wait-timeout 120
+trap - ERR
+if [[ "$had_previous_compose" == true ]]; then
+  mv "$previous_compose" "$root/previous-compose.yaml"
+else
+  rm -f "$previous_compose"
 fi
 printf '%s\n' "$previous" > "$root/previous-image"
 printf '%s\n' "$previous_backend" > "$root/previous-backend-image"
