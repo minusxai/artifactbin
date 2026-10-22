@@ -421,3 +421,48 @@ test("empty type recovery does not permit renamed columns or conflicting nonempt
     await assert.rejects(f.read(), /invalid_dataset/);
   }
 });
+test("real all-null aggregate retains its attested numeric type", async () => {
+  const { createDatasetQueryEngine } = await import(
+    "../src/datasets/sql/read-engine.ts"
+  );
+  const engine = await createDatasetQueryEngine();
+  const f = fixture();
+  f.m.columns = [{ name: "total", type: "number" }];
+  f.m.sql =
+    "SELECT SUM(CASE WHEN amount < 0 THEN amount ELSE NULL END) AS total FROM public.rows";
+  f.ports.models!.execute = async (job) => engine.query(job);
+  const result = await f.read();
+  assert.deepEqual(result.rows, [{ total: null }]);
+  assert.deepEqual(result.columns, [{ name: "total", type: "number" }]);
+});
+test("all-null recovery applies per column and never hides conflicting non-null evidence", async () => {
+  const f = fixture();
+  f.ports.models!.execute = async () => ({
+    tables: {
+      result: {
+        columns: [
+          { name: "amount", type: "string" },
+          { name: "count", type: "string" },
+        ],
+        rows: [{ amount: null, count: "2" }],
+      },
+    },
+    errors: {},
+  });
+  await assert.rejects(f.read(), /invalid_dataset/);
+  f.ports.models!.execute = async () => ({
+    tables: {
+      result: {
+        columns: [
+          { name: "amount", type: "string" },
+          { name: "count", type: "number" },
+        ],
+        rows: [{ amount: null, count: 2 }],
+      },
+    },
+    errors: {},
+  });
+  const result = await f.read();
+  assert.deepEqual(result.columns, model.columns);
+  assert.deepEqual(result.rows, [{ amount: null, count: 2 }]);
+});

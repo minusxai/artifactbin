@@ -160,18 +160,19 @@ export async function readStoredModel(
       );
     await wait(() => authorize(abort.signal));
     const table = answer.tables.result;
-    // The engine has no scalar evidence for empty results and defaults inferred
-    // expressions to string. Retain the attested types only when names and order
-    // match exactly; nonempty results must still match every declared type.
+    // Empty and all-null columns give the engine no scalar type evidence.
+    // With exact names/order, recover only those types from the attestation;
+    // every column containing a non-null value must retain strict inferred typing.
     if (
       table &&
-      table.rows.length === 0 &&
       JSON.stringify(table.columns.map((c) => c.name)) ===
         JSON.stringify(model.columns.map((c) => c.name))
     )
-      table.columns = model.columns.map((c) => ({
-        name: c.name,
-        type: c.type,
+      table.columns = table.columns.map((column, index) => ({
+        name: column.name,
+        type: table.rows.every((row) => row[column.name] === null)
+          ? model.columns[index]!.type
+          : column.type,
       }));
     if (
       !table ||
