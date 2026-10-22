@@ -54,6 +54,8 @@ compose=(docker compose --project-name artefactv2 --project-directory "$root" -f
 rollback_rollout() {
   status=$?
   trap - ERR
+  # Capture the failed containers before Compose replaces them; private evidence never enters CI output.
+  python3 "$release/deploy/capture-rollout-failure.py" "$root" "$revision" "$status" "${compose[@]}" >/dev/null 2>&1 || echo 'Private rollout diagnostics could not be collected' >&2
   if [[ "$had_previous_compose" == true ]]; then
     echo 'Deployment failed; restoring previous composition and images' >&2
     cp -p "$previous_compose" "$root/compose.yaml.rollback"

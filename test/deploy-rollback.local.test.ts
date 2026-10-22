@@ -32,9 +32,10 @@ if(name==='docker'){
  const config=fs.readFileSync(args[args.indexOf('-f')+1],'utf8');
  fs.appendFileSync(process.env.CALL_LOG,JSON.stringify({args,config,app:process.env.PAGEGI_IMAGE,backend:process.env.PAGEGI_BACKEND_IMAGE,sql:process.env.PAGEGI_DATASET_SQL_IMAGE,processor:process.env.PAGEGI_IMAGE_PROCESSOR_IMAGE})+'\\n');
  if(args.includes('exec')){process.stdout.write('private-dump');process.exit(0);}
- if((['rollout','app-health'].includes(process.env.FAIL_STAGE)&&args.includes('--no-build')&&config==='new-composition\\n'))process.exit(17);
+ if((['rollout','app-health','diagnostics'].includes(process.env.FAIL_STAGE)&&args.includes('--no-build')&&config==='new-composition\\n'))process.exit(17);
  process.exit(0);
 }
+if(name==='python3'&&args[0].endsWith('/capture-rollout-failure.py')){fs.writeFileSync(path.join(args[1],'diagnostics-order'),JSON.stringify({config:fs.readFileSync(path.join(args[1],'compose.yaml'),'utf8'),status:args[3],app:process.env.PAGEGI_IMAGE}));process.exit(process.env.FAIL_STAGE==='diagnostics'?19:0);}
 if(name==='python3'&&args[0].endsWith('/backup-schema.py')){if(process.env.FAIL_STAGE==='backup')process.exit(17);fs.writeFileSync(args[2],'schema-backup');fs.writeFileSync(args[2]+'.verified','restore proof');process.exit(0);}
 if(name==='stat'){process.stdout.write(args[1]==='%g'?'1000':String(fs.statSync(args.at(-1)).size));process.exit(0);}
 if(name==='install'){
@@ -44,7 +45,14 @@ if(name==='install'){
 }
 process.exit(0);
 `;
-for (const failure of ["rollout", "app-health", "backup", "", "initial"]) {
+for (const failure of [
+  "rollout",
+  "app-health",
+  "backup",
+  "diagnostics",
+  "",
+  "initial",
+]) {
   test(`isolated receiver ${failure ? `recovers from ${failure} failure` : "retains previous composition after success"}`, () => {
     const dir = mkdtempSync(join(tmpdir(), "afv2-rollout-")),
       root = join(dir, "root"),
@@ -128,6 +136,17 @@ for (const failure of ["rollout", "app-health", "backup", "", "initial"]) {
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line) as ComposeCall);
+      if (failure) {
+        assert.deepEqual(
+          JSON.parse(readFileSync(join(root, "diagnostics-order"), "utf8")),
+          {
+            config: "new-composition\n",
+            status: "17",
+            ...(failure === "backup" ? {} : { app: `artefactv2:${revision}` }),
+          },
+          "capture observes failed composition before rollback replaces it",
+        );
+      } else assert.equal(existsSync(join(root, "diagnostics-order")), false);
       if (failure === "initial") {
         assert.equal(result.status, 17, result.stderr);
         assert.ok(!existsSync(join(root, "compose.yaml")));
@@ -211,24 +230,51 @@ test("application health probe requires exact healthy JSON and HTTP200 before Co
     let exit: number | undefined;
     runInNewContext(probe, {
       URL,
-      process: { env: { PAGEGI_PLATFORM_ORIGIN: "https://platform.invalid" }, exit: (code: number) => {exit = code;} },
+      process: {
+        env: { PAGEGI_PLATFORM_ORIGIN: "https://platform.invalid" },
+        exit: (code: number) => {
+          exit = code;
+        },
+      },
       require: (name: string) => {
-        assert.equal(name,"node:http");
-        return {get: (url: string,options: {headers: {Host: string}},receive: (response: unknown)=>void) => {
-          assert.equal(url,"http://127.0.0.1:8787/health");
-          assert.equal(options.headers.Host,"platform.invalid");
-          const req={setTimeout: (ms: number, _expired: ()=>void) => {assert.equal(ms,4000);},destroy() {},on: (event: string,listener: ()=>void) => {if(event==="error"&&failure==="network")listener();}};
-          const callbacks: Record<string,(chunk?: string)=>void>={};
-          queueMicrotask(()=>{
-            if(failure==="network")return;
-            receive({statusCode:status,on:(event: string,callback: (chunk?: string)=>void)=>{callbacks[event]=callback;}});
-            callbacks.data!(failure==="json"?"invalid-json":JSON.stringify(body));callbacks.end!();
-          });
-          return req;
-        }};
+        assert.equal(name, "node:http");
+        return {
+          get: (
+            url: string,
+            options: { headers: { Host: string } },
+            receive: (response: unknown) => void,
+          ) => {
+            assert.equal(url, "http://127.0.0.1:8787/health");
+            assert.equal(options.headers.Host, "platform.invalid");
+            const req = {
+              setTimeout: (ms: number, _expired: () => void) => {
+                assert.equal(ms, 4000);
+              },
+              destroy() {},
+              on: (event: string, listener: () => void) => {
+                if (event === "error" && failure === "network") listener();
+              },
+            };
+            const callbacks: Record<string, (chunk?: string) => void> = {};
+            queueMicrotask(() => {
+              if (failure === "network") return;
+              receive({
+                statusCode: status,
+                on: (event: string, callback: (chunk?: string) => void) => {
+                  callbacks[event] = callback;
+                },
+              });
+              callbacks.data!(
+                failure === "json" ? "invalid-json" : JSON.stringify(body),
+              );
+              callbacks.end!();
+            });
+            return req;
+          },
+        };
       },
     });
-    await new Promise<void>(resolve=>queueMicrotask(resolve));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
     return exit;
   };
   assert.equal(await check(200, { ok: true }), 0);
@@ -247,23 +293,51 @@ test("application health probe requires exact healthy JSON and HTTP200 before Co
     assert.equal(await check(200, { ok: true }, failure), 1, failure);
 });
 
-
 test("application probe reaches health through the production host boundary", async () => {
- const compose=readFileSync("deploy/compose.artefactv2.yaml","utf8");
- const app=compose.split("  pagegi:\n")[1]!.split("\n  execution:")[0]!;
- const probe=JSON.parse(app.match(/test: \['CMD', 'node', '-e', (".*")\]/)![1]!) as string;
- const hosts: string[]=[];
- const server=createServer((req,res)=>{
-  hosts.push(req.headers.host!);
-  try {hostedRequest(req.headers.host!,0,{platformOrigin:"https://platform.invalid",runnerOrigin:"https://{document}.runner.invalid"});res.writeHead(200);res.end(JSON.stringify({ok:true}));}
-  catch {res.writeHead(403);res.end(JSON.stringify({error:"Invalid host"}));}
- });
- await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
- try {
-  const address=server.address();assert.ok(address&&typeof address==="object");
-  const code=await new Promise<number|null>((resolve,reject)=>{
-   const child=spawn(process.execPath,["-e",probe.replace("127.0.0.1:8787",`127.0.0.1:${address.port}`)],{env:{...process.env,PAGEGI_PLATFORM_ORIGIN:"https://platform.invalid"},stdio:"ignore"});child.once("error",reject);child.once("exit",resolve);
+  const compose = readFileSync("deploy/compose.artefactv2.yaml", "utf8");
+  const app = compose.split("  pagegi:\n")[1]!.split("\n  execution:")[0]!;
+  const probe = JSON.parse(
+    app.match(/test: \['CMD', 'node', '-e', (".*")\]/)![1]!,
+  ) as string;
+  const hosts: string[] = [];
+  const server = createServer((req, res) => {
+    hosts.push(req.headers.host!);
+    try {
+      hostedRequest(req.headers.host!, 0, {
+        platformOrigin: "https://platform.invalid",
+        runnerOrigin: "https://{document}.runner.invalid",
+      });
+      res.writeHead(200);
+      res.end(JSON.stringify({ ok: true }));
+    } catch {
+      res.writeHead(403);
+      res.end(JSON.stringify({ error: "Invalid host" }));
+    }
   });
-  assert.equal(code,0);assert.deepEqual(hosts,["platform.invalid"]);
- } finally {await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const code = await new Promise<number | null>((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        ["-e", probe.replace("127.0.0.1:8787", `127.0.0.1:${address.port}`)],
+        {
+          env: {
+            ...process.env,
+            PAGEGI_PLATFORM_ORIGIN: "https://platform.invalid",
+          },
+          stdio: "ignore",
+        },
+      );
+      child.once("error", reject);
+      child.once("exit", resolve);
+    });
+    assert.equal(code, 0);
+    assert.deepEqual(hosts, ["platform.invalid"]);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
 });
