@@ -155,6 +155,6 @@ An account's optional public name, used in `/@<handle>/<path>` page addresses (s
 | `PUT /api/account/handle` | `{ handle }` | `{ handle }` as saved. `409` when another account has it, `422` when it breaks a rule below. |
 | `DELETE /api/account/handle` | | `{ handle: null }`, also when there was none |
 
-- **`handle`:** 3 to 32 lowercase letters, digits and hyphens, without a hyphen at either end or two in a row. It is trimmed and lowercased before it is checked, so handles are unique regardless of case. Platform words and the server's own top-level paths (such as `api`, `af`, `a`, `connect`, `admin`) are refused with `422`.
+- **`handle`:** 3 to 32 lowercase letters, digits, underscores and hyphens, without a hyphen at either end or two in a row. Underscores may appear anywhere, including repeated or at either end; existing public handles retain their exact spelling. It is trimmed and lowercased before it is checked, so handles are unique regardless of case. Platform words and the server's own top-level paths (such as `api`, `af`, `a`, `connect`, `admin`) are refused with `422`.
 - Changing or removing a handle frees the old one at once: its `/@<old>/…` addresses answer `404` (no redirect) and another account may take it. `/a/<id>` never changes.
 - Every route needs your account token; `401` without one.

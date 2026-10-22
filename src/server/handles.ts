@@ -18,7 +18,7 @@ import {
 const ROUTE = "/api/account/handle";
 const PROBLEMS: Record<HandleProblem, string> = {
   length: `A handle is ${HANDLE_MIN} to ${HANDLE_MAX} characters`,
-  characters: "A handle uses lowercase letters, digits and single hyphens between them",
+  characters: "A handle uses lowercase letters, digits, underscores and single inner hyphens",
   reserved: "That handle is reserved; choose another",
 };
 

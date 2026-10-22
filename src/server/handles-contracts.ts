@@ -7,7 +7,8 @@
  * Rules:
  * - An account has at most one handle; a new account has none.
  * - A handle is HANDLE_MIN..HANDLE_MAX characters of lowercase a-z, 0-9 and
- *   "-", with no leading, trailing or double "-". Input is trimmed and
+ *   "_" and "-", with no leading, trailing or double "-". Underscores may
+ *   appear anywhere, including repeated or at either end. Input is trimmed and
  *   lowercased first, so "Alice" is saved as "alice" and handles are unique
  *   case-insensitively.
  * - RESERVED_HANDLES (platform words and the server's top-level routes) are refused.
@@ -27,7 +28,7 @@ import type { SqlClient } from "../backend/af-backend-contracts.ts";
 
 export const HANDLE_MIN = 3;
 export const HANDLE_MAX = 32;
-export const HANDLE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const HANDLE_PATTERN = /^[a-z0-9_]+(?:-[a-z0-9_]+)*$/;
 /** Words a handle can never be: platform names and the server's top-level paths. */
 export const RESERVED_HANDLES: ReadonlySet<string> = new Set([
   "a",

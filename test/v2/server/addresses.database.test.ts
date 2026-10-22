@@ -12,7 +12,7 @@ import { page, startServer, type TestServer } from "../support/server.ts";
 import { compileOnlyHost } from "../support/todo.ts";
 
 const OWNER = "alice@example.test";
-const HANDLE = "alice";
+const HANDLE = "_alice__";
 /** Every form of one page's address, as a request path. */
 const forms = (id: string, path: string) => [
   `/a/${id}`,

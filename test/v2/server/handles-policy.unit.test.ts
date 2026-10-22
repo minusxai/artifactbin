@@ -11,11 +11,11 @@ test("input is trimmed and lowercased; anything that is not a string is empty", 
   for (const value of [undefined, null, 42, {}, ["alice"]]) assert.equal(normalizeHandle(value), "");
 });
 
-test("a handle is 3 to 32 lowercase letters, digits and single inner hyphens", () => {
-  for (const ok of ["abc", "alice", "alice-smith", "a1-b2-c3", "007", "x".repeat(HANDLE_MAX), "x".repeat(HANDLE_MIN)])
+test("a handle is 3 to 32 lowercase letters, digits and underscores and single inner hyphens", () => {
+  for (const ok of ["abc", "_alice", "alice_", "al__ice", "___", "a_-_b", "alice", "alice-smith", "a1-b2-c3", "007", "x".repeat(HANDLE_MAX), "x".repeat(HANDLE_MIN)])
     assert.equal(handleProblem(ok), null, ok);
   for (const short of ["", "ab", "x".repeat(HANDLE_MAX + 1)]) assert.equal(handleProblem(short), "length", short);
-  for (const bad of ["-alice", "alice-", "al--ice", "al_ice", "al.ice", "al ice", "alice@example.test", "ålice", "al/ice", "Alice"])
+  for (const bad of ["-alice", "alice-", "al--ice", "al.ice", "al ice", "alice@example.test", "ålice", "al/ice", "Alice"])
     assert.equal(handleProblem(bad), "characters", bad);
 });
 

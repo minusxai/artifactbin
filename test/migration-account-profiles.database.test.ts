@@ -39,7 +39,7 @@ test(
         namesFilled: 4,
         namesPreserved: 1,
         namesUnavailable: 0,
-        namesClearedSinceImport: 0,
+        namesAbsentSinceImport: 0,
         handlesFilled: 1,
         handlesPreserved: 1,
         handlesMissing: 0,

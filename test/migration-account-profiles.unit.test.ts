@@ -9,11 +9,15 @@ test("migration handles use the ordinary runtime normalization and reserved word
     handle: "mixed-case",
     status: "valid",
   });
-  for (const value of ["admin", "pagegi", "a--b", "x", "a_b"])
+  for (const value of ["admin", "pagegi", "a--b", "x", "a.b"])
     assert.deepEqual(migrationHandleCandidate(value), {
       handle: null,
       status: "invalid",
     });
+  assert.deepEqual(migrationHandleCandidate("old_name_ab12"), {
+    handle: "old_name_ab12",
+    status: "valid",
+  });
   assert.deepEqual(migrationHandleCandidate(null), {
     handle: null,
     status: "missing",

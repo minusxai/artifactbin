@@ -31,7 +31,7 @@ export async function projectMigrationAccountProfiles(
     namesFilled: 0,
     namesPreserved: 0,
     namesUnavailable: 0,
-    namesClearedSinceImport: 0,
+    namesAbsentSinceImport: 0,
     handlesFilled: 0,
     handlesPreserved: 0,
     handlesMissing: 0,
@@ -51,7 +51,7 @@ export async function projectMigrationAccountProfiles(
     if (!account) throw Error("Mapped profile account is unavailable");
     const name = migrationPublicDisplayName(user);
     if (account.name !== null) summary.namesPreserved++;
-    else if (!initialImport) summary.namesClearedSinceImport++;
+    else if (!initialImport) summary.namesAbsentSinceImport++;
     else if (name !== null) {
       await db.query(
         "UPDATE accounts SET name=$2 WHERE actor=$1 AND name IS NULL",

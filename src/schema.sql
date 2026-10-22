@@ -52,7 +52,11 @@ CREATE TABLE IF NOT EXISTS retired_file_ids (id text PRIMARY KEY, retired_at big
 -- Account secrets: values a lambda reads as `env`, encrypted at rest under PAGEGI_SECRETS_KEY (src/server/secrets-contracts.ts). Times are epoch milliseconds.
 CREATE TABLE IF NOT EXISTS account_secrets (actor text NOT NULL REFERENCES accounts(actor), name text NOT NULL CHECK (name ~ '^[A-Z][A-Z0-9_]{0,63}$'), ciphertext text NOT NULL, created_at bigint NOT NULL, updated_at bigint NOT NULL, PRIMARY KEY(actor, name));
 -- Account handles: the optional public name in /@<handle>/<path> addresses, stored lowercase (src/server/handles-contracts.ts). Existing accounts have none.
-ALTER TABLE accounts ADD COLUMN IF NOT EXISTS handle text CHECK (handle ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(handle) BETWEEN 3 AND 32);
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS handle text;
+-- Upgrade the former hyphen-only constraint without changing any saved handle.
+ALTER TABLE accounts DROP CONSTRAINT IF EXISTS accounts_handle_check;
+ALTER TABLE accounts DROP CONSTRAINT IF EXISTS accounts_handle_format;
+ALTER TABLE accounts ADD CONSTRAINT accounts_handle_format CHECK (handle ~ '^[a-z0-9_]+(-[a-z0-9_]+)*$' AND length(handle) BETWEEN 3 AND 32);
 CREATE UNIQUE INDEX IF NOT EXISTS accounts_handle ON accounts(handle);
 
 -- Imported comments can outlive their original source; never attach them to another version.

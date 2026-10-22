@@ -2,7 +2,7 @@ export interface MigrationAccountProfileSummary {
   namesFilled: number;
   namesPreserved: number;
   namesUnavailable: number;
-  namesClearedSinceImport: number;
+  namesAbsentSinceImport: number;
   handlesFilled: number;
   handlesPreserved: number;
   handlesMissing: number;

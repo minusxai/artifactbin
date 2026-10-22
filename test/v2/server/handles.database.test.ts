@@ -64,7 +64,7 @@ test("a handle another account holds is 409 in any case; a refused one is 422; n
       assert.match(((await response.json()) as { error: string }).error, /taken/i);
     }
     assert.equal(await read(server, bob), null, "a refused write changes nothing");
-    for (const refused of ["ab", "x".repeat(33), "-bob", "bob-", "b--ob", "bob_1", "bob@example.test", "api", "admin", "connect", "pagegi", 12, null]) {
+    for (const refused of ["ab", "x".repeat(33), "-bob", "bob-", "b--ob", "bob@example.test", "api", "admin", "connect", "pagegi", 12, null]) {
       const response = await put(server, bob, refused);
       assert.equal(response.status, 422, String(refused));
       assert.ok(((await response.json()) as { error: string }).error, String(refused));
@@ -97,6 +97,26 @@ test("the home page's cookie session reads and writes the handle from the same o
     assert.equal(saved.status, 200);
     assert.deepEqual(await saved.json(), { handle: "home-page" });
     assert.equal((await server.request(ROUTE, { headers: { Cookie: cookie } })).status, 401, "the cookie counts only from the home page");
+  } finally {
+    await server.close();
+  }
+});
+
+test("underscore handles upgrade the old SQL constraint and preserve exact route identity and remain case-insensitively unique", async () => {
+  const server = await startServer({}, async (query) => {
+    await query(
+      "CREATE TABLE accounts(actor text PRIMARY KEY,salt text,password text,name text,image text,space text NOT NULL DEFAULT gen_random_uuid()::text,handle text CHECK(handle ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(handle) BETWEEN 3 AND 32))",
+    );
+  });
+  try {
+    const alice = await server.token("underscore@example.test"),
+      bob = await server.token("second@example.test");
+    for (const handle of ["_name", "name_", "na__me", "___"]) {
+      const saved = await put(server, alice, handle.toUpperCase());
+      assert.equal(saved.status, 200);
+      assert.equal(await read(server, alice), handle);
+      assert.equal((await put(server, bob, handle)).status, 409);
+    }
   } finally {
     await server.close();
   }
