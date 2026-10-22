@@ -66,10 +66,10 @@ test("captured delegated callbacks restore owners and cannot run or register aft
   callback();
   target.dispatchEvent(new Event("change"));
   assert.equal(calls, 1);
-  assert.throws(
-    () => port.run(owner, () => life.listen(target, "change", () => {})),
-    /disposed/,
+  const cleanup = life.cleanup(() =>
+    port.run(owner, () => life.listen(target, "change", () => {})),
   );
+  assert.throws(cleanup, /disposed/);
 });
 test("once, abort, cross-owner explicit removal and independent factories retain native identity", () => {
   const port = owners(),
@@ -122,4 +122,20 @@ test("disposal is inactive before retirement and drains all registrations despit
     () => port.run(a, () => life.listen(target, "c", () => {})),
     /disposed/,
   );
+});
+test("reused Solid computation owners get a fresh generation without reviving previous callbacks", () => {
+  const port = owners(),
+    owner = port.make(),
+    life = createAuthorComponentLifetime(port);
+  let calls = 0;
+  const first = port.run(owner, () => life.callback(() => calls++));
+  first();
+  port.remove(owner);
+  const second = port.run(owner, () => life.callback(() => calls++));
+  first();
+  second();
+  assert.equal(calls, 2);
+  life.dispose();
+  second();
+  assert.equal(calls, 2);
 });

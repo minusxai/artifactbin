@@ -1,7 +1,10 @@
 import { MAX_COMPILED_SOURCE_BYTES } from "./contracts.ts";
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
-import { prepareAuthorEffects } from "./author/effect-source.ts";
+import {
+  prepareAuthorEffects,
+  prepareOwnedAuthorComponents,
+} from "./author/effect-source.ts";
 import { admitAuthorSource } from "./author/admission.ts";
 import type { AuthorDocumentPlan } from "./author-document-contracts.ts";
 const parser = Parser.extend(jsx());
@@ -96,8 +99,21 @@ export function prepareAuthorDocument(source: string): AuthorDocumentPlan {
         }
   }
   const effects = !exports.length;
+  let windowComponents = false;
+  if (!effects)
+    walk(module, (node) => {
+      if (node.type === "Identifier" && node.name === "window")
+        windowComponents = true;
+    });
   if (effects) prepareAuthorEffects(text);
-  else admitAuthorSource(text);
+  else if (windowComponents) {
+    const plan = prepareOwnedAuthorComponents(text);
+    if (
+      plan.exports.length !== exports.length ||
+      exports.some((name) => !plan.exports.includes(name))
+    )
+      throw Error("Owned author export manifest changed");
+  } else admitAuthorSource(text);
   const mounts: AuthorDocumentPlan["author"]["mounts"] = [];
   const identities = new Set<string>();
   const elements = (node: any, inside = false) => {
@@ -134,6 +150,7 @@ export function prepareAuthorDocument(source: string): AuthorDocumentPlan {
       exports,
       mounts,
       ...(effects ? { mode: "effects" as const } : {}),
+      ...(windowComponents ? { lifecycle: "owned" as const } : {}),
     },
   };
 }

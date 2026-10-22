@@ -87,7 +87,11 @@ const author = input.authorPlan
         queries: split.content.queries.map((q: any) => q.name),
         mutations: [],
       },
-      { archivedRoot: root, mode: input.authorPlan.mode },
+      {
+        archivedRoot: root,
+        mode: input.authorPlan.mode,
+        lifecycle: input.authorPlan.lifecycle,
+      },
     )
   : null;
 if (

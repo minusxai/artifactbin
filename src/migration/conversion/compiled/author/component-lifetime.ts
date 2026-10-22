@@ -26,7 +26,8 @@ export function createAuthorComponentLifetime<Owner extends object>(
   const scopes = new WeakMap<Owner, Scope>(),
     liveScopes = new Set<Scope>(),
     registrations = new Set<Registration>();
-  let active = true;
+  let active = true,
+    retiring = false;
   const capture = (options?: boolean | EventListenerOptions) =>
     typeof options === "boolean" ? options : Boolean(options?.capture);
   const drain = (callbacks: (() => void)[]) => {
@@ -67,11 +68,12 @@ export function createAuthorComponentLifetime<Owner extends object>(
     );
   };
   const current = () => {
-    if (!active) throw Error("Author component lifetime is disposed");
+    if (!active || retiring)
+      throw Error("Author component lifetime is disposed");
     const owner = owners.current();
     if (!owner) throw Error("Author component callback has no owner");
     let scope = scopes.get(owner);
-    if (!scope) {
+    if (!scope || !scope.active) {
       if (liveScopes.size >= 10_000)
         throw Error("Author component owner limit");
       scope = { owner, active: true, registrations: new Set() };
@@ -190,6 +192,19 @@ export function createAuthorComponentLifetime<Owner extends object>(
       return function (this: unknown, ...args) {
         if (!active || !scope.active) return undefined;
         return owners.run(scope.owner, () => callback.apply(this, args));
+      };
+    },
+    cleanup(callback) {
+      if (typeof callback !== "function")
+        throw Error("Author cleanup must be a function");
+      return () => {
+        const previous = retiring;
+        retiring = true;
+        try {
+          callback();
+        } finally {
+          retiring = previous;
+        }
       };
     },
     dispose() {

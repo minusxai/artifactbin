@@ -23,5 +23,6 @@ export interface AuthorComponentLifetime {
   callback<T extends (...args: any[]) => any>(
     callback: T,
   ): (...args: Parameters<T>) => ReturnType<T> | undefined;
+  cleanup(callback: () => void): () => void;
   dispose(): void;
 }

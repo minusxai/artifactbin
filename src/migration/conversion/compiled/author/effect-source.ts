@@ -1,7 +1,10 @@
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
 import { admitAuthorSource } from "./admission.ts";
-import type { PreparedAuthorEffects } from "./effect-source-contracts.ts";
+import type {
+  PreparedAuthorEffects,
+  PreparedOwnedAuthorComponents,
+} from "./effect-source-contracts.ts";
 const parser = Parser.extend(jsx());
 const timers: Record<string, string> = {
   setTimeout: "timeout",
@@ -26,12 +29,69 @@ const windowMethods = new Set([
 const windowEvents = new Set(["resize", "scroll", "hashchange", "pointerup"]);
 /** A bounded parsed rewrite. Unknown lifetime forms remain refusals, never best-effort effects. */
 export function prepareAuthorEffects(source: string): PreparedAuthorEffects {
+  return prepareOwnedSource(source, false);
+}
+export function prepareOwnedAuthorComponents(
+  source: string,
+): PreparedOwnedAuthorComponents {
+  return prepareOwnedSource(source, true);
+}
+function prepareOwnedSource(
+  source: string,
+  components: boolean,
+): PreparedOwnedAuthorComponents {
   if (Buffer.byteLength(source) > 262_144)
     throw Error("Author effects source limit");
   const ast = parser.parse(source, {
     ecmaVersion: "latest",
     sourceType: "module",
   }) as any;
+  const exported: string[] = [];
+  if (components)
+    for (const node of ast.body) {
+      if (!node.type.startsWith("Export")) continue;
+      if (
+        node.type !== "ExportNamedDeclaration" ||
+        node.source ||
+        !node.declaration
+      )
+        throw Error("Owned components require direct named declarations");
+      const declaration = node.declaration;
+      const declarations =
+        declaration.type === "FunctionDeclaration"
+          ? [declaration]
+          : declaration.type === "VariableDeclaration"
+            ? declaration.declarations
+            : [];
+      if (!declarations.length)
+        throw Error("Unsupported owned component export");
+      for (const item of declarations) {
+        const name = item.id?.name;
+        const fn =
+          declaration.type === "FunctionDeclaration" ? item : item.init;
+        if (
+          !name ||
+          !/^[A-Z][A-Za-z0-9_]*$/.test(name) ||
+          ![
+            "FunctionDeclaration",
+            "FunctionExpression",
+            "ArrowFunctionExpression",
+          ].includes(fn?.type) ||
+          exported.includes(name)
+        )
+          throw Error("Owned components require unique named function exports");
+        exported.push(name);
+      }
+    }
+  if (components && !exported.length)
+    throw Error("Owned components require exports");
+  const cleanupNames = new Set<string>();
+  if (components)
+    for (const node of ast.body)
+      if (node.type === "ImportDeclaration" && node.source.value === "solid-js")
+        for (const spec of node.specifiers)
+          if (spec.imported?.name === "onCleanup")
+            cleanupNames.add(spec.local.name);
   const identifiers = new Set<string>();
   const collect = (node: any) => {
     if (!node || typeof node !== "object") return;
@@ -120,7 +180,7 @@ export function prepareAuthorEffects(source: string): PreparedAuthorEffects {
     }
     if (node.type === "NewExpression")
       throw Error("Unowned constructed effects are unsupported");
-    if (node.type?.startsWith("Export"))
+    if (!components && node.type?.startsWith("Export"))
       throw Error("Effects must not declare exports");
     if (
       node.async ||
@@ -285,8 +345,64 @@ export function prepareAuthorEffects(source: string): PreparedAuthorEffects {
         parent.optional
       )
         throw Error("Timers must be unshadowed direct calls");
+      if (components) throw Error("Owned component timers are unsupported");
       time = true;
       edits.set(node, () => lifetimeIdentifier + "." + timers[node.name]);
+    }
+    if (
+      components &&
+      node.type === "ImportSpecifier" &&
+      ["getOwner", "runWithOwner"].includes(node.imported?.name)
+    )
+      throw Error("Authored owner acquisition is unsupported");
+    if (
+      components &&
+      node.type === "Identifier" &&
+      cleanupNames.has(node.name) &&
+      parent?.type !== "ImportSpecifier"
+    ) {
+      if (
+        parent?.type !== "CallExpression" ||
+        parent.callee !== node ||
+        parent.arguments.length !== 1
+      )
+        throw Error("Owned cleanup must be called directly");
+      const call = parent;
+      edits.set(
+        call,
+        (render) =>
+          node.name +
+          "(" +
+          lifetimeIdentifier +
+          ".cleanup(" +
+          render(call.arguments[0]) +
+          "))",
+      );
+    }
+    if (components && node.type === "JSXSpreadAttribute")
+      throw Error("Owned component spread handlers are unsupported");
+    if (
+      components &&
+      node.type === "JSXAttribute" &&
+      (/^on/i.test(node.name?.name ?? "") ||
+        /^on/i.test(node.name?.namespace?.name ?? ""))
+    ) {
+      const value = node.value;
+      const expression = value?.expression;
+      if (
+        value?.type !== "JSXExpressionContainer" ||
+        ![
+          "Identifier",
+          "ArrowFunctionExpression",
+          "FunctionExpression",
+        ].includes(expression?.type)
+      )
+        throw Error("Owned component handlers must be direct callbacks");
+      edits.set(
+        value,
+        (render) =>
+          "{" + lifetimeIdentifier + ".callback(" + render(expression) + ")}",
+      );
     }
     for (const [childKey, value] of Object.entries(node)) {
       if (childKey === "__parent") continue;
@@ -336,6 +452,7 @@ export function prepareAuthorEffects(source: string): PreparedAuthorEffects {
   admitAuthorSource(rewritten);
   return {
     source: rewritten,
+    exports: exported,
     lifetimeIdentifier,
     windowIdentifier,
     capabilities: [

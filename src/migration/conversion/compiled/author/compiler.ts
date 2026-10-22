@@ -3,9 +3,14 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import { build } from "esbuild";
 import { admitAuthorSource } from "./admission.ts";
-import { prepareAuthorEffects } from "./effect-source.ts";
+import {
+  prepareAuthorEffects,
+  prepareOwnedAuthorComponents,
+} from "./effect-source.ts";
 import { effectInitializerModule } from "./effects-module.ts";
 import { effectBundleEntry } from "./effects-entry.ts";
+import { ownedComponentInitializerModule } from "./owned-components-module.ts";
+import { ownedComponentBundleEntry } from "./owned-components-entry.ts";
 import type {
   AuthorCompilation,
   AuthorNames,
@@ -16,11 +21,21 @@ export const PINNED_SOLID_VERSION = "1.9.15";
 export async function prepareAuthorBundle(
   source: string,
   names: AuthorNames,
-  options: { archivedRoot: string; mode?: "components" | "effects" },
+  options: {
+    archivedRoot: string;
+    mode?: "components" | "effects";
+    lifecycle?: "owned";
+  },
 ): Promise<AuthorBundleSources> {
+  if (options.lifecycle && options.mode === "effects")
+    throw Error("Mixed author lifecycle modes");
+  const owned =
+    options.lifecycle === "owned"
+      ? prepareOwnedAuthorComponents(source)
+      : undefined;
   const effects =
     options.mode === "effects" ? prepareAuthorEffects(source) : undefined;
-  if (!effects) admitAuthorSource(source);
+  if (!effects && !owned) admitAuthorSource(source);
   if (names.mutations.length) throw Error("Author mutations are unsupported");
   const root = path.resolve(options.archivedRoot);
   const solidRoot = path.join(root, "node_modules/solid-js");
@@ -34,7 +49,10 @@ export async function prepareAuthorBundle(
       path.join(root, "services/app/lib/author-script/author-module.server.ts"),
     ).href
   );
-  const result = await buildAuthorModule(effects?.source ?? source, names);
+  const result = await buildAuthorModule(
+    owned?.source ?? effects?.source ?? source,
+    names,
+  );
   if (!result.ok)
     throw Error("Author source refused: " + result.errors.join("; "));
   // The archived compiler emits two generated bridge reads. Rewrite ONLY those reads,
@@ -69,10 +87,16 @@ export async function mount(ports,mounts){
  return ()=>drainAuthorCleanups([...stops.splice(0),()=>bindings.dispose()]);
 }`;
   return {
-    entry: effects ? effectBundleEntry(names) : entry,
-    authorModule: effects
-      ? effectInitializerModule(compiled, effects)
-      : `import {getAuthorPorts} from 'author-closure';\n${compiled}`,
+    entry: owned
+      ? ownedComponentBundleEntry(names)
+      : effects
+        ? effectBundleEntry(names)
+        : entry,
+    authorModule: owned
+      ? ownedComponentInitializerModule(compiled, owned)
+      : effects
+        ? effectInitializerModule(compiled, effects)
+        : `import {getAuthorPorts} from 'author-closure';\n${compiled}`,
     closureModule: `let current;export const getAuthorPorts=()=>current;export const setAuthorPorts=value=>{current=value;};`,
     exports: result.module.exports,
     solidRoot,
@@ -82,7 +106,11 @@ export async function mount(ports,mounts){
 export async function compileAuthorScript(
   source: string,
   names: AuthorNames,
-  options: { archivedRoot: string; mode?: "components" | "effects" },
+  options: {
+    archivedRoot: string;
+    mode?: "components" | "effects";
+    lifecycle?: "owned";
+  },
 ): Promise<AuthorCompilation> {
   const prepared = await prepareAuthorBundle(source, names, options);
   const bundled = await build({

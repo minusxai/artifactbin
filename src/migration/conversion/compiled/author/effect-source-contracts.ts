@@ -10,3 +10,7 @@ export interface PreparedAuthorEffects {
     | "owned-timers"
   )[];
 }
+/** Components keep a single shared initializer; every window resource belongs to a Solid owner. */
+export interface PreparedOwnedAuthorComponents extends PreparedAuthorEffects {
+  readonly exports: readonly string[];
+}

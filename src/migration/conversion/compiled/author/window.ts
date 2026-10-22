@@ -11,7 +11,7 @@ function record<T extends object>(fields: T): Readonly<T> {
 /** Deliberately returns neither native events nor native MediaQueryList objects. */
 export function createAuthorWindowFacade(
   port: AuthorWindowPort,
-  lifetime: AuthorEffectLifetime,
+  lifetime: Pick<AuthorEffectLifetime, "active" | "listen" | "unlisten">,
 ): AuthorWindowFacade {
   const assertActive = () => {
     if (!lifetime.active) throw Error("Author effect lifetime is disposed");
