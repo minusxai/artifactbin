@@ -1,3 +1,5 @@
+import {readLocalReactiveExpression} from "./reactive-source.ts";
+import {readLocalIdentityPlan} from "./source-identity-plan.ts";
 import { admitDataControl, controlLiteral } from "./data-controls.ts";
 import type { CompiledDataControl } from "./data-control-contracts.ts";
 /** Source capability admission only: never invokes a compiler or evaluates source. */
@@ -24,7 +26,7 @@ const activeUri = (v: string) =>
     v.replace(/[\u0000-\u0020\u007f]/g, "").toLowerCase(),
   );
 const allowed = new Set(
-  "Helmet Import Value Query Mutation Question Chart Select DataTable Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "Helmet Import Value Query Mutation Question Chart Select DataTable For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -57,9 +59,12 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
             "Dynamic attribute requires an adapter: options",
             "Dynamic attribute requires an adapter: columns",
             "Dynamic attribute requires an adapter: sort",
+            "Dynamic attribute requires an adapter: metrics",
+            "Dynamic attribute requires an adapter: each",
           ].includes(i.message)
         ) &&
         ![
+          "expression",
           "component",
           "value",
           "action-adapter",
@@ -162,6 +167,11 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const dataControls: CompiledDataControl[] = [];
   const scalarBindings = new Set<string>();
   const references = new Set<string>();
+  const cellReferences = new Set<string>();
+  const loopTables = new Set<string>();
+  const loopKeys: {table:string;key:string}[] = [];
+  const rowReads: {table:string;field:string}[] = [];
+  let dynamicIdentities: import("./reactive-source-contracts.ts").LocalDynamicIdentityPlan = {regions:[]};
   const queries = new Set<string>();
   const safeExpression = (node: any): boolean => {
     if (node.type === "Literal")
@@ -204,10 +214,29 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       ecmaVersion: "latest",
     }) as any;
     if (tree.end !== text.length) return blocked("compiled-source");
-    const walk = (node: any) => {
+    const readExpression = (node: any, loopDepth: number, loopTable?: string): boolean => {
+      const read = readLocalReactiveExpression(node);
+      if (read) {
+        if (read.rowFields.length && !loopTable) return false;
+        for (const field of read.rowFields) rowReads.push({table:loopTable!,field});
+        for (const signal of read.signals) {
+          const base = signal.split(".")[0]!;
+          references.add(base);
+          if (signal.includes(".")) cellReferences.add(base);
+        }
+        return true;
+      }
+      if (node.type === "JSXEmptyExpression") return true;
+      if (node.type === "ConditionalExpression") return readExpression(node.test, loopDepth, loopTable) && branch(node.consequent, loopDepth, loopTable) && branch(node.alternate, loopDepth, loopTable);
+      if (node.type === "LogicalExpression" && node.operator === "&&") return readExpression(node.left, loopDepth, loopTable) && branch(node.right, loopDepth, loopTable);
+      return safeExpression(node);
+    };
+    const branch = (node: any, loopDepth: number, loopTable?: string): boolean => ["JSXElement", "JSXFragment"].includes(node.type) || readExpression(node, loopDepth, loopTable);
+    const walk = (node: any, parent?: any, loopDepth = 0, loopTable?: string) => {
+      let childLoopTable = loopTable;
       if (
         node.type === "JSXExpressionContainer" &&
-        !safeExpression(node.expression)
+        !(parent?.type === "JSXAttribute" ? safeExpression(node.expression) : readExpression(node.expression, loopDepth, loopTable))
       )
         invalid = true;
       if (node.type === "JSXElement") {
@@ -231,6 +260,18 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
               if (typeof id !== "string" || !id || renderedIdentities.has(id)) invalid = true;
               else renderedIdentities.add(id);
             } catch { invalid = true; }
+          }
+        }
+        if (name === "For") {
+          const attrs = node.openingElement.attributes;
+          const each = attrs.find((a: any) => a.name?.name === "each")?.value?.expression;
+          const key = attrs.find((a: any) => a.name?.name === "keyBy")?.value?.value;
+          const owner = attrs.find((a: any) => a.name?.name === "id")?.value?.value;
+          if (loopDepth || each?.type !== "Identifier" || !/^\$[A-Za-z]\w*$/.test(each.name) || typeof key !== "string" || !key || ["constructor", "prototype", "__proto__"].includes(key) || typeof owner !== "string" || !owner) invalid = true;
+          else {
+            childLoopTable = each.name.slice(1);
+            loopTables.add(childLoopTable!);
+            loopKeys.push({table:childLoopTable!,key});
           }
         }
         if (["Question", "Chart"].includes(name)) {
@@ -302,7 +343,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
             attr.value?.expression?.type === "ArrayExpression" &&
             !(name === "Value" && attr.name?.name === "value") &&
             !(name === "Select" && attr.name?.name === "options") &&
-            !(name === "DataTable" && attr.name?.name === "columns")
+            !(name === "DataTable" && ["columns", "metrics"].includes(attr.name?.name))
           )
             invalid = true;
           const attrName = attr.name?.name?.toLowerCase();
@@ -501,12 +542,18 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
         if (key === "start" || key === "end") continue;
         if (Array.isArray(value))
           value.forEach((v) => {
-            if (v && typeof v === "object") walk(v);
+            if (v && typeof v === "object") walk(v, node, loopDepth + (node.type === "JSXElement" && node.openingElement.name.name === "For" ? 1 : 0), childLoopTable);
           });
-        else if (value && typeof value === "object") walk(value);
+        else if (value && typeof value === "object") walk(value, node, loopDepth + (node.type === "JSXElement" && node.openingElement.name.name === "For" ? 1 : 0), childLoopTable);
       }
     };
     walk(tree);
+    dynamicIdentities = readLocalIdentityPlan(tree);
+    for (const reference of [...loopKeys.map(r => ({table:r.table,field:r.key})), ...rowReads]) {
+      const declaration = expectedDeclarations.find(d => d.name === reference.table);
+      if (declaration?.type === "table" && !declaration.columns.some(c => c.name === reference.field)) invalid = true;
+    }
+    if ([...cellReferences].some(n => !queries.has(n) && !tableNames.has(n)) || [...loopTables].some(n => !queries.has(n) && !tableNames.has(n))) invalid = true;
     if (
       [...references].some(
         (name) => !declarations.has(name) && !queries.has(name),
@@ -552,13 +599,14 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     )
   )
     return blocked("compiled-data-control");
-  input = { ...input, dataControls };
+  input = { ...input, dataControls, dynamicIdentities };
   return {
     ok: true,
     plan: {
       input,
       manifest: { declarations: expectedDeclarations },
       renderedIdentities,
+      dynamicIdentities,
       historical,
       backendLinks,
       queryNames: queries,

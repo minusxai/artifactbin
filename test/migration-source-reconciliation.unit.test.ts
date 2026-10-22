@@ -149,3 +149,15 @@ test("duplicate authored identities refuse before invoking the compiler", async 
   assert.equal(result.classification, "manual-blocked");
   assert.equal(calls, 0);
 });
+
+test("conditional output preserves exactly the source-default branch identities", async () => {
+  const source='<Value name="count" type="number" default={2}/>{$count === 2 ? <p id="active">yes</p> : <p id="inactive">no</p>}';
+  for(const [html,classification] of [
+    ['<p id="active">yes</p>','functional'],
+    ['<p id="inactive">no</p>','manual-blocked'],
+    ['<p id="active">yes</p><p id="inactive">no</p>','manual-blocked'],
+  ]){
+    const result=await compileArchivedLocal({source,coreUrl:input.coreUrl},{compiler:{compile:async()=>({...output,html:html!,declarations:[output.declarations[0]!]})}});
+    assert.equal(result.classification,classification);
+  }
+});

@@ -19,6 +19,7 @@ export interface AdmittedLocalSource {
   readonly manifest: LocalSourceManifest;
   /** Authored IDs on rendered JSX nodes must survive compiler output unchanged. */
   readonly renderedIdentities: ReadonlySet<string>;
+  readonly dynamicIdentities: import("./reactive-source-contracts.ts").LocalDynamicIdentityPlan;
   readonly historical: boolean;
   readonly backendLinks: ReadonlyMap<string, string>;
   readonly queryNames: ReadonlySet<string>;
