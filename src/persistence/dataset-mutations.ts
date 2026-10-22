@@ -349,12 +349,16 @@ async function userAssignments(
     | Record<string, unknown>
     | undefined;
   const entries = permission?.[op + "_permissions"];
+  const roleEntry = Array.isArray(entries)
+    ? entries.find(
+        (entry) => object(entry) && entry.role === selected.policy?.role,
+      )
+    : undefined;
   const presets =
-    Array.isArray(entries) &&
-    object(entries[0]) &&
-    object(entries[0].permission) &&
-    object(entries[0].permission.set)
-      ? Object.keys(entries[0].permission.set)
+    object(roleEntry) &&
+    object(roleEntry.permission) &&
+    object(roleEntry.permission.set)
+      ? Object.keys(roleEntry.permission.set)
       : [];
   const expected =
     op === "delete"
@@ -469,6 +473,14 @@ export function createDatasetMutationRepository({
       ),
     begin: (context, operation, request) =>
       database.transaction(async (client) => {
+        // Begin and commit acquire this lock before membership/page/resource/
+        // receipt locks, so concurrent replay cannot invert their lock order.
+        const peek = await registered(client, context, operation.name);
+        if (!peek || !same(peek.operation, operation)) deny();
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':dataset-mutations:' || $1,0))",
+          [peek.namespace],
+        );
         if (context.subject) await loadGroupAuthority(client, context.subject);
         const reg = await registered(client, context, operation.name, true);
         if (!reg || !same(reg.operation, operation)) deny();

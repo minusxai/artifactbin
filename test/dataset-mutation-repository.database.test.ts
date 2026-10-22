@@ -27,7 +27,7 @@ const binding: DatasetBinding = {
     },
   ],
 };
-async function fixture(savedBinding = binding) {
+async function fixture(savedBinding = binding, sourceCatalog: unknown = {}) {
   const env = await testDatabase();
   for (const path of [
     "schema.sql",
@@ -89,8 +89,8 @@ async function fixture(savedBinding = binding) {
     [access, dataset],
   );
   await env.pool.query(
-    "INSERT INTO dataset_versions VALUES('legacy','old-data',1,$1,'{}','[]')",
-    [JSON.stringify(savedBinding.tables)],
+    "INSERT INTO dataset_versions VALUES('legacy','old-data',1,$1,$2,'[]')",
+    [JSON.stringify(savedBinding.tables), sourceCatalog],
   );
   await env.pool.query(
     "INSERT INTO dataset_pages VALUES('Pg0001',1,'legacy',$1)",
@@ -319,6 +319,215 @@ test("durable mutation commits history, receipt and invalidation atomically; con
       { code: "denied" },
     );
   } finally {
+    await env.cleanup();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("user presets use the executing viewer role in a multi-role policy", async () => {
+  const tables = [
+    {
+      ...binding.tables[0]!,
+      columns: [
+        { name: "name", type: "string" as const },
+        { name: "assignee", type: "user" as const },
+      ],
+    },
+  ];
+  const { env } = await fixture({ ...binding, tables }, { tables });
+  const directory = await mkdtemp(join(tmpdir(), "mutation-role-"));
+  try {
+    const database = createSqlDatabase({
+        pool: env.pool,
+        initialize: async () => {},
+        statementTimeoutMs: 15000,
+      }),
+      objects = createDatasetMutationObjectStore(directory),
+      repo = createDatasetMutationRepository({
+        database,
+        objects,
+        now: () => 100,
+      });
+    const policy = {
+      version: 1,
+      enforcement: "enabled",
+      tables: [
+        {
+          table: { schema: "public", name: "rows" },
+          update_permissions: [
+            {
+              role: "admin",
+              permission: { columns: "*", filter: {}, set: { name: "admin" } },
+            },
+            {
+              role: "viewer",
+              permission: {
+                columns: ["name"],
+                filter: {},
+                set: { assignee: "old-member" },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    await env.pool.query(
+      "UPDATE dataset_resources SET writable=true,snapshot=jsonb_set(snapshot,'{policy}',$1::jsonb)",
+      [JSON.stringify(policy)],
+    );
+    await database.transaction((c) =>
+      registerDatasetMutationOperations(c, [
+        { sourceNamespace: "legacy", bindingName: "sales", operation },
+      ]),
+    );
+    const start = await repo.begin(context, operation, {
+      operation: "rename",
+      requestId: "roles",
+      params: { name: "new" },
+    });
+    assert.equal(start.kind, "lease");
+    if (start.kind !== "lease") throw Error();
+    const head = await repo.head(context, operation);
+    assert.ok(head);
+    const rows = [{ name: "new", assignee: "old-member" }],
+      object = await objects.persist(rows);
+    const result = await repo.commit({
+      context,
+      operation,
+      lease: start.lease,
+      head,
+      object,
+      outcome: {
+        columns: tables[0]!.columns,
+        rows,
+        affected: 1,
+        analysis: { operation: "update", columns: ["name"], functions: [] },
+        userWrites: [{ assignee: "old-member" }],
+      },
+    });
+    assert.equal(result.kind, "committed");
+  } finally {
+    await env.cleanup();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("concurrent receipt replay cannot deadlock a committing mutation", async () => {
+  const { env } = await fixture(),
+    directory = await mkdtemp(join(tmpdir(), "mutation-order-"));
+  let release!: () => void, ready!: () => void;
+  const released = new Promise<void>((r) => (release = r)),
+    held = new Promise<void>((r) => (ready = r));
+  let phase = "setup";
+  const pids: number[] = [];
+  try {
+    const base = createSqlDatabase({
+      pool: env.pool,
+      initialize: async () => {},
+      statementTimeoutMs: 5000,
+    });
+    const database: import("../src/persistence/sql.ts").SqlDatabase = {
+      ...base,
+      transaction: (work) => {
+        const current = phase;
+        return base.transaction(async (c) => {
+          pids.push(
+            Number(
+              (await c.query("SELECT pg_backend_pid() AS pid")).rows[0]!.pid,
+            ),
+          );
+          return work({
+            ...c,
+            query: async (sql, values) => {
+              const result = await c.query(sql, values);
+              if (
+                current === "commit" &&
+                sql.startsWith(
+                  "SELECT * FROM dataset_mutation_receipts WHERE lease_id",
+                )
+              ) {
+                ready();
+                await released;
+              }
+              return result;
+            },
+          });
+        });
+      },
+    };
+    const objects = createDatasetMutationObjectStore(directory),
+      repo = createDatasetMutationRepository({
+        database,
+        objects,
+        now: () => 100,
+      });
+    await env.pool.query(
+      "UPDATE dataset_resources SET writable=true,access=jsonb_set(access,'{shares}','{\"member\":\"editor\"}')",
+    );
+    await base.transaction((c) =>
+      registerDatasetMutationOperations(c, [
+        { sourceNamespace: "legacy", bindingName: "sales", operation },
+      ]),
+    );
+    const request = {
+      operation: "rename",
+      requestId: "same",
+      params: { name: "new" },
+    };
+    const first = await repo.begin(context, operation, request);
+    if (first.kind !== "lease") throw Error();
+    const head = await repo.head(context, operation);
+    assert.ok(head);
+    const rows = [{ name: "new" }],
+      object = await objects.persist(rows),
+      outcome = {
+        rows,
+        columns: [...head.tables[0]!.columns],
+        affected: 1,
+        analysis: {
+          operation: "update" as const,
+          columns: ["name"],
+          functions: [],
+        },
+      };
+    phase = "commit";
+    const commit = repo.commit({
+      context,
+      operation,
+      lease: first.lease,
+      head,
+      object,
+      outcome,
+    });
+    await held;
+    phase = "replay";
+    const replay = repo.begin(context, operation, request);
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const waiting = await env.pool.query(
+        "SELECT count(*)::int n FROM pg_locks WHERE NOT granted AND pid=ANY($1::int[])",
+        [pids],
+      );
+      if (waiting.rows[0].n > 0) break;
+      if (attempt === 199)
+        assert.fail("concurrent replay did not reach lock barrier");
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    release();
+    const results = await Promise.allSettled([commit, replay]);
+    assert.deepEqual(
+      results.map((r) => r.status),
+      ["fulfilled", "fulfilled"],
+    );
+    assert.equal(
+      results[0]!.status === "fulfilled" && results[0].value.kind,
+      "committed",
+    );
+    assert.equal(
+      results[1]!.status === "fulfilled" && results[1].value.kind,
+      "replay",
+    );
+  } finally {
+    release();
     await env.cleanup();
     await rm(directory, { recursive: true, force: true });
   }
