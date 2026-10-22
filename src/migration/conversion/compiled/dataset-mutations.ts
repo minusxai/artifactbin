@@ -4,6 +4,7 @@ import type {
   CompiledMutationResult,
   CompiledMutationScalar,
   CompiledMutationStatus,
+  CompiledMutationIntent,
 } from "./dataset-mutations-contracts.ts";
 export type * from "./dataset-mutations-contracts.ts";
 export class CompiledDatasetMutationError extends Error {
@@ -43,6 +44,8 @@ interface Attempt {
   viewer: Record<string, CompiledMutationScalar>;
   promise?: Promise<CompiledMutationResult>;
   effectsApplied?: boolean;
+  intent?: CompiledMutationIntent;
+  saved?: boolean;
 }
 /** One helper per rendered page. Canonical Apollo owns transport and credentials. */
 export function createCompiledDatasetMutations(
@@ -55,6 +58,7 @@ export function createCompiledDatasetMutations(
     throw Error("Invalid registered mutation metadata");
   for (const b of bindings.values())
     if (
+      !/^[a-f0-9]{64}$/.test(b.recoveryScope) ||
       !identifier(b.name) ||
       !identifier(b.backendNamespace) ||
       !options.documents[b.backendNamespace] ||
@@ -74,6 +78,106 @@ export function createCompiledDatasetMutations(
       b.reset?.some((name) => !identifier(name))
     )
       throw Error("Invalid registered mutation metadata");
+  const durable = options.intentStore;
+  const context = options.authorizationContext;
+  if ((durable || context) && (!durable || !context))
+    throw Error("Incomplete durable mutation configuration");
+  const record = (value: unknown): value is Record<string, any> => {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return false;
+    if (![Object.prototype, null].includes(Object.getPrototypeOf(value)))
+      return false;
+    return Object.values(Object.getOwnPropertyDescriptors(value)).every(
+      (d) => "value" in d,
+    );
+  };
+  const validIntent = (value: unknown): value is CompiledMutationIntent => {
+    if (
+      !record(value) ||
+      Object.keys(value).sort().join() !==
+        "authorizationContext,name,params,requestId,resetValues,scope,version" ||
+      value.version !== 1 ||
+      typeof value.scope !== "string" ||
+      !/^[a-f0-9]{64}$/.test(value.scope) ||
+      typeof value.authorizationContext !== "string" ||
+      !value.authorizationContext ||
+      value.authorizationContext.length > 256 ||
+      !identifier(value.name) ||
+      typeof value.requestId !== "string" ||
+      !/^[A-Za-z0-9_-]{16,128}$/.test(value.requestId) ||
+      !record(value.params) ||
+      !record(value.resetValues)
+    )
+      return false;
+    for (const values of [value.params, value.resetValues])
+      if (
+        Object.keys(values).length > 240 ||
+        Object.entries(values).some(
+          ([key, v]) => !identifier(key) || !scalar(v),
+        )
+      )
+        return false;
+    return JSON.stringify(value).length <= 16384;
+  };
+  const restore = () => {
+    if (!durable) return;
+    const saved = durable.read();
+    if (
+      !record(saved) ||
+      Object.keys(saved).length > 64 ||
+      JSON.stringify(saved).length > 131072
+    )
+      throw Error("Invalid stored mutation intents");
+    for (const [name, intent] of Object.entries(saved)) {
+      if (!validIntent(intent) || intent.name !== name)
+        throw Error("Invalid stored mutation intent");
+      if (bindings.has(name) && !attempts.has(name))
+        attempts.set(name, {
+          status: { name, requestId: intent.requestId, state: "unknown" },
+          params: { ...intent.params },
+          viewer: { ...intent.resetValues },
+          intent,
+          saved: true,
+        });
+    }
+  };
+  restore();
+  const authorized = (attempt: Attempt) => {
+    if (!durable) return true;
+    const intent = attempt.intent,
+      binding = intent && bindings.get(intent.name),
+      current = context!();
+    return (
+      !!intent &&
+      intent.scope === binding?.recoveryScope &&
+      !!current &&
+      current === intent.authorizationContext &&
+      !!binding &&
+      Object.keys(intent.params).length ===
+        Object.keys(binding.paramTypes).length &&
+      Object.entries(binding.paramTypes).every(
+        ([name, type]) =>
+          Object.hasOwn(intent.params, name) &&
+          matches(type, intent.params[name]!),
+      )
+    );
+  };
+  const clear = async (attempt: Attempt) => {
+    if (durable && attempt.saved) {
+      try {
+        if (
+          await durable.compareAndSet(
+            attempt.status.name,
+            attempt.status.requestId,
+            null,
+          )
+        )
+          attempt.saved = false;
+      } catch {
+        /* A confirmed result is final; a retained intent reconciles the same receipt after reload. */
+      }
+    }
+  };
   const emit = () => {
     for (const listener of [...listeners]) {
       try {
@@ -92,6 +196,29 @@ export function createCompiledDatasetMutations(
     attempt.status = { ...attempt.status, state: "pending" };
     emit();
     const work = async () => {
+      if (durable) {
+        try {
+          if (!authorized(attempt))
+            throw Error("Mutation caller context unavailable or changed");
+          if (!attempt.saved) {
+            if (!(await durable.compareAndSet(name, null, attempt.intent!))) {
+              attempts.delete(name);
+              restore();
+              throw new CompiledDatasetMutationError("unknown");
+            }
+            attempt.saved = true;
+          }
+          if (!authorized(attempt))
+            throw Error("Mutation caller context changed before dispatch");
+        } catch (error) {
+          attempt.status = {
+            ...attempt.status,
+            state: attempt.saved ? "unknown" : "rejected",
+          };
+          emit();
+          throw error;
+        }
+      }
       let wire: Awaited<
         ReturnType<CompiledDatasetMutationOptions["client"]["mutate"]>
       >;
@@ -132,6 +259,7 @@ export function createCompiledDatasetMutations(
               ? "offline"
               : "unknown";
         attempt.status = { ...attempt.status, state };
+        if (state !== "unknown") await clear(attempt);
         emit();
         throw new CompiledDatasetMutationError(state);
       }
@@ -142,6 +270,7 @@ export function createCompiledDatasetMutations(
         generation: payload.generation,
       };
       attempt.status = { ...attempt.status, state: "committed", result };
+      await clear(attempt);
       emit();
       if (!attempt.effectsApplied) {
         attempt.effectsApplied = true;
@@ -181,6 +310,7 @@ export function createCompiledDatasetMutations(
         Object.keys(args).some((k) => !Object.hasOwn(binding.paramTypes, k))
       )
         throw Error("Invalid registered mutation arguments");
+      restore();
       const prior = attempts.get(name);
       if (prior?.status.state === "unknown")
         throw new CompiledDatasetMutationError("unknown");
@@ -212,6 +342,26 @@ export function createCompiledDatasetMutations(
         viewer,
         params,
       };
+      if (durable) {
+        const current = context!();
+        if (!current || current.length > 256)
+          throw Error("Mutation caller context unavailable");
+        const resetValues: Record<string, CompiledMutationScalar> = {};
+        for (const field of binding.reset ?? [])
+          if (Object.hasOwn(viewer, field) && scalar(viewer[field]))
+            resetValues[field] = viewer[field]!;
+        attempt.intent = {
+          version: 1,
+          scope: binding.recoveryScope,
+          authorizationContext: current,
+          name,
+          requestId,
+          params: { ...params },
+          resetValues,
+        };
+        if (!validIntent(attempt.intent))
+          throw Error("Mutation recovery intent exceeds bounds");
+      }
       attempts.set(name, attempt);
       return execute(name, attempt);
     } catch (error) {
@@ -251,3 +401,5 @@ export function compiledDatasetMutationDocument(namespace: string): string {
   if (!identifier(namespace)) throw Error("Invalid mutation namespace");
   return `mutation DatasetMutation($operation:String!,$requestId:String!,$params:DatasetParams!){${namespace}{mutate(operation:$operation,requestId:$requestId,params:$params){affected rowCount version generation}}}`;
 }
+
+export { compiledMutationIntentStore } from "./dataset-mutation-intents.ts";

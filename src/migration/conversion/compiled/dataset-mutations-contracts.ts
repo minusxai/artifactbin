@@ -27,11 +27,34 @@ export interface CompiledMutationStatus {
   state: "pending" | "committed" | "rejected" | "offline" | "unknown";
   result?: CompiledMutationResult;
 }
+/** Public, viewer-local recovery data only; never SQL, credentials or caller identities. */
+export interface CompiledMutationIntent {
+  version: 1;
+  scope: string;
+  authorizationContext: string;
+  name: string;
+  requestId: string;
+  params: Record<string, CompiledMutationScalar>;
+  resetValues: Record<string, CompiledMutationScalar>;
+}
+/** Same canonical Apollo JSON store, with an acknowledged durable compare-and-swap. */
+export interface CompiledMutationIntentStore {
+  read(): unknown;
+  compareAndSet(
+    name: string,
+    expectedRequestId: string | null,
+    next: CompiledMutationIntent | null,
+  ): Promise<boolean>;
+}
 export interface CompiledDatasetMutationOptions {
   bindings: readonly CompiledDatasetMutation[];
   client: Pick<AfClient, "mutate">;
   /** Fixed trusted GraphQL documents, each selecting namespace.mutate; never authored SQL. */
   documents: Readonly<Record<string, DocumentNode>>;
+  /** Required together in functional browser wiring; omitted only for compatibility/admission validation. */
+  intentStore?: CompiledMutationIntentStore;
+  /** Trusted opaque current-caller partition, null while unavailable; never a token or identity. */
+  authorizationContext?(): string | null;
   requestId(): string;
   values(): Readonly<Record<string, CompiledMutationScalar>>;
   reset(names: readonly string[]): void;

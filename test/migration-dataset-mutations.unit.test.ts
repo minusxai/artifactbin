@@ -11,6 +11,7 @@ function setup(replies: unknown[]) {
   const options: CompiledDatasetMutationOptions = {
     bindings: [
       {
+        recoveryScope: "a".repeat(64),
         name: "reserve",
         backendNamespace: "legacyData",
         paramTypes: { id: "number" },
@@ -101,7 +102,12 @@ test("overlapping clicks share one pending attempt; malformed committed response
   // The injected client still uses the canonical mutate signature.
   const options: any = {
     bindings: [
-      { name: "reserve", backendNamespace: "legacyData", paramTypes: {} },
+      {
+        recoveryScope: "a".repeat(64),
+        name: "reserve",
+        backendNamespace: "legacyData",
+        paramTypes: {},
+      },
     ],
     documents: { legacyData: s.calls },
     requestId: () => "same-000000000000",
@@ -131,6 +137,7 @@ test("a delayed commit preserves viewer edits made after submission and refresh 
   const adapter = createCompiledDatasetMutations({
     bindings: [
       {
+        recoveryScope: "a".repeat(64),
         name: "reserve",
         backendNamespace: "legacyData",
         paramTypes: { id: "number" },
