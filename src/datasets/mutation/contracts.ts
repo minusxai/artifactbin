@@ -25,6 +25,8 @@ export interface DatasetMutationOperation {
   /** Trusted authored Import alias; canonical target remains the policy/CAS identity. */
   sqlSchema?: string;
   sql: string;
+  /** Trusted publication-time SQLite authorizer result; absent means advisory unavailable. */
+  analysis?: {operation: "insert" | "update" | "delete"; columns: string[]};
   paramTypes: Record<string, DatasetMutationParameterType>;
   rowParams?: DatasetMutationRowParameters;
   valueParam?: DatasetMutationValueParameter;
