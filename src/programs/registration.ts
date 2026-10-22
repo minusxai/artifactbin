@@ -7,6 +7,26 @@ export function assertSavedProgramRegistration(
   const program = registration.program;
   if (!program) return;
   const { resolver, manifest } = program;
+  if (program.native) {
+    const n = program.native;
+    if (
+      !/^[a-f0-9]{64}$/.test(n.originalSourceSha256) ||
+      n.authority !== "owner-only" ||
+      n.concurrency !== "no-overlap" ||
+      n.computeCompatibility !== "original-reservation-not-provided" ||
+      !n.compute ||
+      !Number.isFinite(n.compute.vcpu) ||
+      n.compute.vcpu <= 0 ||
+      !Number.isSafeInteger(n.compute.memoryMiB) ||
+      n.compute.memoryMiB <= 0 ||
+      !Number.isSafeInteger(n.compute.ttlSeconds) ||
+      n.compute.ttlSeconds <= 0 ||
+      manifest.values.length ||
+      manifest.queries.length ||
+      manifest.mutations.length
+    )
+      throw Error("Native program registration invalid");
+  }
   const same = (a: readonly string[], b: readonly string[]) =>
     a.length === b.length &&
     new Set(a).size === a.length &&
@@ -14,6 +34,8 @@ export function assertSavedProgramRegistration(
   if (
     !resolver ||
     !manifest ||
+    (resolver.outputBytes !== undefined &&
+      (resolver.outputBytes !== 65536 || !program.native)) ||
     typeof resolver.source !== "string" ||
     Buffer.byteLength(resolver.source) > 262144 ||
     createHash("sha256").update(resolver.source).digest("hex") !==

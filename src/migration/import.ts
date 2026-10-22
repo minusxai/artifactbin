@@ -1,5 +1,6 @@
 import type { BoundValueColumnProof } from "./conversion/compiled/bound-value-contracts.ts";
 import { preservedOrphanActor } from "./orphans.ts";
+import { convertNativeProgramPage } from "./programs/native-page.ts";
 import type { CompiledDatasetMutation } from "./conversion/compiled/dataset-mutations-contracts.ts";
 import type { DatasetBrowserBinding } from "./datasets/planner-contracts.ts";
 import { mediaDependencies } from "./dependencies.ts";
@@ -108,6 +109,10 @@ export async function planMigration(
       version: number,
     ) => readonly DatasetBrowserBinding[];
     datasetUnavailable?: (legacyId: string, version: number) => boolean;
+    nativeProgramBinding?: (
+      legacyId: string,
+      version: number,
+    ) => { backendNamespace: string; backendHref: string } | undefined;
   },
 ): Promise<MigrationPlan> {
   if (manifest.schemaVersion !== 1)
@@ -259,6 +264,17 @@ export async function planMigration(
               ? (original.meta as Record<string, unknown>)
               : undefined,
           coreUrl: options.coreUrl,
+        });
+      else if (format === "program")
+        conversion = await convertNativeProgramPage({
+          source: String(original.source ?? ""),
+          coreUrl: options.coreUrl,
+          title: String(original.title ?? artifact.title ?? "Program"),
+          binding:
+            Number(original.version) === artifact.version &&
+            !artifact.deleted_at
+              ? options.nativeProgramBinding?.(artifact.id, version)
+              : undefined,
         });
       else if (options.media && ["image", "file", "pdf"].includes(format))
         conversion = convertMigrationMedia({

@@ -5,6 +5,7 @@ import { extractLegacyMutations } from "./conversion/mutations.ts";
 import { catalogVersion, receiptMap } from "./datasets/catalog.ts";
 import type { MigrationBackendPage } from "./backend-preparation-contracts.ts";
 import type { MigrationJobSource } from "./job-contracts.ts";
+import { compileNativeProgramResolver } from "./programs/native-compiler.ts";
 /** SQL publication uses current trusted catalogs; historical pages never gain write authority. */
 export async function prepareMigrationHeadMutations(
   source: MigrationJobSource,
@@ -22,6 +23,15 @@ export async function prepareMigrationHeadMutations(
     try {
       const artifact = (await source.readArtifact(page.legacyId)).artifacts[0]!;
       const head = page.revisions.find((r) => r.version === artifact.version)!;
+      if (
+        artifact.format === "program" &&
+        head.runsProgram &&
+        !head.imports.length
+      ) {
+        await compileNativeProgramResolver(String(artifact.source ?? ""));
+        admitted.push(page);
+        continue;
+      }
       const catalogs = [];
       for (const binding of head.imports) {
         const dataset = (await source.readArtifact(binding.datasetLegacyId))

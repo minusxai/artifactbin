@@ -48,6 +48,8 @@ export interface ConversionInput {
   meta?: Record<string, unknown>;
 }
 export interface ConversionOutput {
+  /** Offline native admission; source-specific metadata, never supplied by a browser. */
+  nativeProgram?: import("./programs/native-contracts.ts").NativeProgramResolver;
   /** Exact offline conversion producer; retaining a prior successful compiler never changes this receipt. */
   receipt?: {
     compilerIdentity: string;

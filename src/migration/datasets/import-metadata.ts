@@ -329,7 +329,11 @@ export function planDatasetMetadata(
     const page = artifacts.get(member.pageLegacyId);
     if (
       !page ||
-      page.format !== "markup" ||
+      (page.format !== "markup" &&
+        !(
+          page.format === "program" &&
+          (input.programPages ?? []).includes(member)
+        )) ||
       page.version !== member.pageVersion ||
       maps.pages[member.pageLegacyId] !== member.pageId ||
       !/^[A-Za-z0-9]{6}$/.test(member.pageId) ||

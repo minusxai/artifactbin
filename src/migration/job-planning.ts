@@ -34,6 +34,17 @@ export function createMigrationJobPlanner(
     const plan = await planMigration(artifact, {
       maps,
       convert,
+      nativeProgramBinding: (id, version) => {
+        const receipt = source.preparedDatasets?.backends
+          .get(id)
+          ?.find((b) => b.pageVersion === version && b.linked && b.program);
+        return receipt
+          ? {
+              backendNamespace: receipt.backendNamespace,
+              backendHref: receipt.backendHref,
+            }
+          : undefined;
+      },
       datasetAttachments: (id, version) =>
         source.preparedDatasets?.datasetAttachments?.get(
           migrationDatasetVersionKey(id, version),

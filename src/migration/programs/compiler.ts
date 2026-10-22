@@ -104,7 +104,10 @@ function admit(script: string, manifest: ProgramBindingManifest) {
 export const compileProgramResolver: CompileProgramResolver = async (
   script,
   manifest,
+  limits,
 ) => {
+  if (limits && limits.outputBytes !== 65536)
+    throw Error("Invalid program output limit");
   admit(script, manifest);
   const identifiers = JSON.stringify(
     parse(script, { ecmaVersion: "latest", sourceType: "module" }),
@@ -159,7 +162,7 @@ export const compileProgramResolver: CompileProgramResolver = async (
   const source = `${runtime.outputFiles[0]!.text}
 export const typeDefs='type Query{programAvailable:Boolean!} type Mutation{run(inputJson:String!):String!}';
 export default {Query:{programAvailable:()=>true},Mutation:{run:async(${prefix}Args,${prefix}Principal,${prefix}Caps)=>{
- const ${prefix}Encode=value=>{${prefix}Library.assertStorable(value);const text=JSON.stringify(value);if(new TextEncoder().encode(text).length>8192)throw Error('Program JSON exceeds limit');return text;};
+ const ${prefix}Encode=value=>{${prefix}Library.assertStorable(value);const text=JSON.stringify(value);if(new TextEncoder().encode(text).length>${limits?.outputBytes ?? 8192})throw Error('Program JSON exceeds limit');return text;};
  if(typeof ${prefix}Args.inputJson!=='string'||new TextEncoder().encode(${prefix}Args.inputJson).length>8192)throw Error('Program JSON exceeds limit');
  const ${prefix}Input=JSON.parse(${prefix}Args.inputJson);${prefix}Encode(${prefix}Input);
  const ${prefix}Call=(operation,input)=>${prefix}Caps.invoke({resource:'program-bindings',operation,input});
@@ -170,6 +173,7 @@ export default {Query:{programAvailable:()=>true},Mutation:{run:async(${prefix}A
  }finally{await ${prefix}Runtime.close();}
 }}};`;
   return {
+    ...(limits ? { outputBytes: limits.outputBytes } : {}),
     source,
     sourceSha256: digest(source),
     scriptSha256: digest(script),

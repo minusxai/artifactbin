@@ -91,12 +91,16 @@ export async function compileNativeProgramResolver(
   return {
     kind: "native-receipt-resolver",
     originalSourceSha256: createHash("sha256").update(source).digest("hex"),
-    resolver: await compileProgramResolver(script, {
-      values: [],
-      queries: [],
-      mutations: [],
-      defaults: {},
-    }),
+    resolver: await compileProgramResolver(
+      script,
+      {
+        values: [],
+        queries: [],
+        mutations: [],
+        defaults: {},
+      },
+      { outputBytes: 65536 },
+    ),
     compute: structuredClone(compute),
     execution: "bounded-straight-line",
     output: "stdout-stderr-exit-code",

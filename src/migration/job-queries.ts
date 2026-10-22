@@ -13,6 +13,54 @@ export async function prepareMigrationPageQueries(
 ): Promise<void> {
   for (const page of pages) {
     const raw = page.original;
+    if (raw.format === "program") {
+      if (raw.deleted_at) continue;
+      const native = page.revisions.find((r) => r.version === raw.version)
+        ?.conversion.nativeProgram;
+      if (!native) continue; // Explicit native capability refusal belongs to content conversion.
+      if (
+        !queries ||
+        !page.backends?.some(
+          (b) => b.pageVersion === raw.version && b.linked && b.program,
+        ) ||
+        !datasets?.metadata.pages.some(
+          (p) => p.pageId === page.pageId && p.pageVersion === raw.version,
+        )
+      ) {
+        page.disposition = "blocked";
+        page.issues.push("native_program_saved_binding_unavailable");
+        continue;
+      }
+      const {
+        resolver,
+        originalSourceSha256,
+        compute,
+        authority,
+        concurrency,
+        computeCompatibility,
+      } = native;
+      page.serverQueries = [
+        {
+          pageVersion: raw.version,
+          moduleSourceSha256: resolver.scriptSha256,
+          flowSourceSha256: originalSourceSha256,
+          compilerIdentity: queries.compilerIdentity,
+          program: {
+            resolver,
+            manifest: { values: [], queries: [], mutations: [], defaults: {} },
+            native: {
+              originalSourceSha256,
+              compute,
+              authority,
+              concurrency,
+              computeCompatibility,
+            },
+          },
+          plan: { queries: [], scalars: {}, tables: [], imports: [] },
+        },
+      ];
+      continue;
+    }
     let text =
       typeof raw.source === "string" && raw.source.trim()
         ? raw.source

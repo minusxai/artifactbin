@@ -39,6 +39,7 @@ export interface OwnedProgramBindings {
 }
 /** Offline compilation; never registers or activates a backend. */
 export interface ProgramResolverSource {
+  readonly outputBytes?: 65536;
   readonly source: string;
   readonly sourceSha256: string;
   readonly scriptSha256: string;
@@ -49,6 +50,7 @@ export interface ProgramResolverSource {
 export type CompileProgramResolver = (
   script: string,
   manifest: ProgramBindingManifest,
+  limits?: { outputBytes: 65536 },
 ) => Promise<ProgramResolverSource>;
 /** Host-owned invocation identity. Prefixing prevents operation-1 colliding across runs. */
 export interface ProgramInvocationAuthority {
@@ -59,7 +61,16 @@ export interface ProgramInvocationAuthority {
 }
 /** Trusted in-memory preparation only; persisting or exposing this needs explicit admission wiring. */
 export interface PreparedProgramResolver {
+  readonly outputBytes?: 65536;
   readonly backend: import("../backend/contracts.ts").CompiledBackend;
   readonly manifest: ProgramBindingManifest;
   readonly scriptSha256: string;
+}
+/** An explicitly bounded native compatibility mapping; never grants Node or host access. */
+export interface NativeProgramPolicy {
+  originalSourceSha256: string;
+  compute: { vcpu: number; memoryMiB: number; ttlSeconds: number };
+  authority: "owner-only";
+  concurrency: "no-overlap";
+  computeCompatibility: "original-reservation-not-provided";
 }

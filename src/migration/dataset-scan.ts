@@ -1,4 +1,5 @@
 import { hasLegacyServerModule } from "./query-source.ts";
+import { compileNativeProgramResolver } from "./programs/native-compiler.ts";
 import { readsMigrationViewer } from "./job-viewer.ts";
 import { hasLegacyBoundValueSource } from "./conversion/compiled/bound-values.ts";
 import { readsMigrationMembers } from "./job-members.ts";
@@ -44,6 +45,27 @@ export async function scanMigrationDatasetImports(
     let hasViewer = false;
     let hasProgram = false;
     for (const row of originals) {
+      if ((row.format ?? head.format) === "program") {
+        if (
+          Number(row.version) === head.version &&
+          !head.deleted_at &&
+          head.user_id &&
+          !head.group_id
+        ) {
+          try {
+            await compileNativeProgramResolver(String(row.source ?? ""));
+            hasProgram = true;
+            revisions.push({
+              version: Number(row.version),
+              imports: [],
+              runsProgram: true,
+            });
+          } catch {
+            /* The content converter records the capability refusal. */
+          }
+        }
+        continue;
+      }
       if ((row.format ?? head.format) !== "markup") continue;
       let text: string | null;
       try {

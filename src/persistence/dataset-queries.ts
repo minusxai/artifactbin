@@ -147,6 +147,13 @@ export function createSavedQueryRepository(
           const registration = record.registration as SavedQueryRegistration,
             r = registration.plan.registration;
           if (
+            registration.program?.native &&
+            (page.ownerKind !== "user" ||
+              !session?.actor ||
+              page.owner !== session.actor)
+          )
+            return null;
+          if (
             r.pageId !== i.pageId ||
             r.backendId !== i.backendId ||
             r.backendVersion !== i.backendVersion ||

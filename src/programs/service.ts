@@ -34,7 +34,7 @@ export async function invokeProgramResolver(
   });
   if (
     typeof result !== "string" ||
-    new TextEncoder().encode(result).length > 8192
+    new TextEncoder().encode(result).length > (prepared.outputBytes ?? 8192)
   )
     throw Error("Invalid program JSON result");
   const output: unknown = JSON.parse(result);

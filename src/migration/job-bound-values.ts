@@ -20,6 +20,12 @@ export async function prepareMigrationBoundValues(
       const artifact = (await source.readArtifact(page.legacyId)).artifacts[0]!;
       const head = page.revisions.find((r) => r.version === artifact.version);
       if (!head) throw Error("Current page revision is unavailable");
+      if (
+        artifact.format === "program" &&
+        head.runsProgram &&
+        !head.imports.length
+      )
+        continue;
       const text = artifact.source?.trim()
         ? artifact.source
         : legacyDocumentSource(artifact.document);

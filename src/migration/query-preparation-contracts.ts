@@ -59,6 +59,7 @@ export interface MigrationQueryReceipt {
   flowSourceSha256: string;
   compilerIdentity: string;
   program?: {
+    native?: import("../programs/runtime-contracts.ts").NativeProgramPolicy;
     resolver: import("./programs/runtime-contracts.ts").ProgramResolverSource;
     manifest: import("./programs/runtime-contracts.ts").ProgramBindingManifest;
   };

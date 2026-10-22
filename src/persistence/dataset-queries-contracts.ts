@@ -18,6 +18,7 @@ export interface SavedQueryRegistration {
   readonly moduleSourceSha256: string;
   readonly plan: RegisteredServerQueryPlan;
   readonly program?: {
+    readonly native?: import("../programs/runtime-contracts.ts").NativeProgramPolicy;
     readonly resolver: import("../programs/runtime-contracts.ts").ProgramResolverSource;
     readonly manifest: import("../programs/runtime-contracts.ts").ProgramBindingManifest;
   };

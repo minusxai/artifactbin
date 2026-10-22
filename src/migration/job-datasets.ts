@@ -210,15 +210,18 @@ export async function prepareMigrationJobDatasets(
         plan.metadata.bindings,
       );
       const headSource = artifact.artifacts[0]!;
-      const registeredAttachments = projectMigrationAttachmentBindings({
-        source: headSource.source?.trim()
-          ? headSource.source
-          : (legacyDocumentSource(headSource.document) ?? ""),
-        sourceNamespace: source.manifest.sourceNamespace,
-        pageId: page.pageId,
-        pageVersion: scan.heads.get(page.legacyId)!,
-        bindings: plan.metadata.bindings,
-      });
+      const registeredAttachments =
+        headSource.format === "program"
+          ? []
+          : projectMigrationAttachmentBindings({
+              source: headSource.source?.trim()
+                ? headSource.source
+                : (legacyDocumentSource(headSource.document) ?? ""),
+              sourceNamespace: source.manifest.sourceNamespace,
+              pageId: page.pageId,
+              pageVersion: scan.heads.get(page.legacyId)!,
+              bindings: plan.metadata.bindings,
+            });
       datasetAttachments.set(
         migrationDatasetVersionKey(
           page.legacyId,
@@ -229,12 +232,14 @@ export async function prepareMigrationJobDatasets(
           bindingName: r.binding.name,
         })),
       );
-      const personNames = new Set(
-        readLegacyPersonValueNames(
-          headSource.source?.trim()
-            ? headSource.source
-            : (legacyDocumentSource(headSource.document) ?? ""),
-        ),
+      const personNames = new Set<string>(
+        headSource.format === "program"
+          ? []
+          : readLegacyPersonValueNames(
+              headSource.source?.trim()
+                ? headSource.source
+                : (legacyDocumentSource(headSource.document) ?? ""),
+            ),
       );
       personBindings.set(
         migrationDatasetVersionKey(
