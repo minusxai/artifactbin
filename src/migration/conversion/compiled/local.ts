@@ -2,6 +2,7 @@ import{viewerContentHtml}from"./viewer-gate.ts";
 /** Explicit offline compiler orchestration. Admission owns source capabilities
  * and output safety; this module invokes the compiler and packages the page. */
 import { compiledJavascriptMarkup } from "./javascript-payload.ts";
+import { contextMetadata } from "./context-output.ts";
 import { MAX_PAGE_SOURCE } from "../../../af-contracts.ts";
 import { prepareAuthorDocument } from "./author-document.ts";
 import { admitLocalSource } from "./source-admission.ts";
@@ -67,6 +68,7 @@ export async function compileArchivedLocal(
         `<link rel="af-backend" href="${esc(href)}" data-af-name="${esc(name)}">`,
     )
     .join("");
+  const context = contextMetadata(input.contexts ?? []);
   const status = imports.size || historical
     ? historical
       ? '<p role="status" data-migration-dataset-status>Historical data is unavailable. This saved page does not load datasets, evaluate queries, or perform shared data writes.</p>'
@@ -76,7 +78,7 @@ export async function compileArchivedLocal(
     ? '<p role="status" data-migration-author-status>Starting page components…</p>'
     : "";
   const packagedBody=input.viewerBinding||input.viewerUnavailable?viewerContentHtml(body,Boolean(input.viewerUnavailable)):body;
-  const prefix = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}<title>${esc(output.title)}</title><style>${output.css}</style></head><body>${status}${authorStatus}${packagedBody}`;
+  const prefix = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}${context.head}<title>${esc(output.title)}</title><style>${output.css}</style></head><body>${status}${authorStatus}${packagedBody}`;
   let html = prefix + compiledJavascriptMarkup(output.javascript) + "</body></html>";
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE) {
     try { html = prefix + compiledJavascriptMarkup(output.javascript, true) + "</body></html>"; }
@@ -130,6 +132,7 @@ export async function compileArchivedLocal(
             : "authored-components"
           : "local-scalars",
       modules: output.modules,
+      ...(context.provenance.length ? {contexts:context.provenance} : {}),
       ...(compatibility.length ? { compatibility } : {}),
     },
   };

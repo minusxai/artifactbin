@@ -5,7 +5,7 @@ import type { MigrationMaps } from "./contracts.ts";
 export interface MigrationLinkDiagnostic {
   legacyId: string;
   pageId: string;
-  disposition: "legacy-target-blocked" | "legacy-origin-required";
+  disposition: "legacy-target-blocked" | "legacy-origin-required" | "legacy-target-unmapped";
 }
 export interface MigrationLinkOptions {
   legacyOrigins: readonly string[];
@@ -45,6 +45,17 @@ export function rewriteMigrationLinks(
         const reference = value.match(/^ref:([a-zA-Z0-9]+)$/);
         const oldId = reference?.[1] ?? match?.[1];
         const id = oldId ? maps.pages[oldId] : undefined;
+        const context = node.nodeName === "link" && node.attrs.some(a => a.name === "rel" && a.value === "related") && node.attrs.some(a => a.name === "data-migration-context" && a.value === "supporting-document");
+        if (context && value.startsWith("ref:")) {
+          if (!reference || !/^[A-Za-z0-9]{6,12}$/.test(reference[1]!)) throw Error("Invalid supporting document reference");
+          if (!id || (options.readyPages && !options.readyPages.has(id))) {
+            options.onDiagnostic?.({legacyId: oldId!, pageId: id ?? "", disposition: !origins[0] ? "legacy-origin-required" : id ? "legacy-target-blocked" : "legacy-target-unmapped"});
+            if (!origins[0]) throw Error("Supporting document requires legacy origin");
+            const href = new URL("/a/" + oldId, origins[0]).href;
+            edits.push({start:location.startOffset,end:location.endOffset,text:'href="'+href+'"'});
+            return;
+          }
+        }
         if (id && (reference || (allowed && match))) {
           let href: string | undefined;
           if (!options.readyPages || options.readyPages.has(id)) {

@@ -51,6 +51,7 @@ export interface CompiledLocalResult extends ConversionResult {
       | "authored-effects"
       | "historical-data-unavailable";
     modules: string[];
+    contexts?: readonly import("./context-contracts.ts").CompiledContextReference[];
     compatibility?: readonly import("./table-presentation-contracts.ts").TablePresentationCompatibility[];
   };
 }
