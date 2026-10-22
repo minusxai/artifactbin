@@ -147,6 +147,8 @@ export async function planMigrationJob(
               for (const revision of page.revisions) {
                 const p = revision.conversion.provenance;
                 const key = JSON.stringify({
+                  compilerIdentity:
+                    revision.conversion.receipt?.compilerIdentity ?? null,
                   strategy: revision.conversion.strategy ?? conversionStrategy,
                   classification: revision.conversion.classification,
                   compiler: p?.compiler ?? null,
@@ -234,6 +236,7 @@ export async function planMigrationJob(
                     outputBytes: r.conversion.outputBytes,
                     strategy: r.conversion.strategy ?? conversionStrategy,
                     provenance: r.conversion.provenance,
+                    receipt: r.conversion.receipt,
                     issues: r.conversion.issues,
                   })),
                   result,

@@ -115,6 +115,11 @@ const options: MigrationJobOptions = {
       : "strict",
   archivedRoot: process.env.MIGRATION_ARCHIVED_ROOT,
   conversionCacheDirectory: process.env.MIGRATION_CONVERSION_CACHE,
+  retainedCompilerIdentities: (
+    process.env.MIGRATION_RETAINED_COMPILER_IDENTITIES ?? ""
+  )
+    .split(",")
+    .filter(Boolean),
   media:
     mediaPlan && mediaReceipts
       ? {

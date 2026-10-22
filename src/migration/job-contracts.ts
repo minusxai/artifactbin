@@ -34,6 +34,7 @@ export interface MigrationJobOptions {
   archivedRoot?: string;
   fontBundle?: import("./conversion/compiled/fonts/capture-contracts.ts").CapturedFontBundleInput;
   conversionCacheDirectory?: string;
+  retainedCompilerIdentities?: readonly string[];
   datasets?: { receiptsPath: string; relationDirectory: string };
   supplementalAssets?: { receiptsPath: string; objectsDirectory: string };
   media?: { planPath: string; receiptsPath: string; stagingDirectory?: string };

@@ -48,6 +48,12 @@ export interface ConversionInput {
   meta?: Record<string, unknown>;
 }
 export interface ConversionOutput {
+  /** Exact offline conversion producer; retaining a prior successful compiler never changes this receipt. */
+  receipt?: {
+    compilerIdentity: string;
+    inputSha256: string;
+    outputSha256: string;
+  };
   classification: "renderable" | "functional" | "manual-blocked";
   html: string | null;
   outputBytes?: number;

@@ -38,40 +38,66 @@ export function cachedMigrationConverter(
       const directoryInfo = await lstat(options.directory);
       if (!directoryInfo.isDirectory() || directoryInfo.mode & 0o077)
         throw new Error("Conversion cache directory must be private");
-      const key = digest(
-        canonical({
-          cacheVersion: 1,
-          compiler: options.compilerIdentity,
-          strategy: options.strategy,
-          input,
-        }),
-      );
+      const inputSha256 = digest(canonical(input));
+      const cacheKey = (compiler: string) =>
+        digest(
+          canonical({
+            cacheVersion: 1,
+            compiler,
+            strategy: options.strategy,
+            input,
+          }),
+        );
+      const key = cacheKey(options.compilerIdentity);
       const path = join(options.directory, key + ".json");
-      try {
-        const info = await lstat(path);
-        if (!info.isFile() || info.size > max || info.mode & 0o077)
-          throw new Error("Invalid private cache file");
-        const record = JSON.parse(await readFile(path, "utf8"));
-        if (
-          record.key !== key ||
-          record.digest !== digest(canonical(record.result))
-        )
-          throw new Error("Cache digest mismatch");
-        const r = record.result as ConversionOutput;
-        if (
-          !["renderable", "functional", "manual-blocked"].includes(
-            r.classification,
-          ) ||
-          !(r.html === null || typeof r.html === "string") ||
-          !Array.isArray(r.issues) ||
-          !r.identities ||
-          typeof r.identities !== "object"
-        )
-          throw new Error("Invalid cached conversion");
-        stats.hits++;
-        return r;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") stats.invalid++;
+      const compilers = [
+        ...new Set([
+          options.compilerIdentity,
+          ...(options.retainedCompilerIdentities ?? []),
+        ]),
+      ];
+      for (const compilerIdentity of compilers) {
+        const expectedKey = cacheKey(compilerIdentity);
+        try {
+          const cachedPath = join(options.directory, expectedKey + ".json");
+          const info = await lstat(cachedPath);
+          if (!info.isFile() || info.size > max || info.mode & 0o077)
+            throw new Error("Invalid private cache file");
+          const record = JSON.parse(await readFile(cachedPath, "utf8"));
+          if (
+            record.key !== expectedKey ||
+            record.digest !== digest(canonical(record.result))
+          )
+            throw new Error("Cache digest mismatch");
+          const r = record.result as ConversionOutput;
+          if (
+            !["renderable", "functional", "manual-blocked"].includes(
+              r.classification,
+            ) ||
+            !(r.html === null || typeof r.html === "string") ||
+            !Array.isArray(r.issues) ||
+            !r.identities ||
+            typeof r.identities !== "object"
+          )
+            throw new Error("Invalid cached conversion");
+          if (
+            compilerIdentity !== options.compilerIdentity &&
+            (r.classification === "manual-blocked" || !r.html)
+          )
+            continue;
+          stats.hits++;
+          return {
+            ...r,
+            receipt: {
+              compilerIdentity,
+              inputSha256,
+              outputSha256: record.digest,
+            },
+          };
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+            stats.invalid++;
+        }
       }
       stats.misses++;
       const result = await convert(input);
@@ -95,7 +121,14 @@ export function cachedMigrationConverter(
       } finally {
         await unlink(temporary).catch(() => {});
       }
-      return result;
+      return {
+        ...result,
+        receipt: {
+          compilerIdentity: options.compilerIdentity,
+          inputSha256,
+          outputSha256: digest(canonical(result)),
+        },
+      };
     },
   };
 }

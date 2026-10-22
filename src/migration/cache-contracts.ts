@@ -3,6 +3,8 @@ export interface ConversionCacheOptions {
   directory: string;
   /** Hash of compiler code and archived build, never path alone. */ compilerIdentity: string;
   strategy: string;
+  /** Explicitly approved prior compiler identities; only digest-verified successful exact-input outputs may be retained. */
+  retainedCompilerIdentities?: readonly string[];
   maxBytes?: number;
 }
 export interface CachedConverter {

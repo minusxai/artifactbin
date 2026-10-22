@@ -52,6 +52,7 @@ export async function runMigrationJob(
     ? cachedMigrationConverter(convert, {
         directory: options.conversionCacheDirectory,
         compilerIdentity,
+        retainedCompilerIdentities: options.retainedCompilerIdentities,
         strategy: options.conversionStrategy,
       })
     : null;
