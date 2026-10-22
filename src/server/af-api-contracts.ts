@@ -299,6 +299,7 @@ export interface AfServiceOptions {
   /** App-only writable content-addressed overlay; requires remote SQL execution. */
   datasetMutationDirectory?: string;
   /** Private writable attachment object directory; requires an isolated image processor. */
+  sourceQueryResources?: import("./dataset-runtime-contracts.ts").DatasetRuntimeOptions["sourceQueryResources"];
   datasetAttachmentDirectory?: string;
   datasetImageProcessor?: import("../datasets/attachments/image-processor-contracts.ts").ImageProcessor;
   datasetSqlExecutor?: import("../backend/dataset-sql-contracts.ts").DatasetSqlExecutor;
@@ -337,6 +338,7 @@ export interface ServerMainEnv {
   PAGEGI_SECRETS_KEY?: string;
   PAGEGI_MEDIA_DIRECTORY?: string;
   PAGEGI_DATASET_DIRECTORY?: string;
+  PAGEGI_SOURCE_QUERY_RESOURCES?: string;
   PAGEGI_DATASET_ATTACHMENT_DIRECTORY?: string;
 }
 

@@ -22,6 +22,7 @@ export function datasetCapabilityHandler(
   person?: import("./person-contracts.ts").DatasetPersonService,
   viewer?: import("./viewer-contracts.ts").DatasetViewerService,
   availability?: import("./mutation/availability-contracts.ts").DatasetMutationAvailabilityService,
+  sourceQueries?: import("./source-query/contracts.ts").SourceQueryService,
 ): BackendCapabilityHandler {
   const bound = Object.freeze({ ...context });
   return async (principal, request, signal) => {
@@ -33,7 +34,9 @@ export function datasetCapabilityHandler(
       throw new DatasetReadError("denied");
     let result;
     try {
-      if (request.operation === "read")
+      if (request.operation === "sourceQuery" && sourceQueries)
+        result = await sourceQueries.query(bound, request.input, signal);
+      else if (request.operation === "read")
         result = await service.read(bound, request.input, signal);
       else if (request.operation === "members" && members)
         result = await members.members(bound, signal);

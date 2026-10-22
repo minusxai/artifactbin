@@ -9,9 +9,11 @@ export interface DatasetRuntimeOptions {
   executor?: DatasetSqlExecutor;
   attachmentDirectory?: string;
   imageProcessor?: import("../datasets/attachments/image-processor-contracts.ts").ImageProcessor;
+  sourceQueryResources?: {pool(resource:string):import("../connectors/contracts.ts").PgPool|undefined;close():Promise<void>};
   now?: () => number;
 }
 export interface DatasetRuntime {
+  sourceQueries?: import("../datasets/source-query/contracts.ts").SourceQueryService;
   reads: DatasetReadService;
   attachments?: import("./dataset-attachment-http-contracts.ts").DatasetAttachmentHttpPorts;
   availability: import("../datasets/mutation/availability-contracts.ts").DatasetMutationAvailabilityService;

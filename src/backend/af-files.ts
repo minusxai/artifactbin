@@ -347,6 +347,7 @@ export function createBackendRoutes(options: {
   programs?: import("../server/saved-program-host-contracts.ts").SavedProgramHost;
   datasetPerson?: import("../datasets/person-contracts.ts").DatasetPersonService;
   datasetAvailability?: import("../datasets/mutation/availability-contracts.ts").DatasetMutationAvailabilityService;
+  sourceQueries?: import("../datasets/source-query/contracts.ts").SourceQueryService;
   datasetViewer?: import("../datasets/viewer-contracts.ts").DatasetViewerService;
   datasetMembers?: import("../datasets/members-contracts.ts").DatasetMembersService;
   datasetMutations?: import("../datasets/mutation/contracts.ts").DatasetMutationService;
@@ -493,6 +494,7 @@ export function createBackendRoutes(options: {
               options.datasetPerson,
               options.datasetViewer,
               options.datasetAvailability,
+              options.sourceQueries,
             )
           : storeCapabilities;
         try {

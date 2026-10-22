@@ -42,6 +42,8 @@ export interface SqlOperation {
   params(caller: ConnectorCaller, input: Json): Json[];
 }
 export interface SqlBinding {
+  /** Operator-owned read-only transaction, never a request flag. */
+  readOnly?: boolean;
   kind: "postgres";
   pool: PgPool;
   operations: Record<string, SqlOperation>;

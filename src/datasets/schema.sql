@@ -169,3 +169,13 @@ CREATE TABLE IF NOT EXISTS dataset_attachment_completions (
 );
 DROP TRIGGER IF EXISTS dataset_attachment_completion_immutable ON dataset_attachment_completions;
 CREATE TRIGGER dataset_attachment_completion_immutable BEFORE UPDATE OR DELETE ON dataset_attachment_completions FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+
+-- Immutable source-owned PostgreSQL operations; no credential or source URL is stored here.
+CREATE TABLE IF NOT EXISTS dataset_source_queries (
+ backend_id text NOT NULL, backend_version text NOT NULL,
+ page_id text NOT NULL REFERENCES files(id), page_version integer NOT NULL CHECK(page_version>0),
+ name text NOT NULL, registration jsonb NOT NULL,
+ PRIMARY KEY(backend_id,backend_version,name)
+);
+DROP TRIGGER IF EXISTS dataset_source_queries_immutable ON dataset_source_queries;
+CREATE TRIGGER dataset_source_queries_immutable BEFORE UPDATE OR DELETE ON dataset_source_queries FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();

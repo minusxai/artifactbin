@@ -1,3 +1,5 @@
+import{createSourceQueryService}from"../datasets/source-query/service.ts";
+import{createSourceQueryRepository}from"../persistence/source-queries.ts";
 import { createDatasetAttachmentContext } from "../persistence/dataset-attachment-context.ts";
 import { createDatasetAttachmentRepository } from "../persistence/dataset-attachments.ts";
 import { createDatasetAttachmentStorage } from "../persistence/dataset-attachment-storage.ts";
@@ -87,6 +89,7 @@ export function createDatasetRuntime(
   let closing: Promise<void> | undefined;
   return {
     reads,
+    ...(options.sourceQueryResources?{sourceQueries:createSourceQueryService(createSourceQueryRepository(database,options.sourceQueryResources.pool,now))}:{}),
     ...(attachments ? { attachments } : {}),
     availability: createDatasetMutationAvailabilityService(
       createDatasetMutationAvailabilityRepository(database, now),
@@ -104,6 +107,7 @@ export function createDatasetRuntime(
     ...(mutations ? { mutations } : {}),
     close: () =>
       (closing ??= Promise.all([
+        options.sourceQueryResources?.close(),
         executor?.close(),
         imageProcessor?.close(),
       ]).then(() => {})),

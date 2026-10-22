@@ -67,7 +67,7 @@ export async function invokePostgres(
       signal.throwIfAborted();
       return Promise.race([client!.query(text, values), stopped]);
     };
-    await query("BEGIN");
+    await query(binding.readOnly ? "BEGIN READ ONLY" : "BEGIN");
     await query("SELECT set_config('statement_timeout',$1,true)", [
       String(timeoutMs),
     ]);

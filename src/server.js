@@ -99,6 +99,7 @@ export function createService({
   mediaDirectory,
   datasetDirectory,
   datasetMutationDirectory,
+  sourceQueryResources,
   datasetAttachmentDirectory,
   datasetImageProcessor,
   datasetSqlExecutor,
@@ -175,6 +176,7 @@ export function createService({
   let backendRoutes;
   const datasetRuntime = createDatasetRuntime({
     database: repository.sql,
+    sourceQueryResources,
     sourceDirectory: datasetDirectory,
     mutationDirectory: datasetMutationDirectory,
     attachmentDirectory: datasetAttachmentDirectory,
@@ -194,6 +196,7 @@ export function createService({
             datasetMutations: datasetRuntime.mutations,
             datasetMembers: datasetRuntime.members,
             datasetViewer: datasetRuntime.viewer,
+            sourceQueries: datasetRuntime.sourceQueries,
             datasetAvailability: datasetRuntime.availability,
             datasetPerson: datasetRuntime.person,
             secrets: secretsStore && ((client, owner) => secretsStore.env(client, owner)),

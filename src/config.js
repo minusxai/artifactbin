@@ -1,3 +1,4 @@
+import{createSourceQueryResources}from"./datasets/source-query/resources.ts";
 import { remoteImageProcessor } from "./media/image-processing/remote.ts";
 import { readFileSync } from "node:fs";
 import { KNOWN_AF_ORIGINS } from "./af-contracts.ts";
@@ -106,6 +107,7 @@ export function serviceConfig(env = process.env) {
       ? { datasetDirectory: env.PAGEGI_DATASET_DIRECTORY }
       : {}),
     ...(backendHost ? { backendHost } : {}),
+    ...(env.PAGEGI_SOURCE_QUERY_RESOURCES?{sourceQueryResources:createSourceQueryResources(env.PAGEGI_SOURCE_QUERY_RESOURCES,env)}:{}),
     ...(datasetImageProcessor ? { datasetImageProcessor, datasetAttachmentDirectory: env.PAGEGI_DATASET_ATTACHMENT_DIRECTORY } : {}),
     ...(datasetSqlExecutor
       ? {
