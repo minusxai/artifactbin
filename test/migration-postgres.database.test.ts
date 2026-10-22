@@ -206,6 +206,8 @@ test(
         next_node_id: 999999,
         generation: 2,
         share: "public",
+        trash_path: "/bad",
+        trash_batch: "bad",
       })) {
         await db.query(
           `UPDATE "${schema}".files SET ${column}=$2 WHERE id=$1`,
@@ -261,6 +263,31 @@ test(
         `UPDATE "${schema}".comments SET body='Hello' WHERE id='comment'`,
       );
       assert.equal((await verify()).sources, 2);
+      await db.query(
+        `UPDATE "${schema}".comments SET changed=999 WHERE id='comment'`,
+      );
+      await assert.rejects(verify(), /comment body/);
+      await db.query(
+        `UPDATE "${schema}".comments SET changed=NULL WHERE id='comment'`,
+      );
+      await db.query(
+        `INSERT INTO "${schema}".retired_file_ids VALUES ($1,123)`,
+        [plan.pages[0]!.pageId],
+      );
+      await assert.rejects(verify(), /must not be retired/);
+      await db.query(`DELETE FROM "${schema}".retired_file_ids WHERE id=$1`, [
+        plan.pages[0]!.pageId,
+      ]);
+      await db.query(
+        `DELETE FROM "${schema}".folders WHERE owner=$1 AND path='/imported'`,
+        [plan.pages[0]!.owner!.id],
+      );
+      await assert.rejects(verify(), /page parent folders/);
+      await db.query(
+        `INSERT INTO "${schema}".folders VALUES ($1,'/imported')`,
+        [plan.pages[0]!.owner!.id],
+      );
+
       const q = (sql: string) => db.query(`SELECT ${sql}`);
       const anchored = (
         await db.query(

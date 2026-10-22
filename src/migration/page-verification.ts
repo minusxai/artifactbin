@@ -33,7 +33,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
     const liveComments = page.comments.filter((c) => !c.deleted_at);
     const file = (
       await db.query(
-        `SELECT owner,head,path,access,deleted_at,seed,sequence::text,source_digest,next_node_id,generation,share FROM ${runtime}.files WHERE id=$1`,
+        `SELECT owner,head,path,access,deleted_at,seed,sequence::text,source_digest,next_node_id,generation,share,trash_path,trash_batch FROM ${runtime}.files WHERE id=$1`,
         [page.pageId],
       )
     ).rows;
@@ -52,6 +52,8 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
           next_node_id: Number(preparedHead.meta.nextNodeId ?? 1),
           generation: 1,
           share: null,
+          trash_path: null,
+          trash_batch: null,
         },
       ],
       "page owner/head/ACL",
@@ -59,14 +61,44 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
     equal(
       (
         await db.query(
-          `SELECT owner,kind,published FROM ${runtime}.file_ids WHERE id=$1`,
+          `SELECT owner,kind,published,reservation_key,ordinal FROM ${runtime}.file_ids WHERE id=$1`,
           [page.pageId],
         )
       ).rows,
-      [{ owner, kind: "page", published: true }],
+      [
+        {
+          owner,
+          kind: "page",
+          published: true,
+          reservation_key: null,
+          ordinal: null,
+        },
+      ],
       "page ID ownership registry",
     );
 
+    equal(
+      (
+        await db.query(
+          `SELECT id FROM ${runtime}.retired_file_ids WHERE id=$1`,
+          [page.pageId],
+        )
+      ).rows,
+      [],
+      "active page ID must not be retired",
+    );
+    const path = publicationPath(page).split("/").slice(1, -1);
+    for (let i = 1; i <= path.length; i++)
+      equal(
+        (
+          await db.query(
+            `SELECT path FROM ${runtime}.folders WHERE owner=$1 AND path=$2`,
+            [owner, "/" + path.slice(0, i).join("/")],
+          )
+        ).rows,
+        [{ path: "/" + path.slice(0, i).join("/") }],
+        "page parent folders",
+      );
     const sources = (
       await db.query(
         `SELECT revision,content,node_ids,digest FROM ${runtime}.sources WHERE file_id=$1 ORDER BY revision::bigint`,
@@ -130,11 +162,12 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
         fingerprint: digest(JSON.stringify(c)),
         sequence: String(++sequence),
         context_status: context.contextStatus,
+        changed: null,
       };
     });
     const actualComments = (
       await db.query(
-        `SELECT id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence::text,context_status FROM ${runtime}.comments WHERE file_id=$1 ORDER BY sequence`,
+        `SELECT id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence::text,context_status,changed::text FROM ${runtime}.comments WHERE file_id=$1 ORDER BY sequence`,
         [page.pageId],
       )
     ).rows;
