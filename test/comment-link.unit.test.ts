@@ -123,3 +123,21 @@ test("nested replies retain stored order while unrelated and orphan cycles stay 
     ["deep", "reply"],
   );
 });
+
+test("synchronous authority invalidation during installation cannot open or replay the thread", async () => {
+  const calls: string[] = [];
+  const controller = createCommentLink({
+    readThread: async () => thread,
+    install: () => {
+      calls.push("install");
+      controller.invalidate();
+    },
+    showComment: async () => {
+      calls.push("context");
+    },
+    openThread: () => calls.push("open"),
+    error: (message) => calls.push(message),
+  });
+  await controller.open(new URLSearchParams("comment=reply"));
+  assert.deepEqual(calls, ["install"]);
+});

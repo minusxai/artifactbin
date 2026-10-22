@@ -57,8 +57,10 @@ export function createCommentLink(
         )
           throw Error("Comment thread unavailable");
         options.install(thread);
+        if (!current()) return;
         // Select the thread immediately; a missing saved context remains an explicit notice.
         options.openThread(root.id, selected.id);
+        if (!current()) return;
         await options.showComment(selected);
       } catch (error) {
         if (current())
