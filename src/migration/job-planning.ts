@@ -274,6 +274,9 @@ export async function planMigrationJob(
                     strategy: r.conversion.strategy ?? conversionStrategy,
                     provenance: r.conversion.provenance,
                     receipt: r.conversion.receipt,
+                    ...("sourceRecovery" in r.conversion
+                      ? { sourceRecovery: r.conversion.sourceRecovery }
+                      : {}),
                     issues: r.conversion.issues,
                   })),
                   result,
