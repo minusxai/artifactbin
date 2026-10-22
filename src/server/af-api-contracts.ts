@@ -151,11 +151,10 @@ export interface SaveConflict {
   source: string;
 }
 /**
- * 200 body of DELETE /api/files/:id. The page, its versions, comments, page
- * state, idempotency keys, publish requestIds, document sessions and its file
- * ID are gone: every route for the ID then answers 404. Backend files the page
- * linked are separate files with their own IDs and stay published (other pages
- * may link them); only this page's links to them are removed.
+ * 200 body of DELETE /api/files/:id. Move the page to recoverable trash:
+ * all reads stop, while its ID, versions, comments, state and backend links
+ * remain retained. Restore through POST /api/trash/:id/restore. Document
+ * grants are revoked across trash and restoration by advancing generation.
  */
 export interface DeleteResponse {
   id: FileId;

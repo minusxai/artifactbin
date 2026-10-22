@@ -279,13 +279,18 @@ export function mountFiles({
           message(e.message);
         }
       });
-    } else if (
-      !folders.some((p) => p.startsWith(path + "/")) &&
-      !files.some((f) => f.path.startsWith(path + "/"))
-    )
-      action("Remove empty folder", async () => {
+      action("Move to trash", async () => {
         try {
-          await actions.removeFolder(path);
+          await request("/api/files/" + file.fileId, undefined, "DELETE");
+          await reload();
+        } catch (e) {
+          message(e.message);
+        }
+      });
+    } else
+      action("Move folder to trash", async () => {
+        try {
+          await request("/api/trash/folders", { path });
           await reload();
         } catch (e) {
           message(e.message);

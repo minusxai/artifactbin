@@ -409,6 +409,10 @@ export function createService({
       }
       const deleteRoute = /^\/api\/files\/([A-Za-z0-9]{6})$/.exec(url.pathname);
       if (deleteRoute && req.method === "DELETE") {
+        if (!credential(req) && req.headers["x-pagegi-home"] === "1") {
+          sameOrigin(req);
+          req.headers.authorization = "Bearer " + cookieToken(req);
+        }
         const removed = await pages.remove(credential(req), deleteRoute[1] || "");
         // Open views and sockets for the page lose access now.
         live.changed(removed.id, true);

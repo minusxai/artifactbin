@@ -1,3 +1,4 @@
+import { mountTrash } from "./library-client/trash-view.js";
 // @ts-check
 import { workspaceNavigation } from "./library-client/workspace-navigation.ts";
 import { mountLogin } from "./library-client/login-view.js";
@@ -247,6 +248,7 @@ const filesView = mountFiles({
   openSharing,
   folder: params.get("folder") || "/",
 });
+mountTrash({ request, reload: load, message });
 load().then(() => {
   if (!embedded)
     /** @type {Promise<{files?: import("./library-client/contracts.ts").LibraryFile[]}>} */

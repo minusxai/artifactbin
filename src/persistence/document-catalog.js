@@ -53,7 +53,10 @@ export function createDocumentCatalog(sql) {
     sharedLink: (id) =>
       sql.transaction(async (client) => {
         const r = (
-          await client.query("SELECT id FROM files WHERE id=$1 AND deleted_at IS NULL", [id])
+          await client.query(
+            "SELECT id FROM files WHERE id=$1 AND deleted_at IS NULL",
+            [id],
+          )
         ).rows[0];
         return r ? address(String(r.id)) : null;
       }),

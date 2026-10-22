@@ -595,7 +595,7 @@ export function createPageService({
         const document = await lockDocumentHeader(client, id);
         if (!document || !permissions(document, actor, false, false, session?.groupAuthority).manage)
           fail(404, "File not found");
-        await client.query("UPDATE files SET deleted_at=$2,trash_path=path WHERE id=$1", [id, now()]);
+        await client.query("UPDATE files SET deleted_at=$2,trash_path=path,generation=generation+1 WHERE id=$1", [id, now()]);
         return { id, deleted: true as const };
       });
     },
