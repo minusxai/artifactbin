@@ -1,3 +1,5 @@
+import {createDatasetPersonService} from "../src/datasets/person.ts";
+import {createDatasetPersonRepository} from "../src/persistence/dataset-person.ts";
 import {createDatasetMembersService} from "../src/datasets/members.ts";
 import {createDatasetMembersRepository} from "../src/persistence/dataset-members.ts";
 import test from "node:test";
@@ -152,6 +154,9 @@ test(
       const bytes = Buffer.from('[{"value":7},{"value":8}]');
       const sha256 = createHash("sha256").update(bytes).digest("hex");
       await writeFile(join(directory, sha256), bytes);
+      const peopleBytes = Buffer.from('[ {"who":"original-user"} ]');
+      const peopleSha = createHash("sha256").update(peopleBytes).digest("hex");
+      await writeFile(join(directory, peopleSha), peopleBytes);
       const binding: DatasetBinding = {
         mode: "live",
         name: "sales",
@@ -165,6 +170,7 @@ test(
         },
         dataset: { id: "ds", version: 1, policyRevision: 0 },
         tables: [
+          {schema:"public",name:"people",columns:[{name:"who",type:"user"}],object:{key:peopleSha,sha256:peopleSha,bytes:peopleBytes.length}},
           {
             schema: "public",
             name: "rows",
@@ -246,7 +252,11 @@ test(
         "INSERT INTO sessions(token_hash,actor,expires) VALUES($1,'member',$2)",
         [hash("fixture-member"), Date.now() + 60000],
       );
+      const reads = createDatasetReadService({...createDatasetReadRepository(database),read:createReadonlyDatasetObjectStore(directory).read});
+      await env.pool.query("INSERT INTO dataset_person_bindings VALUES($1,$2,'Page12',2,'selected','fixture',$3)",[receipt.backendId,receipt.deployment.version,{sourceNamespace:"fixture",backendId:receipt.backendId,backendVersion:receipt.deployment.version,pageId:"Page12",pageVersion:2,valueName:"selected",bindingName:"sales",schema:"public",table:"people",column:"who"}]);
+      await env.pool.query("INSERT INTO dataset_public_profiles VALUES('fixture','original-user','Original public name','publichandle',NULL),('fixture','unselected-user','Private unselected name',NULL,NULL)");
       const routes = createBackendRoutes({
+        datasetPerson:createDatasetPersonService({...createDatasetPersonRepository(database),reads}),
         database,
         host,
         caller: createPageCaller(),
@@ -278,6 +288,20 @@ test(
           errors?: unknown[];
         };
       };
+      const person = async (userId: string) => {
+        const response = await routes.handle({method:"POST",url:new URL("https://example.test/api/files/Page12/graphql"),credential:"fixture-member",signal:new AbortController().signal,body:{query:'query($id:String!){legacyData{person(valueName:"selected",userId:$id){name handle image}}}',variables:{id:userId}}});
+        assert.equal(response?.status,200);
+        return response!.body as {data?:{legacyData?:{person?:unknown}};errors?:unknown[]};
+      };
+      const selectedPerson=await person("original-user");
+      assert.equal(selectedPerson.errors,undefined);
+      assert.deepEqual(selectedPerson.data?.legacyData?.person,{name:"Original public name",handle:"publichandle",image:null});
+      const unselectedPerson=await person("unselected-user");
+      assert.equal(unselectedPerson.errors,undefined);
+      assert.equal(unselectedPerson.data?.legacyData?.person,null);
+      await env.pool.query("UPDATE dataset_resources SET access=$1",[{...datasetAccess,shares:{}}]);
+      assert.ok((await person("original-user")).errors?.length);
+      await env.pool.query("UPDATE dataset_resources SET access=$1",[datasetAccess]);
       const members = async () => {
         const response = await routes.handle({
           method: "POST", url: new URL("https://example.test/api/files/Page12/graphql"),
@@ -299,6 +323,7 @@ test(
       assert.notEqual(revokedJoin.data?.legacyData?.members?.generation,joined.data?.legacyData?.members?.generation);
       await env.pool.query("UPDATE files SET access=$1",[{...pageAccess,visibility:"private",shares:{}}]);
       await assert.rejects(members(),/access to this document/);
+      await assert.rejects(person("original-user"),/access to this document/);
       await env.pool.query("UPDATE files SET access=$1",[pageAccess]);
       const member = await read("fixture-member");
       assert.equal(member.errors, undefined);
