@@ -260,11 +260,75 @@ test("named mutations pin trusted SQL to exact backend, page revision and bindin
       mutation: {
         name: "reserve",
         backendNamespace: "legacyData",
+        recoveryScope: prepared.browserMutations[0]!.mutation.recoveryScope,
         paramTypes: { id: "number" },
       },
     },
   ]);
   assert.ok(!JSON.stringify(prepared.browserMutations).includes("delete from"));
+  const scope = prepared.browserMutations[0]!.mutation.recoveryScope;
+  assert.match(scope, /^[a-f0-9]{64}$/);
+  const nextDeployment = sealDeployment(
+    generatedDatasetBackendSource,
+    "new compiled bundle",
+    { typeDefs: moduleInfo.typeDefs, fields: deployment.fields },
+  );
+  assert.equal(
+    (
+      await prepareMigrationBackends(revised, {
+        host: { ...host, compile: async () => nextDeployment },
+      })
+    ).browserMutations[0]!.mutation.recoveryScope,
+    scope,
+  );
+
+  assert.equal(
+    (await prepareMigrationBackends(revised, { host })).browserMutations[0]!
+      .mutation.recoveryScope,
+    scope,
+  );
+  for (const changed of [
+    { ...mutation, sql: "delete from sales.rows where id=$id and id>0" },
+    { ...mutation, expectedAffected: 1 },
+  ]) {
+    const altered = {
+      ...revised,
+      pages: [
+        {
+          ...revised.pages[0]!,
+          revisions: [
+            { ...revised.pages[0]!.revisions[0]!, mutations: [changed] },
+          ],
+        },
+      ],
+    };
+    assert.notEqual(
+      (await prepareMigrationBackends(altered, { host })).browserMutations[0]!
+        .mutation.recoveryScope,
+      scope,
+    );
+  }
+  const nextRevision = {
+    ...revised,
+    pages: [
+      {
+        ...revised.pages[0]!,
+        revisions: [
+          {
+            ...revised.pages[0]!.revisions[0]!,
+            version: 2,
+            editId: "next-edit",
+          },
+        ],
+      },
+    ],
+  };
+  assert.notEqual(
+    (await prepareMigrationBackends(nextRevision, { host }))
+      .browserMutations[0]!.mutation.recoveryScope,
+    scope,
+  );
+
   assert.deepEqual(prepared.operations, [
     {
       sourceNamespace: "fixture",

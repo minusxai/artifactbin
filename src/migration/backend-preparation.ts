@@ -27,6 +27,20 @@ const nonempty = (s: string) =>
   s.length > 0 &&
   s.length <= 1024 &&
   !s.includes("\0");
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+  if (value && typeof value === "object")
+    return (
+      "{" +
+      Object.entries(value)
+        .filter(([, v]) => v !== undefined)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => JSON.stringify(k) + ":" + canonical(v))
+        .join(",") +
+      "}"
+    );
+  return JSON.stringify(value);
+}
 function candidate(namespace: string, page: string, attempt: number): string {
   const bytes = createHash("sha256")
     .update(JSON.stringify(["dataset-backend-v1", namespace, page, attempt]))
@@ -224,17 +238,7 @@ export async function prepareMigrationBackends(
           reset: _localReset,
           ...authored
         } = mutation;
-        browserMutations.push({
-          pageLegacyId: page.legacyId,
-          pageVersion: revision.version,
-          mutation: {
-            name: mutation.name,
-            backendNamespace: "legacyData",
-            paramTypes: { ...mutation.paramTypes },
-            ...(mutation.reset?.length ? { reset: [...mutation.reset] } : {}),
-          },
-        });
-        operations.push({
+        const registration = {
           sourceNamespace: input.sourceNamespace,
           bindingName,
           operation: {
@@ -248,6 +252,25 @@ export async function prepareMigrationBackends(
               editId: revision.editId!,
             },
             datasetId: datasetLegacyId,
+          },
+        };
+        operations.push(registration);
+        browserMutations.push({
+          pageLegacyId: page.legacyId,
+          pageVersion: revision.version,
+          mutation: {
+            name: mutation.name,
+            backendNamespace: "legacyData",
+            recoveryScope: digest(
+              canonical([
+                "dataset-mutation-recovery-v1",
+                "legacyData",
+                registration,
+                mutation.reset ?? [],
+              ]),
+            ),
+            paramTypes: { ...mutation.paramTypes },
+            ...(mutation.reset?.length ? { reset: [...mutation.reset] } : {}),
           },
         });
       }

@@ -5,6 +5,8 @@ export type CompiledMutationScalar = string | number | boolean | null;
 export interface CompiledDatasetMutation {
   name: string;
   backendNamespace: string;
+  /** SHA-256 of trusted immutable registration; isolates durable recovery across revisions. */
+  recoveryScope: string;
   paramTypes: Readonly<
     Record<
       string,
