@@ -16,6 +16,7 @@ export type ReadLocalReactiveExpression = (node: unknown) => LocalReactiveRead |
  * repeat requires a durable typed key and an explicit authored owner ID. */
 export type LocalIdentityRegion =
   | { readonly kind: "node"; readonly id: string }
+  | { readonly kind: "deferred"; readonly children: readonly LocalIdentityRegion[] }
   | { readonly kind: "conditional"; readonly test: LocalReactiveExpression; readonly yes: readonly LocalIdentityRegion[]; readonly no: readonly LocalIdentityRegion[] }
   | { readonly kind: "repeat"; readonly owner: string; readonly table: string; readonly keyBy: string; readonly children: readonly LocalIdentityRegion[] }
   | { readonly kind: "cell"; readonly owner: string; readonly table: string; readonly rowKey: string; readonly column: string; readonly children: readonly LocalIdentityRegion[] };
