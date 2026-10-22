@@ -66,6 +66,12 @@ test("immutable bundle set verifies child closures, deduplicates exact receipts 
     const first = await check([a, b]);
     assert.equal(first.manifest.stylesheets.length, 1);
     assert.equal(first.files.size, 2);
+    for (const bytes of first.files.values())
+      assert.equal(
+        bytes.buffer.byteLength,
+        bytes.byteLength,
+        "verified files must not retain maximum-sized scratch buffers",
+      );
     assert.equal((await check([a, b])).resourceDigest, first.resourceDigest);
     assert.notEqual((await check([a])).resourceDigest, first.resourceDigest);
     for (const children of [

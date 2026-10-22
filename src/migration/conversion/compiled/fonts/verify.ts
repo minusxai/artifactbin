@@ -43,7 +43,7 @@ async function readBounded(
       length += result.bytesRead;
     }
     if (length > max) throw Error("Font bundle file limit");
-    return out.subarray(0, length);
+    return Uint8Array.from(out.subarray(0, length));
   } finally {
     await handle.close();
   }
