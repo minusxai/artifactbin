@@ -337,3 +337,39 @@ test("real SQLite alias keeps canonical restrictive policy, presets, checks and 
   await assert.rejects(run("update main.rows set value=2"));
   await assert.rejects(run("update sales.other set value=2"));
 });
+
+test("registered expectedAffected refuses real SQLite effects before publishing any object or revision", async () => {
+  const { createDatasetMutationEngine } = await import(
+    "../src/datasets/sql/engine.ts"
+  );
+  const engine = await createDatasetMutationEngine();
+  for (const [rows, expectedCode] of [
+    [[], "row_changed"],
+    [[{ value: 0 }, { value: 0 }], "row_not_unique"],
+  ] as const) {
+    const f = fixture();
+    const original = structuredClone(rows);
+    f.ports.read = async () => structuredClone([...rows]);
+    f.ports.execute = async (job) => {
+      f.calls.push("execute");
+      assert.equal(job.input.expectedAffected, 1);
+      return engine.mutate(job.input);
+    };
+    await assert.rejects(
+      createDatasetMutationService(f.ports).mutate(context, request),
+      new RegExp(expectedCode),
+    );
+    assert.deepEqual(f.calls, ["begin", "execute", expectedCode]);
+    assert.deepEqual(rows, original);
+  }
+  const f = fixture();
+  f.ports.execute = async (job) => {
+    f.calls.push("execute");
+    return engine.mutate(job.input);
+  };
+  assert.deepEqual(
+    await createDatasetMutationService(f.ports).mutate(context, request),
+    f.result,
+  );
+  assert.deepEqual(f.calls, ["begin", "execute", "persist", "commit"]);
+});
