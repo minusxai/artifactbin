@@ -1,3 +1,4 @@
+import { serveDatasetAttachments } from "./server/dataset-attachment-http.ts";
 import { supplementalRepository } from "./persistence/supplemental-media.ts";
 import { createSupplementalService } from "./media/supplemental-service.ts";
 import { serveSupplemental } from "./media/supplemental-http.ts";
@@ -96,6 +97,8 @@ export function createService({
   mediaDirectory,
   datasetDirectory,
   datasetMutationDirectory,
+  datasetAttachmentDirectory,
+  datasetImageProcessor,
   datasetSqlExecutor,
   testLogin = false,
   knownOrigins = [DEFAULT_AF_ORIGIN],
@@ -172,6 +175,8 @@ export function createService({
     database: repository.sql,
     sourceDirectory: datasetDirectory,
     mutationDirectory: datasetMutationDirectory,
+    attachmentDirectory: datasetAttachmentDirectory,
+    imageProcessor: datasetImageProcessor,
     executor: datasetSqlExecutor,
     now,
   });
@@ -221,6 +226,7 @@ export function createService({
         return serveRunner(req, res, platformOrigin, boundary.origin);
       Object.assign(req, { pagegiOrigin: boundary.origin });
       const url = new URL(req.url || "/", boundary.origin);
+      if (datasetRuntime.attachments && await serveDatasetAttachments(req, res, url, datasetRuntime.attachments, credential(req) || cookieToken(req))) return;
       if (await serveSupplemental(req,res,url,supplemental,credential(req)||cookieToken(req))) return;
       if (await serveMedia(req, res, url, media, credential(req) || cookieToken(req))) return;
       if (req.method === "OPTIONS") {

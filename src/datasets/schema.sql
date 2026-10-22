@@ -138,7 +138,7 @@ CREATE TRIGGER dataset_viewer_bindings_immutable BEFORE UPDATE ON dataset_viewer
 -- Dataset FileUpload is a separate immutable, explicitly published capability.
 CREATE TABLE IF NOT EXISTS dataset_attachment_bindings (
  backend_id text NOT NULL, backend_version text NOT NULL, page_id text NOT NULL,
- page_version bigint NOT NULL, name text NOT NULL, backend_namespace text NOT NULL,
+ page_version bigint NOT NULL, name text NOT NULL, backend_namespace text NOT NULL, source_namespace text NOT NULL,
  registration jsonb NOT NULL,
  PRIMARY KEY(backend_id,backend_version,page_id,page_version,name),
  FOREIGN KEY(backend_id,backend_version,page_id,page_version,name)

@@ -1,7 +1,11 @@
-import {createDatasetMutationAvailabilityService} from "../datasets/mutation/availability.ts";
-import {createDatasetMutationAvailabilityRepository} from "../persistence/dataset-mutations.ts";
-import{createDatasetViewerService}from"../datasets/viewer.ts";
-import{createDatasetViewerRepository}from"../persistence/dataset-viewer.ts";
+import { createDatasetAttachmentContext } from "../persistence/dataset-attachment-context.ts";
+import { createDatasetAttachmentRepository } from "../persistence/dataset-attachments.ts";
+import { createDatasetAttachmentStorage } from "../persistence/dataset-attachment-storage.ts";
+import { createDatasetAttachmentService } from "../datasets/attachments/service.ts";
+import { createDatasetMutationAvailabilityService } from "../datasets/mutation/availability.ts";
+import { createDatasetMutationAvailabilityRepository } from "../persistence/dataset-mutations.ts";
+import { createDatasetViewerService } from "../datasets/viewer.ts";
+import { createDatasetViewerRepository } from "../persistence/dataset-viewer.ts";
 import { createDatasetPersonService } from "../datasets/person.ts";
 import { createDatasetPersonRepository } from "../persistence/dataset-person.ts";
 import { createDatasetMembersService } from "../datasets/members.ts";
@@ -62,19 +66,46 @@ export function createDatasetRuntime(
           execute: (job, signal) => executor.execute(job, signal),
         })
       : undefined;
+  const { attachmentDirectory, imageProcessor } = options;
+  if (Boolean(attachmentDirectory) !== Boolean(imageProcessor))
+    throw Error(
+      "Dataset attachment storage requires an isolated image processor",
+    );
+  const attachments =
+    attachmentDirectory && imageProcessor
+      ? {
+          resolve: createDatasetAttachmentContext(database, now),
+          service: createDatasetAttachmentService({
+            repository: createDatasetAttachmentRepository({ database, now }),
+            storage: createDatasetAttachmentStorage({
+              directory: attachmentDirectory,
+              processor: imageProcessor,
+            }),
+          }),
+        }
+      : undefined;
   let closing: Promise<void> | undefined;
   return {
     reads,
-    availability:createDatasetMutationAvailabilityService(createDatasetMutationAvailabilityRepository(database,now)),
+    ...(attachments ? { attachments } : {}),
+    availability: createDatasetMutationAvailabilityService(
+      createDatasetMutationAvailabilityRepository(database, now),
+    ),
     person: createDatasetPersonService({
       ...createDatasetPersonRepository(database),
       reads,
     }),
-    viewer:createDatasetViewerService(createDatasetViewerRepository(database,now)),
+    viewer: createDatasetViewerService(
+      createDatasetViewerRepository(database, now),
+    ),
     members: createDatasetMembersService(
       createDatasetMembersRepository(database, now),
     ),
     ...(mutations ? { mutations } : {}),
-    close: () => (closing ??= executor?.close() ?? Promise.resolve()),
+    close: () =>
+      (closing ??= Promise.all([
+        executor?.close(),
+        imageProcessor?.close(),
+      ]).then(() => {})),
   };
 }

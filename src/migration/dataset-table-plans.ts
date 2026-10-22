@@ -149,6 +149,20 @@ export function migrationDatasetTablePlans(
       ["descriptor"],
     ),
     plan(
+      "dataset_attachment_bindings",
+      ["backend_id", "backend_version", "page_id", "page_version", "name"],
+      (m.attachments ?? []).map((r) => ({
+        backend_id: r.binding.backendId,
+        backend_version: r.binding.backendVersion,
+        page_id: r.binding.page.id,
+        page_version: r.binding.page.version,
+        name: r.binding.name,
+        backend_namespace: r.backendNamespace,
+        registration: r,
+      })),
+      ["registration"],
+    ),
+    plan(
       "dataset_page_joins",
       ["page_id", "legacy_user_id"],
       m.acceptedJoins.map((r) => ({

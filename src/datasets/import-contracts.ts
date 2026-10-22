@@ -6,6 +6,7 @@ import type { DatasetSnapshot, DocumentSnapshot } from "./policy/contracts.ts";
 export interface DatasetImportMetadata {
   sourceNamespace: string;
   bindings: readonly DatasetBinding[];
+  attachments?: readonly import("./attachments/contracts.ts").DatasetAttachmentRegistration[];
   /** Trusted publication registry, inserted in the binding transaction; never browser metadata. */
   operations?: readonly DatasetOperationRegistration[];
   pages: readonly {

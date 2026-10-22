@@ -143,3 +143,26 @@ test("availability is fresh attachment insert-only authority with no staging or 
   });
   assert.deepEqual(f.counts(), { discarded: 0, committed: 0, closed: 0 });
 });
+
+test("failed staging cleanup stops subsequent admission and availability", async () => {
+  const f = fixture();
+  const stage = f.storage.stage;
+  let staged = 0;
+  f.storage.stage = async (...args) => {
+    staged++;
+    return {
+      ...(await stage(...args)),
+      discard: async () => {
+        throw Error("cleanup failed");
+      },
+    };
+  };
+  await assert.rejects(f.service.upload(context, f.upload()));
+  await assert.rejects(f.service.upload(context, f.upload()), {
+    code: "unavailable",
+  });
+  assert.equal(staged, 1);
+  assert.deepEqual(await f.service.availability(context), {
+    canAttempt: false,
+  });
+});

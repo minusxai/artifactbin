@@ -7,10 +7,13 @@ export interface DatasetRuntimeOptions {
   sourceDirectory?: string;
   mutationDirectory?: string;
   executor?: DatasetSqlExecutor;
+  attachmentDirectory?: string;
+  imageProcessor?: import("../datasets/attachments/image-processor-contracts.ts").ImageProcessor;
   now?: () => number;
 }
 export interface DatasetRuntime {
   reads: DatasetReadService;
+  attachments?: import("./dataset-attachment-http-contracts.ts").DatasetAttachmentHttpPorts;
   availability: import("../datasets/mutation/availability-contracts.ts").DatasetMutationAvailabilityService;
   person: import("../datasets/person-contracts.ts").DatasetPersonService;
   viewer: import("../datasets/viewer-contracts.ts").DatasetViewerService;

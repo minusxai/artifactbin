@@ -6,6 +6,10 @@ import type { MigrationBackendReceipt } from "./backend-preparation-contracts.ts
 import type { MigrationDatasetImportScan } from "./dataset-scan-contracts.ts";
 export interface MigrationJobDatasets {
   metadata: DatasetImportMetadata;
+  datasetAttachments?: ReadonlyMap<
+    string,
+    readonly { backendNamespace: string; bindingName: string }[]
+  >;
   personBindings: ReadonlyMap<
     string,
     readonly { valueName: string; backendNamespace: string }[]

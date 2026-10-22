@@ -57,3 +57,28 @@ test("mutation composition requires readonly source and authenticated remote exe
   await Promise.all([runtime.close(), runtime.close()]);
   assert.equal(closed, 1);
 });
+
+test("attachment composition requires storage and processor together and closes the owned processor once", async () => {
+  const database = {} as SqlDatabase;
+  let closed = 0;
+  const imageProcessor = {
+    process: async () => {
+      throw Error("unused");
+    },
+    close: async () => {
+      closed++;
+    },
+  };
+  assert.throws(() =>
+    createDatasetRuntime({ database, attachmentDirectory: "/tmp/attachments" }),
+  );
+  assert.throws(() => createDatasetRuntime({ database, imageProcessor }));
+  const runtime = createDatasetRuntime({
+    database,
+    attachmentDirectory: "/tmp/attachments",
+    imageProcessor,
+  });
+  assert.ok(runtime.attachments);
+  await Promise.all([runtime.close(), runtime.close()]);
+  assert.equal(closed, 1);
+});

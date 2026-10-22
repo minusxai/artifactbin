@@ -34,13 +34,15 @@ export function createDatasetAttachmentService({
   storage: DatasetAttachmentStorage;
 }): DatasetAttachmentService {
   let active = 0;
+  let healthy = true;
   return {
     async availability(context, signal) {
       signal?.throwIfAborted();
       const a = await repository.authority(context, signal);
       signal?.throwIfAborted();
       return {
-        canAttempt: !!a && datasetAttachmentAllowed(context, a, "insert"),
+        canAttempt:
+          healthy && !!a && datasetAttachmentAllowed(context, a, "insert"),
       };
     },
     async upload(context, upload, callerSignal) {
@@ -51,6 +53,7 @@ export function createDatasetAttachmentService({
         !segment.test(context.bindingName)
       )
         throw new DatasetAttachmentError("invalid_request");
+      if (!healthy) throw new DatasetAttachmentError("unavailable");
       if (active >= DATASET_ATTACHMENT_LIMITS.maxConcurrent)
         throw new DatasetAttachmentError("busy");
       active++;
@@ -93,6 +96,9 @@ export function createDatasetAttachmentService({
       } finally {
         try {
           await staged?.discard();
+        } catch (error) {
+          healthy = false;
+          throw error;
         } finally {
           active--;
         }

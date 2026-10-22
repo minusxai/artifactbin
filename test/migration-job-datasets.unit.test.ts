@@ -232,6 +232,31 @@ test("job prepares exact live head bindings and real compiled receipts without i
     bound!.boundValueColumns.has(JSON.stringify(["abc123", 1])),
     false,
   );
+  const uploadSource = {
+    ...source,
+    readArtifact: async (id: string) => {
+      const artifact = await source.readArtifact(id);
+      if (id !== page.id) return artifact;
+      const clone = structuredClone(artifact);
+      clone.artifacts[0]!.source =
+        page.source +
+        '<Value name="files" type="string"/><FileUpload dataset="sales" value="$files" accept="image/png"/>';
+      return clone;
+    },
+  };
+  const uploads = await prepareMigrationJobDatasets(uploadSource, options, {
+    host: { compile: async () => deployment, invoke: async () => null },
+  });
+  assert.equal(uploads!.metadata.attachments?.length, 1);
+  assert.equal(uploads!.metadata.attachments![0]!.binding.page.version, 2);
+  assert.deepEqual(
+    uploads!.datasetAttachments?.get(JSON.stringify(["abc123", 2])),
+    [{ backendNamespace: "legacyData", bindingName: "sales" }],
+  );
+  assert.equal(
+    uploads!.datasetAttachments?.has(JSON.stringify(["abc123", 1])),
+    false,
+  );
   const memberSource = {
     ...source,
     datasets: {
@@ -321,7 +346,8 @@ test("job prepares exact live head bindings and real compiled receipts without i
   );
   assert.deepEqual(viewer.viewerBindings.get(JSON.stringify(["abc123", 2])), {
     backendNamespace: "legacyData",
-    backendHref: new URL(viewerReceipts.find(r => r.viewer)!.backendHref).pathname,
+    backendHref: new URL(viewerReceipts.find((r) => r.viewer)!.backendHref)
+      .pathname,
   });
   assert.equal(viewer.viewerBindings.has(JSON.stringify(["abc123", 1])), false);
   assert.deepEqual(viewer.scan.historicalServiceVersions.get("abc123"), [1]);

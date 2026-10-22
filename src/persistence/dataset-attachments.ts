@@ -131,7 +131,7 @@ export async function registerDatasetAttachments({
     const { tables: _tables, ...descriptor } = b;
     if (hash(saved) !== hash(descriptor)) deny();
     await client.query(
-      `INSERT INTO dataset_attachment_bindings(backend_id,backend_version,page_id,page_version,name,backend_namespace,registration) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+      `INSERT INTO dataset_attachment_bindings(backend_id,backend_version,page_id,page_version,name,backend_namespace,source_namespace,registration) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
       [
         b.backendId,
         b.backendVersion,
@@ -139,6 +139,7 @@ export async function registerDatasetAttachments({
         b.page.version,
         b.name,
         r.backendNamespace,
+        r.sourceNamespace,
         JSON.stringify(r),
       ],
     );

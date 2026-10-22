@@ -32,6 +32,10 @@ export interface ConversionInput {
   /** Trusted offline catalog facts; included in cache provenance, never browser data. */
   boundValueColumns?: readonly BoundValueColumnProof[];
   personBindings?: readonly { valueName: string; backendNamespace: string }[];
+  datasetAttachments?: readonly {
+    backendNamespace: string;
+    bindingName: string;
+  }[];
   viewerBinding?: import("./conversion/compiled/viewer-contracts.ts").CompiledViewerBinding;
   membersBinding?: { backendNamespace: string; backendHref: string };
   datasetUnavailable?: { reason: "historical-binding-unavailable" };

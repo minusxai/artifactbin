@@ -1,3 +1,4 @@
+import { registerDatasetAttachments } from "../persistence/dataset-attachments.ts";
 import { registerSavedQueries } from "../persistence/dataset-queries.ts";
 import { validateMigrationPersonBindings } from "./person-binding-validation.ts";
 import { migrationDatasetTablePlans as tablePlans } from "./dataset-table-plans.ts";
@@ -178,6 +179,16 @@ export class PostgresDatasetMetadataDestination
           },
           registration,
         );
+      await registerDatasetAttachments({
+        client: {
+          query: async (text, values) => ({
+            ...(await this.db.query(text, values ? [...values] : undefined)),
+            rowCount: null,
+          }),
+          release: () => {},
+        },
+        registrations: batch.metadata.attachments ?? [],
+      });
       const operations = batch.metadata.operations ?? [];
       if (receipt)
         for (const { operation: o } of operations) {

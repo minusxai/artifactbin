@@ -170,3 +170,11 @@ An account's optional public name, used in `/@<handle>/<path>` page addresses (s
 ## Public profiles
 
 `GET /@<handle>` returns an HTML list of that account’s current public pages. Private, unlisted and deleted pages are excluded, including for a signed-in owner. Unknown or changed handles return 404. `HEAD` returns the same status without a body. Optional `limit` is 1–50 (default 24); the Next link supplies the opaque `after` page cursor. Profile links from a page must use the platform origin, not its isolated runner origin.
+
+## Dataset image attachments
+
+A saved page with a registered live dataset upload binding can use `GET /api/files/:id/dataset-attachments/:namespace/:binding` to check `{ canAttempt }`. Upload with `POST` to the same path using the raw PNG, JPEG or WebP body, its exact `Content-Type`, a percent-encoded filename in `X-Filename`, and a stable `Idempotency-Key`. The receipt contains `{ ref, url, name, contentType, size }`; an exact retry may include `replayed: true`. Keep the same key and body after an uncertain response.
+
+Uploads require a fresh authenticated viewer and an explicit dataset v2 insert grant. Downloads use `GET /api/files/:id/dataset-attachments/:namespace/:binding/:fileId` (or `HEAD` for headers) and independently require the current dataset read grant. Returned URLs remain protected and use private no-store responses. Save the `dfile:` ref through the page's dataset mutation; never put credentials in the page or attachment URL.
+
+Each source file is limited to 50 MB. A dataset may retain at most 500 MB of charged image output and 1,000 attachments. Pending publication receipts count toward both limits. Invalid requests return `400`, oversized input `413`, conflicting retry input `409`, quota refusal `422`, busy processing `429`, unavailable processing `503`, and denied or absent resources `404`.

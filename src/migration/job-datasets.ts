@@ -1,3 +1,4 @@
+import { projectMigrationAttachmentBindings } from "./attachment-bindings.ts";
 import { legacyDocumentSource } from "./conversion/index.ts";
 import { readLegacyPersonValueNames } from "./conversion/compiled/person-source.ts";
 import { projectMigrationPersonBindings } from "./person-binding-validation.ts";
@@ -76,6 +77,10 @@ export async function prepareMigrationJobDatasets(
     import("./conversion/compiled/dataset-mutations-contracts.ts").CompiledDatasetMutation[]
   >();
   const bindings = new Map<string, DatasetBrowserBinding[]>();
+  const datasetAttachments = new Map<
+    string,
+    readonly { backendNamespace: string; bindingName: string }[]
+  >();
   const personBindings = new Map<
     string,
     { valueName: string; backendNamespace: string }[]
@@ -196,6 +201,25 @@ export async function prepareMigrationJobDatasets(
         plan.metadata.bindings,
       );
       const headSource = artifact.artifacts[0]!;
+      const registeredAttachments = projectMigrationAttachmentBindings({
+        source: headSource.source?.trim()
+          ? headSource.source
+          : (legacyDocumentSource(headSource.document) ?? ""),
+        sourceNamespace: source.manifest.sourceNamespace,
+        pageId: page.pageId,
+        pageVersion: scan.heads.get(page.legacyId)!,
+        bindings: plan.metadata.bindings,
+      });
+      datasetAttachments.set(
+        migrationDatasetVersionKey(
+          page.legacyId,
+          scan.heads.get(page.legacyId)!,
+        ),
+        registeredAttachments.map((r) => ({
+          backendNamespace: r.backendNamespace,
+          bindingName: r.binding.name,
+        })),
+      );
       const personNames = new Set(
         readLegacyPersonValueNames(
           headSource.source?.trim()
@@ -220,6 +244,7 @@ export async function prepareMigrationJobDatasets(
         principals: [],
         groups: [],
         personBindings: registeredPersons,
+        attachments: registeredAttachments,
         operations: prepared.operations.filter(
           (r) => r.operation.page.id === page.pageId,
         ),
@@ -275,6 +300,7 @@ export async function prepareMigrationJobDatasets(
     membersBindings,
     viewerBindings,
     personBindings,
+    datasetAttachments,
     scan,
     bindings,
     mutations,

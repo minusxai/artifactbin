@@ -73,6 +73,15 @@ export function createDatasetAttachmentStorage({
 }: DatasetAttachmentStorageOptions): DatasetAttachmentStorage {
   const objects = join(directory, "objects"),
     staging = join(directory, "staging");
+  let healthy = true;
+  async function cleanup(action: () => Promise<void>) {
+    try {
+      await action();
+    } catch (error) {
+      healthy = false;
+      throw error;
+    }
+  }
   let initialized: Promise<void> | undefined;
   const init = () =>
     (initialized ??= (async () => {
@@ -82,6 +91,7 @@ export function createDatasetAttachmentStorage({
     })());
   return {
     async stage(upload, signal) {
+      if (!healthy) throw new DatasetAttachmentError("unavailable");
       await init();
       signal?.throwIfAborted();
       const temp = await mkdtemp(join(staging, "request-"));
@@ -229,7 +239,7 @@ export function createDatasetAttachmentStorage({
               : {}),
           };
         } finally {
-          await processed.dispose();
+          await cleanup(() => processed.dispose());
         }
         let disposed = false;
         return {
@@ -263,12 +273,12 @@ export function createDatasetAttachmentStorage({
           async discard() {
             if (!disposed) {
               disposed = true;
-              await rm(temp, { recursive: true, force: true });
+              await cleanup(() => rm(temp, { recursive: true, force: true }));
             }
           },
         };
       } catch (error) {
-        await rm(temp, { recursive: true, force: true });
+        await cleanup(() => rm(temp, { recursive: true, force: true }));
         throw error;
       }
     },

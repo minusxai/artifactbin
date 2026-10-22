@@ -74,6 +74,7 @@ export function createMigrationConverter(
       membersBinding: input.membersBinding,
       viewerBinding: input.viewerBinding,
       personBindings: input.personBindings,
+      datasetAttachments: input.datasetAttachments,
       datasetUnavailable: input.datasetUnavailable,
       theme: typeof meta.theme === "string" ? meta.theme : null,
       template: typeof meta.template === "string" ? meta.template : null,

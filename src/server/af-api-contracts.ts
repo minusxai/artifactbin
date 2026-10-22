@@ -77,6 +77,10 @@
  * are 403 even on an unlisted page, whose hosted view (/af/v1/ids/:id) works
  * for anyone with the link. The link role applies to anonymous viewers too.
  *   GET  /api/files/:id/backends   (C)                      → 200 BackendsResponse
+ *   GET /api/files/:id/dataset-attachments/:namespace/:binding → 200 { canAttempt }
+ *   POST /api/files/:id/dataset-attachments/:namespace/:binding → 200 protected attachment receipt (raw image body)
+ *   GET /api/files/:id/dataset-attachments/:namespace/:binding/:fileId → private image bytes
+ *   HEAD /api/files/:id/dataset-attachments/:namespace/:binding/:fileId → private image headers
  *   POST /api/files/:id/graphql    (C) RemoteRequest        → 200 RemoteResponse
  *   GET  /af/v1/core.js                                     → 200 text/javascript (the built core)
  *   GET  /af/v1/design-systems/<name>.css                   → 200 text/css, byte-equal to
@@ -290,6 +294,9 @@ export interface AfServiceOptions {
   datasetDirectory?: string;
   /** App-only writable content-addressed overlay; requires remote SQL execution. */
   datasetMutationDirectory?: string;
+  /** Private writable attachment object directory; requires an isolated image processor. */
+  datasetAttachmentDirectory?: string;
+  datasetImageProcessor?: import("../datasets/attachments/image-processor-contracts.ts").ImageProcessor;
   datasetSqlExecutor?: import("../backend/dataset-sql-contracts.ts").DatasetSqlExecutor;
   /** Random source for file IDs; tests may inject a deterministic one. */
   randomBytes?: (count: number) => Uint8Array;

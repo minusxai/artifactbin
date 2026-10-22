@@ -34,6 +34,10 @@ export function createMigrationJobPlanner(
     const plan = await planMigration(artifact, {
       maps,
       convert,
+      datasetAttachments: (id, version) =>
+        source.preparedDatasets?.datasetAttachments?.get(
+          migrationDatasetVersionKey(id, version),
+        ) ?? [],
       personBindings: (id, version) =>
         source.preparedDatasets?.personBindings.get(
           migrationDatasetVersionKey(id, version),
@@ -112,8 +116,12 @@ export async function planMigrationJob(
   const readinessRows: MigrationReadinessRow[] = [];
   const pageDigests = new Map<string, string>();
   const pageFormats = new Map<string, string>();
-  const links: { sourcePageId: string; legacyId: string; pageId: string; unmapped: boolean }[] =
-    [];
+  const links: {
+    sourcePageId: string;
+    legacyId: string;
+    pageId: string;
+    unmapped: boolean;
+  }[] = [];
   const conversionStrategy = options.conversionStrategy;
   const reportPath = options.reportPath;
   const conversionProvenance: Record<string, number> = {};
@@ -185,7 +193,12 @@ export async function planMigrationJob(
                   targetOrigin: options.origin,
                   readyPages: new Set(),
                   onDiagnostic: ({ legacyId, pageId, disposition }) =>
-                    links.push({ sourcePageId: page.pageId, legacyId, pageId, unmapped: disposition === "legacy-target-unmapped" }),
+                    links.push({
+                      sourcePageId: page.pageId,
+                      legacyId,
+                      pageId,
+                      unmapped: disposition === "legacy-target-unmapped",
+                    }),
                 });
               }
               pageDigests.set(page.pageId, migrationPageDigest(page));
@@ -289,7 +302,9 @@ export async function planMigrationJob(
           .map((link) => ({
             ...link,
             disposition: options.legacyOrigins.length
-              ? link.unmapped ? "legacy-target-unmapped" : "legacy-target-blocked"
+              ? link.unmapped
+                ? "legacy-target-unmapped"
+                : "legacy-target-blocked"
               : "legacy-origin-required",
           })),
       }),
