@@ -2,7 +2,7 @@ import {readStaticMermaidPlans} from "./mermaid-source.ts";
 import {historicalSourceValueDeclaration} from "./historical-bound-value.ts";
 import {validateBoundPersonRouting} from "./person-admission.ts";
 import {readSlideDeckPlan} from "./slide-deck.ts";
-import {prepareAuthorEffects} from "./author/effect-source.ts";
+import {prepareAuthorEffects,prepareOwnedAuthorComponents} from "./author/effect-source.ts";
 import {admitLocalComponent} from "./component-admission.ts";
 import {validCompiledMembersBinding} from "./members-binding.ts";
 import type {AdmittedAuthorMountProps} from "./author/prop-contracts.ts";
@@ -63,11 +63,17 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   if (author) {
     try {
       if (author.mode === "effects") {
-        if (author.exports.length || author.mounts.length) throw Error("Effect components refused");
+        if (author.lifecycle !== undefined || author.exports.length || author.mounts.length) throw Error("Effect components refused");
         prepareAuthorEffects(author.script);
       } else {
         if (author.mode !== undefined && author.mode !== "components") throw Error("Unknown author mode");
-        admitAuthorSource(author.script);
+        if(author.lifecycle === "owned") {
+          const prepared=prepareOwnedAuthorComponents(author.script);
+          if(prepared.exports.length!==author.exports.length || prepared.exports.some((name,index)=>name!==author.exports[index]))throw Error("Owned component exports differ");
+        } else {
+          if(author.lifecycle !== undefined)throw Error("Unknown component lifetime");
+          admitAuthorSource(author.script);
+        }
       }
       if (
         Buffer.byteLength(author.script) > 1024 * 1024 ||
