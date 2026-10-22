@@ -270,6 +270,45 @@ test("durable mutation commits history, receipt and invalidation atomically; con
       kind: "refused",
       code: "denied",
     });
+    const uncertainRequest = { ...request, requestId: "uncertain" };
+    const uncertain = await repo.begin(context, operation, uncertainRequest);
+    assert.equal(uncertain.kind, "lease");
+    if (uncertain.kind !== "lease") throw Error();
+    const uncertainHead = await repo.head(context, operation);
+    assert.ok(uncertainHead);
+    await env.pool.query(
+      "CREATE FUNCTION reject_invalidation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic outbox failure'; END $$",
+    );
+    await env.pool.query(
+      "CREATE TRIGGER reject_invalidation BEFORE INSERT ON dataset_invalidations FOR EACH ROW EXECUTE FUNCTION reject_invalidation()",
+    );
+    await assert.rejects(
+      repo.commit({
+        context,
+        operation,
+        lease: uncertain.lease,
+        head: uncertainHead,
+        object: stored,
+        outcome,
+      }),
+      /synthetic outbox failure/,
+    );
+    assert.equal(
+      (await env.pool.query("SELECT current_version FROM dataset_resources"))
+        .rows[0].current_version,
+      "2",
+    );
+    assert.equal(
+      (await env.pool.query("SELECT count(*)::int n FROM dataset_versions"))
+        .rows[0].n,
+      2,
+    );
+    assert.deepEqual(await repo.begin(context, operation, uncertainRequest), {
+      kind: "busy",
+    });
+    await env.pool.query(
+      "DROP TRIGGER reject_invalidation ON dataset_invalidations",
+    );
     await env.pool.query("UPDATE dataset_resources SET writable=false");
 
     await assert.rejects(
