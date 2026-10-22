@@ -24,7 +24,8 @@ const split = storyBodyFor(input.source);
 if (
   !split ||
   split.content.script ||
-  split.content.mutations.length !== (input.datasetMutations ?? []).length
+  (!input.datasetUnavailable &&
+    split.content.mutations.length !== (input.datasetMutations ?? []).length)
 )
   throw Error("Only local scalar documents admitted");
 const [

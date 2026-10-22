@@ -441,7 +441,7 @@ test("explicit historical unavailability retains readable page without a backend
 
 test("charts require an explicit offline chart plan and declared data source", async () => {
   const source =
-    '<Helmet><Query name="rows">{`select 1 as amount`}</Query></Helmet><Question data="$rows" viz={{engine:"vega-lite",spec:{mark:"bar"}}}/>';
+    '<Helmet><Query name="rows">{`select 1 as amount`}</Query></Helmet><Question data="$rows" viz={{kind:"vega-lite",spec:{mark:"bar",encoding:{x:{scale:{domain:[0,10]}}}}}}/>';
   let calls = 0;
   const compiler = {
     compile: async () => {
@@ -475,7 +475,7 @@ test("charts require an explicit offline chart plan and declared data source", a
     {
       ...input,
       source: source.replace(
-        ' viz={{engine:"vega-lite",spec:{mark:"bar"}}}',
+        ' viz={{kind:"vega-lite",spec:{mark:"bar",encoding:{x:{scale:{domain:[0,10]}}}}}}',
         "",
       ),
     },
@@ -536,4 +536,37 @@ test("persistent mutation controls require exact registered routing metadata", a
       "manual-blocked",
     );
   }
+});
+
+test("historical mutation declarations render read-only with no executable write metadata", async () => {
+  const source =
+    '<Helmet><Import name="items" src="ref:Abcd12"/><Query name="total">{`select count(*) as total from items.rows`}</Query><Mutation name="save">{`insert into items.rows(amount) values(1)`}</Mutation></Helmet><Button run="$save">Save</Button>';
+  const result = await compileArchivedLocal(
+    {
+      ...input,
+      source,
+      datasetUnavailable: { reason: "historical-binding-unavailable" },
+    },
+    {
+      compiler: {
+        compile: async () => ({
+          ...output,
+          declarations: [],
+          queryNames: ["total"],
+          datasetNames: ["items"],
+          mutationNames: ["save"],
+        }),
+      },
+    },
+  );
+  assert.equal(result.classification, "renderable");
+  assert.match(result.html!, /or perform shared data writes/);
+  assert.doesNotMatch(result.html!, /rel="af-backend"/);
+  assert.ok(!result.capabilities.includes("registered-dataset-mutations"));
+  const { localBootSource } = await import(
+    "../src/migration/conversion/compiled/local-boot.ts"
+  );
+  const boot = localBootSource([], undefined, undefined, ["total"]);
+  assert.match(boot, /Historical shared data writes are unavailable/);
+  assert.doesNotMatch(boot, /createCompiledDatasetMutations|client.mutate/);
 });

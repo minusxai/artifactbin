@@ -81,7 +81,10 @@ export async function compileArchivedLocal(
       (i) =>
         !(
           i.code === "attribute" &&
-          i.message === "Dynamic attribute requires an adapter: value"
+          [
+            "Dynamic attribute requires an adapter: value",
+            "Dynamic attribute requires an adapter: viz",
+          ].includes(i.message)
         ) &&
         ![
           "component",
@@ -379,7 +382,10 @@ export async function compileArchivedLocal(
             ]),
           );
           if (
-            !registeredMutations.some((b) => b.name === attrs.name) ||
+            (!historical &&
+              !registeredMutations.some((b) => b.name === attrs.name)) ||
+            !/^[A-Za-z][A-Za-z0-9_]*$/.test(attrs.name) ||
+            ["constructor", "prototype", "__proto__"].includes(attrs.name) ||
             mutations.has(attrs.name) ||
             Object.keys(attrs).some((k) => !["id", "name", "reset"].includes(k))
           )
@@ -393,7 +399,8 @@ export async function compileArchivedLocal(
               : [];
           if (
             (attrs.reset !== undefined && typeof attrs.reset !== "string") ||
-            JSON.stringify(reset) !== JSON.stringify(metadata?.reset ?? [])
+            (!historical &&
+              JSON.stringify(reset) !== JSON.stringify(metadata?.reset ?? []))
           )
             invalid = true;
           const payload = node.children.filter(
@@ -466,7 +473,7 @@ export async function compileArchivedLocal(
     return blocked("compiled-source");
   }
   if (
-    registeredMutations.length !== mutations.size ||
+    (!historical && registeredMutations.length !== mutations.size) ||
     [...mutations].some(
       (n) => declarations.has(n) || queries.has(n) || imports.has(n),
     ) ||
@@ -636,7 +643,7 @@ export async function compileArchivedLocal(
     .join("");
   const status = imports.size
     ? historical
-      ? '<p role="status" data-migration-dataset-status>Historical data is unavailable. This saved page does not load datasets or evaluate queries.</p>'
+      ? '<p role="status" data-migration-dataset-status>Historical data is unavailable. This saved page does not load datasets, evaluate queries, or perform shared data writes.</p>'
       : '<p role="status" data-migration-dataset-status>Loading protected data…</p>'
     : "";
   const authorStatus = author
@@ -665,7 +672,9 @@ export async function compileArchivedLocal(
         : []),
       ...(author ? ["authored-components"] : []),
       ...(chartCount ? ["compiled-charts"] : []),
-      ...(mutations.size ? ["registered-dataset-mutations"] : []),
+      ...(mutations.size && !historical
+        ? ["registered-dataset-mutations"]
+        : []),
     ],
     provenance: {
       compiler: author ? "archived-author" : "archived-local",
