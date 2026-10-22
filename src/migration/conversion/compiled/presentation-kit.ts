@@ -3,12 +3,15 @@ import type {
   PresentationKitTag,
 } from "./presentation-kit-contracts.ts";
 
-// The archived compiler forces TabsContent, AccordionContent and TooltipContent forceMount=true
+// The archived compiler forces TabsContent, AccordionContent, CollapsibleContent and TooltipContent forceMount=true
 // in both served and browser output (compiler kitParts), preserving hidden identities.
 const definitions: Record<
   PresentationKitTag,
   Omit<PresentationKitCapability, "tag">
 > = {
+  Collapsible: { identity: "direct", conditionalChildren: false, portal: false },
+  CollapsibleTrigger: { identity: "direct", conditionalChildren: false, portal: false, requiredAncestor: "Collapsible" },
+  CollapsibleContent: { identity: "direct", conditionalChildren: false, portal: false, requiredAncestor: "Collapsible" },
   Tabs: { identity: "direct", conditionalChildren: false, portal: false },
   TabsList: {
     identity: "direct",
@@ -97,6 +100,9 @@ const definitions: Record<
   },
 };
 const api: Record<PresentationKitTag, readonly string[]> = {
+  Collapsible: ["defaultOpen", "open", "disabled"],
+  CollapsibleTrigger: [],
+  CollapsibleContent: ["forceMount"],
   Tabs: ["defaultValue", "value", "orientation", "dir"],
   TabsList: ["variant"],
   TabsTrigger: ["value", "disabled"],

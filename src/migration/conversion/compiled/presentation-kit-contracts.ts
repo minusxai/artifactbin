@@ -1,5 +1,8 @@
 /** Exact archived kit names; these are presentation components, never action adapters. */
 export type PresentationKitTag =
+  | "Collapsible"
+  | "CollapsibleTrigger"
+  | "CollapsibleContent"
   | "Tabs"
   | "TabsList"
   | "TabsTrigger"
