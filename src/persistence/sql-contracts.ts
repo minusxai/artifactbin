@@ -9,8 +9,17 @@ export interface SqlClient {
 export interface SqlPool {
   connect(): Promise<SqlClient>;
 }
+export interface SqlTransactionOptions {
+  /** Opt-in end-to-end budget, including initialization and pool wait. */
+  readonly timeoutMs: number;
+  /** Aborts waiting and discards an active driver connection. Server work is additionally bounded by statement_timeout. */
+  readonly signal?: AbortSignal;
+}
 export interface SqlDatabase {
-  transaction<T>(work: (client: SqlClient) => Promise<T>): Promise<T>;
+  transaction<T>(
+    work: (client: SqlClient) => Promise<T>,
+    options?: SqlTransactionOptions,
+  ): Promise<T>;
 }
 export interface SqlDatabaseOptions {
   pool: SqlPool;

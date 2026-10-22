@@ -1,7 +1,9 @@
+import { deadlineSqlTransaction } from "./sql-deadline.ts";
 import type {
   SqlClient,
   SqlDatabase,
   SqlDatabaseOptions,
+  SqlTransactionOptions,
 } from "./sql-contracts.ts";
 export type * from "./sql-contracts.ts";
 export function createSqlDatabase({
@@ -18,7 +20,16 @@ export function createSqlDatabase({
       throw new RangeError("Invalid SQL timeout");
   }
   return {
-    async transaction<T>(work: (client: SqlClient) => Promise<T>): Promise<T> {
+    async transaction<T>(
+      work: (client: SqlClient) => Promise<T>,
+      options?: SqlTransactionOptions,
+    ): Promise<T> {
+      if (options)
+        return deadlineSqlTransaction(
+          { pool, initialize, statementTimeoutMs, lockTimeoutMs },
+          work,
+          options,
+        );
       await initialize();
       const client = await pool.connect();
       let discard = false;
