@@ -28,7 +28,7 @@ export function localBootSource(
 import {hydrateIsland} from '@mx/rt';
 import {createSignal,createRoot,createEffect,untrack} from 'solid-js';
 ${author ? "import {mount as mountAuthor} from 'migration-author-entry';import {authorApolloPorts} from 'migration-author-ports';" : ""}
-${mutations.length ? "import {createCompiledDatasetMutations} from 'migration-mutations';" : ""}
+${mutations.length ? "import {createCompiledDatasetMutations,compiledMutationIntentStore} from 'migration-mutations';" : ""}
 ${charts ? "import {charts} from 'migration-charts';" : ""}
 ${imports ? "import {readCompiledDataset} from 'migration-datasets';" : ""}
 ${sql ? "import {pageEngine} from 'migration-sqlite';" : ""}
