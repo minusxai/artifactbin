@@ -1,3 +1,4 @@
+import { ensureSchema } from "../persistence/schema.ts";
 import type {MigrationArchiveSource} from "./archive-contracts.ts";
 import type {LegacyRow,SqlReader} from './contracts.ts';
 import type {StreamArchiveDestination,StreamPart} from './stream-contracts.ts';
@@ -8,7 +9,7 @@ export class PostgresStreamArchive implements StreamArchiveDestination {
  constructor(db:SqlReader,schema:string,isolated:boolean){this.schema=destinationSchemas(schema).archive;this.db=db;this.isolated=isolated;}
  async initialize():Promise<void>{
   if(!this.isolated)throw new Error('Explicit isolated destination required');
-  await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
+  await ensureSchema(this.db, this.schema.slice(1, -1));
   await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.schema}.stream_parts(namespace text NOT NULL,path text NOT NULL,source_table text NOT NULL,digest text NOT NULL,rows bigint NOT NULL,bytes bigint NOT NULL,PRIMARY KEY(namespace,path))`);
   await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.schema}.stream_rows(namespace text NOT NULL,path text NOT NULL,ordinal bigint NOT NULL,record jsonb NOT NULL,PRIMARY KEY(namespace,path,ordinal),FOREIGN KEY(namespace,path) REFERENCES ${this.schema}.stream_parts(namespace,path) DEFERRABLE INITIALLY DEFERRED)`);
  }

@@ -1,5 +1,6 @@
 // @ts-check
 import { existsSync, readFileSync } from "node:fs";
+import { ensureSchema } from "./schema.ts";
 import { createSqlDatabase } from "./sql.ts";
 const schemaSQL = readFileSync(
   new URL("../schema.sql", import.meta.url),
@@ -27,7 +28,7 @@ export function createInitializer(pool, schema = "public") {
     (ready ||= startup
       .transaction(async (c) => {
         // Without it, the search path would fall back to public.
-        await c.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
+        await ensureSchema(c, schema);
         await c.query(
           "SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':pagegi-schema',0))",
         );

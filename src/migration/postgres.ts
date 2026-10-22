@@ -1,3 +1,4 @@
+import { ensureSchema } from "../persistence/schema.ts";
 import {projectMigrationCommentState} from "./comment-state.ts";
 import {legacyDocumentSource} from "./conversion/index.ts";
 import {projectMigrationAccountProfiles} from "./account-profiles.ts";
@@ -52,11 +53,11 @@ export class PostgresMigrationDestination implements ImportDestination {
   this.maps=input.maps;this.namespace=input.manifest.sourceNamespace;
   const schemaSql=await readFile(new URL('../schema.sql',import.meta.url),'utf8');
   await this.transaction(async()=>{
-   await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);await this.db.query(`SET LOCAL search_path TO ${this.schema}`);
+   await ensureSchema(this.db, this.options.schema);await this.db.query(`SET LOCAL search_path TO ${this.schema}`);
    await this.db.query(schemaSql);
    await this.db.query(await readFile(new URL('../backend/af-schema.sql',import.meta.url),'utf8'));
    await this.db.query(await readFile(new URL('../datasets/schema.sql',import.meta.url),'utf8'));
-   await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.archive}`);
+   await ensureSchema(this.db, this.options.schema + "_migration");
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.archives(namespace text PRIMARY KEY,digest text NOT NULL,manifest jsonb NOT NULL,maps jsonb NOT NULL)`);
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.receipts(key text PRIMARY KEY,digest text NOT NULL,page_id text NOT NULL,imported_at timestamptz NOT NULL DEFAULT now())`);
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.comment_states(namespace text NOT NULL,page_id text NOT NULL,comment_id text NOT NULL,original_revision text NOT NULL,raw jsonb NOT NULL,replay jsonb NOT NULL,PRIMARY KEY(namespace,page_id,comment_id))`);
