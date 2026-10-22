@@ -41,7 +41,7 @@ services:
       - ./datasets:/run/pagegi-datasets:ro
     healthcheck:
       # Compose --wait must verify the app before the receiver publishes image pointers.
-      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:8787/health',{redirect:'error',signal:AbortSignal.timeout(4000)}).then(async r=>{if(r.status!==200)throw Error('Unhealthy status');const body=await r.json();process.exit(body&&!Array.isArray(body)&&Object.keys(body).length===1&&body.ok===true?0:1)}).catch(()=>process.exit(1))"]
+      test: ['CMD', 'node', '-e', "const http=require('node:http');const headers=process.env.PAGEGI_PLATFORM_ORIGIN?{Host:new URL(process.env.PAGEGI_PLATFORM_ORIGIN).host}:{};const req=http.get('http://127.0.0.1:8787/health',{headers},r=>{let text='';r.on('data',chunk=>{text+=chunk;if(text.length>1024)req.destroy(Error('Oversized health response'))});r.on('error',()=>process.exit(1));r.on('end',()=>{try{const body=JSON.parse(text);process.exit(r.statusCode===200&&body&&!Array.isArray(body)&&Object.keys(body).length===1&&body.ok===true?0:1)}catch{process.exit(1)}})});req.setTimeout(4000,()=>req.destroy(Error('Health timeout')));req.on('error',()=>process.exit(1))"]
       interval: 5s
       timeout: 5s
       retries: 12

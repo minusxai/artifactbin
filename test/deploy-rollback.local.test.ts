@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { spawn } from "node:child_process";
+import { hostedRequest } from "../src/hosted-policy.ts";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -206,30 +209,26 @@ test("application health probe requires exact healthy JSON and HTTP200 before Co
     failure?: "json" | "network",
   ) => {
     let exit: number | undefined;
-    await runInNewContext(probe, {
-      AbortSignal,
-      process: {
-        exit: (code: number) => {
-          exit = code;
-        },
-      },
-      fetch: async (
-        url: string,
-        options: { redirect: string; signal: AbortSignal },
-      ) => {
-        assert.equal(url, "http://127.0.0.1:8787/health");
-        assert.equal(options.redirect, "error");
-        assert.ok(options.signal instanceof AbortSignal);
-        if (failure === "network") throw Error("Connection refused");
-        return {
-          status,
-          json: async () => {
-            if (failure === "json") throw Error("Invalid JSON");
-            return body;
-          },
-        };
+    runInNewContext(probe, {
+      URL,
+      process: { env: { PAGEGI_PLATFORM_ORIGIN: "https://platform.invalid" }, exit: (code: number) => {exit = code;} },
+      require: (name: string) => {
+        assert.equal(name,"node:http");
+        return {get: (url: string,options: {headers: {Host: string}},receive: (response: unknown)=>void) => {
+          assert.equal(url,"http://127.0.0.1:8787/health");
+          assert.equal(options.headers.Host,"platform.invalid");
+          const req={setTimeout: (ms: number, _expired: ()=>void) => {assert.equal(ms,4000);},destroy() {},on: (event: string,listener: ()=>void) => {if(event==="error"&&failure==="network")listener();}};
+          const callbacks: Record<string,(chunk?: string)=>void>={};
+          queueMicrotask(()=>{
+            if(failure==="network")return;
+            receive({statusCode:status,on:(event: string,callback: (chunk?: string)=>void)=>{callbacks[event]=callback;}});
+            callbacks.data!(failure==="json"?"invalid-json":JSON.stringify(body));callbacks.end!();
+          });
+          return req;
+        }};
       },
     });
+    await new Promise<void>(resolve=>queueMicrotask(resolve));
     return exit;
   };
   assert.equal(await check(200, { ok: true }), 0);
@@ -246,4 +245,25 @@ test("application health probe requires exact healthy JSON and HTTP200 before Co
     assert.equal(await check(200, body), 1);
   for (const failure of ["json", "network"] as const)
     assert.equal(await check(200, { ok: true }, failure), 1, failure);
+});
+
+
+test("application probe reaches health through the production host boundary", async () => {
+ const compose=readFileSync("deploy/compose.artefactv2.yaml","utf8");
+ const app=compose.split("  pagegi:\n")[1]!.split("\n  execution:")[0]!;
+ const probe=JSON.parse(app.match(/test: \['CMD', 'node', '-e', (".*")\]/)![1]!) as string;
+ const hosts: string[]=[];
+ const server=createServer((req,res)=>{
+  hosts.push(req.headers.host!);
+  try {hostedRequest(req.headers.host!,0,{platformOrigin:"https://platform.invalid",runnerOrigin:"https://{document}.runner.invalid"});res.writeHead(200);res.end(JSON.stringify({ok:true}));}
+  catch {res.writeHead(403);res.end(JSON.stringify({error:"Invalid host"}));}
+ });
+ await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+ try {
+  const address=server.address();assert.ok(address&&typeof address==="object");
+  const code=await new Promise<number|null>((resolve,reject)=>{
+   const child=spawn(process.execPath,["-e",probe.replace("127.0.0.1:8787",`127.0.0.1:${address.port}`)],{env:{...process.env,PAGEGI_PLATFORM_ORIGIN:"https://platform.invalid"},stdio:"ignore"});child.once("error",reject);child.once("exit",resolve);
+  });
+  assert.equal(code,0);assert.deepEqual(hosts,["platform.invalid"]);
+ } finally {await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 });
