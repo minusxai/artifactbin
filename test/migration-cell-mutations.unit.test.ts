@@ -120,3 +120,14 @@ test("computed column types remain unknown through dependent aliases and arbitra
   assert.deepEqual(r.issues, []);
   assert.equal(r.mutations[0]?.valueParam?.type, "string");
 });
+
+test("publication records only the sole SQLite authorizer write action and exact update columns",async()=>{
+ for (const [sql,analysis] of [
+  ["/* insert delete */ update data.rows set title=$_value where id=$_row.id",{operation:"update",columns:["title"]}],
+  ["insert into data.rows(id,title) values(1,$_value)",{operation:"insert",columns:[]}],
+  ["delete from data.rows where title=$_value",{operation:"delete",columns:[]}],
+ ] as const) {
+  const r=await extractLegacyMutations(source(sql),catalogs);
+  assert.deepEqual(r.issues,[]);assert.deepEqual(r.mutations[0]?.analysis,analysis);
+ }
+});

@@ -33,6 +33,7 @@ test("literal mutation is analyzed without executing, with canonical target and 
       target: { schema: "public", table: "rows" },
       sqlSchema: "bookings",
       sql: "update bookings.rows set who=$_me__id where id=$id",
+      analysis: {operation:"update",columns:["who"]},
       paramTypes: { id: "number" },
       conflictMode: "refuse",
     },

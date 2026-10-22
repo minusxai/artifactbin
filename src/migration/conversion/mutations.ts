@@ -409,6 +409,7 @@ export async function extractLegacyMutations(
           target: { schema: table.schema, table: table.name },
           sqlSchema: catalog.name,
           sql: d.sql,
+          analysis: {operation:w.op,columns:[...(w.columns??[])]},
           paramTypes,
           ...(a.reads.some((r) => r.schema === "main" && r.table === "_members")
             ? { readsMembers: true as const }

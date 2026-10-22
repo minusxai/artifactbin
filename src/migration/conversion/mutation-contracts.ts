@@ -1,3 +1,4 @@
+import type { DatasetMutationOperation } from "../../datasets/mutation/contracts.ts";
 import type { DatasetColumn } from "../../datasets/contracts.ts";
 import type {
   DatasetMutationParameterType,
@@ -24,6 +25,8 @@ export interface LegacyMutationDescriptor {
   /** Exact Import namespace used by SQLite, distinct from the canonical catalog target. */
   sqlSchema: string;
   sql: string;
+  /** Trusted SQLite authorizer write facts; never guessed from statement text. */
+  analysis?: DatasetMutationOperation["analysis"];
   paramTypes: Record<string, DatasetMutationParameterType>;
   /** Fixed SQL row bindings; full server paramTypes includes these generated parameter names. */
   rowParams?: DatasetMutationRowParameters;
