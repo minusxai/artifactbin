@@ -1,3 +1,7 @@
+import {
+  validCompiledMutationIntent,
+  validatedCompiledMutationIntents,
+} from "./dataset-mutation-intent-validation.ts";
 import type {
   CompiledDatasetMutationOptions,
   CompiledDatasetMutationAdapter,
@@ -82,55 +86,10 @@ export function createCompiledDatasetMutations(
   const context = options.authorizationContext;
   if ((durable || context) && (!durable || !context))
     throw Error("Incomplete durable mutation configuration");
-  const record = (value: unknown): value is Record<string, any> => {
-    if (!value || typeof value !== "object" || Array.isArray(value))
-      return false;
-    if (![Object.prototype, null].includes(Object.getPrototypeOf(value)))
-      return false;
-    return Object.values(Object.getOwnPropertyDescriptors(value)).every(
-      (d) => "value" in d,
-    );
-  };
-  const validIntent = (value: unknown): value is CompiledMutationIntent => {
-    if (
-      !record(value) ||
-      Object.keys(value).sort().join() !==
-        "authorizationContext,name,params,requestId,resetValues,scope,version" ||
-      value.version !== 1 ||
-      typeof value.scope !== "string" ||
-      !/^[a-f0-9]{64}$/.test(value.scope) ||
-      typeof value.authorizationContext !== "string" ||
-      !value.authorizationContext ||
-      value.authorizationContext.length > 256 ||
-      !identifier(value.name) ||
-      typeof value.requestId !== "string" ||
-      !/^[A-Za-z0-9_-]{16,128}$/.test(value.requestId) ||
-      !record(value.params) ||
-      !record(value.resetValues)
-    )
-      return false;
-    for (const values of [value.params, value.resetValues])
-      if (
-        Object.keys(values).length > 240 ||
-        Object.entries(values).some(
-          ([key, v]) => !identifier(key) || !scalar(v),
-        )
-      )
-        return false;
-    return JSON.stringify(value).length <= 16384;
-  };
   const restore = () => {
     if (!durable) return;
-    const saved = durable.read();
-    if (
-      !record(saved) ||
-      Object.keys(saved).length > 64 ||
-      JSON.stringify(saved).length > 131072
-    )
-      throw Error("Invalid stored mutation intents");
+    const saved = validatedCompiledMutationIntents(durable.read());
     for (const [name, intent] of Object.entries(saved)) {
-      if (!validIntent(intent) || intent.name !== name)
-        throw Error("Invalid stored mutation intent");
       if (bindings.has(name) && !attempts.has(name))
         attempts.set(name, {
           status: { name, requestId: intent.requestId, state: "unknown" },
@@ -359,7 +318,7 @@ export function createCompiledDatasetMutations(
           params: { ...params },
           resetValues,
         };
-        if (!validIntent(attempt.intent))
+        if (!validCompiledMutationIntent(attempt.intent))
           throw Error("Mutation recovery intent exceeds bounds");
       }
       attempts.set(name, attempt);

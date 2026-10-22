@@ -1,3 +1,4 @@
+import { validatedCompiledMutationIntents } from "./dataset-mutation-intent-validation.ts";
 import type { AfClient } from "../../../apollo/apollo-contracts.ts";
 import type { DocumentNode } from "graphql";
 import type {
@@ -27,13 +28,9 @@ export function compiledMutationIntentStore(
         await client.updateQuery<Data>(
           { query, requireDurable: true },
           (data) => {
-            const intents = data.datasetMutationIntents ?? {};
-            if (
-              !intents ||
-              typeof intents !== "object" ||
-              Array.isArray(intents)
-            )
-              throw Error("Invalid stored mutation intents");
+            const intents = validatedCompiledMutationIntents(
+              data.datasetMutationIntents ?? {},
+            );
             const previous = Object.hasOwn(intents, name)
               ? intents[name]
               : undefined;
@@ -48,7 +45,10 @@ export function compiledMutationIntentStore(
                 writable: true,
               });
             else delete updated[name];
-            return { ...data, datasetMutationIntents: updated };
+            return {
+              ...data,
+              datasetMutationIntents: validatedCompiledMutationIntents(updated),
+            };
           },
         );
         return true;
