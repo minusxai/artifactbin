@@ -36,3 +36,14 @@ export const FONT_CAPTURE_LIMITS = Object.freeze({
   faces: 64,
   deadlineMs: 30_000,
 });
+
+/** Immutable set of bounded captures; child paths are direct contained directories. */
+export interface CapturedFontBundleSetManifest {
+  readonly version: 1;
+  readonly kind: "font-bundle-set";
+  readonly bundles: readonly {
+    readonly directory: string;
+    readonly manifestSha256: string;
+    readonly resourceDigest: string;
+  }[];
+}

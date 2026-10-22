@@ -1,6 +1,6 @@
 import { validateWoff2Bounds } from "./woff2.ts";
 import { constants } from "node:fs";
-import { open, realpath } from "node:fs/promises";
+import { open, realpath, lstat } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { admitCapturedFontCss, capturedFontOmissions } from "./capture-css.ts";
@@ -58,6 +58,12 @@ export interface VerifiedFontBundle {
 export async function verifyCapturedFontBundle(
   input: CapturedFontBundleInput,
 ): Promise<VerifiedFontBundle> {
+  return verify(input, true);
+}
+async function verify(
+  input: CapturedFontBundleInput,
+  allowSet: boolean,
+): Promise<VerifiedFontBundle> {
   if (
     !input ||
     typeof input.directory !== "string" ||
@@ -71,6 +77,70 @@ export async function verifyCapturedFontBundle(
   const manifest = JSON.parse(
     new TextDecoder("utf-8", { fatal: true }).decode(manifestBytes),
   ) as CapturedFontManifest;
+  if ((manifest as any)?.kind === "font-bundle-set") {
+    const set =
+      manifest as unknown as import("./capture-contracts.ts").CapturedFontBundleSetManifest;
+    if (
+      !allowSet ||
+      set.version !== 1 ||
+      !Array.isArray(set.bundles) ||
+      !set.bundles.length ||
+      set.bundles.length > 8
+    )
+      throw Error("Font bundle set refused");
+    const directories = new Set<string>(),
+      sheets = new Map<string, CapturedFontManifest["stylesheets"][number]>(),
+      files = new Map<string, Uint8Array>(),
+      closure: string[] = [input.manifestSha256];
+    for (const child of set.bundles) {
+      if (
+        !child ||
+        !/^bundle-[0-7]$/.test(child.directory) ||
+        directories.has(child.directory) ||
+        !sha(child.manifestSha256) ||
+        !sha(child.resourceDigest)
+      )
+        throw Error("Font bundle set child refused");
+      directories.add(child.directory);
+      const directory = path.join(root, child.directory),
+        stat = await lstat(directory);
+      if (
+        !stat.isDirectory() ||
+        stat.isSymbolicLink() ||
+        (await realpath(directory)) !== directory
+      )
+        throw Error("Font bundle set containment refused");
+      const verified = await verify(
+        { directory, manifestSha256: child.manifestSha256 },
+        false,
+      );
+      if (verified.resourceDigest !== child.resourceDigest)
+        throw Error("Font bundle set resource mismatch");
+      closure.push(
+        child.directory +
+          ":" +
+          child.manifestSha256 +
+          ":" +
+          verified.resourceDigest,
+      );
+      for (const sheet of verified.manifest.stylesheets) {
+        const old = sheets.get(sheet.requestSha256);
+        if (old && JSON.stringify(old) !== JSON.stringify(sheet))
+          throw Error("Conflicting captured font request");
+        sheets.set(sheet.requestSha256, sheet);
+      }
+      for (const [name, bytes] of verified.files) files.set(name, bytes);
+    }
+    return {
+      manifest: {
+        version: 1,
+        capturedAt: "1970-01-01T00:00:00.000Z",
+        stylesheets: [...sheets.values()],
+      },
+      files,
+      resourceDigest: digest(JSON.stringify(closure)),
+    };
+  }
   if (
     manifest?.version !== 1 ||
     typeof manifest.capturedAt !== "string" ||
