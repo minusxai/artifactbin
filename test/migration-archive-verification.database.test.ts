@@ -54,6 +54,12 @@ test(
               }
             : {}),
         };
+        if (kind === "base") {
+          for (const path of ["artifacts-000000.ndjson", "artifact_source_ids-000000.ndjson"]) {
+            await writeFile(join(directory, path), text);
+            manifest.parts.push({ ...manifest.parts[0]!, path });
+          }
+        }
         await writeFile(
           join(directory, "manifest.json"),
           JSON.stringify(manifest),
@@ -67,9 +73,9 @@ test(
       await archiveMigrationSources(db, schema, sources);
       assert.deepEqual(await verifyMigrationArchives(db, schema, sources), {
         manifests: 2,
-        parts: 2,
-        rows: 2,
-        bytes: sources.reduce((n, s) => n + s.manifest.parts[0]!.bytes, 0),
+        parts: 4,
+        rows: 4,
+        bytes: sources.reduce((n, s) => n + s.manifest.parts.reduce((m,p)=>m+p.bytes,0), 0),
       });
       await db.query(
         `UPDATE "${schema}_migration".stream_rows SET record='{"id":"corrupt"}' WHERE namespace='fixture:supplemental-relations'`,

@@ -50,6 +50,8 @@ export async function verifyMigrationArchives(
         [source.namespace],
       )
     ).rows;
+    const comparePath = (a: Record<string, unknown>, b: Record<string, unknown>) => String(a.path) < String(b.path) ? -1 : String(a.path) > String(b.path) ? 1 : 0;
+    parts.sort(comparePath);
     const expected = source.manifest.parts
       .map((p) => ({
         path: p.path,
@@ -58,7 +60,7 @@ export async function verifyMigrationArchives(
         rows: String(p.rows),
         bytes: String(p.bytes),
       }))
-      .sort((a, b) => a.path.localeCompare(b.path));
+      .sort(comparePath);
     requireMigrationEquality(parts, expected, "archive part inventory");
     for (const part of source.manifest.parts) {
       let ordinal = 0,
