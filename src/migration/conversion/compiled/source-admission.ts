@@ -1,3 +1,5 @@
+import { admitScalarControl } from "./scalar-controls.ts";
+import type { CompiledScalarControl } from "./scalar-control-contracts.ts";
 import {readLocalReactiveExpression} from "./reactive-source.ts";
 import {readLocalIdentityPlan, validIdentityConditions} from "./source-identity-plan.ts";
 import { admitDataControl, admitDataColumn, controlLiteral } from "./data-controls.ts";
@@ -26,7 +28,7 @@ const activeUri = (v: string) =>
     v.replace(/[\u0000-\u0020\u007f]/g, "").toLowerCase(),
   );
 const allowed = new Set(
-  "Helmet Import Value Query Mutation Question Chart Select DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "Helmet Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -166,6 +168,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const tableNames = new Set<string>();
   const dataControls: CompiledDataControl[] = [];
   const scalarBindings = new Set<string>();
+  const scalarControls: CompiledScalarControl[] = [];
   const references = new Set<string>();
   const cellReferences = new Set<string>();
   const loopTables = new Set<string>();
@@ -318,6 +321,22 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
             invalid = true;
           imports.add(attrs.name);
         }
+        if (["Segmented", "Switch", "Slider"].includes(name)) {
+          const attributes = node.openingElement.attributes;
+          if (new Set(attributes.map((a:any)=>a.name?.name)).size !== attributes.length) invalid = true;
+          const attrs = Object.fromEntries(attributes.map((a:any)=> {
+            if (a.type !== "JSXAttribute" || typeof a.name?.name !== "string") throw Error("Invalid scalar control attribute");
+            return [a.name.name, controlLiteral(a.value)];
+          }));
+          const plan = admitScalarControl(name, attrs, node.children.some((c:any)=> !(c.type === "JSXText" && !c.value.trim()) && !(c.type === "JSXExpressionContainer" && c.expression.type === "JSXEmptyExpression")));
+          scalarControls.push(plan);
+          references.add(plan.binding);
+          scalarBindings.add(plan.binding);
+          if (plan.options) {
+            dataControls.push(plan.options);
+            if (typeof plan.options.options === "string") references.add(plan.options.options);
+          }
+        }
         if (name === "Select" || name === "DataTable") {
           if (new Set(node.openingElement.attributes.map((a:any)=>a.name?.name)).size !== node.openingElement.attributes.length) invalid = true;
           const attrs = Object.fromEntries(
@@ -362,7 +381,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           if (
             attr.value?.expression?.type === "ArrayExpression" &&
             !(name === "Value" && attr.name?.name === "value") &&
-            !(name === "Select" && attr.name?.name === "options") &&
+            !(["Select", "Segmented"].includes(name) && attr.name?.name === "options") &&
             !(name === "DataTable" && ["columns", "metrics"].includes(attr.name?.name))
           )
             invalid = true;
@@ -449,7 +468,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
             (["row", "rowScope", "options", "query", "table"].includes(
               attr.name.name,
             ) &&
-              !(name === "Select" && attr.name.name === "options"))
+              !(["Select", "Segmented"].includes(name) && attr.name.name === "options"))
           )
             invalid = true;
         }
@@ -569,6 +588,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       }
     };
     walk(tree);
+    if (scalarControls.some(control => expectedDeclarations.find(d => d.name === control.binding)?.type !== control.valueType)) invalid = true;
     dynamicIdentities = readLocalIdentityPlan(tree);
     if (!validIdentityConditions(dynamicIdentities, expectedDeclarations)) invalid = true;
     for (const reference of [...loopKeys.map(r => ({table:r.table,field:r.key})), ...rowReads]) {

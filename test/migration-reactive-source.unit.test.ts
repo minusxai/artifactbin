@@ -54,3 +54,11 @@ test('read-only column markup preserves headers separately from durable cell ins
   for(const markup of ['<Value name="text" default="hello"/>','<Value name="when" type="date"/>','<Value name="person" type="user"/>']) assert.equal(admitLocalSource({...base,source:markup}).ok,true,markup);
   for(const markup of ['<Value name="bad" type="unknown"/>','<Value name="bound" source="$other" column="name"/>']) assert.equal(admitLocalSource({...base,source:markup}).ok,false,markup);
  });
+
+test('viewer scalar controls require matching declared types and bounded literal configuration',()=>{
+ const values='<Value name="choice" default="a"/><Value name="enabled" type="boolean"/><Value name="amount" type="number"/>';
+ for(const markup of ['<Segmented value="$choice" options={["a","b"]}/>','<Switch checked="$enabled"/>','<Slider value="$amount" min={0} max={10} step={1}/>'])assert.equal(admitLocalSource({...base,source:values+markup}).ok,true,markup);
+ for(const markup of ['<Segmented value="$amount" options={["a"]}/>','<Switch checked="$choice"/>','<Slider value="$enabled"/>','<Slider value="$amount" step={0}/>','<Switch checked="$enabled" onChange="evil"/>','<Segmented value="$choice" options={["a"]}><span>ignored</span></Segmented>'])assert.equal(admitLocalSource({...base,source:values+markup}).ok,false,markup);
+ const result=admitLocalSource({...base,source:values+'<Segmented value="$choice" options={["a","b"]}/>'});
+ assert.ok(result.ok);assert.equal(result.plan.input.dataControls?.[0]?.kind,'select');
+});
