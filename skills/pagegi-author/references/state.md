@@ -64,3 +64,5 @@ Strings, numbers, booleans, `null`, arrays and plain objects. Store dates as ISO
 ## History
 
 When someone comments, the platform saves their local state with the comment. Viewing that comment later shows the page as they saw it, read-only, without running your scripts. Clicking another viewer in the toolbar shows their current page the same way, until you return to your own.
+
+For a local recovery record that must survive reload before sending a shared write, use `client.updateQuery({ query, requireDurable: true }, fn)`. It rejects if browser storage is unavailable or full; ordinary local updates still work in memory. The acknowledgement covers the browser's successful storage write, not backup or protection from the viewer clearing storage. A memory-only client cannot acknowledge durability.

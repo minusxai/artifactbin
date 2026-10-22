@@ -156,6 +156,14 @@ export function persistentStore(
         if (value === undefined) delete updated[name];
         else updated[name] = copy(value);
       }
+      if (change.requireDurable) {
+        if (!storage) return {status:"rejected",document:copy(document),error:"Durability unavailable"};
+        try { storage.setItem(key, JSON.stringify(updated)); }
+        catch { return {status:"rejected",document:copy(document),error:"Durability unavailable"}; }
+        document = updated;
+        notify();
+        return {status:"committed",document:copy(document),durable:true};
+      }
       document = updated;
       save();
       notify();

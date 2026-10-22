@@ -89,9 +89,11 @@ export interface AfClient {
    * promise resolves with the saved data once the store commits it.
    */
   updateQuery<T = AfJsonObject>(
-    options: QueryOptions,
+    options: QueryOptions & { requireDurable?: boolean },
     fn: (data: T) => T,
   ): Promise<T>;
+  /** Trusted opaque current authenticated caller partition; null until verified. */
+  authorizationContext(): string | null;
   /** Stop all owned query subscriptions; pending completions cannot publish. */
   dispose(): void;
   /** Register local named mutations. Later registrations of the same name replace earlier ones. */
@@ -100,6 +102,8 @@ export interface AfClient {
 
 /** A write against the document: replace top-level fields if they still hold the expected values. */
 export interface StoreWrite {
+  /** Opt-in: reject unless the next document is durably saved before commit. */
+  requireDurable?: boolean;
   /** Top-level field → value it must still have (undefined: must be absent). */
   expected: Record<string, AfJson | undefined>;
   /** Top-level field → new value (undefined: remove the field). */
@@ -108,7 +112,7 @@ export interface StoreWrite {
   exact?: boolean;
 }
 export type StoreReceipt =
-  | { status: "committed"; document: AfJsonObject }
+  | { status: "committed"; document: AfJsonObject; durable?: true }
   | { status: "conflict"; document: AfJsonObject }
   | { status: "rejected"; document: AfJsonObject; error: string };
 
@@ -132,6 +136,7 @@ export class RemoteUnreachable extends Error {
 }
 /** The page's backend endpoint (POST /api/files/:id/graphql through the platform frame). */
 export interface RemotePort {
+  authorizationContext?(): string | null;
   online(): boolean;
   /** Server invalidation/reconnect signal; contains no page data or credentials. */
   subscribe?(listener: () => void): () => void;

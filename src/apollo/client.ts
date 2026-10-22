@@ -338,7 +338,10 @@ export function createClient(options: ClientOptions): AfClient {
       const { write, result } = compute(clone(document));
       if (!write) return { result, document: document };
       const receipt: StoreReceipt = await state.write(write);
-      if (receipt.status === "committed") return { result, document: receipt.document };
+      if (receipt.status === "committed") {
+        if (write.requireDurable && receipt.durable !== true) throw Error("Durability unavailable");
+        return { result, document: receipt.document };
+      }
       if (receipt.status === "rejected") throw new Error(receipt.error || "The change was rejected");
       if (attempt >= maxAttempts)
         throw new Error(`Conflict: the state kept changing; gave up after ${maxAttempts} attempts`);
@@ -347,7 +350,7 @@ export function createClient(options: ClientOptions): AfClient {
   }
 
   async function updateQuery<T>(
-    { query: document, variables }: { query: DocumentNode; variables?: Variables },
+    { query: document, variables, requireDurable }: { query: DocumentNode; variables?: Variables; requireDurable?: boolean },
     fn: (data: T) => T,
   ): Promise<T> {
     const { op, fields } = localOnly(document, variables, "updateQuery");
@@ -368,7 +371,7 @@ export function createClient(options: ClientOptions): AfClient {
         check(value, key, new Set());
         next[name] = clone(value as AfJson);
       }
-      return { write: Object.keys(next).length ? { expected, next } : null, result: null };
+      return { write: Object.keys(next).length ? { expected, next, ...(requireDurable ? {requireDurable:true} : {}) } : null, result: null };
     })).document;
     return read(fields, op, saved) as T;
   }
@@ -530,6 +533,7 @@ export function createClient(options: ClientOptions): AfClient {
     mutate: mutate as AfClient["mutate"],
     watchQuery: watchQuery as AfClient["watchQuery"],
     updateQuery: updateQuery as AfClient["updateQuery"],
+    authorizationContext: () => remote?.authorizationContext?.() ?? null,
     addResolvers,
     dispose() {
       if (disposed) return;
@@ -556,6 +560,7 @@ export function createLocalStore(initial: AfJsonObject = {}): StatePort {
       };
     },
     async write(change) {
+      if (change.requireDurable) return {status:"rejected",document:clone(document),error:"Durability unavailable"};
       for (const [key, value] of Object.entries(change.expected))
         if (canonical(own(document, key)) !== canonical(value)) return { status: "conflict", document: clone(document) };
       if (change.exact)
