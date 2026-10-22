@@ -63,7 +63,7 @@ export function renderCommentBody(
       if (node.kind === "link") {
         const href = isPersonMentionHref(node.href)
           ? links.get(node.href.slice(8))
-          : /^https?:/i.test(node.href)
+          : /^(?:https?:|mailto:)/i.test(node.href)
             ? node.href
             : null;
         if (!href) {
@@ -72,8 +72,10 @@ export function renderCommentBody(
         }
         const element = document.createElement("a");
         element.href = href;
-        element.target = "_blank";
-        element.rel = "noopener noreferrer";
+        if (/^https?:/i.test(href)) {
+          element.target = "_blank";
+          element.rel = "noopener noreferrer";
+        }
         element.referrerPolicy = "no-referrer";
         inline(node.children, element);
         into.append(element);
@@ -102,7 +104,7 @@ export function renderCommentBody(
         const element = document.createElement("pre"),
           code = document.createElement("code");
         code.textContent = node.text;
-        element.style.overflowX = "auto";
+
         element.append(code);
         into.append(element);
       } else if (node.kind === "quote") {
@@ -122,8 +124,7 @@ export function renderCommentBody(
   };
   const body = document.createElement("div");
   body.className = "pg-comment-body";
-  body.style.font = "14px/1.375 var(--pg-sans)";
-  body.style.overflowWrap = "anywhere";
+
   blocks(parseMarkdownLite(presentation.body), body);
   parent.append(body);
 }

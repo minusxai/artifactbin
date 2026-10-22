@@ -29,6 +29,11 @@ export function safeHref(url: string): string | null {
   if (isSessionMentionHref(url) || isPersonMentionHref(url)) return url;
   const cleaned = url.replace(URL_NOISE_RE, "");
   const lower = cleaned.toLowerCase();
+  if (lower.startsWith("mailto:")) {
+    // A single mailbox only: no headers, control escapes or navigation-capable schemes.
+    const address = cleaned.slice(7);
+    return /^[^@\s<>?%]+@[^@\s<>?%]+$/.test(address) ? cleaned : null;
+  }
   if (!SCHEMES.some((scheme) => lower.startsWith(scheme))) return null;
   try {
     const parsed = new URL(cleaned);

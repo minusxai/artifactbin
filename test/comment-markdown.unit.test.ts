@@ -32,7 +32,8 @@ test("unsafe links and raw HTML remain literal text; bounded input never execute
     "java\tscript:alert(1)",
     "//external.test/path",
     "data:text/html,x",
-    "mailto:private@example.test",
+    "mailto:person@example.test?bcc=hidden@example.test",
+    "mailto:person%0a@example.test",
   ])
     assert.equal(safeHref(href), null);
   assert.equal(
@@ -44,4 +45,25 @@ test("unsafe links and raw HTML remain literal text; bounded input never execute
     /<img/,
   );
   assert.equal(plainText(parseMarkdownLite("x".repeat(10_001))).length, 10_001);
+});
+
+test("mailbox links keep their readable legacy label without mail headers", () => {
+  assert.equal(
+    safeHref("mailto:reader@example.test"),
+    "mailto:reader@example.test",
+  );
+  const nodes = parseMarkdownLite("[write to me](mailto:reader@example.test)");
+  assert.equal(plainText(nodes), "write to me");
+  assert.deepEqual(nodes, [
+    {
+      kind: "paragraph",
+      children: [
+        {
+          kind: "link",
+          href: "mailto:reader@example.test",
+          children: [{ kind: "text", text: "write to me" }],
+        },
+      ],
+    },
+  ]);
 });

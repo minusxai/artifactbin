@@ -191,6 +191,57 @@ body {
   font: 14px/1.375 var(--pg-sans);
   margin: 4px 0;
 }
+.pg-comment-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: 14px/1.375 var(--pg-sans);
+}
+.pg-comment-body [role="heading"] {
+  font-weight: 600;
+  margin: 8px 0 4px;
+}
+.pg-comment-body [aria-level="1"] {
+  font-size: 18px;
+}
+.pg-comment-body [aria-level="2"] {
+  font-size: 16px;
+}
+.pg-comment-body [aria-level="3"],
+.pg-comment-body [aria-level="4"],
+.pg-comment-body [aria-level="5"],
+.pg-comment-body [aria-level="6"] {
+  font-size: 14px;
+}
+.pg-comment-body ul,
+.pg-comment-body ol {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+.pg-comment-body blockquote {
+  margin: 4px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--pg-edge);
+  color: var(--pg-muted);
+}
+.pg-comment-body code {
+  font: 12px/1.5 var(--pg-mono);
+  background: var(--pg-raised);
+  border-radius: 3px;
+  padding: 1px 3px;
+}
+.pg-comment-body pre {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 6px 0;
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--pg-raised);
+}
+.pg-comment-body pre code {
+  padding: 0;
+  background: transparent;
+}
 .pg-bubble[data-expanded="false"] .pg-message > p:first-of-type {
   display: -webkit-box;
   -webkit-line-clamp: 2;
