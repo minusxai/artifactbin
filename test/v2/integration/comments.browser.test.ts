@@ -37,11 +37,10 @@ async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean
 }
 async function app(page: Page, marker = "#milk"): Promise<Frame> {
   await page.waitForSelector("html[data-pagegi-startup=ready]", { state: "attached" });
-  for (let attempt = 0; attempt < 100; attempt++) {
-    for (const frame of page.frames()) if (await frame.$(marker).catch(() => null)) return frame;
-    await page.waitForTimeout(100);
-  }
-  throw Error("page did not load");
+  await page.frameLocator("#pg-frame").locator(marker).waitFor({ state: "attached", timeout: 10_000 });
+  const frame = await (await page.$("#pg-frame"))?.contentFrame();
+  if (!frame) throw Error("page did not load");
+  return frame;
 }
 
 for (const [name, engine] of engines) {

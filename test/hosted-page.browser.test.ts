@@ -78,12 +78,10 @@ async function bundles() {
 }
 
 async function app(page: Page, id: string): Promise<Frame> {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const frame = await (await page.$(`iframe#${id}`))?.contentFrame();
-    if (frame && (await frame.$("#list").catch(() => null))) return frame;
-    await page.waitForTimeout(50);
-  }
-  throw Error(`frame ${id} did not load`);
+  await page.frameLocator(`iframe#${id}`).locator("#list").waitFor({ state: "attached", timeout: 5000 });
+  const frame = await (await page.$(`iframe#${id}`))?.contentFrame();
+  if (!frame) throw Error(`frame ${id} did not load`);
+  return frame;
 }
 const items = (frame: Frame) => frame.locator("#list li span").allTextContents();
 async function eventually<T>(read: () => Promise<T>, expected: T) {

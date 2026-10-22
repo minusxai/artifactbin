@@ -96,7 +96,8 @@ for (const [name, engine] of engines) {
       await shows(b, "filter: all · draft: ");
       await b.locator("#text").fill("Bread");
       await shows(b, "filter: all · draft: Bread");
-      await ann.waitForTimeout(500);
+      // Local state never leaves a viewer's browser context: Ann's view is unchanged now, after both
+      // reload below, and Bob sees her state only through the server's snapshot further down.
       await shows(a, "filter: done · draft: Milk");
 
       // Both persist across reloads.
