@@ -12,6 +12,14 @@ export function migrationHandleCandidate(value: unknown): {
     ? { handle: null, status: "invalid" }
     : { handle, status: "valid" };
 }
+export function migrationPublicDisplayName(user: LegacyRow): string | null {
+  if (typeof user.name === "string" && user.name) return user.name;
+  // The archived username was public; its generator intentionally omitted the email domain.
+  return typeof user.username === "string" &&
+    /^[a-z0-9_]{3,32}$/.test(user.username)
+    ? user.username
+    : null;
+}
 /** Preserves current account edits; original public cards remain a separate immutable catalog. */
 export async function projectMigrationAccountProfiles(
   db: SqlReader,
@@ -41,12 +49,13 @@ export async function projectMigrationAccountProfiles(
       await db.query("SELECT name,handle FROM accounts WHERE actor=$1", [actor])
     ).rows[0];
     if (!account) throw Error("Mapped profile account is unavailable");
+    const name = migrationPublicDisplayName(user);
     if (account.name !== null) summary.namesPreserved++;
     else if (!initialImport) summary.namesClearedSinceImport++;
-    else if (typeof user.name === "string" && user.name) {
+    else if (name !== null) {
       await db.query(
         "UPDATE accounts SET name=$2 WHERE actor=$1 AND name IS NULL",
-        [actor, user.name],
+        [actor, name],
       );
       summary.namesFilled++;
     } else summary.namesUnavailable++;
