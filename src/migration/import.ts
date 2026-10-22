@@ -49,12 +49,13 @@ export async function planMigration(manifest:MigrationManifest, options:{maps:Mi
   const rows=(name:string):LegacyRow[]=>(manifest.tables[name]??[]).filter(row=>row.artifact_id===artifact.id).sort((a,b)=>canonical(a).localeCompare(canonical(b)));
   const liveComments=rows('annotations').filter(c=>!c.deleted_at);
   const commentIds=new Set(liveComments.map(c=>c.id));
+  const unavailableCommentContexts:NonNullable<PlannedPage['unavailableCommentContexts']>=[];
   for(const comment of liveComments){
    if(!(maps.users[String(comment.author_user_id)]??maps.tokens[String(comment.author_token_id)]))issues.push('Unmapped live comment author');
-   if(!versions.has(Number(comment.anchor_version??artifact.version)))issues.push('Comment references missing historical source');
+   if(!versions.has(Number(comment.anchor_version??artifact.version)))unavailableCommentContexts.push({commentId:String(comment.id),status:'unavailable',originalRevision:String(comment.anchor_version??artifact.version),reason:'not-retained'});
    if(comment.root_id&&!commentIds.has(comment.root_id))issues.push('Comment references missing root');
   }
-  pages.push({legacyId:artifact.id,pageId:id,owner:newOwner?{kind:ownerKind,id:newOwner}:null,disposition:issues.length?'blocked':'ready',issues,revisions,access:{visibility:artifact.visibility,linkRole:artifact.link_role??'viewer',shares:rows('artifact_shares')},original:artifact,comments:rows('annotations'),identities:rows('artifact_source_ids')});
+  pages.push({legacyId:artifact.id,pageId:id,owner:newOwner?{kind:ownerKind,id:newOwner}:null,disposition:issues.length?'blocked':'ready',issues,revisions,access:{visibility:artifact.visibility,linkRole:artifact.link_role??'viewer',shares:rows('artifact_shares')},original:artifact,comments:rows('annotations'),unavailableCommentContexts,identities:rows('artifact_source_ids')});
  }
  return {schemaVersion:1,sourceNamespace:manifest.sourceNamespace,maps,pages,archive:manifest};
 }

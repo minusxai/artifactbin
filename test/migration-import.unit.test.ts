@@ -44,5 +44,5 @@ test('identical head/archive overlap is classified once without dropping origina
 test('live comment relation failures block planning before destination mutation',async()=>{
  const m=structuredClone(manifest);m.tables.annotations=[{id:'comment',artifact_id:'longIdentifier',body:'fixture',author_user_id:'missing',anchor_version:99,root_id:'missing-root'}];
  const p=await planMigration(m,{maps,convert:converter,coreUrl:'/af/v1/core.js'});
- assert.equal(p.pages[0]?.disposition,'blocked');assert.match(p.pages[0]!.issues.join(' '),/Unmapped live comment author/);assert.match(p.pages[0]!.issues.join(' '),/missing historical source/);assert.match(p.pages[0]!.issues.join(' '),/missing root/);
+ assert.equal(p.pages[0]?.disposition,'blocked');assert.match(p.pages[0]!.issues.join(' '),/Unmapped live comment author/);assert.deepEqual(p.pages[0]!.unavailableCommentContexts,[{commentId:'comment',status:'unavailable',originalRevision:'99',reason:'not-retained'}]);assert.match(p.pages[0]!.issues.join(' '),/missing root/);
 });

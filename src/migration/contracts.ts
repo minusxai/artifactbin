@@ -58,6 +58,7 @@ export interface PlannedPage {
   access: { visibility: string; linkRole: string; shares: LegacyRow[] };
   original: LegacyArtifact;
   comments: LegacyRow[];
+  unavailableCommentContexts?: {commentId:string;status:'unavailable';originalRevision:string;reason:'not-retained'}[];
   identities: LegacyRow[];
 }
 export interface MigrationPlan {
