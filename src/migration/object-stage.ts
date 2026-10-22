@@ -1,3 +1,4 @@
+import { constants } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import {
   lstat,
@@ -123,7 +124,16 @@ export async function stageMigrationObjects(
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-    await existing(join(dir, e.sha256), e);
+    if (await existing(join(dir, e.sha256), e)) {
+      const info = await lstat(join(dir, e.sha256));
+      if (
+        (info.uid !== options.uid ||
+          info.gid !== options.gid ||
+          (info.mode & 0o777) !== 0o600) &&
+        info.nlink > 1
+      )
+        throw Error("Permission repair would change another hard link");
+    }
   }
   for (const store of new Set(plan.entries.map((e) => e.store))) {
     const path = join(root, store);
@@ -142,8 +152,25 @@ export async function stageMigrationObjects(
   for (const e of plan.entries) {
     const target = join(root, e.store, e.sha256);
     if (await existing(target, e)) {
-      await chown(target, options.uid, options.gid);
-      await chmod(target, 0o600);
+      const handle = await open(
+        target,
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
+      try {
+        const info = await handle.stat();
+        if (
+          info.uid !== options.uid ||
+          info.gid !== options.gid ||
+          (info.mode & 0o777) !== 0o600
+        ) {
+          if (info.nlink > 1)
+            throw Error("Permission repair would change another hard link");
+          await handle.chown(options.uid, options.gid);
+          await handle.chmod(0o600);
+        }
+      } finally {
+        await handle.close();
+      }
       result.reused++;
       continue;
     }

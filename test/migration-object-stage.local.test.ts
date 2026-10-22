@@ -10,6 +10,8 @@ import {
   symlink,
   readdir,
   realpath,
+  link,
+  chmod,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -152,6 +154,28 @@ test("approved digest and consistent cross-store lengths are mandatory; source s
       }),
     );
     assert.deepEqual(await readdir(f.target), []);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+
+test("reuse never changes permissions through another existing hard link", async () => {
+  const f = await fixture();
+  try {
+    await mkdir(join(f.target, "media"));
+    await link(join(f.source, f.sha256), join(f.target, "media", f.sha256));
+    await chmod(join(f.target, "media", f.sha256), 0o644);
+    await assert.rejects(
+      stageMigrationObjects(f.plan, {
+        sourceDirectory: f.source,
+        targetRoot: f.target,
+        ...owner,
+        expectedPlanSha256: f.plan.sha256,
+      }),
+      /hard link/,
+    );
+    assert.equal((await lstat(join(f.source, f.sha256))).mode & 0o777, 0o644);
+    assert.deepEqual(await readdir(f.target), ["media"]);
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }
