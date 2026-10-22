@@ -42,7 +42,7 @@ test(
               revisions: [1, 2, 3].map((version) => ({
                 version,
                 imports:
-                  version === 3
+                  version !== 2
                     ? []
                     : [
                         {
@@ -110,10 +110,7 @@ test(
           r.file_id,
           r.version,
         ]),
-        [
-          [1, "legacyData", receipt.backendId, receipt.deployment.version],
-          [2, "legacyData", receipt.backendId, receipt.deployment.version],
-        ],
+        [[2, "legacyData", receipt.backendId, receipt.deployment.version]],
       );
       assert.equal(
         (

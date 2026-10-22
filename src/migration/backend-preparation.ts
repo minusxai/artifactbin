@@ -242,6 +242,16 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
       throw new Error(
         "Migration backend owner does not match a person-owned page",
       );
+    if (!receipt.linked) {
+      await files.record(client, {
+        owner: receipt.owner,
+        pageId: receipt.pageId,
+        pageVersion: receipt.pageVersion,
+        links: [],
+        compiled: {},
+      });
+      continue;
+    }
     if (
       (
         await db.query("SELECT 1 FROM retired_file_ids WHERE id=$1", [
