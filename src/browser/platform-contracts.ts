@@ -68,7 +68,7 @@ export type PlatformCommand =
   /** Open the page as whoever the frame currently is (nobody, the link, or the connected account). */
   | { kind: "page" }
   /** A backend call or listing with the frame's credential; the status and body come back as they are. */
-  | { kind: "backend"; path: PlatformBackendPath; method: "GET" | "POST"; body?: unknown }
+  | { kind: "backend"; path: PlatformBackendPath; method: "GET" | "POST"; body?: unknown; authorizationContext?: string }
   | {
       kind: "live.start";
       sessionId: string;
@@ -110,7 +110,7 @@ export interface PlatformClient {
   pair(): Promise<PlatformConnection>;
   request(operation: PlatformOperation): Promise<any>;
   page(): Promise<PlatformPage>;
-  backend(path: PlatformBackendPath, method: "GET" | "POST", body?: unknown): Promise<PlatformBackendResult>;
+  backend(path: PlatformBackendPath, method: "GET" | "POST", body?: unknown, authorizationContext?: string): Promise<PlatformBackendResult>;
   startLive(value: {
     sessionId: string;
     sourceRevision: string;

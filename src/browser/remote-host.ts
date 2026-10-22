@@ -44,7 +44,7 @@ export function createRemoteHost(options: RemoteHostOptions): RemoteHost {
         options.reply(response);
       };
       options
-        .post(endpoint, { query: request.query, variables: request.variables })
+        .post(endpoint, { query: request.query, variables: request.variables }, typeof request.authorizationContext === "string" ? request.authorizationContext : undefined)
         .then(({ status, body }) => {
           const error = plainObject(body) && typeof body.error === "string" ? body.error : `Backend call failed (${status})`;
           if (status >= 200 && status < 300 && plainObject(body))

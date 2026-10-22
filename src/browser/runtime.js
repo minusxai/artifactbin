@@ -262,8 +262,8 @@ async function bootPlatform() {
         : null,
     active: () => gate.active && !documentView.historical,
     online: () => navigator.onLine,
-    async post(url, body) {
-      if (local) return broker().backend("graphql", "POST", body);
+    async post(url, body, expectedContext) {
+      if (local) return broker().backend("graphql", "POST", body, expectedContext);
       const response = await fetch(url, {
         method: "POST",
         credentials: "same-origin",

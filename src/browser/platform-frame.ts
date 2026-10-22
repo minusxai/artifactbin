@@ -100,6 +100,8 @@ export function createPlatformSession(
     liveEpoch = 0,
     abort = new AbortController(),
     live: ReturnType<typeof connectLive> | undefined;
+  let identityEpoch = 0;
+  let authorizationContext: string | null = null;
   const active = (version: number) => {
     if (disposed || version !== generation || abort.signal.aborted)
       throw Error("Platform request cancelled");
@@ -152,6 +154,8 @@ export function createPlatformSession(
     live?.close();
     live = undefined;
     token = null;
+    authorizationContext = null;
+    identityEpoch++;
     pairing = false;
   }
   function credential() {
@@ -171,7 +175,9 @@ export function createPlatformSession(
     return publicPage(value);
   }
   /** A backend route under the page, with the frame's credential; the status and body come back as they are. */
-  async function backend(path: unknown, method: unknown, body: unknown) {
+  async function backend(path: unknown, method: unknown, body: unknown, expectedContext?: string) {
+    if (expectedContext !== undefined && (pairing || expectedContext !== authorizationContext))
+      throw Error("Caller changed before the backend request was sent");
     if (!binding.fileId) throw Error("Publish this file first");
     if (typeof path !== "string" || !BACKEND_PATHS.includes(path))
       throw Error("Unsupported backend route");
@@ -201,6 +207,8 @@ export function createPlatformSession(
       throw Error("Invalid pair generation");
     if (pairing) throw Error("Connection already pending");
     pairing = true;
+    authorizationContext = null;
+    identityEpoch++;
     const version = generation;
     try {
       const value = await pairingExchange({
@@ -252,6 +260,7 @@ export function createPlatformSession(
       throw Error("Unsupported platform operation");
     }
     if (!wire) throw Error("Unsupported platform operation");
+    const callerEpoch = identityEpoch;
     const value = (
       await call(
         "/api/files/" + encodeURIComponent(binding.fileId) + wire.path,
@@ -260,6 +269,8 @@ export function createPlatformSession(
         { ...credential(), ...wire.headers },
       )
     ).value;
+    if (callerEpoch !== identityEpoch || pairing) throw Error("Platform caller changed");
+    if (op.kind === "permissions") authorizationContext = typeof value?.authorizationContext === "string" ? value.authorizationContext : null;
     return wireResult(op, value, page);
   }
   return {
@@ -275,7 +286,7 @@ export function createPlatformSession(
         case "page":
           return page();
         case "backend":
-          return backend(command.path, command.method, command.body);
+          return backend(command.path, command.method, command.body, command.authorizationContext);
         case "live.start": {
           if (!binding.fileId) throw Error("Publish this file first");
           if (command.sessionId !== binding.sessionId)

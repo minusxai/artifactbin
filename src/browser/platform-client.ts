@@ -214,9 +214,9 @@ export function createPlatformClient(
       command({ kind: "pair", pairGeneration: ++pairGeneration }, 305000),
     request: (operation) => command({ kind: "request", operation }),
     page: () => command({ kind: "page" }),
-    backend: (path, method, body) =>
+    backend: (path, method, body, authorizationContext) =>
       command(
-        { kind: "backend", path, method, ...(body === undefined ? {} : { body }) },
+        { kind: "backend", path, method, ...(body === undefined ? {} : { body }), ...(authorizationContext === undefined ? {} : {authorizationContext}) },
         35000,
       ),
     startLive: (args) =>

@@ -59,6 +59,7 @@ export interface RemoteHostOptions {
   post(
     url: string,
     body: AfJsonObject,
+    authorizationContext?: string,
   ): Promise<{ status: number; body: unknown }>;
   reply(response: RemoteBridgeResponse): void;
 }
