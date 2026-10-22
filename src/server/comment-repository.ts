@@ -1,3 +1,4 @@
+import { projectCommentPersons } from "../comments/retained-person-repository.ts";
 import { fail } from "../errors.ts";
 import { MAX_COMMENT_THREAD_RECORDS } from "./comment-thread-contracts.ts";
 import { commentAttachments } from "../persistence/comment-attachments.ts";
@@ -42,7 +43,7 @@ async function comment(c: SqlClient, fileId: string, id: string) {
   ).rows[0];
   if(!row)return null;
   const attachments=(await commentAttachments(c,fileId,id)).get(id);
-  return {...decodeComment(row),...(attachments?.length?{attachments}:{})};
+  return (await projectCommentPersons(c,fileId,[{...decodeComment(row),...(attachments?.length?{attachments}:{})}]))[0]!;
 }
 async function source(c: SqlClient, fileId: string, revision: string) {
   const row = (
@@ -108,7 +109,7 @@ export function createCommentRepository(
           since ?? 0,
         );
         const attachments=await commentAttachments(c,request.fileId);
-        return work({ ...loaded, comments: rows.map(row=>{const value=decodeComment(row);const images=attachments.get(value.id);return {...value,...(images?.length?{attachments:images}:{})};}), cursor });
+        return work({ ...loaded, comments: await projectCommentPersons(c,request.fileId,rows.map(row=>{const value=decodeComment(row);const images=attachments.get(value.id);return {...value,...(images?.length?{attachments:images}:{})};})), cursor });
       }),
     add: (baseRequest, prepare, work, idempotency = null) =>
       database.transaction(async (c) => {
@@ -238,7 +239,7 @@ export function createCommentRepository(
       if(notes.length<=MAX_COMMENT_THREAD_RECORDS){
         for(const note of notes){const attachments=(await commentAttachments(c,request.fileId,note.id)).get(note.id);if(attachments?.length)note.attachments=attachments;}
       }
-      return work({...loaded,selected,root,comments:notes});
+      return work({...loaded,selected,root,comments:await projectCommentPersons(c,request.fileId,notes)});
     }),
     context: (baseRequest, prepare, work) =>
       database.transaction(async (c) => {

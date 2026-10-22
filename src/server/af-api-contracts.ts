@@ -218,6 +218,7 @@ export interface CommentInput {
   rendered?: string | null;
 }
 export interface CommentRecord {
+  personLinks?: readonly import("../comments/presentation-contracts.ts").CommentPersonLink[];
   attachments?: readonly import("../comment-attachment-contracts.ts").CommentAttachment[];
   context?: import("../contracts.ts").CommentContextStatus;
   stateReplay?: import("../contracts.ts").CommentStateReplay;

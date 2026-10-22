@@ -1,3 +1,4 @@
+import { projectCommentPersons } from "../comments/retained-person-repository.ts";
 import type { PageRevisionSelection } from "./page-revision-contracts.ts";
 import {
   resolvePageRevision,
@@ -633,7 +634,7 @@ export function createPageService({
         const digest = selected.historical
           ? sourceDigest(source)
           : (document.sourceDigest ?? sourceDigest(source));
-        const comments = (
+        const comments = await projectCommentPersons(client,id,(
           await client.query(
             `SELECT id,node_id AS "nodeId",quote,body,source_revision AS "sourceRevision",parent_id AS "parentId",app_state_id AS "appStateId",published_by AS "publishedBy",created_at AS "createdAt",revision,resolved,fingerprint,sequence::int AS sequence FROM comments WHERE file_id=$1 ORDER BY sequence DESC LIMIT 50`,
             [id],
@@ -645,7 +646,7 @@ export function createPageService({
             c.sourceRevision === String(version)
               ? { ...c, sourceRevision: digest }
               : c,
-          );
+          ).map(c=>({...c,id:String(c.id),body:String(c.body),publishedBy:String(c.publishedBy)})));
         const people = [
           ...new Set([
             document.owner,

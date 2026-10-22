@@ -1,3 +1,5 @@
+import { parseMarkdownLite, plainText } from "../comments/markdown.ts";
+import { renderCommentBody } from "../comments/presentation.ts";
 import { commentThreadReplies } from "./comment-link.ts";
 import type { Comment } from "../contracts.ts";
 import type {
@@ -386,7 +388,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
         message.dataset.commentId=entry.id;
         authorHeader(entry, message);
         if (entry.quote) para(entry.quote.slice(0, 160), message, "pg-quote");
-        para(entry.body, message);
+        renderCommentBody(message, entry);
         attachments(entry, message);
         const actions = document.createElement("div");
         actions.className = "pg-actions";
@@ -485,7 +487,8 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
         message.className = "pg-message";
         message.dataset.commentId=entry.id;
         if (!root) authorHeader(entry, message);
-        para(entry.body, message);
+        if(root && !composer.interaction.expanded) para(plainText(parseMarkdownLite(entry.body)),message);
+        else renderCommentBody(message, entry);
         attachments(entry, message);
         message.dataset.author = entry.publishedBy || "";
         message.dataset.sync = entry.publishedBy ? "saved" : "local";

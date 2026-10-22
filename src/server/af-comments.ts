@@ -33,6 +33,7 @@ export function commentRecord(comment: AcceptedComment): CommentRecord {
     nodeId: comment.context?.status === "unavailable" ? null : comment.nodeId,
     quote: comment.quote,
     body: comment.body,
+    ...(comment.personLinks?.length ? {personLinks:comment.personLinks} : {}),
     parentId: comment.parentId,
     version: comment.sourceRevision === null ? null : Number(comment.sourceRevision),
     ...(comment.context ? { context: comment.context } : {}),
