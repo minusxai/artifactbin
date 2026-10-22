@@ -84,3 +84,13 @@ test("only pinned literal page bindings and the audited server module family com
       source,
     );
 });
+test("default input arguments retain their authored fallback without host substitution", async () => {
+  const compiled = await compileLegacyServerModule(
+    "export default async function(input={count:2}){return input.count}",
+    { values: [], queries: [], mutations: [] },
+  );
+  const handler = runInNewContext("(" + compiled.factorySource + ")({})");
+  assert.equal(await handler(), 2);
+  assert.equal(await handler({ count: 4 }), 4);
+  await assert.rejects(handler(null));
+});

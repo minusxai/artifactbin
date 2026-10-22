@@ -74,7 +74,14 @@ export function admitLegacyServerModule(
         !fn.async ||
         fn.generator ||
         fn.params.length > 1 ||
-        fn.params.some((param: any) => param.type !== "Identifier")
+        fn.params.some(
+          (param: any) =>
+            param.type !== "Identifier" &&
+            !(
+              param.type === "AssignmentPattern" &&
+              param.left.type === "Identifier"
+            ),
+        )
       )
         throw Error("Unsupported server default handler");
     } else if (node.type.startsWith("Export"))
