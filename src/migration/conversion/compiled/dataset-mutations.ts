@@ -109,6 +109,11 @@ export function createCompiledDatasetMutations(
         emit();
         throw new CompiledDatasetMutationError("unknown");
       }
+      if (!wire || typeof wire !== "object") {
+        attempt.status = { ...attempt.status, state: "unknown" };
+        emit();
+        throw new CompiledDatasetMutationError("unknown");
+      }
       const outcome =
         wire.extensions?.outcomes?.[binding.backendNamespace + ".mutate"];
       const data = wire.data as Record<string, unknown> | null;

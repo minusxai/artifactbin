@@ -156,3 +156,19 @@ test("a delayed commit preserves viewer edits made after submission and refresh 
   assert.deepEqual(resets, []);
   assert.equal(adapter.status("reserve")?.state, "committed");
 });
+
+test("missing transport answer is unknown and observers cannot corrupt write status", async () => {
+  const s = setup([null, committed]);
+  const seen: string[] = [];
+  s.adapter.subscribe(() => {
+    seen.push(s.adapter.status("reserve")!.state);
+  });
+  s.adapter.subscribe(() => {
+    throw Error("observer");
+  });
+  await assert.rejects(s.adapter.mutate("reserve"), /unknown/);
+  assert.equal(s.adapter.pending(), false);
+  await s.adapter.retry("reserve");
+  assert.deepEqual(seen, ["pending", "unknown", "pending", "committed"]);
+  assert.equal(s.calls[0].variables.requestId, s.calls[1].variables.requestId);
+});
