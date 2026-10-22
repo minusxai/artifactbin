@@ -3,6 +3,7 @@
  * save, paths and the hosted representations. Every page edit goes through the
  * page model's prepareForSave; every linked backend file through brief C's port.
  */
+import { createPageWriteRepository } from "../persistence/page-writes.ts";
 import {
   KNOWN_AF_ORIGINS,
   MAX_PAGE_SOURCE,
@@ -15,15 +16,10 @@ import type {
   SaveResponse,
   SourceResponse,
 } from "./af-api-contracts.ts";
-import type {
-  BackendLink,
-  PageModelModule,
-  PreparedPage,
-} from "../page/page-contracts.ts";
+import type { PageModelModule, PreparedPage } from "../page/page-contracts.ts";
 import type { BackendFilesPort } from "../backend/af-backend-contracts.ts";
 import type { CompiledBackend } from "../backend/contracts.ts";
 import type {
-  AccessPolicy,
   FilePermissions,
   PathChange,
   PathEntry,
@@ -32,29 +28,23 @@ import type {
 } from "../contracts.ts";
 import type { SessionGrant } from "../identity-data-contracts.ts";
 import type { IdentityAuthority } from "./identity-contracts.ts";
-import type { SqlClient, SqlDatabase } from "../persistence/sql.ts";
+import type { SqlDatabase } from "../persistence/sql.ts";
 import type { DocumentHeader } from "./document-authorization-contracts.ts";
 import { fileAddress, isFileId } from "../ids/file-id.ts";
-import {
-  claimReservedId,
-  insertFreshId,
-  readFileId,
-  type RandomBytes,
-} from "./af-ids.ts";
+import { readFileId, type RandomBytes } from "./af-ids.ts";
 import {
   loadDocumentHeader,
   loadSession,
   lockDocumentHeader,
 } from "../persistence/document-records.ts";
 import { pathLock, readPaths, writeFolders } from "../persistence/paths.js";
-import { checkIdempotency, recordIdempotency } from "../persistence/idempotency.ts";
 import { namespaceOwner } from "../group-authority.ts";
 import { authorizeDocument } from "./document-authorization.ts";
-import { addDocument, changePaths, defaultPath, normalizePath } from "../path-model.ts";
+import { changePaths, normalizePath } from "../path-model.ts";
 import { permissions } from "../access.ts";
 import { canonical } from "../model-values.ts";
 import { fail } from "../errors.ts";
-import { documentTitle, hash } from "./text.ts";
+import { hash } from "./text.ts";
 import { pageProblem, sourceDigest } from "./page-ports.ts";
 import { hostedDesignSystem } from "./af-hosting.ts";
 
@@ -66,6 +56,7 @@ export interface PageServiceOptions {
   pageModel(): Promise<PageModelModule>;
   /** Brief C's port, or null when the backend module is not installed. */
   backendFiles(): Promise<BackendFilesPort | null>;
+  writes?: import("./page-write-contracts.ts").PageWriteRepository;
   randomBytes: RandomBytes;
   /** Origins rewritten to this server on save, besides KNOWN_AF_ORIGINS (the skill's default host and the earlier ones). */
   knownOrigins?: readonly string[];
@@ -73,20 +64,13 @@ export interface PageServiceOptions {
   token(): string;
 }
 
-/** 409 with the head's version and source (SaveConflict), so a client can merge without another request. */
-async function conflict(client: SqlClient, id: string, version: number): Promise<never> {
-  const row = (
-    await client.query("SELECT content FROM sources WHERE file_id=$1 AND revision=$2", [id, String(version)])
-  ).rows[0];
-  throw Object.assign(
-    new Error("Someone else saved first. Merge your change into this source and save again."),
-    { status: 409, details: { version, source: String(row?.content ?? "") } },
-  );
-}
 /** `If-Match: 3`, `"3"` or `W/"3"`; null when absent. */
 export function parseIfMatch(value: string | undefined): number | null {
   if (value === undefined || !value.trim()) return null;
-  const bare = value.trim().replace(/^W\//, "").replace(/^"(.*)"$/, "$1");
+  const bare = value
+    .trim()
+    .replace(/^W\//, "")
+    .replace(/^"(.*)"$/, "$1");
   return /^[1-9][0-9]{0,9}$/.test(bare) ? Number(bare) : NaN;
 }
 function source(value: unknown): string {
@@ -101,7 +85,8 @@ function backendSources(value: unknown): Record<FileId, string> {
   const files: Record<FileId, string> = {};
   let size = 0;
   for (const [id, content] of Object.entries(value)) {
-    if (!isFileId(id)) fail(422, `files: ${JSON.stringify(id)} is not a file ID`);
+    if (!isFileId(id))
+      fail(422, `files: ${JSON.stringify(id)} is not a file ID`);
     if (typeof content !== "string" || !content.trim())
       fail(422, `files: ${id} must be the file's contents`);
     size += content.length;
@@ -128,7 +113,22 @@ export function createPageService({
   knownOrigins = [],
   now = Date.now,
   token,
+  writes: providedWrites,
 }: PageServiceOptions) {
+  const writes =
+    providedWrites ??
+    createPageWriteRepository({
+      database,
+      account: (session) => authority.account(session),
+      backendFiles,
+      randomBytes,
+      token,
+      now,
+    });
+  const writeCredential = (credential: string) => ({
+    sessionHash: hash(credential),
+    shareHash: credential ? hash(credential) : null,
+  });
   const rewritten = [...new Set([...KNOWN_AF_ORIGINS, ...knownOrigins])];
   const credentialHash = (credential: string) =>
     credential ? hash(credential) : null;
@@ -161,124 +161,38 @@ export function createPageService({
       pageProblem(error);
     }
   }
-  function linkedIds(links: readonly BackendLink[]): FileId[] {
-    return links.map(
-      (link) =>
-        link.id ??
-        fail(
-          422,
-          `Line ${link.line}: the af-backend link "${link.name}" must point at /af/v1/ids/<id>`,
-        ),
-    );
-  }
-
-  /**
-   * Publish rules for `files` and links: every file is linked and is the
-   * caller's (reserved and unpublished, or an owned backend); every linked ID
-   * not in `files` is already published.
-   */
-  async function checkBackends(
-    client: SqlClient,
-    port: BackendFilesPort,
-    actor: string,
-    links: readonly FileId[],
-    files: Readonly<Record<FileId, string>>,
-  ): Promise<{ reserved: FileId[] }> {
-    const ids = Object.keys(files);
-    const reserved: FileId[] = [];
-    const ownedBackends = new Set(await port.owned(client, actor, ids));
-    for (const id of ids) {
-      if (!links.includes(id))
-        fail(422, `files: ${id} is not linked from the page with an af-backend link`);
-      const record = await readFileId(client, id);
-      if (record && record.owner === actor && !record.published) reserved.push(id);
-      else if (!ownedBackends.has(id))
-        fail(422, `files: ${id} is not a file ID you reserved or a backend file you own`);
-    }
-    const unsent = links.filter((id) => !Object.hasOwn(files, id));
-    const published = new Set(
-      unsent.length ? await port.published(client, unsent) : [],
-    );
-    for (const id of unsent)
-      if (!published.has(id))
-        fail(422, `The linked backend ${id} is not published; send its contents in files`);
-    return { reserved };
-  }
-
   /** Compile the whole batch outside any transaction; the port's limits apply to it and a failure names its file. */
   async function compile(
-    port: BackendFilesPort,
-    files: Readonly<Record<FileId, string>>,
+    port: import("./page-write-contracts.ts").PageBackendPreparation,
     signal?: AbortSignal,
   ): Promise<Record<FileId, CompiledBackend>> {
     try {
-      return await port.compile(files, signal);
+      return await port.compile(signal);
     } catch (error) {
       if (signal?.aborted) throw error;
-      const { status, code, fileId, detail } = error as { status?: unknown; code?: unknown; fileId?: unknown; detail?: unknown };
+      const { status, code, fileId, detail } = error as {
+        status?: unknown;
+        code?: unknown;
+        fileId?: unknown;
+        detail?: unknown;
+      };
       if (typeof status === "number" && status >= 500) throw error;
       const id = typeof fileId === "string" ? fileId : null;
       if (code === "backend_unavailable" || code === "backend_busy")
-        return fail(503, `files: ${id ?? "the backend files"} could not be compiled now; try again later`);
+        return fail(
+          503,
+          `files: ${id ?? "the backend files"} could not be compiled now; try again later`,
+        );
       // The publisher owns the file: what it said while loading (bounded by the host) may be shown.
       const message =
         (error instanceof Error ? error.message : "invalid backend file") +
         (typeof detail === "string" ? `: ${detail}` : "");
       if (id === null) return fail(422, `files: ${message}`);
-      return fail(422, `files: ${id} could not be compiled: ${message.startsWith(id + ": ") ? message.slice(id.length + 2) : message}`);
+      return fail(
+        422,
+        `files: ${id} could not be compiled: ${message.startsWith(id + ": ") ? message.slice(id.length + 2) : message}`,
+      );
     }
-  }
-
-  /** Mark the caller's reserved backend IDs published under the page that sent them. */
-  async function publishBackendIds(
-    client: SqlClient,
-    actor: string,
-    reserved: readonly FileId[],
-  ) {
-    for (const id of reserved)
-      if (!(await claimReservedId(client, actor, id, "backend")))
-        fail(409, `files: ${id} was published by another request`);
-  }
-
-  /**
-   * Brief C's port takes part in every publish and save once it is installed,
-   * so a save that drops every link also stops the old backends being callable.
-   */
-  async function backendsFor(links: readonly BackendLink[], files: Record<FileId, string>) {
-    const ids = linkedIds(links);
-    const port = await backendFiles();
-    if (!port) {
-      if (!ids.length && !Object.keys(files).length) return null;
-      fail(503, "Backend files are not available on this server");
-    }
-    return { port, ids };
-  }
-
-  async function replay(
-    client: SqlClient,
-    actor: string,
-    requestId: string,
-    fingerprint: string,
-    origin: string,
-  ): Promise<PublishResponse | null> {
-    const row = (
-      await client.query(
-        "SELECT p.file_id,p.fingerprint,p.path,s.content FROM publications p JOIN sources s ON s.file_id=p.file_id AND s.revision='1' WHERE p.request_key=$1",
-        [actor + ":" + requestId],
-      )
-    ).rows[0];
-    if (!row) return null;
-    if (row.fingerprint !== fingerprint)
-      fail(409, "This requestId was already used for a different publish");
-    const id = String(row.file_id);
-    if (!(await loadDocumentHeader(client, id))) fail(404, "File not found");
-    return {
-      id,
-      version: 1,
-      url: fileAddress(origin, id),
-      path: apiPath(String(row.path)),
-      source: String(row.content),
-    };
   }
 
   return {
@@ -294,13 +208,24 @@ export function createPageService({
       const files = backendSources(input.files);
       const requestId = input.requestId;
       if (typeof requestId !== "string" || !requestId || requestId.length > 200)
-        fail(422, "requestId must be a string you choose (at most 200 characters)");
-      if (input.visibility !== undefined && !visibilities.includes(input.visibility as Visibility))
+        fail(
+          422,
+          "requestId must be a string you choose (at most 200 characters)",
+        );
+      if (
+        input.visibility !== undefined &&
+        !visibilities.includes(input.visibility as Visibility)
+      )
         fail(422, "visibility must be private, unlisted or public");
-      if (input.linkRole !== undefined && !roles.includes(input.linkRole as ShareRole))
+      if (
+        input.linkRole !== undefined &&
+        !roles.includes(input.linkRole as ShareRole)
+      )
         fail(422, "linkRole must be viewer, commenter or editor");
       const requestedPath =
-        input.path === undefined || input.path === null ? null : normalizePath(input.path);
+        input.path === undefined || input.path === null
+          ? null
+          : normalizePath(input.path);
       const folder =
         placement.folder === undefined || placement.folder === null
           ? "/"
@@ -316,11 +241,20 @@ export function createPageService({
           ...(folder === "/" ? [] : [folder]),
         ]),
       );
-      const first = await database.transaction(async (client) => {
-        const actor = account(await loadSession(client, hash(credential)));
-        return { actor, replayed: await replay(client, actor, requestId, fingerprint, origin) };
+      const first = await writes.inspectPublication({
+        credential: writeCredential(credential),
+        requestId,
+        fingerprint,
       });
-      if (first.replayed) return { status: 200, value: first.replayed };
+      if (first.replayed)
+        return {
+          status: 200,
+          value: {
+            ...first.replayed,
+            url: fileAddress(origin, first.replayed.id),
+            path: apiPath(first.replayed.path),
+          },
+        };
       const actor = first.actor;
       const model = await pageModel();
       const meta = model.parsePage(html).meta;
@@ -335,107 +269,34 @@ export function createPageService({
       });
       // Validate the page before touching backends; the real ID is chosen in the write.
       const draft = prepare(model, html, context(requested ?? "AAAAAA"));
-      const backends = await backendsFor(draft.backends, files);
-      if (backends)
-        await database.transaction((client) =>
-          checkBackends(client, backends.port, actor, backends.ids, files),
-        );
-      const compiled = backends ? await compile(backends.port, files, signal) : {};
-      return database.transaction(async (client) => {
-        if (account(await loadSession(client, hash(credential))) !== actor)
-          fail(401, "Sign in required");
-        await client.query(
-          "SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':publication:' || $1,0))",
-          [actor + ":" + requestId],
-        );
-        const again = await replay(client, actor, requestId, fingerprint, origin);
-        if (again) return { status: 200 as const, value: again };
-        // A named ID is used only when it is the caller's unpublished reservation. Anything
-        // else (someone else's, already published, never reserved) is refused rather than
-        // quietly publishing a copied page under a fresh ID.
-        if (requested && !(await claimReservedId(client, actor, requested, "page")))
-          fail(
-            422,
-            `The meta block names ID ${requested}, which is not an ID you reserved and have not published. Take "id" out of the meta block to publish this as a new page, or save the published page with PUT /api/files/${requested}/source.`,
-          );
-        const id =
-          requested ??
-          (await insertFreshId(client, randomBytes, {
-            owner: actor,
-            reservationKey: null,
-            ordinal: null,
-            kind: "page",
-            now: now(),
-          }));
-        const prepared = prepare(model, html, context(id));
-        const reserved = backends
-          ? await checkBackends(client, backends.port, actor, backends.ids, files)
-          : { reserved: [] };
-        await pathLock(client, actor);
-        const entries = await readPaths(client, actor);
-        const path =
-          requestedPath ??
-          defaultPath(
-            typeof prepared.meta.name === "string" && prepared.meta.name.trim()
-              ? prepared.meta.name
-              : documentTitle(prepared.source),
-            entries,
-            folder,
-          );
-        const next = addDocument(entries, path, id);
-        const share = token();
-        const policy: AccessPolicy = {
-          // Unlisted by default: anyone with the link can view (PublishRequest.visibility).
-          visibility: (input.visibility as Visibility | undefined) ?? "unlisted",
-          linkRole: (input.linkRole as ShareRole | undefined) ?? "viewer",
-          shares: {},
-          version: 1,
-        };
-        // The page's data-af="state" block: where each viewer's own local state starts.
-        await client.query(
-          "INSERT INTO files(id,owner,share_hash,generation,head,sequence,share,path,access,seed,next_node_id,source_digest) VALUES($1,$2,$3,1,'1',0,$4,$5,$6::jsonb,$7::jsonb,$8,$9)",
-          [
-            id,
-            actor,
-            hash(share),
-            share,
-            path,
-            JSON.stringify(policy),
-            prepared.state ? JSON.stringify(prepared.state) : null,
-            nextNodeId(prepared),
-            sourceDigest(prepared.source),
-          ],
-        );
-        await writeFolders(client, actor, next);
-        await client.query(
-          "INSERT INTO sources(file_id,revision,content,node_ids,digest) VALUES($1,'1',$2,$3::jsonb,$4)",
-          [id, prepared.source, JSON.stringify(prepared.nodeIds), sourceDigest(prepared.source)],
-        );
-        if (backends) {
-          await publishBackendIds(client, actor, reserved.reserved);
-          await backends.port.record(client, {
-            owner: actor,
-            pageId: id,
-            pageVersion: 1,
-            links: prepared.backends,
-            compiled,
-          });
-        }
-        await client.query(
-          "INSERT INTO publications(request_key,file_id,fingerprint,path) VALUES($1,$2,$3,$4)",
-          [actor + ":" + requestId, id, fingerprint, path],
-        );
-        return {
-          status: 201 as const,
-          value: {
-            id,
-            version: 1,
-            url: fileAddress(origin, id),
-            path: apiPath(path),
-            source: prepared.source,
-          },
-        };
+      const backends = await writes.preflightBackends({
+        actor,
+        links: draft.backends,
+        files,
       });
+      const compiled = backends ? await compile(backends, signal) : {};
+      const result = await writes.commitPublication({
+        credential: writeCredential(credential),
+        actor,
+        requestId,
+        fingerprint,
+        requestedId: requested,
+        requestedPath,
+        folder,
+        visibility: (input.visibility as Visibility | undefined) ?? "unlisted",
+        linkRole: (input.linkRole as ShareRole | undefined) ?? "viewer",
+        backends,
+        compiled,
+        prepareForId: (id) => prepare(model, html, context(id)),
+      });
+      return {
+        status: result.kind === "created" ? 201 : 200,
+        value: {
+          ...result.page,
+          url: fileAddress(origin, result.page.id),
+          path: apiPath(result.page.path),
+        },
+      };
     },
 
     readSource(credential: string, id: string): Promise<SourceResponse> {
@@ -474,40 +335,18 @@ export function createPageService({
       const files = backendSources(input.files);
       const expected = parseIfMatch(ifMatch);
       const fingerprint = hash(
-        canonical(["save", html, Object.entries(files).sort(([a], [b]) => (a < b ? -1 : 1))]),
+        canonical([
+          "save",
+          html,
+          Object.entries(files).sort(([a], [b]) => (a < b ? -1 : 1)),
+        ]),
       );
-      const replayed = async (client: SqlClient, actor: string) => {
-        if (key === null) return null;
-        const decision = await checkIdempotency(client, { fileId: id, actor, key }, fingerprint, now());
-        return decision.kind === "replay"
-          ? { status: decision.status, value: decision.body as SaveResponse, changed: false }
-          : null;
-      };
-      const first = await database.transaction(async (client) => {
-        const session = await loadSession(client, hash(credential));
-        const document = owned(await loadDocumentHeader(client, id));
-        const decision = access(document, session, credential, id);
-        if (!decision.owner || !decision.actor)
-          fail(403, "Only owners and editors can change the page");
-        // A replay wins over If-Match: the page may have moved on since the first save.
-        const replay = await replayed(client, decision.actor);
-        if (replay) return { replay, base: null };
-        if (expected === null)
-          fail(428, "Send If-Match with the version you edited");
-        const version = Number(document.head);
-        if (expected !== version) await conflict(client, id, version);
-        const reserved = new Set<string>();
-        for (const row of (
-          await client.query("SELECT node_ids FROM sources WHERE file_id=$1", [id])
-        ).rows)
-          for (const nodeId of row.node_ids as string[]) reserved.add(nodeId);
-        const next = (
-          await client.query("SELECT next_node_id FROM files WHERE id=$1", [id])
-        ).rows[0]?.next_node_id;
-        return {
-          replay: null,
-          base: { actor: decision.actor, owner: document.owner, ownerKind: document.ownerKind, version, reserved, nextNodeId: Number(next) || 0 },
-        };
+      const first = await writes.inspectSave({
+        credential: writeCredential(credential),
+        id,
+        expected,
+        key,
+        fingerprint,
       });
       if (first.replay) return first.replay;
       const base = first.base;
@@ -521,65 +360,27 @@ export function createPageService({
         previousNextNodeId: base.nextNodeId,
         reserved: base.reserved,
       });
-      if (base.ownerKind === "group" && (prepared.backends.length || Object.keys(files).length))
+      if (
+        base.ownerKind === "group" &&
+        (prepared.backends.length || Object.keys(files).length)
+      )
         fail(422, "Group-owned pages do not support backend files");
-      const backends = await backendsFor(prepared.backends, files);
-      if (backends)
-        await database.transaction((client) =>
-          checkBackends(client, backends.port, base.actor, backends.ids, files),
-        );
-      const compiled = backends ? await compile(backends.port, files, signal) : {};
-      const value = await database.transaction(async (client) => {
-        const session = await loadSession(client, hash(credential));
-        const document = owned(await lockDocumentHeader(client, id));
-        const decision = access(document, session, credential, id);
-        if (!decision.owner || decision.actor !== base.actor)
-          fail(403, "Only owners and editors can change the page");
-        // The header lock serializes requests sharing a key; look again under it.
-        const replay = await replayed(client, base.actor);
-        if (replay) return replay;
-        if (Number(document.head) !== base.version)
-          await conflict(client, id, Number(document.head));
-        const reserved = backends
-          ? await checkBackends(client, backends.port, base.actor, backends.ids, files)
-          : { reserved: [] };
-        await client.query(
-          "INSERT INTO sources(file_id,revision,content,node_ids,digest) VALUES($1,$2,$3,$4::jsonb,$5)",
-          [id, String(version), prepared.source, JSON.stringify(prepared.nodeIds), sourceDigest(prepared.source)],
-        );
-        // The seed is the page's, not the version's: a save keeps it unless it carries a new data-af="state" block.
-        await client.query(
-          "UPDATE files SET head=$2,next_node_id=GREATEST(next_node_id,$3),source_digest=$4,seed=COALESCE($5::jsonb,seed) WHERE id=$1",
-          [
-            id,
-            String(version),
-            nextNodeId(prepared),
-            sourceDigest(prepared.source),
-            prepared.state ? JSON.stringify(prepared.state) : null,
-          ],
-        );
-        if (backends) {
-          await publishBackendIds(client, base.actor, reserved.reserved);
-          await backends.port.record(client, {
-            owner: base.actor,
-            pageId: id,
-            pageVersion: version,
-            links: prepared.backends,
-            compiled,
-          });
-        }
-        const saved: SaveResponse = { version, source: prepared.source };
-        if (key !== null)
-          await recordIdempotency(
-            client,
-            { fileId: id, actor: base.actor, key },
-            fingerprint,
-            { status: 200, body: saved },
-            now(),
-          );
-        return { status: 200, value: saved, changed: true };
+      const backends = await writes.preflightBackends({
+        actor: base.actor,
+        links: prepared.backends,
+        files,
       });
-      return value;
+      const compiled = backends ? await compile(backends, signal) : {};
+      return writes.commitSave({
+        credential: writeCredential(credential),
+        id,
+        base,
+        prepared,
+        backends,
+        compiled,
+        key,
+        fingerprint,
+      });
     },
 
     /** Move a managed page to recoverable trash, retaining every version and ID. */
@@ -857,11 +658,6 @@ function readable(document: DocumentHeader, actor: string | null, session: Sessi
   const grant = permissions(document, actor, true, false, session?.groupAuthority);
   return grant.read ? grant : null;
 }
-function nextNodeId(prepared: PreparedPage): number {
-  const value = prepared.meta.nextNodeId;
-  return typeof value === "number" && Number.isSafeInteger(value) ? value : 1;
-}
-
 export interface AddressedPage {
   id: FileId;
   version: number;
