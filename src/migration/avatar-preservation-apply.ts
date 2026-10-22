@@ -18,32 +18,32 @@ export function createAvatarPreservation(db: AvatarPreservationDatabase, options
   if (typeof options.verifyPrerequisites !== "function") throw Error("Avatar prerequisites require verification");
   let active = false;
   const receipt = (plan: AvatarPreservationPlan): AvatarPreservationReceipt => ({ schemaVersion: 1, plan });
-  async function source(plan: AvatarPreservationPlan): Promise<void> {
-    const rows = (await db.query(`SELECT digest,manifest,maps FROM ${archive}.archives WHERE namespace=$1 FOR SHARE`, [plan.base.sourceNamespace])).rows;
+  async function source(plan: AvatarPreservationPlan, readOnly: boolean): Promise<void> {
+    const rows = (await db.query(`SELECT digest,manifest,maps FROM ${archive}.archives WHERE namespace=$1${readOnly ? "" : " FOR SHARE"}`, [plan.base.sourceNamespace])).rows;
     if (rows.length !== 1 || rows[0]!.digest !== plan.base.archiveManifestSha256) throw Error("Avatar source archive differs");
     recheckAvatarPreservationPlan(plan, { archiveManifestSha256: String(rows[0]!.digest), manifest: rows[0]!.manifest, maps: rows[0]!.maps } as AvatarPreservationSource);
   }
-  async function accounts(plan: AvatarPreservationPlan, alreadyApplied: boolean): Promise<void> {
-    const rows = (await db.query(`SELECT actor,image,principal_kind FROM ${runtime}.accounts WHERE actor=ANY($1::text[]) ORDER BY actor FOR UPDATE`, [plan.candidates.map(row => row.actor)])).rows;
+  async function accounts(plan: AvatarPreservationPlan, alreadyApplied: boolean, readOnly = false): Promise<void> {
+    const rows = (await db.query(`SELECT actor,image,principal_kind FROM ${runtime}.accounts WHERE actor=ANY($1::text[]) ORDER BY actor${readOnly ? "" : " FOR UPDATE"}`, [plan.candidates.map(row => row.actor)])).rows;
     if (rows.length !== plan.candidates.length) throw Error("Avatar account is unavailable");
     for (const candidate of plan.candidates) {
       const row = rows.find(row => row.actor === candidate.actor);
       if (!row || row.principal_kind !== "user" || (row.image !== candidate.image && (alreadyApplied || row.image !== null))) throw Error("Avatar account image changed");
     }
   }
-  async function transaction<T>(plan: AvatarPreservationPlan, work: () => Promise<T>): Promise<T> {
+  async function transaction<T>(plan: AvatarPreservationPlan, work: () => Promise<T>, readOnly = false): Promise<T> {
     if (active) throw Error("Avatar preservation connection is busy"); active = true; let begun = false;
     try {
       await options.verifyPrerequisites(plan.base);
-      await db.query("BEGIN"); begun = true;
-      await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [options.archiveSchema + ":avatar-preservation:" + plan.base.sourceNamespace]);
-      await source(plan);
+      await db.query(readOnly ? "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY" : "BEGIN"); begun = true;
+      if (!readOnly) await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [options.archiveSchema + ":avatar-preservation:" + plan.base.sourceNamespace]);
+      await source(plan, readOnly);
       const result = await work(); await db.query("COMMIT"); begun = false; return result;
     } catch (error) { if (begun) await db.query("ROLLBACK"); throw error; }
     finally { active = false; }
   }
-  async function existing(plan: AvatarPreservationPlan): Promise<boolean> {
-    const rows = (await db.query(`SELECT plan_sha256,receipt FROM ${archive}.avatar_preservation_receipts WHERE namespace=$1 FOR UPDATE`, [plan.base.sourceNamespace])).rows;
+  async function existing(plan: AvatarPreservationPlan, readOnly = false): Promise<boolean> {
+    const rows = (await db.query(`SELECT plan_sha256,receipt FROM ${archive}.avatar_preservation_receipts WHERE namespace=$1${readOnly ? "" : " FOR UPDATE"}`, [plan.base.sourceNamespace])).rows;
     if (!rows.length) return false;
     if (rows.length !== 1 || rows[0]!.plan_sha256 !== plan.sha256 || canonical(rows[0]!.receipt) !== canonical(receipt(plan))) throw Error("Avatar preservation receipt differs");
     return true;
@@ -73,9 +73,9 @@ export function createAvatarPreservation(db: AvatarPreservationDatabase, options
       const plan = immutableCopy(input);
       return transaction(plan, async () => {
         const table = (await db.query("SELECT to_regclass($1) AS name", [options.archiveSchema + ".avatar_preservation_receipts"])).rows[0];
-        if (!table?.name || !(await existing(plan))) throw Error("Avatar preservation receipt is unavailable");
-        await accounts(plan, true); return receipt(plan);
-      });
+        if (!table?.name || !(await existing(plan, true))) throw Error("Avatar preservation receipt is unavailable");
+        await accounts(plan, true, true); return receipt(plan);
+      }, true);
     },
   };
 }

@@ -98,3 +98,15 @@ test("caller mutation during prerequisite verification cannot redirect the avata
     assert.deepEqual((await t.db.query("SELECT image FROM accounts ORDER BY actor")).rows.map((row: Record<string, unknown>) => row.image), t.plan.candidates.map(row => row.image));
   } finally { await t.cleanup(); }
 });
+
+test("standalone avatar verification uses a repeatable read read-only transaction", async () => {
+  const t = await setup();
+  try {
+    await t.service.apply(t.plan, "initial");
+    const statements: string[] = [];
+    const service = createAvatarPreservation({ query: async (sql, args) => { statements.push(sql); return t.db.query(sql, args); } }, { runtimeSchema: t.env.schema, archiveSchema: t.env.schema, verifyPrerequisites: async () => {} });
+    await service.verify(t.plan);
+    assert.equal(statements[0], "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    assert.ok(statements.every(sql => !/FOR (SHARE|UPDATE)|pg_advisory|CREATE |UPDATE |INSERT /i.test(sql)));
+  } finally { await t.cleanup(); }
+});
