@@ -377,7 +377,7 @@ const bundled = await bundle({
             const relative =
               args.path === "@mx/rt"
                 ? "rt.tsx"
-                : args.path.replace("@mx/", "") + ".tsx";
+                : args.path.replace("@mx/", "") + (args.path === "@mx/kit/templates" ? ".ts" : ".tsx");
             return {
               path: path.join(root, "services/app/lib/islands", relative),
             };
