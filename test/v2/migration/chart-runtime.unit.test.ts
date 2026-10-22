@@ -86,3 +86,44 @@ test("oversized live rows report a visible limitation without throwing from kit 
   assert.equal(attributes.get("data-mx-chart-state"), "error");
   assert.match(element.textContent ?? "", /Chart unavailable/);
 });
+
+test("unsupported live template text reports a visible limitation before allocating a renderer", () => {
+  const attrs = new Map();
+  const element = {
+    setAttribute: (k: string, v: string) => attrs.set(k, v),
+    textContent: "",
+  } as unknown as HTMLElement;
+  const envelope = {
+    source: {
+      kind: "vega-lite",
+      spec: { encoding: { x: { axis: { format: "marker" } } } },
+    },
+  };
+  const module = createCompiledCharts(
+    [
+      {
+        key: chartEnvelopeKey(envelope),
+        runtime: {},
+        width: 300,
+        height: 200,
+        textBindings: [
+          {
+            path: ["source", "spec", "encoding", "x", "axis", "format"],
+            marker: "marker",
+            signal: "text",
+          },
+        ],
+      },
+    ],
+    {
+      create: () => {
+        throw Error("must not allocate");
+      },
+      observe: () => () => {},
+    },
+  );
+  envelope.source.spec.encoding.x.axis.format = "100000000f";
+  assert.doesNotThrow(() => module.mountChart({ element, envelope, rows: [] }));
+  assert.equal(attrs.get("data-mx-chart-state"), "error");
+  assert.match(element.textContent ?? "", /Chart unavailable/);
+});

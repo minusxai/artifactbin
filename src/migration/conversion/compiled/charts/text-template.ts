@@ -22,6 +22,9 @@ export function matchChartTextPlan(
     if (!parent || typeof parent !== "object" || !Object.hasOwn(parent, key))
       return null;
     const value = parent[key];
+    // d3 numeric format width can otherwise allocate an arbitrarily padded string.
+    if (key === "format" && typeof value === "string" && /\d{4}/.test(value))
+      return null;
     if (
       !(
         value === null ||

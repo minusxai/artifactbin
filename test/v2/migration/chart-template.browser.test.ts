@@ -92,7 +92,7 @@ function mount(title,format){if(controller)controller.destroy();controller=chart
               .replace('"{$labels.format}"', "format"),
           ) +
           `
-mount('Initial title','.0%');document.getElementById('change').onclick=()=>mount('<img src=https://example.invalid/probe onerror=alert(1)>','.2f');`,
+mount('Initial title','.0%');document.getElementById('change').onclick=()=>mount('<img src=https://example.invalid/probe onerror=alert(1)>','.2f');document.getElementById('reject').onclick=()=>mount('Title','100000000f');`,
         resolveDir: root,
       },
       plugins: [sources.plugin],
@@ -126,7 +126,7 @@ mount('Initial title','.0%');document.getElementById('change').onclick=()=>mount
       page.on("pageerror", (e) => errors.push(e.message));
       page.on("request", (r) => requests.push(r.url()));
       await page.setContent(
-        `<div id="chart" style="width:400px;height:240px"></div><button id="change">Change</button><script type="module">${javascript}</script>`,
+        `<div id="chart" style="width:400px;height:240px"></div><button id="change">Change</button><button id="reject">Reject</button><script type="module">${javascript}</script>`,
       );
       await page.locator('#chart[data-mx-chart-state="ready"]').waitFor();
       assert.match(
@@ -148,6 +148,12 @@ mount('Initial title','.0%');document.getElementById('change').onclick=()=>mount
         /0\.50/,
       );
       assert.equal(await page.locator("#chart img").count(), 0);
+      await page.locator("#reject").click();
+      await page.locator('#chart[data-mx-chart-state="error"]').waitFor();
+      assert.match(
+        (await page.locator("#chart").textContent()) ?? "",
+        /Chart unavailable/,
+      );
       assert.deepEqual(errors, []);
       assert.deepEqual(requests, []);
     } finally {

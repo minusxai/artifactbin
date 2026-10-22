@@ -117,4 +117,27 @@ test("generated tooltip object expressions use bounded own properties, including
   );
 });
 
+test("live format values cannot request unbounded numeric padding", () => {
+  const prepared = prepareChartTextTemplate({
+    kind: "vega-lite",
+    spec: { encoding: { x: { axis: { format: "{$labels.format}" } } } },
+  });
+  const plan = {
+    key: chartEnvelopeKey({ source: prepared.viz }),
+    runtime: {},
+    width: 300,
+    height: 200,
+    textBindings: prepared.bindings,
+  };
+  const envelope = (format: string) => ({
+    source: {
+      kind: "vega-lite",
+      spec: { encoding: { x: { axis: { format } } } },
+    },
+  });
+  assert.equal(matchChartTextPlan(plan, envelope("100000000f")), null);
+  assert.ok(matchChartTextPlan(plan, envelope(".2f")));
+  assert.ok(matchChartTextPlan(plan, envelope("%Y-%m-%d")));
+});
+
 import { matchChartTextPlan } from "../../../src/migration/conversion/compiled/charts/text-template.ts";

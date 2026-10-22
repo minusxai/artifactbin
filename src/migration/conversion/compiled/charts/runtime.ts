@@ -5,6 +5,26 @@ import type {
   ChartRendererPorts,
   CompiledChartController,
 } from "./contracts.ts";
+function showChartError(element: HTMLElement): void {
+  element.setAttribute("data-mx-chart-error", "Chart rendering failed");
+  element.setAttribute("data-mx-chart-state", "error");
+  element.setAttribute("aria-busy", "false");
+  element.setAttribute("role", "status");
+  element.textContent =
+    "Chart unavailable. Reload the page after checking its data.";
+}
+function unavailableChart(element: HTMLElement): CompiledChartController {
+  showChartError(element);
+  let stopped = false;
+  return {
+    update() {
+      if (stopped) throw Error("Chart disposed");
+    },
+    destroy() {
+      stopped = true;
+    },
+  };
+}
 /** Framework-free chart lifecycle injected into the archived kit's explicit loadChart port. */
 export function createCompiledCharts(
   plans: readonly CompiledChartPlan[],
@@ -31,7 +51,11 @@ export function createCompiledCharts(
           }
         }
       }
-      if (!plan) throw Error("Chart envelope was not compiled offline");
+      if (!plan) {
+        if (plans.some((candidate) => candidate.textBindings?.length))
+          return unavailableChart(input.element);
+        throw Error("Chart envelope was not compiled offline");
+      }
       const selectedPlan = plan;
       const element = input.element;
       const copyRows = (rows: Record<string, unknown>[]) => {
@@ -40,27 +64,13 @@ export function createCompiledCharts(
         return JSON.parse(chartEnvelopeKey(rows)) as Record<string, unknown>[];
       };
       const showError = () => {
-        element.setAttribute("data-mx-chart-error", "Chart rendering failed");
-        element.setAttribute("data-mx-chart-state", "error");
-        element.setAttribute("aria-busy", "false");
-        element.setAttribute("role", "status");
-        element.textContent =
-          "Chart unavailable. Reload the page after checking its data.";
+        showChartError(element);
       };
       let pending: Record<string, unknown>[];
       try {
         pending = copyRows(input.rows);
       } catch {
-        showError();
-        let stopped = false;
-        return {
-          update() {
-            if (stopped) throw Error("Chart disposed");
-          },
-          destroy() {
-            stopped = true;
-          },
-        };
+        return unavailableChart(element);
       }
 
       const view = ports.create(
