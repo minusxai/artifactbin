@@ -75,7 +75,8 @@ function tablePlans(batch: DatasetMigrationBatch): TablePlan[] {
         kind: r.kind,
         legacy_id: r.legacyId,
         identity: r.identity,
-        expires_at: r.expiresAt,
+        expires_at:
+          r.expiresAt === null ? null : new Date(r.expiresAt).toISOString(),
       })),
     ),
     plan(
