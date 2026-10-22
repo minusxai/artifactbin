@@ -52,6 +52,6 @@ export function validIdentityConditions(plan:LocalDynamicIdentityPlan,declaratio
     if(expression.kind==='binary')return scalar(expression.left)&&scalar(expression.right);
     return true;
   };
-  const visit=(regions:readonly LocalIdentityRegion[]):boolean=>regions.every(region=>region.kind==='node'||(region.kind==='repeat'||region.kind==='cell'?visit(region.children):scalar(region.test)&&visit(region.yes)&&visit(region.no)));
+  const visit=(regions:readonly LocalIdentityRegion[]):boolean=>regions.every(region=>region.kind==='node'||(region.kind==='repeat'||region.kind==='cell'||region.kind==='deferred'?visit(region.children):scalar(region.test)&&visit(region.yes)&&visit(region.no)));
   return visit(plan.regions);
 }

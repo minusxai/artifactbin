@@ -1,4 +1,4 @@
-import {initialDynamicIdentities} from "./dynamic-identities.ts";
+import {initialDynamicIdentities,allowedInitialDynamicIdentities} from "./dynamic-identities.ts";
 /** Compiler-output admission owns shape, source reconciliation, bundle policy,
  * HTML identity repair and author mount verification; never invokes a compiler. */
 import { parseFragment, serialize } from "parse5";
@@ -157,7 +157,8 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
   };
   visit(fragment);
   const initialIdentities = new Set(initialDynamicIdentities(plan.dynamicIdentities, Object.fromEntries(plan.manifest.declarations.map(d => [d.name,d.default]))));
-  if (unsafe || [...initialIdentities].some((id) => !Object.hasOwn(identities, id)) || [...plan.renderedIdentities].some(id => Object.hasOwn(identities,id) && !initialIdentities.has(id)) || (author && authorMounts.size !== author.mounts.length))
+  const allowedIdentities = new Set(allowedInitialDynamicIdentities(plan.dynamicIdentities, Object.fromEntries(plan.manifest.declarations.map(d => [d.name,d.default]))));
+  if (unsafe || [...initialIdentities].some((id) => !Object.hasOwn(identities, id)) || [...plan.renderedIdentities].some(id => Object.hasOwn(identities,id) && !allowedIdentities.has(id)) || (author && authorMounts.size !== author.mounts.length))
     return blocked("compiled-local-output");
   return {
     ok: true,
