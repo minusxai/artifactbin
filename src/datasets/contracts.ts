@@ -23,12 +23,18 @@ export interface DatasetTable {
   object: { key: string; sha256: string; bytes: number };
 }
 export interface DatasetBinding {
+  /** Unversioned authored Imports follow current head; explicit snapshots remain pinned. */
+  mode: "live" | "pinned";
   name: string;
   backendId: string;
   backendVersion: string;
   page: { id: string; version: number; legacyId: string; editId: string };
   dataset: { id: string; version: number; policyRevision: number };
   tables: readonly DatasetTable[];
+}
+/** Ephemeral catalog resolution; never stored back over the original import descriptor. */
+export interface DatasetResolvedBinding extends DatasetBinding {
+  revision: { version: number; generation: number; policyRevision: number };
 }
 /** Constructed by the backend host from the saved deployment and verified caller. */
 export interface DatasetCallContext {
@@ -43,9 +49,12 @@ export interface DatasetReadRequest {
   table: string;
   offset: number;
   limit: number;
+  expectedVersion?: number;
+  expectedGeneration?: number;
 }
 export interface DatasetReadResult {
   version: number;
+  generation: number;
   schema: string;
   table: string;
   columns: readonly DatasetColumn[];
@@ -57,7 +66,7 @@ export interface DatasetReadResult {
 export interface DatasetReadAuthority {
   page: DocumentSnapshot;
   pageVersion: number;
-  dataset: DatasetSnapshot & { deleted: boolean };
+  dataset: DatasetSnapshot & { deleted: boolean; version: number; generation: number };
   /** Includes the server-derived legacy user/token principal mapping; never page input. */
   facts: AuthorizationFacts;
 }
@@ -65,7 +74,7 @@ export interface DatasetReadPorts {
   binding(
     context: DatasetCallContext,
     name: string,
-  ): Promise<DatasetBinding | null>;
+  ): Promise<DatasetResolvedBinding | null>;
   /** Must freshly resolve current page/dataset ACL, identity and policy, including after I/O. */
   authority(
     context: DatasetCallContext,
