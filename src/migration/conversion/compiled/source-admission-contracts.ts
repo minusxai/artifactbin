@@ -4,7 +4,10 @@ import type { LocalDeclaration } from "./local-contracts.ts";
 export interface LocalSourceManifest {
   readonly declarations: readonly LocalDeclaration[];
 }
-export type ReadLocalSourceManifest = (source: string) => LocalSourceManifest;
+export type ReadLocalSourceManifest = (
+  source: string,
+  proofs?: readonly import("./bound-value-contracts.ts").BoundValueColumnProof[],
+) => LocalSourceManifest;
 /** Compiler JSON is untrusted at this boundary; a valid but different type,
  * default, row set or schema is not a successful migration. */
 export type ReconcileLocalDeclarations = (

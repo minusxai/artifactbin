@@ -1,3 +1,5 @@
+import type { BoundValueColumnProof } from "./bound-value-contracts.ts";
+import { validBoundValueProof } from "./bound-value-proof.ts";
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
 import { MAX_COMPILED_SOURCE_BYTES } from "./contracts.ts";
@@ -64,6 +66,9 @@ function literal(node: Node | undefined): unknown {
   }
   return refuse();
 }
+/** Shared offline literal decoder; never evaluates source. */
+export const readLocalSourceLiteral = (node: Node | undefined): unknown =>
+  literal(node);
 function inferredColumns(rows: Record<string, unknown>[]) {
   const columns = new Map<string, LocalColumnType | "">();
   for (const row of rows)
@@ -91,7 +96,10 @@ function inferredColumns(rows: Record<string, unknown>[]) {
   }));
 }
 /** Shared with full source admission so one parsed AST owns the manifest. */
-export function sourceValueDeclaration(node: Node): LocalDeclaration {
+export function sourceValueDeclaration(
+  node: Node,
+  proofs: readonly BoundValueColumnProof[] = [],
+): LocalDeclaration {
   const attrs: Record<string, unknown> = Object.create(null);
   for (const attr of node.openingElement.attributes) {
     const name = attr.name?.name;
@@ -99,12 +107,44 @@ export function sourceValueDeclaration(node: Node): LocalDeclaration {
       attr.type !== "JSXAttribute" ||
       typeof name !== "string" ||
       Object.hasOwn(attrs, name) ||
-      !["name", "type", "default", "value", "columns", "url"].includes(name)
+      ![
+        "name",
+        "type",
+        "default",
+        "value",
+        "columns",
+        "url",
+        "source",
+        "column",
+      ].includes(name)
     )
       refuse();
     attrs[name] = attr.value ? literal(attr.value) : true;
   }
-  const type = attrs.type ?? "string";
+  const bound = Object.hasOwn(attrs, "source");
+  if (bound) {
+    if (
+      !Array.isArray(proofs) ||
+      proofs.length > 256 ||
+      proofs.some((p) => !validBoundValueProof(p)) ||
+      Object.hasOwn(attrs, "type") ||
+      Object.hasOwn(attrs, "value") ||
+      Object.hasOwn(attrs, "columns")
+    )
+      refuse();
+    const selected = proofs.filter(
+      (p) =>
+        p.valueName === attrs.name &&
+        p.sourceRef === attrs.source &&
+        p.column === attrs.column,
+    );
+    if (
+      selected.length !== 1 ||
+      proofs.filter((p) => p.valueName === attrs.name).length !== 1
+    )
+      refuse();
+  } else if (Object.hasOwn(attrs, "column")) refuse();
+  const type = attrs.type ?? (bound ? "user" : "string");
   if (
     typeof attrs.name !== "string" ||
     !/^[A-Za-z][A-Za-z0-9_]*$/.test(attrs.name) ||
@@ -189,7 +229,10 @@ export function sourceValueDeclaration(node: Node): LocalDeclaration {
   if (!validLocalValue(declaration, declaration.default)) refuse();
   return declaration;
 }
-export const readLocalSourceManifest: ReadLocalSourceManifest = (source) => {
+export const readLocalSourceManifest: ReadLocalSourceManifest = (
+  source,
+  proofs = [],
+) => {
   if (
     typeof source !== "string" ||
     Buffer.byteLength(source) > MAX_COMPILED_SOURCE_BYTES
@@ -207,7 +250,7 @@ export const readLocalSourceManifest: ReadLocalSourceManifest = (source) => {
       node.type === "JSXElement" &&
       node.openingElement.name.name === "Value"
     ) {
-      const declaration = sourceValueDeclaration(node);
+      const declaration = sourceValueDeclaration(node, proofs);
       if (names.has(declaration.name)) refuse();
       names.add(declaration.name);
       declarations.push(declaration);
