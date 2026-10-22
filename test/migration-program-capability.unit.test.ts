@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { programCapabilityHandler } from "../src/migration/programs/capability.ts";
+import { DatasetMutationError } from "../src/datasets/mutation/contracts.ts";
 const signal = new AbortController().signal;
 const principal = { tenant: "page", subject: "caller" };
 const manifest = {
@@ -107,4 +108,43 @@ test("unknown mutation outcome is retained for reconciliation and never retried"
   await assert.rejects(handler(principal, request, signal), /unknown/);
   await assert.rejects(handler(principal, request, signal), /unknown/);
   assert.equal(writes, 1);
+});
+test("registered mutation service rejection and unknown outcomes never become program success", async () => {
+  for (const outcome of ["rejected", "unknown"] as const) {
+    let calls = 0;
+    const failure = new DatasetMutationError("mutation_failed", outcome);
+    const handler = programCapabilityHandler({
+      principal,
+      requestId: "run-outcome",
+      manifest,
+      transport: {
+        authorize: async () => {},
+        query: async () => [],
+        mutate: async () => {
+          calls++;
+          throw failure;
+        },
+      },
+    });
+    const request = {
+      kind: "invoke" as const,
+      resource: "program-bindings",
+      operation: "mutate",
+      input: {
+        name: "insert",
+        args: {},
+        operationId: "operation-1",
+        values: { region: "east" },
+      },
+    };
+    await assert.rejects(
+      handler(principal, request, signal),
+      (error) => error === failure,
+    );
+    await assert.rejects(
+      handler(principal, request, signal),
+      (error) => error === failure,
+    );
+    assert.equal(calls, 1);
+  }
 });
