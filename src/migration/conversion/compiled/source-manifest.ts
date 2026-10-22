@@ -1,8 +1,8 @@
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
 import { MAX_COMPILED_SOURCE_BYTES } from "./contracts.ts";
-import { validLocalValue } from "./local-state.ts";
-import type { LocalDeclaration } from "./local-contracts.ts";
+import { validLocalValue, normalizeLocalTimestamp } from "./local-state.ts";
+import type { LocalDeclaration, LocalColumnType } from "./local-contracts.ts";
 import type {
   ReadLocalSourceManifest,
   ReconcileLocalDeclarations,
@@ -65,24 +65,30 @@ function literal(node: Node | undefined): unknown {
   return refuse();
 }
 function inferredColumns(rows: Record<string, unknown>[]) {
-  const columns = new Map<string, string>();
+  const columns = new Map<string, LocalColumnType | "">();
   for (const row of rows)
     for (const [name, value] of Object.entries(row)) {
       if (!columns.has(name)) columns.set(name, "");
       if (value === null) continue;
-      let type = typeof value as string;
+      let type = typeof value as LocalColumnType;
       if (type === "string") {
         if (/^\d{4}-\d{2}-\d{2}$/.test(value as string)) type = "date";
         else if (
           /^\d{4}-/.test(value as string) &&
-          Number.isFinite(Date.parse(value as string))
+          validLocalValue(
+            { name: "timestamp", type: "timestamp", default: null },
+            value,
+          )
         )
           type = "timestamp";
       }
       const previous = columns.get(name)!;
       columns.set(name, !previous || previous === type ? type : "string");
     }
-  return [...columns].map(([name, type]) => ({ name, type: type || "string" }));
+  return [...columns].map(([name, type]) => ({
+    name,
+    type: type || ("string" as LocalColumnType),
+  }));
 }
 /** Shared with full source admission so one parsed AST owns the manifest. */
 export function sourceValueDeclaration(node: Node): LocalDeclaration {
@@ -98,16 +104,25 @@ export function sourceValueDeclaration(node: Node): LocalDeclaration {
       refuse();
     attrs[name] = attr.value ? literal(attr.value) : true;
   }
+  const type = attrs.type ?? "string";
   if (
     typeof attrs.name !== "string" ||
     !/^[A-Za-z][A-Za-z0-9_]*$/.test(attrs.name) ||
     forbidden.has(attrs.name) ||
-    !["string", "number", "boolean", "table"].includes(String(attrs.type))
+    ![
+      "string",
+      "number",
+      "boolean",
+      "date",
+      "timestamp",
+      "user",
+      "table",
+    ].includes(String(type))
   )
     refuse();
   if (Object.hasOwn(attrs, "url") && typeof attrs.url !== "boolean") refuse();
   let declaration: LocalDeclaration;
-  if (attrs.type === "table") {
+  if (type === "table") {
     if (
       Object.hasOwn(attrs, "default") ||
       Object.hasOwn(attrs, "url") ||
@@ -135,7 +150,15 @@ export function sourceValueDeclaration(node: Node): LocalDeclaration {
           typeof column !== "object" ||
           Array.isArray(column) ||
           typeof column.name !== "string" ||
-          !["string", "number", "boolean"].includes(column.type)
+          Object.keys(column).some((key) => !["name", "type"].includes(key)) ||
+          ![
+            "string",
+            "number",
+            "boolean",
+            "date",
+            "timestamp",
+            "user",
+          ].includes(column.type)
         )
           refuse();
       const names = new Set(attrs.columns.map((c) => c.name));
@@ -156,8 +179,11 @@ export function sourceValueDeclaration(node: Node): LocalDeclaration {
       refuse();
     declaration = {
       name: attrs.name,
-      type: attrs.type,
-      default: attrs.default ?? null,
+      type,
+      default:
+        type === "timestamp" && attrs.default != null
+          ? normalizeLocalTimestamp(attrs.default)
+          : (attrs.default ?? null),
     } as LocalDeclaration;
   }
   if (!validLocalValue(declaration, declaration.default)) refuse();

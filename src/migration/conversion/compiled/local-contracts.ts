@@ -5,16 +5,23 @@ import type {
 } from "./contracts.ts";
 import type { ConversionResult } from "../contracts.ts";
 /** Mutable viewer data; queries are derived, never persisted. */
+export type LocalColumnType =
+  | "string"
+  | "number"
+  | "boolean"
+  | "date"
+  | "timestamp"
+  | "user";
 export interface LocalScalarDeclaration {
   name: string;
-  type: "string" | "number" | "boolean";
+  type: LocalColumnType;
   default: string | number | boolean | null;
 }
 export interface LocalTableDeclaration {
   name: string;
   type: "table";
   default: Record<string, string | number | boolean | null>[];
-  columns: { name: string; type: "string" | "number" | "boolean" }[];
+  columns: { name: string; type: LocalColumnType }[];
 }
 export type LocalDeclaration = LocalScalarDeclaration | LocalTableDeclaration;
 export interface ArchivedLocalOutput extends ArchivedStaticOutput {
