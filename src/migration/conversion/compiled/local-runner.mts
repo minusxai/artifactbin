@@ -1,4 +1,5 @@
 import { preservePresentationHosts } from "./presentation-hosts.ts";
+import {forwardArchivedMembersContext} from "./members-engine.ts";
 import { gzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import {
@@ -134,6 +135,7 @@ if (input.datasetUnavailable) {
     localTables,
     input.datasetBindings ?? [],
     input.boundValueColumns ?? [],
+    input.membersBinding,
   ));
 } else if (rawFlow.imports.length) throw Error("Import requires a query");
 const hasCharts = (nodes: readonly any[]): boolean =>
@@ -234,6 +236,7 @@ if (flow.queries.length && !input.datasetUnavailable) {
     },
     tables: results.tables,
     bindings: input.datasetBindings ?? [],
+    membersBinding:input.membersBinding,
   };
 }
 const sqlitePath = Object.keys(buildManifest.files).find((v: string) =>
@@ -380,6 +383,8 @@ const bundled = await bundle({
         b.onResolve({ filter: /^migration-datasets$/ }, () => ({
           path: path.join(import.meta.dirname, "dataset-reader.ts"),
         }));
+        if(input.membersBinding)b.onLoad({filter:/[\\/]lib[\\/]page-store[\\/]page-engine\.ts$/},async(args:any)=>({contents:forwardArchivedMembersContext(await readFile(args.path,"utf8")),loader:"ts",resolveDir:path.dirname(args.path)}));
+        b.onResolve({ filter: /^migration-members$/ },()=>({path:path.join(import.meta.dirname,"members-runtime.ts")}));
         b.onResolve({ filter: /^migration-sqlite$/ }, () => {
           if (!sqlitePath) throw Error("No archived SQLite engine");
           return {

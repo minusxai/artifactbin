@@ -1,3 +1,5 @@
+import { validCompiledMembersBinding } from "./members-binding.ts";
+import type { CompiledMembersBinding } from "./members-contracts.ts";
 import type { BoundValueColumnProof } from "./bound-value-contracts.ts";
 import { validateBoundFlow, publicBoundFlow } from "./bound-flow.ts";
 import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
@@ -10,8 +12,14 @@ export async function prepareLocalFlow(
   localTables: Record<string, unknown>,
   bindings: readonly CompiledDatasetBinding[],
   boundProofs: readonly BoundValueColumnProof[] = [],
+  membersBinding?: CompiledMembersBinding,
 ): Promise<{ flow: any; results: any }> {
   validateBoundFlow(rawFlow, bindings, boundProofs);
+  if (
+    membersBinding !== undefined &&
+    !validCompiledMembersBinding(membersBinding)
+  )
+    throw Error("Invalid members binding");
   if (!rawFlow.queries.length) throw Error("A local query is required");
   const { prepareCompile, compileDataflow } = await archived(
     "lib/dataflow/compile-dataflow.ts",
@@ -56,7 +64,12 @@ export async function prepareLocalFlow(
     flow.mutations.length ||
     flow.imports.length !== bindings.length ||
     flow.queries.some(
-      (q: any) => q.engine !== "sqlite" || q.source || q.reads.builtins.length,
+      (q: any) =>
+        q.engine !== "sqlite" ||
+        q.source ||
+        q.reads.builtins.some(
+          (b: string) => b !== "_members" || !membersBinding,
+        ),
     ) ||
     flow.imports.some(
       (i: any) =>
@@ -66,8 +79,14 @@ export async function prepareLocalFlow(
     )
   )
     throw Error("Unported query capability");
+  if (
+    membersBinding &&
+    !flow.queries.some((q: any) => q.reads.builtins.includes("_members"))
+  )
+    throw Error("Unused members binding");
   // Protected imported rows and their query results are never captured in HTML.
-  if (flow.imports.length) return { flow, results: { tables: {}, errors: {} } };
+  if (flow.imports.length || membersBinding)
+    return { flow, results: { tables: {}, errors: {} } };
   const { createPageEngine } = await archived("lib/page-store/page-engine.ts");
   const engine = createPageEngine({
     load: async () => ctx.engine,
