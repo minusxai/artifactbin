@@ -358,7 +358,7 @@ export function createCompiledDatasetMutations(
 /** Feed this fixed source to canonical Apollo gql; only the trusted namespace varies. */
 export function compiledDatasetMutationDocument(namespace: string): string {
   if (!identifier(namespace)) throw Error("Invalid mutation namespace");
-  return `mutation DatasetMutation($operation:String!,$requestId:String!,$params:DatasetParams!){${namespace}{mutate(operation:$operation,requestId:$requestId,params:$params){affected rowCount version generation}}}`;
+  return `mutation DatasetMutation($operation:String!,$requestId:String!,$params:${namespace}__DatasetParams!){${namespace}{mutate(operation:$operation,requestId:$requestId,params:$params){affected rowCount version generation}}}`;
 }
 
 export { compiledMutationIntentStore } from "./dataset-mutation-intents.ts";
