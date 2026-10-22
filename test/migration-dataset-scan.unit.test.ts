@@ -90,11 +90,32 @@ test("dataset scan retains literal dependencies and pins initial receipt to trus
   assert.deepEqual(result.historicalImportVersions.get("abc123"), [1]);
   assert.deepEqual(result.statistics, {
     pagesWithImports: 1,
+    pagesWithMembers: 0,
     headImports: 1,
     historicalImports: 1,
     groupOwnedPages: 0,
     unresolvedPages: 0,
   });
+  page.source =
+    '<Helmet><Query name="people">{`select user_id from _members`}</Query></Helmet>';
+  const members = await scanMigrationDatasetImports(source);
+  assert.equal(members.pages.length, 1);
+  assert.equal(
+    members.pages[0]!.revisions.find((r) => r.version === 2)!.readsMembers,
+    true,
+  );
+  assert.equal(
+    members.pages[0]!.revisions.find((r) => r.version === 1)!.readsMembers,
+    undefined,
+  );
+  assert.equal(members.statistics.pagesWithMembers, 1);
+  page.source =
+    '<Helmet><Query name="people">{`select 1 as _members`}</Query></Helmet>';
+  const notMembers = await scanMigrationDatasetImports(source);
+  assert.equal(
+    notMembers.pages[0]!.revisions.find((r) => r.version === 2)!.readsMembers,
+    undefined,
+  );
   source.maps.users = {};
   const unresolved = await scanMigrationDatasetImports(source);
   assert.equal(unresolved.pages.length, 0);

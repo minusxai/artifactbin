@@ -236,6 +236,15 @@ test(
       );
 
       await db.query(
+        `INSERT INTO "${schema}".dataset_member_bindings VALUES ('fakeid','fakeversion',$1,1,'fixture')`,
+        [plan.pages[0]!.pageId],
+      );
+      await assert.rejects(verify(), /member backend registry/);
+      await db.query(
+        `DELETE FROM "${schema}".dataset_member_bindings WHERE page_id=$1`,
+        [plan.pages[0]!.pageId],
+      );
+      await db.query(
         `UPDATE "${schema}".files SET access=jsonb_set(access,'{visibility}','"public"') WHERE id=$1`,
         [plan.pages[0]!.pageId],
       );

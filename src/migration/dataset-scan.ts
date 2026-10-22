@@ -1,3 +1,4 @@
+import { readsMigrationMembers } from "./job-members.ts";
 import {
   extractLegacyImports,
   legacyDocumentSource,
@@ -17,6 +18,7 @@ export async function scanMigrationDatasetImports(
   const historicalImportVersions = new Map<string, number[]>();
   const statistics = {
     pagesWithImports: 0,
+    pagesWithMembers: 0,
     headImports: 0,
     historicalImports: 0,
     groupOwnedPages: 0,
@@ -33,6 +35,7 @@ export async function scanMigrationDatasetImports(
     ];
     const revisions: MigrationBackendPage["revisions"][number][] = [];
     let hasImports = false;
+    let hasMembers = false;
     for (const row of originals) {
       if ((row.format ?? head.format) !== "markup") continue;
       let text: string | null;
@@ -90,10 +93,19 @@ export async function scanMigrationDatasetImports(
           statistics.headImports += extracted.imports.length;
         else statistics.historicalImports += extracted.imports.length;
       }
-      revisions.push({ version: Number(row.version), imports });
+      const readsMembers = await readsMigrationMembers(source, text, imports);
+      if (readsMembers) {
+        hasMembers = true;
+        statistics.pagesWithMembers++;
+      }
+      revisions.push({
+        version: Number(row.version),
+        imports,
+        ...(readsMembers ? { readsMembers: true as const } : {}),
+      });
     }
-    if (!hasImports) continue;
-    statistics.pagesWithImports++;
+    if (!hasImports && !hasMembers) continue;
+    if (hasImports) statistics.pagesWithImports++;
     heads.set(id, head.version);
     const kind = head.group_id ? "group" : head.user_id ? "user" : "token";
     const key = String(head.group_id ?? head.user_id ?? head.token_id ?? "");

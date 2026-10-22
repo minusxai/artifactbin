@@ -92,6 +92,29 @@ test("private conversion cache varies full inputs/compiler, retries corrupt and 
       boundValueColumns: [{ ...proof, constraints: { self: false } }],
     });
     assert.equal(calls, 8);
+    await a.convert({
+      ...input,
+      membersBinding: {
+        backendNamespace: "legacyData",
+        backendHref: "/af/v1/ids/abc123",
+      },
+    });
+    await a.convert({
+      ...input,
+      membersBinding: {
+        backendNamespace: "legacyData",
+        backendHref: "/af/v1/ids/abc123",
+      },
+    });
+    assert.equal(calls, 9);
+    await a.convert({
+      ...input,
+      membersBinding: {
+        backendNamespace: "legacyData",
+        backendHref: "/af/v1/ids/def456",
+      },
+    });
+    assert.equal(calls, 10);
     let attempts = 0;
     const flaky = cachedMigrationConverter(
       () => {

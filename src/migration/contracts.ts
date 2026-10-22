@@ -31,6 +31,7 @@ export interface SqlReader {
 export interface ConversionInput {
   /** Trusted offline catalog facts; included in cache provenance, never browser data. */
   boundValueColumns?: readonly BoundValueColumnProof[];
+  membersBinding?: { backendNamespace: string; backendHref: string };
   datasetUnavailable?: { reason: "historical-binding-unavailable" };
   datasetMutations?: readonly CompiledDatasetMutation[];
   datasetBindings?: readonly DatasetBrowserBinding[];

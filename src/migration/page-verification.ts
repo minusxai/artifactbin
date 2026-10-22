@@ -206,6 +206,30 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
     equal(
       (
         await db.query(
+          `SELECT backend_id,backend_version,page_version::text,source_namespace FROM ${runtime}.dataset_member_bindings WHERE page_id=$1 ORDER BY page_version,backend_id,backend_version`,
+          [page.pageId],
+        )
+      ).rows,
+      (page.backends ?? [])
+        .filter((b) => b.members)
+        .map((b) => ({
+          backend_id: b.backendId,
+          backend_version: b.deployment.version,
+          page_version: String(b.pageVersion),
+          source_namespace: b.members!.sourceNamespace,
+        }))
+        .sort(
+          (a, b) =>
+            Number(a.page_version) - Number(b.page_version) ||
+            a.backend_id.localeCompare(b.backend_id) ||
+            a.backend_version.localeCompare(b.backend_version),
+        ),
+      "member backend registry",
+    );
+
+    equal(
+      (
+        await db.query(
           `SELECT page_version FROM ${runtime}.af_backend_pages WHERE page_id=$1`,
           [page.pageId],
         )

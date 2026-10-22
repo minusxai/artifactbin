@@ -7,6 +7,7 @@ export interface MigrationDatasetImportScan {
   issues: ReadonlyMap<string, readonly string[]>;
   statistics: {
     pagesWithImports: number;
+    pagesWithMembers: number;
     headImports: number;
     historicalImports: number;
     groupOwnedPages: number;

@@ -222,4 +222,54 @@ test("job prepares exact live head bindings and real compiled receipts without i
     bound!.boundValueColumns.has(JSON.stringify(["abc123", 1])),
     false,
   );
+  const memberSource = {
+    ...source,
+    datasets: {
+      ...source.datasets!,
+      relations: [
+        {
+          subject_kind: "user",
+          subject_id: "owner",
+          verb: "join",
+          object_kind: "artifact",
+          object_id: "abc123",
+          status: "accepted",
+          accepted_at: "2026-10-21T12:30:00+05:30",
+        },
+      ],
+    },
+    readArtifact: async (id: string) => {
+      const artifact = await source.readArtifact(id);
+      if (id !== page.id) return artifact;
+      const clone = structuredClone(artifact);
+      clone.artifacts[0]!.source =
+        '<Helmet><Query name="people">{`select user_id,joined_at from _members`}</Query></Helmet>';
+      clone.tables.artifact_versions = [];
+      return clone;
+    },
+  };
+  const member = await prepareMigrationJobDatasets(memberSource, options, {
+    host: { compile: async () => deployment, invoke: async () => null },
+  });
+  assert.ok(member);
+  assert.equal(member.issues.size, 0);
+  assert.equal(member.metadata.bindings.length, 0);
+  assert.equal(member.metadata.pages.length, 1);
+  assert.deepEqual(member.metadata.acceptedJoins, [
+    {
+      pageId: "abc123",
+      legacyUserId: "owner",
+      joinedAt: "2026-10-21T07:00:00.000Z",
+    },
+  ]);
+  const receipt = member.backends.get("abc123")![0]!;
+  assert.deepEqual(receipt.members, { sourceNamespace: "fixture" });
+  assert.deepEqual(member.membersBindings.get(JSON.stringify(["abc123", 2])), {
+    backendNamespace: receipt.backendNamespace,
+    backendHref: receipt.backendHref,
+  });
+  assert.equal(
+    member.membersBindings.has(JSON.stringify(["abc123", 1])),
+    false,
+  );
 });

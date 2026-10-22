@@ -31,7 +31,7 @@ export async function prepareMigrationJobDatasets(
   const candidates = scan.pages.filter((page) => {
     const head = scan.heads.get(page.legacyId)!;
     const hasImports = page.revisions.some(
-      (r) => r.version === head && r.imports.length,
+      (r) => r.version === head && (r.imports.length || r.readsMembers),
     );
     if (hasImports && page.owner.kind === "group") {
       issues.set(page.legacyId, [
@@ -68,6 +68,10 @@ export async function prepareMigrationJobDatasets(
     import("./conversion/compiled/dataset-mutations-contracts.ts").CompiledDatasetMutation[]
   >();
   const bindings = new Map<string, DatasetBrowserBinding[]>();
+  const membersBindings = new Map<
+    string,
+    { backendNamespace: string; backendHref: string }
+  >();
   const backends = new Map<string, MigrationBackendReceipt[]>();
   const tokenOwners = source.base.tokenOwners.filter(
     (token) => source.maps.tokens[token.id],
@@ -96,7 +100,14 @@ export async function prepareMigrationJobDatasets(
     const pageBindings = prepared.bindings.filter(
       (b) => b.pageLegacyId === page.legacyId,
     );
-    if (!pageBindings.length) continue;
+    const memberPages = prepared.receipts
+      .filter((r) => r.pageLegacyId === page.legacyId && r.members)
+      .map((r) => ({
+        pageLegacyId: r.pageLegacyId,
+        pageId: r.pageId,
+        pageVersion: r.pageVersion,
+      }));
+    if (!pageBindings.length && !memberPages.length) continue;
     try {
       const artifact = await source.readArtifact(page.legacyId);
       const referenced = [
@@ -128,6 +139,7 @@ export async function prepareMigrationJobDatasets(
         maps: source.maps,
         receipts: source.datasets.receipts,
         bindings: pageBindings,
+        memberPages,
         relationProvenance: {
           exportedAt: source.datasets.provenance.relationExportedAt,
           manifestSha256: source.datasets.provenance.relationManifestSha256,
@@ -161,6 +173,16 @@ export async function prepareMigrationJobDatasets(
         list.push(row.mutation);
         mutations.set(key, list);
       }
+      for (const receipt of prepared.receipts.filter(
+        (r) => r.pageLegacyId === page.legacyId && r.members,
+      ))
+        membersBindings.set(
+          migrationDatasetVersionKey(receipt.pageLegacyId, receipt.pageVersion),
+          {
+            backendNamespace: receipt.backendNamespace,
+            backendHref: receipt.backendHref,
+          },
+        );
       backends.set(
         page.legacyId,
         prepared.receipts.filter((r) => r.pageLegacyId === page.legacyId),
@@ -179,6 +201,7 @@ export async function prepareMigrationJobDatasets(
   return {
     metadata: accumulator.finish(),
     boundValueColumns,
+    membersBindings,
     scan,
     bindings,
     mutations,
