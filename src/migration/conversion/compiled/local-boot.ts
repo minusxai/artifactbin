@@ -31,12 +31,14 @@ export function localBootSource(
   mutations: readonly CompiledDatasetMutation[] = [],
   controls: readonly CompiledDataControl[] = [],
   identities?: LocalDynamicIdentityPlan,
+  deck?: import("./slide-deck-contracts.ts").CompiledSlideDeck,
 ): string {
   const imports = sql?.bindings?.length ?? 0;
   const members=Boolean(sql?.membersBinding);
   return `import {client,gql} from '@afbin/apollo';
 import {hydrateIsland} from '@mx/rt';
 import {markCompiledReady} from 'migration-readiness';
+${deck ? "import {startDeck} from 'migration-deck';" : ""}
 ${identities ? "import {installDynamicIdentities} from 'migration-identities';" : ""}
 import {createSignal,createRoot,createEffect,untrack} from 'solid-js';
 ${author ? "import {mount as mountAuthor} from 'migration-author-entry';import {authorApolloPorts} from 'migration-author-ports';" : ""}
@@ -78,7 +80,8 @@ export function boot({TREE}) {
  ${mutations.length ? datasetMutationBoot(mutations, Boolean(imports)) : ""}
  const context={values, value:name=>values()[name],table,tableSnapshot:table,pending:()=>pending(),error:name=>queryErrors()[name],people:()=>({}),setValue:store.setValue,mutate:unavailable,writesUnavailable:()=>null,mutationUnavailable:name=>{${unavailableQueries ? "return 'Historical shared data writes are unavailable.';" : mutations.length ? "mutationTick();return mutationAdapter.status(name)?.state==='unknown'?'Reconcile the previous save before saving again.':null;" : "return null;"}},mutating:name=>{${mutations.length ? "mutationTick();return mutationAdapter.pending(name);" : "return false;"}},assetsUrl:()=>null,viewer:()=>null,drawings:()=>({}),valueType:name=>declarations.find(d=>d.name===name)?.type,nullable:name=>declarations.find(d=>d.name===name)?.default===null,declaresQueries:()=>${Boolean(sql)},writes:{current:()=>[],subscribe:()=>()=>{},dismiss:()=>{}},store:()=>store,trustedPortal:()=>null,loadChart:${charts ? "async()=>charts" : "unavailable"}};
  let ready=false;
- ${identities ? "pageSubscription=" : ""}client.watchQuery({query}).subscribe(({data})=>{${identities ? "if(identityFailed)return;" : ""}if(!ready){ready=true;${identities ? "stopIsland=" : ""}hydrateIsland('d-',TREE,context);${identities ? "flushIdentities();if(identityFailed){stopIsland?.();return;}" : ""}}setState(checked(data.compiledPage));${identities ? "flushIdentities();if(identityFailed)return;" : ""}markCompiledReady();void run();});
+ ${deck ? "let stopDeck=()=>{};window.addEventListener('pagehide',()=>stopDeck(),{once:true});" : ""}
+ ${identities ? "pageSubscription=" : ""}client.watchQuery({query}).subscribe(({data})=>{${identities ? "if(identityFailed)return;" : ""}if(!ready){ready=true;${identities ? "stopIsland=" : ""}hydrateIsland('d-',TREE,context);${deck ? `stopDeck=startDeck(${JSON.stringify(deck)});` : ''}${identities ? "flushIdentities();if(identityFailed){stopIsland?.();return;}" : ""}}setState(checked(data.compiledPage));${identities ? "flushIdentities();if(identityFailed)return;" : ""}markCompiledReady();void run();});
  ${identities ? "if(identityFailed)pageSubscription.unsubscribe();if(store.mutate){const mutate=store.mutate;store.mutate=(...args)=>identityFailed?Promise.reject(Error('Page identities unavailable')):mutate(...args);}" : ""}
  ${author ? authorDocumentBoot(author) : ""}
  ${identities && author ? "stopAuthored=stopAuthor;if(identityFailed)stopAuthored();" : ""}

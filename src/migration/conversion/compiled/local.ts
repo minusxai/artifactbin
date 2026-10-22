@@ -83,6 +83,7 @@ export async function compileArchivedLocal(
     issues: [],
     capabilities: [
       "local-scalars",
+      ...(input.slideDeck ? ["slide-deck-navigation"] : []),
       "archived-kit",
       "inlined-fonts",
       ...(queries.size && !historical ? ["local-sql-queries"] : []),

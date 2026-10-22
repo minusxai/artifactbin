@@ -5,6 +5,8 @@ import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 import type { ConversionResult } from "../contracts.ts";
 export interface CompiledMigrationInput {
   source: string;
+  /** Source-derived static slide navigation, overwritten at admission. */
+  slideDeck?: import("./slide-deck-contracts.ts").CompiledSlideDeck;
   /** Current executing page only, never an authored page ID or arbitrary membership scope. */
   membersBinding?: import("./members-contracts.ts").CompiledMembersBinding;
   /** Offline trusted catalog facts only; never serialize these in emitted page JavaScript. */

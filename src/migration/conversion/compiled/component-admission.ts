@@ -1,3 +1,4 @@
+import {admitSlideDeckComponent} from "./slide-deck.ts";
 import { admitScalarControl } from "./scalar-controls.ts";
 import {
   admitDataControl,
@@ -52,7 +53,7 @@ export const admitLocalComponent: AdmitLocalComponent = (input, context) => {
   }
   if (
     !presentationKitComponent(tag) &&
-    !["Segmented", "Switch", "Slider", "Select", "DataTable"].includes(tag)
+    !["Segmented", "Switch", "Slider", "Select", "DataTable", "SlideDeck", "Slide"].includes(tag)
   )
     return null;
   const attrs = attributes(node);
@@ -66,6 +67,10 @@ export const admitLocalComponent: AdmitLocalComponent = (input, context) => {
     dataControls: [],
     presentationIdentityHosts: [],
   };
+  if (["SlideDeck","Slide"].includes(tag)) {
+    admitSlideDeckComponent(tag,attrs);
+    return result;
+  }
   if (presentationKitComponent(tag)) {
     const capability = admitPresentationKit(tag, attrs, context.ancestors);
     result.identityLifecycle = capability;

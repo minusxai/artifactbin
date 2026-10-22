@@ -1,3 +1,4 @@
+import {readSlideDeckPlan} from "./slide-deck.ts";
 import {admitLocalComponent} from "./component-admission.ts";
 import {validCompiledMembersBinding} from "./members-binding.ts";
 import type {AdmittedAuthorMountProps} from "./author/prop-contracts.ts";
@@ -29,7 +30,7 @@ const activeUri = (v: string) =>
     v.replace(/[\u0000-\u0020\u007f]/g, "").toLowerCase(),
   );
 const allowed = new Set(
-  "Helmet Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "SlideDeck Slide Helmet Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -144,6 +145,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const loopTables = new Set<string>();
   const loopKeys: {table:string;key:string}[] = [];
   const rowReads: {table:string;field:string}[] = [];
+  let slideDeck: import("./slide-deck-contracts.ts").CompiledSlideDeck | undefined;
   let dynamicIdentities: import("./reactive-source-contracts.ts").LocalDynamicIdentityPlan = {regions:[]};
   const queries = new Set<string>();
   const safeExpression = (node: any): boolean => {
@@ -548,6 +550,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     };
     walk(tree);
     if (scalarControls.some(control => expectedDeclarations.find(d => d.name === control.binding)?.type !== control.valueType)) invalid = true;
+    slideDeck = readSlideDeckPlan(tree);
     dynamicIdentities = readLocalIdentityPlan(tree);
     if (!validIdentityConditions(dynamicIdentities, expectedDeclarations)) invalid = true;
     for (const reference of [...loopKeys.map(r => ({table:r.table,field:r.key})), ...rowReads]) {
@@ -586,7 +589,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     [...imports].some((n) => declarations.has(n) || queries.has(n))
   )
     invalid = true;
-  if (invalid || (declarations.size === 0 && queries.size === 0 && !author))
+  if (invalid || (declarations.size === 0 && queries.size === 0 && !author && !slideDeck))
     return blocked("compiled-capability");
   if (
     dataControls.some((p) =>
@@ -600,7 +603,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     )
   )
     return blocked("compiled-data-control");
-  input = { ...input, dataControls, dynamicIdentities, presentationIdentities };
+  input = { ...input, slideDeck, dataControls, dynamicIdentities, presentationIdentities };
   return {
     ok: true,
     plan: {

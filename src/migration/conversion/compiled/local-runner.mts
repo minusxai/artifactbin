@@ -62,7 +62,7 @@ const parts = await prepareStoryParts({
   colorMode: input.colorMode ?? "light",
   title: null,
   refData: {},
-  chrome: false,
+  chrome: Boolean(input.slideDeck),
 });
 if (parts.runtime.authorScript || parts.runtime.authorScriptErrors?.length)
   throw Error("Author code is not supported");
@@ -163,7 +163,7 @@ const generated = generate({
   nodes: presentationNodes,
   colorMode: parts.mode,
   template: input.template ?? null,
-  chrome: false,
+  chrome: Boolean(input.slideDeck),
   glyphs: parts.runtime.data.glyphs,
   refData: {},
   flow,
@@ -173,7 +173,7 @@ const generated = generate({
 if (
   generated.unported.length ||
   generated.partial.length ||
-  generated.behaviors.length
+  generated.behaviors.some((behavior:string)=>behavior!=="@mx/deck" || !input.slideDeck || input.slideDeck.slides.length<2)
 )
   throw Error("Interactive behavior requires a migration adapter");
 const rendered = (
@@ -329,6 +329,7 @@ const bundled = await bundle({
             input.datasetMutations ?? [],
             input.dataControls ?? [],
             input.dynamicIdentities,
+            input.slideDeck,
           ),
           loader: "js",
         }));
@@ -362,6 +363,7 @@ const bundled = await bundle({
             resolveDir: root,
           }),
         );
+        b.onResolve({filter:/^migration-deck$/},()=>({path:path.join(import.meta.dirname,"deck-runtime.ts")}));
         b.onResolve({ filter: /^migration-readiness$/ }, () => ({
           path: path.join(import.meta.dirname, "readiness.ts"),
         }));
@@ -397,7 +399,7 @@ const bundled = await bundle({
               author ||
               chartSources ||
               input.datasetMutations?.length ||
-              input.dataControls?.length) &&
+              input.dataControls?.length || input.slideDeck) &&
             args.path.startsWith("solid-js")
           ) {
             const suffix = args.path.slice("solid-js".length);
@@ -412,7 +414,7 @@ const bundled = await bundle({
               author ||
               chartSources ||
               input.datasetMutations?.length ||
-              input.dataControls?.length) &&
+              input.dataControls?.length || input.slideDeck) &&
             (args.path === "@mx/rt" || args.path.startsWith("@mx/kit/"))
           ) {
             const relative =
@@ -455,7 +457,7 @@ if (/\/api\/|\/islands\/|EventSource|WebSocket|@mx\/boot/.test(javascript))
   throw Error("Legacy platform transport in browser bundle");
 const sheets = documentStyleSheets({
   compiledCss,
-  chrome: false,
+  chrome: Boolean(input.slideDeck),
   bare: false,
   theme: input.theme ?? null,
   docFonts: parts.docFonts,

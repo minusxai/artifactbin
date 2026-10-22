@@ -1,3 +1,4 @@
+import {reconcileSlideDeckHtml} from "./slide-deck-output.ts";
 import {reconcileAuthorProps} from "./author/props.ts";
 import {initialDynamicIdentities,allowedInitialDynamicIdentities} from "./dynamic-identities.ts";
 /** Compiler-output admission owns shape, source reconciliation, bundle policy,
@@ -155,6 +156,11 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
         } catch { unsafe = true; }
         authorMounts.add(id);
       }
+      if(plan.input.slideDeck){
+        const path=node.attrs.find((a:any)=>a.name==='data-mx-ast');
+        node.attrs=node.attrs.filter((a:any)=>a.name!=='data-af-deck-path');
+        if(path)node.attrs.push({name:'data-af-deck-path',value:path.value});
+      }
       node.attrs = node.attrs.filter(
         (a: any) => !["data-af-id", "data-mx-ast", "data-mx-source-node-id"].includes(a.name),
       );
@@ -162,8 +168,10 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
       if (id) node.attrs.push({ name: "data-af-id", value: id.value });
     }
     for (const c of node.childNodes ?? []) visit(c);
+    if(plan.input.slideDeck && node.content)visit(node.content);
   };
   visit(fragment);
+  if(!reconcileSlideDeckHtml(fragment,plan.input.slideDeck))return blocked("compiled-slide-output");
   const initialIdentities = new Set(initialDynamicIdentities(plan.dynamicIdentities, Object.fromEntries(plan.manifest.declarations.map(d => [d.name,d.default]))));
   const allowedIdentities = new Set(allowedInitialDynamicIdentities(plan.dynamicIdentities, Object.fromEntries(plan.manifest.declarations.map(d => [d.name,d.default]))));
   if (unsafe || [...initialIdentities].some((id) => !Object.hasOwn(identities, id)) || [...plan.renderedIdentities].some(id => Object.hasOwn(identities,id) && !allowedIdentities.has(id)) || (author && authorMounts.size !== author.mounts.length))
