@@ -6,6 +6,7 @@ export async function recoverArchivedDocumentSource(
   legacyRoot: string,
 ): Promise<LegacyDocumentSourceRecovery | null> {
   try {
+    if (!document || typeof document !== "object" || Buffer.byteLength(JSON.stringify(document)) > MAX_COMPILED_SOURCE_BYTES) return null;
     const result = await externalCompile<
       LegacyDocumentSourceRecovery,
       { document: unknown }
