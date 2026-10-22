@@ -1,7 +1,13 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import { compileChartPlan, isKitQuestionView } from "./plan.ts";
 import type { CompiledChartPlan } from "./contracts.ts";
+import { chartTextObject } from "./text-object.ts";
+import {
+  prepareChartTextTemplate,
+  bindChartTextPlan,
+} from "./text-template-compiler.ts";
 /** Called only inside the bounded archived compiler subprocess. Never import from page boot. */
 export async function prepareArchivedChartPlans(
   nodes: readonly any[],
@@ -23,7 +29,7 @@ export async function prepareArchivedChartPlans(
     { resolveEnvelopeSpec, planVega },
     { inferVizColumnsFromRows },
     { deepHasValueHole },
-    { parse },
+    { parse, expressionFunction },
   ] = await Promise.all([
     archived("lib/viz/chart-envelope.ts"),
     archived("lib/viz/render-vega.ts"),
@@ -35,6 +41,18 @@ export async function prepareArchivedChartPlans(
       ).href
     ),
   ]);
+  expressionFunction("migration_chart_text_object", chartTextObject);
+  // The archived parser has its own pinned vega-functions dependency/registry.
+  const parserRequire = createRequire(
+    path.join(archivedRoot, "node_modules/vega-parser/package.json"),
+  );
+  const parserFunctions = await import(
+    pathToFileURL(parserRequire.resolve("vega-functions")).href
+  );
+  parserFunctions.expressionFunction(
+    "migration_chart_text_object",
+    chartTextObject,
+  );
   const plans = new Map<string, CompiledChartPlan>();
   const walk = (list: readonly any[]) => {
     for (const node of list) {
@@ -44,10 +62,13 @@ export async function prepareArchivedChartPlans(
           node.attributes.find((a: any) => a.name === name)?.value;
         const vizAttr = attr("viz");
         if (vizAttr && !(vizAttr.static && isKitQuestionView(vizAttr.json))) {
-          if (!vizAttr.static || deepHasValueHole(vizAttr.json))
+          if (!vizAttr.static)
             throw Error(
               "Templated chart requires a finite offline plan adapter",
             );
+          const prepared = deepHasValueHole(vizAttr.json)
+            ? prepareChartTextTemplate(vizAttr.json)
+            : { viz: vizAttr.json, bindings: [] };
           const data = attr("data");
           if (
             !data?.static ||
@@ -63,7 +84,7 @@ export async function prepareArchivedChartPlans(
               : 300;
           const plan = compileChartPlan(
             {
-              viz: vizAttr.json,
+              viz: prepared.viz,
               columns: table?.columns ?? [],
               rows: table?.rows ?? [],
               width: 640,
@@ -73,11 +94,16 @@ export async function prepareArchivedChartPlans(
             {
               envelope: questionEnvelope,
               resolve: resolveEnvelopeSpec,
-              plan: planVega,
+              plan: (...args: any[]) => {
+                const result = planVega(...args);
+                bindChartTextPlan(result.vegaSpec, prepared.bindings);
+                return result;
+              },
               infer: inferVizColumnsFromRows,
               parse,
             },
           );
+          if (prepared.bindings.length) plan.textBindings = prepared.bindings;
           plans.set(plan.key, plan);
           if (plans.size > 32) throw Error("Chart count exceeds limit");
         }

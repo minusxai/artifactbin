@@ -37,6 +37,9 @@ export async function chartRendererSources(
   }
   const runtimePath = fileURLToPath(new URL("./runtime.ts", import.meta.url));
   const paintPath = fileURLToPath(new URL("./paint.ts", import.meta.url));
+  const textObjectPath = fileURLToPath(
+    new URL("./text-object.ts", import.meta.url),
+  );
   const entry = `import {View} from 'vega-view';
 import {transforms} from 'vega-dataflow';
 import {SVGRenderer,renderModule} from 'vega-scenegraph';
@@ -52,6 +55,9 @@ import * as regression from 'vega-regression';
 import * as voronoi from 'vega-voronoi';
 import * as wordcloud from 'vega-wordcloud';
 import {expressionInterpreter} from 'vega-interpreter';
+import {expressionFunction} from 'vega-functions';
+import {chartTextObject} from ${JSON.stringify(textObjectPath)};
+expressionFunction('migration_chart_text_object',chartTextObject);
 import {createCompiledCharts} from ${JSON.stringify(runtimePath)};
 Object.assign(transforms,tx,vtx,encode,geo,force,hierarchy,label,regression,voronoi,wordcloud);
 class SafeSVGRenderer extends SVGRenderer {
@@ -64,7 +70,7 @@ create:(runtime,element)=>{
  let failed=false;
  const logger={level(){return this;},error(){failed=true;element.setAttribute('data-mx-chart-state','error');element.setAttribute('aria-busy','false');element.setAttribute('role','status');element.textContent='Chart unavailable. Reload the page after checking its data.';return this;},warn(){return this;},info(){return this;},debug(){return this;}};
  view.logger(logger);
- const adapter={data(name,rows){view.data(name,rows);return adapter;},width(value){view.width(value);return adapter;},height(value){view.height(value);return adapter;},resize(){view.resize();return adapter;},async runAsync(){await view.runAsync();if(failed)throw Error('Chart rendering failed');return adapter;},finalize(){view.finalize();}};
+ const adapter={signal(name,value){view.signal(name,value);return adapter;},data(name,rows){view.data(name,rows);return adapter;},width(value){view.width(value);return adapter;},height(value){view.height(value);return adapter;},resize(){view.resize();return adapter;},async runAsync(){await view.runAsync();if(failed)throw Error('Chart rendering failed');return adapter;},finalize(){view.finalize();}};
  return adapter;
 },
 observe:(element,resize)=>{const observer=new ResizeObserver(resize);observer.observe(element);return ()=>observer.disconnect();}

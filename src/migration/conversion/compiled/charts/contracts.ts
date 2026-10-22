@@ -12,6 +12,8 @@ export interface CompiledChartPlan {
   runtime: Record<string, unknown>;
   width: number;
   height: number;
+  /** Fixed envelope leaves supplied as signal DATA, never expression source. */
+  textBindings?: Array<{ path: string[]; signal: string; marker: string }>;
 }
 export interface ChartCompilerPorts {
   envelope(
@@ -38,6 +40,7 @@ export interface ChartCompilerPorts {
   parse(spec: unknown, config: unknown, options: { ast: true }): unknown;
 }
 export interface ChartView {
+  signal?(name: string, value: string | number | boolean | null): ChartView;
   data(name: string, rows: Record<string, unknown>[]): ChartView;
   width(value: number): ChartView;
   height(value: number): ChartView;

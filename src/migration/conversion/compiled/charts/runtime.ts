@@ -1,4 +1,5 @@
 import { chartEnvelopeKey } from "./plan.ts";
+import { matchChartTextPlan } from "./text-template.ts";
 import type {
   CompiledChartPlan,
   ChartRendererPorts,
@@ -18,8 +19,20 @@ export function createCompiledCharts(
       envelope: unknown;
       rows: Record<string, unknown>[];
     }): CompiledChartController {
-      const plan = lookup.get(chartEnvelopeKey(input.envelope));
+      let plan = lookup.get(chartEnvelopeKey(input.envelope));
+      let signals: ReturnType<typeof matchChartTextPlan> = null;
+      if (!plan) {
+        for (const candidate of plans) {
+          const values = matchChartTextPlan(candidate, input.envelope);
+          if (values) {
+            if (plan) throw Error("Ambiguous compiled chart envelope");
+            plan = candidate;
+            signals = values;
+          }
+        }
+      }
       if (!plan) throw Error("Chart envelope was not compiled offline");
+      const selectedPlan = plan;
       const element = input.element;
       const copyRows = (rows: Record<string, unknown>[]) => {
         if (!Array.isArray(rows) || rows.length > 10000)
@@ -54,6 +67,14 @@ export function createCompiledCharts(
         JSON.parse(JSON.stringify(plan.runtime)),
         element,
       );
+      if (signals) {
+        if (!view.signal) {
+          view.finalize();
+          throw Error("Chart signal adapter unavailable");
+        }
+        for (const binding of signals)
+          view.signal(binding.signal, binding.value);
+      }
       let failed = false;
       let disposed = false,
         running = false,
@@ -68,12 +89,15 @@ export function createCompiledCharts(
             view
               .data("main", pending)
               .width(
-                Math.max(80, Math.min(4096, element.clientWidth || plan.width)),
+                Math.max(
+                  80,
+                  Math.min(4096, element.clientWidth || selectedPlan.width),
+                ),
               )
               .height(
                 Math.max(
                   60,
-                  Math.min(4096, element.clientHeight || plan.height),
+                  Math.min(4096, element.clientHeight || selectedPlan.height),
                 ),
               )
               .resize();

@@ -125,6 +125,17 @@ test("Question tables and single values retain the kit's reactive renderer", () 
   assert.equal(isKitQuestionView({ kind: "vega-lite" }), false);
 });
 
+test("string Question viz retains the archived kit's native table behavior", () => {
+  // The archived kit reads viz.kind, then defaults to table; a string has no kind.
+  assert.equal(isKitQuestionView("legacy-view"), true);
+  assert.equal(isKitQuestionView("bar"), true);
+  assert.equal(isKitQuestionView(""), true);
+  assert.equal(
+    isKitQuestionView({ kind: "bar", x: "label", y: "amount" }),
+    false,
+  );
+});
+
 test("compiled runtime refuses selector and timer streams and binding controls", () => {
   for (const runtime of [
     { streams: [{ source: "body", type: "click" }] },
