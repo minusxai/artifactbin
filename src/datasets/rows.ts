@@ -72,9 +72,9 @@ export function validateTable(table: DatasetTable): void {
   const o = table.object;
   if (
     !o ||
-    !/^dataset\/[a-f0-9]{32}$/.test(o.key) ||
+    !/^[a-f0-9]{64}$/.test(o.key) ||
     !/^[a-f0-9]{64}$/.test(o.sha256) ||
-    o.key.slice(8) !== o.sha256.slice(0, 32) ||
+    o.key !== o.sha256 ||
     !Number.isSafeInteger(o.bytes) ||
     o.bytes < 2 ||
     o.bytes > DATASET_OBJECT_BYTES
@@ -109,8 +109,9 @@ function boundedRowCount(text: string): void {
       quoted = true;
       continue;
     }
-    if (char === "[" || char === "{") depth++;
-    else if (char === "]" || char === "}") depth--;
+    if (char === "[" || char === "{") {
+      if (++depth > 32) invalid();
+    } else if (char === "]" || char === "}") depth--;
     else if (char === "," && depth === 1 && ++count > 100000) invalid();
   }
 }

@@ -19,7 +19,7 @@ export interface DatasetTable {
   schema: string;
   name: string;
   columns: readonly DatasetColumn[];
-  /** Server-only immutable storage identity. Never supplied by a page or returned. */
+  /** Server-only flat full-SHA256 storage identity, equal to sha256. Never page input/output. */
   object: { key: string; sha256: string; bytes: number };
 }
 export interface DatasetBinding {

@@ -21,7 +21,7 @@ const binding: DatasetBinding = {
       name: "rows",
       columns: [{ name: "amount", type: "number" }],
       object: {
-        key: "dataset/" + sha256.slice(0, 32),
+        key: sha256,
         sha256,
         bytes: bytes.length,
       },
@@ -152,7 +152,7 @@ test("digest corruption and typed row corruption are refused", async () => {
         {
           ...binding.tables[0]!,
           object: {
-            key: "dataset/" + digest.slice(0, 32),
+            key: digest,
             sha256: digest,
             bytes: bad.length,
           },
@@ -270,7 +270,7 @@ test("payloads larger than bound stop before parsing and oversized cells cannot 
           name: "rows",
           columns: [{ name: "text", type: "string" }],
           object: {
-            key: "dataset/" + digest.slice(0, 32),
+            key: digest,
             sha256: digest,
             bytes: data.length,
           },
@@ -312,7 +312,7 @@ test("typed legacy dates, timestamps, booleans and user IDs retain read semantic
             { name: "person", type: "user" },
           ],
           object: {
-            key: "dataset/" + digest.slice(0, 32),
+            key: digest,
             sha256: digest,
             bytes: data.length,
           },
@@ -369,7 +369,7 @@ test("response pagination reduces the window to fit the capability frame and res
           name: "rows",
           columns: [{ name: "text", type: "string" }],
           object: {
-            key: "dataset/" + digest.slice(0, 32),
+            key: digest,
             sha256: digest,
             bytes: data.length,
           },
@@ -411,7 +411,7 @@ test("tiny sparse tables do not expand every row across a wide catalog and exces
               type: "string",
             })),
             object: {
-              key: "dataset/" + digest.slice(0, 32),
+              key: digest,
               sha256: digest,
               bytes: data.length,
             },
@@ -434,4 +434,44 @@ test("tiny sparse tables do not expand every row across a wide catalog and exces
       assert.equal(Object.keys(result.rows[0]!).length, 1024);
     }
   }
+});
+test("runtime object identity uses the full digest and excessive nesting is refused before parsing", async () => {
+  const f = fixture({
+    binding: async () => ({
+      ...binding,
+      tables: [
+        {
+          ...binding.tables[0]!,
+          object: {
+            ...binding.tables[0]!.object,
+            key: "dataset/" + sha256.slice(0, 32),
+          },
+        },
+      ],
+    }),
+  });
+  await assert.rejects(f.service.read(context, request), {
+    code: "invalid_dataset",
+  });
+  assert.equal(f.loads(), 0);
+  const data = Buffer.from("[".repeat(40) + "]".repeat(40));
+  const digest = createHash("sha256").update(data).digest("hex");
+  const g = fixture({
+    binding: async () => ({
+      ...binding,
+      tables: [
+        {
+          ...binding.tables[0]!,
+          object: { key: digest, sha256: digest, bytes: data.length },
+        },
+      ],
+    }),
+    read: async () =>
+      (async function* () {
+        yield data;
+      })(),
+  });
+  await assert.rejects(g.service.read(context, request), {
+    code: "invalid_dataset",
+  });
 });
