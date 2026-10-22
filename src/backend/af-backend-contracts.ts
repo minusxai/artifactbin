@@ -95,7 +95,11 @@ export interface BackendFilesPort {
     },
   ): Promise<void>;
   /** IDs among `ids` that are published backend files owned by `owner`. */
-  owned(client: SqlClient, owner: string, ids: readonly FileId[]): Promise<FileId[]>;
+  owned(
+    client: SqlClient,
+    owner: string,
+    ids: readonly FileId[],
+  ): Promise<FileId[]>;
   /** IDs among `ids` that are published backend files (any owner). */
   published(client: SqlClient, ids: readonly FileId[]): Promise<FileId[]>;
   /** A published backend file's owner and current version, or null; serves /af/v1/ids/<backend-id> to its owner. */
@@ -153,6 +157,8 @@ export interface BackendFilesModule {
      * request's own short transaction. Without it every call gets `{}`.
      */
     secrets?: import("../server/secrets-contracts.ts").SecretsEnvPort;
+    /** Explicit server binding service; absent means every dataset capability is denied. */
+    datasets?: import("../datasets/contracts.ts").DatasetReadService;
     /** B's resolver from credential to caller, so C never parses tokens itself. */
     caller(
       client: SqlClient,

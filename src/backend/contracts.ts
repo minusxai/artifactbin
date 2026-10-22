@@ -92,7 +92,12 @@ export type BackendCapabilityRequest =
       resource: string;
       operations: { operation: string; input: BackendJson }[];
     }
-  | BackendStoreRequest;
+  | BackendStoreRequest
+  | {
+      kind: "dataset";
+      operation: "read";
+      input: import("../datasets/contracts.ts").DatasetReadRequest;
+    };
 /**
  * `caps.store`: the backend file's one JSON document, kept by the platform.
  * The host decides which file; the request never names it.

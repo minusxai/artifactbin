@@ -59,11 +59,10 @@ export function withCapabilityAuthority(
           capabilityHandler: undefined,
         });
       }
-      // `store` is the server's handler for the backend file's platform-kept
-      // document (caps.store): open to anonymous callers, since no connector
-      // or operator secret is involved.
+      // The server handler owns store and explicit dataset bindings. Dataset
+      // reads recheck their own audience; anonymous connector access stays denied.
       const handler: BackendCapabilityHandler = (ignored, request, s) =>
-        request.kind === "store"
+        request.kind === "store" || request.kind === "dataset"
           ? store
             ? store(ignored, request, s)
             : Promise.reject(new ConnectorError("DENIED"))

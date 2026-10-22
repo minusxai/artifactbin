@@ -1,3 +1,4 @@
+import { datasetCapabilityHandler } from "../datasets/capability.ts";
 /**
  * Backend files: compile and version them with the page that links them, and
  * serve the page's backend routes (contract: ./af-backend-contracts.ts).
@@ -340,6 +341,7 @@ export function createBackendRoutes(options: {
     credential: string,
   ): Promise<PageCaller>;
   secrets?: SecretsEnvPort;
+  datasets?: import("../datasets/contracts.ts").DatasetReadService;
   log?(line: string): void;
 }): AfRouteModule {
   const { database, host, caller, secrets } = options;
@@ -447,7 +449,19 @@ export function createBackendRoutes(options: {
           );
         const deployment = await runnable(host, pageId, link);
         // caps.store reaches this file's own document.
-        const capabilities = store.handler(link.id);
+        const storeCapabilities = store.handler(link.id);
+        const capabilities = options.datasets
+          ? datasetCapabilityHandler(
+              options.datasets,
+              {
+                backendId: link.id,
+                backendVersion: deployment.version,
+                pageId,
+                subject: call.principal.subject,
+              },
+              storeCapabilities,
+            )
+          : storeCapabilities;
         try {
           return (await host.invoke({
             deployment: deployment,

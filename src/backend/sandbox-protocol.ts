@@ -83,6 +83,44 @@ function checkedCapabilityFrame(
       };
     throw Error();
   }
+  if (req.kind === "dataset") {
+    const input = req.input;
+    if (
+      req.operation !== "read" ||
+      Object.keys(req).sort().join() !== "input,kind,operation" ||
+      !record(input) ||
+      Object.keys(input).sort().join() !==
+        "binding,limit,offset,schema,table" ||
+      typeof input.binding !== "string" ||
+      !input.binding ||
+      typeof input.schema !== "string" ||
+      !input.schema ||
+      typeof input.table !== "string" ||
+      !input.table ||
+      typeof input.offset !== "number" ||
+      !Number.isSafeInteger(input.offset) ||
+      input.offset < 0 ||
+      typeof input.limit !== "number" ||
+      !Number.isSafeInteger(input.limit) ||
+      input.limit < 1 ||
+      input.limit > 10000
+    )
+      throw Error();
+    return {
+      id,
+      request: {
+        kind: "dataset",
+        operation: "read",
+        input: {
+          binding: input.binding,
+          schema: input.schema,
+          table: input.table,
+          offset: input.offset,
+          limit: input.limit,
+        },
+      },
+    };
+  }
   if (typeof req.resource !== "string" || !req.resource) throw Error();
   if (
     req.kind === "invoke" &&

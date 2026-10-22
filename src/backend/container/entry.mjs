@@ -19,7 +19,8 @@ function validate(x, seen = new Set(), depth = 0) {
   seen.add(x);
   const keys = Reflect.ownKeys(x),
     array = Array.isArray(x);
-  if (array && keys.length !== x.length + 1) throw Error("Arrays must have no holes");
+  if (array && keys.length !== x.length + 1)
+    throw Error("Arrays must have no holes");
   for (const key of keys) {
     if (array && key === "length") continue;
     const d = Object.getOwnPropertyDescriptor(x, key);
@@ -58,7 +59,9 @@ function storeLimitError() {
   return error;
 }
 function codeOf(error) {
-  return typeof error === "object" && error !== null && storeLimitErrors.has(error)
+  return typeof error === "object" &&
+    error !== null &&
+    storeLimitErrors.has(error)
     ? "store_limit"
     : "backend_rejected";
 }
@@ -75,10 +78,14 @@ export default {
         !groups ||
         Object.keys(groups).some((k) => k !== "Query" && k !== "Mutation")
       )
-        throw Error("The default export must be an object with Query and/or Mutation");
+        throw Error(
+          "The default export must be an object with Query and/or Mutation",
+        );
       for (const group of Object.values(groups)) {
         if (!group || typeof group !== "object")
-          throw Error("Query and Mutation must be objects of resolver functions");
+          throw Error(
+            "Query and Mutation must be objects of resolver functions",
+          );
         for (const [field, resolver] of Object.entries(group)) {
           if (typeof resolver !== "function" || Object.hasOwn(resolvers, field))
             throw Error(`Resolver ${field} must be one function`);
@@ -144,6 +151,11 @@ export default {
             },
             transaction: async (resource, operations) =>
               capability({ kind: "transaction", resource, operations }),
+            // Only saved server bindings are readable; pages cannot send keys or SQL.
+            dataset: Object.freeze({
+              read: async (input) =>
+                capability({ kind: "dataset", operation: "read", input }),
+            }),
             // This backend file's one JSON document, kept by the platform.
             store: Object.freeze({
               get: async () => {
