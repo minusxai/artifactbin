@@ -11,7 +11,14 @@ const defaults: DatasetReadLimits = {
   timeoutMs: 10_000,
   pageSize: 500,
 };
-const types = new Set(["string", "number", "boolean", "date", "timestamp"]);
+const types = new Set([
+  "string",
+  "number",
+  "boolean",
+  "date",
+  "timestamp",
+  "user",
+]);
 export function validDatasetBinding(binding: CompiledDatasetBinding): boolean {
   if (
     !binding ||
