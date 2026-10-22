@@ -43,6 +43,7 @@ export interface PlatformChrome {
   readonly bar: HTMLElement;
   readonly theme: ColorMode;
   renderIdentity(): void;
+  /** Updates profiles and current sessions without replacing surviving viewer controls or their pointer targets. */
   renderPeople(): void;
   /** Refresh recovery actions in an open settings menu without replacing its controls. */
   /** Show a theme; persist false re-applies it without recording a pick or telling the page. */

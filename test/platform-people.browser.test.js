@@ -51,7 +51,65 @@ test("a profile refresh during a pointer gesture preserves the viewer snapshot a
       [{ kind: "view-person", sessionId: "ann-session" }],
       "an async profile refresh must not drop or duplicate the in-progress snapshot click",
     );
-    await page.evaluate(() => chromeUI.dispose());
+    // Keyed controls retain focus and pointer nodes while their presentation
+    // and selected live session change, then remove departed viewers.
+    const projection = await page.evaluate(() => {
+      const button = document.querySelector(
+        '[aria-label="View ann\'s snapshot"]',
+      );
+      const face = button.querySelector(".pg-face");
+      const image = face.querySelector("img");
+      button.focus();
+      state.profiles.ann = {
+        name: "Zoe",
+        image: "https://tracker.invalid/photo.png",
+      };
+      state.viewers[0].sessionId = "new-ann-session";
+      state.viewers[0].shareView = false;
+      chromeUI.renderPeople();
+      return {
+        sameButton:
+          button ===
+          document.querySelector('[aria-label="View ann\'s snapshot"]'),
+        sameFace: face === button.querySelector(".pg-face"),
+        sameImage: image === face.querySelector("img"),
+        focusKept: document.activeElement === button,
+        initial: face.firstChild.nodeValue,
+        imageHidden: image.hidden && !image.hasAttribute("src"),
+        sharing: button.getAttribute("aria-description"),
+      };
+    });
+    assert.deepEqual(projection, {
+      sameButton: true,
+      sameFace: true,
+      sameImage: true,
+      focusKept: true,
+      initial: "Z",
+      imageHidden: true,
+      sharing: "View sharing is off",
+    });
+    await viewer.press("Enter");
+    assert.deepEqual(await page.evaluate(() => calls.at(-1)), {
+      kind: "view-person",
+      sessionId: "new-ann-session",
+    });
+    await page.evaluate(() => {
+      state.viewers = [];
+      chromeUI.renderPeople();
+    });
+    assert.equal(
+      await page.getByRole("button", { name: "View ann's snapshot" }).count(),
+      0,
+    );
+    assert.equal(await page.locator("#pg-people").isHidden(), true);
+    await page.evaluate(() => {
+      chromeUI.dispose();
+      state.viewers = [
+        { actor: "ann", sessionId: "later-session", shareView: true },
+      ];
+      chromeUI.renderPeople();
+    });
+    assert.equal(await page.locator("#pg-people").count(), 0);
   } finally {
     await browser.close();
   }

@@ -17,6 +17,7 @@ import {
 import { DESIGN_SYSTEMS } from "../af-contracts.ts";
 import type { DesignSystemName } from "../af-contracts.ts";
 import { otherViewers } from "../chrome-model.ts";
+import { createViewerControls } from "./viewer-controls.ts";
 /** Owns platform presentation and focus. All document/account effects are semantic commands. */
 export function createPlatformChrome(
   options: PlatformChromeOptions,
@@ -48,6 +49,9 @@ export function createPlatformChrome(
     surface.addEventListener("click", () => options.beginAction?.(), {
       capture: true,
     });
+  const viewerControls = createViewerControls(people, (sessionId) =>
+    act({ kind: "view-person", sessionId }),
+  );
   let theme: ColorMode = themeChoice(),
     disposed = false;
   function act(action: ChromeAction) {
@@ -266,22 +270,7 @@ export function createPlatformChrome(
       if (disposed) return;
       const view = options.read(),
         viewers = otherViewers(view.viewers, view.actor, view.sessionId);
-      people.replaceChildren();
-      people.hidden = !viewers.length;
-      for (const viewer of viewers) {
-        const el = button(
-          viewer.actor.slice(0, 2).toUpperCase(),
-          () => act({ kind: "view-person", sessionId: viewer.sessionId }),
-          people,
-          "pg-person",
-        );
-        avatar(el, view.profiles[viewer.actor], viewer.actor);
-        el.setAttribute("aria-label", "View " + viewer.actor + "'s snapshot");
-        el.setAttribute(
-          "aria-description",
-          viewer.shareView ? "View sharing is on" : "View sharing is off",
-        );
-      }
+      viewerControls.render(viewers, view.profiles);
     },
     setTheme,
     setStatus(label) {
@@ -373,6 +362,7 @@ export function createPlatformChrome(
       disposed = true;
       removeEventListener("pagegi-theme", onTheme);
       panels.dispose();
+      viewerControls.dispose();
       bar.remove();
       popover.remove();
       context.remove();
