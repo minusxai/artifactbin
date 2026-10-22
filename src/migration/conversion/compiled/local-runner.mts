@@ -1,6 +1,7 @@
 import { archivedRuntimePlan } from "./runtime-plan.ts";
 import { archivedDialogFocusSource } from "./dialog-source.ts";
 import {readLegacyCellWriteSites} from "./cell-write-source.ts";
+import {isolateArchivedThemeVariables} from "./legacy-theme.ts";
 import{readsLegacyViewer}from"./viewer-source.ts";
 import {validateCompiledCellWriteContexts} from "./cell-write-context.ts";
 import {archivedExplicitCellOptionsSource} from "./cell-kit-source.ts";
@@ -226,6 +227,7 @@ const sheets = documentStyleSheets({
   authorCss: parts.runtime.authorCss,
 });
 let css = sheets.map((sheet: { css: string }) => sheet.css).join("\n");
+css = isolateArchivedThemeVariables(css);
 const archivedFonts = await prepareArchivedFontResources(root, process.argv[3] ? JSON.parse(process.argv[3]) : undefined);
 const fontResources = await inlinePinnedFontImports(css, archivedFonts.resolve);
 css = fontResources.css;
