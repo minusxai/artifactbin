@@ -59,6 +59,10 @@ export async function runMigrationJob(
   );
   const planned = await planMigrationJob(source, options, planner, preflight);
   if (options.apply) {
+    if (planned.linksRequireLegacyOrigin)
+      throw new Error(
+        "Explicit legacy origin required to preserve blocked link targets",
+      );
     const connection = await ports.connectDestination!();
     try {
       const destination = new PostgresMigrationDestination(

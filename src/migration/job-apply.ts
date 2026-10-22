@@ -1,3 +1,4 @@
+import { rewriteMigrationLinks } from "./links.ts";
 import { open } from "node:fs/promises";
 import { stageMigrationMedia } from "./media.ts";
 import { PostgresStreamArchive } from "./stream-postgres.ts";
@@ -47,6 +48,25 @@ export async function applyMigrationJob(
         if (migrationPageDigest(page) !== planned.pageDigests.get(page.pageId))
           throw new Error("Plan changed after global dependency preflight");
       }
+      for (const page of plan.pages)
+        for (const revision of page.revisions) {
+          if (revision.conversion.html === null) continue;
+          revision.conversion.html = rewriteMigrationLinks(
+            revision.conversion.html,
+            maps,
+            {
+              legacyOrigins: options.legacyOrigins,
+              targetOrigin: options.origin,
+              readyPages: ready,
+              onDiagnostic: (diagnostic) => {
+                if (diagnostic.disposition === "legacy-origin-required")
+                  throw new Error(
+                    "Explicit legacy origin required to preserve a blocked link target",
+                  );
+              },
+            },
+          );
+        }
       const result = await applyMigration(plan, destination, {
         dryRun: false,
         globallyReadyPages: ready,

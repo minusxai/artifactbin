@@ -65,6 +65,7 @@ export interface MigrationJobPlan {
   readiness: MigrationReadiness;
   readinessRows: MigrationReadinessRow[];
   pageDigests: Map<string, string>;
+  linksRequireLegacyOrigin: boolean;
   conversionProvenance: Record<string, number>;
 }
 

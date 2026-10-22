@@ -29,18 +29,7 @@ export function createMigrationJobPlanner(
   const planArtifact = (artifact: MigrationManifest) =>
     planMigration(artifact, {
       maps,
-      convert: async (input) => {
-        const result = await convert(input);
-        return result.html === null
-          ? result
-          : {
-              ...result,
-              html: rewriteMigrationLinks(result.html, maps, {
-                legacyOrigins: options.legacyOrigins,
-                targetOrigin: options.origin,
-              }),
-            };
-      },
+      convert,
       coreUrl: "/af/v1/core.js",
       media: media
         ? {
@@ -63,6 +52,8 @@ export async function planMigrationJob(
   const readinessRows: MigrationReadinessRow[] = [];
   const pageDigests = new Map<string, string>();
   const pageFormats = new Map<string, string>();
+  const links: { sourcePageId: string; legacyId: string; pageId: string }[] =
+    [];
   const conversionStrategy = options.conversionStrategy;
   const reportPath = options.reportPath;
   const conversionProvenance: Record<string, number> = {};
@@ -127,6 +118,16 @@ export async function planMigrationJob(
                     a.sha256,
                 ),
               });
+              for (const revision of page.revisions) {
+                if (revision.conversion.html === null) continue;
+                rewriteMigrationLinks(revision.conversion.html, maps, {
+                  legacyOrigins: options.legacyOrigins,
+                  targetOrigin: options.origin,
+                  readyPages: new Set(),
+                  onDiagnostic: ({ legacyId, pageId }) =>
+                    links.push({ sourcePageId: page.pageId, legacyId, pageId }),
+                });
+              }
               pageDigests.set(page.pageId, migrationPageDigest(page));
               pageFormats.set(page.pageId, page.original.format);
               const result = await applyMigration(plan, destination, {
@@ -217,6 +218,23 @@ export async function planMigrationJob(
       }),
       { mode: 0o600, flag: "wx" },
     );
+    await writeFile(
+      reportPath + ".links.json",
+      JSON.stringify({
+        complete: true,
+        diagnostics: links
+          .filter(
+            (link) => ready.has(link.sourcePageId) && !ready.has(link.pageId),
+          )
+          .map((link) => ({
+            ...link,
+            disposition: options.legacyOrigins.length
+              ? "legacy-target-blocked"
+              : "legacy-origin-required",
+          })),
+      }),
+      { mode: 0o600, flag: "wx" },
+    );
     await reportWrites;
     await report.sync();
     return {
@@ -226,6 +244,11 @@ export async function planMigrationJob(
       readinessRows,
       pageDigests,
       conversionProvenance,
+      linksRequireLegacyOrigin:
+        !options.legacyOrigins.length &&
+        links.some(
+          (link) => ready.has(link.sourcePageId) && !ready.has(link.pageId),
+        ),
     };
   } finally {
     await report.close();
