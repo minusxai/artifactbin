@@ -7,6 +7,8 @@ import { createPageWriteRepository } from "../persistence/page-writes.ts";
 import {
   KNOWN_AF_ORIGINS,
   MAX_PAGE_SOURCE,
+  MAX_BACKEND_SOURCE_CHARACTERS,
+  utf8ByteLength,
   type AfJsonObject,
   type FileId,
 } from "../af-contracts.ts";
@@ -74,8 +76,8 @@ export function parseIfMatch(value: string | undefined): number | null {
   return /^[1-9][0-9]{0,9}$/.test(bare) ? Number(bare) : NaN;
 }
 function source(value: unknown): string {
-  if (typeof value !== "string" || !value.trim() || value.length > MAX_SOURCE)
-    fail(422, "source must be the page's HTML (at most 4,000,000 characters)");
+  if (typeof value !== "string" || !value.trim() || utf8ByteLength(value) > MAX_SOURCE)
+    fail(422, `source must be the page's HTML (at most ${MAX_SOURCE.toLocaleString('en-US')} UTF-8 bytes, including saved metadata)`);
   return value;
 }
 function backendSources(value: unknown): Record<FileId, string> {
@@ -92,7 +94,7 @@ function backendSources(value: unknown): Record<FileId, string> {
     size += content.length;
     files[id] = content;
   }
-  if (size > MAX_SOURCE) fail(413, "files are too large");
+  if (size > MAX_BACKEND_SOURCE_CHARACTERS) fail(413, "files are too large");
   return files;
 }
 const visibilities: Visibility[] = ["private", "unlisted", "public"];
@@ -156,7 +158,9 @@ export function createPageService({
     context: Parameters<PageModelModule["prepareForSave"]>[1],
   ): PreparedPage {
     try {
-      return model.prepareForSave(html, context);
+      const prepared=model.prepareForSave(html, context);
+      source(prepared.source);
+      return prepared;
     } catch (error) {
       pageProblem(error);
     }

@@ -11,7 +11,7 @@ import { createBackendStoreInvalidationReader } from "./persistence/backend-stor
 import { createServiceLifecycle } from "./server/service-lifecycle.ts";
 import { createTrashService } from "./trash/service.ts";
 // @ts-check
-import { parseRequestBody, parseFileRoute } from "./server/request.ts";
+import { parseRequestBody, parseFileRoute, readRequestText } from "./server/request.ts";
 import { createPlatformAssets } from "./server/assets.ts";
 import { createCollaborationService } from "./server/collaboration.ts";
 import { createIdentityAuthority } from "./server/identity.ts";
@@ -308,11 +308,7 @@ export function createService({
         return send(200, {
           files: await repository.catalog.discover(null, true),
         });
-      let raw = "";
-      for await (const chunk of req) {
-        raw += chunk;
-        if (raw.length > 8e6) fail(413, "Request too large");
-      }
+      const raw = await readRequestText(req);
       // Command services validate their own fields after transport shape checking.
       const input = /** @type {any} */ (parseRequestBody(raw));
       const controller = new AbortController();

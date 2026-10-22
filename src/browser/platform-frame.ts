@@ -1,4 +1,5 @@
 import { imagePath, readPlatformImage } from "./platform-image.ts";
+import {MAX_PAGE_SOURCE,utf8ByteLength} from '../af-contracts.ts';
 import { createAttachmentHTTP } from "./dataset-attachment-http.ts";
 import { attachmentRead, attachmentUpload, attachmentScope } from "./dataset-attachment-validation.ts";
 import { pairingExchange } from "./pairing-exchange.ts";
@@ -38,7 +39,8 @@ function bindingOf(value: PlatformBinding): PlatformBinding {
     )
       throw Error("Invalid platform data");
   } else {
-    text(value.source, 4e6);
+    text(value.source, MAX_PAGE_SOURCE);
+    if(utf8ByteLength(value.source!)>MAX_PAGE_SOURCE)throw Error('Invalid platform data');
     text(value.requestId, 100);
   }
   return JSON.parse(JSON.stringify(value));

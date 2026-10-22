@@ -75,9 +75,9 @@ test("backend files past 4,000,000 characters in total are 413 before compiling,
       requestId: "limits-fits",
     });
     assert.equal(fits.status, 201, fits.body.error);
-    const bigPage = await publish(server, token, { source: page("<p>" + "y".repeat(4_000_001) + "</p>"), requestId: "limits-page" });
+    const bigPage = await publish(server, token, { source: page("<p>" + "y".repeat(6_000_001) + "</p>"), requestId: "limits-page" });
     assert.equal(bigPage.status, 422);
-    assert.match(bigPage.body.error ?? "", /4,000,000/);
+    assert.match(bigPage.body.error ?? "", /6,000,000/);
     assert.equal(await pathCount(server, token), 1);
   } finally {
     await server.close();

@@ -1,7 +1,7 @@
 import { childPath, canMoveTo, movePaths } from "../file-browser.js";
-import { MAX_PAGE_SOURCE } from "../af-contracts.ts";
+import { MAX_PAGE_SOURCE, utf8ByteLength } from "../af-contracts.ts";
 import type { LibraryActions, LibraryActionsOptions } from "./contracts.ts";
-const TOO_LARGE = `Choose an HTML file under ${MAX_PAGE_SOURCE.toLocaleString("en-US")} characters (about ${MAX_PAGE_SOURCE / 1e6} MB).`;
+const TOO_LARGE = `Choose an HTML file of at most ${MAX_PAGE_SOURCE.toLocaleString("en-US")} UTF-8 bytes (${MAX_PAGE_SOURCE / 1e6} MB).`;
 const EMPTY = "This file is empty. Choose an HTML file with a page in it.";
 /** Library command policy: validated paths, bounded uploads, stable creation retries. */
 export function createLibraryActions(
@@ -36,12 +36,11 @@ export function createLibraryActions(
       if (!/\.html?$/i.test(file.name))
         throw Error("Choose an HTML file (.html or .htm).");
       if (!file.size) throw Error(EMPTY);
-      // A character is at most 3 bytes of UTF-8, so a larger file cannot fit.
-      if (file.size > 3 * MAX_PAGE_SOURCE) throw Error(TOO_LARGE);
+      if (file.size > MAX_PAGE_SOURCE) throw Error(TOO_LARGE);
       const path = childPath(options.folder, file.name);
       const html = await file.text();
       if (!html.trim()) throw Error(EMPTY);
-      if (html.length > MAX_PAGE_SOURCE) throw Error(TOO_LARGE);
+      if (utf8ByteLength(html) > MAX_PAGE_SOURCE) throw Error(TOO_LARGE);
       return (
         await options.request<{ url: string }>("/api/library", {
           html,

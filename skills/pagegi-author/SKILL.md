@@ -7,6 +7,8 @@ description: Write an Artifactbin page. It's a normal HTML file; keep viewer sta
 
 An Artifactbin page is a normal HTML file. Write it the way you'd write any web page, with any scripts, styles and libraries. The platform adds saving, sharing, comments, presence, design systems and history on top.
 
+Submitted and saved HTML must fit 6,000,000 UTF-8 bytes, including platform metadata. The JSON request has an independent 8,000,000-byte limit; escaping and other fields count too. See [HTTP API](references/http-api.md).
+
 ## Installation
 
 Install this skill with `npx https://app.artefactbin.dev/skills/artefactbin-skill.tgz` and restart your coding agent. This command only installs the skill; use the HTTP API and scripts below to author pages. For another server, install with `--origin https://your-server.example`. Upgrades retain any old `pagegi-author` installation, including local changes, under `~/.af/skill-backups/` outside agent discovery. Credentials are stored separately per server origin; signing in to one server never signs you in to another.

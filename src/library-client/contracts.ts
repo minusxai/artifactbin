@@ -81,7 +81,7 @@ export interface LibraryActions {
   /** The example is named by the server from its title, in the current folder. */
   createExample(): Promise<string>;
   /** Refuses, before any request, a name that is not .html/.htm, an empty file, a file over
-   * MAX_PAGE_SOURCE characters, and a name the server's paths refuse, each in a plain sentence. */
+   * MAX_PAGE_SOURCE UTF-8 bytes, and a name the server's paths refuse, each in a plain sentence. */
   publish(file: {
     name: string;
     size: number;

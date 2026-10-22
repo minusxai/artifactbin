@@ -1,5 +1,13 @@
 import { fail } from "../errors.ts";
 import type { FileRoute, RequestBody } from "./request-contracts.ts";
+import {MAX_REQUEST_BODY_BYTES} from '../af-contracts.ts';
+import {StringDecoder} from 'node:string_decoder';
+/** Bound incoming wire bytes before decoding, preserving split UTF-8 scalars. */
+export async function readRequestText(chunks:AsyncIterable<Uint8Array>,limit=MAX_REQUEST_BODY_BYTES):Promise<string>{
+ const decoder=new StringDecoder('utf8');let bytes=0,raw='';
+ for await(const chunk of chunks){bytes+=chunk.byteLength;if(bytes>limit)fail(413,'Request too large');raw+=decoder.write(Buffer.from(chunk.buffer,chunk.byteOffset,chunk.byteLength));}
+ return raw+decoder.end();
+}
 
 /** Classify client syntax errors without exposing JSON parser diagnostics. */
 export function parseRequestBody(raw: string): RequestBody {

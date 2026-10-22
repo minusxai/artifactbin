@@ -142,14 +142,14 @@ test("only explicit verified media mappings replace archived image dependencies"
   }
 });
 
-test("static compiled output obeys the unchanged product page source limit", async () => {
+test("static compiled output obeys the product page source byte limit", async () => {
   const result = await compileArchivedStatic(
     { source: "<p>Example</p>", coreUrl: "/af/v1/core.js" },
     {
       compiler: {
         compile: async () => ({
           ...(await compiler.compile({} as never)),
-          css: "é".repeat(2_000_000),
+          css: "é".repeat(3_000_000),
         }),
       },
     },

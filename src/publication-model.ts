@@ -2,10 +2,12 @@ import { fail } from "./errors.ts";
 import { text } from "./model-values.ts";
 import { normalizePath } from "./path-model.ts";
 import type { SharedFile } from "./contracts.ts";
+import {MAX_PAGE_SOURCE,utf8ByteLength} from './af-contracts.ts';
+function pageSource(value:unknown):string{const source=text(value,MAX_PAGE_SOURCE);if(utf8ByteLength(source)>MAX_PAGE_SOURCE)fail(422,'Page source exceeds UTF-8 byte limit');return source;}
 export const preparePublication: import("./publication-model-contracts.ts").PublicationPreparation =
   (existing, actor, request, options) => {
     if (!actor) fail(401, "Sign in required");
-    const source = text(request.source, 4e6);
+    const source = pageSource(request.source);
     text(request.requestId, 100);
     const revision = options.revision(source),
       old = existing;
@@ -15,7 +17,7 @@ export const preparePublication: import("./publication-model-contracts.ts").Publ
     }
     const sources = { ...request.sources, [revision]: source };
     for (const [rev, content] of Object.entries(sources))
-      if (options.revision(text(content, 4e6)) !== rev)
+      if (options.revision(pageSource(content)) !== rev)
         fail(422, "Source revision mismatch");
     const publication = {
       fileId: options.fileId,

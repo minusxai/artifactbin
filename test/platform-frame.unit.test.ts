@@ -487,3 +487,12 @@ for (const succeeds of [true, false]) test(`operations started during ${succeeds
   assert.equal(backendWrites,1);
   session.dispose();
 });
+
+test('unsaved binding accepts exact UTF8 source budget and rejects one byte excess', () => {
+  const source = '☃'.repeat(2_000_000);
+  const value = { source, sourceRevision: 'rev', sessionId: 'session', requestId: 'request' };
+  const ports = { fetch: async () => new Response('{}'), emit: () => {} };
+  const session = createPlatformSession('https://service.example', value, ports);
+  session.dispose();
+  assert.throws(() => createPlatformSession('https://service.example', { ...value, source: source + 'x' }, ports), /Invalid platform data/);
+});

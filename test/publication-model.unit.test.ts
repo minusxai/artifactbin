@@ -65,3 +65,11 @@ test("publication rejects invalid authorization, source history and policy", () 
       preparePublication(null, actor, request as any, options),
     );
 });
+
+test('publication applies the UTF8 byte budget to current and historical source', () => {
+  const source = '☃'.repeat(2_000_000);
+  const compact = { ...options, digest: () => 'digest', revision: () => 'revision' };
+  assert.ok(preparePublication(null, 'actor', { requestId: 'utf8', source }, compact).file);
+  assert.throws(() => preparePublication(null, 'actor', { requestId: 'utf8', source: source + 'x' }, compact), /UTF-8 byte limit/);
+  assert.throws(() => preparePublication(null, 'actor', { requestId: 'utf8', source: 'ok', sources: { old: source + 'x' } }, compact), /UTF-8 byte limit/);
+});

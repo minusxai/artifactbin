@@ -9,7 +9,7 @@
  * CSS is put back inline, so the view looks like the live page did.
  */
 import { isDesignSystem } from "./core/appearance.ts";
-import { MAX_PAGE_SOURCE, DEFAULT_DESIGN_SYSTEM } from "../af-contracts.ts";
+import { MAX_PAGE_SOURCE, DEFAULT_DESIGN_SYSTEM, utf8ByteLength } from "../af-contracts.ts";
 import type { DesignSystemName } from "../af-contracts.ts";
 
 /** Stored captures remain at most 200,000 characters. Style references are
@@ -31,13 +31,13 @@ function resolveCapture(value: string, source: string): string {
   try {
     const capture = JSON.parse(value) as SourceStyleCapture;
     if (value.length > CAPTURE_LIMIT || typeof capture.html !== "string" ||
-        !Array.isArray(capture.styles) || source.length > MAX_PAGE_SOURCE)
+        !Array.isArray(capture.styles) || utf8ByteLength(source) > MAX_PAGE_SOURCE)
       return "";
     const doc = new DOMParser().parseFromString(capture.html, "text/html");
     const styles = [...doc.querySelectorAll("style")];
     const originals = [...new DOMParser().parseFromString(source, "text/html").querySelectorAll("style")];
     const seen = new Set<number>();
-    let size = capture.html.length;
+    let size = utf8ByteLength(capture.html);
     for (const reference of capture.styles) {
       if (!Array.isArray(reference) || reference.length !== 2) return "";
       const [target, original] = reference;
@@ -46,7 +46,7 @@ function resolveCapture(value: string, source: string): string {
           !styles[target] || !originals[original] || styles[target]!.textContent !== "")
         return "";
       const text = originals[original]!.textContent ?? "";
-      size += text.length;
+      size += utf8ByteLength(text);
       // A compact capture cannot amplify a source into an unbounded replay.
       if (size > MAX_PAGE_SOURCE + CAPTURE_LIMIT) return "";
       styles[target]!.textContent = text;
@@ -215,7 +215,7 @@ export function captureRenderedDocument(
   if (!copy.classList.length) copy.removeAttribute("class");
   const rendered = copy.outerHTML;
   if (rendered.length <= CAPTURE_LIMIT) return rendered;
-  if (rendered.length > MAX_PAGE_SOURCE + CAPTURE_LIMIT) return undefined;
+  if (utf8ByteLength(rendered) > MAX_PAGE_SOURCE + CAPTURE_LIMIT) return undefined;
   const sourceStyleIndexes = new Map(sourceStyles.map((text, index) => [text, index]));
   const styles: SourceStyleCapture["styles"] = [];
   [...copy.querySelectorAll("style")].forEach((style, index) => {

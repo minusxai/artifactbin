@@ -44,7 +44,7 @@ test(
               javascript:
                 output.javascript +
                 "\nconst codecFixturePadding=" +
-                JSON.stringify("x".repeat(4_000_000)) +
+                JSON.stringify("x".repeat(6_000_000)) +
                 ";",
             };
           },
@@ -58,7 +58,7 @@ test(
     );
     assert.ok(result.html);
     assert.match(result.html, /data-af-compiled-payload/);
-    assert.ok(Buffer.byteLength(result.html) < 4_000_000);
+    assert.ok(Buffer.byteLength(result.html) < 6_000_000);
     assert.deepEqual(result.provenance?.contexts, [{ legacyId: "Cx1234" }]);
     const html = rewriteMigrationLinks(
       result.html,

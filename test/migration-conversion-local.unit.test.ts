@@ -261,7 +261,7 @@ test("local query projection ignores stale runs after later Apollo state changes
 test("local HTML that exceeds the existing platform page source limit remains blocked", async () => {
   const result = await compileArchivedLocal(input, {
     compiler: {
-      compile: async () => ({ ...output, css: "é".repeat(2_000_000) }),
+      compile: async () => ({ ...output, css: "é".repeat(3_000_000) }),
     },
   });
   assert.equal(result.classification, "manual-blocked");

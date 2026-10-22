@@ -47,7 +47,7 @@ test('live comment relation failures block planning before destination mutation'
  assert.equal(p.pages[0]?.disposition,'blocked');assert.match(p.pages[0]!.issues.join(' '),/Unmapped live comment author/);assert.deepEqual(p.pages[0]!.unavailableCommentContexts,[{commentId:'comment',status:'unavailable',originalRevision:'99',reason:'not-retained'}]);assert.match(p.pages[0]!.issues.join(' '),/missing root/);
 });
 test('destination source limit explicitly blocks oversized output without truncating retained originals',async()=>{
- const source='x'.repeat(4_000_001);const p=await planMigration(manifest,{maps,coreUrl:'/af/v1/core.js',convert:()=>({classification:'renderable',html:source,issues:[],identities:{}})});assert.equal(p.pages[0]!.disposition,'blocked');assert.equal(p.pages[0]!.revisions[0]!.conversion.html,null);assert.equal(p.pages[0]!.revisions[0]!.conversion.outputBytes,4_000_001);assert.equal(p.archive,manifest);
+ const source='x'.repeat(6_000_001);const p=await planMigration(manifest,{maps,coreUrl:'/af/v1/core.js',convert:()=>({classification:'renderable',html:source,issues:[],identities:{}})});assert.equal(p.pages[0]!.disposition,'blocked');assert.equal(p.pages[0]!.revisions[0]!.conversion.html,null);assert.equal(p.pages[0]!.revisions[0]!.conversion.outputBytes,6_000_001);assert.equal(p.archive,manifest);
 });
 
 test('actual page imports refuse unresolved global media dependency preflight before mutation',async()=>{

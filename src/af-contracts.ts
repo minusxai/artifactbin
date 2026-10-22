@@ -20,8 +20,14 @@ export const FILE_ID_PATTERN = /^[A-Za-z0-9]{6}$/;
 export const FILE_ID_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-/** The most characters a page's HTML may have (PublishRequest.source); the library's Publish HTML uses the same limit. */
-export const MAX_PAGE_SOURCE = 4e6;
+/** UTF-8 byte budget for submitted and normalized saved HTML, including metadata. */
+export const MAX_PAGE_SOURCE = 6_000_000;
+/** Independent unchanged aggregate backend source quota, measured in UTF-16 characters. */
+export const MAX_BACKEND_SOURCE_CHARACTERS = 4_000_000;
+/** Independent HTTP JSON envelope budget. Escaping/other fields count as bytes too. */
+export const MAX_REQUEST_BODY_BYTES = 8_000_000;
+/** Same UTF-8 replacement semantics in Node and browsers, including lone surrogates. */
+export const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).byteLength;
 
 /** The default public host the skill writes. Servers rewrite this prefix to their own origin on save. */
 export const DEFAULT_AF_ORIGIN = "https://app.artefactbin.dev";

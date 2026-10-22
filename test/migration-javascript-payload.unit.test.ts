@@ -188,7 +188,7 @@ test("retired documents cannot import late decoded bytes; BFCache preserves the 
 
 import { compiledJavascriptMarkup } from "../src/migration/conversion/compiled/javascript-payload.ts";
 import { compileArchivedLocal } from "../src/migration/conversion/compiled/local.ts";
-test("packaging preserves raw small modules and readable HTML/state; decoded policy admission still precedes compression and the final 4MB cap", async () => {
+test("packaging preserves raw small modules and readable HTML/state; decoded policy admission still precedes compression and the final 6MB cap", async () => {
   const base: Omit<ArchivedLocalOutput, "javascript"> = {
     html: '<p id="content">Readable content</p>',
     css: "p { color: blue }",
@@ -201,7 +201,7 @@ test("packaging preserves raw small modules and readable HTML/state; decoded pol
   };
   const source =
       '<Helmet><Value name="label" type="string" default="Saved text"/></Helmet><p id="content">Readable content</p>',
-    javascript = "const generated=" + JSON.stringify("x".repeat(4000000)) + ";";
+    javascript = "const generated=" + JSON.stringify("x".repeat(6000000)) + ";";
   const result = await compileArchivedLocal(
     { source, coreUrl: "/af/v1/core.js" },
     { compiler: { compile: async () => ({ ...base, javascript }) } },
@@ -211,7 +211,7 @@ test("packaging preserves raw small modules and readable HTML/state; decoded pol
     "functional",
     JSON.stringify(result.issues),
   );
-  assert.ok(result.html && Buffer.byteLength(result.html) < 4000000);
+  assert.ok(result.html && Buffer.byteLength(result.html) < 6000000);
   assert.match(result.html!, /<p id="content"[^>]*>Readable content<\/p>/);
   assert.match(result.html!, /p \{ color: blue \}/);
   assert.match(result.html!, /data-af="state"/);
@@ -239,7 +239,7 @@ test("packaging preserves raw small modules and readable HTML/state; decoded pol
       compiler: {
         compile: async () => ({
           ...base,
-          css: "/*" + "x".repeat(4000000) + "*/",
+          css: "/*" + "x".repeat(6000000) + "*/",
           javascript,
         }),
       },

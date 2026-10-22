@@ -46,8 +46,8 @@ test("publish refuses, in plain words and before any request, what the server wo
     },
   });
   await assert.rejects(
-    a.publish(unread("huge.html", 3 * MAX_PAGE_SOURCE + 1)),
-    /^Error: Choose an HTML file under 4,000,000 characters \(about 4 MB\)\.$/,
+    a.publish(unread("huge.html", MAX_PAGE_SOURCE + 1)),
+    /^Error: Choose an HTML file of at most 6,000,000 UTF-8 bytes \(6 MB\)\.$/,
   );
   await assert.rejects(a.publish(unread("notes.txt", 10)), /Choose an HTML file \(\.html or \.htm\)\./);
   await assert.rejects(a.publish(unread("empty.html", 0)), /This file is empty\./);
@@ -55,7 +55,7 @@ test("publish refuses, in plain words and before any request, what the server wo
   await assert.rejects(a.publish(file("blank.html", "  \n ")), /This file is empty\./);
   await assert.rejects(
     a.publish(file("big.html", "x".repeat(MAX_PAGE_SOURCE + 1), MAX_PAGE_SOURCE + 1)),
-    /under 4,000,000 characters/,
+    /at most 6,000,000 UTF-8 bytes/,
   );
   await assert.rejects(
     a.publish(file("Meeting notes — draft #2.html", "<h1>Hi</h1>")),
