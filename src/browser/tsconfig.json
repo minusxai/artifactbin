@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "noEmit": true,
+    "erasableSyntaxOnly": true,
     "allowJs": true,
     "checkJs": false,
     "strict": true,

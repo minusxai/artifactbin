@@ -6,6 +6,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
+    "erasableSyntaxOnly": true,
     "allowJs": true,
     "checkJs": false,
     "skipLibCheck": true,

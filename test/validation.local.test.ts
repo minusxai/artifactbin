@@ -51,6 +51,23 @@ test("cached validation rechecks changed sources, imports, and compiler options 
       assert.match(invalid.stdout, /probe\.js.*TS2322/, config);
       writeFileSync(value, "export const value = 1;\n");
       assert.equal(run().status, 0, config);
+      // Node strips types without transforming runtime syntax. Catch the same
+      // deployment failure while validating, including after a successful cache.
+      for (const runtimeSyntax of [
+        "export class Failure { constructor(public status: number) {} }",
+        "export enum State { Ready }",
+        "export namespace Runtime { export const status = 1; }",
+      ]) {
+        writeFileSync(value, runtimeSyntax + "\nexport const value = 1;\n");
+        const unsupported = run();
+        assert.notEqual(unsupported.status, 0, config + ": " + runtimeSyntax);
+        assert.match(unsupported.stdout, /TS1294/, config);
+        writeFileSync(
+          value,
+          "export interface State { status: number }\nexport const value = 1;\n",
+        );
+        assert.equal(run().status, 0, config);
+      }
       options.noUnusedLocals = true;
       writeFileSync(configPath, configBody());
       writeFileSync(value, "const unused = 1; export const value = 1;\n");
