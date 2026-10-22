@@ -18,7 +18,7 @@ export interface MigrationBackendPage {
 export interface MigrationBackendPreparationInput {
   sourceNamespace: string;
   origin: string;
-  /** Every page, backend, and reserved ID in this destination namespace. */
+  /** Source-planned page/reserved IDs and unrelated known IDs. Replay uses the same immutable allocation inventory; own generated backend IDs are not re-added as collisions. */
   allocatedIds: readonly string[];
   pages: readonly MigrationBackendPage[];
 }
@@ -26,6 +26,8 @@ export interface MigrationBackendReceipt {
   pageLegacyId: string;
   pageId: string;
   pageVersion: number;
+  /** False records an empty backend set when this revision removed all Imports. */
+  linked: boolean;
   owner: string;
   backendId: string;
   backendNamespace: "legacyData";

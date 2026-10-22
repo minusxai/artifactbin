@@ -160,11 +160,11 @@ export async function prepareMigrationBackends(
     for (const revision of [...page.revisions].sort(
       (a, b) => a.version - b.version,
     )) {
-      if (!revision.imports.length) continue;
       receipts.push({
         pageLegacyId: page.legacyId,
         pageId: page.pageId,
         pageVersion: revision.version,
+        linked: revision.imports.length > 0,
         owner: page.owner.id,
         backendId,
         backendNamespace: "legacyData",
@@ -200,6 +200,7 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
       !FILE_ID_PATTERN.test(receipt.backendId) ||
       receipt.pageId === receipt.backendId ||
       !positive(receipt.pageVersion) ||
+      typeof receipt.linked !== "boolean" ||
       !nonempty(receipt.owner) ||
       receipt.backendNamespace !== "legacyData" ||
       receipt.sourceSha256 !== digest(receipt.deployment.source) ||
@@ -285,15 +286,19 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
       owner: receipt.owner,
       pageId: receipt.pageId,
       pageVersion: receipt.pageVersion,
-      links: [
-        {
-          name: receipt.backendNamespace,
-          id: receipt.backendId,
-          href: receipt.backendHref,
-          line: 1,
-        },
-      ],
-      compiled: { [receipt.backendId]: receipt.deployment },
+      links: receipt.linked
+        ? [
+            {
+              name: receipt.backendNamespace,
+              id: receipt.backendId,
+              href: receipt.backendHref,
+              line: 1,
+            },
+          ]
+        : [],
+      compiled: receipt.linked
+        ? { [receipt.backendId]: receipt.deployment }
+        : {},
     });
   }
 };

@@ -39,23 +39,26 @@ test(
               legacyId: "old-page",
               pageId: "Page12",
               owner: { kind: "user", id: "owner" },
-              revisions: [1, 2].map((version) => ({
+              revisions: [1, 2, 3].map((version) => ({
                 version,
-                imports: [
-                  {
-                    name: "sales",
-                    legacyRef: "ds:1",
-                    datasetLegacyId: "ds",
-                    datasetVersion: 1,
-                  },
-                ],
+                imports:
+                  version === 3
+                    ? []
+                    : [
+                        {
+                          name: "sales",
+                          legacyRef: "ds:1",
+                          datasetLegacyId: "ds",
+                          datasetVersion: 1,
+                        },
+                      ],
               })),
             },
           ],
         },
         { host },
       );
-      assert.equal(prepared.receipts.length, 2);
+      assert.equal(prepared.receipts.length, 3);
       const receipt = prepared.receipts[1]!;
       assert.match(receipt.deployment.runtime, /\/image:sha256:/);
       assert.deepEqual(receipt.deployment.lockfile, {});
@@ -90,7 +93,10 @@ test(
         statementTimeoutMs: 15000,
       });
       await database.transaction((client) =>
-        registerMigrationBackends(client, prepared.receipts),
+        registerMigrationBackends(
+          client,
+          prepared.receipts.filter((r) => r.pageVersion <= 2),
+        ),
       );
       const links = (
         await env.pool.query(
@@ -243,6 +249,34 @@ test(
       ]);
       await env.pool.query("UPDATE dataset_resources SET deleted=true");
       assert.ok((await read("fixture-member")).errors?.length);
+      await env.pool.query("UPDATE files SET head='3'");
+      await database.transaction((client) =>
+        registerMigrationBackends(client, [prepared.receipts[2]!]),
+      );
+      assert.equal(
+        (
+          await env.pool.query(
+            "SELECT page_version FROM af_backend_pages WHERE page_id='Page12'",
+          )
+        ).rows[0].page_version,
+        3,
+      );
+      assert.equal(
+        (
+          await env.pool.query(
+            "SELECT count(*)::int AS count FROM af_page_backends WHERE page_id='Page12' AND page_version=3",
+          )
+        ).rows[0].count,
+        0,
+      );
+      assert.equal(
+        (
+          await env.pool.query(
+            "SELECT count(*)::int AS count FROM af_page_backends WHERE page_id='Page12' AND page_version=2",
+          )
+        ).rows[0].count,
+        1,
+      );
     } finally {
       await host.close?.();
       await env.cleanup();

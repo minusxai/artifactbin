@@ -189,3 +189,25 @@ test("same-owner backend IDs from a different page are collisions, never reused"
   );
   assert.ok(statements.every((sql) => sql.startsWith("SELECT")));
 });
+
+test("later revisions that remove Imports still emit an empty-backend receipt", async () => {
+  const page = input.pages[0]!;
+  const prepared = await prepareMigrationBackends(
+    {
+      ...input,
+      pages: [
+        {
+          ...page,
+          revisions: [...page.revisions, { version: 3, imports: [] }],
+        },
+      ],
+    },
+    { host: { compile: async () => deployment, invoke: async () => null } },
+  );
+  assert.equal(prepared.receipts.length, 3);
+  assert.deepEqual(
+    prepared.receipts.map((r) => r.linked),
+    [true, true, false],
+  );
+  assert.equal(prepared.bindings.length, 2);
+});
