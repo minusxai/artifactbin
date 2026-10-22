@@ -84,9 +84,9 @@ function checkedCapabilityFrame(
     throw Error();
   }
   if (req.kind === "dataset") {
-    if (req.operation === "members") {
+    if (req.operation === "members" || req.operation === "viewer") {
       if (Object.keys(req).sort().join() !== "kind,operation") throw Error();
-      return { id, request: { kind: "dataset", operation: "members" } };
+      return { id, request: { kind: "dataset", operation: req.operation } };
     }
     const input = req.input;
     if (req.operation === "person") {

@@ -185,6 +185,7 @@ export function createService({
             datasets: datasetRuntime.reads,
             datasetMutations: datasetRuntime.mutations,
             datasetMembers: datasetRuntime.members,
+            datasetViewer: datasetRuntime.viewer,
             datasetPerson: datasetRuntime.person,
             secrets: secretsStore && ((client, owner) => secretsStore.env(client, owner)),
           })

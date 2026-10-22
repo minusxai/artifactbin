@@ -143,7 +143,7 @@ export default {
           const effectful =
             !(
               request.kind === "dataset" &&
-              ["read", "members", "person"].includes(request.operation)
+              ["read", "members", "person", "viewer"].includes(request.operation)
             ) && !(request.kind === "store" && request.operation === "get");
           if (effectful) {
             effectfulDispatches++;
@@ -200,6 +200,10 @@ export default {
             dataset: Object.freeze({
               person: async (input) =>
                 capability({ kind: "dataset", operation: "person", input }),
+              viewer: async (...args) => {
+                if(args.length)throw Error("Viewer accepts no arguments");
+                return capability({kind:"dataset",operation:"viewer"});
+              },
               members: async (...args) => {
                 if (args.length) throw Error("capability request");
                 return capability({ kind: "dataset", operation: "members" });

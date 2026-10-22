@@ -1,3 +1,5 @@
+import{createDatasetViewerService}from"../datasets/viewer.ts";
+import{createDatasetViewerRepository}from"../persistence/dataset-viewer.ts";
 import { createDatasetPersonService } from "../datasets/person.ts";
 import { createDatasetPersonRepository } from "../persistence/dataset-person.ts";
 import { createDatasetMembersService } from "../datasets/members.ts";
@@ -65,6 +67,7 @@ export function createDatasetRuntime(
       ...createDatasetPersonRepository(database),
       reads,
     }),
+    viewer:createDatasetViewerService(createDatasetViewerRepository(database,now)),
     members: createDatasetMembersService(
       createDatasetMembersRepository(database, now),
     ),
