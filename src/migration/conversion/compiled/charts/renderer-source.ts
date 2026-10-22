@@ -9,7 +9,15 @@ export async function chartRendererSources(
 ) {
   const root = path.resolve(archivedRoot, "node_modules");
   for (const [name, version] of [
+    ["vega", "6.3.1"],
+    ["vega-lite", "6.4.3"],
     ["vega-view", "6.1.2"],
+    ["vega-encode", "5.2.2"],
+    ["vega-transforms", "5.2.2"],
+    ["vega-view-transforms", "5.2.2"],
+    ["vega-functions", "6.1.3"],
+    ["vega-expression", "6.2.2"],
+    ["vega-dataflow", "6.1.3"],
     ["vega-runtime", "7.1.3"],
     ["vega-interpreter", "2.3.1"],
   ]) {
