@@ -1,4 +1,5 @@
-import type { Comment, DocumentState, Snapshot, Target } from "../contracts.ts";
+import type { Target } from "./page-message-contracts.ts";
+import type { Comment, DocumentState, Snapshot } from "../contracts.ts";
 import type { ActivityReason } from "./activity-contracts.ts";
 export interface DocumentViewContext {
   source: string | null;

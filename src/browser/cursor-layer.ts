@@ -1,4 +1,5 @@
-import type { Target, Viewer } from "../contracts.ts";
+import type { Target } from "./page-message-contracts.ts";
+import type { Viewer } from "../contracts.ts";
 import { otherViewers } from "../chrome-model.ts";
 export interface CursorFrame {
   viewers: Viewer[];

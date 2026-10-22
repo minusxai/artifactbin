@@ -1,6 +1,7 @@
+import type { Target } from "./page-message-contracts.ts";
 import { jsonCopy } from "../json.ts";
 import { compact } from "../model.ts";
-import type { DocumentState, Snapshot, Target } from "../contracts.ts";
+import type { DocumentState, Snapshot } from "../contracts.ts";
 import type {
   DocumentView,
   DocumentViewOptions,

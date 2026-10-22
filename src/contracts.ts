@@ -1,4 +1,3 @@
-import type { RuntimeStatus, SaveResult } from "./browser/platform-status-contracts.ts";
 import type {
   Account,
   SessionGrant,
@@ -289,46 +288,7 @@ export interface AuthPort {
   begin(fileId: Id, share: string): Promise<PairChallenge>;
   poll(deviceCode: string): Promise<PairResponse>;
 }
-export interface Target {
-  id: Id;
-  quote: string;
-  rect: { x: number; y: number; width: number; height: number };
-}
-export type AppMessage =
-  | {
-      pagegi: true;
-      kind: "context";
-      nodeId: Id | null;
-      quote: string;
-      snapshot: Snapshot;
-      x: number;
-      y: number;
-    }
-  | { pagegi: true; kind: "dismiss" }
-  | {
-      pagegi: true;
-      kind: "view";
-      snapshot: Snapshot | null;
-      targets: Target[];
-      /** False while the design system's stylesheet is still loading; the loading screen waits for it. */
-      styled?: boolean;
-    }
-  | {
-      pagegi: true;
-      kind: "pick";
-      nodeId: Id | null;
-      quote: string;
-      snapshot: Snapshot | null;
-    }
-  | { pagegi: true; kind: "cursor"; cursor: Cursor }
-  | { pagegi: true; kind: "save"; id: Id }
-  | { pagegi: true; kind: "error"; message: string };
-export type HostMessage =
-  | { pagegi: true; kind: "theme"; theme: Theme }
-  | { pagegi: true; kind: "mode"; on: boolean }
-  | { pagegi: true; kind: "status"; status: RuntimeStatus }
-  | { pagegi: true; kind: "saved"; id: Id; result?: SaveResult; error?: string }
-  | { pagegi: true; kind: "scroll"; view: Viewport };
+export type { Target, AppMessage, HostMessage } from "./browser/page-message-contracts.ts";
 
 /** Pure transition surface shared by browser, CLI and server. */
 export interface CollaborationModel {

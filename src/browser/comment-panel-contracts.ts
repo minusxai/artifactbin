@@ -1,4 +1,5 @@
-import type { Comment, Profile, Snapshot, Target } from "../contracts.ts";
+import type { Target } from "./page-message-contracts.ts";
+import type { Comment, Profile, Snapshot } from "../contracts.ts";
 /** Selection owns an immutable copy of the context captured when composing starts. */
 export interface CommentSelection {
   nodeId: string | null;
