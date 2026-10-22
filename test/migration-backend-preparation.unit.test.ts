@@ -232,6 +232,7 @@ test("named mutations pin trusted SQL to exact backend, page revision and bindin
     target: { schema: "public", table: "rows" },
     sqlSchema: "sales",
     sql: "delete from sales.rows where id=$id",
+    analysis: {operation: "delete" as const, columns: []},
     paramTypes: { id: "number" as const },
     conflictMode: "refuse" as const,
   };
@@ -266,6 +267,7 @@ test("named mutations pin trusted SQL to exact backend, page revision and bindin
     },
   ]);
   assert.ok(!JSON.stringify(prepared.browserMutations).includes("delete from"));
+  assert.equal(Object.hasOwn(prepared.browserMutations[0]!.mutation,"analysis"),false);
   const scope = prepared.browserMutations[0]!.mutation.recoveryScope;
   assert.match(scope, /^[a-f0-9]{64}$/);
   const rowMutation = {
@@ -379,6 +381,7 @@ test("named mutations pin trusted SQL to exact backend, page revision and bindin
         target: mutation.target,
         sqlSchema: "sales",
         sql: mutation.sql,
+        analysis: mutation.analysis,
         paramTypes: { id: "number" },
         conflictMode: "refuse",
       },
