@@ -141,8 +141,10 @@ export default {
           )
             throw Error("capability quota");
           const effectful =
-            !(request.kind === "dataset" && request.operation === "read") &&
-            !(request.kind === "store" && request.operation === "get");
+            !(
+              request.kind === "dataset" &&
+              ["read", "members"].includes(request.operation)
+            ) && !(request.kind === "store" && request.operation === "get");
           if (effectful) {
             effectfulDispatches++;
             // A later possible effect invalidates an earlier caught refusal:
@@ -196,6 +198,10 @@ export default {
               capability({ kind: "transaction", resource, operations }),
             // Only saved server bindings are readable; pages cannot send keys or SQL.
             dataset: Object.freeze({
+              members: async (...args) => {
+                if (args.length) throw Error("capability request");
+                return capability({ kind: "dataset", operation: "members" });
+              },
               read: async (input) =>
                 capability({ kind: "dataset", operation: "read", input }),
               mutate: async (input) =>

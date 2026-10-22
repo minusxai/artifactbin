@@ -1,3 +1,5 @@
+import { createDatasetMembersService } from "../datasets/members.ts";
+import { createDatasetMembersRepository } from "../persistence/dataset-members.ts";
 import { createReadonlyDatasetObjectStore } from "../datasets/object-store.ts";
 import { createDatasetMutationObjectStore } from "../datasets/mutation/object-store.ts";
 import { createDatasetReadRepository } from "../persistence/datasets.ts";
@@ -57,6 +59,9 @@ export function createDatasetRuntime(
   let closing: Promise<void> | undefined;
   return {
     reads,
+    members: createDatasetMembersService(
+      createDatasetMembersRepository(database, now),
+    ),
     ...(mutations ? { mutations } : {}),
     close: () => (closing ??= executor?.close() ?? Promise.resolve()),
   };

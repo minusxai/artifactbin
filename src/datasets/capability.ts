@@ -18,6 +18,7 @@ export function datasetCapabilityHandler(
   context: DatasetCallContext,
   fallback: BackendCapabilityHandler,
   mutations?: import("./mutation/contracts.ts").DatasetMutationService,
+  members?: import("./members-contracts.ts").DatasetMembersService,
 ): BackendCapabilityHandler {
   const bound = Object.freeze({ ...context });
   return async (principal, request, signal) => {
@@ -29,14 +30,13 @@ export function datasetCapabilityHandler(
       throw new DatasetReadError("denied");
     let result;
     try {
-      result =
-        request.operation === "read"
-          ? await service.read(bound, request.input, signal)
-          : mutations
-            ? await mutations.mutate(bound, request.input, signal)
-            : (() => {
-                throw new DatasetReadError("denied");
-              })();
+      if (request.operation === "read")
+        result = await service.read(bound, request.input, signal);
+      else if (request.operation === "members" && members)
+        result = await members.members(bound);
+      else if (request.operation === "mutate" && mutations)
+        result = await mutations.mutate(bound, request.input, signal);
+      else throw new DatasetReadError("denied");
     } catch (error) {
       if (error instanceof DatasetReadError && error.code === "dataset_changed")
         throw new BackendDatasetChangedError();

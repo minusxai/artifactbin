@@ -93,6 +93,7 @@ export type BackendCapabilityRequest =
       operations: { operation: string; input: BackendJson }[];
     }
   | BackendStoreRequest
+  | { kind: "dataset"; operation: "members" }
   | {
       kind: "dataset";
       operation: "read";

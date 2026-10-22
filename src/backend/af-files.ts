@@ -343,6 +343,7 @@ export function createBackendRoutes(options: {
   ): Promise<PageCaller>;
   secrets?: SecretsEnvPort;
   datasets?: import("../datasets/contracts.ts").DatasetReadService;
+  datasetMembers?: import("../datasets/members-contracts.ts").DatasetMembersService;
   datasetMutations?: import("../datasets/mutation/contracts.ts").DatasetMutationService;
   log?(line: string): void;
 }): AfRouteModule {
@@ -463,6 +464,7 @@ export function createBackendRoutes(options: {
               },
               storeCapabilities,
               options.datasetMutations,
+              options.datasetMembers,
             )
           : storeCapabilities;
         try {

@@ -178,6 +178,7 @@ export function createService({
             caller: createPageCaller(now),
             datasets: datasetRuntime.reads,
             datasetMutations: datasetRuntime.mutations,
+            datasetMembers: datasetRuntime.members,
             secrets: secretsStore && ((client, owner) => secretsStore.env(client, owner)),
           })
         : null,

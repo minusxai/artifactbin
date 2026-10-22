@@ -84,6 +84,10 @@ function checkedCapabilityFrame(
     throw Error();
   }
   if (req.kind === "dataset") {
+    if (req.operation === "members") {
+      if (Object.keys(req).sort().join() !== "kind,operation") throw Error();
+      return { id, request: { kind: "dataset", operation: "members" } };
+    }
     const input = req.input;
     if (req.operation === "mutate") {
       if (
