@@ -172,3 +172,10 @@ test("font Unicode descriptors reject invalid scalar ranges rather than losing c
   ])
     assert(!validFontUnicodeRange(value));
 });
+
+test("prototype font resolution failures preserve original browser CSS without claiming local receipts",async()=>{
+ const css='@import url("https://fonts.googleapis.com/css2?family=Example:wght@400&display=swap");body{font-family:Example}';
+ const resolver=async()=>{throw Error('Pinned font axis proof mismatch');};
+ await assert.rejects(inlinePinnedFontImports(css,resolver),/axis proof mismatch/);
+ assert.deepEqual(await inlinePinnedFontImports(css,resolver,'preserve-unresolved'),{css,receipts:[]});
+});

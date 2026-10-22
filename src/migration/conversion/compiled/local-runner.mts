@@ -237,10 +237,7 @@ const sheets = documentStyleSheets({
 let css = sheets.map((sheet: { css: string }) => sheet.css).join("\n");
 css = isolateArchivedThemeVariables(css);
 const archivedFonts = await prepareArchivedFontResources(root, process.argv[3] ? JSON.parse(process.argv[3]) : undefined);
-const fontResources = await inlinePinnedFontImports(css, archivedFonts.resolve).catch(error=>{
-  if(!prototype||!(error instanceof Error)||error.message!=="Requested font family is not pinned")throw error;
-  return {css,receipts:[]};
-});
+const fontResources = await inlinePinnedFontImports(css, archivedFonts.resolve,prototype?"preserve-unresolved":"strict");
 css = fontResources.css;
 // No network, old origin, asset endpoint or deployment host is carried into migrated styles.
 const { parse: parseCss, walk: walkCss } = await import("css-tree");

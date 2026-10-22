@@ -11,6 +11,7 @@ import type {
   ResolvePinnedFonts,
   InlinedFontStylesheet,
   FontAxisRange,
+  FontInliningPolicy,
 } from "./contracts.ts";
 export function parsePinnedFontRequest(raw: string): PinnedFontRequest {
   if (
@@ -126,7 +127,7 @@ function faceCss(face: PinnedFontFace, request: PinnedFontRequest): string {
     : "";
   return `@font-face{font-family:${JSON.stringify(face.family)};font-style:${face.style};font-weight:${face.weight[0] === face.weight[1] ? face.weight[0] : face.weight.join(" ")};${stretch}font-display:${request.display};src:url("data:font/woff2;base64,${Buffer.from(face.bytes).toString("base64")}") format("woff2");unicode-range:${face.unicodeRange}}`;
 }
-export async function inlinePinnedFontImports(
+async function inlinePinnedFontImportsStrict(
   css: string,
   resolve: ResolvePinnedFonts,
 ): Promise<InlinedFontStylesheet> {
@@ -299,4 +300,11 @@ export async function inlinePinnedFontImports(
   for (const edit of edits.reverse())
     css = css.slice(0, edit.start) + edit.text + css.slice(edit.end);
   return { css, receipts };
+}
+
+/** Resource-manifest verification belongs to the caller and runs before this
+ * presentation-only fallback. No local proof is claimed for retained imports. */
+export async function inlinePinnedFontImports(css:string,resolve:ResolvePinnedFonts,policy:FontInliningPolicy="strict"):Promise<InlinedFontStylesheet>{
+ try{return await inlinePinnedFontImportsStrict(css,resolve);}
+ catch(error){if(policy!=="preserve-unresolved")throw error;return {css,receipts:[]};}
 }

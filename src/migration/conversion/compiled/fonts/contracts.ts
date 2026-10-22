@@ -38,6 +38,8 @@ export interface InlinedFontReceipt {
     readonly bytes: number;
   }[];
 }
+/** Offline prototype pages may retain browser font imports when local resolution fails. */
+export type FontInliningPolicy = "strict" | "preserve-unresolved";
 export interface InlinedFontStylesheet {
   readonly css: string;
   readonly receipts: readonly InlinedFontReceipt[];
