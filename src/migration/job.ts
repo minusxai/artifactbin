@@ -1,4 +1,5 @@
 import { validateMigrationSourceAdmission } from "./source-admission-policy.ts";
+import { validateNativeProgramExclusions } from "./programs/native-admission.ts";
 import { createMigrationQueryCompiler } from "./query-compiler.ts";
 import { measureMigrationStorage } from "./storage-measurement.ts";
 import { verifyMigrationJob } from "./job-verification.ts";
@@ -23,6 +24,7 @@ export async function runMigrationJob(
   ports: MigrationJobPorts = {},
 ): Promise<MigrationJobSummary> {
   const sourceAdmission = validateMigrationSourceAdmission(options);
+  validateNativeProgramExclusions(options.excludedNativeProgramSources);
   destinationSchemas(options.schema);
   if (options.apply && options.verifyOnly)
     throw new Error("Choose apply or verify-only");
@@ -145,6 +147,9 @@ export async function runMigrationJob(
     complete: true,
     dryRun: !options.apply,
     inventory: planned.inventory,
+    ...(planned.exclusions?.length
+      ? { exclusions: planned.exclusions, totalExcluded: planned.totalExcluded }
+      : {}),
     datasets: source.preparedDatasets
       ? {
           imports: source.preparedDatasets.scan.statistics,

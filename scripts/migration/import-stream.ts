@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { validateNativeProgramExclusions } from "../../src/migration/programs/native-admission.ts";
 import { destinationSchemas } from "../../src/migration/destination-schema.ts";
 import { runMigrationJob } from "../../src/migration/job.ts";
 import type {
@@ -66,6 +67,10 @@ if (Boolean(fontBundleDirectory) !== Boolean(fontBundleManifestSha256))
     "Font bundle directory and manifest digest must be supplied together",
   );
 const options: MigrationJobOptions = {
+  excludedNativeProgramSources: process.env
+    .MIGRATION_EXCLUDED_NATIVE_PROGRAM_SOURCES
+    ? JSON.parse(process.env.MIGRATION_EXCLUDED_NATIVE_PROGRAM_SOURCES)
+    : undefined,
   fontBundle:
     fontBundleDirectory && fontBundleManifestSha256
       ? {
@@ -129,6 +134,7 @@ const options: MigrationJobOptions = {
         }
       : undefined,
 };
+validateNativeProgramExclusions(options.excludedNativeProgramSources);
 const ports: MigrationJobPorts = {
   connectDestination:
     apply || verifyOnly

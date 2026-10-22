@@ -119,6 +119,7 @@ export interface PlannedPage {
   identities: LegacyRow[];
 }
 export interface MigrationPlan {
+  excludedNativePrograms?: readonly import("./programs/native-contracts.ts").NativeProgramExclusion[];
   schemaVersion: 1;
   sourceNamespace: string;
   maps: MigrationMaps;

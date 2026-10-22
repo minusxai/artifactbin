@@ -34,6 +34,7 @@ export function createMigrationJobPlanner(
     const plan = await planMigration(artifact, {
       maps,
       convert,
+      excludedNativeProgramSources: options.excludedNativeProgramSources,
       nativeProgramBinding: (id, version) => {
         const receipt = source.preparedDatasets?.backends
           .get(id)
@@ -136,6 +137,8 @@ export async function planMigrationJob(
   const conversionStrategy = options.conversionStrategy;
   const reportPath = options.reportPath;
   const conversionProvenance: Record<string, number> = {};
+  const exclusions: import("./programs/native-contracts.ts").NativeProgramExclusion[] =
+    [];
   const report = await open(reportPath, "wx", 0o600);
   let reportWrites = Promise.resolve();
   const writeReport = (line: string) => {
@@ -144,7 +147,7 @@ export async function planMigrationJob(
   };
   const inventory: Record<
     string,
-    { total: number; ready: number; blocked: number }
+    { total: number; ready: number; blocked: number; excluded?: number }
   > = {};
   const totals = { created: 0, unchanged: 0, blocked: 0, errors: 0 };
   try {
@@ -154,6 +157,24 @@ export async function planMigrationJob(
           const artifact = await source.readArtifact(id);
           try {
             const plan = await planArtifact(artifact);
+            for (const exclusion of plan.excludedNativePrograms ?? []) {
+              exclusions.push(exclusion);
+              const row = (inventory.program ??= {
+                total: 0,
+                ready: 0,
+                blocked: 0,
+              });
+              row.total++;
+              row.excluded = (row.excluded ?? 0) + 1;
+              await writeReport(
+                JSON.stringify({
+                  ...exclusion,
+                  legacyId: id,
+                  pageId: maps.pages[id],
+                  disposition: "excluded",
+                }) + "\n",
+              );
+            }
             for (const page of plan.pages) {
               for (const revision of page.revisions) {
                 const p = revision.conversion.provenance;
@@ -302,6 +323,9 @@ export async function planMigrationJob(
         complete: true,
         sourceNamespace: manifest.sourceNamespace,
         readiness,
+        ...(exclusions.length
+          ? { exclusions, totalExcluded: exclusions.length }
+          : {}),
       }),
       { mode: 0o600, flag: "wx" },
     );
@@ -328,6 +352,9 @@ export async function planMigrationJob(
     await report.sync();
     return {
       inventory,
+      ...(exclusions.length
+        ? { exclusions, totalExcluded: exclusions.length }
+        : {}),
       totals,
       readiness,
       readinessRows,

@@ -16,6 +16,7 @@ import type {
 } from "./dependency-contracts.ts";
 import type { MigrationMediaIndex } from "./media-contracts.ts";
 export interface MigrationJobOptions {
+  excludedNativeProgramSources?: readonly import("./programs/native-contracts.ts").NativeProgramExclusionDecision[];
   sourceDirectory: string;
   indexDirectory: string;
   schema: string;
@@ -67,7 +68,7 @@ export interface MigrationJobSource {
 }
 export type JobInventory = Record<
   string,
-  { total: number; ready: number; blocked: number }
+  { total: number; ready: number; blocked: number; excluded?: number }
 >;
 export interface JobTotals {
   created: number;
@@ -79,6 +80,8 @@ export type MigrationPagePlanner = (
   artifact: MigrationManifest,
 ) => Promise<MigrationPlan>;
 export interface MigrationJobPlan {
+  exclusions?: readonly import("./programs/native-contracts.ts").NativeProgramExclusion[];
+  totalExcluded?: number;
   inventory: JobInventory;
   totals: JobTotals;
   readiness: MigrationReadiness;
@@ -90,6 +93,8 @@ export interface MigrationJobPlan {
 }
 
 export interface MigrationJobSummary {
+  exclusions?: readonly import("./programs/native-contracts.ts").NativeProgramExclusion[];
+  totalExcluded?: number;
   complete: true;
   dryRun: boolean;
   inventory: JobInventory;

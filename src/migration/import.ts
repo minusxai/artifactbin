@@ -1,6 +1,10 @@
 import type { BoundValueColumnProof } from "./conversion/compiled/bound-value-contracts.ts";
 import { preservedOrphanActor } from "./orphans.ts";
 import { convertNativeProgramPage } from "./programs/native-page.ts";
+import {
+  nativeProgramExclusion,
+  validateNativeProgramExclusions,
+} from "./programs/native-admission.ts";
 import type { CompiledDatasetMutation } from "./conversion/compiled/dataset-mutations-contracts.ts";
 import type { DatasetBrowserBinding } from "./datasets/planner-contracts.ts";
 import { mediaDependencies } from "./dependencies.ts";
@@ -113,10 +117,14 @@ export async function planMigration(
       legacyId: string,
       version: number,
     ) => { backendNamespace: string; backendHref: string } | undefined;
+    excludedNativeProgramSources?: readonly import("./programs/native-contracts.ts").NativeProgramExclusionDecision[];
   },
 ): Promise<MigrationPlan> {
   if (manifest.schemaVersion !== 1)
     throw new Error("Unsupported manifest schema");
+  validateNativeProgramExclusions(options.excludedNativeProgramSources);
+  const excludedNativePrograms: import("./programs/native-contracts.ts").NativeProgramExclusion[] =
+    [];
   const maps = allocateMigrationMaps(
     manifest.sourceNamespace,
     manifest.artifacts.map((a) => a.id),
@@ -135,6 +143,16 @@ export async function planMigration(
   )) {
     if (seen.has(artifact.id)) throw new Error("Duplicate source artifact");
     seen.add(artifact.id);
+    if (artifact.format === "program") {
+      const exclusion = await nativeProgramExclusion(
+        String(artifact.source ?? ""),
+        options.excludedNativeProgramSources,
+      );
+      if (exclusion) {
+        excludedNativePrograms.push(exclusion);
+        continue;
+      }
+    }
     const id =
       maps.pages[artifact.id] ??
       pageId(manifest.sourceNamespace, artifact.id, occupied);
@@ -398,6 +416,7 @@ export async function planMigration(
     maps,
     pages,
     archive: manifest,
+    ...(excludedNativePrograms.length ? { excludedNativePrograms } : {}),
   };
 }
 export const migrationPageDigest = (page: PlannedPage): string =>
