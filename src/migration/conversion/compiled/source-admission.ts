@@ -541,7 +541,8 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           queries.add(attrs.name);
         }
         if (name === "Value") {
-          expectedDeclarations.push(sourceValueDeclaration(node));
+          const declaration = sourceValueDeclaration(node);
+          expectedDeclarations.push(declaration);
           const attrs = Object.fromEntries(
             node.openingElement.attributes.map((a: any) => [
               a.name.name,
@@ -551,12 +552,11 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           if (
             !/^[A-Za-z][A-Za-z0-9_]*$/.test(attrs.name) ||
             ["constructor", "prototype", "__proto__"].includes(attrs.name) ||
-            declarations.has(attrs.name) ||
-            !["string", "number", "boolean", "table"].includes(attrs.type)
+            declarations.has(attrs.name)
           )
             invalid = true;
           declarations.add(attrs.name);
-          if (attrs.type === "table") tableNames.add(attrs.name);
+          if (declaration.type === "table") tableNames.add(attrs.name);
         }
       }
       for (const [key, value] of Object.entries(node)) {

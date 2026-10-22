@@ -49,3 +49,8 @@ test('read-only column markup preserves headers separately from durable cell ins
     '<DataTable id="table" data="$rows" rowKey="key"><Column col="label"><span>{$_row.missing}</span></Column></DataTable>',
   ])assert.equal(admitLocalSource({...base,source:prefix+markup}).ok,false,markup);
 });
+
+ test('source admission trusts normalized omitted and temporal Value declarations',()=>{
+  for(const markup of ['<Value name="text" default="hello"/>','<Value name="when" type="date"/>','<Value name="person" type="user"/>']) assert.equal(admitLocalSource({...base,source:markup}).ok,true,markup);
+  for(const markup of ['<Value name="bad" type="unknown"/>','<Value name="bound" source="$other" column="name"/>']) assert.equal(admitLocalSource({...base,source:markup}).ok,false,markup);
+ });
