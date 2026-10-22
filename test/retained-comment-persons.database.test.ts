@@ -16,15 +16,33 @@ import { hash } from "../src/server/text.ts";
 test("retained mentions verify read-only, apply idempotently and project fresh public handles only under page ACL", async () => {
   const env = await testDatabase();
   try {
-    await env.pool.query(
-      await readFile(new URL("../src/schema.sql", import.meta.url), "utf8"),
-    );
-    await env.pool.query(
-      await readFile(
-        new URL("../src/datasets/schema.sql", import.meta.url),
-        "utf8",
-      ),
-    );
+    const setup = await env.pool.connect();
+    try {
+      await setup.query("BEGIN");
+      // This fixture must initialize its own dependencies, never borrow public tables.
+      await setup.query(`SET LOCAL search_path TO "${env.schema}"`);
+      await setup.query(
+        await readFile(new URL("../src/schema.sql", import.meta.url), "utf8"),
+      );
+      await setup.query(
+        await readFile(
+          new URL("../src/backend/af-schema.sql", import.meta.url),
+          "utf8",
+        ),
+      );
+      await setup.query(
+        await readFile(
+          new URL("../src/datasets/schema.sql", import.meta.url),
+          "utf8",
+        ),
+      );
+      await setup.query("COMMIT");
+    } catch (error) {
+      await setup.query("ROLLBACK");
+      throw error;
+    } finally {
+      setup.release();
+    }
     await env.pool.query(
       "INSERT INTO accounts(actor,handle) VALUES('owner','page_owner'),('mentioned','current_public')",
     );
