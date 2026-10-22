@@ -1,4 +1,6 @@
 /** Offline-only publication analysis. Source is parsed, SQL is prepared, neither is evaluated. */
+import type { BoundValueColumnProof } from "./compiled/bound-value-contracts.ts";
+import { validBoundValueProof } from "./compiled/bound-value-proof.ts";
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
 import { SqliteDatabase } from "../../datasets/sql/engine/database.ts";
@@ -99,6 +101,7 @@ function builtinSql(text: string): {
 export async function extractLegacyMutations(
   source: string,
   catalogs: readonly LegacyMutationImportCatalog[],
+  boundValueColumns: readonly BoundValueColumnProof[] = [],
 ): Promise<LegacyMutationExtraction> {
   const result: LegacyMutationExtraction = { mutations: [], issues: [] };
   const issue = () =>
@@ -181,7 +184,17 @@ export async function extractLegacyMutations(
               throw Error();
             importNames.set(name.toLowerCase(), src.slice(4));
           } else if (tag === "Value") {
-            const type = a.get("type");
+            let type = a.get("type");
+            if (a.has("source")) {
+              if (a.has("type") || a.has("constraints")) throw Error();
+              const proofs = boundValueColumns.filter((p) => p.valueName === name);
+              if (proofs.length !== 1) throw Error();
+              const proof = proofs[0]!;
+              if (!validBoundValueProof(proof) || proof.sourceRef !== a.get("source") || proof.column !== a.get("column")) throw Error();
+              const matches = catalogs.filter((c) => c.name === proof.bindingName && `ref:${c.datasetLegacyId}` === proof.sourceRef);
+              if (matches.length !== 1 || !matches[0]!.tables.some((t) => t.schema === proof.schema && t.name === proof.table && t.columns.some((c) => c.name === proof.column && c.type === "user"))) throw Error();
+              type = "user";
+            }
             if (params.has(name) || typeof type !== "string") throw Error();
             // Table Values remain browser-local; never become server SQL bindings.
             params.set(name, types.has(type) ? type : null);

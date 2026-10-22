@@ -180,3 +180,15 @@ test("registered mutations may read only the current page accepted-members relat
     assert.deepEqual(bad.mutations, []);
   }
 });
+
+test("source-bound mutation Value requires exact trusted user-column proof", async () => {
+  const source = '<Helmet><Import name="bookings" src="ref:ABC123"/><Value name="who" source="ref:ABC123" column="who"/><Mutation name="assign">{`update bookings.rows set who=$who where id=1`}</Mutation></Helmet>';
+  const proof = {valueName:"who",sourceRef:"ref:ABC123",version:1,bindingName:"bookings",schema:"public",table:"rows" as const,column:"who",type:"user" as const};
+  const result = await extractLegacyMutations(source, catalogs, [proof]);
+  assert.deepEqual(result.issues, []);
+  assert.deepEqual(result.mutations[0]?.paramTypes, {who:"user"});
+  for (const proofs of [[], [{...proof,column:"id"}], [{...proof,bindingName:"other"}], [proof,proof]]) {
+    assert.equal((await extractLegacyMutations(source,catalogs,proofs)).mutations.length,0);
+  }
+  assert.equal((await extractLegacyMutations(source.replace('column="who"','column="who" type="user"'),catalogs,[proof])).mutations.length,0);
+});
