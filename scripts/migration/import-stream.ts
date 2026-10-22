@@ -1,3 +1,4 @@
+import {readMigrationMedia,stageMigrationMedia,migrationResourceMap} from '../../src/migration/media.ts';
 import {planMigrationGroups} from '../../src/migration/groups.ts';
 import {cachedMigrationConverter,archivedCompilerIdentity} from '../../src/migration/cache.ts';
 import {destinationSchemas} from '../../src/migration/destination-schema.ts';
@@ -33,6 +34,8 @@ const identitySummary={emailLogin:identities.filter(i=>i.classification==='email
 // Only small account/ID metadata is retained across artifacts, never document/history/edit bodies.
 for await(const header of indexedArtifactHeaders(indexDirectory))if(header.format==='folder'){const artifact=await readIndexedArtifact(indexDirectory,manifest,header.id);base.artifacts.push(artifact.artifacts[0]!);}
 const apply=flags.includes('--apply-isolated');
+const mediaPlanPath=process.env.MIGRATION_MEDIA_PLAN;const mediaReceiptsPath=process.env.MIGRATION_MEDIA_RECEIPTS;if(Boolean(mediaPlanPath)!==Boolean(mediaReceiptsPath))throw new Error('Media plan and receipts must be supplied together');
+const media=mediaPlanPath&&mediaReceiptsPath?await readMigrationMedia(mediaPlanPath,mediaReceiptsPath):null;const resourceMap=media?migrationResourceMap(media.assets,maps.pages,process.env.MIGRATION_PUBLIC_ORIGIN??'http://localhost:8787',(process.env.MIGRATION_LEGACY_ORIGINS??'').split(',').filter(Boolean)):undefined;if(media&&apply){if(!process.env.MIGRATION_MEDIA_STAGING_DIRECTORY)throw new Error('Explicit media staging directory required');await stageMigrationMedia(media.assets,process.env.MIGRATION_MEDIA_STAGING_DIRECTORY);}
 if(flags.filter(f=>f.startsWith('--concurrency=')).length>1)throw new Error('Choose one concurrency');
 const concurrency=flags.includes('--concurrency=2')?2:1;if(apply&&concurrency!==1)throw new Error('Destination writes require concurrency 1');
 if(apply&&(!process.env.MIGRATION_DESTINATION_DATABASE_URL||!process.env.MIGRATION_PUBLIC_ORIGIN))throw new Error('Explicit MIGRATION_DESTINATION_DATABASE_URL and MIGRATION_PUBLIC_ORIGIN required');
@@ -45,11 +48,11 @@ try{
  for(let offset=0;offset<ids.length;offset+=concurrency)await Promise.all(ids.slice(offset,offset+concurrency).map(async id=>{
   const artifact=await readIndexedArtifact(indexDirectory,manifest,id);
   try{
-  const plan=await planMigration(artifact,{maps,convert:async input=>{const result=await convert(input);return result.html===null?result:{...result,html:rewriteMigrationLinks(result.html,maps,{legacyOrigins:(process.env.MIGRATION_LEGACY_ORIGINS??'').split(',').filter(Boolean),targetOrigin:process.env.MIGRATION_PUBLIC_ORIGIN??'http://localhost:8787'})};},coreUrl:'/af/v1/core.js'});
+  const plan=await planMigration(artifact,{maps,convert:async input=>{const result=await convert(input);return result.html===null?result:{...result,html:rewriteMigrationLinks(result.html,maps,{legacyOrigins:(process.env.MIGRATION_LEGACY_ORIGINS??'').split(',').filter(Boolean),targetOrigin:process.env.MIGRATION_PUBLIC_ORIGIN??'http://localhost:8787'})};},coreUrl:'/af/v1/core.js',media:media?{assets:media.assets,resourceMap,origin:process.env.MIGRATION_PUBLIC_ORIGIN??'http://localhost:8787'}:undefined});
   for(const page of plan.pages){for(const revision of page.revisions){const p=revision.conversion.provenance;const key=JSON.stringify({strategy:revision.conversion.strategy??conversionStrategy,classification:revision.conversion.classification,compiler:p?.compiler??null,build:p?.build??null,mode:p?.mode??null});conversionProvenance[key]=(conversionProvenance[key]??0)+1;}if(!destination.supportsExactAccess(page)){page.disposition='blocked';page.issues.push('Destination cannot preserve exact access or deletion state');}
    const row=inventory[page.original.format]??={total:0,ready:0,blocked:0};row.total++;if(page.disposition==='ready')row.ready++;else row.blocked++;
    const result=await applyMigration(plan,destination,{dryRun:!apply});totals.created+=result.created;totals.unchanged+=result.unchanged;totals.blocked+=result.blocked;
-   await writeReport(JSON.stringify({legacyId:page.legacyId,pageId:page.pageId,format:page.original.format,disposition:page.disposition,unavailableCommentContexts:page.unavailableCommentContexts,ownerAccess:page.owner?.kind==='group'?'group-membership':page.owner?isPreservedNonloginActor(page.owner.id)?'preserved-nonlogin-unclaimable':'email-login':'unmapped',issues:page.issues,revisions:page.revisions.map(r=>({version:r.version,classification:r.conversion.classification,strategy:r.conversion.strategy??conversionStrategy,provenance:r.conversion.provenance,issues:r.conversion.issues})),result})+'\n');
+   await writeReport(JSON.stringify({legacyId:page.legacyId,pageId:page.pageId,format:page.original.format,disposition:page.disposition,assets:page.assets,unavailableCommentContexts:page.unavailableCommentContexts,ownerAccess:page.owner?.kind==='group'?'group-membership':page.owner?isPreservedNonloginActor(page.owner.id)?'preserved-nonlogin-unclaimable':'email-login':'unmapped',issues:page.issues,revisions:page.revisions.map(r=>({version:r.version,classification:r.conversion.classification,outputBytes:r.conversion.outputBytes,strategy:r.conversion.strategy??conversionStrategy,provenance:r.conversion.provenance,issues:r.conversion.issues})),result})+'\n');
   }
   }catch(error){
    if(apply)throw error;

@@ -17,7 +17,7 @@ export function createMigrationConverter(options:MigrationConversionOptions):Con
   if(source===null)return {classification:'manual-blocked',html:null,issues:[{code:'document-codec',message:'Archived document cannot be reconstructed'}],identities:{},strategy:'archived-static'};
   const {compileArchivedStatic}=await import('./conversion/compiled/index.ts');
   const meta=input.meta??{};
-  const result=await compileArchivedStatic({source,coreUrl:input.coreUrl,theme:typeof meta.theme==='string'?meta.theme:null,template:typeof meta.template==='string'?meta.template:null,colorMode:meta.colorMode==='dark'?'dark':'light'},{legacyRoot:options.legacyRoot,compiler:options.compiler});
+  const result=await compileArchivedStatic({source,coreUrl:input.coreUrl,resourceMap:input.resourceMap,theme:typeof meta.theme==='string'?meta.theme:null,template:typeof meta.template==='string'?meta.template:null,colorMode:meta.colorMode==='dark'?'dark':'light'},{legacyRoot:options.legacyRoot,compiler:options.compiler});
   return {...result,strategy:'archived-static'};
  };
 }

@@ -24,13 +24,14 @@ export interface MigrationManifest {
 export interface SqlReader {
   query(sql: string, values?: unknown[]): Promise<{ rows: LegacyRow[] }>;
 }
-export interface ConversionInput { source: string; coreUrl: string; document?: unknown; meta?: Record<string,unknown> }
+export interface ConversionInput { resourceMap?:Readonly<Record<string,string>>; source: string; coreUrl: string; document?: unknown; meta?: Record<string,unknown> }
 export interface ConversionOutput {
   classification: 'renderable' | 'functional' | 'manual-blocked';
   html: string | null;
+  outputBytes?:number;
   issues: readonly unknown[];
   identities: Record<string, string>;
-  strategy?: 'strict'|'archived-static';
+  strategy?: 'strict'|'archived-static'|'media-wrapper';
   provenance?: {compiler:string;build:string;mode:string};
 }
 export type Converter = (input: ConversionInput) => ConversionOutput | Promise<ConversionOutput>;
@@ -57,6 +58,7 @@ export interface PlannedPage {
   /** Full original ACL; destination adapter must implement its exact semantics. */
   access: { visibility: string; linkRole: string; shares: LegacyRow[] };
   original: LegacyArtifact;
+  assets?: {revision:string;variant:'original'|'small';sha256:string;contentType:string;filename:string|null;bytes:number}[];
   comments: LegacyRow[];
   unavailableCommentContexts?: {commentId:string;status:'unavailable';originalRevision:string;reason:'not-retained'}[];
   identities: LegacyRow[];
