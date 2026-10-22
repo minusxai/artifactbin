@@ -10,6 +10,14 @@ export interface StandaloneDatasetJobAdmission {
   /** Entire frozen source-ID and base backend-ID inventory, including deleted/blocked source artifacts. */
   reservedFileIds: readonly string[];
   base: AdditiveDatasetBaseApproval;
+  /** Exact reviewed canonical declarations and notebook-expanded server registrations; never browser metadata. */
+  external?: readonly {
+    legacyId: string;
+    version: number;
+    artifactSha256: string;
+    declarations: string;
+    queries: readonly import("../../datasets/source-query/contracts.ts").MigrationSourceQueryRegistration[];
+  }[];
 }
 export interface AdditiveDatasetBaseApproval {
   /** A completed normal read-only verification report, frozen and reviewed with this exact inventory. */

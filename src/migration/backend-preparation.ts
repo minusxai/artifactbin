@@ -141,6 +141,10 @@ export async function prepareMigrationBackends(
       )
         invalid();
       versions.add(revision.version);
+      if (revision.standaloneExternalDataset) {
+        const p=revision.standaloneExternalDataset;
+        if(p.sourceFormat!=="dataset" || p.legacyId!==page.legacyId || p.pageId!==page.pageId || p.pageVersion!==revision.version || p.editId!==revision.editId || !nonempty(p.editId) || !/^[a-f0-9]{64}$/.test(p.artifactSha256) || revision.standaloneDataset || revision.imports.length || revision.readsMembers || revision.readsViewer!==true || revision.runsProgram || !revision.sourceQueries?.length || revision.mutations?.length)invalid();
+      }
       if (revision.standaloneDataset) {
         const p = revision.standaloneDataset;
         if (p.sourceFormat !== "dataset" || p.legacyId !== page.legacyId || p.pageId !== page.pageId || p.pageVersion !== revision.version || p.editId !== revision.editId || !nonempty(p.editId) || !/^[a-f0-9]{64}$/.test(p.artifactSha256) || revision.imports.length !== 1 || revision.imports[0]!.datasetLegacyId !== page.legacyId || revision.imports[0]!.datasetVersion !== revision.version || revision.readsMembers || revision.readsViewer || revision.runsProgram || revision.sourceQueries?.length || revision.mutations?.length) invalid();
@@ -295,6 +299,7 @@ export async function prepareMigrationBackends(
           readsViewer ||
           revision.runsProgram === true,
         ...(revision.runsProgram ? { program: true as const } : {}),
+        ...(revision.standaloneExternalDataset ? { standaloneExternalDataset: revision.standaloneExternalDataset } : {}),
         ...(revision.standaloneDataset ? { standaloneDataset: revision.standaloneDataset } : {}),
         ...(hasSourceQueries ? { sourceQueries: true as const } : {}),
         ...(readsViewer
@@ -431,6 +436,8 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
         (!receipt.linked || !nonempty(receipt.viewer.sourceNamespace))) ||
       (receipt.members !== undefined &&
         (!receipt.linked || !nonempty(receipt.members.sourceNamespace))) ||
+      (receipt.standaloneExternalDataset !== undefined &&
+        (!receipt.linked || !receipt.sourceQueries || !receipt.viewer || receipt.standaloneDataset || receipt.program || receipt.members || receipt.standaloneExternalDataset.sourceFormat!=="dataset" || receipt.standaloneExternalDataset.legacyId!==receipt.pageLegacyId || receipt.standaloneExternalDataset.pageId!==receipt.pageId || receipt.standaloneExternalDataset.pageVersion!==receipt.pageVersion || !nonempty(receipt.standaloneExternalDataset.editId) || !/^[a-f0-9]{64}$/.test(receipt.standaloneExternalDataset.artifactSha256))) ||
       (receipt.standaloneDataset !== undefined &&
         (!receipt.linked || receipt.sourceQueries || receipt.program || receipt.viewer || receipt.members || receipt.standaloneDataset.sourceFormat !== "dataset" || receipt.standaloneDataset.legacyId !== receipt.pageLegacyId || receipt.standaloneDataset.pageId !== receipt.pageId || receipt.standaloneDataset.pageVersion !== receipt.pageVersion || !nonempty(receipt.standaloneDataset.editId) || !/^[a-f0-9]{64}$/.test(receipt.standaloneDataset.artifactSha256))) ||
       !nonempty(receipt.owner) ||

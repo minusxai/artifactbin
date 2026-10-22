@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { datasetPageArtifactSha256 } from "../../src/migration/dataset-pages/scan.ts";
+import { boundedBackendSchema } from "../../src/graphql/execution-policy.ts";
 import { sealDeployment } from "../../src/backend/deployment.ts";
 import { readBackendModule } from "../../src/backend/af-module.ts";
 import type {
@@ -140,7 +141,15 @@ export const standaloneDatasetHost = {
     const info = await readBackendModule(source);
     return sealDeployment(source, "inert test bundle", {
       typeDefs: info.typeDefs,
-      fields: ["read"],
+      fields: [
+        ...Object.keys(
+          boundedBackendSchema(info.typeDefs).getQueryType()?.getFields() ?? {},
+        ),
+        ...Object.keys(
+          boundedBackendSchema(info.typeDefs).getMutationType()?.getFields() ??
+            {},
+        ),
+      ],
     });
   },
 };

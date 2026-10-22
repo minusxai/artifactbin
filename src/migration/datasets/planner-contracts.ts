@@ -64,6 +64,7 @@ export interface DatasetMetadataInput {
     pageVersion: number;
   }[];
   sourceQueryPages?: readonly {
+    standaloneExternalDataset?: import("../dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance;
     pageLegacyId: string;
     pageId: string;
     pageVersion: number;

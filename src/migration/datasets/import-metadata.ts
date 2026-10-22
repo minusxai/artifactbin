@@ -263,7 +263,7 @@ export function planDatasetMetadata(
   const pageKeys = new Set<string>();
   const addPage = (
     page: LegacyArtifact,
-    b: { pageId: string; pageVersion: number; standaloneDataset?: import("../dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance },
+    b: { pageId: string; pageVersion: number; standaloneExternalDataset?: import("../dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance; standaloneDataset?: import("../dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance },
   ) => {
     if (typeof page.edit_id !== "string" || !page.edit_id)
       throw Error("Missing exact member page edit identity");
@@ -287,7 +287,7 @@ export function planDatasetMetadata(
         editId: page.edit_id,
         owner: principal(page),
         visibility: page.visibility,
-        format: b.standaloneDataset ? "dataset" : "markup",
+        format: b.standaloneDataset || b.standaloneExternalDataset ? "dataset" : "markup",
         ...(b.standaloneDataset ? { standaloneDataset: { kind: "dataset-self-read-v1" as const, datasetId: page.id, version: b.pageVersion } } : {}),
         deleted: !!page.deleted_at,
         ownerIsTestUser: users.get(String(page.user_id))?.kind === "testuser",
@@ -330,10 +330,15 @@ export function planDatasetMetadata(
     ...(input.sourceQueryPages ?? []),
   ]) {
     const page = artifacts.get(member.pageLegacyId);
+    const external = input.sourceQueryPages?.find(entry=>entry===member)?.standaloneExternalDataset;
     if (
       !page ||
       (page.format !== "markup" &&
         !(
+          page.format === "dataset" &&
+          (input.sourceQueryPages ?? []).includes(member) &&
+          external
+        ) && !(
           page.format === "program" &&
           (input.programPages ?? []).includes(member)
         )) ||
@@ -343,7 +348,11 @@ export function planDatasetMetadata(
       page.deleted_at
     )
       throw Error("Invalid member page provenance");
-    addPage(page, member);
+    if (external) {
+      const p=external;
+      if (p.sourceFormat!=="dataset" || p.legacyId!==page.id || p.pageId!==member.pageId || p.pageVersion!==member.pageVersion || p.editId!==page.edit_id || p.artifactSha256!==datasetPageArtifactSha256(page)) throw Error("Invalid standalone external provenance");
+    }
+    addPage(page, {...member, ...(external ? {standaloneExternalDataset:external} : {})});
   }
   for (const b of input.bindings) {
     const headPage = artifacts.get(b.pageLegacyId);

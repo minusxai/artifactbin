@@ -64,6 +64,17 @@ export async function prepareStandaloneDatasetJob(
       manifest,
       maps: source.maps,
       receipts: source.datasets.receipts,
+      sourceQueryPages: page.revisions[0]!.standaloneExternalDataset
+        ? [
+            {
+              pageLegacyId: page.legacyId,
+              pageId: page.pageId,
+              pageVersion: page.revisions[0]!.version,
+              standaloneExternalDataset:
+                page.revisions[0]!.standaloneExternalDataset,
+            },
+          ]
+        : [],
       bindings: prepared.bindings.filter(
         (b) => b.pageLegacyId === page.legacyId,
       ),
@@ -77,7 +88,11 @@ export async function prepareStandaloneDatasetJob(
         v.legacyId === page.legacyId &&
         v.version === artifact.artifacts[0]!.version,
     );
-    if (!version || version.unavailableTables.length) {
+    if (
+      !version ||
+      (!page.revisions[0]!.standaloneExternalDataset &&
+        version.unavailableTables.length)
+    ) {
       issues.set(page.legacyId, ["dataset-source-registration-required"]);
       continue;
     }
@@ -112,6 +127,7 @@ export async function prepareStandaloneDatasetJob(
   );
   return {
     metadata: accumulator.finish(),
+    sourceQueryRegistrations: prepared.sourceQueryRegistrations,
     scan: {
       pages,
       issues,

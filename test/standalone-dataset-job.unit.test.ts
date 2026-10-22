@@ -2,6 +2,7 @@ import {
   standaloneDatasetFixture,
   standaloneDatasetHost,
 } from "./support/standalone-dataset.ts";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { prepareMigrationJobDatasets } from "../src/migration/job-datasets.ts";
@@ -112,4 +113,57 @@ test("completed base resource projections are reused without introducing dataset
   });
   assert.deepEqual(prepared!.metadata.resources, [approved]);
   assert.equal(prepared!.metadata.operations?.length ?? 0, 0);
+});
+test("external admission binds exact source and canonical declarations before compiling only the trusted query capability", async () => {
+  const { artifact, source, options } = standaloneDatasetFixture(true);
+  const sql = "SELECT 1 AS n";
+  const query = {
+    pageLegacyId: artifact.id,
+    pageVersion: artifact.version,
+    name: "table0",
+    sourceRef: "ref:" + artifact.id,
+    resource: "source-" + artifact.id,
+    sql,
+    sqlSha256: createHash("sha256").update(sql).digest("hex"),
+    params: {},
+    columns: [{ name: "n", type: "number" as const }],
+  };
+  options.standaloneDatasetPages!.external = [
+    {
+      legacyId: artifact.id,
+      version: artifact.version,
+      artifactSha256: options.standaloneDatasetPages!.heads[0]!.artifactSha256,
+      declarations: `<Helmet><Query name="table0" source="ref:${artifact.id}">{${JSON.stringify(sql)}}</Query></Helmet>`,
+      queries: [query],
+    },
+  ];
+  options.sourceQueryRegistrations = [query];
+  const prepared = await prepareMigrationJobDatasets(source, options, {
+    host: standaloneDatasetHost,
+  });
+  assert.ok(prepared);
+  assert.equal(prepared.issues.size, 0);
+  const receipt = prepared.backends.get(artifact.id)![0]!;
+  assert.equal(receipt.sourceQueries, true);
+  assert.ok(receipt.standaloneExternalDataset);
+  assert.equal(receipt.standaloneDataset, undefined);
+  assert.equal(prepared.metadata.pages[0]!.snapshot.format, "dataset");
+  assert.equal(
+    prepared.metadata.pages[0]!.snapshot.standaloneDataset,
+    undefined,
+  );
+  assert.equal(prepared.metadata.bindings.length, 0);
+  assert.equal(prepared.sourceQueryRegistrations!.length, 1);
+  options.standaloneDatasetPages!.external![0]!.declarations =
+    options.standaloneDatasetPages!.external![0]!.declarations.replace(
+      "SELECT 1",
+      "SELECT 2",
+    );
+  await assert.rejects(
+    () =>
+      prepareMigrationJobDatasets(source, options, {
+        host: standaloneDatasetHost,
+      }),
+    /declaration differs/,
+  );
 });

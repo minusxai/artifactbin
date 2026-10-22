@@ -1,3 +1,5 @@
+import { attestMigrationSourceQueries } from "../source-query-preparation.ts";
+import { canonicalMigrationValue } from "../verification-values.ts";
 import { createHash } from "node:crypto";
 import { canonical } from "../datasets/catalog.ts";
 import {
@@ -28,6 +30,20 @@ export async function scanStandaloneDatasetPages(
   const unique = new Set<string>();
   const pages: MigrationBackendPage[] = [];
   const issues = new Map<string, string[]>();
+  if (
+    new Set((admission.external ?? []).map((e) => e.legacyId)).size !==
+      (admission.external ?? []).length ||
+    (admission.external ?? []).some(
+      (e) =>
+        !admission.heads.some(
+          (h) =>
+            h.legacyId === e.legacyId &&
+            h.version === e.version &&
+            h.artifactSha256 === e.artifactSha256,
+        ),
+    )
+  )
+    throw Error("Invalid standalone external admission");
   for (const expected of admission.heads) {
     if (
       unique.has(expected.legacyId) ||
@@ -73,9 +89,61 @@ export async function scanStandaloneDatasetPages(
       typeof catalog === "object" &&
       (catalog as { kind?: unknown }).kind === "postgres"
     ) {
-      issues.set(head.id, ["external-registration-required"]);
+      if (head.dataset_policy != null)
+        throw Error(
+          "Standalone external dataset policy requires explicit admission",
+        );
+      const external = admission.external?.find((e) => e.legacyId === head.id);
+      if (!external) {
+        issues.set(head.id, ["external-registration-required"]);
+        continue;
+      }
+      const queries = attestMigrationSourceQueries(
+        external.declarations,
+        head.id,
+        head.version,
+        external.queries,
+      );
+      const trusted = (options.sourceQueryRegistrations ?? []).filter(
+        (q) => q.pageLegacyId === head.id && q.pageVersion === head.version,
+      );
+      if (
+        !Array.isArray((catalog as { tables?: unknown }).tables) ||
+        queries.length !== (catalog as { tables: unknown[] }).tables.length ||
+        !queries.length ||
+        queries.some(
+          (q) =>
+            q.sourceRef !== "ref:" + head.id || Object.keys(q.params).length,
+        ) ||
+        canonicalMigrationValue(queries) !== canonicalMigrationValue(trusted)
+      )
+        throw Error("Standalone external trusted registration differs");
+      pages.push({
+        legacyId: head.id,
+        pageId: source.maps.pages[head.id]!,
+        owner: owner as MigrationBackendPage["owner"],
+        revisions: [
+          {
+            version: head.version,
+            editId: String(head.edit_id ?? ""),
+            imports: [],
+            readsViewer: true,
+            sourceQueries: queries,
+            standaloneExternalDataset: {
+              sourceFormat: "dataset",
+              legacyId: head.id,
+              pageId: source.maps.pages[head.id]!,
+              pageVersion: head.version,
+              editId: String(head.edit_id ?? ""),
+              artifactSha256: expected.artifactSha256,
+            },
+          },
+        ],
+      });
       continue;
     }
+    if (admission.external?.some((e) => e.legacyId === head.id))
+      throw Error("Standalone external source kind differs");
     pages.push({
       legacyId: head.id,
       pageId: source.maps.pages[head.id]!,
