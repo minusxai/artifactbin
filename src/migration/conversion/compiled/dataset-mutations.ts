@@ -1,9 +1,7 @@
+import { admitCompiledDatasetMutationBindings } from "./dataset-mutation-bindings.ts";
 import {
   datasetMutationScalar,
   matchesDatasetMutationScalar,
-  validDatasetMutationParameterType,
-  validDatasetMutationParameterMap,
-  validDatasetMutationRowParameters,
 } from "../../../datasets/mutation/parameter-scalars.ts";
 import {
   validCompiledMutationIntent,
@@ -52,54 +50,12 @@ interface Attempt {
 export function createCompiledDatasetMutations(
   options: CompiledDatasetMutationOptions,
 ): CompiledDatasetMutationAdapter {
-  const bindings = new Map(options.bindings.map((b) => [b.name, b])),
-    attempts = new Map<string, Attempt>(),
-    listeners = new Set<() => void>();
-  if (bindings.size !== options.bindings.length)
-    throw Error("Invalid registered mutation metadata");
-  for (const b of bindings.values())
-    if (
-      !/^[a-f0-9]{64}$/.test(b.recoveryScope) ||
-      !identifier(b.name) ||
-      !identifier(b.backendNamespace) ||
-      !options.documents[b.backendNamespace] ||
-      !validDatasetMutationParameterMap(b.paramTypes) ||
-      Object.keys(b.paramTypes).length > 240 ||
-      Object.entries(b.paramTypes).some(
-        ([name, type]) =>
-          !identifier(name) || !validDatasetMutationParameterType(type),
-      ) ||
-      b.reset?.some((name) => !identifier(name))
-    )
-      throw Error("Invalid registered mutation metadata");
-  const flatTypes = new Map<
-    string,
-    Record<
-      string,
-      import("../../../datasets/mutation/parameter-contracts.ts").DatasetMutationParameterType
-    >
-  >();
-  for (const binding of bindings.values()) {
-    const types = { ...binding.paramTypes };
-    for (const [field, descriptor] of Object.entries(binding.rowParams ?? {})) {
-      if (
-        !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(field) ||
-        ["constructor", "prototype", "__proto__"].includes(field) ||
-        !descriptor ||
-        !identifier(descriptor.param) ||
-        !validDatasetMutationParameterType(descriptor.type) ||
-        Object.hasOwn(types, descriptor.param)
-      )
-        throw Error("Invalid registered row mutation metadata");
-      types[descriptor.param] = descriptor.type;
-    }
-    if (
-      !validDatasetMutationRowParameters(binding.rowParams, types) ||
-      Object.keys(types).length > 240
-    )
-      throw Error("Invalid registered row mutation metadata");
-    flatTypes.set(binding.name, types);
-  }
+  const admitted = admitCompiledDatasetMutationBindings(options.bindings);
+  const bindings = new Map(admitted.map((binding) => [binding.name, binding]));
+  const attempts = new Map<string, Attempt>();
+  const listeners = new Set<() => void>();
+  if (admitted.some((binding) => !options.documents[binding.backendNamespace]))
+    throw Error("Missing registered mutation document");
   const durable = options.intentStore;
   const context = options.authorizationContext;
   if ((durable || context) && (!durable || !context))
@@ -131,8 +87,8 @@ export function createCompiledDatasetMutations(
       current === intent.authorizationContext &&
       !!binding &&
       Object.keys(intent.params).length ===
-        Object.keys(flatTypes.get(binding.name)!).length &&
-      Object.entries(flatTypes.get(binding.name)!).every(
+        Object.keys(binding.flatParamTypes).length &&
+      Object.entries(binding.flatParamTypes).every(
         ([name, type]) =>
           Object.hasOwn(intent.params, name) &&
           matches(type, intent.params[name]!),
