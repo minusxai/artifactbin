@@ -263,3 +263,17 @@ test("Mutation expectedAffected admits only the trusted extractor's literal shap
   ])
     assert.equal(admitLocalSource({ ...base, source: source(flag) }).ok, false);
 });
+
+
+test("native default chart visualizations do not require a Vega result", async () => {
+  const {admitLocalSource} = await import("../src/migration/conversion/compiled/source-admission.ts");
+  for (const viz of ['"table"', '{{}}', '{{kind:"table"}}']) {
+    const result = admitLocalSource({
+      source: '<Value name="rows" type="table" value={[{n:1}]}/><Chart data="$rows" viz=' + viz + '/>',
+      coreUrl: '/af/v1/core.js',
+    });
+    assert.ok(result.ok);
+    assert.equal(result.plan.chartCount, 1);
+    assert.equal(result.plan.vegaCount, 0);
+  }
+});

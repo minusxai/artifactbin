@@ -247,7 +247,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
             invalid = true;
           const kind = viz?.value?.expression?.properties?.find(
             (p: any) => (p.key?.name ?? p.key?.value) === "kind",
-          )?.value?.value;
+          )?.value?.value ?? "table";
           if (!["table", "single_value"].includes(kind)) vegaCount++;
         }
         if (name === "Import") {
