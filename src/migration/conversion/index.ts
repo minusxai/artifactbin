@@ -530,3 +530,9 @@ export function inventoryLegacyConversions(
   }
   return inventory;
 }
+
+export { extractLegacyImports } from "./imports.ts";
+export type {
+  LegacyImportDescriptor,
+  LegacyImportExtraction,
+} from "./import-contracts.ts";

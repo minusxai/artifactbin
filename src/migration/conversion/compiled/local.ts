@@ -93,7 +93,7 @@ export async function compileArchivedLocal(
     bindings.some(
       (b) =>
         !validDatasetBinding(b) ||
-        !/^ref:[A-Za-z0-9]{6}$/.test(b.legacyRef) ||
+        !/^ref:[A-Za-z0-9]{6,12}$/.test(b.legacyRef) ||
         ["compiledPage", "authorSignals"].includes(b.backendNamespace),
     )
   )
