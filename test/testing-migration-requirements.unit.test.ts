@@ -72,3 +72,21 @@ test("discovery errors identify the exact file needing a requirement declaration
     await rm(root, { recursive: true, force: true });
   }
 });
+test("registered query compiler verification belongs to the required archived compiler gate", async () => {
+  const { discoverTests } = await import("../scripts/testing/inventory.ts");
+  const required = selectTests(discoverTests(), "required-migration");
+  const query = required.filter(
+    (t) => t.file === "test/migration-query-compiler.database.test.ts",
+  );
+  assert.equal(query.length, 1);
+  assert.deepEqual(query[0]!.requirements.migration, ["archived-compiler"]);
+});
+test("retired compiler environment aliases cannot hide a skipped migration test from discovery", () => {
+  assert.throws(
+    () =>
+      migrationTestRequirements(
+        "const root=process" + ".env.MIGRATION_LEGACY_ROOT;",
+      ),
+    /PAGEGI_ARCHIVED_COMPILER_ROOT/,
+  );
+});

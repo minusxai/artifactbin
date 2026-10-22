@@ -1,8 +1,9 @@
+// @requires archived-compiler
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createMigrationQueryCompiler } from "../src/migration/query-compiler.ts";
 import { prepareMigrationQueryReceipt } from "../src/migration/query-preparation.ts";
-const root = process.env.MIGRATION_LEGACY_ROOT;
+const root = process.env.PAGEGI_ARCHIVED_COMPILER_ROOT;
 test(
   "actual archived query parser/compiler preserves typed values and refuses malformed canonical declarations without executing authored module",
   { skip: !root },

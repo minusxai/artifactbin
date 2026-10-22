@@ -11,6 +11,10 @@ const flags: readonly MigrationTestRequirement[] = [
 export function migrationTestRequirements(
   source: string,
 ): MigrationTestRequirement[] {
+  if (/process\.env\.MIGRATION_LEGACY_ROOT\b/.test(source))
+    throw Error(
+      "Use PAGEGI_ARCHIVED_COMPILER_ROOT and declare // @requires archived-compiler",
+    );
   const declared = [
     ...source.matchAll(/^\s*\/\/\s*@requires\s+(\S+)\s*$/gm),
   ].map((match) => match[1]!);
