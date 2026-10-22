@@ -358,6 +358,15 @@ const bundled = await bundle({
             resolveDir: root,
           }),
         );
+        b.onResolve({ filter: /^migration-readiness$/ }, () => ({
+          path: path.join(import.meta.dirname, "readiness.ts"),
+        }));
+        b.onResolve({ filter: /^\.\.\/defer-engine$/ }, (args: any) =>
+          args.importer ===
+          path.join(root, "services/app/lib/islands/kit/disclosure.tsx")
+            ? { path: path.join(import.meta.dirname, "readiness.ts") }
+            : undefined,
+        );
         b.onResolve({ filter: /^migration-identities$/ }, () => ({
           path: path.join(import.meta.dirname, "dynamic-identity-dom.ts"),
         }));
