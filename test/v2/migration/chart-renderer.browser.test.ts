@@ -20,7 +20,11 @@ test(
     const spec = {
       width: 300,
       height: 200,
-      data: [{ name: "main" }],
+      signals: [{ name: "inlineRows", value: [{}] }],
+      data: [
+        { name: "main" },
+        { name: "inline", values: { signal: "inlineRows" } },
+      ],
       scales: [
         {
           name: "x",

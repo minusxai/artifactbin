@@ -40,6 +40,9 @@ export async function chartRendererSources(
   const textObjectPath = fileURLToPath(
     new URL("./text-object.ts", import.meta.url),
   );
+  const inlineDataPath = fileURLToPath(
+    new URL("./inline-data.ts", import.meta.url),
+  );
   const entry = `import {View} from 'vega-view';
 import {transforms} from 'vega-dataflow';
 import {SVGRenderer,renderModule} from 'vega-scenegraph';
@@ -129,8 +132,8 @@ observe:(element,resize)=>{const observer=new ResizeObserver(resize);observer.ob
           return undefined;
         });
         b.onLoad({ filter: /.*/, namespace: "offline-chart" }, () => ({
-          contents:
-            "const refuse=()=>{throw Error('Chart resource unavailable')};export const loader=()=>({load:refuse,sanitize:refuse});export const read=refuse;export const responseType=refuse;",
+          contents: `export {readChartInlineData as read} from ${JSON.stringify(inlineDataPath)};const refuse=()=>{throw Error('Chart resource unavailable')};export const loader=()=>({load:refuse,sanitize:refuse});export const responseType=refuse;`,
+          resolveDir: root,
           loader: "js",
         }));
         b.onLoad(
