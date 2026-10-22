@@ -100,7 +100,9 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       (b) =>
         !validDatasetBinding(b) ||
         !/^ref:[A-Za-z0-9]{6,12}$/.test(b.legacyRef) ||
-        ["compiledPage", "authorSignals"].includes(b.backendNamespace),
+        ["compiledPage", "authorSignals", "datasetMutationIntents"].includes(
+          b.backendNamespace,
+        ),
     )
   )
     return blocked("compiled-dataset-binding");
@@ -375,6 +377,30 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
             invalid = true;
         }
         if (name === "Mutation") {
+          const attributes = node.openingElement.attributes;
+          if (
+            new Set(attributes.map((a: any) => a.name?.name)).size !==
+            attributes.length
+          )
+            invalid = true;
+          const expected = attributes.find(
+            (a: any) => a.name?.name === "expectedAffected",
+          );
+          if (expected) {
+            const literal =
+              expected.value?.type === "JSXExpressionContainer"
+                ? expected.value.expression
+                : expected.value;
+            // The publication extractor owns this authority field. Admission
+            // accepts its exact literal grammar; browser routing gains no flag.
+            if (
+              literal?.type !== "Literal" ||
+              typeof literal.value !== "number" ||
+              !Number.isSafeInteger(literal.value) ||
+              literal.value < 0
+            )
+              invalid = true;
+          }
           const attrs = Object.fromEntries(
             node.openingElement.attributes.map((a: any) => [
               a.name?.name,
@@ -387,7 +413,9 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
             !/^[A-Za-z][A-Za-z0-9_]*$/.test(attrs.name) ||
             ["constructor", "prototype", "__proto__"].includes(attrs.name) ||
             mutations.has(attrs.name) ||
-            Object.keys(attrs).some((k) => !["id", "name", "reset"].includes(k))
+            Object.keys(attrs).some(
+              (k) => !["id", "name", "reset", "expectedAffected"].includes(k),
+            )
           )
             invalid = true;
           const metadata = registeredMutations.find(

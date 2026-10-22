@@ -171,3 +171,59 @@ test("output admission treats compiler JSON as unknown and reconciles against th
   ])
     assert.equal(admitLocalOutput(admission.plan, candidate).ok, false);
 });
+
+test("Mutation expectedAffected admits only the trusted extractor's literal shape and never augments browser authority", async () => {
+  const { admitLocalSource } = await import(
+    "../src/migration/conversion/compiled/source-admission.ts"
+  );
+  const metadata = {
+    name: "save",
+    backendNamespace: "legacyData",
+    paramTypes: { amount: "number" as const },
+  };
+  const base = {
+    coreUrl: "/af/v1/core.js",
+    datasetBindings: [
+      {
+        name: "items",
+        legacyRef: "ref:Abcd12",
+        backendNamespace: "legacyData",
+        backendHref: "/af/v1/ids/Bac123",
+        version: 1,
+        mode: "live" as const,
+        tables: [
+          {
+            schema: "public",
+            table: "rows",
+            columns: [{ name: "amount", type: "number" }],
+          },
+        ],
+      },
+    ],
+    datasetMutations: [metadata],
+  };
+  const source = (flag: string) =>
+    '<Helmet><Import name="items" src="ref:Abcd12"/><Value name="amount" type="number" default={2}/><Query name="rows">{`select amount from items.rows`}</Query><Mutation name="save" ' +
+    flag +
+    '>{`insert into items.rows(amount) values($amount)`}</Mutation></Helmet><Button run="$save">Save</Button>';
+  for (const number of [0, 1, Number.MAX_SAFE_INTEGER]) {
+    const accepted = admitLocalSource({
+      ...base,
+      source: source("expectedAffected={" + number + "}"),
+    });
+    assert.ok(accepted.ok);
+    assert.deepEqual(accepted.plan.input.datasetMutations, [metadata]);
+  }
+  for (const flag of [
+    "expectedAffected={-1}",
+    "expectedAffected={1.5}",
+    "expectedAffected={9007199254740992}",
+    'expectedAffected="1"',
+    "expectedAffected={null}",
+    "expectedAffected={+1}",
+    "expectedAffected={globalThis.sideEffect()}",
+    "expectedAffected={1} expectedAffected={2}",
+    "unexpectedFlag={1}",
+  ])
+    assert.equal(admitLocalSource({ ...base, source: source(flag) }).ok, false);
+});
