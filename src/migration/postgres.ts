@@ -1,3 +1,4 @@
+import {projectMigrationCommentContext} from "./comment-projection.ts";
 import {preservedOrphanActor} from "./orphans.ts";
 import {registerMigrationBackends} from "./backend-preparation.ts";
 import {MAX_PAGE_SOURCE} from '../af-contracts.ts';
@@ -119,13 +120,10 @@ export class PostgresMigrationDestination implements ImportDestination {
    const parts=path.split('/').slice(1,-1);for(let i=1;i<=parts.length;i++)await this.db.query('INSERT INTO folders(owner,path) VALUES($1,$2) ON CONFLICT DO NOTHING',[owner,'/'+parts.slice(0,i).join('/')]);
    const comments=page.comments.filter(c=>!c.deleted_at);let sequence=0;
    for(const c of comments){
-    const originalRevision=String(c.anchor_version??head);const available=page.revisions.some(r=>String(r.version)===originalRevision);const revision=available?originalRevision:null;
-    const contextStatus=available?null:{status:'unavailable',originalRevision,reason:'not-retained'};
     const author=this.maps.users[String(c.author_user_id)]??this.maps.tokens[String(c.author_token_id)];if(!author)throw new Error('Unmapped comment author');
     const root=c.root_id?comments.find(r=>r.id===c.root_id):c;if(!root)throw new Error('Comment references missing root');
-    const originalAnchor=typeof root.anchor_key==='string'?root.anchor_key:null;
-    const mapped=available&&originalAnchor?(current.conversion.identities[originalAnchor]??originalAnchor):null;
-    const snapshot=!available||c.view_state===null||c.view_state===undefined?null:'legacy-'+String(c.id);
+    const {sourceRevision:revision,nodeId:mapped,contextStatus}=projectMigrationCommentContext({root,revisions:page.revisions});
+    const snapshot=revision===null||c.view_state===null||c.view_state===undefined?null:'legacy-'+String(c.id);
     if(snapshot)await this.db.query('INSERT INTO snapshots(file_id,id,source_revision,schema_version,state,view,rendered) VALUES($1,$2,$3,1,$4::jsonb,$5::jsonb,NULL)',[page.pageId,snapshot,revision,'{}',JSON.stringify(c.view_state)]);
     await this.db.query('INSERT INTO comments(file_id,id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence,context_status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb)',[page.pageId,String(c.id),mapped,String(c.quote??c.snippet??''),String(c.body??''),revision,c.root_id??null,snapshot,author,String(c.created_at),Number(c.revision??1),root.status==='resolved',digest(JSON.stringify(c)),++sequence,contextStatus?JSON.stringify(contextStatus):null]);
    }

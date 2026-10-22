@@ -10,7 +10,8 @@ test('isolated Postgres import preserves revisions, comments, snapshots, ACL and
  const db=new Client({connectionString:process.env.MIGRATION_TEST_DATABASE_URL});await db.connect();const schema='migration_test_'+process.pid;
  try{
  const manifest:MigrationManifest={schemaVersion:1,sourceNamespace:'fixture',exportedAt:'epoch',tokenOwners:[{id:'anonymous',user_id:null}],tables:{groups:[{id:'team',name:'Fixture group'},{id:'retired',deleted_at:'2026-01-01'}],group_members:[{group_id:'team',user_id:'u2',role:'viewer'}],users:[{id:'u1',email:'owner@example.test'},{id:'u2',email:'reader@example.test'},{id:'historical',email:null,name:'Historical',username:'should-not-copy'}],artifact_versions:[{artifact_id:'source',version:1,format:'markup',source:'old'}],annotations:[{id:'comment',artifact_id:'source',body:'Hello',author_user_id:'u2',anchor_version:1,anchor_key:'node',created_at:'2026-01-01T00:00:00Z',status:'open',view_state:{scroll:1}},{id:'unavailable',artifact_id:'source',body:'Retained body',quote:'Retained quote',author_token_id:'anonymous',anchor_version:99,anchor_key:'node',view_state:{scroll:4},created_at:'2026-01-01T00:00:00Z',status:'open'},{id:'deleted',artifact_id:'source',body:'Removed',deleted_at:'2026-01-02'}]},artifacts:[{id:'source',version:2,format:'markup',source:'new',document:null,user_id:'u1',group_id:null,token_id:'t',visibility:'private',link_role:'viewer',title:'Fixture'}]};
- const plan=await planMigration(manifest,{maps:buildAccountMaps(manifest),coreUrl:'/af/v1/core.js',convert:({source})=>({classification:'renderable',html:`<html><p data-af-id="node">${source}</p></html>`,identities:{node:'node'},issues:[]})});
+ manifest.tables.annotations!.push({id:"reply",artifact_id:"source",root_id:"comment",body:"Reply",author_user_id:"u2",anchor_version:null,created_at:"2026-01-02T00:00:00Z"});
+ const plan=await planMigration(manifest,{maps:buildAccountMaps(manifest),coreUrl:'/af/v1/core.js',convert:({source})=>({classification:'renderable',html:`<html><p data-af-id="${source==='old'?'historical-node':'head-node'}">${source}</p></html>`,identities:{node:source==='old'?'historical-node':'head-node'},issues:[]})});
  const archive=new PostgresStreamArchive(db,schema,true);await archive.initialize();
  const part={table:'artifact_edits',path:'edits-0.ndjson',rows:2,bytes:40,sha256:'fixture-digest'};
  async function* records(){yield {artifact_id:'source',removed:'old'};yield {artifact_id:'source',inserted:'new'};}
@@ -22,11 +23,13 @@ test('isolated Postgres import preserves revisions, comments, snapshots, ACL and
  const destination=new PostgresMigrationDestination(db,{schema,origin:'http://localhost:8787',isolated:true,editorManageRestricted:true});await destination.prepare({manifest,maps:plan.maps});
  assert.equal((await applyMigration(plan,destination,{dryRun:false})).created,1);assert.equal((await applyMigration(plan,destination,{dryRun:false})).unchanged,1);
  const q=(sql:string)=>db.query(`SELECT ${sql}`);
+ const anchored=(await db.query(`SELECT id,source_revision,node_id,parent_id FROM "${schema}".comments WHERE id IN ('comment','reply') ORDER BY id`)).rows;
+ assert.deepEqual(anchored,[{id:'comment',source_revision:'1',node_id:'historical-node',parent_id:null},{id:'reply',source_revision:'1',node_id:'historical-node',parent_id:'comment'}]);
  const unavailable=(await db.query(`SELECT source_revision,node_id,app_state_id,context_status,body,quote,published_by FROM "${schema}".comments WHERE id='unavailable'`)).rows[0];assert.deepEqual(unavailable,{source_revision:null,node_id:null,app_state_id:null,context_status:{status:'unavailable',originalRevision:'99',reason:'not-retained'},body:'Retained body',quote:'Retained quote',published_by:plan.maps.tokens.anonymous});
  const tokenAccount=(await db.query(`SELECT salt,password,handle FROM "${schema}".accounts WHERE actor=$1`,[plan.maps.tokens.anonymous])).rows[0];assert.deepEqual(tokenAccount,{salt:null,password:null,handle:null});
  const opaque=plan.maps.users.historical!;const historical=(await db.query(`SELECT name,salt,password,handle FROM "${schema}".accounts WHERE actor=$1`,[opaque])).rows[0];assert.deepEqual(historical,{name:'Historical',salt:null,password:null,handle:null});assert.equal((await q(`count(*)::int AS n FROM "${schema}".sessions`)).rows[0].n,0);
  assert.equal((await q(`count(*)::int AS n FROM "${schema}".sources`)).rows[0].n,2);
- assert.equal((await q(`count(*)::int AS n FROM "${schema}".comments`)).rows[0].n,2);
+ assert.equal((await q(`count(*)::int AS n FROM "${schema}".comments`)).rows[0].n,3);
  assert.equal((await q(`count(*)::int AS n FROM "${schema}".snapshots`)).rows[0].n,1);
  assert.equal((await q(`access->>'visibility' AS v FROM "${schema}".files`)).rows[0].v,'private');
  assert.equal((await q(`manifest->'tables'->'annotations'->2->>'body' AS v FROM "${schema}_migration".archives`)).rows[0].v,'Removed');
