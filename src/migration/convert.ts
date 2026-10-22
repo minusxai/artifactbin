@@ -81,7 +81,7 @@ export function createMigrationConverter(
       result.classification !== "manual-blocked"
     )
       return { ...result, strategy: options.strategy };
-    const { compileArchivedLocal } = await import(
+    const { compileArchivedLocal, compileArchivedAuthor } = await import(
       "./conversion/compiled/local.ts"
     );
     const local = await compileArchivedLocal(compiledInput, {
@@ -90,6 +90,12 @@ export function createMigrationConverter(
     });
     if (local.classification !== "manual-blocked")
       return { ...local, strategy: options.strategy };
+    const authored = await compileArchivedAuthor(compiledInput, {
+      legacyRoot: options.legacyRoot,
+      compiler: options.localCompiler,
+    });
+    if (authored.classification !== "manual-blocked")
+      return { ...authored, strategy: options.strategy };
     const routeIssues = (route: string, issues: readonly unknown[]) =>
       issues.map((issue) =>
         issue && typeof issue === "object"
@@ -102,6 +108,7 @@ export function createMigrationConverter(
       issues: [
         ...routeIssues("archived-static", result.issues),
         ...routeIssues("archived-local", local.issues),
+        ...routeIssues("archived-author", authored.issues),
       ],
     };
   };

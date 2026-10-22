@@ -129,3 +129,33 @@ test("explicit archived-functional admits bounded local state and preserves both
     ),
   );
 });
+
+test("archived-functional explicitly selects admitted authored components", async () => {
+  const convert = createMigrationConverter({
+    strategy: "archived-functional",
+    localCompiler: {
+      compile: async (input) => {
+        assert.ok(input.authorPlan);
+        return {
+          html: '<div id="mount" data-migration-author-component="Example"></div>',
+          css: "",
+          title: "Fixture",
+          build: "fixture",
+          rootAttributes: {},
+          capabilities: [],
+          javascript: "void 0",
+          declarations: [],
+          modules: [],
+          authorExports: ["Example"],
+        };
+      },
+    },
+  });
+  const result = await convert({
+    source:
+      '<Helmet><script>{`export function Example(){return <button>Go</button>}`}</script></Helmet><Example id="mount"/>',
+    coreUrl: "/af/v1/core.js",
+  });
+  assert.equal(result.classification, "functional");
+  assert.equal(result.provenance?.compiler, "archived-author");
+});
