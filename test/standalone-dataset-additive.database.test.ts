@@ -58,6 +58,11 @@ test("additive normal publication preserves its completed base receipt, replays 
         acceptedJoins: [],
       },
     };
+    const originalDataset = await prepareMigrationJobDatasets(source, options, {
+      host: standaloneDatasetHost,
+    });
+    base.metadata.resources = originalDataset!.metadata.resources;
+    base.metadata.versions = originalDataset!.metadata.versions;
     await metadata.import(base);
     await verifyMigrationDatasetMetadata(client, db.schema, base);
     const original = (
@@ -92,6 +97,21 @@ test("additive normal publication preserves its completed base receipt, replays 
     const plan = await createMigrationJobPlanner(source, options, async () => {
       throw Error("not legacy markup");
     })(await source.readArtifact("data01"));
+    await assert.rejects(
+      () =>
+        verifyAdditiveDatasetBase(client, db.schema, {
+          ...base,
+          additive: options.standaloneDatasetPages,
+          metadata: {
+            ...prepared.metadata,
+            resources: prepared.metadata.resources.map((r) => ({
+              ...r,
+              generation: r.generation + 1,
+            })),
+          },
+        }),
+      /attempted base replacement/,
+    );
     const result = await applyMigration(plan, destination, { dryRun: false });
     assert.equal(result.created, 1);
     const batch: DatasetMigrationBatch = {

@@ -273,6 +273,13 @@ export async function verifyAdditiveDatasetBase(
         additiveRowSha256(normalizeAdditiveRow(r)),
       ]),
     );
+    for (const [key, digest] of own)
+      if (expected.has(key))
+        same(
+          digest,
+          expected.get(key),
+          plan.table + " attempted base replacement",
+        );
     for (const item of (
       await db.query(
         `SELECT row_to_json(t) AS value FROM ${runtime}.${plan.table} t WHERE source_namespace=$1`,
