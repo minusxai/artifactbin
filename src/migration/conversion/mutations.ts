@@ -130,6 +130,8 @@ export async function extractLegacyMutations(
           )
             throw Error();
           if (tag === "Import") {
+            if (["main", "temp"].includes(name.toLowerCase()))
+              throw Error("local SQL namespace");
             const src = a.get("src");
             if (
               typeof src !== "string" ||

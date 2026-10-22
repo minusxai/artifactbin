@@ -88,3 +88,14 @@ test("legacy clock semantics refuse ambient now while preserving server-bound cl
   assert.deepEqual(accepted.issues, []);
   assert.deepEqual(accepted.mutations[0]?.paramTypes, {});
 });
+
+test("local SQLite namespaces cannot masquerade as persistent Import targets", async () => {
+  for (const alias of ["main", "temp"]) {
+    const result = await extractLegacyMutations(
+      `<Helmet><Import name="${alias}" src="ref:ABC123"/><Mutation name="erase">{\`delete from ${alias}.rows\`}</Mutation></Helmet>`,
+      [{ ...catalogs[0]!, name: alias }],
+    );
+    assert.deepEqual(result.mutations, []);
+    assert.ok(result.issues.length);
+  }
+});
