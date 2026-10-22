@@ -1,3 +1,4 @@
+import {registerMigrationBackends} from "./backend-preparation.ts";
 import {MAX_PAGE_SOURCE} from '../af-contracts.ts';
 import {createHash,randomBytes} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -45,6 +46,8 @@ export class PostgresMigrationDestination implements ImportDestination {
   await this.transaction(async()=>{
    await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);await this.db.query(`SET LOCAL search_path TO ${this.schema}`);
    await this.db.query(schemaSql);
+   await this.db.query(await readFile(new URL('../backend/af-schema.sql',import.meta.url),'utf8'));
+   await this.db.query(await readFile(new URL('../datasets/schema.sql',import.meta.url),'utf8'));
    await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.archive}`);
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.archives(namespace text PRIMARY KEY,digest text NOT NULL,manifest jsonb NOT NULL,maps jsonb NOT NULL)`);
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.receipts(key text PRIMARY KEY,digest text NOT NULL,page_id text NOT NULL,imported_at timestamptz NOT NULL DEFAULT now())`);
@@ -105,6 +108,7 @@ export class PostgresMigrationDestination implements ImportDestination {
    await this.db.query('UPDATE files SET seed=$2::jsonb WHERE id=$1',[page.pageId,JSON.stringify(preparedHead.state)]);
    for(const r of normalized)await this.db.query('INSERT INTO sources(file_id,revision,content,node_ids,digest) VALUES($1,$2,$3,$4::jsonb,$5)',[page.pageId,String(r.version),r.prepared.source,JSON.stringify(r.prepared.nodeIds),digest(r.prepared.source)]);
    for(const asset of page.assets??[])await this.db.query('INSERT INTO page_assets(page_id,revision,variant,sha256,content_type,filename,byte_length,storage_key) VALUES($1,$2,$3,$4,$5,$6,$7,$4)',[page.pageId,asset.revision,asset.variant,asset.sha256,asset.contentType,asset.filename,asset.bytes]);
+   if(page.backends?.length)await registerMigrationBackends(this.db,page.backends);
    const parts=path.split('/').slice(1,-1);for(let i=1;i<=parts.length;i++)await this.db.query('INSERT INTO folders(owner,path) VALUES($1,$2) ON CONFLICT DO NOTHING',[owner,'/'+parts.slice(0,i).join('/')]);
    const comments=page.comments.filter(c=>!c.deleted_at);let sequence=0;
    for(const c of comments){

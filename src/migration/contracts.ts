@@ -1,3 +1,4 @@
+import type {MigrationBackendReceipt} from "./backend-preparation-contracts.ts";
 import type {DatasetBrowserBinding} from "./datasets/planner-contracts.ts";
 /** Offline migration records contain private content. Never commit exported manifests. */
 export type LegacyRow = Record<string, unknown>;
@@ -50,6 +51,7 @@ export interface PlannedRevision {
   conversion: ConversionOutput;
 }
 export interface PlannedPage {
+  backends?:readonly MigrationBackendReceipt[];
   legacyId: string;
   pageId: string;
   owner: { kind: 'user' | 'group' | 'token'; id: string } | null;
