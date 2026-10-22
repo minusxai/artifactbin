@@ -24,7 +24,7 @@ export interface DatasetImportMetadata {
     unavailableTables: readonly { schema: string; name: string; reason: "external" | "model" }[];
   }[];
   /** Token rows retain ownership provenance only: they never authenticate a dataset caller. */
-  principals: readonly { actor: string; kind: "user" | "token"; legacyId: string; identity: "user" | "guest" | "testuser" }[];
+  principals: readonly { actor: string; kind: "user" | "token"; legacyId: string; identity: "user" | "guest" | "testuser"; expiresAt: string | null }[];
   groups: readonly { owner: string; legacyGroupId: string }[];
   /** Current accepted joins; removals take effect on the next authority read. */
   acceptedJoins: readonly { pageId: string; legacyUserId: string }[];
