@@ -3,6 +3,8 @@ import {
   type DatasetQueryJob,
   type RegisteredServerQueryPorts,
   type RegisteredServerQueryService,
+  type RegisteredServerQueryOptions,
+  type RegisteredServerQueryIdentity,
 } from "./contracts.ts";
 import {
   name,
@@ -28,27 +30,68 @@ function typed(v: unknown, type: ColumnType): v is Scalar {
 }
 export function createRegisteredServerQueryService(
   ports: RegisteredServerQueryPorts,
+  options: RegisteredServerQueryOptions = {},
 ): RegisteredServerQueryService {
   return {
-    async execute(context, request, signal) {
+    async execute(callerContext, request, signal) {
+      const context = Object.freeze({
+        backendId: callerContext.backendId,
+        backendVersion: callerContext.backendVersion,
+        pageId: callerContext.pageId,
+        subject: callerContext.subject,
+        pageVersion: callerContext.pageVersion,
+        sourceSha256: callerContext.sourceSha256,
+      });
+      if (
+        ![context.backendId, context.backendVersion, context.pageId].every(
+          (v) => typeof v === "string" && v.length > 0 && v.length <= 512,
+        ) ||
+        (context.subject !== null &&
+          (typeof context.subject !== "string" ||
+            !context.subject ||
+            context.subject.length > 512)) ||
+        !Number.isSafeInteger(context.pageVersion) ||
+        context.pageVersion < 1 ||
+        !/^[a-f0-9]{64}$/.test(context.sourceSha256)
+      )
+        throw Error("invalid_query_context");
       const abort = new AbortController();
       const forward = () => abort.abort(signal?.reason);
       signal?.addEventListener("abort", forward, { once: true });
       if (signal?.aborted) forward();
-      const timer = setTimeout(
-        () => abort.abort(Error("query_deadline")),
-        limits.wallMs,
-      );
-      let rejectAbort!: (reason: unknown) => void;
-      const cancelled = new Promise<never>((_, reject) => {
-        rejectAbort = reject;
-      });
-      const onAbort = () =>
-        rejectAbort(abort.signal.reason ?? Error("cancelled"));
-      abort.signal.addEventListener("abort", onAbort, { once: true });
-      const wait = async <T>(promise: Promise<T>): Promise<T> => {
+      const cancelDeadline = (
+        options.scheduleDeadline ??
+        ((milliseconds, expire) => {
+          const timer = setTimeout(expire, milliseconds);
+          return () => clearTimeout(timer);
+        })
+      )(limits.wallMs, () => abort.abort(Error("query_deadline")));
+      const wait = <T>(start: () => Promise<T>): Promise<T> => {
         abort.signal.throwIfAborted();
-        return Promise.race([promise, cancelled]);
+        return new Promise<T>((resolve, reject) => {
+          const cancel = () => {
+            abort.signal.removeEventListener("abort", cancel);
+            reject(abort.signal.reason ?? Error("cancelled"));
+          };
+          abort.signal.addEventListener("abort", cancel, { once: true });
+          try {
+            Promise.resolve(start()).then(
+              (value) => {
+                abort.signal.removeEventListener("abort", cancel);
+                if (abort.signal.aborted)
+                  reject(abort.signal.reason ?? Error("cancelled"));
+                else resolve(value);
+              },
+              (error) => {
+                abort.signal.removeEventListener("abort", cancel);
+                reject(error);
+              },
+            );
+          } catch (error) {
+            abort.signal.removeEventListener("abort", cancel);
+            reject(error);
+          }
+        });
       };
       try {
         abort.signal.throwIfAborted();
@@ -65,8 +108,35 @@ export function createRegisteredServerQueryService(
           Buffer.byteLength(JSON.stringify(request)) > limits.inputBytes
         )
           throw Error("invalid_query_request");
-        const plan = structuredClone(await wait(ports.registry(context)));
-        if (!plan || !(await wait(ports.authorize(context))))
+        const input = structuredClone({
+          values: request.values,
+          only: request.only as string[],
+        });
+        const plan = structuredClone(
+          await wait(() => ports.registry(context, abort.signal)),
+        );
+        if (!plan) throw Error("denied");
+        const identity = plan.registration;
+        const keys = [
+          "backendId",
+          "backendVersion",
+          "pageId",
+          "pageVersion",
+          "sourceSha256",
+        ] as const;
+        if (
+          !identity ||
+          keys.some((key) => identity[key] !== context[key]) ||
+          Object.keys(identity).length !== keys.length
+        )
+          throw Error("invalid_query_registry");
+        const registration: Readonly<RegisteredServerQueryIdentity> =
+          Object.freeze({ ...identity });
+        if (
+          !(await wait(() =>
+            ports.authorize(context, registration, abort.signal),
+          ))
+        )
           throw Error("denied");
         if (
           plan.queries.length > limits.maxQueries ||
@@ -77,14 +147,12 @@ export function createRegisteredServerQueryService(
         const params: Record<string, Scalar> = Object.create(null),
           paramTypes: Record<string, ColumnType> = Object.create(null);
         if (
-          Object.keys(request.values).some(
-            (k) => !Object.hasOwn(plan.scalars, k),
-          )
+          Object.keys(input.values).some((k) => !Object.hasOwn(plan.scalars, k))
         )
           throw Error("invalid_query_request");
         for (const [k, d] of Object.entries(plan.scalars)) {
-          const v = Object.hasOwn(request.values, k)
-            ? request.values[k]
+          const v = Object.hasOwn(input.values, k)
+            ? input.values[k]
             : d.default;
           if (
             !name(k) ||
@@ -96,7 +164,9 @@ export function createRegisteredServerQueryService(
           params[k] = v;
           paramTypes[k] = d.type;
         }
-        const platform = await wait(ports.platform(context));
+        const platform = await wait(() =>
+          ports.platform(context, abort.signal),
+        );
         if (
           (platform.userId !== null &&
             (typeof platform.userId !== "string" || !platform.userId)) ||
@@ -137,7 +207,7 @@ export function createRegisteredServerQueryService(
           visiting.delete(key);
           visited.add(key);
         };
-        for (const key of request.only) visit(key);
+        for (const key of input.only) visit(key);
         const completed = new Set<string>();
         for (const q of plan.queries) {
           if (!visited.has(q.name)) continue;
@@ -180,7 +250,7 @@ export function createRegisteredServerQueryService(
           };
           tables.push(table);
           do {
-            const window = await wait(
+            const window = await wait(() =>
               ports.reads.read(
                 context,
                 {
@@ -232,10 +302,10 @@ export function createRegisteredServerQueryService(
         }
         const answer = decodeDatasetQueryAnswer(
           job,
-          await wait(ports.execute(job, abort.signal)),
+          await wait(() => ports.execute(job, abort.signal)),
         );
         for (const pin of pins) {
-          const r = await wait(
+          const r = await wait(() =>
             ports.reads.read(
               context,
               {
@@ -254,12 +324,17 @@ export function createRegisteredServerQueryService(
           )
             throw Error("dataset_changed");
         }
-        if (!(await wait(ports.authorize(context)))) throw Error("denied");
+        if (
+          !(await wait(() =>
+            ports.authorize(context, registration, abort.signal),
+          ))
+        )
+          throw Error("denied");
+        abort.signal.throwIfAborted();
         return answer;
       } finally {
-        clearTimeout(timer);
+        cancelDeadline();
         signal?.removeEventListener("abort", forward);
-        abort.signal.removeEventListener("abort", onAbort);
         abort.abort();
       }
     },

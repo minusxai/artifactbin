@@ -10,8 +10,12 @@ const context = {
   backendVersion: "saved",
   pageId: "page",
   subject: "viewer",
+  pageVersion: 7,
+  sourceSha256: "a".repeat(64),
 };
+const { subject: _subject, ...registration } = context;
 const plan: RegisteredServerQueryPlan = {
+  registration,
   scalars: { minimum: { type: "number", default: 1 } },
   tables: [],
   imports: [
@@ -277,4 +281,166 @@ test("platform identity/time/zone are trusted typed bindings and cannot be calle
     }),
     /invalid_query_platform/,
   );
+});
+test("registry identity must match the exact saved page, backend, version and source before any capability runs", async () => {
+  for (const changed of [
+    { backendId: "other" },
+    { backendVersion: "other" },
+    { pageId: "other" },
+    { pageVersion: 8 },
+    { sourceSha256: "b".repeat(64) },
+  ]) {
+    const s = setup();
+    let authorityCalls = 0;
+    s.ports.registry = async () => ({
+      ...plan,
+      registration: { ...registration, ...changed },
+    });
+    s.ports.authorize = async () => {
+      authorityCalls++;
+      return true;
+    };
+    await assert.rejects(
+      createRegisteredServerQueryService(s.ports).execute(context, {
+        values: {},
+        only: ["answer"],
+      }),
+      /invalid_query_registry/,
+    );
+    assert.equal(authorityCalls, 0);
+    assert.equal(s.calls.length, 0);
+  }
+});
+test("an invocation snapshots context, request and registration before asynchronous host work", async () => {
+  const s = setup();
+  const callerContext = { ...context };
+  const input = { values: { minimum: 2 }, only: ["answer"] };
+  let release!: (value: RegisteredServerQueryPlan) => void;
+  let entered!: () => void;
+  const started = new Promise<void>((r) => {
+    entered = r;
+  });
+  s.ports.registry = async (c) => {
+    assert.equal(Object.isFrozen(c), true);
+    entered();
+    return new Promise((r) => {
+      release = r;
+    });
+  };
+  s.ports.authorize = async (c, identity) => {
+    assert.deepEqual(c, context);
+    assert.deepEqual(identity, registration);
+    assert.equal(Object.isFrozen(identity), true);
+    return true;
+  };
+  const work = createRegisteredServerQueryService(s.ports).execute(
+    callerContext,
+    input,
+  );
+  await started;
+  callerContext.subject = "other";
+  callerContext.sourceSha256 = "b".repeat(64);
+  input.values.minimum = 99;
+  input.only.splice(0, 1, "unknown");
+  release(plan);
+  await work;
+  const job = s.calls[2] as { input: { params: { minimum: number } } };
+  assert.equal(job.input.params.minimum, 2);
+});
+test("deadline and caller cancellation reach registry, initial/final authorization and platform ports without starting later work", async () => {
+  for (const stage of [
+    "registry",
+    "authorize",
+    "platform",
+    "final_authorize",
+  ] as const) {
+    for (const mode of ["deadline", "caller"] as const) {
+      const s = setup();
+      let entered!: () => void;
+      const started = new Promise<void>((r) => {
+        entered = r;
+      });
+      let supplied: AbortSignal | undefined;
+      let count = 0;
+      const hold = async (signal: AbortSignal) => {
+        supplied = signal;
+        entered();
+        return new Promise<never>(() => {});
+      };
+      if (stage === "registry") s.ports.registry = (_c, signal) => hold(signal);
+      if (stage === "platform") s.ports.platform = (_c, signal) => hold(signal);
+      if (stage === "authorize" || stage === "final_authorize")
+        s.ports.authorize = async (_c, _identity, signal) => {
+          if (stage === "authorize" || ++count === 2) return hold(signal);
+          return true;
+        };
+      let expire!: () => void;
+      let cancelled = false;
+      const controller = new AbortController();
+      const service = createRegisteredServerQueryService(s.ports, {
+        scheduleDeadline(ms, callback) {
+          assert.equal(ms, 20000);
+          expire = callback;
+          return () => {
+            cancelled = true;
+          };
+        },
+      });
+      const work = service.execute(
+        context,
+        { values: {}, only: ["answer"] },
+        controller.signal,
+      );
+      await started;
+      if (mode === "deadline") expire();
+      else controller.abort(Error("caller_cancelled"));
+      await assert.rejects(
+        work,
+        mode === "deadline" ? /query_deadline/ : /caller_cancelled/,
+      );
+      assert.equal(supplied?.aborted, true);
+      assert.equal(cancelled, true);
+      if (stage !== "final_authorize") assert.equal(s.calls.length, 0);
+    }
+  }
+});
+test("source or saved version changes during object and SQL I/O discard the result under the original registration", async () => {
+  for (const stage of ["read", "sql"] as const) {
+    for (const changed of [
+      { backendVersion: "new-deployment" },
+      { pageVersion: 8 },
+      { sourceSha256: "b".repeat(64) },
+    ]) {
+      const s = setup();
+      let current = { ...registration };
+      s.ports.authorize = async (_context, expected) => {
+        assert.deepEqual(expected, registration);
+        return Object.entries(expected).every(
+          ([key, value]) => current[key as keyof typeof current] === value,
+        );
+      };
+      if (stage === "read") {
+        const read = s.ports.reads.read;
+        s.ports.reads.read = async (...args) => {
+          const value = await read(...args);
+          current = { ...current, ...changed };
+          return value;
+        };
+      } else {
+        const execute = s.ports.execute;
+        s.ports.execute = async (...args) => {
+          const value = await execute(...args);
+          current = { ...current, ...changed };
+          return value;
+        };
+      }
+      await assert.rejects(
+        createRegisteredServerQueryService(s.ports).execute(context, {
+          values: {},
+          only: ["answer"],
+        }),
+        /denied/,
+      );
+    }
+  }
 });

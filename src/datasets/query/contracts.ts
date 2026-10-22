@@ -20,7 +20,24 @@ export interface RegisteredServerQuery {
   sql: string;
   dependencies: readonly string[];
 }
+/** Host-attested immutable deployment identity; never accepted from runner input. */
+export interface RegisteredServerQueryIdentity {
+  readonly backendId: string;
+  readonly backendVersion: string;
+  readonly pageId: string;
+  readonly pageVersion: number;
+  readonly sourceSha256: string;
+}
+export interface RegisteredServerQueryContext extends DatasetCallContext {
+  readonly pageVersion: number;
+  readonly sourceSha256: string;
+}
+export interface RegisteredServerQueryOptions {
+  /** Injected scheduler for deterministic deadlines; returns a cancellation function. */
+  scheduleDeadline?: (milliseconds: number, expire: () => void) => () => void;
+}
 export interface RegisteredServerQueryPlan {
+  readonly registration: RegisteredServerQueryIdentity;
   queries: readonly RegisteredServerQuery[];
   scalars: Readonly<Record<string, { type: ColumnType; default: Scalar }>>;
   tables: readonly QueryTableData[];
@@ -45,15 +62,23 @@ export interface DatasetQueryJob {
   };
 }
 export interface RegisteredServerQueryPorts {
-  /** Resolve from the saved backend/page/version, never by a runner-provided identifier. */
+  /** Resolve from the saved backend/page/version. All async ports must honor the supplied deadline/cancellation signal.
+   * The service stops awaiting on abort; adapter-owned database/network work must cancel and drain independently.
+   */
   registry(
-    context: DatasetCallContext,
+    context: Readonly<RegisteredServerQueryContext>,
+    signal: AbortSignal,
   ): Promise<RegisteredServerQueryPlan | null>;
   /** Fresh page access and exact saved backend/page/source version, including after execution. */
-  authorize(context: DatasetCallContext): Promise<boolean>;
+  authorize(
+    context: Readonly<RegisteredServerQueryContext>,
+    registration: Readonly<RegisteredServerQueryIdentity>,
+    signal: AbortSignal,
+  ): Promise<boolean>;
   /** Server-resolved legacy reader identity, invocation instant and validated zone. Never request values. */
   platform(
-    context: DatasetCallContext,
+    context: Readonly<RegisteredServerQueryContext>,
+    signal: AbortSignal,
   ): Promise<{ userId: string | null; now: string; tz: string }>;
   reads: DatasetReadService;
   execute(
@@ -63,7 +88,7 @@ export interface RegisteredServerQueryPorts {
 }
 export interface RegisteredServerQueryService {
   execute(
-    context: DatasetCallContext,
+    context: RegisteredServerQueryContext,
     request: unknown,
     signal?: AbortSignal,
   ): Promise<ServerQueryAnswer>;
