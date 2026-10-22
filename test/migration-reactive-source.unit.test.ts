@@ -62,3 +62,13 @@ test('viewer scalar controls require matching declared types and bounded literal
  const result=admitLocalSource({...base,source:values+'<Segmented value="$choice" options={["a","b"]}/>'});
  assert.ok(result.ok);assert.equal(result.plan.input.dataControls?.[0]?.kind,'select');
 });
+
+test('registered row mutations require a durable renderer row scope and existing fields',()=>{
+ const binding={name:'items',legacyRef:'ref:Abcd12',backendNamespace:'legacyData',backendHref:'/af/v1/ids/Bac123',version:1,mode:'live' as const,tables:[{schema:'public',table:'rows',columns:[{name:'key',type:'string'}]}]};
+ const metadata={name:'save',backendNamespace:'legacyData',recoveryScope:'a'.repeat(64),paramTypes:{},rowParams:{key:{param:'row__key',type:'string' as const}}};
+ const head='<Import name="items" src="ref:Abcd12"/><Value name="rows" type="table" value={[{key:"a",label:"First"}]}/><Mutation name="save">{`delete from items.rows where key=$_row.key`}</Mutation>';
+ const input={...base,datasetBindings:[binding],datasetMutations:[metadata]};
+ for(const body of ['<For id="list" each={$rows} keyBy="key"><Button id="action" run="$save">Delete</Button></For>','<DataTable id="table" data="$rows" rowKey="key"><Column col="label"><Button id="action" run="$save">Delete</Button></Column></DataTable>'])assert.equal(admitLocalSource({...input,source:head+body}).ok,true,body);
+ assert.equal(admitLocalSource({...input,source:head+'<Button run="$save">Delete</Button>'}).ok,false);
+ assert.equal(admitLocalSource({...input,datasetMutations:[{...metadata,rowParams:{missing:{param:'row__missing',type:null}}}],source:head+'<For id="list" each={$rows} keyBy="key"><Button run="$save">Delete</Button></For>'}).ok,false);
+});

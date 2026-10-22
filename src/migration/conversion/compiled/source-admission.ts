@@ -244,7 +244,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
         invalid = true;
       if (node.type === "JSXElement") {
         const name = node.openingElement.name.name;
-        if (loopTable && !loopDepth && !["Column", "span", "strong", "em", "b", "i", "small", "code", "br", "p", "div", "a"].includes(name)) invalid = true;
+        if (loopTable && !loopDepth && !["Column", "Button", "span", "strong", "em", "b", "i", "small", "code", "br", "p", "div", "a"].includes(name)) invalid = true;
         if (name === "Column" && (parent?.type !== "JSXElement" || parent.openingElement.name.name !== "DataTable")) invalid = true;
         if (
           typeof name !== "string" ||
@@ -386,7 +386,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           )
             invalid = true;
           const attrName = attr.name?.name?.toLowerCase();
-          if (loopTable && ["run", "set", "args"].includes(attrName)) invalid = true;
+          if (loopTable && ["set", "args"].includes(attrName)) invalid = true;
           if (
             attrName === "data-migration-dataset-status" ||
             attrName?.startsWith("data-migration-author-") ||
@@ -447,7 +447,13 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
               !/^\$[A-Za-z][A-Za-z0-9_]*$/.test(run)
             )
               invalid = true;
-            else mutationRuns.add(run.slice(1));
+            else {
+              const mutation = registeredMutations.find(binding => binding.name === run.slice(1));
+              const fields = Object.keys(mutation?.rowParams ?? {});
+              if (fields.length && !loopTable) invalid = true;
+              if (loopTable) for (const field of fields) rowReads.push({table:loopTable,field});
+              mutationRuns.add(run.slice(1));
+            }
           }
           if (attr.name?.name === "args") {
             if (
