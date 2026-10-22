@@ -132,3 +132,24 @@ test("authored timestamp parameters retain the local scalar timestamp contract",
     at: "1970-01-01T00:00:00.000Z",
   });
 });
+test("remote option windows complete safely without an exact total count", async () => {
+  const { completeControlOptions } = await import(
+    "../src/migration/conversion/compiled/control-options.ts"
+  );
+  const rows = Array.from({ length: 1002 }, (_, i) => ({ label: String(i) }));
+  const engine = createCompiledSourceQueryEngine([binding], {
+    read: async (_b, r) =>
+      JSON.stringify({
+        columns: binding.columns,
+        rows: rows.slice(r.offset, r.offset + r.limit),
+        ...(r.offset + r.limit < rows.length ? { truncated: true } : {}),
+      }),
+  });
+  const initial = (await engine.run(null, ["rows"], evaluation)).tables.rows!;
+  assert.equal(initial.rows.length, 1000);
+  assert.equal(initial.truncated, true);
+  const result = await completeControlOptions(initial, (offset, limit) =>
+    engine.page(null, "rows", { offset, limit }, evaluation),
+  );
+  assert.equal(result.rows.length, 1002);
+});

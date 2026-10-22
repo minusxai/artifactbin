@@ -37,7 +37,7 @@ export function createCompiledSourceQueryEngine(
       request.offset < 0 ||
       !Number.isSafeInteger(request.limit) ||
       request.limit < 1 ||
-      request.limit > 10000
+      request.limit > 1000
     )
       throw Error("Invalid source query page");
     if (
@@ -100,7 +100,7 @@ export function createCompiledSourceQueryEngine(
           (t.rows.length ? request.offset + t.rows.length : 0))
     )
       throw Error("Invalid source query count");
-    if (t.truncated === true && t.totalRows === undefined)
+    if (t.truncated === true && t.rows.length !== request.limit)
       throw Error("Unbounded source query window");
     return t as unknown as CompiledDisplayTable;
   };
