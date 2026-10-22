@@ -88,7 +88,7 @@ export function validDatasetMutationRowParameters(
 }
 
 export const datasetMutationSystemParameter = (name: string) =>
-  name === "_now" || name.startsWith("_me__") || name.startsWith("__policy_");
+  name === "_now" || name === "_tz" || name.startsWith("_me__") || name.startsWith("__policy_");
 /** Exact generated edited-value slot; the flattened SQL map remains immutable authority metadata. */
 export function validDatasetMutationValueParameter(
   value: unknown,

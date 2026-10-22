@@ -147,3 +147,7 @@ test('prototype computed cell fields use native control wire types without guess
  }
  const missing=stringSource.replace('col="title"','col="missing"').replace('value="$_row.title"','value="$_row.missing"');assert.ok((await extractLegacyMutations(missing,catalogs,[],'offline-prototype')).issues.length);
 });
+test('registered mutation timezone remains a server builtin instead of a caller parameter',async()=>{
+ const text=source('update data.rows set title=$_tz where id=$_row.id');
+ const result=await extractLegacyMutations(text,catalogs,[],'offline-prototype');assert.deepEqual(result.issues,[]);assert.equal(result.mutations[0]?.sql,'update data.rows set title=$_tz where id=$row__id');assert.equal(Object.hasOwn(result.mutations[0]!.paramTypes,'_tz'),false);
+});

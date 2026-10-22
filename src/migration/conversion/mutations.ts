@@ -389,7 +389,7 @@ export async function extractLegacyMutations(
         }
         const rowKeys = new Set(Object.values(rowParams).map((r) => r.param));
         for (const p of a.params) {
-          if (p === "_me__id" || p === "_now") continue;
+          if (p === "_me__id" || p === "_now" || p === "_tz") continue;
           if (
             !identifier.test(p) ||
             p.length > 128 ||

@@ -330,6 +330,7 @@ async function currentHead(
     systemParams: {
       _me__id: authority.facts.caller.userId,
       _now: new Date(now).toISOString(),
+      _tz: "UTC",
     },
     tables: tableColumns(
       version.source_catalog,

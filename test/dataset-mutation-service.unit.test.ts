@@ -499,3 +499,12 @@ test("row and cell generated parameters cannot own the same server slot", async 
  await assert.rejects(createDatasetMutationService(f.ports).mutate(context,{...request,params:{cell__value:1}}),/invalid_request/);
  assert.deepEqual(f.calls,[]);
 });
+test('mutation timezone is server-owned and caller spoofing never starts an attempt',async()=>{
+ const {createDatasetMutationEngine}=await import('../src/datasets/sql/engine.ts');const engine=await createDatasetMutationEngine();
+ const f=fixture(),head=f.ports.head;
+ f.ports.operation=async()=>({...operation,sql:"update rows set value=case when $_tz='UTC' then $value else 99 end"});
+ f.ports.head=async(...args)=>{const h=(await head(...args))!;return{...h,systemParams:{_tz:'UTC'}};};
+ let value:unknown;f.ports.execute=async(job,signal)=>{const result=await engine.mutate(job.input);if("error" in result)throw Error(result.error);value=result.rows[0]?.value;return result;};
+ await createDatasetMutationService(f.ports).mutate(context,request);assert.equal(value,1);
+ const spoof=fixture();await assert.rejects(createDatasetMutationService(spoof.ports).mutate(context,{...request,params:{value:1,_tz:'Etc/GMT+12'}}),/invalid_request/);assert.deepEqual(spoof.calls,[]);
+});

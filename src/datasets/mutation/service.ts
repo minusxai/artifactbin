@@ -39,6 +39,7 @@ function request(value: unknown): DatasetMutationRequest {
       k.startsWith("__policy_") ||
       k.startsWith("_me__") ||
       k === "_now" ||
+      k === "_tz" ||
       !(
         v === null ||
         typeof v === "string" ||

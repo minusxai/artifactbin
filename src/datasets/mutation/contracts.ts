@@ -49,7 +49,7 @@ export interface DatasetMutationHead {
   writable: boolean;
   callerCanEdit: boolean;
   documentWriterCanRead: boolean;
-  /** Server-only system bindings such as _me__id and _now; never copied from request params. */
+  /** Server-only system bindings such as _me__id, _now and _tz; never copied from request params. */
   systemParams: Readonly<Record<string, DatasetCell>>;
   members?: import("../members-contracts.ts").DatasetMembersSnapshot;
   /** Preserve legacy user constraints for transaction-time validation of actual assignments. */
