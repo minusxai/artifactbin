@@ -162,3 +162,9 @@ test("checkbox editing remains explicit unsupported because archived native cell
     readLegacyCellWriteSites(source.replace('type="text"', 'type="checkbox"')),
   );
 });
+test('native editing input constraints preserve fixed mutation scope and reject executable bounds',()=>{
+ const cell=(attributes:string)=>'<DataTable data="$rows" rowKey="id"><Column col="amount"><input type="number" value="$_row.amount" run="$save" '+attributes+'/></Column></DataTable>';
+ const expected=[{mutationName:'save',dataName:'rows',column:'amount',rowKey:'id',tag:'input'}];
+ for(const attrs of ['min={0}','min="-1" max={100} step="any"','min={-2} max={2} step={0.25}'])assert.deepEqual(readLegacyCellWriteSites(cell(attrs)),expected);
+ for(const attrs of ['min={window.limit}','max={()=>1}','step={{value:1}}','min={true}','step={1e999}'])assert.throws(()=>readLegacyCellWriteSites(cell(attrs)));
+});

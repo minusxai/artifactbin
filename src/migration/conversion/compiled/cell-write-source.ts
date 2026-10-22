@@ -118,7 +118,7 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
                 "exclude",
               ]
             : tag === "input"
-              ? ["type"]
+              ? ["type", "min", "max", "step"]
               : []),
         ]);
         for (const attribute of attributes) {
@@ -128,6 +128,7 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
           )
             refuse();
           const value = selected(attribute.name.name);
+          if (["min","max","step"].includes(attribute.name.name) && !((typeof value==="number" && Number.isFinite(value)) || (typeof value==="string" && value.length<=128))) refuse();
           if (
             ["multiple", "allowCreate", "nullable", "disabled"].includes(
               attribute.name.name,

@@ -14,7 +14,8 @@ test(
       name,
       type: "string",
     }));
-    const source = `<Helmet><Import name="items" src="ref:Abcd12"/><Value name="optionRows" type="table" value={${JSON.stringify(Array.from({ length: 350 }, (_, i) => ({ label: "Choice " + i })))}}/><Query name="choices">{\`select label from optionRows order by label\`}</Query><Query name="rows">{\`select id,title,note,tags from items.rows\`}</Query>${["title", "note", "tags"].map((field) => `<Mutation name="save_${field}" expectedAffected={1}>{\`update items.rows set ${field} = $_value where id = $_row.id\`}</Mutation>`).join("")}</Helmet><DataTable id="table" data="$rows" rowKey="id"><Column col="title"><input id="title" aria-label="Title" type="text" value="$_row.title" run="$save_title"/></Column><Column col="note"><textarea id="note" aria-label="Note" value="$_row.note" run="$save_note"/></Column><Column col="tags"><Select id="tags" label="Tags" value="$_row.tags" run="$save_tags" options="$choices" multiple={true} valueFormat="json" allowCreate={true}/></Column></DataTable>`;
+    columns.push({name:"amount",type:"number"});
+    const source = `<Helmet><Import name="items" src="ref:Abcd12"/><Value name="optionRows" type="table" value={${JSON.stringify(Array.from({ length: 350 }, (_, i) => ({ label: "Choice " + i })))}}/><Query name="choices">{\`select label from optionRows order by label\`}</Query><Query name="rows">{\`select id,title,note,tags,amount from items.rows\`}</Query>${["title", "note", "tags", "amount"].map((field) => `<Mutation name="save_${field}" expectedAffected={1}>{\`update items.rows set ${field} = $_value where id = $_row.id\`}</Mutation>`).join("")}</Helmet><DataTable id="table" data="$rows" rowKey="id"><Column col="title"><input id="title" aria-label="Title" type="text" value="$_row.title" run="$save_title"/></Column><Column col="note"><textarea id="note" aria-label="Note" value="$_row.note" run="$save_note"/></Column><Column col="tags"><Select id="tags" label="Tags" value="$_row.tags" run="$save_tags" options="$choices" multiple={true} valueFormat="json" allowCreate={true}/></Column><Column col="amount"><input id="amount" aria-label="Amount" type="number" min={0} max={100} step={1} value="$_row.amount" run="$save_amount"/></Column></DataTable>`;
     const result = await compileArchivedLocal(
       {
         source,
@@ -30,13 +31,13 @@ test(
             tables: [{ schema: "main", table: "rows", columns }],
           },
         ],
-        datasetMutations: ["title", "note", "tags"].map((field) => ({
+        datasetMutations: ["title", "note", "tags", "amount"].map((field) => ({
           name: "save_" + field,
           backendNamespace: "legacyData",
           recoveryScope: "a".repeat(64),
           paramTypes: {},
           rowParams: { id: { param: "row__id", type: "string" } },
-          valueParam: { param: "cell__value", type: "string" },
+          valueParam: { param: "cell__value", type: field==="amount"?"number":"string" },
         })),
       },
       { legacyRoot: archivedRoot! },
@@ -60,8 +61,9 @@ test(
         minify: true,
       })
     ).outputFiles[0]!.text;
-    const row: Record<string, string | null> = {
+    const row: Record<string, string | number | null> = {
       id: "row-a",
+      amount: 1,
       title: "Initial",
       note: "Initial note",
       tags: '["Choice 0"]',
@@ -303,6 +305,13 @@ test(
       await title.press("Escape");
       assert.equal(await title.inputValue(), "Changed");
       assert.equal(writes.length, 3);
+      const amount=page.getByRole("spinbutton",{name:"Amount",exact:true});
+      assert.equal(await amount.getAttribute("min"),"0");assert.equal(await amount.getAttribute("max"),"100");assert.equal(await amount.getAttribute("step"),"1");
+      await amount.fill("-1");await amount.press("Enter");
+      assert.equal(await amount.evaluate((input:HTMLInputElement)=>input.validity.rangeUnderflow),true);assert.equal(writes.length,3);
+      await amount.fill("6");await amount.press("Enter");
+      await page.waitForFunction(()=>!(document.querySelector('input[aria-label="Amount"]') as HTMLInputElement)?.disabled);
+      assert.equal(writes.length,4);assert.equal(writes[3].params.cell__value,6);
       assert.deepEqual(errors, []);
       assert.deepEqual(external, []);
     } finally {
