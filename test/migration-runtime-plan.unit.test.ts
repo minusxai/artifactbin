@@ -48,7 +48,7 @@ test("preserves graph parity for every combination of source-requiring adapters"
 test("metadata and trusted read bindings retain manifest graph unless a source adapter is present", () => {
   const requirements = {
     ...empty,
-    person: true,
+    person: false,
     viewer: true,
     members: true,
     fonts: true,
@@ -57,7 +57,6 @@ test("metadata and trusted read bindings retain manifest graph unless a source a
   const plan = archivedRuntimePlan(requirements);
   assert.equal(plan.kitGraph, "manifest");
   assert.deepEqual(plan.capabilities, [
-    "person",
     "viewer",
     "members",
     "fonts",
@@ -82,4 +81,11 @@ test("plans are isolated immutable snapshots across later compiler preparation",
   assert.equal(archivedRuntimePlan(requirements).kitGraph, "manifest");
   assert.ok(Object.isFrozen(first));
   assert.ok(Object.isFrozen(first.capabilities));
+});
+
+test("person profiles require the source kit even without SQL so trusted navigation adapter executes", () => {
+  assert.equal(
+    archivedRuntimePlan({ ...empty, person: true }).kitGraph,
+    "source",
+  );
 });

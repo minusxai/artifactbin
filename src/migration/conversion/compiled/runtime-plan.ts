@@ -4,9 +4,8 @@ import type {
   ArchivedRuntimeRequirements,
 } from "./runtime-plan-contracts.ts";
 
-/** Every capability explicitly chooses a graph. Read bindings and resources do
- * not by themselves replace the frozen manifest; their adapters retain the
- * historical graph decision. These are compiler requirements, never grants. */
+/** Every capability explicitly chooses a graph. Person navigation requires its source adapter. Other read bindings and
+ * resources do not by themselves replace the frozen manifest. These are compiler requirements, never grants. */
 const graphRequirements: Readonly<
   Record<ArchivedRuntimeCapability, "source" | "manifest">
 > = {
@@ -18,7 +17,7 @@ const graphRequirements: Readonly<
   "slide-deck": "source",
   mermaid: "source",
   "dialog-focus": "source",
-  person: "manifest",
+  person: "source",
   viewer: "manifest",
   members: "manifest",
   fonts: "manifest",
