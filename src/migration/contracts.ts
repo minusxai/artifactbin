@@ -51,7 +51,7 @@ export interface ConversionInput {
 export interface ConversionOutput {
   /** Explicit migration receipt; the retained document is never modified. */
   sourceRecovery?: {
-    kind: "retained-graph-empty-separators" | "retained-graph-missing-root-content";
+    kind: "retained-graph-empty-separators" | "retained-graph-missing-root-content" | "retired-source-wrapper";
     missingNodes?: number;
     repairedNodes: number;
     documentSha256: string;

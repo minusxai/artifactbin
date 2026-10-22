@@ -59,3 +59,12 @@ test("partial recovery preserves exact root sibling placement and marks unavaila
  assert.equal(partial({...original,nodes:{...original.nodes,$root:{parts:['<script>','','','</script>'],children:['a','missing','b']}}}),null);
  assert.equal(partial({...original,nodes:{...original.nodes,a:{parts:['',''],children:['a']}}}),null);
 });
+
+import {recoverRetiredSourceWrapper} from '../src/migration/conversion/document-recovery.ts';
+import {MAX_COMPILED_SOURCE_BYTES} from '../src/migration/conversion/compiled/contracts.ts';
+test('retired source wrapper migration preserves exact source bytes without graph identity',()=>{
+ const source='<p title="&quot;">é</p>\n<script>const x="<\\/script>";</script>';
+ const document={kind:'source',schema:1,source},before=JSON.stringify(document);
+ assert.deepEqual(recoverRetiredSourceWrapper(document),{source});assert.equal(JSON.stringify(document),before);
+ for(const value of [null,[],{}, {kind:'source',schema:1,source:''},{kind:'source',schema:1,source:'  '},{kind:'source',schema:1,source:42},{kind:'graph',schema:1,source},{kind:'source',schema:2,source},{kind:'source',schema:1,source,unknown:true},{kind:'source',schema:1,source:'é'.repeat(MAX_COMPILED_SOURCE_BYTES/2+1)}])assert.equal(recoverRetiredSourceWrapper(value),null);
+});

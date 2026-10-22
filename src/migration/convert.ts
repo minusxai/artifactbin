@@ -53,6 +53,11 @@ export function createMigrationConverter(
       source = null;
       codecFailure = error instanceof Error ? error.message : undefined;
     }
+    if (source === null && options.sourceAdmission === "offline-prototype") {
+      const {recoverRetiredSourceWrapper}=await import("./conversion/document-recovery.ts");
+      const retired=recoverRetiredSourceWrapper(input.document);
+      if(retired){source=retired.source;sourceRecovery={kind:"retired-source-wrapper",repairedNodes:0,documentSha256:createHash("sha256").update(JSON.stringify(input.document)).digest("hex"),sourceSha256:createHash("sha256").update(source).digest("hex")};}
+    }
     if (source === null && options.sourceAdmission === "offline-prototype" && options.legacyRoot) {
       const {recoverArchivedDocumentSource}=await import("./conversion/compiled/document-recovery.ts");
       const recovered=await recoverArchivedDocumentSource(input.document,options.legacyRoot);

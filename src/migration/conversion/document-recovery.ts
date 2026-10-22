@@ -84,3 +84,12 @@ export function recoverPartialLegacyDocument(document: unknown): import("./docum
     return Buffer.byteLength(source)<=MAX_COMPILED_SOURCE_BYTES ? {source,missingNodes:missing.size}:null;
   } catch {return null;}
 }
+
+export const recoverRetiredSourceWrapper: import('./document-recovery-contracts.ts').RecoverRetiredSourceWrapper = document => {
+ if(!document || typeof document!=="object" || Array.isArray(document)) return null;
+ const keys=Reflect.ownKeys(document);
+ if(keys.length!==3 || !keys.every(k=>typeof k==="string" && ["kind","schema","source"].includes(k))) return null;
+ const value=document as {kind?:unknown;schema?:unknown;source?:unknown};
+ if(value.kind!=="source" || value.schema!==1 || typeof value.source!=="string" || !value.source.trim() || Buffer.byteLength(value.source)>MAX_COMPILED_SOURCE_BYTES) return null;
+ return {source:value.source};
+};

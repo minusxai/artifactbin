@@ -17,3 +17,9 @@ test('partial root recovery renders visible losses with warning, never functiona
  const result=await createMigrationConverter({strategy:'archived-functional',sourceAdmission:'offline-prototype',legacyRoot:root!})(input);
  assert.equal(result.classification,'renderable');assert.match(result.html!,/Original saved content unavailable/);assert.equal(result.sourceRecovery?.kind,'retained-graph-missing-root-content');assert.equal(result.sourceRecovery?.missingNodes,1);assert.ok(result.issues.some((i:any)=>i.code==='document-partial-recovery'));assert.equal(JSON.stringify(document),before);
 });
+
+test('retired source wrappers enter only explicit migration compilation and record provenance',{skip:!root},async()=>{
+ const document={schema:1,kind:'source',source:'<p id="kept">Retained &amp; exact</p>'},input={source:'',document,coreUrl:'/af/v1/core.js'},before=JSON.stringify(document);
+ const strict=await createMigrationConverter({strategy:'archived-functional',legacyRoot:root!})(input);assert.equal(strict.classification,'manual-blocked');
+ const recovered=await createMigrationConverter({strategy:'archived-functional',sourceAdmission:'offline-prototype',legacyRoot:root!})(input);assert.notEqual(recovered.classification,'manual-blocked');assert.equal(recovered.sourceRecovery?.kind,'retired-source-wrapper');assert.equal(recovered.sourceRecovery?.repairedNodes,0);assert.match(recovered.sourceRecovery!.sourceSha256,/^[a-f0-9]{64}$/);assert.equal(JSON.stringify(document),before);
+});
