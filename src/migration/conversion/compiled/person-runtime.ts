@@ -44,26 +44,50 @@ export function createCompiledPeople(
     current: boolean;
     stop: () => void;
     card: CompiledPersonCard | null;
+    identity: string | null;
+    imageGeneration: number;
+    abort?: AbortController;
+    url?: string;
+    bytes: number;
   };
   const slots = new Map<string, Slot>();
-  let disposed = false;
+  let disposed = false,
+    imageBytes = 0;
+  const objectUrls = ports.objectUrls ?? {
+    create: (blob: Blob) => URL.createObjectURL(blob),
+    revoke: (url: string) => URL.revokeObjectURL(url),
+  };
+  const clearImage = (slot: Slot) => {
+    slot.imageGeneration++;
+    slot.abort?.abort();
+    slot.abort = undefined;
+    if (slot.url) {
+      objectUrls.revoke(slot.url);
+      imageBytes -= slot.bytes;
+      slot.url = undefined;
+      slot.bytes = 0;
+    }
+  };
   const publish = () => {
     const cards: Record<string, CompiledPersonCard> = {};
-    const conflicts = new Set<string>();
+    const conflicts = new Set<string>(),
+      identities = new Map<string, string>();
     for (const slot of slots.values()) {
       if (!slot.card || conflicts.has(slot.id)) continue;
       if (
         Object.hasOwn(cards, slot.id) &&
-        JSON.stringify(cards[slot.id]) !== JSON.stringify(slot.card)
+        identities.get(slot.id) !== slot.identity
       ) {
         delete cards[slot.id];
         conflicts.add(slot.id);
-      } else
+      } else {
+        identities.set(slot.id, slot.identity!);
         Object.defineProperty(cards, slot.id, {
           value: { ...slot.card },
           enumerable: true,
           configurable: true,
         });
+      }
     }
     ports.changed(cards);
   };
@@ -83,23 +107,68 @@ export function createCompiledPeople(
         if (old?.id === id && old.current) continue;
         if (old) {
           old.current = false;
+          clearImage(old);
           old.stop();
           slots.delete(binding.valueName);
           removed = true;
         }
         if (!id) continue;
-        const slot: Slot = { id, current: true, stop: () => {}, card: null };
+        const slot: Slot = {
+          id,
+          current: true,
+          stop: () => {},
+          card: null,
+          identity: null,
+          imageGeneration: 0,
+          bytes: 0,
+        };
         slots.set(binding.valueName, slot);
         const receive = (value: unknown) => {
           if (disposed || !slot.current) return;
-          slot.card = card(value);
+          clearImage(slot);
+          const selected = card(value);
+          slot.identity = selected ? JSON.stringify(selected) : null;
+          slot.card = selected ? { ...selected, image: null } : null;
           publish();
+          if (selected?.image && ports.image) {
+            const generation = slot.imageGeneration,
+              abort = new AbortController();
+            slot.abort = abort;
+            void Promise.resolve()
+              .then(() => ports.image!(selected.image!, abort.signal))
+              .then((blob) => {
+                if (
+                  disposed ||
+                  !slot.current ||
+                  generation !== slot.imageGeneration ||
+                  abort.signal.aborted
+                )
+                  return;
+                if (
+                  !(blob instanceof Blob) ||
+                  blob.type !== "image/webp" ||
+                  blob.size < 1 ||
+                  blob.size > 4 * 1024 * 1024 ||
+                  imageBytes + blob.size > 8 * 1024 * 1024
+                )
+                  return;
+                const url = objectUrls.create(blob);
+                if (typeof url !== "string" || !url.startsWith("blob:")) {
+                  if (typeof url === "string") objectUrls.revoke(url);
+                  return;
+                }
+                slot.url = url;
+                slot.bytes = blob.size;
+                imageBytes += blob.size;
+                slot.card = { ...selected, image: url };
+                publish();
+              })
+              .catch(() => {});
+          }
         };
         const fail = () => {
           if (disposed || !slot.current) return;
-          slot.card = null;
-          slot.current = false;
-          publish();
+          receive(null);
         };
         try {
           slot.stop = ports.watch(binding, id, receive, fail);
@@ -115,6 +184,7 @@ export function createCompiledPeople(
       disposed = true;
       for (const slot of slots.values()) {
         slot.current = false;
+        clearImage(slot);
         slot.stop();
       }
       slots.clear();
