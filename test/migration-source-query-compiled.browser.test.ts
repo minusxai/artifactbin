@@ -66,15 +66,34 @@ test(
       await page.addInitScript(() => {
         (globalThis as any).__name = (f: any) => f;
         (globalThis as any).__requests = [];
+        let allowed = true;
+        const listeners = new Set<() => void>();
+        (globalThis as any).__revoke = () => {
+          allowed = false;
+          for (const f of listeners) f();
+        };
+        (globalThis as any).__allow = () => {
+          allowed = true;
+          for (const f of listeners) f();
+        };
         (globalThis as any)[Symbol.for("afbin.host")] = {
           viewer: () => ({}),
           subscribeViewer: () => () => {},
           state: () => null,
           remote: () => ({
             online: () => true,
-            authorizationContext: () => null,
-            subscribe: () => () => {},
+            authorizationContext: () => (allowed ? "reader-a" : "denied"),
+            subscribe: (f: () => void) => {
+              listeners.add(f);
+              return () => listeners.delete(f);
+            },
             execute: async (r: any) => {
+              if (r.query.includes("SourceQueryAvailability"))
+                return {
+                  data: { legacyData: { sourceQueryAvailability: allowed } },
+                };
+              if (!allowed)
+                return { data: null, errors: [{ message: "denied" }] };
               (globalThis as any).__requests.push(r.variables);
               const values = JSON.parse(r.variables.valuesJson);
               return {
@@ -109,6 +128,18 @@ test(
       assert.deepEqual(JSON.parse(requests.at(-1).valuesJson), {
         choice: "two",
       });
+      await page.evaluate(() => {
+        (globalThis as any).__revoke();
+        if (document.querySelector("#label")?.textContent)
+          throw Error("Stale source result after revoke");
+      });
+      await page.waitForFunction(
+        () => document.querySelector("#label")?.textContent === "",
+      );
+      await page.evaluate(() => (globalThis as any).__allow());
+      await page.waitForFunction(
+        () => document.querySelector("#label")?.textContent === "two",
+      );
       assert.deepEqual(errors, []);
     } finally {
       await browser.close();

@@ -26,7 +26,7 @@ export async function prepareLocalFlow(
   if(!validCompiledSourceQueries(sourceQueries))throw Error("Invalid source query proof");
   const remote=rawFlow.queries.filter((q:any)=>q.source);
   if(remote.length||sourceQueries.length){
-   if(sourceAdmission!=="offline-prototype"||remote.length!==rawFlow.queries.length||remote.length!==sourceQueries.length||rawFlow.imports.length||bindings.length||rawFlow.mutations.length)throw Error("Unsupported source query composition");
+   if(sourceAdmission!=="offline-prototype"||remote.length!==rawFlow.queries.length||remote.length!==sourceQueries.length||rawFlow.imports.length||bindings.length||rawFlow.mutations.length||viewerBinding||membersBinding)throw Error("Unsupported source query composition");
    for(const q of remote){const b=sourceQueries.find(b=>b.name===q.name&&b.sourceRef===`ref:${q.source}`&&b.sqlSha256===createHash("sha256").update(q.sql).digest("hex"));if(!b)throw Error("Source query proof mismatch");}
   }
   if(viewerBinding!==undefined&&!validCompiledViewerBinding(viewerBinding))throw Error("Invalid viewer binding");

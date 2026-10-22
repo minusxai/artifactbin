@@ -74,11 +74,12 @@ export function boot({TREE}) {
  const values=()=>Object.fromEntries(declarations.filter(d=>d.type!=="table").map(d=>[d.name,state()[d.name]]));
  const localTables=()=>Object.fromEntries(declarations.filter(d=>d.type==="table").map(d=>[d.name,state()[d.name]]));
  const table=name=>{const d=declarations.find(d=>d.name===name&&d.type==="table");return d?{rows:state()[name],columns:d.columns}:tables()[name];};
+ ${sql?.sourceQueries?.length?"const sourceAccessReady=new Set();":""}
  const [tables,setTables]=createSignal(${JSON.stringify({})});
  const [queryErrors,setQueryErrors]=createSignal(${JSON.stringify(Object.fromEntries((unavailableQueries ?? []).map((name) => [name, "Historical data is unavailable"])))});
  const [controlError,setControlError]=createSignal('');
  const [pending,setPending]=createSignal(false);
- ${controls.length || members ? "const controlStatus=document.createElement('p');controlStatus.setAttribute('role','status');controlStatus.dataset.migrationControlStatus='';document.body.append(controlStatus);createRoot(()=>createEffect(()=>{controlStatus.textContent=controlError()||(pending()?'Loading data controls…':'');}));" : ""}
+ ${controls.length || members || sql?.sourceQueries?.length ? "const controlStatus=document.createElement('p');controlStatus.setAttribute('role','status');controlStatus.dataset.migrationControlStatus='';document.body.append(controlStatus);createRoot(()=>createEffect(()=>{controlStatus.textContent=controlError()||(pending()?'Loading data controls…':'');}));" : ""}
  let queryController;
  const stopControlRuns=()=>queryController?.dispose();
  window.addEventListener('pagehide',event=>{if(!event.persisted)stopControlRuns();});
@@ -86,7 +87,7 @@ export function boot({TREE}) {
  queryController=createCompiledQueryController({queries:flow.queries.map(q=>q.name),optionQueries,deadlineMs:${imports||sql.sourceQueries?.length ? 15000 : 5000}},{
  engine:{prepare:()=>engine.prepare(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"}),ready:()=>engine.ready(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"}),run:evaluation=>engine.run(flow,flow.queries.map(q=>q.name),evaluation),page:(name,page,evaluation)=>engine.page(flow,name,page,evaluation)},
  evaluation:async()=>{${members ? "const memberRows=(await membersAdapter.read()).rows;" : ""}return {values:values(),localTables:localTables(),userId:${viewerBinding ? "viewer()?.id??null" : "null"},now:new Date().toISOString(),tz:'UTC'${members ? ",members:memberRows" : ""}};},
- availability:()=>${viewerBinding ? "!viewerAvailable?'blocked':" : ""}${identities ? "identityFailed?'blocked':" : ""}${imports ? "datasetReadFailed?'failed':" : ""}'ready',
+ availability:()=>${sql.sourceQueries?.length?`sourceAccessReady.size!==${sql.sourceQueries.length}?'blocked':`:""}${viewerBinding ? "!viewerAvailable?'blocked':" : ""}${identities ? "identityFailed?'blocked':" : ""}${imports ? "datasetReadFailed?'failed':" : ""}'ready',
  clock:compiledQueryClock,
  publish:event=>{if(event.state==='pending'){setPending(true);setControlError('');return;}setPending(false);if(event.state==='settled'){setTables(event.answer.tables);setQueryErrors(event.answer.errors);${imports ? "setDatasetStatus(Object.keys(event.answer.errors).length?'Protected data queries could not be evaluated.':'');" : ""}}else{setTables({});setQueryErrors(event.state==='failed'?event.errors:{});if(event.state==='failed'){setControlError('Data controls are unavailable. Refresh data or check the supported row limits.');${imports ? "setDatasetStatus('Protected data is unavailable. Check access and refresh data.');" : ""}}}}
  });const run=()=>queryController.refresh();` : viewerBinding ? "const run=async()=>viewerAvailable;" : "const run=()=>{};"}
@@ -109,6 +110,9 @@ export function boot({TREE}) {
  ${identities ? "if(identityFailed)pageSubscription.unsubscribe();if(store.mutate){const mutate=store.mutate;store.mutate=(...args)=>identityFailed?Promise.reject(Error('Page identities unavailable')):mutate(...args);}" : ""}
  ${author ? authorDocumentBoot(author) : ""}
  ${viewerBinding ? viewerBootSource(viewerBinding) : ""}
+ ${sql?.sourceQueries?.length?`const sourceAccessDocument=gql\`query SourceQueryAvailability($name:String!){legacyData{sourceQueryAvailability(name:$name)}}\`;
+ const sourceAccessWatches=${JSON.stringify(sql.sourceQueries.map(b=>b.name))}.map(name=>client.watchQuery({query:sourceAccessDocument,variables:{name},clearOnRefresh:true}).subscribe(result=>{queryController.invalidate();setTables({});setQueryErrors({});if(!result.errors?.length&&result.data?.legacyData?.sourceQueryAvailability===true){sourceAccessReady.add(name);setControlError('');if(sourceAccessReady.size===${sql.sourceQueries.length})queueMicrotask(()=>void run());}else{sourceAccessReady.delete(name);setControlError(result.errors?.length||result.data?.legacyData?.sourceQueryAvailability===false?'Source queries are unavailable. Check access.':'Loading source query access…');}}));
+ window.addEventListener('pagehide',event=>{if(!event.persisted){for(const subscription of sourceAccessWatches)subscription.unsubscribe();sourceAccessReady.clear();}});`:""}
  ${identities && author ? "stopAuthored=stopAuthor;if(identityFailed)stopAuthored();" : ""}
 }
 `;

@@ -75,3 +75,23 @@ test("source discovery hashes only actual static query declarations", () => {
     ),
   );
 });
+
+test(
+  "remote source compilation refuses an overlapping browser viewer lifecycle",
+  { skip: !root },
+  async () => {
+    const result = await compileArchivedLocal(
+      {
+        source,
+        coreUrl: "/af/v1/core.js",
+        sourceQueries: [proof],
+        viewerBinding: {
+          backendNamespace: "legacyData",
+          backendHref: "/af/v1/ids/Bk1234",
+        },
+      },
+      { legacyRoot: root!, sourceAdmission: "offline-prototype" },
+    );
+    assert.equal(result.classification, "manual-blocked");
+  },
+);
