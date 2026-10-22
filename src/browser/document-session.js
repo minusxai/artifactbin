@@ -121,7 +121,7 @@ function openLocalDocument() {
       ? meta.version
       : 0;
   if (!core || !server || !id || !version)
-    throw Error("Open this page from its Pagegi address");
+    throw Error("Open this page from its Artifactbin address");
   const revision = core.getAttribute(AF_REVISION_ATTRIBUTE) || String(version);
   return {
     source: document.documentElement.outerHTML,

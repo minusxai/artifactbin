@@ -106,7 +106,7 @@ export function installBridge(boot) {
     /** @type {import("./core/host-contracts.ts").CoreModules | undefined} */
     const core = globalThis[Symbol.for(AF_CORE_KEY)];
     if (typeof core?.attach !== "function")
-      throw Error("Open this page from its Pagegi address");
+      throw Error("Open this page from its Artifactbin address");
     attached = core.attach({
       viewer: host.viewer,
       subscribeViewer: host.subscribeViewer,

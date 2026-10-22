@@ -355,7 +355,7 @@ export function createService({
       if (req.method === "POST" && ["/api/pair", "/api/pair/approve", "/api/pair/poll"].includes(url.pathname)) {
         if (url.pathname === "/api/pair/approve") {
           sameOrigin(req);
-          if (req.headers["x-pagegi-home"] !== "1") fail(403, "Approve connections in Pagegi.");
+          if (req.headers["x-pagegi-home"] !== "1") fail(403, "Approve connections in Artifactbin.");
           const approved = await connect.approve(cookieToken(req), input.code);
           return send(approved.status, approved.value);
         }
@@ -440,7 +440,7 @@ export function createService({
       );
       if (sharingRoute) {
         if (req.headers["x-pagegi-home"] !== "1")
-          fail(403, "Open sharing in Pagegi.");
+          fail(403, "Open sharing in Artifactbin.");
         if (req.method !== "GET") sameOrigin(req);
         req.headers.authorization ||= "Bearer " + cookieToken(req);
         url.pathname = "/api/files/" + sharingRoute[1] + "/sharing";

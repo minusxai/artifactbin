@@ -943,6 +943,6 @@ bootPlatform().catch((error) => {
   const notice = document.createElement("p");
   notice.dataset.pagegiUi = "";
   notice.setAttribute("role", "alert");
-  notice.textContent = "Pagegi could not start: " + error.message;
+  notice.textContent = "Artifactbin could not start: " + error.message;
   document.body?.append(notice);
 });

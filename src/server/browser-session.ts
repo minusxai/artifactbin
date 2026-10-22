@@ -15,7 +15,7 @@ export function requestOrigin(req: BrowserRequest): string {
 }
 export function sameOrigin(req: BrowserRequest): void {
   if (req.headers.origin !== requestOrigin(req))
-    fail(403, "Open this action from Pagegi.");
+    fail(403, "Open this action from Artifactbin.");
 }
 export function cookieToken(req: BrowserRequest): string {
   return (

@@ -62,7 +62,7 @@ export function libraryHandler({
     );
     if (!representation) {
       if (req.headers["x-pagegi-home"] !== "1")
-        fail(403, "Open your library in Pagegi.");
+        fail(403, "Open your library in Artifactbin.");
       if (req.method !== "GET") sameOrigin(req);
     }
     res.setHeader("Cache-Control", "private, no-store");

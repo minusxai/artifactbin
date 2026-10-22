@@ -228,7 +228,7 @@ export function fileName(name: string | null | undefined): string {
  */
 export function installDownloadControl(document: Document, save: () => void): HTMLElement {
   const host = document.createElement("af-download");
-  host.setAttribute("aria-label", "Pagegi");
+  host.setAttribute("aria-label", "Artifactbin");
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
   style.textContent = `:host{all:initial;position:fixed;right:12px;bottom:12px;z-index:2147483000}

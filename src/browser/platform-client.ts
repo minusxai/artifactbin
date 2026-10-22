@@ -43,7 +43,7 @@ export function createPlatformClient(
     loaded = false;
   const frame = document.createElement("iframe");
   frame.hidden = true;
-  frame.title = "Pagegi connection";
+  frame.title = "Artifactbin connection";
   // Platform UI, so a downloaded file's bridge and saved copy leave it out.
   frame.setAttribute("data-pagegi-ui", "");
   frame.tabIndex = -1;

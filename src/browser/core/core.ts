@@ -65,7 +65,7 @@ function standaloneHost(): Pick<CoreHost, "viewer" | "subscribeViewer"> {
 /** No platform frame, so nothing can be sent: every backend call settles offline. */
 const unconnectedRemote: RemotePort = {
   online: () => false,
-  execute: () => Promise.reject(new RemoteUnreachable("This page is not connected to a Pagegi server")),
+  execute: () => Promise.reject(new RemoteUnreachable("This page is not connected to an Artifactbin server")),
 };
 
 function readSeed(): { seed: AfJsonObject; text: string } {

@@ -29,6 +29,8 @@ test("platform assets allowlist paths and keep credential frame and account fram
   const approval = get("/connect?code=expired")!;
   assert.match(approval.headers["Content-Security-Policy"]!, /script-src 'self'/);
   assert.match(approval.headers["Content-Security-Policy"]!, /frame-ancestors 'none'/);
+  assert.match(String(approval.body), /<title>Connect · Artifactbin<\/title>/);
+  assert.match(String(approval.body), /<h1>Connect to Artifactbin<\/h1>/);
   assert.match(String(approval.body), /<script src="\/connect\.js"/);
   assert.doesNotMatch(String(approval.body), /<script>/);
   assert.ok(get("/connect.js"), "the approval window's script is served");
