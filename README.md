@@ -93,7 +93,7 @@ npm run validate      # TypeScript and architectural policy checks
 npm test              # pure tests: no browser, server, database or network
 ```
 
-Database, browser and isolate tests need a disposable Postgres (default `postgres://pagegi:pagegi-local@127.0.0.1:55432/pagegi`; each test creates and drops its own schema), Playwright browsers and Docker:
+Only isolate tests may start the backend, dataset SQL and image-processing containers: every other stage runs with a `docker` that refuses those images by name (`scripts/testing/backend-guard.ts`), so a misdeclared test fails here the way it fails in CI. Database, browser and isolate tests need a disposable Postgres (default `postgres://pagegi:pagegi-local@127.0.0.1:55432/pagegi`; each test creates and drops its own schema), Playwright browsers and Docker:
 
 ```sh
 docker run -d --name pagegi-postgres-dev -e POSTGRES_USER=pagegi -e POSTGRES_PASSWORD=pagegi-local -e POSTGRES_DB=pagegi -p 127.0.0.1:55432:5432 postgres:17-bookworm

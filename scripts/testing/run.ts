@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
 import { testConcurrency } from "./concurrency.ts";
+import { guardReport, guardedEnvironment } from "./backend-guard.ts";
 import {
   discoverAcceptanceTests,
   discoverTests,
@@ -12,11 +13,11 @@ import {
   setupRequirements,
 } from "./inventory.ts";
 const [stage = "unit", ...options] = process.argv.slice(2);
-async function run(argv: string[]): Promise<void> {
+async function run(argv: string[], env = process.env): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(argv[0]!, argv.slice(1), {
       stdio: "inherit",
-      env: process.env,
+      env,
     });
     child.on("error", reject);
     child.on("exit", (code) =>
@@ -86,17 +87,30 @@ async function main(): Promise<void> {
     await run(["npm", "run", "build:image-processor"]);
   }
   console.log(`Running ${tests.length} ${stage} test files`);
-  await run([
-    process.execPath,
-    // Unit tests use the native TypeScript support required by our Node engine.
-    // Keep the existing loader for capability stages with integration dependencies.
-    ...(tests.every((test) => test.capability === "unit")
-      ? []
-      : ["--import", "tsx"]),
-    "--test",
-    `--test-concurrency=${testConcurrency(tests, { availableParallelism: availableParallelism(), ci: Boolean(process.env.CI) })}`,
-    ...tests.map((test) => test.file),
-  ]);
+  // Stages that declare no backend image cannot start one, here as in CI.
+  const env = guardedEnvironment(needs, process.env);
+  try {
+    await run(
+      [
+        process.execPath,
+        // Unit tests use the native TypeScript support required by our Node engine.
+        // Keep the existing loader for capability stages with integration dependencies.
+        ...(tests.every((test) => test.capability === "unit")
+          ? []
+          : ["--import", "tsx"]),
+        "--test",
+        `--test-concurrency=${testConcurrency(tests, { availableParallelism: availableParallelism(), ci: Boolean(process.env.CI) })}`,
+        ...tests.map((test) => test.file),
+      ],
+      env,
+    );
+  } finally {
+    const refused = guardReport(env);
+    if (refused)
+      console.error(
+        `Backend image refusals in the ${stage} stage:\n${refused}`,
+      );
+  }
 }
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : "Test stage failed");
