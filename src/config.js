@@ -1,3 +1,4 @@
+import { remoteImageProcessor } from "./media/image-processing/remote.ts";
 import { readFileSync } from "node:fs";
 import { KNOWN_AF_ORIGINS } from "./af-contracts.ts";
 import { createBackendHost } from "./backend/container-host.ts";
@@ -36,7 +37,7 @@ export function serviceConfig(env = process.env) {
     from = env.PAGEGI_EMAIL_FROM;
   if (Boolean(key) !== Boolean(from))
     throw Error("Configure both PAGEGI_RESEND_API_KEY and PAGEGI_EMAIL_FROM");
-  let backendHost, datasetSqlExecutor;
+  let backendHost, datasetSqlExecutor, datasetImageProcessor;
   if (env.PAGEGI_BACKEND_EXECUTOR === "remote") {
     let secret = env.PAGEGI_EXECUTION_SECRET;
     if (env.PAGEGI_EXECUTION_SECRET_FILE) {
@@ -56,6 +57,8 @@ export function serviceConfig(env = process.env) {
       socketPath: env.PAGEGI_EXECUTION_SOCKET,
       secret,
     };
+    if (env.PAGEGI_DATASET_ATTACHMENT_DIRECTORY)
+      datasetImageProcessor = remoteImageProcessor({ ...transport, endpoint: transport.endpoint || "http://localhost" });
     if (env.PAGEGI_DATASET_MUTATION_DIRECTORY)
       datasetSqlExecutor = remoteDatasetSqlExecutor(transport);
     backendHost = remoteBackendHost({
@@ -76,6 +79,8 @@ export function serviceConfig(env = process.env) {
     throw Error(
       "Dataset mutation storage requires remote execution and source storage",
     );
+  if (env.PAGEGI_DATASET_ATTACHMENT_DIRECTORY && !datasetImageProcessor)
+    throw Error("Dataset attachment storage requires authenticated remote image processing");
   if (env.PAGEGI_RESOURCE_CONFIG) {
     if (!backendHost)
       throw Error("Resource configuration requires backend execution");
@@ -101,6 +106,7 @@ export function serviceConfig(env = process.env) {
       ? { datasetDirectory: env.PAGEGI_DATASET_DIRECTORY }
       : {}),
     ...(backendHost ? { backendHost } : {}),
+    ...(datasetImageProcessor ? { datasetImageProcessor, datasetAttachmentDirectory: env.PAGEGI_DATASET_ATTACHMENT_DIRECTORY } : {}),
     ...(datasetSqlExecutor
       ? {
           datasetSqlExecutor,

@@ -333,6 +333,7 @@ export interface ServerMainEnv {
   PAGEGI_SECRETS_KEY?: string;
   PAGEGI_MEDIA_DIRECTORY?: string;
   PAGEGI_DATASET_DIRECTORY?: string;
+  PAGEGI_DATASET_ATTACHMENT_DIRECTORY?: string;
 }
 
 /** A route module brief C provides and brief B mounts before its own file routes. */

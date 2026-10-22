@@ -82,3 +82,25 @@ test("attachment composition requires storage and processor together and closes 
   await Promise.all([runtime.close(), runtime.close()]);
   assert.equal(closed, 1);
 });
+
+test("configured attachment storage requires authenticated isolated image transport", async () => {
+  assert.throws(() =>
+    serviceConfig({ PAGEGI_DATASET_ATTACHMENT_DIRECTORY: "/tmp/attachments" }),
+  );
+  assert.throws(() =>
+    serviceConfig({
+      PAGEGI_DATASET_ATTACHMENT_DIRECTORY: "/tmp/attachments",
+      PAGEGI_BACKEND_EXECUTOR: "docker",
+    }),
+  );
+  const config = serviceConfig({
+    PAGEGI_DATASET_ATTACHMENT_DIRECTORY: "/tmp/attachments",
+    PAGEGI_BACKEND_EXECUTOR: "remote",
+    PAGEGI_EXECUTION_ENDPOINT: "http://127.0.0.1:9000/v1/execute",
+    PAGEGI_EXECUTION_SECRET: "s".repeat(32),
+  });
+  assert.equal(config.datasetAttachmentDirectory, "/tmp/attachments");
+  assert.ok(config.datasetImageProcessor);
+  await config.datasetImageProcessor.close();
+  await config.backendHost?.close?.();
+});

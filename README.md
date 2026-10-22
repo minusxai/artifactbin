@@ -107,3 +107,5 @@ npm run check            # validation and every stage
 Every stage includes `test/v2`. Browser journeys are ordinary `*.browser.test.js` files in the browser stage.
 
 Define or update TypeScript interfaces first, write failing behavioral tests against them, then implement. See [the fast development loop](docs/development-validation.md) and [CI policy](docs/ci-policy.md).
+
+Dataset image uploads require `PAGEGI_DATASET_ATTACHMENT_DIRECTORY`, a private writable directory, together with `PAGEGI_BACKEND_EXECUTOR=remote` and the authenticated execution transport. The app streams images to the controller's `/v1/image-process` endpoint; image decoding runs in an isolated container. Keep this directory separate from the readonly source dataset and media mounts. Without attachment storage configuration, upload routes remain unavailable.
