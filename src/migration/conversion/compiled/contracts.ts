@@ -8,6 +8,8 @@ export interface CompiledMigrationInput {
   coreUrl: string;
   /** Explicit manifest bindings; metadata only, never dataset rows. */
   datasetBindings?: readonly CompiledDatasetBinding[];
+  /** Explicit importer decision for an archived revision without historical authorization. */
+  datasetUnavailable?: { reason: "historical-binding-unavailable" };
   /** Exact archived img URL -> verified ACL media endpoint. Static assembler only. */
   resourceMap?: Readonly<Record<string, string>>;
   theme?: string | null;

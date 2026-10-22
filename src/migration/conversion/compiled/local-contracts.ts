@@ -36,7 +36,10 @@ export interface CompiledLocalResult extends ConversionResult {
   provenance?: {
     compiler: "archived-local" | "archived-author";
     build: string;
-    mode: "local-scalars" | "authored-components";
+    mode:
+      | "local-scalars"
+      | "authored-components"
+      | "historical-data-unavailable";
     modules: string[];
   };
 }

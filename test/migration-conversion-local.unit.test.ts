@@ -402,3 +402,39 @@ test("dataset Imports require exact manifest bindings and emit no fetched rows",
   }
   assert.equal(calls, 1);
 });
+
+test("explicit historical unavailability retains readable page without a backend or query runtime", async () => {
+  const source =
+    '<Helmet><Import name="items" src="ref:Abcd12"/><Query name="total">{`select sum(amount) as total from items.rows`}</Query></Helmet><p id="history-note">Saved layout</p><Number data="$total"/>';
+  const result = await compileArchivedLocal(
+    {
+      ...input,
+      source,
+      datasetUnavailable: { reason: "historical-binding-unavailable" },
+    },
+    {
+      compiler: {
+        compile: async () => ({
+          ...output,
+          declarations: [],
+          queryNames: ["total"],
+          datasetNames: ["items"],
+          html: '<p id="history-note">Saved layout</p>',
+        }),
+      },
+    },
+  );
+  assert.equal(result.classification, "renderable");
+  assert.match(result.html!, /Saved layout/);
+  assert.match(result.html!, /Historical data is unavailable/);
+  assert.doesNotMatch(result.html!, /rel="af-backend"/);
+  assert.ok(result.capabilities.includes("historical-data-unavailable"));
+  assert.ok(!result.capabilities.includes("protected-dataset-reads"));
+  assert.ok(!result.capabilities.includes("local-sql-queries"));
+  const { localBootSource } = await import(
+    "../src/migration/conversion/compiled/local-boot.ts"
+  );
+  const boot = localBootSource([], undefined, undefined, ["total"]);
+  assert.doesNotMatch(boot, /readCompiledDataset|pageEngine|client.query/);
+  assert.match(boot, /Historical data is unavailable/);
+});

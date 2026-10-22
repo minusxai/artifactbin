@@ -102,7 +102,13 @@ export async function compileArchivedLocal(
       return blocked("compiled-author-capability");
     }
   }
+  const historical =
+    input.datasetUnavailable?.reason === "historical-binding-unavailable";
+  if (input.datasetUnavailable && !historical)
+    return blocked("compiled-dataset-unavailable-mode");
   const bindings = input.datasetBindings ?? [];
+  if (historical && bindings.length)
+    return blocked("compiled-dataset-unavailable-mode");
   const backendLinks = new Map<string, string>();
   if (
     !Array.isArray(bindings) ||
@@ -202,7 +208,10 @@ export async function compileArchivedLocal(
             (b) => b.name === attrs.name && b.legacyRef === attrs.src,
           );
           if (
-            !binding ||
+            (!historical && !binding) ||
+            !/^[A-Za-z][A-Za-z0-9_]*$/.test(attrs.name) ||
+            ["constructor", "prototype", "__proto__"].includes(attrs.name) ||
+            !/^ref:[A-Za-z0-9]{6,12}$/.test(attrs.src) ||
             imports.has(attrs.name) ||
             node.openingElement.attributes.length !== 2 ||
             Object.keys(attrs).some((k) => !["name", "src"].includes(k)) ||
@@ -346,7 +355,8 @@ export async function compileArchivedLocal(
   )
     invalid = true;
   if (
-    imports.size !== bindings.length ||
+    (!historical && imports.size !== bindings.length) ||
+    (historical && imports.size === 0) ||
     [...imports].some((n) => declarations.has(n) || queries.has(n))
   )
     invalid = true;
@@ -480,7 +490,9 @@ export async function compileArchivedLocal(
     )
     .join("");
   const status = imports.size
-    ? '<p role="status" data-migration-dataset-status>Loading protected data…</p>'
+    ? historical
+      ? '<p role="status" data-migration-dataset-status>Historical data is unavailable. This saved page does not load datasets or evaluate queries.</p>'
+      : '<p role="status" data-migration-dataset-status>Loading protected data…</p>'
     : "";
   const authorStatus = author
     ? '<p role="status" data-migration-author-status>Starting page components…</p>'
@@ -489,7 +501,7 @@ export async function compileArchivedLocal(
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE)
     return blocked("compiled-page-limit");
   return {
-    classification: "functional",
+    classification: historical ? "renderable" : "functional",
     html,
     identities,
     issues: [],
@@ -497,15 +509,25 @@ export async function compileArchivedLocal(
       "local-scalars",
       "archived-kit",
       "inlined-fonts",
-      ...(queries.size ? ["local-sql-queries"] : []),
+      ...(queries.size && !historical ? ["local-sql-queries"] : []),
       ...(tableNames.size ? ["local-inline-tables"] : []),
-      ...(imports.size ? ["protected-dataset-reads"] : []),
+      ...(imports.size
+        ? [
+            historical
+              ? "historical-data-unavailable"
+              : "protected-dataset-reads",
+          ]
+        : []),
       ...(author ? ["authored-components"] : []),
     ],
     provenance: {
       compiler: author ? "archived-author" : "archived-local",
       build: output.build,
-      mode: author ? "authored-components" : "local-scalars",
+      mode: historical
+        ? "historical-data-unavailable"
+        : author
+          ? "authored-components"
+          : "local-scalars",
       modules: output.modules,
     },
   };

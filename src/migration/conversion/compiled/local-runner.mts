@@ -104,7 +104,10 @@ const rawFlow = {
 };
 let flow: any = rawFlow;
 let results: any = null;
-if (rawFlow.queries.length) {
+if (input.datasetUnavailable) {
+  flow = { ...rawFlow, imports: [], queries: [] };
+  results = { tables: {}, errors: {} };
+} else if (rawFlow.queries.length) {
   ({ flow, results } = await prepareLocalFlow(
     archived,
     rawFlow,
@@ -171,7 +174,7 @@ const buildManifest = JSON.parse(
 );
 const manifest = buildManifest.manifest;
 let sql: any;
-if (flow.queries.length) {
+if (flow.queries.length && !input.datasetUnavailable) {
   const wasm = await readFile(
     path.join(root, "services/app/public", buildManifest.sqliteWasm),
   );
@@ -249,7 +252,14 @@ const bundled = await bundle({
           namespace: "migration",
         }));
         b.onLoad({ filter: /.*/, namespace: "migration" }, () => ({
-          contents: localBootSource(declarations, sql, input.authorPlan),
+          contents: localBootSource(
+            declarations,
+            sql,
+            input.authorPlan,
+            input.datasetUnavailable
+              ? rawFlow.queries.map((q: any) => q.name)
+              : undefined,
+          ),
           loader: "js",
         }));
         b.onResolve(
@@ -384,8 +394,8 @@ process.stdout.write(
     javascript,
     declarations,
     authorExports: author?.exports ?? [],
-    datasetNames: flow.imports.map((i: any) => i.name),
-    queryNames: flow.queries.map((q: any) => q.name),
+    datasetNames: rawFlow.imports.map((i: any) => i.name),
+    queryNames: rawFlow.queries.map((q: any) => q.name),
     modules,
     title: parts.title,
     build: build.id,

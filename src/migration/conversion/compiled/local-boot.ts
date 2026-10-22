@@ -14,6 +14,7 @@ export function localBootSource(
     bindings?: readonly CompiledDatasetBinding[];
   },
   author?: CompiledAuthorPlan,
+  unavailableQueries?: readonly string[],
 ): string {
   const imports = sql?.bindings?.length ?? 0;
   return `import {client,gql} from '@afbin/apollo';
@@ -33,7 +34,7 @@ export function boot({TREE}) {
  const localTables=()=>Object.fromEntries(declarations.filter(d=>d.type==="table").map(d=>[d.name,state()[d.name]]));
  const table=name=>{const d=declarations.find(d=>d.name===name&&d.type==="table");return d?{rows:state()[name],columns:d.columns}:tables()[name];};
  const [tables,setTables]=createSignal(${JSON.stringify({})});
- const [queryErrors,setQueryErrors]=createSignal({});
+ const [queryErrors,setQueryErrors]=createSignal(${JSON.stringify(Object.fromEntries((unavailableQueries ?? []).map((name) => [name, "Historical data is unavailable"])))});
  const [pending,setPending]=createSignal(false);
  let generation=0;
  ${sql ? `setTables(${JSON.stringify(sql.tables)});const run=async()=>{const current=++generation;setPending(true);try{engine.prepare(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"});const deadline=Date.now()+${imports ? 15000 : 5000};while(!engine.ready(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"})){${imports ? "if(datasetReadFailed)throw Error('Dataset read unavailable');" : ""}if(Date.now()>deadline)throw Error("Local engine loading timed out");await new Promise(resolve=>setTimeout(resolve,10));}const answer=await engine.run(flow,flow.queries.map(q=>q.name),{values:values(),localTables:localTables(),userId:null,now:new Date().toISOString(),tz:'UTC'});if(current===generation){setTables(answer.tables);setQueryErrors(answer.errors);${imports ? "setDatasetStatus(Object.keys(answer.errors).length?'Protected data queries could not be evaluated.':'');" : ""}}}catch{if(current===generation){setTables({});setQueryErrors(Object.fromEntries(flow.queries.map(q=>[q.name,'Local query failed'])));${imports ? "setDatasetStatus('Protected data is unavailable. Check access and refresh data.');" : ""}}}finally{if(current===generation)setPending(false);}};` : "const run=()=>{};"}
