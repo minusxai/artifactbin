@@ -135,3 +135,24 @@ test("font admission refuses tokenizer tricks, import qualifiers and unproven de
     ),
   );
 });
+test("font width axis remains an explicit CSS face stretch range", async () => {
+  const bytes = Buffer.from("wOF2fixture");
+  const result = await inlinePinnedFontImports(
+    `@import 'https://fonts.googleapis.com/css2?family=Example:wdth,wght@75..100,200..800';`,
+    async () => [
+      {
+        family: "Example",
+        axes: [
+          { tag: "wdth", min: 75, max: 100 },
+          { tag: "wght", min: 200, max: 800 },
+        ],
+        weight: [200, 800],
+        style: "normal",
+        unicodeRange: "U+0000-00FF",
+        bytes,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      },
+    ],
+  );
+  assert(result.css.includes("font-stretch:75% 100%"));
+});

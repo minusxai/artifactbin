@@ -98,7 +98,11 @@ export function parsePinnedFontRequest(raw: string): PinnedFontRequest {
   return { families, display: display as PinnedFontRequest["display"] };
 }
 function faceCss(face: PinnedFontFace, request: PinnedFontRequest): string {
-  return `@font-face{font-family:${JSON.stringify(face.family)};font-style:${face.style};font-weight:${face.weight[0] === face.weight[1] ? face.weight[0] : face.weight.join(" ")};font-display:${request.display};src:url("data:font/woff2;base64,${Buffer.from(face.bytes).toString("base64")}") format("woff2");unicode-range:${face.unicodeRange}}`;
+  const width = face.axes.find((axis) => axis.tag === "wdth");
+  const stretch = width
+    ? `font-stretch:${width.min}%${width.min === width.max ? "" : ` ${width.max}%`};`
+    : "";
+  return `@font-face{font-family:${JSON.stringify(face.family)};font-style:${face.style};font-weight:${face.weight[0] === face.weight[1] ? face.weight[0] : face.weight.join(" ")};${stretch}font-display:${request.display};src:url("data:font/woff2;base64,${Buffer.from(face.bytes).toString("base64")}") format("woff2");unicode-range:${face.unicodeRange}}`;
 }
 export async function inlinePinnedFontImports(
   css: string,

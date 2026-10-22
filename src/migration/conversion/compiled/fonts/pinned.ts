@@ -105,6 +105,7 @@ export async function pinnedFontResolver(
               "font-style",
               "font-display",
               "font-weight",
+              "font-stretch",
               "src",
               "unicode-range",
             ].includes(node.property)
@@ -205,6 +206,16 @@ export async function pinnedFontResolver(
           (pair[0] === pair[1] ? String(pair[0]) : pair.join(" "))
         )
           throw Error("Pinned font weight proof mismatch");
+        const width = inspected.axes.find((axis) => axis.tag === "wdth");
+        if (
+          width
+            ? properties.get("font-stretch") !==
+              (width.min === width.max
+                ? `${width.min}%`
+                : `${width.min}% ${width.max}%`)
+            : properties.has("font-stretch")
+        )
+          throw Error("Pinned font stretch proof mismatch");
         const unicodeRange = properties.get("unicode-range");
         if (!unicodeRange)
           throw Error("Pinned font Unicode coverage unavailable");
