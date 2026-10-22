@@ -6,12 +6,14 @@ export interface LegacyCellWriteSite {
   column: string;
   rowKey: string;
   tag: "input" | "textarea" | "Select";
+  optionsQuery?: string;
 }
 export interface TypedLegacyCellWriteSite extends LegacyCellWriteSite {
   type: DatasetColumn["type"];
 }
 export type ReadLegacyCellWriteSites = (
   source: string,
+  visit?: (node: unknown, site: LegacyCellWriteSite) => void,
 ) => readonly LegacyCellWriteSite[];
 export type TypeLegacyCellWriteSites = (
   sites: readonly LegacyCellWriteSite[],

@@ -19,7 +19,10 @@ const ref = (v: unknown): string | undefined =>
 function refuse(): never {
   throw Error("Unsupported editing cell scope");
 }
-export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (source) => {
+export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
+  source,
+  visit,
+) => {
   if (
     typeof source !== "string" ||
     Buffer.byteLength(source) > MAX_COMPILED_SOURCE_BYTES
@@ -100,13 +103,67 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (source) => {
           ].includes(selected("type") as any)
         )
           refuse();
-        out.push({
+        const allowed = new Set([
+          "id",
+          "className",
+          "aria-label",
+          "run",
+          "value",
+          "label",
+          "placeholder",
+          "disabled",
+          ...(tag === "Select"
+            ? [
+                "options",
+                "multiple",
+                "allowCreate",
+                "valueFormat",
+                "nullable",
+                "exclude",
+              ]
+            : tag === "input"
+              ? ["type"]
+              : []),
+        ]);
+        for (const attribute of attributes) {
+          if (
+            attribute.type !== "JSXAttribute" ||
+            !allowed.has(attribute.name?.name)
+          )
+            refuse();
+          const value = selected(attribute.name.name);
+          if (
+            ["multiple", "allowCreate", "nullable", "disabled"].includes(
+              attribute.name.name,
+            ) &&
+            typeof value !== "boolean"
+          )
+            refuse();
+          if (
+            [
+              "id",
+              "className",
+              "aria-label",
+              "label",
+              "placeholder",
+              "valueFormat",
+            ].includes(attribute.name.name) &&
+            typeof value !== "string"
+          )
+            refuse();
+        }
+        const optionsQuery =
+          tag === "Select" ? ref(selected("options")) : undefined;
+        const site: LegacyCellWriteSite = {
           mutationName,
           dataName: next.dataName,
           column: next.column,
           rowKey: next.rowKey,
           tag,
-        });
+          ...(optionsQuery ? { optionsQuery } : {}),
+        };
+        out.push(site);
+        visit?.(node, site);
         if (out.length > 256) refuse();
       }
     }

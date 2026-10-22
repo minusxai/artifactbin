@@ -1,3 +1,5 @@
+import {readLegacyCellWriteSites} from "./cell-write-source.ts";
+import type {LegacyCellWriteSite} from "./cell-write-contracts.ts";
 import{readContextReferences}from"./context-source.ts";
 import{validCompiledViewerBinding}from"./viewer-binding.ts";
 import{readsLegacyViewerMarkup}from"./viewer-source.ts";
@@ -160,6 +162,13 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   } catch {
     return blocked("compiled-mutation-binding");
   }
+  const cellSites = new Map<number,LegacyCellWriteSite>();
+  try {
+    if(registeredMutations.some(binding=>binding.valueParam)) {
+      readLegacyCellWriteSites(input.source,(node,site)=>cellSites.set((node as any).start,site));
+      if(historical || [...cellSites.values()].some(site=>!registeredMutations.find(binding=>binding.name===site.mutationName)?.valueParam) || registeredMutations.some(binding=>binding.valueParam&&![...cellSites.values()].some(site=>site.mutationName===binding.name)))return blocked("compiled-cell-binding");
+    }
+  } catch {return blocked("compiled-cell-binding");}
   const mutations = new Set<string>();
   const mutationRuns = new Set<string>();
   let chartCount = 0,
@@ -280,9 +289,15 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       if (node.type === "JSXElement") {
         const name = node.openingElement.name.name;
         if (name === "Dialog") dialogFocus = true;
+        const editingCell = cellSites.get(node.start);
+        if(editingCell){
+          if(loopTable!==editingCell.dataName)invalid=true;
+          rowReads.push({table:editingCell.dataName,field:editingCell.column});
+          if(editingCell.optionsQuery){references.add(editingCell.optionsQuery);cellReferences.add(editingCell.optionsQuery);}
+        }
         if (name === "SlideDeck") hasSlideDeck = true;
-        if (loopTable && !loopDepth && !["Column", "Button", "span", "strong", "em", "b", "i", "small", "code", "br", "p", "div", "a"].includes(name)) invalid = true;
-        const component = admitLocalComponent(node, {ancestors, parentTag: parent?.type === "JSXElement" ? parent.openingElement.name.name : undefined, rowTable:loopTable});
+        if (loopTable && !loopDepth && !editingCell && !["Column", "Button", "span", "strong", "em", "b", "i", "small", "code", "br", "p", "div", "a"].includes(name)) invalid = true;
+        const component = editingCell ? null : admitLocalComponent(node, {ancestors, parentTag: parent?.type === "JSXElement" ? parent.openingElement.name.name : undefined, rowTable:loopTable});
         if (component) {
           for (const reference of component.references) references.add(reference);
           for (const binding of component.scalarBindings) scalarBindings.add(binding);
@@ -416,11 +431,13 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
             typeof attr.value?.value === "string" &&
             attr.value.value.startsWith("$")
           ) {
-            references.add(attr.value.value.slice(1));
-            if (
+            if(editingCell && attr.name.name === "value") {
+              if(attr.value.value!=="$_row."+editingCell.column)invalid=true;
+            } else references.add(attr.value.value.slice(1));
+            if (!editingCell && (
               ["Input", "Textarea", "input", "textarea", "select"].includes(
                 name,
-              )
+              ))
             )
               scalarBindings.add(attr.value.value.slice(1));
           }
@@ -447,13 +464,14 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           if (attr.name?.name === "run") {
             const run = attr.value?.value;
             if (
-              name !== "Button" ||
+              (!editingCell && name !== "Button") ||
               typeof run !== "string" ||
               !/^\$[A-Za-z][A-Za-z0-9_]*$/.test(run)
             )
               invalid = true;
             else {
               const mutation = registeredMutations.find(binding => binding.name === run.slice(1));
+              if((editingCell && !mutation?.valueParam) || (!editingCell && mutation?.valueParam))invalid=true;
               const fields = Object.keys(mutation?.rowParams ?? {});
               if (fields.length && !loopTable) invalid = true;
               if (loopTable) for (const field of fields) rowReads.push({table:loopTable,field});

@@ -22,6 +22,7 @@ test("editing-cell sites bind exact authored table, column, key and immutable sc
       column: "tags",
       rowKey: "id",
       tag: "Select",
+      optionsQuery: "choices",
     },
   ]);
   assert.deepEqual(
