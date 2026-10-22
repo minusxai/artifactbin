@@ -17,6 +17,6 @@ export function datasetMutationBoot(
  const mutationStatus=document.createElement('div');mutationStatus.setAttribute('role','status');document.body.append(mutationStatus);
  const renderMutations=()=>{setMutationTick(n=>n+1);mutationStatus.replaceChildren();for(const binding of mutationBindings){const status=mutationAdapter.status(binding.name);if(!status)continue;const message=document.createElement('p');message.textContent=({pending:'Saving shared data…',committed:'Shared data saved.',rejected:'Shared data save rejected.',offline:'Offline. Shared data was not saved.',unknown:'The save outcome is unknown. Reconcile it before saving again.'})[status.state];mutationStatus.append(message);if(status.state==='unknown'){const retry=document.createElement('button');retry.type='button';retry.textContent='Reconcile save';retry.addEventListener('click',()=>{void mutationAdapter.retry(binding.name).catch(()=>{});});mutationStatus.append(retry);}}};
  const stopMutations=mutationAdapter.subscribe(renderMutations);renderMutations();
- store.mutate=(name,args,row)=>{if(row&&Object.keys(row).length)return Promise.reject(Error('Row-dependent mutations are unavailable'));return mutationAdapter.mutate(name,args);};
+ store.mutate=(name,args,row)=>mutationAdapter.mutate(name,args,row);
  window.addEventListener('pagehide',event=>{if(!event.persisted)stopMutations();});`;
 }
