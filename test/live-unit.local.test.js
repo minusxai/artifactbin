@@ -6,19 +6,20 @@ import WebSocket from "ws";
 import { liveHub } from "../src/live.js";
 
 // No app, Postgres or browser: inject authorization and clock into the transport boundary.
-async function fixture(t) {
+async function fixture(t, heartbeatMs = 20) {
   let time = 1000,
     reads = 0;
+  const revoked = new Set();
   const server = createServer(),
     presence = new Map();
   const hub = liveHub({
     server,
     presence,
     now: () => time,
-    heartbeatMs: 20,
+    heartbeatMs,
     authorize: async (id, token, sourceRevision) => {
       reads++;
-      if (token === "bad")
+      if (token === "bad" || revoked.has(token))
         throw Object.assign(Error("Denied"), { status: 403 });
       return {
         actor: token === "share" ? null : token,
@@ -62,13 +63,14 @@ async function fixture(t) {
     presence,
     hub,
     reads: () => reads,
+    revoke: (actor) => revoked.add(actor),
     advance: () => {
       time = 60000;
     },
   };
 }
 const wait = () => new Promise((r) => setTimeout(r, 30));
-test("cursor traffic retains snapshot without authorization queries; expiry removes presence", async (t) => {
+test("cursor traffic retains snapshot while refreshing authority; expiry removes presence", async (t) => {
   const f = await fixture(t),
     a = await f.connect();
   a.send({
@@ -89,7 +91,7 @@ test("cursor traffic retains snapshot without authorization queries; expiry remo
   for (let i = 0; i < 20; i++)
     a.send({ type: "cursor", cursor: { nodeId: "node", x: i / 20, y: 0.5 } });
   await wait();
-  assert.equal(f.reads(), 1);
+  assert.ok(f.reads() > 1);
   assert.equal(f.presence.get("file").session.snapshot, snapshot);
   assert.equal(f.presence.get("file").session.cursor.x, 0.95);
   const closed = once(a.ws, "close");
@@ -155,3 +157,21 @@ test("reconnect replaces only the same identity and disconnect removes its curso
   await wait();
   assert.ok(!f.presence.get("file")?.session);
 });
+
+for (const trigger of ["presence", "cursor", "broadcast", "changed", "heartbeat"]) {
+  test(`revoked membership stops existing socket ${trigger} and removes presence`, async (t) => {
+    const f = await fixture(t, trigger === "heartbeat" ? 20 : 10000), a = await f.connect();
+    a.send({ type: "presence", presence: { sessionId: "session", sourceRevision: "rev" } });
+    await wait();
+    const before = a.messages.length;
+    const closed = once(a.ws, "close");
+    f.revoke("alice");
+    if (trigger === "presence") a.send({ type: "presence", presence: { sessionId: "session", sourceRevision: "rev" } });
+    if (trigger === "cursor") a.send({ type: "cursor", cursor: { nodeId: "node", x: 0.5, y: 0.5 } });
+    if (trigger === "broadcast") f.hub.presenceChanged("file", 0);
+    if (trigger === "changed") f.hub.changed("file");
+    await closed;
+    assert.ok(!f.presence.get("file")?.session);
+    assert.equal(a.messages.slice(before).some((message) => ["viewers", "changed", "heartbeat"].includes(message.type)), false);
+  });
+}

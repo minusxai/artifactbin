@@ -29,19 +29,33 @@ export function liveHub({
     }
     ws.send(JSON.stringify(message));
   }
-  function broadcast(id, generation) {
-    const message = {
-      type: "viewers",
-      viewers: visiblePresence(presence.get(id) || {}, clock(generation)),
-    };
-    for (const [ws, c] of clients)
-      if (c.id === id && c.auth) {
-        if (c.auth.expires <= now()) {
-          ws.close(4403, "Access expired");
-          continue;
-        }
-        send(ws, message);
-      }
+  function closeRevoked(ws, c) {
+    const entries = presence.get(c.id);
+    if (entries?.[c.sessionId]?.actor === c.auth?.actor) delete entries[c.sessionId];
+    ws.close(4403, "Access changed");
+  }
+  // A live authorization is a single-operation fact, never a durable socket grant.
+  // Rechecking the repository also observes revocation by another server process.
+  async function refresh(ws, c, revision = c.auth.sourceRevision) {
+    const epoch = epochs.get(c.id) || 0;
+    const auth = await authorize(c.id, c.token, revision);
+    if (ws.readyState !== WebSocket.OPEN) return false;
+    if (epoch !== (epochs.get(c.id) || 0) || auth.expires <= now() || auth.actor !== c.auth.actor)
+      fail(403, "Access revoked");
+    return auth;
+  }
+  async function broadcast(id, generation) {
+    await Promise.all([...clients].map(async ([ws, c]) => {
+      if (c.id !== id || !c.auth) return;
+      try {
+        const auth = await refresh(ws, c);
+        if (!auth) return;
+        send(ws, {
+          type: "viewers",
+          viewers: visiblePresence(presence.get(id) || {}, clock(auth.file.generation)),
+        });
+      } catch { closeRevoked(ws, c); }
+    }));
   }
   const upgrade = (req, socket, head) => {
     const match = /^\/api\/files\/([^/?]+)\/live$/.exec(req.url);
@@ -75,9 +89,8 @@ export function liveHub({
     ws.on("error", () => {});
     ws.on("pong", () => {
       c.alive = true;
-      const entry = presence.get(id)?.[c.sessionId];
-      if (entry && c.auth && entry.actor === c.auth.actor)
-        entry.lastSeen = now();
+      // Pong proves transport liveness only. Authorization is refreshed on the
+      // heartbeat before extending a viewer's presence lifetime.
     });
     ws.on("close", () => {
       clearTimeout(timeout);
@@ -89,7 +102,7 @@ export function liveHub({
         broadcast(id, c.auth.file.generation);
       }
     });
-    ws.on("message", async (raw, binary) => {
+    const handleMessage = async (raw, binary) => {
       try {
         if (binary) fail(422, "Text messages required");
         if (now() - c.window >= 1000) {
@@ -132,21 +145,16 @@ export function liveHub({
           broadcast(id, auth.file.generation);
           return;
         }
-        if (c.auth.expires <= now()) fail(403, "Access expired");
+        const revision = m.type === "presence" && m.presence?.snapshot && m.presence?.shareView !== false
+          ? m.presence.sourceRevision : c.auth.sourceRevision;
+        const refreshed = await refresh(ws, c, revision);
+        if (!refreshed) return;
+        c.auth = refreshed;
         if (!c.auth.actor) fail(401, "Sign in to share presence");
         if (m.type === "presence") {
           const input = m.presence;
           if (input.sessionId !== c.sessionId) fail(403, "Session mismatch");
           if (input.snapshot && input.shareView !== false) {
-            if (c.auth.sourceRevision !== input.sourceRevision) {
-              c.busy = true;
-              const epoch = epochs.get(id) || 0;
-              const auth = await authorize(id, c.token, input.sourceRevision);
-              if (ws.readyState !== WebSocket.OPEN) return;
-              if (epoch !== (epochs.get(id) || 0)) fail(403, "Access revoked");
-              c.auth = auth;
-              c.busy = false;
-            }
             validateLoadedSnapshot(
               c.auth.sourceAvailable,
               input.snapshot,
@@ -188,6 +196,8 @@ export function liveHub({
           type: "error",
           message: e.status ? e.message : "Live connection failed",
         });
+        const entries = presence.get(id);
+        if (entries?.[c.sessionId]?.actor === c.auth?.actor) delete entries[c.sessionId];
         ws.close(
           e.status === 403
             ? 4403
@@ -197,9 +207,18 @@ export function liveHub({
           "Live request rejected",
         );
       }
+    };
+    // Keep async checks in frame order; mouse updates cannot overtake revocation.
+    let pending = Promise.resolve();
+    ws.on("message", (raw, binary) => {
+      pending = pending.then(() => handleMessage(raw, binary));
     });
   });
-  const heartbeat = setInterval(() => {
+  let heartbeatBusy = false;
+  const heartbeat = setInterval(async () => {
+    if (heartbeatBusy) return;
+    heartbeatBusy = true;
+    try {
     for (const [ws, c] of clients) {
       if (!c.alive || c.auth?.expires <= now()) {
         ws.terminate();
@@ -207,7 +226,14 @@ export function liveHub({
       }
       c.alive = false;
       ws.ping();
-      if (c.auth) send(ws, { type: "heartbeat" });
+      if (c.auth) {
+        try {
+          if (!await refresh(ws, c)) continue;
+          const entry = presence.get(c.id)?.[c.sessionId];
+          if (entry && entry.actor === c.auth.actor) entry.lastSeen = now();
+          send(ws, { type: "heartbeat" });
+        } catch { closeRevoked(ws, c); }
+      }
     }
     for (const [id, entries] of presence) {
       let changed = false,
@@ -222,6 +248,7 @@ export function liveHub({
       if (changed) broadcast(id, generation);
       if (!Object.keys(entries).length) presence.delete(id);
     }
+    } finally { heartbeatBusy = false; }
   }, heartbeatMs);
   heartbeat.unref();
   return {
@@ -236,7 +263,9 @@ export function liveHub({
         if (c.id === id && c.auth) {
           if (revoke || c.auth.expires <= now())
             ws.close(revoke === "policy" ? 1012 : 4403, "Access changed");
-          else send(ws, { type: "changed" });
+          else void refresh(ws, c).then((valid) => {
+            if (valid) send(ws, { type: "changed" });
+          }).catch(() => closeRevoked(ws, c));
         }
     },
     close() {

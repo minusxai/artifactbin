@@ -37,6 +37,7 @@ export interface LiveAuthorization {
   sourceAvailable: boolean;
 }
 export interface CollaborationService {
+  /** Fresh facts for each live read/write; transport must never cache as ongoing authority. */
   authorizeLive(
     fileId: string,
     credential: string,
