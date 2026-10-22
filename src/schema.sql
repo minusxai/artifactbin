@@ -121,3 +121,32 @@ DROP INDEX IF EXISTS files_owner_path;
 CREATE UNIQUE INDEX IF NOT EXISTS files_owner_path ON files(owner,path) WHERE deleted_at IS NULL;
 CREATE TABLE IF NOT EXISTS trash_folders (id text PRIMARY KEY,owner text NOT NULL REFERENCES accounts(actor),path text NOT NULL,deleted_at bigint NOT NULL,folders jsonb NOT NULL,file_ids jsonb NOT NULL);
 ALTER TABLE files ADD COLUMN IF NOT EXISTS trash_batch text;
+
+-- Imported raster proofs. Source object keys stay in private migration receipts.
+CREATE TABLE IF NOT EXISTS profile_assets (
+  source_namespace text NOT NULL,
+  legacy_user_id text NOT NULL,
+  asset_id text NOT NULL CHECK (asset_id ~ '^[a-f0-9]{64}$'),
+  sha256 text NOT NULL CHECK (sha256 ~ '^[a-f0-9]{64}$'),
+  byte_length bigint NOT NULL CHECK (byte_length > 0),
+  width integer NOT NULL CHECK (width > 0),
+  height integer NOT NULL CHECK (height > 0),
+  content_type text NOT NULL CHECK (content_type = 'image/webp'),
+  storage_key text NOT NULL CHECK (storage_key = sha256),
+  PRIMARY KEY(source_namespace,asset_id)
+);
+CREATE TABLE IF NOT EXISTS comment_attachment_assets (
+  page_id text NOT NULL,
+  comment_id text NOT NULL,
+  attachment_id text NOT NULL,
+  variant text NOT NULL CHECK (variant IN ('original','preview','thumbnail')),
+  name text NOT NULL,
+  sha256 text NOT NULL CHECK (sha256 ~ '^[a-f0-9]{64}$'),
+  byte_length bigint NOT NULL CHECK (byte_length > 0),
+  width integer NOT NULL CHECK (width > 0),
+  height integer NOT NULL CHECK (height > 0),
+  content_type text NOT NULL CHECK (content_type = 'image/webp'),
+  storage_key text NOT NULL CHECK (storage_key = sha256),
+  PRIMARY KEY(page_id,comment_id,attachment_id,variant),
+  FOREIGN KEY(page_id,comment_id) REFERENCES comments(file_id,id)
+);
