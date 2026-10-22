@@ -36,13 +36,24 @@ test("library Trash restores a retained page", async () => {
         .status,
       200,
     );
-    await dialog.getByRole('button',{name:'Close',exact:true}).click();
-    await page.getByRole('button',{name:'Close panel',exact:true}).click();
-    await page.getByLabel('Actions for test-page.html',{exact:true}).click();
-    await page.getByRole('button',{name:'Move to trash',exact:true}).click();
-    await page.getByRole('button',{name:'Close panel',exact:true}).click();
-    await page.getByLabel('Actions for test-page.html',{exact:true}).waitFor({state:'detached'});
-    assert.equal((await server.request(`/api/files/${published.id}/source`,{token})).status,404);
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Close panel", exact: true })
+      .click();
+    await page
+      .getByLabel("Actions for test-page.html", { exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Move to trash", exact: true })
+      .click();
+    await page
+      .getByLabel("Actions for test-page.html", { exact: true })
+      .waitFor({ state: "detached" });
+    assert.equal(
+      (await server.request(`/api/files/${published.id}/source`, { token }))
+        .status,
+      404,
+    );
   } finally {
     await browser.close();
     await server.close();
