@@ -9,9 +9,16 @@ export interface DatasetMembersSnapshot {
   generation: string;
   rows: readonly DatasetMemberRow[];
 }
+/** Cancellation must reach adapter-owned I/O; late snapshots must not begin further work. */
 export interface DatasetMembersPorts {
-  snapshot(context: DatasetCallContext): Promise<DatasetMembersSnapshot | null>;
+  snapshot(
+    context: DatasetCallContext,
+    signal?: AbortSignal,
+  ): Promise<DatasetMembersSnapshot | null>;
 }
 export interface DatasetMembersService {
-  members(context: DatasetCallContext): Promise<DatasetMembersSnapshot>;
+  members(
+    context: DatasetCallContext,
+    signal?: AbortSignal,
+  ): Promise<DatasetMembersSnapshot>;
 }

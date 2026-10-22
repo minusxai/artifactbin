@@ -43,3 +43,32 @@ test("membership results reject invented timestamps, malformed rows and oversize
       }).members(context),
     );
 });
+test("member cancellation reaches snapshots and a late first response cannot begin a second lookup", async () => {
+  const abort = new AbortController();
+  let resolve!: (value: import("../src/datasets/members-contracts.ts").DatasetMembersSnapshot | null) => void;
+  let calls = 0;
+  let supplied: AbortSignal | undefined;
+  const service = createDatasetMembersService({
+    snapshot: async (_context, signal) => {
+      calls++;
+      supplied = signal;
+      return new Promise((r) => {
+        resolve = r;
+      });
+    },
+  });
+  const pending = service.members(
+    {
+      backendId: "backend",
+      backendVersion: "version",
+      pageId: "page",
+      subject: null,
+    },
+    abort.signal,
+  );
+  assert.equal(supplied, abort.signal);
+  abort.abort();
+  resolve({ generation: "a".repeat(64), rows: [] });
+  await assert.rejects(pending);
+  assert.equal(calls, 1);
+});

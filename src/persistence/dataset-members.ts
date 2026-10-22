@@ -98,14 +98,16 @@ export async function loadDatasetMembers(
     rows,
   };
 }
+/** Each snapshot has a one-second pool+SQL budget, independent of the global database policy. */
 export function createDatasetMembersRepository(
   database: SqlDatabase,
   now = Date.now,
 ): DatasetMembersPorts {
   return {
-    snapshot: (context) =>
-      database.transaction((client) =>
-        loadDatasetMembers(client, context, now()),
+    snapshot: (context, signal) =>
+      database.transaction(
+        (client) => loadDatasetMembers(client, context, now()),
+        { signal, timeoutMs: 1000 },
       ),
   };
 }

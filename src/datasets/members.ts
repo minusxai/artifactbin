@@ -8,8 +8,10 @@ export function createDatasetMembersService(
   ports: DatasetMembersPorts,
 ): DatasetMembersService {
   return {
-    async members(context) {
-      const initial = await ports.snapshot(context);
+    async members(context, signal) {
+      signal?.throwIfAborted();
+      const initial = await ports.snapshot(context, signal);
+      signal?.throwIfAborted();
       if (!initial) throw new DatasetReadError("denied");
       if (
         !/^[a-f0-9]{64}$/.test(initial.generation) ||
@@ -28,7 +30,8 @@ export function createDatasetMembersService(
         DATASET_RESULT_BYTES
       )
         throw new DatasetReadError("result_limit");
-      const fresh = await ports.snapshot(context);
+      const fresh = await ports.snapshot(context, signal);
+      signal?.throwIfAborted();
       if (!fresh) throw new DatasetReadError("denied");
       if (fresh.generation !== initial.generation)
         throw new DatasetReadError("dataset_changed");

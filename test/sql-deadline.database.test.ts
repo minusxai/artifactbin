@@ -124,3 +124,83 @@ test("cancellable dataset binding and authority queries cannot retain blocked Po
     await env.cleanup();
   }
 });
+test("member snapshot SQL is bounded and an aborted pool wait cannot later begin membership reads", async () => {
+  const env = await testDatabase();
+  const lock = await env.pool.connect();
+  try {
+    for (const path of [
+      "schema.sql",
+      "backend/af-schema.sql",
+      "datasets/schema.sql",
+    ])
+      await env.pool.query(
+        await readFile(new URL("../src/" + path, import.meta.url), "utf8"),
+      );
+    const { createDatasetMembersRepository } = await import(
+      "../src/persistence/dataset-members.ts"
+    );
+    const context = {
+      backendId: "Back12",
+      backendVersion: "version",
+      pageId: "Page12",
+      subject: null,
+    };
+    const repository = createDatasetMembersRepository(
+      createSqlDatabase({
+        pool: env.pool,
+        initialize: async () => {},
+        statementTimeoutMs: 15000,
+      }),
+    );
+    await lock.query("BEGIN");
+    await lock.query(
+      "LOCK TABLE dataset_member_bindings IN ACCESS EXCLUSIVE MODE",
+    );
+    await assert.rejects(
+      repository.snapshot(context, new AbortController().signal),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const active = await env.pool.query(
+      "SELECT count(*)::int AS count FROM pg_stat_activity WHERE state='active' AND query LIKE 'SELECT DISTINCT b.source_namespace,b.page_version FROM dataset_member_bindings b%' AND pid<>pg_backend_pid()",
+    );
+    assert.equal(active.rows[0].count, 0);
+    let acquired!: (
+      client: import("../src/persistence/sql-contracts.ts").SqlClient,
+    ) => void;
+    let queries = 0,
+      discarded = 0;
+    const pooled = createDatasetMembersRepository(
+      createSqlDatabase({
+        pool: {
+          connect: () =>
+            new Promise((resolve) => {
+              acquired = resolve;
+            }),
+        },
+        initialize: async () => {},
+        statementTimeoutMs: 15000,
+      }),
+    );
+    const abort = new AbortController();
+    const pending = pooled.snapshot(context, abort.signal);
+    await new Promise((resolve) => setImmediate(resolve));
+    abort.abort();
+    await assert.rejects(pending);
+    acquired({
+      query: async () => {
+        queries++;
+        return { rows: [], rowCount: 0 };
+      },
+      release: (discard) => {
+        if (discard) discarded++;
+      },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(queries, 0);
+    assert.equal(discarded, 1);
+  } finally {
+    await lock.query("ROLLBACK");
+    lock.release();
+    await env.cleanup();
+  }
+});

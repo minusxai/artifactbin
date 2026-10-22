@@ -14,6 +14,7 @@ const snapshot = {
 };
 test("members capability captures authority and fails closed without service or matching principal", async () => {
   let calls = 0;
+  let received: AbortSignal | undefined;
   const reads = {
     read: async () => {
       throw Error("not read");
@@ -23,7 +24,8 @@ test("members capability captures authority and fails closed without service or 
     throw Error("not connector");
   };
   const members = {
-    members: async (actual: typeof context) => {
+    members: async (actual: typeof context, signal?: AbortSignal) => {
+      received = signal;
       assert.deepEqual(actual, context);
       calls++;
       return snapshot;
@@ -42,6 +44,7 @@ test("members capability captures authority and fails closed without service or 
     await handler({ tenant: "page", subject: "viewer" }, request, signal),
     snapshot,
   );
+  assert.equal(received, signal);
   for (const principal of [
     { tenant: "other", subject: "viewer" },
     { tenant: "page", subject: "other" },
