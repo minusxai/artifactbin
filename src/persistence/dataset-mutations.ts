@@ -13,11 +13,11 @@ import {
   DatasetMutationError,
   DATASET_SQL_LIMITS as limits,
 } from "../datasets/mutation/contracts.ts";
+import type { DatasetMutationRepository } from "../datasets/mutation/repository-contracts.ts";
 import type {
-  DatasetMutationRepository,
   DatasetMutationRepositoryOptions,
   RegisterDatasetOperations,
-} from "../datasets/mutation/repository-contracts.ts";
+} from "./dataset-mutation-contracts.ts";
 import { canonical } from "../model-values.ts";
 import { loadDatasetAuthority } from "./datasets.ts";
 import { decodeDatasetBinding } from "./dataset-records.ts";

@@ -1,4 +1,4 @@
-import type { ValidateDatasetUserWrites } from "../datasets/mutation/repository-contracts.ts";
+import type { ValidateDatasetUserWrites } from "./dataset-mutation-contracts.ts";
 import { DatasetMutationError } from "../datasets/mutation/contracts.ts";
 import { selectDatasetMutationPolicy } from "../datasets/mutation/policy.ts";
 import type { DatasetReadAuthority } from "../datasets/contracts.ts";
