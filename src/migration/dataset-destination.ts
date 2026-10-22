@@ -69,7 +69,7 @@ export class PostgresDatasetMetadataDestination
     validateMigrationOwnershipDatasetGrantBatch(
       batch.metadata,
       batch.ownershipDatasetGrants,
-      this.ownershipOverride,
+      batch.additive ? undefined : this.ownershipOverride,
     );
     validateMigrationPersonBindings(batch.metadata);
     validateMigrationSourceQueryBatch(

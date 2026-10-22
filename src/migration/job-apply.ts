@@ -131,7 +131,7 @@ export async function applyMigrationJob(
         ...projectMigrationOwnershipDatasetGrants(
           selectMigrationDatasetMetadata(metadata, ready),
           source.preparedDatasets.ownershipDatasetGrants,
-          options.ownershipOverride,
+          options.standaloneDatasetPages ? undefined : options.ownershipOverride,
         ),
       });
     }

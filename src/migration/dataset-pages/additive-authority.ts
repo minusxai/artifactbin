@@ -144,6 +144,8 @@ export async function verifyAdditiveDatasetBase(
           (h) => h.legacyId === p.snapshot.id && h.version === p.pageVersion,
         ),
     ) ||
+    batch.ownershipDatasetGrants?.length ||
+    batch.sourceQueryRegistrations?.length ||
     batch.metadata.operations?.length ||
     batch.metadata.attachments?.length ||
     batch.metadata.pages.some(
@@ -273,6 +275,11 @@ export async function verifyAdditiveDatasetBase(
         additiveRowSha256(normalizeAdditiveRow(r)),
       ]),
     );
+    if (
+      plan.table === "dataset_resources" &&
+      [...own.keys()].some((key) => !expected.has(key))
+    )
+      throw Error("Additive dataset resource absent from completed base");
     for (const [key, digest] of own)
       if (expected.has(key))
         same(
@@ -328,6 +335,7 @@ export async function captureAdditiveDatasetBase(
   const inventory: AdditiveDatasetBaseApproval["inventory"] = {
     sourceNamespace: namespace,
     datasetFingerprint: String(receipt.fingerprint),
+    resources: batch.metadata.resources,
     baseManifestSha256: batch.baseManifestSha256,
     relationManifestSha256: batch.relationManifestSha256,
     relationExportedAt: batch.relationExportedAt,

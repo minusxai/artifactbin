@@ -114,6 +114,7 @@ export function standaloneDatasetFixture(external = false) {
         verificationReport: { path: "unused", sha256: "a".repeat(64) },
         inventory: {
           sourceNamespace: "fixture",
+          resources: [],
           datasetFingerprint: "a".repeat(64),
           baseManifestSha256: "a".repeat(64),
           relationManifestSha256: "b".repeat(64),

@@ -83,7 +83,15 @@ export async function prepareStandaloneDatasetJob(
     }
     accumulator.add(
       projectMigrationDatasetOwnership(
-        plan.metadata,
+        {
+          ...plan.metadata,
+          resources: plan.metadata.resources.map(
+            (resource) =>
+              admission.base.inventory.resources.find(
+                (existing) => existing.legacyId === resource.legacyId,
+              ) ?? resource,
+          ),
+        },
         artifact.artifacts[0]!,
         source,
         options.ownershipOverride,

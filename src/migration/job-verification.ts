@@ -84,7 +84,7 @@ export async function verifyMigrationJob(
                   ready,
                 ),
                 source.preparedDatasets.ownershipDatasetGrants,
-                options.ownershipOverride,
+                options.standaloneDatasetPages ? undefined : options.ownershipOverride,
               ),
             },
             options.ownershipOverride,

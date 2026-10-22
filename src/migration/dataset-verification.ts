@@ -24,7 +24,7 @@ export async function verifyMigrationDatasetMetadata(
   validateMigrationOwnershipDatasetGrantBatch(
     batch.metadata,
     batch.ownershipDatasetGrants,
-    ownershipOverride,
+    batch.additive ? undefined : ownershipOverride,
   );
   validateMigrationSourceQueryBatch(
     batch.metadata,

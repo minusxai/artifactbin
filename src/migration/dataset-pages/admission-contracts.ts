@@ -17,6 +17,8 @@ export interface AdditiveDatasetBaseApproval {
   inventory: {
     sourceNamespace: string;
     datasetFingerprint: string;
+    /** Exact current resource descriptors from the completed base batch, including reviewed ownership projections. */
+    resources: import("../../datasets/import-contracts.ts").DatasetImportMetadata["resources"];
     baseManifestSha256: string;
     relationManifestSha256: string;
     relationExportedAt: string;

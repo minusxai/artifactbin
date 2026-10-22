@@ -97,3 +97,19 @@ test("relocating the reviewed report preserves backend allocation but changing i
   });
   assert.notDeepEqual(changed!.allocation, first!.allocation);
 });
+test("completed base resource projections are reused without introducing dataset write operations", async () => {
+  const { source, options } = standaloneDatasetFixture();
+  const original = await prepareMigrationJobDatasets(source, options, {
+    host: standaloneDatasetHost,
+  });
+  const approved = {
+    ...original!.metadata.resources[0]!,
+    owner: "assigned@example.test",
+  };
+  options.standaloneDatasetPages!.base.inventory.resources = [approved];
+  const prepared = await prepareMigrationJobDatasets(source, options, {
+    host: standaloneDatasetHost,
+  });
+  assert.deepEqual(prepared!.metadata.resources, [approved]);
+  assert.equal(prepared!.metadata.operations?.length ?? 0, 0);
+});
