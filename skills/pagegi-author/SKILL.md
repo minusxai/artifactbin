@@ -5,7 +5,7 @@ description: Write an Artifactbin page. It's a normal HTML file; keep viewer sta
 
 # Author a Artifactbin page
 
-A Artifactbin page is a normal HTML file. Write it the way you'd write any web page, with any scripts, styles and libraries. The platform adds saving, sharing, comments, presence, design systems and history on top.
+An Artifactbin page is a normal HTML file. Write it the way you'd write any web page, with any scripts, styles and libraries. The platform adds saving, sharing, comments, presence, design systems and history on top.
 
 ## Installation
 
@@ -13,7 +13,7 @@ Install this skill with `npx https://app.artefactbin.dev/skills/artefactbin-skil
 
 ## Core concept
 
-A Artifactbin page is a normal HTML file with one extra line: the core script.
+An Artifactbin page is a normal HTML file with one extra line: the core script.
 
 ```html
 <!DOCTYPE html>
@@ -305,6 +305,8 @@ node scripts/shot.mjs page.html --width 390 --dark --out phone-dark.png
 `check.mjs` reports mistakes with line numbers. `shot.mjs` saves a screenshot (it needs Chrome); look at it. Each script takes `--help`.
 
 ## References
+
+See [Author contract decisions](references/migration-decisions.md) for backend watches, saved views, trash, handles and the skill's installation identity.
 
 Read these when you need them:
 
