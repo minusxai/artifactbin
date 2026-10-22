@@ -108,6 +108,7 @@ export type PlatformMessage =
 export interface PlatformClient {
   ready: Promise<void>;
   pair(): Promise<PlatformConnection>;
+  /** Caller operations refuse transport while pairing; permissions must be refreshed after any pairing attempt. */
   request(operation: PlatformOperation): Promise<any>;
   page(): Promise<PlatformPage>;
   backend(path: PlatformBackendPath, method: "GET" | "POST", body?: unknown, authorizationContext?: string): Promise<PlatformBackendResult>;

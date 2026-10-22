@@ -163,6 +163,8 @@ export function createPlatformSession(
   }
   /** GET /api/library/:id/host as whoever the frame is now; the capability it returns stays here. */
   async function page(): Promise<PlatformPage> {
+    if (pairing) throw Error("Connection pairing is pending");
+    const callerEpoch = identityEpoch;
     if (!binding.fileId) throw Error("Publish this file first");
     const { value } = await call(
       "/api/library/" + encodeURIComponent(binding.fileId) + "/host",
@@ -170,13 +172,15 @@ export function createPlatformSession(
       "GET",
       credential(),
     );
+    if (callerEpoch !== identityEpoch || pairing) throw Error("Platform caller changed");
     const share = value?.state?.remote?.share;
     if (typeof share === "string" && share && !binding.share) binding.share = share;
     return publicPage(value);
   }
   /** A backend route under the page, with the frame's credential; the status and body come back as they are. */
   async function backend(path: unknown, method: unknown, body: unknown, expectedContext?: string) {
-    if (expectedContext !== undefined && (pairing || expectedContext !== authorizationContext))
+    if (pairing) throw Error("Connection pairing is pending");
+    if (expectedContext !== undefined && expectedContext !== authorizationContext)
       throw Error("Caller changed before the backend request was sent");
     if (!binding.fileId) throw Error("Publish this file first");
     if (typeof path !== "string" || !BACKEND_PATHS.includes(path))
@@ -227,6 +231,8 @@ export function createPlatformSession(
         binding.share = value.publication.share;
         binding.sourceRevision = value.publication.sourceRevision;
       }
+      identityEpoch++;
+      authorizationContext = null;
       token = value.token;
       return {
         username: value.username,
@@ -237,6 +243,7 @@ export function createPlatformSession(
     }
   }
   async function request(op: PlatformOperation) {
+    if (pairing) throw Error("Connection pairing is pending");
     if (!binding.fileId) throw Error("Publish this file first");
     if (!op || typeof op !== "object")
       throw Error("Unsupported platform operation");

@@ -458,3 +458,32 @@ test('portable final credential owner rejects queued old-context mutations and s
   assert.equal(lastAuthorization,'Bearer synthetic-b');
   session.dispose();
 });
+
+for (const succeeds of [true, false]) test(`operations started during ${succeeds ? 'successful' : 'failed'} pairing never transport old authority`, async () => {
+  let release!: (response:Response)=>void;
+  let started!: ()=>void;
+  const polling = new Promise<void>(resolve=>{started=resolve;});
+  let permissionReads=0, backendWrites=0;
+  const session = createPlatformSession('https://service.example',binding,{
+    fetch:async(url:string)=>{
+      if(url.endsWith('/api/pair')) return new Response(JSON.stringify({code:'code',deviceCode:'device'}),{status:201});
+      if(url.endsWith('/poll')) {started();return new Promise<Response>(resolve=>{release=resolve;});}
+      if(url.endsWith('/permissions')) {permissionReads++;return new Response(JSON.stringify({read:true,authorizationContext:permissionReads===1?'context-a':'current-context'}));}
+      backendWrites++;return new Response(JSON.stringify({data:{}}));
+    },sleep:async()=>{},emit(){},
+  });
+  await session.handle({kind:'request',operation:{kind:'permissions'}});
+  const pair=session.handle({kind:'pair',pairGeneration:1});
+  await polling;
+  await assert.rejects(session.handle({kind:'request',operation:{kind:'permissions'}}),/pair|connect|caller/i);
+  await assert.rejects(session.handle({kind:'backend',path:'graphql',method:'POST',body:{query:'mutation { save }'}}),/pair|connect|caller/i);
+  assert.equal(permissionReads,1);
+  assert.equal(backendWrites,0);
+  release(new Response(JSON.stringify(succeeds?{purpose:'document',token:'synthetic-b',username:'b'}:{error:'pair rejected'}),{status:succeeds?200:403}));
+  if(succeeds) await pair; else await assert.rejects(pair);
+  await assert.rejects(session.handle({kind:'backend',path:'graphql',method:'POST',body:{query:'mutation { save }'},authorizationContext:'context-a'}),/caller/i);
+  await session.handle({kind:'request',operation:{kind:'permissions'}});
+  await session.handle({kind:'backend',path:'graphql',method:'POST',body:{query:'mutation { save }'},authorizationContext:'current-context'});
+  assert.equal(backendWrites,1);
+  session.dispose();
+});
