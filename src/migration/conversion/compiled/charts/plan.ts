@@ -130,3 +130,14 @@ export function compileChartPlan(
   ) as Record<string, unknown>;
   return { key, runtime, width, height };
 }
+
+/** These two Question views are rendered reactively by the kit and need no Vega engine. */
+export function isKitQuestionView(viz: unknown): boolean {
+  return (
+    !!viz &&
+    typeof viz === "object" &&
+    ["table", "single_value"].includes(
+      String((viz as Record<string, unknown>).kind),
+    )
+  );
+}

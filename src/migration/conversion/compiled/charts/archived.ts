@@ -1,6 +1,6 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { compileChartPlan } from "./plan.ts";
+import { compileChartPlan, isKitQuestionView } from "./plan.ts";
 import type { CompiledChartPlan } from "./contracts.ts";
 /** Called only inside the bounded archived compiler subprocess. Never import from page boot. */
 export async function prepareArchivedChartPlans(
@@ -43,7 +43,7 @@ export async function prepareArchivedChartPlans(
         const attr = (name: string) =>
           node.attributes.find((a: any) => a.name === name)?.value;
         const vizAttr = attr("viz");
-        if (vizAttr) {
+        if (vizAttr && !(vizAttr.static && isKitQuestionView(vizAttr.json))) {
           if (!vizAttr.static || deepHasValueHole(vizAttr.json))
             throw Error(
               "Templated chart requires a finite offline plan adapter",

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   compileChartPlan,
+  isKitQuestionView,
   chartEnvelopeKey,
 } from "../../../src/migration/conversion/compiled/charts/plan.ts";
 import type {
@@ -67,4 +68,14 @@ test("chart plans refuse assets, oversized runtime and ambient event streams", (
       ports,
     ),
   );
+});
+
+test("Question tables and single values retain the kit's reactive renderer", () => {
+  assert.equal(isKitQuestionView({ kind: "table" }), true);
+  assert.equal(
+    isKitQuestionView({ kind: "single_value", yCols: ["amount"] }),
+    true,
+  );
+  assert.equal(isKitQuestionView({ kind: "bar" }), false);
+  assert.equal(isKitQuestionView({ kind: "vega-lite" }), false);
 });
