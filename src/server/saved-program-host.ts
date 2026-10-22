@@ -175,7 +175,7 @@ export function createSavedProgramHost(options: {
         return JSON.stringify(result);
       };
       return program.native
-        ? withNativeProgramLock(options.database, saved.pageId, execute)
+        ? withNativeProgramLock(options.database, saved.pageId, execute, signal)
         : execute();
     },
   };

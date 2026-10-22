@@ -1,4 +1,5 @@
 import pg from "pg";
+import { DEFAULT_SQL_POOL_CAPACITY } from "./persistence/sql-contracts.ts";
 import { createSqlDatabase } from "./persistence/sql.ts";
 import { createInitializer } from "./persistence/bootstrap.js";
 import { createDocumentCatalog } from "./persistence/document-catalog.js";
@@ -20,7 +21,7 @@ export function database({
   const pool = new pg.Pool({
     connectionString,
     options: `-c search_path=${schema},public`,
-    max: 10,
+    max: DEFAULT_SQL_POOL_CAPACITY,
     connectionTimeoutMillis: 5000,
   });
   pool.on("error", () =>
@@ -29,6 +30,7 @@ export function database({
   const initialize = createInitializer(pool, schema);
   const sql = createSqlDatabase({
     pool,
+    poolCapacity: DEFAULT_SQL_POOL_CAPACITY,
     initialize,
     statementTimeoutMs: 15000,
     lockTimeoutMs: 5000,

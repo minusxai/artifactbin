@@ -108,3 +108,11 @@ test("invalid timeout configurations fail before acquiring SQL resources", () =>
   );
   assert.deepEqual(f.releases, []);
 });
+
+test("SQL adapters expose their declared pool capacity and reject impossible limits", () => {
+  const pool = {connect: async () => { throw Error("must not connect"); }};
+  const options = {pool, initialize: async () => {}, statementTimeoutMs: 15000};
+  assert.equal(createSqlDatabase({...options, poolCapacity: 8}).poolCapacity, 8);
+  for (const poolCapacity of [0, -1, 1.5, NaN])
+    assert.throws(() => createSqlDatabase({...options, poolCapacity}), /capacity/);
+});

@@ -1,3 +1,4 @@
+import { DEFAULT_SQL_POOL_CAPACITY } from "./sql-contracts.ts";
 import { deadlineSqlTransaction } from "./sql-deadline.ts";
 import type {
   SqlClient,
@@ -8,10 +9,13 @@ import type {
 export type * from "./sql-contracts.ts";
 export function createSqlDatabase({
   pool,
+  poolCapacity = DEFAULT_SQL_POOL_CAPACITY,
   initialize,
   statementTimeoutMs,
   lockTimeoutMs,
 }: SqlDatabaseOptions): SqlDatabase {
+  if (!Number.isSafeInteger(poolCapacity) || poolCapacity < 1)
+    throw new RangeError("Invalid SQL pool capacity");
   for (const timeout of [statementTimeoutMs, lockTimeoutMs]) {
     if (
       timeout !== undefined &&
@@ -20,6 +24,7 @@ export function createSqlDatabase({
       throw new RangeError("Invalid SQL timeout");
   }
   return {
+    poolCapacity,
     async transaction<T>(
       work: (client: SqlClient) => Promise<T>,
       options?: SqlTransactionOptions,

@@ -1,3 +1,5 @@
+/** The application pool and consumers share this declared capacity. */
+export const DEFAULT_SQL_POOL_CAPACITY = 10;
 /** SQL-only adapter boundary. Domain operations must expose semantic ports instead. */
 export interface SqlClient {
   query(
@@ -16,6 +18,8 @@ export interface SqlTransactionOptions {
   readonly signal?: AbortSignal;
 }
 export interface SqlDatabase {
+  /** Actual maximum connection count; injected adapters default to DEFAULT_SQL_POOL_CAPACITY. */
+  readonly poolCapacity?: number;
   transaction<T>(
     work: (client: SqlClient) => Promise<T>,
     options?: SqlTransactionOptions,
@@ -23,6 +27,8 @@ export interface SqlDatabase {
 }
 export interface SqlDatabaseOptions {
   pool: SqlPool;
+  /** Must match the underlying driver pool maximum. */
+  poolCapacity?: number;
   initialize: () => Promise<void>;
   statementTimeoutMs: number;
   lockTimeoutMs?: number;
