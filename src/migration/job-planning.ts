@@ -104,7 +104,7 @@ export async function planMigrationJob(
   const readinessRows: MigrationReadinessRow[] = [];
   const pageDigests = new Map<string, string>();
   const pageFormats = new Map<string, string>();
-  const links: { sourcePageId: string; legacyId: string; pageId: string }[] =
+  const links: { sourcePageId: string; legacyId: string; pageId: string; unmapped: boolean }[] =
     [];
   const conversionStrategy = options.conversionStrategy;
   const reportPath = options.reportPath;
@@ -176,8 +176,8 @@ export async function planMigrationJob(
                   legacyOrigins: options.legacyOrigins,
                   targetOrigin: options.origin,
                   readyPages: new Set(),
-                  onDiagnostic: ({ legacyId, pageId }) =>
-                    links.push({ sourcePageId: page.pageId, legacyId, pageId }),
+                  onDiagnostic: ({ legacyId, pageId, disposition }) =>
+                    links.push({ sourcePageId: page.pageId, legacyId, pageId, unmapped: disposition === "legacy-target-unmapped" }),
                 });
               }
               pageDigests.set(page.pageId, migrationPageDigest(page));
@@ -281,7 +281,7 @@ export async function planMigrationJob(
           .map((link) => ({
             ...link,
             disposition: options.legacyOrigins.length
-              ? "legacy-target-blocked"
+              ? link.unmapped ? "legacy-target-unmapped" : "legacy-target-blocked"
               : "legacy-origin-required",
           })),
       }),

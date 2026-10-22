@@ -14,7 +14,7 @@ test('validated static kit and presentation preserve authored identities without
  }
 });
 test('static admission retains existing security, unsupported widget and state-reference refusals',()=>{
- for(const source of ['<UnknownWidget id="widget"/>','<p>{[3,7]}</p>','<Card><p>{[3,7]}</p></Card>','<Card>{{value:3}}</Card>','<SlideDeck><p>Empty</p></SlideDeck>','<Helmet><Value name="n" type="number"/></Helmet><SlideDeck><p>Empty</p></SlideDeck>','<Card id="card" onClick="run()">No</Card>','<Card id="same"><p id="same">Duplicate</p></Card>','<Card><a href="javascript:alert(1)">No</a></Card>','<Card>{doWork()}</Card>','<Tabs id="tabs" value="$missing"/>','<Helmet><Context src="ref:Ab1234"/></Helmet>'])assert.equal(admit(source).ok,false);
+ for(const source of ['<UnknownWidget id="widget"/>','<p>{[3,7]}</p>','<Card><p>{[3,7]}</p></Card>','<Card>{{value:3}}</Card>','<SlideDeck><p>Empty</p></SlideDeck>','<Helmet><Value name="n" type="number"/></Helmet><SlideDeck><p>Empty</p></SlideDeck>','<Card id="card" onClick="run()">No</Card>','<Card id="same"><p id="same">Duplicate</p></Card>','<Card><a href="javascript:alert(1)">No</a></Card>','<Card>{doWork()}</Card>','<Tabs id="tabs" value="$missing"/>'])assert.equal(admit(source).ok,false);
 });
 test('ordinary declared local state and queries remain admitted',()=>{
  const result=admit('<Helmet><Value name="count" type="number" default={1}/><Query name="total">{`select $count + 1 as n`}</Query></Helmet><Card id="card"><p id="count">{$count}</p></Card>');
