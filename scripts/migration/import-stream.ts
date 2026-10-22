@@ -55,7 +55,21 @@ if (Boolean(supplementalReceipts) !== Boolean(supplementalObjects))
   throw Error(
     "Supplemental asset receipts and flat object directory must be supplied together",
   );
+const fontBundleDirectory = process.env.MIGRATION_FONT_BUNDLE_DIRECTORY;
+const fontBundleManifestSha256 =
+  process.env.MIGRATION_FONT_BUNDLE_MANIFEST_SHA256;
+if (Boolean(fontBundleDirectory) !== Boolean(fontBundleManifestSha256))
+  throw Error(
+    "Font bundle directory and manifest digest must be supplied together",
+  );
 const options: MigrationJobOptions = {
+  fontBundle:
+    fontBundleDirectory && fontBundleManifestSha256
+      ? {
+          directory: fontBundleDirectory,
+          manifestSha256: fontBundleManifestSha256,
+        }
+      : undefined,
   supplementalAssets:
     supplementalReceipts && supplementalObjects
       ? {

@@ -80,8 +80,12 @@ export function createMigrationConverter(
       colorMode:
         meta.colorMode === "dark" ? ("dark" as const) : ("light" as const),
     };
-    const result = await compileArchivedStatic(compiledInput, {
+    const compilerOptions = {
       legacyRoot: options.legacyRoot,
+      fontBundle: options.fontBundle,
+    };
+    const result = await compileArchivedStatic(compiledInput, {
+      ...compilerOptions,
       compiler: options.compiler,
     });
     if (
@@ -93,13 +97,13 @@ export function createMigrationConverter(
       "./conversion/compiled/local.ts"
     );
     const local = await compileArchivedLocal(compiledInput, {
-      legacyRoot: options.legacyRoot,
+      ...compilerOptions,
       compiler: options.localCompiler,
     });
     if (local.classification !== "manual-blocked")
       return { ...local, strategy: options.strategy };
     const authored = await compileArchivedAuthor(compiledInput, {
-      legacyRoot: options.legacyRoot,
+      ...compilerOptions,
       compiler: options.localCompiler,
     });
     if (authored.classification !== "manual-blocked")

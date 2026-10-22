@@ -31,6 +31,7 @@ export interface MigrationJobOptions {
   editorManageRestricted: boolean;
   conversionStrategy: MigrationConversionStrategy;
   archivedRoot?: string;
+  fontBundle?: import("./conversion/compiled/fonts/capture-contracts.ts").CapturedFontBundleInput;
   conversionCacheDirectory?: string;
   datasets?: { receiptsPath: string; relationDirectory: string };
   supplementalAssets?: { receiptsPath: string; objectsDirectory: string };

@@ -5,7 +5,8 @@ import { prepareMigrationJobDatasets } from "./job-datasets.ts";
 import { writeFile } from "node:fs/promises";
 import { destinationSchemas } from "./destination-schema.ts";
 import { createMigrationConverter } from "./convert.ts";
-import { cachedMigrationConverter, archivedCompilerIdentity } from "./cache.ts";
+import { cachedMigrationConverter } from "./cache.ts";
+import { migrationCompilerIdentity } from "./compiler-identity.ts";
 import { PostgresMigrationDestination } from "./postgres.ts";
 import { prepareMigrationJobSource } from "./job-source.ts";
 import { createMigrationJobPlanner, planMigrationJob } from "./job-planning.ts";
@@ -34,15 +35,15 @@ export async function runMigrationJob(
   source.preparedDatasets = await prepareMigrationJobDatasets(source, options, {
     host: ports.backendHost,
   });
-  const identify =
-    ports.compilerIdentity ??
-    (() => archivedCompilerIdentity(options.archivedRoot ?? ""));
+  const identify = () =>
+    migrationCompilerIdentity(options, ports.compilerIdentity);
   const compilerIdentity = await identify();
   let convert =
     ports.convert ??
     createMigrationConverter({
       strategy: options.conversionStrategy,
       legacyRoot: options.archivedRoot,
+      fontBundle: options.fontBundle,
     });
   const cache = options.conversionCacheDirectory
     ? cachedMigrationConverter(convert, {
