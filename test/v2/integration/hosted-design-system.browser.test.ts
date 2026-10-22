@@ -136,8 +136,24 @@ for (const [name, engine] of engines) {
       await asked;
       const frame = page.frameLocator("#pg-frame");
       await frame.getByRole("heading", { name: "Styled" }).waitFor({ state: "attached" });
-      // The page's own document is attached while its stylesheet is still held: record every startup
-      // change from here on, so showing the page before the release is caught in order, not by a timer.
+      // Checkpoint: everything but the held stylesheet has happened. The page's document is parsed and
+      // its design-system link points at volta with no sheet of that href yet (Chromium and WebKit keep
+      // the page's inline sheet on the link until the new one arrives), so a ready page here would be
+      // ready without its CSS.
+      const documentFrame = await (await page.$("#pg-frame"))?.contentFrame();
+      assert.ok(documentFrame, "the page's document frame");
+      const pendingVolta = () => {
+        const link = document.querySelector('link[data-af="design-system"]') as HTMLLinkElement | null;
+        return (
+          document.readyState !== "loading" &&
+          !!link &&
+          /\/volta\.css$/.test(link.href) &&
+          !(link.sheet && link.sheet.href === link.href)
+        );
+      };
+      await documentFrame.waitForFunction(pendingVolta);
+      // From here on record every startup change, so showing the page before the release is caught in
+      // order, not by a timer.
       await page.evaluate(() => {
         const order: string[] = ((window as any).startupOrder = []);
         new MutationObserver(() => {
@@ -149,6 +165,7 @@ for (const [name, engine] of engines) {
         "ready",
         "the page is not shown while its design system's CSS is still loading",
       );
+      assert.equal(await documentFrame.evaluate(pendingVolta), true, "the design system's CSS is still pending at the release");
       await page.evaluate(() => (window as any).startupOrder.push("released"));
       const released = Date.now();
       release();
