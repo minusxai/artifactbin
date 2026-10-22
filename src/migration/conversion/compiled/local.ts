@@ -1,5 +1,6 @@
 /** Explicit offline route; never a fallback for blocked static conversion. */
 import { Parser } from "acorn";
+import { safeInlineModule } from "./module-safety.ts";
 import jsx from "acorn-jsx";
 import { parseFragment, serialize } from "parse5";
 import { convertLegacyJsx } from "../index.ts";
@@ -219,6 +220,7 @@ export async function compileArchivedLocal(
     return blocked("compiled-local-failed");
   }
   if (
+    !safeInlineModule(output?.javascript) ||
     !output ||
     typeof output.html !== "string" ||
     typeof output.css !== "string" ||
