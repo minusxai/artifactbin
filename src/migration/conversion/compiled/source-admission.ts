@@ -12,11 +12,7 @@ import jsx from "acorn-jsx";
 import { convertLegacyJsx } from "../index.ts";
 import { MAX_COMPILED_SOURCE_BYTES } from "./contracts.ts";
 import { admitAuthorSource } from "./author/admission.ts";
-import {
-  createCompiledDatasetMutations,
-  compiledDatasetMutationDocument,
-} from "./dataset-mutations.ts";
-import { parse as parseGraphql } from "graphql";
+import {admitCompiledDatasetMutationBindings} from "./dataset-mutation-bindings.ts";
 import { validDatasetBinding } from "./dataset-reader.ts";
 import { sourceValueDeclaration } from "./source-manifest.ts";
 import type { LocalDeclaration } from "./local-contracts.ts";
@@ -140,24 +136,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       (historical && registeredMutations.length)
     )
       throw Error();
-    createCompiledDatasetMutations({
-      bindings: registeredMutations,
-      client: {
-        mutate: async () => {
-          throw Error();
-        },
-      },
-      documents: Object.fromEntries(
-        registeredMutations.map((b) => [
-          b.backendNamespace,
-          parseGraphql(compiledDatasetMutationDocument(b.backendNamespace)),
-        ]),
-      ),
-      requestId: () => "",
-      values: () => ({}),
-      reset: () => {},
-      committed: () => {},
-    });
+    admitCompiledDatasetMutationBindings(registeredMutations);
   } catch {
     return blocked("compiled-mutation-binding");
   }
