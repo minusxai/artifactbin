@@ -1,3 +1,4 @@
+import { runMigrationBoundedWork } from "./bounded-work.ts";
 import { prepareMigrationPageQueries } from "./job-queries.ts";
 import type { MigrationQueryCompiler } from "./query-preparation-contracts.ts";
 import { migrationDatasetVersionKey } from "./job-dataset-contracts.ts";
@@ -156,9 +157,7 @@ export async function planMigrationJob(
   > = {};
   const totals = { created: 0, unchanged: 0, blocked: 0, errors: 0 };
   try {
-    for (let offset = 0; offset < ids.length; offset += concurrency)
-      await Promise.all(
-        ids.slice(offset, offset + concurrency).map(async (id) => {
+    await runMigrationBoundedWork(ids, concurrency, async (id) => {
           const artifact = await source.readArtifact(id);
           try {
             const plan = await planArtifact(artifact);
@@ -314,8 +313,7 @@ export async function planMigrationJob(
               }) + "\n",
             );
           }
-        }),
-      );
+    });
     const readiness = resolveMigrationReadiness(readinessRows);
     const ready = new Set(readiness.ready);
     for (const row of readinessRows)
