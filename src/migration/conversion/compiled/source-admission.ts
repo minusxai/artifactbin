@@ -1,6 +1,6 @@
 import {readLocalReactiveExpression} from "./reactive-source.ts";
-import {readLocalIdentityPlan} from "./source-identity-plan.ts";
-import { admitDataControl, controlLiteral } from "./data-controls.ts";
+import {readLocalIdentityPlan, validIdentityConditions} from "./source-identity-plan.ts";
+import { admitDataControl, admitDataColumn, controlLiteral } from "./data-controls.ts";
 import type { CompiledDataControl } from "./data-control-contracts.ts";
 /** Source capability admission only: never invokes a compiler or evaluates source. */
 import { Parser } from "acorn";
@@ -26,7 +26,7 @@ const activeUri = (v: string) =>
     v.replace(/[\u0000-\u0020\u007f]/g, "").toLowerCase(),
   );
 const allowed = new Set(
-  "Helmet Import Value Query Mutation Question Chart Select DataTable For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "Helmet Import Value Query Mutation Question Chart Select DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -241,6 +241,8 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
         invalid = true;
       if (node.type === "JSXElement") {
         const name = node.openingElement.name.name;
+        if (loopTable && !loopDepth && !["Column", "span", "strong", "em", "b", "i", "small", "code", "br", "p", "div", "a"].includes(name)) invalid = true;
+        if (name === "Column" && (parent?.type !== "JSXElement" || parent.openingElement.name.name !== "DataTable")) invalid = true;
         if (
           typeof name !== "string" ||
           ["script", "iframe", "object", "embed"].includes(
@@ -267,7 +269,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           const each = attrs.find((a: any) => a.name?.name === "each")?.value?.expression;
           const key = attrs.find((a: any) => a.name?.name === "keyBy")?.value?.value;
           const owner = attrs.find((a: any) => a.name?.name === "id")?.value?.value;
-          if (loopDepth || each?.type !== "Identifier" || !/^\$[A-Za-z]\w*$/.test(each.name) || typeof key !== "string" || !key || ["constructor", "prototype", "__proto__"].includes(key) || typeof owner !== "string" || !owner) invalid = true;
+          if (loopDepth || loopTable || each?.type !== "Identifier" || !/^\$[A-Za-z]\w*$/.test(each.name) || typeof key !== "string" || !key || ["constructor", "prototype", "__proto__"].includes(key) || typeof owner !== "string" || !owner) invalid = true;
           else {
             childLoopTable = each.name.slice(1);
             loopTables.add(childLoopTable!);
@@ -317,6 +319,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           imports.add(attrs.name);
         }
         if (name === "Select" || name === "DataTable") {
+          if (new Set(node.openingElement.attributes.map((a:any)=>a.name?.name)).size !== node.openingElement.attributes.length) invalid = true;
           const attrs = Object.fromEntries(
             node.openingElement.attributes.map((a: any) => {
               if (a.type !== "JSXAttribute" || typeof a.name?.name !== "string")
@@ -324,12 +327,29 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
               return [a.name.name, controlLiteral(a.value)];
             }),
           );
+          const meaningful = node.children.filter((c: any) => !(c.type === "JSXText" && !c.value.trim()) && !(c.type === "JSXExpressionContainer" && c.expression.type === "JSXEmptyExpression"));
+          const columns = name === "DataTable" && meaningful.length ? meaningful.map((column: any) => {
+            if (column.type !== "JSXElement" || column.openingElement.name.name !== "Column") throw Error("Only readonly Columns are supported");
+            if (new Set(column.openingElement.attributes.map((a:any)=>a.name?.name)).size !== column.openingElement.attributes.length || column.openingElement.attributes.some((a:any)=>a.name?.name==='hasContent')) throw Error("Ambiguous Column attributes");
+            return admitDataColumn(Object.fromEntries(column.openingElement.attributes.map((a:any) => {
+              if (a.type !== "JSXAttribute" || typeof a.name?.name !== "string") throw Error("Invalid Column attribute");
+              return [a.name.name, controlLiteral(a.value)];
+            })), column.children.some((c:any) => !(c.type === "JSXText" && !c.value.trim()) && !(c.type === "JSXExpressionContainer" && c.expression.type === "JSXEmptyExpression")));
+          }) : undefined;
+          if (columns?.length) {
+            if (loopTable) invalid = true;
+            const data = attrs.data;
+            if (typeof data !== "string" || !/^\$[A-Za-z]\w*$/.test(data)) invalid = true;
+            else {
+              childLoopTable = data.slice(1);
+              if (typeof attrs.rowKey === "string") loopKeys.push({table:childLoopTable,key:attrs.rowKey});
+            }
+          }
           const plan = admitDataControl(
             name,
             attrs,
-            node.children.some(
-              (c: any) => c.type !== "JSXText" || c.value.trim(),
-            ),
+            meaningful.length > 0,
+            columns,
           );
           dataControls.push(plan);
           if (plan.kind === "select") {
@@ -347,6 +367,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           )
             invalid = true;
           const attrName = attr.name?.name?.toLowerCase();
+          if (loopTable && ["run", "set", "args"].includes(attrName)) invalid = true;
           if (
             attrName === "data-migration-dataset-status" ||
             attrName?.startsWith("data-migration-author-") ||
@@ -549,6 +570,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     };
     walk(tree);
     dynamicIdentities = readLocalIdentityPlan(tree);
+    if (!validIdentityConditions(dynamicIdentities, expectedDeclarations)) invalid = true;
     for (const reference of [...loopKeys.map(r => ({table:r.table,field:r.key})), ...rowReads]) {
       const declaration = expectedDeclarations.find(d => d.name === reference.table);
       if (declaration?.type === "table" && !declaration.columns.some(c => c.name === reference.field)) invalid = true;

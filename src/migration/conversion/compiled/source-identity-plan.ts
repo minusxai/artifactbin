@@ -18,6 +18,21 @@ export function readLocalIdentityPlan(tree:unknown):LocalDynamicIdentityPlan {
     if(['Helmet','Import','Value','Query','Mutation'].includes(name))return [];
     const attr=(key:string)=>{const a=node.openingElement.attributes.find((a:any)=>a.name?.name===key);return a?controlLiteral(a.value):undefined;};
     const id=attr('id');
+    if(name==='DataTable' && node.children.some((n:any)=>n.type==='JSXElement' && n.openingElement.name.name==='Column')){
+      const regions:LocalIdentityRegion[]=typeof id==='string'?[{kind:'node',id}]:[];
+      const data=attr('data');
+      for(const column of node.children.filter((n:any)=>n.type==='JSXElement')){
+        const columnAttr=(key:string)=>{const a=column.openingElement.attributes.find((a:any)=>a.name?.name===key);return a?controlLiteral(a.value):undefined;};
+        const header=columnAttr('id');if(typeof header==='string')regions.push({kind:'node',id:header});
+        const children=column.children.flatMap((n:any)=>visit(n,depth+1));
+        if(children.length){
+          const rowKey=attr('rowKey'),col=columnAttr('col');
+          if(typeof id!=='string'||typeof data!=='string'||typeof rowKey!=='string'||typeof col!=='string')throw Error('Durable Column identity required');
+          regions.push({kind:'cell',owner:id,table:data.slice(1),rowKey,column:col,children});
+        }
+      }
+      return regions;
+    }
     if(name==='For'){
       const each=node.openingElement.attributes.find((a:any)=>a.name?.name==='each')?.value?.expression;
       if(each?.type!=='Identifier'||typeof id!=='string'||typeof attr('keyBy')!=='string')throw Error('Keyed identity repeat');
@@ -26,4 +41,17 @@ export function readLocalIdentityPlan(tree:unknown):LocalDynamicIdentityPlan {
     return [...(typeof id==='string'?[{kind:'node' as const,id}]:[]),...node.children.flatMap((n:any)=>visit(n,depth+1))];
   };
   return {regions:visit(tree)};
+}
+
+/** Branch previews may depend on admitted scalar defaults and scoped rows,
+ * never a table object or a server query snapshot the source does not own. */
+export function validIdentityConditions(plan:LocalDynamicIdentityPlan,declarations:readonly import('./local-contracts.ts').LocalDeclaration[]):boolean {
+  const scalar=(expression:import('./reactive-source-contracts.ts').LocalReactiveExpression):boolean=>{
+    if(expression.kind==='signal')return declarations.some(d=>d.name===expression.name&&d.type!=='table');
+    if(expression.kind==='not')return scalar(expression.value);
+    if(expression.kind==='binary')return scalar(expression.left)&&scalar(expression.right);
+    return true;
+  };
+  const visit=(regions:readonly LocalIdentityRegion[]):boolean=>regions.every(region=>region.kind==='node'||(region.kind==='repeat'||region.kind==='cell'?visit(region.children):scalar(region.test)&&visit(region.yes)&&visit(region.no)));
+  return visit(plan.regions);
 }

@@ -28,9 +28,24 @@ test('source admission records conditional and stable keyed identity regions wit
 });
 test('source admission refuses ambient execution, unresolved cells, unscoped rows and unstable loops',()=>{
   for(const markup of [
-    '{$summary.n ? <p>not admitted</p> : <span>other</span>}', '{window.location}', '{$summary["n"]}', '{$mode.constructor}', '{$mode.n}', '{$_row.label}',
+    '{$rows && <p>not scalar</p>}', '{$summary ? <p>not scalar</p> : <span>other</span>}', '{$summary.n ? <p>not admitted</p> : <span>other</span>}', '{window.location}', '{$summary["n"]}', '{$mode.constructor}', '{$mode.n}', '{$_row.label}',
     '{$mode == "a" && <p>bad</p>}', '{fetch("/secret") && <p>bad</p>}',
     '<For each={$rows}><span>bad</span></For>', '<For id="list" each={$rows} keyBy="missing"><span>bad</span></For>', '<For id="list" each={$rows} keyBy="key"><span>{$_row.missing}</span></For>', '<For id="list" each={$mode} keyBy="key"><span>bad</span></For>',
     '<For id="list" each={$rows} keyBy="key"><For id="nested" each={$rows} keyBy="key"><span>bad</span></For></For>',
   ]) assert.equal(admitLocalSource({...base,source:prefix+markup}).ok,false,markup);
+});
+
+test('read-only column markup preserves headers separately from durable cell instances',()=>{
+  const result=admitLocalSource({...base,source:prefix+'<DataTable id="table" data="$rows" rowKey="key"><Column id="header" col="label" title="Label"><span id="cell">{$_row.label}</span></Column></DataTable>'});
+  assert.ok(result.ok);
+  assert.deepEqual(result.plan.dynamicIdentities.regions,[{kind:'node',id:'table'},{kind:'node',id:'header'},{kind:'cell',owner:'table',table:'rows',rowKey:'key',column:'label',children:[{kind:'node',id:'cell'}]}]);
+  for(const markup of [
+    '<Column col="label"><span>{$_row.label}</span></Column>',
+    '<DataTable id="table" data="$rows" rowKey="key"><Column col="label" col="key"/></DataTable>',
+    '<DataTable id="table" data="$rows" rowKey="key"><Column col="label" hasContent/></DataTable>',
+    '<DataTable id="table" data="$rows" rowKey="key"><p>mixed child</p></DataTable>',
+    '<DataTable id="table" data="$rows"><Column col="label"><span>{$_row.label}</span></Column></DataTable>',
+    '<DataTable id="table" data="$rows" rowKey="key"><Column col="label"><Button set={{mode:"b"}}>write</Button></Column></DataTable>',
+    '<DataTable id="table" data="$rows" rowKey="key"><Column col="label"><span>{$_row.missing}</span></Column></DataTable>',
+  ])assert.equal(admitLocalSource({...base,source:prefix+markup}).ok,false,markup);
 });
