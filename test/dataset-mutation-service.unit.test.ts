@@ -430,7 +430,7 @@ test('registered nullable parameters accept finite scalars with exact required k
 test('nullable row parameters reach real SQLite as scalars with no string conversion',async()=>{
  const {createDatasetMutationEngine}=await import('../src/datasets/sql/engine.ts');const engine=await createDatasetMutationEngine();
  const f=fixture();f.ports.operation=async()=>({...operation,paramTypes:{value:null,row__old:null},rowParams:{old:{param:'row__old',type:null}},sql:"update rows set value=case when typeof($value)='real' then $value else 99 end where value=$row__old"});
- f.ports.execute=job=>engine.mutate(job.input);
+ f.ports.execute=async job=>engine.mutate(job.input);
  f.ports.persist=async rows=>{assert.deepEqual(rows,[{value:2}]);return object;};
  await createDatasetMutationService(f.ports).mutate(context,{...request,params:{value:2,row__old:0}});
  assert.equal(f.calls.includes('commit'),true);
