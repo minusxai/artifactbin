@@ -1,4 +1,5 @@
 import { archivedDialogFocusSource } from "./dialog-source.ts";
+import {readLegacyCellWriteSites} from "./cell-write-source.ts";
 import{readsLegacyViewer}from"./viewer-source.ts";
 import {validateCompiledCellWriteContexts} from "./cell-write-context.ts";
 import {archivedExplicitCellOptionsSource} from "./cell-kit-source.ts";
@@ -402,6 +403,7 @@ const bundled = await bundle({
             input.slideDeck,
             input.personBindings ?? [],
             input.viewerBinding,
+            input.datasetMutations?.some(binding=>binding.valueParam)?readLegacyCellWriteSites(input.source).flatMap(site=>site.optionsQuery?[site.optionsQuery]:[]):[],
           ),
           loader: "js",
         }));
@@ -454,6 +456,7 @@ const bundled = await bundle({
         b.onResolve({ filter: /^migration-identities$/ }, () => ({
           path: path.join(import.meta.dirname, "dynamic-identity-dom.ts"),
         }));
+        b.onResolve({filter:/^migration-mutation-availability$/},()=>({path:path.join(import.meta.dirname,"mutation-availability.ts")}));
         b.onResolve({ filter: /^migration-mutations$/ }, () => ({
           path: path.join(
             path.dirname(new URL(import.meta.url).pathname),

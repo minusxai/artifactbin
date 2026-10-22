@@ -39,6 +39,7 @@ export function localBootSource(
   deck?: import("./slide-deck-contracts.ts").CompiledSlideDeck,
   personBindings: readonly CompiledPersonBinding[] = [],
   viewerBinding?:CompiledViewerBinding,
+  cellOptionQueries: readonly string[] = [],
 ): string {
   const imports = sql?.bindings?.length ?? 0;
   const members=Boolean(sql?.membersBinding);
@@ -49,7 +50,7 @@ ${deck ? "import {startDeck} from 'migration-deck';" : ""}
 ${identities ? "import {installDynamicIdentities} from 'migration-identities';" : ""}
 import {createSignal,createRoot,createEffect,untrack} from 'solid-js';
 ${author ? "import {mount as mountAuthor} from 'migration-author-entry';import {authorApolloPorts} from 'migration-author-ports';" : ""}
-${mutations.length ? "import {createCompiledDatasetMutations,compiledMutationIntentStore} from 'migration-mutations';" : ""}
+${mutations.length ? "import {createCompiledMutationAvailability} from 'migration-mutation-availability';import {createCompiledDatasetMutations,compiledMutationIntentStore} from 'migration-mutations';" : ""}
 ${charts ? "import {charts} from 'migration-charts';" : ""}
 ${personBindings.length ? "import {createCompiledPeople} from 'migration-people';" : ""}
 ${viewerBinding ? "import {createCompiledViewer} from 'migration-viewer';" : ""}
@@ -58,7 +59,7 @@ ${imports ? "import {readCompiledDataset} from 'migration-datasets';" : ""}
 ${sql ? "import {pageEngine} from 'migration-sqlite';" : ""}
 const decodeCompiledWasm=(()=>{const __name=f=>f;return ${decodeCompiledWasm.toString()};})();
 const declarations=${JSON.stringify(declarations)};
-const optionQueries=${JSON.stringify([...new Set(controls.flatMap((p) => (p.kind === "select" && typeof p.options === "string" ? [p.options] : [])))])};
+const optionQueries=${JSON.stringify([...new Set([...cellOptionQueries,...controls.flatMap((p) => (p.kind === "select" && typeof p.options === "string" ? [p.options] : []))])])};
 const completeControlOptions=(()=>{const __name=f=>f;return ${completeControlOptions.toString()};})();
 const createControlOptionsLifecycle=(()=>{const __name=f=>f;return ${createControlOptionsLifecycle.toString()};})();
 const controlPageRequest=(()=>{const __name=f=>f;return ${controlPageRequest.toString()};})();
@@ -93,7 +94,7 @@ export function boot({TREE}) {
  const unavailable=()=>Promise.reject(Error('Shared data is not supported by this migration'));
  ${mutations.length ? datasetMutationBoot(mutations, Boolean(imports)) : ""}
  ${personBindings.length ? personBootSource(personBindings) : ""}
- const context={values, value:name=>values()[name],table,tableSnapshot:table,pending:()=>pending(),error:name=>queryErrors()[name],people:${personBindings.length ? "people" : "()=>({})"},setValue:store.setValue,mutate:unavailable,writesUnavailable:()=>null,mutationUnavailable:name=>{${unavailableQueries ? "return 'Historical shared data writes are unavailable.';" : mutations.length ? "mutationTick();return mutationAdapter.status(name)?.state==='unknown'?'Reconcile the previous save before saving again.':null;" : "return null;"}},mutating:name=>{${mutations.length ? "mutationTick();return mutationAdapter.pending(name);" : "return false;"}},assetsUrl:()=>null,viewer:${viewerBinding ? "viewer" : "()=>null"},drawings:()=>({}),valueType:name=>declarations.find(d=>d.name===name)?.type,nullable:name=>declarations.find(d=>d.name===name)?.default===null,declaresQueries:()=>${Boolean(sql)},writes:{current:()=>[],subscribe:()=>()=>{},dismiss:()=>{}},store:()=>store,trustedPortal:()=>null,loadChart:${charts ? "async()=>charts" : "unavailable"}};
+ const context={values, value:name=>values()[name],table,tableSnapshot:table,pending:()=>pending(),error:name=>queryErrors()[name],people:${personBindings.length ? "people" : "()=>({})"},setValue:store.setValue,mutate:unavailable,writesUnavailable:()=>null,mutationUnavailable:name=>{${unavailableQueries ? "return 'Historical shared data writes are unavailable.';" : mutations.length ? "mutationTick();return mutationAdapter.status(name)?.state==='unknown'?'Reconcile the previous save before saving again.':mutationBindings.some(binding=>binding.name===name&&binding.valueParam)?cellAvailability.unavailable(name):null;" : "return null;"}},mutating:name=>{${mutations.length ? "mutationTick();return mutationAdapter.pending(name);" : "return false;"}},assetsUrl:()=>null,viewer:${viewerBinding ? "viewer" : "()=>null"},drawings:()=>({}),valueType:name=>declarations.find(d=>d.name===name)?.type,nullable:name=>declarations.find(d=>d.name===name)?.default===null,declaresQueries:()=>${Boolean(sql)},writes:{current:()=>[],subscribe:()=>()=>{},dismiss:()=>{}},store:()=>store,trustedPortal:()=>null,loadChart:${charts ? "async()=>charts" : "unavailable"}};
  let ready=false;
  ${deck ? "let stopDeck=()=>{};window.addEventListener('pagehide',()=>stopDeck(),{once:true});" : ""}
  ${identities ? "pageSubscription=" : ""}client.watchQuery({query}).subscribe(({data})=>{${identities ? "if(identityFailed)return;" : ""}if(!ready){ready=true;${identities ? "stopIsland=" : ""}hydrateIsland('d-',TREE,context);${deck ? `stopDeck=startDeck(${JSON.stringify(deck)});` : ''}${identities ? "flushIdentities();if(identityFailed){stopIsland?.();return;}" : ""}}setState(checked(data.compiledPage));${personBindings.length ? "peopleAdapter.update(values());" : ""}${identities ? "flushIdentities();if(identityFailed)return;" : ""}markCompiledReady();void run();});

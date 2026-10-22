@@ -18,11 +18,12 @@ export const generatedDatasetBackendSource = `export const typeDefs = \`
  type DatasetWindow { version: Int! generation: Int! schema: String! table: String! columns: [DatasetColumn!]! rows: DatasetRows! offset: Int! nextOffset: Int totalRows: Int! }
  type DatasetPersonCard { name: String! handle: String image: String }
  type DatasetMembers { generation: String! rows: DatasetRows! }
+ type MutationAvailability { canAttempt: Boolean! }
  type DatasetMutationResult { affected: Int! rowCount: Int! version: Int! generation: Int! }
  type Mutation { mutate(operation: String!, requestId: String!, params: DatasetParams!): DatasetMutationResult! @auth(role: VIEWER) }
- type Query { person(valueName: String!, userId: String!): DatasetPersonCard members: DatasetMembers! read(binding: String!, schema: String!, table: String!, offset: Int!, limit: Int!, expectedVersion: Int, expectedGeneration: Int): DatasetWindow! }
+ type Query { mutationAvailability(operation: String!): MutationAvailability! person(valueName: String!, userId: String!): DatasetPersonCard members: DatasetMembers! read(binding: String!, schema: String!, table: String!, offset: Int!, limit: Int!, expectedVersion: Int, expectedGeneration: Int): DatasetWindow! }
 \`;
-export default { Query: { person: (args, _principal, caps) => caps.dataset.person(args), members: (_args, _principal, caps) => caps.dataset.members(), read: (args, _principal, caps) => caps.dataset.read(args) }, Mutation: { mutate: (args, _principal, caps) => caps.dataset.mutate(args) } };
+export default { Query: { mutationAvailability: (args, _principal, caps) => caps.dataset.mutationAvailability(args), person: (args, _principal, caps) => caps.dataset.person(args), members: (_args, _principal, caps) => caps.dataset.members(), read: (args, _principal, caps) => caps.dataset.read(args) }, Mutation: { mutate: (args, _principal, caps) => caps.dataset.mutate(args) } };
 `;
 function principal(row: LegacyRow): Principal {
   return row.group_id
