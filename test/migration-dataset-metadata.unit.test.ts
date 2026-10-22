@@ -107,6 +107,7 @@ test("all immutable versions and current resource authority stay separate; brows
   const plan = planDatasetMetadata(input());
   assert.equal(plan.metadata.versions.length, 2);
   assert.equal(plan.metadata.resources[0]?.policyRevision, 3);
+  assert.equal(plan.metadata.resources[0]?.generation, 1);
   assert.equal(plan.metadata.versions[0]?.tables[0]?.object.key, digest);
   assert.equal(plan.metadata.bindings[0]?.page.legacyId, "document");
   const browser = JSON.stringify(plan.browserBindings);

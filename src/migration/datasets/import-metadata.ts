@@ -222,7 +222,7 @@ export function planDatasetMetadata(
       currentVersion: row.version,
       policyRevision: snapshot.policyRevision,
       owner: owner(row, maps),
-      generation: 0,
+      generation: 1,
       access: access(
         row,
         (manifest.tables.artifact_shares ?? []).filter(
