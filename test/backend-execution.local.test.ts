@@ -766,3 +766,54 @@ test("trusted dataset_changed survives the remote execution capability roundtrip
     await f.close();
   }
 });
+
+test("trusted dataset_mutation_rejected survives the remote execution capability roundtrip while raw codes are scrubbed", async () => {
+  const { BackendDatasetMutationRejectedError } = await import(
+    "../src/backend/contracts.ts"
+  );
+  const f = await fixture({
+    async compile() {
+      throw Error();
+    },
+    async invoke({ principal, capabilityHandler }) {
+      return capabilityHandler!(
+        principal,
+        {
+          kind: "dataset",
+          operation: "read",
+          input: {
+            binding: "data",
+            schema: "public",
+            table: "rows",
+            offset: 0,
+            limit: 1,
+          },
+        },
+        new AbortController().signal,
+      );
+    },
+  });
+  try {
+    for (const trusted of [true, false])
+      await assert.rejects(
+        f.client.invoke({
+          deployment: {} as never,
+          principal,
+          input: { field: "read", args: null },
+          env: {},
+          reuse: { kind: "one-shot" },
+          capabilityHandler: async () => {
+            throw trusted
+              ? new BackendDatasetMutationRejectedError()
+              : Object.assign(Error("private detail"), {
+                  code: "dataset_mutation_rejected",
+                });
+          },
+        }),
+        { code: trusted ? "dataset_mutation_rejected" : "backend_rejected" },
+      );
+  } finally {
+    await f.client.close();
+    await f.close();
+  }
+});

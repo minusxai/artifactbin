@@ -373,3 +373,43 @@ test("registered expectedAffected refuses real SQLite effects before publishing 
   );
   assert.deepEqual(f.calls, ["begin", "execute", "persist", "commit"]);
 });
+
+test("only a completed terminal refusal is definite; lost dispatch or failed receipt remains unknown", async () => {
+  const { DatasetMutationError } = await import(
+    "../src/datasets/mutation/contracts.ts"
+  );
+  const known = fixture();
+  known.ports.execute = async () => ({
+    error: "wrong count",
+    code: "row_changed",
+  });
+  await assert.rejects(
+    createDatasetMutationService(known.ports).mutate(context, request),
+    (error) =>
+      error instanceof DatasetMutationError &&
+      error.code === "row_changed" &&
+      error.outcome === "rejected",
+  );
+  const unknown = fixture();
+  const lost = Error("lost after dispatch");
+  unknown.ports.execute = async () => {
+    throw lost;
+  };
+  await assert.rejects(
+    createDatasetMutationService(unknown.ports).mutate(context, request),
+    (error) => error === lost,
+  );
+  const failedReceipt = fixture();
+  failedReceipt.ports.execute = async () => ({
+    error: "wrong count",
+    code: "row_changed",
+  });
+  const unavailable = Error("receipt unavailable");
+  failedReceipt.ports.refuse = async () => {
+    throw unavailable;
+  };
+  await assert.rejects(
+    createDatasetMutationService(failedReceipt.ports).mutate(context, request),
+    (error) => error === unavailable,
+  );
+});

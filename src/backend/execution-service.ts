@@ -98,6 +98,7 @@ const CODES: readonly BackendErrorCode[] = [
   "cleanup_failed",
   "store_limit",
   "dataset_changed",
+  "dataset_mutation_rejected",
 ];
 /** The invoke frame's `env`: required and validated by the shared environment policy. */
 function envOf(value: unknown): Readonly<Record<string, string>> | null {
@@ -216,7 +217,9 @@ export function createExecutionService(
                 ? "store_limit"
                 : frame.code === "dataset_changed"
                   ? "dataset_changed"
-                  : "backend_rejected",
+                  : frame.code === "dataset_mutation_rejected"
+                    ? "dataset_mutation_rejected"
+                    : "backend_rejected",
             ),
           );
         return;
@@ -494,7 +497,10 @@ export function remoteBackendHost(
                                 : error instanceof BackendHostError &&
                                     error.code === "dataset_changed"
                                   ? { code: "dataset_changed" }
-                                  : {}),
+                                  : error instanceof BackendHostError &&
+                                      error.code === "dataset_mutation_rejected"
+                                    ? { code: "dataset_mutation_rejected" }
+                                    : {}),
                             },
                             config.maxFrameBytes,
                           ),

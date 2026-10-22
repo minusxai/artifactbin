@@ -627,3 +627,35 @@ test("a backend whose recompile fails settles rejected with a clear code", async
     await db.cleanup();
   }
 });
+
+test("a proven dataset refusal is rejected at GraphQL while a dispatched transport failure stays unknown", async () => {
+  const { db, database } = await setup();
+  try {
+    const { host } = fakeHost();
+    const original = host.invoke;
+    host.invoke = async (call) => {
+      if (call.input.field === "huge") {
+        const { BackendDatasetMutationRejectedError } = await import(
+          "../../../src/backend/contracts.ts"
+        );
+        throw new BackendDatasetMutationRejectedError();
+      }
+      return original(call);
+    };
+    const { api } = await publishBoth(database, host, []);
+    const result = await api.graphql(
+      "owner",
+      "mutation { ledger { huge { note } crash { note } } }",
+    );
+    assert.deepEqual(result.extensions?.outcomes, {
+      "ledger.huge": "rejected",
+      "ledger.crash": "unknown",
+    });
+    assert.equal(
+      result.errors?.[0]?.extensions?.code,
+      "dataset_mutation_rejected",
+    );
+  } finally {
+    await db.cleanup();
+  }
+});

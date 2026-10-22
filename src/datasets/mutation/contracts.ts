@@ -116,10 +116,12 @@ export interface DatasetPolicySelection {
 }
 export class DatasetMutationError extends Error {
   readonly code: string;
-  constructor(code: string) {
+  readonly outcome: "rejected" | "unknown";
+  constructor(code: string, outcome: "rejected" | "unknown" = "unknown") {
     super(code);
     this.code = code;
     this.name = "DatasetMutationError";
+    this.outcome = outcome;
   }
 }
 export const DATASET_SQL_LIMITS = Object.freeze({

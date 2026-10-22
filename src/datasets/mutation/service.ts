@@ -24,7 +24,7 @@ function request(value: unknown): DatasetMutationRequest {
     !record(value.params) ||
     Object.keys(value.params).length > limits.maxCallerParams
   )
-    throw new DatasetMutationError("invalid_request");
+    throw new DatasetMutationError("invalid_request", "rejected");
   for (const [k, v] of Object.entries(value.params))
     if (
       !k ||
@@ -39,9 +39,9 @@ function request(value: unknown): DatasetMutationRequest {
         (typeof v === "number" && Number.isFinite(v))
       )
     )
-      throw new DatasetMutationError("invalid_request");
+      throw new DatasetMutationError("invalid_request", "rejected");
   if (Buffer.byteLength(JSON.stringify(value)) > 64 * 1024)
-    throw new DatasetMutationError("invalid_request");
+    throw new DatasetMutationError("invalid_request", "rejected");
   return structuredClone(value) as unknown as DatasetMutationRequest;
 }
 function bound(
@@ -71,22 +71,23 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
       const input = request(value),
         found = await ports.operation(context, input.operation);
       if (!found || !bound(context, found))
-        throw new DatasetMutationError("denied");
+        throw new DatasetMutationError("denied", "rejected");
       const operation = structuredClone(found);
       if (
         Object.keys(input.params).some(
           (k) => !Object.hasOwn(operation.paramTypes, k),
         )
       )
-        throw new DatasetMutationError("invalid_request");
+        throw new DatasetMutationError("invalid_request", "rejected");
       const start = await ports.begin(context, operation, input);
       if (start.kind === "replay") return start.result;
-      if (start.kind === "refused") throw new DatasetMutationError(start.code);
+      if (start.kind === "refused")
+        throw new DatasetMutationError(start.code, "rejected");
       if (start.kind === "busy") throw new DatasetMutationError("inflight");
       const lease = start.lease;
       const terminal = async (code: string): Promise<never> => {
         await ports.refuse(lease, code);
-        throw new DatasetMutationError(code);
+        throw new DatasetMutationError(code, "rejected");
       };
       const head = await ports
         .head(context, operation)

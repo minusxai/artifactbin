@@ -21,7 +21,7 @@ import { createBackendStore } from "../src/backend/af-store.ts";
 test("isolate named mutation crosses authenticated SQL controller, persists overlay, refreshes live readers and replays durable notifications", async () => {
   const host = createBackendHost({ sandboxNetwork: "none" });
   const deployment = await host.compile(
-    `export const typeDefs='type Query { change: JSON } scalar JSON';export default {Query:{change:(_args,_principal,caps)=>caps.dataset.mutate({operation:'rename',requestId:'runtime_request_0001',params:{name:'new'}})}}`,
+    `export const typeDefs='type Query { change(operation:String,requestId:String): JSON } scalar JSON';export default {Query:{change:(args,_principal,caps)=>caps.dataset.mutate({operation:args.operation??'rename',requestId:args.requestId??'runtime_request_0001',params:{name:'new'}})}}`,
   );
   const source = await mkdtemp(join(tmpdir(), "dataset-source-")),
     overlay = await mkdtemp(join(tmpdir(), "dataset-overlay-"));
@@ -64,21 +64,22 @@ test("isolate named mutation crosses authenticated SQL controller, persists over
     );
     await database.transaction((c) =>
       registerDatasetMutationOperations(c, [
-        {
+        ...["rename", "wrong_count"].map((name) => ({
           sourceNamespace: "legacy",
           bindingName: "sales",
           operation: {
-            name: "rename",
+            name,
+            ...(name === "wrong_count" ? { expectedAffected: 2 } : {}),
             backendId: actual.backendId,
             backendVersion: actual.backendVersion,
             page: binding.page,
             datasetId: binding.dataset.id,
             target: { schema: "public", table: "rows" },
             sql: "UPDATE rows SET name=$name",
-            paramTypes: { name: "string" },
-            conflictMode: "refuse",
+            paramTypes: { name: "string" as const },
+            conflictMode: "refuse" as const,
           },
-        },
+        })),
       ]),
     );
     const capabilities = datasetCapabilityHandler(
@@ -89,11 +90,11 @@ test("isolate named mutation crosses authenticated SQL controller, persists over
       },
       runtime.mutations,
     );
-    const invoke = () =>
+    const invoke = (args: Record<string, string> = {}) =>
       host.invoke({
         deployment,
         principal: { tenant: actual.pageId, subject: actual.subject },
-        input: { field: "change", args: {} },
+        input: { field: "change", args },
         capabilityHandler: capabilities,
         env: {},
         reuse: { kind: "one-shot" },
@@ -106,6 +107,16 @@ test("isolate named mutation crosses authenticated SQL controller, persists over
       generation: 2,
     });
     assert.deepEqual(await invoke(), result);
+    // The SQL controller produces a definite wrong-count refusal, durably
+    // recorded and replayed; neither attempt can reach dataset commit.
+    for (let i = 0; i < 2; i++)
+      await assert.rejects(
+        invoke({
+          operation: "wrong_count",
+          requestId: "runtime_wrong_count_0001",
+        }),
+        { code: "dataset_mutation_rejected" },
+      );
     const read = await runtime.reads.read(actual, {
       binding: "sales",
       schema: "public",

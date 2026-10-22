@@ -52,6 +52,7 @@ const NOT_STARTED: ReadonlySet<BackendErrorCode> = new Set([
   "deployment_invalid",
   "backend_busy",
   "store_limit",
+  "dataset_mutation_rejected",
 ]);
 /** Host failures worth retrying as they are; they say nothing about the backend itself. */
 const TRANSIENT: ReadonlySet<BackendErrorCode> = new Set([

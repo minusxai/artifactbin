@@ -1,5 +1,8 @@
 import { DatasetMutationError } from "./mutation/contracts.ts";
-import { BackendDatasetChangedError } from "../backend/contracts.ts";
+import {
+  BackendDatasetChangedError,
+  BackendDatasetMutationRejectedError,
+} from "../backend/contracts.ts";
 import type {
   BackendCapabilityHandler,
   BackendJson,
@@ -35,12 +38,10 @@ export function datasetCapabilityHandler(
                 throw new DatasetReadError("denied");
               })();
     } catch (error) {
-      if (
-        (error instanceof DatasetReadError &&
-          error.code === "dataset_changed") ||
-        (error instanceof DatasetMutationError && error.code === "row_changed")
-      )
+      if (error instanceof DatasetReadError && error.code === "dataset_changed")
         throw new BackendDatasetChangedError();
+      if (error instanceof DatasetMutationError && error.outcome === "rejected")
+        throw new BackendDatasetMutationRejectedError();
       throw error;
     }
 

@@ -51,6 +51,13 @@ const STORE_LIMIT_BYTES = 60 * 1024;
 /** Store-limit errors this module threw: a resolver can set `code` on anything, but not join this set. */
 const storeLimitErrors = new WeakSet();
 const datasetChangedErrors = new WeakSet();
+const datasetMutationRejectedErrors = new WeakSet();
+function datasetMutationRejectedError() {
+  const error = Error("dataset_mutation_rejected");
+  error.code = "dataset_mutation_rejected";
+  datasetMutationRejectedErrors.add(error);
+  return error;
+}
 function datasetChangedError() {
   const error = Error("dataset_changed");
   error.code = "dataset_changed";
@@ -74,7 +81,11 @@ function codeOf(error) {
         error !== null &&
         datasetChangedErrors.has(error)
       ? "dataset_changed"
-      : "backend_rejected";
+      : typeof error === "object" &&
+          error !== null &&
+          datasetMutationRejectedErrors.has(error)
+        ? "dataset_mutation_rejected"
+        : "backend_rejected";
 }
 export default {
   async fetch(req, env) {
@@ -142,7 +153,9 @@ export default {
                 ? storeLimitError()
                 : reply.code === "dataset_changed"
                   ? datasetChangedError()
-                  : Error("capability rejected");
+                  : reply.code === "dataset_mutation_rejected"
+                    ? datasetMutationRejectedError()
+                    : Error("capability rejected");
             validate(reply.value);
             return reply.value;
           } finally {

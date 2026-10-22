@@ -116,11 +116,11 @@ test("sandbox admits only named mutation requests and rejects SQL, authority and
   }
 });
 
-test("only a trusted row conflict becomes the dataset_changed refresh marker", async () => {
+test("only explicit definite mutation refusals become the trusted rejection marker", async () => {
   const { DatasetMutationError } = await import(
     "../src/datasets/mutation/contracts.ts"
   );
-  const { BackendDatasetChangedError } = await import(
+  const { BackendDatasetMutationRejectedError } = await import(
     "../src/backend/contracts.ts"
   );
   const handler = datasetCapabilityHandler(
@@ -133,7 +133,7 @@ test("only a trusted row conflict becomes the dataset_changed refresh marker", a
     async () => null,
     {
       mutate: async () => {
-        throw new DatasetMutationError("row_changed");
+        throw new DatasetMutationError("row_changed", "rejected");
       },
     },
   );
@@ -143,6 +143,37 @@ test("only a trusted row conflict becomes the dataset_changed refresh marker", a
       { kind: "dataset", operation: "mutate", input },
       new AbortController().signal,
     ),
-    BackendDatasetChangedError,
+    BackendDatasetMutationRejectedError,
   );
+});
+
+test("an inflight mutation or unclassified failure remains unknown", async () => {
+  const { DatasetMutationError } = await import(
+    "../src/datasets/mutation/contracts.ts"
+  );
+  for (const code of ["inflight", "row_changed"]) {
+    const failure = new DatasetMutationError(code);
+    const handler = datasetCapabilityHandler(
+      {
+        read: async () => {
+          throw Error();
+        },
+      },
+      context,
+      async () => null,
+      {
+        mutate: async () => {
+          throw failure;
+        },
+      },
+    );
+    await assert.rejects(
+      handler(
+        { tenant: "page", subject: "user" },
+        { kind: "dataset", operation: "mutate", input },
+        new AbortController().signal,
+      ),
+      (error) => error === failure,
+    );
+  }
 });

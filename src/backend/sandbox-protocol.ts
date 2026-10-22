@@ -221,7 +221,8 @@ export function sandboxFailure(
     code === "build_rejected" ||
     code === "output_quota" ||
     code === "store_limit" ||
-    code === "dataset_changed"
+    code === "dataset_changed" ||
+    code === "dataset_mutation_rejected"
     ? code
     : "backend_rejected";
 }
@@ -317,6 +318,9 @@ export function createSandboxCall(
             const datasetChanged =
               error instanceof BackendHostError &&
               error.code === "dataset_changed";
+            const mutationRejected =
+              error instanceof BackendHostError &&
+              error.code === "dataset_mutation_rejected";
             return {
               kind: "capability-result",
               id: capability.id,
@@ -325,8 +329,13 @@ export function createSandboxCall(
                 ? "store_limit"
                 : datasetChanged
                   ? "dataset_changed"
-                  : "capability_rejected",
-              outcome: storeLimit || datasetChanged ? "rejected" : "unknown",
+                  : mutationRejected
+                    ? "dataset_mutation_rejected"
+                    : "capability_rejected",
+              outcome:
+                storeLimit || datasetChanged || mutationRejected
+                  ? "rejected"
+                  : "unknown",
             };
           })
           .then((reply) => {

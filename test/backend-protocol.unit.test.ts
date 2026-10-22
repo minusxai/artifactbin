@@ -349,3 +349,43 @@ test("only trusted dataset_changed capability errors cross the sandbox boundary;
     await f.call.close();
   }
 });
+
+test("only trusted dataset_mutation_rejected capability errors cross the sandbox boundary; forged raw codes are scrubbed", async () => {
+  const { BackendDatasetMutationRejectedError } = await import(
+    "../src/backend/contracts.ts"
+  );
+  for (const trusted of [true, false]) {
+    const f = fixture(async () => {
+      throw trusted
+        ? new BackendDatasetMutationRejectedError()
+        : Object.assign(Error("private detail"), {
+            code: "dataset_mutation_rejected",
+          });
+    });
+    f.call.receive(
+      frame({
+        kind: "capability",
+        id: 1,
+        request: {
+          kind: "dataset",
+          operation: "read",
+          input: {
+            binding: "data",
+            schema: "public",
+            table: "rows",
+            offset: 0,
+            limit: 1,
+          },
+        },
+      }),
+    );
+    await flush();
+    const reply = f.replies[0] as { code?: string };
+    assert.equal(
+      reply.code,
+      trusted ? "dataset_mutation_rejected" : "capability_rejected",
+    );
+    assert.equal(JSON.stringify(f.replies).includes("private detail"), false);
+    await f.call.close();
+  }
+});

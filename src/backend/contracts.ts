@@ -189,7 +189,8 @@ export type BackendErrorCode =
   | "cleanup_failed"
   /** A store write over BACKEND_STORE_LIMIT_BYTES reached the resolver uncaught: nothing was saved. */
   | "store_limit"
-  | "dataset_changed";
+  | "dataset_changed"
+  | "dataset_mutation_rejected";
 export class BackendHostError extends Error {
   readonly code: BackendErrorCode;
   /**
@@ -210,6 +211,13 @@ export class BackendDatasetChangedError extends BackendHostError {
   constructor() {
     super("dataset_changed");
     this.name = "BackendDatasetChangedError";
+  }
+}
+/** A trusted dataset operation was definitely refused before any dataset commit. */
+export class BackendDatasetMutationRejectedError extends BackendHostError {
+  constructor() {
+    super("dataset_mutation_rejected");
+    this.name = "BackendDatasetMutationRejectedError";
   }
 }
 /** A store write refused for size; the sandbox learns this code (never a handler's text) and the resolver may catch it. */
