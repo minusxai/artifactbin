@@ -1,3 +1,4 @@
+import { readStoredModel } from "./stored-model/service.ts";
 import {
   DatasetReadError,
   DATASET_RESULT_BYTES,
@@ -129,6 +130,25 @@ export function createDatasetReadService(
       const matches = b.tables.filter(
         (t) => t.schema === r.schema && t.name === r.table,
       );
+      if (matches.length === 0 && ports.models) {
+        await requireAuthority(ports, context, b, signal);
+        if (
+          r.expectedVersion !== undefined &&
+          (r.expectedVersion !== b.revision.version ||
+            r.expectedGeneration !== b.revision.generation)
+        )
+          throw new DatasetReadError("dataset_changed");
+        const { models: _models, ...physicalPorts } = ports;
+        return readStoredModel(
+          ports.models,
+          createDatasetReadService(physicalPorts),
+          context,
+          b,
+          r,
+          (modelSignal) => requireAuthority(ports, context, b, modelSignal),
+          signal,
+        );
+      }
       if (matches.length !== 1) throw new DatasetReadError("denied");
       const table = matches[0]!;
       validateTable(table);

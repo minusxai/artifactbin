@@ -76,6 +76,8 @@ export interface DatasetReadAuthority {
 }
 /** Supplied cancellation must reach adapter-owned I/O, including registry and authority lookups. */
 export interface DatasetReadPorts {
+  /** Optional exact server registrations; absent means model reads are denied. */
+  models?: import("./stored-model/contracts.ts").StoredModelPorts;
   binding(
     context: DatasetCallContext,
     name: string,

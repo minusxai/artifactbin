@@ -1,3 +1,4 @@
+import { createStoredModelResolver } from "../persistence/dataset-stored-models.ts";
 import{createSourceQueryService}from"../datasets/source-query/service.ts";
 import{createSourceQueryRepository}from"../persistence/source-queries.ts";
 import { createDatasetAttachmentContext } from "../persistence/dataset-attachment-context.ts";
@@ -48,6 +49,14 @@ export function createDatasetRuntime(
     ? createDatasetReadService({
         ...createDatasetReadRepository(database, now),
         read: objects.read,
+        ...(executor?.query
+          ? {
+              models: {
+                resolve: createStoredModelResolver(database),
+                execute: executor.query.bind(executor),
+              },
+            }
+          : {}),
       })
     : {
         read: async () => {
