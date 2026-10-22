@@ -127,3 +127,29 @@ test(
     assert.equal(JSON.stringify(document), before);
   },
 );
+
+test(
+  "source-backed historical mutations remain unavailable with real archived compiler",
+  { skip: !root },
+  async () => {
+    const source =
+      '<Helmet><Mutation name="save" source="ref:Abcd12" expectedAffected={1}>{`insert into items values(1)`}</Mutation></Helmet><Button run="$save">Save</Button>';
+    const result = await createMigrationConverter({
+      strategy: "archived-functional",
+      sourceAdmission: "offline-prototype",
+      legacyRoot: root!,
+    })({
+      source,
+      coreUrl: "/af/v1/core.js",
+      datasetUnavailable: { reason: "historical-binding-unavailable" },
+    });
+    assert.equal(
+      result.classification,
+      "renderable",
+      JSON.stringify(result.issues),
+    );
+    assert.match(result.html!, /<button[^>]*disabled/);
+    assert.match(result.html!, /Historical data is unavailable/);
+    assert.doesNotMatch(result.html!, /rel="af-backend"/);
+  },
+);

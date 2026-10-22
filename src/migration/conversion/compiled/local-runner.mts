@@ -1,3 +1,4 @@
+import { readHistoricalRemoteMutationNames } from "./historical-mutations.ts";
 import {archivedScalarChoiceSource} from "./scalar-choice-kit-source.ts";
 import { validCompiledBrowserImports } from "./browser-imports.ts";
 import { archivedRuntimePlan } from "./runtime-plan.ts";
@@ -51,6 +52,9 @@ const prototype=input.sourceAdmission==="offline-prototype";
 const attachmentSites=prepareCompiledFileUploads(input.source,input.datasetAttachments??[],input.datasetBindings??[]);
 const { storyBodyFor } = await archived("lib/document/body.ts");
 const split = storyBodyFor(input.source);
+const historicalRemoteMutations = input.datasetUnavailable
+  ? readHistoricalRemoteMutationNames(input.source)
+  : [];
 if (
   !split ||
   split.content.script ||
@@ -154,7 +158,7 @@ let results: any = null;
 if(!prototype&&input.viewerBinding&&!(await readsLegacyViewer(input.source)))throw Error("Unused viewer binding");
 if (input.datasetUnavailable) {
   const bound=rawFlow.values.some((v:any)=>v.kind==="scalar"&&typeof v.source==="string"&&v.source.length>0);
-  if(!rawFlow.imports.length&&!bound&&!(await readsLegacyMembers(input.source))&&!(await readsLegacyViewer(input.source)))throw Error("Historical service dependency missing");
+  if(!rawFlow.imports.length&&!bound&&!historicalRemoteMutations.length&&!(await readsLegacyMembers(input.source))&&!(await readsLegacyViewer(input.source)))throw Error("Historical service dependency missing");
   flow = { ...rawFlow, imports: [], queries: [], values:rawFlow.values.map((v:any)=>{
     const {source,column,constraints,...local}=v;void source;void column;void constraints;return local;
   }) };
@@ -593,7 +597,12 @@ process.stdout.write(
     chartPlans: chartPlans.length,
     chartRuntime: archivedChartController ? "archived-controller" : "compiled-plans",
     datasetNames: rawFlow.imports.map((i: any) => i.name),
-    mutationNames: split.content.mutations.map((m: any) => m.name),
+    mutationNames: [
+      ...new Set([
+        ...split.content.mutations.map((m: any) => m.name),
+        ...historicalRemoteMutations,
+      ]),
+    ],
     queryNames: rawFlow.queries.map((q: any) => q.name),
     modules,
     title: parts.title,
