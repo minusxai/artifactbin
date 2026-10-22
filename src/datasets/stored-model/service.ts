@@ -59,6 +59,12 @@ export async function readStoredModel(
       model.dependencies.length > 64
     )
       throw new DatasetReadError("invalid_dataset");
+    validateTable({
+      schema: model.schema,
+      name: model.table,
+      columns: model.columns,
+      object: model.dependencies[0]!.object,
+    });
     const keys = new Set<string>();
     for (const dep of model.dependencies) {
       validateTable(dep);
@@ -154,6 +160,19 @@ export async function readStoredModel(
       );
     await wait(() => authorize(abort.signal));
     const table = answer.tables.result;
+    // The engine has no scalar evidence for empty results and defaults inferred
+    // expressions to string. Retain the attested types only when names and order
+    // match exactly; nonempty results must still match every declared type.
+    if (
+      table &&
+      table.rows.length === 0 &&
+      JSON.stringify(table.columns.map((c) => c.name)) ===
+        JSON.stringify(model.columns.map((c) => c.name))
+    )
+      table.columns = model.columns.map((c) => ({
+        name: c.name,
+        type: c.type,
+      }));
     if (
       !table ||
       Object.keys(answer.errors).length ||

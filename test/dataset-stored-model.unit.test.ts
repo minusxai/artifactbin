@@ -386,3 +386,38 @@ test("fixed model deadline aborts an unresponsive controller", async (t) => {
   await assert.rejects(pending, /result_limit/);
   assert.equal(executionSignal?.aborted, true);
 });
+test("real empty aggregate keeps attested numeric columns despite absent type evidence", async () => {
+  const { createDatasetQueryEngine } = await import(
+    "../src/datasets/sql/read-engine.ts"
+  );
+  const engine = await createDatasetQueryEngine();
+  const f = fixture();
+  f.m.sql =
+    "SELECT amount, COUNT(*) AS count FROM public.rows WHERE amount < 0 GROUP BY amount";
+  f.ports.models!.execute = async (job) => engine.query(job);
+  const result = await f.read();
+  assert.deepEqual(result.rows, []);
+  assert.deepEqual(result.columns, model.columns);
+  assert.equal(result.totalRows, 0);
+});
+
+test("empty type recovery does not permit renamed columns or conflicting nonempty types", async () => {
+  for (const empty of [true, false]) {
+    const f = fixture();
+    f.ports.models!.execute = async () => ({
+      tables: {
+        result: {
+          columns: empty
+            ? [{ name: "renamed", type: "string" }]
+            : [
+                { name: "amount", type: "string" },
+                { name: "count", type: "number" },
+              ],
+          rows: empty ? [] : [{ amount: "1", count: 2 }],
+        },
+      },
+      errors: {},
+    });
+    await assert.rejects(f.read(), /invalid_dataset/);
+  }
+});
