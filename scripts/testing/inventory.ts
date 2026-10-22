@@ -65,15 +65,24 @@ function listFiles(root: string, start: string): string[] {
   return files;
 }
 function describeTests(root: string, start: string): TestDescriptor[] {
-  return classifyTests(listFiles(root, start)).map((test) => ({
-    ...test,
-    requirements: {
-      ...test.requirements,
-      migration: migrationTestRequirements(
-        readFileSync(join(root, test.file), "utf8"),
-      ),
-    },
-  }));
+  return classifyTests(listFiles(root, start)).map((test) => {
+    try {
+      return {
+        ...test,
+        requirements: {
+          ...test.requirements,
+          migration: migrationTestRequirements(
+            readFileSync(join(root, test.file), "utf8"),
+          ),
+        },
+      };
+    } catch (error) {
+      throw new Error(
+        `${test.file}: ${error instanceof Error ? error.message : "Invalid test requirements"}`,
+        { cause: error },
+      );
+    }
+  });
 }
 /** Recursively discover the complete Node test surface, including tests added in new module folders. */
 export function discoverTests(root = process.cwd()): TestDescriptor[] {

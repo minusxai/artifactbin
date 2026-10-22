@@ -52,3 +52,23 @@ test("required migration preflight refuses absent or broken inputs without discl
     { archivedRoot: "/frozen", databaseUrl: env.MIGRATION_TEST_DATABASE_URL },
   );
 });
+test("discovery errors identify the exact file needing a requirement declaration", async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { discoverTests } = await import("../scripts/testing/inventory.ts");
+  const root = await mkdtemp(join(tmpdir(), "test-requirements-"));
+  try {
+    await mkdir(join(root, "test"));
+    await writeFile(
+      join(root, "test", "new.browser.test.ts"),
+      "const root=process" + ".env.PAGEGI_ARCHIVED_COMPILER_ROOT;",
+    );
+    assert.throws(
+      () => discoverTests(root),
+      /test\/new\.browser\.test\.ts: Declare.*archived-compiler/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
