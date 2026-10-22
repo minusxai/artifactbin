@@ -15,6 +15,8 @@ export const DATASET_ATTACHMENT_LIMITS = Object.freeze({
 export interface DatasetAttachmentContext extends DatasetCallContext {
   backendNamespace: string;
   bindingName: string;
+  /** Trusted host only; revalidated after binary I/O, never sent to page code. */
+  credentialHash: string | null;
 }
 /** Trusted publication record. Browser requests never supply this authority. */
 export interface DatasetAttachmentRegistration {
@@ -40,6 +42,16 @@ export interface DatasetAttachmentObject {
   byteLength: number;
   contentType: DatasetAttachmentMime;
   filename: string;
+  /** Quota includes all persisted variants, not only the primary response. */
+  totalBytes?: number;
+  small?: {
+    sha256: string;
+    storageKey: string;
+    byteLength: number;
+    contentType: "image/webp";
+    width: number;
+    height: number;
+  };
 }
 export interface DatasetAttachmentReceipt {
   ref: string;
@@ -59,6 +71,8 @@ export interface DatasetAttachmentRecord {
 export interface DatasetAttachmentStaged {
   inputSha256: string;
   object: DatasetAttachmentObject;
+  /** Called only after a durable charged reservation, before final fresh-authority completion. */
+  publish(): Promise<void>;
   /** Removes only request-owned staging; never deletes deduplicated immutable objects. */ discard(): Promise<void>;
 }
 export interface DatasetAttachmentRepository {
@@ -66,7 +80,7 @@ export interface DatasetAttachmentRepository {
     context: DatasetAttachmentContext,
     signal?: AbortSignal,
   ): Promise<DatasetAttachmentAuthority | null>;
-  /** Atomic fresh authority/registration+grant recheck, actor-scoped idempotency, quota serialization and metadata commit. */
+  /** Durable quota reservation, idempotent promotion and final fresh-authority completion; unknown failures remain charged and unreadable. */
   commit(
     input: {
       context: DatasetAttachmentContext;
@@ -95,22 +109,27 @@ export interface DatasetAttachmentStorage {
   ): Promise<{ body: AsyncIterable<Uint8Array>; close(): Promise<void> }>;
 }
 export class DatasetAttachmentError extends Error {
-  constructor(
-    readonly code:
-      | "denied"
-      | "invalid_request"
-      | "too_large"
-      | "busy"
-      | "conflict"
-      | "quota"
-      | "unavailable",
-  ) {
+  readonly code:
+    | "denied"
+    | "invalid_request"
+    | "too_large"
+    | "busy"
+    | "conflict"
+    | "quota"
+    | "unavailable";
+  constructor(code: DatasetAttachmentError["code"]) {
     super(code);
+    this.code = code;
     this.name = "DatasetAttachmentError";
   }
 }
 
 export interface DatasetAttachmentService {
+  /** Advisory only: no quota/row/value success promise or reservation. */
+  availability(
+    context: DatasetAttachmentContext,
+    signal?: AbortSignal,
+  ): Promise<{ canAttempt: boolean }>;
   upload(
     context: DatasetAttachmentContext,
     upload: DatasetAttachmentUpload,

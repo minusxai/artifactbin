@@ -134,3 +134,38 @@ CREATE TABLE IF NOT EXISTS dataset_viewer_bindings (
 );
 DROP TRIGGER IF EXISTS dataset_viewer_bindings_immutable ON dataset_viewer_bindings;
 CREATE TRIGGER dataset_viewer_bindings_immutable BEFORE UPDATE ON dataset_viewer_bindings FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+
+-- Dataset FileUpload is a separate immutable, explicitly published capability.
+CREATE TABLE IF NOT EXISTS dataset_attachment_bindings (
+ backend_id text NOT NULL, backend_version text NOT NULL, page_id text NOT NULL,
+ page_version bigint NOT NULL, name text NOT NULL, backend_namespace text NOT NULL,
+ registration jsonb NOT NULL,
+ PRIMARY KEY(backend_id,backend_version,page_id,page_version,name),
+ FOREIGN KEY(backend_id,backend_version,page_id,page_version,name)
+ REFERENCES dataset_bindings(backend_id,backend_version,page_id,page_version,name) ON DELETE CASCADE
+);
+DROP TRIGGER IF EXISTS dataset_attachments_binding_immutable ON dataset_attachment_bindings;
+CREATE TRIGGER dataset_attachments_binding_immutable BEFORE UPDATE ON dataset_attachment_bindings FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+CREATE TABLE IF NOT EXISTS dataset_attachments (
+ id text PRIMARY KEY CHECK(id ~ '^[a-f0-9]{32}$'), source_namespace text NOT NULL, dataset_id text NOT NULL,
+ page_id text NOT NULL REFERENCES files(id), object jsonb NOT NULL,
+ stored_bytes bigint NOT NULL CHECK(stored_bytes>0 AND stored_bytes<=500000000), created_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(source_namespace,dataset_id) REFERENCES dataset_resources(source_namespace,legacy_id)
+);
+CREATE INDEX IF NOT EXISTS dataset_attachments_quota ON dataset_attachments(source_namespace,dataset_id);
+CREATE TABLE IF NOT EXISTS dataset_attachment_receipts (
+ source_namespace text NOT NULL, dataset_id text NOT NULL, actor text NOT NULL REFERENCES accounts(actor),
+ request_id text NOT NULL, fingerprint text NOT NULL CHECK(fingerprint ~ '^[a-f0-9]{64}$'), attachment_id text NOT NULL REFERENCES dataset_attachments(id),
+ PRIMARY KEY(source_namespace,dataset_id,actor,request_id)
+);
+DROP TRIGGER IF EXISTS dataset_attachment_objects_immutable ON dataset_attachments;
+CREATE TRIGGER dataset_attachment_objects_immutable BEFORE UPDATE OR DELETE ON dataset_attachments FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+DROP TRIGGER IF EXISTS dataset_attachment_receipts_immutable ON dataset_attachment_receipts;
+CREATE TRIGGER dataset_attachment_receipts_immutable BEFORE UPDATE OR DELETE ON dataset_attachment_receipts FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+
+-- Completion is separate so immutable pending reservations remain quota-accounted after an unknown publish outcome.
+CREATE TABLE IF NOT EXISTS dataset_attachment_completions (
+ attachment_id text PRIMARY KEY REFERENCES dataset_attachments(id), completed_at timestamptz NOT NULL DEFAULT now()
+);
+DROP TRIGGER IF EXISTS dataset_attachment_completion_immutable ON dataset_attachment_completions;
+CREATE TRIGGER dataset_attachment_completion_immutable BEFORE UPDATE OR DELETE ON dataset_attachment_completions FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
