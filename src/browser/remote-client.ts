@@ -18,7 +18,9 @@ export function createRemoteClient(options: RemoteClientOptions): RemoteClient {
   >();
   return {
     setAuthorizationContext(context) {
-      if (!disposed) authorizationContext = context;
+      if(disposed||authorizationContext===context)return;
+      authorizationContext=context;
+      for(const listener of [...listeners])listener();
     },
     port: {
       authorizationContext: () => (disposed ? null : authorizationContext),

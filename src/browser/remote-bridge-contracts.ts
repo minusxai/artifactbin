@@ -41,6 +41,7 @@ export interface RemoteClientOptions {
 }
 export interface RemoteClient {
   /** Only the authenticated platform message handler supplies this credential-free marker. */
+  /** A changed caller context synchronously invalidates remote subscribers. */
   setAuthorizationContext(context: string | null): void;
   port: RemotePort;
   receive(response: RemoteBridgeResponse): void;

@@ -143,3 +143,15 @@ test("remote bridge invalidations notify owned query listeners and disposal remo
   remote.invalidate();
   assert.equal(count, 1);
 });
+
+test('authorization context transitions clear opt-in reader watches in the same task and discard previous caller receipts',async()=>{
+ const replies:Array<(v:{status:number;body:unknown})=>void>=[];
+ const page=wire(()=>new Promise(resolve=>replies.push(resolve)));
+ page.client.setAuthorizationContext('context-a');const seen:unknown[]=[];
+ const sub=page.apollo.watchQuery({query:gql`{billing{viewer{id}}}`,clearOnRefresh:true}).subscribe(r=>seen.push(r.data.billing));await tick();
+ replies.shift()!({status:200,body:{data:{billing:{viewer:{id:'first'}}}}});await tick();assert.deepEqual(seen.at(-1),{viewer:{id:'first'}});
+ page.client.setAuthorizationContext('context-b');assert.equal(seen.at(-1),null);await tick();page.client.setAuthorizationContext(null);assert.equal(seen.at(-1),null);
+ replies.shift()!({status:200,body:{data:{billing:{viewer:{id:'stale'}}}}});await tick();assert.equal(seen.at(-1),null);
+ replies.shift()!({status:200,body:{data:{billing:{viewer:{id:null}}}}});await tick();assert.deepEqual(seen.at(-1),{viewer:{id:null}});
+ sub.unsubscribe();page.client.dispose();
+});
