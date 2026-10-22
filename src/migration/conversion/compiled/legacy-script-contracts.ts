@@ -11,7 +11,8 @@ export interface LegacyScriptNormalizationReceipt {
   codemodSha256: string;
   originalSourceSha256: string;
   derivedSourceSha256: string;
-  applied: readonly string[];
+  /** Count only: original tool descriptions can contain authored titles and IDs. */
+  appliedRuleCount: number;
 }
 export interface LegacyScriptNormalization {
   source: string;

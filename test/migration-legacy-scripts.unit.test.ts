@@ -23,6 +23,8 @@ test("normalization records both exact byte digests without changing the retaine
     },
   });
   assert.equal(result?.source, derived);
+  assert.equal(result?.receipt.appliedRuleCount, 1);
+  assert.equal("applied" in result!.receipt, false);
   assert.equal(result?.receipt.originalSourceSha256, hash(source));
   assert.equal(result?.receipt.derivedSourceSha256, hash(derived));
   assert.equal(JSON.stringify(retained), before);

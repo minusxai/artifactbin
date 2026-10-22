@@ -72,7 +72,7 @@ export async function normalizeLegacyManagedFrames(
         codemodSha256: LEGACY_SCRIPT_CODEMOD_SHA256,
         originalSourceSha256: hash(source),
         derivedSourceSha256: hash(result.source),
-        applied: result.applied,
+        appliedRuleCount: result.applied.length,
       },
     };
   } catch {
