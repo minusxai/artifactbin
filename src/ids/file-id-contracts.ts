@@ -26,6 +26,8 @@
 import type { FileId } from "../af-contracts.ts";
 
 export type FileKind = "page" | "backend";
+/** Internal registry occupancy. Retained folders are not publishable file kinds. */
+export type RegisteredFileKind = FileKind | "folder";
 
 /** What a request path names: a file by ID, or a page by its owner's library path. */
 export type PageAddress =
@@ -65,7 +67,11 @@ export interface IdReservationStore {
    * Reserve `count` (1..100) new IDs for `owner`. The same owner and key
    * return the same IDs; the same key with a different count fails with 422.
    */
-  reserve(owner: string, idempotencyKey: string, count: number): Promise<{
+  reserve(
+    owner: string,
+    idempotencyKey: string,
+    count: number,
+  ): Promise<{
     ids: FileId[];
     replayed: boolean;
   }>;

@@ -26,6 +26,11 @@ test("retained folder HTTP renders escaped readable links, hides private childre
       tokens: {
         [hash("owner-token")]: { actor: "owner", expires: Date.now() + 60000 },
         [hash("expired")]: { actor: "owner", expires: 0 },
+        [hash("scoped")]: {
+          actor: "owner",
+          fileId: "PUB123",
+          expires: Date.now() + 60000,
+        },
       },
       files: {
         PUB123: {
@@ -104,6 +109,32 @@ test("retained folder HTTP renders escaped readable links, hides private childre
       ).status,
       200,
     );
+    for (const token of ["expired", "scoped"])
+      for (const method of ["GET", "HEAD"])
+        assert.equal(
+          (
+            await fetch(origin + "/a/FLD123", {
+              method,
+              headers: { Cookie: "pagegi_account=" + token },
+            })
+          ).status,
+          200,
+        );
+    const attempted = await fetch(origin + "/api/publish", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer owner-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        source:
+          '<!doctype html><html><head><script type="application/json" data-af="meta">{"id":"FLD123"}</script></head><body>Refused</body></html>',
+        requestId: "folder-claim",
+        visibility: "public",
+      }),
+    });
+    assert.equal(attempted.status, 422);
+    assert.ok((await attempted.text()).includes("meta block names ID"));
     const response = await fetch(origin + "/a/FLD123");
     assert.equal(response.status, 200);
     const body = await response.text();
@@ -157,6 +188,18 @@ test("retained folder HTTP renders escaped readable links, hides private childre
     const hiddenParent = await (await fetch(origin + "/a/FLD123")).text();
     assert.ok(!hiddenParent.includes("Parent &lt;tag&gt;"));
     await env.pool.query(
+      "UPDATE retained_folders SET access=$1::jsonb WHERE legacy_id='PAR123'",
+      [JSON.stringify(policy("unlisted"))],
+    );
+    await env.pool.query(
+      "UPDATE retained_folders SET access=$1::jsonb WHERE legacy_id='FLD123'",
+      [JSON.stringify(policy("unlisted"))],
+    );
+    const unlisted = await (await fetch(origin + "/a/FLD123")).text();
+    assert.ok(unlisted.includes('href="/a/PAR123"'));
+    assert.ok(!unlisted.includes('href="/a/UNL123"'));
+    assert.ok(unlisted.includes('href="/a/PUB123"'));
+    await env.pool.query(
       "UPDATE retained_folders SET access=$1::jsonb WHERE legacy_id='FLD123'",
       [JSON.stringify(policy("private"))],
     );
@@ -166,6 +209,17 @@ test("retained folder HTTP renders escaped readable links, hides private childre
           .status,
         404,
       );
+    for (const token of ["expired", "scoped"])
+      for (const method of ["GET", "HEAD"])
+        assert.equal(
+          (
+            await fetch(origin + "/a/FLD123", {
+              method,
+              headers: { Cookie: "pagegi_account=" + token },
+            })
+          ).status,
+          404,
+        );
     await env.pool.query(
       "UPDATE retained_folders SET state='deleted',path=NULL WHERE legacy_id='FLD123'",
     );

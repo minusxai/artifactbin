@@ -58,7 +58,7 @@ test("postimport plans commit atomically, replay idempotently and follow real pa
       apply: createRetainedFolderExecutor(store.sql),
     };
     const records = [
-      registration("old-folder", "/imported/old", "Readable folder"),
+      registration("FLD123", "/imported/old", "Readable folder"),
     ];
     const expected = { owner: await store.paths.paths("owner") };
     const plan = planFolderTitles(
@@ -144,7 +144,7 @@ test("postimport plans commit atomically, replay idempotently and follow real pa
       { path: "/Moved" },
     );
     assert.ok(receipt && "id" in receipt);
-    assert.equal(await service.read("old-folder"), null);
+    assert.equal(await service.read("FLD123"), null);
     await store.paths.changePath("owner", { kind: "folder", path: "/Moved" });
     await assert.rejects(
       trash.handle(
@@ -174,10 +174,7 @@ test("postimport plans commit atomically, replay idempotently and follow real pa
         .state,
       "live",
     );
-    assert.equal(
-      (await service.read("old-folder", "owner-token"))?.title,
-      "Moved",
-    );
+    assert.equal((await service.read("FLD123", "owner-token"))?.title, "Moved");
   } finally {
     await store.close();
     await env.cleanup();
@@ -229,7 +226,7 @@ test("retained folder reads enforce fresh folder ACL, independent child ACL and 
     });
     const records = [
       registration(
-        "root",
+        "ROT123",
         "/imported/root",
         "Public folder",
         policy("public", { reader: "editor" }),
@@ -245,11 +242,11 @@ test("retained folder reads enforce fresh folder ACL, independent child ACL and 
     };
     assert.equal(await service.apply(plan, records), "applied");
     assert.deepEqual(
-      (await service.read("root"))?.rows.map((r) => r.id),
+      (await service.read("ROT123"))?.rows.map((r) => r.id),
       ["PUB123"],
     );
     assert.deepEqual(
-      (await service.read("root", "reader-token"))?.rows.map((r) => r.id),
+      (await service.read("ROT123", "reader-token"))?.rows.map((r) => r.id),
       ["PUB123"],
     );
     await env.pool.query(
@@ -258,7 +255,7 @@ test("retained folder reads enforce fresh folder ACL, independent child ACL and 
     );
     assert.deepEqual(
       new Set(
-        (await service.read("root", "reader-token"))?.rows.map((r) => r.id),
+        (await service.read("ROT123", "reader-token"))?.rows.map((r) => r.id),
       ),
       new Set(["PUB123", "PRV123"]),
     );
@@ -266,22 +263,20 @@ test("retained folder reads enforce fresh folder ACL, independent child ACL and 
       JSON.stringify(policy("unlisted")),
     ]);
     assert.deepEqual(
-      (await service.read("root"))?.rows.map((row) => row.id),
+      (await service.read("ROT123"))?.rows.map((row) => row.id),
       ["PUB123"],
     );
     await env.pool.query("UPDATE retained_folders SET access=$1::jsonb", [
       JSON.stringify(policy("private", { reader: "viewer" })),
     ]);
-    assert.equal(await service.read("root"), null);
-    assert.ok(await service.read("root", "reader-token"));
+    assert.equal(await service.read("ROT123"), null);
+    assert.ok(await service.read("ROT123", "reader-token"));
     await env.pool.query("UPDATE retained_folders SET access=$1::jsonb", [
       JSON.stringify(policy("private")),
     ]);
-    assert.equal(await service.read("root", "reader-token"), null);
-    await assert.rejects(service.read("root", "expired-token"), {
-      status: 401,
-    });
-    await assert.rejects(service.read("root", "scoped-token"), { status: 401 });
+    assert.equal(await service.read("ROT123", "reader-token"), null);
+    assert.equal(await service.read("ROT123", "expired-token"), null);
+    assert.equal(await service.read("ROT123", "scoped-token"), null);
   } finally {
     await store.close();
     await env.cleanup();
@@ -305,12 +300,12 @@ test("failed registration rolls back renamed paths, mappings and application rec
       },
     });
     const records = [
-      registration("live", "/imported/old", "New title"),
+      registration("LIV123", "/imported/old", "New title"),
       {
-        ...registration("deleted", "/unused", "Deleted"),
+        ...registration("DEL123", "/unused", "Deleted"),
         descriptor: {
-          ...registration("deleted", "/unused", "Deleted").descriptor,
-          owner: "absent",
+          ...registration("DEL123", "/unused", "Deleted").descriptor,
+          owner: "owner",
           deleted: true,
           expectedPath: null,
         },
@@ -323,9 +318,20 @@ test("failed registration rolls back renamed paths, mappings and application rec
     );
     assert.equal(plan.kind, "ready");
     if (plan.kind !== "ready") return;
+    await env.pool.query(
+      "CREATE FUNCTION reject_retained() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture rejection' USING ERRCODE='23514'; END $$; CREATE TRIGGER reject_retained BEFORE INSERT ON retained_folders FOR EACH ROW EXECUTE FUNCTION reject_retained()",
+    );
     await assert.rejects(
       createRetainedFolderExecutor(store.sql)(plan, records),
-      { code: "23503" },
+      { code: "23514" },
+    );
+    assert.equal(
+      (
+        await env.pool.query(
+          "SELECT count(*) FROM file_ids WHERE kind='folder'",
+        )
+      ).rows[0].count,
+      "0",
     );
     assert.deepEqual(await store.paths.paths("owner"), expected.owner);
     assert.equal(
@@ -365,20 +371,20 @@ test("fresh group membership gates private retained folders and private ancestor
       "INSERT INTO accounts(actor,principal_kind) VALUES('group:fixture','group'); INSERT INTO groups(owner) VALUES('group:fixture'); INSERT INTO group_memberships(owner,actor,role) VALUES('group:fixture','reader','viewer'); INSERT INTO folders(owner,path) VALUES('group:fixture','/old'),('group:fixture','/old/child')",
     );
     const parent = registration(
-      "parent",
+      "PAR123",
       "/old",
       "Hidden parent",
       policy("private"),
     );
     parent.descriptor.owner = "group:fixture";
     const child = registration(
-      "child",
+      "CHD123",
       "/old/child",
       "Public child",
       policy("public"),
     );
     child.descriptor.owner = "group:fixture";
-    child.descriptor.ancestorIds = ["parent"];
+    child.descriptor.ancestorIds = ["PAR123"];
     const plan = planFolderTitles([parent.descriptor, child.descriptor], {
       "group:fixture": await store.paths.paths("group:fixture"),
     });
@@ -386,29 +392,29 @@ test("fresh group membership gates private retained folders and private ancestor
     if (plan.kind !== "ready") return;
     await createRetainedFolderExecutor(store.sql)(plan, [parent, child]);
     const service = createRetainedFolderService(store.sql);
-    assert.equal(await service.read("parent"), null);
-    assert.deepEqual((await service.read("child"))?.trail, []);
+    assert.equal(await service.read("PAR123"), null);
+    assert.deepEqual((await service.read("CHD123"))?.trail, []);
     assert.equal(
-      (await service.read("child", "reader-token"))?.trail[0]?.id,
-      "parent",
+      (await service.read("CHD123", "reader-token"))?.trail[0]?.id,
+      "PAR123",
     );
-    assert.ok(await service.read("parent", "reader-token"));
+    assert.ok(await service.read("PAR123", "reader-token"));
     await env.pool.query(
       "DELETE FROM group_memberships WHERE owner='group:fixture'",
     );
-    assert.equal(await service.read("parent", "reader-token"), null);
-    assert.deepEqual((await service.read("child", "reader-token"))?.trail, []);
+    assert.equal(await service.read("PAR123", "reader-token"), null);
+    assert.deepEqual((await service.read("CHD123", "reader-token"))?.trail, []);
     await env.pool.query(
-      "UPDATE retained_folders SET access=$1::jsonb WHERE legacy_id='parent'",
+      "UPDATE retained_folders SET access=$1::jsonb WHERE legacy_id='PAR123'",
       [JSON.stringify(policy("unlisted"))],
     );
-    assert.ok(await service.read("parent"));
-    assert.equal((await service.read("child"))?.trail[0]?.id, "parent");
+    assert.ok(await service.read("PAR123"));
+    assert.equal((await service.read("CHD123"))?.trail[0]?.id, "PAR123");
     await env.pool.query(
-      "UPDATE retained_folders SET access=$1::jsonb WHERE legacy_id='parent'",
+      "UPDATE retained_folders SET access=$1::jsonb WHERE legacy_id='PAR123'",
       [JSON.stringify(policy("private"))],
     );
-    assert.deepEqual((await service.read("child"))?.trail, []);
+    assert.deepEqual((await service.read("CHD123"))?.trail, []);
   } finally {
     await store.close();
     await env.cleanup();
@@ -424,9 +430,9 @@ test("nested batch moves and empty-folder removal preserve or tombstone stable l
     await env.pool.query(
       "INSERT INTO folders(owner,path) VALUES('owner','/old'),('owner','/old/child'),('owner','/Destination')",
     );
-    const parent = registration("parent", "/old", "Parent"),
-      child = registration("child", "/old/child", "Child");
-    child.descriptor.ancestorIds = ["parent"];
+    const parent = registration("PAR123", "/old", "Parent"),
+      child = registration("CHD123", "/old/child", "Child");
+    child.descriptor.ancestorIds = ["PAR123"];
     const plan = planFolderTitles([parent.descriptor, child.descriptor], {
       owner: await store.paths.paths("owner"),
     });
@@ -451,16 +457,301 @@ test("nested batch moves and empty-folder removal preserve or tombstone stable l
     assert.equal(
       (
         await env.pool.query(
-          "SELECT state FROM retained_folders WHERE legacy_id='child'",
+          "SELECT state FROM retained_folders WHERE legacy_id='CHD123'",
         )
       ).rows[0].state,
       "deleted",
     );
     assert.equal(
-      await createRetainedFolderService(store.sql).read("child"),
+      await createRetainedFolderService(store.sql).read("CHD123"),
       null,
     );
   } finally {
+    await store.close();
+    await env.cleanup();
+  }
+});
+
+test("folder IDs reserve global registry occupancy, reject collisions atomically and make allocation retry", async () => {
+  const env = await testDatabase(),
+    store = database(env);
+  try {
+    await store.health();
+    await insertPages(env.pool, { accounts: { owner: {} } });
+    await env.pool.query(
+      "INSERT INTO folders(owner,path) VALUES('owner','/old'),('owner','/second')",
+    );
+    const records = [
+      registration("FLD123", "/old", "Folder"),
+      registration("ZZZ999", "/second", "Other"),
+    ];
+    const plan = planFolderTitles(
+      records.map((row) => row.descriptor),
+      { owner: await store.paths.paths("owner") },
+    );
+    assert.equal(plan.kind, "ready");
+    if (plan.kind !== "ready") return;
+    const apply = createRetainedFolderExecutor(store.sql);
+    await env.pool.query(
+      "INSERT INTO file_ids(id,owner,created_at) VALUES('ZZZ999','owner',0)",
+    );
+    assert.equal(await apply(plan, records), "stale");
+    assert.equal(
+      (await env.pool.query("SELECT count(*) FROM file_ids WHERE id='FLD123'"))
+        .rows[0].count,
+      "0",
+    );
+    await env.pool.query(
+      "DELETE FROM file_ids WHERE id='ZZZ999'; INSERT INTO retired_file_ids VALUES('FLD123',0)",
+    );
+    assert.equal(await apply(plan, records), "stale");
+    assert.equal(
+      (await env.pool.query("SELECT count(*) FROM retained_folders")).rows[0]
+        .count,
+      "0",
+    );
+    await env.pool.query("DELETE FROM retired_file_ids WHERE id='FLD123'");
+    assert.equal(await apply(plan, records), "applied");
+    const registered = (
+      await env.pool.query(
+        "SELECT id,owner,kind,published,created_at FROM file_ids WHERE id='FLD123'",
+      )
+    ).rows[0];
+    assert.deepEqual(registered, {
+      id: "FLD123",
+      owner: "owner",
+      kind: "folder",
+      published: true,
+      created_at: "0",
+    });
+    const receipt = (
+      await env.pool.query("SELECT receipt FROM retained_folder_applications")
+    ).rows[0].receipt;
+    assert.deepEqual(receipt.registry, [
+      {
+        id: "FLD123",
+        owner: "owner",
+        kind: "folder",
+        published: true,
+        createdAt: 0,
+      },
+      {
+        id: "ZZZ999",
+        owner: "owner",
+        kind: "folder",
+        published: true,
+        createdAt: 0,
+      },
+    ]);
+    const { createIdReservationStore, claimReservedId } = await import(
+      "../src/server/af-ids.ts"
+    );
+    const alphabet =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let attempts = 0;
+    const ids = createIdReservationStore(store.sql, {
+      randomBytes: () =>
+        Uint8Array.from(attempts++ === 0 ? "FLD123" : "NEW123", (char) =>
+          alphabet.indexOf(char),
+        ),
+    });
+    assert.deepEqual((await ids.reserve("owner", "retry", 1)).ids, ["NEW123"]);
+    assert.equal(await ids.available("owner", "FLD123"), false);
+    for (const kind of ["page", "backend"] as const)
+      assert.equal(
+        await store.sql.transaction((client) =>
+          claimReservedId(client, "owner", "FLD123", kind),
+        ),
+        false,
+      );
+    assert.ok(await createRetainedFolderService(store.sql).read("FLD123"));
+  } finally {
+    await store.close();
+    await env.cleanup();
+  }
+});
+
+test("anonymous private-folder reads do not contend on the owner's path lock", async () => {
+  const env = await testDatabase(),
+    store = database(env);
+  let blocker;
+  try {
+    await store.health();
+    await insertPages(env.pool, { accounts: { owner: {} } });
+    await env.pool.query(
+      "INSERT INTO folders(owner,path) VALUES('owner','/old')",
+    );
+    const records = [
+      registration("FLD123", "/old", "Private", policy("private")),
+    ];
+    const plan = planFolderTitles(
+      records.map((row) => row.descriptor),
+      { owner: await store.paths.paths("owner") },
+    );
+    assert.equal(plan.kind, "ready");
+    if (plan.kind !== "ready") return;
+    await createRetainedFolderExecutor(store.sql)(plan, records);
+    blocker = await env.pool.connect();
+    await blocker.query("BEGIN");
+    await blocker.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':paths:owner',0))",
+    );
+    const { createSqlDatabase } = await import("../src/persistence/sql.ts");
+    const bounded = createSqlDatabase({
+      pool: env.pool,
+      initialize: async () => {},
+      statementTimeoutMs: 1000,
+      lockTimeoutMs: 50,
+    });
+    assert.equal(
+      await createRetainedFolderService(bounded).read("FLD123"),
+      null,
+    );
+  } finally {
+    if (blocker) {
+      await blocker.query("ROLLBACK");
+      blocker.release();
+    }
+    await store.close();
+    await env.cleanup();
+  }
+});
+
+test("source title survives initial collision suffixes; subsequent explicit rename keeps its literal segment", async () => {
+  const env = await testDatabase(),
+    store = database(env);
+  try {
+    await store.health();
+    await insertPages(env.pool, { accounts: { owner: {} } });
+    await env.pool.query(
+      "INSERT INTO folders(owner,path) VALUES('owner','/one'),('owner','/two')",
+    );
+    const original = "  Source / title  ";
+    const records = [
+      registration("AAA111", "/one", original),
+      registration("BBB222", "/two", original),
+    ];
+    const plan = planFolderTitles(
+      records.map((row) => row.descriptor),
+      { owner: await store.paths.paths("owner") },
+    );
+    assert.equal(plan.kind, "ready");
+    if (plan.kind !== "ready") return;
+    await createRetainedFolderExecutor(store.sql)(plan, records);
+    const service = createRetainedFolderService(store.sql);
+    assert.equal((await service.read("AAA111"))?.title, original);
+    const source = plan.locations.find((row) => row.legacyId === "AAA111")!;
+    assert.equal(source.state, "live");
+    if (source.state !== "live") return;
+    assert.notEqual(source.path, "/" + original);
+    await store.paths.changePath("owner", {
+      kind: "move",
+      from: source.path,
+      path: "/Explicit title-deadbeef",
+    });
+    assert.equal(
+      (await service.read("AAA111"))?.title,
+      "Explicit title-deadbeef",
+    );
+    assert.equal((await service.read("BBB222"))?.title, original);
+  } finally {
+    await store.close();
+    await env.cleanup();
+  }
+});
+
+test("folder listings fail bounded rather than disclose or silently truncate over 500 page candidates", async () => {
+  const env = await testDatabase(),
+    store = database(env);
+  try {
+    await store.health();
+    await insertPages(env.pool, { accounts: { owner: {} } });
+    await env.pool.query(
+      "INSERT INTO folders(owner,path) VALUES('owner','/old')",
+    );
+    const records = [registration("FLD123", "/old", "Folder")];
+    const plan = planFolderTitles(
+      records.map((row) => row.descriptor),
+      { owner: await store.paths.paths("owner") },
+    );
+    assert.equal(plan.kind, "ready");
+    if (plan.kind !== "ready") return;
+    await createRetainedFolderExecutor(store.sql)(plan, records);
+    await env.pool.query(
+      "INSERT INTO file_ids(id,owner,kind,published,created_at) SELECT lpad(n::text,6,'0'),'owner','page',true,0 FROM generate_series(1,501)n; INSERT INTO files(id,owner,share_hash,generation,head,path,access) SELECT id,owner,'fixture',1,'1','/Folder/'||id||'.html','{\"visibility\":\"public\",\"linkRole\":\"viewer\",\"shares\":{},\"version\":1}'::jsonb FROM file_ids WHERE kind='page'; INSERT INTO sources(file_id,revision,content) SELECT id,'1','<title>Bounded</title>' FROM file_ids WHERE kind='page'",
+    );
+    await assert.rejects(
+      createRetainedFolderService(store.sql).read("FLD123"),
+      { status: 503 },
+    );
+  } finally {
+    await store.close();
+    await env.cleanup();
+  }
+});
+
+test("concurrent mint wins cleanly without a registry-to-path lock inversion", async () => {
+  const env = await testDatabase(),
+    store = database(env);
+  let mint;
+  let pending: Promise<unknown> | undefined;
+  try {
+    await store.health();
+    await insertPages(env.pool, { accounts: { owner: {} } });
+    await env.pool.query(
+      "INSERT INTO folders(owner,path) VALUES('owner','/old')",
+    );
+    const records = [registration("FLD123", "/old", "Folder")];
+    const plan = planFolderTitles(
+      records.map((row) => row.descriptor),
+      { owner: await store.paths.paths("owner") },
+    );
+    assert.equal(plan.kind, "ready");
+    if (plan.kind !== "ready") return;
+    mint = await env.pool.connect();
+    await mint.query("BEGIN; SET LOCAL lock_timeout='100ms'");
+    await mint.query(
+      "INSERT INTO file_ids(id,owner,kind,published,created_at) VALUES('FLD123','owner','page',true,0)",
+    );
+    let started!: () => void;
+    const inserting = new Promise<void>((resolve) => (started = resolve));
+    const observed: import("../src/persistence/sql.ts").SqlDatabase = {
+      transaction: (work) =>
+        store.sql.transaction((client) =>
+          work({
+            query: (text, values) => {
+              if (text.startsWith("INSERT INTO file_ids")) started();
+              return client.query(text, values);
+            },
+            release: () => {},
+          }),
+        ),
+    };
+    pending = createRetainedFolderExecutor(observed)(plan, records);
+    await inserting;
+    await mint.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':paths:owner',0))",
+    );
+    await mint.query("COMMIT");
+    mint.release();
+    mint = undefined;
+    assert.equal(await pending, "stale");
+    assert.equal(
+      (await env.pool.query("SELECT kind FROM file_ids WHERE id='FLD123'"))
+        .rows[0].kind,
+      "page",
+    );
+    assert.equal(
+      (await env.pool.query("SELECT count(*) FROM retained_folders")).rows[0]
+        .count,
+      "0",
+    );
+  } finally {
+    if (mint) {
+      await mint.query("ROLLBACK");
+      mint.release();
+    }
+    await pending?.catch(() => {});
     await store.close();
     await env.cleanup();
   }

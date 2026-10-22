@@ -73,6 +73,16 @@ Each form takes `?download=1`. With `version=N`, the download contains that revi
 
 A private page sends a signed-out visitor to sign in; anything unknown, including a page the viewer may not read, is `404`.
 
+### Retained imported folders
+
+`GET /a/<folder-id>` renders an imported folder's readable title, ancestor links and immediate children. `HEAD` applies the same authorization and returns the same headers without a body. Folder IDs remain occupied in the file registry and cannot be claimed for a new page or backend.
+
+The optional `?namespace=<namespace>` selects an exact installed migration namespace, not an owner or access grant. Supply it at most once, as a nonempty URL-encoded string of at most 200 characters without control characters. The canonical address and child links remain `/a/<id>`. Other query parameters, including `download`, are unsupported for folders.
+
+Access is checked afresh for the folder and each child. An unlisted folder and its independently readable unlisted ancestors open by address; unlisted children are not discoverable without their own named or owner access. A folder grant does not grant child access. Expired or scoped account credentials fall back to anonymous access. Private, deleted, trashed, missing or ambiguous folders return `404`, without a sign-in redirect. Responses use private no-store caching.
+
+A read examines at most 500 immediate page candidates and 500 related folder candidates (children and ancestors). A larger candidate set returns `503`; it is never silently truncated or counted as though unreadable children were visible.
+
 ## Imported media
 
 Imported image, file and PDF pages can contain immutable media links. These links read bytes; they do not accept uploads or edits.

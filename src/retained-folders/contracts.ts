@@ -71,8 +71,9 @@ export interface RetainedFolderPage {
   }[];
 }
 export interface RetainedFolderService {
-  /** Credentials are resolved fresh inside the transaction. Scoped/expired grants cannot act as accounts.
-   * Null means absent, deleted, trashed, ambiguous or unreadable; it never reveals which. */
+  /** Credentials are resolved fresh inside the transaction. Invalid/scoped/expired grants fall back to anonymous.
+   * Null means absent, deleted, trashed, ambiguous or unreadable; it never reveals which.
+   * More than 500 immediate page or 500 related folder candidates fails with 503, never truncates. */
   read(
     legacyId: string,
     credential?: string,
@@ -85,3 +86,16 @@ export type RetainedFolderExecutor = (
   plan: FolderTitlePlan,
   registrations: readonly RetainedFolderRegistration[],
 ) => Promise<"applied" | "already-applied" | "stale">;
+
+/** Exact postimport receipt includes each permanently occupied registry ID. */
+export interface RetainedFolderApplicationReceipt {
+  plan: FolderTitlePlan;
+  registrations: readonly RetainedFolderRegistration[];
+  registry: readonly {
+    id: string;
+    owner: string;
+    kind: "folder";
+    published: true;
+    createdAt: 0;
+  }[];
+}

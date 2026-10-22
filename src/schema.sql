@@ -18,7 +18,14 @@ DO $$ DECLARE t text; aside text := current_schema() || '_v1'; BEGIN
 END $$;
 
 -- Every file ID, page or backend: who owns it, the reservation that created it, and whether a file is published under it.
-CREATE TABLE IF NOT EXISTS file_ids (id text PRIMARY KEY CHECK (id ~ '^[A-Za-z0-9]{6}$'), owner text NOT NULL REFERENCES accounts(actor), reservation_key text, ordinal integer, kind text CHECK (kind IN ('page','backend')), published boolean NOT NULL DEFAULT false, created_at bigint NOT NULL, CHECK (published = (kind IS NOT NULL)));
+CREATE TABLE IF NOT EXISTS file_ids (id text PRIMARY KEY CHECK (id ~ '^[A-Za-z0-9]{6}$'), owner text NOT NULL REFERENCES accounts(actor), reservation_key text, ordinal integer, kind text CHECK (kind IN ('page','backend','folder')), published boolean NOT NULL DEFAULT false, created_at bigint NOT NULL, CHECK (published = (kind IS NOT NULL)));
+-- Internal retained folder occupancy never becomes a public publishable file kind.
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='file_ids'::regclass AND conname='file_ids_kind_check' AND pg_get_constraintdef(oid) NOT LIKE '%folder%') THEN
+    ALTER TABLE file_ids DROP CONSTRAINT file_ids_kind_check;
+    ALTER TABLE file_ids ADD CONSTRAINT file_ids_kind_check CHECK(kind IN ('page','backend','folder'));
+  END IF;
+END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS file_ids_reservation ON file_ids(owner, reservation_key, ordinal) WHERE reservation_key IS NOT NULL;
 
 -- Pages. head is the current integer version as text, so sources and comments key on it.

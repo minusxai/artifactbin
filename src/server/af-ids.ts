@@ -1,6 +1,7 @@
 import type { FileId } from "../af-contracts.ts";
 import type {
   FileKind,
+  RegisteredFileKind,
   IdReservationStore,
 } from "../ids/file-id-contracts.ts";
 import { generateFileId, isFileId } from "../ids/file-id.ts";
@@ -13,7 +14,7 @@ export type RandomBytes = (count: number) => Uint8Array;
 export interface FileIdRecord {
   id: FileId;
   owner: string;
-  kind: FileKind | null;
+  kind: RegisteredFileKind | null;
   published: boolean;
 }
 
@@ -66,7 +67,7 @@ export async function readFileId(
     ? {
         id: String(row.id),
         owner: String(row.owner),
-        kind: (row.kind as FileKind | null) ?? null,
+        kind: (row.kind as RegisteredFileKind | null) ?? null,
         published: row.published === true,
       }
     : null;

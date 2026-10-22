@@ -23,21 +23,17 @@ export function createRetainedFolderService(
           )
         ).rows;
         if (candidates.length !== 1) return null;
-        const session = credential
+        let session = credential
           ? await loadSession(client, hash(credential))
           : null;
-        const actor = credential ? accountActor(session, now()) : null;
-        const selectedOwner = String(candidates[0]!.owner);
-        // Match mutation lock order: path lock before folder/file row locks.
-        await pathLock(client, selectedOwner);
-        const rows = (
-          await client.query(
-            "SELECT r.*,a.principal_kind FROM retained_folders r JOIN accounts a ON a.actor=r.owner WHERE r.legacy_id=$1 AND ($2::text IS NULL OR r.namespace=$2) AND r.state='live' LIMIT 2 FOR SHARE OF r",
-            [legacyId, namespace ?? null],
-          )
-        ).rows;
-        if (rows.length !== 1 || rows[0]!.owner !== selectedOwner) return null;
-        const folder = rows[0]!;
+        let actor: string | null = null;
+        if (credential) {
+          try {
+            actor = accountActor(session, now());
+          } catch {
+            session = null;
+          }
+        }
         const readable = (row: Record<string, unknown>, link: boolean) =>
           permissions(
             {
@@ -50,6 +46,20 @@ export function createRetainedFolderService(
             false,
             session?.groupAuthority,
           ).read;
+        // Do not let an unauthorized known ID contend on the owner's path lock.
+        // Authorized reads still serialize with moves and recheck the locked row below.
+        if (!readable(candidates[0]!, true)) return null;
+        const selectedOwner = String(candidates[0]!.owner);
+        // Match mutation lock order: path lock before folder/file row locks.
+        await pathLock(client, selectedOwner);
+        const rows = (
+          await client.query(
+            "SELECT r.*,a.principal_kind FROM retained_folders r JOIN accounts a ON a.actor=r.owner WHERE r.legacy_id=$1 AND ($2::text IS NULL OR r.namespace=$2) AND r.state='live' LIMIT 2 FOR SHARE OF r",
+            [legacyId, namespace ?? null],
+          )
+        ).rows;
+        if (rows.length !== 1 || rows[0]!.owner !== selectedOwner) return null;
+        const folder = rows[0]!;
         if (!readable(folder, true)) return null;
         const owner = String(folder.owner),
           path = String(folder.path);
