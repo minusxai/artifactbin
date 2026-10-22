@@ -102,7 +102,7 @@ const author = input.authorPlan
           .filter((v: any) => v.kind === "table")
           .map((v: any) => v.name),
         queries: split.content.queries.map((q: any) => q.name),
-        mutations: [],
+        mutations: input.datasetMutations?.map(binding => binding.name) ?? [],
       },
       {
         archivedRoot: root,
