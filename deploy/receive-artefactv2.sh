@@ -147,11 +147,12 @@ mv "$root/current-dataset-sql-image.tmp" "$root/current-dataset-sql-image"
 # Keep ordinary docker compose operations on the successful release too.
 printf 'PAGEGI_IMAGE=%s\nPAGEGI_BACKEND_IMAGE=%s\nPAGEGI_DATASET_SQL_IMAGE=%s\n' "$image" "$backend_image" "$dataset_sql_image" > "$root/.env.tmp"
 mv "$root/.env.tmp" "$root/.env"
+# Only this receiver's timestamp namespace is eligible; named/protected backups survive.
+python3 "$release/deploy/backup-retention.py" "$root/backups" --apply
 python3 - "$root" <<'PY'
 from pathlib import Path
 import shutil, sys
 root=Path(sys.argv[1])
-for p in sorted((root/'backups').glob('*.dump'),key=lambda p:p.stat().st_mtime,reverse=True)[7:]: p.unlink()
 for p in sorted((root/'releases').iterdir(),key=lambda p:p.stat().st_mtime,reverse=True)[5:]:
     if p.is_dir() and not p.name.startswith('.'): shutil.rmtree(p)
 PY

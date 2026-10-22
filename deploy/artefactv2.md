@@ -34,3 +34,20 @@ before recovering the previous app/backend/SQL images; current image pointers an
 beside the previous image pointers. An initial deployment has no prior services
 to recover and removes its failed candidate composition. Database backups remain
 separate; restoring composition never removes a database or object volume.
+
+Backup retention only owns filenames matching exactly19decimal timestamp digits
+followed by `.dump`, inside this deployment's backup directory. Named recovery
+backups and symlinks are never deleted. Add `<backup>.dump.protected` to protect
+an ordinary timestamp backup; after independently validating a dump with
+`pg_restore --list`, record `<backup>.dump.verified` to identify verified recovery
+points. Retention always preserves the two newest timestamp backups and the two
+newest marked verified backups. It otherwise retains at most7timestamp backups,
+and targets16GiB total regular dump bytes (including protected/named backups).
+The policy never deletes a protected recovery point to meet either bound; its
+aggregate `overBudget` result must be resolved before another rollout/import.
+Use `python3 deploy/backup-retention.py <backup-directory>` for a read-only plan;
+`--keep` and `--max-bytes` make a separately reviewed capacity budget explicit.
+Only `--apply` deletes eligible files. The receiver runs this policy after a
+successful deployment, under its deployment lock. Protect migration recovery
+points before deploying; retention does not replace an independently verified
+pre-import backup or a measured database/WAL/object/image disk budget.
