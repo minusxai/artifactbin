@@ -19,7 +19,7 @@ export async function loadDatasetMembers(
     : undefined;
   const binding = (
     await client.query(
-      `SELECT DISTINCT b.source_namespace,b.page_version FROM dataset_bindings b
+      `SELECT DISTINCT b.source_namespace,b.page_version FROM dataset_member_bindings b
     JOIN files f ON f.id=b.page_id AND f.head=b.page_version::text
     WHERE b.backend_id=$1 AND b.backend_version=$2 AND b.page_id=$3
     AND EXISTS(SELECT 1 FROM af_page_backends p WHERE p.page_id=b.page_id AND p.page_version=b.page_version AND p.file_id=b.backend_id AND p.version=b.backend_version)`,
@@ -108,4 +108,46 @@ export function createDatasetMembersRepository(
         loadDatasetMembers(client, context, now()),
       ),
   };
+}
+
+/** Publication only, inside the caller's canonical backend registration transaction. */
+export async function registerDatasetMemberBinding(
+  client: Pick<SqlClient, "query">,
+  binding: {
+    backendId: string;
+    backendVersion: string;
+    pageId: string;
+    pageVersion: number;
+    sourceNamespace: string;
+  },
+): Promise<void> {
+  const tuple = [
+    binding.backendId,
+    binding.backendVersion,
+    binding.pageId,
+    binding.pageVersion,
+  ];
+  if (
+    !binding.sourceNamespace ||
+    !(
+      await client.query(
+        "SELECT 1 FROM af_page_backends WHERE file_id=$1 AND version=$2 AND page_id=$3 AND page_version=$4",
+        tuple,
+      )
+    ).rows.length
+  )
+    throw Error("Unregistered membership backend");
+  const saved = (
+    await client.query(
+      "SELECT source_namespace FROM dataset_member_bindings WHERE backend_id=$1 AND backend_version=$2 AND page_id=$3 AND page_version=$4",
+      tuple,
+    )
+  ).rows[0];
+  if (saved && saved.source_namespace !== binding.sourceNamespace)
+    throw Error("Conflicting membership provenance");
+  if (!saved)
+    await client.query(
+      "INSERT INTO dataset_member_bindings(backend_id,backend_version,page_id,page_version,source_namespace) VALUES($1,$2,$3,$4,$5)",
+      [...tuple, binding.sourceNamespace],
+    );
 }

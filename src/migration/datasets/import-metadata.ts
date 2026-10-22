@@ -258,6 +258,81 @@ export function planDatasetMetadata(
   const browserBindings: DatasetMetadataPlan["browserBindings"][number][] = [];
   const bindingKeys = new Set<string>();
   const pageKeys = new Set<string>();
+  const addPage = (
+    page: LegacyArtifact,
+    b: { pageId: string; pageVersion: number },
+  ) => {
+    if (typeof page.edit_id !== "string" || !page.edit_id)
+      throw Error("Missing exact member page edit identity");
+    const pageKey = JSON.stringify([b.pageId, b.pageVersion]);
+    const joins = (manifest.tables.relations ?? [])
+      .filter(
+        (r) =>
+          r.subject_kind === "user" &&
+          r.verb === "join" &&
+          r.object_kind === "artifact" &&
+          r.object_id === page.id &&
+          r.status === "accepted",
+      )
+      .map((r) => String(r.subject_id));
+    if (joins.some((id) => !users.has(id)))
+      throw Error("Unmapped accepted dataset membership");
+    if (!pageKeys.has(pageKey)) {
+      pageKeys.add(pageKey);
+      const snapshot: DocumentSnapshot = {
+        id: page.id,
+        editId: page.edit_id,
+        owner: principal(page),
+        visibility: page.visibility,
+        format: "markup",
+        deleted: !!page.deleted_at,
+        ownerIsTestUser: users.get(String(page.user_id))?.kind === "testuser",
+        acceptedJoinUserIds: joins,
+      };
+      (metadata.pages as Array<DatasetImportMetadata["pages"][number]>).push({
+        pageId: b.pageId,
+        pageVersion: b.pageVersion,
+        snapshot,
+      });
+      for (const legacyUserId of joins)
+        (
+          metadata.acceptedJoins as Array<
+            DatasetImportMetadata["acceptedJoins"][number]
+          >
+        ).push({
+          pageId: b.pageId,
+          legacyUserId,
+          joinedAt: (() => {
+            const relation = (manifest.tables.relations ?? []).find(
+              (r) =>
+                r.subject_kind === "user" &&
+                r.verb === "join" &&
+                r.object_kind === "artifact" &&
+                r.object_id === page.id &&
+                r.subject_id === legacyUserId &&
+                r.status === "accepted",
+            );
+            const at = relation?.accepted_at;
+            return typeof at === "string" && Number.isFinite(Date.parse(at))
+              ? new Date(at).toISOString()
+              : null;
+          })(),
+        });
+    }
+  };
+  for (const member of input.memberPages ?? []) {
+    const page = artifacts.get(member.pageLegacyId);
+    if (
+      !page ||
+      page.format !== "markup" ||
+      page.version !== member.pageVersion ||
+      maps.pages[member.pageLegacyId] !== member.pageId ||
+      !/^[A-Za-z0-9]{6}$/.test(member.pageId) ||
+      page.deleted_at
+    )
+      throw Error("Invalid member page provenance");
+    addPage(page, member);
+  }
   for (const b of input.bindings) {
     const headPage = artifacts.get(b.pageLegacyId);
     const archivedPages = (manifest.tables.artifact_versions ?? []).filter(
@@ -316,61 +391,7 @@ export function planDatasetMetadata(
     ]);
     if (bindingKeys.has(key)) throw Error("Ambiguous dataset binding");
     bindingKeys.add(key);
-    const pageKey = JSON.stringify([b.pageId, b.pageVersion]);
-    const joins = (manifest.tables.relations ?? [])
-      .filter(
-        (r) =>
-          r.subject_kind === "user" &&
-          r.verb === "join" &&
-          r.object_kind === "artifact" &&
-          r.object_id === page.id &&
-          r.status === "accepted",
-      )
-      .map((r) => String(r.subject_id));
-    if (joins.some((id) => !users.has(id)))
-      throw Error("Unmapped accepted dataset membership");
-    if (!pageKeys.has(pageKey)) {
-      pageKeys.add(pageKey);
-      const snapshot: DocumentSnapshot = {
-        id: page.id,
-        editId: page.edit_id,
-        owner: principal(page),
-        visibility: page.visibility,
-        format: "markup",
-        deleted: !!page.deleted_at,
-        ownerIsTestUser: users.get(String(page.user_id))?.kind === "testuser",
-        acceptedJoinUserIds: joins,
-      };
-      (metadata.pages as Array<DatasetImportMetadata["pages"][number]>).push({
-        pageId: b.pageId,
-        pageVersion: b.pageVersion,
-        snapshot,
-      });
-      for (const legacyUserId of joins)
-        (
-          metadata.acceptedJoins as Array<
-            DatasetImportMetadata["acceptedJoins"][number]
-          >
-        ).push({
-          pageId: b.pageId,
-          legacyUserId,
-          joinedAt: (() => {
-            const relation = (manifest.tables.relations ?? []).find(
-              (r) =>
-                r.subject_kind === "user" &&
-                r.verb === "join" &&
-                r.object_kind === "artifact" &&
-                r.object_id === page.id &&
-                r.subject_id === legacyUserId &&
-                r.status === "accepted",
-            );
-            const at = relation?.joined_at;
-            return typeof at === "string" && Number.isFinite(Date.parse(at))
-              ? new Date(at).toISOString()
-              : null;
-          })(),
-        });
-    }
+    addPage(page, b);
     const current = metadata.resources.find(
       (r) => r.legacyId === b.datasetLegacyId,
     )!;

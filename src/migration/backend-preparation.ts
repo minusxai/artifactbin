@@ -1,3 +1,4 @@
+import { registerDatasetMemberBinding } from "../persistence/dataset-members.ts";
 import {
   validDatasetMutationParameterMap,
   validDatasetMutationRowParameters,
@@ -171,14 +172,16 @@ export async function prepareMigrationBackends(
     }
     if (
       page.owner.kind === "group" &&
-      page.revisions.some((r) => r.imports.length)
+      page.revisions.some((r) => r.imports.length || r.readsMembers)
     )
       throw new Error(
         "Group-owned pages with dataset Imports cannot use backend execution",
       );
   }
   const required = pages.filter((page) =>
-    page.revisions.some((revision) => revision.imports.length),
+    page.revisions.some(
+      (revision) => revision.imports.length || revision.readsMembers,
+    ),
   );
   if (!required.length)
     return { receipts: [], bindings: [], operations: [], browserMutations: [] };
@@ -215,11 +218,17 @@ export async function prepareMigrationBackends(
     for (const revision of [...page.revisions].sort(
       (a, b) => a.version - b.version,
     )) {
+      const readsMembers =
+        revision.readsMembers ||
+        revision.mutations?.some((m) => m.readsMembers);
       receipts.push({
         pageLegacyId: page.legacyId,
         pageId: page.pageId,
         pageVersion: revision.version,
-        linked: revision.imports.length > 0,
+        linked: revision.imports.length > 0 || readsMembers === true,
+        ...(readsMembers
+          ? { members: { sourceNamespace: input.sourceNamespace } }
+          : {}),
         owner: page.owner.id,
         backendId,
         backendNamespace: "legacyData",
@@ -307,6 +316,8 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
       receipt.pageId === receipt.backendId ||
       !positive(receipt.pageVersion) ||
       typeof receipt.linked !== "boolean" ||
+      (receipt.members !== undefined &&
+        (!receipt.linked || !nonempty(receipt.members.sourceNamespace))) ||
       !nonempty(receipt.owner) ||
       receipt.backendNamespace !== "legacyData" ||
       receipt.sourceSha256 !== digest(receipt.deployment.source) ||
@@ -416,5 +427,13 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
         ? { [receipt.backendId]: receipt.deployment }
         : {},
     });
+    if (receipt.members)
+      await registerDatasetMemberBinding(client, {
+        backendId: receipt.backendId,
+        backendVersion: receipt.deployment.version,
+        pageId: receipt.pageId,
+        pageVersion: receipt.pageVersion,
+        sourceNamespace: receipt.members.sourceNamespace,
+      });
   }
 };

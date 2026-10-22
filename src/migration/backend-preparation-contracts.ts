@@ -13,6 +13,8 @@ export interface MigrationBackendPage {
     /** Exact archived source identity; required for persistent mutation publication. */
     editId?: string;
     mutations?: readonly LegacyMutationDescriptor[];
+    /** Canonical source-declared current-page accepted membership relation. */
+    readsMembers?: true;
     imports: readonly {
       name: string;
       legacyRef: string;
@@ -35,6 +37,8 @@ export interface MigrationBackendReceipt {
   /** False records an empty backend set when this revision removed all Imports. */
   linked: boolean;
   owner: string;
+  /** Present only when this revision declared the trusted membership relation. */
+  members?: { sourceNamespace: string };
   backendId: string;
   backendNamespace: "legacyData";
   backendHref: string;

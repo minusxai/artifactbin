@@ -548,6 +548,9 @@ test("a changed accepted join snapshot cannot publish a staged membership-depend
         objects,
         now: () => 100,
       });
+    await env.pool.query(
+      "INSERT INTO dataset_member_bindings VALUES('Bk0001','backend-v1','Pg0001',1,'legacy')",
+    );
     const memberOperation = {
       ...operation,
       readsMembers: true as const,

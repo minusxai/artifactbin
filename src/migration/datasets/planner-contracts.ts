@@ -56,4 +56,10 @@ export interface DatasetMetadataInput {
   maps: MigrationMaps;
   receipts: readonly DatasetObjectReceipt[];
   bindings: readonly DatasetImportBindingInput[];
+  /** Canonically registered current-page membership backends without a dataset Import. */
+  memberPages?: readonly {
+    pageLegacyId: string;
+    pageId: string;
+    pageVersion: number;
+  }[];
 }

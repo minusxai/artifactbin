@@ -92,3 +92,11 @@ BEGIN
 END $$;
 DROP TRIGGER IF EXISTS dataset_join_page_lock ON dataset_page_joins;
 CREATE TRIGGER dataset_join_page_lock BEFORE INSERT OR UPDATE OR DELETE ON dataset_page_joins FOR EACH ROW EXECUTE FUNCTION lock_dataset_join_page();
+
+CREATE TABLE IF NOT EXISTS dataset_member_bindings (
+ backend_id text NOT NULL, backend_version text NOT NULL, page_id text NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+ page_version bigint NOT NULL CHECK(page_version>0), source_namespace text NOT NULL,
+ PRIMARY KEY(backend_id,backend_version,page_id,page_version)
+);
+DROP TRIGGER IF EXISTS dataset_member_bindings_immutable ON dataset_member_bindings;
+CREATE TRIGGER dataset_member_bindings_immutable BEFORE UPDATE ON dataset_member_bindings FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();

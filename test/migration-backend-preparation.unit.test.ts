@@ -401,3 +401,25 @@ test("named mutations pin trusted SQL to exact backend, page revision and bindin
     );
   }
 });
+
+test("a declared membership-only revision receives a real compiled backend without dataset Imports", async () => {
+  const page = input.pages[0]!;
+  const result = await prepareMigrationBackends(
+    {
+      ...input,
+      pages: [
+        {
+          ...page,
+          revisions: [{ version: 1, readsMembers: true, imports: [] }],
+        },
+      ],
+    },
+    { host: { compile: async () => deployment, invoke: async () => null } },
+  );
+  assert.equal(result.bindings.length, 0);
+  assert.equal(result.receipts.length, 1);
+  assert.equal(result.receipts[0]!.linked, true);
+  assert.deepEqual(result.receipts[0]!.members, {
+    sourceNamespace: input.sourceNamespace,
+  });
+});

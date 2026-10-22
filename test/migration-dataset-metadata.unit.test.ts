@@ -159,7 +159,7 @@ test("accepted joins come only from exact accepted source relations, including l
       object_id: "document",
       status: "accepted",
       deleted_at: "2020-01-01",
-      joined_at: "2019-01-01T00:00:00Z",
+      accepted_at: "2019-01-01T00:00:00Z",
     },
     {
       subject_kind: "user",
@@ -250,4 +250,32 @@ test("unrelated unmapped token provenance is counted, while an actual unmapped t
   a.manifest.artifacts[0]!.user_id = null;
   a.manifest.artifacts[0]!.token_id = "orphan";
   assert.throws(() => planDatasetMetadata(a));
+});
+
+test("membership-only page metadata preserves joins without inventing dataset bindings", () => {
+  const a = input();
+  a.bindings = [];
+  a.memberPages = [
+    { pageLegacyId: "document", pageId: "Doc123", pageVersion: 3 },
+  ];
+  const head = a.manifest.artifacts.find((r) => r.id === "document")!;
+  a.memberPages[0]!.pageVersion = head.version;
+  a.manifest.tables.relations = [
+    {
+      subject_kind: "user",
+      subject_id: "user",
+      verb: "join",
+      object_kind: "artifact",
+      object_id: "document",
+      status: "accepted",
+      accepted_at: "2020-01-01T00:00:00Z",
+    },
+  ];
+  const result = planDatasetMetadata(a);
+  assert.equal(result.metadata.bindings.length, 0);
+  assert.equal(result.metadata.pages.length, 1);
+  assert.equal(
+    result.metadata.acceptedJoins[0]!.joinedAt,
+    "2020-01-01T00:00:00.000Z",
+  );
 });

@@ -6,6 +6,7 @@ import { createSqlDatabase } from "../src/persistence/sql.ts";
 import {
   createDatasetMembersRepository,
   loadDatasetMembers,
+  registerDatasetMemberBinding,
 } from "../src/persistence/dataset-members.ts";
 import type { DatasetBinding } from "../src/datasets/contracts.ts";
 const context = {
@@ -110,6 +111,10 @@ async function fixture(savedBinding = binding) {
   await env.pool.query(
     "INSERT INTO dataset_page_joins VALUES('Pg0001','legacy','old-member')",
   );
+  await env.pool.query(
+    "INSERT INTO dataset_member_bindings VALUES('Bk0001',$1,'Pg0001',1,'legacy')",
+    [savedBinding.backendVersion],
+  );
   const repository = createDatasetMembersRepository(
     createSqlDatabase({
       pool: env.pool,
@@ -123,6 +128,19 @@ async function fixture(savedBinding = binding) {
 test("accepted members preserve timestamps/order and deny stale context, revocation and deletion", async () => {
   const { env, repository } = await fixture();
   try {
+    const publication = {
+      ...context,
+      pageVersion: 1,
+      sourceNamespace: "legacy",
+    };
+    await registerDatasetMemberBinding(env.pool, publication);
+    await assert.rejects(
+      registerDatasetMemberBinding(env.pool, {
+        ...publication,
+        sourceNamespace: "different",
+      }),
+      /Conflicting/,
+    );
     assert.equal(
       await repository.snapshot(context),
       null,
@@ -134,6 +152,7 @@ test("accepted members preserve timestamps/order and deny stale context, revocat
     await env.pool.query(
       "INSERT INTO dataset_page_joins(page_id,source_namespace,legacy_user_id,joined_at) VALUES('Pg0001','legacy','earlier','2020-01-01T00:00:00Z')",
     );
+    await env.pool.query("DELETE FROM dataset_bindings");
     const snapshot = await repository.snapshot(context);
     assert.ok(snapshot);
     assert.deepEqual(snapshot.rows, [
