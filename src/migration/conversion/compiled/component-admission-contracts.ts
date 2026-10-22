@@ -11,6 +11,7 @@ export interface LocalComponentContext {
 }
 /** Family-local facts; source traversal owns symbol resolution and lexical scopes. */
 export interface LocalComponentAdmission {
+  readonly dialogMutationForm?: import("./dialog-form-contracts.ts").AdmittedDialogMutationForm;
   readonly selectedPerson?: string;
   readonly references: readonly string[];
   readonly scalarBindings: readonly string[];

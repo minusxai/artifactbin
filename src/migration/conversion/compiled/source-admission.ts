@@ -304,6 +304,11 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           scalarControls.push(...component.scalarControls);
           dataControls.push(...component.dataControls);
           presentationIdentities.push(...component.presentationIdentityHosts);
+          if(component.dialogMutationForm){
+            const form=component.dialogMutationForm;
+            const registered=registeredMutations.find(binding=>binding.name===form.name);
+            if(!registered||registered.valueParam||Object.keys(registered.rowParams??{}).length||form.requiresViewer&&!viewerAllowed||Object.keys(form.args??{}).some(key=>!Object.hasOwn(registered.paramTypes,key)))invalid=true;
+          }
           if(component.selectedPerson){
             if(!historical&&!people.some(p=>p.valueName===component.selectedPerson))invalid=true;
             usedPeople.add(component.selectedPerson);
@@ -464,7 +469,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           if (attr.name?.name === "run" && !(!editingCell && name === "Select")) {
             const run = attr.value?.value;
             if (
-              (!editingCell && name !== "Button") ||
+              (!editingCell && name !== "Button" && !component?.dialogMutationForm) ||
               typeof run !== "string" ||
               !/^\$[A-Za-z][A-Za-z0-9_]*$/.test(run)
             )
@@ -478,7 +483,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
               mutationRuns.add(run.slice(1));
             }
           }
-          if (attr.name?.name === "args") {
+          if (attr.name?.name === "args" && !component?.dialogMutationForm) {
             if (
               name !== "Button" ||
               attr.value?.expression?.type !== "ObjectExpression"

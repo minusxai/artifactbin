@@ -1,4 +1,5 @@
 import { archivedRuntimePlan } from "./runtime-plan.ts";
+import {archivedDialogMutationFormSource} from "./dialog-form-source.ts";
 import { archivedDialogFocusSource } from "./dialog-source.ts";
 import {readLegacyCellWriteSites} from "./cell-write-source.ts";
 import {validateCompiledTransport} from "./transport.ts";
@@ -387,7 +388,7 @@ const bundled = await bundle({
           let source = await readFile(args.path, "utf8");
           if (input.personBindings?.length && args.path === path.join(root,"services/app/lib/islands/kit/people.tsx")) source = archivedPersonProfileSource({source,coreUrl:input.coreUrl});
           if(input.datasetMutations?.some(binding=>binding.valueParam)&&args.path===path.join(root,"services/app/lib/islands/kit/cells.tsx"))source=archivedExplicitCellOptionsSource(source);
-          if (args.path === path.join(root,"services/app/lib/islands/kit/dialog.tsx")) source = archivedDialogFocusSource(source,path.join(import.meta.dirname,"dialog-focus.ts"));
+          if (args.path === path.join(root,"services/app/lib/islands/kit/dialog.tsx")) source = archivedDialogMutationFormSource(archivedDialogFocusSource(source,path.join(import.meta.dirname,"dialog-focus.ts")),path.join(import.meta.dirname,"dialog-form.ts"));
           const stripped = await stripTypes(source, {
             loader: "tsx",
             jsx: "preserve",

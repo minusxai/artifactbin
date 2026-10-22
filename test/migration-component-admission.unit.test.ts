@@ -89,3 +89,11 @@ test("custom cell identities require durable owner and row keys without mutating
   ])
     assert.throws(() => admitLocalComponent(node(invalid), context));
 });
+
+test("Dialog mutation forms retain registered names and scalar binding facts and refuse nested forms",()=>{
+ const c={ancestors:["Dialog"]};
+ const form=admitLocalComponent(node('<DialogContent run="$save" args={{title:"$title",owner:"$_me.id"}}><input value="$title" required={true}/><button type="submit">Save</button></DialogContent>'),c)!;
+ assert.equal(form.dialogMutationForm?.name,"save");assert.deepEqual(form.references,["title"]);assert.equal(form.dialogMutationForm?.requiresViewer,true);
+ for(const source of ['<DialogContent args={{title:"$title"}}/>','<DialogContent run="$save"><form/></DialogContent>','<DialogContent run="$save"><Custom/></DialogContent>','<DialogContent run="$save" args={{title:"$_row.title"}}/>'])assert.throws(()=>admitLocalComponent(node(source),c));
+ assert.throws(()=>admitLocalComponent(node('<DialogContent run="$save"/>'),{ancestors:["Dialog","form"]}));
+});

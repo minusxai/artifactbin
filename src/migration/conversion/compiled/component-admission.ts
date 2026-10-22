@@ -1,3 +1,4 @@
+import {admitDialogMutationForm,assertDialogFormChildren} from "./dialog-form-admission.ts";
 import {admitMermaid} from "./mermaid-admission.ts";
 import {admitPersonAttributes} from "./person-admission.ts";
 import {admitSlideDeckComponent} from "./slide-deck.ts";
@@ -83,7 +84,10 @@ export const admitLocalComponent: AdmitLocalComponent = (input, context) => {
     return result;
   }
   if (presentationKitComponent(tag)) {
-    const capability = admitPresentationKit(tag, attrs, context.ancestors);
+    const form = tag === "DialogContent" ? admitDialogMutationForm(attrs, context.ancestors, context.rowTable) : null;
+    if(form){assertDialogFormChildren(node);result.dialogMutationForm=form;result.references=[...form.references];result.scalarBindings=[...form.references];}
+    const presentationAttrs = form ? Object.fromEntries(Object.entries(attrs).filter(([key])=>key!=="run"&&key!=="args")) : attrs;
+    const capability = admitPresentationKit(tag, presentationAttrs, context.ancestors);
     result.identityLifecycle = capability;
     if (capability.scalarBinding) {
       result.references = [capability.scalarBinding.binding];

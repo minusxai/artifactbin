@@ -6,6 +6,7 @@ import {
   createCompiledDatasetMutations,
   compiledMutationIntentStore,
 } from "../src/migration/conversion/compiled/dataset-mutations.ts";
+import {createCompiledMutationAvailability} from "../src/migration/conversion/compiled/mutation-availability.ts";
 import { datasetMutationBoot } from "../src/migration/conversion/compiled/dataset-mutation-boot.ts";
 test("generated boot immediately renders restored uncertainty and reconciles original ID after an explicit click", async () => {
   const disk = new Map<string, string>(),
@@ -102,6 +103,7 @@ test("generated boot immediately renders restored uncertainty and reconciles ori
     "gql",
     "createSignal",
     "createCompiledDatasetMutations",
+    "createCompiledMutationAvailability",
     "compiledMutationIntentStore",
     "values",
     "write",
@@ -124,6 +126,7 @@ test("generated boot immediately renders restored uncertainty and reconciles ori
       ];
     },
     createCompiledDatasetMutations,
+    createCompiledMutationAvailability,
     compiledMutationIntentStore,
     () => ({ value: 10 }),
     () => {},
