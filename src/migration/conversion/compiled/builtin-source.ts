@@ -1,3 +1,4 @@
+import { prepareLegacyBuiltinSql } from "./builtin-sql.ts";
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
 import { SqliteDatabase } from "../../../datasets/sql/engine/database.ts";
@@ -132,8 +133,9 @@ export async function analyzeLegacyBuiltin(
       let progressed = false;
       for (const query of pending) {
         let prepared;
+        const rewritten = prepareLegacyBuiltinSql(query.sql);
         try {
-          prepared = db.prepare(query.sql, "read");
+          prepared = db.prepare(rewritten.sql, "read");
         } catch {
           next.push(query);
           continue;
@@ -141,6 +143,9 @@ export async function analyzeLegacyBuiltin(
         try {
           const a = prepared.analysis;
           if (
+            (builtin === "_me" &&
+              rewritten.viewerParameter !== null &&
+              a.params.includes(rewritten.viewerParameter)) ||
             a.reads.some(
               (r) =>
                 r.schema.toLowerCase() === "main" &&

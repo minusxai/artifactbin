@@ -47,3 +47,8 @@ test("member declaration discovery uses canonical Helmet Query declarations and 
     false,
   );
 });
+
+test("membership SQL preparation keeps canonical viewer and clock inputs in dependencies", async () => {
+  const source = '<Helmet><Query name="clock">{`select $_now as instant`}</Query><Query name="readers">{`select user_id, instant from _members, clock where user_id = $_me.id`}</Query></Helmet><p>Readers</p>';
+  assert.equal(await readsLegacyMembers(source), true);
+});
