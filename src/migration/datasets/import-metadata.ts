@@ -325,6 +325,7 @@ export function planDatasetMetadata(
   for (const member of [
     ...(input.memberPages ?? []),
     ...(input.programPages ?? []),
+    ...(input.sourceQueryPages ?? []),
   ]) {
     const page = artifacts.get(member.pageLegacyId);
     if (

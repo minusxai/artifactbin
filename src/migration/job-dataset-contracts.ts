@@ -6,6 +6,11 @@ import type { MigrationBackendReceipt } from "./backend-preparation-contracts.ts
 import type { MigrationDatasetImportScan } from "./dataset-scan-contracts.ts";
 export interface MigrationJobDatasets {
   metadata: DatasetImportMetadata;
+  sourceQueries?: ReadonlyMap<
+    string,
+    readonly import("./conversion/compiled/source-query-contracts.ts").CompiledSourceQueryBinding[]
+  >;
+  sourceQueryRegistrations?: readonly import("./source-query-contracts.ts").MigrationSourceQueryBatch[];
   ownershipDatasetGrants?: readonly import("./ownership-dataset-grants-contracts.ts").MigrationOwnershipDatasetGrantAudit[];
   datasetAttachments?: ReadonlyMap<
     string,

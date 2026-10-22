@@ -69,6 +69,14 @@ export async function verifyMigrationJob(
               ...source.datasets.provenance,
               profileAssets: source.supplementalAssets?.profiles,
               queryRegistrations,
+              ...(source.preparedDatasets.sourceQueryRegistrations?.length
+                ? {
+                    sourceQueryRegistrations:
+                      source.preparedDatasets.sourceQueryRegistrations.filter(
+                        (g) => ready.has(g.receipt.pageId),
+                      ),
+                  }
+                : {}),
               ...projectMigrationOwnershipDatasetGrants(
                 selectMigrationDatasetMetadata(
                   source.preparedDatasets.metadata,
@@ -79,6 +87,7 @@ export async function verifyMigrationJob(
               ),
             },
             options.ownershipOverride,
+            options.sourceQueryRegistrations,
           )
         : 0;
     result = {

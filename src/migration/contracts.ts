@@ -41,6 +41,7 @@ export interface ConversionInput {
   datasetUnavailable?: { reason: "historical-binding-unavailable" };
   datasetMutations?: readonly CompiledDatasetMutation[];
   datasetBindings?: readonly DatasetBrowserBinding[];
+  sourceQueries?: readonly import("./conversion/compiled/source-query-contracts.ts").CompiledSourceQueryBinding[];
   resourceMap?: Readonly<Record<string, string>>;
   source: string;
   coreUrl: string;

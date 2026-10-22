@@ -62,6 +62,11 @@ export interface DatasetMetadataInput {
     pageId: string;
     pageVersion: number;
   }[];
+  sourceQueryPages?: readonly {
+    pageLegacyId: string;
+    pageId: string;
+    pageVersion: number;
+  }[];
   memberPages?: readonly {
     pageLegacyId: string;
     pageId: string;

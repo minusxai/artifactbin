@@ -1,5 +1,5 @@
-import {createHash} from "node:crypto";
-import {validateMigrationSourceAdmission} from "./source-admission-policy.ts";
+import { createHash } from "node:crypto";
+import { validateMigrationSourceAdmission } from "./source-admission-policy.ts";
 import type { Converter } from "./contracts.ts";
 import {
   convertLegacyJsx,
@@ -23,7 +23,10 @@ export const convertMigrationContent: Converter = (input) =>
 export function createMigrationConverter(
   options: MigrationConversionOptions,
 ): Converter {
-  validateMigrationSourceAdmission({conversionStrategy:options.strategy,sourceAdmission:options.sourceAdmission});
+  validateMigrationSourceAdmission({
+    conversionStrategy: options.strategy,
+    sourceAdmission: options.sourceAdmission,
+  });
   if (options.strategy === "strict")
     return async (input) => ({
       ...(await convertMigrationContent(input)),
@@ -87,6 +90,7 @@ export function createMigrationConverter(
       coreUrl: input.coreUrl,
       resourceMap: input.resourceMap,
       datasetBindings: input.datasetBindings,
+      sourceQueries: input.sourceQueries,
       datasetMutations: input.datasetMutations,
       boundValueColumns: input.boundValueColumns,
       membersBinding: input.membersBinding,

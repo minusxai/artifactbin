@@ -1,3 +1,9 @@
+import {
+  registerSourceQueries,
+  verifySourceQueries,
+} from "../persistence/source-queries.ts";
+import { validateMigrationSourceQueryBatch } from "./source-query-preparation.ts";
+import type { MigrationSourceQueryRegistration } from "../datasets/source-query/contracts.ts";
 import { validateMigrationOwnershipDatasetGrantBatch } from "./ownership-dataset-grants.ts";
 import { persistMigrationOwnershipDatasetGrantAudit } from "./ownership-dataset-grant-audit.ts";
 import type { MigrationOwnershipOverride } from "./ownership-override-contracts.ts";
@@ -35,12 +41,15 @@ export class PostgresDatasetMetadataDestination
   private readonly names: ReturnType<typeof destinationSchemas>;
   private readonly db: SqlReader;
   private readonly ownershipOverride?: MigrationOwnershipOverride;
+  private readonly sourceQueryRegistrations?: readonly MigrationSourceQueryRegistration[];
   constructor(
     db: SqlReader,
     schema: string,
     ownershipOverride?: MigrationOwnershipOverride,
+    sourceQueryRegistrations?: readonly MigrationSourceQueryRegistration[],
   ) {
     this.ownershipOverride = ownershipOverride;
+    this.sourceQueryRegistrations = sourceQueryRegistrations;
     this.db = db;
     this.names = destinationSchemas(schema);
   }
@@ -60,6 +69,11 @@ export class PostgresDatasetMetadataDestination
       this.ownershipOverride,
     );
     validateMigrationPersonBindings(batch.metadata);
+    validateMigrationSourceQueryBatch(
+      batch.metadata,
+      batch.sourceQueryRegistrations,
+      this.sourceQueryRegistrations,
+    );
     const plans = tablePlans(batch);
     const key = (row: LegacyRow, keys: readonly string[]) =>
       canonical(keys.map((k) => row[k]));
@@ -85,8 +99,24 @@ export class PostgresDatasetMetadataDestination
       await this.db.query(`SET LOCAL search_path TO ${this.names.runtime}`);
       // Locks serialize migration reruns against live revocations while comparing current authority.
       await this.db.query(
-        `LOCK TABLE ${[...plans.map((p) => this.names.runtime + "." + p.table), this.names.runtime + ".dataset_mutation_operations"].join(",")} IN SHARE ROW EXCLUSIVE MODE`,
+        `LOCK TABLE ${[...plans.map((p) => this.names.runtime + "." + p.table), this.names.runtime + ".dataset_mutation_operations", this.names.runtime + ".dataset_source_queries", this.names.runtime + ".dataset_viewer_bindings"].join(",")} IN SHARE ROW EXCLUSIVE MODE`,
       );
+      for (const { receipt: r } of batch.sourceQueryRegistrations ?? []) {
+        const authority = await this.db.query(
+          `SELECT 1 FROM ${this.names.runtime}.af_backend_versions v JOIN ${this.names.runtime}.af_page_backends p ON p.file_id=v.file_id AND p.version=v.version JOIN ${this.names.runtime}.dataset_viewer_bindings b ON b.backend_id=v.file_id AND b.backend_version=v.version AND b.page_id=p.page_id AND b.page_version=p.page_version WHERE v.file_id=$1 AND v.version=$2 AND p.page_id=$3 AND p.page_version=$4 AND b.source_namespace=$5`,
+          [
+            r.backendId,
+            r.deployment.version,
+            r.pageId,
+            r.pageVersion,
+            batch.metadata.sourceNamespace,
+          ],
+        );
+        if (authority.rows.length !== 1)
+          throw Error(
+            "Source query requires exact compiled backend/page/viewer authority",
+          );
+      }
       for (const binding of batch.metadata.bindings) {
         const compiled = await this.db.query(
           `SELECT 1 FROM ${this.names.runtime}.af_backend_versions v JOIN ${this.names.runtime}.af_page_backends p ON p.file_id=v.file_id AND p.version=v.version WHERE v.file_id=$1 AND v.version=$2 AND p.page_id=$3 AND p.page_version=$4`,
@@ -188,6 +218,27 @@ export class PostgresDatasetMetadataDestination
           ),
         );
         result.created++;
+      }
+      const sourceQueryClient = {
+        query: async (text: string, values?: readonly unknown[]) => ({
+          ...(await this.db.query(text, values ? [...values] : undefined)),
+          rowCount: null,
+        }),
+      };
+      for (const group of batch.sourceQueryRegistrations ?? []) {
+        if (receipt)
+          await verifySourceQueries(
+            sourceQueryClient,
+            group.receipt,
+            batch.metadata.sourceNamespace,
+            group.queries,
+          );
+        await registerSourceQueries(
+          sourceQueryClient,
+          group.receipt,
+          batch.metadata.sourceNamespace,
+          group.queries,
+        );
       }
       for (const registration of batch.queryRegistrations ?? [])
         await registerSavedQueries(

@@ -555,3 +555,76 @@ test("an admitted server-handler head receives the fixed callable backend withou
   assert.equal(prepared.bindings.length, 0);
   assert.ok(schema.getMutationType()?.getFields().run);
 });
+
+test("source-query pages get their own fixed backend variant and viewer authority without changing hosted backends", async () => {
+  const { generatedSourceQueryBackendSource } = await import(
+    "../src/migration/source-query-backend.ts"
+  );
+  const sql = "select 1 as value";
+  const query = {
+    pageLegacyId: "source-page",
+    pageVersion: 1,
+    name: "q",
+    sourceRef: "ref:source01",
+    resource: "source-source01",
+    sql,
+    sqlSha256: digest(sql),
+    params: {},
+    columns: [{ name: "value", type: "number" as const }],
+  };
+  let calls = 0;
+  const host = {
+    compile: async (source: string) => {
+      calls++;
+      const module = await readBackendModule(source);
+      const schema = boundedBackendSchema(module.typeDefs);
+      return sealDeployment(source, "fixture compiled variant", {
+        typeDefs: module.typeDefs,
+        fields: [
+          ...Object.keys(schema.getQueryType()?.getFields() ?? {}),
+          ...Object.keys(schema.getMutationType()?.getFields() ?? {}),
+        ],
+      });
+    },
+    invoke: async () => null,
+  };
+  const prepared = await prepareMigrationBackends(
+    {
+      ...input,
+      pages: [
+        ...input.pages,
+        {
+          legacyId: "source-page",
+          pageId: "Page56",
+          owner: { kind: "user", id: "member" },
+          revisions: [
+            {
+              version: 1,
+              imports: [],
+              readsViewer: true,
+              sourceQueries: [query],
+            },
+          ],
+        },
+      ],
+    },
+    { host },
+  );
+  assert.equal(calls, 2);
+  assert.equal(
+    prepared.receipts[0]!.deployment.source,
+    generatedDatasetBackendSource,
+  );
+  const receipt = prepared.receipts.find(
+    (r) => r.pageLegacyId === "source-page",
+  )!;
+  assert.equal(receipt.deployment.source, generatedSourceQueryBackendSource);
+  assert.equal(receipt.sourceQueries, true);
+  assert.equal(receipt.linked, true);
+  assert.equal(receipt.viewer?.sourceNamespace, "fixture");
+  assert.deepEqual(prepared.sourceQueryRegistrations?.[0]?.queries, [query]);
+  assert.equal(
+    prepared.sourceQueryRegistrations?.[0]?.receipt.backendId,
+    receipt.backendId,
+  );
+});

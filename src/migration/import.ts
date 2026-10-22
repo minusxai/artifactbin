@@ -110,6 +110,12 @@ export async function planMigration(
       legacyId: string,
       version: number,
     ) => readonly CompiledDatasetMutation[];
+    sourceQueries?: (
+      legacyId: string,
+      version: number,
+    ) =>
+      | readonly import("./conversion/compiled/source-query-contracts.ts").CompiledSourceQueryBinding[]
+      | undefined;
     datasetBindings?: (
       legacyId: string,
       version: number,
@@ -270,6 +276,15 @@ export async function planMigration(
                   Number(original.version),
                 )
               : undefined,
+          ...(Number(original.version) === artifact.version &&
+          options.sourceQueries?.(artifact.id, Number(original.version))?.length
+            ? {
+                sourceQueries: options.sourceQueries!(
+                  artifact.id,
+                  Number(original.version),
+                ),
+              }
+            : {}),
           datasetBindings: options.datasetBindings?.(
             artifact.id,
             Number(original.version),

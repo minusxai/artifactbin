@@ -1,3 +1,5 @@
+import { generatedSourceQueryBackendSource } from "./source-query-backend.ts";
+import { validateSourceRegistration } from "../datasets/source-query/sql.ts";
 import { registerMigrationViewerBinding } from "./viewer-registration.ts";
 import { registerDatasetMemberBinding } from "../persistence/dataset-members.ts";
 import {
@@ -60,15 +62,20 @@ function candidate(namespace: string, page: string, attempt: number): string {
   }
   return id;
 }
-async function checkedDeployment(deployment: CompiledBackend) {
+async function checkedDeployment(
+  deployment: CompiledBackend,
+  sourceQueries = false,
+) {
+  const expectedSource = sourceQueries
+    ? generatedSourceQueryBackendSource
+    : generatedDatasetBackendSource;
   try {
     verifyDeployment(deployment);
     if (
-      deployment.source !== generatedDatasetBackendSource ||
+      deployment.source !== expectedSource ||
       !isCurrentRuntime(deployment.runtime) ||
       Object.keys(deployment.lockfile).length ||
-      deployment.typeDefs !==
-        (await readBackendModule(generatedDatasetBackendSource)).typeDefs
+      deployment.typeDefs !== (await readBackendModule(expectedSource)).typeDefs
     )
       throw Error();
   } catch {
@@ -198,6 +205,17 @@ export async function prepareMigrationBackends(
         "Group-owned pages with dataset Imports cannot use backend execution",
       );
   }
+  for (const page of pages)
+    for (const revision of page.revisions)
+      for (const query of revision.sourceQueries ?? []) {
+        validateSourceRegistration(query);
+        if (
+          query.pageLegacyId !== page.legacyId ||
+          query.pageVersion !== revision.version ||
+          revision.readsViewer !== true
+        )
+          invalid();
+      }
   const required = pages.filter((page) =>
     page.revisions.some(
       (revision) =>
@@ -215,10 +233,21 @@ export async function prepareMigrationBackends(
       deploymentNamespace: "afmigration",
       sandboxNetwork: "none",
     });
-  let deployment: CompiledBackend;
+  const deployments = new Map<boolean, CompiledBackend>();
   try {
-    deployment = await host.compile(generatedDatasetBackendSource);
-    await checkedDeployment(deployment);
+    for (const sourceQueries of new Set(
+      required.flatMap((page) =>
+        page.revisions.map((r) => Boolean(r.sourceQueries?.length)),
+      ),
+    )) {
+      const deployment = await host.compile(
+        sourceQueries
+          ? generatedSourceQueryBackendSource
+          : generatedDatasetBackendSource,
+      );
+      await checkedDeployment(deployment, sourceQueries);
+      deployments.set(sourceQueries, deployment);
+    }
   } finally {
     if (!ports.host) await host.close?.();
   }
@@ -242,7 +271,9 @@ export async function prepareMigrationBackends(
     for (const revision of [...page.revisions].sort(
       (a, b) => a.version - b.version,
     )) {
-      const readsViewer = revision.readsViewer === true;
+      const hasSourceQueries = Boolean(revision.sourceQueries?.length);
+      const deployment = deployments.get(hasSourceQueries)!;
+      const readsViewer = revision.readsViewer === true || hasSourceQueries;
       const readsMembers =
         revision.readsMembers ||
         revision.mutations?.some((m) => m.readsMembers);
@@ -256,6 +287,7 @@ export async function prepareMigrationBackends(
           readsViewer ||
           revision.runsProgram === true,
         ...(revision.runsProgram ? { program: true as const } : {}),
+        ...(hasSourceQueries ? { sourceQueries: true as const } : {}),
         ...(readsViewer
           ? { viewer: { sourceNamespace: input.sourceNamespace } }
           : {}),
@@ -335,7 +367,35 @@ export async function prepareMigrationBackends(
         });
     }
   }
-  return { receipts, bindings, operations, browserMutations };
+  const sourceQueryRegistrations = required.flatMap((page) =>
+    page.revisions.flatMap((revision) => {
+      if (!revision.sourceQueries?.length) return [];
+      const receipt = receipts.find(
+        (r) =>
+          r.pageLegacyId === page.legacyId &&
+          r.pageVersion === revision.version,
+      )!;
+      return [
+        {
+          receipt: {
+            pageLegacyId: receipt.pageLegacyId,
+            pageId: receipt.pageId,
+            pageVersion: receipt.pageVersion,
+            backendId: receipt.backendId,
+            deployment: { version: receipt.deployment.version },
+          },
+          queries: revision.sourceQueries,
+        },
+      ];
+    }),
+  );
+  return {
+    receipts,
+    bindings,
+    operations,
+    browserMutations,
+    ...(sourceQueryRegistrations.length ? { sourceQueryRegistrations } : {}),
+  };
 }
 /** The caller owns the page transaction and search_path. This function never begins or commits one. */
 export const registerMigrationBackends: MigrationBackendRegistrar = async (
@@ -344,13 +404,17 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
 ) => {
   const keys = new Set<string>();
   for (const receipt of receipts) {
-    await checkedDeployment(receipt.deployment);
+    await checkedDeployment(receipt.deployment, receipt.sourceQueries === true);
     if (
       !FILE_ID_PATTERN.test(receipt.pageId) ||
       !FILE_ID_PATTERN.test(receipt.backendId) ||
       receipt.pageId === receipt.backendId ||
       !positive(receipt.pageVersion) ||
       typeof receipt.linked !== "boolean" ||
+      (receipt.sourceQueries !== undefined &&
+        (receipt.sourceQueries !== true ||
+          !receipt.linked ||
+          !receipt.viewer)) ||
       (receipt.program !== undefined &&
         (receipt.program !== true || !receipt.linked)) ||
       (receipt.viewer !== undefined &&

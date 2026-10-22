@@ -13,6 +13,7 @@ export interface MigrationBackendPage {
     /** Exact archived source identity; required for persistent mutation publication. */
     editId?: string;
     mutations?: readonly LegacyMutationDescriptor[];
+    sourceQueries?: readonly import("../datasets/source-query/contracts.ts").MigrationSourceQueryRegistration[];
     /** Canonical source-declared current-page accepted membership relation. */
     readsMembers?: true;
     /** Read-only original viewer identity, current saved head only. */
@@ -45,6 +46,7 @@ export interface MigrationBackendReceipt {
   members?: { sourceNamespace: string };
   viewer?: { sourceNamespace: string };
   program?: true;
+  sourceQueries?: true;
   backendId: string;
   backendNamespace: "legacyData";
   backendHref: string;
@@ -54,6 +56,7 @@ export interface MigrationBackendReceipt {
 }
 export interface MigrationBackendPreparation {
   receipts: readonly MigrationBackendReceipt[];
+  sourceQueryRegistrations?: readonly import("./source-query-contracts.ts").MigrationSourceQueryBatch[];
   bindings: readonly DatasetImportBindingInput[];
   /** Saved atomically with dataset bindings after canonical backend registration. */
   operations: readonly DatasetOperationRegistration[];

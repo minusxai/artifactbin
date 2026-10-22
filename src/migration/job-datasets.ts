@@ -30,10 +30,15 @@ export async function prepareMigrationJobDatasets(
   options: MigrationJobOptions,
   ports: MigrationBackendPreparationPorts = {},
 ): Promise<MigrationJobDatasets | undefined> {
-  if (!source.datasets) return undefined;
+  if (!source.datasets) {
+    if (options.sourceQueryRegistrations?.length)
+      throw Error("Source query registrations require dataset preparation");
+    return undefined;
+  }
   const scan = await scanMigrationDatasetImports(
     source,
     options.ownershipOverride,
+    options.sourceQueryRegistrations,
   );
   const issues = new Map(
     [...scan.issues].map(([id, reasons]) => [id, [...reasons]]),
@@ -134,7 +139,7 @@ export async function prepareMigrationJobDatasets(
     if (pageReceipts.some((r) => r.viewer)) {
       backends.set(page.legacyId, pageReceipts);
       for (const receipt of pageReceipts)
-        if (receipt.viewer)
+        if (receipt.viewer && !receipt.sourceQueries)
           viewerBindings.set(
             migrationDatasetVersionKey(
               receipt.pageLegacyId,
@@ -157,6 +162,13 @@ export async function prepareMigrationJobDatasets(
         pageId: r.pageId,
         pageVersion: r.pageVersion,
       }));
+    const sourceQueryPages = pageReceipts
+      .filter((r) => r.sourceQueries)
+      .map((r) => ({
+        pageLegacyId: r.pageLegacyId,
+        pageId: r.pageId,
+        pageVersion: r.pageVersion,
+      }));
     const programPages = prepared.receipts
       .filter((r) => r.pageLegacyId === page.legacyId && r.program)
       .map((r) => ({
@@ -164,7 +176,12 @@ export async function prepareMigrationJobDatasets(
         pageId: r.pageId,
         pageVersion: r.pageVersion,
       }));
-    if (!pageBindings.length && !memberPages.length && !programPages.length)
+    if (
+      !pageBindings.length &&
+      !memberPages.length &&
+      !programPages.length &&
+      !sourceQueryPages.length
+    )
       continue;
     try {
       const artifact = await source.readArtifact(page.legacyId);
@@ -199,6 +216,7 @@ export async function prepareMigrationJobDatasets(
         bindings: pageBindings,
         memberPages,
         programPages,
+        sourceQueryPages,
         relationProvenance: {
           exportedAt: source.datasets.provenance.relationExportedAt,
           manifestSha256: source.datasets.provenance.relationManifestSha256,
@@ -325,8 +343,31 @@ export async function prepareMigrationJobDatasets(
     metadata,
     options.ownershipOverride,
   );
+  const sourceQueries = new Map(
+    (prepared.sourceQueryRegistrations ?? []).map((group) => [
+      migrationDatasetVersionKey(
+        group.receipt.pageLegacyId,
+        group.receipt.pageVersion,
+      ),
+      group.queries.map((query) => ({
+        name: query.name,
+        sourceRef: query.sourceRef,
+        backendNamespace: "legacyData" as const,
+        backendHref: "/af/v1/ids/" + group.receipt.backendId,
+        sqlSha256: query.sqlSha256,
+        params: query.params,
+        columns: query.columns.map((c) => ({ name: c.name, type: c.type })),
+      })),
+    ]),
+  );
   return {
     metadata,
+    ...(sourceQueries.size
+      ? {
+          sourceQueries,
+          sourceQueryRegistrations: prepared.sourceQueryRegistrations,
+        }
+      : {}),
     ownershipDatasetGrants,
     boundValueColumns,
     membersBindings,

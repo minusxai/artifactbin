@@ -71,6 +71,10 @@ export function createMigrationJobPlanner(
         source.preparedDatasets?.mutations.get(
           migrationDatasetVersionKey(id, version),
         ) ?? [],
+      sourceQueries: (id, version) =>
+        source.preparedDatasets?.sourceQueries?.get(
+          migrationDatasetVersionKey(id, version),
+        ),
       datasetBindings: (id, version) =>
         source.preparedDatasets?.bindings.get(
           migrationDatasetVersionKey(id, version),

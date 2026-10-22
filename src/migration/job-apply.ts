@@ -108,10 +108,19 @@ export async function applyMigrationJob(
         db,
         options.schema,
         options.ownershipOverride,
+        options.sourceQueryRegistrations,
       ).import({
         ...source.datasets.provenance,
         profileAssets: source.supplementalAssets?.profiles,
         queryRegistrations,
+        ...(source.preparedDatasets.sourceQueryRegistrations?.length
+          ? {
+              sourceQueryRegistrations:
+                source.preparedDatasets.sourceQueryRegistrations.filter((g) =>
+                  ready.has(g.receipt.pageId),
+                ),
+            }
+          : {}),
         ...projectMigrationOwnershipDatasetGrants(
           selectMigrationDatasetMetadata(metadata, ready),
           source.preparedDatasets.ownershipDatasetGrants,

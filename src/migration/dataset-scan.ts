@@ -1,4 +1,8 @@
-import {originalMigrationOwner,resolveMigrationOwnership} from "./ownership-override.ts";
+import { attestMigrationSourceQueries } from "./source-query-preparation.ts";
+import {
+  originalMigrationOwner,
+  resolveMigrationOwnership,
+} from "./ownership-override.ts";
 import { hasLegacyServerModule } from "./query-source.ts";
 import { compileNativeProgramResolver } from "./programs/native-compiler.ts";
 import { readsMigrationViewer } from "./job-viewer.ts";
@@ -16,7 +20,11 @@ import type { MigrationDatasetImportScan } from "./dataset-scan-contracts.ts";
 export async function scanMigrationDatasetImports(
   source: MigrationJobSource,
   ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride,
+  sourceQueryRegistrations: readonly import("../datasets/source-query/contracts.ts").MigrationSourceQueryRegistration[] = [],
 ): Promise<MigrationDatasetImportScan> {
+  const pendingSourceQueryPages = new Set(
+    sourceQueryRegistrations.map((q) => q.pageLegacyId),
+  );
   const pages: MigrationBackendPage[] = [];
   const issues = new Map<string, string[]>();
   const versions = new Map<string, number | null>();
@@ -35,6 +43,31 @@ export async function scanMigrationDatasetImports(
   for (const id of source.ids) {
     const artifact = await source.readArtifact(id);
     const head = artifact.artifacts[0]!;
+    if (pendingSourceQueryPages.has(id)) {
+      if (
+        head.deleted_at ||
+        head.format !== "markup" ||
+        sourceQueryRegistrations.some(
+          (q) => q.pageLegacyId === id && q.pageVersion !== head.version,
+        )
+      )
+        throw Error(
+          "Source query attestation is not an active current markup head",
+        );
+      const text =
+        typeof head.source === "string" && head.source.trim()
+          ? head.source
+          : legacyDocumentSource(head.document);
+      if (text === null)
+        throw Error("Source query attestation source unavailable");
+      attestMigrationSourceQueries(
+        text,
+        id,
+        Number(head.version),
+        sourceQueryRegistrations,
+      );
+      pendingSourceQueryPages.delete(id);
+    }
     const originals: LegacyRow[] = [
       ...(artifact.tables.artifact_versions ?? []).filter(
         (row) => Number(row.version) !== head.version,
@@ -137,7 +170,15 @@ export async function scanMigrationDatasetImports(
       }
       const runsProgram = hasLegacyServerModule(text);
       if (runsProgram) hasProgram = true;
-      const readsViewer = await readsMigrationViewer(source, text, imports);
+      const sourceQueries = attestMigrationSourceQueries(
+        text,
+        id,
+        Number(row.version),
+        sourceQueryRegistrations,
+      );
+      const readsViewer =
+        sourceQueries.length > 0 ||
+        (await readsMigrationViewer(source, text, imports));
       if (readsViewer) {
         hasViewer = true;
         statistics.pagesWithViewer++;
@@ -153,12 +194,22 @@ export async function scanMigrationDatasetImports(
         ...(readsMembers ? { readsMembers: true as const } : {}),
         ...(readsViewer ? { readsViewer: true as const } : {}),
         ...(runsProgram ? { runsProgram: true as const } : {}),
+        ...(sourceQueries.length ? { sourceQueries } : {}),
       });
     }
     if (!hasImports && !hasMembers && !hasViewer && !hasProgram) continue;
     if (hasImports) statistics.pagesWithImports++;
     heads.set(id, head.version);
-    const {owner} = resolveMigrationOwnership(head,source.manifest.sourceNamespace,originalMigrationOwner(head,source.manifest.sourceNamespace,source.maps),ownershipOverride);
+    const { owner } = resolveMigrationOwnership(
+      head,
+      source.manifest.sourceNamespace,
+      originalMigrationOwner(
+        head,
+        source.manifest.sourceNamespace,
+        source.maps,
+      ),
+      ownershipOverride,
+    );
     if (owner?.kind === "group") statistics.groupOwnedPages++;
     if (!owner || owner.kind === "orphan")
       issues.set(id, [
@@ -176,6 +227,8 @@ export async function scanMigrationDatasetImports(
       revisions: revisions.sort((a, b) => a.version - b.version),
     });
   }
+  if (pendingSourceQueryPages.size)
+    throw Error("Source query attestation page outside source scope");
   return {
     pages,
     issues,
