@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { testDatabase } from "./postgres.js";
 import { createSqlDatabase } from "../src/persistence/sql.ts";
+import type { SqlDatabase } from "../src/persistence/sql.ts";
 import { createGroupHandlePreservation } from "../src/migration/group-handles-apply.ts";
 import { planGroupHandles } from "../src/migration/group-handles.ts";
 
@@ -76,8 +77,32 @@ async function fixture(t: TestContext) {
     },
     candidates,
   );
-  return { env, archive, service, plan, candidates };
+  return { env, archive, sql, service, plan, candidates };
 }
+
+test("the independent audit runs in a real PostgreSQL read-only transaction", async (t) => {
+  const { env, sql, service, plan } = await fixture(t);
+  const applied = await service.apply(plan);
+  const readonly: SqlDatabase = {
+    poolCapacity: sql.poolCapacity,
+    transaction: (work, options) =>
+      sql.transaction(async (client) => {
+        await client.query("SET TRANSACTION READ ONLY");
+        assert.equal(
+          (await client.query("SHOW transaction_read_only")).rows[0]
+            ?.transaction_read_only,
+          "on",
+        );
+        return work(client);
+      }, options),
+  };
+  const audit = createGroupHandlePreservation(readonly, env.schema);
+  assert.deepEqual(await audit.verify(plan), applied.receipt);
+  await env.pool.query("UPDATE accounts SET handle=NULL WHERE actor=$1", [
+    plan.candidates[0]!.actor,
+  ]);
+  await assert.rejects(audit.verify(plan), /changed/);
+});
 
 test("explicit post-base handle amendment preserves active and inactive groups with an independently verifiable receipt", async (t) => {
   const { env, service, plan } = await fixture(t);

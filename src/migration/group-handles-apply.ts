@@ -22,10 +22,14 @@ export function createGroupHandlePreservation(
       throw Error("Invalid group handle plan");
     return expected;
   }
-  async function source(client: SqlClient, plan: GroupHandlePlan) {
+  async function source(
+    client: SqlClient,
+    plan: GroupHandlePlan,
+    lock: boolean,
+  ) {
     const row = (
       await client.query(
-        `SELECT digest,manifest,maps FROM ${archive}.archives WHERE namespace=$1 FOR SHARE`,
+        `SELECT digest,manifest,maps FROM ${archive}.archives WHERE namespace=$1${lock ? " FOR SHARE" : ""}`,
         [plan.base.sourceNamespace],
       )
     ).rows[0];
@@ -55,11 +59,12 @@ export function createGroupHandlePreservation(
     client: SqlClient,
     plan: GroupHandlePlan,
     applied: boolean,
+    lock: boolean,
   ) {
     const actors = plan.candidates.map((row) => row.actor);
     const rows = (
       await client.query(
-        `SELECT a.actor,a.principal_kind,a.salt,a.password,a.handle,g.active FROM ${runtime}.accounts a JOIN ${runtime}.groups g ON g.owner=a.actor WHERE a.actor=ANY($1::text[]) ORDER BY a.actor FOR SHARE OF a,g`,
+        `SELECT a.actor,a.principal_kind,a.salt,a.password,a.handle,g.active FROM ${runtime}.accounts a JOIN ${runtime}.groups g ON g.owner=a.actor WHERE a.actor=ANY($1::text[]) ORDER BY a.actor${lock ? " FOR SHARE OF a,g" : ""}`,
         [actors],
       )
     ).rows;
@@ -90,12 +95,16 @@ export function createGroupHandlePreservation(
     )
       throw Error("Group principals must remain nonlogin");
   }
-  async function audit(client: SqlClient, plan: GroupHandlePlan) {
-    await source(client, plan);
+  async function audit(
+    client: SqlClient,
+    plan: GroupHandlePlan,
+    lock: boolean,
+  ) {
+    await source(client, plan, lock);
     const receipt = groupHandleReceipt(plan);
     const row = (
       await client.query(
-        `SELECT plan_sha256,receipt FROM ${receipts} WHERE namespace=$1 FOR SHARE`,
+        `SELECT plan_sha256,receipt FROM ${receipts} WHERE namespace=$1${lock ? " FOR SHARE" : ""}`,
         [plan.base.sourceNamespace],
       )
     ).rows[0];
@@ -105,7 +114,7 @@ export function createGroupHandlePreservation(
       !isDeepStrictEqual(row.receipt, receipt)
     )
       throw Error("Group handle preservation receipt missing or changed");
-    await principals(client, plan, true);
+    await principals(client, plan, true, lock);
     return receipt;
   }
   return {
@@ -129,10 +138,10 @@ export function createGroupHandlePreservation(
         if (old)
           return {
             status: "already-applied" as const,
-            receipt: await audit(client, plan),
+            receipt: await audit(client, plan, true),
           };
-        await source(client, plan);
-        await principals(client, plan, false);
+        await source(client, plan, true);
+        await principals(client, plan, false, true);
         const collision = (
           await client.query(
             `SELECT actor FROM ${runtime}.accounts WHERE handle=ANY($1::text[]) LIMIT 1`,
@@ -163,7 +172,13 @@ export function createGroupHandlePreservation(
     },
     verify: (input) => {
       const plan = canonical(input);
-      return database.transaction((client) => audit(client, plan));
+      return database.transaction(async (client) => {
+        // A coherent audit snapshot needs no write-capable row locks or DDL.
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+        );
+        return audit(client, plan, false);
+      });
     },
   };
 }
