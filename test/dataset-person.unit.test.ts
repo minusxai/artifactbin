@@ -101,10 +101,21 @@ test("person lookup aborts a pending read and never performs subsequent work", a
     abort = new AbortController();
   let calls = 0,
     received: AbortSignal | undefined;
+  const originalRead = f.ports.reads.read;
+  const lateResult = await originalRead(context, {
+    binding: "people",
+    schema: "public",
+    table: "rows",
+    offset: 0,
+    limit: 1000,
+  });
+  let complete!: (value: typeof lateResult) => void;
   f.ports.reads.read = async (_context, _input, signal) => {
     calls++;
     received = signal;
-    return await new Promise(() => {});
+    return await new Promise((resolve) => {
+      complete = resolve;
+    });
   };
   const pending = createDatasetPersonService(f.ports).person(
     context,
@@ -114,6 +125,8 @@ test("person lookup aborts a pending read and never performs subsequent work", a
   await new Promise((resolve) => setTimeout(resolve, 5));
   abort.abort();
   await assert.rejects(pending);
+  complete(lateResult);
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(received?.aborted, true);
   assert.equal(calls, 1);
   assert.equal(f.cards(), 0);
