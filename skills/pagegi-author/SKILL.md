@@ -1,6 +1,6 @@
 ---
 name: artifactbin-author
-description: Write a Artifactbin page. It's a normal HTML file; keep all page state in @afbin/apollo local state, and share data through backends.
+description: Write an Artifactbin page. It's a normal HTML file; keep viewer state in @afbin/apollo local state, and share data through backends.
 ---
 
 # Author a Artifactbin page
@@ -36,7 +36,7 @@ Don't add your own `<script type="importmap">`: the core adds the page's import 
 
 ## Local state contract
 
-Keep all of the page's state in local state, through `client` from `@afbin/apollo`: its data, filters, the open tab, selections and drafts. Don't keep state in plain variables.
+Keep viewer-specific state in local state, through `client` from `@afbin/apollo`: filters, the open tab, selections and drafts. Render shared backend data directly from `watchQuery` results. Don't keep state in plain variables.
 
 Local state belongs to the viewer. It's saved in their browser, so it's still there when they come back, and other viewers never see it. To share data between viewers, use a backend (see Remote state contract).
 
@@ -64,7 +64,7 @@ Local state needs no schema or resolvers. Read it with a query, and write it bac
 
 - Store plain data: strings, numbers, booleans, arrays and objects.
 - A `<script type="application/json" data-af="state">` block in the page is where every viewer's local state starts. When you publish or save, the platform takes that block out of the saved file and keeps it as the page's starting state, so it is no longer in your copy; a download (`?download=1`) shows it again.
-- A comment saves the commenter's local state, and a viewer can click another viewer in the toolbar to see their page, read-only. Both show what local state shows, so keep everything that changes the page there.
+- A comment saves the commenter's local state, and a viewer can click another viewer in the toolbar to see their page, read-only. These saved views retain the rendered page and local state; keep viewer-specific controls in local state and shared results in backend watches.
 - An address ending in `#af-state=<base64url of the state's JSON>` opens the page with that local state, which becomes the viewer's own. Comment contexts give such an address, so you can open exactly what the commenter saw.
 
 Read [`references/state.md`](references/state.md) for two tabs of one viewer, changes that must combine, state in an address, and exactly what can be stored.
@@ -197,8 +197,7 @@ const result = await client.mutate({
 
 - Local state lives at the top level, and each backend under its own name, so they never clash.
 - In one mutation request, fields run in the order written, even across namespaces. Each field has its own outcome: one can succeed while another is rejected.
-- Results aren't stored in local state automatically. To show one, write it with `client.updateQuery`, so the viewer's page, comments and downloads all show what they saw.
-- Other viewers' changes don't arrive by themselves. Query again to see them, for example every few seconds.
+- Render backend results from `watchQuery` directly; they stay remote and authoritative. Keep only the viewer's filters, drafts and other local choices in `updateQuery`. Offline files need a connection for fresh backend data; comments and saved views retain an inert rendering of what the viewer saw.
 - Write each query or mutation as one `gql` template. Don't insert one `gql` document into another; to fetch from several backends, put them all in the same template, as above.
 - Remote calls can fail, or the page can be offline, so check `errors`. Each backend mutation field's outcome is in `result.extensions.outcomes`, keyed by its path, for example `{ "billing.pay": "committed" }`.
 - `watchQuery` watches local fields and backend namespaces together. Server changes and reconnects refresh backend results automatically; no polling is needed. Subscribe to `{ data, errors }`; backend fields start as `null` until the first response and become `null` on a refused read. Unsubscribe when the view is removed. `updateQuery` works on local state only.

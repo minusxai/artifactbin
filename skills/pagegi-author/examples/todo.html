@@ -31,19 +31,18 @@
     <button type="button" data-filter="done">Done</button>
   </nav>
   <ul id="list"></ul>
+  <p id="read-status" role="status"></p>
   <p id="status" role="status"></p>
 
   <script type="module">
     import { gql, client } from '@afbin/apollo';
 
     // Shared by everyone: the list, kept by the team backend.
-    const LIST = gql`{ team { list { id text done } } }`;
     const ADD = gql`mutation Add($text: String!) { team { add(text: $text) { id } } }`;
     const TOGGLE = gql`mutation Toggle($id: ID!) { team { toggle(id: $id) { id } } }`;
     const REMOVE = gql`mutation Remove($id: ID!) { team { remove(id: $id) } }`;
-    // This viewer's own: the last list they loaded, their filter, their unsent text.
-    const VIEW = gql`{ todos { id text done } filter draft }`;
-    const SEEN = gql`{ todos { id text done } }`;
+    // Backend results stay authoritative; only the filter and draft belong to this viewer.
+    const VIEW = gql`{ team { list { id text done } } filter draft }`;
     const FILTER = gql`{ filter }`;
     const DRAFT = gql`{ draft }`;
 
@@ -51,37 +50,23 @@
     const input = document.querySelector('#text');
     const status = document.querySelector('#status');
 
-    // A refresh only clears its own offline notice; an action's outcome stays until the next action.
-    let offline = false;
-    async function refresh() {
-      const { data, errors } = await client.query({ query: LIST });
-      if (errors?.length || !data.team) {
-        offline = true;
-        status.textContent = 'Offline: showing the list as you last saw it.';
-        return;
-      }
-      if (offline) {
-        offline = false;
-        status.textContent = '';
-      }
-      await client.updateQuery({ query: SEEN }, () => ({ todos: data.team.list }));
-    }
-
     async function run(mutation, variables, path) {
       status.textContent = '';
       const result = await client.mutate({ mutation, variables });
       const outcome = result.extensions?.outcomes?.[path];
       if (outcome === 'rejected') status.textContent = 'Only editors can do that.';
-      else if (outcome !== 'committed') status.textContent = 'That did not go through; try again.';
-      await refresh();
+      else if (outcome === 'offline') status.textContent = 'Offline: nothing was sent. Reconnect before trying again.';
+      else if (outcome !== 'committed') status.textContent = 'Save outcome unknown. Check the shared list before trying again.';
+      return outcome;
     }
 
-    client.watchQuery({ query: VIEW }).subscribe(({ data }) => {
+    const view = client.watchQuery({ query: VIEW }).subscribe(({ data, errors }) => {
+      document.querySelector('#read-status').textContent = errors?.length ? 'Shared list unavailable. Connect or check your access.' : !data.team ? 'Loading shared list…' : '';
       const filter = data.filter ?? 'all';
       for (const button of document.querySelectorAll('#filters button'))
         button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
       if (input.value !== (data.draft ?? '')) input.value = data.draft ?? '';
-      const shown = (data.todos ?? []).filter((t) => filter === 'all' || (filter === 'done') === t.done);
+      const shown = (data.team?.list ?? []).filter((t) => filter === 'all' || (filter === 'done') === t.done);
       list.replaceChildren(...shown.map((todo) => {
         const li = document.createElement('li');
         li.dataset.afId = 'todo-' + todo.id;
@@ -110,12 +95,11 @@
       event.preventDefault();
       const text = input.value.trim();
       if (!text) return;
-      await client.updateQuery({ query: DRAFT }, () => ({ draft: '' }));
-      await run(ADD, { text }, 'team.add');
+      if (await run(ADD, { text }, 'team.add') === 'committed')
+        await client.updateQuery({ query: DRAFT }, () => ({ draft: '' }));
     };
 
-    await refresh();
-    setInterval(refresh, 3000);
+    addEventListener('pagehide', (event) => { if (!event.persisted) view.unsubscribe(); });
   </script>
 </body>
 </html>

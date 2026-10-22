@@ -40,6 +40,7 @@
     <ol id="list"></ol>
     <p id="count" class="t-label"></p>
   </section>
+  <p id="read-status" role="status"></p>
   <p id="status" role="status"></p>
 
   <script type="module">
@@ -47,12 +48,9 @@
 
     // Shared by everyone signed in: the notes, kept in a database by the notes backend.
     const WHO = gql`{ notes { viewer } }`;
-    const LIST = gql`{ notes { list { id text } } }`;
     const ADD = gql`mutation Add($text: String!) { notes { add(text: $text) { id } } }`;
-    // This viewer's own: whether they're signed in, the notes they last loaded, their search, their unsent note.
-    const VIEW = gql`{ signedIn loaded { id text } search draft }`;
-    const SIGNED_IN = gql`{ signedIn }`;
-    const SEEN = gql`{ loaded { id text } }`;
+    // Identity and notes stay remote; only search and the unsent note belong to this viewer.
+    const VIEW = gql`{ notes { list { id text } } search draft }`;
     const SEARCH = gql`{ search }`;
     const DRAFT = gql`{ draft }`;
 
@@ -64,34 +62,18 @@
     const count = document.querySelector('#count');
     const status = document.querySelector('#status');
 
-    // Viewers who aren't signed in can't reach the database, so ask the backend
-    // who's calling once: true or false, or null when it can't be reached.
-    async function whoIsViewing() {
-      const { data, errors } = await client.query({ query: WHO });
-      if (errors?.length || !data.notes) return null;
-      const signedIn = data.notes.viewer !== null;
-      await client.updateQuery({ query: SIGNED_IN }, () => ({ signedIn }));
-      return signedIn;
-    }
-
-    async function refresh() {
-      const { data, errors } = await client.query({ query: LIST });
-      if (errors?.length || !data.notes) {
-        status.textContent = 'Offline: showing the notes as you last saw them.';
-        return;
-      }
-      status.textContent = '';
-      await client.updateQuery({ query: SEEN }, () => ({ loaded: data.notes.list }));
-    }
-
-    client.watchQuery({ query: VIEW }).subscribe(({ data }) => {
-      const signedIn = data.signedIn !== false;
+    const identity = client.watchQuery({ query: WHO }).subscribe(({ data }) => {
+      const signedIn = typeof data.notes?.viewer === 'string';
       form.hidden = !signedIn;
       hint.hidden = signedIn;
+    });
+
+    const view = client.watchQuery({ query: VIEW }).subscribe(({ data, errors }) => {
+      document.querySelector('#read-status').textContent = errors?.length ? 'Shared notes unavailable. Connect or check your access.' : !data.notes ? 'Loading shared notes…' : '';
       if (input.value !== (data.draft ?? '')) input.value = data.draft ?? '';
       if (search.value !== (data.search ?? '')) search.value = data.search ?? '';
       const term = (data.search ?? '').trim().toLowerCase();
-      const loaded = data.loaded ?? [];
+      const loaded = data.notes?.list ?? [];
       const shown = loaded.filter((note) => !term || note.text.toLowerCase().includes(term));
       list.replaceChildren(...shown.map((note) => {
         const li = document.createElement('li');
@@ -99,7 +81,7 @@
         li.textContent = note.text;
         return li;
       }));
-      count.textContent = !signedIn ? ''
+      count.textContent = !data.notes ? ''
         : !loaded.length ? 'No notes yet'
         : term ? `${shown.length} of ${loaded.length} notes`
         : `${loaded.length} notes`;
@@ -116,20 +98,18 @@
         status.textContent = 'A note is 1 to 500 characters.';
         return;
       }
-      await client.updateQuery({ query: DRAFT }, () => ({ draft: '' }));
       const result = await client.mutate({ mutation: ADD, variables: { text } });
       const outcome = result.extensions?.outcomes?.['notes.add'];
       if (outcome === 'rejected') status.textContent = 'Sign in to add a note.';
-      else if (outcome !== 'committed') status.textContent = 'That did not go through; try again.';
-      await refresh();
+      else if (outcome === 'offline') status.textContent = 'Offline: nothing was sent. Reconnect before trying again.';
+      else if (outcome !== 'committed') status.textContent = 'Save outcome unknown. Check the shared notes before trying again.';
+      else {
+        status.textContent = '';
+        await client.updateQuery({ query: DRAFT }, () => ({ draft: '' }));
+      }
     };
 
-    const signedIn = await whoIsViewing();
-    if (signedIn === null) status.textContent = 'Offline: showing the notes as you last saw them.';
-    else if (signedIn) {
-      await refresh();
-      setInterval(refresh, 5000);
-    }
+    addEventListener('pagehide', (event) => { if (!event.persisted) { identity.unsubscribe(); view.unsubscribe(); } });
   </script>
 </body>
 </html>

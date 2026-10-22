@@ -26,6 +26,7 @@ const todo = readFileSync("skills/pagegi-author/examples/todo.html", "utf8");
 const PLATFORM_SCRIPT = `
 import { createAppHTML } from "./src/browser/surface.js";
 const list = [];
+const readers = new Map();
 window.views = [];
 window.remoteCalls = [];
 addEventListener("message", (event) => {
@@ -34,6 +35,7 @@ addEventListener("message", (event) => {
   const reply = (data) => event.source.postMessage({ pagegi: true, channel: m.channel, ...data }, "*");
   if (m.kind === "view") window.views.push(m);
   if (m.kind === "remote-request") {
+    readers.set(event.source, m.channel);
     const request = m.request;
     window.remoteCalls.push(request);
     let response = { data: { team: { list: list.slice() } } };
@@ -43,6 +45,9 @@ addEventListener("message", (event) => {
       response = { data: { team: { add: { id: todo.id } } }, extensions: { outcomes: { "team.add": "committed" } } };
     }
     reply({ kind: "remote-response", response: { id: m.id, response } });
+    if (request.operation === "mutation") for (const [source, channel] of readers) {
+      source.postMessage({ pagegi: true, channel, kind: "remote-invalidated" }, "*");
+    }
   }
 });
 window.mount = (id, source, bridge) => {

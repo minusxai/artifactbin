@@ -8,7 +8,7 @@ Local state belongs to one viewer. The platform keeps it in that viewer's browse
 
 A viewer opening the page for the first time starts from the page's `<script type="application/json" data-af="state">` block, or from nothing if it has none.
 
-Keep everything that changes what the page shows in local state: data, filters, the open tab, selections and drafts. Comments, "view as person" and downloads all show the page from local state, so anything kept in a plain variable is missing from them.
+Keep viewer-specific state in local state: filters, the open tab, selections and drafts. Render shared backend data directly from `watchQuery` results; do not mirror it into local state. Comments and "view as person" retain a rendered snapshot with local state. Downloads retain local state, but need a connection to read fresh shared backend data. Viewer state kept only in plain variables is missing from these saved views.
 
 To share data between viewers, use a backend. See [`backend.md`](backend.md) for its store.
 

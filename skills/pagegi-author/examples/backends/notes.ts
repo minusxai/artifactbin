@@ -47,8 +47,8 @@ export default {
       // rule first and shows the viewer its own message.
       const trimmed = text.trim();
       if (trimmed.length < 1 || trimmed.length > 500) throw new Error('A note is 1 to 500 characters');
-      // The lambda chooses the ID, so the operation's ON CONFLICT DO NOTHING
-      // keeps a repeated insert from making a second row.
+      // Each invocation chooses a fresh ID. Repeating an unknown mutation can
+      // therefore create another note; inspect the shared list before retrying.
       const [note] = await caps.invoke({
         resource: 'demo-db',
         operation: 'addNote',
