@@ -35,3 +35,9 @@ test('unsupported chart forms produce an explicit renderable result rather than 
  const result=await compileArchivedLocal({coreUrl:'/af/v1/core.js',source:'<Question id="plot" data="$rows" viz={{kind:"bar"}}/>'},{sourceAdmission:'offline-prototype',compiler:{async compile(){return {html:'<div id="plot">Chart unavailable</div>',css:'',javascript:'globalThis.ready=true;',title:'Proof',build:'frozen',capabilities:[],rootAttributes:{},modules:[],declarations:[],queryNames:[],datasetNames:[],mutationNames:[],chartPlans:0};}}});
  assert.equal(result.classification,'renderable');assert.ok(result.capabilities.includes('unavailable-chart-forms'));assert.match(result.html!,/data-migration-chart-status/);
 });
+test('prototype local mutation candidates derive only from declared viewer tables without shared bindings',()=>{
+ const source='<Helmet><Value name="drafts" type="table" value={[{id:1}]}/><Mutation name="remove">{`delete from drafts`}</Mutation></Helmet><Button run="$remove">Remove</Button>';
+ const input={source,coreUrl:'/af/v1/core.js',localMutationNames:['forged']};
+ assert.equal(admitLocalSource(input).ok,false);const result=admitLocalSource(input,'offline-prototype');assert.equal(result.ok,true);if(result.ok)assert.deepEqual(result.plan.input.localMutationNames,['remove']);
+ assert.equal(admitLocalSource({...input,source:source.replace('<Value name="drafts" type="table" value={[{id:1}]}/>','')},'offline-prototype').ok,false);
+});

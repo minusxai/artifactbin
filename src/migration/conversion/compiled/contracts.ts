@@ -6,6 +6,8 @@ import type { ConversionResult } from "../contracts.ts";
 export interface CompiledMigrationInput {
   /** Internal migration policy, overwritten from the explicit offline compiler options. */
   sourceAdmission?: import("./local-contracts.ts").CompiledSourceAdmission;
+  /** Source-derived candidates; trusted archived compilation must prove local-only targets. */
+  localMutationNames?: readonly string[];
   source: string;
   /** Source-derived Dialog runtime adapter, overwritten during admission. */
   dialogFocus?: boolean;

@@ -35,7 +35,7 @@ export async function prepareLocalFlow(
     !validCompiledMembersBinding(membersBinding)
   )
     throw Error("Invalid members binding");
-  if (!rawFlow.queries.length) throw Error("A local query is required");
+  if (!rawFlow.queries.length && !(sourceAdmission==="offline-prototype"&&rawFlow.mutations.length)) throw Error("A local query is required");
   const { prepareCompile, compileDataflow } = await archived(
     "lib/dataflow/compile-dataflow.ts",
   );
@@ -84,7 +84,7 @@ export async function prepareLocalFlow(
    return{flow,results:{tables:{},errors:{}}};
   }
   if (
-    flow.mutations.length ||
+    (flow.mutations.length && !(sourceAdmission==="offline-prototype" && !flow.imports.length && flow.mutations.every((m:any)=>m.target && typeof m.target.local==="string" && flow.values.some((v:any)=>v.kind==="table"&&v.name===m.target.local) && !m.reads.imports.length && !m.reads.queries?.length && !m.reads.builtins.some((b:string)=>!["_now","_tz","_row","_value"].includes(b)&&!b.startsWith("_row."))))) ||
     flow.imports.length !== bindings.length ||
     flow.queries.some(
       (q: any) =>

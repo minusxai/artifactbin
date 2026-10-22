@@ -54,7 +54,7 @@ if (
   !split ||
   split.content.script ||
   (!input.datasetUnavailable &&
-    split.content.mutations.length !== (input.datasetMutations ?? []).length)
+    split.content.mutations.length !== (input.datasetMutations ?? []).length + (prototype?input.localMutationNames?.length??0:0))
 )
   throw Error("Only local scalar documents admitted");
 const [
@@ -144,7 +144,7 @@ const localTables = Object.fromEntries(
 const rawFlow = {
   imports: split.content.imports,
   queries: split.content.queries,
-  mutations: [],
+  mutations: prototype&&input.localMutationNames?.length ? split.content.mutations : [],
   values: split.content.values,
 };
 if(input.sourceQueries?.length&&!rawFlow.queries.length)throw Error("Unused source query proof");
@@ -158,7 +158,7 @@ if (input.datasetUnavailable) {
     const {source,column,constraints,...local}=v;void source;void column;void constraints;return local;
   }) };
   results = { tables: {}, errors: {} };
-} else if (rawFlow.queries.length) {
+} else if (rawFlow.queries.length || rawFlow.mutations.length) {
   ({ flow, results } = await prepareLocalFlow(
     archived,
     rawFlow,
@@ -317,7 +317,7 @@ const buildManifest = JSON.parse(
 );
 const manifest = buildManifest.manifest;
 let sql: any;
-if (flow.queries.length && !input.datasetUnavailable) {
+if ((flow.queries.length || flow.mutations.length) && !input.datasetUnavailable) {
   const wasm = await readFile(
     path.join(root, "services/app/public", buildManifest.sqliteWasm),
   );
@@ -454,6 +454,7 @@ const bundled = await bundle({
             input.viewerBinding,
             input.datasetMutations?.some(binding=>binding.valueParam)?readLegacyCellWriteSites(input.source,undefined,input.sourceAdmission).flatMap(site=>site.optionsQuery?[site.optionsQuery]:[]):[],
             attachmentSites,
+            input.localMutationNames ?? [],
           ),
           loader: "js",
         }));
@@ -524,6 +525,7 @@ const bundled = await bundle({
         b.onResolve({ filter: /^migration-people$/ },()=>({path:path.join(import.meta.dirname,"person-runtime.ts")}));
         b.onResolve({filter:/^migration-viewer$/},()=>({path:path.join(import.meta.dirname,"viewer-runtime.ts")}));
         b.onResolve({ filter: /^migration-members$/ },()=>({path:path.join(import.meta.dirname,"members-runtime.ts")}));
+        b.onResolve({filter:/^migration-local-mutations$/},()=>({path:path.join(import.meta.dirname,"local-mutations.ts")}));
         b.onResolve({ filter: /^migration-sqlite$/ }, () => {
           if (!sqlitePath) throw Error("No archived SQLite engine");
           return {

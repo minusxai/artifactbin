@@ -14,6 +14,7 @@ export function readPrototypeSource(input:CompiledMigrationInput,backendLinks:Re
  const text='<>'+input.source+'</>',tree=Parser.extend(jsx()).parseExpressionAt(text,0,{ecmaVersion:'latest'}) as any;
  if(tree.end!==text.length)throw Error('Incomplete source');
  const declarations:import('./local-contracts.ts').LocalDeclaration[]=[],names=new Set<string>(),queries=new Set<string>(),imports=new Set<string>(),mutations=new Set<string>(),identities=new Set<string>();
+ const localMutations=new Set<string>();
  let chartCount=0,vegaCount=0,unavailableCharts=0;
  const name=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z][A-Za-z0-9_]*$/.test(v)&&!['constructor','prototype','__proto__'].includes(v);
  function walk(node:any):void {
@@ -31,21 +32,22 @@ export function readPrototypeSource(input:CompiledMigrationInput,backendLinks:Re
    }
    if(tag==='Mutation'){
     const binding=(input.datasetMutations??[]).find(b=>b.name===attrs.name);
-    if(!name(attrs.name)||mutations.has(attrs.name)||(!historical&&!binding))throw Error('Unbound mutation');
+    if(!name(attrs.name)||mutations.has(attrs.name))throw Error('Unbound mutation');if(!historical&&!binding)localMutations.add(attrs.name);
     const reset=typeof attrs.reset==='string'?attrs.reset.trim().split(/\s+/).filter(Boolean):[];
-    if(!historical&&JSON.stringify(reset)!==JSON.stringify(binding?.reset??[]))throw Error('Mutation reset differs');mutations.add(attrs.name);
+    if(!historical&&binding&&JSON.stringify(reset)!==JSON.stringify(binding.reset??[]))throw Error('Mutation reset differs');mutations.add(attrs.name);
    }
    if(tag==='Chart'||tag==='Question'){chartCount++;const kind=node.openingElement.attributes.find((a:any)=>a.name?.name==='viz')?.value?.expression?.properties?.find((p:any)=>(p.key?.name??p.key?.value)==='kind')?.value?.value??'table';if(['vega','vega-lite','recipe'].includes(kind))vegaCount++;else if(!['table','single_value'].includes(kind))unavailableCharts++;}
   }
   for(const [k,v]of Object.entries(node)){if(k==='start'||k==='end')continue;if(Array.isArray(v))v.forEach(walk);else if(v&&typeof v==='object')walk(v);}
  }
  walk(tree);
- if((!historical&&imports.size!==(input.datasetBindings??[]).length)||(!historical&&mutations.size!==(input.datasetMutations??[]).length)||[...queries].some(n=>names.has(n))||[...imports].some(n=>names.has(n)||queries.has(n))||[...mutations].some(n=>names.has(n)||queries.has(n)||imports.has(n)))throw Error('Runtime names differ');
+ if(localMutations.size && (historical||imports.size||(input.datasetBindings??[]).length||(input.datasetMutations??[]).length||!declarations.some(d=>d.type==="table")))throw Error("Unbound mutation");
+ if((!historical&&imports.size!==(input.datasetBindings??[]).length)||(!historical&&mutations.size-localMutations.size!==(input.datasetMutations??[]).length)||[...queries].some(n=>names.has(n))||[...imports].some(n=>names.has(n)||queries.has(n))||[...mutations].some(n=>names.has(n)||queries.has(n)||imports.has(n)))throw Error('Runtime names differ');
  if((input.boundValueColumns??[]).some(p=>!names.has(p.valueName))||(input.personBindings??[]).some(p=>declarations.find(d=>d.name===p.valueName)?.type!=='user'))throw Error('Bound value differs');
  let contexts:CompiledMigrationInput['contexts']=[],mermaids:CompiledMigrationInput['mermaids']=[],slideDeck:CompiledMigrationInput['slideDeck'];
  try{contexts=readContextReferences(tree);}catch{/* Compiler owns unsupported presentation. */}
  try{mermaids=readStaticMermaidPlans(tree);}catch{/* Use the archived component when no static adapter applies. */}
  try{slideDeck=readSlideDeckPlan(tree);}catch{/* Use compiled presentation behavior. */}
  const dynamicIdentities={regions:[]};
- return {sourceAdmission:'offline-prototype',input:{...input,sourceAdmission:'offline-prototype',viewerUnavailable:historical&&readsLegacyViewerMarkup(input.source),contexts,mermaids,slideDeck,dataControls:[],presentationIdentities:[],dynamicIdentities},manifest:{declarations},renderedIdentities:identities,dynamicIdentities,historical,backendLinks,queryNames:queries,datasetNames:imports,mutationNames:mutations,chartCount,vegaCount,unavailableCharts,author:input.authorPlan,authorProps:[]};
+ return {sourceAdmission:'offline-prototype',input:{...input,localMutationNames:[...localMutations],sourceAdmission:'offline-prototype',viewerUnavailable:historical&&readsLegacyViewerMarkup(input.source),contexts,mermaids,slideDeck,dataControls:[],presentationIdentities:[],dynamicIdentities},manifest:{declarations},renderedIdentities:identities,dynamicIdentities,historical,backendLinks,queryNames:queries,datasetNames:imports,mutationNames:mutations,chartCount,vegaCount,unavailableCharts,author:input.authorPlan,authorProps:[]};
 }
