@@ -65,6 +65,9 @@ test("concurrent exact replay has one durable receipt, changed input conflicts a
       database: db,
       now: () => 100,
     });
+    await env.pool.query(
+      "INSERT INTO dataset_page_joins(page_id,source_namespace,legacy_user_id) VALUES('Pg0001','legacy','old-owner')",
+    );
     const initial = await repo.authority(context);
     assert.ok(initial);
     let published = 0;
@@ -95,6 +98,23 @@ test("concurrent exact replay has one durable receipt, changed input conflicts a
     const results = await Promise.all([repo.commit(input), repo.commit(input)]);
     assert.equal(results.filter((r) => r.replayed).length, 1);
     assert.ok(published >= 1 && published <= 2);
+    await env.pool.query(
+      "INSERT INTO sessions(token_hash,actor,expires) VALUES('owner-session','owner',9999999999999)",
+    );
+    const otherContext = {
+      ...context,
+      subject: "owner",
+      credentialHash: "owner-session",
+    };
+    const otherInitial = await repo.authority(otherContext);
+    assert.ok(otherInitial);
+    const other = await repo.commit({
+      ...input,
+      context: otherContext,
+      initial: otherInitial,
+    });
+    assert.notEqual(other.record.id, results[0]!.record.id);
+    assert.equal(other.replayed, false);
     const promotions = published;
     assert.equal(results[0]!.record.id, results[1]!.record.id);
     await assert.rejects(
@@ -106,7 +126,7 @@ test("concurrent exact replay has one durable receipt, changed input conflicts a
     );
     assert.equal(
       (await env.pool.query("SELECT * FROM dataset_attachments")).rows.length,
-      1,
+      2,
     );
     await env.pool.query(
       "DELETE FROM dataset_page_joins WHERE page_id='Pg0001'",

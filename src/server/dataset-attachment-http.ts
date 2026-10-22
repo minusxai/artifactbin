@@ -9,7 +9,7 @@ import {
 import type { DatasetAttachmentMime } from "../datasets/attachments/contracts.ts";
 import { preparePrivateMedia } from "../media/http.ts";
 const base =
-  /^\/api\/files\/([A-Za-z0-9]{6})\/dataset-attachments\/([A-Za-z_][A-Za-z0-9_]{0,127})\/([A-Za-z_][A-Za-z0-9_]{0,127})(?:\/([a-f0-9]{32}))?$/;
+  /^\/api\/files\/([A-Za-z0-9]{6})\/dataset-attachments\/([A-Za-z_][A-Za-z0-9_-]{0,127})\/([A-Za-z_][A-Za-z0-9_-]{0,127})(?:\/([a-f0-9]{32}))?$/;
 const one = (v: string | string[] | undefined) =>
   typeof v === "string" ? v : "";
 /** Dedicated raw-body boundary: binary data never enters the JSON capability/parser budget. */

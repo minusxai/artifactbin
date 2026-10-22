@@ -147,3 +147,19 @@ test("explicit malformed table metadata is not treated as an omitted restriction
   (s.authority.dataset.policy as Record<string, unknown>).tables = null;
   assert.equal(datasetAttachmentAllowed(context, s, "insert"), false);
 });
+test("group-owned dataset insert selector requires a current editor fact, never inherited prototype roles", () => {
+  const s = snapshot();
+  s.authority.dataset.owner = { userId: null, tokenId: null, groupId: "team" };
+  s.authority.dataset.policy = {
+    version: 2,
+    allow: [
+      { actions: ["insert"], from: { user: "$owner", artifact: "Legacy12" } },
+    ],
+  };
+  s.authority.facts.groupRoles = { team: "editor" };
+  assert.equal(datasetAttachmentAllowed(context, s, "insert"), true);
+  s.authority.facts.groupRoles = { team: "viewer" };
+  assert.equal(datasetAttachmentAllowed(context, s, "insert"), false);
+  s.authority.facts.groupRoles = Object.create({ team: "editor" });
+  assert.equal(datasetAttachmentAllowed(context, s, "insert"), false);
+});

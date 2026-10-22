@@ -1,3 +1,4 @@
+import type { FileHandle } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdir, mkdtemp, open, rm, lstat, link } from "node:fs/promises";
@@ -133,6 +134,8 @@ export function createDatasetAttachmentStorage({
             signal?.throwIfAborted();
             const verified = await inspect(artifact.path, signal);
             if (
+              (index === 0 &&
+                verified.byteLength > DATASET_ATTACHMENT_LIMITS.fileBytes) ||
               verified.sha256 !== artifact.sha256 ||
               verified.byteLength !== artifact.byteLength ||
               verified.contentType !== artifact.contentType
@@ -155,8 +158,9 @@ export function createDatasetAttachmentStorage({
               artifact.path,
               constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
             );
-            const destination = await open(path, "wx", 0o600);
+            let destination: FileHandle | undefined;
             try {
+              destination = await open(path, "wx", 0o600);
               let copiedBytes = 0;
               for await (const c of source.createReadStream({
                 autoClose: false,
@@ -173,7 +177,7 @@ export function createDatasetAttachmentStorage({
               await destination.sync();
             } finally {
               await source.close();
-              await destination.close();
+              await destination?.close();
             }
             const copied = await inspect(path, signal);
             if (
