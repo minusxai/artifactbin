@@ -18,7 +18,7 @@ export function createRemoteHost(options: RemoteHostOptions): RemoteHost {
       if (value?.kind !== "remote-request") return false;
       const id = value.id;
       if (typeof id !== "string" || !id || id.length > 200 || inFlight.has(id)) return true;
-      const request = value.request as { query?: unknown; variables?: unknown; operation?: unknown };
+      const request = value.request as { query?: unknown; variables?: unknown; operation?: unknown; authorizationContext?: unknown };
       if (
         !plainObject(request) ||
         typeof request.query !== "string" ||
@@ -30,6 +30,9 @@ export function createRemoteHost(options: RemoteHostOptions): RemoteHost {
         refuse(id, "Invalid backend request");
         return true;
       }
+      if (request.authorizationContext !== undefined &&
+        (typeof request.authorizationContext !== "string" || request.authorizationContext !== options.authorizationContext?.()))
+        return refuse(id, "Caller changed before the backend request was sent"), true;
       const endpoint = options.endpoint();
       if (!options.active()) return refuse(id, "Backends are unavailable in a saved view"), true;
       if (!endpoint) return refuse(id, "Publish this page to call its backends"), true;

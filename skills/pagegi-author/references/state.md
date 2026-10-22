@@ -66,3 +66,14 @@ Strings, numbers, booleans, `null`, arrays and plain objects. Store dates as ISO
 When someone comments, the platform saves their local state with the comment. Viewing that comment later shows the page as they saw it, read-only, without running your scripts. Clicking another viewer in the toolbar shows their current page the same way, until you return to your own.
 
 For a local recovery record that must survive reload before sending a shared write, use `client.updateQuery({ query, requireDurable: true }, fn)`. It rejects if browser storage is unavailable or full; ordinary local updates still work in memory. The acknowledgement covers the browser's successful storage write, not backup or protection from the viewer clearing storage. A memory-only client cannot acknowledge durability.
+
+
+`client.authorizationContext()` returns a credential-free opaque marker for the current
+page and caller after fresh server authorization. It is stable across reloads for
+that account incarnation or exact guest share capability. Account switch or
+recreation, another page, or a replaced share capability changes it. It is `null`
+while disconnected or unauthorized, or when an anonymous request carries no
+specific share capability. Use it only to compare the caller that saved a pending
+local intent with the caller about to retry it; it grants no access and must never
+replace server authorization. Guests using the same share capability have the same
+effective authorization identity; the marker does not identify an individual person.

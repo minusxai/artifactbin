@@ -25,6 +25,7 @@ function fixture() {
   ).state;
   const authority = createIdentityAuthority();
   const issued = authority.issue("alice");
+  issued.session.principalSpace = "account-incarnation-a";
   const credential = issued.credential;
   db.tokens[issued.tokenHash] = issued.session;
   let failed = false;
@@ -236,4 +237,31 @@ test("editors cannot change policy or revoke the share capability", async () => 
   assert.equal(f.db().files.doc!.generation, file.generation);
   assert.equal(f.db().files.doc!.shareHash, file.shareHash);
   assert.deepEqual(f.db().files.doc!.access, file.access);
+});
+
+test("permissions issues caller markers only after fresh authorization and separates capability guests", async () => {
+  const f = fixture();
+  const read = async (credential: string) =>
+    (await f.service.execute("doc", credential, { kind: "permissions" }))
+      .value as import("../src/contracts.ts").FilePermissions;
+  const first = await read(f.credential);
+  assert.ok(first.authorizationContext);
+  assert.equal(
+    (await read(f.credential)).authorizationContext,
+    first.authorizationContext,
+  );
+  const guest = (await read("share")).authorizationContext;
+  assert.ok(guest);
+  assert.notEqual(guest, first.authorizationContext);
+  assert.equal((await read("share")).authorizationContext, guest);
+  f.db().tokens[hash(f.credential)]!.principalSpace = "account-incarnation-b";
+  assert.notEqual(
+    (await read(f.credential)).authorizationContext,
+    first.authorizationContext,
+  );
+  delete f.db().tokens[hash(f.credential)];
+  await assert.rejects(
+    read(f.credential),
+    /Sign in|revoked|access|permission/i,
+  );
 });

@@ -7,6 +7,8 @@ export interface Account {
   password?: string;
 }
 export interface SessionGrant {
+  /** Fresh account incarnation UUID; never persisted in a session or exported. */
+  principalSpace?: string;
   /** Transaction-local fresh group facts; never persisted in sessions. */
   groupAuthority?: import("./group-authority-contracts.ts").GroupAuthorityFacts;
   /** Account sessions omit purpose; scoped grants never inherit another purpose. */

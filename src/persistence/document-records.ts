@@ -24,12 +24,13 @@ export async function loadSession(
 ): Promise<SessionGrant | null> {
   const row = (
     await client.query(
-      "SELECT actor,file_id,generation,expires,purpose,backend_version FROM sessions WHERE token_hash=$1 FOR SHARE",
+      "SELECT s.actor,s.file_id,s.generation,s.expires,s.purpose,s.backend_version,a.space AS principal_space FROM sessions s JOIN accounts a ON a.actor=s.actor WHERE s.token_hash=$1 FOR SHARE OF s,a",
       [tokenHash],
     )
   ).rows[0];
   if (!row) return null;
   const session = decodeSessionGrant(row);
+  if (typeof row.principal_space === "string") session.principalSpace = row.principal_space;
   if (isLegacyNonloginActor(session.actor)) return null;
   session.groupAuthority = await loadGroupAuthority(client, session.actor);
   return session;

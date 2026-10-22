@@ -10,6 +10,8 @@ import type { AfJsonObject, Outcome } from "../af-contracts.ts";
 import type { RemotePort, ResultError } from "../apollo/apollo-contracts.ts";
 
 export interface RemoteBridgeRequest {
+  /** Pins a queued request to the caller observed by the page; never sent to the backend. */
+  authorizationContext?: string;
   query: string;
   variables: AfJsonObject;
   operation: "query" | "mutation";
@@ -38,6 +40,8 @@ export interface RemoteClientOptions {
   timeoutMs?: number;
 }
 export interface RemoteClient {
+  /** Only the authenticated platform message handler supplies this credential-free marker. */
+  setAuthorizationContext(context: string | null): void;
   port: RemotePort;
   receive(response: RemoteBridgeResponse): void;
   /** Invalidate query snapshots after an authorized live change or reconnect. */
@@ -46,6 +50,7 @@ export interface RemoteClient {
 }
 
 export interface RemoteHostOptions {
+  authorizationContext?(): string | null;
   /** `/api/files/<id>/graphql`, or null when the page is not published. */
   endpoint(): string | null;
   active(): boolean;

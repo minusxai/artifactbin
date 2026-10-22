@@ -1,4 +1,8 @@
 import { randomBytes } from "node:crypto";
+import {
+  callerAuthorizationContext,
+  guestAuthorizationContext,
+} from "./caller-authorization-context.ts";
 import { hash } from "./text.ts";
 import { policyFor, updatePolicy } from "../access.ts";
 import { presenceUpdate, visiblePresence } from "../model.ts";
@@ -32,9 +36,22 @@ export function createCollaborationService({
     },
     async execute(id, credential, command) {
       if (command.kind === "permissions")
-        return repository.authorize(id, hash(credential), async (loaded) => ({
-          value: authority.document(loaded, credential, id).permissions,
-        }));
+        return repository.authorize(id, hash(credential), async (loaded) => {
+          const decision = authority.document(loaded, credential, id);
+          return {
+            value: {
+              ...decision.permissions,
+              authorizationContext: decision.actor
+                ? callerAuthorizationContext(id, loaded.session?.principalSpace)
+                : guestAuthorizationContext(
+                    id,
+                    hash(credential),
+                    loaded.document!.shareHash,
+                    loaded.document!.generation,
+                  ),
+            },
+          };
+        });
       let afterCommit: (() => void) | undefined;
       let profiles: string[] | undefined;
       const result = await repository.run<CollaborationResult>(

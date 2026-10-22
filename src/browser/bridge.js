@@ -286,6 +286,10 @@ export function installBridge(boot) {
       repaintSelections();
       return;
     }
+    if (m.kind === "authorization-context") {
+      remote.setAuthorizationContext(typeof m.context === "string" ? m.context : null);
+      return;
+    }
     if (m.kind === "remote-invalidated") {
       remote.invalidate();
       return;

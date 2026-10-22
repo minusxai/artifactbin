@@ -135,6 +135,7 @@ function start(): void {
     for (const listener of [...remoteListeners]) listener();
   });
   const switchableRemote: RemotePort = {
+    authorizationContext: () => remote.authorizationContext?.() ?? null,
     subscribe(listener) {
       remoteListeners.add(listener);
       return () => { remoteListeners.delete(listener); };

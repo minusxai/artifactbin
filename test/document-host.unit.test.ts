@@ -224,3 +224,29 @@ test("hosted permission projection and suspension govern comment authority; prev
   assert.equal(host.commentAccess().authenticated, false);
   assert.equal(host.commentAccess().permission, null);
 });
+
+test("switching identity clears the previous caller permission marker before reauthorization", () => {
+  const { host } = setup();
+  host.applyConnection(identity);
+  host.observeCollaboration({
+    mode: "active",
+    sync: "synced",
+    viewers: [],
+    message: "",
+    permissions: {
+      role: "owner",
+      read: true,
+      comment: true,
+      edit: true,
+      manage: true,
+      authorizationContext: "previous-caller",
+    },
+  });
+  host.applyConnection({
+    ...identity,
+    username: "other",
+    publication: undefined,
+  });
+  assert.equal(host.read().permissions, null);
+  assert.equal(host.read().sync, "disconnected");
+});

@@ -10,13 +10,18 @@ type Reply = NonNullable<RemoteBridgeResponse["response"]>;
 
 export function createRemoteClient(options: RemoteClientOptions): RemoteClient {
   let disposed = false;
+  let authorizationContext: string | null = null;
   const listeners = new Set<() => void>();
   const pending = new Map<
     string,
     { resolve(reply: Reply): void; reject(error: Error): void; cancel(): void }
   >();
   return {
+    setAuthorizationContext(context) {
+      if (!disposed) authorizationContext = context;
+    },
     port: {
+      authorizationContext: () => (disposed ? null : authorizationContext),
       online: () => !disposed && options.online(),
       subscribe(listener) {
         if (disposed) return () => {};
@@ -46,6 +51,9 @@ export function createRemoteClient(options: RemoteClientOptions): RemoteClient {
               kind: "remote-request",
               id,
               request: {
+                ...(request.operation === "mutation" && authorizationContext
+                  ? { authorizationContext }
+                  : {}),
                 query: request.query,
                 variables: request.variables,
                 operation: request.operation,
@@ -87,6 +95,7 @@ export function createRemoteClient(options: RemoteClientOptions): RemoteClient {
     },
     dispose() {
       disposed = true;
+      authorizationContext = null;
       listeners.clear();
       for (const item of pending.values()) {
         item.cancel();

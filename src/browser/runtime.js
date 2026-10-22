@@ -59,6 +59,14 @@ async function bootPlatform() {
   function sendApp(data) {
     placement?.send(data);
   }
+  function authorizationContext() {
+    const current = host.read();
+    return gate.active && !documentView.historical && current.sync === "synced"
+      ? current.permissions?.authorizationContext ?? null : null;
+  }
+  function sendAuthorizationContext() {
+    sendApp({pagegi: true, kind: "authorization-context", context: authorizationContext()});
+  }
   const localLayout = local
     ? installLocalLayout({ document, inset: 44 })
     : null;
@@ -246,6 +254,7 @@ async function bootPlatform() {
   // Backend calls from the page: POST /api/files/:id/graphql with the viewer's own page grant
   // (a downloaded file sends them through its platform frame, which holds that grant).
   const remoteHost = createRemoteHost({
+    authorizationContext,
     endpoint: () =>
       saved.fileId
         ? `/api/files/${encodeURIComponent(saved.fileId)}/graphql`
@@ -462,6 +471,7 @@ async function bootPlatform() {
     onAcknowledged: (from, to) => commentPanel.rename(from, to),
     onChange(next) {
       const change = host.observeCollaboration(next);
+      sendAuthorizationContext();
       if (change.rosterChanged) drawPeople();
       drawCursors();
       if (change.permissionsChanged) draw();
@@ -677,6 +687,7 @@ async function bootPlatform() {
     chrome.renderPeople();
   }
   function updateIdentity() {
+    sendAuthorizationContext();
     chrome.renderIdentity();
   }
   function closePopover(focus = false) {
@@ -712,10 +723,11 @@ async function bootPlatform() {
         info("Choose something to comment on, or right-click it.");
         return;
       case "disconnect":
+        sendApp({pagegi: true, kind: "authorization-context", context: null});
         trustedConnection?.cancel();
         collaboration.disconnect();
-        await connection.disconnect();
         host.disconnectIdentity();
+        await connection.disconnect();
         startLive();
         chrome.showConnect(true);
         updateIdentity();
@@ -778,6 +790,7 @@ async function bootPlatform() {
     const m = e.data;
     try {
       if (m.kind === "view") {
+        sendAuthorizationContext();
         documentView.receiveView(m);
         // The loading screen lifts once the page is styled, never before its design system's CSS.
         if (!local && m.styled !== false) dispatchEvent(new Event("pagegi-startup-ready"));

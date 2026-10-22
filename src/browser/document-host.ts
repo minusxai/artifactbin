@@ -78,6 +78,8 @@ export function createDocumentHost(options: DocumentHostOptions): DocumentHost {
         ...snapshot,
         session: identity.session,
         username: identity.username,
+        permissions: null,
+        sync: "disconnected",
       });
       return { publicationChanged: !!identity.publication };
     },

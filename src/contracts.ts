@@ -517,6 +517,8 @@ export interface AccessPolicy {
   version: number;
 }
 export interface FilePermissions {
+  /** Fresh /permissions response only: opaque page/caller equality marker, never a credential. */
+  authorizationContext?: string | null;
   role: ShareRole | "owner" | null;
   read: boolean;
   comment: boolean;
