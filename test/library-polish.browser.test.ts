@@ -55,6 +55,19 @@ test("library visibility filters and folder papers render from listing metadata"
       await page.locator(".folder-cover-tab").textContent(),
       "1 artifact",
     );
+    const cover = await page.locator(".folder-cover").boundingBox();
+    const paper = await page.locator(".folder-cover-paper").boundingBox();
+    assert.ok(
+      cover && paper && paper.y + paper.height <= cover.y + cover.height,
+      "folder papers stay within the decorative cover",
+    );
+    await page.getByRole("link", { name: "work", exact: true }).click();
+    await page.waitForURL("**/?folder=%2Fwork");
+    await page.goto(origin);
+    await page.getByRole("button", { name: "List view", exact: true }).click();
+    await page.getByRole("link", { name: "work", exact: true }).click();
+    await page.waitForURL("**/?folder=%2Fwork");
+    await page.goto(origin);
     await page.getByLabel("Filter by visibility").selectOption("public");
     assert.equal(await page.locator('#files [data-path="/Report"]').count(), 0);
     assert.equal(await page.locator('#files [data-path="/work"]').count(), 1);

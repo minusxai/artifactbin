@@ -1394,9 +1394,9 @@ html[data-af-dark] .folder-cover {
   top: calc(var(--paper-position) * 7px);
   left: calc(var(--paper-position) * (100% - var(--paper-width)));
   overflow: hidden;
-  border: 1px solid var(--pg-border);
+  border: 1px solid var(--pg-edge);
   border-radius: 4px;
-  background: var(--pg-surface);
+  background: var(--pg-raised);
   box-shadow: 0 2px 4px #00000012;
   transform: rotate(calc((var(--paper-position) - 0.5) * 10deg));
   transition:
@@ -1414,7 +1414,7 @@ html[data-af-dark] .folder-cover {
   margin: 14px;
   background: repeating-linear-gradient(
     to bottom,
-    var(--pg-border) 0 2px,
+    var(--pg-edge) 0 2px,
     transparent 2px 10px
   );
 }
@@ -1475,4 +1475,12 @@ html[data-af-dark] .folder-cover {
 .artifact-shelf[data-layout="list"] .folder-cover::after {
   content: "▱";
   font-size: 24px;
+}
+
+/* Folder artwork stays inside its cover and never blocks document navigation. */
+.artifact-shelf .folder-cover { pointer-events:none; overflow:hidden; }
+.artifact-shelf .folder-cover .folder-cover-paper {
+  position:absolute;
+  width:var(--paper-width);
+  height:86px;
 }

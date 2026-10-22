@@ -70,6 +70,7 @@ test("metadata queries preserve owner, invited and public listings, profiles, lo
         sourceRevision: "1",
         title: "Alpha",
         commentCount: 0,
+        visibility: "public",
       },
     ]);
     assert.deepEqual(
