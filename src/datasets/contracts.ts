@@ -83,14 +83,14 @@ export interface DatasetReadService {
 export const DATASET_RESULT_BYTES = 60 * 1024;
 export const DATASET_OBJECT_BYTES = 32 * 1024 * 1024;
 export class DatasetReadError extends Error {
-  constructor(
-    readonly code:
-      | "denied"
-      | "invalid_request"
-      | "invalid_dataset"
-      | "result_limit",
-  ) {
+  readonly code:
+    | "denied"
+    | "invalid_request"
+    | "invalid_dataset"
+    | "result_limit";
+  constructor(code: DatasetReadError["code"]) {
     super(code);
+    this.code = code;
     this.name = "DatasetReadError";
   }
 }
