@@ -93,6 +93,33 @@ test(
       await db.query(
         `INSERT INTO files VALUES ('abc123'); INSERT INTO af_backend_files(file_id,owner,head_version) VALUES ('def456','owner@example.test','version1'); INSERT INTO af_backend_versions(file_id,version,page_id,page_version,type_defs,deployment) VALUES ('def456','version1','abc123',1,'fixture','{}'); INSERT INTO af_page_backends VALUES ('abc123',1,0,'legacyDatasets','def456','version1'); INSERT INTO dataset_resources VALUES ('bound','dataset',1,0,'owner@example.test',1,'{}',false,'{}',false); INSERT INTO dataset_versions VALUES ('bound','dataset',1,'[]','{}','[]')`,
       );
+      const resource: DatasetMigrationBatch["metadata"]["resources"][number] = {
+        legacyId: "dataset",
+        currentVersion: 1,
+        policyRevision: 0,
+        owner: "owner@example.test",
+        generation: 1,
+        access: {
+          visibility: "private",
+          linkRole: "viewer",
+          shares: {},
+          version: 1,
+        },
+        deleted: false,
+        writable: false,
+        snapshot: {
+          id: "dataset",
+          owner: { userId: "original-user", tokenId: null },
+          visibility: "private",
+          policyRevision: 0,
+          ownerIsTestUser: false,
+          policy: null,
+        },
+      };
+      await db.query(
+        "UPDATE dataset_resources SET access=$1::jsonb,snapshot=$2::jsonb WHERE source_namespace='bound'",
+        [JSON.stringify(resource.access), JSON.stringify(resource.snapshot)],
+      );
       const bound: DatasetMigrationBatch = {
         ...batch,
         metadata: {
@@ -192,19 +219,7 @@ test(
       );
       // Include directly seeded authority rows so the independent verifier checks the full namespace.
       const verified = structuredClone(bound);
-      verified.metadata.resources = [
-        {
-          legacyId: "dataset",
-          currentVersion: 1,
-          policyRevision: 0,
-          owner: "owner@example.test",
-          generation: 1,
-          access: {},
-          deleted: false,
-          snapshot: {},
-          writable: false,
-        },
-      ] as typeof verified.metadata.resources;
+      verified.metadata.resources = [resource];
       verified.metadata.versions = [
         {
           legacyId: "dataset",
