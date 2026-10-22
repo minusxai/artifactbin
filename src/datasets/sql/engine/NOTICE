@@ -1,0 +1,1 @@
+This directory adapts the Apache-2.0 licensed SQL library. Only the in-memory SQLite engine, scalar function library, policy predicate compiler, shape helpers and value contracts are included. Imports were localized; application, editor, transport and persistence code are excluded. Runtime engine dependency: official SQLite WASM, pinned separately.
