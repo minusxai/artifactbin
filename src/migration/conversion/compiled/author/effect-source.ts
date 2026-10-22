@@ -96,17 +96,21 @@ export function prepareAuthorEffects(source: string): PreparedAuthorEffects {
     )
       throw Error("Computed effect calls are unsupported");
     if (node.type === "ImportDeclaration")
-      for (const spec of node.specifiers)
+      for (const spec of node.specifiers) {
+        if (spec.type !== "ImportSpecifier")
+          throw Error("Only named effect imports are supported");
         if (
           ["createRoot", "render", "hydrate"].includes(
             spec.imported?.name ?? spec.imported?.value,
           )
         )
           throw Error("Unowned author render roots are unsupported");
+      }
     if (
       node.type === "Identifier" &&
       [
         "Promise",
+        "Reflect",
         "queueMicrotask",
         "requestIdleCallback",
         "cancelIdleCallback",

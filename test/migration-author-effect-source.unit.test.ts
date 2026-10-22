@@ -54,3 +54,12 @@ test("rewrite deduplicates shared shorthand spans and chooses noncolliding priva
   ])
     assert.throws(() => prepareAuthorEffects(value));
 });
+test("effect imports and reflection cannot escape root or listener ownership", () => {
+  for (const source of [
+    `import * as web from 'solid-js/web';web.render(()=>null,document.body);`,
+    `import * as solid from 'solid-js';solid.createRoot(()=>{});`,
+    `Reflect.get(document,'addEventListener').bind(document)('click',()=>{});`,
+    `const reflect=Reflect;reflect.get(document,'addEventListener')('click',()=>{});`,
+  ])
+    assert.throws(() => prepareAuthorEffects(source));
+});
