@@ -1,3 +1,4 @@
+import {validateMigrationSourceAdmission} from "./source-admission-policy.ts";
 import type { Converter } from "./contracts.ts";
 import {
   convertLegacyJsx,
@@ -21,7 +22,7 @@ export const convertMigrationContent: Converter = (input) =>
 export function createMigrationConverter(
   options: MigrationConversionOptions,
 ): Converter {
-  if(options.sourceAdmission === "offline-prototype" && options.strategy !== "archived-functional")throw Error("Offline prototype admission requires archived-functional conversion");
+  validateMigrationSourceAdmission({conversionStrategy:options.strategy,sourceAdmission:options.sourceAdmission});
   if (options.strategy === "strict")
     return async (input) => ({
       ...(await convertMigrationContent(input)),

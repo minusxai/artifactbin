@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gunzipSync} from 'node:zlib';
 import {admitLocalSource} from '../src/migration/conversion/compiled/source-admission.ts';
+import {createMigrationConverter} from '../src/migration/convert.ts';
 import {compileArchivedLocal} from '../src/migration/conversion/compiled/local.ts';
 test('offline prototype delegates whole compiled component and expression behavior to archived compiler',async()=>{
  const input={source:'<Helmet><Value name="n" type="number" default={2}/></Helmet><UnknownArchivedWidget id="widget" options={[{a:1}]}>{$n + 5}</UnknownArchivedWidget>',coreUrl:'/af/v1/core.js'};
@@ -17,4 +18,9 @@ test('prototype mode preserves binding and state reconciliation and cannot be en
  assert.equal(admitLocalSource({...base,source:'<Helmet><Mutation name="write">delete from remote</Mutation></Helmet><div/>'},'offline-prototype').ok,false);
  assert.equal(admitLocalSource({...base,source:'<UnknownArchivedWidget/>',sourceAdmission:'offline-prototype'}).ok,false);
  const result=await compileArchivedLocal(base,{sourceAdmission:'offline-prototype',compiler:{async compile(){return {html:'<div id="proof"/>',css:'',javascript:'globalThis.ok=true;',title:'Proof',build:'frozen',capabilities:[],rootAttributes:{},modules:[],declarations:[{name:'n',type:'number',default:999}]};}}});assert.equal(result.classification,'manual-blocked');
+});
+
+test('direct converter validates the explicit offline policy before reading source or compiling',()=>{
+ for(const strategy of ['strict','archived-static']as const)assert.throws(()=>createMigrationConverter({strategy,sourceAdmission:'offline-prototype'}),/requires archived-functional/);
+ assert.throws(()=>createMigrationConverter({strategy:'archived-functional',sourceAdmission:'unknown' as any}),/Unknown migration source admission policy/);
 });
