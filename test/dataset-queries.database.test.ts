@@ -98,6 +98,28 @@ test("saved query authority pins source, session, namespace and immutable SQL ac
     const authority = await repo.resolve(invocation, signal);
     assert.equal(authority?.userId, "original-user");
     assert.equal(authority?.context.sourceSha256, digest);
+    await env.pool.query("DELETE FROM dataset_principals WHERE kind='user'");
+    assert.equal(
+      await repo.resolve(invocation, signal),
+      null,
+      "signed-in unmapped is unavailable",
+    );
+    await env.pool.query(
+      "INSERT INTO dataset_principals VALUES('legacy','owner','user','original-user','guest',NULL)",
+    );
+    assert.equal(
+      await repo.resolve(invocation, signal),
+      null,
+      "guest-kind mapping cannot project authenticated identity",
+    );
+    await env.pool.query("DELETE FROM dataset_principals WHERE kind='user'");
+    await env.pool.query(
+      "INSERT INTO dataset_principals VALUES('legacy','owner','user','original-user','user',NULL)",
+    );
+    assert.equal(
+      (await repo.resolve(invocation, signal))?.userId,
+      "original-user",
+    );
     assert.equal(
       await repo.resolve(
         { ...invocation, principal: { tenant: "Page12", subject: "forged" } },
@@ -184,6 +206,25 @@ test("saved query authority pins source, session, namespace and immutable SQL ac
     const timer = setTimeout(() => abort.abort(Error("test cancellation")), 50);
     try {
       await assert.rejects(waiting);
+      const until = Date.now() + 1500;
+      let waiters = 0;
+      do {
+        waiters = (
+          await env.pool.query(
+            `SELECT l.pid FROM pg_locks l
+          JOIN pg_class c ON c.oid=l.relation JOIN pg_namespace n ON n.oid=c.relnamespace
+          WHERE n.nspname=$1 AND c.relname='dataset_query_registrations' AND NOT l.granted`,
+            [env.schema],
+          )
+        ).rows.length;
+        if (!waiters) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      } while (Date.now() < until);
+      assert.equal(
+        waiters,
+        0,
+        "PostgreSQL waiter drained before held registry lock is released",
+      );
     } finally {
       clearTimeout(timer);
       await lock.query("ROLLBACK");
