@@ -48,6 +48,13 @@ export interface ConversionInput {
   meta?: Record<string, unknown>;
 }
 export interface ConversionOutput {
+  /** Explicit migration receipt; the retained document is never modified. */
+  sourceRecovery?: {
+    kind: "retained-graph-empty-separators";
+    repairedNodes: number;
+    documentSha256: string;
+    sourceSha256: string;
+  };
   /** Offline native admission; source-specific metadata, never supplied by a browser. */
   nativeProgram?: import("./programs/native-contracts.ts").NativeProgramResolver;
   /** Exact offline conversion producer; retaining a prior successful compiler never changes this receipt. */

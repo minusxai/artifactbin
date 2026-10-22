@@ -90,11 +90,11 @@ function preflight(
   walk(root);
   return unsupported ? refused("compiled-capability", unsupported) : null;
 }
-export async function externalCompile(
-  input: CompiledMigrationInput,
+export async function externalCompile<Output = ArchivedStaticOutput, Input = CompiledMigrationInput>(
+  input: Input,
   options: CompiledMigrationOptions,
   runnerName = "runner.mts",
-): Promise<ArchivedStaticOutput> {
+): Promise<Output> {
   if (!options.legacyRoot) throw Error("Archived compiler root is required");
   const root = path.resolve(options.legacyRoot);
   const runner = fileURLToPath(new URL(runnerName, import.meta.url));
@@ -169,7 +169,7 @@ export async function externalCompile(
         resolve(
           JSON.parse(
             Buffer.concat(chunks).toString("utf8"),
-          ) as ArchivedStaticOutput,
+          ) as Output,
         );
       } catch {
         reject(Error("Invalid archived compiler output"));

@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import {validateMigrationSourceAdmission} from "./source-admission-policy.ts";
 import type { Converter } from "./contracts.ts";
 import {
@@ -40,6 +41,7 @@ export function createMigrationConverter(
   return async (input) => {
     let source: string | null;
     let codecFailure: string | undefined;
+    let sourceRecovery: import("./contracts.ts").ConversionOutput["sourceRecovery"];
     try {
       source = input.source.trim()
         ? input.source
@@ -47,6 +49,14 @@ export function createMigrationConverter(
     } catch (error) {
       source = null;
       codecFailure = error instanceof Error ? error.message : undefined;
+    }
+    if (source === null && options.sourceAdmission === "offline-prototype" && options.legacyRoot) {
+      const {recoverArchivedDocumentSource}=await import("./conversion/compiled/document-recovery.ts");
+      const recovered=await recoverArchivedDocumentSource(input.document,options.legacyRoot);
+      if(recovered){
+        source=recovered.source;
+        sourceRecovery={kind:"retained-graph-empty-separators",repairedNodes:recovered.repairedNodes,documentSha256:createHash("sha256").update(JSON.stringify(input.document)).digest("hex"),sourceSha256:createHash("sha256").update(source).digest("hex")};
+      }
     }
     if (source === null)
       return {
@@ -95,7 +105,7 @@ export function createMigrationConverter(
       options.strategy === "archived-static" ||
       result.classification !== "manual-blocked"
     )
-      return { ...result, strategy: options.strategy };
+      return { ...result, strategy: options.strategy, ...(sourceRecovery?{sourceRecovery}:{}) };
     const { compileArchivedLocal, compileArchivedAuthor } = await import(
       "./conversion/compiled/local.ts"
     );
@@ -105,14 +115,14 @@ export function createMigrationConverter(
       sourceAdmission: options.sourceAdmission,
     });
     if (local.classification !== "manual-blocked")
-      return { ...local, strategy: options.strategy };
+      return { ...local, strategy: options.strategy, ...(sourceRecovery?{sourceRecovery}:{}) };
     const authored = await compileArchivedAuthor(compiledInput, {
       ...compilerOptions,
       compiler: options.localCompiler,
       sourceAdmission: options.sourceAdmission,
     });
     if (authored.classification !== "manual-blocked")
-      return { ...authored, strategy: options.strategy };
+      return { ...authored, strategy: options.strategy, ...(sourceRecovery?{sourceRecovery}:{}) };
     const routeIssues = (route: string, issues: readonly unknown[]) =>
       issues.map((issue) =>
         issue && typeof issue === "object"
@@ -121,6 +131,7 @@ export function createMigrationConverter(
       );
     return {
       ...local,
+      ...(sourceRecovery?{sourceRecovery}:{}),
       strategy: options.strategy,
       issues: [
         ...routeIssues("archived-static", result.issues),
