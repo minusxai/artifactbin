@@ -85,3 +85,10 @@ test("headers retain endpoint-specific semantics and untrusted data is not coerc
     assert.equal(decode(method, "/api/files/Pg4mQ2/graphql")?.kind, "backend");
   }
 });
+
+test("thread read grammar decodes opaque IDs once and never aliases write endpoints",()=>{
+ assert.deepEqual(decode("GET","/api/files/Pg4mQ2/comments/reply%2Fopaque/thread"),{kind:"comments.thread",fileId:"Pg4mQ2",commentId:"reply/opaque"});
+ assert.equal(decode("PUT","/api/files/Pg4mQ2/comments/root/thread"),null);
+ assert.equal(decode("GET","/api/files/Pg4mQ2/comments/root/thread/extra"),null);
+ assert.throws(()=>decode("GET","/api/files/Pg4mQ2/comments/%zz/thread"));
+});

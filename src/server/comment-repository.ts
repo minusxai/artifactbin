@@ -1,3 +1,5 @@
+import { fail } from "../errors.ts";
+import { MAX_COMMENT_THREAD_RECORDS } from "./comment-thread-contracts.ts";
 import { commentAttachments } from "../persistence/comment-attachments.ts";
 import type { AcceptedComment, Snapshot } from "../contracts.ts";
 import type { SqlClient, SqlDatabase } from "../persistence/sql.ts";
@@ -215,6 +217,29 @@ export function createCommentRepository(
         );
         return staged.value;
       }),
+    thread: (baseRequest, prepare, work) => database.transaction(async c=>{
+      const loaded=await access(c,baseRequest,false);
+      const request={...baseRequest,...prepare(loaded)};
+      const selected=await comment(c,request.fileId,request.commentId);
+      let root=selected;
+      const seen=new Set<string>();
+      while(root?.parentId){
+        if(seen.has(root.id)){root=null;break;}
+        if(seen.size>=MAX_COMMENT_THREAD_RECORDS)fail(413,"This comment thread is too large to open from a link");
+        seen.add(root.id);root=await comment(c,request.fileId,root.parentId);
+      }
+      if(!root)return work({...loaded,selected,root:null,comments:[]});
+      // UNION deduplicates corrupt cycles; LIMIT bounds traversal before sorting or attachment reads.
+      const rows=(await c.query(`WITH RECURSIVE thread AS (
+        SELECT * FROM comments WHERE file_id=$1 AND id=$2
+        UNION SELECT child.* FROM comments child JOIN thread parent ON child.parent_id=parent.id AND child.file_id=parent.file_id
+      ) SELECT * FROM thread LIMIT $3`,[request.fileId,root.id,MAX_COMMENT_THREAD_RECORDS+1])).rows;
+      const notes=rows.map(decodeComment).sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));
+      if(notes.length<=MAX_COMMENT_THREAD_RECORDS){
+        for(const note of notes){const attachments=(await commentAttachments(c,request.fileId,note.id)).get(note.id);if(attachments?.length)note.attachments=attachments;}
+      }
+      return work({...loaded,selected,root,comments:notes});
+    }),
     context: (baseRequest, prepare, work) =>
       database.transaction(async (c) => {
         const loaded = await access(c, baseRequest, false);

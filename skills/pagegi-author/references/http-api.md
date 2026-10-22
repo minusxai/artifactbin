@@ -88,9 +88,12 @@ Imported image, file and PDF pages can contain immutable media links. These link
 
 ## Comments
 
+A hosted page address accepts `?comment=<commentId>` or `?thread=<commentId>` to open that comment’s thread and saved context. The target is read again under current permissions, including replies, resolved threads and comments outside the initial page bootstrap. Missing targets show an explicit error; duplicate, empty or conflicting selectors are invalid.
+
 | Method and path | Body | Returns |
 |---|---|---|
 | `GET /api/files/:id/comments` | | `{ comments, head, cursor }` |
+| `GET /api/files/:id/comments/:commentId/thread` | | `{ selectedId, rootId, comments }`; current read permission, including resolved threads and replies, at most 200 comments / 1 MB (`413` if larger) |
 | `POST /api/files/:id/comments` | `{ comment }`, optionally with header `Idempotency-Key` | The saved comment |
 | `PUT /api/files/:id/comments/:commentId` | The change, for example `{ resolved: true }`, with header `If-Match: <revision>` | The updated comment |
 | `GET /api/files/:id/context/:commentId` | | `{ comment, source, state, url }`: the page source and the commenter's own local state when they commented |

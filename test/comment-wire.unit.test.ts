@@ -189,3 +189,10 @@ test("unavailable imported interactive state keeps its original source and quote
  assert.equal(context.source,"<p>Historical</p>");assert.equal(context.comment.quote,original.quote);assert.equal(context.snapshot,null);
  assert.deepEqual(context.comment.stateReplay,original.stateReplay);
 });
+
+test("single thread operations encode opaque IDs and preserve resolved roots and selected replies",()=>{
+ const op={kind:"comments.thread" as const,id:"reply/opaque"};
+ assert.equal(wireRequest(op,page).path,"/comments/reply%2Fopaque/thread");
+ const result=wireResult(op,{selectedId:"reply/opaque",rootId:"root",comments:[{...record("root",1),resolved:true},record("reply/opaque",1,"root")]},page) as import("../src/browser/comment-link-contracts.ts").CommentThread;
+ assert.equal(result.selectedId,"reply/opaque");assert.equal(result.comments[0]!.resolved,true);assert.equal(result.comments[1]!.sourceRevision,"1");
+});

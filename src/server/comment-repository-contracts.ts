@@ -40,6 +40,7 @@ export interface CommentRepository {
     ) => T,
     since?: number | null,
   ): Promise<T>;
+  thread<T>(request: SourceRequest, prepare:(context:CommentAccess)=>{commentId:string}, work:(context:CommentAccess & {selected:AcceptedComment|null;root:AcceptedComment|null;comments:AcceptedComment[]})=>T):Promise<T>;
   /**
    * With `idempotency`, a live stored response for the key is returned
    * instead of running `work` (another fingerprint is 422), and a new

@@ -40,6 +40,7 @@
  *   GET  /api/files/:id/comments                            → 200 CommentsResponse
  *                                  ?since=<cursor> lists only later changes; 400 when the cursor is malformed
  *   POST /api/files/:id/comments   { comment: CommentInput } [+ Idempotency-Key] → 201 CommentRecord
+ *   GET  /api/files/:id/comments/:commentId/thread → selectedId, rootId, comments (fresh read permission; max 200 records / 1 MB, otherwise 413)
  *   PUT  /api/files/:id/comments/:commentId  { body?, resolved? } + If-Match: <revision> → 200 CommentRecord
  *                                  409 when the revision is stale; 428 when If-Match is missing
  *

@@ -575,3 +575,16 @@ test('fresh permission success or denial settles access separately from a networ
 test('initial live connecting remains pending but reconnect retires access until fresh policy arrives',()=>{const f=fixture();f.live.status('connecting');assert.equal(f.changes.at(-1).access,'pending');f.live.status('reconnecting');assert.equal(f.changes.at(-1).access,'disconnected');f.session.dispose()});
 
 test('permission settlement is observable before unrelated comment synchronization completes',async()=>{const comments=deferred<any>();const f=fixture(async op=>op.kind==='permissions'?{...permission,authorizationContext:'verified-policy'}:op.kind==='comments.list'?comments.promise:{});const pending=f.session.synchronize();await Promise.resolve();await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));const status=f.changes.at(-1);assert.equal(status.access,'allowed');assert.equal(status.sync,'syncing');assert.equal(status.permissions.authorizationContext,'verified-policy');comments.resolve({comments:[],head:'r'});await pending;f.session.dispose()});
+
+test("caller abort cancels only its thread read and rejects a late transport result", async()=>{
+ const pending=deferred<any>();let threadSignal:AbortSignal|undefined;
+ const f=fixture(async(op,signal)=>{if(op.kind==="comments.thread"){threadSignal=signal;return pending.promise;}return op.kind==="permissions"?permission:{comments:[],head:"r"};});
+ await f.session.synchronize();
+ const controller=new AbortController();
+ const request=f.session.request({kind:"comments.thread",id:"reply"},controller.signal);
+ await Promise.resolve();controller.abort();
+ await assert.rejects(request);assert.equal(threadSignal?.aborted,true);
+ pending.resolve({selectedId:"reply",rootId:"root",comments:[]});
+ assert.equal((await f.session.request({kind:"permissions"})).read,true);
+ f.session.dispose();
+});

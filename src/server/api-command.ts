@@ -1,3 +1,4 @@
+import { fail } from "../errors.ts";
 import { parseFileRoute } from "./request.ts";
 import type { ApiCommand, ApiCommandRequest } from "./request-contracts.ts";
 /** Decode endpoint grammar only. Authorization and body validation belong to the selected service. */
@@ -29,6 +30,10 @@ export function parseApiCommand({
       };
   }
   if (endpoint === "comments") {
+    if(parts.length===6 && parts[5]==="thread" && method==="GET"){
+      let commentId:string;try{commentId=decodeURIComponent(parts[4]!);}catch{fail(400,"Invalid comment identifier");}
+      return {kind:"comments.thread",fileId,commentId};
+    }
     if (parts.length === 4 && method === "GET")
       return {
         kind: "comments.list",

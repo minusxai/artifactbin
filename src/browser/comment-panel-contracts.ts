@@ -43,6 +43,7 @@ export interface CommentPanel {
   readonly active: boolean;
   /** Open the composer; a selection with nodeId null comments on the whole page. */
   open(selection: CommentSelection): void;
+  openThread(rootId:string, selectedId?:string):void;
   close(): void;
   render(): void;
   /** A posted comment took the server's ID: an open thread and its draft follow it. */

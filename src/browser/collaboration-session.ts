@@ -76,6 +76,7 @@ export function createCollaborationSession(
   function request<O extends PlatformOperation>(
     operation: O,
     contextRead = false,
+    callerSignal?:AbortSignal,
   ): Promise<OperationResults[O["kind"]]> {
     const lifecycleAllowed = () =>
       gate.active || (contextRead && options.contextReadsAllowed?.() === true);
@@ -102,15 +103,19 @@ export function createCollaborationSession(
         clock.clearTimeout(timer);
         controllers.delete(controller);
         controller.signal.removeEventListener("abort", aborted);
+        callerSignal?.removeEventListener("abort",cancelled);
         if (error) reject(error);
         else resolve(value!);
       };
+      const cancelled=()=>controller.abort();
       const aborted = () => finish(new ObsoleteSession());
       controller.signal.addEventListener("abort", aborted, { once: true });
       const timer = clock.setTimeout(() => {
         finish(Error("Collaboration request timed out"));
         controller.abort();
       }, options.timeoutMs ?? 15000);
+      callerSignal?.addEventListener("abort",cancelled,{once:true});
+      if(callerSignal?.aborted)cancelled();
       // Calling the adapter in a microtask handles synchronous throws consistently.
       Promise.resolve()
         .then(() => {
@@ -299,14 +304,15 @@ export function createCollaborationSession(
     },
     restart,
     synchronize,
-    request: (operation) => request(operation),
-    readContext(operation) {
+    request: (operation,signal) => request(operation,false,signal),
+    readContext(operation,signal) {
       if (
         operation.kind !== "context.get" &&
-        operation.kind !== "presence.capture"
+        operation.kind !== "presence.capture" &&
+        operation.kind !== "comments.thread"
       )
         return Promise.reject(Error("Invalid context read operation"));
-      return request(operation, true);
+      return request(operation, true,signal);
     },
     refreshProfiles,
     async resolveComment(id, revision, resolved = true) {

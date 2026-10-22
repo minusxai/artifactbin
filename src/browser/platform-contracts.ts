@@ -19,6 +19,7 @@ export interface PlatformBinding {
 export type PlatformOperation =
   | { kind: "permissions" }
   | { kind: "comments.list" }
+  | { kind: "comments.thread"; id:string }
   | { kind: "comments.create"; comment: unknown; snapshot: unknown }
   /** Resolve a thread, or reopen it with resolved: false. */
   | {

@@ -103,6 +103,8 @@ export function wireRequest(
       return { path: "/permissions" };
     case "comments.list":
       return { path: "/comments" };
+    case "comments.thread":
+      return {path:"/comments/"+encodeURIComponent(op.id)+"/thread"};
     case "comments.create":
       return {
         path: "/comments",
@@ -147,6 +149,8 @@ export function wireResult(
         ),
         head: revisionOf(Number(value.head), page),
       } satisfies CommentsResponse;
+    case "comments.thread":
+      return {selectedId:value.selectedId,rootId:value.rootId,comments:(value.comments as CommentRecord[]).map(record=>acceptedComment(record,page))};
     case "comments.create":
     case "comments.resolve":
       return acceptedComment(value as CommentRecord, page);

@@ -34,6 +34,7 @@ export type ApiCommand =
     }
   | { kind: "comments.capture"; fileId: string; sessionId: unknown }
   | { kind: "comments.context"; fileId: string; commentId: string }
+  | { kind: "comments.thread"; fileId:string; commentId:string }
   | {
       kind: "collaboration";
       fileId: string;

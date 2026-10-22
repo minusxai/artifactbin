@@ -281,7 +281,7 @@ export function createPlatformSession(
       if (op.resolved !== undefined && typeof op.resolved !== "boolean")
         throw Error("Invalid comment resolution");
     }
-    if (op.kind === "comments.resolve" || op.kind === "context.get")
+    if (op.kind === "comments.resolve" || op.kind === "context.get" || op.kind === "comments.thread")
       text(op.id);
     if (op.kind === "presence.capture") text(op.sessionId);
     const page = {

@@ -15,6 +15,7 @@ import type { PlatformOperation } from "./platform-contracts.ts";
 export interface OperationResults {
   permissions: FilePermissions;
   "comments.list": CommentsResponse;
+  "comments.thread": import("./comment-link-contracts.ts").CommentThread;
   "comments.create": AcceptedComment;
   "comments.resolve": AcceptedComment;
   "context.get": Context;
@@ -79,15 +80,17 @@ export interface CollaborationSession {
   synchronize(): Promise<void>;
   request<O extends PlatformOperation>(
     operation: O,
+    signal?:AbortSignal,
   ): Promise<OperationResults[O["kind"]]>;
   /** Only context retrieval; authority changes, lifecycle denial and disposal invalidate results. */
   readContext<
     O extends Extract<
       PlatformOperation,
-      { kind: "context.get" | "presence.capture" }
+      { kind: "context.get" | "presence.capture" | "comments.thread" }
     >,
   >(
     operation: O,
+    signal?:AbortSignal,
   ): Promise<OperationResults[O["kind"]]>;
   refreshProfiles(): Promise<void>;
   /** Resolve a thread; resolved false reopens it. */

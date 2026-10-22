@@ -1,3 +1,4 @@
+import { commentThreadReplies } from "./comment-link.ts";
 import type { Comment } from "../contracts.ts";
 import type {
   CommentPanel,
@@ -382,6 +383,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
       for (const entry of resolved) {
         const message = document.createElement("article");
         message.className = "pg-message";
+        message.dataset.commentId=entry.id;
         authorHeader(entry, message);
         if (entry.quote) para(entry.quote.slice(0, 160), message, "pg-quote");
         para(entry.body, message);
@@ -473,7 +475,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
         }
       };
     } else if (c) {
-      const replies = data().comments.filter((x) => x.parentId === c.id);
+      const replies = commentThreadReplies(data().comments,c.id);
       const showMessage = (
         entry: Comment,
         parent: HTMLElement,
@@ -481,6 +483,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
       ) => {
         const message = document.createElement("article");
         message.className = "pg-message";
+        message.dataset.commentId=entry.id;
         if (!root) authorHeader(entry, message);
         para(entry.body, message);
         attachments(entry, message);
@@ -549,9 +552,10 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
         c.publishedBy === data().actor
       ) {
         const resolve = button(
-          "Resolve",
+          c.resolved ? "Reopen" : "Resolve",
           async () => {
-            await options.actions.resolve(c);
+            if(c.resolved)await options.actions.reopen(c);
+            else await options.actions.resolve(c);
             composer.interaction = commentTransition(composer.interaction, {
               kind: "close",
             });
@@ -646,6 +650,15 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
       layer.replaceChildren();
       draw();
       layer.querySelector("textarea")?.focus();
+    },
+    openThread(rootId,selectedId){
+      if(disposed||!data().comments.some(c=>c.id===rootId&&!c.parentId))return;
+      composer.selection=null;showResolved=false;clearTimeout(hoverTimer);
+      composer.interaction=commentTransition(composer.interaction,{kind:"open",id:rootId});
+      composer.interaction=commentTransition(composer.interaction,{kind:"expand",id:rootId});
+      clearAttachments();layer.replaceChildren();draw();
+      const reply=Array.from(layer.querySelectorAll("[data-comment-id]")).find(el=>el.getAttribute("data-comment-id")===selectedId);
+      reply?.scrollIntoView({block:"nearest"});
     },
     close: closeComment,
     render: draw,

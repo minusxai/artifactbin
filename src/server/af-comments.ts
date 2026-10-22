@@ -1,3 +1,5 @@
+import { MAX_COMMENT_THREAD_RECORDS, MAX_COMMENT_THREAD_BYTES } from "./comment-thread-contracts.ts";
+import type { CommentThreadResponse } from "./comment-thread-contracts.ts";
 import { isStableNodeId } from "../domain/stable-node-id.ts";
 /**
  * Comments over the v2 HTTP API, on the existing comment repository and model.
@@ -87,6 +89,17 @@ export function createCommentService({
         },
         after,
       );
+    },
+
+    thread(fileId:string,credential:string,commentId:string):Promise<CommentThreadResponse>{
+      return comments.thread(request(fileId,credential),context=>{authorize(fileId,credential,context);return {commentId};},context=>{
+        authorize(fileId,credential,context);
+        if(!context.selected||!context.root)fail(404,"Comment not found");
+        if(context.comments.length>MAX_COMMENT_THREAD_RECORDS)fail(413,"This comment thread is too large to open from a link");
+        const result={selectedId:context.selected.id,rootId:context.root.id,comments:context.comments.map(commentRecord)};
+        if(Buffer.byteLength(JSON.stringify(result),"utf8")>MAX_COMMENT_THREAD_BYTES)fail(413,"This comment thread is too large to open from a link");
+        return result;
+      });
     },
 
     /**

@@ -30,7 +30,7 @@ export function parseFileRoute(pathname: string): FileRoute | null {
   if (!match) return null;
   const tail = match[2]!;
   if (
-    !/^(?:source|comments|capture|permissions|sharing|profiles|presence|revoke|sync|comments\/[^/]+|context\/[^/]+|sync\/checkpoint|sync\/intents\/ack|backends|graphql)$/.test(
+    !/^(?:source|comments|capture|permissions|sharing|profiles|presence|revoke|sync|comments\/[^/]+|comments\/[^/]+\/thread|context\/[^/]+|sync\/checkpoint|sync\/intents\/ack|backends|graphql)$/.test(
       tail,
     )
   )

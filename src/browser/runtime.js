@@ -1,4 +1,5 @@
 // @ts-check
+import { createCommentLink } from "./comment-link.ts";
 import {createRemoteAccess} from "./remote-access.ts";
 import { createImageHost } from "./image-host.ts";
 import { createAttachmentHost } from "./dataset-attachment-host.ts";
@@ -140,6 +141,7 @@ async function bootPlatform() {
   let cursor = null, selection = null;
   const readerPreferences = createReaderPreferences(() => localStorage);
   const preferences = readerPreferences.read();
+  let linkedContextReads=0;
   const documentView = createDocumentView({
     source,
     revision: saved.sourceRevision,
@@ -169,7 +171,7 @@ async function bootPlatform() {
           schedulePresence();
         }
       } else {
-        commentPanel.close();
+        if(!linkedContextReads)commentPanel.close();
         chrome.showReturn(change.kind === "history");
         info(
           change.kind === "saved-context"
@@ -450,6 +452,9 @@ async function bootPlatform() {
   function mode(on) {
     sendApp({ pagegi: true, kind: "mode", on });
   }
+  /** @type {import("./comment-link-contracts.ts").CommentLinkController|null} */
+  let commentLinks=null;
+  let commentLinkAttempted=false;
   const collaboration = createCollaborationSession({
     gate,
     readState: () => saved,
@@ -476,6 +481,7 @@ async function bootPlatform() {
       sendApp({ pagegi: true, kind: "remote-invalidated" });
     },
     onInvalidated() {
+      commentLinks?.invalidate();
       datasetAttachmentHost.invalidate();
       attachmentResources.setAuthority(null);
       sendApp({ pagegi: true, kind: "remote-invalidated" });
@@ -484,6 +490,9 @@ async function bootPlatform() {
     onChange(next) {
       authorAccessState=next.access??(next.sync==='synced'?'allowed':next.sync==='error'?'disconnected':'pending');
       const change = host.observeCollaboration(next);
+      if(next.sync==="synced"&&!commentLinkAttempted&&commentLinks){
+        commentLinkAttempted=true;void commentLinks.open(new URLSearchParams(location.search));
+      }
       refreshAttachmentAuthority();
       sendAuthorizationContext();
       if (change.rosterChanged) drawPeople();
@@ -615,6 +624,27 @@ async function bootPlatform() {
       error: info,
     },
   });
+  commentLinks=createCommentLink({
+    readThread:(id,signal)=>documentView.historical
+      ?collaboration.readContext({kind:"comments.thread",id},signal)
+      :collaboration.request({kind:"comments.thread",id},signal),
+    install(thread){
+      const records=new Map(saved.comments.map(c=>[c.id,c]));
+      for(const comment of thread.comments)records.set(comment.id,comment);
+      saved={...saved,comments:[...records.values()]};
+      draw();
+    },
+    async showComment(comment){
+      linkedContextReads++;
+      try{await documentView.showComment(comment);}finally{linkedContextReads--;}
+    },
+    openThread:(root,selected)=>commentPanel.openThread(root,selected),
+    error:message=>platformStatus.notice(message),
+  });
+  addEventListener("popstate",()=>{
+    commentLinkAttempted=false;commentLinks?.invalidate();
+    if(host.read().sync==="synced"||(documentView.historical&&!saved.contextOnly)){commentLinkAttempted=true;void commentLinks?.open(new URLSearchParams(location.search));}
+  });
   function draw() {
     refreshAttachmentAuthority();
     drawCursors();
@@ -688,6 +718,7 @@ async function bootPlatform() {
           [
             () => suspendBackend(),
             () => documentView.dispose(),
+            () => commentLinks?.dispose(),
             () => commentPanel.dispose(),
             () => attachmentResources.dispose(),
             () => imageHost.invalidate(),
