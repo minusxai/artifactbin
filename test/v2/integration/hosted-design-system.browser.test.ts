@@ -136,15 +136,28 @@ for (const [name, engine] of engines) {
       await asked;
       const frame = page.frameLocator("#pg-frame");
       await frame.getByRole("heading", { name: "Styled" }).waitFor({ state: "attached" });
-      await page.waitForTimeout(400);
+      // The page's own document is attached while its stylesheet is still held: record every startup
+      // change from here on, so showing the page before the release is caught in order, not by a timer.
+      await page.evaluate(() => {
+        const order: string[] = ((window as any).startupOrder = []);
+        new MutationObserver(() => {
+          if (document.documentElement.getAttribute("data-pagegi-startup") === "ready") order.push("ready");
+        }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-pagegi-startup"] });
+      });
       assert.notEqual(
         await page.locator("html").getAttribute("data-pagegi-startup"),
         "ready",
         "the page is not shown while its design system's CSS is still loading",
       );
+      await page.evaluate(() => (window as any).startupOrder.push("released"));
       const released = Date.now();
       release();
       await page.waitForSelector("html[data-pagegi-startup=ready]", { state: "attached" });
+      assert.deepEqual(
+        await page.evaluate(() => (window as any).startupOrder),
+        ["released", "ready"],
+        "the page is shown only after its design system's CSS arrived",
+      );
       // The stylesheet's load lifts the loading screen, not the bridge's 5 s fallback.
       assert.ok(Date.now() - released < 2000, `shown ${Date.now() - released} ms after the stylesheet arrived`);
       // At the moment the page shows, volta's CSS applies.
