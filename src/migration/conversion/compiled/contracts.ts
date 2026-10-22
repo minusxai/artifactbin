@@ -34,6 +34,7 @@ export interface CompiledMigrationInput {
   /** Explicit manifest bindings; metadata only, never dataset rows. */
   datasetBindings?: readonly CompiledDatasetBinding[];
   datasetMutations?: readonly CompiledDatasetMutation[];
+  datasetAttachments?: readonly import("./file-upload-runtime-contracts.ts").CompiledAttachmentBinding[];
   /** Explicit importer decision for an archived revision without historical authorization. */
   datasetUnavailable?: { reason: "historical-binding-unavailable" };
   /** Exact archived img URL -> verified ACL media endpoint. Static assembler only. */
