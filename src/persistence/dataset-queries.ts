@@ -1,7 +1,7 @@
 import { assertSavedProgramRegistration } from "../programs/registration.ts";
 import { verifyDeployment } from "../backend/deployment.ts";
 import type { CompiledBackend } from "../backend/contracts.ts";
-import { createHash } from "node:crypto";
+import { sourceDigest } from "../server/page-ports.ts";
 import type { SqlClient, SqlDatabase } from "./sql.ts";
 import type {
   SavedQueryRegistration,
@@ -50,7 +50,7 @@ export async function registerSavedQueries(
   ).rows;
   if (
     source.length !== 1 ||
-    createHash("sha256").update(String(source[0]!.content)).digest("hex") !==
+    sourceDigest(String(source[0]!.content)) !==
       r.sourceSha256
   )
     throw Error("query_registration_source_mismatch");
@@ -159,9 +159,7 @@ export function createSavedQueryRepository(
             r.backendVersion !== i.backendVersion ||
             String(r.pageVersion) !== page.head ||
             r.sourceSha256 !== record.digest ||
-            createHash("sha256")
-              .update(String(record.content))
-              .digest("hex") !== r.sourceSha256 ||
+            sourceDigest(String(record.content)) !== r.sourceSha256 ||
             (record.deployment as { version?: unknown })?.version !==
               i.backendVersion
           )

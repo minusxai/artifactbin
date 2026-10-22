@@ -4,6 +4,7 @@ import { planMigration } from "../src/migration/import.ts";
 import { migrationPageQueryRegistrations } from "../src/migration/query-registrations.ts";
 import type { MigrationBackendReceipt } from "../src/migration/backend-preparation-contracts.ts";
 import { prepareMigrationPageSources } from "../src/migration/page-source-preparation.ts";
+import { sourceDigest } from "../src/server/page-ports.ts";
 import { createHash } from "node:crypto";
 test("query registration pins final canonical source and exact saved deployment, with distinct original-flow and module provenance", async () => {
   const plan = await planMigration(
@@ -75,12 +76,7 @@ test("query registration pins final canonical source and exact saved deployment,
   assert.equal(result[0]!.plan.registration.backendVersion, "compiled-version");
   assert.equal(
     result[0]!.plan.registration.sourceSha256,
-    createHash("sha256")
-      .update(
-        prepareMigrationPageSources(page, "https://example.test")[0]!.prepared
-          .source,
-      )
-      .digest("hex"),
+    sourceDigest(prepareMigrationPageSources(page, "https://example.test")[0]!.prepared.source),
   );
   assert.notEqual(
     result[0]!.plan.registration.sourceSha256,
@@ -89,6 +85,7 @@ test("query registration pins final canonical source and exact saved deployment,
   assert.deepEqual(result[0]!.migrationProvenance, {
     flowSourceSha256: "b".repeat(64),
     compilerIdentity: "c".repeat(64),
+    savedSourceSha256: createHash("sha256").update(prepareMigrationPageSources(page,"https://example.test")[0]!.prepared.source).digest("hex"),
   });
   page.backends = [];
   assert.throws(

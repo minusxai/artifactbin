@@ -51,7 +51,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
           deleted_at: null,
           seed: preparedHead.state,
           sequence: String(liveComments.length),
-          source_digest: digest(preparedHead.source),
+          source_digest: normalized.find(r=>r.version===page.original.version)!.sourceRevision,
           next_node_id: Number(preparedHead.meta.nextNodeId ?? 1),
           generation: 1,
           share: null,
@@ -115,7 +115,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
           revision: String(r.version),
           content: r.prepared.source,
           node_ids: r.prepared.nodeIds,
-          digest: digest(r.prepared.source),
+          digest: r.sourceRevision,
         }))
         .sort((a, b) => Number(a.revision) - Number(b.revision)),
       "saved HTML revisions and identities",

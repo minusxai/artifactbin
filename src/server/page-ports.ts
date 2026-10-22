@@ -15,8 +15,10 @@ import { hash } from "./text.ts";
  */
 export const PAGE_STATE_SCHEMA = 0;
 const REVISION_PREFIX = "pagegi-readable-v2/parse5-7.3.0\n";
-export const sourceDigest = (source: string): string =>
-  hash(REVISION_PREFIX + source);
+declare const sourceRevisionBrand: unique symbol;
+export type SourceRevision = string & { readonly [sourceRevisionBrand]: true };
+export const sourceDigest = (source: string): SourceRevision =>
+  hash(REVISION_PREFIX + source) as SourceRevision;
 
 function missing(error: unknown): boolean {
   return (

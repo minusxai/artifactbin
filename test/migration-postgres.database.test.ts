@@ -1,4 +1,6 @@
 // @requires migration-database
+import { sourceDigest } from "../src/server/page-ports.ts";
+import { createCollaborationRepository } from "../src/persistence/collaboration.ts";
 import { verifyMigrationRuntime } from "../src/migration/page-verification.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -205,6 +207,19 @@ test(
         (await applyMigration(plan, destination, { dryRun: false })).unchanged,
         1,
       );
+      const storedSources = (await db.query(`SELECT revision,content,digest FROM "${schema}".sources WHERE file_id=$1 ORDER BY revision::bigint`,[plan.pages[0]!.pageId])).rows;
+      assert.equal(storedSources.length, 2);
+      const collaboration = createCollaborationRepository({ transaction: async (work) => {
+        await db.query("BEGIN");
+        try { await db.query(`SET LOCAL search_path TO "${schema}"`); const result=await work(db);await db.query("COMMIT");return result; }
+        catch(error){await db.query("ROLLBACK");throw error;}
+      } }, {} as never);
+      for (const saved of storedSources) {
+        const browserRevision = sourceDigest(String(saved.content));
+        assert.equal(saved.digest, browserRevision);
+        assert.equal(await collaboration.authorize(plan.pages[0]!.pageId,"",async loaded=>loaded.sourceExists(browserRevision)),true);
+      }
+      assert.equal((await db.query(`SELECT source_digest FROM "${schema}".files WHERE id=$1`,[plan.pages[0]!.pageId])).rows[0].source_digest, sourceDigest(String(storedSources[1].content)));
       async function* expectedPages() {
         yield plan.pages[0]!;
       }

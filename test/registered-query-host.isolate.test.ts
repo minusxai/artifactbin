@@ -1,3 +1,4 @@
+import { sourceDigest } from "../src/server/page-ports.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -53,7 +54,7 @@ test("internal V8 query closure crosses fresh PG authority and policy reads into
   });
   try {
     const content = "canonical saved page",
-      digest = createHash("sha256").update(content).digest("hex");
+      digest = sourceDigest(content);
     await env.pool.query("UPDATE files SET source_digest=$1", [digest]);
     await env.pool.query(
       "INSERT INTO sources(file_id,revision,content,digest) VALUES('Pg0001','1',$1,$2)",

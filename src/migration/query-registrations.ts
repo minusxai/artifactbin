@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { MigrationSavedQueryRegistration } from "./query-preparation-contracts.ts";
 export type { MigrationSavedQueryRegistration } from "./query-preparation-contracts.ts";
 import type { PlannedPage } from "./contracts.ts";
@@ -25,6 +24,7 @@ export function migrationPageQueryRegistrations(
       migrationProvenance: {
         flowSourceSha256: receipt.flowSourceSha256,
         compilerIdentity: receipt.compilerIdentity,
+        savedSourceSha256: source.sourceSha256,
       },
       plan: {
         ...receipt.plan,
@@ -33,9 +33,7 @@ export function migrationPageQueryRegistrations(
           backendVersion: backend[0]!.deployment.version,
           pageId: page.pageId,
           pageVersion: receipt.pageVersion,
-          sourceSha256: createHash("sha256")
-            .update(source.prepared.source)
-            .digest("hex"),
+          sourceSha256: source.sourceRevision,
         },
       },
     };

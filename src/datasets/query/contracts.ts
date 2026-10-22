@@ -26,10 +26,12 @@ export interface RegisteredServerQueryIdentity {
   readonly backendVersion: string;
   readonly pageId: string;
   readonly pageVersion: number;
+  /** Canonical readable source revision from the normal save model; not a plain content hash. */
   readonly sourceSha256: string;
 }
 export interface RegisteredServerQueryContext extends DatasetCallContext {
   readonly pageVersion: number;
+  /** Canonical readable source revision from the normal save model; not a plain content hash. */
   readonly sourceSha256: string;
 }
 export interface RegisteredServerQueryOptions {

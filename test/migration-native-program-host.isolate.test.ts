@@ -1,3 +1,4 @@
+import { sourceDigest } from "../src/server/page-ports.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -52,7 +53,7 @@ test("native saved page execution requires its owner and rejects concurrent invo
   };
   try {
     const content = "canonical native page",
-      digest = createHash("sha256").update(content).digest("hex");
+      digest = sourceDigest(content);
     await env.pool.query(
       "INSERT INTO af_backend_pages(page_id,page_version) VALUES('Pg0001',1)",
     );

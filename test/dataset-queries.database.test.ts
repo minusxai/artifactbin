@@ -1,3 +1,4 @@
+import { sourceDigest } from "../src/server/page-ports.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -15,7 +16,7 @@ const deployment = sealDeployment("source", "bundle", {
   typeDefs: "type Query { x: String }",
   fields: ["x"],
 });
-const digest = createHash("sha256").update("saved source").digest("hex");
+const digest = sourceDigest("saved source");
 const registration: SavedQueryRegistration = {
   sourceNamespace: "legacy",
   moduleSourceSha256: "a".repeat(64),
@@ -79,6 +80,13 @@ test("saved query authority pins source, session, namespace and immutable SQL ac
       statementTimeoutMs: 15000,
     });
     await db.transaction((c) => registerSavedQueries(c, registration));
+    await assert.rejects(db.transaction(c => registerSavedQueries(c, {
+      ...registration, plan: { ...registration.plan, registration: {
+        ...registration.plan.registration,
+        sourceSha256: createHash("sha256").update("saved source").digest("hex"),
+      } },
+    })), /source_mismatch/);
+
     await db.transaction((c) =>
       registerSavedQueries(c, structuredClone(registration)),
     );

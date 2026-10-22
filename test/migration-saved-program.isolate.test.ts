@@ -1,3 +1,4 @@
+import { sourceDigest } from "../src/server/page-ports.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -50,7 +51,7 @@ test("saved page GraphQL run executes its exact isolated handler with fresh SQL 
   const credential = "synthetic-program-session";
   try {
     const content = "saved canonical page";
-    const digest = createHash("sha256").update(content).digest("hex");
+    const digest = sourceDigest(content);
     await env.pool.query(
       "INSERT INTO af_backend_pages(page_id,page_version) VALUES('Pg0001',1)",
     );

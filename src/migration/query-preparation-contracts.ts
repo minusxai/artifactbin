@@ -69,6 +69,8 @@ export interface MigrationQueryReceipt {
 export interface MigrationSavedQueryRegistration
   extends SavedQueryRegistration {
   readonly migrationProvenance: {
+    /** Plain SHA256 of saved HTML bytes; the registration uses the readable source revision. */
+    savedSourceSha256?: string;
     flowSourceSha256: string;
     compilerIdentity: string;
   };
