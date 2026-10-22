@@ -1,3 +1,7 @@
+import { verifyStandaloneVizBase, recordStandaloneVizReceipt, verifyStandaloneVizReceipt } from "./viz-pages/authority.ts";
+import { validateAdditiveVerification } from "./dataset-pages/additive-authority.ts";
+import { readPreparedMigrationPages } from "./prepared-pages.ts";
+import { admitStandaloneVizSources } from "./viz-pages/admission.ts";
 import {
   originalMigrationOwner,
   resolveMigrationOwnership,
@@ -58,11 +62,14 @@ export async function runMigrationJob(
     throw new Error("Destination writes require concurrency 1");
   if ((options.apply || options.verifyOnly) && !ports.connectDestination)
     throw new Error("Explicit isolated destination connection required");
+  if(options.standaloneVizPages && (options.standaloneDatasetPages||options.media||options.supplementalAssets||options.sourceQueryRegistrations?.length))throw Error("Visualization addon cannot install backend or media authority");
+  if(options.standaloneVizPages)await validateAdditiveVerification(options.standaloneVizPages.admission.base);
   const source = await prepareMigrationJobSource(options);
+  if(options.standaloneVizPages)admitStandaloneVizSources(await Promise.all(source.ids.map(id=>source.readArtifact(id))),source.maps,options.standaloneVizPages.admission);
   validateMigrationOwnershipOverride(
     options.ownershipOverride,
     source.manifest.sourceNamespace,
-    options.standaloneDatasetPages ? Object.keys(source.maps.pages) : source.ids,
+    (options.standaloneDatasetPages||options.standaloneVizPages) ? Object.keys(source.maps.pages) : source.ids,
   );
   // Validate every selected immutable head before dataset/backend preparation, including excluded pages.
   for (const entry of options.ownershipOverride?.entries ?? []) {
@@ -155,6 +162,12 @@ export async function runMigrationJob(
         destinationOptions,
         source.maps,
       );
+      const vizPages=[];
+      if(options.standaloneVizPages){
+        for await(const page of readPreparedMigrationPages(source,options,planned,planner))vizPages.push(page);
+        await connection.db.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+        try{await verifyStandaloneVizBase(connection.db,options.schema,options.standaloneVizPages.admission,options.standaloneVizPages.baseInputs,vizPages,source.maps,options.origin);await connection.db.query("COMMIT");}catch(error){await connection.db.query("ROLLBACK");throw error;}
+      }
       await applyMigrationJob(
         source,
         options,
@@ -170,6 +183,7 @@ export async function runMigrationJob(
         planner,
         connection.db,
       );
+      if(options.standaloneVizPages)await recordStandaloneVizReceipt(connection.db,options.schema,options.standaloneVizPages.admission,vizPages);
     } finally {
       await connection.close();
     }
@@ -177,6 +191,11 @@ export async function runMigrationJob(
   if (options.verifyOnly) {
     const connection = await ports.connectDestination!();
     try {
+      if(options.standaloneVizPages){
+        const pages=[];for await(const page of readPreparedMigrationPages(source,options,planned,planner))pages.push(page);
+        await verifyStandaloneVizBase(connection.db,options.schema,options.standaloneVizPages.admission,options.standaloneVizPages.baseInputs,pages,source.maps,options.origin);
+        await verifyStandaloneVizReceipt(connection.db,options.schema,options.standaloneVizPages.admission,pages);
+      }
       await verifyMigrationJob(
         source,
         options,

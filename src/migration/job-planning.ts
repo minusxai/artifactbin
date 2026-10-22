@@ -34,6 +34,7 @@ export function createMigrationJobPlanner(
   const planArtifact = async (artifact: MigrationManifest) => {
     const plan = await planMigration(artifact, {
       maps,
+      standaloneVizRecipes: Boolean(options.standaloneVizPages),
       historicalUnavailable: options.historicalUnavailable,
       ownershipOverride: options.ownershipOverride,
       convert,

@@ -1,3 +1,5 @@
+import { convertVizRecipePage } from "./viz-pages/convert.ts";
+import { createHash as vizCreateHash } from "node:crypto";
 import { convertStandaloneDatasetPage } from "./dataset-pages/convert.ts";
 import { referencedLegacyRawMediaMappings } from "./raw-media.ts";
 import { legacyDocumentSource } from "./conversion/index.ts";
@@ -125,6 +127,7 @@ export async function planMigration(
       legacyId: string,
       version: number,
     ) => readonly DatasetBrowserBinding[];
+    standaloneVizRecipes?: boolean;
     standaloneDatasetSource?: (legacyId: string, version: number) => import("./dataset-pages/contracts.ts").StandaloneDatasetPageInput["source"] | undefined;
     datasetUnavailable?: (legacyId: string, version: number) => boolean;
     nativeProgramBinding?: (
@@ -326,6 +329,8 @@ export async function planMigration(
               : undefined,
           coreUrl: options.coreUrl,
         });
+      else if(format === "viz" && options.standaloneVizRecipes)
+        conversion = convertVizRecipePage({format:"viz",title:String(original.title??artifact.title??"Recipe"),coreUrl:options.coreUrl,source:String(original.source??""),sourceVersion:version,sourceSha256:vizCreateHash("sha256").update(String(original.source??"")).digest("hex")});
       else if (format === "dataset" && options.standaloneDatasetSource) {
         const source = options.standaloneDatasetSource(artifact.id, version);
         conversion = source ? convertStandaloneDatasetPage({title:String(original.title??artifact.title??"Dataset"),coreUrl:options.coreUrl,source}) : {classification:"manual-blocked",html:null,issues:["dataset-page-exact-binding-required"],identities:{}};

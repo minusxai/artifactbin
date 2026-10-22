@@ -16,6 +16,7 @@ import type {
 } from "./dependency-contracts.ts";
 import type { MigrationMediaIndex } from "./media-contracts.ts";
 export interface MigrationJobOptions {
+  standaloneVizPages?: { admission: import("./viz-pages/admission-contracts.ts").StandaloneVizJobAdmission; baseInputs: import("./viz-pages/admission-contracts.ts").StandaloneVizBaseInputs };
   standaloneDatasetPages?: import("./dataset-pages/admission-contracts.ts").StandaloneDatasetJobAdmission;
   historicalUnavailable?: import("./historical-unavailable-contracts.ts").HistoricalUnavailablePolicy;
   sourceQueryRegistrations?: readonly import("../datasets/source-query/contracts.ts").MigrationSourceQueryRegistration[];

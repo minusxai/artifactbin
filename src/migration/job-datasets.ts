@@ -31,6 +31,7 @@ export async function prepareMigrationJobDatasets(
   options: MigrationJobOptions,
   ports: MigrationBackendPreparationPorts = {},
 ): Promise<MigrationJobDatasets | undefined> {
+  if (options.standaloneVizPages) return undefined;
   if (options.standaloneDatasetPages) return prepareStandaloneDatasetJob(source, options, ports);
   if (!source.datasets) {
     if (options.sourceQueryRegistrations?.length)
