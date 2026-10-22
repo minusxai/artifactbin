@@ -16,6 +16,7 @@ export async function prepareLocalFlow(
   boundProofs: readonly BoundValueColumnProof[] = [],
   membersBinding?: CompiledMembersBinding,
   viewerBinding?:CompiledViewerBinding,
+  sourceAdmission?:import("./local-contracts.ts").CompiledSourceAdmission,
 ): Promise<{ flow: any; results: any }> {
   validateBoundFlow(rawFlow, bindings, boundProofs);
   if(viewerBinding!==undefined&&!validCompiledViewerBinding(viewerBinding))throw Error("Invalid viewer binding");
@@ -84,7 +85,7 @@ export async function prepareLocalFlow(
   )
     throw Error("Unported query capability");
   if (
-    membersBinding &&
+    sourceAdmission!=="offline-prototype" && membersBinding &&
     !flow.queries.some((q: any) => q.reads.builtins.includes("_members"))
   )
     throw Error("Unused members binding");

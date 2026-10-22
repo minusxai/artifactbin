@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {gunzipSync} from 'node:zlib';
 import {admitLocalSource} from '../src/migration/conversion/compiled/source-admission.ts';
 import {compileArchivedLocal} from '../src/migration/conversion/compiled/local.ts';
 test('offline prototype delegates whole compiled component and expression behavior to archived compiler',async()=>{
@@ -7,8 +8,8 @@ test('offline prototype delegates whole compiled component and expression behavi
  assert.equal(admitLocalSource(input).ok,false);
  const admitted=admitLocalSource(input,'offline-prototype');assert.equal(admitted.ok,true);
  let captured:any;
- const result=await compileArchivedLocal(input,{sourceAdmission:'offline-prototype',compiler:{async compile(i){captured=i;return {html:'<div id="widget"><img src="https://example.invalid/image.png">7</div>',css:'',javascript:'const inert="/api/reference";globalThis.answer=7;',title:'Proof',build:'frozen',capabilities:[],rootAttributes:{},modules:['known-compiled-widget.js'],declarations:[{name:'n',type:'number',default:2}],queryNames:[],datasetNames:[],mutationNames:[]};}}});
- assert.equal(result.classification,'functional',JSON.stringify(result.issues));assert.match(result.html!,/globalThis.answer=7/);assert.match(result.html!,/example.invalid\/image.png/);assert.equal(captured.sourceAdmission,'offline-prototype');
+ const result=await compileArchivedLocal(input,{sourceAdmission:'offline-prototype',compiler:{async compile(i){captured=i;return {html:'<div id="widget"><img src="https://example.invalid/image.png">7</div>',css:'',javascript:'const inert="/api/reference </script><!--";globalThis.answer=7;',title:'Proof',build:'frozen',capabilities:[],rootAttributes:{},modules:['known-compiled-widget.js'],declarations:[{name:'n',type:'number',default:2}],queryNames:[],datasetNames:[],mutationNames:[]};}}});
+ assert.equal(result.classification,'functional',JSON.stringify(result.issues));const payload=JSON.parse(/<script type="application\/json" data-af-compiled-payload>(.*?)<\/script>/.exec(result.html!)![1]!);assert.match(gunzipSync(Buffer.from(payload.base64,'base64')).toString(),/globalThis.answer=7/);assert.match(gunzipSync(Buffer.from(payload.base64,'base64')).toString(),/<\/script><!--/);assert.match(result.html!,/example.invalid\/image.png/);assert.equal(captured.sourceAdmission,'offline-prototype');
 });
 test('prototype mode preserves binding and state reconciliation and cannot be enabled through input',async()=>{
  const base={source:'<Helmet><Value name="n" type="number" default={2}/></Helmet><div id="proof"/>',coreUrl:'/af/v1/core.js'};

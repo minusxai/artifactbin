@@ -79,7 +79,8 @@ export async function compileArchivedLocal(
     : "";
   const packagedBody=input.viewerBinding||input.viewerUnavailable?viewerContentHtml(body,Boolean(input.viewerUnavailable)):body;
   const prefix = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}${context.head}<title>${esc(output.title)}</title><style>${output.css}</style></head><body>${status}${authorStatus}${packagedBody}`;
-  let html = prefix + compiledJavascriptMarkup(output.javascript) + "</body></html>";
+  let html:string;
+  try{html=prefix+compiledJavascriptMarkup(output.javascript,plan.sourceAdmission==="offline-prototype")+"</body></html>";}catch{return blocked("compiled-page-limit");}
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE) {
     try { html = prefix + compiledJavascriptMarkup(output.javascript, true) + "</body></html>"; }
     catch { return blocked("compiled-page-limit"); }
@@ -94,10 +95,10 @@ export async function compileArchivedLocal(
     issues: [],
     capabilities: [
       "local-scalars",
-      ...(input.mermaids?.length ? ["offline-mermaid-flowcharts"] : []),
+      ...(input.mermaids?.length && plan.sourceAdmission!=="offline-prototype" ? ["offline-mermaid-flowcharts"] : []),
       ...(input.slideDeck ? ["slide-deck-navigation"] : []),
       "archived-kit",
-      "inlined-fonts",
+      ...(plan.sourceAdmission==="offline-prototype" ? ["compiled-browser-program"] : ["inlined-fonts"]),
       ...(queries.size && !historical ? ["local-sql-queries"] : []),
       ...(plan.manifest.declarations.some((d) => d.type === "table")
         ? ["local-inline-tables"]

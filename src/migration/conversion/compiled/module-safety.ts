@@ -13,3 +13,9 @@ export function safeInlineModule(source: unknown): source is string {
     return false;
   }
 }
+
+/** Blob-backed migration modules do not cross an HTML tokenizer boundary. */
+export function validCompiledModule(source:unknown):source is string {
+ if(typeof source!=="string")return false;
+ try{parse(source,{ecmaVersion:"latest",sourceType:"module"});return true;}catch{return false;}
+}

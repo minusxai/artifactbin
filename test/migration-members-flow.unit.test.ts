@@ -49,3 +49,9 @@ test("current-page members compile without Imports but never capture memberships
       prepareLocalFlow(archive("_members"), raw, [], {}, {}, [], [], invalid),
     );
 });
+test('offline prototype keeps an unused validated service binding without granting another scope',async()=>{
+ const archived=async()=>({prepareCompile:async()=>({}),compileDataflow:()=>({ok:true,compiled:{values:[],imports:[],mutations:[],queries:[{name:'members',engine:'sqlite',reads:{builtins:[]}}]}})});
+ await assert.rejects(prepareLocalFlow(archived,raw,[],{},{},[],[],binding));
+ const result=await prepareLocalFlow(archived,raw,[],{},{},[],[],binding,undefined,'offline-prototype');assert.deepEqual(result.results,{tables:{},errors:{}});
+ await assert.rejects(prepareLocalFlow(archived,raw,[],{},{},[],[],{...binding,backendHref:'https://example.invalid'},undefined,'offline-prototype'));
+});

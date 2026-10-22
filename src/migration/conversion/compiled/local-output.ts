@@ -5,7 +5,7 @@ import {initialDynamicIdentities,allowedInitialDynamicIdentities} from "./dynami
 /** Compiler-output admission owns shape, source reconciliation, bundle policy,
  * HTML identity repair and author mount verification; never invokes a compiler. */
 import { parseFragment, serialize } from "parse5";
-import { safeInlineModule } from "./module-safety.ts";
+import { safeInlineModule, validCompiledModule } from "./module-safety.ts";
 import { compiledAuthorMountAttributes } from "./author-document.ts";
 import { reconcileLocalDeclarations } from "./source-manifest.ts";
 import { MAX_COMPILED_OUTPUT_BYTES } from "./contracts.ts";
@@ -30,7 +30,7 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
     datasetNames: imports,
   } = plan;
   if (
-    !safeInlineModule(output?.javascript) ||
+    !(prototype ? validCompiledModule(output?.javascript) : safeInlineModule(output?.javascript)) ||
     !output ||
     typeof output.html !== "string" ||
     typeof output.css !== "string" ||

@@ -165,6 +165,7 @@ if (input.datasetUnavailable) {
     input.boundValueColumns ?? [],
     input.membersBinding,
     input.viewerBinding,
+    input.sourceAdmission,
   ));
 } else if (rawFlow.imports.length) throw Error("Import requires a query");
 if(!input.datasetUnavailable&&input.datasetMutations?.some(binding=>binding.valueParam))validateCompiledCellWriteContexts(input.source,flow,input.datasetMutations??[]);
@@ -235,7 +236,10 @@ const sheets = documentStyleSheets({
 let css = sheets.map((sheet: { css: string }) => sheet.css).join("\n");
 css = isolateArchivedThemeVariables(css);
 const archivedFonts = await prepareArchivedFontResources(root, process.argv[3] ? JSON.parse(process.argv[3]) : undefined);
-const fontResources = await inlinePinnedFontImports(css, archivedFonts.resolve);
+const fontResources = await inlinePinnedFontImports(css, archivedFonts.resolve).catch(error=>{
+  if(!prototype||!(error instanceof Error)||error.message!=="Requested font family is not pinned")throw error;
+  return {css,receipts:[]};
+});
 css = fontResources.css;
 // No network, old origin, asset endpoint or deployment host is carried into migrated styles.
 const { parse: parseCss, walk: walkCss } = await import("css-tree");
@@ -251,8 +255,10 @@ const replacements: Array<{ start: number; end: number; text: string }> = [];
 for (const node of urls) {
   const url = node.value;
   if (url.startsWith("data:") || url.startsWith("#")) continue;
-  if (!/^\/fonts\/[A-Za-z0-9_.-]+\.woff2$/.test(url))
+  if (!/^\/fonts\/[A-Za-z0-9_.-]+\.woff2$/.test(url)){
+    if(prototype)continue;
     throw Error("Unresolved stylesheet resource");
+  }
   const bytes = await readFile(path.join(root, "services/app/public", url));
   replacements.push({
     start: node.loc.start.offset,
@@ -265,11 +271,11 @@ for (const replacement of replacements.sort((a, b) => b.start - a.start))
     css.slice(0, replacement.start) +
     replacement.text +
     css.slice(replacement.end);
-if (/@import\s/i.test(css))
+if (!prototype && /@import\s/i.test(css))
   throw Error("External stylesheet imports are not self-contained");
 const html = inlineStoryElement(rendered, parts.mode, input.theme ?? null);
 
-const preparedMermaids=await prepareArchivedMermaid(root,{html,css,plans:input.mermaids??[]});
+const preparedMermaids=await prepareArchivedMermaid(root,{html,css,plans:input.mermaids??[]}).catch(error=>{if(!prototype)throw error;return [];});
 const { MODULE_DATA_READ_CODE } = await archived(
   "lib/compiled-page/carriers.ts",
 );
