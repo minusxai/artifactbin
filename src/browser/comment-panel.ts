@@ -4,6 +4,7 @@ import type {
   CommentPanelOptions,
   CommentSelection,
 } from "./comment-panel-contracts.ts";
+import { createCommentAttachmentGallery } from "./comment-attachment-gallery.ts";
 import { CommentComposer } from "./comment-composer.ts";
 import {
   commentTransition,
@@ -18,6 +19,22 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
   const document = layer.ownerDocument;
   const composer = new CommentComposer();
   let disposed = false;
+  let attachmentGalleries: { dispose(): void }[] = [];
+  function clearAttachments() {
+    for (const gallery of attachmentGalleries) gallery.dispose();
+    attachmentGalleries = [];
+  }
+  function attachments(entry: Comment, parent: HTMLElement) {
+    if (entry.attachments?.length && options.attachmentResources)
+      attachmentGalleries.push(
+        createCommentAttachmentGallery({
+          parent,
+          commentId: entry.id,
+          attachments: entry.attachments,
+          resources: options.attachmentResources,
+        }),
+      );
+  }
   let hoverTimer: ReturnType<typeof setTimeout> | undefined;
   let dismissedHover: string | null = null;
   let dismissedPointer: { x: number; y: number } | null = null;
@@ -195,6 +212,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
     const c = data().comments.find((c) => c.id === composer.interaction.active);
     const key = JSON.stringify({
       selected: composer.selection,
+      attachmentRevision: options.attachmentResources?.revision,
       permissions: [
         data().canComment,
         data().canResolve,
@@ -217,6 +235,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
       return;
     }
     layer.dataset.key = key;
+    clearAttachments();
     layer.replaceChildren();
     drawCommentTargets(roots, composer.selection?.nodeId || c?.nodeId || null);
     const rail = document.createElement("div");
@@ -366,6 +385,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
         authorHeader(entry, message);
         if (entry.quote) para(entry.quote.slice(0, 160), message, "pg-quote");
         para(entry.body, message);
+        attachments(entry, message);
         const actions = document.createElement("div");
         actions.className = "pg-actions";
         if (
@@ -463,6 +483,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
         message.className = "pg-message";
         if (!root) authorHeader(entry, message);
         para(entry.body, message);
+        attachments(entry, message);
         message.dataset.author = entry.publishedBy || "";
         message.dataset.sync = entry.publishedBy ? "saved" : "local";
         if (!entry.publishedBy)
@@ -620,6 +641,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
       if (!canComment()) return options.actions.error(commentNotice());
       composer.open(selection);
       showResolved = false;
+      clearAttachments();
       layer.replaceChildren();
       draw();
       layer.querySelector("textarea")?.focus();
@@ -641,6 +663,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
     dispose() {
       disposed = true;
       clearTimeout(hoverTimer);
+      clearAttachments();
       layer.replaceChildren();
     },
   };

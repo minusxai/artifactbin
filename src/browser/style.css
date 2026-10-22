@@ -408,3 +408,12 @@ body {
   background: var(--pg-raised);
   color: var(--pg-accent);
 }
+
+.pg-comment-attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 8px; }
+.pg-attachment-thumbnail { display: grid; gap: 4px; max-width: 144px; text-align: left; }
+.pg-attachment-thumbnail img { width: 128px; height: 96px; object-fit: contain; border-radius: 6px; }
+.pg-attachment-thumbnail span { overflow-wrap: anywhere; }
+.pg-attachment-dialog { max-width: min(92vw, 1200px); max-height: 90vh; padding: 16px; border: 1px solid #888; border-radius: 10px; }
+.pg-attachment-dialog::backdrop { background: #0009; }
+.pg-attachment-dialog > img { display: block; max-width: 85vw; max-height: 72vh; object-fit: contain; margin-top: 12px; }
+.pg-attachment-dialog > img:not([src]) { display: none; }

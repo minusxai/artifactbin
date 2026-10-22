@@ -19,6 +19,8 @@ export interface CommentPanelData {
 }
 export interface CommentPanelOptions {
   layer: HTMLElement;
+  /** Trusted image loader/resource owner; omitted when no attachment transport exists. */
+  attachmentResources?: import("./comment-attachments-contracts.ts").CommentAttachmentResources;
   read(): CommentPanelData;
   geometry(): { targets: Target[]; inset: number; height: number };
   actions: {
