@@ -266,3 +266,57 @@ test("a committed write with a failed local clear is reconciled only with its or
   assert.deepEqual(s.calls[1].variables, s.calls[0].variables);
   assert.deepEqual(saved, {});
 });
+
+test("an in-flight confirmed commit cannot reset the replacement caller local fields", async () => {
+  let context = "caller-a",
+    finish!: (reply: any) => void,
+    resets = 0,
+    refreshes = 0;
+  const saved: Record<string, any> = {};
+  const adapter = createCompiledDatasetMutations({
+    bindings: [
+      {
+        name: "save",
+        recoveryScope: "a".repeat(64),
+        backendNamespace: "data",
+        paramTypes: { value: "number" },
+        reset: ["value"],
+      },
+    ],
+    documents: { data: parse("mutation{data{mutate}}") },
+    client: {
+      mutate: async () =>
+        new Promise((r) => {
+          finish = r;
+        }),
+    },
+    authorizationContext: () => context,
+    intentStore: {
+      read: () => ({ ...saved }),
+      compareAndSet: async (name, expected, next) => {
+        if ((saved[name]?.requestId ?? null) !== expected) return false;
+        if (next) saved[name] = next;
+        else delete saved[name];
+        return true;
+      },
+    },
+    requestId: () => "request-000000000-1",
+    values: () => ({ value: 7 }),
+    reset() {
+      resets++;
+    },
+    committed() {
+      refreshes++;
+    },
+  });
+  const pending = adapter.mutate("save");
+  await Promise.resolve();
+  await Promise.resolve();
+  context = "caller-b";
+  finish(committed);
+  await pending;
+  assert.equal(adapter.status("save")?.state, "committed");
+  assert.deepEqual(saved, {});
+  assert.equal(resets, 0);
+  assert.equal(refreshes, 1);
+});

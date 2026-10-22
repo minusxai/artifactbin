@@ -282,7 +282,7 @@ export function createCompiledDatasetMutations(
               Object.hasOwn(attempt.viewer, field) &&
               Object.is(current[field], attempt.viewer[field]),
           );
-          if (reset.length) options.reset(reset);
+          if (reset.length && authorized(attempt)) options.reset(reset);
         } catch {}
         try {
           await options.committed();
