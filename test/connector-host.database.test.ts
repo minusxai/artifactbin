@@ -198,18 +198,42 @@ test("real PostgreSQL parameterization, tenant scoping, rollback and server time
     },
     slow: { text: "SELECT pg_sleep(1)", params: () => [] },
   };
+  let slowQueries = 0,
+    serverTimeouts = 0;
   const host = createConnectorHost(
     {
       db: {
         kind: "postgres",
         pool: {
-          connect: () => db.pool.connect(),
+          connect: async () => {
+            const client = await db.pool.connect();
+            return {
+              async query(text: string, values?: unknown[]) {
+                if (text === operations.slow.text) slowQueries++;
+                try {
+                  // Test PostgreSQL's statement deadline independently of the host's
+                  // total checkout/setup deadline; both previously raced at 80ms.
+                  return await client.query(
+                    text,
+                    text === "SELECT set_config('statement_timeout',$1,true)"
+                      ? ["80"]
+                      : values,
+                  );
+                } catch (error) {
+                  if ((error as { code?: string }).code === "57014")
+                    serverTimeouts++;
+                  throw error;
+                }
+              },
+              release: (destroy?: boolean) => client.release(destroy),
+            };
+          },
           end: async () => {},
         } as PgPool,
         operations,
       },
     },
-    { timeoutMs: 80 },
+    { timeoutMs: 10000 },
   );
   const principal = {
     ...caller,
@@ -256,12 +280,24 @@ test("real PostgreSQL parameterization, tenant scoping, rollback and server time
       }),
       { code: "TIMEOUT", outcome: "unknown" },
     );
+    assert.equal(slowQueries, 1);
+    assert.equal(
+      serverTimeouts,
+      1,
+      "PostgreSQL must report statement cancellation",
+    );
     await assert.rejects(
       host.transaction(principal, "db", [
         { operation: "put", input: { id: "cancelled", value: "x" } },
         { operation: "slow", input: null },
       ]),
       { code: "TIMEOUT", outcome: "unknown" },
+    );
+    assert.equal(slowQueries, 2);
+    assert.equal(
+      serverTimeouts,
+      2,
+      "transaction timeout must also come from PostgreSQL",
     );
     assert.deepEqual(
       await host.invoke(principal, {
