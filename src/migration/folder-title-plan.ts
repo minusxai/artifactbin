@@ -21,11 +21,9 @@ function titleSegment(title: string): string {
       .normalize("NFC")
       .replace(/[\\/%?#\u0000-\u001f\u007f]+/g, "-")
       .trim()
-      .replace(/[-\s]+/g, " ")
-      .trim()
-      .replace(/ /g, "-")
+      .replace(/\s+/g, " ")
       .slice(0, 80)
-      .replace(/^[.-]+|[.-]+$/g, "") || "Untitled"
+      .replace(/^[ .-]+|[ .-]+$/g, "") || "Untitled"
   );
 }
 

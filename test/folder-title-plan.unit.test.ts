@@ -247,3 +247,17 @@ test("location moves respect segment boundaries and never revive deleted or unre
     locations,
   );
 });
+
+test("title paths retain readable spaces and canonical Unicode", () => {
+  const result = planFolderTitles(
+    [folder("a", "Cafe\u0301 notes", "/imported/a")],
+    { owner: [{ path: "/imported/a", fileId: null }] },
+  );
+  assert.equal(result.kind, "ready");
+  if (result.kind === "ready")
+    assert.ok(
+      result.locations.some(
+        (row) => row.state === "live" && row.path === "/imported/Café notes",
+      ),
+    );
+});
