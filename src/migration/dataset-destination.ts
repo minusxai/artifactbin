@@ -282,7 +282,10 @@ export class PostgresDatasetMetadataDestination
       await registerDatasetMutationOperations(
         {
           query: async (text, values) => {
-            const r = await this.db.query(text, values);
+            const r = await this.db.query(
+              text,
+              values ? [...values] : undefined,
+            );
             return { ...r, rowCount: null };
           },
           release: () => {},
