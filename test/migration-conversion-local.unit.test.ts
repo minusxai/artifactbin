@@ -358,6 +358,7 @@ test("dataset Imports require exact manifest bindings and emit no fetched rows",
     backendNamespace: "legacyDatasets",
     backendHref: "/af/v1/ids/Bac123",
     version: 3,
+    mode: "pinned" as const,
     tables: [
       {
         schema: "main",

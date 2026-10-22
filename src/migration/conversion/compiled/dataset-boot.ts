@@ -7,7 +7,7 @@ export function datasetBootSetup(
   const documents = Object.fromEntries(
     [...new Set(bindings.map((b) => b.backendNamespace))].map((name) => [
       name,
-      `query DatasetRead($binding:String!,$schema:String!,$table:String!,$offset:Int!,$limit:Int!){${name}{read(binding:$binding,schema:$schema,table:$table,offset:$offset,limit:$limit){version schema table columns{name type} rows offset nextOffset totalRows}}}`,
+      `query DatasetRead($binding:String!,$schema:String!,$table:String!,$offset:Int!,$limit:Int!,$expectedVersion:Int,$expectedGeneration:Int){${name}{read(binding:$binding,schema:$schema,table:$table,offset:$offset,limit:$limit,expectedVersion:$expectedVersion,expectedGeneration:$expectedGeneration){version generation schema table columns{name type} rows offset nextOffset totalRows}}}`,
     ]),
   );
   return `const datasetBindings=${JSON.stringify(bindings)};
@@ -20,6 +20,11 @@ export const datasetBootStatus = `const status=document.querySelector('[data-mig
  const setDatasetStatus=(message)=>{if(status){status.textContent=message;status.hidden=!message;}};
  const refreshDatasets=()=>{datasetBudget={bytes:0,rows:0};datasetReadFailed=false;setTables({});setQueryErrors({});setDatasetStatus('Loading protected data…');engine.invalidate(flow.imports.map(i=>i.ref));void run();};
  const retry=document.createElement('button');retry.type='button';retry.textContent='Refresh data';retry.addEventListener('click',refreshDatasets);status?.after(retry);
- const interval=setInterval(refreshDatasets,30000);
- const visible=()=>{if(document.visibilityState==='visible')refreshDatasets();};document.addEventListener('visibilitychange',visible);
- window.addEventListener('pagehide',event=>{if(!event.persisted){clearInterval(interval);document.removeEventListener('visibilitychange',visible);}});`;
+ const datasetWatches=[];
+ for(const binding of datasetBindings)for(const table of binding.tables){let received=false;
+  const subscription=client.watchQuery({query:datasetDocuments[binding.backendNamespace],variables:{binding:binding.name,schema:table.schema,table:table.table,offset:0,limit:1}}).subscribe(result=>{
+   if(!result.errors?.length&&!result.data?.[binding.backendNamespace]?.read)return;
+   if(!received){received=true;return;}refreshDatasets();
+  });datasetWatches.push(subscription);
+ }
+ window.addEventListener('pagehide',event=>{if(!event.persisted){for(const subscription of datasetWatches)subscription.unsubscribe();}});`;

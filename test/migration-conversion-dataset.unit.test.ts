@@ -7,6 +7,7 @@ const binding = {
   backendNamespace: "legacyDatasets",
   backendHref: "/af/v1/ids/Bac123",
   version: 3,
+  mode: "pinned" as const,
   tables: [
     {
       schema: "main",
@@ -17,6 +18,7 @@ const binding = {
 };
 const window = {
   version: 3,
+  generation: 0,
   schema: "main",
   table: "rows",
   columns: [{ name: "amount", type: "number" }],
@@ -122,4 +124,106 @@ test("shared refresh budgets and deadlines bound the entire read generation", as
     })),
     /Dataset read unavailable/,
   );
+});
+
+test("live reads latch version and generation and retry a changed snapshot without mixing rows", async () => {
+  const calls: any[] = [];
+  let attempt = 0;
+  const result = await readCompiledDataset(
+    { ...binding, mode: "live" },
+    async (_namespace, args) => {
+      calls.push(args);
+      if (args.offset === 0) attempt++;
+      if (attempt === 1 && args.offset > 0) throw Error("dataset_changed");
+      return {
+        ...window,
+        version: attempt + 3,
+        generation: attempt,
+        offset: args.offset,
+        rows: [{ amount: attempt * 10 + args.offset }],
+        nextOffset: args.offset === 0 ? 1 : null,
+        totalRows: 2,
+      };
+    },
+  );
+  assert.deepEqual(result.rows!.rows, [{ amount: 20 }, { amount: 21 }]);
+  assert.equal(calls[0].expectedVersion, undefined);
+  assert.equal(calls[1].expectedVersion, 4);
+  assert.equal(calls[1].expectedGeneration, 1);
+  assert.equal(calls[2].expectedVersion, undefined);
+  assert.equal(calls[3].expectedVersion, 5);
+  assert.equal(calls[3].expectedGeneration, 2);
+});
+test("repeated live changes exhaust bounded retry and never expose partial rows", async () => {
+  let calls = 0;
+  await assert.rejects(
+    readCompiledDataset(
+      { ...binding, mode: "live" },
+      async (_namespace, args) => {
+        calls++;
+        return {
+          ...window,
+          version: 4,
+          generation: args.offset,
+          offset: args.offset,
+          rows: [{ amount: 1 }],
+          nextOffset: args.offset === 0 ? 1 : null,
+          totalRows: 2,
+        };
+      },
+    ),
+    /Dataset read unavailable/,
+  );
+  assert.equal(calls, 4);
+});
+
+test("dataset notification observers refresh complete snapshots and release subscriptions", async () => {
+  const { datasetBootStatus } = await import(
+    "../src/migration/conversion/compiled/dataset-boot.ts"
+  );
+  const { runInNewContext } = await import("node:vm");
+  const callbacks: Function[] = [];
+  let refreshes = 0,
+    released = 0;
+  const events: Record<string, Function> = {};
+  const noop = () => {};
+  runInNewContext(datasetBootStatus, {
+    document: {
+      querySelector: () => ({ textContent: "", hidden: false, after: noop }),
+      createElement: () => ({ addEventListener: noop }),
+    },
+    window: {
+      addEventListener: (name: string, fn: Function) => (events[name] = fn),
+    },
+    datasetBindings: [binding],
+    datasetDocuments: { legacyDatasets: {} },
+    client: {
+      watchQuery: () => ({
+        subscribe: (fn: Function) => {
+          callbacks.push(fn);
+          return { unsubscribe: () => released++ };
+        },
+      }),
+    },
+    engine: { invalidate: () => refreshes++ },
+    flow: { imports: [{ ref: "sample" }] },
+    setTables: noop,
+    setQueryErrors: noop,
+    run: noop,
+  });
+  callbacks[0]!({ data: { legacyDatasets: null } });
+  assert.equal(refreshes, 0);
+  callbacks[0]!({ data: { legacyDatasets: { read: window } } });
+  assert.equal(refreshes, 0);
+  callbacks[0]!({ data: { legacyDatasets: { read: window } } });
+  assert.equal(refreshes, 1);
+  callbacks[0]!({
+    data: { legacyDatasets: null },
+    errors: [{ message: "unavailable" }],
+  });
+  assert.equal(refreshes, 2);
+  events.pagehide!({ persisted: true });
+  assert.equal(released, 0);
+  events.pagehide!({ persisted: false });
+  assert.equal(released, 1);
 });

@@ -8,7 +8,8 @@ export interface CompiledDatasetBinding {
   legacyRef: string;
   backendNamespace: string;
   backendHref: string;
-  /** Pinned dataset version, not the backend's compiled version. */
+  mode: "live" | "pinned";
+  /** Initial dataset version provenance, not the backend compiled version. */
   version: number;
   tables: readonly {
     schema: string;
@@ -22,9 +23,12 @@ export interface DatasetReadArguments {
   table: string;
   offset: number;
   limit: number;
+  expectedVersion?: number;
+  expectedGeneration?: number;
 }
 export interface DatasetReadWindow {
   version: number;
+  generation: number;
   schema: string;
   table: string;
   columns: CompiledDatasetColumn[];

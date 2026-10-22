@@ -36,6 +36,7 @@ export function validDatasetBinding(binding: CompiledDatasetBinding): boolean {
       binding.backendNamespace,
     ) &&
     /^\/af\/v1\/ids\/[A-Za-z0-9]{6}$/.test(binding.backendHref) &&
+    ["live", "pinned"].includes(binding.mode) &&
     Number.isSafeInteger(binding.version) &&
     binding.version > 0 &&
     Array.isArray(binding.tables) &&
@@ -96,6 +97,7 @@ export async function readCompiledDataset(
     const work = async () => {
       const result: Awaited<ReturnType<typeof readCompiledDataset>> =
         Object.create(null);
+      let version: number | undefined, generation: number | undefined;
       for (const table of binding.tables) {
         const rows: Record<string, string | number | boolean | null>[] = [];
         let offset = 0,
@@ -108,10 +110,19 @@ export async function readCompiledDataset(
             table: table.table,
             offset,
             limit: cap.pageSize,
+            ...(offset > 0
+              ? { expectedVersion: version, expectedGeneration: generation }
+              : {}),
           });
           if (
             !window ||
-            window.version !== binding.version ||
+            !Number.isSafeInteger(window.version) ||
+            window.version < 1 ||
+            !Number.isSafeInteger(window.generation) ||
+            window.generation < 0 ||
+            (binding.mode === "pinned" && window.version !== binding.version) ||
+            (version !== undefined && window.version !== version) ||
+            (generation !== undefined && window.generation !== generation) ||
             window.schema !== table.schema ||
             window.table !== table.table ||
             window.offset !== offset ||
@@ -131,6 +142,8 @@ export async function readCompiledDataset(
           )
             throw Error();
           if (expired) throw Error();
+          version = window.version;
+          generation = window.generation;
           total = window.totalRows;
           budget.bytes += new TextEncoder().encode(
             JSON.stringify(window),
@@ -184,7 +197,15 @@ export async function readCompiledDataset(
       return result;
     };
     return await Promise.race([
-      work(),
+      (async () => {
+        for (let attempt = 0; ; attempt++) {
+          try {
+            return await work();
+          } catch (error) {
+            if (expired || binding.mode !== "live" || attempt >= 1) throw error;
+          }
+        }
+      })(),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           expired = true;
