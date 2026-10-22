@@ -81,3 +81,12 @@ test("aborted reads release their timers and a reauthorized client accepts only 
   client.receive({ id: message.id, blob: new Blob(["fresh"], { type: "image/png" }) });
   assert.equal(await (await second).text(), "fresh"); assert.equal(timers.size, 0);
 });
+test("attachment availability is typed, scope-bound and invalidated with its caller", async () => {
+  const { client, sent } = fixture(); client.setAuthority("epoch-one");
+  const result = client.availability({ backendNamespace: "data", bindingName: "files" });
+  assert.equal(sent[0]?.kind, "attachment-availability");
+  client.receive({ id: sent[0]!.id, availability: { canAttempt: true } });
+  assert.deepEqual(await result, { canAttempt: true });
+  const pending = client.availability({ backendNamespace: "data", bindingName: "files" }), rejected = assert.rejects(pending);
+  client.setAuthority(null); await rejected;
+});

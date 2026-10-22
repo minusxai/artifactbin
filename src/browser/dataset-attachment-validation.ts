@@ -26,3 +26,6 @@ export function attachmentReceipt(value: unknown): value is AttachmentReceipt {
   const v = value as AttachmentReceipt;
   return typeof v.ref === "string" && /^dfile:[a-f0-9]{32}$/.test(v.ref) && filename(v.name) && mime(v.contentType) && Number.isSafeInteger(v.size) && v.size > 0 && v.size <= ATTACHMENT_MAX_BYTES && typeof v.url === "string" && v.url.startsWith("/") && !v.url.startsWith("//") && v.url.length <= 2048 && (v.replayed === undefined || v.replayed === true);
 }
+export function publicAttachmentReceipt(value: AttachmentReceipt): AttachmentReceipt {
+  return { ref: value.ref, url: value.url, name: value.name, contentType: value.contentType, size: value.size, ...(value.replayed === true ? {replayed:true} : {}) };
+}

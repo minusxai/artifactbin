@@ -21,16 +21,19 @@ export interface AttachmentReceipt {
   replayed?: boolean;
 }
 export interface AttachmentPort {
+  availability(request: AttachmentScope, signal?: AbortSignal): Promise<{ canAttempt: boolean }>;
   upload(request: AttachmentUpload, signal?: AbortSignal): Promise<AttachmentReceipt>;
   read(request: AttachmentRead, signal?: AbortSignal): Promise<Blob>;
 }
 export type AttachmentBridgeRequest =
   | { kind: "attachment-upload"; id: string; authorizationContext: string; request: AttachmentUpload }
   | { kind: "attachment-read"; id: string; authorizationContext: string; request: AttachmentRead }
+  | { kind: "attachment-availability"; id: string; authorizationContext: string; request: AttachmentScope }
   | { kind: "attachment-cancel"; id: string };
 export type AttachmentBridgeReply =
   | { id: string; receipt: AttachmentReceipt }
   | { id: string; blob: Blob }
+  | { id: string; availability: { canAttempt: boolean } }
   | { id: string; error: "unavailable" | "unknown" | "invalid_request" };
 export interface AttachmentBridgeClient extends AttachmentPort {
   setAuthority(context: string | null): void;
