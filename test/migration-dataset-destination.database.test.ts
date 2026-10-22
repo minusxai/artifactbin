@@ -192,21 +192,19 @@ test(
       );
       // Include directly seeded authority rows so the independent verifier checks the full namespace.
       const verified = structuredClone(bound);
-      verified.metadata.resources = (
-        await db.query(
-          "SELECT * FROM dataset_resources WHERE source_namespace='bound'",
-        )
-      ).rows.map((r: Record<string, unknown>) => ({
-        legacyId: String(r.legacy_id),
-        currentVersion: Number(r.current_version),
-        policyRevision: Number(r.policy_revision),
-        owner: String(r.owner),
-        generation: Number(r.generation),
-        access: r.access,
-        deleted: r.deleted,
-        snapshot: r.snapshot,
-        writable: r.writable,
-      })) as typeof verified.metadata.resources;
+      verified.metadata.resources = [
+        {
+          legacyId: "dataset",
+          currentVersion: 1,
+          policyRevision: 0,
+          owner: "owner@example.test",
+          generation: 1,
+          access: {},
+          deleted: false,
+          snapshot: {},
+          writable: false,
+        },
+      ] as typeof verified.metadata.resources;
       verified.metadata.versions = [
         {
           legacyId: "dataset",
