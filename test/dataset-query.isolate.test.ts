@@ -8,7 +8,7 @@ import { createDatasetSqlExecutor } from "../src/backend/dataset-sql-executor.ts
 import { remoteDatasetSqlExecutor } from "../src/backend/dataset-sql-transport.ts";
 import type { DatasetQueryJob } from "../src/datasets/query/contracts.ts";
 const exec = promisify(execFile),
-  namespace = "readqueryproof";
+  namespace = "readproof";
 const job: DatasetQueryJob = {
   kind: "dataset-query",
   engineVersion: "sqlite-3.53.4-read-v1",
