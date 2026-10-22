@@ -1,3 +1,4 @@
+import { historicalSourceValueDeclaration } from "./historical-bound-value.ts";
 import type { BoundValueColumnProof } from "./bound-value-contracts.ts";
 import { validBoundValueProof } from "./bound-value-proof.ts";
 import { readSourceLiteral as literal } from "./source-literal.ts";
@@ -16,7 +17,8 @@ function refuse(): never {
   throw Error("Unsupported source declaration");
 }
 /** Shared offline literal decoder; never evaluates source. */
-export const readLocalSourceLiteral = (node: Node | undefined): unknown => literal(node);
+export const readLocalSourceLiteral = (node: Node | undefined): unknown =>
+  literal(node);
 function inferredColumns(rows: Record<string, unknown>[]) {
   const columns = new Map<string, LocalColumnType | "">();
   for (const row of rows)
@@ -180,7 +182,9 @@ export function sourceValueDeclaration(
 export const readLocalSourceManifest: ReadLocalSourceManifest = (
   source,
   proofs = [],
+  mode,
 ) => {
+  if (mode !== undefined && mode !== "historical-unavailable") refuse();
   if (
     typeof source !== "string" ||
     Buffer.byteLength(source) > MAX_COMPILED_SOURCE_BYTES
@@ -198,7 +202,13 @@ export const readLocalSourceManifest: ReadLocalSourceManifest = (
       node.type === "JSXElement" &&
       node.openingElement.name.name === "Value"
     ) {
-      const declaration = sourceValueDeclaration(node, proofs);
+      const declaration =
+        mode === "historical-unavailable" &&
+        node.openingElement.attributes.some(
+          (a: any) => a.type === "JSXAttribute" && a.name?.name === "source",
+        )
+          ? historicalSourceValueDeclaration(node)
+          : sourceValueDeclaration(node, proofs);
       if (names.has(declaration.name)) refuse();
       names.add(declaration.name);
       declarations.push(declaration);

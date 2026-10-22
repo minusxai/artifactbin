@@ -7,6 +7,7 @@ export interface LocalSourceManifest {
 export type ReadLocalSourceManifest = (
   source: string,
   proofs?: readonly import("./bound-value-contracts.ts").BoundValueColumnProof[],
+  mode?: "historical-unavailable",
 ) => LocalSourceManifest;
 /** Compiler JSON is untrusted at this boundary; a valid but different type,
  * default, row set or schema is not a successful migration. */
