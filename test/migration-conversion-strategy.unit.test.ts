@@ -137,7 +137,7 @@ test("archived-functional explicitly selects admitted authored components", asyn
       compile: async (input) => {
         assert.ok(input.authorPlan);
         return {
-          html: '<div id="mount" data-migration-author-component="Example"></div>',
+          html: '<div id="mount" data-migration-author-component="Example" data-migration-author-props="{}" data-migration-author-bind="{}"></div>',
           css: "",
           title: "Fixture",
           build: "fixture",

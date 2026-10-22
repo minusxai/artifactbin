@@ -1,3 +1,4 @@
+import type {AdmittedAuthorMountProps} from "./author/prop-contracts.ts";
 import {admitAuthorProps} from "./author/props.ts";
 import type { PresentationIdentityHost } from "./presentation-kit-contracts.ts";
 import { presentationKitComponent, admitPresentationKit } from "./presentation-kit.ts";
@@ -59,6 +60,8 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       if (
         Buffer.byteLength(author.script) > 1024 * 1024 ||
         author.exports.length > 64 ||
+        new Set(author.exports).size !== author.exports.length ||
+        author.exports.some(name => !/^[A-Z][A-Za-z0-9_]*$/.test(name) || allowed.has(name) || presentationKitComponent(name) !== null) ||
         author.mounts.length > 256
       )
         return blocked("compiled-author-limit");
@@ -99,6 +102,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   }
   const expectedDeclarations: LocalDeclaration[] = [];
   const renderedIdentities = new Set<string>();
+  const authorProps: AdmittedAuthorMountProps[] = [];
   let invalid = false;
   const registeredMutations = input.datasetMutations ?? [];
   try {
@@ -183,13 +187,17 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       if (depth > 128) throw Error("Author mount structure limit");
       if (node.type === "JSXElement" && author?.exports.includes(node.openingElement.name.name)) {
         const admitted = admitAuthorProps(node.openingElement.attributes);
-        for (const name of admitted.bindings) references.add(name);
+        for (const name of Object.values(admitted.bindings)) references.add(name);
+        const component = node.openingElement.name.name;
+        if (!admitted.identity || !author.mounts.some(m => m.identity === admitted.identity && m.component === component) || authorProps.some(m => m.identity === admitted.identity)) throw Error("Author mount identity mismatch");
+        authorProps.push({...admitted,identity:admitted.identity,component});
         for (const attribute of node.openingElement.attributes) authorAttributes.add(attribute);
         authorPaths.add(path);
       }
       for (const [index,child] of (node.children ?? []).entries()) admitMounts(child,path+"."+index,depth+1);
     };
     admitMounts(tree);
+    if (author && authorProps.length !== author.mounts.length) throw Error("Author mount manifest mismatch");
     if (strict.issues.some(issue => !genericIssueSupported(issue) && !(["attribute", "event"].includes(issue.code) && authorPaths.has(issue.path)))) return blocked("compiled-capability");
 
     const readExpression = (node: any, loopDepth: number, loopTable?: string): boolean => {
@@ -660,6 +668,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       chartCount,
       vegaCount,
       author,
+      authorProps,
     },
   };
 };

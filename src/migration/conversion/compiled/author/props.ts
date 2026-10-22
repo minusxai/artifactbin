@@ -1,4 +1,4 @@
-import type {AdmitAuthorProps} from './prop-contracts.ts';
+import type {AdmitAuthorProps, AuthorPropJson, AdmittedAuthorMountProps} from './prop-contracts.ts';
 const forbidden=new Set(['constructor','prototype','__proto__']);
 const binding=(value:unknown):string|null=>typeof value==='string'&&/^\$[A-Za-z][A-Za-z0-9_]*$/.test(value)&&!forbidden.has(value.slice(1))?value.slice(1):null;
 /** Decode the same JSON/signal ABI as archived mountParts, with explicit bounds.
@@ -23,7 +23,7 @@ export const admitAuthorProps:AdmitAuthorProps=(attributes)=>{
   }
   throw Error('Unsupported author prop expression');
  };
- const names=new Set<string>(),bindings=new Set<string>();let bytes=0;
+ const names=new Set<string>(),bindings:Record<string,string>=Object.create(null),props:Record<string,AuthorPropJson>=Object.create(null);let bytes=0;let identity:string|undefined,className:string|undefined;
  for(const attribute of attributes){
   const name=attribute.name?.type==='JSXIdentifier'?attribute.name.name:null;
   if(attribute.type!=='JSXAttribute'||typeof name!=='string'||forbidden.has(name)||names.has(name)||/^data-(?:mx|migration-author)-/.test(name))throw Error('Unsupported author prop name');
@@ -34,9 +34,25 @@ export const admitAuthorProps:AdmitAuthorProps=(attributes)=>{
   const ref=signal??binding(value);
   if(['id','class','className'].includes(name)){
    if(ref||typeof value!=='string')throw Error('Author mount DOM attribute must be text');
-  }else if(ref)bindings.add(ref);
+   if(name==='id') identity=value; else className=value;
+  }else if(ref)bindings[name]=ref; else props[name]=value as AuthorPropJson;
   bytes+=Buffer.byteLength(name)+Buffer.byteLength(JSON.stringify(value));
   if(bytes>256*1024)throw Error('Author prop size');
  }
- return {bindings:[...bindings]};
+ return {props,bindings,...(identity===undefined?{}:{identity}),...(className===undefined?{}:{className})};
 };
+
+/** Key order has no JSON meaning; arrays, scalar types and exact bindings do. */
+export function reconcileAuthorProps(expected:AdmittedAuthorMountProps,props:unknown,bindings:unknown):boolean {
+ const canonical=(value:unknown,depth=0,budget={nodes:0}):string=>{
+  if(++budget.nodes>25000||depth>32)throw Error('Author prop limit');
+  if(value===null||typeof value==='string'||typeof value==='boolean'||(typeof value==='number'&&Number.isFinite(value)))return JSON.stringify(value);
+  if(Array.isArray(value))return '['+value.map(v=>canonical(v,depth+1,budget)).join(',')+']';
+  if(value&&typeof value==='object'&&(Object.getPrototypeOf(value)===Object.prototype||Object.getPrototypeOf(value)===null)){
+   const keys=Object.keys(value).sort();if(keys.some(k=>forbidden.has(k)))throw Error('Author prop key');
+   return '{'+keys.map(k=>JSON.stringify(k)+':'+canonical((value as Record<string,unknown>)[k],depth+1,budget)).join(',')+'}';
+  }
+  throw Error('Author prop JSON');
+ };
+ try{return canonical(expected.props)===canonical(props)&&canonical(expected.bindings)===canonical(bindings);}catch{return false;}
+}

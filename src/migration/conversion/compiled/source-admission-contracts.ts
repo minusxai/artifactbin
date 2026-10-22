@@ -30,6 +30,7 @@ export interface AdmittedLocalSource {
   readonly mutationNames: ReadonlySet<string>;
   readonly chartCount: number;
   readonly vegaCount: number;
+  readonly authorProps: readonly import("./author/prop-contracts.ts").AdmittedAuthorMountProps[];
   readonly author?: import("./author-document-contracts.ts").CompiledAuthorPlan;
 }
 export type LocalSourceAdmission =

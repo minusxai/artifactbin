@@ -1,3 +1,4 @@
+import {reconcileAuthorProps} from "./author/props.ts";
 import {initialDynamicIdentities,allowedInitialDynamicIdentities} from "./dynamic-identities.ts";
 /** Compiler-output admission owns shape, source reconciliation, bundle policy,
  * HTML identity repair and author mount verification; never invokes a compiler. */
@@ -145,6 +146,13 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
           authorMounts.has(id)
         )
           unsafe = true;
+        const expected = plan.authorProps.find(m => m.identity === id && m.component === authorComponent);
+        try {
+          const propAttrs = node.attrs.filter((a:any) => a.name === "data-migration-author-props");
+          const bindAttrs = node.attrs.filter((a:any) => a.name === "data-migration-author-bind");
+          const className = node.attrs.find((a:any) => a.name === "class")?.value;
+          if (!expected || propAttrs.length !== 1 || bindAttrs.length !== 1 || propAttrs[0].value.length > 256*1024 || bindAttrs[0].value.length > 256*1024 || className !== expected.className || !reconcileAuthorProps(expected, JSON.parse(propAttrs[0].value), JSON.parse(bindAttrs[0].value))) unsafe = true;
+        } catch { unsafe = true; }
         authorMounts.add(id);
       }
       node.attrs = node.attrs.filter(
