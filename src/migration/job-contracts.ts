@@ -97,6 +97,7 @@ export interface MigrationJobSummary {
     preparedBindings: number;
     blockedPages: number;
     omittedUnmappedTokenPrincipals: number;
+    unavailableProfileImages: number;
     historicalUnavailableRevisions: number;
   };
   result: JobTotals;

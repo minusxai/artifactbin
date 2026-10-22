@@ -218,6 +218,12 @@ test("job prepares exact live head bindings and real compiled receipts without i
       },
     ],
   );
+  assert.equal(bound!.metadata.personBindings?.length, 1);
+  assert.deepEqual(bound!.metadata.profiles, [
+    { legacyUserId: "owner", name: "owner", handle: null, image: null },
+  ]);
+  assert.equal(bound!.metadata.personBindings![0]!.valueName, "who");
+  assert.equal("constraints" in bound!.metadata.personBindings![0]!, false);
   assert.equal(
     bound!.boundValueColumns.has(JSON.stringify(["abc123", 1])),
     false,

@@ -38,6 +38,14 @@ test(
           versions: [],
           groups: [],
           acceptedJoins: [],
+          profiles: [
+            {
+              legacyUserId: "original-user",
+              name: "Original display",
+              handle: "handle",
+              image: null,
+            },
+          ],
           principals: [
             {
               actor: "owner@example.test",
@@ -51,23 +59,42 @@ test(
       };
       const destination = new PostgresDatasetMetadataDestination(db, schema);
       assert.deepEqual(await destination.import(batch), {
-        created: 1,
+        created: 2,
         unchanged: 0,
       });
       assert.deepEqual(await destination.import(batch), {
         created: 0,
-        unchanged: 1,
+        unchanged: 2,
       });
-      assert.equal(await verifyMigrationDatasetMetadata(db, schema, batch), 1);
+      assert.equal(await verifyMigrationDatasetMetadata(db, schema, batch), 2);
       await db.query(
-        "UPDATE dataset_principals SET expires_at='2028-01-01' WHERE source_namespace='fixture'",
+        "UPDATE dataset_principals SET expires_at='2028-01-01T00:00:00Z' WHERE source_namespace='fixture'",
       );
       await assert.rejects(
         verifyMigrationDatasetMetadata(db, schema, batch),
         /dataset policy/,
       );
       await db.query(
-        "UPDATE dataset_principals SET expires_at='2027-01-01' WHERE source_namespace='fixture'",
+        "UPDATE dataset_principals SET expires_at='2027-01-01T00:00:00Z' WHERE source_namespace='fixture'",
+      );
+      await db.query(
+        "DELETE FROM dataset_public_profiles WHERE source_namespace='fixture'",
+      );
+      await assert.rejects(
+        verifyMigrationDatasetMetadata(db, schema, batch),
+        /missing dataset metadata/,
+      );
+      assert.equal(
+        (
+          await db.query(
+            "SELECT expires_at FROM dataset_principals WHERE source_namespace='fixture'",
+          )
+        ).rows[0].expires_at.toISOString(),
+        "2027-01-01T00:00:00.000Z",
+      );
+      await assert.rejects(destination.import(batch), /removed after import/);
+      await db.query(
+        "INSERT INTO dataset_public_profiles VALUES ('fixture','original-user','Original display','handle',NULL)",
       );
       const changed = structuredClone(batch);
       changed.metadata.principals = [
@@ -188,7 +215,7 @@ test(
         },
       ];
       assert.deepEqual(await destination.import(bound), {
-        created: 4,
+        created: 5,
         unchanged: 0,
       });
       assert.equal(
@@ -231,7 +258,7 @@ test(
       ];
       await verifyMigrationDatasetMetadata(db, schema, verified);
       await db.query(
-        "UPDATE dataset_page_joins SET joined_at='2026-01-01' WHERE legacy_user_id='joined-user'",
+        "UPDATE dataset_page_joins SET joined_at='2026-01-01T00:00:00Z' WHERE legacy_user_id='joined-user'",
       );
       await assert.rejects(
         verifyMigrationDatasetMetadata(db, schema, verified),

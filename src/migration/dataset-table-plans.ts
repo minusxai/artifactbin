@@ -24,6 +24,35 @@ export function migrationDatasetTablePlans(
   });
   return [
     plan(
+      "dataset_public_profiles",
+      ["legacy_user_id"],
+      (m.profiles ?? []).map((r) => ({
+        legacy_user_id: r.legacyUserId,
+        name: r.name,
+        handle: r.handle,
+        image: r.image,
+      })),
+    ),
+    plan(
+      "dataset_person_bindings",
+      [
+        "backend_id",
+        "backend_version",
+        "page_id",
+        "page_version",
+        "value_name",
+      ],
+      (m.personBindings ?? []).map((r) => ({
+        backend_id: r.backendId,
+        backend_version: r.backendVersion,
+        page_id: r.pageId,
+        page_version: r.pageVersion,
+        value_name: r.valueName,
+        descriptor: r,
+      })),
+      ["descriptor"],
+    ),
+    plan(
       "dataset_resources",
       ["legacy_id"],
       m.resources.map((r) => ({

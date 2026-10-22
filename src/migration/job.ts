@@ -135,6 +135,8 @@ export async function runMigrationJob(
           verifiedBytes: source.datasets!.verifiedBytes,
           preparedBindings: source.preparedDatasets.metadata.bindings.length,
           blockedPages: source.preparedDatasets.issues.size,
+          unavailableProfileImages:
+            source.preparedDatasets.unavailableProfileImages,
           omittedUnmappedTokenPrincipals:
             source.preparedDatasets.omittedUnmappedTokenPrincipals,
           historicalUnavailableRevisions: [

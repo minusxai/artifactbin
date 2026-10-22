@@ -20,6 +20,8 @@ export function createDatasetMetadataAccumulator(namespace: string): {
     sourceNamespace: namespace,
     bindings: [],
     operations: [],
+    profiles: [],
+    personBindings: [],
     pages: [],
     resources: [],
     versions: [],
@@ -28,6 +30,12 @@ export function createDatasetMetadataAccumulator(namespace: string): {
     acceptedJoins: [],
   };
   const keys = {
+    profiles: (r: NonNullable<DatasetImportMetadata["profiles"]>[number]) => [
+      r.legacyUserId,
+    ],
+    personBindings: (
+      r: NonNullable<DatasetImportMetadata["personBindings"]>[number],
+    ) => [r.backendId, r.backendVersion, r.pageId, r.pageVersion, r.valueName],
     operations: (
       r: NonNullable<DatasetImportMetadata["operations"]>[number],
     ) => [

@@ -1,3 +1,4 @@
+import { projectMigrationProfiles } from "./profiles.ts";
 import { prepareMigrationBoundValues } from "./job-bound-values.ts";
 import { prepareMigrationHeadMutations } from "./job-mutations.ts";
 import { createHash } from "node:crypto";
@@ -95,7 +96,8 @@ export async function prepareMigrationJobDatasets(
       manifestSha256: source.datasets.provenance.relationManifestSha256,
     },
   });
-  accumulator.add(global.metadata);
+  const profiles = projectMigrationProfiles(source.base.tables.users ?? []);
+  accumulator.add({ ...global.metadata, profiles: profiles.profiles });
   for (const page of executable) {
     const pageBindings = prepared.bindings.filter(
       (b) => b.pageLegacyId === page.legacyId,
@@ -149,6 +151,45 @@ export async function prepareMigrationJobDatasets(
         ...plan.metadata,
         principals: [],
         groups: [],
+        personBindings: (
+          boundValueColumns.get(
+            migrationDatasetVersionKey(
+              page.legacyId,
+              scan.heads.get(page.legacyId)!,
+            ),
+          ) ?? []
+        ).map((proof) => {
+          const matches = plan.metadata.bindings.filter(
+            (b) =>
+              b.name === proof.bindingName &&
+              b.page.id === page.pageId &&
+              b.dataset.version === proof.version &&
+              `ref:${b.dataset.id}` === proof.sourceRef &&
+              b.tables.some(
+                (t) =>
+                  t.schema === proof.schema &&
+                  t.name === proof.table &&
+                  t.columns.some(
+                    (c) => c.name === proof.column && c.type === proof.type,
+                  ),
+              ),
+          );
+          if (matches.length !== 1)
+            throw Error("Bound person column provenance mismatch");
+          const b = matches[0]!;
+          return {
+            sourceNamespace: source.manifest.sourceNamespace,
+            backendId: b.backendId,
+            backendVersion: b.backendVersion,
+            pageId: b.page.id,
+            pageVersion: b.page.version,
+            valueName: proof.valueName,
+            bindingName: proof.bindingName,
+            schema: proof.schema,
+            table: proof.table,
+            column: proof.column,
+          };
+        }),
         operations: prepared.operations.filter(
           (r) => r.operation.page.id === page.pageId,
         ),
@@ -214,5 +255,6 @@ export async function prepareMigrationJobDatasets(
         .digest("hex"),
     },
     omittedUnmappedTokenPrincipals,
+    unavailableProfileImages: profiles.unavailableAvatarImages,
   };
 }

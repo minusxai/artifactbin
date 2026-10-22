@@ -18,6 +18,7 @@ export interface MigrationJobDatasets {
   issues: ReadonlyMap<string, readonly string[]>;
   allocation: { sourceNamespace: string; inventorySha256: string };
   omittedUnmappedTokenPrincipals: number;
+  unavailableProfileImages: number;
 }
 export const migrationDatasetVersionKey = (
   legacyId: string,

@@ -9,6 +9,16 @@ export function selectMigrationDatasetMetadata(
   return {
     ...metadata,
     bindings,
+    personBindings: metadata.personBindings?.filter((p) =>
+      bindings.some(
+        (b) =>
+          b.backendId === p.backendId &&
+          b.backendVersion === p.backendVersion &&
+          b.page.id === p.pageId &&
+          b.page.version === p.pageVersion &&
+          b.name === p.bindingName,
+      ),
+    ),
     operations: metadata.operations?.filter((r) =>
       bindings.some(
         (b) =>

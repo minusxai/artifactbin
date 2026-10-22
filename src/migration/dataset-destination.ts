@@ -1,3 +1,4 @@
+import { validateMigrationPersonBindings } from "./person-binding-validation.ts";
 import { migrationDatasetTablePlans as tablePlans } from "./dataset-table-plans.ts";
 import type { TablePlan } from "./dataset-table-plans.ts";
 import { registerDatasetMutationOperations } from "../persistence/dataset-mutations.ts";
@@ -42,6 +43,7 @@ export class PostgresDatasetMetadataDestination
       !batch.metadata.sourceNamespace
     )
       throw new Error("Invalid dataset export provenance");
+    validateMigrationPersonBindings(batch.metadata);
     const plans = tablePlans(batch);
     const key = (row: LegacyRow, keys: readonly string[]) =>
       canonical(keys.map((k) => row[k]));
@@ -104,7 +106,7 @@ export class PostgresDatasetMetadataDestination
           const old = existing.get(key(row, p.keys));
           if (old) {
             if (canonical(old) !== canonical(row))
-              throw new Error("Existing dataset metadata differs");
+              throw new Error(`Existing dataset metadata differs (${p.table})`);
             result.unchanged++;
           } else missing.push({ plan: p, row });
         }
