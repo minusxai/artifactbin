@@ -103,6 +103,10 @@ for (const [name, engine] of engines) {
       const reply = replied.comments.find((c) => c.body === "The usual one");
       assert.ok(reply, JSON.stringify(replied.comments));
       assert.equal(reply.parentId, comment!.id);
+      // The server can accept the reply before this viewer has applied its
+      // receipt. Wait for that visible acknowledgement before the next action:
+      // applying the receipt replaces the thread's pending message and controls.
+      await page.locator(`.pg-message[data-comment-id="${reply.id}"][data-sync="saved"]`).waitFor();
 
       // What the commenter saw, over HTTP.
       const context = (await (
