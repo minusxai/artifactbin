@@ -177,6 +177,11 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
           column: next.column,
           rowKey: next.rowKey,
           tag,
+          ...(sourceAdmission === "offline-prototype" ? {
+            wireType: tag === "input"
+              ? ({number:"number",date:"date","datetime-local":"timestamp"} as const)[selected("type") as "number"|"date"|"datetime-local"] ?? "string"
+              : "string",
+          } : {}),
           ...(optionsQuery ? { optionsQuery } : {}),
         };
         out.push(site);
@@ -196,23 +201,28 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
 export const typeLegacyCellWriteSites: TypeLegacyCellWriteSites = (
   sites,
   columns,
+  sourceAdmission="strict",
 ) => {
+  if(!["strict","offline-prototype"].includes(sourceAdmission))refuse();
   const mutations = new Map<string, string>();
   return sites.map((site) => {
     const schema = columns[site.dataName];
     if (!schema) refuse();
     const fields = schema.filter((c) => c.name === site.column),
       keys = schema.filter((c) => c.name === site.rowKey);
+    const nativeType=sourceAdmission==="offline-prototype"?site.wireType:undefined;
+    const fieldType=fields[0]?.type??nativeType;
     if (
       fields.length !== 1 ||
       keys.length !== 1 ||
       keys[0]!.type === "boolean" ||
+      (keys[0]!.type==null && sourceAdmission!=="offline-prototype") ||
       !["string", "number", "boolean", "date", "timestamp", "user"].includes(
-        fields[0]!.type,
+        fieldType as string,
       )
     )
       refuse();
-    const type = fields[0]!.type,
+    const type = fieldType!,
       prior = mutations.get(site.mutationName);
     if (prior !== undefined && prior !== type) refuse();
     mutations.set(site.mutationName, type);

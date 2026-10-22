@@ -138,3 +138,12 @@ test('prototype presentation attributes do not change verified publication descr
  const result=await extractLegacyMutations(decorated,catalogs,[],'offline-prototype');assert.deepEqual(result,plain);
  for(const invalid of [decorated.replace('data.rows set title','missing.rows set title'),decorated.replace('value="$_row.title"','value="$_row.other"'),decorated.replace('rowKey="id"','')])assert.ok((await extractLegacyMutations(invalid,catalogs,[],'offline-prototype')).issues.length);
 });
+test('prototype computed cell fields use native control wire types without guessing query expression types',async()=>{
+ const stringSource=source(undefined,'title',"select id || ':' as id, upper(title) as title from data.rows");
+ const numericSource=source('update data.rows set id=$_value where id=$_row.id','title','select id,coalesce(id,0) as title from data.rows').replace('<input value=','<input type="number" value=');
+ for(const [text,type] of [[stringSource,'string'],[numericSource,'number']] as const){
+  assert.ok((await extractLegacyMutations(text,catalogs)).issues.length);
+  const admitted=await extractLegacyMutations(text,catalogs,[],'offline-prototype');assert.deepEqual(admitted.issues,[]);assert.equal(admitted.mutations[0]?.valueParam?.type,type);
+ }
+ const missing=stringSource.replace('col="title"','col="missing"').replace('value="$_row.title"','value="$_row.missing"');assert.ok((await extractLegacyMutations(missing,catalogs,[],'offline-prototype')).issues.length);
+});

@@ -326,7 +326,8 @@ export async function extractLegacyMutations(
       );
       const typed = typeLegacyCellWriteSites(
         readLegacyCellWriteSites(source,undefined,sourceAdmission),
-        legacyCellWriteQueryColumns(db, queries),
+        legacyCellWriteQueryColumns(db, queries,sourceAdmission),
+        sourceAdmission,
       );
       for (const site of typed) cellTypes.set(site.mutationName, site.type);
     }

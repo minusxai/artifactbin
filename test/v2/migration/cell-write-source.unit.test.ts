@@ -172,7 +172,7 @@ test('prototype cell scope ignores compiler-owned presentation but preserves exa
  const cell=(extra:string)=>'<DataTable data="$rows" rowKey="id"><Column col="title"><input type="text" value="$_row.title" run="$save" '+extra+'/></Column></DataTable>';
  const source=cell('style={{width:"12rem"}} title="Edit title" placeholder={$hint} data-extra="presentation"');
  assert.throws(()=>readLegacyCellWriteSites(source));
- assert.deepEqual(readLegacyCellWriteSites(source,undefined,'offline-prototype'),[{mutationName:'save',dataName:'rows',column:'title',rowKey:'id',tag:'input'}]);
+ assert.deepEqual(readLegacyCellWriteSites(source,undefined,'offline-prototype'),[{mutationName:'save',dataName:'rows',column:'title',rowKey:'id',tag:'input',wireType:'string'}]);
  for(const bad of [source.replace('run="$save"','run={$name}'),source.replace('value="$_row.title"','value="$_row.other"'),source.replace('rowKey="id"',''),cell('{...attrs}')])assert.throws(()=>readLegacyCellWriteSites(bad,undefined,'offline-prototype'));
 });
 test('dialog submission is separate from editing-cell mutation scope',()=>{
@@ -180,4 +180,12 @@ test('dialog submission is separate from editing-cell mutation scope',()=>{
  assert.deepEqual(readLegacyCellWriteSites(dialog),[]);
  assert.deepEqual(readLegacyCellWriteSites(dialog+source),readLegacyCellWriteSites(source));
  assert.throws(()=>readLegacyCellWriteSites('<Unknown run="$create"/>'));
+});
+test('prototype wire typing requires exact query columns and a parsed native control protocol',()=>{
+ const sites=readLegacyCellWriteSites(source,undefined,'offline-prototype');
+ const unknown={rows:[{name:'id',type:null},{name:'title',type:null},{name:'tags',type:null}]};
+ assert.throws(()=>typeLegacyCellWriteSites(sites,unknown));
+ assert.deepEqual(typeLegacyCellWriteSites(sites,unknown,'offline-prototype').map(s=>s.type),['string','string']);
+ assert.throws(()=>typeLegacyCellWriteSites(sites,{rows:[{name:'id',type:null}]},'offline-prototype'));
+ assert.throws(()=>typeLegacyCellWriteSites(sites.map(({wireType,...site})=>site),unknown,'offline-prototype'));
 });

@@ -22,14 +22,15 @@ export function validateCompiledCellWriteContexts(
   bindings: readonly CompiledDatasetMutation[],
   sourceAdmission:import("./local-contracts.ts").CompiledSourceAdmission="strict",
 ): void {
-  const columns: Record<string, readonly DatasetColumn[]> = Object.create(null);
+  const columns: Record<string, readonly import("./cell-write-contracts.ts").LegacyCellWriteColumn[]> = Object.create(null);
   for (const query of flow.queries)
-    columns[query.name] = query.columns as readonly DatasetColumn[];
+    columns[query.name] = query.columns;
   for (const value of flow.values)
     if (value.kind === "table") columns[value.name] = value.columns ?? [];
   const sites = typeLegacyCellWriteSites(
     readLegacyCellWriteSites(source,undefined,sourceAdmission),
     columns,
+    sourceAdmission,
   );
   for (const site of sites) {
     const matches = bindings.filter((b) => b.name === site.mutationName);

@@ -1,3 +1,4 @@
+import type {LegacyCellWriteColumn} from "./compiled/cell-write-contracts.ts";
 import type { DatasetColumn } from "../../datasets/contracts.ts";
 import type { SqliteDatabase } from "../../datasets/sql/engine/database.ts";
 import type { LegacyCellWriteQuery } from "./cell-write-query-contracts.ts";
@@ -6,9 +7,10 @@ import type { LegacyCellWriteQuery } from "./cell-write-query-contracts.ts";
 export function legacyCellWriteQueryColumns(
   db: SqliteDatabase,
   queries: readonly LegacyCellWriteQuery[],
-): Readonly<Record<string, readonly DatasetColumn[]>> {
+  sourceAdmission: import("../conversion-strategy-contracts.ts").MigrationSourceAdmission="strict",
+): Readonly<Record<string, readonly LegacyCellWriteColumn[]>> {
   if (queries.length > 256) throw Error("Cell query limit");
-  const result: Record<string, DatasetColumn[]> = Object.create(null);
+  const result: Record<string, LegacyCellWriteColumn[]> = Object.create(null);
   const unknown = new Set<string>(),
     names = new Set<string>();
   const key = (table: string, column: string) =>
@@ -37,7 +39,7 @@ export function legacyCellWriteQueryColumns(
       try {
         const seen = new Set<string>(),
           all: DatasetColumn[] = [],
-          known: DatasetColumn[] = [];
+          known: LegacyCellWriteColumn[] = [];
         for (const c of prepared.analysis.columns) {
           if (seen.has(c.name.toLowerCase()))
             throw Error("Ambiguous cell query column");
@@ -51,8 +53,8 @@ export function legacyCellWriteQueryColumns(
               ? c.declaredType
               : null;
           all.push({ name: c.name, type: type ?? "string" });
-          if (type) known.push({ name: c.name, type });
-          else unknown.add(key(q.name, c.name));
+          if (type || sourceAdmission==="offline-prototype") known.push({ name: c.name, type });
+          if (!type) unknown.add(key(q.name, c.name));
         }
         db.createTable({ schema: "main", table: q.name, columns: all });
         result[q.name] = known;
