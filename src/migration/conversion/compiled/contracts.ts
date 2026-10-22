@@ -12,6 +12,7 @@ export interface CompiledMigrationInput {
   /** Source-derived static slide navigation, overwritten at admission. */
   slideDeck?: import("./slide-deck-contracts.ts").CompiledSlideDeck;
   /** Current executing page only, never an authored page ID or arbitrary membership scope. */
+  viewerBinding?: import("./viewer-contracts.ts").CompiledViewerBinding;
   membersBinding?: import("./members-contracts.ts").CompiledMembersBinding;
   /** Offline trusted catalog facts only; never serialize these in emitted page JavaScript. */
   boundValueColumns?: readonly import("./bound-value-contracts.ts").BoundValueColumnProof[];
