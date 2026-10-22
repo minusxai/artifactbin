@@ -51,3 +51,31 @@ CREATE TRIGGER dataset_principals_identity_immutable BEFORE UPDATE OF source_nam
 
 -- Read-only is the safe default for metadata imported before mutation support.
 ALTER TABLE dataset_resources ADD COLUMN IF NOT EXISTS writable boolean NOT NULL DEFAULT false;
+-- Authored operations belong to one saved backend/page deployment and immutable Import binding.
+CREATE TABLE IF NOT EXISTS dataset_mutation_operations (
+ backend_id text NOT NULL, backend_version text NOT NULL, page_id text NOT NULL,
+ page_version bigint NOT NULL CHECK(page_version>0), name text NOT NULL,
+ source_namespace text NOT NULL, binding_name text NOT NULL, dataset_id text NOT NULL,
+ operation jsonb NOT NULL,
+ PRIMARY KEY(backend_id,backend_version,page_id,page_version,name),
+ FOREIGN KEY(backend_id,backend_version,page_id,page_version,binding_name)
+ REFERENCES dataset_bindings(backend_id,backend_version,page_id,page_version,name) ON DELETE CASCADE
+);
+DROP TRIGGER IF EXISTS dataset_operations_immutable ON dataset_mutation_operations;
+CREATE TRIGGER dataset_operations_immutable BEFORE UPDATE ON dataset_mutation_operations FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+-- No timeout or reclamation: an uncertain execution remains inflight forever.
+CREATE TABLE IF NOT EXISTS dataset_mutation_receipts (
+ scope_key text PRIMARY KEY CHECK(scope_key ~ '^[a-f0-9]{64}$'),
+ fingerprint text NOT NULL CHECK(fingerprint ~ '^[a-f0-9]{64}$'),
+ lease_id text NOT NULL UNIQUE, attempt integer NOT NULL DEFAULT 1 CHECK(attempt=1),
+ context jsonb NOT NULL, operation jsonb NOT NULL, request jsonb NOT NULL,
+ state text NOT NULL CHECK(state IN ('inflight','committed','refused')),
+ result jsonb, refusal text, created_at bigint NOT NULL, completed_at bigint,
+ CHECK((state='committed')=(result IS NOT NULL)), CHECK((state='refused')=(refusal IS NOT NULL))
+);
+-- Durable outbox: consumers may resume by sequence; never rely on process-local callbacks.
+CREATE TABLE IF NOT EXISTS dataset_invalidations (
+ sequence bigserial PRIMARY KEY, source_namespace text NOT NULL, dataset_id text NOT NULL,
+ version bigint NOT NULL, generation integer NOT NULL, created_at bigint NOT NULL,
+ UNIQUE(source_namespace,dataset_id,version)
+);
