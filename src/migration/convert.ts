@@ -37,12 +37,14 @@ export function createMigrationConverter(
     );
   return async (input) => {
     let source: string | null;
+    let codecFailure: string | undefined;
     try {
       source = input.source.trim()
         ? input.source
         : legacyDocumentSource(input.document);
-    } catch {
+    } catch (error) {
       source = null;
+      codecFailure = error instanceof Error ? error.message : undefined;
     }
     if (source === null)
       return {
@@ -51,7 +53,8 @@ export function createMigrationConverter(
         issues: [
           {
             code: "document-codec",
-            message: "Archived document cannot be reconstructed",
+            message:
+              codecFailure ?? "Archived document cannot be reconstructed",
           },
         ],
         identities: {},

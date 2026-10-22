@@ -159,3 +159,39 @@ test("archived-functional explicitly selects admitted authored components", asyn
   assert.equal(result.classification, "functional");
   assert.equal(result.provenance?.compiler, "archived-author");
 });
+
+test("archived strategy preserves explicit structural corruption instead of producing an empty page", async () => {
+  let compilations = 0;
+  const convert = createMigrationConverter({
+    strategy: "archived-functional",
+    compiler: {
+      compile: async () => {
+        compilations++;
+        throw Error("Cannot compile corrupt source");
+      },
+    },
+  });
+  for (const [nodes, message] of [
+    [
+      {
+        $root: { parts: ["<main>"], children: ["child"] },
+        child: { parts: ["Retained"], children: [] },
+      },
+      "Invalid canonical source boundaries",
+    ],
+    [
+      { $root: { parts: ["<main>", "</main>"], children: ["missing"] } },
+      "Canonical graph references a missing child",
+    ],
+  ] as const) {
+    const result = await convert({
+      source: "",
+      document: { kind: "graph", schema: 3, nodes },
+      coreUrl: "/af/v1/core.js",
+    });
+    assert.equal(result.classification, "manual-blocked");
+    assert.equal(result.html, null);
+    assert.equal((result.issues[0] as { message: string }).message, message);
+  }
+  assert.equal(compilations, 0);
+});
