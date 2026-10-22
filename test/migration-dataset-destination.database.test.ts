@@ -1,5 +1,5 @@
 // @requires migration-database
-import { createHash } from "node:crypto";
+import { sourceDigest } from "../src/server/page-ports.ts";
 import { verifyMigrationDatasetMetadata } from "../src/migration/dataset-verification.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -247,9 +247,7 @@ test(
         },
       ];
       const savedContent = "exact canonical saved page";
-      const savedDigest = createHash("sha256")
-        .update(savedContent)
-        .digest("hex");
+      const savedDigest = sourceDigest(savedContent);
       await db.query(
         "CREATE TABLE sources(file_id text,revision text,content text,digest text)",
       );
