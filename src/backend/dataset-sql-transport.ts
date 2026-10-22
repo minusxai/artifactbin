@@ -1,3 +1,13 @@
+import { SERVER_QUERY_LIMITS as queryLimits } from "../datasets/query/contracts.ts";
+import {
+  validateDatasetQueryJob,
+  decodeDatasetQueryAnswer,
+} from "../datasets/sql/read-job.ts";
+import type {
+  DatasetQueryJob,
+  ServerQueryAnswer,
+} from "../datasets/query/contracts.ts";
+import type { DatasetSqlJob } from "../datasets/mutation/contracts.ts";
 import { decodeDatasetSqlOutcome } from "../datasets/sql/outcome.ts";
 import { request as httpRequest, type RequestListener } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -36,7 +46,10 @@ export function datasetSqlListener(
       res.writeHead(503).end();
       return;
     }
-    if (req.method !== "POST" || req.url !== "/v1/dataset-sql") {
+    if (
+      req.method !== "POST" ||
+      !["/v1/dataset-sql", "/v1/dataset-query"].includes(req.url ?? "")
+    ) {
       res.writeHead(404).end();
       return;
     }
@@ -45,6 +58,14 @@ export function datasetSqlListener(
       res.writeHead(503).end();
       return;
     }
+    const frameLimit =
+      req.url === "/v1/dataset-query"
+        ? queryLimits.inputBytes
+        : limits.inputBytes;
+    const replyLimit =
+      req.url === "/v1/dataset-query"
+        ? queryLimits.outputBytes
+        : RESPONSE_LIMIT;
     const controller = new AbortController();
     let release!: () => void;
     owned.set(
@@ -101,7 +122,7 @@ export function datasetSqlListener(
     req.on("data", (chunk: Buffer) => {
       if (done) return;
       total += chunk.length;
-      if (total > limits.inputBytes) {
+      if (total > frameLimit) {
         finish(413);
         return;
       }
@@ -112,21 +133,27 @@ export function datasetSqlListener(
       let job: unknown;
       try {
         job = JSON.parse(Buffer.concat(chunks, total).toString("utf8"));
-        validateDatasetSqlJob(job);
+        if (req.url === "/v1/dataset-query") validateDatasetQueryJob(job);
+        else validateDatasetSqlJob(job);
         chunks.length = 0;
       } catch {
         finish(400);
         return;
       }
       running = true;
-      void executor
-        .execute(job, controller.signal)
+      const work =
+        req.url === "/v1/dataset-query"
+          ? executor.query
+            ? executor.query(job as DatasetQueryJob, controller.signal)
+            : Promise.reject(Error("query_unavailable"))
+          : executor.execute(job as DatasetSqlJob, controller.signal);
+      void work
         .then(
           (value) => {
             let data: string;
             try {
               data = JSON.stringify(value);
-              if (Buffer.byteLength(data) > RESPONSE_LIMIT) throw Error();
+              if (Buffer.byteLength(data) > replyLimit) throw Error();
             } catch {
               finish(502);
               return;
@@ -176,28 +203,40 @@ export function remoteDatasetSqlExecutor(
     throw Error("Invalid execution socket");
   let closed = false;
   const active = new Map<AbortController, Promise<void>>();
-  return {
-    async execute(job, signal) {
-      validateDatasetSqlJob(job);
-      if (closed || signal?.aborted) throw Error("sql_unavailable");
-      if (active.size >= 2) throw Error("sql_busy");
-      const body = JSON.stringify(job),
-        controller = new AbortController();
-      let release!: () => void;
-      active.set(
-        controller,
-        new Promise((r) => {
-          release = r;
-        }),
-      );
-      const forward = () => controller.abort();
-      signal?.addEventListener("abort", forward, { once: true });
-      try {
-        return await new Promise<MutationOutcome>((resolve, reject) => {
+  async function executeJob(
+    job: DatasetSqlJob | DatasetQueryJob,
+    signal?: AbortSignal,
+  ): Promise<MutationOutcome | ServerQueryAnswer> {
+    if (job.kind === "dataset-query") validateDatasetQueryJob(job);
+    else validateDatasetSqlJob(job);
+    const target = new URL(endpoint);
+    target.pathname =
+      job.kind === "dataset-query" ? "/v1/dataset-query" : "/v1/dataset-sql";
+    if (closed || signal?.aborted) throw Error("sql_unavailable");
+    if (active.size >= 2) throw Error("sql_busy");
+    const replyLimit =
+      job.kind === "dataset-query" ? queryLimits.outputBytes : RESPONSE_LIMIT;
+    const body = JSON.stringify(job),
+      controller = new AbortController();
+    let release!: () => void;
+    active.set(
+      controller,
+      new Promise((r) => {
+        release = r;
+      }),
+    );
+    const forward = () => controller.abort();
+    signal?.addEventListener("abort", forward, { once: true });
+    try {
+      return await new Promise<MutationOutcome | ServerQueryAnswer>(
+        (resolve, reject) => {
           let done = false,
             total = 0;
           const chunks: Buffer[] = [];
-          const finish = (error?: Error, value?: MutationOutcome) => {
+          const finish = (
+            error?: Error,
+            value?: MutationOutcome | ServerQueryAnswer,
+          ) => {
             if (done) return;
             done = true;
             clearTimeout(timer);
@@ -210,13 +249,13 @@ export function remoteDatasetSqlExecutor(
           const req = (
             endpoint.protocol === "https:" ? httpsRequest : httpRequest
           )(
-            endpoint,
+            target,
             {
               method: "POST",
               ...(options.socketPath
                 ? {
                     socketPath: options.socketPath,
-                    path: "/v1/dataset-sql",
+                    path: target.pathname,
                     agent: false,
                   }
                 : {}),
@@ -231,7 +270,7 @@ export function remoteDatasetSqlExecutor(
               res.on("data", (chunk: Buffer) => {
                 if (done) return;
                 total += chunk.length;
-                if (total > RESPONSE_LIMIT) finish(Error("sql_output_limit"));
+                if (total > replyLimit) finish(Error("sql_output_limit"));
                 else chunks.push(chunk);
               });
               res.once("end", () => {
@@ -246,7 +285,12 @@ export function remoteDatasetSqlExecutor(
                     Array.isArray(value)
                   )
                     throw Error();
-                  finish(undefined, decodeDatasetSqlOutcome(job, value));
+                  finish(
+                    undefined,
+                    job.kind === "dataset-query"
+                      ? decodeDatasetQueryAnswer(job, value)
+                      : decodeDatasetSqlOutcome(job, value),
+                  );
                 } catch {
                   finish(Error("sql_invalid_result"));
                 }
@@ -257,12 +301,20 @@ export function remoteDatasetSqlExecutor(
           req.once("error", () => finish(Error("sql_unavailable")));
           controller.signal.addEventListener("abort", cancel, { once: true });
           req.end(body);
-        });
-      } finally {
-        signal?.removeEventListener("abort", forward);
-        active.delete(controller);
-        release();
-      }
+        },
+      );
+    } finally {
+      signal?.removeEventListener("abort", forward);
+      active.delete(controller);
+      release();
+    }
+  }
+  return {
+    async execute(job, signal) {
+      return (await executeJob(job, signal)) as MutationOutcome;
+    },
+    async query(job, signal) {
+      return (await executeJob(job, signal)) as ServerQueryAnswer;
     },
     async close() {
       closed = true;

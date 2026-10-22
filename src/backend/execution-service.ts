@@ -122,7 +122,11 @@ export function createExecutionService(
     closePromise: Promise<void> | undefined;
   const owned = new Map<() => void, Promise<void>>();
   const listener: RequestListener = (req, res) => {
-    if (!closed && req.url === "/v1/dataset-sql" && datasetSql) {
+    if (
+      !closed &&
+      ["/v1/dataset-sql", "/v1/dataset-query"].includes(req.url ?? "") &&
+      datasetSql
+    ) {
       datasetSql(req, res);
       return;
     }
