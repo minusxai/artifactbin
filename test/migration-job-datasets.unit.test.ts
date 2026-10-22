@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { prepareMigrationJobDatasets } from "../src/migration/job-datasets.ts";
+import { readBackendModule } from "../src/backend/af-module.ts";
+import { boundedBackendSchema } from "../src/graphql/execution-policy.ts";
 import { sealDeployment } from "../src/backend/deployment.ts";
 import { generatedDatasetBackendSource } from "../src/migration/datasets/import-metadata.ts";
 import type {
@@ -127,12 +129,17 @@ test("job prepares exact live head bindings and real compiled receipts without i
     conversionStrategy: "archived-functional",
   };
   let compilations = 0;
+  const moduleInfo = await readBackendModule(generatedDatasetBackendSource);
+  const backendSchema = boundedBackendSchema(moduleInfo.typeDefs);
   const deployment = sealDeployment(
     generatedDatasetBackendSource,
     "compiled fixture",
     {
-      typeDefs: generatedDatasetBackendSource.split("`")[1]!,
-      fields: ["read", "mutate"],
+      typeDefs: moduleInfo.typeDefs,
+      fields: [
+        ...Object.keys(backendSchema.getQueryType()?.getFields() ?? {}),
+        ...Object.keys(backendSchema.getMutationType()?.getFields() ?? {}),
+      ],
     },
   );
   const plan = await prepareMigrationJobDatasets(source, options, {
