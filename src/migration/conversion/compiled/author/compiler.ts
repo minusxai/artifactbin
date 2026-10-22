@@ -25,17 +25,19 @@ export async function prepareAuthorBundle(
     archivedRoot: string;
     mode?: "components" | "effects";
     lifecycle?: "owned";
+    sourceAdmission?:import("../local-contracts.ts").CompiledSourceAdmission;
   },
 ): Promise<AuthorBundleSources> {
   if (options.lifecycle && options.mode === "effects")
     throw Error("Mixed author lifecycle modes");
+  const prototype=options.sourceAdmission==="offline-prototype";
   const owned =
-    options.lifecycle === "owned"
+    !prototype && options.lifecycle === "owned"
       ? prepareOwnedAuthorComponents(source)
       : undefined;
   const effects =
-    options.mode === "effects" ? prepareAuthorEffects(source) : undefined;
-  if (!effects && !owned) admitAuthorSource(source);
+    !prototype && options.mode === "effects" ? prepareAuthorEffects(source) : undefined;
+  if (!prototype && !effects && !owned) admitAuthorSource(source);
   const root = path.resolve(options.archivedRoot);
   const solidRoot = path.join(root, "node_modules/solid-js");
   const pkg = JSON.parse(
@@ -109,6 +111,7 @@ export async function compileAuthorScript(
     archivedRoot: string;
     mode?: "components" | "effects";
     lifecycle?: "owned";
+    sourceAdmission?:import("../local-contracts.ts").CompiledSourceAdmission;
   },
 ): Promise<AuthorCompilation> {
   const prepared = await prepareAuthorBundle(source, names, options);

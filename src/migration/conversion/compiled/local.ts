@@ -150,7 +150,7 @@ export async function compileArchivedAuthor(
   options: ArchivedLocalOptions,
 ): Promise<CompiledLocalResult> {
   try {
-    const plan = prepareAuthorDocument(input.source);
+    const plan = prepareAuthorDocument(input.source,options.sourceAdmission);
     return await compileArchivedLocal(
       { ...input, source: plan.source, authorPlan: plan.author },
       options,

@@ -33,7 +33,7 @@ function literal(node: any): unknown {
     return node.quasis[0]?.value.cooked;
   return undefined;
 }
-export function prepareAuthorDocument(source: string): AuthorDocumentPlan {
+export function prepareAuthorDocument(source: string, sourceAdmission: import("./local-contracts.ts").CompiledSourceAdmission="strict"): AuthorDocumentPlan {
   if (
     typeof source !== "string" ||
     Buffer.byteLength(source) > MAX_COMPILED_SOURCE_BYTES
@@ -105,7 +105,8 @@ export function prepareAuthorDocument(source: string): AuthorDocumentPlan {
       if (node.type === "Identifier" && node.name === "window")
         windowComponents = true;
     });
-  if (effects) prepareAuthorEffects(text);
+  if (sourceAdmission==="offline-prototype") {/* Archived compiler owns browser behavior in the isolated runner. */}
+  else if (effects) prepareAuthorEffects(text);
   else if (windowComponents) {
     const plan = prepareOwnedAuthorComponents(text);
     if (

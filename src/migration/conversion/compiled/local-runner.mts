@@ -108,6 +108,7 @@ const author = input.authorPlan
         archivedRoot: root,
         mode: input.authorPlan.mode,
         lifecycle: input.authorPlan.lifecycle,
+        sourceAdmission:input.sourceAdmission,
       },
     )
   : null;
