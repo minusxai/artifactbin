@@ -81,6 +81,7 @@ export async function prepareArchivedFontResources(
           axes: family.axes.filter((a) => a.tag !== "ital"),
           style: face.style,
           weight: face.weight,
+          ...(face.stretch ? { stretch: face.stretch } : {}),
           unicodeRange: face.unicodeRange,
           bytes,
           sha256: face.sha256,

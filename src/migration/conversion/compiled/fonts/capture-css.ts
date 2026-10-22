@@ -89,7 +89,12 @@ export function admitCapturedFontCss(
     if (
       !requested ||
       get("font-display") !== request.display ||
-      Boolean(stretch) !== requested.axes.some((a) => a.tag === "wdth")
+      (Boolean(stretch) !== requested.axes.some((a) => a.tag === "wdth") &&
+        !(
+          stretch?.[0] === 100 &&
+          stretch?.[1] === 100 &&
+          !requested.axes.some((a) => a.tag === "wdth")
+        ))
     )
       throw Error("Captured font request mismatch");
     const unicodeRange = get("unicode-range");

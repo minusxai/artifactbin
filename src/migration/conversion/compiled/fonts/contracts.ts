@@ -16,6 +16,7 @@ export interface PinnedFontFace {
   readonly axes: readonly FontAxisRange[];
   readonly style: "normal" | "italic";
   readonly weight: readonly [number, number];
+  readonly stretch?: readonly [number, number];
   readonly unicodeRange: string;
   readonly bytes: Uint8Array;
   readonly sha256: string;

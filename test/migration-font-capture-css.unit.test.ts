@@ -91,3 +91,17 @@ test("provider omissions preserve returned face descriptors without manufacturin
     admitCapturedFontCss(provider, request + "&family=Missing"),
   );
 });
+
+test("provider explicit default stretch stays exact without requesting an extra width axis", () => {
+  const faces = admitCapturedFontCss(
+    css.replace("font-display:", "font-stretch:100%;font-display:"),
+    url,
+  );
+  assert.deepEqual(faces[0]?.stretch, [100, 100]);
+  assert.throws(() =>
+    admitCapturedFontCss(
+      css.replace("font-display:", "font-stretch:90%;font-display:"),
+      url,
+    ),
+  );
+});

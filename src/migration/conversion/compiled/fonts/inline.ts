@@ -119,8 +119,10 @@ export function validFontUnicodeRange(value: string): boolean {
 }
 function faceCss(face: PinnedFontFace, request: PinnedFontRequest): string {
   const width = face.axes.find((axis) => axis.tag === "wdth");
-  const stretch = width
-    ? `font-stretch:${width.min}%${width.min === width.max ? "" : ` ${width.max}%`};`
+  const stretchRange =
+    face.stretch ?? (width ? [width.min, width.max] : undefined);
+  const stretch = stretchRange
+    ? `font-stretch:${stretchRange[0]}%${stretchRange[0] === stretchRange[1] ? "" : ` ${stretchRange[1]}%`};`
     : "";
   return `@font-face{font-family:${JSON.stringify(face.family)};font-style:${face.style};font-weight:${face.weight[0] === face.weight[1] ? face.weight[0] : face.weight.join(" ")};${stretch}font-display:${request.display};src:url("data:font/woff2;base64,${Buffer.from(face.bytes).toString("base64")}") format("woff2");unicode-range:${face.unicodeRange}}`;
 }
@@ -221,6 +223,19 @@ export async function inlinePinnedFontImports(
       )
         throw Error("Provider omission contradicts returned face");
       if (
+        (face.stretch !== undefined &&
+          (face.stretch.length !== 2 ||
+            !face.stretch.every(
+              (value) => Number.isFinite(value) && value > 0 && value <= 2000,
+            ) ||
+            face.stretch[0] > face.stretch[1] ||
+            (!(face.stretch[0] === 100 && face.stretch[1] === 100) &&
+              !face.axes.some(
+                (axis) =>
+                  axis.tag === "wdth" &&
+                  axis.min === face.stretch![0] &&
+                  axis.max === face.stretch![1],
+              )))) ||
         !["normal", "italic"].includes(face.style) ||
         face.weight.length !== 2 ||
         !face.weight.every(
