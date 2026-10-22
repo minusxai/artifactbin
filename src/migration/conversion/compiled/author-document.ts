@@ -77,7 +77,7 @@ export function prepareAuthorDocument(source: string, sourceAdmission: import(".
   }) as any;
   const exports: string[] = [];
   for (const node of module.body) {
-    if (node.type === "ExportDefaultDeclaration")
+    if (node.type === "ExportDefaultDeclaration" && sourceAdmission !== "offline-prototype")
       throw Error("Default author exports unsupported");
     if (node.type !== "ExportNamedDeclaration") continue;
     const declaration = node.declaration;
