@@ -2,12 +2,34 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { gzipSync } from "node:zlib";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { chromium, webkit } from "playwright";
 import { decodeCompiledWasm } from "../src/migration/conversion/compiled/wasm.ts";
 for (const [name, engine] of Object.entries({ chromium, webkit }))
   test(`embedded engine codec verifies and instantiates through ${name}`, async () => {
-    const bytes = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]);
+    const custom = randomBytes(600000);
+    let sectionLength = custom.length + 1;
+    const leb: number[] = [];
+    do {
+      let byte = sectionLength & 127;
+      sectionLength >>>= 7;
+      if (sectionLength) byte |= 128;
+      leb.push(byte);
+    } while (sectionLength);
+    const bytes = Uint8Array.from([
+      0,
+      97,
+      115,
+      109,
+      1,
+      0,
+      0,
+      0,
+      0,
+      ...leb,
+      0,
+      ...custom,
+    ]);
     const payload = {
       compression: "gzip",
       base64: gzipSync(bytes).toString("base64"),
@@ -30,7 +52,7 @@ for (const [name, engine] of Object.entries({ chromium, webkit }))
             "(()=>{const __name=f=>f;return " + source + "})()",
           );
           const bytes = await decode(payload);
-          await WebAssembly.compile(bytes);
+          await WebAssembly.instantiate(bytes);
           let rejected = false;
           try {
             await decode({ ...payload, sha256: "0".repeat(64) });
@@ -41,7 +63,7 @@ for (const [name, engine] of Object.entries({ chromium, webkit }))
         },
         { source: decodeCompiledWasm.toString(), payload },
       );
-      assert.deepEqual(answer, { length: 8, rejected: true });
+      assert.deepEqual(answer, { length: bytes.length, rejected: true });
     } finally {
       await browser.close();
       server.closeAllConnections();
