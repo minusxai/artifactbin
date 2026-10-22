@@ -116,6 +116,7 @@ test("Apollo boot applies atomic scalar writes and reprojects persisted state af
     .replace(/^import .*;$/gm, "")
     .replace("export function boot", "function boot");
   const boot = Function(
+    "window",
     "client",
     "gql",
     "hydrateIsland",
@@ -123,6 +124,7 @@ test("Apollo boot applies atomic scalar writes and reprojects persisted state af
     "createSignal",
     source + ";return boot;",
   )(
+    {addEventListener(){}},
     client,
     () => ({}),
     (_: any, _tree: any, c: any) => {
@@ -220,6 +222,7 @@ test("local query projection ignores stale runs after later Apollo state changes
     run: () => new Promise((resolve) => runs.push(resolve)),
   };
   const boot = Function(
+    "window",
     "client",
     "gql",
     "hydrateIsland",
@@ -228,6 +231,7 @@ test("local query projection ignores stale runs after later Apollo state changes
     "pageEngine",
     source + ";return boot;",
   )(
+    {addEventListener(){}},
     client,
     () => ({}),
     (_: any, _tree: any, c: any) => {
@@ -323,6 +327,7 @@ test("table viewer state validates schema, reloads saved rows, and keeps scalar 
     .replace(/^import .*;$/gm, "")
     .replace("export function boot", "function boot");
   const boot = Function(
+    "window",
     "client",
     "gql",
     "hydrateIsland",
@@ -330,6 +335,7 @@ test("table viewer state validates schema, reloads saved rows, and keeps scalar 
     "createSignal",
     source + ";return boot;",
   )(
+    {addEventListener(){}},
     client,
     () => ({}),
     (_: any, __: any, c: any) => {
