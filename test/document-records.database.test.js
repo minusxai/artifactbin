@@ -58,6 +58,9 @@ test("shared record readers load complete scalar headers and sessions, and disti
       statementTimeoutMs: 15000,
       lockTimeoutMs: 40,
     });
+    const principalSpace = (await env.pool.query("SELECT space FROM accounts WHERE actor='owner'")).rows[0].space;
+    assert.equal(typeof principalSpace, "string");
+    assert.match(principalSpace, /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
     await sql.transaction(async (c) => {
       assert.deepEqual(await loadSession(c, "token"), {
         actor: "owner",
@@ -66,6 +69,7 @@ test("shared record readers load complete scalar headers and sessions, and disti
         expires: 123456,
         purpose: "backend",
         backendVersion: "v1",
+        principalSpace,
         groupAuthority: { actor: "owner", memberships: [] },
       });
       assert.equal(await loadSession(c, "missing"), null);

@@ -58,7 +58,13 @@ test("identity operations preserve unique accounts, atomically commit challenges
         value: "committed",
       };
     });
-    assert.deepEqual(await repository.readSession("hashed"), { ...session, groupAuthority: { actor: session.actor, memberships: [] } });
+    const principalSpace = (await env.pool.query("SELECT space FROM accounts WHERE actor='alice'")).rows[0].space;
+    assert.equal(typeof principalSpace, "string");
+    assert.match(principalSpace, /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
+    const expectedSession = {...session, principalSpace, groupAuthority:{actor:session.actor,memberships:[]}};
+    assert.deepEqual(await repository.readSession("hashed"), expectedSession);
+    assert.deepEqual(await repository.readSession("hashed"), expectedSession,
+      "reloading a session preserves its current account incarnation");
     assert.equal(await repository.readSession("raw-secret"), null);
     await assert.rejects(
       repository.withEmailChallenge("other", () => ({
@@ -86,6 +92,16 @@ test("identity operations preserve unique accounts, atomically commit challenges
     });
     await repository.revokeSession("hashed");
     assert.equal(await repository.readSession("hashed"), null);
+    await env.pool.query("DELETE FROM accounts WHERE actor='alice'");
+    assert.equal(await repository.createAccount("alice", {}), true);
+    const recreatedSpace = (await env.pool.query("SELECT space FROM accounts WHERE actor='alice'")).rows[0].space;
+    assert.notEqual(recreatedSpace, principalSpace, "a recreated login name is a different principal incarnation");
+    await repository.withPasswordAccount("alice", () => ({
+      issued:{credential:"replacement-secret",tokenHash:"replacement-hash",session}, value:null,
+    }));
+    assert.deepEqual(await repository.readSession("replacement-hash"), {
+      ...session, principalSpace:recreatedSpace, groupAuthority:{actor:session.actor,memberships:[]},
+    });
   } finally {
     await env.cleanup();
   }
