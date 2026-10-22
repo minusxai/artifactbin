@@ -107,7 +107,7 @@ export function createSourceQueryService(
       const parameters = prepared.names.map((name) =>
         reserved.has(name) ? platform[name]! : values[name]!,
       );
-      const text =
+      const windowSql =
         "SELECT * FROM (" +
         prepared.text +
         ") AS source_result" +
@@ -116,6 +116,12 @@ export function createSourceQueryService(
         (parameters.length + 1) +
         " OFFSET $" +
         (parameters.length + 2);
+      // Bound the driver payload before PostgreSQL serializes it to the app.
+      // The trusted query window executes once; oversized UTF-8 output is a sentinel.
+      const text =
+        "WITH source_window AS MATERIALIZED (" +
+        windowSql +
+        "), source_payload AS MATERIALIZED (SELECT coalesce(jsonb_agg(to_jsonb(source_window)), '[]'::jsonb)::text AS payload FROM source_window) SELECT CASE WHEN octet_length(payload)<=49152 THEN payload ELSE NULL END AS source_rows FROM source_payload";
       const pool = ports.pool(registration.resource);
       if (!pool) throw new DatasetReadError("denied");
       const host = createConnectorHost(
@@ -139,7 +145,7 @@ export function createSourceQueryService(
           maxPendingAcquisitions: 1,
         },
       );
-      const raw = await host.invoke(
+      const response = await host.invoke(
         {
           tenant: context.pageId,
           subject: context.subject ?? "anonymous",
@@ -148,6 +154,22 @@ export function createSourceQueryService(
         { resource: "source", operation: "read", input: null },
         signal,
       );
+      if (
+        !Array.isArray(response) ||
+        response.length !== 1 ||
+        !response[0] ||
+        typeof response[0] !== "object" ||
+        Array.isArray(response[0]) ||
+        typeof response[0].source_rows !== "string" ||
+        Buffer.byteLength(response[0].source_rows) > 49152
+      )
+        throw new DatasetReadError("invalid_dataset");
+      let raw: unknown;
+      try {
+        raw = JSON.parse(response[0].source_rows);
+      } catch {
+        throw new DatasetReadError("invalid_dataset");
+      }
       signal?.throwIfAborted();
       const fresh = await ports.authority(context, signal);
       if (

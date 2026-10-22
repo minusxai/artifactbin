@@ -44,7 +44,9 @@ test("source query derives named SQL server-side, brackets access, refuses injec
       query: async (text: string, values?: unknown[]) => {
         calls.push({ text, values });
         return {
-          rows: text.startsWith("SELECT * FROM") ? [{ value: "hello" }] : [],
+          rows: text.startsWith("WITH source_window")
+            ? [{ source_rows: JSON.stringify([{ value: "hello" }]) }]
+            : [],
         };
       },
       release() {},
@@ -75,7 +77,7 @@ test("source query derives named SQL server-side, brackets access, refuses injec
   assert.equal(calls[0].text, "BEGIN READ ONLY");
   assert.ok(
     calls.find(
-      (c) => c.text.startsWith("SELECT * FROM") && c.values[0] === "hello",
+      (c) => c.text.startsWith("WITH source_window") && c.values[0] === "hello",
     ),
   );
   for (const input of [
@@ -141,4 +143,31 @@ test("operator source resources enforce CA verification and read-only defaults d
       ),
     /Invalid source query resources/,
   );
+});
+import { verifySourceQueries } from "../src/persistence/source-queries.ts";
+test("source query receipt replay refuses removed or modified operations", async () => {
+  const receipt = {
+    pageLegacyId: "legacy",
+    pageId: "PAGE01",
+    pageVersion: 1,
+    backendId: "BACK01",
+    deployment: { version: "1" },
+  };
+  for (const state of ["same", "removed", "modified"]) {
+    const db = {
+      query: async (sql: string) => ({
+        rows: sql.startsWith("SELECT count")
+          ? [{ count: state === "removed" ? 0 : 1 }]
+          : [{ matches: state === "same" }],
+        rowCount: 1,
+      }),
+    };
+    if (state === "same")
+      await verifySourceQueries(db, receipt, "test", [registration]);
+    else
+      await assert.rejects(
+        verifySourceQueries(db, receipt, "test", [registration]),
+        /conflict/,
+      );
+  }
 });

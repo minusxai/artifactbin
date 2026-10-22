@@ -63,6 +63,19 @@ test("external source runs named typed parameters read-only and discards revoked
     reads = 0;
     generation = "stable";
     definition.sql =
+      "SELECT repeat($needle::text,30000) AS value, $_me.id::text AS viewer";
+    definition.sqlSha256 = createHash("sha256")
+      .update(definition.sql)
+      .digest("hex");
+    await assert.rejects(
+      service.query(context, {
+        ...input,
+        valuesJson: JSON.stringify({ needle: "é" }),
+      }),
+      { code: "invalid_dataset" },
+    );
+    reads = 0;
+    definition.sql =
       "WITH changed AS (DELETE FROM items RETURNING value) SELECT value FROM changed";
     definition.params = {} as any;
     definition.sqlSha256 = createHash("sha256")
