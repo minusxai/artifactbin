@@ -237,7 +237,11 @@ async function signOut() {
   try {
     if (!(await session.logout())) return;
     accountView.close();
-    if (!embedded) history.replaceState(null, "", "/");
+    if (!embedded) {
+      // Reinitialize both the namespace and folder for the next account.
+      location.replace("/");
+      return;
+    }
     frameEvent("profile-changed");
     await load();
     frameEvent("close");

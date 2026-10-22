@@ -246,3 +246,64 @@ test("selected namespace scopes only listing; profile and account identity stay 
   ]);
   session.dispose();
 });
+
+test("successful logout resets namespace for the next account; failed logout preserves it", async () => {
+  const paths: string[] = [];
+  let failLogout = true;
+  const session = createLibrarySession({
+    embedded: false,
+    sharing: false,
+    owner: "group:fixture",
+    changed: () => {},
+    request: async (path) => {
+      paths.push(path);
+      if (path === "/api/library/logout" && failLogout) throw Error("Offline");
+      return path === "/api/library/profile"
+        ? { name: "Member", image: null }
+        : { username: "member" };
+    },
+  });
+  await assert.rejects(session.logout(), /Offline/);
+  await session.load();
+  assert.ok(paths.includes("/api/library?owner=group%3Afixture"));
+  failLogout = false;
+  await session.logout();
+  paths.length = 0;
+  await session.verify("other@example.test", "123456");
+  await session.load();
+  assert.deepEqual(paths, [
+    "/api/auth/email/verify",
+    "/api/library",
+    "/api/library/profile",
+  ]);
+  session.dispose();
+});
+
+test("a superseded logout cannot reset a newer namespace load", async () => {
+  const logout = deferred();
+  const paths: string[] = [];
+  const session = createLibrarySession({
+    embedded: false,
+    sharing: false,
+    owner: "group:fixture",
+    changed: () => {},
+    request: async (path) => {
+      paths.push(path);
+      return path === "/api/library/logout"
+        ? logout.promise
+        : { username: "member", name: "Member", image: null };
+    },
+  });
+  const pending = session.logout();
+  const rejected = assert.rejects(pending, /superseded/);
+  await session.load();
+  logout.resolve({});
+  await rejected;
+  paths.length = 0;
+  await session.load();
+  assert.deepEqual(paths, [
+    "/api/library?owner=group%3Afixture",
+    "/api/library/profile",
+  ]);
+  session.dispose();
+});

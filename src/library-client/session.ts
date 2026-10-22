@@ -9,6 +9,7 @@ import type {
 export function createLibrarySession(
   options: LibrarySessionOptions,
 ): LibrarySession {
+  let owner = options.owner;
   let epoch = 0,
     disposed = false,
     credential: string | null = null,
@@ -71,7 +72,7 @@ export function createLibrarySession(
           request<LibraryData>(
             options.embedded
               ? "/api/library/session"
-              : namespaceLibraryPath("/api/library", options.owner),
+              : namespaceLibraryPath("/api/library", owner),
           ),
           options.sharing
             ? Promise.resolve({ name: "", image: null })
@@ -115,6 +116,7 @@ export function createLibrarySession(
       await request("/api/library/logout", {});
       if (!current(version)) return false;
       credential = null;
+      owner = undefined;
       publish({ status: "signed-out", error: "" });
       return true;
     },

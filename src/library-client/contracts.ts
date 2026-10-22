@@ -55,6 +55,7 @@ export interface LibraryListing {
 export interface LibrarySessionOptions {
   request: LibraryTransport;
   embedded: boolean;
+  /** Initial namespace selection; a successful logout resets it to personal. */
   owner?: string;
   sharing: boolean;
   /** The page knows no session was sent with it: the first load is signed out without asking the server. */
@@ -71,6 +72,7 @@ export interface LibrarySession {
     method?: string,
   ): Promise<T>;
   verify(email: string, code: string): Promise<boolean>;
+  /** Clears credentials and namespace selection only after a current successful logout. */
   logout(): Promise<boolean>;
   token(): string | null;
   cancelAuthentication(): void;
