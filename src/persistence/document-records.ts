@@ -1,3 +1,4 @@
+import { isLegacyNonloginActor } from "../principal-policy.ts";
 import { loadGroupAuthority } from "./group-memberships.ts";
 import type { SessionGrant } from "../identity-data-contracts.ts";
 import type { DocumentHeader } from "../server/document-authorization-contracts.ts";
@@ -29,6 +30,7 @@ export async function loadSession(
   ).rows[0];
   if (!row) return null;
   const session = decodeSessionGrant(row);
+  if (isLegacyNonloginActor(session.actor)) return null;
   session.groupAuthority = await loadGroupAuthority(client, session.actor);
   return session;
 }

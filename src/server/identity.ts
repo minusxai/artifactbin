@@ -1,3 +1,4 @@
+import { isLegacyNonloginActor } from "../principal-policy.ts";
 import { hash } from "./text.ts";
 import { authorizeDocument } from "./document-authorization.ts";
 import { fail } from "../errors.ts";
@@ -10,6 +11,7 @@ export function createIdentityAuthority({
 }: { now?: () => number; crypto?: IdentityCrypto } = {}): IdentityAuthority {
   return {
     issue(actor, fileId = null, generation = null) {
+      if (isLegacyNonloginActor(actor)) fail(401, "Sign in required");
       const credential = crypto.token();
       return {
         credential,

@@ -76,12 +76,14 @@ CREATE TABLE IF NOT EXISTS groups (owner text PRIMARY KEY REFERENCES accounts(ac
 CREATE TABLE IF NOT EXISTS group_memberships (owner text NOT NULL REFERENCES groups(owner), actor text NOT NULL REFERENCES accounts(actor), role text NOT NULL CHECK (role IN ('viewer','editor')), PRIMARY KEY(owner,actor));
 CREATE INDEX IF NOT EXISTS group_memberships_actor ON group_memberships(actor,owner);
 CREATE OR REPLACE FUNCTION enforce_group_principal() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+ IF NEW.actor ~ '^legacy-(user|token|orphan):[a-f0-9]{64}$' AND (NEW.salt IS NOT NULL OR NEW.password IS NOT NULL OR NEW.handle IS NOT NULL) THEN RAISE EXCEPTION 'Archival principals cannot have login credentials'; END IF;
  IF NEW.principal_kind='group' AND (NEW.actor NOT LIKE 'group:%' OR NEW.salt IS NOT NULL OR NEW.password IS NOT NULL) THEN RAISE EXCEPTION 'Groups cannot have login credentials'; END IF;
  IF TG_OP='UPDATE' AND NEW.principal_kind<>OLD.principal_kind THEN RAISE EXCEPTION 'Principal kinds are immutable'; END IF;
  RETURN NEW; END $$;
 DROP TRIGGER IF EXISTS group_principal_guard ON accounts;
 CREATE TRIGGER group_principal_guard BEFORE INSERT OR UPDATE ON accounts FOR EACH ROW EXECUTE FUNCTION enforce_group_principal();
 CREATE OR REPLACE FUNCTION enforce_person_session() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+ IF NEW.actor ~ '^legacy-(user|token|orphan):[a-f0-9]{64}$' THEN RAISE EXCEPTION 'Archival principals cannot authenticate'; END IF;
  IF NOT EXISTS(SELECT 1 FROM accounts WHERE actor=NEW.actor AND principal_kind='user') THEN RAISE EXCEPTION 'Only users can authenticate'; END IF;
  RETURN NEW; END $$;
 DROP TRIGGER IF EXISTS person_session_guard ON sessions;

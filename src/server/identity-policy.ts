@@ -1,3 +1,4 @@
+import { isLegacyNonloginActor } from "../principal-policy.ts";
 import {
   randomBytes,
   randomInt,
@@ -25,7 +26,13 @@ export function accountActor(
   session: SessionGrant | null,
   now: number,
 ): string {
-  if (!session || session.fileId || session.purpose || session.expires <= now)
+  if (
+    !session ||
+    isLegacyNonloginActor(session.actor) ||
+    session.fileId ||
+    session.purpose ||
+    session.expires <= now
+  )
     fail(401, "Sign in required");
   return session.actor;
 }

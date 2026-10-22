@@ -1,3 +1,4 @@
+import { isLegacyNonloginActor } from "../principal-policy.ts";
 import type { FilePermissions } from "../contracts.ts";
 import { permissions, policyFor } from "../access.ts";
 import { fail } from "../errors.ts";
@@ -17,6 +18,7 @@ export function authorizeDocument({
     fail(403, "Backend grants cannot access collaboration APIs");
   const valid =
     session &&
+    !isLegacyNonloginActor(session.actor) &&
     session.expires > now &&
     (!session.fileId ||
       (session.fileId === fileId && session.generation === f.generation));
@@ -37,17 +39,40 @@ export function authorizeDocument({
     (!!valid &&
       session.purpose === "document" &&
       session.fileId === fileId &&
-      permissions(f, actor, true, false, valid ? session.groupAuthority : undefined).edit);
+      permissions(
+        f,
+        actor,
+        true,
+        false,
+        valid ? session.groupAuthority : undefined,
+      ).edit);
   return { actor, owner: grant.edit, permissions: grant, appEdit };
 }
 
 /** Read a page-addressed resource using its own policy, never a parent page's. */
-export function authorizePageRead({ document, session, fileId, now }: import("./document-authorization-contracts.ts").PageReadAuthorizationInput): FilePermissions {
+export function authorizePageRead({
+  document,
+  session,
+  fileId,
+  now,
+}: import("./document-authorization-contracts.ts").PageReadAuthorizationInput): FilePermissions {
   const file = document ?? fail(404, "File not found");
-  if (session && (session.purpose === "backend" || session.expires <= now ||
-      (session.fileId && (session.fileId !== fileId || session.generation !== file.generation))))
+  if (
+    session &&
+    (isLegacyNonloginActor(session.actor) ||
+      session.purpose === "backend" ||
+      session.expires <= now ||
+      (session.fileId &&
+        (session.fileId !== fileId || session.generation !== file.generation)))
+  )
     fail(403, "Access expired or revoked");
-  const grant = permissions(file, session?.actor ?? null, true, !!session?.fileId, session?.groupAuthority);
+  const grant = permissions(
+    file,
+    session?.actor ?? null,
+    true,
+    !!session?.fileId,
+    session?.groupAuthority,
+  );
   if (!grant.read) fail(403, "You do not have access to this document.");
   return grant;
 }

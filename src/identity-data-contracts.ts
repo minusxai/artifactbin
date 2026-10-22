@@ -13,6 +13,7 @@ export interface SessionGrant {
   purpose?: "collaboration" | "document" | "backend";
   /** Backend grants authorize only this immutable deployment version. */
   backendVersion?: string;
+  /** A session actor is login-capable or an explicit scoped guest, never an archival legacy-user/token/orphan principal. */
   actor: string;
   fileId: Id | null;
   generation: number | null;

@@ -1,3 +1,4 @@
+import { isLegacyNonloginActor } from "../principal-policy.ts";
 import type { Account, EmailChallenge } from "../identity-data-contracts.ts";
 import type {
   AccountProfileRecord,
@@ -24,6 +25,7 @@ async function readAccount(
   c: SqlClient,
   actor: string,
 ): Promise<Account | null> {
+  if (isLegacyNonloginActor(actor)) return null;
   const row = (
     await c.query(
       "SELECT salt,password,name,image FROM accounts WHERE actor=$1",
