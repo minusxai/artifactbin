@@ -91,6 +91,11 @@ export function createAuthorComponentLifetime<Owner extends object>(
     if (!scope.active) throw Error("Author component owner is disposed");
     return scope;
   };
+  const dispose = () => {
+    if (!active) return;
+    active = false;
+    drain([...liveScopes].map((scope) => () => retire(scope)));
+  };
   return {
     get active() {
       return active;
@@ -195,6 +200,7 @@ export function createAuthorComponentLifetime<Owner extends object>(
       };
     },
     cleanup(callback) {
+      current(); // Register resource retirement before the authored Solid cleanup.
       if (typeof callback !== "function")
         throw Error("Author cleanup must be a function");
       return () => {
@@ -202,15 +208,24 @@ export function createAuthorComponentLifetime<Owner extends object>(
         retiring = true;
         try {
           callback();
+        } catch (error) {
+          // Never abort Solid's child-before-parent disposal. Disable all native
+          // resources now; the host reports and drains remaining roots afterward.
+          let failure = error;
+          try {
+            dispose();
+          } catch (retirement) {
+            failure = new AggregateError(
+              [error, retirement],
+              "Author cleanup failed",
+            );
+          }
+          owners.cleanupError(failure);
         } finally {
           retiring = previous;
         }
       };
     },
-    dispose() {
-      if (!active) return;
-      active = false;
-      drain([...liveScopes].map((scope) => () => retire(scope)));
-    },
+    dispose,
   };
 }

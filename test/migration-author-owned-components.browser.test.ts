@@ -123,3 +123,120 @@ test(
     }
   },
 );
+test(
+  "whole canonical window component document preserves shared state and owns final page lifecycle",
+  { skip: !archivedRoot },
+  async () => {
+    const { compileArchivedAuthor } = await import(
+      "../src/migration/conversion/compiled/local.ts"
+    );
+    const { readFile } = await import("node:fs/promises");
+    const source = `<Helmet><script>{\`import {createSignal} from 'solid-js';const [shared,setShared]=createSignal(0);export function Counter(){window.addEventListener('scroll',()=>document.getElementById('observed').textContent=String(window.scrollY));return <button onClick={()=>setShared(shared()+1)}>{shared()}</button>;}export function Display(){return <p>{shared()}</p>;}\`}</script></Helmet><p id="observed">Waiting</p><Counter id="counter"/><Display id="display"/>`;
+    const result = await compileArchivedAuthor(
+      { source, coreUrl: "/af/v1/core.js" },
+      { legacyRoot: archivedRoot! },
+    );
+    assert.equal(result.classification, "functional");
+    assert(result.html);
+    const core = await readFile(new URL("../dist/core.js", import.meta.url));
+    const server = createServer((req, res) => {
+      res.setHeader(
+        "Content-Type",
+        req.url === "/af/v1/core.js" ? "text/javascript" : "text/html",
+      );
+      res.end(req.url === "/af/v1/core.js" ? core : result.html);
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage(),
+        errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.goto(
+        `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+      );
+      await page.locator("#counter button").click();
+      assert.equal(await page.locator("#display").textContent(), "1");
+      await page.evaluate(() => {
+        window.dispatchEvent(
+          new PageTransitionEvent("pagehide", { persisted: true }),
+        );
+        window.dispatchEvent(new Event("scroll"));
+      });
+      assert.equal(await page.locator("#observed").textContent(), "0");
+      await page.evaluate(() => {
+        document.getElementById("observed")!.textContent = "Stopped";
+        window.dispatchEvent(
+          new PageTransitionEvent("pagehide", { persisted: false }),
+        );
+        window.dispatchEvent(new Event("scroll"));
+      });
+      assert.equal(await page.locator("#observed").textContent(), "Stopped");
+      assert.deepEqual(errors, []);
+    } finally {
+      await browser.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  },
+);
+test(
+  "throwing nested authored cleanup fail-stops all native resources before same-task dispatch and visibly drains bindings",
+  { skip: !archivedRoot },
+  async () => {
+    const source = `import {createSignal,createMemo,onCleanup} from 'solid-js';import {signal} from 'page';export function Parent(){const out=document.getElementById('stats');const [value]=signal('$count');const [show,setShow]=createSignal(true);createMemo(()=>{if(show()){window.addEventListener('scroll',()=>out.dataset.calls=String(Number(out.dataset.calls||0)+1));createMemo(()=>onCleanup(()=>{throw Error('nested');}));onCleanup(()=>out.dataset.sibling='yes');}});return <button id="hide" onClick={()=>setShow(false)}>{value()}</button>;}`;
+    const compiled = await compileAuthorScript(
+      source,
+      { values: ["count"], queries: [], mutations: [] },
+      { archivedRoot: archivedRoot!, lifecycle: "owned" },
+    );
+    const html = `<!doctype html><p id="stats"></p><main id="mount"></main><script type="module">import{createAuthorModule}from'/module.js';window.subscriptions=0;window.stop=await createAuthorModule().mount({state:{read:()=>0,write(){},subscribe(){window.subscriptions++;return()=>window.subscriptions--;}},query(){throw Error('unused')}},[{element:document.getElementById('mount'),identity:'parent',component:'Parent'}]);window.ready=true;</script>`;
+    const server = createServer((req, res) => {
+      res.setHeader(
+        "Content-Type",
+        req.url === "/module.js" ? "text/javascript" : "text/html",
+      );
+      res.end(req.url === "/module.js" ? compiled.code : html);
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage(),
+        errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.goto(
+        `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+      );
+      await page.waitForFunction(() => Boolean((window as any).ready));
+      assert.equal(await page.evaluate(() => (window as any).subscriptions), 1);
+      const immediate = await page.evaluate(() => {
+        window.dispatchEvent(new Event("scroll"));
+        document.getElementById("hide")!.click();
+        window.dispatchEvent(new Event("scroll"));
+        return document.getElementById("stats")!.dataset.calls;
+      });
+      assert.equal(immediate, "1");
+      await page
+        .locator("[data-migration-author-status]")
+        .waitFor({ state: "visible" });
+      assert.equal(
+        await page.locator("#stats").getAttribute("data-sibling"),
+        "yes",
+      );
+      assert.equal(await page.evaluate(() => (window as any).subscriptions), 0);
+      assert.equal(errors.length, 1);
+      assert.match(errors[0]!, /Authored module cleanup failed/);
+      await page.evaluate(() => window.dispatchEvent(new Event("scroll")));
+      assert.equal(
+        await page.locator("#stats").getAttribute("data-calls"),
+        "1",
+      );
+    } finally {
+      await browser.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  },
+);

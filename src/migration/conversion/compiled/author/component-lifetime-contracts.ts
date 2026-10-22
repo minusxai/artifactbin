@@ -1,6 +1,8 @@
 import type { AuthorListener } from "./lifecycle-contracts.ts";
 /** Injected Solid ownership operations; no authored module is evaluated by this port. */
 export interface AuthorComponentOwners<Owner extends object> {
+  /** Must enqueue visible module failure after Solid finishes its current retirement. */
+  cleanupError(error: unknown): void;
   current(): Owner | null;
   run<T>(owner: Owner, callback: () => T): T;
   cleanup(owner: Owner, dispose: () => void): void;

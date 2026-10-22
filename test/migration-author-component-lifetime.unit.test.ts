@@ -13,7 +13,12 @@ function owners() {
       current = previous;
     }
   };
+  const errors: unknown[] = [];
   return {
+    errors,
+    cleanupError: (error: unknown) => {
+      errors.push(error);
+    },
     make: (): Owner => ({ cleanups: [] }),
     run,
     current: () => current,
@@ -66,10 +71,13 @@ test("captured delegated callbacks restore owners and cannot run or register aft
   callback();
   target.dispatchEvent(new Event("change"));
   assert.equal(calls, 1);
-  const cleanup = life.cleanup(() =>
-    port.run(owner, () => life.listen(target, "change", () => {})),
+  const cleanup = port.run(owner, () =>
+    life.cleanup(() =>
+      port.run(owner, () => life.listen(target, "change", () => {})),
+    ),
   );
-  assert.throws(cleanup, /disposed/);
+  cleanup();
+  assert.match(String(port.errors[0]), /disposed/);
 });
 test("once, abort, cross-owner explicit removal and independent factories retain native identity", () => {
   const port = owners(),
@@ -138,4 +146,56 @@ test("reused Solid computation owners get a fresh generation without reviving pr
   life.dispose();
   second();
   assert.equal(calls, 2);
+});
+test("authored cleanup registration reserves retirement first even when cleanup later throws", () => {
+  const port = owners(),
+    owner = port.make(),
+    life = createAuthorComponentLifetime(port),
+    target = new EventTarget();
+  let calls = 0;
+  port.run(owner, () => {
+    port.cleanup(
+      owner,
+      life.cleanup(() => {
+        throw Error("authored");
+      }),
+    );
+    life.listen(target, "change", () => calls++);
+  });
+  port.remove(owner);
+  assert.match(String(port.errors[0]), /authored/);
+  target.dispatchEvent(new Event("change"));
+  assert.equal(calls, 0);
+});
+test("a throwing child cleanup fail-stops ancestor listeners synchronously without aborting remaining cleanup", () => {
+  const port = owners(),
+    parent = port.make(),
+    child = port.make(),
+    life = createAuthorComponentLifetime(port),
+    target = new EventTarget();
+  let calls = 0,
+    sibling = false;
+  port.run(parent, () => life.listen(target, "change", () => calls++));
+  port.run(child, () => {
+    port.cleanup(
+      child,
+      life.cleanup(() => {
+        throw Error("child");
+      }),
+    );
+    port.cleanup(
+      child,
+      life.cleanup(() => {
+        sibling = true;
+      }),
+    );
+  });
+  port.remove(child);
+  target.dispatchEvent(new Event("change"));
+  assert.equal(calls, 0);
+  assert.equal(life.active, false);
+  assert.equal(sibling, true);
+  assert.equal(port.errors.length, 1);
+  port.remove(parent);
+  life.dispose();
 });
