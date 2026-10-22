@@ -3,6 +3,17 @@ import type {
   DatasetPersonPorts,
   DatasetPersonService,
 } from "./person-contracts.ts";
+function safeImage(image: string): boolean {
+  if (image.length > 4096) return false;
+  try {
+    const url = new URL(image);
+    return (
+      url.protocol === "https:" && !url.username && !url.password && !url.hash
+    );
+  } catch {
+    return false;
+  }
+}
 const denied = (): never => {
   throw new DatasetReadError("denied");
 };
@@ -11,102 +22,159 @@ export function createDatasetPersonService(
   ports: DatasetPersonPorts,
 ): DatasetPersonService {
   return {
-    async person(context, input) {
-      if (
-        !input ||
-        typeof input !== "object" ||
-        Array.isArray(input) ||
-        Object.keys(input).sort().join() !== "userId,valueName"
-      )
-        throw new DatasetReadError("invalid_request");
-      const { valueName, userId } = input as Record<string, unknown>;
-      if (
-        typeof valueName !== "string" ||
-        !/^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(valueName) ||
-        typeof userId !== "string" ||
-        !userId ||
-        new TextEncoder().encode(userId).length > 16384
-      )
-        throw new DatasetReadError("invalid_request");
-      const binding = await ports.binding(context, valueName);
-      if (!binding) return denied();
-      if (
-        binding.backendId !== context.backendId ||
-        binding.backendVersion !== context.backendVersion ||
-        binding.pageId !== context.pageId ||
-        binding.valueName !== valueName
-      )
-        return denied();
-      let offset = 0,
-        version: number | undefined,
-        generation: number | undefined,
-        foundOffset: number | undefined;
-      for (let page = 0; page < 10000; page++) {
-        const result = await ports.reads.read(context, {
-          binding: binding.bindingName,
-          schema: binding.schema,
-          table: binding.table,
-          offset,
-          limit: 1000,
-          ...(version === undefined
-            ? {}
-            : { expectedVersion: version, expectedGeneration: generation }),
+    async person(context, input, callerSignal) {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      callerSignal?.addEventListener("abort", abort, { once: true });
+      if (callerSignal?.aborted) abort();
+      const timer = setTimeout(abort, 5000);
+      const signal = controller.signal;
+      const wait = async <T>(operation: () => Promise<T>): Promise<T> => {
+        signal.throwIfAborted();
+        return await new Promise<T>((resolve, reject) => {
+          const interrupted = () => reject(signal.reason);
+          signal.addEventListener("abort", interrupted, { once: true });
+          operation().then(
+            (value) => {
+              signal.removeEventListener("abort", interrupted);
+              if (signal.aborted) reject(signal.reason);
+              else resolve(value);
+            },
+            (error) => {
+              signal.removeEventListener("abort", interrupted);
+              reject(error);
+            },
+          );
         });
+      };
+      try {
         if (
-          !result.columns.some(
-            (c) => c.name === binding.column && c.type === "user",
-          )
+          !input ||
+          typeof input !== "object" ||
+          Array.isArray(input) ||
+          Object.keys(input).sort().join() !== "userId,valueName"
+        )
+          throw new DatasetReadError("invalid_request");
+        const { valueName, userId } = input as Record<string, unknown>;
+        if (
+          typeof valueName !== "string" ||
+          !/^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(valueName) ||
+          typeof userId !== "string" ||
+          !userId ||
+          new TextEncoder().encode(userId).length > 16384
+        )
+          throw new DatasetReadError("invalid_request");
+        const binding = await wait(() =>
+          ports.binding(context, valueName, signal),
+        );
+        if (!binding) return denied();
+        if (
+          binding.backendId !== context.backendId ||
+          binding.backendVersion !== context.backendVersion ||
+          binding.pageId !== context.pageId ||
+          binding.valueName !== valueName
         )
           return denied();
-        if (
-          version !== undefined &&
-          (version !== result.version || generation !== result.generation)
-        )
-          throw new DatasetReadError("dataset_changed");
-        version = result.version;
-        generation = result.generation;
-        if (result.rows.some((row) => row[binding.column] === userId)) {
-          foundOffset = offset;
-          break;
+        let offset = 0,
+          version: number | undefined,
+          generation: number | undefined,
+          foundOffset: number | undefined;
+        for (let page = 0; page < 16; page++) {
+          const result = await wait(() =>
+            ports.reads.read(
+              context,
+              {
+                binding: binding.bindingName,
+                schema: binding.schema,
+                table: binding.table,
+                offset,
+                limit: 1000,
+                ...(version === undefined
+                  ? {}
+                  : {
+                      expectedVersion: version,
+                      expectedGeneration: generation,
+                    }),
+              },
+              signal,
+            ),
+          );
+          if (
+            !result.columns.some(
+              (c) => c.name === binding.column && c.type === "user",
+            )
+          )
+            return denied();
+          if (
+            version !== undefined &&
+            (version !== result.version || generation !== result.generation)
+          )
+            throw new DatasetReadError("dataset_changed");
+          version = result.version;
+          generation = result.generation;
+          if (result.rows.some((row) => row[binding.column] === userId)) {
+            foundOffset = offset;
+            break;
+          }
+          if (result.nextOffset === null) return null;
+          if (
+            !Number.isSafeInteger(result.nextOffset) ||
+            result.nextOffset <= offset
+          )
+            throw new DatasetReadError("invalid_dataset");
+          offset = result.nextOffset;
         }
-        if (result.nextOffset === null) return null;
+        if (foundOffset === undefined)
+          throw new DatasetReadError("result_limit");
+        const card = await wait(() =>
+          ports.card(binding.sourceNamespace, userId, signal),
+        );
+        const freshBinding = await wait(() =>
+          ports.binding(context, valueName, signal),
+        );
         if (
-          !Number.isSafeInteger(result.nextOffset) ||
-          result.nextOffset <= offset
+          !freshBinding ||
+          JSON.stringify(freshBinding) !== JSON.stringify(binding)
+        )
+          return denied();
+        const fresh = await wait(() =>
+          ports.reads.read(
+            context,
+            {
+              binding: binding.bindingName,
+              schema: binding.schema,
+              table: binding.table,
+              offset: foundOffset,
+              limit: 1000,
+              expectedVersion: version,
+              expectedGeneration: generation,
+            },
+            signal,
+          ),
+        );
+        if (fresh.version !== version || fresh.generation !== generation)
+          throw new DatasetReadError("dataset_changed");
+        if (!fresh.rows.some((row) => row[binding.column] === userId))
+          return denied();
+        if (
+          card &&
+          (Object.keys(card).sort().join() !== "handle,image,name" ||
+            typeof card.name !== "string" ||
+            card.name.length > 4096 ||
+            (typeof card.handle === "string" && card.handle.length > 4096) ||
+            (typeof card.image === "string" && !safeImage(card.image)) ||
+            !card.name ||
+            (card.handle !== null && typeof card.handle !== "string") ||
+            (card.image !== null && typeof card.image !== "string"))
         )
           throw new DatasetReadError("invalid_dataset");
-        offset = result.nextOffset;
+        return card
+          ? { name: card.name, handle: card.handle, image: card.image }
+          : null;
+      } finally {
+        clearTimeout(timer);
+        callerSignal?.removeEventListener("abort", abort);
       }
-      if (foundOffset === undefined) throw new DatasetReadError("result_limit");
-      const card = await ports.card(binding.sourceNamespace, userId);
-      const freshBinding = await ports.binding(context, valueName);
-      if (
-        !freshBinding ||
-        JSON.stringify(freshBinding) !== JSON.stringify(binding)
-      )
-        return denied();
-      const fresh = await ports.reads.read(context, {
-        binding: binding.bindingName,
-        schema: binding.schema,
-        table: binding.table,
-        offset: foundOffset,
-        limit: 1000,
-        expectedVersion: version,
-        expectedGeneration: generation,
-      });
-      if (fresh.version !== version || fresh.generation !== generation)
-        throw new DatasetReadError("dataset_changed");
-      if (!fresh.rows.some((row) => row[binding.column] === userId))
-        return denied();
-      if (
-        card &&
-        (typeof card.name !== "string" ||
-          !card.name ||
-          (card.handle !== null && typeof card.handle !== "string") ||
-          (card.image !== null && typeof card.image !== "string"))
-      )
-        throw new DatasetReadError("invalid_dataset");
-      return card ? structuredClone(card) : null;
     },
   };
 }

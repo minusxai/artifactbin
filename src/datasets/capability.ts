@@ -36,7 +36,7 @@ export function datasetCapabilityHandler(
       else if (request.operation === "members" && members)
         result = await members.members(bound);
       else if (request.operation === "person" && person)
-        result = await person.person(bound, request.input);
+        result = await person.person(bound, request.input, signal);
       else if (request.operation === "mutate" && mutations)
         result = await mutations.mutate(bound, request.input, signal);
       else throw new DatasetReadError("denied");

@@ -95,3 +95,60 @@ test("revocation and changed dataset generation clear a selected person instead 
     /denied/,
   );
 });
+
+test("person lookup aborts a pending read and never performs subsequent work", async () => {
+  const f = fixture(),
+    abort = new AbortController();
+  let calls = 0,
+    received: AbortSignal | undefined;
+  f.ports.reads.read = async (_context, _input, signal) => {
+    calls++;
+    received = signal;
+    return await new Promise(() => {});
+  };
+  const pending = createDatasetPersonService(f.ports).person(
+    context,
+    { valueName: "selected", userId: "original-user" },
+    abort.signal,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  abort.abort();
+  await assert.rejects(pending);
+  assert.equal(received?.aborted, true);
+  assert.equal(calls, 1);
+  assert.equal(f.cards(), 0);
+});
+test("person scan capacity is finite and private profile keys and unsafe images cannot escape", async () => {
+  const f = fixture();
+  let calls = 0;
+  const read = f.ports.reads.read;
+  f.ports.reads.read = async (...args) => ({
+    ...(await read(...args)),
+    rows: [],
+    nextOffset: ++calls,
+    totalRows: 100000,
+  });
+  await assert.rejects(
+    createDatasetPersonService(f.ports).person(context, {
+      valueName: "selected",
+      userId: "missing",
+    }),
+    /result_limit/,
+  );
+  assert.ok(calls <= 16);
+  assert.equal(f.cards(), 0);
+  for (const card of [
+    { name: "N", handle: null, image: "javascript:alert(1)" },
+    { name: "N", handle: null, image: null, email: "private" },
+  ]) {
+    const bad = fixture();
+    bad.ports.card = async () => card;
+    await assert.rejects(
+      createDatasetPersonService(bad.ports).person(context, {
+        valueName: "selected",
+        userId: "original-user",
+      }),
+      /invalid_dataset/,
+    );
+  }
+});

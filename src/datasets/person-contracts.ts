@@ -21,16 +21,19 @@ export interface DatasetPersonPorts {
   binding(
     context: DatasetCallContext,
     valueName: string,
+    signal?: AbortSignal,
   ): Promise<DatasetPersonBinding | null>;
   reads: DatasetReadService;
   card(
     sourceNamespace: string,
     legacyUserId: string,
+    signal?: AbortSignal,
   ): Promise<DatasetPersonCard | null>;
 }
 export interface DatasetPersonService {
   person(
     context: DatasetCallContext,
     input: unknown,
+    signal?: AbortSignal,
   ): Promise<DatasetPersonCard | null>;
 }
