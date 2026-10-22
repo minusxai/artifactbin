@@ -29,3 +29,18 @@ test("mount attribute rewrite changes syntax attributes without changing authore
   assert.match(result, /data-migration-author-component="Example"/);
   assert.match(result, />data-mx-mount<\/div>/);
 });
+
+test("effect-only scripts have an explicit lifetime mode and unknown async or window paths refuse", () => {
+  const document = prepareAuthorDocument(
+    `<Helmet><script>{\`document.addEventListener('click',()=>document.getElementById('out').textContent='clicked');\`}</script></Helmet><p id="out">Ready</p>`,
+  );
+  assert.equal(document.author.mode, "effects");
+  assert.deepEqual(document.author.mounts, []);
+  assert.deepEqual(document.author.exports, []);
+  assert(!document.source.includes("<script>"));
+  assert.throws(() =>
+    prepareAuthorDocument(
+      `<Helmet><script>{\`window.open('/x')\`}</script></Helmet>`,
+    ),
+  );
+});

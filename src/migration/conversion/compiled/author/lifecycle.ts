@@ -7,6 +7,7 @@ import type {
 /** Owns admitted effects. This is lifetime management, not a JavaScript sandbox. */
 export function createAuthorEffectLifetime(
   clock: AuthorLifetimeClock,
+  runOwned: (callback: () => void) => void = (callback) => callback(),
 ): AuthorEffectLifetime {
   let active = true;
   type Registration = {
@@ -58,7 +59,7 @@ export function createAuthorEffectLifetime(
     const invoke = () => {
       if (!active || !timers.has(id)) return;
       if (kind === "timeout") timers.delete(id);
-      fn(...args);
+      runOwned(() => fn(...args));
     };
     id = clock[kind](invoke, delay(ms));
     timers.set(id, kind);
@@ -121,8 +122,10 @@ export function createAuthorEffectLifetime(
       r.wrapped = function (event) {
         if (!active || !listeners.has(r)) return;
         if (opts?.once) remove(r);
-        if (typeof listener === "function") listener.call(target, event);
-        else listener.handleEvent(event);
+        runOwned(() => {
+          if (typeof listener === "function") listener.call(target, event);
+          else listener.handleEvent(event);
+        });
       };
       listeners.add(r);
       try {
@@ -163,7 +166,7 @@ export function createAuthorEffectLifetime(
       let id: number;
       id = clock.frame((time) => {
         if (!active || !frames.delete(id)) return;
-        fn(time);
+        runOwned(() => fn(time));
       });
       frames.add(id);
       return id;

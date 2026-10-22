@@ -97,7 +97,13 @@ export async function compileArchivedLocal(
               : "protected-dataset-reads",
           ]
         : []),
-      ...(author ? ["authored-components"] : []),
+      ...(author
+        ? [
+            author.mode === "effects"
+              ? "authored-effects"
+              : "authored-components",
+          ]
+        : []),
       ...(chartCount ? ["compiled-charts"] : []),
       ...(mutations.size && !historical
         ? ["registered-dataset-mutations"]
@@ -109,7 +115,9 @@ export async function compileArchivedLocal(
       mode: historical
         ? "historical-data-unavailable"
         : author
-          ? "authored-components"
+          ? author.mode === "effects"
+            ? "authored-effects"
+            : "authored-components"
           : "local-scalars",
       modules: output.modules,
     },

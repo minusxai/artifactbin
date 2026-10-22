@@ -48,6 +48,7 @@ export interface CompiledLocalResult extends ConversionResult {
     mode:
       | "local-scalars"
       | "authored-components"
+      | "authored-effects"
       | "historical-data-unavailable";
     modules: string[];
   };

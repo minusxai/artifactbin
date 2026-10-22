@@ -1,6 +1,7 @@
 import { MAX_COMPILED_SOURCE_BYTES } from "./contracts.ts";
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
+import { prepareAuthorEffects } from "./author/effect-source.ts";
 import { admitAuthorSource } from "./author/admission.ts";
 import type { AuthorDocumentPlan } from "./author-document-contracts.ts";
 const parser = Parser.extend(jsx());
@@ -67,7 +68,6 @@ export function prepareAuthorDocument(source: string): AuthorDocumentPlan {
   const text = literal(script.children[0]);
   if (typeof text !== "string")
     throw Error("Unsupported author script payload");
-  admitAuthorSource(text);
   const module = parser.parse(text, {
     ecmaVersion: "latest",
     sourceType: "module",
@@ -95,7 +95,9 @@ export function prepareAuthorDocument(source: string): AuthorDocumentPlan {
           exports.push(d.id.name);
         }
   }
-  if (!exports.length) throw Error("No supported author exports");
+  const effects = !exports.length;
+  if (effects) prepareAuthorEffects(text);
+  else admitAuthorSource(text);
   const mounts: AuthorDocumentPlan["author"]["mounts"] = [];
   const identities = new Set<string>();
   const elements = (node: any, inside = false) => {
@@ -122,12 +124,17 @@ export function prepareAuthorDocument(source: string): AuthorDocumentPlan {
       for (const child of node.children) elements(child, inside);
   };
   elements(tree);
-  if (!mounts.length) throw Error("No supported author mounts");
+  if (!effects && !mounts.length) throw Error("No supported author mounts");
   const start = script.start - 3,
     end = script.end - 3;
   return {
     source: source.slice(0, start) + source.slice(end),
-    author: { script: text, exports, mounts },
+    author: {
+      script: text,
+      exports,
+      mounts,
+      ...(effects ? { mode: "effects" as const } : {}),
+    },
   };
 }
 /** Rewrite syntax-owned attributes, never arbitrary literal text or author code. */
