@@ -1,3 +1,9 @@
+import { gzipSync } from "node:zlib";
+import { createHash } from "node:crypto";
+import {
+  MAX_PACKED_WASM_BYTES,
+  MAX_UNPACKED_WASM_BYTES,
+} from "./wasm-contracts.ts";
 /** Migration subprocess only: archived compiler dependencies never enter the product package graph. */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -206,9 +212,20 @@ if (flow.queries.length && !input.datasetUnavailable) {
   const wasm = await readFile(
     path.join(root, "services/app/public", buildManifest.sqliteWasm),
   );
+  const packed = gzipSync(wasm, { level: 9 });
+  if (
+    wasm.byteLength > MAX_UNPACKED_WASM_BYTES ||
+    packed.byteLength > MAX_PACKED_WASM_BYTES
+  )
+    throw Error("Embedded engine exceeds migration limit");
   sql = {
     flow,
-    wasmBase64: wasm.toString("base64"),
+    wasm: {
+      compression: "gzip",
+      base64: packed.toString("base64"),
+      sha256: createHash("sha256").update(wasm).digest("hex"),
+      uncompressedBytes: wasm.byteLength,
+    },
     tables: results.tables,
     bindings: input.datasetBindings ?? [],
   };

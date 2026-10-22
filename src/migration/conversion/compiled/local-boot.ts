@@ -1,3 +1,5 @@
+import { decodeCompiledWasm } from "./wasm.ts";
+import type { CompiledWasmPayload } from "./wasm-contracts.ts";
 import { completeControlOptions, controlPageRequest } from "./data-controls.ts";
 import type { CompiledDataControl } from "./data-control-contracts.ts";
 import { datasetMutationBoot } from "./dataset-mutation-boot.ts";
@@ -13,7 +15,8 @@ export function localBootSource(
   declarations: LocalDeclaration[],
   sql?: {
     flow: unknown;
-    wasmBase64: string;
+    wasmBase64?: string;
+    wasm?: CompiledWasmPayload;
     tables: unknown;
     bindings?: readonly CompiledDatasetBinding[];
   },
@@ -32,13 +35,14 @@ ${mutations.length ? "import {createCompiledDatasetMutations,compiledMutationInt
 ${charts ? "import {charts} from 'migration-charts';" : ""}
 ${imports ? "import {readCompiledDataset} from 'migration-datasets';" : ""}
 ${sql ? "import {pageEngine} from 'migration-sqlite';" : ""}
+const decodeCompiledWasm=(()=>{const __name=f=>f;return ${decodeCompiledWasm.toString()};})();
 const declarations=${JSON.stringify(declarations)};
 const optionQueries=${JSON.stringify([...new Set(controls.flatMap((p) => (p.kind === "select" && typeof p.options === "string" ? [p.options] : [])))])};
 const completeControlOptions=(()=>{const __name=f=>f;return ${completeControlOptions.toString()};})();
 const controlPageRequest=(()=>{const __name=f=>f;return ${controlPageRequest.toString()};})();
 const validLocalValue=(()=>{const __name=f=>f;return ${validLocalValue.toString()};})();
 ${datasetBootSetup(sql?.bindings ?? [])}
-${sql ? `const flow=${JSON.stringify(sql.flow)};const engine=pageEngine(async()=>Uint8Array.from(atob(${JSON.stringify(sql.wasmBase64)}),c=>c.charCodeAt(0)),${imports ? "readImport" : "async()=>{throw Error('Remote imports are unavailable');}"});` : ""}
+${sql ? `const flow=${JSON.stringify(sql.flow)};const engine=pageEngine(async()=>${sql.wasm ? `decodeCompiledWasm(${JSON.stringify(sql.wasm)})` : `Uint8Array.from(atob(${JSON.stringify(sql.wasmBase64)}),c=>c.charCodeAt(0))`},${imports ? "readImport" : "async()=>{throw Error('Remote imports are unavailable');}"});` : ""}
 const query=gql\`{ compiledPage }\`;
 export function boot({TREE}) {
  const [state,setState]=createSignal(Object.fromEntries(declarations.map(d=>[d.name,d.default])));
