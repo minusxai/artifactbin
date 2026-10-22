@@ -35,3 +35,15 @@ test("every deployment installs, enables and runs the egress script", () => {
   assert.match(script, /^#!\/bin\/sh\n/);
   assert.match(script, /\/run\/systemd\/resolve\/resolv\.conf/);
 });
+
+test("the dedicated IPv6 backstop uses the same persistent boot and Docker restart hook", () => {
+  const isolated = readFileSync("deploy/receive-artefactv2.sh", "utf8");
+  const unit = isolated.match(/<<'UNIT'\n([\s\S]*?)\nUNIT\n/)?.[1];
+  assert.ok(unit);
+  for (const line of ["After=docker.service network-online.target", "PartOf=docker.service",
+    "ExecStart=/usr/local/sbin/artefactv2-sandbox-egress", "WantedBy=multi-user.target docker.service"])
+    assert.ok(unit.split("\n").includes(line));
+  const enable = isolated.indexOf("systemctl daemon-reload && systemctl enable --now artefactv2-sandbox-egress.service");
+  const run = isolated.indexOf('\n"$egress_script"\n');
+  assert.ok(enable > 0 && run > enable && run < isolated.indexOf('"${compose[@]}" up -d --no-build --wait', run));
+});

@@ -100,6 +100,7 @@ for (const failure of [
         "flock",
         "systemctl",
         "iptables",
+        "ip6tables",
         "python3",
       ]) {
         writeFileSync(join(bin, name), stub);

@@ -100,3 +100,5 @@ Dataset image attachments use the independent private writable mount
 the app; neither execution nor image jobs mount attachment storage. Deployment
 creates the directory without replacing existing contents. It is separate from
 imported datasets and media, and remains retained across rollout and rollback.
+
+The sandbox egress hook also drops IPv6 arriving from the dedicated sandbox bridge in the host INPUT and FORWARD chains. This covers kernel link-local addresses even though Docker IPv6 allocation is disabled. The same enabled service reapplies both address families at boot, after Docker restarts, and on deployment; setup refuses if IPv6 rules cannot be installed. Other bridges are unchanged.

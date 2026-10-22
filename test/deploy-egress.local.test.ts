@@ -41,6 +41,11 @@ esac
       const egress = join(dir, "pagegi-sandbox-egress");
       writeFileSync(egress, script + "\n");
       writeFileSync(join(dir, "iptables"), fakeIptables);
+      writeFileSync(join(dir, "ip6tables"), `#!/bin/sh
+[ "\${FAKE_IPV6_FAIL:-}" != 1 ] || exit 2
+FAKE_RULES="$FAKE_IPV6_RULES" exec "${dir}/iptables" "$@"
+`);
+      chmodSync(join(dir, "ip6tables"), 0o755);
       chmodSync(egress, 0o755);
       chmodSync(join(dir, "iptables"), 0o755);
       execFileSync("sh", ["-n", egress]);
@@ -51,9 +56,13 @@ esac
         "nameserver 127.0.0.53\nnameserver 10.0.0.2\nnameserver fe80::1\n",
       );
       const rules = join(dir, "rules");
+      const ipv6Rules = join(dir, "ipv6-rules");
+      const unrelatedIPv6 = "INPUT -i unrelated-bridge -j ACCEPT\nFORWARD -i old-sandbox -j ACCEPT\n";
+      writeFileSync(ipv6Rules, unrelatedIPv6);
       const env = {
         ...process.env,
         FAKE_RULES: rules,
+        FAKE_IPV6_RULES: ipv6Rules,
         PAGEGI_SANDBOX_RESOLV_CONF: resolv,
       };
       // The script sets its own PATH; run it with the fake first by prefixing PATH inside sh.
@@ -65,11 +74,20 @@ esac
         );
       run();
       const first = readFileSync(rules, "utf8");
+      const firstIPv6 = readFileSync(ipv6Rules, "utf8");
       run();
       assert.equal(
         readFileSync(rules, "utf8").split("\n").sort().join("\n"),
         first.split("\n").sort().join("\n"),
       );
+      assert.equal(readFileSync(ipv6Rules, "utf8"), firstIPv6, "IPv6 rules are idempotent");
+      assert.equal(firstIPv6, unrelatedIPv6 + (namespace === "artefactv2"
+        ? "INPUT -i artefactv2-sb -j DROP\nFORWARD -i artefactv2-sb -j DROP\n"
+        : ""), "only the new sandbox bridge receives the IPv6 backstop");
+      if (namespace === "artefactv2")
+        assert.throws(() => execFileSync("sh", ["-c", `sed 's#^PATH=#PATH=${dir}:#' "$0" | sh`, egress],
+          { env: { ...env, FAKE_IPV6_FAIL: "1" }, stdio: "pipe" }),
+          "missing or failed IPv6 enforcement refuses firewall setup");
       const chain = first
         .split("\n")
         .filter((l) => l.startsWith(chainName + " "));

@@ -77,7 +77,8 @@ mv "$root/compose.yaml.tmp" "$root/compose.yaml"
 # execution service; src/backend/README.md) and may reach public addresses only. workerd enforces
 # that for lambda code; these rules are the kernel backstop: from that bridge, nothing to the host
 # itself and nothing to private, loopback, link-local or reserved ranges, except DNS to the host's
-# resolvers. IPv4 only: the sandbox bridge is created without IPv6. The rules live in a standalone
+# resolvers. IPv6 is blocked at INPUT and FORWARD even if link-local addresses exist.
+# The sandbox bridge still disables Docker IPv6 allocation. The rules live in a standalone
 # script that the unit below reapplies at boot and whenever Docker (re)starts; every deployment
 # rewrites both and also runs the script directly. Idempotent.
 egress_script=/usr/local/sbin/artefactv2-sandbox-egress
@@ -94,6 +95,11 @@ resolv=${PAGEGI_SANDBOX_RESOLV_CONF:-/etc/resolv.conf}
 if [ -z "${PAGEGI_SANDBOX_RESOLV_CONF:-}" ] && [ -r /run/systemd/resolve/resolv.conf ]; then
   resolv=/run/systemd/resolve/resolv.conf
 fi
+# Docker's IPv6 allocation flag does not disable kernel link-local IPv6.
+# Put bridge-specific drops ahead of Docker rules, without touching other networks.
+# Failure is fatal: never report a configured backstop with either family missing.
+ip6tables -C INPUT -i artefactv2-sb -j DROP 2>/dev/null || ip6tables -I INPUT -i artefactv2-sb -j DROP
+ip6tables -C FORWARD -i artefactv2-sb -j DROP 2>/dev/null || ip6tables -I FORWARD -i artefactv2-sb -j DROP
 iptables -N "$chain" 2>/dev/null || true
 iptables -F "$chain"
 for ns in $(awk '$1 == "nameserver" && $2 ~ /^[0-9.]+$/ && $2 !~ /^127\./ { print $2 }' "$resolv"); do
