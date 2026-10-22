@@ -4,6 +4,7 @@ import {prepareCompiledFileUploads} from "./file-upload-admission.ts";
 import {archivedFileUploadControlSource} from "./file-upload-kit-source.ts";
 import { archivedDialogFocusSource } from "./dialog-source.ts";
 import {readLegacyCellWriteSites} from "./cell-write-source.ts";
+import {prototypeMermaidContext} from "./prototype-mermaid-context.ts";
 import {validateCompiledTransport} from "./transport.ts";
 import {isolateArchivedThemeVariables} from "./legacy-theme.ts";
 import{readsLegacyViewer}from"./viewer-source.ts";
@@ -275,7 +276,7 @@ if (!prototype && /@import\s/i.test(css))
   throw Error("External stylesheet imports are not self-contained");
 const html = inlineStoryElement(rendered, parts.mode, input.theme ?? null);
 
-const preparedMermaids=await prepareArchivedMermaid(root,{html,css,plans:input.mermaids??[]}).catch(error=>{if(!prototype)throw error;return [];});
+const preparedMermaids=await prepareArchivedMermaid(root,prototype?prototypeMermaidContext({html,css,plans:input.mermaids??[]}):{html,css,plans:input.mermaids??[]}).catch(error=>{if(!prototype)throw error;return [];});
 const { MODULE_DATA_READ_CODE } = await archived(
   "lib/compiled-page/carriers.ts",
 );
