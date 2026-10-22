@@ -48,6 +48,7 @@ import {
 } from "../persistence/document-records.ts";
 import { pathLock, readPaths, writeFolders } from "../persistence/paths.js";
 import { checkIdempotency, recordIdempotency } from "../persistence/idempotency.ts";
+import { namespaceOwner } from "../group-authority.ts";
 import { authorizeDocument } from "./document-authorization.ts";
 import { addDocument, changePaths, defaultPath, normalizePath } from "../path-model.ts";
 import { permissions } from "../access.ts";
@@ -619,24 +620,26 @@ export function createPageService({
       });
     },
 
-    async paths(credential: string, origin: string, change?: PathChange) {
+    async paths(credential: string, origin: string, change?: PathChange, selection: import("../group-authority-contracts.ts").OwnerNamespaceSelection = {}) {
       const entries = await database.transaction(async (client) => {
-        const actor = account(await loadSession(client, hash(credential)));
-        if (!change) return readPaths(client, actor);
-        await pathLock(client, actor);
-        const before = await readPaths(client, actor),
+        const session = await loadSession(client, hash(credential));
+        const actor = account(session);
+        const owner = namespaceOwner(actor, selection.owner, !!change, session?.groupAuthority);
+        if (!change) return readPaths(client, owner);
+        await pathLock(client, owner);
+        const before = await readPaths(client, owner),
           after = changePaths(before, change);
         for (const entry of after.filter((e) => e.fileId)) {
           const old = before.find((e) => e.fileId === entry.fileId);
           if (old?.path !== entry.path)
             await client.query("UPDATE files SET path=$3 WHERE owner=$1 AND id=$2", [
-              actor,
+              owner,
               entry.fileId,
               entry.path,
             ]);
         }
-        await client.query("DELETE FROM folders WHERE owner=$1", [actor]);
-        await writeFolders(client, actor, after);
+        await client.query("DELETE FROM folders WHERE owner=$1", [owner]);
+        await writeFolders(client, owner, after);
         return after;
       });
       return {

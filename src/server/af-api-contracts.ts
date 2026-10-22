@@ -52,6 +52,8 @@
  *   GET  /api/files/:id/sharing                             → 200 { policy, permissions, url, owner }
  *   PUT  /api/files/:id/sharing    AccessPatch + If-Match   → 200 sharing; 412 when If-Match is
  *                                  missing or not the policy's version (not 428/409 like the routes above)
+ *   Both path methods accept ?owner=<group-principal-id>; active group viewers list, editors mutate.
+ *   Omit owner for the caller account namespace; other account namespaces are forbidden.
  *   GET  /api/paths                                         → 200 { entries }
  *   POST /api/paths                PathChange (src/contracts.ts: folder, move, move-many,
  *                                  remove-folder)           → 200 { entries }; 404 unknown path,

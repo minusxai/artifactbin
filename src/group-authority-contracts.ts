@@ -18,3 +18,7 @@ export interface GroupMembershipRepository {
   /** Replacement/removal serializes against all authorized transactions. */
   set(owner: string, actor: string, role: GroupRole | null): Promise<void>;
 }
+/** Omitted owner means the authenticated user's personal namespace. */
+export interface OwnerNamespaceSelection {
+  owner?: string;
+}

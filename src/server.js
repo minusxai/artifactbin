@@ -359,6 +359,7 @@ export function createService({
             credential(req),
             origin,
             req.method === "POST" ? input : undefined,
+            { ...(url.searchParams.has("owner") ? { owner: url.searchParams.get("owner") ?? "" } : {}) },
           ),
         );
       if (url.pathname === "/api/secrets" || url.pathname.startsWith("/api/secrets/") || url.pathname.startsWith("/api/account/")) {

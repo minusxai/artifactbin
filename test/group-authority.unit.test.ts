@@ -41,3 +41,14 @@ test("addressed reads combine fresh group authority with link policy and reject 
   assert.throws(() => authorizePageRead({ document, session, fileId: "abc123", now: 101 }));
   assert.equal(authorizePageRead({ document: { ...document, access: { ...document.access, visibility: "unlisted" } }, session: null, fileId: "abc123", now: 1 }).read, true);
 });
+
+import { namespaceOwner } from "../src/group-authority.ts";
+test("namespace selection keeps actor separate and requires the corresponding membership", () => {
+  const facts = { actor: "member", memberships: [{ owner: "group:one", role: "viewer" as const }] };
+  assert.equal(namespaceOwner("member", undefined, false, facts), "member");
+  assert.equal(namespaceOwner("member", "group:one", false, facts), "group:one");
+  assert.throws(() => namespaceOwner("member", "group:one", true, facts));
+  assert.throws(() => namespaceOwner("member", "other-user", false, facts));
+  assert.throws(() => namespaceOwner("other-user", "group:one", false, facts));
+  assert.equal(namespaceOwner("member", "group:one", true, { actor: "member", memberships: [{ owner: "group:one", role: "editor" }] }), "group:one");
+});

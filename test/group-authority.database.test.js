@@ -88,12 +88,28 @@ test("imported group pages use fresh membership for source, sharing, discovery a
     assert.equal((await request(base + "/sharing", viewer)).body.permissions.manage, false);
     const library = await request("/api/library", null, null, "GET", { "X-Pagegi-Home": "1", Cookie: "pagegi_account=" + viewer });
     assert.equal(library.body.sharedFiles[0].fileId, id);
+    const groupPaths = "/api/paths?owner=" + encodeURIComponent("group:one");
+    assert.equal((await request(groupPaths, outsider)).status, 403);
+    const listed = await request(groupPaths, viewer);
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.entries[0].fileId, id);
+    assert.equal((await request(groupPaths, viewer, { kind: "folder", path: "shared-folder" })).status, 403);
+    assert.equal((await request(groupPaths, editor, { kind: "folder", path: "shared-folder" })).status, 200);
+    assert.equal((await request("/api/paths", editor, { kind: "folder", path: "shared-folder" })).status, 200);
+    assert.equal((await request(groupPaths, editor, { kind: "move", from: listed.body.entries[0].path, path: "shared-folder/moved" })).status, 200);
+    const personalPaths = await request("/api/paths", editor);
+    assert.equal(personalPaths.body.entries.some((entry) => entry.fileId === id), false);
+    assert.equal((await db.pool.query("SELECT owner,path FROM files WHERE id=$1", [id])).rows[0].owner, "group:one");
+    assert.equal((await db.pool.query("SELECT path FROM files WHERE id=$1", [id])).rows[0].path, "/shared-folder/moved");
+    assert.equal((await request("/api/paths?owner=outsider%40example.test", editor)).status, 403);
+
     const saved = await request(base + "/source", editor, { source: "<title>Group</title><h1>Edited</h1>" }, "PUT", { "If-Match": "1" });
     assert.equal(saved.status, 200);
     assert.equal((await db.pool.query("SELECT owner FROM files WHERE id=$1", [id])).rows[0].owner, "group:one");
     assert.equal((await request(base, viewer, null, "DELETE")).status, 404);
     await db.pool.query("DELETE FROM group_memberships WHERE owner='group:one' AND actor='viewer@example.test'");
     assert.equal((await request(base + "/source", viewer)).status, 403);
+    assert.equal((await request(groupPaths, viewer)).status, 403);
     assert.equal((await request(base, editor, null, "DELETE")).status, 200);
   } finally {
     await new Promise((r) => service.server.close(r));

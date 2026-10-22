@@ -75,7 +75,7 @@ Saves (`PUT /source`) and new comments and replies (`POST /comments`) accept an 
 
 ### Imported group ownership
 
-Imported group pages retain a distinct non-login group owner. An active group editor can read, edit, manage sharing and delete its pages; an active group viewer can read them. Membership is checked again for each operation, including document grants. Named invitations and link access still apply; an invited editor gains no ownership management authority. Group pages appear in members’ shared library. Group creation, membership administration, group path management and group backend publication/execution are not exposed by this API. Group membership grants no access to any user’s account secrets.
+Imported group pages retain a distinct non-login group owner. An active group editor can read, edit, manage sharing and delete its pages; an active group viewer can read them. Membership is checked again for each operation, including document grants. Named invitations and link access still apply; an invited editor gains no ownership management authority. Group pages appear in members’ shared library. Group creation, membership administration, group backend publication/execution are not exposed by this API. Group membership grants no access to any user’s account secrets.
 
 ## Sharing
 
@@ -90,6 +90,8 @@ Imported group pages retain a distinct non-login group owner. An active group ed
 ## Paths
 
 Paths are yours to organise; a page's ID and address never change when it moves.
+
+Both methods accept an optional `?owner=<group-principal-id>` to select an imported group's namespace. Active group viewers may list it; active group editors may change it. Membership is checked inside the operation's transaction. Omit `owner` for your personal namespace. Selecting another user's namespace or a group you cannot access returns `403`; moves always stay within the selected owner and preserve page ownership.
 
 | Method and path | Body | Returns |
 |---|---|---|
