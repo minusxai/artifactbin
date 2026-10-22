@@ -15,6 +15,7 @@ export async function prepareMigrationHeadMutations(
     string,
     readonly BoundValueColumnProof[]
   > = new Map(),
+  sourceAdmission: import("./conversion-strategy-contracts.ts").MigrationSourceAdmission = "strict",
 ): Promise<MigrationBackendPage[]> {
   if (!source.datasets) return [...pages];
   const receipts = receiptMap(source.datasets.receipts);
@@ -55,6 +56,7 @@ export async function prepareMigrationHeadMutations(
         boundValueColumns.get(
           migrationDatasetVersionKey(page.legacyId, artifact.version),
         ),
+        sourceAdmission,
       );
       if (extracted.issues.length) {
         issues.set(

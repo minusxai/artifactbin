@@ -379,4 +379,20 @@ test("job prepares exact live head bindings and real compiled receipts without i
   });
   assert.equal(viewer.viewerBindings.has(JSON.stringify(["abc123", 1])), false);
   assert.deepEqual(viewer.scan.historicalServiceVersions.get("abc123"), [1]);
+  const presentationSource = {
+    ...source,
+    readArtifact: async (id: string) => {
+      const artifact = structuredClone(await source.readArtifact(id));
+      if (id === page.id) artifact.artifacts[0]!.source = '<Helmet><Import name="sales" src="ref:data01"/><Query name="base">{`select value,who from sales.rows`}</Query><Mutation name="save" expectedAffected={1}>{`update sales.rows set who=$_value where value=$_row.value`}</Mutation></Helmet><DataTable data="$base" rowKey="value"><Column col="who"><input style={{width:120}} value="$_row.who" run="$save"/></Column></DataTable>';
+      return artifact;
+    },
+  };
+  const presentationHost = {host: {compile: async () => deployment, invoke: async () => null}};
+  const strictPresentation = await prepareMigrationJobDatasets(presentationSource, options, presentationHost);
+  assert.equal(strictPresentation!.metadata.operations?.length ?? 0, 0);
+  const prototypePresentation = await prepareMigrationJobDatasets(presentationSource, {...options, sourceAdmission:'offline-prototype'}, presentationHost);
+  assert.equal(prototypePresentation!.metadata.operations?.length, 1);
+  assert.equal(prototypePresentation!.metadata.operations?.[0]!.operation.valueParam?.type, 'user');
+  assert.equal(prototypePresentation!.issues.has(page.id), false);
+
 });
