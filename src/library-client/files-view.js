@@ -1,3 +1,4 @@
+import { namespaceNavigation } from "./namespace.ts";
 import { createLibraryActions } from "./actions.ts";
 import {
   htmlDownloadName,
@@ -23,6 +24,8 @@ export function mountFiles({
     folders = [],
     sharedFiles = [],
     username = "";
+  let namespace;
+  const manages = () => namespaceNavigation(namespace).manage;
   const actions = createLibraryActions({
     folder,
     request,
@@ -36,8 +39,7 @@ export function mountFiles({
 
   const parentPath = (path) => path.slice(0, path.lastIndexOf("/")) || "/";
   const nameOf = (path) => path.split("/").at(-1);
-  const folderURL = (path) =>
-    path === "/" ? "/" : "/?folder=" + encodeURIComponent(path);
+  const folderURL = (path) => namespaceNavigation(namespace, path).url;
   /** @type {import("./contracts.ts").LibraryLayout} */
   let layout = "gallery";
   function setLayout(next) {
@@ -218,7 +220,7 @@ export function mountFiles({
   };
   function dropTarget(element, target) {
     element.ondragover = (e) => {
-      if (dragging && canMoveTo(movingPaths, target)) {
+      if (manages() && dragging && canMoveTo(movingPaths, target)) {
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         element.classList.add("drop-target");
@@ -228,7 +230,7 @@ export function mountFiles({
     element.ondrop = async (e) => {
       e.preventDefault();
       element.classList.remove("drop-target");
-      if (!dragging || !canMoveTo(movingPaths, target)) return;
+      if (!manages() || !dragging || !canMoveTo(movingPaths, target)) return;
       try {
         await performMove(movingPaths, target);
       } catch (e) {
@@ -254,12 +256,15 @@ export function mountFiles({
       };
       menu.append(b);
     };
-    action("Rename", () => pathDialog({ kind: "move", from: path }));
-    action("Move to…", () =>
-      openMove(selection.paths.includes(path) ? selection.paths : [path]),
-    );
+    if (manages())
+      action("Rename", () => pathDialog({ kind: "move", from: path }));
+    if (manages())
+      action("Move to…", () =>
+        openMove(selection.paths.includes(path) ? selection.paths : [path]),
+      );
     if (file) {
-      action("Share", () => openSharing(location.origin, file.fileId));
+      if (manages())
+        action("Share", () => openSharing(location.origin, file.fileId));
       action("Download", async () => {
         try {
           const r = await fetch("/api/library/" + file.fileId + "/download", {
@@ -279,15 +284,16 @@ export function mountFiles({
           message(e.message);
         }
       });
-      action("Move to trash", async () => {
-        try {
-          await request("/api/files/" + file.fileId, undefined, "DELETE");
-          await reload();
-        } catch (e) {
-          message(e.message);
-        }
-      });
-    } else
+      if (manages())
+        action("Move to trash", async () => {
+          try {
+            await request("/api/files/" + file.fileId, undefined, "DELETE");
+            await reload();
+          } catch (e) {
+            message(e.message);
+          }
+        });
+    } else if (manages())
       action("Move folder to trash", async () => {
         try {
           await request("/api/trash/folders", { path });
@@ -429,9 +435,10 @@ export function mountFiles({
       row.className = "file";
       row.dataset.path = path;
       row.dataset.kind = isFile ? "artifact" : "folder";
-      row.draggable = true;
+      row.draggable = manages();
       const check = document.createElement("input");
       check.type = "checkbox";
+      check.hidden = !manages();
       check.setAttribute("aria-label", "Select " + nameOf(path));
       check.onclick = (e) => {
         selection = selectPaths(selection, {
@@ -614,6 +621,36 @@ export function mountFiles({
   return {
     renderDiscovered,
     update(data) {
+      namespace = data.namespace;
+      const policy = namespaceNavigation(namespace);
+      $("namespace-help").hidden = policy.create;
+      $("namespace-help").textContent = policy.manage
+        ? "Group library · You can manage folders. Publish new pages from your personal library."
+        : "Group library · Read-only access. A group editor manages its folders.";
+      for (const id of [
+        "new-folder",
+        "workspace-folder",
+        "move-selected",
+        "select-all",
+      ])
+        $(id).hidden = !policy.manage;
+      for (const id of [
+        "publish",
+        "workspace-publish",
+        "workspace-upload",
+        "new-example",
+        "empty-example",
+        "workspace-example",
+        "empty-agent",
+        "workspace-agent",
+      ]) {
+        const element = document.getElementById(id);
+        if (element) element.hidden = !policy.create;
+      }
+      document
+        .getElementById("folder-missing")
+        ?.querySelector("a")
+        ?.setAttribute("href", folderURL("/"));
       username = data.username || "";
       files = data.files || [];
       folders = data.folders || [];

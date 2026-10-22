@@ -14,6 +14,8 @@ export interface LibraryFile {
 }
 export interface LibraryData {
   username: string;
+  namespaces?: import("../group-authority-contracts.ts").LibraryNamespace[];
+  namespace?: import("../group-authority-contracts.ts").LibraryNamespace;
   files?: LibraryFile[];
   sharedFiles?: LibraryFile[];
   folders?: string[];
@@ -53,6 +55,7 @@ export interface LibraryListing {
 export interface LibrarySessionOptions {
   request: LibraryTransport;
   embedded: boolean;
+  owner?: string;
   sharing: boolean;
   /** The page knows no session was sent with it: the first load is signed out without asking the server. */
   signedOut?: boolean;
@@ -105,4 +108,10 @@ export interface LibrarySurface {
   onboarding: boolean;
   toolbar: boolean;
   noResults: boolean;
+}
+
+export interface NamespaceNavigation {
+  readonly manage: boolean;
+  readonly create: boolean;
+  readonly url: string;
 }

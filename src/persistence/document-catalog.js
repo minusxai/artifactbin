@@ -1,3 +1,6 @@
+import { fail } from "../errors.ts";
+import { loadGroupAuthority } from "./group-memberships.ts";
+import { namespaceOwner } from "../group-authority.ts";
 import { PUBLIC_LIBRARY_FILE_PREDICATE } from "./public-library-policy.ts";
 // @ts-check
 import { AF_PAGE_PATH } from "../af-contracts.ts";
@@ -28,15 +31,42 @@ export function createDocumentCatalog(sql) {
           ]),
         );
       }),
-    library: (actor) =>
+    namespaces: (actor) =>
       sql.transaction(async (client) => {
+        const facts = await loadGroupAuthority(client, actor);
+        const rows = (
+          await client.query(
+            "SELECT actor,name,handle FROM accounts WHERE actor=ANY($1::text[]) ORDER BY actor LIMIT 1001",
+            [[actor, ...facts.memberships.map((m) => m.owner)]],
+          )
+        ).rows;
+        if (rows.length > 1000) fail(503, "Too many library namespaces");
+        return rows.map((row) => ({
+          owner: String(row.actor),
+          kind: row.actor === actor ? "personal" : "group",
+          name: String(
+            row.name || (row.actor === actor ? "Personal" : "Group"),
+          ),
+          handle: typeof row.handle === "string" ? row.handle : null,
+          role:
+            facts.memberships.find((m) => m.owner === row.actor)?.role ?? null,
+        }));
+      }),
+    library: (actor, selected) =>
+      sql.transaction(async (client) => {
+        const owner = namespaceOwner(
+          actor,
+          selected,
+          false,
+          selected ? await loadGroupAuthority(client, actor) : undefined,
+        );
         const rows = (
           await client.query(
             `SELECT f.id, f.path, f.head, f.access->>'visibility' AS visibility, a.space, left(s.content,8192) AS content,
         (SELECT count(*)::int FROM comments c WHERE c.file_id=f.id) AS comments
         FROM files f JOIN accounts a ON a.actor=f.owner JOIN sources s ON s.file_id=f.id AND s.revision=f.head
         WHERE f.owner=$1 AND f.deleted_at IS NULL ORDER BY f.id`,
-            [actor],
+            [owner],
           )
         ).rows;
         return rows.map((r) => ({

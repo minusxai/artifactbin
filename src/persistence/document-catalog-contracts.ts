@@ -2,7 +2,10 @@ import type { Profile, LibraryFile } from "../contracts.ts";
 /** Read-only metadata and locators for a document; credentials never grant access through a locator. */
 export interface DocumentCatalog {
   profiles(fileId: string, actors: string[]): Promise<Record<string, Profile>>;
-  library(actor: string): Promise<LibraryFile[]>;
+  namespaces(
+    actor: string,
+  ): Promise<import("../group-authority-contracts.ts").LibraryNamespace[]>;
+  library(actor: string, owner?: string): Promise<LibraryFile[]>;
   discover(actor: string | null, publicOnly?: boolean): Promise<LibraryFile[]>;
   sharedLink(id: string): Promise<string | null>;
   resolveSharedPath(space: string, path: string): Promise<string | null>;

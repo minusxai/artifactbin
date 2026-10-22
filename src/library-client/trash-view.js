@@ -54,4 +54,10 @@ export function mountTrash({ request, reload, message }) {
       message(error.message);
     }
   };
+  return {
+    update(manage) {
+      button.hidden = !manage;
+      if (!manage && panel.open) panel.close();
+    },
+  };
 }

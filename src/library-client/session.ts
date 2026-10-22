@@ -1,3 +1,4 @@
+import { namespaceLibraryPath } from "./namespace.ts";
 import type {
   LibrarySession,
   LibrarySessionOptions,
@@ -68,7 +69,9 @@ export function createLibrarySession(
       try {
         const [data, profile] = await Promise.all([
           request<LibraryData>(
-            options.embedded ? "/api/library/session" : "/api/library",
+            options.embedded
+              ? "/api/library/session"
+              : namespaceLibraryPath("/api/library", options.owner),
           ),
           options.sharing
             ? Promise.resolve({ name: "", image: null })

@@ -31,3 +31,9 @@ Implementation: `src/server/handles-contracts.ts`, `src/server/handles.ts`. Beha
 ## Skill identity and installation
 
 The agent-facing skill name is `artifactbin-author`, declared in the skill's frontmatter. Its served installation package is `https://app.artefactbin.dev/skills/artefactbin-skill.tgz`. The repository directory `skills/pagegi-author/` is an internal source location retained for compatibility with build scripts and tests; it is not a second skill or a separate product installation. Both npm and shell installers install it into `artifactbin-author`; the archive still has the internal `pagegi-author` root. On upgrade an old `pagegi-author` installation is moved intact to `~/.af/skill-backups/`, outside agent discovery. Both installers configure the examples and scripts for the selected server origin. The installer installs the author skill. Authoring uses the documented HTTP API and the skill's helper scripts; it does not require an end-user CLI.
+
+## Imported group libraries retain distinct ownership
+
+The signed-in library offers personal and imported group namespaces derived from current active memberships. Selecting a group changes its listing and folder navigation, never the signed-in identity. Group viewers browse; group editors also manage folders and paths. Every operation rechecks membership. New HTML publication and examples remain personal: group backend publication, membership administration and account secrets are not exposed through this selector.
+
+Original group handles are a separate metadata preservation step. A namespace may have no handle; its owner-scoped library remains usable. Restoring handles must validate original source mappings, current global collisions and existing migration verification rules before applying an idempotent metadata update. Navigation does not create group login credentials or silently assign a new handle.

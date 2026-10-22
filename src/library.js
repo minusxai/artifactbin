@@ -35,7 +35,7 @@ export const exampleBackend = () =>
 /**
  * The signed-in home page's API (cookie session, same-origin only) and the
  * hosted runner's representations of a page.
- * @param {{catalog: Pick<import('./persistence/document-catalog-contracts.ts').DocumentCatalog,'library'|'discover'>,
+ * @param {{catalog: Pick<import('./persistence/document-catalog-contracts.ts').DocumentCatalog,'library'|'discover'|'namespaces'>,
  * paths:import('./persistence/path-catalog-contracts.ts').PathCatalog,
  * accounts: ReturnType<typeof import('./server/account-service.ts').createAccountService>,
  * pages: import('./server/af-pages.ts').PageService,
@@ -110,17 +110,32 @@ export function libraryHandler({
       return send(200, { username: actor });
     if (url.pathname === "/api/library" && req.method === "GET") {
       if (!actor) fail(401, "Sign in required");
+      const selected = url.searchParams.get("owner") ?? undefined;
+      const namespaces = await catalog.namespaces(actor);
+      const namespace = namespaces.find(
+        (entry) => entry.owner === (selected ?? actor),
+      );
+      if (!namespace)
+        fail(403, "You do not have access to this owner namespace");
       return send(200, {
         username: actor,
-        files: await catalog.library(actor),
-        sharedFiles: await catalog.discover(actor),
-        folders: (await paths.paths(actor))
+        namespaces,
+        namespace,
+        files: await catalog.library(actor, selected),
+        sharedFiles: selected ? [] : await catalog.discover(actor),
+        folders: (await paths.paths(actor, selected))
           .filter((e) => !e.fileId)
           .map((e) => e.path),
       });
     }
     if (url.pathname === "/api/library/paths" && req.method === "POST") {
       if (!actor) fail(401, "Sign in required");
+      const selected = url.searchParams.get("owner") ?? undefined;
+      if (selected)
+        return send(
+          200,
+          await pages.paths(credential, origin, input, { owner: selected }),
+        );
       return send(200, { entries: await paths.changePath(actor, input) });
     }
     if (
@@ -128,6 +143,8 @@ export function libraryHandler({
         url.pathname === "/api/library/example") &&
       req.method === "POST"
     ) {
+      if (url.searchParams.has("owner"))
+        fail(403, "Publish new pages in your personal library");
       const sample = url.pathname.endsWith("/example");
       if (sample && !actor) fail(401, "Sign in required");
       const files = sample

@@ -1,12 +1,22 @@
+import { loadGroupAuthority } from "./group-memberships.ts";
+import { namespaceOwner } from "../group-authority.ts";
 // @ts-check
 import { changePaths } from "../path-model.ts";
 import { pathLock, readPaths, writeFolders } from "./paths.js";
 /** @param {import("./sql.ts").SqlDatabase} sql @returns {import("./path-catalog-contracts.ts").PathCatalog} */
 export function createPathCatalog(sql) {
   return {
-    paths: (actor) =>
+    paths: (actor, selected) =>
       sql.transaction(async (client) => {
-        return readPaths(client, actor);
+        return readPaths(
+          client,
+          namespaceOwner(
+            actor,
+            selected,
+            false,
+            selected ? await loadGroupAuthority(client, actor) : undefined,
+          ),
+        );
       }),
     changePath: (actor, change) =>
       sql.transaction(async (client) => {

@@ -1,3 +1,7 @@
+import {
+  namespaceLibraryPath,
+  namespaceNavigation,
+} from "./library-client/namespace.ts";
 import { mountTrash } from "./library-client/trash-view.js";
 // @ts-check
 import { workspaceNavigation } from "./library-client/workspace-navigation.ts";
@@ -48,6 +52,7 @@ const dialog = loginElement;
 const view = createLibraryViewState({ changed: () => showScreen() });
 const session = createLibrarySession({
   embedded,
+  owner: params.get("owner") || undefined,
   // The server marks a home page requested without the account cookie.
   signedOut:
     !embedded &&
@@ -60,7 +65,12 @@ const session = createLibrarySession({
   },
   request: createLibraryTransport((input, init) => fetch(input, init)),
 });
-const request = session.request;
+const request = (path, body, method) =>
+  session.request(
+    namespaceLibraryPath(path, params.get("owner") || undefined),
+    body,
+    method,
+  );
 addEventListener("pagehide", (event) => {
   if (!event.persisted) {
     view.invalidate();
@@ -163,6 +173,24 @@ async function load() {
   const rendered = await view.render(async (current) => {
     accountView.update(accountProfile, data.username);
     filesView.update(data);
+    trashView.update(namespaceNavigation(data.namespace).manage);
+    const selector = $("namespace-select");
+    selector.replaceChildren();
+    for (const namespace of data.namespaces || []) {
+      const option = document.createElement("option");
+      option.value = namespace.kind === "personal" ? "" : namespace.owner;
+      option.textContent =
+        namespace.name +
+        (namespace.kind === "group" ? " · Group" : " · Personal");
+      option.selected = namespace.owner === data.namespace?.owner;
+      selector.append(option);
+    }
+    $("namespace-navigation").hidden = !(data.namespaces?.length > 1);
+    selector.onchange = () => {
+      location.href = namespaceNavigation(
+        data.namespaces.find((n) => n.owner === selector.value),
+      ).url;
+    };
     message("");
     if (sharingId) {
       // A detached host keeps old async sharing work out of a newer account view.
@@ -248,7 +276,7 @@ const filesView = mountFiles({
   openSharing,
   folder: params.get("folder") || "/",
 });
-mountTrash({ request, reload: load, message });
+const trashView = mountTrash({ request, reload: load, message });
 load().then(() => {
   if (!embedded)
     /** @type {Promise<{files?: import("./library-client/contracts.ts").LibraryFile[]}>} */

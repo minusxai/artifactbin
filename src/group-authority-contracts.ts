@@ -22,3 +22,11 @@ export interface GroupMembershipRepository {
 export interface OwnerNamespaceSelection {
   owner?: string;
 }
+/** Membership-derived navigation metadata; a selected owner never grants authority. */
+export interface LibraryNamespace {
+  readonly owner: string;
+  readonly kind: "personal" | "group";
+  readonly name: string;
+  readonly handle: string | null;
+  readonly role: GroupRole | null;
+}

@@ -204,11 +204,45 @@ test("a page served without a session is signed out on its first load without a 
     changed: (v) => states.push(v),
     request: async (path) => {
       paths.push(path);
-      return path.endsWith("/profile") ? { name: "Ann", image: null } : { username: "ann" };
+      return path.endsWith("/profile")
+        ? { name: "Ann", image: null }
+        : { username: "ann" };
     },
   });
   assert.equal((await s.load())?.status, "signed-out");
   assert.deepEqual(paths, []);
   assert.equal((await s.load())?.status, "signed-in");
   assert.deepEqual(paths.sort(), ["/api/library", "/api/library/profile"]);
+});
+
+test("selected namespace scopes only listing; profile and account identity stay personal", async () => {
+  const paths: string[] = [];
+  const session = createLibrarySession({
+    embedded: false,
+    sharing: false,
+    owner: "group:fixture",
+    changed: () => {},
+    request: async (path) => {
+      paths.push(path);
+      return path.startsWith("/api/library?")
+        ? {
+            username: "member",
+            namespace: {
+              owner: "group:fixture",
+              kind: "group",
+              name: "Team",
+              handle: null,
+              role: "viewer",
+            },
+          }
+        : { name: "Member", image: null };
+    },
+  });
+  const result = await session.load();
+  assert.equal(result?.status, "signed-in");
+  assert.deepEqual(paths, [
+    "/api/library?owner=group%3Afixture",
+    "/api/library/profile",
+  ]);
+  session.dispose();
 });

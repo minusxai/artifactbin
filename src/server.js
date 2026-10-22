@@ -698,6 +698,7 @@ export function createService({
   }
   const library = libraryHandler({
     catalog: {
+      namespaces: repository.catalog.namespaces,
       library: repository.catalog.library,
       discover: repository.catalog.discover,
     },
