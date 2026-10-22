@@ -15,6 +15,7 @@ destinationSchemas(schema);
 const allowed = [
   "--apply-isolated",
   "--verify-isolated",
+  "--measure-storage",
   "--editor-manage-restricted",
   "--conversion-strategy=strict",
   "--conversion-strategy=archived-static",
@@ -59,6 +60,7 @@ const options: MigrationJobOptions = {
   reportPath,
   apply,
   verifyOnly,
+  measureStorage: flags.includes("--measure-storage"),
   concurrency: flags.includes("--concurrency=2") ? 2 : 1,
   origin: process.env.MIGRATION_PUBLIC_ORIGIN ?? "http://localhost:8787",
   legacyOrigins: (process.env.MIGRATION_LEGACY_ORIGINS ?? "")

@@ -23,6 +23,8 @@ export interface MigrationJobOptions {
   apply: boolean;
   /** Compare existing destination only; cannot be combined with apply. */
   verifyOnly?: boolean;
+  /** Reproduce final admitted HTML and record exact UTF8 storage inputs without connecting to a destination. */
+  measureStorage?: boolean;
   concurrency: 1 | 2;
   origin: string;
   legacyOrigins: readonly string[];
@@ -87,6 +89,7 @@ export interface MigrationJobSummary {
   dependencyBlocked: number;
   readinessReport: string;
   verificationReport?: string;
+  storageReport?: string;
   datasets?: {
     imports: MigrationJobDatasets["scan"]["statistics"];
     verifiedObjects: number;

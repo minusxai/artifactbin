@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exportLegacyStream } from "../src/migration/stream.ts";
@@ -152,6 +152,40 @@ test("compiler provenance changes abort before destination connects", async () =
       /provenance changed/,
     );
     assert.equal(connections, 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("read-only storage measurement reproduces final normalized UTF8 bytes without opening destination", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "migration-size-"));
+  try {
+    const options = await fixture(directory);
+    options.measureStorage = true;
+    const summary = await runMigrationJob(options, {
+      compilerIdentity: async () => "pinned",
+      connectDestination: async () => {
+        throw Error("Must not connect");
+      },
+      convert: () => ({
+        classification: "renderable",
+        html: "<p>Résumé 🌍</p>",
+        issues: [],
+        identities: {},
+      }),
+    });
+    assert.equal(summary.storageReport, options.reportPath + ".storage.json");
+    const report = JSON.parse(await readFile(summary.storageReport!, "utf8"));
+    assert.equal(report.destinationWrite, false);
+    assert.equal(report.postgresAllocationEstimate, false);
+    assert.equal(report.measurement.pages, 3);
+    assert.equal(report.measurement.sources, 3);
+    assert.ok(
+      report.measurement.normalizedSourceBytes >
+        3 * Buffer.byteLength("<p>Résumé 🌍</p>"),
+    );
+    assert.equal(report.measurement.rawArchiveRows, 4);
+    assert.equal(report.compilerIdentity, "pinned");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

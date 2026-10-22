@@ -1,3 +1,4 @@
+import { measureMigrationStorage } from "./storage-measurement.ts";
 import { verifyMigrationJob } from "./job-verification.ts";
 import { prepareMigrationJobDatasets } from "./job-datasets.ts";
 import { writeFile } from "node:fs/promises";
@@ -72,6 +73,11 @@ export async function runMigrationJob(
     throw new Error(
       "Compiler provenance changed during planning; use frozen source checkouts",
     );
+  if (options.measureStorage || options.apply) {
+    await measureMigrationStorage(source, options, planned, planner);
+    if ((await identify()) !== compilerIdentity)
+      throw Error("Compiler provenance changed during storage measurement");
+  }
   if (options.apply) {
     if (planned.linksRequireLegacyOrigin)
       throw new Error(
@@ -140,6 +146,10 @@ export async function runMigrationJob(
       (r) => r.ready && !ready.has(r.pageId),
     ).length,
     readinessReport: options.reportPath + ".readiness.json",
+    storageReport:
+      options.measureStorage || options.apply
+        ? options.reportPath + ".storage.json"
+        : undefined,
     verificationReport:
       options.apply || options.verifyOnly
         ? options.reportPath + ".verification.json"

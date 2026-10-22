@@ -5,8 +5,7 @@ import { verifyMigrationRuntime } from "./page-verification.ts";
 import { verifyMigrationAuthority } from "./authority-verification.ts";
 import { verifyMigrationDatasetMetadata } from "./dataset-verification.ts";
 import { selectMigrationDatasetMetadata } from "./dataset-selection.ts";
-import { migrationPageDigest } from "./import.ts";
-import { rewriteMigrationLinks } from "./links.ts";
+import { readPreparedMigrationPages } from "./prepared-pages.ts";
 import type { SqlReader } from "./contracts.ts";
 import type {
   MigrationJobOptions,
@@ -29,34 +28,12 @@ export async function verifyMigrationJob(
       : undefined,
   });
   const ready = new Set(planned.readiness.ready);
-  async function* pages() {
-    for (const id of source.ids) {
-      if (!ready.has(source.maps.pages[id]!)) continue;
-      const plan = await planner(await source.readArtifact(id));
-      for (const page of plan.pages) {
-        if (migrationPageDigest(page) !== planned.pageDigests.get(page.pageId))
-          throw Error("Verification source plan changed");
-        for (const revision of page.revisions)
-          if (revision.conversion.html !== null)
-            revision.conversion.html = rewriteMigrationLinks(
-              revision.conversion.html,
-              source.maps,
-              {
-                legacyOrigins: options.legacyOrigins,
-                targetOrigin: options.origin,
-                readyPages: ready,
-              },
-            );
-        yield page;
-      }
-    }
-  }
   await db.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
   let result;
   try {
     const raw = await verifyMigrationArchives(db, options.schema, archives);
     const runtime = await verifyMigrationRuntime(db, options.schema, {
-      pages: pages(),
+      pages: readPreparedMigrationPages(source, options, planned, planner),
       maps: source.maps,
       origin: options.origin,
     });
