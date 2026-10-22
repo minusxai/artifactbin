@@ -16,6 +16,8 @@
  *   addresses are 404 (no redirect) and another account may take it.
  * - `/@<handle>/<path>` resolves only through handles: an account without one
  *   has no such address, and an email in that position is 404.
+ * - One exception for continuity: `/@<handle>/<id>` or `/@<handle>/<id>-<title>`
+ *   that matches no path is 308 to `/a/<id>` (src/ids/file-id-contracts.ts).
  *
  * Routes (all need a valid account: bearer token, or the home page's cookie
  * session; 401 otherwise):

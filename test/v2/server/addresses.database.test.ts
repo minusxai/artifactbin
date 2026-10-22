@@ -163,6 +163,60 @@ test("only a handle opens a path address: none without one, the old one 404 once
   }
 });
 
+test("a legacy /@<handle>/<id>-<title> link is sent to /a/<id> when no library path matches, keeping the query", async () => {
+  const server = await startServer();
+  try {
+    const token = await owner(server);
+    const published = await publish(server, token, {
+      source: page("<h1>Legacy link</h1>"),
+      requestId: "addresses-legacy",
+      path: "reports/legacy.html",
+    });
+    const other = await server.token("bob@example.test");
+    for (const path of [
+      `/@${HANDLE}/${published.id}`,
+      `/@${HANDLE}/${published.id}-`,
+      `/@${HANDLE}/${published.id}-html-migration-progress-tracker`,
+      `/@${HANDLE.toUpperCase()}/${published.id}-Title%20With%20Spaces`,
+      `/@someone-else/${published.id}-title`,
+      `/@nobody/${published.id}`,
+    ]) {
+      for (const query of ["", "?download=1"]) {
+        const response = await get(server, path + query, other);
+        assert.equal(response.status, 308, path + query);
+        assert.equal(response.headers.get("location"), `/a/${published.id}${query}`, path + query);
+      }
+      const followed = await fetch(server.origin + path, { headers: { Authorization: `Bearer ${token}` } });
+      assert.equal(followed.status, 200, path);
+      assert.match(await followed.text(), /pagegi-host/, path);
+    }
+    for (const path of [
+      `/@${HANDLE}/${published.id}/extra`,
+      `/@${HANDLE}/${published.id}-slug/extra`,
+      `/@${HANDLE}/x${published.id}`,
+      `/@${HANDLE}/${published.id}.html`,
+      `/@${HANDLE}/missing.html`,
+    ]) {
+      const response = await get(server, path, token);
+      assert.equal(response.status, 404, path);
+      assert.equal(response.headers.get("location"), null, path);
+    }
+    const unknown = await get(server, `/@${HANDLE}/Zz9Zz9-gone`, token);
+    assert.equal(unknown.status, 308, "an unknown ID still redirects; /a/ answers 404");
+    assert.equal((await get(server, "/a/Zz9Zz9-gone", token)).status, 404);
+    const literal = await publish(server, token, {
+      source: page("<h1>Literal path</h1>"),
+      requestId: "addresses-legacy-literal",
+      path: `${published.id}-notes`,
+    });
+    const own = await get(server, `/@${HANDLE}/${published.id}-notes`, token);
+    assert.equal(own.status, 200, "a real library path wins over the legacy form");
+    assert.notEqual(literal.id, published.id);
+  } finally {
+    await server.close();
+  }
+});
+
 test("a private page sends a signed-out visitor to sign in and back, and is 404 to other accounts, at every address", async () => {
   const server = await startServer();
   try {
