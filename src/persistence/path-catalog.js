@@ -1,6 +1,7 @@
 import { loadGroupAuthority } from "./group-memberships.ts";
 import { namespaceOwner } from "../group-authority.ts";
 // @ts-check
+import { syncRetainedPathChange } from "../retained-folders/locations.ts";
 import { changePaths } from "../path-model.ts";
 import { pathLock, readPaths, writeFolders } from "./paths.js";
 /** @param {import("./sql.ts").SqlDatabase} sql @returns {import("./path-catalog-contracts.ts").PathCatalog} */
@@ -33,6 +34,7 @@ export function createPathCatalog(sql) {
         }
         await client.query("DELETE FROM folders WHERE owner=$1", [actor]);
         await writeFolders(client, actor, after);
+        await syncRetainedPathChange(client, actor, change);
         return after;
       }),
   };

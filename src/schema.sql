@@ -167,3 +167,21 @@ DO $$ BEGIN
     );
   END IF;
 END $$;
+
+-- Postimport retained folder identity is independent of its mutable library path.
+CREATE TABLE IF NOT EXISTS retained_folders (
+  namespace text NOT NULL, legacy_id text NOT NULL,
+  owner text NOT NULL REFERENCES accounts(actor), source_revision text NOT NULL,
+  title text NOT NULL, access jsonb NOT NULL,
+  state text NOT NULL CHECK(state IN ('live','trash','deleted')),
+  path text, trash_id text,
+  PRIMARY KEY(namespace,legacy_id),
+  CHECK ((state='live' AND path IS NOT NULL AND trash_id IS NULL) OR
+         (state='trash' AND path IS NOT NULL AND trash_id IS NOT NULL) OR
+         (state='deleted' AND path IS NULL AND trash_id IS NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS retained_folders_live_path ON retained_folders(owner,path) WHERE state='live';
+CREATE INDEX IF NOT EXISTS retained_folders_legacy_id ON retained_folders(legacy_id);
+CREATE TABLE IF NOT EXISTS retained_folder_applications (
+  digest text PRIMARY KEY, receipt jsonb NOT NULL
+);

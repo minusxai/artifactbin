@@ -1,3 +1,4 @@
+import { updateRetainedLocations } from "../retained-folders/locations.ts";
 import { randomUUID } from "node:crypto";
 import { normalizePath } from "../path-model.ts";
 import type { SqlDatabase } from "../persistence/sql.ts";
@@ -71,6 +72,9 @@ export function createTrashService(
             "DELETE FROM folders WHERE owner=$1 AND path=ANY($2::text[])",
             [owner, folders],
           );
+          await updateRetainedLocations(client, owner, [
+            { kind: "trash", owner, path, trashId: id },
+          ]);
           return { id, deletedIds: ids };
         }
         const id = url.pathname.split("/")[3]!;
@@ -123,6 +127,18 @@ export function createTrashService(
                 [item.id, item.path],
               );
           }
+          const restoredRoot = restored.find(
+            (item) => item.kind === "folder" && item.id === root.path,
+          )!;
+          await updateRetainedLocations(client, owner, [
+            {
+              kind: "restore",
+              owner,
+              trashId: id,
+              from: root.path,
+              path: restoredRoot.path,
+            },
+          ]);
           await client.query("DELETE FROM trash_folders WHERE id=$1", [id]);
           return {
             id,

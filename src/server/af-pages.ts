@@ -4,6 +4,7 @@ import {
   readOnlyPagePermissions,
   pageRevisionQuery,
 } from "./page-revision.ts";
+import { syncRetainedPathChange } from "../retained-folders/locations.ts";
 /**
  * Pages over the v2 HTTP API (src/server/af-api-contracts.ts): publish, read,
  * save, paths and the hosted representations. Every page edit goes through the
@@ -436,6 +437,7 @@ export function createPageService({
         }
         await client.query("DELETE FROM folders WHERE owner=$1", [owner]);
         await writeFolders(client, owner, after);
+        await syncRetainedPathChange(client, owner, change);
         return after;
       });
       return {

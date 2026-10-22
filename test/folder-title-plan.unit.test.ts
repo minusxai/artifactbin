@@ -261,3 +261,18 @@ test("title paths retain readable spaces and canonical Unicode", () => {
       ),
     );
 });
+
+test("owner names that match object properties remain explicit isolated snapshot keys", () => {
+  const descriptor = { ...folder("a", "Readable", "/old"), owner: "__proto__" };
+  const paths = Object.fromEntries([
+    ["__proto__", [{ path: "/old", fileId: null }]],
+  ]);
+  const plan = planFolderTitles([descriptor], paths);
+  assert.equal(plan.kind, "ready");
+  if (plan.kind === "ready")
+    assert.deepEqual(Object.keys(plan.expected), ["__proto__"]);
+  assert.equal(
+    planFolderTitles([{ ...descriptor, owner: "toString" }], {}).kind,
+    "conflict",
+  );
+});
