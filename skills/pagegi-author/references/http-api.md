@@ -47,6 +47,19 @@ The server is `https://app.artefactbin.dev`. If `AF_SERVER` and `AF_TOKEN` are s
 
 Each form takes `?download=1`. A private page sends a signed-out visitor to sign in; anything unknown, including a page the viewer may not read, is `404`.
 
+## Imported media
+
+Imported image, file and PDF pages can contain immutable media links. These links read bytes; they do not accept uploads or edits.
+
+| Method and path | Returns |
+|---|---|
+| `GET /af/v1/ids/<id>/assets/<revision>/<variant>/<sha256>` | Exact stored bytes, with the asset page's current read permission. `variant` is `original` or `small`; the importer supplies the revision and full SHA-256. |
+| `HEAD /af/v1/ids/<id>/assets/<revision>/<variant>/<sha256>` | The same authorization and headers, without a body. |
+
+- The asset's own sharing policy applies, even when another page embeds it. Public and unlisted assets allow guest reads; private assets require an authorized account session or a document grant for that asset. A containing page's grant does not authorize another asset. Missing or denied assets return `404`.
+- `Range: bytes=start-end`, open-ended and suffix ranges return `206`; invalid, multiple or unsatisfiable ranges return `416`. Authorized bytes unavailable on the server return `503`.
+- PNG, JPEG, WebP and GIF images display inline. SVG, PDF and other files download as sandboxed attachments. Responses are private and uncached, with no CORS access or credentials in URLs. Hosted sibling runners can use the platform browser session. A downloaded HTML file needs the hosted media link and sign-in for private assets; connecting to its parent page does not grant access to another asset.
+
 ## Comments
 
 | Method and path | Body | Returns |

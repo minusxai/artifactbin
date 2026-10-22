@@ -52,6 +52,10 @@ import {
 } from "./server/secrets.ts";
 import { createHandleRoutes, handleStore } from "./server/handles.ts";
 import { fail } from "./model.ts";
+import { mediaRepository } from "./persistence/media.ts";
+import { readOnlyMediaStore } from "./media/filestore.ts";
+import { createMediaService } from "./media/service.ts";
+import { serveMedia } from "./media/http.ts";
 const token = () => cryptoRandomBytes(32).toString("base64url");
 /** @param {Parameters<typeof database>[0]} options @param {string} username @param {string} password */
 export async function addAccount(options, username, password) {
@@ -79,6 +83,7 @@ export function createService({
   runnerOrigin,
   backendHost,
   secretsKey,
+  mediaDirectory,
   testLogin = false,
   knownOrigins = [DEFAULT_AF_ORIGIN],
   randomBytes = (count) => new Uint8Array(cryptoRandomBytes(count)),
@@ -160,6 +165,7 @@ export function createService({
         : null,
     ));
   const assets = createPlatformAssets();
+  const media = createMediaService(mediaRepository(repository.sql, now), readOnlyMediaStore(mediaDirectory));
   const server = createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader(
@@ -185,11 +191,12 @@ export function createService({
       if (boundary.kind === "runner")
         return serveRunner(req, res, platformOrigin, boundary.origin);
       Object.assign(req, { pagegiOrigin: boundary.origin });
+      const url = new URL(req.url || "/", boundary.origin);
+      if (await serveMedia(req, res, url, media, credential(req) || cookieToken(req))) return;
       if (req.method === "OPTIONS") {
         res.writeHead(204);
         return res.end();
       }
-      const url = new URL(req.url || "/", boundary.origin);
       /** The server's public origin: written into saved pages and addresses. */
       const origin = platformOrigin || boundary.origin;
       const asset = assets.resolve(req.method || "GET", url, {

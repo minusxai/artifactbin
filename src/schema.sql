@@ -97,3 +97,18 @@ DROP TRIGGER IF EXISTS group_owner_guard ON groups;
 CREATE TRIGGER group_owner_guard BEFORE INSERT OR UPDATE ON groups FOR EACH ROW EXECUTE FUNCTION enforce_group_membership();
 DROP TRIGGER IF EXISTS group_member_guard ON group_memberships;
 CREATE TRIGGER group_member_guard BEFORE INSERT OR UPDATE ON group_memberships FOR EACH ROW EXECUTE FUNCTION enforce_group_membership();
+
+-- Immutable imported binary descriptors belong to their own HTML page and exact saved revision.
+-- Only verified SHA-256 names resolve in the private, read-only media mount; no authored paths.
+CREATE TABLE IF NOT EXISTS page_assets (
+  page_id text NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  revision text NOT NULL CHECK (revision ~ '^[1-9][0-9]*$'),
+  variant text NOT NULL CHECK (variant IN ('original','small')),
+  sha256 text NOT NULL CHECK (sha256 ~ '^[a-f0-9]{64}$'),
+  content_type text NOT NULL CHECK (content_type ~ '^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$'),
+  filename text,
+  byte_length bigint NOT NULL CHECK (byte_length BETWEEN 0 AND 9007199254740991),
+  storage_key text NOT NULL CHECK (storage_key = sha256),
+  PRIMARY KEY (page_id, revision, variant),
+  FOREIGN KEY (page_id, revision) REFERENCES sources(file_id,revision) ON DELETE CASCADE
+);

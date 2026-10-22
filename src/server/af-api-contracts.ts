@@ -3,7 +3,7 @@
  * C implements behind AfRouteModule and B mounts). This is the exact surface in
  * skills/pagegi-author/references/http-api.md.
  *
- * All JSON. Errors are `{ "error": string }` with a 4xx/5xx status.
+ * JSON except hosted HTML and media bytes. JSON API errors are `{ "error": string }` with a 4xx/5xx status.
  * Credentials: `Authorization: Bearer <token>`. Page scripts never run on the
  * platform origin and never see a token.
  *
@@ -94,6 +94,11 @@
  *                                  that is not a handle (an email address): 404
  *   GET  /af/v1/ids/<id>           any file by ID, exactly as /a/<id> for a page;
  *                                  backend: 200 { id, kind: "backend", name?, version } to its owner, else 404
+ *   GET  /af/v1/ids/<id>/assets/<revision>/<variant>/<sha256> → 200 exact immutable media bytes, 206 single Range;
+ *                                  own asset-page current ACL (public/unlisted guests allowed); 404 missing/denied,
+ *                                  416 invalid/unsatisfiable range, 503 authorized bytes unavailable.
+ *                                  PNG/JPEG/WebP/GIF inline; SVG/PDF/files attachment, sandboxed, no CORS.
+ *   HEAD /af/v1/ids/<id>/assets/<revision>/<variant>/<sha256> → same authorization/headers, no body
  *   GET  /skills/pagegi-author.tgz                          → 200 application/gzip, cacheable: the whole
  *                                  author skill (skills/pagegi-author/) as a gzip tarball with a
  *                                  top-level pagegi-author/ directory (SkillArchive); other /skills/ paths 404
@@ -277,6 +282,8 @@ export interface AfServiceOptions {
    * and every lambda's `env` is `{}`.
    */
   secretsKey?: Uint8Array;
+  /** Private operator-staged immutable media directory, mounted read-only. No setting means media reads return 503. */
+  mediaDirectory?: string;
   /** Random source for file IDs; tests may inject a deterministic one. */
   randomBytes?: (count: number) => Uint8Array;
 }
@@ -310,6 +317,7 @@ export interface ServerMainEnv {
   PAGEGI_TEST_LOGIN?: string;
   PAGEGI_KNOWN_ORIGINS?: string;
   PAGEGI_SECRETS_KEY?: string;
+  PAGEGI_MEDIA_DIRECTORY?: string;
 }
 
 /** A route module brief C provides and brief B mounts before its own file routes. */

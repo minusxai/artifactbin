@@ -139,8 +139,8 @@ test("design systems name only fonts installed on the platforms and download non
 
 test("every endpoint in references/http-api.md is in the server's route contract", () => {
   const contract = readFileSync(repositoryPath("src/server/af-api-contracts.ts"), "utf8");
-  const routes = new Set([...contract.matchAll(/^ \*\s+(GET|POST|PUT|DELETE)\s+(\/\S+)/gm)].map((m) => `${m[1]} ${m[2]}`));
-  const documented = [...skillFile("references/http-api.md").matchAll(/^\| `(GET|POST|PUT|DELETE) (\/[^`]+)`/gm)].map((m) => `${m[1]} ${m[2]}`);
+  const routes = new Set([...contract.matchAll(/^ \*\s+(GET|HEAD|POST|PUT|DELETE)\s+(\/\S+)/gm)].map((m) => `${m[1]} ${m[2]}`));
+  const documented = [...skillFile("references/http-api.md").matchAll(/^\| `(GET|HEAD|POST|PUT|DELETE) (\/[^`]+)`/gm)].map((m) => `${m[1]} ${m[2]}`);
   assert.ok(documented.length >= 14);
   for (const route of documented) assert.ok(routes.has(route), route);
 });
