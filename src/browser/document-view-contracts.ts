@@ -17,7 +17,7 @@ export interface DocumentViewOptions {
   contextOnly?: boolean;
   contexts: {
     cached(): Pick<DocumentState, "sources" | "snapshots">;
-    comment(id: string): Promise<DocumentViewContext>;
+    comment(id: string, signal?: AbortSignal): Promise<DocumentViewContext>;
     viewer(sessionId: string): Promise<DocumentViewContext>;
   };
   surface: {
@@ -45,6 +45,7 @@ export interface DocumentView {
   receiveView(message: { snapshot?: unknown; targets?: unknown }): boolean;
   showComment(
     comment: Pick<Comment, "id" | "appStateId" | "sourceRevision" | "context">,
+    signal?: AbortSignal,
   ): Promise<void>;
   showViewer(sessionId: string): Promise<void>;
   returnLive(): boolean;

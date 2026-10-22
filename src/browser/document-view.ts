@@ -131,8 +131,8 @@ export function createDocumentView(options: DocumentViewOptions): DocumentView {
       changed("live", previous);
       return true;
     },
-    async showComment(comment) {
-      if (disposed || options.contextOnly) return;
+    async showComment(comment, signal) {
+      if (disposed || options.contextOnly || signal?.aborted) return;
       if (comment.context?.status === "unavailable" || comment.sourceRevision === null)
         throw Error("Original context unavailable: the original page version was not retained.");
       const token = ++selection;
@@ -151,9 +151,9 @@ export function createDocumentView(options: DocumentViewOptions): DocumentView {
       if (!context.source || !context.snapshot) {
         const fallback = !comment.appStateId && context.source ? context : null;
         try {
-          context = await options.contexts.comment(comment.id);
+          context = await options.contexts.comment(comment.id, signal);
         } catch {
-          if (disposed || selection !== token) return;
+          if (disposed || selection !== token || signal?.aborted) return;
           if (!fallback)
             throw Error(
               "This context is not cached. Connect to its server to view it.",
@@ -161,7 +161,7 @@ export function createDocumentView(options: DocumentViewOptions): DocumentView {
           context = fallback;
         }
       }
-      if (!disposed && selection === token)
+      if (!disposed && selection === token && !signal?.aborted)
         show(context, comment.sourceRevision);
     },
     async showViewer(sessionId) {

@@ -141,3 +141,75 @@ test("synchronous authority invalidation during installation cannot open or repl
   await controller.open(new URLSearchParams("comment=reply"));
   assert.deepEqual(calls, ["install"]);
 });
+
+test("navigation, revocation and disposal cancel an already pending saved context before it can replay", async () => {
+  const { createDocumentView } = await import(
+    "../src/browser/document-view.ts"
+  );
+  for (const action of ["navigation", "invalidate", "dispose"] as const) {
+    let resolveContext!: (value: any) => void, started!: () => void;
+    const contextStarted = new Promise<void>((resolve) => (started = resolve));
+    const mounts: string[] = [];
+    const view = createDocumentView({
+      source: "live",
+      revision: "live",
+      snapshot: null,
+      contexts: {
+        cached: () => ({ sources: {}, snapshots: {} }),
+        comment: async () => {
+          started();
+          return new Promise((resolve) => (resolveContext = resolve));
+        },
+        viewer: async () => ({ source: null, snapshot: null }),
+      },
+      surface: { mount: (source) => mounts.push(source), suspend() {} },
+      activity: { suspend() {}, resume() {} },
+      changed() {},
+    });
+    const oldThread = {
+      ...thread,
+      comments: thread.comments.map((c) => ({
+        ...c,
+        sourceRevision: "old",
+        appStateId: "snapshot",
+      })),
+    };
+    let nextReadStarted!: () => void;
+    const nextStarted = new Promise<void>(
+      (resolve) => (nextReadStarted = resolve),
+    );
+    const controller = createCommentLink({
+      readThread: async (id) => {
+        if (id === "next") {
+          nextReadStarted();
+          return new Promise(() => {});
+        }
+        return oldThread;
+      },
+      install() {},
+      showComment: (comment, signal) => view.showComment(comment, signal),
+      openThread() {},
+      error() {},
+    });
+    const old = controller.open(new URLSearchParams("comment=reply"));
+    await contextStarted;
+    if (action === "navigation") {
+      void controller.open(new URLSearchParams("comment=next"));
+      await nextStarted;
+    } else controller[action]();
+    resolveContext({
+      source: "obsolete context",
+      snapshot: {
+        schema: 0,
+        sourceRevision: "old",
+        state: {},
+        view: { x: 0, y: 0 },
+      },
+    });
+    await old;
+    assert.deepEqual(mounts, [], action);
+    assert.equal(view.historical, false, action);
+    controller.dispose();
+    view.dispose();
+  }
+});

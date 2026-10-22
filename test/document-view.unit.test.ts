@@ -256,3 +256,12 @@ test("unavailable original context never fetches, mounts or replays the current 
   assert.equal(f.view.historical, false);
   assert.equal(f.view.revision, "live");
 });
+
+test("an aborted comment context cannot replay its cached-source fallback after fetch failure",async()=>{
+ const f=fixture();let reject!:(error:Error)=>void;
+ f.comment=()=>new Promise((_resolve,fail)=>reject=fail);
+ const controller=new AbortController();
+ const pending=f.view.showComment({id:"comment",sourceRevision:"live",appStateId:null},controller.signal);
+ controller.abort();reject(Error("late failure"));await pending;
+ assert.equal(f.view.historical,false);assert.deepEqual(f.mounts,[]);
+});

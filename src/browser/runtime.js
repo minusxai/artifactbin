@@ -149,7 +149,7 @@ async function bootPlatform() {
     contextOnly: saved.contextOnly,
     contexts: {
       cached: () => ({ sources: saved.sources, snapshots: saved.snapshots }),
-      comment: (id) => collaboration.readContext({ kind: "context.get", id }),
+      comment: (id, signal) => collaboration.readContext({ kind: "context.get", id }, signal),
       viewer: (sessionId) =>
         collaboration.readContext({ kind: "presence.capture", sessionId }),
     },
@@ -634,9 +634,9 @@ async function bootPlatform() {
       saved={...saved,comments:[...records.values()]};
       draw();
     },
-    async showComment(comment){
+    async showComment(comment,signal){
       linkedContextReads++;
-      try{await documentView.showComment(comment);}finally{linkedContextReads--;}
+      try{await documentView.showComment(comment,signal);}finally{linkedContextReads--;}
     },
     openThread:(root,selected)=>commentPanel.openThread(root,selected),
     error:message=>platformStatus.notice(message),

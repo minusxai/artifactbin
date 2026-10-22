@@ -61,7 +61,7 @@ export function createCommentLink(
         // Select the thread immediately; a missing saved context remains an explicit notice.
         options.openThread(root.id, selected.id);
         if (!current()) return;
-        await options.showComment(selected);
+        await options.showComment(selected, controller.signal);
       } catch (error) {
         if (current())
           options.error(

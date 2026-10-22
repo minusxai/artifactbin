@@ -8,7 +8,7 @@ export interface CommentThread {
 export interface CommentLinkOptions {
   readThread(id: string, signal: AbortSignal): Promise<CommentThread>;
   install(thread: CommentThread): void;
-  showComment(comment: Comment): Promise<void>;
+  showComment(comment: Comment, signal: AbortSignal): Promise<void>;
   openThread(rootId: string, selectedId: string): void;
   error(message: string): void;
 }
