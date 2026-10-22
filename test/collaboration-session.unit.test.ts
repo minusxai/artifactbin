@@ -566,3 +566,12 @@ test("identity replacement retires held prior-caller permissions before any new-
   assert.equal(sentToken,undefined);
   session.dispose();
 });
+
+test('fresh permission success or denial settles access separately from a network failure',async()=>{
+ const pending=deferred<any>();const f=fixture(async op=>op.kind==='permissions'?pending.promise:op.kind==='comments.list'?{comments:[],head:'r'}:{});const run=f.session.synchronize();assert.equal(f.changes.at(-1).access,'pending');pending.resolve({...permission,role:null,edit:false,manage:false,authorizationContext:'guest-policy'});await run;assert.equal(f.changes.at(-1).access,'allowed');f.session.dispose();assert.equal(f.changes.at(-1).access,'disposed');
+ for(const status of [403,0]){const g=fixture(async()=>{throw Object.assign(Error('unavailable'),{status})});await assert.rejects(g.session.synchronize());assert.equal(g.changes.at(-1).access,status===403?'denied':'disconnected');g.session.dispose()}
+});
+
+test('initial live connecting remains pending but reconnect retires access until fresh policy arrives',()=>{const f=fixture();f.live.status('connecting');assert.equal(f.changes.at(-1).access,'pending');f.live.status('reconnecting');assert.equal(f.changes.at(-1).access,'disconnected');f.session.dispose()});
+
+test('permission settlement is observable before unrelated comment synchronization completes',async()=>{const comments=deferred<any>();const f=fixture(async op=>op.kind==='permissions'?{...permission,authorizationContext:'verified-policy'}:op.kind==='comments.list'?comments.promise:{});const pending=f.session.synchronize();await Promise.resolve();await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));const status=f.changes.at(-1);assert.equal(status.access,'allowed');assert.equal(status.sync,'syncing');assert.equal(status.permissions.authorizationContext,'verified-policy');comments.resolve({comments:[],head:'r'});await pending;f.session.dispose()});

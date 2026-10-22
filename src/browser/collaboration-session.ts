@@ -33,6 +33,7 @@ export function createCollaborationSession(
   let status: SessionStatus = {
     mode: gate.active ? "active" : "suspended",
     sync: "disconnected",
+    access: "pending",
     permissions: null,
     viewers: [],
     message: "",
@@ -161,10 +162,13 @@ export function createCollaborationSession(
       try {
         do {
           work.again = false;
-          emit({ sync: "syncing", message: "" });
+          emit({ sync: "syncing", access: "pending", message: "" });
           const permissions = await request({ kind: "permissions" });
           if (!valid(work.generation, work.epoch)) throw new ObsoleteSession();
-          emit({ permissions });
+          emit({
+            permissions,
+            access: permissions.read ? "allowed" : "denied",
+          });
           if (options.authenticated() && permissions.comment) {
             const ids = [...options.readState().pending];
             for (const id of ids) {
@@ -215,6 +219,11 @@ export function createCollaborationSession(
         if (valid(work.generation, work.epoch)) {
           emit({
             sync: "error",
+            access: [401, 403, 404].includes(
+              (error as { status?: number })?.status ?? 0,
+            )
+              ? "denied"
+              : "disconnected",
             message: error instanceof Error ? error.message : String(error),
           });
           throw error;
@@ -262,13 +271,18 @@ export function createCollaborationSession(
           cancelWork();
           emit({
             sync: "disconnected",
+            access: value === "connecting" ? "pending" : "disconnected",
             message: "Connecting for live updates…",
           });
         }
         if (value === "error") {
           try { options.onInvalidated?.(); } catch {}
           cancelWork();
-          emit({ sync: "error", message: error ?? "Connection failed" });
+          emit({
+            sync: "error",
+            access: "disconnected",
+            message: error ?? "Connection failed",
+          });
         }
       },
     });
@@ -280,6 +294,7 @@ export function createCollaborationSession(
     attach(value) {
       if (disposed) throw new ObsoleteSession();
       transport = value;
+      status={...status,access:"pending"};
       restart();
     },
     restart,
@@ -329,6 +344,7 @@ export function createCollaborationSession(
       closeLive();
       emit({
         mode: "suspended",
+        access: "denied",
         sync: "disconnected",
         viewers: [],
         message: "",
@@ -347,6 +363,7 @@ export function createCollaborationSession(
       transport = null;
       emit({
         sync: "disconnected",
+        access: "disconnected",
         permissions: null,
         viewers: [],
         message: "",
@@ -361,6 +378,7 @@ export function createCollaborationSession(
       transport = null;
       emit({
         mode: "disposed",
+        access: "disposed",
         sync: "disconnected",
         viewers: [],
         message: "",

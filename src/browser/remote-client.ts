@@ -11,18 +11,60 @@ type Reply = NonNullable<RemoteBridgeResponse["response"]>;
 export function createRemoteClient(options: RemoteClientOptions): RemoteClient {
   let disposed = false;
   let authorizationContext: string | null = null;
+  let access: import("../apollo/apollo-contracts.ts").RemoteAccessSnapshot = {
+    epoch: null,
+    state: "pending",
+    context: null,
+  };
   const listeners = new Set<() => void>();
+  const accessListeners = new Set<() => void>();
   const pending = new Map<
     string,
     { resolve(reply: Reply): void; reject(error: Error): void; cancel(): void }
   >();
   return {
+    setAccess(snapshot) {
+      if (disposed || access.state === "disposed") return;
+      if (
+        !Number.isSafeInteger(snapshot.epoch) ||
+        snapshot.epoch! < 0 ||
+        !["pending", "allowed", "denied", "disconnected", "disposed"].includes(
+          snapshot.state,
+        ) ||
+        !(snapshot.context === null || typeof snapshot.context === "string") ||
+        (snapshot.state === "allowed" &&
+          (!snapshot.context || snapshot.context.length > 256)) ||
+        (snapshot.state !== "allowed" && snapshot.context !== null)
+      )
+        return;
+      if (access.epoch !== null && snapshot.epoch! < access.epoch) return;
+      if (JSON.stringify(access) === JSON.stringify(snapshot)) return;
+      access = {
+        epoch: snapshot.epoch,
+        state: snapshot.state,
+        context: snapshot.context,
+      };
+      authorizationContext = access.context;
+      for (const listener of [...accessListeners]) listener();
+      for (const listener of [...listeners]) listener();
+    },
     setAuthorizationContext(context) {
-      if(disposed||authorizationContext===context)return;
-      authorizationContext=context;
-      for(const listener of [...listeners])listener();
+      if (disposed || authorizationContext === context) return;
+      authorizationContext = context;
+      for (const listener of [...listeners]) listener();
     },
     port: {
+      access: () => ({ ...access }),
+      subscribeAccess(listener) {
+        if (disposed) {
+          listener();
+          return () => {};
+        }
+        accessListeners.add(listener);
+        return () => {
+          accessListeners.delete(listener);
+        };
+      },
       authorizationContext: () => (disposed ? null : authorizationContext),
       online: () => !disposed && options.online(),
       subscribe(listener) {
@@ -98,6 +140,9 @@ export function createRemoteClient(options: RemoteClientOptions): RemoteClient {
     dispose() {
       disposed = true;
       authorizationContext = null;
+      access = { ...access, state: "disposed", context: null };
+      for (const listener of [...accessListeners]) listener();
+      accessListeners.clear();
       listeners.clear();
       for (const item of pending.values()) {
         item.cancel();

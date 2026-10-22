@@ -155,3 +155,32 @@ test('authorization context transitions clear opt-in reader watches in the same 
  replies.shift()!({status:200,body:{data:{billing:{viewer:{id:null}}}}});await tick();assert.deepEqual(seen.at(-1),{viewer:{id:null}});
  sub.unsubscribe();page.client.dispose();
 });
+
+test("trusted access snapshots distinguish pending settlement, reject stale epochs and retire on disposal", () => {
+  const client = createRemoteClient({
+    send() {},
+    id: () => "x",
+    online: () => true,
+    schedule: () => () => {},
+  });
+  let notifications = 0;
+  client.port.subscribeAccess!(() => notifications++);
+  assert.deepEqual(client.port.access!(), {
+    epoch: null,
+    state: "pending",
+    context: null,
+  });
+  client.setAccess({ epoch: 1, state: "pending", context: null });
+  assert.equal(notifications, 1);
+  client.setAccess({ epoch: 1, state: "allowed", context: "guest-policy" });
+  assert.equal(client.port.authorizationContext!(), "guest-policy");
+  client.setAccess({ epoch: 2, state: "denied", context: null });
+  assert.equal(client.port.authorizationContext!(), null);
+  client.setAccess({ epoch: 1, state: "allowed", context: "stale" });
+  assert.equal(client.port.access!().state, "denied");
+  client.setAccess({ epoch: 2, state: "pending", context: "invalid" });
+  assert.equal(client.port.access!().state, "denied");
+  client.dispose();
+  assert.equal(client.port.access!().state, "disposed");
+  assert.equal(notifications, 4);
+});

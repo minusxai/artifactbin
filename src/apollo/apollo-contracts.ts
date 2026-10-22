@@ -136,8 +136,17 @@ export class RemoteUnreachable extends Error {
     this.name = "RemoteUnreachable";
   }
 }
+/** Trusted page access state, never a credential or operation-level write grant. */
+export interface RemoteAccessSnapshot {
+  epoch: number | null;
+  state: "pending" | "allowed" | "denied" | "disconnected" | "disposed";
+  context: string | null;
+}
 /** The page's backend endpoint (POST /api/files/:id/graphql through the platform frame). */
 export interface RemotePort {
+  /** Internal migrated-author startup settlement; subscribeAccess signals changes. */
+  access?(): RemoteAccessSnapshot;
+  subscribeAccess?(listener: () => void): () => void;
   authorizationContext?(): string | null;
   online(): boolean;
   /** Server invalidation/reconnect signal; contains no page data or credentials. */

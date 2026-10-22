@@ -1,3 +1,4 @@
+import { awaitAuthorAccess } from "./access.ts";
 import type {
   AuthorPorts,
   QueryPort,
@@ -56,13 +57,23 @@ export function authorApolloPorts(
             name: string,
             args: Readonly<import("./contracts.ts").Row>,
             row?: Readonly<import("./contracts.ts").Row>,
+            signal?: AbortSignal,
           ) => {
             if (!mutations.names.includes(name))
               throw Error("Unregistered author mutation");
-            const context = mutations.authorizationContext();
-            if (!context) throw Error("Author mutation context unavailable");
+            const { context, epoch } = await awaitAuthorAccess(
+              mutations,
+              signal,
+            );
+            const current = () =>
+              mutations.authorizationContext() === context &&
+              (!mutations.access ||
+                (mutations.access.read().state === "allowed" &&
+                  mutations.access.read().epoch === epoch));
+            if (signal?.aborted || !current())
+              throw Error("Author mutation context changed");
             const result = await mutations.adapter.mutate(name, args, row);
-            if (mutations.authorizationContext() !== context)
+            if (signal?.aborted || !current())
               throw Error("Author mutation context changed");
             return result;
           },

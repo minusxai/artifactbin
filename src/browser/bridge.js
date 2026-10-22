@@ -293,7 +293,8 @@ export function installBridge(boot) {
     if (m.kind === "image-response") { images.receive(m.response); return; }
     if (m.kind === "authorization-context") {
       images.setAuthority(typeof m.context==="string"?m.context:null);
-      remote.setAuthorizationContext(typeof m.context === "string" ? m.context : null);
+      if(m.access&&typeof m.access==='object')remote.setAccess(m.access);
+      else remote.setAuthorizationContext(typeof m.context === "string" ? m.context : null);
       return;
     }
     if (m.kind === "remote-invalidated") {

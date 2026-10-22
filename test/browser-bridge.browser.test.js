@@ -92,6 +92,17 @@ test("app bridge accepts only its parent and channel; backend replies correlate 
       await reply("app", message(ids[0], { a: { x: "duplicate" } }));
       await frame.waitForFunction(() => results.length === 2);
       assert.deepEqual(await frame.evaluate(() => results), ["offline", { a: { x: 1 } }], name);
+      const accessMessage={pagegi:true,channel:'trusted-channel',kind:'authorization-context',context:'verified-guest',access:{epoch:1,state:'allowed',context:'verified-guest'}};
+      await frame.evaluate(message=>window.postMessage(message,'*'),accessMessage);
+      await stranger.evaluate(message=>parent.document.querySelector('#app').contentWindow.postMessage(message,'*'),accessMessage);
+      assert.equal(await frame.evaluate(()=>globalThis[Symbol.for('afbin.host')].remote().access().state),'pending',name);
+      await reply('app',accessMessage);
+      await frame.waitForFunction(()=>globalThis[Symbol.for('afbin.host')].remote().access().state==='allowed');
+      assert.equal(await frame.evaluate(()=>globalThis[Symbol.for('afbin.host')].remote().authorizationContext()),'verified-guest',name);
+      await reply('app',{...accessMessage,context:null,access:{epoch:2,state:'denied',context:null}});
+      await frame.waitForFunction(()=>globalThis[Symbol.for('afbin.host')].remote().access().state==='denied');
+      await reply('app',accessMessage);
+      assert.equal(await frame.evaluate(()=>globalThis[Symbol.for('afbin.host')].remote().authorizationContext()),null,name);
       assert.deepEqual(errors, [], name);
     } finally {
       await browser.close();

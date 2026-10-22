@@ -237,3 +237,84 @@ test(
     }
   },
 );
+
+test(
+  "compiled startup mutation awaits authenticated parent policy settlement before dispatch",
+  { skip: !archivedRoot },
+  async () => {
+    const compiled = await compileAuthorScript(
+      `import {mutation} from 'page';import {createSignal} from 'solid-js';export function Startup(){const [status,set]=createSignal('waiting');const save=mutation('$save');save({amount:3}).then(()=>set('saved'),()=>set('refused'));return <p>{status()}</p>}`,
+      { values: [], queries: [], mutations: ["save"] },
+      { archivedRoot: archivedRoot! },
+    );
+    const api = (
+      await build({
+        stdin: {
+          contents: `export {installBridge} from './src/browser/bridge.js';export {authorApolloPorts} from './src/migration/conversion/compiled/author/apollo-ports.ts'`,
+          resolveDir: process.cwd(),
+        },
+        bundle: true,
+        write: false,
+        format: "iife",
+        globalName: "api",
+      })
+    ).outputFiles[0]!.text;
+    const child = `<!doctype html><div id="mount"></div><script src="/api.js"></script><script type="module">import{createAuthorModule}from'/author.js';api.installBridge({local:false,channel:'startup',revision:'r'});const remote=globalThis[Symbol.for('afbin.host')].remote();const ports=api.authorApolloPorts({authorizationContext:remote.authorizationContext},null,()=>{throw Error('unused')},{names:['save'],authorizationContext:remote.authorizationContext,access:{read:remote.access,subscribe:remote.subscribeAccess},adapter:{async mutate(){document.body.dataset.writes=String(Number(document.body.dataset.writes||0)+1);return {affected:1,rowCount:1,version:1,generation:1}}}});await createAuthorModule().mount(ports,[{element:document.querySelector('#mount'),identity:'startup',component:'Startup'}]);</script>`;
+    const server = createServer((req, res) => {
+      res.setHeader(
+        "Content-Type",
+        req.url?.endsWith(".js") ? "text/javascript" : "text/html",
+      );
+      res.end(
+        req.url === "/api.js"
+          ? api
+          : req.url === "/author.js"
+            ? compiled.code
+            : req.url === "/child"
+              ? child
+              : '<iframe src="/child"></iframe>',
+      );
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.goto(
+        `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+      );
+      const frame = page.frameLocator("iframe");
+      await frame.getByText("waiting", { exact: true }).waitFor();
+      assert.equal(
+        await frame.locator("body").getAttribute("data-writes"),
+        null,
+      );
+      await page.evaluate(() =>
+        document
+          .querySelector("iframe")!
+          .contentWindow!.postMessage(
+            {
+              pagegi: true,
+              channel: "startup",
+              kind: "authorization-context",
+              context: "guest-policy",
+              access: { epoch: 1, state: "allowed", context: "guest-policy" },
+            },
+            "*",
+          ),
+      );
+      await frame.getByText("saved", { exact: true }).waitFor();
+      assert.equal(
+        await frame.locator("body").getAttribute("data-writes"),
+        "1",
+      );
+      assert.deepEqual(errors, []);
+    } finally {
+      await browser.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  },
+);

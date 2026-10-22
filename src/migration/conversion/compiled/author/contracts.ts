@@ -33,6 +33,7 @@ export interface AuthorPorts {
     name: string,
     args: Readonly<Row>,
     row?: Readonly<Row>,
+    signal?: AbortSignal,
   ): Promise<unknown>;
 }
 export interface AuthorNames {
@@ -57,6 +58,10 @@ export interface AuthorMutationOptions {
     "mutate"
   >;
   authorizationContext(): string | null;
+  access?: {
+    read(): import("../../../../apollo/apollo-contracts.ts").RemoteAccessSnapshot;
+    subscribe(listener: () => void): () => void;
+  };
 }
 export interface AuthorBindings {
   signal(ref: string): [Accessor<Scalar>, Setter<Scalar>];

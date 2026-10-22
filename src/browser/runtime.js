@@ -1,4 +1,5 @@
 // @ts-check
+import {createRemoteAccess} from "./remote-access.ts";
 import { createImageHost } from "./image-host.ts";
 import { createCommentAttachmentResources } from "./comment-attachment-resources.ts";
 import { readPlatformImage, platformImageBlob } from "./platform-image.ts";
@@ -47,8 +48,11 @@ async function bootPlatform() {
   const sessionId = crypto.randomUUID();
   /** A downloaded file's identity: the server it came from, its ID, version and revision. */
   const localPage = local ? documentSession.page : null;
+  const authorAccess=createRemoteAccess();
+  /** @type {import('../apollo/apollo-contracts.ts').RemoteAccessSnapshot['state']} */
+  let authorAccessState='pending';
   const host = createDocumentHost({
-    invalidateCollaboration: () => { imageHost.invalidate(); attachmentResources.setAuthority(null); collaboration.disconnect(); },
+    invalidateCollaboration: () => { authorAccessState='pending';sendApp({pagegi:true,kind:'authorization-context',context:null,access:authorAccess.invalidate()});imageHost.invalidate(); attachmentResources.setAuthority(null); collaboration.disconnect(); },
     readState: () => saved,
     updateState: (reducer) => { saved = reducer(saved); },
     // A downloaded file comments as the hosted view does: signed in, with the server's permission.
@@ -66,12 +70,14 @@ async function bootPlatform() {
   }
   function authorizationContext() {
     const current = host.read();
-    return gate.active && !documentView.historical && current.sync === "synced"
+    return gate.active && !documentView.historical && authorAccessState === "allowed"
       ? current.permissions?.authorizationContext ?? null : null;
   }
   function sendAuthorizationContext() {
     if(!authorizationContext())imageHost.invalidate();
-    sendApp({pagegi: true, kind: "authorization-context", context: authorizationContext()});
+    const context=authorizationContext();
+    const access=authorAccess.project({active:gate.active,historical:documentView.historical,phase:authorAccessState,context});
+    sendApp({pagegi: true, kind: "authorization-context", context:access.context,access});
   }
   const localLayout = local
     ? installLocalLayout({ document, inset: 44 })
@@ -486,6 +492,7 @@ async function bootPlatform() {
     },
     onAcknowledged: (from, to) => commentPanel.rename(from, to),
     onChange(next) {
+      authorAccessState=next.access??(next.sync==='synced'?'allowed':next.sync==='error'?'disconnected':'pending');
       const change = host.observeCollaboration(next);
       refreshAttachmentAuthority();
       sendAuthorizationContext();

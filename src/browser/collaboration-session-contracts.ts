@@ -40,6 +40,8 @@ export interface SessionTransport {
   };
 }
 export interface SessionStatus {
+  /** Fresh permissions settlement, separate from comment synchronization. */
+  access?: "pending" | "allowed" | "denied" | "disconnected" | "disposed";
   mode: "active" | "suspended" | "disposed";
   sync: "disconnected" | "syncing" | "pending" | "synced" | "error";
   permissions: FilePermissions | null;

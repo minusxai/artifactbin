@@ -142,6 +142,7 @@ test("trusted port only routes exact registrations under fresh unchanged authori
   assert.equal(calls, 0);
   context = "epoch1";
   const pending = ports.mutation!("save", {});
+  await Promise.resolve();
   context = "epoch2";
   finish({ affected: 1, rowCount: 1, version: 1, generation: 1 });
   await assert.rejects(pending, /context/);

@@ -43,6 +43,9 @@ export interface RemoteClient {
   /** Only the authenticated platform message handler supplies this credential-free marker. */
   /** A changed caller context synchronously invalidates remote subscribers. */
   setAuthorizationContext(context: string | null): void;
+  setAccess(
+    snapshot: import("../apollo/apollo-contracts.ts").RemoteAccessSnapshot,
+  ): void;
   port: RemotePort;
   receive(response: RemoteBridgeResponse): void;
   /** Invalidate query snapshots after an authorized live change or reconnect. */

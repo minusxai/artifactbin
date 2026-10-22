@@ -35,6 +35,7 @@ export function createAuthorBindings(
   reactive: ReactivePort,
 ): AuthorBindings {
   let disposed = false;
+  const mutationAbort = new AbortController();
   const stops: Array<() => void> = [];
   const rejectPending = new Set<(error: Error) => void>();
   const active = () => {
@@ -135,7 +136,7 @@ export function createAuthorBindings(
           Promise.resolve()
             .then(() => {
               active();
-              return dispatch(key, args, row);
+              return dispatch(key, args, row, mutationAbort.signal);
             })
             .then(
               () => {
@@ -207,6 +208,7 @@ export function createAuthorBindings(
     dispose() {
       if (disposed) return;
       disposed = true;
+      mutationAbort.abort();
       drainAuthorCleanups([
         ...stops.splice(0),
         () => {
