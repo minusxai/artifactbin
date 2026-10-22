@@ -7,6 +7,7 @@ import {
   compiledMutationIntentStore,
   createCompiledDatasetMutations,
 } from "../src/migration/conversion/compiled/dataset-mutations.ts";
+import type { CompiledDatasetMutation } from "../src/migration/conversion/compiled/dataset-mutations-contracts.ts";
 import type { CompiledMutationIntent } from "../src/migration/conversion/compiled/dataset-mutations-contracts.ts";
 for (const capacity of ["count", "aggregate"] as const)
   test(`proposed ${capacity} overflow cannot persist or dispatch and preserves all recoverable intents`, async () => {
@@ -40,14 +41,14 @@ for (const capacity of ["count", "aggregate"] as const)
         datasetMutationIntents
       }
     `;
+    const paramTypes: CompiledDatasetMutation["paramTypes"] = capacity === "aggregate" ? { text: "string" } : {};
     const options = {
       bindings: [
         {
           name: "save",
           backendNamespace: "data",
           recoveryScope: "b".repeat(64),
-          paramTypes:
-            capacity === "aggregate" ? { text: "string" as const } : {},
+          paramTypes,
         },
       ],
       documents: { data: parse("mutation{data{mutate}}") },
@@ -85,8 +86,7 @@ for (const capacity of ["count", "aggregate"] as const)
           name: "old0",
           backendNamespace: "data",
           recoveryScope: "a".repeat(64),
-          paramTypes:
-            capacity === "aggregate" ? { text: "string" as const } : {},
+          paramTypes,
         },
       ],
       intentStore: compiledMutationIntentStore(
