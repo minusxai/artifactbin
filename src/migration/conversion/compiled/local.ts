@@ -133,6 +133,9 @@ export async function compileArchivedLocal(
           : "local-scalars",
       modules: output.modules,
       ...(context.provenance.length ? {contexts:context.provenance} : {}),
+      ...(output.fontResources?.length
+        ? { fontResources: output.fontResources }
+        : {}),
       ...(compatibility.length ? { compatibility } : {}),
     },
   };

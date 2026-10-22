@@ -290,6 +290,9 @@ export async function compileArchivedStatic(
       compiler: "archived-static",
       build: compiled.build,
       mode: "static-only",
+      ...(compiled.fontResources?.length
+        ? { fontResources: compiled.fontResources }
+        : {}),
     },
   };
 }

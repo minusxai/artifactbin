@@ -41,6 +41,8 @@ export interface CompiledMigrationInput {
   colorMode?: "light" | "dark";
 }
 export interface ArchivedStaticOutput {
+  /** Offline verified font bytes only; no provider URLs. */
+  fontResources?: readonly import("./fonts/contracts.ts").InlinedFontReceipt[];
   html: string;
   css: string;
   title: string;
@@ -62,6 +64,7 @@ export interface CompiledMigrationResult extends ConversionResult {
     compiler: "archived-static";
     build: string;
     mode: "static-only";
+    fontResources?: readonly import("./fonts/contracts.ts").InlinedFontReceipt[];
   };
 }
 export const MAX_COMPILED_SOURCE_BYTES = 8 * 1024 * 1024;

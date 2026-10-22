@@ -52,6 +52,7 @@ export interface CompiledLocalResult extends ConversionResult {
       | "historical-data-unavailable";
     modules: string[];
     contexts?: readonly import("./context-contracts.ts").CompiledContextReference[];
+    fontResources?: readonly import("./fonts/contracts.ts").InlinedFontReceipt[];
     compatibility?: readonly import("./table-presentation-contracts.ts").TablePresentationCompatibility[];
   };
 }
