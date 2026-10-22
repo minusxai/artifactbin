@@ -1,3 +1,9 @@
+import type { PageRevisionSelection } from "./page-revision-contracts.ts";
+import {
+  resolvePageRevision,
+  readOnlyPagePermissions,
+  pageRevisionQuery,
+} from "./page-revision.ts";
 /**
  * Pages over the v2 HTTP API (src/server/af-api-contracts.ts): publish, read,
  * save, paths and the hosted representations. Every page edit goes through the
@@ -303,20 +309,25 @@ export function createPageService({
       };
     },
 
-    readSource(credential: string, id: string): Promise<SourceResponse> {
+    readSource(
+      credential: string,
+      id: string,
+      selection: PageRevisionSelection = { kind: "head" },
+    ): Promise<SourceResponse> {
       if (!isFileId(id)) fail(404, "File not found");
       return database.transaction(async (client) => {
         const session = await loadSession(client, hash(credential));
         const document = owned(await loadDocumentHeader(client, id));
         access(document, session, credential, id);
+        const selected = resolvePageRevision(selection, document.head);
         const row = (
           await client.query(
             "SELECT content FROM sources WHERE file_id=$1 AND revision=$2",
-            [id, document.head],
+            [id, String(selected.version)],
           )
         ).rows[0];
         if (!row) fail(404, "Source unavailable");
-        return { source: String(row.content), version: Number(document.head) };
+        return { source: String(row.content), version: selected.version };
       });
     },
 
@@ -442,7 +453,11 @@ export function createPageService({
      * What `/af/v1/ids/<id>` shows this caller. Unknown, reserved-but-unpublished
      * and unreadable files are all 404 so an address reveals nothing.
      */
-    address(credential: string, id: string): Promise<AddressedFile> {
+    address(
+      credential: string,
+      id: string,
+      selection: PageRevisionSelection = { kind: "head" },
+    ): Promise<AddressedFile> {
       if (!isFileId(id)) fail(404, "Not found");
       return database.transaction(async (client) => {
         const record = await readFileId(client, id);
@@ -453,9 +468,12 @@ export function createPageService({
           actor = account(session);
         } catch {}
         if (record.kind === "backend") {
+          if (selection.kind === "saved")
+            fail(404, "Saved page version not found");
           const port = await backendFiles();
           const head = port ? await port.head(client, id) : null;
-          if (!head || actor === null || head.owner !== actor) fail(404, "Not found");
+          if (!head || actor === null || head.owner !== actor)
+            fail(404, "Not found");
           return {
             kind: "backend" as const,
             value: { id, kind: "backend" as const, version: head.version },
@@ -469,21 +487,27 @@ export function createPageService({
             status: 404,
             signIn: actor === null,
           });
+        const selected = resolvePageRevision(selection, document.head);
         const row = (
           await client.query(
             "SELECT s.content,f.seed FROM sources s JOIN files f ON f.id=s.file_id WHERE s.file_id=$1 AND s.revision=$2",
-            [id, document.head],
+            [id, String(selected.version)],
           )
-        ).rows[0]!;
+        ).rows[0];
+        if (!row) fail(404, "Saved page version not found");
         return {
           kind: "page" as const,
           page: {
             id,
-            version: Number(document.head),
-            revision: document.sourceDigest ?? sourceDigest(String(row.content)),
+            version: selected.version,
+            revision: selected.historical
+              ? sourceDigest(String(row.content))
+              : (document.sourceDigest ?? sourceDigest(String(row.content))),
             path: document.path ?? id,
             source: String(row.content),
-            state: (row.seed as AfJsonObject | null) ?? null,
+            state: selected.historical
+              ? null
+              : ((row.seed as AfJsonObject | null) ?? null),
           },
         };
       });
@@ -551,7 +575,13 @@ export function createPageService({
      * A viewer holding a page grant for this page (a connected downloaded
      * file) opens it as their account.
      */
-    host(credential: string, id: string, origin: string, issueSession = true) {
+    host(
+      credential: string,
+      id: string,
+      origin: string,
+      issueSession = true,
+      selection: PageRevisionSelection = { kind: "head" },
+    ) {
       if (!isFileId(id)) fail(404, "Document not found");
       return database.transaction(async (client) => {
         const session = await loadSession(client, hash(credential));
@@ -566,15 +596,22 @@ export function createPageService({
         if (granted) actor = session!.actor;
         const grant = readable(document, actor, session);
         if (!grant)
-          fail(actor ? 403 : 401, "You need an invitation to open this document.");
+          fail(
+            actor ? 403 : 401,
+            "You need an invitation to open this document.",
+          );
+        const selected = resolvePageRevision(selection, document.head);
         const row = (
           await client.query(
             "SELECT s.content,f.seed FROM sources s JOIN files f ON f.id=s.file_id WHERE s.file_id=$1 AND s.revision=$2",
-            [id, document.head],
+            [id, String(selected.version)],
           )
-        ).rows[0]!;
+        ).rows[0];
+        if (!row) fail(404, "Saved page version not found");
         const issued =
-          actor && issueSession && !granted ? authority.issue(actor, id, document.generation) : null;
+          actor && issueSession && !granted && !selected.historical
+            ? authority.issue(actor, id, document.generation)
+            : null;
         // A "document" grant: same-page reads (including source), comments,
         // presence and backend calls under current permission; no account
         // access, source edits, sharing management or other-page permission.
@@ -589,25 +626,44 @@ export function createPageService({
               issued.session.expires,
             ],
           );
-        const version = Number(document.head);
+        const version = selected.version;
         const source = String(row.content);
-        const digest = document.sourceDigest ?? sourceDigest(source);
+        const digest = selected.historical
+          ? sourceDigest(source)
+          : (document.sourceDigest ?? sourceDigest(source));
         const comments = (
           await client.query(
             `SELECT id,node_id AS "nodeId",quote,body,source_revision AS "sourceRevision",parent_id AS "parentId",app_state_id AS "appStateId",published_by AS "publishedBy",created_at AS "createdAt",revision,resolved,fingerprint,sequence::int AS sequence FROM comments WHERE file_id=$1 ORDER BY sequence DESC LIMIT 50`,
             [id],
           )
-        )
-          .rows.reverse()
+        ).rows
+          .reverse()
           // The runtime keys the open version by its digest (see src/browser/comment-wire.ts).
-          .map((c) => (c.sourceRevision === String(version) ? { ...c, sourceRevision: digest } : c));
+          .map((c) =>
+            c.sourceRevision === String(version)
+              ? { ...c, sourceRevision: digest }
+              : c,
+          );
         const people = [
-          ...new Set([document.owner, ...(actor ? [actor] : []), ...comments.map((c) => String(c.publishedBy))]),
+          ...new Set([
+            document.owner,
+            ...(actor ? [actor] : []),
+            ...comments.map((c) => String(c.publishedBy)),
+          ]),
         ];
         const profiles = Object.fromEntries(
           (
-            await client.query("SELECT actor,name,image FROM accounts WHERE actor=ANY($1::text[])", [people])
-          ).rows.map((r) => [String(r.actor), { name: String(r.name || r.actor), image: r.image ? String(r.image) : null }]),
+            await client.query(
+              "SELECT actor,name,image FROM accounts WHERE actor=ANY($1::text[])",
+              [people],
+            )
+          ).rows.map((r) => [
+            String(r.actor),
+            {
+              name: String(r.name || r.actor),
+              image: r.image ? String(r.image) : null,
+            },
+          ]),
         );
         return {
           source,
@@ -616,10 +672,13 @@ export function createPageService({
           /** The hosted runtime's document state (src/browser/document-session.js reads it). */
           state: {
             format: 1,
+            ...(selected.historical ? { contextOnly: true } : {}),
             fileId: id,
             sourceRevision: digest,
             // A read capability for link viewers, never an account credential.
-            remote: { origin, share: document.share, head: digest },
+            remote: selected.historical
+              ? null
+              : { origin, share: document.share, head: digest },
             anchors: {},
             comments,
             pending: [],
@@ -630,13 +689,17 @@ export function createPageService({
             publishRequest: "",
           },
           /** Where each viewer's own local state starts (the published data-af="state" block). */
-          seed: (row.seed as AfJsonObject | null) ?? null,
+          seed: selected.historical
+            ? null
+            : ((row.seed as AfJsonObject | null) ?? null),
           boot: {
             fileId: id,
             version,
-            url: fileAddress(origin, id),
+            url: fileAddress(origin, id) + pageRevisionQuery(selection),
             token: issued?.credential ?? null,
-            permissions: grant,
+            permissions: selected.historical
+              ? readOnlyPagePermissions(grant)
+              : grant,
             username: actor,
             home: origin,
             path: apiPath(document.path ?? id),

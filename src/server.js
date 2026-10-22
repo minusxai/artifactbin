@@ -1,3 +1,4 @@
+import {parsePageRevision,pageRevisionQuery} from "./server/page-revision.ts";
 import { createSavedProgramHost } from "./server/saved-program-host.ts";
 import { serveDatasetAttachments } from "./server/dataset-attachment-http.ts";
 import { supplementalRepository } from "./persistence/supplemental-media.ts";
@@ -497,11 +498,12 @@ export function createService({
           return send(handled.status, handled.body);
         }
         case "source.read": {
-          const current = await pages.readSource(credential(req), id);
+          const current = await pages.readSource(credential(req), id, parsePageRevision(url.searchParams));
           res.setHeader("ETag", `"${current.version}"`);
           return send(200, current);
         }
         case "source.save": {
+          if (parsePageRevision(url.searchParams).kind === "saved") fail(405,"Saved page versions are read-only");
           const saved = await pages.save(
             credential(req),
             id,
@@ -629,9 +631,11 @@ export function createService({
   async function address(req, res, url, origin, id) {
     const viewer = credential(req) || cookieToken(req);
     const download = url.searchParams.get("download") === "1";
+    const selection = parsePageRevision(url.searchParams);
+    const revisionQuery = pageRevisionQuery(selection);
     let found;
     try {
-      found = await pages.address(viewer, id);
+      found = await pages.address(viewer, id, selection);
     } catch (error) {
       // A signed-out visitor is sent to sign in; nothing about the file is revealed.
       if (!download && error && typeof error === "object" && "signIn" in error && error.signIn) {
@@ -655,12 +659,12 @@ export function createService({
       fileId: id,
       version: found.page.version,
       runner,
-      sourceUrl: `/api/library/${id}/source`,
-      stateUrl: `/api/library/${id}/host`,
+      sourceUrl: `/api/library/${id}/source${revisionQuery}`,
+      stateUrl: `/api/library/${id}/host${revisionQuery}`,
     };
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
-      Link: `</api/library/${id}/source>; rel="alternate"; type="text/plain"`,
+      Link: `</api/library/${id}/source${revisionQuery}>; rel="alternate"; type="text/plain"`,
       "Content-Security-Policy": `default-src 'self'; script-src 'self' ${hostedStartupScriptPolicy}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:; frame-src 'self' ${new URL(runner).origin}; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`,
     });
     res.end(hostedShell({ title: documentTitle(found.page.source), boot }));
@@ -714,7 +718,7 @@ export function createService({
       };
     },
     async download(viewer, id, res, origin) {
-      const found = await pages.address(viewer, id);
+      const found = await pages.address(viewer, id, selection);
       if (found.kind !== "page") fail(404, "Not found");
       await sendDownload(res, found.page, origin);
     },

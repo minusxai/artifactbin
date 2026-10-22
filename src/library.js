@@ -1,3 +1,4 @@
+import {parsePageRevision} from "./server/page-revision.ts";
 // @ts-check
 import { readFileSync } from "node:fs";
 import { hash } from "./server/text.ts";
@@ -151,8 +152,10 @@ export function libraryHandler({
     const downloadRoute = /^\/api\/library\/([^/]+)\/download$/.exec(
       url.pathname,
     );
-    if (downloadRoute && req.method === "GET")
+    if (downloadRoute && req.method === "GET") {
+      if (parsePageRevision(url.searchParams).kind === "saved") fail(400,"Download a saved version from its page address");
       return download(credential, downloadRoute[1] || "", res, origin);
+    }
     if (!representation || req.method !== "GET") fail(404, "Not found");
     const id = representation[1] || "";
     const page = await pages.host(
@@ -160,6 +163,7 @@ export function libraryHandler({
       id,
       origin,
       representation[2] === "host",
+      parsePageRevision(url.searchParams),
     );
     res.setHeader("ETag", `"${page.version}"`);
     if (representation[2] === "source") {

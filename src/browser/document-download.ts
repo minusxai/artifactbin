@@ -20,7 +20,9 @@ export function createDocumentDownload(
         return "download-started";
       }
       const address = new URL(options.address());
+      const versions = address.searchParams.getAll("version");
       address.search = "?download=1";
+      for (const version of versions) address.searchParams.append("version", version);
       address.hash = "";
       const name =
         (options

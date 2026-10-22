@@ -67,7 +67,11 @@ These routes require your account token. Use `?owner=` for an imported group's n
 | `GET /af/v1/ids/<id>` | Any file by ID: a page as `/a/<id>`; a backend file as `{ id, kind, version }` to its owner only. |
 | `GET /@<handle>/<id>` or `/@<handle>/<id>-<title>` | A link the earlier product showed. When the handle's library has no such path, `308` to `/a/<id>` with the query kept; the target then applies the usual rules. |
 
-Each form takes `?download=1`. A private page sends a signed-out visitor to sign in; anything unknown, including a page the viewer may not read, is `404`.
+Each page address also accepts `?version=N`, where N is one positive integer selecting that exact stored revision. An invalid selector is `400`; a missing revision is `404`, never the head. The hosted saved-version view is read-only: scripts do not run and it receives no live collaboration or backend authority. The source alternate URL and `GET /api/files/:id/source?version=N` return the selected saved bytes under the usual read permission. Per-viewer state and the current head's starting state are not applied to saved views. `PUT /api/files/:id/source?version=N` is refused (`405`).
+
+Each form takes `?download=1`. With `version=N`, the download contains that revision's portable HTML, with no head or viewer state overlaid. As with other portable files, its authored scripts may run when the downloaded copy is opened; the file contains no account credentials.
+
+A private page sends a signed-out visitor to sign in; anything unknown, including a page the viewer may not read, is `404`.
 
 ## Imported media
 

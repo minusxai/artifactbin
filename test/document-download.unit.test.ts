@@ -19,7 +19,7 @@ function fixture(overrides: Partial<DocumentDownloadOptions> = {}) {
       delegated++;
     },
     hostedPath: () => "/folder/report.html",
-    address: () => "https://example.test/page?version=3#private-state",
+    address: () => "https://example.test/page?filter=open#private-state",
     title: () => "Title",
     snapshot: () => ({ historical: false, state: { draft: "current" } }),
     fetch: async (address, options) => {
@@ -95,12 +95,14 @@ test("hosted download captures current view state and releases its object URL af
 
 test("historical download keeps server state and title fallback is sanitized", async () => {
   const f = fixture({
+    address: () => "https://example.test/page?version=3&filter=open#private-state",
     hostedPath: () => null,
     title: () => "  A: report!  ",
     snapshot: () => ({ historical: true, state: { draft: "must not export" } }),
   });
   f.controller.download();
   await settle();
+  assert.deepEqual(f.requests,["https://example.test/page?download=1&version=3"]);
   assert.equal(await f.files[0]!.text(), f.html);
   assert.equal(f.starts[0]!.name, "A report.html");
 });
