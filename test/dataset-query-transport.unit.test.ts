@@ -103,3 +103,32 @@ test("query client rejects raw oversized reply and cancellation without acceptin
     await new Promise<void>((r) => server.close(() => r()));
   }
 });
+test("query and mutation executor methods independently reject crossed job families before transport", async () => {
+  let calls = 0;
+  const server = createServer((_req, res) => {
+    calls++;
+    res.writeHead(400).end();
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const client = remoteDatasetSqlExecutor({
+    endpoint: `http://127.0.0.1:${(server.address() as { port: number }).port}/v1/execute`,
+    secret: "q".repeat(32),
+  });
+  const mutation = {
+    kind: "dataset-sql",
+    engineVersion: "sqlite-3.53.4-effect-v1",
+    input: {
+      table: { schema: "main", name: "rows", columns: [], rows: [] },
+      sql: "delete from rows",
+      params: {},
+    },
+  };
+  try {
+    await assert.rejects(client.query!(mutation as unknown as DatasetQueryJob));
+    await assert.rejects(client.execute(job as never));
+    assert.equal(calls, 0);
+  } finally {
+    await client.close();
+    await new Promise<void>((r) => server.close(() => r()));
+  }
+});

@@ -311,9 +311,11 @@ export function remoteDatasetSqlExecutor(
   }
   return {
     async execute(job, signal) {
+      validateDatasetSqlJob(job);
       return (await executeJob(job, signal)) as MutationOutcome;
     },
     async query(job, signal) {
+      validateDatasetQueryJob(job);
       return (await executeJob(job, signal)) as ServerQueryAnswer;
     },
     async close() {
