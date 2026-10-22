@@ -14,8 +14,9 @@
  *   POST /api/pair/poll     { deviceCode }  → 202 { pending: true } until approved, then once
  *                                             200 { token, username, purpose: "document" }; 410 after
  * The grant is a `document` session for the page, the same kind the hosted
- * shell gets: comments, presence and backend calls as that account, never
- * source, sharing or account access. The approval page is GET /connect?code=.
+ * shell gets: reads (including source), comments, presence and backend calls
+ * for that page under the account's current permission. It does not authorize
+ * source edits, sharing management, account access or another page. The approval page is GET /connect?code=.
  */
 export interface PendingConnection {
   code: string;

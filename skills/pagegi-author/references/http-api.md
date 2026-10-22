@@ -100,6 +100,10 @@ Saves (`PUT /source`) and new comments and replies (`POST /comments`) accept an 
 
 Imported group pages retain a distinct non-login group owner. An active group editor can read, edit, manage sharing and delete its pages; an active group viewer can read them. Membership is checked again for each operation, including document grants. Named invitations and link access still apply; an invited editor gains no ownership management authority. Group pages appear in members’ shared library. Group creation, membership administration, group backend publication/execution are not exposed by this API. Group membership grants no access to any user’s account secrets.
 
+## Document-scoped connections
+
+A hosted page or connected download receives a document-scoped token, separate from the account token. It authorizes reads of that page (including its HTML source), comments, presence and backend calls under the account's current page permission. It does not authorize source edits, sharing management, account endpoints or access to another private page. Page HTML is readable content, not a place for secrets; keep account credentials out of it.
+
 ## Sharing
 
 | Method and path | Body | Returns |

@@ -708,8 +708,9 @@ export function createPageService({
     /**
      * A page grant for `id` to the account behind `credential` (a connected
      * downloaded file): the same `document` session the hosted shell gets, for
-     * comments, presence and backend calls as that account, never source,
-     * sharing or account access. 401 without an account session, 403 when the
+     * reads (including source), comments, presence and backend calls for that
+     * page under the account's current permission. No source edits, sharing
+     * management, account access or access to another page. 401 without an account session, 403 when the
      * account cannot read the page.
      */
     grant(credential: string, id: string): Promise<{ token: string; username: string }> {
@@ -769,8 +770,9 @@ export function createPageService({
         ).rows[0]!;
         const issued =
           actor && issueSession && !granted ? authority.issue(actor, id, document.generation) : null;
-        // A "document" grant: comments and presence while the account's
-        // role allows them, never source, sharing or account access.
+        // A "document" grant: same-page reads (including source), comments,
+        // presence and backend calls under current permission; no account
+        // access, source edits, sharing management or other-page permission.
         if (issued)
           await client.query(
             "INSERT INTO sessions(token_hash,actor,file_id,generation,expires,purpose) VALUES($1,$2,$3,$4,$5,'document')",
