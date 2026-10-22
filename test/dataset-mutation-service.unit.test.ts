@@ -256,3 +256,84 @@ test("trusted Import SQL alias changes only engine schema while canonical policy
     /invalid_request/,
   );
 });
+
+test("real SQLite alias keeps canonical restrictive policy, presets, checks and table isolation", async () => {
+  const { createDatasetMutationEngine } = await import(
+    "../src/datasets/sql/engine.ts"
+  );
+  const engine = await createDatasetMutationEngine();
+  async function run(sql: string) {
+    const f = fixture();
+    const originalHead = f.ports.head;
+    const cols = [
+      { name: "id", type: "number" as const },
+      { name: "who", type: "string" as const },
+      { name: "value", type: "number" as const },
+    ];
+    f.ports.operation = async () => ({
+      ...operation,
+      target: { schema: "main", table: "rows" },
+      sqlSchema: "sales",
+      sql,
+    });
+    f.ports.head = async (...args) => {
+      const h = await originalHead(...args);
+      assert.ok(h);
+      h.tables = [{ schema: "main", name: "rows", columns: cols, object }];
+      h.authority.dataset.policy = {
+        version: 1,
+        enforcement: "enabled",
+        tables: [
+          {
+            table: { schema: "main", name: "rows" },
+            update_permissions: [
+              {
+                role: "viewer",
+                permission: {
+                  columns: ["value"],
+                  filter: { who: { _eq: "x-hasura-user-id" } },
+                  check: { value: { _gte: 0 } },
+                  set: { who: "x-hasura-user-id", id: 7 },
+                },
+              },
+            ],
+          },
+        ],
+      };
+      return h;
+    };
+    f.ports.read = async (table) => {
+      assert.equal(table.schema, "main");
+      return [
+        { id: 1, who: "owner", value: 0 },
+        { id: 2, who: "other", value: 0 },
+      ];
+    };
+    f.ports.execute = async (job) => engine.mutate(job.input);
+    f.ports.persist = async (rows) => {
+      assert.deepEqual(rows, [
+        { id: 7, who: "owner", value: 2 },
+        { id: 2, who: "other", value: 0 },
+      ]);
+      return object;
+    };
+    const originalCommit = f.ports.commit;
+    f.ports.commit = async (input) => {
+      assert.deepEqual(input.operation.target, {
+        schema: "main",
+        table: "rows",
+      });
+      assert.equal(input.outcome.affected, 1);
+      return originalCommit(input);
+    };
+    return createDatasetMutationService(f.ports).mutate(context, request);
+  }
+  await run("update sales.rows set value=(select count(*) from sales.rows)");
+  await assert.rejects(run("update sales.rows set value=-1"), /policy_denied/);
+  await assert.rejects(
+    run("update sales.rows set who='other'"),
+    /policy_denied/,
+  );
+  await assert.rejects(run("update main.rows set value=2"));
+  await assert.rejects(run("update sales.other set value=2"));
+});
