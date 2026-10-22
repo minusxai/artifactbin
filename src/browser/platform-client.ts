@@ -183,7 +183,9 @@ export function createPlatformClient(
         ? {
             fileId: options.fileId,
             ...(options.share === undefined ? {} : { share: options.share }),
-            ...(options.version === undefined ? {} : { version: options.version }),
+            ...(options.version === undefined
+              ? {}
+              : { version: options.version }),
           }
         : {
             source: options.source,
@@ -214,9 +216,37 @@ export function createPlatformClient(
       command({ kind: "pair", pairGeneration: ++pairGeneration }, 305000),
     request: (operation) => command({ kind: "request", operation }),
     page: () => command({ kind: "page" }),
+    async image(address, authorizationContext, signal) {
+      signal?.throwIfAborted();
+      const id = crypto.randomUUID();
+      const cancel = () => {
+        void command({ kind: "image.cancel", id }).catch(() => {});
+      };
+      signal?.addEventListener("abort", cancel, { once: true });
+      try {
+        const value = await command({
+          kind: "image",
+          id,
+          address,
+          authorizationContext,
+        });
+        signal?.throwIfAborted();
+        return value;
+      } finally {
+        signal?.removeEventListener("abort", cancel);
+      }
+    },
     backend: (path, method, body, authorizationContext) =>
       command(
-        { kind: "backend", path, method, ...(body === undefined ? {} : { body }), ...(authorizationContext === undefined ? {} : {authorizationContext}) },
+        {
+          kind: "backend",
+          path,
+          method,
+          ...(body === undefined ? {} : { body }),
+          ...(authorizationContext === undefined
+            ? {}
+            : { authorizationContext }),
+        },
         35000,
       ),
     startLive: (args) =>

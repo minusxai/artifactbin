@@ -42,6 +42,8 @@ export interface CoreHost {
   state(seed: AfJsonObject): StatePort | null;
   /** One RemotePort per page: POST /api/files/:id/graphql through the platform frame. */
   remote(): RemotePort;
+  /** Internal migrated person-card image port: exact page-bound URL, no arbitrary fetch. */
+  image?(url:string,signal?:AbortSignal):Promise<Blob>;
 }
 
 /** What the core gives a platform runtime that attaches to a downloaded file. */

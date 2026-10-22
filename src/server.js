@@ -1,3 +1,6 @@
+import { supplementalRepository } from "./persistence/supplemental-media.ts";
+import { createSupplementalService } from "./media/supplemental-service.ts";
+import { serveSupplemental } from "./media/supplemental-http.ts";
 import { createDatasetRuntime } from "./server/dataset-runtime.ts";
 import { createDatasetInvalidationReader } from "./persistence/dataset-invalidations.ts";
 import { createBackendStoreInvalidationReader } from "./persistence/backend-store-invalidations.ts";
@@ -186,6 +189,7 @@ export function createService({
     ));
   const assets = createPlatformAssets();
   const media = createMediaService(mediaRepository(repository.sql, now), readOnlyMediaStore(mediaDirectory));
+  const supplemental = createSupplementalService({repository:supplementalRepository(repository.sql, now, datasetRuntime.person),store:readOnlyMediaStore(mediaDirectory)});
   const server = createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader(
@@ -212,6 +216,7 @@ export function createService({
         return serveRunner(req, res, platformOrigin, boundary.origin);
       Object.assign(req, { pagegiOrigin: boundary.origin });
       const url = new URL(req.url || "/", boundary.origin);
+      if (await serveSupplemental(req,res,url,supplemental,credential(req)||cookieToken(req))) return;
       if (await serveMedia(req, res, url, media, credential(req) || cookieToken(req))) return;
       if (req.method === "OPTIONS") {
         res.writeHead(204);

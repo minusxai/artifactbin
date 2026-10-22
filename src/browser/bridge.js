@@ -1,3 +1,4 @@
+import { createImageClient } from "./image-client.ts";
 // The page-side half of a hosted page, installed by the runner before the
 // page's own HTML. It registers the CoreHost the core uses for the viewer's
 // own local state (kept in this browser, keyed by the page), backend calls
@@ -49,6 +50,7 @@ export function installBridge(boot) {
   const receiver = boot.local ? window : parent;
   const send = (data) =>
     receiver.postMessage({ pagegi: true, channel: boot.channel, ...data }, "*");
+  const images = createImageClient({send,id:()=>crypto.randomUUID(),schedule});
   const remote = createRemoteClient({
     send,
     id: () => crypto.randomUUID(),
@@ -92,6 +94,7 @@ export function installBridge(boot) {
       return local;
     },
     remote: () => remote.port,
+    image: (url,signal) => images.load(url,signal),
   };
   /** @type {import("./core/host-contracts.ts").LocalAttachment | null} */
   let attached = null;
@@ -107,10 +110,10 @@ export function installBridge(boot) {
     });
     local = attached.state;
     local.subscribe(report);
-  } else
-    Object.defineProperty(globalThis, Symbol.for(AF_HOST_KEY), {
-      value: Object.freeze(host),
-    });
+  }
+  Object.defineProperty(globalThis, Symbol.for(AF_HOST_KEY), {
+    value: Object.freeze(host),
+  });
 
   const offset = () =>
     boot.local ? document.getElementById("pg-bar")?.offsetHeight || 0 : 0;
@@ -270,6 +273,7 @@ export function installBridge(boot) {
   addEventListener("pagehide", (event) => {
     if (event.persisted) return;
     remote.dispose();
+    images.dispose();
     selectionLayer.remove();
     document.removeEventListener("selectionchange", selectionChanged);
   });
@@ -286,7 +290,9 @@ export function installBridge(boot) {
       repaintSelections();
       return;
     }
+    if (m.kind === "image-response") { images.receive(m.response); return; }
     if (m.kind === "authorization-context") {
+      images.setAuthority(typeof m.context==="string"?m.context:null);
       remote.setAuthorizationContext(typeof m.context === "string" ? m.context : null);
       return;
     }

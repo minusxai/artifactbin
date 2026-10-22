@@ -1,4 +1,8 @@
 // @ts-check
+import { createImageHost } from "./image-host.ts";
+import { createCommentAttachmentResources } from "./comment-attachment-resources.ts";
+import { readPlatformImage, platformImageBlob } from "./platform-image.ts";
+import { supplementalAddress } from "../media/supplemental-address.ts";
 import { createDocumentHost } from "./document-host.ts";
 import { validateSelection } from "../domain/selection-presence.ts";
 import { commentAccess, prepareComment } from "./comment-command.ts";
@@ -44,7 +48,7 @@ async function bootPlatform() {
   /** A downloaded file's identity: the server it came from, its ID, version and revision. */
   const localPage = local ? documentSession.page : null;
   const host = createDocumentHost({
-    invalidateCollaboration: () => collaboration.disconnect(),
+    invalidateCollaboration: () => { imageHost.invalidate(); attachmentResources.setAuthority(null); collaboration.disconnect(); },
     readState: () => saved,
     updateState: (reducer) => { saved = reducer(saved); },
     // A downloaded file comments as the hosted view does: signed in, with the server's permission.
@@ -66,6 +70,7 @@ async function bootPlatform() {
       ? current.permissions?.authorizationContext ?? null : null;
   }
   function sendAuthorizationContext() {
+    if(!authorizationContext())imageHost.invalidate();
     sendApp({pagegi: true, kind: "authorization-context", context: authorizationContext()});
   }
   const localLayout = local
@@ -254,6 +259,15 @@ async function bootPlatform() {
   }
   // Backend calls from the page: POST /api/files/:id/graphql with the viewer's own page grant
   // (a downloaded file sends them through its platform frame, which holds that grant).
+  const imageHost = createImageHost({
+    pageId:()=>saved.fileId||null,
+    authority:authorizationContext,
+    async load(address,context,signal){
+      if(local)return broker().image(address,context,signal);
+      return readPlatformImage(await fetch(supplementalAddress(address),{method:"GET",credentials:"same-origin",redirect:"error",headers:backendHeaders(),signal}),signal);
+    },
+    reply:response=>sendApp({pagegi:true,kind:"image-response",response}),
+  });
   const remoteHost = createRemoteHost({
     authorizationContext,
     endpoint: () =>
@@ -467,11 +481,13 @@ async function bootPlatform() {
       sendApp({ pagegi: true, kind: "remote-invalidated" });
     },
     onInvalidated() {
+      attachmentResources.setAuthority(null);
       sendApp({ pagegi: true, kind: "remote-invalidated" });
     },
     onAcknowledged: (from, to) => commentPanel.rename(from, to),
     onChange(next) {
       const change = host.observeCollaboration(next);
+      refreshAttachmentAuthority();
       sendAuthorizationContext();
       if (change.rosterChanged) drawPeople();
       drawCursors();
@@ -545,7 +561,27 @@ async function bootPlatform() {
         : null,
     );
   }
+  const attachmentResources = createCommentAttachmentResources({
+    async load(commentId,attachmentId,variant,signal) {
+      const current=host.read(),context=current.permissions?.authorizationContext;
+      if(!saved.fileId||current.sync!=="synced"||!current.permissions?.read||!context)throw Object.assign(Error("Image unavailable"),{status:403});
+      const address={kind: /** @type {const} */ ("comment"),pageId:saved.fileId,commentId,attachmentId,variant};
+      signal.throwIfAborted();
+      const value=local?await broker().image(address,context,signal):await readPlatformImage(await fetch(supplementalAddress(address),{method:"GET",credentials:"same-origin",redirect:"error",headers:backendHeaders(),signal}),signal);
+      signal.throwIfAborted();
+      if(host.read().permissions?.authorizationContext!==context||host.read().sync!=="synced")throw Object.assign(Error("Image caller changed"),{status:403});
+      return platformImageBlob(value);
+    },
+    maxBytes:4*1024*1024,
+    createURL:blob=>URL.createObjectURL(blob),
+    revokeURL:url=>URL.revokeObjectURL(url),
+  });
+  function refreshAttachmentAuthority(){
+    const current=host.read();
+    attachmentResources.setAuthority(gate.active&&current.sync==="synced"&&current.permissions?.read?current.permissions.authorizationContext??null:null);
+  }
   const commentPanel = createCommentPanel({
+    attachmentResources,
     layer,
     read: () => ({
       comments: saved.comments,
@@ -583,6 +619,7 @@ async function bootPlatform() {
     },
   });
   function draw() {
+    refreshAttachmentAuthority();
     drawCursors();
     commentPanel.render();
   }
@@ -655,6 +692,8 @@ async function bootPlatform() {
             () => suspendBackend(),
             () => documentView.dispose(),
             () => commentPanel.dispose(),
+            () => attachmentResources.dispose(),
+            () => imageHost.invalidate(),
             () => chrome.dispose(),
             () => connection.dispose(),
             () => presence.cancel(),
@@ -688,6 +727,7 @@ async function bootPlatform() {
     chrome.renderPeople();
   }
   function updateIdentity() {
+    refreshAttachmentAuthority();
     sendAuthorizationContext();
     chrome.renderIdentity();
   }
@@ -784,7 +824,7 @@ async function bootPlatform() {
   const appMessageRouting = {
     accepts: (event) => placement?.accepts(event) === true,
     active: () => gate.active,
-    backend: (message) => remoteHost.handle(message),
+    backend: (message) => imageHost.handle(message)||remoteHost.handle(message),
   };
   addEventListener("message", (e) => {
     if (!admitAppMessage(e, appMessageRouting)) return;

@@ -1,3 +1,4 @@
+import { commentAttachments } from "../persistence/comment-attachments.ts";
 import type { AcceptedComment, Snapshot } from "../contracts.ts";
 import type { SqlClient, SqlDatabase } from "../persistence/sql.ts";
 import {
@@ -36,7 +37,9 @@ async function comment(c: SqlClient, fileId: string, id: string) {
       id,
     ])
   ).rows[0];
-  return row ? decodeComment(row) : null;
+  if(!row)return null;
+  const attachments=(await commentAttachments(c,fileId,id)).get(id);
+  return {...decodeComment(row),...(attachments?.length?{attachments}:{})};
 }
 async function source(c: SqlClient, fileId: string, revision: string) {
   const row = (
@@ -101,7 +104,8 @@ export function createCommentRepository(
           (latest, row) => Math.max(latest, Number(row.changed_at)),
           since ?? 0,
         );
-        return work({ ...loaded, comments: rows.map(decodeComment), cursor });
+        const attachments=await commentAttachments(c,request.fileId);
+        return work({ ...loaded, comments: rows.map(row=>{const value=decodeComment(row);const images=attachments.get(value.id);return {...value,...(images?.length?{attachments:images}:{})};}), cursor });
       }),
     add: (baseRequest, prepare, work, idempotency = null) =>
       database.transaction(async (c) => {

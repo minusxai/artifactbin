@@ -21,7 +21,12 @@ export type PlatformOperation =
   | { kind: "comments.list" }
   | { kind: "comments.create"; comment: unknown; snapshot: unknown }
   /** Resolve a thread, or reopen it with resolved: false. */
-  | { kind: "comments.resolve"; id: string; revision: number; resolved?: boolean }
+  | {
+      kind: "comments.resolve";
+      id: string;
+      revision: number;
+      resolved?: boolean;
+    }
   | { kind: "context.get"; id: string }
   | { kind: "profiles.list" }
   | { kind: "presence.capture"; sessionId: string };
@@ -67,8 +72,21 @@ export type PlatformCommand =
   | { kind: "request"; operation: PlatformOperation }
   /** Open the page as whoever the frame currently is (nobody, the link, or the connected account). */
   | { kind: "page" }
+  | { kind: "image.cancel"; id: string }
+  | {
+      kind: "image";
+      id: string;
+      address: import("../media/supplemental-contracts.ts").SupplementalAddress;
+      authorizationContext: string;
+    }
   /** A backend call or listing with the frame's credential; the status and body come back as they are. */
-  | { kind: "backend"; path: PlatformBackendPath; method: "GET" | "POST"; body?: unknown; authorizationContext?: string }
+  | {
+      kind: "backend";
+      path: PlatformBackendPath;
+      method: "GET" | "POST";
+      body?: unknown;
+      authorizationContext?: string;
+    }
   | {
       kind: "live.start";
       sessionId: string;
@@ -105,13 +123,27 @@ export type PlatformMessage =
       status?: number;
     }
   | { pagegiPlatform: 1; session: string; kind: "event"; event: PlatformEvent };
+export interface PlatformImage {
+  mimeType: "image/webp";
+  base64: string;
+}
 export interface PlatformClient {
   ready: Promise<void>;
   pair(): Promise<PlatformConnection>;
   /** Caller operations refuse transport while pairing; permissions must be refreshed after any pairing attempt. */
   request(operation: PlatformOperation): Promise<any>;
   page(): Promise<PlatformPage>;
-  backend(path: PlatformBackendPath, method: "GET" | "POST", body?: unknown, authorizationContext?: string): Promise<PlatformBackendResult>;
+  image(
+    address: import("../media/supplemental-contracts.ts").SupplementalAddress,
+    authorizationContext: string,
+    signal?: AbortSignal,
+  ): Promise<PlatformImage>;
+  backend(
+    path: PlatformBackendPath,
+    method: "GET" | "POST",
+    body?: unknown,
+    authorizationContext?: string,
+  ): Promise<PlatformBackendResult>;
   startLive(value: {
     sessionId: string;
     sourceRevision: string;

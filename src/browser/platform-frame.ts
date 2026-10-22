@@ -1,3 +1,4 @@
+import { imagePath, readPlatformImage } from "./platform-image.ts";
 import { pairingExchange } from "./pairing-exchange.ts";
 import { readBoundedJSON } from "./bounded-response.ts";
 import { wireRequest, wireResult } from "./comment-wire.ts";
@@ -100,6 +101,12 @@ export function createPlatformSession(
     liveEpoch = 0,
     abort = new AbortController(),
     live: ReturnType<typeof connectLive> | undefined;
+  const imageReads = new Map<string, AbortController>();
+  function invalidateImages() {
+    authorizationContext = null;
+    for (const read of imageReads.values()) read.abort();
+    imageReads.clear();
+  }
   let identityEpoch = 0;
   let authorizationContext: string | null = null;
   const active = (version: number) => {
@@ -147,6 +154,7 @@ export function createPlatformSession(
     return { response, value };
   }
   function stop() {
+    invalidateImages();
     generation++;
     liveEpoch++;
     abort.abort();
@@ -172,20 +180,31 @@ export function createPlatformSession(
       "GET",
       credential(),
     );
-    if (callerEpoch !== identityEpoch || pairing) throw Error("Platform caller changed");
+    if (callerEpoch !== identityEpoch || pairing)
+      throw Error("Platform caller changed");
     const share = value?.state?.remote?.share;
-    if (typeof share === "string" && share && !binding.share) binding.share = share;
+    if (typeof share === "string" && share && !binding.share)
+      binding.share = share;
     return publicPage(value);
   }
   /** A backend route under the page, with the frame's credential; the status and body come back as they are. */
-  async function backend(path: unknown, method: unknown, body: unknown, expectedContext?: string) {
+  async function backend(
+    path: unknown,
+    method: unknown,
+    body: unknown,
+    expectedContext?: string,
+  ) {
     if (pairing) throw Error("Connection pairing is pending");
-    if (expectedContext !== undefined && expectedContext !== authorizationContext)
+    if (
+      expectedContext !== undefined &&
+      expectedContext !== authorizationContext
+    )
       throw Error("Caller changed before the backend request was sent");
     if (!binding.fileId) throw Error("Publish this file first");
     if (typeof path !== "string" || !BACKEND_PATHS.includes(path))
       throw Error("Unsupported backend route");
-    if (method !== "GET" && method !== "POST") throw Error("Unsupported backend route");
+    if (method !== "GET" && method !== "POST")
+      throw Error("Unsupported backend route");
     const version = generation;
     active(version);
     const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(30000)]);
@@ -202,7 +221,9 @@ export function createPlatformSession(
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       },
     );
-    const value = await readBoundedJSON(response, PLATFORM_MAX_BYTES).catch(() => null);
+    const value = await readBoundedJSON(response, PLATFORM_MAX_BYTES).catch(
+      () => null,
+    );
     active(version);
     return { status: response.status, body: value };
   }
@@ -211,7 +232,7 @@ export function createPlatformSession(
       throw Error("Invalid pair generation");
     if (pairing) throw Error("Connection already pending");
     pairing = true;
-    authorizationContext = null;
+    invalidateImages();
     identityEpoch++;
     const version = generation;
     try {
@@ -267,6 +288,7 @@ export function createPlatformSession(
       throw Error("Unsupported platform operation");
     }
     if (!wire) throw Error("Unsupported platform operation");
+    if (op.kind === "permissions") invalidateImages();
     const callerEpoch = identityEpoch;
     const value = (
       await call(
@@ -276,8 +298,13 @@ export function createPlatformSession(
         { ...credential(), ...wire.headers },
       )
     ).value;
-    if (callerEpoch !== identityEpoch || pairing) throw Error("Platform caller changed");
-    if (op.kind === "permissions") authorizationContext = typeof value?.authorizationContext === "string" ? value.authorizationContext : null;
+    if (callerEpoch !== identityEpoch || pairing)
+      throw Error("Platform caller changed");
+    if (op.kind === "permissions")
+      authorizationContext =
+        typeof value?.authorizationContext === "string"
+          ? value.authorizationContext
+          : null;
     return wireResult(op, value, page);
   }
   return {
@@ -292,8 +319,65 @@ export function createPlatformSession(
           return request(command.operation);
         case "page":
           return page();
+        case "image.cancel":
+          imageReads.get(command.id)?.abort();
+          imageReads.delete(command.id);
+          return null;
+        case "image": {
+          if (
+            pairing ||
+            !binding.fileId ||
+            !authorizationContext ||
+            command.authorizationContext !== authorizationContext
+          )
+            throw Error("Image caller changed");
+          if (
+            typeof command.id !== "string" ||
+            !command.id ||
+            command.id.length > 100 ||
+            imageReads.has(command.id) ||
+            imageReads.size >= 16
+          )
+            throw Error("Invalid image request");
+          const path = imagePath(command.address, binding.fileId),
+            version = generation,
+            callerEpoch = identityEpoch,
+            controller = new AbortController();
+          imageReads.set(command.id, controller);
+          const signal = AbortSignal.any([
+            abort.signal,
+            controller.signal,
+            AbortSignal.timeout(15000),
+          ]);
+          try {
+            const response = await fetcher(origin + path, {
+              method: "GET",
+              credentials: "omit",
+              redirect: "error",
+              signal,
+              headers: credential(),
+            });
+            const value = await readPlatformImage(response, signal);
+            active(version);
+            if (
+              pairing ||
+              callerEpoch !== identityEpoch ||
+              command.authorizationContext !== authorizationContext
+            )
+              throw Error("Image caller changed");
+            return value;
+          } finally {
+            if (imageReads.get(command.id) === controller)
+              imageReads.delete(command.id);
+          }
+        }
         case "backend":
-          return backend(command.path, command.method, command.body, command.authorizationContext);
+          return backend(
+            command.path,
+            command.method,
+            command.body,
+            command.authorizationContext,
+          );
         case "live.start": {
           if (!binding.fileId) throw Error("Publish this file first");
           if (command.sessionId !== binding.sessionId)
@@ -306,8 +390,15 @@ export function createPlatformSession(
           const version = generation,
             epoch = ++liveEpoch;
           const emitLive = (event: PlatformLiveEvent) => {
-            if (epoch === liveEpoch)
+            if (epoch === liveEpoch && version === generation && !disposed) {
+              if (
+                event.type === "changed" ||
+                event.type === "live-ready" ||
+                (event.type === "status" && event.status !== "live")
+              )
+                invalidateImages();
               emit({ ...event, liveGeneration }, version);
+            }
           };
           const url = new URL(
             "/api/files/" + encodeURIComponent(binding.fileId) + "/live",

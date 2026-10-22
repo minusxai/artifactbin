@@ -3,18 +3,10 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { isMediaPath, parseMediaAddress } from "./address.ts";
 import type { MediaRequest, MediaResponse } from "./contracts.ts";
-interface MediaService {
+export interface MediaService {
   read(request: MediaRequest): Promise<MediaResponse>;
 }
-/** Removes the API's permissive CORS defaults before every media response, including denials. */
-export async function serveMedia(
-  req: IncomingMessage,
-  res: ServerResponse,
-  url: URL,
-  service: MediaService,
-  credential: string,
-): Promise<boolean> {
-  if (!isMediaPath(url.pathname)) return false;
+export function preparePrivateMedia(res: ServerResponse) {
   for (const name of [
     "Access-Control-Allow-Origin",
     "Access-Control-Allow-Headers",
@@ -28,6 +20,33 @@ export async function serveMedia(
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+}
+export async function writePrivateMedia(
+  req: IncomingMessage,
+  res: ServerResponse,
+  response: MediaResponse,
+) {
+  try {
+    res.writeHead(response.status, response.headers);
+    if (response.body && req.method !== "HEAD")
+      await pipeline(Readable.from(response.body), res);
+    else res.end();
+  } catch {
+    res.destroy();
+  } finally {
+    await response.close().catch(() => {});
+  }
+}
+/** Removes the API's permissive CORS defaults before every media response, including denials. */
+export async function serveMedia(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  service: MediaService,
+  credential: string,
+): Promise<boolean> {
+  if (!isMediaPath(url.pathname)) return false;
+  preparePrivateMedia(res);
   const address = parseMediaAddress(url.pathname);
   if (!address || url.search || !["GET", "HEAD"].includes(req.method || "")) {
     res.writeHead(404);
@@ -50,15 +69,6 @@ export async function serveMedia(
     res.end();
     return true;
   }
-  try {
-    res.writeHead(response.status, response.headers);
-    if (response.body && req.method !== "HEAD")
-      await pipeline(Readable.from(response.body), res);
-    else res.end();
-  } catch {
-    res.destroy();
-  } finally {
-    await response.close().catch(() => {});
-  }
+  await writePrivateMedia(req, res, response);
   return true;
 }

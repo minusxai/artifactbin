@@ -27,6 +27,7 @@ import { decodeCursor, encodeCursor } from "./idempotency.ts";
 export function commentRecord(comment: AcceptedComment): CommentRecord {
   return {
     id: comment.id,
+    ...(comment.attachments?.length?{attachments:comment.attachments}:{}),
     nodeId: comment.context?.status === "unavailable" ? null : comment.nodeId,
     quote: comment.quote,
     body: comment.body,
