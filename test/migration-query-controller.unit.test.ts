@@ -302,3 +302,221 @@ test("invalidation releases a hung ready wait and dispose clears exactly once", 
   controller.invalidate();
   assert.equal(publications.length, count);
 });
+
+function injectedClock() {
+  let now = 0;
+  const timers = new Map<() => void, number>();
+  const schedule = (callback: () => void, ms: number) => {
+    timers.set(callback, now + ms);
+    return () => {
+      timers.delete(callback);
+    };
+  };
+  return {
+    timers,
+    elapse(ms: number) {
+      now += ms;
+    },
+    advance(ms: number) {
+      now += ms;
+      for (const [callback, at] of [...timers])
+        if (at <= now) {
+          timers.delete(callback);
+          callback();
+        }
+    },
+    port: {
+      now: () => now,
+      schedule,
+      sleep: (ms: number, signal: AbortSignal) =>
+        new Promise<void>((resolve, reject) => {
+          const abort = () => {
+            stop();
+            signal.removeEventListener("abort", abort);
+            reject(Error("cancelled"));
+          };
+          const stop = schedule(() => {
+            signal.removeEventListener("abort", abort);
+            resolve();
+          }, ms);
+          if (signal.aborted) abort();
+          else signal.addEventListener("abort", abort, { once: true });
+        }),
+    },
+  };
+}
+const flush = async () => {
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+};
+for (const phase of ["evaluation", "run", "option-page", "table-page"] as const)
+  test(`total deadline releases hung ${phase}, clears timers and ignores late result`, async () => {
+    const clock = injectedClock();
+    const evaluation =
+        deferred<Awaited<ReturnType<CompiledQueryPorts["evaluation"]>>>(),
+      run = deferred<CompiledQueryAnswer>(),
+      page = deferred<typeof table>();
+    const { controller, publications } = setup(
+      {
+        clock: clock.port,
+        evaluation:
+          phase === "evaluation"
+            ? () => evaluation.promise
+            : async () => ({
+                values: {},
+                localTables: {},
+                userId: null,
+                now: "0",
+                tz: "UTC",
+              }),
+        engine: {
+          prepare() {},
+          ready: () => true,
+          run:
+            phase === "run"
+              ? () => run.promise
+              : async () => ({
+                  tables: {
+                    rows: {
+                      ...table,
+                      totalRows: phase === "option-page" ? 2 : 1,
+                    },
+                  },
+                  errors: {},
+                }),
+          page: () => page.promise,
+        },
+      },
+      phase === "option-page" ? ["rows"] : [],
+    );
+    const pending =
+      phase === "table-page"
+        ? controller.fetchPage("rows", { offset: 0, limit: 1 }, table.columns)
+        : controller.refresh();
+    await flush();
+    clock.advance(20);
+    await flush();
+    if (phase === "table-page") await assert.rejects(pending, /timed out/);
+    else {
+      assert.equal(await pending, false);
+      assert.equal(publications.at(-1)?.state, "failed");
+    }
+    assert.equal(clock.timers.size, 0);
+    const count = publications.length;
+    evaluation.resolve({
+      values: {},
+      localTables: {},
+      userId: "old",
+      now: "0",
+      tz: "UTC",
+    });
+    run.resolve(answer());
+    page.resolve(table);
+    await flush();
+    assert.equal(publications.length, count);
+  });
+test("evaluation and engine execution share one deadline instead of restarting the budget at each await", async () => {
+  const clock = injectedClock(),
+    evaluation =
+      deferred<Awaited<ReturnType<CompiledQueryPorts["evaluation"]>>>(),
+    run = deferred<CompiledQueryAnswer>();
+  const { controller, publications } = setup({
+    clock: clock.port,
+    evaluation: () => evaluation.promise,
+    engine: {
+      prepare() {},
+      ready: () => true,
+      run: () => run.promise,
+      page: async () => table,
+    },
+  });
+  const pending = controller.refresh();
+  clock.advance(12);
+  evaluation.resolve({
+    values: {},
+    localTables: {},
+    userId: null,
+    now: "0",
+    tz: "UTC",
+  });
+  await flush();
+  clock.advance(8);
+  await flush();
+  assert.equal(await pending, false);
+  assert.equal(publications.at(-1)?.state, "failed");
+  assert.equal(clock.timers.size, 0);
+});
+
+test("late promise completion cannot beat a due deadline whose timer has not yet run", async () => {
+  const clock = injectedClock(),
+    run = deferred<CompiledQueryAnswer>();
+  const { controller, publications } = setup({
+    clock: clock.port,
+    engine: {
+      prepare() {},
+      ready: () => true,
+      run: () => run.promise,
+      page: async () => table,
+    },
+  });
+  const pending = controller.refresh();
+  await flush();
+  clock.elapse(20);
+  run.resolve(answer());
+  assert.equal(await pending, false);
+  assert.equal(publications.at(-1)?.state, "failed");
+  assert.equal(clock.timers.size, 0);
+});
+
+test("expired synchronous preparation does not dispatch evaluation or engine execution", async () => {
+  const clock = injectedClock();
+  let evaluations = 0,
+    runs = 0;
+  const { controller } = setup({
+    clock: clock.port,
+    evaluation: async () => {
+      evaluations++;
+      return { values: {}, localTables: {}, userId: null, now: "0", tz: "UTC" };
+    },
+    engine: {
+      prepare: () => clock.elapse(20),
+      ready: () => true,
+      run: async () => {
+        runs++;
+        return answer();
+      },
+      page: async () => table,
+    },
+  });
+  assert.equal(await controller.refresh(), false);
+  assert.equal(evaluations, 0);
+  assert.equal(runs, 0);
+  assert.equal(clock.timers.size, 0);
+});
+
+for (const action of ["supersede", "dispose"] as const)
+  test(`${action} releases a hung engine deadline and suppresses its late result`, async () => {
+    const clock = injectedClock(),
+      first = deferred<CompiledQueryAnswer>();
+    let calls = 0;
+    const { controller, publications } = setup({
+      clock: clock.port,
+      engine: {
+        prepare() {},
+        ready: () => true,
+        run: () => (++calls === 1 ? first.promise : Promise.resolve(answer())),
+        page: async () => table,
+      },
+    });
+    const pending = controller.refresh();
+    await flush();
+    assert.equal(clock.timers.size, 1);
+    if (action === "supersede") assert.equal(await controller.refresh(), true);
+    else controller.dispose();
+    assert.equal(await pending, false);
+    assert.equal(clock.timers.size, 0);
+    const count = publications.length;
+    first.resolve(answer());
+    clock.advance(20);
+    await flush();
+    assert.equal(publications.length, count);
+  });

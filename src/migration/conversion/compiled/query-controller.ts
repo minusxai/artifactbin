@@ -11,30 +11,61 @@ export function createCompiledQueryController(
   configuration: CompiledQueryConfiguration,
   ports: CompiledQueryPorts,
 ): CompiledQueryController {
+  if (
+    !Number.isSafeInteger(configuration.deadlineMs) ||
+    configuration.deadlineMs < 1 ||
+    configuration.deadlineMs > 2147483647
+  )
+    throw Error("Invalid query deadline");
   let generation = 0,
     disposed = false,
     scope = new AbortController();
   const queries = new Set(configuration.queries);
-  const check = (current: number, signal: AbortSignal) => {
+  const check = (current: number, signal: AbortSignal, deadline: number) => {
     if (disposed || current !== generation || signal.aborted)
       throw Error("Query snapshot cancelled");
+    if (ports.clock.now() >= deadline) throw Error("Query execution timed out");
     if (ports.availability() !== "ready")
       throw Error("Query inputs unavailable");
   };
-  const wait = <T>(promise: Promise<T>, signal: AbortSignal): Promise<T> =>
+  const wait = <T>(
+    promise: Promise<T>,
+    signal: AbortSignal,
+    deadline: number,
+  ): Promise<T> =>
     new Promise((resolve, reject) => {
-      const abort = () => {
+      let settled = false,
+        stopDeadline = () => {};
+      const finish = (action: () => void) => {
+        if (settled) return;
+        settled = true;
+        stopDeadline();
         signal.removeEventListener("abort", abort);
-        reject(Error("Query snapshot cancelled"));
+        action();
       };
+      const abort = () =>
+        finish(() => reject(Error("Query snapshot cancelled")));
+      const timeout = () =>
+        finish(() => reject(Error("Query execution timed out")));
+      // Observe even a late engine rejection after cancellation or timeout.
+      promise.then(
+        (value) => {
+          if (ports.clock.now() >= deadline) timeout();
+          else finish(() => resolve(value));
+        },
+        (error) => finish(() => reject(error)),
+      );
       if (signal.aborted) {
         abort();
         return;
       }
       signal.addEventListener("abort", abort, { once: true });
-      promise
-        .then(resolve, reject)
-        .finally(() => signal.removeEventListener("abort", abort));
+      const remaining = deadline - ports.clock.now();
+      if (remaining <= 0) {
+        timeout();
+        return;
+      }
+      stopDeadline = ports.clock.schedule(timeout, remaining);
     });
   const retire = () => {
     generation++;
@@ -46,22 +77,25 @@ export function createCompiledQueryController(
       if (disposed || ports.availability() === "blocked") return false;
       retire();
       const current = generation,
-        signal = scope.signal;
+        signal = scope.signal,
+        deadline = ports.clock.now() + configuration.deadlineMs;
       ports.publish({ state: "pending" });
       try {
-        check(current, signal);
+        check(current, signal, deadline);
         ports.engine.prepare();
-        const deadline = ports.clock.now() + configuration.deadlineMs;
         while (!ports.engine.ready()) {
-          check(current, signal);
-          if (ports.clock.now() > deadline)
-            throw Error("Local engine loading timed out");
-          await wait(ports.clock.sleep(10, signal), signal);
+          check(current, signal, deadline);
+          await wait(ports.clock.sleep(10, signal), signal, deadline);
         }
-        const evaluation = await wait(ports.evaluation(), signal);
-        check(current, signal);
-        const result = await wait(ports.engine.run(evaluation), signal);
-        check(current, signal);
+        check(current, signal, deadline);
+        const evaluation = await wait(ports.evaluation(), signal, deadline);
+        check(current, signal, deadline);
+        const result = await wait(
+          ports.engine.run(evaluation),
+          signal,
+          deadline,
+        );
+        check(current, signal, deadline);
         // Completing option windows must not mutate the engine's cached answer.
         const answer: CompiledQueryAnswer = {
           tables: { ...result.tables },
@@ -74,43 +108,56 @@ export function createCompiledQueryController(
           )
             throw Error("Select options unavailable");
           if (answer.tables[name])
-            answer.tables[name] = await completeControlOptions(
-              answer.tables[name],
-              (offset, limit) => {
-                check(current, signal);
-                return ports.engine.page(name, { offset, limit }, evaluation);
-              },
-              {},
-              { signal, now: ports.clock.now, schedule: ports.clock.schedule },
+            answer.tables[name] = await wait(
+              completeControlOptions(
+                answer.tables[name],
+                (offset, limit) => {
+                  check(current, signal, deadline);
+                  return ports.engine.page(name, { offset, limit }, evaluation);
+                },
+                {},
+                {
+                  signal,
+                  now: () => ports.clock.now(),
+                  schedule: (callback, ms) =>
+                    ports.clock.schedule(callback, ms),
+                },
+              ),
+              signal,
+              deadline,
             );
-          check(current, signal);
+          check(current, signal, deadline);
         }
         ports.publish({ state: "settled", answer });
         return !Object.keys(answer.errors).length;
       } catch {
-        if (!disposed && current === generation)
+        if (!disposed && current === generation) {
+          scope.abort();
           ports.publish({
             state: "failed",
             errors: Object.fromEntries(
               configuration.queries.map((name) => [name, "Local query failed"]),
             ),
           });
+        }
         return false;
       }
     },
     async fetchPage(name, page, columns) {
       const current = generation,
-        signal = scope.signal;
-      check(current, signal);
+        signal = scope.signal,
+        deadline = ports.clock.now() + configuration.deadlineMs;
+      check(current, signal, deadline);
       if (!queries.has(name)) throw Error("Undeclared table query");
       const request = controlPageRequest(page, columns);
-      const evaluation = await wait(ports.evaluation(), signal);
-      check(current, signal);
+      const evaluation = await wait(ports.evaluation(), signal, deadline);
+      check(current, signal, deadline);
       const answer = await wait(
         ports.engine.page(name, request, evaluation),
         signal,
+        deadline,
       );
-      check(current, signal);
+      check(current, signal, deadline);
       return answer;
     },
     invalidate() {

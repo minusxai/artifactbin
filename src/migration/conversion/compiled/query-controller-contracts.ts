@@ -38,6 +38,8 @@ export interface CompiledQueryPorts {
 export interface CompiledQueryConfiguration {
   queries: readonly string[];
   optionQueries: readonly string[];
+  /** Total elapsed budget per refresh or page request, including async inputs,
+   * readiness, engine execution and option completion. Does not cancel engine work. */
   deadlineMs: number;
 }
 export interface CompiledQueryController {
