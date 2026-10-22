@@ -174,8 +174,9 @@ export interface CommentInput {
   /** The commenter's own local state when they commented; kept with the comment for context. */
   state?: AfJsonObject | null;
   /**
-   * Platform UI only: an inert copy of what the commenter saw (scripts and
-   * attributes stripped, at most 200000 characters). Agents leave it out.
+   * Platform UI only: inert HTML or a source-style capture envelope, bound to
+   * this version (at most 200000 characters). Replay sanitizes both forms;
+   * style references use only this version's immutable source. Agents leave it out.
    */
   rendered?: string | null;
 }

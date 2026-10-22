@@ -9,8 +9,52 @@
  * CSS is put back inline, so the view looks like the live page did.
  */
 import { isDesignSystem } from "./core/appearance.ts";
-import { DEFAULT_DESIGN_SYSTEM } from "../af-contracts.ts";
+import { MAX_PAGE_SOURCE, DEFAULT_DESIGN_SYSTEM } from "../af-contracts.ts";
 import type { DesignSystemName } from "../af-contracts.ts";
+
+/** Stored captures remain at most 200,000 characters. Style references are
+ * resolved only against the immutable source selected by snapshot.sourceRevision.
+ * Unchanged source CSS is not duplicated; changed/runtime CSS stays inline. */
+export interface SourceStyleCapture {
+  format: "pagegi-source-styles-v1";
+  html: string;
+  /** [captured style ordinal, immutable source style ordinal]. */
+  styles: [number, number][];
+}
+
+const CAPTURE_LIMIT = 200000;
+const CAPTURE_PREFIX = '{"format":"pagegi-source-styles-v1"';
+
+/** Rehydrate CSS only from the caller's exact historical source, never a URL. */
+function resolveCapture(value: string, source: string): string {
+  if (!value.startsWith(CAPTURE_PREFIX)) return value;
+  try {
+    const capture = JSON.parse(value) as SourceStyleCapture;
+    if (value.length > CAPTURE_LIMIT || typeof capture.html !== "string" ||
+        !Array.isArray(capture.styles) || source.length > MAX_PAGE_SOURCE)
+      return "";
+    const doc = new DOMParser().parseFromString(capture.html, "text/html");
+    const styles = [...doc.querySelectorAll("style")];
+    const originals = [...new DOMParser().parseFromString(source, "text/html").querySelectorAll("style")];
+    const seen = new Set<number>();
+    let size = capture.html.length;
+    for (const reference of capture.styles) {
+      if (!Array.isArray(reference) || reference.length !== 2) return "";
+      const [target, original] = reference;
+      if (!Number.isSafeInteger(target) || !Number.isSafeInteger(original) ||
+          target < 0 || original < 0 || seen.has(target) ||
+          !styles[target] || !originals[original] || styles[target]!.textContent !== "")
+        return "";
+      const text = originals[original]!.textContent ?? "";
+      size += text.length;
+      // A compact capture cannot amplify a source into an unbounded replay.
+      if (size > MAX_PAGE_SOURCE + CAPTURE_LIMIT) return "";
+      styles[target]!.textContent = text;
+      seen.add(target);
+    }
+    return doc.documentElement.outerHTML;
+  } catch { return ""; }
+}
 
 /** Elements that run, load or embed something; they never reach a saved view. */
 const dropped = new Set(
@@ -29,6 +73,10 @@ const POLICY =
 
 /** The design system a capture (or a page's source) shows: its <html> attribute, else the default. */
 export function replayDesignSystem(source: string): DesignSystemName {
+  if (source.startsWith(CAPTURE_PREFIX)) {
+    try { source = (JSON.parse(source) as SourceStyleCapture).html; }
+    catch { return DEFAULT_DESIGN_SYSTEM; }
+  }
   const name = /<html\b[^>]*\sdata-af-design-system\s*=\s*["']?([a-z]+)/i.exec(
     source,
   )?.[1];
@@ -42,7 +90,9 @@ export function replayDesignSystem(source: string): DesignSystemName {
 export function assembleStaticReplay(
   source: string,
   designSystemCss: string | null = null,
+  immutableSource: string = "",
 ): string {
+  source = resolveCapture(source, immutableSource);
   // A parsed, never-rendered document is inert: nothing in it loads or runs.
   const input = new DOMParser().parseFromString(source, "text/html");
   const output = document.implementation.createHTMLDocument("");
@@ -130,7 +180,10 @@ export function mountStaticReplay(
  * <head> the page's styles) with each form control's current value written
  * into its markup. Undefined when there is no body yet or it is too large.
  */
-export function captureRenderedDocument(doc: Document): string | undefined {
+export function captureRenderedDocument(
+  doc: Document,
+  sourceStyles: readonly string[] = [],
+): string | undefined {
   // A page whose core runs in <head> can be asked before <body> exists.
   if (!doc.body) return undefined;
   const root = doc.documentElement;
@@ -161,5 +214,20 @@ export function captureRenderedDocument(doc: Document): string | undefined {
   copy.classList.remove("pagegi-commenting");
   if (!copy.classList.length) copy.removeAttribute("class");
   const rendered = copy.outerHTML;
-  return rendered.length <= 200000 ? rendered : undefined;
+  if (rendered.length <= CAPTURE_LIMIT) return rendered;
+  if (rendered.length > MAX_PAGE_SOURCE + CAPTURE_LIMIT) return undefined;
+  const sourceStyleIndexes = new Map(sourceStyles.map((text, index) => [text, index]));
+  const styles: SourceStyleCapture["styles"] = [];
+  [...copy.querySelectorAll("style")].forEach((style, index) => {
+    const original = sourceStyleIndexes.get(style.textContent ?? "");
+    if (original !== undefined) {
+      styles.push([index, original]);
+      style.textContent = "";
+    }
+  });
+  const capture: SourceStyleCapture = {
+    format: "pagegi-source-styles-v1", html: copy.outerHTML, styles,
+  };
+  const compact = JSON.stringify(capture);
+  return styles.length && compact.length <= CAPTURE_LIMIT ? compact : undefined;
 }

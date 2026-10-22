@@ -205,7 +205,7 @@ export function installBridge(boot) {
   }
   /** What a commenter saw: the page state, the scroll position and a rendered copy. */
   function capture() {
-    const rendered = captureRenderedDocument(document);
+    const rendered = captureRenderedDocument(document, boot.sourceStyles);
     const snapshot = {
       schema: 0,
       sourceRevision: boot.revision,

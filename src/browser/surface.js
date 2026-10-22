@@ -33,7 +33,7 @@ export function createAppHTML(source, boot, bridge, designSystem = null) {
   const config = doc.createElement("script");
   config.id = "pagegi-boot";
   config.type = "application/json";
-  config.textContent = JSON.stringify(boot).replaceAll("<", "\\u003c");
+  config.textContent = JSON.stringify({ ...boot, sourceStyles: [...doc.querySelectorAll("style")].map(style => style.textContent ?? "") }).replaceAll("<", "\\u003c");
   const script = doc.createElement("script");
   // Deliberate app execution: runner.js accepts this bridge only from its exact
   // server-issued platform origin, parent window, and one-time handshake channel.

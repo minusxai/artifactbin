@@ -27,7 +27,8 @@ export interface Viewport {
   y: number;
 }
 export interface Snapshot {
-  /** Optional inert semantic capture, bound to sourceRevision; never executed. */
+  /** Optional inert HTML or source-style capture envelope (200,000 characters),
+   * bound to sourceRevision; referenced CSS comes only from that source. Never executed. */
   rendered?: string;
   /** Zero is a static document view without an initialized app store. */
   schema: number;

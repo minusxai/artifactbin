@@ -53,7 +53,7 @@ export function createPlacement({
           .catch(() => null)
           .then((css) => {
             if (mount === mounts)
-              historyFrame.srcdoc = assembleStaticReplay(captured, css);
+              historyFrame.srcdoc = assembleStaticReplay(captured, css, source);
           });
         return;
       }
@@ -70,6 +70,7 @@ export function createPlacement({
           revision,
           channel,
           local: true,
+          sourceStyles: [...new DOMParser().parseFromString(source, "text/html").querySelectorAll("style")].map(style => style.textContent ?? ""),
           viewer: viewer(),
         });
         return;
