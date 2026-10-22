@@ -1,3 +1,4 @@
+import { preservePresentationHosts } from "./presentation-hosts.ts";
 import { gzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import {
@@ -64,6 +65,10 @@ const parts = await prepareStoryParts({
 });
 if (parts.runtime.authorScript || parts.runtime.authorScriptErrors?.length)
   throw Error("Author code is not supported");
+const presentationNodes = preservePresentationHosts(
+  parts.runtime.data.nodes,
+  input.presentationIdentities ?? [],
+);
 const build = loadCompilerBuild();
 const author = input.authorPlan
   ? await prepareAuthorBundle(
@@ -136,8 +141,8 @@ const hasCharts = (nodes: readonly any[]): boolean =>
       n.type === "element" &&
       (["Question", "Chart"].includes(n.tag) || hasCharts(n.children ?? [])),
   );
-const chartPlans = hasCharts(parts.runtime.data.nodes)
-  ? await prepareArchivedChartPlans(parts.runtime.data.nodes, archived, root, {
+const chartPlans = hasCharts(presentationNodes)
+  ? await prepareArchivedChartPlans(presentationNodes, archived, root, {
       colorMode: parts.mode,
       tables:
         results?.tables ??
@@ -152,7 +157,7 @@ const chartSources = chartPlans.length
   ? await chartRendererSources(root, chartPlans)
   : null;
 const generated = generate({
-  nodes: parts.runtime.data.nodes,
+  nodes: presentationNodes,
   colorMode: parts.mode,
   template: input.template ?? null,
   chrome: false,
