@@ -141,3 +141,19 @@ test("unrelated read-only dynamic tables do not acquire editing scope restrictio
     readLegacyCellWriteSites(source),
   );
 });
+test("editing Selects retain finite authored option validation and do not drop authored children", () => {
+  for (const options of ["[{}]", JSON.stringify(Array(10001).fill("a"))])
+    assert.throws(() =>
+      readLegacyCellWriteSites(
+        source.replace('options="$choices"', "options={" + options + "}"),
+      ),
+    );
+  assert.throws(() =>
+    readLegacyCellWriteSites(
+      source.replace(
+        'type="text"/>',
+        'type="text"><span>Hidden</span></input>',
+      ),
+    ),
+  );
+});

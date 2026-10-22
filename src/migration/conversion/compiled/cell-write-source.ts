@@ -1,3 +1,4 @@
+import { admitDataControl } from "./data-controls.ts";
 /** Offline source classification only; schema types must come from verified SQL/catalog analysis. */
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
@@ -148,10 +149,26 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
               "placeholder",
               "valueFormat",
             ].includes(attribute.name.name) &&
-            typeof value !== "string"
+            (typeof value !== "string" || value.length > 4096)
           )
             refuse();
         }
+        if (
+          node.children.some(
+            (child: any) =>
+              !(child.type === "JSXText" && !child.value.trim()) &&
+              !(
+                child.type === "JSXExpressionContainer" &&
+                child.expression.type === "JSXEmptyExpression"
+              ),
+          )
+        )
+          refuse();
+        if (tag === "Select")
+          admitDataControl("Select", {
+            value: "$cell",
+            options: selected("options"),
+          });
         const optionsQuery =
           tag === "Select" ? ref(selected("options")) : undefined;
         const site: LegacyCellWriteSite = {
