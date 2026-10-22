@@ -157,3 +157,8 @@ test("editing Selects retain finite authored option validation and do not drop a
     ),
   );
 });
+test("checkbox editing remains explicit unsupported because archived native cells emit text rather than checked state", () => {
+  assert.throws(() =>
+    readLegacyCellWriteSites(source.replace('type="text"', 'type="checkbox"')),
+  );
+});

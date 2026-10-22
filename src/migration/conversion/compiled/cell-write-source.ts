@@ -94,14 +94,9 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
         if (tag === "Select" && selected("options") === undefined) refuse();
         if (
           tag === "input" &&
-          ![
-            "text",
-            "number",
-            "date",
-            "datetime-local",
-            "checkbox",
-            undefined,
-          ].includes(selected("type") as any)
+          !["text", "number", "date", "datetime-local", undefined].includes(
+            selected("type") as any,
+          )
         )
           refuse();
         const allowed = new Set([
