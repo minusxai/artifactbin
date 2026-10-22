@@ -14,7 +14,12 @@ export type RecoverLegacyDocumentSource = (
 ) => LegacyDocumentSourceRecovery | null;
 
 /** Partial rendering only: root sibling positions are retained, missing content is explicit. */
-export interface LegacyPartialDocumentRecovery { source: string; missingNodes: number; }
+export interface LegacyPartialDocumentRecovery {
+  source: string;
+  missingNodes: number;
+}
 
 /** Retired source wrapper accepted only by explicit offline migration, never ordinary graph decoding. */
-export type RecoverRetiredSourceWrapper = (document: unknown) => {source: string} | null;
+export type RecoverRetiredSourceWrapper = (
+  document: unknown,
+) => { source: string } | null;

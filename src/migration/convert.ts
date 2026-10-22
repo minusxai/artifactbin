@@ -54,24 +54,85 @@ export function createMigrationConverter(
       codecFailure = error instanceof Error ? error.message : undefined;
     }
     if (source === null && options.sourceAdmission === "offline-prototype") {
-      const {recoverRetiredSourceWrapper}=await import("./conversion/document-recovery.ts");
-      const retired=recoverRetiredSourceWrapper(input.document);
-      if(retired){source=retired.source;sourceRecovery={kind:"retired-source-wrapper",repairedNodes:0,documentSha256:createHash("sha256").update(JSON.stringify(input.document)).digest("hex"),sourceSha256:createHash("sha256").update(source).digest("hex")};}
+      const { recoverRetiredSourceWrapper } = await import(
+        "./conversion/document-recovery.ts"
+      );
+      const retired = recoverRetiredSourceWrapper(input.document);
+      if (retired) {
+        source = retired.source;
+        sourceRecovery = {
+          kind: "retired-source-wrapper",
+          repairedNodes: 0,
+          documentSha256: createHash("sha256")
+            .update(JSON.stringify(input.document))
+            .digest("hex"),
+          sourceSha256: createHash("sha256").update(source).digest("hex"),
+        };
+      }
     }
-    if (source === null && options.sourceAdmission === "offline-prototype" && options.legacyRoot) {
-      const {recoverArchivedDocumentSource}=await import("./conversion/compiled/document-recovery.ts");
-      const recovered=await recoverArchivedDocumentSource(input.document,options.legacyRoot);
-      if(recovered){
-        source=recovered.source;
-        sourceRecovery={kind:"retained-graph-empty-separators",repairedNodes:recovered.repairedNodes,documentSha256:createHash("sha256").update(JSON.stringify(input.document)).digest("hex"),sourceSha256:createHash("sha256").update(source).digest("hex")};
+    if (
+      source === null &&
+      options.sourceAdmission === "offline-prototype" &&
+      options.legacyRoot
+    ) {
+      const { recoverArchivedDocumentSource } = await import(
+        "./conversion/compiled/document-recovery.ts"
+      );
+      const recovered = await recoverArchivedDocumentSource(
+        input.document,
+        options.legacyRoot,
+      );
+      if (recovered) {
+        source = recovered.source;
+        sourceRecovery = {
+          kind: "retained-graph-empty-separators",
+          repairedNodes: recovered.repairedNodes,
+          documentSha256: createHash("sha256")
+            .update(JSON.stringify(input.document))
+            .digest("hex"),
+          sourceSha256: createHash("sha256").update(source).digest("hex"),
+        };
       }
     }
     if (source === null && options.sourceAdmission === "offline-prototype") {
-      const {recoverPartialLegacyDocument}=await import("./conversion/document-recovery.ts");
-      const partial=recoverPartialLegacyDocument(input.document);
-      if(partial){source=partial.source;sourceRecovery={kind:"retained-graph-missing-root-content",repairedNodes:0,missingNodes:partial.missingNodes,documentSha256:createHash("sha256").update(JSON.stringify(input.document)).digest("hex"),sourceSha256:createHash("sha256").update(source).digest("hex")};}
+      const { recoverPartialLegacyDocument } = await import(
+        "./conversion/document-recovery.ts"
+      );
+      const partial = recoverPartialLegacyDocument(input.document);
+      if (partial) {
+        source = partial.source;
+        sourceRecovery = {
+          kind: "retained-graph-missing-root-content",
+          repairedNodes: 0,
+          missingNodes: partial.missingNodes,
+          documentSha256: createHash("sha256")
+            .update(JSON.stringify(input.document))
+            .digest("hex"),
+          sourceSha256: createHash("sha256").update(source).digest("hex"),
+        };
+      }
     }
-    const finish = (output: import("./contracts.ts").ConversionOutput): import("./contracts.ts").ConversionOutput => ({...output,...(sourceRecovery?{sourceRecovery}:{}),...(sourceRecovery?.kind==="retained-graph-missing-root-content" && output.html ? {classification:"renderable" as const,issues:[...output.issues,{code:"document-partial-recovery",message:"Original saved content unavailable at retained root positions",missingNodes:sourceRecovery.missingNodes}]}:{})});
+    const finish = (
+      output: import("./contracts.ts").ConversionOutput,
+    ): import("./contracts.ts").ConversionOutput => ({
+      ...output,
+      ...(sourceRecovery ? { sourceRecovery } : {}),
+      ...(sourceRecovery?.kind === "retained-graph-missing-root-content" &&
+      output.html
+        ? {
+            classification: "renderable" as const,
+            issues: [
+              ...output.issues,
+              {
+                code: "document-partial-recovery",
+                message:
+                  "Original saved content unavailable at retained root positions",
+                missingNodes: sourceRecovery.missingNodes,
+              },
+            ],
+          }
+        : {}),
+    });
     if (source === null)
       return {
         classification: "manual-blocked",
@@ -146,7 +207,7 @@ export function createMigrationConverter(
       );
     return {
       ...local,
-      ...(sourceRecovery?{sourceRecovery}:{}),
+      ...(sourceRecovery ? { sourceRecovery } : {}),
       strategy: options.strategy,
       issues: [
         ...routeIssues("archived-static", result.issues),

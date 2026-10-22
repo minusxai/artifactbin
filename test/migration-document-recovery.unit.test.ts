@@ -50,21 +50,98 @@ test("changed wrappers, changed semantic AST, ambiguous parts and cycles remain 
 });
 
 test("partial recovery preserves exact root sibling placement and marks unavailable content", async () => {
- const {recoverPartialLegacyDocument: partial}=await import('../src/migration/conversion/document-recovery.ts');
- const original={schema:3,kind:'graph',nodes:{$root:{parts:['','','',''],children:['a','missing','b']},a:{parts:['<p>A</p>'],children:[]},b:{parts:['<p>B</p>'],children:[]}}};
- const before=JSON.stringify(original);
- assert.deepEqual(partial(original),{source:'<p>A</p><p role="note">Original saved content unavailable</p><p>B</p>',missingNodes:1});
- assert.equal(JSON.stringify(original),before);
- assert.equal(partial({...original,nodes:{...original.nodes,a:{parts:['<div>','</div>'],children:['nested-missing']}}}),null);
- assert.equal(partial({...original,nodes:{...original.nodes,$root:{parts:['<script>','','','</script>'],children:['a','missing','b']}}}),null);
- assert.equal(partial({...original,nodes:{...original.nodes,a:{parts:['',''],children:['a']}}}),null);
+  const { recoverPartialLegacyDocument: partial } = await import(
+    "../src/migration/conversion/document-recovery.ts"
+  );
+  const original = {
+    schema: 3,
+    kind: "graph",
+    nodes: {
+      $root: { parts: ["", "", "", ""], children: ["a", "missing", "b"] },
+      a: { parts: ["<p>A</p>"], children: [] },
+      b: { parts: ["<p>B</p>"], children: [] },
+    },
+  };
+  const before = JSON.stringify(original);
+  assert.deepEqual(partial(original), {
+    source:
+      '<p>A</p><p role="note">Original saved content unavailable</p><p>B</p>',
+    missingNodes: 1,
+  });
+  assert.equal(JSON.stringify(original), before);
+  assert.equal(
+    partial({
+      ...original,
+      nodes: {
+        ...original.nodes,
+        a: { parts: ["<div>", "</div>"], children: ["nested-missing"] },
+      },
+    }),
+    null,
+  );
+  assert.equal(
+    partial({
+      ...original,
+      nodes: {
+        ...original.nodes,
+        $root: {
+          parts: ["<script>", "", "", "</script>"],
+          children: ["a", "missing", "b"],
+        },
+      },
+    }),
+    null,
+  );
+  assert.equal(
+    partial({
+      ...original,
+      nodes: { ...original.nodes, a: { parts: ["", ""], children: ["a"] } },
+    }),
+    null,
+  );
 });
 
-import {recoverRetiredSourceWrapper} from '../src/migration/conversion/document-recovery.ts';
-import {MAX_COMPILED_SOURCE_BYTES} from '../src/migration/conversion/compiled/contracts.ts';
-test('retired source wrapper migration preserves exact source bytes without graph identity',()=>{
- const source='<p title="&quot;">é</p>\n<script>const x="<\\/script>";</script>';
- const document={kind:'source',schema:1,source},before=JSON.stringify(document);
- assert.deepEqual(recoverRetiredSourceWrapper(document),{source});assert.equal(JSON.stringify(document),before);
- for(const value of [null,[],{}, {kind:'source',schema:1,source:''},{kind:'source',schema:1,source:'  '},{kind:'source',schema:1,source:42},{kind:'graph',schema:1,source},{kind:'source',schema:2,source},{kind:'source',schema:1,source,unknown:true},{kind:'source',schema:1,source:'é'.repeat(MAX_COMPILED_SOURCE_BYTES/2+1)}])assert.equal(recoverRetiredSourceWrapper(value),null);
+import { recoverRetiredSourceWrapper } from "../src/migration/conversion/document-recovery.ts";
+import { MAX_COMPILED_SOURCE_BYTES } from "../src/migration/conversion/compiled/contracts.ts";
+test("retired source wrapper migration preserves exact source bytes without graph identity", () => {
+  const source =
+    '<p title="&quot;">é</p>\n<script>const x="<\\/script>";</script>';
+  const document = { kind: "source", schema: 1, source },
+    before = JSON.stringify(document);
+  assert.deepEqual(recoverRetiredSourceWrapper(document), { source });
+  assert.equal(JSON.stringify(document), before);
+  for (const value of [
+    null,
+    [],
+    {},
+    { kind: "source", schema: 1, source: "" },
+    { kind: "source", schema: 1, source: "  " },
+    { kind: "source", schema: 1, source: 42 },
+    { kind: "graph", schema: 1, source },
+    { kind: "source", schema: 2, source },
+    { kind: "source", schema: 1, source, unknown: true },
+    {
+      kind: "source",
+      schema: 1,
+      source: "é".repeat(MAX_COMPILED_SOURCE_BYTES / 2 + 1),
+    },
+  ])
+    assert.equal(recoverRetiredSourceWrapper(value), null);
+});
+
+test("retired wrapper source byte limit accepts the exact UTF8 boundary and rejects one byte more", () => {
+  const source = "é".repeat(MAX_COMPILED_SOURCE_BYTES / 2);
+  assert.equal(Buffer.byteLength(source), MAX_COMPILED_SOURCE_BYTES);
+  assert.deepEqual(
+    recoverRetiredSourceWrapper({ kind: "source", schema: 1, source }),
+    { source },
+  );
+  assert.equal(
+    recoverRetiredSourceWrapper({
+      kind: "source",
+      schema: 1,
+      source: source + "x",
+    }),
+    null,
+  );
 });
