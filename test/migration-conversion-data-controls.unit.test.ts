@@ -106,3 +106,20 @@ test("source admission sends immutable Select and readonly DataTable plans to th
     { kind: "table", data: "rows" },
   ]);
 });
+import { controlPageRequest } from "../src/migration/conversion/compiled/data-controls.ts";
+test("table paging preserves typed sort and bounds requests before engine execution", () => {
+  assert.deepEqual(
+    controlPageRequest(
+      { offset: 500, limit: 500, sort: { col: "id", dir: "desc" } },
+      [{ name: "id" }],
+    ),
+    { offset: 500, limit: 500, sort: { col: "id", dir: "desc" } },
+  );
+  for (const page of [
+    { offset: -1, limit: 1 },
+    { offset: 0, limit: 501 },
+    { offset: 0, limit: 1, sort: { col: "missing", dir: "asc" } },
+    { offset: 0, limit: 1, sort: { col: "id", dir: "DROP" } },
+  ])
+    assert.throws(() => controlPageRequest(page, [{ name: "id" }]));
+});

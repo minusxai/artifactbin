@@ -301,6 +301,7 @@ const bundled = await bundle({
               : undefined,
             Boolean(chartSources),
             input.datasetMutations ?? [],
+            input.dataControls ?? [],
           ),
           loader: "js",
         }));
@@ -351,7 +352,11 @@ const bundled = await bundle({
         });
         b.onResolve({ filter: /^(@mx\/|solid-js)/ }, (args: any) => {
           if (
-            (sql || author || chartSources || input.datasetMutations?.length) &&
+            (sql ||
+              author ||
+              chartSources ||
+              input.datasetMutations?.length ||
+              input.dataControls?.length) &&
             args.path.startsWith("solid-js")
           ) {
             const suffix = args.path.slice("solid-js".length);
@@ -362,7 +367,11 @@ const bundled = await bundle({
             return { path: path.join(root, "node_modules/solid-js", file) };
           }
           if (
-            (sql || author || chartSources || input.datasetMutations?.length) &&
+            (sql ||
+              author ||
+              chartSources ||
+              input.datasetMutations?.length ||
+              input.dataControls?.length) &&
             (args.path === "@mx/rt" || args.path.startsWith("@mx/kit/"))
           ) {
             const relative =
