@@ -175,6 +175,9 @@ export async function externalCompile(
         reject(Error("Invalid archived compiler output"));
       }
     });
+    child.stdin.on("error", () =>
+      terminate(Error("Archived compiler input closed")),
+    );
     child.stdin.end(JSON.stringify(input));
   });
 }

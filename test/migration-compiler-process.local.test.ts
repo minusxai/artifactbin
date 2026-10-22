@@ -56,6 +56,15 @@ test(
           "decoder remains alive after compiler settles",
         );
       }
+      const early = path.join(root, "early.mjs");
+      await writeFile(early, "process.exit(1)");
+      await assert.rejects(() =>
+        externalCompile(
+          { source: "x".repeat(4_000_000), coreUrl: "/af/v1/core.js" },
+          { legacyRoot: root, timeoutMs: 1500 },
+          pathToFileURL(early).href,
+        ),
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
