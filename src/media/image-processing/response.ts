@@ -58,7 +58,29 @@ export async function readImageResponse(
   } catch {
     throw Error("image_result_invalid");
   }
-  const manifest = decodeImageManifest(json, inputBytes, type);
+  let manifest: ImageManifest;
+  try {
+    manifest = decodeImageManifest(json, inputBytes, type);
+  } catch (error) {
+    // A valid error frame completes only once the controller has drained its job cleanup.
+    // Refuse any accompanying body rather than buffering arbitrary error output.
+    if (
+      json &&
+      Object.keys(json).length === 1 &&
+      typeof json.error === "string" &&
+      [
+        "image_type",
+        "image_input_limit",
+        "image_pixel_limit",
+        "image_processing_failed",
+      ].includes(json.error)
+    ) {
+      if (pending.length || !(await iterator.next()).done)
+        throw Error("image_result_trailing");
+      signal.throwIfAborted();
+    }
+    throw error;
+  }
   const artifact = async (
     name: string,
     byteLength: number,

@@ -43,6 +43,7 @@ export const IMAGE_PROCESS_LIMITS = Object.freeze({
 export interface RasterMetadata {
   readonly width: number;
   readonly height: number;
+  /** Positive total frame count; aggregate frame area shares the decoded pixel budget. */
   readonly pages: number;
 }
 export interface RasterEncoded {

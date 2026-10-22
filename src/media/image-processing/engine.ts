@@ -68,11 +68,13 @@ export async function optimiseRaster(
   if (
     !Number.isSafeInteger(width) ||
     !Number.isSafeInteger(height) ||
+    !Number.isSafeInteger(pages) ||
+    pages < 1 ||
     width < 1 ||
     height < 1 ||
     width > limits.dimension ||
     height > limits.dimension ||
-    width * height > limits.pixels
+    width * height > limits.pixels / pages
   )
     throw Error("image_pixel_limit");
   const base = {

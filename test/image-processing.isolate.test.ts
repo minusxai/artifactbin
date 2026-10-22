@@ -17,6 +17,7 @@ const fixturesCode = `import sharp from 'sharp'; const out={};
 for(const type of ['png','jpeg','webp'])out[type]=(await sharp({create:{width:3000,height:1000,channels:3,background:'#336699'}})[type]().toBuffer()).toString('base64');
 out.pixel=(await sharp({create:{width:5000,height:4000,channels:3,background:'#336699'}}).png().toBuffer()).toString('base64');
 out.animated=(await sharp(Buffer.concat([Buffer.alloc(4*4*3,50),Buffer.alloc(4*4*3,200)]),{raw:{width:4,height:8,channels:3,pageHeight:4}}).webp({loop:0}).toBuffer()).toString('base64');
+out.frameBudget=(await sharp(Buffer.concat(Array.from({length:6},(_,i)=>Buffer.alloc(3000*1000*3,20+i*30))),{raw:{width:3000,height:6000,channels:3,pageHeight:1000}}).webp({loop:0}).toBuffer()).toString('base64');
 console.log(JSON.stringify(out));`;
 test("real isolated image processing preserves frozen selection and refuses pixel overflow with clean containers", async () => {
   const generated = await exec(
@@ -87,6 +88,17 @@ test("real isolated image processing preserves frozen selection and refuses pixe
     assert.equal(unchanged.placeholder, null);
     assert.equal(unchanged.small, undefined);
     await unchanged.dispose();
+    const frameBudget = Buffer.from(fixtures.frameBudget, "base64");
+    const framePath = join(directory, "frames");
+    await writeFile(framePath, frameBudget);
+    await assert.rejects(
+      processor.process({
+        path: framePath,
+        byteLength: frameBudget.length,
+        contentType: "image/webp",
+      }),
+      /image_pixel_limit/,
+    );
     const malformed = Buffer.from([
       137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0,
     ]);

@@ -58,6 +58,18 @@ test("animation and decode failure preserve input without frame encoding; resour
   d.metadata = async () => ({ width: 10000, height: 10000, pages: 1 });
   await assert.rejects(optimiseRaster(png, d), /image_pixel_limit/);
 });
+test("animation shares the decoded pixel budget and refuses invalid frame counts before encoding", async () => {
+  const d = decoder();
+  d.encode = async () => {
+    throw Error("must not encode animation");
+  };
+  for (const pages of [0, -1, 1.5, Infinity, NaN, 9]) {
+    d.metadata = async () => ({ width: 2000, height: 1000, pages });
+    await assert.rejects(optimiseRaster(png, d), /image_pixel_limit/);
+  }
+  d.metadata = async () => ({ width: 2000, height: 1000, pages: 8 });
+  assert.equal((await optimiseRaster(png, d)).manifest.primary.source, "input");
+});
 test("failed main encoding preserves original; optional failures do not discard usable primary", async () => {
   const d = decoder();
   d.encode = async () => {

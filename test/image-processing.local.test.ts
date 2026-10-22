@@ -56,6 +56,63 @@ async function setup(executor: ImageJobExecutor) {
     },
   };
 }
+test("processor error waits for controller completion and rejects trailing error bytes", async () => {
+  const { readImageResponse } = await import(
+    "../src/media/image-processing/response.ts"
+  );
+  const { imageHeader } = await import(
+    "../src/media/image-processing/protocol.ts"
+  );
+  let release!: () => void;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  let requestedEnd!: () => void;
+  const readingEnd = new Promise<void>((r) => {
+    requestedEnd = r;
+  });
+  async function* input() {
+    yield imageHeader({ error: "image_pixel_limit" });
+    requestedEnd();
+    await held;
+  }
+  let settled = false;
+  const result = readImageResponse(
+    input(),
+    "/unused",
+    12,
+    "image/png",
+    new AbortController().signal,
+  );
+  void result.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await readingEnd;
+  assert.equal(settled, false);
+  release();
+  await assert.rejects(result, /image_pixel_limit/);
+  async function* trailing() {
+    yield Buffer.concat([
+      imageHeader({ error: "image_pixel_limit" }),
+      Buffer.from([1]),
+    ]);
+  }
+  await assert.rejects(
+    readImageResponse(
+      trailing(),
+      "/unused",
+      12,
+      "image/png",
+      new AbortController().signal,
+    ),
+    /image_result_trailing/,
+  );
+});
 test("streams bounded bytes, hashes generated output and dispose preserves caller input", async () => {
   const dir = await mkdtemp(join(tmpdir(), "image-test-"));
   let received = 0;
