@@ -1,3 +1,4 @@
+import { createDatasetSqlExecutor } from "./dataset-sql-executor.ts";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { createBackendHost } from "./container-host.ts";
@@ -16,6 +17,10 @@ const service = createExecutionService({
     image: process.env.PAGEGI_BACKEND_IMAGE,
     sandboxNetwork: process.env.PAGEGI_SANDBOX_NETWORK || undefined,
   }),
+  datasetSql: createDatasetSqlExecutor({
+    deploymentNamespace,
+    image: process.env.PAGEGI_DATASET_SQL_IMAGE,
+  }),
   secret: readFileSync(secretFile, "utf8").trim(),
 });
 const server = createServer(
@@ -27,10 +32,14 @@ server.maxConnections = 64;
 // Containers a previous controller left behind are removed before any request is admitted;
 // a cleanup that cannot be verified keeps the controller closed.
 try {
-  const reaped = await reapBackendContainers(dockerCommand, { deploymentNamespace });
+  const reaped = await reapBackendContainers(dockerCommand, {
+    deploymentNamespace,
+  });
   console.log(JSON.stringify({ execution: "cleanup verified", reaped }));
 } catch {
-  console.error("Execution container cleanup failed; admission must remain stopped");
+  console.error(
+    "Execution container cleanup failed; admission must remain stopped",
+  );
   process.exit(1);
 }
 const socketPath = process.env.PAGEGI_EXECUTION_SOCKET;

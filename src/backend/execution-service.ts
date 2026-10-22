@@ -1,3 +1,4 @@
+import { datasetSqlListener } from "./dataset-sql-transport.ts";
 import { request as httpRequest, type RequestListener } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { timingSafeEqual } from "node:crypto";
@@ -110,12 +111,19 @@ export function createExecutionService(
 ): ExecutionService {
   validateSecret(options.secret);
   const config = limits(options);
+  const datasetSql = options.datasetSql
+    ? datasetSqlListener(options.datasetSql, options.secret)
+    : undefined;
   let active = 0;
   const expected = Buffer.from("Bearer " + options.secret);
   let closed = false,
     closePromise: Promise<void> | undefined;
   const owned = new Map<() => void, Promise<void>>();
   const listener: RequestListener = (req, res) => {
+    if (!closed && req.url === "/v1/dataset-sql" && datasetSql) {
+      datasetSql(req, res);
+      return;
+    }
     if (closed) {
       res.writeHead(503).end();
       return;
@@ -311,7 +319,7 @@ export function createExecutionService(
         const work = [...owned.values()];
         for (const cancel of owned.keys()) cancel();
         closePromise = Promise.all(work).then(async () => {
-          await options.host.close?.();
+          await Promise.all([options.host.close?.(), datasetSql?.close()]);
         });
       }
       return closePromise;
@@ -532,7 +540,15 @@ export function remoteBackendHost(
       return closePromise;
     },
     compile: (source, signal) => run({ kind: "compile", source }, signal),
-    invoke({ deployment, principal, input, signal, capabilityHandler, env, reuse }) {
+    invoke({
+      deployment,
+      principal,
+      input,
+      signal,
+      capabilityHandler,
+      env,
+      reuse,
+    }) {
       // A malformed env or reuse is a rejected invocation, never a synchronous throw;
       // env is the caller's quota (as the container host reports it), reuse the platform's.
       return Promise.resolve().then(() => {

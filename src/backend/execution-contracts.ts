@@ -7,6 +7,7 @@ export interface ExecutionLimits {
 }
 export interface ExecutionServiceOptions extends ExecutionLimits {
   host: BackendHost;
+  datasetSql?: import("./dataset-sql-contracts.ts").DatasetSqlExecutor;
   secret: string;
 }
 export interface RemoteBackendOptions extends ExecutionLimits {
