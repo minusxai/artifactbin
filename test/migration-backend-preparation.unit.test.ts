@@ -467,3 +467,65 @@ test("viewer-only current revisions receive a compiled capability receipt withou
     /Invalid migration backend preparation/,
   );
 });
+test("editing-cell receipts keep typed generated SQL slot private, preserve value descriptor and bind recovery identity", async () => {
+  const prepare = (type: "number" | "string", param = "cell__value") =>
+    prepareMigrationBackends(
+      {
+        ...input,
+        pages: [
+          {
+            ...input.pages[0]!,
+            revisions: [
+              {
+                ...input.pages[0]!.revisions[0]!,
+                editId: "source-edit",
+                mutations: [
+                  {
+                    name: "editCell",
+                    bindingName: "sales",
+                    datasetLegacyId: "ds",
+                    target: { schema: "public", table: "rows" },
+                    sqlSchema: "sales",
+                    sql: "update sales.rows set value=$cell__value where id=$id",
+                    paramTypes: { cell__value: type, id: "number" },
+                    valueParam: { param, type },
+                    conflictMode: "refuse",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { host: { compile: async () => deployment, invoke: async () => null } },
+    );
+  const prepared = await prepare("number");
+  assert.deepEqual(prepared.operations[0]!.operation.paramTypes, {
+    cell__value: "number",
+    id: "number",
+  });
+  assert.deepEqual(
+    (prepared.operations[0]!.operation as { valueParam?: unknown }).valueParam,
+    { param: "cell__value", type: "number" },
+  );
+  assert.deepEqual(prepared.browserMutations[0]!.mutation.paramTypes, {
+    id: "number",
+  });
+  assert.deepEqual(prepared.browserMutations[0]!.mutation.valueParam, {
+    param: "cell__value",
+    type: "number",
+  });
+  assert.match(
+    prepared.browserMutations[0]!.mutation.recoveryScope,
+    /^[a-f0-9]{64}$/,
+  );
+  assert.notEqual(
+    (await prepare("string")).browserMutations[0]!.mutation.recoveryScope,
+    prepared.browserMutations[0]!.mutation.recoveryScope,
+  );
+  assert.equal(
+    JSON.stringify(prepared.browserMutations).includes("update sales"),
+    false,
+  );
+  await assert.rejects(prepare("number", "ordinary"), /Invalid/);
+});

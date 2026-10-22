@@ -212,3 +212,45 @@ test("conversion cache includes current viewer routing without caching viewer id
     await rm(directory, { recursive: true, force: true });
   }
 });
+test("conversion cache distinguishes typed editing-cell metadata independently of authored source and ordinary parameters", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "migration-cell-cache-"));
+  try {
+    let calls = 0;
+    const cached = cachedMigrationConverter(
+      () => {
+        calls++;
+        return {
+          classification: "renderable",
+          html: "<p>fixture</p>",
+          issues: [],
+          identities: {},
+        };
+      },
+      { directory, compilerIdentity: "fixture", strategy: "functional" },
+    );
+    const mutation = {
+      name: "editCell",
+      backendNamespace: "legacyData",
+      recoveryScope: "a".repeat(64),
+      paramTypes: {},
+      valueParam: { param: "cell__value", type: "number" as const },
+    };
+    const input = {
+      source: "unchanged",
+      coreUrl: "/af/v1/core.js",
+      datasetMutations: [mutation],
+    };
+    await cached.convert(input);
+    await cached.convert(input);
+    assert.equal(calls, 1);
+    await cached.convert({
+      ...input,
+      datasetMutations: [
+        { ...mutation, valueParam: { param: "cell__value", type: "string" } },
+      ],
+    });
+    assert.equal(calls, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

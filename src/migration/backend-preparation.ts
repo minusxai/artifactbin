@@ -3,6 +3,7 @@ import { registerDatasetMemberBinding } from "../persistence/dataset-members.ts"
 import {
   validDatasetMutationParameterMap,
   validDatasetMutationRowParameters,
+  validDatasetMutationValueParameter,
 } from "../datasets/mutation/parameter-scalars.ts";
 import { createHash } from "node:crypto";
 import { FILE_ID_ALPHABET, FILE_ID_PATTERN } from "../af-contracts.ts";
@@ -168,6 +169,14 @@ export async function prepareMigrationBackends(
               mutation.expectedAffected < 0)) ||
           (mutation.readsMembers !== undefined &&
             mutation.readsMembers !== true) ||
+          !validDatasetMutationValueParameter(
+            mutation.valueParam,
+            mutation.paramTypes,
+          ) ||
+          (mutation.valueParam !== undefined &&
+            Object.values(mutation.rowParams ?? {}).some(
+              (row) => row.param === mutation.valueParam!.param,
+            )) ||
           !validDatasetMutationParameterMap(mutation.paramTypes) ||
           !validDatasetMutationRowParameters(
             mutation.rowParams,
@@ -296,12 +305,14 @@ export async function prepareMigrationBackends(
             paramTypes: Object.fromEntries(
               Object.entries(mutation.paramTypes).filter(
                 ([name]) =>
+                  mutation.valueParam?.param !== name &&
                   !Object.values(mutation.rowParams ?? {}).some(
                     (row) => row.param === name,
                   ),
               ),
             ),
             ...(mutation.rowParams ? { rowParams: mutation.rowParams } : {}),
+            ...(mutation.valueParam ? { valueParam: mutation.valueParam } : {}),
             ...(mutation.reset?.length ? { reset: [...mutation.reset] } : {}),
           },
         });
