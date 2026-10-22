@@ -398,6 +398,17 @@ test("fresh group membership gates private retained folders and private ancestor
     );
     assert.equal(await service.read("parent", "reader-token"), null);
     assert.deepEqual((await service.read("child", "reader-token"))?.trail, []);
+    await env.pool.query(
+      "UPDATE retained_folders SET access=$1::jsonb WHERE legacy_id='parent'",
+      [JSON.stringify(policy("unlisted"))],
+    );
+    assert.ok(await service.read("parent"));
+    assert.equal((await service.read("child"))?.trail[0]?.id, "parent");
+    await env.pool.query(
+      "UPDATE retained_folders SET access=$1::jsonb WHERE legacy_id='parent'",
+      [JSON.stringify(policy("private"))],
+    );
+    assert.deepEqual((await service.read("child"))?.trail, []);
   } finally {
     await store.close();
     await env.cleanup();

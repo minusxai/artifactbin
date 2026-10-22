@@ -77,7 +77,7 @@ export function createRetainedFolderService(
           trail: related
             .filter(
               (row) =>
-                path.startsWith(String(row.path) + "/") && discoverable(row),
+                path.startsWith(String(row.path) + "/") && readable(row, true),
             )
             .map((row) => ({
               id: String(row.legacy_id),
