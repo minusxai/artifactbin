@@ -67,8 +67,8 @@ export interface CoreModules {
   /**
    * Only in a downloaded file that names its server: a platform runtime loaded
    * from that server attaches its host once. The core then takes the host's
-   * viewer appearance and remote port (also for a client built earlier) and
+   * viewer appearance, remote and internal attachment ports (also for a client built earlier) and
    * removes its own download control. A second call throws.
    */
-  attach?(host: Pick<CoreHost, "viewer" | "subscribeViewer" | "remote">): LocalAttachment;
+  attach?(host: Pick<CoreHost, "viewer" | "subscribeViewer" | "remote" | "datasetAttachment">): LocalAttachment;
 }

@@ -16,6 +16,8 @@ import {
   AF_STATE_MARKER,
   DEFAULT_AF_ORIGIN,
 } from "../../af-contracts.ts";
+import { createAttachmentAccess } from "../dataset-attachment-access.ts";
+import { ATTACHMENT_ACCESS_KEY } from "../dataset-attachment-access-contracts.ts";
 import type { AfJsonObject } from "../../af-contracts.ts";
 import { AF_STATE_FRAGMENT, RemoteUnreachable } from "../../apollo/apollo-contracts.ts";
 import type { AfClient, RemotePort, StatePort } from "../../apollo/apollo-contracts.ts";
@@ -130,7 +132,15 @@ function start(): void {
   // Where the viewer's picks and backend calls come from; a runtime attached later replaces both.
   let viewer: Pick<CoreHost, "viewer" | "subscribeViewer"> = host ?? standaloneHost();
   let remote: RemotePort = host ? host.remote() : unconnectedRemote;
+  let attachmentTransport = host?.datasetAttachment;
   const remoteListeners = new Set<() => void>();
+  const notifyRemote = () => { for (const listener of [...remoteListeners]) listener(); };
+  let stopAccess = remote.subscribeAccess?.(notifyRemote);
+  const attachmentAccess = createAttachmentAccess({
+    transport: () => attachmentTransport,
+    access: () => remote.access?.(),
+    subscribe(listener) { remoteListeners.add(listener); return () => {remoteListeners.delete(listener);}; },
+  });
   let stopRemote = remote.subscribe?.(() => {
     for (const listener of [...remoteListeners]) listener();
   });
@@ -146,6 +156,8 @@ function start(): void {
   addEventListener("pagehide", event => {
     if ((event as PageTransitionEvent).persisted) return;
     stopRemote?.();
+    stopAccess?.();
+    attachmentAccess.dispose();
     remoteListeners.clear();
     client?.dispose();
   });
@@ -157,6 +169,7 @@ function start(): void {
 
   // 1. The import map, before anything can load a module.
   let client: AfClient | undefined;
+  let clientDisposed = false;
   let store: StatePort | undefined;
   // `#af-state=` on a page opened on its own (a hosted page's shell reads its own address).
   const loaded = host ? null : takeStateFragment();
@@ -189,6 +202,9 @@ function start(): void {
         state: state(),
         ...(backends.length ? { remote: switchableRemote } : {}),
       });
+      Object.defineProperty(client, Symbol.for(ATTACHMENT_ACCESS_KEY), { value: () => attachmentAccess });
+      const dispose = client.dispose;
+      client.dispose = () => { clientDisposed = true; stopAccess?.(); attachmentAccess.dispose(); dispose(); };
       return client;
     },
     ...(server
@@ -200,7 +216,10 @@ function start(): void {
             late.subscribeViewer(apply);
             apply();
             stopRemote?.();
+            stopAccess?.();
+            attachmentTransport = late.datasetAttachment;
             remote = late.remote();
+            if (!clientDisposed) stopAccess = remote.subscribeAccess?.(notifyRemote);
             stopRemote = remote.subscribe?.(() => {
               for (const listener of [...remoteListeners]) listener();
             });
