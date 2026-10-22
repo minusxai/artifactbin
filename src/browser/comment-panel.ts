@@ -303,7 +303,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
           ? "1"
           : "3";
       const peek = () => {
-        if (composer.selection) return;
+        if (composer.selection || showResolved) return;
         clearTimeout(hoverTimer);
         const next = commentTransition(composer.interaction, {
           kind: "hover",

@@ -214,6 +214,33 @@ test("comment panel owns composition, permission refresh, thread lifecycle and s
         });
       },
     );
+    await t.test("an open resolved list keeps ownership when a rail marker receives pointer hover", async () => {
+      const resolved = await browser.newPage();
+      await resolved.setContent('<div id="layer"></div>');
+      await resolved.addScriptTag({ content: bundle.outputFiles[0].text });
+      await resolved.evaluate(() => {
+        state.live = true;
+        const comment = { nodeId: "a", quote: "Target", parentId: null,
+          publishedBy: "alice", createdAt: "2026-01-01", sourceRevision: "r", appStateId: null };
+        state.comments.push({ ...comment, id: "open", body: "Open thread" },
+          { ...comment, id: "resolved", body: "Resolved thread", resolved: true });
+        panel.render();
+      });
+      await resolved.getByRole("button", { name: "Resolved (1)", exact: true }).evaluate(button => button.click());
+      const reopen = resolved.getByRole("button", { name: "Reopen comment: Resolved thread", exact: true });
+      await reopen.waitFor();
+      // Redraws can expose an underlying marker to a stationary mouse. Hover
+      // must not replace the resolved list the viewer explicitly opened.
+      const pin = resolved.getByRole("button", { name: "Open comment: Open thread", exact: true });
+      await pin.dispatchEvent("pointerenter", { pointerType: "mouse" });
+      assert.equal(await reopen.count(), 1);
+      assert.equal(await resolved.getByRole("dialog", { name: "Resolved comments", exact: true }).count(), 1);
+      // Explicitly choosing that marker still switches to its thread.
+      await pin.click();
+      assert.equal(await reopen.count(), 0);
+      assert.equal(await resolved.getByRole("dialog", { name: "Comment thread", exact: true }).count(), 1);
+      await resolved.close();
+    });
     await t.test("unavailable saved state preserves a readable historical context action", async () => {
       const historical = await browser.newPage();
       await historical.setContent('<div id="layer"></div>');
