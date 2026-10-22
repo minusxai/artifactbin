@@ -1,3 +1,5 @@
+import { validateComposedAdditiveVerification } from "./composed-verification.ts";
+import type { ComposedAdditiveVerification } from "./composed-verification-contracts.ts";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { destinationSchemas } from "../destination-schema.ts";
@@ -85,6 +87,16 @@ export async function validateAdditiveVerification(
     throw Error("Additive verification report changed");
   const report = JSON.parse(bytes.toString("utf8"));
   if (
+    report.kind !== undefined &&
+    report.kind !== "verified-additive-composition-v1"
+  )
+    throw Error("Unsupported additive verification kind");
+  if (report.kind === "verified-additive-composition-v1")
+    await validateComposedAdditiveVerification(
+      report as ComposedAdditiveVerification,
+      approval.inventory,
+    );
+  if (
     report.complete !== true ||
     report.readOnly !== true ||
     report.compilerIdentity !== approval.inventory.compilerIdentity ||
@@ -138,6 +150,18 @@ export async function verifyAdditiveDatasetBase(
     [{ fingerprint: inventory.datasetFingerprint }],
     "immutable base dataset receipt",
   );
+  if (inventory.datasetAdditiveReceipts) {
+    same(
+      (
+        await db.query(
+          `SELECT source_namespace,authority_sha256,fingerprint,base_fingerprint FROM ${archive}.dataset_additive_receipts WHERE source_namespace=$1 ORDER BY authority_sha256`,
+          [admission.sourceNamespace],
+        )
+      ).rows,
+      inventory.datasetAdditiveReceipts,
+      "previous additive receipts",
+    );
+  }
   const pageIds = new Set(batch.metadata.pages.map((p) => p.pageId));
   const scope = new Set(admission.heads.map((h) => h.legacyId));
   const externalPages = new Map(
@@ -382,12 +406,29 @@ export async function captureAdditiveDatasetBase(
   batch: DatasetMigrationBatch,
   verificationReport: AdditiveDatasetBaseApproval["verificationReport"],
 ): Promise<AdditiveDatasetBaseApproval> {
-  const { runtime, archive } = destinationSchemas(schema);
-  const namespace = batch.metadata.sourceNamespace;
   const info = await stat(verificationReport.path);
   if (!info.isFile() || info.size > 1_048_576)
     throw Error("Invalid additive verification report size");
   const report = JSON.parse(await readFile(verificationReport.path, "utf8"));
+  const inventory = await captureAdditiveDatasetFacts(
+    db,
+    schema,
+    batch,
+    report.compilerIdentity,
+  );
+  const approval = { verificationReport, inventory };
+  await validateAdditiveVerification(approval);
+  return approval;
+}
+/** Raw read-only facts only. This does not issue an approval or attest completed verification. */
+export async function captureAdditiveDatasetFacts(
+  db: SqlReader,
+  schema: string,
+  batch: DatasetMigrationBatch,
+  compilerIdentity: string,
+): Promise<AdditiveDatasetBaseApproval["inventory"]> {
+  const { runtime, archive } = destinationSchemas(schema);
+  const namespace = batch.metadata.sourceNamespace;
   const receipt = (
     await db.query(
       `SELECT fingerprint FROM ${archive}.dataset_receipts WHERE source_namespace=$1`,
@@ -408,7 +449,7 @@ export async function captureAdditiveDatasetBase(
     baseManifestSha256: batch.baseManifestSha256,
     relationManifestSha256: batch.relationManifestSha256,
     relationExportedAt: batch.relationExportedAt,
-    compilerIdentity: report.compilerIdentity,
+    compilerIdentity,
     reservedFileIds: (
       await db.query(`SELECT id FROM ${runtime}.file_ids ORDER BY id`)
     ).rows.map((r) => String(r.id)),
@@ -513,7 +554,22 @@ export async function captureAdditiveDatasetBase(
       }),
     });
   }
-  const approval = { verificationReport, inventory };
-  await validateAdditiveVerification(approval);
-  return approval;
+  const additiveTable = (
+    await db.query("SELECT to_regclass($1) AS name", [
+      archive + ".dataset_additive_receipts",
+    ])
+  ).rows[0]?.name;
+  if (additiveTable) {
+    const receipts = (
+      await db.query(
+        `SELECT source_namespace,authority_sha256,fingerprint,base_fingerprint FROM ${archive}.dataset_additive_receipts WHERE source_namespace=$1 ORDER BY authority_sha256`,
+        [namespace],
+      )
+    ).rows;
+    if (receipts.length)
+      inventory.datasetAdditiveReceipts = receipts as unknown as NonNullable<
+        AdditiveDatasetBaseApproval["inventory"]["datasetAdditiveReceipts"]
+      >;
+  }
+  return inventory;
 }

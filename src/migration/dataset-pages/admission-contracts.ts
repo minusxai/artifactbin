@@ -34,6 +34,8 @@ export interface AdditiveDatasetBaseApproval {
   inventory: {
     sourceNamespace: string;
     datasetFingerprint: string;
+    /** Present only after separately verified additive dataset publications. */
+    datasetAdditiveReceipts?: readonly import("./composed-verification-contracts.ts").DatasetAdditiveReceiptProof[];
     /** Exact current resource descriptors from the completed base batch, including reviewed ownership projections. */
     resources: import("../../datasets/import-contracts.ts").DatasetImportMetadata["resources"];
     baseManifestSha256: string;
