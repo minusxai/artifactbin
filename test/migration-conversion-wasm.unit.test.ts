@@ -28,3 +28,7 @@ test("embedded WASM refuses malformed metadata, corrupt/truncated gzip, wrong di
   ])
     await assert.rejects(decodeCompiledWasm(payload as any));
 });
+test("small declared size cancels a larger valid gzip stream before joining or instantiation", async () => {
+  const payload = { ...pack(new Uint8Array(256000)), uncompressedBytes: 8 };
+  await assert.rejects(decodeCompiledWasm(payload), /expanded limit/);
+});
