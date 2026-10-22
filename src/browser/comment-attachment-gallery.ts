@@ -56,8 +56,9 @@ export function createCommentAttachmentGallery(
       attachment.variants.find((v) => v.variant === "preview") ??
       attachment.variants.find((v) => v.variant === "original");
     const large =
-      attachment.variants.find((v) => v.variant === "original") ??
+      // Archived drawing strokes are baked into preview; original is the unmarked capture.
       attachment.variants.find((v) => v.variant === "preview") ??
+      attachment.variants.find((v) => v.variant === "original") ??
       thumbnail;
     if (!thumbnail || !large) continue;
     const button = document.createElement("button");

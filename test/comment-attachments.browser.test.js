@@ -144,7 +144,7 @@ test("comment images use authenticated bytes and keyboard-accessible Blob views;
       ),
     );
     assert.ok(requests.some((req) => req.url.endsWith("/thumbnail")));
-    assert.ok(requests.some((req) => req.url.endsWith("/original")));
+    assert.ok(requests.some((req) => req.url.endsWith("/preview")));
   } finally {
     await browser.close();
     server.closeAllConnections();
