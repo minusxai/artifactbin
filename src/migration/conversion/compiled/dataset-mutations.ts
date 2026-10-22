@@ -1,4 +1,11 @@
 import {
+  datasetMutationScalar,
+  matchesDatasetMutationScalar,
+  validDatasetMutationParameterType,
+  validDatasetMutationParameterMap,
+  validDatasetMutationRowParameters,
+} from "../../../datasets/mutation/parameter-scalars.ts";
+import {
   validCompiledMutationIntent,
   validatedCompiledMutationIntents,
 } from "./dataset-mutation-intent-validation.ts";
@@ -23,18 +30,8 @@ const identifier = (value: string) =>
   typeof value === "string" &&
   /^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(value) &&
   !["constructor", "prototype", "__proto__"].includes(value);
-const scalar = (v: unknown): v is CompiledMutationScalar =>
-  v === null ||
-  typeof v === "string" ||
-  typeof v === "boolean" ||
-  (typeof v === "number" && Number.isFinite(v));
-const matches = (type: string, value: CompiledMutationScalar) =>
-  value === null ||
-  (type === "number"
-    ? typeof value === "number"
-    : type === "boolean"
-      ? typeof value === "boolean"
-      : typeof value === "string");
+const scalar = datasetMutationScalar;
+const matches = matchesDatasetMutationScalar;
 const validResult = (v: any): v is CompiledMutationResult =>
   !!v &&
   typeof v === "object" &&
@@ -66,22 +63,43 @@ export function createCompiledDatasetMutations(
       !identifier(b.name) ||
       !identifier(b.backendNamespace) ||
       !options.documents[b.backendNamespace] ||
+      !validDatasetMutationParameterMap(b.paramTypes) ||
       Object.keys(b.paramTypes).length > 240 ||
       Object.entries(b.paramTypes).some(
         ([name, type]) =>
-          !identifier(name) ||
-          ![
-            "string",
-            "number",
-            "boolean",
-            "date",
-            "timestamp",
-            "user",
-          ].includes(type),
+          !identifier(name) || !validDatasetMutationParameterType(type),
       ) ||
       b.reset?.some((name) => !identifier(name))
     )
       throw Error("Invalid registered mutation metadata");
+  const flatTypes = new Map<
+    string,
+    Record<
+      string,
+      import("../../../datasets/mutation/parameter-contracts.ts").DatasetMutationParameterType
+    >
+  >();
+  for (const binding of bindings.values()) {
+    const types = { ...binding.paramTypes };
+    for (const [field, descriptor] of Object.entries(binding.rowParams ?? {})) {
+      if (
+        !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(field) ||
+        ["constructor", "prototype", "__proto__"].includes(field) ||
+        !descriptor ||
+        !identifier(descriptor.param) ||
+        !validDatasetMutationParameterType(descriptor.type) ||
+        Object.hasOwn(types, descriptor.param)
+      )
+        throw Error("Invalid registered row mutation metadata");
+      types[descriptor.param] = descriptor.type;
+    }
+    if (
+      !validDatasetMutationRowParameters(binding.rowParams, types) ||
+      Object.keys(types).length > 240
+    )
+      throw Error("Invalid registered row mutation metadata");
+    flatTypes.set(binding.name, types);
+  }
   const durable = options.intentStore;
   const context = options.authorizationContext;
   if ((durable || context) && (!durable || !context))
@@ -113,8 +131,8 @@ export function createCompiledDatasetMutations(
       current === intent.authorizationContext &&
       !!binding &&
       Object.keys(intent.params).length ===
-        Object.keys(binding.paramTypes).length &&
-      Object.entries(binding.paramTypes).every(
+        Object.keys(flatTypes.get(binding.name)!).length &&
+      Object.entries(flatTypes.get(binding.name)!).every(
         ([name, type]) =>
           Object.hasOwn(intent.params, name) &&
           matches(type, intent.params[name]!),
@@ -258,6 +276,7 @@ export function createCompiledDatasetMutations(
   const mutate = (
     name: string,
     args: Readonly<Record<string, CompiledMutationScalar>> = {},
+    row?: Readonly<Record<string, unknown>>,
   ): Promise<CompiledMutationResult> => {
     try {
       const binding = bindings.get(name);
@@ -280,6 +299,21 @@ export function createCompiledDatasetMutations(
         if (!scalar(value) || !matches(type, value))
           throw Error("Invalid registered mutation arguments");
         params[field] = value;
+      }
+      for (const [field, descriptor] of Object.entries(
+        binding.rowParams ?? {},
+      )) {
+        const property =
+          row &&
+          !Array.isArray(row) &&
+          Object.getOwnPropertyDescriptor(row, field);
+        if (
+          !property ||
+          !Object.hasOwn(property, "value") ||
+          !matches(descriptor.type, property.value)
+        )
+          throw Error("Invalid registered row mutation arguments");
+        params[descriptor.param] = property.value;
       }
       if (prior?.status.state === "pending") {
         if (

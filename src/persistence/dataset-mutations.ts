@@ -1,3 +1,7 @@
+import {
+  validDatasetMutationParameterMap,
+  validDatasetMutationRowParameters,
+} from "../datasets/mutation/parameter-scalars.ts";
 import { createHash, randomUUID } from "node:crypto";
 import type { SqlClient } from "./sql.ts";
 import type {
@@ -57,8 +61,8 @@ export const registerDatasetMutationOperations: RegisterDatasetOperations =
         !Number.isSafeInteger(o.page.version) ||
         o.page.version < 1 ||
         !["refuse", "rerun-fresh"].includes(o.conflictMode) ||
-        !object(o.paramTypes) ||
-        Object.keys(o.paramTypes).length > limits.maxParams
+        !validDatasetMutationParameterMap(o.paramTypes) ||
+        !validDatasetMutationRowParameters(o.rowParams, o.paramTypes)
       )
         deny();
       const binding = (

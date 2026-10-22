@@ -1,7 +1,10 @@
 import type {
+  DatasetMutationParameterType,
+  DatasetMutationRowParameters,
+} from "./parameter-contracts.ts";
+import type {
   DatasetCallContext,
   DatasetCell,
-  DatasetColumn,
   DatasetTable,
 } from "../contracts.ts";
 import type { DatasetReadAuthority } from "../contracts.ts";
@@ -21,7 +24,8 @@ export interface DatasetMutationOperation {
   /** Trusted authored Import alias; canonical target remains the policy/CAS identity. */
   sqlSchema?: string;
   sql: string;
-  paramTypes: Record<string, DatasetColumn["type"]>;
+  paramTypes: Record<string, DatasetMutationParameterType>;
+  rowParams?: DatasetMutationRowParameters;
   expectedAffected?: number;
   /** Retries must be explicitly authored as fresh-row operations; never inferred from SQL text. */
   conflictMode: "refuse" | "rerun-fresh";

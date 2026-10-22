@@ -1,3 +1,9 @@
+import {
+  datasetMutationSystemParameter,
+  matchesDatasetMutationScalar,
+  validDatasetMutationParameterMap,
+  validDatasetMutationRowParameters,
+} from "./parameter-scalars.ts";
 import { validateDatasetSqlJob } from "../sql/job.ts";
 import type { DatasetCallContext } from "../contracts.ts";
 import { selectDatasetMutationPolicy } from "./policy.ts";
@@ -73,7 +79,23 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
       if (!found || !bound(context, found))
         throw new DatasetMutationError("denied", "rejected");
       const operation = structuredClone(found);
+      const callerTypes = Object.fromEntries(
+        Object.entries(operation.paramTypes).filter(
+          ([name]) => !datasetMutationSystemParameter(name),
+        ),
+      );
       if (
+        !validDatasetMutationParameterMap(operation.paramTypes) ||
+        !validDatasetMutationRowParameters(
+          operation.rowParams,
+          operation.paramTypes,
+        ) ||
+        Object.keys(input.params).length !== Object.keys(callerTypes).length ||
+        Object.entries(callerTypes).some(
+          ([name, type]) =>
+            !Object.hasOwn(input.params, name) ||
+            !matchesDatasetMutationScalar(type, input.params[name]),
+        ) ||
         Object.keys(input.params).some(
           (k) => !Object.hasOwn(operation.paramTypes, k),
         )
@@ -135,7 +157,11 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
           },
           sql: operation.sql,
           params: { ...input.params, ...head.systemParams },
-          paramTypes: operation.paramTypes,
+          paramTypes: Object.fromEntries(
+            Object.entries(operation.paramTypes).filter(
+              ([, type]) => type !== null,
+            ),
+          ) as Record<string, import("../contracts.ts").DatasetColumn["type"]>,
           ...(selection.policy ? { policy: selection.policy } : {}),
           ...(operation.expectedAffected === undefined
             ? {}

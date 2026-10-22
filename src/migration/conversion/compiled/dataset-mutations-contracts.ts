@@ -1,3 +1,7 @@
+import type {
+  DatasetMutationParameterType,
+  DatasetMutationRowParameters,
+} from "../../../datasets/mutation/parameter-contracts.ts";
 import type { DocumentNode } from "graphql";
 import type { AfClient } from "../../../apollo/apollo-contracts.ts";
 export type CompiledMutationScalar = string | number | boolean | null;
@@ -7,12 +11,9 @@ export interface CompiledDatasetMutation {
   backendNamespace: string;
   /** SHA-256 of trusted immutable registration; isolates durable recovery across revisions. */
   recoveryScope: string;
-  paramTypes: Readonly<
-    Record<
-      string,
-      "string" | "number" | "boolean" | "date" | "timestamp" | "user"
-    >
-  >;
+  paramTypes: Readonly<Record<string, DatasetMutationParameterType>>;
+  /** Whitelisted query-row inputs; never authority or caller facts. */
+  rowParams?: DatasetMutationRowParameters;
   reset?: readonly string[];
 }
 export interface CompiledMutationResult {
@@ -65,6 +66,7 @@ export interface CompiledDatasetMutationAdapter {
   mutate(
     name: string,
     args?: Readonly<Record<string, CompiledMutationScalar>>,
+    row?: Readonly<Record<string, unknown>>,
   ): Promise<CompiledMutationResult>;
   /** Reconciles an unknown result with exactly the original requestId and argument snapshot. */
   retry(name: string): Promise<CompiledMutationResult>;

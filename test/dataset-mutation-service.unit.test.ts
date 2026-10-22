@@ -413,3 +413,16 @@ test("only a completed terminal refusal is definite; lost dispatch or failed rec
     (error) => error === unavailable,
   );
 });
+
+test('registered nullable parameters accept finite scalars with exact required keys and never become implicit string types',async()=>{
+ for(const value of [null,1,true,'x']){
+  const f=fixture();f.ports.operation=async()=>({...operation,paramTypes:{value:null}});
+  const execute=f.ports.execute;f.ports.execute=async(job,signal)=>{assert.deepEqual(job.input.paramTypes,{});assert.equal(job.input.params.value,value);return execute(job,signal);};
+  await createDatasetMutationService(f.ports).mutate(context,{...request,params:{value}});
+ }
+ for(const params of [{},{value:1,extra:2},{value:{}},{value:Infinity}]){
+  const f=fixture();f.ports.operation=async()=>({...operation,paramTypes:{value:null}});
+  await assert.rejects(createDatasetMutationService(f.ports).mutate(context,{...request,params}));assert.equal(f.calls.includes('begin'),false);
+ }
+ const wrong=fixture();await assert.rejects(createDatasetMutationService(wrong.ports).mutate(context,{...request,params:{value:'not a number'}}));assert.equal(wrong.calls.includes('begin'),false);
+});
