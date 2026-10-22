@@ -276,7 +276,7 @@ test("job prepares exact live head bindings and real compiled receipts without i
   assert.deepEqual(receipt.members, { sourceNamespace: "fixture" });
   assert.deepEqual(member.membersBindings.get(JSON.stringify(["abc123", 2])), {
     backendNamespace: receipt.backendNamespace,
-    backendHref: receipt.backendHref,
+    backendHref: new URL(receipt.backendHref).pathname,
   });
   assert.equal(
     member.membersBindings.has(JSON.stringify(["abc123", 1])),

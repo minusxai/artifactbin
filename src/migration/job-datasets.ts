@@ -251,7 +251,7 @@ export async function prepareMigrationJobDatasets(
           migrationDatasetVersionKey(receipt.pageLegacyId, receipt.pageVersion),
           {
             backendNamespace: receipt.backendNamespace,
-            backendHref: receipt.backendHref,
+            backendHref: new URL(receipt.backendHref).pathname,
           },
         );
       backends.set(
