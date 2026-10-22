@@ -1,3 +1,4 @@
+import { migrationCommentAssetRecords } from "./assets/comment-records.ts";
 import { createHash } from "node:crypto";
 import { destinationSchemas } from "./destination-schema.ts";
 import { destinationAccess, publicationPath } from "./postgres.ts";
@@ -215,6 +216,18 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
       "asset descriptors",
     );
     totals.assets += assets.length;
+    const attachmentRows = (
+      await db.query(
+        `SELECT comment_id,attachment_id,variant,name,sha256,byte_length::text,width,height,content_type,storage_key FROM ${runtime}.comment_attachment_assets WHERE page_id=$1 ORDER BY comment_id,attachment_id,variant`,
+        [page.pageId],
+      )
+    ).rows;
+    equal(
+      attachmentRows,
+      migrationCommentAssetRecords(page.commentAssets ?? []),
+      "comment attachment descriptors",
+    );
+    totals.assets += attachmentRows.length;
     const expectedLinks = (page.backends ?? [])
       .filter((b) => b.linked)
       .map((b) => ({

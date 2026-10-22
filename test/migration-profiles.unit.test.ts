@@ -76,3 +76,26 @@ test("person selector publication refuses a column without its exact admitted bi
   );
   assert.equal(queries, 0);
 });
+
+test("verified avatars project only an opaque scoped asset identity", () => {
+  const asset = {
+    sourceNamespace: "fixture",
+    legacyUserId: "one",
+    assetId: "c".repeat(64),
+    objectKey: "avatar/one/" + "a".repeat(32),
+    kind: "avatar" as const,
+    sha256: "a".repeat(64),
+    storageKey: "a".repeat(64),
+    byteLength: 20,
+    width: 10,
+    height: 5,
+    contentType: "image/webp" as const,
+  };
+  const result = projectMigrationProfiles(
+    [{ id: "one", image_key: asset.objectKey }],
+    [asset],
+  );
+  assert.equal(result.profiles[0]!.image, asset.assetId);
+  assert.equal(result.unavailableAvatarImages, 0);
+  assert.equal(JSON.stringify(result).includes("avatar/"), false);
+});

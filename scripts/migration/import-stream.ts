@@ -49,7 +49,20 @@ if (Boolean(datasetReceipts) !== Boolean(relationDirectory))
   throw new Error(
     "Dataset receipts and supplemental relation source must be supplied together",
   );
+const supplementalReceipts = process.env.MIGRATION_SUPPLEMENTAL_ASSET_RECEIPTS;
+const supplementalObjects = process.env.MIGRATION_SUPPLEMENTAL_ASSET_DIRECTORY;
+if (Boolean(supplementalReceipts) !== Boolean(supplementalObjects))
+  throw Error(
+    "Supplemental asset receipts and flat object directory must be supplied together",
+  );
 const options: MigrationJobOptions = {
+  supplementalAssets:
+    supplementalReceipts && supplementalObjects
+      ? {
+          receiptsPath: supplementalReceipts,
+          objectsDirectory: supplementalObjects,
+        }
+      : undefined,
   sourceDirectory,
   datasets:
     datasetReceipts && relationDirectory

@@ -94,6 +94,7 @@ export interface PlannedPage {
     filename: string | null;
     bytes: number;
   }[];
+  commentAssets?: readonly import("./assets/projection-contracts.ts").MigrationCommentAsset[];
   comments: LegacyRow[];
   unavailableCommentContexts?: {
     commentId: string;

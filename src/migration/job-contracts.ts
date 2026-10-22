@@ -33,6 +33,7 @@ export interface MigrationJobOptions {
   archivedRoot?: string;
   conversionCacheDirectory?: string;
   datasets?: { receiptsPath: string; relationDirectory: string };
+  supplementalAssets?: { receiptsPath: string; objectsDirectory: string };
   media?: { planPath: string; receiptsPath: string; stagingDirectory?: string };
 }
 export interface MigrationJobPorts {
@@ -52,6 +53,7 @@ export interface MigrationJobSource {
   ids: string[];
   identitySummary: Record<string, number>;
   groupSummary: Record<string, number>;
+  supplementalAssets?: import("./assets/projection-contracts.ts").MigrationSupplementalProjection;
   media: MigrationMediaIndex | null;
   datasets?: MigrationDatasetSource;
   preparedDatasets?: MigrationJobDatasets;
@@ -99,6 +101,12 @@ export interface MigrationJobSummary {
     omittedUnmappedTokenPrincipals: number;
     unavailableProfileImages: number;
     historicalUnavailableRevisions: number;
+  };
+  supplementalAssets?: {
+    verifiedAvatars: number;
+    verifiedCommentVariants: number;
+    unavailableAvatars: number;
+    unavailableAttachments: number;
   };
   result: JobTotals;
   identitySummary: Record<string, number>;

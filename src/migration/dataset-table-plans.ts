@@ -24,6 +24,20 @@ export function migrationDatasetTablePlans(
   });
   return [
     plan(
+      "profile_assets",
+      ["asset_id"],
+      (batch.profileAssets ?? []).map((asset) => ({
+        legacy_user_id: asset.legacyUserId,
+        asset_id: asset.assetId,
+        sha256: asset.sha256,
+        byte_length: asset.byteLength,
+        width: asset.width,
+        height: asset.height,
+        content_type: asset.contentType,
+        storage_key: asset.storageKey,
+      })),
+    ),
+    plan(
       "dataset_public_profiles",
       ["legacy_user_id"],
       (m.profiles ?? []).map((r) => ({

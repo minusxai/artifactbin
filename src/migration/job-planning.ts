@@ -75,6 +75,16 @@ export function createMigrationJobPlanner(
         page.issues.push(...reasons);
       }
     }
+    for (const page of plan.pages) {
+      const comments = new Set(
+        page.comments.filter((c) => !c.deleted_at).map((c) => String(c.id)),
+      );
+      page.commentAssets = source.supplementalAssets?.comments.filter(
+        (asset) =>
+          asset.legacyArtifactId === page.legacyId &&
+          comments.has(asset.commentId),
+      );
+    }
     return plan;
   };
   return planArtifact;

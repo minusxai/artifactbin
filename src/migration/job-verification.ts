@@ -47,6 +47,7 @@ export async function verifyMigrationJob(
       source.preparedDatasets && source.datasets
         ? await verifyMigrationDatasetMetadata(db, options.schema, {
             ...source.datasets.provenance,
+            profileAssets: source.supplementalAssets?.profiles,
             metadata: selectMigrationDatasetMetadata(
               source.preparedDatasets.metadata,
               ready,

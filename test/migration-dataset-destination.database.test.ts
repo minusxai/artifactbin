@@ -25,8 +25,26 @@ test(
           "utf8",
         ),
       );
+      await db.query(
+        `CREATE TABLE profile_assets(source_namespace text,legacy_user_id text,asset_id text,sha256 text,byte_length bigint,width integer,height integer,content_type text,storage_key text,PRIMARY KEY(source_namespace,asset_id))`,
+      );
       await db.query(`INSERT INTO accounts VALUES ('owner@example.test')`);
       const batch: DatasetMigrationBatch = {
+        profileAssets: [
+          {
+            sourceNamespace: "fixture",
+            legacyUserId: "original-user",
+            assetId: "c".repeat(64),
+            objectKey: "avatar/original-user/" + "a".repeat(32),
+            kind: "avatar",
+            sha256: "a".repeat(64),
+            storageKey: "a".repeat(64),
+            byteLength: 20,
+            width: 10,
+            height: 5,
+            contentType: "image/webp",
+          },
+        ],
         baseManifestSha256: "a".repeat(64),
         relationManifestSha256: "b".repeat(64),
         relationExportedAt: "2026-10-22T00:00:00.000Z",
@@ -59,14 +77,20 @@ test(
       };
       const destination = new PostgresDatasetMetadataDestination(db, schema);
       assert.deepEqual(await destination.import(batch), {
-        created: 2,
+        created: 3,
         unchanged: 0,
       });
       assert.deepEqual(await destination.import(batch), {
         created: 0,
-        unchanged: 2,
+        unchanged: 3,
       });
-      assert.equal(await verifyMigrationDatasetMetadata(db, schema, batch), 2);
+      assert.equal(await verifyMigrationDatasetMetadata(db, schema, batch), 3);
+      await db.query("UPDATE profile_assets SET width=11");
+      await assert.rejects(
+        verifyMigrationDatasetMetadata(db, schema, batch),
+        /metadata/,
+      );
+      await db.query("UPDATE profile_assets SET width=10");
       await db.query(
         "UPDATE dataset_principals SET expires_at='2028-01-01T00:00:00Z' WHERE source_namespace='fixture'",
       );
@@ -215,7 +239,7 @@ test(
         },
       ];
       assert.deepEqual(await destination.import(bound), {
-        created: 5,
+        created: 6,
         unchanged: 0,
       });
       assert.equal(

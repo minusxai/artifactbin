@@ -156,6 +156,15 @@ export async function runMigrationJob(
       options.apply || options.verifyOnly
         ? options.reportPath + ".verification.json"
         : undefined,
+    supplementalAssets: source.supplementalAssets
+      ? {
+          verifiedAvatars: source.supplementalAssets.profiles.length,
+          verifiedCommentVariants: source.supplementalAssets.comments.length,
+          unavailableAvatars: source.supplementalAssets.unavailableAvatars,
+          unavailableAttachments:
+            source.supplementalAssets.unavailableAttachments,
+        }
+      : undefined,
     result: planned.totals,
     identitySummary: source.identitySummary,
     groupSummary: source.groupSummary,

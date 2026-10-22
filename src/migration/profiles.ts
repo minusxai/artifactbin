@@ -3,6 +3,7 @@ import type { MigrationProfileProjection } from "./profile-contracts.ts";
 /** Original public labels only. Login accounts, emails and object storage keys never enter this catalog. */
 export function projectMigrationProfiles(
   users: readonly LegacyRow[],
+  assets: readonly import("./assets/projection-contracts.ts").MigrationProfileAsset[] = [],
 ): MigrationProfileProjection {
   const profiles: MigrationProfileProjection["profiles"][number][] = [];
   const seen = new Set<string>();
@@ -22,9 +23,18 @@ export function projectMigrationProfiles(
           : row.id;
     const handle =
       typeof row.username === "string" && row.username ? row.username : null;
-    if (typeof row.image_key === "string" && row.image_key)
+    const asset = assets.find(
+      (asset) =>
+        asset.legacyUserId === row.id && asset.objectKey === row.image_key,
+    );
+    if (typeof row.image_key === "string" && row.image_key && !asset)
       unavailableAvatarImages++;
-    profiles.push({ legacyUserId: row.id, name, handle, image: null });
+    profiles.push({
+      legacyUserId: row.id,
+      name,
+      handle,
+      image: asset?.assetId ?? null,
+    });
   }
   return { profiles, unavailableAvatarImages };
 }

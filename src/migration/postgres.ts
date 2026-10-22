@@ -1,3 +1,4 @@
+import { migrationCommentAssetRecords } from "./assets/comment-records.ts";
 import {projectMigrationCommentContext} from "./comment-projection.ts";
 import {preservedOrphanActor} from "./orphans.ts";
 import {registerMigrationBackends} from "./backend-preparation.ts";
@@ -125,6 +126,7 @@ export class PostgresMigrationDestination implements ImportDestination {
     if(snapshot)await this.db.query('INSERT INTO snapshots(file_id,id,source_revision,schema_version,state,view,rendered) VALUES($1,$2,$3,1,$4::jsonb,$5::jsonb,NULL)',[page.pageId,snapshot,revision,'{}',JSON.stringify(c.view_state)]);
     await this.db.query('INSERT INTO comments(file_id,id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence,context_status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb)',[page.pageId,String(c.id),mapped,String(c.quote??c.snippet??''),String(c.body??''),revision,c.root_id??null,snapshot,author,String(c.created_at),Number(c.revision??1),root.status==='resolved',digest(JSON.stringify(c)),++sequence,contextStatus?JSON.stringify(contextStatus):null]);
    }
+   for(const asset of migrationCommentAssetRecords(page.commentAssets??[])) await this.db.query('INSERT INTO comment_attachment_assets(page_id,comment_id,attachment_id,variant,name,sha256,byte_length,width,height,content_type,storage_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [page.pageId,asset.comment_id,asset.attachment_id,asset.variant,asset.name,asset.sha256,asset.byte_length,asset.width,asset.height,asset.content_type,asset.storage_key]);
    await this.db.query('UPDATE files SET sequence=$2 WHERE id=$1',[page.pageId,sequence]);
    await this.db.query(`INSERT INTO ${this.archive}.receipts(key,digest,page_id) VALUES($1,$2,$3)`,[key,checksum,page.pageId]);return 'created';
   });

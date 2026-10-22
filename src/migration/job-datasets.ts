@@ -103,7 +103,10 @@ export async function prepareMigrationJobDatasets(
       manifestSha256: source.datasets.provenance.relationManifestSha256,
     },
   });
-  const profiles = projectMigrationProfiles(source.base.tables.users ?? []);
+  const profiles = projectMigrationProfiles(
+    source.base.tables.users ?? [],
+    source.supplementalAssets?.profiles,
+  );
   accumulator.add({ ...global.metadata, profiles: profiles.profiles });
   for (const page of executable) {
     const pageBindings = prepared.bindings.filter(

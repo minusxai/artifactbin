@@ -1,3 +1,5 @@
+import { readVerifiedSupplementalAssets } from "./assets/supplemental.ts";
+import { projectSupplementalAssets } from "./assets/projection.ts";
 import { preservedOrphanActor } from "./orphans.ts";
 import { readMigrationDatasetSource } from "./dataset-source.ts";
 import { readFile } from "node:fs/promises";
@@ -27,7 +29,12 @@ export async function prepareMigrationJobSource(
   const manifest = await readStreamManifest(options.sourceDirectory);
   const authorityTables: Record<string, import("./contracts.ts").LegacyRow[]> =
     {};
-  for (const name of ["groups", "group_members", "group_links"]) {
+  for (const name of [
+    "groups",
+    "group_members",
+    "group_links",
+    ...(options.supplementalAssets ? ["comment_images"] : []),
+  ]) {
     authorityTables[name] = [];
     for (const part of manifest.parts.filter((p) => p.table === name))
       for await (const row of readPartRows(options.sourceDirectory, part))
@@ -119,7 +126,23 @@ export async function prepareMigrationJobSource(
         receiptsPath: options.datasets.receiptsPath,
       })
     : undefined;
+  if (options.supplementalAssets && !datasets)
+    throw Error(
+      "Supplemental profile projection requires dataset metadata destination",
+    );
+  const supplementalAssets = options.supplementalAssets
+    ? projectSupplementalAssets(
+        manifest.sourceNamespace,
+        accounts.users,
+        authorityTables.comment_images ?? [],
+        await readVerifiedSupplementalAssets(
+          options.supplementalAssets.receiptsPath,
+          options.supplementalAssets.objectsDirectory,
+        ),
+      )
+    : undefined;
   return {
+    supplementalAssets,
     datasets,
     manifest,
     base,

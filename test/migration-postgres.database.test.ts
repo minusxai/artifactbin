@@ -174,6 +174,23 @@ test(
         isolated: true,
         editorManageRestricted: true,
       });
+      plan.pages[0]!.commentAssets = [
+        {
+          objectKey: "comment-images/image/original.webp",
+          kind: "comment-image",
+          sha256: "a".repeat(64),
+          storageKey: "a".repeat(64),
+          byteLength: 20,
+          width: 10,
+          height: 5,
+          contentType: "image/webp",
+          legacyArtifactId: plan.pages[0]!.legacyId,
+          commentId: String(plan.pages[0]!.comments[0]!.id),
+          attachmentId: "image",
+          variant: "original",
+          name: "Attached image",
+        },
+      ];
       await destination.prepare({ manifest, maps: plan.maps });
       assert.equal(
         (await applyMigration(plan, destination, { dryRun: false })).created,
@@ -193,6 +210,14 @@ test(
           origin: "http://localhost:8787",
         });
       assert.equal((await verify()).comments, 3);
+      await db.query(
+        `UPDATE "${schema}".comment_attachment_assets SET width=11`,
+      );
+      await assert.rejects(verify(), /comment attachment descriptors/);
+      await db.query(
+        `UPDATE "${schema}".comment_attachment_assets SET width=10`,
+      );
+      await verify();
       const baseline = (
         await db.query(`SELECT * FROM "${schema}".files WHERE id=$1`, [
           plan.pages[0]!.pageId,

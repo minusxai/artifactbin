@@ -2,6 +2,7 @@ import type { DatasetImportMetadata } from "../datasets/import-contracts.ts";
 /** Pins both independently consistent exports; never implies one shared snapshot. */
 export interface DatasetMigrationBatch {
   metadata: DatasetImportMetadata;
+  profileAssets?: readonly import("./assets/projection-contracts.ts").MigrationProfileAsset[];
   baseManifestSha256: string;
   relationManifestSha256: string;
   relationExportedAt: string;

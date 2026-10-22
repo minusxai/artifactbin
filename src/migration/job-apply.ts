@@ -87,6 +87,7 @@ export async function applyMigrationJob(
       const metadata = source.preparedDatasets.metadata;
       await new PostgresDatasetMetadataDestination(db, options.schema).import({
         ...source.datasets.provenance,
+        profileAssets: source.supplementalAssets?.profiles,
         metadata: selectMigrationDatasetMetadata(metadata, ready),
       });
     }
