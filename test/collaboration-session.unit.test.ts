@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createCollaborationSession } from "../src/browser/collaboration-session.ts";
+import { createRemoteHost } from "../src/browser/remote-host.ts";
+import { createDocumentHost } from "../src/browser/document-host.ts";
 import { publicationGate } from "../src/browser/lifecycle.ts";
 import type { DocumentState, AcceptedComment } from "../src/contracts.ts";
 import type {
@@ -527,3 +529,40 @@ test("historical context reads continue without publication and reject obsolete 
  f.live.status("error","Connection rejected"); assert.equal(f.invalidations,2);
  f.session.dispose(); f.live.changed(); assert.equal(f.invalidations,2);
  });
+
+test("identity replacement retires held prior-caller permissions before any new-caller backend dispatch", async () => {
+  const held = deferred<typeof permission & {authorizationContext:string}>();
+  const gate = publicationGate();
+  let state = initial();
+  let session: ReturnType<typeof createCollaborationSession>;
+  const host = createDocumentHost({
+    readState:()=>state, updateState:fn=>{state=fn(state);}, gate,
+    source:"source", sessionId:"session", local:false, hosted:true,
+    origin:"https://example.invalid", documentPath:"/page",
+    initial:{session:"synthetic-a",username:"caller-a"},
+    invalidateCollaboration:()=>session.disconnect(),
+  });
+  session = createCollaborationSession({gate, readState:()=>state,
+    updateState:fn=>{state=fn(state);}, authenticated:()=>false,
+    onChange:status=>{host.observeCollaboration(status);},
+  });
+  session.attach({request:async(op)=> (op.kind === "permissions" ? held.promise : {comments:[],head:"r"}) as any,
+    connect:()=>({close(){},send(){return true;}})});
+  const pending = session.synchronize();
+  host.applyConnection({origin:"https://example.invalid",session:"synthetic-b",username:"caller-b"});
+  held.resolve({...permission,authorizationContext:"caller-a-context"});
+  await pending.catch(()=>{});
+  let sentToken: string | undefined;
+  const remote = createRemoteHost({
+    authorizationContext:()=>host.read().sync === "synced" ? host.read().permissions?.authorizationContext ?? null : null,
+    endpoint:()=>"/graphql",active:()=>true,online:()=>true,
+    post:async()=>{sentToken=host.transportConnection().token;return {status:200,body:{data:{}}};},reply(){},
+  });
+  remote.handle({kind:"remote-request",id:"held-intent",request:{operation:"mutation",query:"mutation { save }",variables:{},authorizationContext:"caller-a-context"}});
+  await Promise.resolve();
+  assert.equal(host.read().session,"synthetic-b");
+  assert.equal(host.read().permissions,null);
+  assert.equal(host.read().sync,"disconnected");
+  assert.equal(sentToken,undefined);
+  session.dispose();
+});

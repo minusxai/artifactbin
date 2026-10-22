@@ -12,6 +12,8 @@ export interface DocumentHostSnapshot {
   sync: SessionStatus["sync"];
 }
 export interface DocumentHostOptions {
+  /** Synchronously retire all prior caller observations before installing another identity. */
+  invalidateCollaboration?(): void;
   readState(): DocumentState;
   updateState(reducer: (state: DocumentState) => DocumentState): void;
   gate: Pick<PublicationGate, "active">;

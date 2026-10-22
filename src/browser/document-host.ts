@@ -74,6 +74,7 @@ export function createDocumentHost(options: DocumentHostOptions): DocumentHost {
           },
         }));
       }
+      options.invalidateCollaboration?.();
       snapshot = jsonCopy({
         ...snapshot,
         session: identity.session,

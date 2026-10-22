@@ -44,6 +44,7 @@ async function bootPlatform() {
   /** A downloaded file's identity: the server it came from, its ID, version and revision. */
   const localPage = local ? documentSession.page : null;
   const host = createDocumentHost({
+    invalidateCollaboration: () => collaboration.disconnect(),
     readState: () => saved,
     updateState: (reducer) => { saved = reducer(saved); },
     // A downloaded file comments as the hosted view does: signed in, with the server's permission.
