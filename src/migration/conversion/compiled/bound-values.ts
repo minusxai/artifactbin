@@ -31,13 +31,34 @@ export const readBoundValueColumnProofs: ReadBoundValueColumnProofs = (
       ecmaVersion: "latest",
     }) as any;
   if (tree.end !== text.length) refuse();
+  const containsBound = (n: any): boolean => {
+    if (!n || typeof n !== "object") return false;
+    if (
+      n.type === "JSXElement" &&
+      n.openingElement.name.name === "Value" &&
+      n.openingElement.attributes.some(
+        (a: any) => a.type === "JSXAttribute" && a.name?.name === "source",
+      )
+    )
+      return true;
+    return Object.values(n).some((v) =>
+      Array.isArray(v) ? v.some(containsBound) : containsBound(v),
+    );
+  };
+  if (!containsBound(tree)) return [];
   const imports = new Map<string, { ref: string; version?: number }>(),
     values: any[] = [];
   const walk = (n: any) => {
     if (!n || typeof n !== "object") return;
     if (n.type === "JSXElement") {
       const tag = n.openingElement.name.name;
-      if (tag === "Import" || tag === "Value") {
+      if (
+        tag === "Import" ||
+        (tag === "Value" &&
+          n.openingElement.attributes.some(
+            (a: any) => a.type === "JSXAttribute" && a.name?.name === "source",
+          ))
+      ) {
         const attrs: Record<string, unknown> = Object.create(null);
         for (const a of n.openingElement.attributes) {
           if (a.type !== "JSXAttribute" || Object.hasOwn(attrs, a.name?.name))

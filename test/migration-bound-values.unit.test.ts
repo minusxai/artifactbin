@@ -210,3 +210,21 @@ test("pinned source versions must match trusted immutable catalog version", () =
       ),
     );
 });
+
+test("offline bound planning ignores unrelated unbound Value expressions", () => {
+  assert.deepEqual(
+    readBoundValueColumnProofs(
+      '<Import name="unrelated" src={dynamicSource}/><Value name="unrelated" default={dynamicValue}/>',
+      [],
+    ),
+    [],
+  );
+  assert.equal(
+    readBoundValueColumnProofs(
+      source +
+        '<Import name="unrelated" src={dynamicSource}/><Value name="unrelated" default={dynamicValue}/>',
+      [catalog],
+    ).length,
+    1,
+  );
+});
