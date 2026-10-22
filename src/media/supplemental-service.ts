@@ -59,7 +59,7 @@ export function createSupplementalService({
       )
         return denied();
       const address = { ...synthetic, sha256: descriptor.sha256 };
-      return createMediaService(
+      const response = await createMediaService(
         {
           async read() {
             return {
@@ -78,6 +78,24 @@ export function createSupplementalService({
         method: request.method,
         ...(request.range ? { range: request.range } : {}),
       });
+      if (response.status === 200 || response.status === 206) {
+        try {
+          const fresh = await repository.read(
+            request.address,
+            request.credential,
+            request.signal,
+          );
+          request.signal?.throwIfAborted();
+          if (JSON.stringify(fresh) !== JSON.stringify(descriptor)) {
+            await response.close();
+            return denied();
+          }
+        } catch (error) {
+          await response.close();
+          throw error;
+        }
+      }
+      return response;
     },
   };
 }

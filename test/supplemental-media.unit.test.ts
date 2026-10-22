@@ -156,3 +156,43 @@ test("corrupt proof and unavailable bytes fail closed without a public URL fallb
     503,
   );
 });
+test("page access or descriptor changes during object open close bytes before delivery", async () => {
+  for (const next of [
+    null,
+    { ...descriptor, address: { ...address, pageId: "OTHER1" } },
+  ]) {
+    let grant: SupplementalDescriptor | null = descriptor;
+    let closed = 0,
+      streamed = 0;
+    const service = createSupplementalService({
+      repository: {
+        async read() {
+          return grant;
+        },
+      },
+      store: {
+        async open() {
+          grant = next;
+          return {
+            async *stream() {
+              streamed++;
+              yield new Uint8Array([1]);
+            },
+            async close() {
+              closed++;
+            },
+          };
+        },
+      },
+    });
+    const response = await service.read({
+      address,
+      credential: "page-grant",
+      method: "GET",
+    });
+    assert.equal(response.status, 404);
+    assert.equal(response.body, undefined);
+    assert.equal(closed, 1);
+    assert.equal(streamed, 0);
+  }
+});

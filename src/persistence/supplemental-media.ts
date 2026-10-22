@@ -23,10 +23,14 @@ export function supplementalRepository(
     const session = credential
       ? await loadSession(client, hash(credential))
       : null;
-    if (credential && !session) return false;
+    const document = await loadDocumentHeader(client, address.pageId);
+    // Hosted and portable guest runners use the page's current link capability,
+    // not an account session. Unknown, rotated and other-page links still deny.
+    if (credential && !session && document?.shareHash !== hash(credential))
+      return false;
     try {
       return authorizePageRead({
-        document: await loadDocumentHeader(client, address.pageId),
+        document,
         session,
         fileId: address.pageId,
         now: now(),

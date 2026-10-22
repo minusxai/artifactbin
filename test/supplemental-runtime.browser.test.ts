@@ -131,6 +131,33 @@ test("hosted trusted comment chrome fetches private verified attachment into Blo
       "function",
       "downloaded connection attaches internal image port",
     );
+    const sharing = await (
+      await server.request(`/api/files/${published.id}/sharing`, { token })
+    ).json();
+    await server.request(`/api/files/${published.id}/sharing`, {
+      token,
+      method: "PUT",
+      headers: { "If-Match": String(sharing.policy.version) },
+      body: { visibility: "unlisted", linkRole: "viewer" },
+    });
+    const guest = await (await browser.newContext()).newPage();
+    guest.on("pageerror", (error) => errors.push(error.message));
+    await guest.goto(published.url);
+    await guest.locator('html[data-pagegi-startup="ready"]').waitFor();
+    await guest
+      .getByRole("button", {
+        name: "Open comment: Original comment",
+        exact: true,
+      })
+      .click();
+    await guest.waitForFunction(() => {
+      const img = document.querySelector(
+        ".pg-comment-attachments img",
+      ) as HTMLImageElement;
+      return (
+        img?.src.startsWith("blob:") && img.complete && img.naturalWidth === 1
+      );
+    });
     assert.deepEqual(errors, []);
     const listed = await (
       await server.request(`/api/files/${published.id}/comments`, { token })

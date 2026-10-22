@@ -133,6 +133,45 @@ test("comment attachment GET/HEAD/ranges enforce current page ACL, group revocat
       assert.equal((await get("AST001", token)).status, 200, token);
     assert.equal((await get("PUB001", "")).status, 200);
     assert.equal((await get("LNK001", "")).status, 200);
+    await db.pool.query("UPDATE files SET share_hash=$1 WHERE id='LNK001'", [
+      hash("guest-link"),
+    ]);
+    assert.equal(
+      (await get("LNK001", "guest-link")).status,
+      200,
+      "hosted guest link credential",
+    );
+    assert.equal(
+      (await get("PUB001", "guest-link")).status,
+      404,
+      "link is page scoped",
+    );
+    assert.equal((await get("LNK001", "invalid")).status, 404);
+    assert.equal(
+      (await get("LNK001", "guest-link", { method: "HEAD" })).status,
+      200,
+    );
+    assert.equal(
+      (await get("LNK001", "guest-link", { headers: { Range: "bytes=0-1" } }))
+        .status,
+      206,
+    );
+    await db.pool.query("UPDATE files SET share_hash=$1 WHERE id='AST001'", [
+      hash("private-link"),
+    ]);
+    assert.equal(
+      (await get("AST001", "private-link")).status,
+      404,
+      "private policy still requires an invited identity",
+    );
+    await db.pool.query("UPDATE files SET share_hash=$1 WHERE id='LNK001'", [
+      hash("rotated-link"),
+    ]);
+    assert.equal(
+      (await get("LNK001", "guest-link")).status,
+      404,
+      "rotated link denied",
+    );
     assert.equal((await get("GRP001", "member")).status, 200);
     assert.equal((await get("GRP001", "outsider")).status, 404);
     await db.pool.query(
