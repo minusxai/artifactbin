@@ -144,9 +144,13 @@ pg_ctl -D /proof/data -o "-k /tmp -c listen_addresses='' -c shared_buffers=64MB 
 createdb -h /tmp recovery
 pg_restore -h /tmp --dbname=recovery --exit-on-error --no-owner --no-privileges /proof/archive.dump
 pg_ctl -D /proof/data -m immediate -w stop >/dev/null
+used=$(du -sk /proof | awk '{print $1}')
+free=$(df -Pk /proof | awk 'NR==2{print $4}')
+case "$used:$free" in *[!0-9:]*|:*) exit 1;; esac
+[ "$used" -le "$1" ] && [ "$free" -ge "$2" ]
 """
         self.containers.append(self.name)
-        args = ["docker", "run", "--name", self.name, *self.labels(), "--network=none", "--read-only", "--memory=1g", "--memory-swap=1g", "--cpus=1", "--pids-limit=64", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=postgres", "--tmpfs", "/tmp:rw,nosuid,nodev,size=128m,uid=999,gid=999", *self.mount(), "-i", "--entrypoint", "sh", "postgres:18-bookworm", "-c", proof]
+        args = ["docker", "run", "--name", self.name, *self.labels(), "--network=none", "--read-only", "--memory=1g", "--memory-swap=1g", "--cpus=1", "--pids-limit=64", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=postgres", "--tmpfs", "/tmp:rw,nosuid,nodev,size=128m,uid=999,gid=999", *self.mount(), "-i", "--entrypoint", "sh", "postgres:18-bookworm", "-c", proof, "proof", str(maximum // 1024), str((RESERVE_BYTES + 1023) // 1024)]
         with archive.open("rb") as source:
             try:
                 process = subprocess.Popen(args, stdin=source, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -162,6 +166,8 @@ pg_ctl -D /proof/data -m immediate -w stop >/dev/null
                         code = process.wait(timeout=min(POLL_SECONDS, remaining))
                         if code != 0:
                             raise RuntimeError("Schema restore verification failed")
+                        if shutil.disk_usage(host_directory).free < RESERVE_BYTES:
+                            raise RuntimeError("Backup free-space reserve reached")
                         break
                     except subprocess.TimeoutExpired:
                         if shutil.disk_usage(host_directory).free < RESERVE_BYTES:

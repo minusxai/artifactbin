@@ -85,3 +85,35 @@ assert proof.volume_attempted
   );
   assert.equal(result.status, 0, result.stderr);
 });
+test("completed restore enforces final volume budget and host reserve", () => {
+  const result = spawnSync("python3", ["-c", `
+import importlib.util, subprocess, tempfile
+from pathlib import Path
+from types import SimpleNamespace
+spec=importlib.util.spec_from_file_location('backup','deploy/backup-schema.py')
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+real_run=subprocess.run
+real_popen=subprocess.Popen
+for used,free,host,expected in [(5,100,100,False),(1,1,100,False),(1,100,0,False),(1,100,100,True)]:
+ class Process:
+  def wait(self,timeout):return self.code
+  def poll(self):return self.code
+ def start(args,**kwargs):
+  script=args[-4].split('used=$(du',1)[1]
+  script='used=$(du'+script
+  prefix='du() { echo "'+str(used*m.GIB//1024)+' /proof"; }; df() { printf "header\\nfs 1 1 '+str(free*m.GIB//1024)+' /proof\\n"; }; '
+  m.subprocess.Popen=real_popen
+  code=real_run(['sh','-c',prefix+script,*args[-3:]],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE).returncode
+  m.subprocess.Popen=start
+  process=Process();process.code=code;return process
+ m.subprocess.Popen=start
+ m.shutil.disk_usage=lambda p:SimpleNamespace(free=host*m.GIB)
+ with tempfile.TemporaryDirectory() as folder:
+  archive=Path(folder)/'dump';archive.write_bytes(b'archive')
+  passed=False
+  try:m.VolumeProof().restore(archive,4*m.GIB,Path(folder),m.time.monotonic()+10);passed=True
+  except RuntimeError:pass
+  assert passed==expected,(used,free,host,passed)
+`], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+});
