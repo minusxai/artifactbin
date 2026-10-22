@@ -89,3 +89,19 @@ export function validDatasetMutationRowParameters(
 
 export const datasetMutationSystemParameter = (name: string) =>
   name === "_now" || name.startsWith("_me__") || name.startsWith("__policy_");
+/** Exact generated edited-value slot; the flattened SQL map remains immutable authority metadata. */
+export function validDatasetMutationValueParameter(
+  value: unknown,
+  flat: Readonly<Record<string, DatasetMutationParameterType>>,
+): boolean {
+  if (value === undefined) return true;
+  return (
+    safeRecord(value) &&
+    Object.keys(value).sort().join() === "param,type" &&
+    value.param === "cell__value" &&
+    value.type !== null &&
+    validDatasetMutationParameterType(value.type) &&
+    Object.hasOwn(flat, value.param) &&
+    flat[value.param] === value.type
+  );
+}

@@ -1,6 +1,7 @@
 import type {
   DatasetMutationParameterType,
   DatasetMutationRowParameters,
+  DatasetMutationValueParameter,
 } from "../../../datasets/mutation/parameter-contracts.ts";
 import type { DocumentNode } from "graphql";
 import type { AfClient } from "../../../apollo/apollo-contracts.ts";
@@ -14,6 +15,8 @@ export interface CompiledDatasetMutation {
   paramTypes: Readonly<Record<string, DatasetMutationParameterType>>;
   /** Whitelisted query-row inputs; never authority or caller facts. */
   rowParams?: DatasetMutationRowParameters;
+  /** Fixed scalar supplied only by the validated editing cell. */
+  valueParam?: DatasetMutationValueParameter;
   reset?: readonly string[];
 }
 export interface CompiledMutationResult {

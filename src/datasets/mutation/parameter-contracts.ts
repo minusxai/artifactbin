@@ -9,3 +9,8 @@ export interface DatasetMutationRowParameter {
 export type DatasetMutationRowParameters = Readonly<
   Record<string, DatasetMutationRowParameter>
 >;
+/** The edited scalar's fixed SQL slot. Inferred from its exact authored cell's typed column. */
+export interface DatasetMutationValueParameter {
+  param: string;
+  type: DatasetColumn["type"];
+}

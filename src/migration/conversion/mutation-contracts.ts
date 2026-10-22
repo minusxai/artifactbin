@@ -2,6 +2,7 @@ import type { DatasetColumn } from "../../datasets/contracts.ts";
 import type {
   DatasetMutationParameterType,
   DatasetMutationRowParameters,
+  DatasetMutationValueParameter,
 } from "../../datasets/mutation/parameter-contracts.ts";
 import type { ConversionIssue } from "./contracts.ts";
 /** Catalogs are trusted migration inventory, never declarations supplied by page JavaScript. */
@@ -26,6 +27,8 @@ export interface LegacyMutationDescriptor {
   paramTypes: Record<string, DatasetMutationParameterType>;
   /** Fixed SQL row bindings; full server paramTypes includes these generated parameter names. */
   rowParams?: DatasetMutationRowParameters;
+  /** Fixed scalar supplied only by the validated editing cell. */
+  valueParam?: DatasetMutationValueParameter;
   /** Read-only accepted joins of the current executing page. */
   readsMembers?: true;
   expectedAffected?: number;
