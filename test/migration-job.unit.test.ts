@@ -9,10 +9,13 @@ import type { MigrationJobOptions } from "../src/migration/job-contracts.ts";
 async function fixture(
   directory: string,
   bad = false,
+  count = 3,
 ): Promise<MigrationJobOptions> {
   let table = "";
   let fetched = false;
-  const artifacts = ["abc123", "def456", "ghi789"].map((id) => ({
+  const artifacts = Array.from({ length: count }, (_, i) =>
+    i.toString(36).padStart(6, "0"),
+  ).map((id) => ({
     id,
     format: "markup",
     version: bad ? 0 : 1,
@@ -65,11 +68,11 @@ async function fixture(
     conversionStrategy: "strict",
   };
 }
-for (const concurrency of [1, 2, 3, 4] as const)
+for (const concurrency of [1, 2, 3, 4, 8] as const)
   test(`typed dry-run job bounds conversion concurrency at ${concurrency} without opening a destination`, async () => {
     const directory = await mkdtemp(join(tmpdir(), "migration-job-"));
     try {
-      const options = await fixture(directory);
+      const options = await fixture(directory, false, 16);
       options.concurrency = concurrency;
       let active = 0,
         peak = 0,
@@ -87,7 +90,7 @@ for (const concurrency of [1, 2, 3, 4] as const)
         convert: async () => {
           active++;
           peak = Math.max(peak, active);
-          if (++calls === Math.min(concurrency, 3)) release();
+          if (++calls === concurrency) release();
           await gate;
           active--;
           return {
@@ -98,10 +101,10 @@ for (const concurrency of [1, 2, 3, 4] as const)
           };
         },
       });
-      assert.equal(peak, Math.min(concurrency, 3));
-      assert.equal(calls, 3);
+      assert.equal(peak, concurrency);
+      assert.equal(calls, 16);
       assert.equal(connections, 0);
-      assert.equal(summary.inventory.markup?.ready, 3);
+      assert.equal(summary.inventory.markup?.ready, 16);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

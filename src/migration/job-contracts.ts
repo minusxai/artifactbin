@@ -29,7 +29,7 @@ export interface MigrationJobOptions {
   verifyOnly?: boolean;
   /** Reproduce final admitted HTML and record exact UTF8 storage inputs without connecting to a destination. */
   measureStorage?: boolean;
-  concurrency: 1 | 2 | 3 | 4;
+  concurrency: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   origin: string;
   legacyOrigins: readonly string[];
   editorManageRestricted: boolean;

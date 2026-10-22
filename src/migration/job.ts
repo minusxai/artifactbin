@@ -34,7 +34,7 @@ export async function runMigrationJob(
   if (options.apply && options.verifyOnly)
     throw new Error("Choose apply or verify-only");
   if (
-    ![1, 2, 3, 4].includes(options.concurrency) ||
+    ![1, 2, 3, 4, 5, 6, 7, 8].includes(options.concurrency) ||
     (options.apply && options.concurrency !== 1)
   )
     throw new Error("Destination writes require concurrency 1");
