@@ -106,10 +106,15 @@ export function createDatasetRuntime(
     ),
     ...(mutations ? { mutations } : {}),
     close: () =>
-      (closing ??= Promise.all([
-        options.sourceQueryResources?.close(),
-        executor?.close(),
-        imageProcessor?.close(),
-      ]).then(() => {})),
+      (closing ??= Promise.allSettled(
+        [
+          () => options.sourceQueryResources?.close(),
+          () => executor?.close(),
+          () => imageProcessor?.close(),
+        ].map((close) => Promise.resolve().then(close)),
+      ).then((results) => {
+        const failed = results.find((result) => result.status === "rejected");
+        if (failed?.status === "rejected") throw failed.reason;
+      })),
   };
 }

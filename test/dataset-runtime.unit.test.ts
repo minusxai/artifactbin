@@ -1,4 +1,6 @@
 import test from "node:test";
+import { EventEmitter } from "node:events";
+import { createServiceLifecycle } from "../src/server/service-lifecycle.ts";
 import assert from "node:assert/strict";
 import { serviceConfig } from "../src/config.js";
 import { createDatasetRuntime } from "../src/server/dataset-runtime.ts";
@@ -104,3 +106,84 @@ test("configured attachment storage requires authenticated isolated image transp
   await config.datasetImageProcessor.close();
   await config.backendHost?.close?.();
 });
+
+for (const failureMode of ["throw", "reject"] as const) {
+  test(`dataset cleanup ${failureMode} waits for siblings before persistence closes`, async () => {
+    const calls: string[] = [];
+    const failure = Error("source pool cleanup failed");
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runtime = createDatasetRuntime({
+      database: {} as SqlDatabase,
+      sourceDirectory: "/tmp/source",
+      mutationDirectory: "/tmp/overlay",
+      sourceQueryResources: {
+        pool: () => undefined,
+        close: () => {
+          calls.push("source");
+          if (failureMode === "throw") throw failure;
+          return Promise.reject(failure);
+        },
+      },
+      executor: {
+        execute: async () => {
+          throw Error("unused");
+        },
+        close: async () => {
+          calls.push("executor");
+          await pending;
+          calls.push("executor settled");
+        },
+      },
+      attachmentDirectory: "/tmp/attachments",
+      imageProcessor: {
+        process: async () => {
+          throw Error("unused");
+        },
+        close: async () => {
+          calls.push("image");
+          throw Error("secondary failure");
+        },
+      },
+    });
+    const first = runtime.close();
+    assert.equal(runtime.close(), first);
+    let settled = false;
+    const rejected = assert
+      .rejects(first, (error) => error === failure)
+      .then(() => {
+        settled = true;
+      });
+    const lifecycle = createServiceLifecycle({
+      server: new EventEmitter(),
+      invalidationReaders: [],
+      live: { close() {}, changedAndWait() {} },
+      runners: { close() {} },
+      datasets: runtime,
+      repository: {
+        close() {
+          calls.push("repository");
+        },
+      },
+    });
+    const outer = assert.rejects(
+      lifecycle.close(),
+      (error) => error === failure,
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls, ["source", "executor", "image"]);
+    assert.equal(settled, false);
+    release();
+    await Promise.all([rejected, outer]);
+    assert.deepEqual(calls, [
+      "source",
+      "executor",
+      "image",
+      "executor settled",
+      "repository",
+    ]);
+    assert.equal(runtime.close(), first);
+  });
+}

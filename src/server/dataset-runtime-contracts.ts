@@ -21,5 +21,6 @@ export interface DatasetRuntime {
   viewer: import("../datasets/viewer-contracts.ts").DatasetViewerService;
   members: import("../datasets/members-contracts.ts").DatasetMembersService;
   mutations?: DatasetMutationService;
+  /** One shared completion promise; attempt every owned close and wait for all to settle before rejecting. */
   close(): Promise<void>;
 }
