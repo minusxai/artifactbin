@@ -47,3 +47,27 @@ test("startup cleanup refuses foreign backend container even with matching image
   );
   assert.equal(removed, false);
 });
+test("late foreign inventory and duplicate full IDs refuse all removals", async () => {
+  for (const duplicate of [false, true]) {
+    let removed = 0;
+    const other = "b".repeat(64);
+    await assert.rejects(
+      reapImageContainers(async (args) => {
+        if (args[0] === "ps")
+          return duplicate ? id + "\n" + id.slice(0, 12) : id + "\n" + other;
+        if (args[0] === "inspect")
+          return JSON.stringify([
+            {
+              Id: duplicate ? id : args[1],
+              Name: !duplicate && args[1] === other ? "/foreign" : name,
+              Config: { Labels: { "demo.image-processor": "1" } },
+            },
+          ]);
+        removed++;
+        return "";
+      }, "demo"),
+      /image_cleanup_failed/,
+    );
+    assert.equal(removed, 0);
+  }
+});

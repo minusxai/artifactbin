@@ -38,6 +38,7 @@ export async function reapImageContainers(
     return ids;
   };
   const ids = await list();
+  const proven: string[] = [];
   for (const id of ids) {
     let rows;
     try {
@@ -55,7 +56,9 @@ export async function reapImageContainers(
       rows[0].Config?.Labels?.[label] !== "1"
     )
       throw Error("image_cleanup_failed");
-    await command(["rm", "-f", rows[0].Id]);
+    if (proven.includes(rows[0].Id)) throw Error("image_cleanup_failed");
+    proven.push(rows[0].Id);
   }
+  for (const id of proven) await command(["rm", "-f", id]);
   if ((await list()).length) throw Error("image_cleanup_failed");
 }

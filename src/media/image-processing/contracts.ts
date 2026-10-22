@@ -67,3 +67,8 @@ export interface RasterResult {
 export interface ImageContainerCommands {
   (arguments_: readonly string[], timeoutMs: number): Promise<string>;
 }
+/** App-owned private output directory lifecycle, injectable for cancellation/cleanup behavior. */
+export interface ImageTemporaryDirectories {
+  create(): Promise<string>;
+  remove(path: string): Promise<void>;
+}

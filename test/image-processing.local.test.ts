@@ -201,3 +201,105 @@ test("abort preserves admission until owned cleanup settles and permits no queue
     await rm(dir, { recursive: true, force: true });
   }
 });
+test("controller close destroys held partial request before awaiting executor drain", async () => {
+  const { request } = await import("node:http");
+  const { Readable, Writable } = await import("node:stream");
+  const { pipeline } = await import("node:stream/promises");
+  let consumed!: () => void;
+  const firstByte = new Promise<void>((r) => (consumed = r));
+  const listener = imageProcessingListener(
+    {
+      async execute(input, _write, signal) {
+        await pipeline(
+          Readable.from(input),
+          new Writable({
+            write(_chunk, _enc, done) {
+              consumed();
+              done();
+            },
+          }),
+          { signal },
+        );
+      },
+      async close() {},
+    },
+    secret,
+  );
+  const server = createServer(listener);
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const address = server.address();
+  if (!address || typeof address === "string") throw Error();
+  const req = request({
+    host: "127.0.0.1",
+    port: address.port,
+    path: "/v1/image-process",
+    method: "POST",
+    headers: { authorization: "Bearer " + secret, "content-length": "100" },
+  });
+  req.on("error", () => {});
+  req.write(Buffer.from([1]));
+  try {
+    await firstByte;
+    await listener.close();
+    assert.equal(req.writableEnded, false);
+  } finally {
+    req.destroy();
+    await new Promise<void>((r, j) => server.close((e) => (e ? j(e) : r())));
+  }
+});
+test("abort held before dispatch issues no network request; cleanup failure settles close and fails closed", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "image-temp-"));
+  const path = join(directory, "input");
+  await writeFile(path, png);
+  let release!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  let entered!: () => void;
+  const creating = new Promise<void>((r) => (entered = r));
+  let requests = 0;
+  const server = createServer((_req, res) => {
+    requests++;
+    res.end();
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const addr = server.address();
+  if (!addr || typeof addr === "string") throw Error();
+  const processor = remoteImageProcessor({
+    endpoint: `http://127.0.0.1:${addr.port}`,
+    secret,
+    temporaryDirectories: {
+      async create() {
+        entered();
+        await held;
+        return directory;
+      },
+      async remove() {
+        throw Error("cleanup rejected");
+      },
+    },
+  });
+  const abort = new AbortController();
+  try {
+    const work = processor.process(
+      { path, byteLength: png.length, contentType: "image/png" },
+      abort.signal,
+    );
+    await creating;
+    abort.abort();
+    release();
+    await assert.rejects(work, /image_cleanup_failed/);
+    assert.equal(requests, 0);
+    await assert.rejects(processor.close(), /image_cleanup_failed/);
+    await assert.rejects(
+      processor.process({
+        path,
+        byteLength: png.length,
+        contentType: "image/png",
+      }),
+      /image_unavailable/,
+    );
+  } finally {
+    release();
+    await new Promise<void>((r, j) => server.close((e) => (e ? j(e) : r())));
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -7,7 +7,7 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import type { ImageProcessor } from "./contracts.ts";
+import type { ImageProcessor, ImageTemporaryDirectories } from "./contracts.ts";
 import { IMAGE_PROCESS_LIMITS as limits } from "./contracts.ts";
 import { rasterType } from "./engine.ts";
 import { readImageResponse } from "./response.ts";
@@ -16,6 +16,7 @@ export function remoteImageProcessor(options: {
   endpoint: string;
   secret: string;
   socketPath?: string;
+  temporaryDirectories?: ImageTemporaryDirectories;
 }): ImageProcessor {
   const url = new URL(options.endpoint);
   if (
@@ -28,6 +29,11 @@ export function remoteImageProcessor(options: {
   )
     throw Error("image_configuration");
   url.pathname = "/v1/image-process";
+  const temporary = options.temporaryDirectories ?? {
+    create: () => mkdtemp(join(tmpdir(), "page-image-")),
+    remove: (path: string) => rm(path, { recursive: true, force: true }),
+  };
+  let cleanupFailed = false;
   let closed = false;
   let active: { abort: AbortController; done: Promise<void> } | undefined;
   return {
@@ -65,7 +71,8 @@ export function remoteImageProcessor(options: {
         abort.signal.throwIfAborted();
         if (!stat.isFile() || stat.size !== source.byteLength)
           throw Error("image_input_changed");
-        directory = await mkdtemp(join(tmpdir(), "page-image-"));
+        directory = await temporary.create();
+        abort.signal.throwIfAborted();
         const outputDirectory = directory;
         const hash = createHash("sha256");
         let count = 0;
@@ -94,6 +101,7 @@ export function remoteImageProcessor(options: {
             );
           },
         });
+        abort.signal.throwIfAborted();
         const response = new Promise<import("node:http").IncomingMessage>(
           (resolve, reject) => {
             req = (url.protocol === "https:" ? httpsRequest : httpRequest)(
@@ -156,7 +164,7 @@ export function remoteImageProcessor(options: {
           height: parsed.manifest.primary.height,
           placeholder: parsed.manifest.placeholder,
           totalBytes: primary.byteLength + (small?.byteLength ?? 0),
-          dispose: () => rm(outputDirectory, { recursive: true, force: true }),
+          dispose: () => temporary.remove(outputDirectory),
         };
       } catch (error) {
         abort.abort();
@@ -167,10 +175,20 @@ export function remoteImageProcessor(options: {
         clearTimeout(timer);
         abort.signal.removeEventListener("abort", cancel);
         signal?.removeEventListener("abort", forward);
-        await file?.close();
-        if (directory) await rm(directory, { recursive: true, force: true });
-        active = undefined;
-        finish();
+        try {
+          const cleanup = await Promise.allSettled([
+            file?.close(),
+            directory ? temporary.remove(directory) : Promise.resolve(),
+          ]);
+          if (cleanup.some((result) => result.status === "rejected")) {
+            closed = true;
+            cleanupFailed = true;
+            throw Error("image_cleanup_failed");
+          }
+        } finally {
+          active = undefined;
+          finish();
+        }
       }
     },
     async close() {
@@ -178,6 +196,7 @@ export function remoteImageProcessor(options: {
       const current = active;
       current?.abort.abort(Error("image_closed"));
       await current?.done;
+      if (cleanupFailed) throw Error("image_cleanup_failed");
     },
   };
 }

@@ -39,6 +39,10 @@ export function imageProcessingListener(
       return;
     }
     const abort = new AbortController();
+    const stopInput = () => {
+      if (!req.complete) req.destroy();
+    };
+    abort.signal.addEventListener("abort", stopInput, { once: true });
     let release!: () => void;
     active.set(abort, new Promise((r) => (release = r)));
     const timer = setTimeout(
@@ -89,6 +93,7 @@ export function imageProcessingListener(
       )
       .finally(() => {
         clearTimeout(timer);
+        abort.signal.removeEventListener("abort", stopInput);
         res.off("close", disconnect);
         abort.abort();
         if (!req.complete) req.destroy();
