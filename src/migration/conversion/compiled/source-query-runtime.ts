@@ -1,3 +1,4 @@
+import { normalizeLocalTimestamp } from "./local-state.ts";
 import type {
   CompiledSourceQueryBinding,
   CompiledSourceQueryEngine,
@@ -48,13 +49,14 @@ export function createCompiledSourceQueryEngine(
     const values: Record<string, unknown> = {};
     for (const [name, type] of Object.entries(b.params)) {
       if (["_me__id", "_now", "_tz"].includes(name)) continue;
-      if (
-        !Object.hasOwn(evaluation.values, name) ||
-        !scalar(evaluation.values[name], type)
-      )
+      const value =
+        type === "timestamp" && evaluation.values[name] !== null
+          ? normalizeLocalTimestamp(evaluation.values[name])
+          : evaluation.values[name];
+      if (!Object.hasOwn(evaluation.values, name) || !scalar(value, type))
         throw Error("Invalid source query value");
       Object.defineProperty(values, name, {
-        value: evaluation.values[name],
+        value,
         enumerable: true,
       });
     }

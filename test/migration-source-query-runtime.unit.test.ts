@@ -114,3 +114,21 @@ test("source query fanout stays bounded while independent queries can progress",
   assert.equal(Object.keys(answer.tables).length, 9);
   assert.equal(peak, 4);
 });
+test("authored timestamp parameters retain the local scalar timestamp contract", async () => {
+  const requests: any[] = [];
+  const b = { ...binding, params: { at: "timestamp" as const } };
+  const engine = createCompiledSourceQueryEngine([b], {
+    read: async (_b, r) => {
+      requests.push(r);
+      return JSON.stringify(table);
+    },
+  });
+  assert.deepEqual(
+    (await engine.run(null, ["rows"], { ...evaluation, values: { at: 0 } }))
+      .errors,
+    {},
+  );
+  assert.deepEqual(JSON.parse(requests[0].valuesJson), {
+    at: "1970-01-01T00:00:00.000Z",
+  });
+});
