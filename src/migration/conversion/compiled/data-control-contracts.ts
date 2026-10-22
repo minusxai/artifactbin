@@ -4,6 +4,7 @@ export type CompiledDataControl =
       kind: "table";
       data: string;
       comparison?: true;
+      compatibility?: readonly import("./table-presentation-contracts.ts").TablePresentationCompatibility[];
       columns?: readonly CompiledDataColumn[];
     };
 export interface CompiledDisplayTable {
@@ -24,7 +25,8 @@ export interface CompiledDataColumn {
   title?: string;
   fmt?: string;
   align?: "left" | "right" | "center";
-  width?: number;
+  /** Percentage strings were ignored by the frozen renderer and remain ignored. */
+  width?: number | string;
   bar?: boolean;
   colorScale?: "sequential" | "diverging";
   hasContent: boolean;

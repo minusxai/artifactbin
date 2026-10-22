@@ -76,6 +76,8 @@ export async function compileArchivedLocal(
   const html = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}<title>${esc(output.title)}</title><style>${output.css}</style></head><body>${status}${authorStatus}${body}<script type="module">${output.javascript.replace(/<\/script/gi, "<\\/script")}</script></body></html>`;
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE)
     return blocked("compiled-page-limit");
+  const compatibility = [...new Set((input.dataControls ?? []).flatMap(p =>
+    p.kind === "table" ? p.compatibility ?? [] : []))];
   return {
     classification: historical ? "renderable" : "functional",
     html,
@@ -121,6 +123,7 @@ export async function compileArchivedLocal(
             : "authored-components"
           : "local-scalars",
       modules: output.modules,
+      ...(compatibility.length ? { compatibility } : {}),
     },
   };
 }

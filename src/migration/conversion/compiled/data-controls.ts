@@ -1,3 +1,4 @@
+import { readLegacyTablePresentation } from "./table-presentation.ts";
 import { readSourceLiteral } from "./source-literal.ts";
 import type {
   CompiledDataControl,
@@ -81,6 +82,19 @@ export function admitDataControl(
         typeof options === "string" ? options.slice(1) : (options as unknown[]),
     };
   }
+  const presentation = readLegacyTablePresentation(attrs);
+  attrs = {
+    ...attrs,
+    ...(presentation.columns === undefined
+      ? {}
+      : { columns: presentation.columns }),
+    ...(presentation.height === undefined
+      ? {}
+      : { height: presentation.height }),
+  };
+  const compatibility = new Set(presentation.compatibility);
+  if (columns?.some((c) => typeof c.width === "string"))
+    compatibility.add("ignored-column-width");
   if (columns) {
     if (
       !hasChildren ||
@@ -220,6 +234,7 @@ export function admitDataControl(
     data: (attrs.data as string).slice(1),
     ...(attrs.transpose === true ? { comparison: true as const } : {}),
     ...(columns ? { columns } : {}),
+    ...(compatibility.size ? { compatibility: [...compatibility] } : {}),
   };
 }
 export { completeControlOptions } from "./control-options.ts";
