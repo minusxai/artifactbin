@@ -572,7 +572,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
           for (const entry of replies) showMessage(entry, list);
           bubble.append(list);
         }
-        if (c.context?.status !== "unavailable" && !rectFor(c.nodeId))
+        if (c.nodeId !== null && c.context?.status !== "unavailable" && !rectFor(c.nodeId))
           para(
             "Target is unavailable in this view. Open the saved context.",
             bubble,
