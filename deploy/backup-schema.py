@@ -4,6 +4,12 @@ Private configuration contains literal libpq KEY=value lines, without shell expa
 No credentials, connection details or database diagnostics are emitted.
 """
 import os
+import json
+import re
+import resource
+import shutil
+import signal
+import time
 from pathlib import Path
 import stat
 import subprocess
@@ -31,61 +37,201 @@ def configuration(path):
         raise RuntimeError("Remote backup requires certificate and hostname verification")
     return result
 
-def run(args, **options):
+# Capacity contract: estimates include archive bytes retained both on the host and
+# in the restore volume, database/index/WAL expansion, and an untouched free reserve.
+GIB = 1024 ** 3
+RESERVE_BYTES = 8 * GIB
+MAX_ARCHIVE_BYTES = 32 * GIB
+MAX_VOLUME_BYTES = 64 * GIB
+JOB_SECONDS = 1800
+POLL_SECONDS = 2
+
+def capacity(source_bytes):
+    if not isinstance(source_bytes, int) or source_bytes < 0:
+        raise RuntimeError("Invalid measured schema size")
+    archive = max(GIB, source_bytes * 2 + GIB)
+    volume = max(4 * GIB, source_bytes * 3 + archive + GIB)
+    if archive > MAX_ARCHIVE_BYTES or volume > MAX_VOLUME_BYTES:
+        raise RuntimeError("Measured backup exceeds the reviewed disk budget")
+    return archive, volume
+
+def command(args, *, timeout=30, **options):
     try:
-        subprocess.run(args, check=True, stderr=subprocess.DEVNULL, timeout=600, **options)
+        return subprocess.run(args, check=True, stderr=subprocess.PIPE,
+                              timeout=timeout, **options)
     except (subprocess.SubprocessError, OSError):
         raise RuntimeError("Schema backup or restore verification failed") from None
 
+def capture(args, **options):
+    return command(args, stdout=subprocess.PIPE, **options).stdout
+
+def absent(kind, name):
+    try:
+        result = subprocess.run(["docker", *kind, "inspect", name], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=15)
+    except (subprocess.SubprocessError, OSError):
+        return False
+    return result.returncode > 0 and bool(re.search(rb"No such (?:container|object|volume)", result.stderr, re.I))
+
+def owned(kind, name, token):
+    try:
+        rows = json.loads(capture(["docker", *kind, "inspect", name]))
+        labels = rows[0].get("Labels", {}) if kind else rows[0].get("Config", {}).get("Labels", {})
+        return len(rows) == 1 and isinstance(labels, dict) and labels.get("pagegi.backup-proof-job") == token
+    except (RuntimeError, ValueError, IndexError, TypeError):
+        return False
+
+class VolumeProof:
+    def __init__(self):
+        self.token = str(uuid.uuid4())
+        self.name = "pagegi-backup-proof-" + self.token
+        self.probe = self.name + "-probe"
+        self.volume = self.name + "-data"
+        self.volume_attempted = False
+        self.containers = []
+
+    def labels(self):
+        return ["--label", "pagegi.backup-proof=1", "--label", "pagegi.backup-proof-job=" + self.token]
+
+    def mount(self, readonly=False):
+        return ["--mount", "type=volume,source=" + self.volume + ",target=/proof,volume-nocopy" + (",readonly" if readonly else "")]
+
+    def create(self):
+        self.volume_attempted = True
+        capture(["docker", "volume", "create", *self.labels(), self.volume])
+        # A fresh managed volume starts root-owned. This fixed setup command has
+        # only CHOWN and no credentials, host paths, network or published ports.
+        self.containers.append(self.probe)
+        output = capture(["docker", "run", "--name", self.probe, *self.labels(), "--network=none", "--read-only", "--cap-drop=ALL", "--cap-add=CHOWN", *self.mount(), "--entrypoint", "sh", "postgres:18-bookworm", "-c", "chown 999:999 /proof; df -Pk /proof | awk 'NR==2{print $4}'"])
+        free = integer(output) * 1024
+        self.remove_container(self.probe)
+        self.containers.remove(self.probe)
+        return free
+
+    def remove_container(self, name):
+        if absent([], name):
+            return
+        if not owned([], name, self.token):
+            raise RuntimeError("Backup verifier cleanup could not prove ownership")
+        try:
+            command(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL)
+        except RuntimeError:
+            pass
+        if not absent([], name):
+            raise RuntimeError("Backup verifier cleanup could not prove absence")
+
+    def close(self):
+        for name in reversed(self.containers):
+            self.remove_container(name)
+        self.containers.clear()
+        if self.volume_attempted:
+            if not absent(["volume"], self.volume):
+                if not owned(["volume"], self.volume, self.token):
+                    raise RuntimeError("Backup volume cleanup could not prove ownership")
+                try:
+                    command(["docker", "volume", "rm", self.volume], stdout=subprocess.DEVNULL)
+                except RuntimeError:
+                    pass
+                if not absent(["volume"], self.volume):
+                    raise RuntimeError("Backup volume cleanup could not prove absence")
+            self.volume_attempted = False
+
+    def restore(self, archive, maximum, host_directory, deadline):
+        proof = """set -eu
+cat > /proof/archive.dump
+initdb -D /proof/data -A trust --no-locale >/dev/null
+pg_ctl -D /proof/data -o "-k /tmp -c listen_addresses='' -c shared_buffers=64MB -c max_wal_size=256MB -c maintenance_work_mem=64MB" -w start >/dev/null
+createdb -h /tmp recovery
+pg_restore -h /tmp --dbname=recovery --exit-on-error --no-owner --no-privileges /proof/archive.dump
+pg_ctl -D /proof/data -m immediate -w stop >/dev/null
+"""
+        self.containers.append(self.name)
+        args = ["docker", "run", "--name", self.name, *self.labels(), "--network=none", "--read-only", "--memory=1g", "--memory-swap=1g", "--cpus=1", "--pids-limit=64", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=postgres", "--tmpfs", "/tmp:rw,nosuid,nodev,size=128m,uid=999,gid=999", *self.mount(), "-i", "--entrypoint", "sh", "postgres:18-bookworm", "-c", proof]
+        with archive.open("rb") as source:
+            try:
+                process = subprocess.Popen(args, stdin=source, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except OSError:
+                raise RuntimeError("Backup verifier could not start") from None
+            started = time.monotonic()
+            try:
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise RuntimeError("Backup verification deadline exceeded")
+                    try:
+                        code = process.wait(timeout=min(POLL_SECONDS, remaining))
+                        if code != 0:
+                            raise RuntimeError("Schema restore verification failed")
+                        break
+                    except subprocess.TimeoutExpired:
+                        if shutil.disk_usage(host_directory).free < RESERVE_BYTES:
+                            raise RuntimeError("Backup free-space reserve reached")
+                        # Commands execute fixed image binaries, never restored code.
+                        measured = subprocess.run(["docker", "exec", self.name, "sh", "-c", "du -sk /proof | awk '{print $1}'; df -Pk /proof | awk 'NR==2{print $4}'"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15)
+                        if measured.returncode != 0:
+                            if process.poll() is not None:
+                                continue
+                            if time.monotonic() - started < 15:
+                                continue
+                            raise RuntimeError("Backup disk usage could not be measured")
+                        values = measured.stdout.splitlines()
+                        if len(values) != 2 or integer(values[0]) * 1024 > maximum or integer(values[1]) * 1024 < RESERVE_BYTES:
+                            raise RuntimeError("Backup restore disk budget exceeded")
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=15)
+
+def integer(value):
+    if not re.fullmatch(rb"[0-9]+", value.strip()):
+        raise RuntimeError("Invalid measured backup capacity")
+    return int(value.strip())
+
 def backup(config, destination):
     environment = configuration(config)
-    try:
-        version = subprocess.run(["pg_dump", "--version"], env=environment, capture_output=True, text=True, check=True, timeout=15).stdout
-    except (subprocess.SubprocessError, OSError):
-        raise RuntimeError("PostgreSQL 18 backup client is required") from None
-    if not version.startswith("pg_dump (PostgreSQL) 18."):
+    version = capture(["pg_dump", "--version"], env=environment, timeout=15)
+    if not version.startswith(b"pg_dump (PostgreSQL) 18."):
         raise RuntimeError("PostgreSQL 18 backup client is required")
+    size_sql = "SELECT coalesce(sum(pg_total_relation_size(c.oid)),0)::bigint FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('artefactv2','artefactv2_migration') AND c.relkind IN ('r','m');"
+    source_bytes = integer(capture(["psql", "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", size_sql], env=environment, timeout=30))
+    archive_limit, volume_limit = capacity(source_bytes)
     partial = destination.with_name(destination.name + ".tmp")
     marker = destination.with_name(destination.name + ".verified")
-    name = "pagegi-backup-proof-" + str(uuid.uuid4())
     if destination.exists() or marker.exists():
         raise RuntimeError("Backup destination already exists")
-    created = False
+    if shutil.disk_usage(destination.parent).free < archive_limit + volume_limit + RESERVE_BYTES:
+        raise RuntimeError("Insufficient measured disk space for archive and restore proof")
+    proof = VolumeProof()
+    deadline = time.monotonic() + JOB_SECONDS
     try:
+        if proof.create() < archive_limit + volume_limit + RESERVE_BYTES:
+            raise RuntimeError("Insufficient Docker volume filesystem capacity")
         with partial.open("xb") as output:
             partial.chmod(0o600)
-            run(["pg_dump", "--format=custom", "--schema=" + SCHEMA, "--schema=artefactv2_migration", "--strict-names", "--no-owner", "--no-privileges"], env=environment, stdout=output)
-        # Start only a disposable offline verifier. It has no host mounts, database
-        # credentials or published ports; all data is in bounded temporary memory.
-        proof = """set -eu
-cat > /tmp/archive.dump
-initdb -D /tmp/data -A trust --no-locale >/dev/null
-pg_ctl -D /tmp/data -o \"-k /tmp -c listen_addresses=''\" -w start >/dev/null
-createdb -h /tmp recovery
-pg_restore -h /tmp --dbname=recovery --exit-on-error --no-owner --no-privileges /tmp/archive.dump
-pg_ctl -D /tmp/data -m immediate -w stop >/dev/null
-"""
-        created = True
-        with partial.open("rb") as source:
-            run(["docker", "run", "--name", name, "--label", "pagegi.backup-proof=1", "--network=none", "--read-only", "--memory=1g", "--memory-swap=1g", "--cpus=1", "--pids-limit=64", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=postgres", "--tmpfs", "/tmp:rw,nosuid,nodev,size=512m,uid=999,gid=999", "-i", "--entrypoint", "sh", "postgres:18-bookworm", "-c", proof], stdin=source, stdout=subprocess.DEVNULL)
-        # Verified removal is part of success, including an unsuccessful restore.
-        run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL)
-        created = False
+            def file_limit():
+                resource.setrlimit(resource.RLIMIT_FSIZE, (archive_limit, archive_limit))
+            command(["pg_dump", "--format=custom", "--schema=" + SCHEMA, "--schema=artefactv2_migration", "--strict-names", "--no-owner", "--no-privileges"], env=environment, stdout=output, timeout=max(1, deadline-time.monotonic()), preexec_fn=file_limit)
+        if partial.stat().st_size > archive_limit:
+            raise RuntimeError("Backup archive disk budget exceeded")
+        proof.restore(partial, volume_limit, destination.parent, deadline)
+        proof.close()
         partial.rename(destination)
         with marker.open("x") as verified:
-            verified.write("offline restore completed\n")
+            verified.write(json.dumps({"verification":"offline restore completed", "sourceBytes":source_bytes, "archiveBytes":destination.stat().st_size, "archiveLimit":archive_limit, "restoreVolumeLimit":volume_limit, "reserveBytes":RESERVE_BYTES}) + "\n")
         marker.chmod(0o600)
     finally:
         partial.unlink(missing_ok=True)
-        if created:
-            run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL)
+        proof.close()
 
 if __name__ == "__main__":
+    def interrupted(_signal, _frame):
+        raise RuntimeError("Backup interrupted")
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
     try:
         if len(sys.argv) != 3:
             raise RuntimeError("Expected private configuration and backup destination")
         backup(Path(sys.argv[1]), Path(sys.argv[2]))
-    except (RuntimeError, OSError) as error:
-        # OSError can include private paths; emit only fixed diagnostics.
-        print(str(error) if isinstance(error, RuntimeError) else "Schema backup failed", file=sys.stderr)
+    except (RuntimeError, OSError, subprocess.SubprocessError):
+        print("Schema backup or restore verification failed; no verified recovery point was published", file=sys.stderr)
         sys.exit(1)

@@ -37,8 +37,16 @@ commands never include a connection URI or password in their arguments. A custom
 archive contains only these schemas and excludes ownership and privilege grants.
 Before publishing the dump and its `.verified` marker, the receiver restores it
 with `--exit-on-error` into a disposable offline PostgreSQL verifier: no network,
-ports, production mounts or credentials, read-only root filesystem and bounded
-memory/tmpfs. Restore failure prevents rollout and removes the verifier. The receiver requires the PostgreSQL18 client and a fixed
+ports, production mounts or credentials, read-only root filesystem and a private
+Docker-managed disk volume. Source relation sizes determine archive and restore
+budgets (at most32GiB and64GiB), with an8GiB untouched free-space reserve.
+Host and Docker filesystem capacity are checked before dumping; the dump has an
+OS file-size limit. During restore, disk usage and free space are measured every
+2seconds, with a30minute deadline. These are monitored budgets, not filesystem
+quotas. Restore failure prevents rollout. Container and volume ownership labels
+and inspected absence are required before publishing a verified recovery point;
+cleanup failure leaves no verified marker. SIGTERM/SIGINT clean up owned work;
+a host crash or SIGKILL requires review of `pagegi.backup-proof=1` leftovers. The receiver requires the PostgreSQL18 client and a fixed
 `postgres:18-bookworm` verifier, matching the remote server major version.
 
 
