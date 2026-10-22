@@ -81,7 +81,9 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
         await ports.refuse(lease, code);
         throw new DatasetMutationError(code);
       };
-      const head = await ports.head(context, operation);
+      const head = await ports
+        .head(context, operation)
+        .catch(() => terminal("authority_unavailable"));
       if (!head) return terminal("denied");
       let selection;
       try {
@@ -103,7 +105,9 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
           t.name === operation.target.table,
       );
       if (!table) return terminal("invalid_dataset");
-      const rows = await ports.read(table);
+      const rows = await ports
+        .read(table)
+        .catch(() => terminal("dataset_unavailable"));
       if (
         rows.length > limits.maxRows ||
         rows.length * table.columns.length > limits.maxCells

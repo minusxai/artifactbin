@@ -159,3 +159,23 @@ test("legacy identity system parameters cannot be forged by the browser", async 
   );
   assert.deepEqual(f.calls, []);
 });
+test("known pre-execution authority and object failures become durable terminal refusals", async () => {
+  const a = fixture();
+  a.ports.head = async () => {
+    throw Error("database offline");
+  };
+  await assert.rejects(
+    createDatasetMutationService(a.ports).mutate(context, request),
+    /authority_unavailable/,
+  );
+  assert.deepEqual(a.calls, ["begin", "authority_unavailable"]);
+  const b = fixture();
+  b.ports.read = async () => {
+    throw Error("missing bytes");
+  };
+  await assert.rejects(
+    createDatasetMutationService(b.ports).mutate(context, request),
+    /dataset_unavailable/,
+  );
+  assert.deepEqual(b.calls, ["begin", "dataset_unavailable"]);
+});
