@@ -1,4 +1,9 @@
-import type { AuthorPorts, QueryPort, AuthorState } from "./contracts.ts";
+import type {
+  AuthorPorts,
+  QueryPort,
+  AuthorState,
+  AuthorMutationOptions,
+} from "./contracts.ts";
 import type { AfClient } from "../../../../apollo/apollo-contracts.ts";
 import type { DocumentNode } from "graphql";
 type AuthorData = {
@@ -10,6 +15,7 @@ export function authorApolloPorts(
   client: Pick<AfClient, "updateQuery" | "watchQuery">,
   query: DocumentNode,
   queries: (name: string) => QueryPort,
+  mutations?: AuthorMutationOptions,
 ): AuthorPorts {
   return {
     state: {
@@ -44,5 +50,23 @@ export function authorApolloPorts(
       },
     },
     query: queries,
+    ...(mutations
+      ? {
+          mutation: async (
+            name: string,
+            args: Readonly<import("./contracts.ts").Row>,
+            row?: Readonly<import("./contracts.ts").Row>,
+          ) => {
+            if (!mutations.names.includes(name))
+              throw Error("Unregistered author mutation");
+            const context = mutations.authorizationContext();
+            if (!context) throw Error("Author mutation context unavailable");
+            const result = await mutations.adapter.mutate(name, args, row);
+            if (mutations.authorizationContext() !== context)
+              throw Error("Author mutation context changed");
+            return result;
+          },
+        }
+      : {}),
   };
 }

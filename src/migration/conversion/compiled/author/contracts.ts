@@ -28,6 +28,12 @@ export interface AuthorPorts {
     subscribe(listener: () => void): () => void;
   };
   query(name: string): QueryPort;
+  /** Trusted registered dataset mutation transport; never a generic authored fetch. */
+  mutation?(
+    name: string,
+    args: Readonly<Row>,
+    row?: Readonly<Row>,
+  ): Promise<unknown>;
 }
 export interface AuthorNames {
   values: string[];
@@ -40,9 +46,22 @@ export interface QueryAccessor extends Accessor<Row[]> {
   error: Accessor<string | null>;
   readonly ready: Promise<Row[]>;
 }
+/** Frozen page ABI: commits resolve without a payload, all other outcomes reject. */
+export type AuthorMutation = (
+  args?: Readonly<Record<string, unknown>>,
+) => Promise<void>;
+export interface AuthorMutationOptions {
+  names: readonly string[];
+  adapter: Pick<
+    import("../dataset-mutations-contracts.ts").CompiledDatasetMutationAdapter,
+    "mutate"
+  >;
+  authorizationContext(): string | null;
+}
 export interface AuthorBindings {
   signal(ref: string): [Accessor<Scalar>, Setter<Scalar>];
   query(ref: string): QueryAccessor;
+  mutation(ref: string): AuthorMutation;
   createSignal<T>(
     value: T,
     options?: SignalOptions<T>,

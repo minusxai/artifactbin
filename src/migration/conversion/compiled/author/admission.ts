@@ -45,10 +45,12 @@ export function admitAuthorSource(source: string): void {
         n.specifiers.some(
           (s: any) =>
             s.type !== "ImportSpecifier" ||
-            !["signal", "query"].includes(s.imported.name ?? s.imported.value),
+            !["signal", "query", "mutation"].includes(
+              s.imported.name ?? s.imported.value,
+            ),
         )
       )
-        throw Error("Only page signal and query are supported");
+        throw Error("Only page signal, query and mutation are supported");
     }
     if (
       (n.type === "ExportNamedDeclaration" ||

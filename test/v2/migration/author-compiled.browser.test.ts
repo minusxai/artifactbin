@@ -185,3 +185,55 @@ test(
     }
   },
 );
+
+test(
+  "compiled authored mutation awaits trusted commit and disposal suppresses a late continuation",
+  { skip: !archivedRoot },
+  async () => {
+    const compiled = await compileAuthorScript(
+      `import {mutation} from 'page';import {createSignal} from 'solid-js';export function Save(){const save=mutation('$save');const [status,set]=createSignal('idle');return <button onClick={async()=>{set('pending');try{const result=await save({amount:3,_row:{id:1}});set(result===undefined?'saved':'bad ABI')}catch{set('refused')}}}>{status()}</button>}`,
+      { values: [], queries: [], mutations: ["save"] },
+      { archivedRoot: archivedRoot! },
+    );
+    const html = `<!doctype html><div id="mount"></div><script type="module">import {createAuthorModule} from '/author.js';let calls=0;const mounted=await createAuthorModule().mount({state:{read(){},write(){},subscribe(){return()=>{}}},query(){throw Error('unused')},mutation(name,args,row){if(name!=='save'||args.amount!==3||row.id!==1)throw Error('bad snapshot');document.body.dataset.calls=String(++calls);return new Promise(resolve=>{window.commit=()=>resolve({affected:1})})}},[{element:document.querySelector('#mount'),identity:'save',component:'Save'}]);window.dispose=()=>mounted();</script>`;
+    const server = createServer((req, res) => {
+      res.setHeader(
+        "Content-Type",
+        req.url === "/author.js" ? "text/javascript" : "text/html",
+      );
+      res.end(req.url === "/author.js" ? compiled.code : html);
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.goto(
+        `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+      );
+      await page.getByRole("button", { name: "idle", exact: true }).click();
+      await page
+        .getByRole("button", { name: "pending", exact: true })
+        .waitFor();
+      assert.equal(await page.locator("body").getAttribute("data-calls"), "1");
+      await page.evaluate(() => (window as any).commit());
+      await page.getByRole("button", { name: "saved", exact: true }).waitFor();
+      await page.getByRole("button").click();
+      await page
+        .getByRole("button", { name: "pending", exact: true })
+        .waitFor();
+      await page.evaluate(() => {
+        (window as any).dispose();
+        (window as any).commit();
+      });
+      assert.equal(await page.locator("body").getAttribute("data-calls"), "2");
+      assert.deepEqual(errors, []);
+    } finally {
+      await browser.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  },
+);

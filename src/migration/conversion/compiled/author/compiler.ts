@@ -36,7 +36,6 @@ export async function prepareAuthorBundle(
   const effects =
     options.mode === "effects" ? prepareAuthorEffects(source) : undefined;
   if (!effects && !owned) admitAuthorSource(source);
-  if (names.mutations.length) throw Error("Author mutations are unsupported");
   const root = path.resolve(options.archivedRoot);
   const solidRoot = path.join(root, "node_modules/solid-js");
   const pkg = JSON.parse(

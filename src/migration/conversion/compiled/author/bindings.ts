@@ -1,9 +1,11 @@
+import { authorMutationArguments } from "./mutation-arguments.ts";
 import { drainAuthorCleanups } from "./cleanup.ts";
 import { assertStorable } from "../../../../apollo/storable.ts";
 import { AF_STATE_URL_LIMIT } from "../../../../apollo/apollo-contracts.ts";
 import type {
   Accessor,
   AuthorBindings,
+  AuthorMutation,
   AuthorState,
   AuthorNames,
   AuthorPorts,
@@ -80,6 +82,7 @@ export function createAuthorBindings(
     return binding;
   }
   const queries = new Map<string, QueryAccessor>();
+  const mutations = new Map<string, AuthorMutation>();
   const name = (ref: string, allowed: string[]) => {
     active();
     if (!ref.startsWith("$") || !allowed.includes(ref.slice(1)))
@@ -116,6 +119,38 @@ export function createAuthorBindings(
         value,
         options as SignalOptions<AuthorState>,
       ) as unknown as [Accessor<T>, Setter<T>];
+    },
+    mutation(ref) {
+      const key = name(ref, names.mutations);
+      const existing = mutations.get(key);
+      if (existing) return existing;
+      const dispatch = ports.mutation;
+      if (!dispatch) throw Error("Registered author mutation unavailable");
+      const fn: AuthorMutation = async (input) => {
+        active();
+        const { args, row } = authorMutationArguments(input);
+        return new Promise<void>((resolve, reject) => {
+          rejectPending.add(reject);
+          const finish = () => rejectPending.delete(reject);
+          Promise.resolve()
+            .then(() => {
+              active();
+              return dispatch(key, args, row);
+            })
+            .then(
+              () => {
+                finish();
+                if (!disposed) resolve();
+              },
+              (error) => {
+                finish();
+                if (!disposed) reject(error);
+              },
+            );
+        });
+      };
+      mutations.set(key, fn);
+      return fn;
     },
     query(ref) {
       const key = name(ref, [...names.queries, ...(names.tables ?? [])]);
@@ -180,6 +215,7 @@ export function createAuthorBindings(
           rejectPending.clear();
           state.clear();
           queries.clear();
+          mutations.clear();
         },
       ]);
     },
