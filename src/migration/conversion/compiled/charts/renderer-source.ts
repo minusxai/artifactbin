@@ -61,7 +61,7 @@ expressionFunction('migration_chart_text_object',chartTextObject);
 import {createCompiledCharts} from ${JSON.stringify(runtimePath)};
 Object.assign(transforms,tx,vtx,encode,geo,force,hierarchy,label,regression,voronoi,wordcloud);
 class SafeSVGRenderer extends SVGRenderer {
-_render(scene,markTypes){assertChartPaints(scene,{isColor:value=>CSS.supports('color',value)});return super._render(scene,markTypes);}
+_render(scene,markTypes){assertChartPaints(scene,{isColor:value=>CSS.supports('color',value),resolveColor:property=>getComputedStyle(this._el).getPropertyValue(property).trim()});return super._render(scene,markTypes);}
 }
 renderModule('migration-svg',{...renderModule('svg'),renderer:SafeSVGRenderer});
 export const charts=createCompiledCharts(${JSON.stringify(plans)},{

@@ -39,3 +39,16 @@ test("scene paint boundary inspects nested marks and gradient stops before DOM w
       assertChartPaints({ items: [{ items: [{ fill }] }] }, policy),
     );
 });
+
+
+test("exact CSS paint variables resolve to validated colors before SVG attributes", () => {
+  const scene = { items: [{ fill: "var(--cat-dynamic)", stroke: "red" }] };
+  assertChartPaints(scene, { ...policy, resolveColor: () => "blue" });
+  assert.equal(scene.items[0]!.fill, "blue");
+  for (const resolved of ["url(https://example.invalid/paint.svg)", "var(--other)", "inherit", "", "blue;fill:red"]) {
+    assert.throws(() => assertChartPaints({ fill: "var(--cat-dynamic)" }, { ...policy, resolveColor: () => resolved }));
+  }
+  for (const fill of ["var(--cat-dynamic,red)", "var(--cat-dynamic) url(x)", "var(--cat-dynamic/**/)"]) {
+    assert.throws(() => assertChartPaints({ fill }, { ...policy, resolveColor: () => "blue" }));
+  }
+});

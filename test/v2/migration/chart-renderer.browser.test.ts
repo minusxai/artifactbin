@@ -39,7 +39,7 @@ test(
               width: { scale: "x", band: 1 },
               y: { scale: "y", field: "amount" },
               y2: { scale: "y", value: 0 },
-              fill: { value: "steelblue" },
+              fill: { value: "var(--cat-dynamic)" },
             },
           },
         },
@@ -100,11 +100,12 @@ test(
       const requests: string[] = [];
       page.on("request", (request) => requests.push(request.url()));
       await page.setContent(
-        `<div id="chart" style="width:300px;height:200px"></div><button id="change">Change</button><button id="remove">Remove</button><script type="module">${javascript}</script>`,
+        `<div id="chart" style="--cat-dynamic:steelblue;width:300px;height:200px"></div><button id="change">Change</button><button id="remove">Remove</button><script type="module">${javascript}</script>`,
       );
       await page.locator('#chart[data-mx-chart-state="ready"]').waitFor();
       const mark = page.locator(".mark-rect.role-mark path");
       await mark.waitFor();
+      assert.equal(await mark.getAttribute("fill"), "steelblue");
       const before = await mark.getAttribute("d");
       await page.locator("#change").click();
       await page.waitForFunction(
@@ -136,6 +137,7 @@ test(
     try {
       for (const fill of [
         { field: "paint" },
+        { value: "var(--unsafe-paint)" },
         { signal: "'ur' + 'l(https://example.invalid/chart-probe.svg#paint)'" },
       ]) {
         const spec = {
@@ -201,7 +203,7 @@ test(
         });
         page.on("pageerror", (error) => errors.push(error.message));
         await page.setContent(
-          `<div id="chart"></div><script type="module">${out.outputFiles[0]!.text}</script>`,
+          `<div id="chart" style="--unsafe-paint:url(https://example.invalid/chart-probe.svg#paint)"></div><script type="module">${out.outputFiles[0]!.text}</script>`,
         );
         await page.locator('#chart[data-mx-chart-state="error"]').waitFor();
         assert.match(
