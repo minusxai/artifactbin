@@ -1,3 +1,5 @@
+import { referencedLegacyRawMediaMappings } from "./raw-media.ts";
+import { legacyDocumentSource } from "./conversion/index.ts";
 import { preserveUnavailableHistoricalRevision } from "./historical-unavailable.ts";
 import { resolveMigrationOwnership } from "./ownership-override.ts";
 import type { BoundValueColumnProof } from "./conversion/compiled/bound-value-contracts.ts";
@@ -291,7 +293,27 @@ export async function planMigration(
             artifact.id,
             Number(original.version),
           ),
-          resourceMap: options.media?.resourceMap,
+          resourceMap: (() => {
+            const originalMap = options.media?.resourceMap;
+            const aliases = options.media?.resourceMapAliases;
+            if (!aliases || !Object.keys(aliases).length) return originalMap;
+            let source: string;
+            try {
+              source =
+                typeof original.source === "string" && original.source.trim()
+                  ? original.source
+                  : legacyDocumentSource(original.document);
+            } catch {
+              return originalMap;
+            }
+            const referenced = referencedLegacyRawMediaMappings(
+              source,
+              aliases,
+            );
+            return Object.keys(referenced).length
+              ? { ...originalMap, ...referenced }
+              : originalMap;
+          })(),
           source: typeof original.source === "string" ? original.source : "",
           document: original.document,
           meta:
@@ -367,7 +389,9 @@ export async function planMigration(
         (conversion.classification === "manual-blocked" || conversion.html === null)
       )
         conversion = preserveUnavailableHistoricalRevision(
-          original, conversion, options.coreUrl,
+          original,
+          conversion,
+          options.coreUrl,
         );
       if (
         conversion.classification === "manual-blocked" ||

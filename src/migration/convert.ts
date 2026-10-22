@@ -1,3 +1,4 @@
+import { rewriteLegacyRawMediaSource } from "./raw-media.ts";
 import { createHash } from "node:crypto";
 import { validateMigrationSourceAdmission } from "./source-admission-policy.ts";
 import type { Converter } from "./contracts.ts";
@@ -171,8 +172,23 @@ export function createMigrationConverter(
       "./conversion/compiled/index.ts"
     );
     const meta = input.meta ?? {};
+    let compiledSource: string;
+    try {
+      compiledSource = rewriteLegacyRawMediaSource(
+        source,
+        input.resourceMap ?? {},
+      ).source;
+    } catch {
+      return finish({
+        classification: "manual-blocked",
+        html: null,
+        issues: ["Invalid verified media mapping"],
+        identities: {},
+        strategy: options.strategy,
+      });
+    }
     const compiledInput = {
-      source,
+      source: compiledSource,
       coreUrl: input.coreUrl,
       resourceMap: input.resourceMap,
       datasetBindings: input.datasetBindings,

@@ -1,4 +1,4 @@
-import type { MigratedAsset } from "./media-contracts.ts";
+import type { MigrationMediaHeads, MigratedAsset } from "./media-contracts.ts";
 import type { ConversionOutput } from "./contracts.ts";
 const esc = (s: string) =>
   s
@@ -68,12 +68,13 @@ export function convertMigrationMedia(input: {
   };
 }
 
-/** Only documented exact legacy byte URLs are mapped; HTML links and ref: expressions are not guessed. */
+/** Only exact verified legacy byte URLs are mapped; default-version aliases require explicit immutable head metadata. */
 export function migrationResourceMap(
   assets: readonly MigratedAsset[],
   pages: Record<string, string>,
   origin: string,
   legacyOrigins: readonly string[],
+  heads: MigrationMediaHeads = {},
 ): Record<string, string> {
   const result: Record<string, string> = {};
   for (const asset of assets) {
@@ -87,14 +88,24 @@ export function migrationResourceMap(
       asset.version +
       (asset.variant === "small" ? "&w=" + asset.width : "");
     const target = migrationAssetUrl(asset, pageId, origin);
-    for (const url of [
-      old,
-      ...legacyOrigins.map((base) => new URL(old, base).href),
-    ]) {
-      if (result[url] && result[url] !== target)
-        throw new Error("Ambiguous legacy media URL");
-      result[url] = target;
+    const aliases = [old];
+    if (heads[asset.artifactId] === asset.version) {
+      aliases.push(
+        "/a/" +
+          encodeURIComponent(asset.artifactId) +
+          "/raw" +
+          (asset.variant === "small" ? "?w=" + asset.width : ""),
+      );
     }
+    for (const alias of aliases)
+      for (const url of [
+        alias,
+        ...legacyOrigins.map((base) => new URL(alias, base).href),
+      ]) {
+        if (result[url] && result[url] !== target)
+          throw new Error("Ambiguous legacy media URL");
+        result[url] = target;
+      }
   }
   return result;
 }

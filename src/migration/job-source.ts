@@ -90,11 +90,18 @@ export async function prepareMigrationJobSource(
   };
   // Only small account/ID metadata is retained across artifacts, never document/history/edit bodies.
   let preservedOrphans = 0;
+  const mediaHeadVersions: Record<string, number> = {};
   for await (const header of indexedArtifactHeaders(options.indexDirectory)) {
     const head = await readIndexedArtifactHead(
       options.indexDirectory,
       header.id,
     );
+    if (
+      ["image", "file", "pdf"].includes(header.format) &&
+      Number.isSafeInteger(head.version) &&
+      head.version > 0
+    )
+      mediaHeadVersions[head.id] = head.version;
     const orphan = preservedOrphanActor(manifest.sourceNamespace, head);
     if (orphan) {
       maps.orphans ??= {};
@@ -110,6 +117,15 @@ export async function prepareMigrationJobSource(
         options.media.receiptsPath,
       )
     : null;
+  const resourceMapWithHeads = media
+    ? migrationResourceMap(
+        media.assets,
+        maps.pages,
+        options.origin,
+        options.legacyOrigins,
+        mediaHeadVersions,
+      )
+    : undefined;
   const resourceMap = media
     ? migrationResourceMap(
         media.assets,
@@ -118,6 +134,11 @@ export async function prepareMigrationJobSource(
         options.legacyOrigins,
       )
     : undefined;
+  const resourceMapAliases = Object.fromEntries(
+    Object.entries(resourceMapWithHeads ?? {}).filter(
+      ([key]) => !Object.hasOwn(resourceMap ?? {}, key),
+    ),
+  );
   const datasets = options.datasets
     ? await readMigrationDatasetSource({
         baseDirectory: options.sourceDirectory,
@@ -152,6 +173,7 @@ export async function prepareMigrationJobSource(
     groupSummary,
     media,
     resourceMap,
+    resourceMapAliases,
     readArtifact: (id) =>
       readIndexedArtifact(options.indexDirectory, manifest, id),
   };

@@ -42,7 +42,7 @@ export interface CompiledMigrationInput {
   datasetAttachments?: readonly import("./file-upload-runtime-contracts.ts").CompiledAttachmentBinding[];
   /** Explicit importer decision for an archived revision without historical authorization. */
   datasetUnavailable?: { reason: "historical-binding-unavailable" };
-  /** Exact archived img URL -> verified ACL media endpoint. Static assembler only. */
+  /** Exact archived media URL -> verified ACL media endpoint. The normal converter rewrites static raw-download/image literals before compilation; the static assembler also resolves output images and links. */
   resourceMap?: Readonly<Record<string, string>>;
   theme?: string | null;
   template?: string | null;

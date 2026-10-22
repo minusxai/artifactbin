@@ -90,6 +90,7 @@ export function createMigrationJobPlanner(
         ? {
             assets: media.assets,
             resourceMap,
+            resourceMapAliases: source.resourceMapAliases,
             origin: options.origin,
           }
         : undefined,

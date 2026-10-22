@@ -248,8 +248,8 @@ export async function compileArchivedStatic(
           } else invalid = true;
         }
         if (
-          node.tagName === "img" &&
-          a.name === "src" &&
+          ((node.tagName === "img" && a.name === "src") ||
+            (node.tagName === "a" && a.name === "href")) &&
           Object.hasOwn(input.resourceMap ?? {}, a.value)
         ) {
           a.value = input.resourceMap![a.value];

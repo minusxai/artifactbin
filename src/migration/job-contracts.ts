@@ -67,6 +67,8 @@ export interface MigrationJobSource {
   datasets?: MigrationDatasetSource;
   preparedDatasets?: MigrationJobDatasets;
   resourceMap?: Readonly<Record<string, string>>;
+  /** Verified default-version aliases, scoped to exact source literals before conversion. */
+  resourceMapAliases?: Readonly<Record<string, string>>;
   readArtifact: (id: string) => Promise<MigrationManifest>;
 }
 export type JobInventory = Record<
