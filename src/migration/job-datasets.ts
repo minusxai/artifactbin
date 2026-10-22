@@ -57,6 +57,10 @@ export async function prepareMigrationJobDatasets(
   const accumulator = createDatasetMetadataAccumulator(
     source.manifest.sourceNamespace,
   );
+  const mutations = new Map<
+    string,
+    import("./conversion/compiled/dataset-mutations-contracts.ts").CompiledDatasetMutation[]
+  >();
   const bindings = new Map<string, DatasetBrowserBinding[]>();
   const backends = new Map<string, MigrationBackendReceipt[]>();
   const tokenOwners = source.base.tokenOwners.filter(
@@ -140,6 +144,17 @@ export async function prepareMigrationJobDatasets(
         list.push(row.binding);
         bindings.set(key, list);
       }
+      for (const row of prepared.browserMutations.filter(
+        (r) => r.pageLegacyId === page.legacyId,
+      )) {
+        const key = migrationDatasetVersionKey(
+          row.pageLegacyId,
+          row.pageVersion,
+        );
+        const list = mutations.get(key) ?? [];
+        list.push(row.mutation);
+        mutations.set(key, list);
+      }
       backends.set(
         page.legacyId,
         prepared.receipts.filter((r) => r.pageLegacyId === page.legacyId),
@@ -159,6 +174,7 @@ export async function prepareMigrationJobDatasets(
     metadata: accumulator.finish(),
     scan,
     bindings,
+    mutations,
     backends,
     issues,
     allocation: {

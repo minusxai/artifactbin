@@ -1,3 +1,4 @@
+import type { CompiledDatasetMutation } from "./conversion/compiled/dataset-mutations-contracts.ts";
 import type { DatasetBrowserBinding } from "./datasets/planner-contracts.ts";
 import { mediaDependencies } from "./dependencies.ts";
 import { convertMigrationMedia } from "./media.ts";
@@ -74,6 +75,10 @@ export async function planMigration(
     convert: Converter;
     coreUrl: string;
     media?: MigrationMediaOptions;
+    datasetMutations?: (
+      legacyId: string,
+      version: number,
+    ) => readonly CompiledDatasetMutation[];
     datasetBindings?: (
       legacyId: string,
       version: number,
@@ -170,6 +175,13 @@ export async function planMigration(
             Number(original.version) !== artifact.version &&
             options.datasetUnavailable?.(artifact.id, Number(original.version))
               ? { reason: "historical-binding-unavailable" }
+              : undefined,
+          datasetMutations:
+            Number(original.version) === artifact.version
+              ? options.datasetMutations?.(
+                  artifact.id,
+                  Number(original.version),
+                )
               : undefined,
           datasetBindings: options.datasetBindings?.(
             artifact.id,

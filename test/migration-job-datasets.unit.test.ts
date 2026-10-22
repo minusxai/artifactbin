@@ -156,6 +156,14 @@ test("job prepares exact live head bindings and real compiled receipts without i
   assert.equal(plan.omittedUnmappedTokenPrincipals, 1);
   assert.equal(plan.metadata.bindings.length, 1);
   assert.equal(plan.metadata.operations?.length, 1);
+  const browser = plan.mutations.get(JSON.stringify(["abc123", 2]))![0]!;
+  assert.equal(browser.name, "updateValue");
+  assert.deepEqual(Object.keys(browser).sort(), [
+    "backendNamespace",
+    "name",
+    "paramTypes",
+  ]);
+  assert.equal(plan.mutations.has(JSON.stringify(["abc123", 1])), false);
   assert.equal(
     plan.metadata.operations?.[0]?.operation.page.editId,
     "actual-head-edit",

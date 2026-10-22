@@ -1,3 +1,4 @@
+import type { CompiledDatasetMutation } from "./conversion/compiled/dataset-mutations-contracts.ts";
 import type { MigrationBackendReceipt } from "./backend-preparation-contracts.ts";
 import type { DatasetBrowserBinding } from "./datasets/planner-contracts.ts";
 /** Offline migration records contain private content. Never commit exported manifests. */
@@ -28,6 +29,7 @@ export interface SqlReader {
 }
 export interface ConversionInput {
   datasetUnavailable?: { reason: "historical-binding-unavailable" };
+  datasetMutations?: readonly CompiledDatasetMutation[];
   datasetBindings?: readonly DatasetBrowserBinding[];
   resourceMap?: Readonly<Record<string, string>>;
   source: string;
