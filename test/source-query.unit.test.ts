@@ -200,3 +200,53 @@ test("source availability rechecks exact named registration and access without i
   assert.equal(await service.availability(context, { name: "other" }), false);
   assert.equal(connections, 0);
 });
+
+test("timestamp payload requires exact native type metadata, not string guessing", async () => {
+  for (const metadata of [
+    undefined,
+    "{}",
+    "null",
+    "[]",
+    '{"value":25}',
+    '{"value":1114,"extra":1184}',
+  ]) {
+    const pool = {
+      connect: async () => ({
+        query: async (text: string) => ({
+          rows: text.startsWith("WITH source_window")
+            ? [
+                {
+                  source_rows: '[{"value":"2026-10-15T00:00:00"}]',
+                  ...(metadata === undefined ? {} : { source_types: metadata }),
+                },
+              ]
+            : [],
+        }),
+        release() {},
+      }),
+      end: async () => {},
+    };
+    const service = createSourceQueryService({
+      registry: async () => ({
+        ...registration,
+        columns: [{ name: "value", type: "timestamp" }],
+      }),
+      pool: () => pool,
+      authority: async () => ({
+        generation: "stable",
+        userId: null,
+        now: "2026-01-01T00:00:00Z",
+        tz: "UTC",
+      }),
+    });
+    await assert.rejects(
+      service.query(context, {
+        name: "answer",
+        valuesJson: '{"needle":"x"}',
+        offset: 0,
+        limit: 1,
+      }),
+      { code: "invalid_dataset" },
+    );
+  }
+});

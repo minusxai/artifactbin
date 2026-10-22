@@ -1,3 +1,5 @@
+import { normalizeSourceTimestamp } from "./timestamps.ts";
+import type { SourceTimestampOid } from "./timestamp-contracts.ts";
 import { createConnectorHost } from "../../connectors/index.ts";
 import { DatasetReadError } from "../contracts.ts";
 import type {
@@ -144,10 +146,31 @@ export function createSourceQueryService(
         (parameters.length + 2);
       // Bound the driver payload before PostgreSQL serializes it to the app.
       // The trusted query window executes once; oversized UTF-8 output is a sentinel.
+      const timestampColumns = registration.columns.filter(
+        (c) => c.type === "timestamp",
+      );
+      const timestampTypes = timestampColumns.length
+        ? ", jsonb_build_object(" +
+          timestampColumns
+            .map((c) => {
+              const identifier = '"' + c.name.replaceAll('"', '""') + '"';
+              const key = "'" + c.name.replaceAll("'", "''") + "'";
+              return (
+                key +
+                ", pg_typeof((SELECT " +
+                identifier +
+                " FROM source_window LIMIT 1))::oid::integer"
+              );
+            })
+            .join(", ") +
+          ")::text AS source_types"
+        : "";
       const text =
         "WITH source_window AS MATERIALIZED (" +
         windowSql +
-        "), source_payload AS MATERIALIZED (SELECT coalesce(jsonb_agg(to_jsonb(source_window)), '[]'::jsonb)::text AS payload FROM source_window) SELECT CASE WHEN octet_length(payload)<=49152 THEN payload ELSE NULL END AS source_rows FROM source_payload";
+        "), source_payload AS MATERIALIZED (SELECT coalesce(jsonb_agg(to_jsonb(source_window)), '[]'::jsonb)::text AS payload FROM source_window) SELECT CASE WHEN octet_length(payload)<=49152 THEN payload ELSE NULL END AS source_rows" +
+        timestampTypes +
+        " FROM source_payload";
       const pool = ports.pool(registration.resource);
       if (!pool) throw new DatasetReadError("denied");
       const host = createConnectorHost(
@@ -190,6 +213,32 @@ export function createSourceQueryService(
         Buffer.byteLength(response[0].source_rows) > 49152
       )
         throw new DatasetReadError("invalid_dataset");
+      let sourceTypes: Record<string, SourceTimestampOid> = {};
+      if (timestampColumns.length) {
+        const encoded = response[0].source_types;
+        if (
+          typeof encoded !== "string" ||
+          Buffer.byteLength(encoded) > 512 * 1024
+        )
+          throw new DatasetReadError("invalid_dataset");
+        try {
+          sourceTypes = JSON.parse(encoded);
+        } catch {
+          throw new DatasetReadError("invalid_dataset");
+        }
+        if (
+          !sourceTypes ||
+          typeof sourceTypes !== "object" ||
+          Array.isArray(sourceTypes) ||
+          Object.keys(sourceTypes).length !== timestampColumns.length ||
+          timestampColumns.some(
+            (c) =>
+              !Object.hasOwn(sourceTypes, c.name) ||
+              ![1114, 1184].includes(sourceTypes[c.name]!),
+          )
+        )
+          throw new DatasetReadError("invalid_dataset");
+      }
       let raw: unknown;
       try {
         raw = JSON.parse(response[0].source_rows);
@@ -222,6 +271,11 @@ export function createSourceQueryService(
               value = Number(value);
             if (!Object.hasOwn(row as object, c.name) || !scalar(value, c.type))
               throw new DatasetReadError("invalid_dataset");
+            if (c.type === "timestamp")
+              value = normalizeSourceTimestamp(
+                value as string | null,
+                sourceTypes[c.name]!,
+              );
             return [c.name, value];
           }),
         ),

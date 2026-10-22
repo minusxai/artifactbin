@@ -15,6 +15,8 @@ for (const timezone of ["UTC", "Asia/Kolkata", "America/New_York"]) {
 import {createRequire} from 'node:module';
 const Result=createRequire(import.meta.url)('pg/lib/result');
 import {createSourceQueryResources} from './src/datasets/source-query/resources.ts';
+import {normalizeSourceTimestamp} from './src/datasets/source-query/timestamps.ts';
+if(normalizeSourceTimestamp('2026-10-15T00:00:00',1114)!=='2026-10-15T00:00:00.000Z'||normalizeSourceTimestamp('2026-10-15T00:00:00+05:30',1184)!=='2026-10-14T18:30:00.000Z')throw Error('JSON timestamp timezone regression');
 let parsers;
 const resources=createSourceQueryResources(JSON.stringify({resources:{'source-ABC123':{connectionStringEnv:'PAGEGI_SOURCE_QUERY_TEST_URL',caEnv:'PAGEGI_SOURCE_QUERY_TEST_CA'}}}),{PAGEGI_SOURCE_QUERY_TEST_URL:'postgres://reader:secret@db.invalid/source',PAGEGI_SOURCE_QUERY_TEST_CA:'ca'},options=>{parsers=options.types;return{connect:async()=>{throw Error('unused')},end:async()=>{},on(){}}});
 const parse=(oid,value)=>{const result=new Result(undefined,parsers);result.addFields([{name:'value',dataTypeID:oid,format:'text'}]);return result.parseRow([value]).value;};

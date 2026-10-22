@@ -92,3 +92,66 @@ test("external source runs named typed parameters read-only and discards revoked
     await db.cleanup();
   }
 });
+test("bounded JSON rows normalize native timestamp types even when driver column parsers cannot run", async () => {
+  const db = await testDatabase();
+  try {
+    const sql =
+      "SELECT timestamp '2026-10-15 00:00:00' AS plain, timestamptz '2026-10-15 00:00:00+05:30' AS zoned, date '2026-10-15' AS day, NULL::timestamp AS missing, timestamp 'infinity' AS plain_infinite, timestamptz 'infinity' AS zoned_infinite";
+    const columns = [
+      { name: "plain", type: "timestamp" as const },
+      { name: "zoned", type: "timestamp" as const },
+      { name: "day", type: "date" as const },
+      { name: "missing", type: "timestamp" as const },
+      { name: "plain_infinite", type: "timestamp" as const },
+      { name: "zoned_infinite", type: "timestamp" as const },
+    ];
+    let empty = false;
+    const service = createSourceQueryService({
+      pool: () => db.pool,
+      registry: async () => ({
+        pageLegacyId: "legacy",
+        pageVersion: 1,
+        name: "times",
+        sourceRef: "ref:ABC123",
+        resource: "source-ABC123",
+        params: {},
+        columns,
+        backendId: "BACK01",
+        backendVersion: "1",
+        pageId: "PAGE01",
+        sourceNamespace: "test",
+        sql: empty ? sql + " WHERE false" : sql,
+        sqlSha256: createHash("sha256")
+          .update(empty ? sql + " WHERE false" : sql)
+          .digest("hex"),
+      }),
+      authority: async () => ({
+        generation: "stable",
+        userId: null,
+        now: "2026-10-22T00:00:00Z",
+        tz: "UTC",
+      }),
+    });
+    const context = {
+        backendId: "BACK01",
+        backendVersion: "1",
+        pageId: "PAGE01",
+        subject: "user:test",
+      },
+      input = { name: "times", valuesJson: "{}", offset: 0, limit: 10 };
+    assert.deepEqual((await service.query(context, input)).rows, [
+      {
+        plain: "2026-10-15T00:00:00.000Z",
+        zoned: "2026-10-14T18:30:00.000Z",
+        day: "2026-10-15",
+        missing: null,
+        plain_infinite: "infinity",
+        zoned_infinite: null,
+      },
+    ]);
+    empty = true;
+    assert.deepEqual((await service.query(context, input)).rows, []);
+  } finally {
+    await db.cleanup();
+  }
+});
