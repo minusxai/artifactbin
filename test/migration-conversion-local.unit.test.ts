@@ -515,6 +515,7 @@ test("persistent mutation controls require exact registered routing metadata", a
   const metadata = {
     name: "save",
     backendNamespace: "legacyDatasets",
+    recoveryScope: "a".repeat(64),
     paramTypes: { amount: "number" as const },
     reset: ["amount"],
   };
