@@ -1,6 +1,11 @@
 /** Explicit offline route; never a fallback for blocked static conversion. */
 import { MAX_PAGE_SOURCE } from "../../../af-contracts.ts";
 import { Parser } from "acorn";
+import {
+  prepareAuthorDocument,
+  compiledAuthorMountAttributes,
+} from "./author-document.ts";
+import { admitAuthorSource } from "./author/admission.ts";
 import { validDatasetBinding } from "./dataset-reader.ts";
 import { validLocalValue } from "./local-state.ts";
 import { safeInlineModule } from "./module-safety.ts";
@@ -83,6 +88,20 @@ export async function compileArchivedLocal(
     )
   )
     return blocked("compiled-capability");
+  const author = input.authorPlan;
+  if (author) {
+    try {
+      admitAuthorSource(author.script);
+      if (
+        Buffer.byteLength(author.script) > 1024 * 1024 ||
+        author.exports.length > 64 ||
+        author.mounts.length > 256
+      )
+        return blocked("compiled-author-limit");
+    } catch {
+      return blocked("compiled-author-capability");
+    }
+  }
   const bindings = input.datasetBindings ?? [];
   const backendLinks = new Map<string, string>();
   if (
@@ -167,7 +186,9 @@ export async function compileArchivedLocal(
           ["script", "iframe", "object", "embed"].includes(
             name.toLowerCase(),
           ) ||
-          (/^[A-Z]/.test(name) && !allowed.has(name))
+          (/^[A-Z]/.test(name) &&
+            !allowed.has(name) &&
+            !author?.exports.includes(name))
         )
           invalid = true;
         if (name === "Import") {
@@ -199,8 +220,20 @@ export async function compileArchivedLocal(
           )
             invalid = true;
           const attrName = attr.name?.name?.toLowerCase();
-          if (attrName === "data-migration-dataset-status") invalid = true;
+          if (
+            attrName === "data-migration-dataset-status" ||
+            attrName?.startsWith("data-migration-author-") ||
+            (author?.exports.includes(name) &&
+              ["constructor", "prototype", "__proto__"].includes(attrName))
+          )
+            invalid = true;
           const attrValue = attr.value?.value ?? attr.value?.expression?.value;
+          if (
+            author?.exports.includes(name) &&
+            typeof attrValue === "string" &&
+            /^\$[A-Za-z][A-Za-z0-9_]*$/.test(attrValue)
+          )
+            references.add(attrValue.slice(1));
           if (
             /^on/.test(attrName) ||
             attrName === "srcdoc" ||
@@ -317,7 +350,7 @@ export async function compileArchivedLocal(
     [...imports].some((n) => declarations.has(n) || queries.has(n))
   )
     invalid = true;
-  if (invalid || (declarations.size === 0 && queries.size === 0))
+  if (invalid || (declarations.size === 0 && queries.size === 0 && !author))
     return blocked("compiled-capability");
   let output: ArchivedLocalOutput;
   try {
@@ -380,6 +413,12 @@ export async function compileArchivedLocal(
     [...imports].some((n) => !output.datasetNames?.includes(n))
   )
     return blocked("compiled-local-output");
+  if (
+    author &&
+    author.exports.some((name) => !output.authorExports?.includes(name))
+  )
+    return blocked("compiled-author-output");
+  const authorMounts = new Set<string>();
   const identities: Record<string, string> = Object.create(null);
   let unsafe = false;
   const fragment = parseFragment(output.html);
@@ -388,6 +427,8 @@ export async function compileArchivedLocal(
       if (["script", "iframe", "object", "embed"].includes(node.tagName))
         unsafe = true;
       for (const a of [...node.attrs]) {
+        if (author && compiledAuthorMountAttributes[a.name])
+          a.name = compiledAuthorMountAttributes[a.name];
         if (
           (["href", "src", "action", "formaction", "xlink:href"].includes(
             a.name,
@@ -405,6 +446,20 @@ export async function compileArchivedLocal(
           node.attrs.push({ name: "data-af-id", value: a.value });
         }
       }
+      const authorComponent = node.attrs.find(
+        (a: any) => a.name === "data-migration-author-component",
+      )?.value;
+      if (authorComponent) {
+        const id = node.attrs.find((a: any) => a.name === "id")?.value;
+        if (
+          !author?.mounts.some(
+            (m) => m.identity === id && m.component === authorComponent,
+          ) ||
+          authorMounts.has(id)
+        )
+          unsafe = true;
+        authorMounts.add(id);
+      }
       node.attrs = node.attrs.filter(
         (a: any) => !["data-mx-ast", "data-mx-source-node-id"].includes(a.name),
       );
@@ -412,7 +467,8 @@ export async function compileArchivedLocal(
     for (const c of node.childNodes ?? []) visit(c);
   };
   visit(fragment);
-  if (unsafe) return blocked("compiled-local-output");
+  if (unsafe || (author && authorMounts.size !== author.mounts.length))
+    return blocked("compiled-local-output");
   const attrs = Object.entries(output.rootAttributes)
     .filter(([key]) => ["class", "data-theme"].includes(key))
     .map(([key, value]) => ` ${key}="${esc(value)}"`)
@@ -426,7 +482,10 @@ export async function compileArchivedLocal(
   const status = imports.size
     ? '<p role="status" data-migration-dataset-status>Loading protected data…</p>'
     : "";
-  const html = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state })}</script>${links}<title>${esc(output.title)}</title><style>${output.css}</style></head><body>${status}${serialize(fragment)}<script type="module">${output.javascript.replace(/<\/script/gi, "<\\/script")}</script></body></html>`;
+  const authorStatus = author
+    ? '<p role="status" data-migration-author-status>Starting page components…</p>'
+    : "";
+  const html = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}<title>${esc(output.title)}</title><style>${output.css}</style></head><body>${status}${authorStatus}${serialize(fragment)}<script type="module">${output.javascript.replace(/<\/script/gi, "<\\/script")}</script></body></html>`;
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE)
     return blocked("compiled-page-limit");
   return {
@@ -441,12 +500,29 @@ export async function compileArchivedLocal(
       ...(queries.size ? ["local-sql-queries"] : []),
       ...(tableNames.size ? ["local-inline-tables"] : []),
       ...(imports.size ? ["protected-dataset-reads"] : []),
+      ...(author ? ["authored-components"] : []),
     ],
     provenance: {
-      compiler: "archived-local",
+      compiler: author ? "archived-author" : "archived-local",
       build: output.build,
-      mode: "local-scalars",
+      mode: author ? "authored-components" : "local-scalars",
       modules: output.modules,
     },
   };
+}
+
+/** Explicit whole-document author migration. No fallback from another strategy. */
+export async function compileArchivedAuthor(
+  input: CompiledMigrationInput,
+  options: ArchivedLocalOptions,
+): Promise<CompiledLocalResult> {
+  try {
+    const plan = prepareAuthorDocument(input.source);
+    return await compileArchivedLocal(
+      { ...input, source: plan.source, authorPlan: plan.author },
+      options,
+    );
+  } catch {
+    return blocked("compiled-author-capability");
+  }
 }

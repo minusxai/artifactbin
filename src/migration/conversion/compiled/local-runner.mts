@@ -2,6 +2,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { prepareAuthorBundle } from "./author/compiler.ts";
+import { rewriteCompiledMounts } from "./author-document.ts";
 import { prepareLocalFlow } from "./local-engine.ts";
 import { localBootSource } from "./local-boot.ts";
 import type { CompiledMigrationInput } from "./contracts.ts";
@@ -50,6 +52,27 @@ const parts = await prepareStoryParts({
 if (parts.runtime.authorScript || parts.runtime.authorScriptErrors?.length)
   throw Error("Author code is not supported");
 const build = loadCompilerBuild();
+const author = input.authorPlan
+  ? await prepareAuthorBundle(
+      input.authorPlan.script,
+      {
+        values: split.content.values
+          .filter((v: any) => v.kind === "scalar")
+          .map((v: any) => v.name),
+        tables: split.content.values
+          .filter((v: any) => v.kind === "table")
+          .map((v: any) => v.name),
+        queries: split.content.queries.map((q: any) => q.name),
+        mutations: [],
+      },
+      { archivedRoot: root },
+    )
+  : null;
+if (
+  author &&
+  input.authorPlan!.exports.some((name) => !author.exports.includes(name))
+)
+  throw Error("Author export mismatch");
 const declarations = split.content.values.map((v: any) =>
   v.kind === "table"
     ? {
@@ -135,7 +158,8 @@ if (browser.includes(MODULE_DATA_READ_CODE))
     `const $moduleData=${JSON.stringify(generated.moduleData.map((v: string) => JSON.parse(v)))};\n`,
   );
 const source = await transformSolid(
-  browser + "\nimport {boot} from '@mx/boot';boot({TREE:Document});",
+  (author ? rewriteCompiledMounts(browser) : browser) +
+    "\nimport {boot} from '@mx/boot';boot({TREE:Document});",
   { generate: "dom", hydratable: true },
   { moduleName: "@mx/rt" },
 );
@@ -225,9 +249,39 @@ const bundled = await bundle({
           namespace: "migration",
         }));
         b.onLoad({ filter: /.*/, namespace: "migration" }, () => ({
-          contents: localBootSource(declarations, sql),
+          contents: localBootSource(declarations, sql, input.authorPlan),
           loader: "js",
         }));
+        b.onResolve(
+          {
+            filter:
+              /^(migration-author-entry|migration-author-ports|authored-module|author-closure)$/,
+          },
+          (args: any) => {
+            if (!author) throw Error("No author plan");
+            return args.path === "migration-author-ports"
+              ? {
+                  path: path.join(
+                    import.meta.dirname,
+                    "author/apollo-ports.ts",
+                  ),
+                }
+              : { path: args.path, namespace: "migration-author" };
+          },
+        );
+        b.onLoad(
+          { filter: /.*/, namespace: "migration-author" },
+          (args: any) => ({
+            contents:
+              args.path === "migration-author-entry"
+                ? author!.entry
+                : args.path === "author-closure"
+                  ? author!.closureModule
+                  : author!.authorModule,
+            loader: "js",
+            resolveDir: root,
+          }),
+        );
         b.onResolve({ filter: /^migration-datasets$/ }, () => ({
           path: path.join(import.meta.dirname, "dataset-reader.ts"),
         }));
@@ -238,7 +292,7 @@ const bundled = await bundle({
           };
         });
         b.onResolve({ filter: /^(@mx\/|solid-js)/ }, (args: any) => {
-          if (sql && args.path.startsWith("solid-js")) {
+          if ((sql || author) && args.path.startsWith("solid-js")) {
             const suffix = args.path.slice("solid-js".length);
             const file =
               suffix === ""
@@ -247,7 +301,7 @@ const bundled = await bundle({
             return { path: path.join(root, "node_modules/solid-js", file) };
           }
           if (
-            sql &&
+            (sql || author) &&
             (args.path === "@mx/rt" || args.path.startsWith("@mx/kit/"))
           ) {
             const relative =
@@ -329,6 +383,7 @@ process.stdout.write(
     css,
     javascript,
     declarations,
+    authorExports: author?.exports ?? [],
     datasetNames: flow.imports.map((i: any) => i.name),
     queryNames: flow.queries.map((q: any) => q.name),
     modules,

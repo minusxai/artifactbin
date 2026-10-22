@@ -21,6 +21,7 @@ export interface ArchivedLocalOutput extends ArchivedStaticOutput {
   javascript: string;
   queryNames?: string[];
   datasetNames?: string[];
+  authorExports?: string[];
   declarations: LocalDeclaration[];
   /** Audited migration-time bundle inputs; no authored source or absolute paths. */
   modules: string[];
@@ -33,9 +34,9 @@ export interface ArchivedLocalOptions
 }
 export interface CompiledLocalResult extends ConversionResult {
   provenance?: {
-    compiler: "archived-local";
+    compiler: "archived-local" | "archived-author";
     build: string;
-    mode: "local-scalars";
+    mode: "local-scalars" | "authored-components";
     modules: string[];
   };
 }

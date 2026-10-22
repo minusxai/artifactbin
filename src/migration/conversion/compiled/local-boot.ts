@@ -1,3 +1,5 @@
+import { authorDocumentBoot } from "./author-document-boot.ts";
+import type { CompiledAuthorPlan } from "./author-document-contracts.ts";
 import { datasetBootSetup, datasetBootStatus } from "./dataset-boot.ts";
 import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 import { validLocalValue } from "./local-state.ts";
@@ -11,11 +13,13 @@ export function localBootSource(
     tables: unknown;
     bindings?: readonly CompiledDatasetBinding[];
   },
+  author?: CompiledAuthorPlan,
 ): string {
   const imports = sql?.bindings?.length ?? 0;
   return `import {client,gql} from '@afbin/apollo';
 import {hydrateIsland} from '@mx/rt';
-import {createSignal} from 'solid-js';
+import {createSignal,createRoot,createEffect,untrack} from 'solid-js';
+${author ? "import {mount as mountAuthor} from 'migration-author-entry';import {authorApolloPorts} from 'migration-author-ports';" : ""}
 ${imports ? "import {readCompiledDataset} from 'migration-datasets';" : ""}
 ${sql ? "import {pageEngine} from 'migration-sqlite';" : ""}
 const declarations=${JSON.stringify(declarations)};
@@ -42,6 +46,7 @@ export function boot({TREE}) {
  const context={values, value:name=>values()[name],table,tableSnapshot:table,pending:()=>pending(),error:name=>queryErrors()[name],people:()=>({}),setValue:store.setValue,mutate:unavailable,writesUnavailable:()=>null,mutationUnavailable:()=>null,mutating:()=>false,assetsUrl:()=>null,viewer:()=>null,drawings:()=>({}),valueType:name=>declarations.find(d=>d.name===name)?.type,nullable:name=>declarations.find(d=>d.name===name)?.default===null,declaresQueries:()=>${Boolean(sql)},writes:{current:()=>[],subscribe:()=>()=>{},dismiss:()=>{}},store:()=>store,trustedPortal:()=>null,loadChart:unavailable};
  let ready=false;
  client.watchQuery({query}).subscribe(({data})=>{if(!ready){ready=true;hydrateIsland('d-',TREE,context);}setState(checked(data.compiledPage));void run();});
+ ${author ? authorDocumentBoot(author) : ""}
 }
 `;
 }

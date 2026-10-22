@@ -1,7 +1,10 @@
+import type { CompiledAuthorPlan } from "./author-document-contracts.ts";
 import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 import type { ConversionResult } from "../contracts.ts";
 export interface CompiledMigrationInput {
   source: string;
+  /** Set only by the explicit author-document offline migration route. */
+  authorPlan?: CompiledAuthorPlan;
   coreUrl: string;
   /** Explicit manifest bindings; metadata only, never dataset rows. */
   datasetBindings?: readonly CompiledDatasetBinding[];
