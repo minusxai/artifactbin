@@ -36,7 +36,7 @@ import { localChromeCSS } from "./ui-style.js";
 import { createPlatformClient } from "./platform-client.ts";
 import { openDocument } from "./document-session.js";
 import { createPlacement, PAGE_FRAME_SANDBOX } from "./placement.js";
-import { withState } from "./core/standalone.ts";
+import { createDocumentDownload, createBrowserDownloadSink } from "./document-download.ts";
 import { readStateFragment } from "../apollo/state-url.ts";
 async function bootPlatform() {
   const documentSession = await openDocument();
@@ -380,48 +380,22 @@ async function bootPlatform() {
   function envelope() {
     return documentView.envelope(saved);
   }
-  /**
-   * The server writes the file (the page with the core inlined); this viewer's
-   * own local state replaces the published starting state in it.
-   */
+  const documentDownload = createDocumentDownload({
+    local,
+    delegate: () => sendApp({ pagegi: true, kind: "download" }),
+    hostedPath: () => hosted?.path,
+    address: () => location.href,
+    title: () => document.title,
+    snapshot: () => ({
+      historical: documentView.historical,
+      state: documentView.snapshot?.state || null,
+    }),
+    fetch: (address, options) => fetch(address, options),
+    sink: createBrowserDownloadSink(document, URL, setTimeout),
+    status: (message) => info(message),
+  });
   function download() {
-    if (local) {
-      // The file saves itself with its current state, as its own control does offline.
-      sendApp({ pagegi: true, kind: "download" });
-      info("Download started — keep the downloaded file to preserve changes.");
-      return "download-started";
-    }
-    const url = new URL(location.href);
-    url.search = "?download=1";
-    url.hash = "";
-    const name =
-      (hosted?.path
-        ?.split("/")
-        .at(-1)
-        ?.replace(/\.html$/i, "") ||
-        document.title
-          .replace(/[^a-z0-9 _-]/gi, "")
-          .trim()
-          .slice(0, 80) ||
-        "pagegi") + ".html";
-    const state = documentView.historical
-      ? null
-      : documentView.snapshot?.state || null;
-    void (async () => {
-      const response = await fetch(url.href, { credentials: "same-origin" });
-      if (!response.ok) throw Error("Download failed");
-      const html = await response.text();
-      const file = new Blob([state ? withState(html, state) : html], {
-        type: "text/html",
-      });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(file);
-      a.download = name;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
-    })().catch((error) => info(error.message));
-    info("Download started — keep the downloaded file to preserve changes.");
-    return "download-started";
+    return documentDownload.download();
   }
   function save() {
     return saver.save();
