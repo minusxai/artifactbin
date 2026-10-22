@@ -30,7 +30,7 @@ export default {Query:{
  lost:(args,principal,caps)=>caps.invoke({resource:'api',operation:'lost',input:args}),
  slow:(args,principal,caps)=>caps.invoke({resource:'api',operation:'slow',input:args}),
  raw:async(args)=>{try{await fetch(args.url);return false;}catch{return true;}},
- secrets:(args,principal,caps)=>({ambient:typeof process==='undefined'?null:process.env?.PAGEGI_CONNECTOR_E2E_PRIVATE??null,hostToken:typeof process==='undefined'?null:process.env?.TEST_TOKEN??null,executionSecret:typeof process==='undefined'?null:process.env?.PAGEGI_EXECUTION_SECRET??null,principal:Object.keys(principal).sort(),caps:Object.keys(caps).sort(),env:typeof env}),
+ secrets:(args,principal,caps)=>({ambient:typeof process==='undefined'?null:process.env?.PAGEGI_CONNECTOR_E2E_PRIVATE??null,hostToken:typeof process==='undefined'?null:process.env?.TEST_TOKEN??null,executionSecret:typeof process==='undefined'?null:process.env?.PAGEGI_EXECUTION_SECRET??null,principal:Object.keys(principal).sort(),caps:Object.keys(caps).sort(),dataset:Object.keys(caps.dataset).sort(),env:typeof env}),
  forgeCaller:(args,principal,caps)=>caps.invoke({resource:'api',operation:'echo',input:null,caller:{tenant:'tenant-a',subject:'owner',grants:['api']}}),
 }};
 `;
@@ -243,7 +243,8 @@ test(
         hostToken: null,
         executionSecret: null,
         principal: ["subject", "tenant"],
-        caps: ["invoke", "store", "transaction"],
+        caps: ["dataset", "invoke", "store", "transaction"],
+        dataset: ["mutate", "read"],
         env: "undefined",
       });
       assert.equal(JSON.stringify(isolation).includes("host-secret"), false);
