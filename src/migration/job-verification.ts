@@ -16,6 +16,30 @@ import type {
   MigrationJobPlan,
   MigrationPagePlanner,
 } from "./job-contracts.ts";
+import type { PlannedPage } from "./contracts.ts";
+
+interface PreparedMigrationVerificationPages {
+  pages: AsyncIterable<PlannedPage>;
+  queryRegistrations: MigrationSavedQueryRegistration[];
+}
+
+/** Collect registrations as runtime verification consumes the prepared source once. */
+export function prepareMigrationVerificationPages(
+  sourcePages: AsyncIterable<PlannedPage>,
+  sourceNamespace: string,
+  origin: string,
+): PreparedMigrationVerificationPages {
+  const queryRegistrations: MigrationSavedQueryRegistration[] = [];
+  async function* pages(): AsyncGenerator<PlannedPage> {
+    for await (const page of sourcePages) {
+      queryRegistrations.push(
+        ...migrationPageQueryRegistrations(page, sourceNamespace, origin),
+      );
+      yield page;
+    }
+  }
+  return { pages: pages(), queryRegistrations };
+}
 /** Independent destination reads in one repeatable-read READ ONLY transaction. Never repairs missing data. */
 export async function verifyMigrationJob(
   source: MigrationJobSource,
@@ -35,8 +59,13 @@ export async function verifyMigrationJob(
   let result;
   try {
     const raw = await verifyMigrationArchives(db, options.schema, archives);
+    const preparedPages = prepareMigrationVerificationPages(
+      readPreparedMigrationPages(source, options, planned, planner),
+      source.manifest.sourceNamespace,
+      options.origin,
+    );
     const runtime = await verifyMigrationRuntime(db, options.schema, {
-      pages: readPreparedMigrationPages(source, options, planned, planner),
+      pages: preparedPages.pages,
       maps: options.standaloneVizPages ? {...source.maps,pages:Object.fromEntries(options.standaloneVizPages.admission.heads.map(h=>[h.legacyId,h.pageId]))} : options.standaloneDatasetPages ? {...source.maps,pages:Object.fromEntries(options.standaloneDatasetPages.heads.map(h=>[h.legacyId,source.maps.pages[h.legacyId]!]))} : source.maps,
       origin: options.origin,
     });
@@ -46,20 +75,7 @@ export async function verifyMigrationJob(
       source.base,
       source.maps,
     );
-    const queryRegistrations: MigrationSavedQueryRegistration[] = [];
-    for await (const page of readPreparedMigrationPages(
-      source,
-      options,
-      planned,
-      planner,
-    ))
-      queryRegistrations.push(
-        ...migrationPageQueryRegistrations(
-          page,
-          source.manifest.sourceNamespace,
-          options.origin,
-        ),
-      );
+    const queryRegistrations = preparedPages.queryRegistrations;
     const datasetRows =
       source.preparedDatasets && source.datasets
         ? await verifyMigrationDatasetMetadata(
