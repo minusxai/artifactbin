@@ -155,3 +155,37 @@ test("registration rejects altered compiled receipts before touching destination
   );
   assert.equal(queries, 0);
 });
+
+test("same-owner backend IDs from a different page are collisions, never reused", async () => {
+  const prepared = await prepareMigrationBackends(input, {
+    host: { compile: async () => deployment, invoke: async () => null },
+  });
+  const receipt = prepared.receipts[0]!;
+  const statements: string[] = [];
+  await assert.rejects(
+    registerMigrationBackends(
+      {
+        query: async (sql) => {
+          statements.push(sql);
+          if (sql.includes("FROM files f"))
+            return { rows: [{ owner: receipt.owner, principal_kind: "user" }] };
+          if (sql.includes("FROM retired_file_ids")) return { rows: [] };
+          if (sql.includes("FROM file_ids"))
+            return {
+              rows: [
+                { owner: receipt.owner, kind: "backend", published: true },
+              ],
+            };
+          if (sql.includes("FROM af_backend_files"))
+            return {
+              rows: [{ owner: receipt.owner, page_id: "Page34", deployment }],
+            };
+          throw Error("Unexpected destination mutation");
+        },
+      },
+      [receipt],
+    ),
+    /collision/,
+  );
+  assert.ok(statements.every((sql) => sql.startsWith("SELECT")));
+});

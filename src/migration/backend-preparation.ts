@@ -264,13 +264,14 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
         throw new Error("Migration backend ID collision");
       const saved = (
         await db.query(
-          "SELECT f.owner,v.deployment FROM af_backend_files f JOIN af_backend_versions v ON v.file_id=f.file_id AND v.version=$2 WHERE f.file_id=$1",
+          "SELECT f.owner,v.page_id,v.deployment FROM af_backend_files f JOIN af_backend_versions v ON v.file_id=f.file_id AND v.version=$2 WHERE f.file_id=$1",
           [receipt.backendId, receipt.deployment.version],
         )
       ).rows[0];
       if (
         !saved ||
         saved.owner !== receipt.owner ||
+        saved.page_id !== receipt.pageId ||
         (saved.deployment as CompiledBackend).sourceHash !==
           receipt.sourceSha256
       )
