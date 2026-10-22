@@ -8,7 +8,7 @@ export function convertStandaloneDatasetPage(
 ): ConversionOutput {
   const plan = planStandaloneDatasetPage(input);
   const ids =
-    plan.kind === "ready"
+    plan.kind !== "unavailable"
       ? [
           "dataset-table",
           "dataset-status",
@@ -19,7 +19,8 @@ export function convertStandaloneDatasetPage(
         ]
       : [];
   return {
-    classification: plan.kind === "ready" ? "functional" : "manual-blocked",
+    classification:
+      plan.kind !== "unavailable" ? "functional" : "manual-blocked",
     html: renderStandaloneDatasetPage(plan),
     identities: Object.fromEntries(ids.map((id) => [id, id])),
     issues: plan.kind === "unavailable" ? [{ code: plan.reason }] : [],

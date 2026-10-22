@@ -1,3 +1,4 @@
+import { renderExternalDatasetPage } from "./external-render.ts";
 import type { StandaloneDatasetPagePlan } from "./contracts.ts";
 import { createDatasetPageReader } from "./reader.ts";
 const escape = (s: string) =>
@@ -11,6 +12,7 @@ const json = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 export function renderStandaloneDatasetPage(
   plan: StandaloneDatasetPagePlan,
 ): string {
+  if (plan.kind === "external-ready") return renderExternalDatasetPage(plan);
   const ready = plan.kind === "ready";
   const body = ready
     ? `<label for="dataset-table">Table</label><select data-af-id="dataset-table" id="dataset-table">${plan.binding.tables.map((t, i) => `<option value="${i}">${escape(t.schema + "." + t.table)}</option>`).join("")}</select><p data-af-id="dataset-status" role="status" aria-live="polite">Loading data…</p><div class="table-scroll"><table data-af-id="dataset-grid"><thead></thead><tbody></tbody></table></div><nav aria-label="Table pages"><button data-af-id="dataset-previous" disabled>Previous</button><button data-af-id="dataset-next" disabled>Next</button><button data-af-id="dataset-refresh">Refresh</button></nav>`

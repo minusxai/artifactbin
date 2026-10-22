@@ -1,3 +1,4 @@
+import { projectRegisteredExternalDatasetSource } from "./external-plan.ts";
 import { validDatasetBinding } from "../conversion/compiled/dataset-reader.ts";
 import type {
   StandaloneDatasetPageInput,
@@ -14,6 +15,13 @@ export function planStandaloneDatasetPage(
     input.coreUrl !== "/af/v1/core.js"
   )
     throw Error("Invalid standalone dataset page");
+  if (input.source?.kind === "external" && input.source.registered === true)
+    return {
+      kind: "external-ready",
+      title: input.title,
+      coreUrl: input.coreUrl,
+      source: projectRegisteredExternalDatasetSource(input.source),
+    };
   if (input.source?.kind === "external" && input.source.registered === false)
     return {
       kind: "unavailable",

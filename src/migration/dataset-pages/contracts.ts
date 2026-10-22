@@ -10,9 +10,41 @@ export interface StandaloneDatasetPageInput {
   coreUrl: string;
   source:
     | { kind: "stored"; binding: CompiledDatasetBinding }
-    | { kind: "external"; registered: false };
+    | { kind: "external"; registered: false }
+    | RegisteredExternalDatasetPageSource;
 }
+/** Safe exact registered operation names only; SQL and resources stay server-side. */
+export interface RegisteredExternalDatasetPageSource {
+  kind: "external";
+  registered: true;
+  backendHref: string;
+  backendNamespace: "legacyData";
+  tables: readonly {
+    schema: string;
+    table: string;
+    queryName: string;
+    columns: readonly { name: string; type: string }[];
+  }[];
+}
+export interface ExternalDatasetPageWindow {
+  columns: { name: string; type: string }[];
+  rows: Record<string, string | number | boolean | null>[];
+  offset: number;
+  nextOffset: number | null;
+}
+export type ExternalDatasetPageReadPort = (request: {
+  name: string;
+  valuesJson: "{}";
+  offset: number;
+  limit: number;
+}) => Promise<unknown>;
 export type StandaloneDatasetPagePlan =
+  | {
+      kind: "external-ready";
+      title: string;
+      coreUrl: string;
+      source: RegisteredExternalDatasetPageSource;
+    }
   | {
       kind: "ready";
       title: string;
