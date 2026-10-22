@@ -8,6 +8,7 @@ test("public profile routes bound pagination and escape all public text", async 
       calls.push({ handle, after, limit });
       return {
         handle: "alice",
+        image: null,
         files: [{ id: "Page01", title: "<img src=x onerror=alert(1)>" }],
         next: "Page01",
       };
@@ -24,6 +25,8 @@ test("public profile routes bound pagination and escape all public text", async 
   assert.match(result!.body, /href="\/a\/Page01"/);
   assert.match(result!.body, /after=Page01&amp;limit=2/);
   assert.equal(result!.headers["Cache-Control"], "no-store");
+  assert.doesNotMatch(result!.headers["Content-Security-Policy"]!, /img-src/);
+  assert.doesNotMatch(result!.body, /<img/);
   for (const query of [
     "?limit=0",
     "?limit=51",
@@ -57,4 +60,63 @@ test("unknown profiles and forbidden methods reveal no account details", async (
     (await route("GET", new URL("https://example.test/@bad%2Fhandle")))?.status,
     404,
   );
+});
+
+const PHOTO =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+test("a profile with a photo shows it beside the handle and allows only inline images; anything else from storage is refused", async () => {
+  const page = (image: unknown) =>
+    createPublicProfileRoute({
+      read: async () => ({
+        handle: "alice",
+        image: image as string | null,
+        files: [],
+        next: null,
+      }),
+    })("GET", new URL("https://example.test/@alice"));
+  const shown = await page(PHOTO);
+  assert.equal(shown?.status, 200);
+  assert.match(
+    shown!.body,
+    new RegExp(
+      '<img class="profile-photo" src="' +
+        PHOTO.replace(/[+/]/g, "\\$&") +
+        '" alt="" width="64" height="64">',
+    ),
+  );
+  assert.match(
+    shown!.headers["Content-Security-Policy"]!,
+    /default-src 'none'; .*img-src data:;/,
+  );
+  assert.doesNotMatch(
+    shown!.headers["Content-Security-Policy"]!,
+    /img-src [^;]*(https?:|'self'|\*)/,
+  );
+  const head = await createPublicProfileRoute({
+    read: async () => ({
+      handle: "alice",
+      image: PHOTO,
+      files: [],
+      next: null,
+    }),
+  })("HEAD", new URL("https://example.test/@alice"));
+  assert.equal(head?.body, "");
+  assert.match(head!.headers["Content-Security-Policy"]!, /img-src data:/);
+  const without = await page(null);
+  assert.doesNotMatch(without!.body, /<img/);
+  assert.doesNotMatch(without!.headers["Content-Security-Policy"]!, /img-src/);
+  for (const bad of [
+    "https://example.test/avatar.png",
+    "data:text/html;base64,PHNjcmlwdD4=",
+    "data:image/svg+xml;base64,PHN2Zz4=",
+    'data:image/png;base64,abc"onerror="alert(1)',
+    "data:image/png;base64," + "A".repeat(150000),
+    undefined,
+    7,
+  ])
+    await assert.rejects(
+      page(bad),
+      /Invalid public profile result/,
+      String(bad).slice(0, 40),
+    );
 });
