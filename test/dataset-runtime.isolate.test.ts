@@ -8,7 +8,7 @@ import { fixture, binding, context } from "./dataset-runtime-fixture.ts";
 import { createSqlDatabase } from "../src/persistence/sql.ts";
 import { createDatasetMutationObjectStore } from "../src/datasets/mutation/object-store.ts";
 import { registerDatasetMutationOperations } from "../src/persistence/dataset-mutations.ts";
-import { createDatasetRuntime } from "../src/datasets/runtime.ts";
+import { createDatasetRuntime } from "../src/server/dataset-runtime.ts";
 import { createBackendHost } from "../src/backend/container-host.ts";
 import { createExecutionService } from "../src/backend/execution-service.ts";
 import { createDatasetSqlExecutor } from "../src/backend/dataset-sql-executor.ts";

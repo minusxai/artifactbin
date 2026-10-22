@@ -1,4 +1,4 @@
-import { createDatasetRuntime } from "./datasets/runtime.ts";
+import { createDatasetRuntime } from "./server/dataset-runtime.ts";
 import { createDatasetInvalidationReader } from "./persistence/dataset-invalidations.ts";
 import { createBackendStoreInvalidationReader } from "./persistence/backend-store-invalidations.ts";
 import { createLiveInvalidationConsumer } from "./live-invalidation.ts";

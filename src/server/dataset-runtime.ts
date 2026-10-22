@@ -1,15 +1,15 @@
-import { createReadonlyDatasetObjectStore } from "./object-store.ts";
-import { createDatasetMutationObjectStore } from "./mutation/object-store.ts";
+import { createReadonlyDatasetObjectStore } from "../datasets/object-store.ts";
+import { createDatasetMutationObjectStore } from "../datasets/mutation/object-store.ts";
 import { createDatasetReadRepository } from "../persistence/datasets.ts";
 import { createDatasetMutationRepository } from "../persistence/dataset-mutations.ts";
-import { createDatasetReadService } from "./service.ts";
-import { createDatasetMutationService } from "./mutation/service.ts";
-import { readRows } from "./rows.ts";
-import { DatasetReadError } from "./contracts.ts";
+import { createDatasetReadService } from "../datasets/service.ts";
+import { createDatasetMutationService } from "../datasets/mutation/service.ts";
+import { readRows } from "../datasets/rows.ts";
+import { DatasetReadError } from "../datasets/contracts.ts";
 import type {
   DatasetRuntime,
   DatasetRuntimeOptions,
-} from "./runtime-contracts.ts";
+} from "./dataset-runtime-contracts.ts";
 /** App-only composition. SQL is delegated exclusively to the authenticated execution-controller port. */
 export function createDatasetRuntime(
   options: DatasetRuntimeOptions,

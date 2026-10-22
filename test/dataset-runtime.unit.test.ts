@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { serviceConfig } from "../src/config.js";
-import { createDatasetRuntime } from "../src/datasets/runtime.ts";
+import { createDatasetRuntime } from "../src/server/dataset-runtime.ts";
 import type { SqlDatabase } from "../src/persistence/sql.ts";
 test("mutation composition requires readonly source and authenticated remote execution configuration", async () => {
   const base = {
