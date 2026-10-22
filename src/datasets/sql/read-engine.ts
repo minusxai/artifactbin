@@ -9,6 +9,7 @@ import {
   type DatasetQueryJob,
   type ServerQueryAnswer,
 } from "../query/contracts.ts";
+class UnregisteredQueryParameter extends Error {}
 /** Controller-only fixed read engine. Every relation arrives by authorized value; no filesystem catalog. */
 export async function createDatasetQueryEngine() {
   const sqlite = await loadSqliteModule();
@@ -33,6 +34,14 @@ export async function createDatasetQueryEngine() {
             const stmt = db.prepare(q.sql, "read");
             let result;
             try {
+              for (let index = 1; index <= stmt.stmt.parameterCount; index++) {
+                const bound = sqlite.capi.sqlite3_bind_parameter_name(
+                  stmt.stmt.pointer!,
+                  index,
+                );
+                if (!bound || !Object.hasOwn(job.input.params, bound.slice(1)))
+                  throw new UnregisteredQueryParameter();
+              }
               result = stmt
                 .bind(job.input.params, job.input.paramTypes)
                 .rows(limits.maxRows - totalRows, left);
@@ -53,10 +62,13 @@ export async function createDatasetQueryEngine() {
               throw Error("query_output_limit");
             }
             db.load({ schema: "main", table: q.name, ...tables[q.name]! });
-          } catch {
+          } catch (error) {
             // Engine diagnostics can embed input values; keep the RPC error bounded and generic.
             delete tables[q.name];
-            errors[q.name] = "query_failed";
+            errors[q.name] =
+              error instanceof UnregisteredQueryParameter
+                ? "unregistered_query_parameter"
+                : "query_failed";
           }
         }
         return decodeDatasetQueryAnswer(job, { tables, errors });

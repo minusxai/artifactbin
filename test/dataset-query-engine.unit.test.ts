@@ -111,3 +111,17 @@ test("oversized dependencies fail closed rather than silently aggregating a trun
     ),
   );
 });
+test("unregistered SQL bindings including stale _me.role are refused instead of silently bound to NULL", async () => {
+  const engine = await createDatasetQueryEngine();
+  for (const parameter of ["_me__role", "undeclared"]) {
+    const out = engine.query({
+      ...job,
+      input: {
+        ...job.input,
+        queries: [{ name: "answer", sql: `select $${parameter} as value` }],
+      },
+    });
+    assert.equal(out.errors.answer, "unregistered_query_parameter");
+    assert.equal(Object.hasOwn(out.tables, "answer"), false);
+  }
+});
