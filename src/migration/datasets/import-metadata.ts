@@ -356,7 +356,7 @@ export function planDatasetMetadata(
       metadata.bindings as Array<DatasetImportMetadata["bindings"][number]>
     ).push({
       name: b.name,
-      ...({ mode } as object),
+      ...{ mode },
       backendId: b.backendId,
       backendVersion: b.backendVersion,
       page: {
