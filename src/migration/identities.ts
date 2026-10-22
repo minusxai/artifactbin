@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {planMigrationGroups} from './groups.ts';
 import {emailAddress} from '../email.ts';
 import type {MigrationManifest} from './contracts.ts';
 import type {IdentityMigrationPlan} from './identity-contracts.ts';
@@ -25,5 +26,6 @@ export function planMigrationIdentities(manifest:MigrationManifest):IdentityMigr
   const actor='legacy-token:'+createHash('sha256').update(JSON.stringify([manifest.sourceNamespace,token.id])).digest('hex');
   result.maps.tokens[token.id]=actor;result.identities.push({legacyUserId:'',legacyTokenId:token.id,actor,classification:'preserved-nonlogin',reason:'Existing anonymous token ownership and attribution preserved without credentials or restored account access'});
  }
+ for(const group of planMigrationGroups(manifest,result.maps.users).groups)result.maps.groups[group.legacyId]=group.actor;
  return result;
 }

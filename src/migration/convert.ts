@@ -13,7 +13,7 @@ export function createMigrationConverter(options:MigrationConversionOptions):Con
  if(options.strategy!=='archived-static')throw new Error('Unknown migration conversion strategy');
  if(!options.legacyRoot&&!options.compiler)throw new Error('Archived-static conversion requires an explicit archived compiler root');
  return async input=>{
-  const source=input.source.trim()?input.source:legacyDocumentSource(input.document);
+  let source:string|null;try{source=input.source.trim()?input.source:legacyDocumentSource(input.document);}catch{source=null;}
   if(source===null)return {classification:'manual-blocked',html:null,issues:[{code:'document-codec',message:'Archived document cannot be reconstructed'}],identities:{},strategy:'archived-static'};
   const {compileArchivedStatic}=await import('./conversion/compiled/index.ts');
   const meta=input.meta??{};

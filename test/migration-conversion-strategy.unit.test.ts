@@ -15,3 +15,8 @@ test('archived-static strategy does not call compiler for unsupported data or au
  let calls=0;const convert=createMigrationConverter({strategy:'archived-static',compiler:{compile:async()=>{calls++;throw new Error('not permitted')}}});
  const result=await convert({...input,source:'<Query source="ref:abc123">SELECT * FROM data</Query>'});assert.equal(result.classification,'manual-blocked');assert.equal(result.html,null);assert.equal(calls,0);
 });
+
+test('archived-static unsupported document codecs are explicitly blocked rather than planner errors',async()=>{
+ const convert=createMigrationConverter({strategy:'archived-static',compiler:{compile:async()=>{throw new Error('must not compile');}}});
+ const result=await convert({source:'',document:{schema:999},coreUrl:'/af/v1/core.js'});assert.equal(result.classification,'manual-blocked');assert.equal(result.html,null);
+});

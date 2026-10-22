@@ -2,6 +2,7 @@ import {createHash,randomBytes} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {prepareForSave} from '../page/page-model.ts';
 import {normalizePath} from '../path-model.ts';
+import {planMigrationGroups} from './groups.ts';
 import {planMigrationIdentities,isPreservedNonloginActor} from './identities.ts';
 import type {ImportDestination,MigrationManifest,MigrationMaps,PlannedPage,SqlReader} from './contracts.ts';
 import type {DestinationOptions,DestinationPreparation} from './postgres-contracts.ts';
@@ -58,6 +59,15 @@ export class PostgresMigrationDestination implements ImportDestination {
     if(handle&&/^[a-z0-9]+(-[a-z0-9]+)*$/.test(handle)&&handle.length>=3&&handle.length<=32)await this.db.query('UPDATE accounts SET handle=$2 WHERE actor=$1 AND handle IS NULL AND NOT EXISTS(SELECT 1 FROM accounts WHERE handle=$2)',[actor,handle]);
    }
 
+   for(const group of planMigrationGroups(input.manifest,input.maps.users).groups){
+    if(input.maps.groups[group.legacyId]!==group.actor)throw new Error('Group mapping mismatch');
+    const existingAccount=(await this.db.query('SELECT principal_kind FROM accounts WHERE actor=$1',[group.actor])).rows[0];if(existingAccount&&existingAccount.principal_kind!=='group')throw new Error('Group principal conflicts with existing account');
+    const existingGroup=(await this.db.query('SELECT active FROM groups WHERE owner=$1',[group.actor])).rows[0];if(existingGroup&&existingGroup.active!==group.active)throw new Error('Group activation conflicts with existing authority');
+    const existingMembers=(await this.db.query('SELECT actor,role FROM group_memberships WHERE owner=$1',[group.actor])).rows;if(existingMembers.some(member=>!group.members.some(m=>m.actor===member.actor&&m.role===member.role)))throw new Error('Group membership conflicts with existing authority');
+    await this.db.query("INSERT INTO accounts(actor,principal_kind,name) VALUES($1,'group',$2) ON CONFLICT(actor) DO NOTHING",[group.actor,group.name]);
+    await this.db.query('INSERT INTO groups(owner,active) VALUES($1,$2) ON CONFLICT(owner) DO NOTHING',[group.actor,group.active]);
+    for(const member of group.members)await this.db.query('INSERT INTO group_memberships(owner,actor,role) VALUES($1,$2,$3) ON CONFLICT(owner,actor) DO NOTHING',[group.actor,member.actor,member.role]);
+   }
    for(const folder of input.manifest.artifacts.filter(a=>a.format==='folder'&&!a.deleted_at)){
     const actor=folder.user_id?input.maps.users[folder.user_id]:undefined;if(!actor||folder.group_id)continue;
     const path='/imported/'+[...(Array.isArray(folder.ancestor_ids)?folder.ancestor_ids:[]),folder.id].map(value=>'folder-'+digest(String(value)).slice(0,16)).join('/');
@@ -67,7 +77,7 @@ export class PostgresMigrationDestination implements ImportDestination {
  }
  supportsExactAccess(page:PlannedPage):boolean {
   try{destinationAccess(page,this.maps);normalizePath(publicationPath(page));}catch{return false;}
-  if(page.owner?.kind!=='user'&&page.owner?.kind!=='token')return false;
+  if(page.owner?.kind!=='user'&&page.owner?.kind!=='token'&&page.owner?.kind!=='group')return false;
   if(page.original.deleted_at)return false;
   if(!this.options.editorManageRestricted&&(page.access.linkRole==='editor'||page.access.shares.some(s=>s.role==='editor')))return false;
   return true;
