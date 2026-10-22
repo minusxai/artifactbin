@@ -45,19 +45,23 @@ export async function prepareAuthorBundle(
   if (replacements > 2 || compiled.includes("__mxPageBindings"))
     throw Error("Archived author bridge changed");
   const bindingsPath = fileURLToPath(new URL("./bindings.ts", import.meta.url));
+  const cleanupPath = fileURLToPath(new URL("./cleanup.ts", import.meta.url));
   const entry = `import {setAuthorPorts} from 'author-closure';
-import {createSignal,untrack} from 'solid-js';
+import {createSignal,untrack,createContext,useContext,createComponent} from 'solid-js';
 import {render} from 'solid-js/web';
 import {createAuthorBindings} from ${JSON.stringify(bindingsPath)};
+import {drainAuthorCleanups} from ${JSON.stringify(cleanupPath)};
+const MountScope=createContext(null);
+const reactive={signal:createSignal,untrack,identity:()=>useContext(MountScope),scope:(identity,fn)=>createComponent(MountScope.Provider,{value:identity,get children(){return fn();}})};
 let mounted=false;
 export async function mount(ports,mounts){
  if(mounted)throw Error('Author module already mounted');mounted=true;
- const bindings=createAuthorBindings(ports,${JSON.stringify(names)},{signal:createSignal,untrack});
+ const bindings=createAuthorBindings(ports,${JSON.stringify(names)},reactive);
  setAuthorPorts(bindings);
  const stops=[];const identities=new Set();
- try{const components=await import('authored-module');for(const item of mounts){if(identities.has(item.identity))throw Error('Duplicate author mount identity');identities.add(item.identity);const component=components[item.component];if(typeof component!=='function')throw Error('Unknown author component');stops.push(bindings.mount(item.identity,()=>render(()=>component(item.props??{}),item.element)));}}
- catch(error){for(const stop of stops)stop();bindings.dispose();throw error;}
- return ()=>{for(const stop of stops)stop();bindings.dispose();};
+ try{const components=await import('authored-module');for(const item of mounts){if(identities.has(item.identity))throw Error('Duplicate author mount identity');identities.add(item.identity);const component=components[item.component];if(typeof component!=='function')throw Error('Unknown author component');stops.push(render(()=>bindings.mount(item.identity,()=>component(item.props??{})),item.element));}}
+ catch(error){try{drainAuthorCleanups([...stops.splice(0),()=>bindings.dispose()]);}catch(cleanup){throw new AggregateError([error,cleanup],'Author mount failed');}throw error;}
+ return ()=>drainAuthorCleanups([...stops.splice(0),()=>bindings.dispose()]);
 }`;
   return {
     entry,

@@ -1,3 +1,4 @@
+import { drainAuthorCleanups } from "./cleanup.ts";
 import { assertStorable } from "../../../../apollo/storable.ts";
 import { AF_STATE_URL_LIMIT } from "../../../../apollo/apollo-contracts.ts";
 import type {
@@ -32,7 +33,6 @@ export function createAuthorBindings(
   reactive: ReactivePort,
 ): AuthorBindings {
   let disposed = false;
-  let mount: string | null = null;
   const stops: Array<() => void> = [];
   const rejectPending = new Set<(error: Error) => void>();
   const active = () => {
@@ -47,7 +47,13 @@ export function createAuthorBindings(
     active();
     const existing = state.get(key);
     if (existing) return existing;
+    const validate = (value: unknown): value is AuthorState => {
+      if (key.startsWith("value:") && !scalar(value))
+        throw Error("Declared author state must be scalar");
+      return storable(value);
+    };
     const saved = ports.state.read(key);
+    validate(saved === undefined ? initial : saved);
     const [read, put] = reactive.signal(
       saved === undefined ? initial : saved,
       options,
@@ -57,8 +63,7 @@ export function createAuthorBindings(
       active();
       const value =
         typeof next === "function" ? next(reactive.untrack(read)) : next;
-      if (!storable(value))
-        throw Error("Named author state must be storable JSON");
+      validate(value);
       ports.state.write(key, value);
       put(value);
       return value;
@@ -67,7 +72,7 @@ export function createAuthorBindings(
       ports.state.subscribe(() => {
         if (disposed) return;
         const value = ports.state.read(key);
-        if (value !== undefined && storable(value)) put(value);
+        if (value !== undefined && validate(value)) put(value);
       }),
     );
     const binding: [Accessor<AuthorState>, Setter<AuthorState>] = [read, set];
@@ -104,11 +109,10 @@ export function createAuthorBindings(
     ): [Accessor<T>, Setter<T>] {
       active();
       if (!options?.name) return reactive.signal(value, options);
-      if (!mount) throw Error("Named author signals require a stable mount");
       if (!storable(value))
         throw Error("Named author state must be storable JSON");
       return bound(
-        "author:" + JSON.stringify([mount, options.name]),
+        "author:" + JSON.stringify([reactive.identity(), options.name]),
         value,
         options as SignalOptions<AuthorState>,
       ) as unknown as [Accessor<T>, Setter<T>];
@@ -163,23 +167,21 @@ export function createAuthorBindings(
     mount(identity, render) {
       active();
       if (!identity) throw Error("Missing stable author mount identity");
-      const previous = mount;
-      mount = identity;
-      try {
-        return render();
-      } finally {
-        mount = previous;
-      }
+      return reactive.scope(identity, render);
     },
     dispose() {
       if (disposed) return;
       disposed = true;
-      for (const stop of stops.splice(0)) stop();
-      for (const reject of rejectPending)
-        reject(Error("Author mount disposed"));
-      rejectPending.clear();
-      state.clear();
-      queries.clear();
+      drainAuthorCleanups([
+        ...stops.splice(0),
+        () => {
+          for (const reject of rejectPending)
+            reject(Error("Author mount disposed"));
+          rejectPending.clear();
+          state.clear();
+          queries.clear();
+        },
+      ]);
     },
   };
 }

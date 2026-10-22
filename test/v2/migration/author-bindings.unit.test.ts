@@ -6,7 +6,18 @@ import type {
   QuerySnapshot,
   ReactivePort,
 } from "../../../src/migration/conversion/compiled/author/contracts.ts";
+let identity: string | null = null;
 const reactive: ReactivePort = {
+  identity: () => identity,
+  scope(id, render) {
+    const previous = identity;
+    identity = id;
+    try {
+      return render();
+    } finally {
+      identity = previous;
+    }
+  },
   signal<T>(v: T) {
     let value = v;
     return [
@@ -145,4 +156,49 @@ test("named signals preserve JSON arrays and objects and reject unpersistable va
     ]),
   );
   b.dispose();
+});
+
+test("persisted state is validated before any signal or subscription is created", () => {
+  for (const [key, value] of [
+    ["value:count", { bad: true }],
+    ["author:" + JSON.stringify([null, "saved"]), "x".repeat(256 * 1024)],
+    ["author:" + JSON.stringify([null, "saved"]), new Date()],
+  ] as const) {
+    const f = fixture();
+    f.values.set(key, value);
+    const b = createAuthorBindings(
+      f.ports,
+      { values: ["count"], queries: [], mutations: [] },
+      reactive,
+    );
+    assert.throws(() =>
+      key.startsWith("value:")
+        ? b.signal("$count")
+        : b.createSignal(0, { name: "saved" }),
+    );
+    assert.equal(f.listeners.size, 0);
+    b.dispose();
+  }
+});
+test("disposal drains throwing subscriptions and rejects every pending ready promise", async () => {
+  const f = fixture();
+  const subscribe = f.ports.state.subscribe;
+  f.ports.state.subscribe = (fn) => {
+    const stop = subscribe(fn);
+    return () => {
+      stop();
+      throw Error("cleanup failed");
+    };
+  };
+  const b = createAuthorBindings(
+    f.ports,
+    { values: ["count"], queries: ["rows"], mutations: [] },
+    reactive,
+  );
+  b.signal("$count");
+  const ready = b.query("$rows").ready;
+  assert.throws(() => b.dispose(), AggregateError);
+  await assert.rejects(ready, /disposed/);
+  assert.equal(f.listeners.size, 0);
+  assert.equal(f.queryListeners.size, 0);
 });

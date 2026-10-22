@@ -53,6 +53,8 @@ export interface AuthorBindings {
 export interface ReactivePort {
   signal<T>(value: T, options?: SignalOptions<T>): [Accessor<T>, Setter<T>];
   untrack<T>(read: () => T): T;
+  identity(): string | null;
+  scope<T>(identity: string, render: () => T): T;
 }
 export interface AuthorCompilation {
   code: string;
