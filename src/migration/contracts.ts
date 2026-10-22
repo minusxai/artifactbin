@@ -31,7 +31,7 @@ export interface ConversionOutput {
   outputBytes?:number;
   issues: readonly unknown[];
   identities: Record<string, string>;
-  strategy?: 'strict'|'archived-static'|'media-wrapper';
+  strategy?: 'strict'|'archived-static'|'archived-functional'|'media-wrapper';
   provenance?: {compiler:string;build:string;mode:string};
 }
 export type Converter = (input: ConversionInput) => ConversionOutput | Promise<ConversionOutput>;

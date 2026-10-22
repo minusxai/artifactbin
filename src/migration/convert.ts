@@ -1,23 +1,106 @@
-import type {Converter} from './contracts.ts';
-import {convertLegacyJsx,convertLegacyDocument,legacyDocumentSource} from './conversion/index.ts';
-import type {MigrationConversionOptions} from './conversion-strategy-contracts.ts';
+import type { Converter } from "./contracts.ts";
+import {
+  convertLegacyJsx,
+  convertLegacyDocument,
+  legacyDocumentSource,
+} from "./conversion/index.ts";
+import type { MigrationConversionOptions } from "./conversion-strategy-contracts.ts";
 /** Prefer retained markup; canonical JSON alone must never become an empty page. */
-export const convertMigrationContent: Converter = input => input.source.trim()
- ? convertLegacyJsx({source:input.source,coreUrl:input.coreUrl})
- : input.document !== null && input.document !== undefined
- ? convertLegacyDocument(input.document,{coreUrl:input.coreUrl})
- : {classification:'manual-blocked',html:null,issues:['Missing source content'],identities:{}};
+export const convertMigrationContent: Converter = (input) =>
+  input.source.trim()
+    ? convertLegacyJsx({ source: input.source, coreUrl: input.coreUrl })
+    : input.document !== null && input.document !== undefined
+      ? convertLegacyDocument(input.document, { coreUrl: input.coreUrl })
+      : {
+          classification: "manual-blocked",
+          html: null,
+          issues: ["Missing source content"],
+          identities: {},
+        };
 /** Explicit strategies, never a hidden retry through a less restrictive compiler. */
-export function createMigrationConverter(options:MigrationConversionOptions):Converter {
- if(options.strategy==='strict')return async input=>({...await convertMigrationContent(input),strategy:'strict'});
- if(options.strategy!=='archived-static')throw new Error('Unknown migration conversion strategy');
- if(!options.legacyRoot&&!options.compiler)throw new Error('Archived-static conversion requires an explicit archived compiler root');
- return async input=>{
-  let source:string|null;try{source=input.source.trim()?input.source:legacyDocumentSource(input.document);}catch{source=null;}
-  if(source===null)return {classification:'manual-blocked',html:null,issues:[{code:'document-codec',message:'Archived document cannot be reconstructed'}],identities:{},strategy:'archived-static'};
-  const {compileArchivedStatic}=await import('./conversion/compiled/index.ts');
-  const meta=input.meta??{};
-  const result=await compileArchivedStatic({source,coreUrl:input.coreUrl,resourceMap:input.resourceMap,theme:typeof meta.theme==='string'?meta.theme:null,template:typeof meta.template==='string'?meta.template:null,colorMode:meta.colorMode==='dark'?'dark':'light'},{legacyRoot:options.legacyRoot,compiler:options.compiler});
-  return {...result,strategy:'archived-static'};
- };
+export function createMigrationConverter(
+  options: MigrationConversionOptions,
+): Converter {
+  if (options.strategy === "strict")
+    return async (input) => ({
+      ...(await convertMigrationContent(input)),
+      strategy: "strict",
+    });
+  if (
+    options.strategy !== "archived-static" &&
+    options.strategy !== "archived-functional"
+  )
+    throw new Error("Unknown migration conversion strategy");
+  if (!options.legacyRoot && !options.compiler && !options.localCompiler)
+    throw new Error(
+      "Archived-static conversion requires an explicit archived compiler root",
+    );
+  return async (input) => {
+    let source: string | null;
+    try {
+      source = input.source.trim()
+        ? input.source
+        : legacyDocumentSource(input.document);
+    } catch {
+      source = null;
+    }
+    if (source === null)
+      return {
+        classification: "manual-blocked",
+        html: null,
+        issues: [
+          {
+            code: "document-codec",
+            message: "Archived document cannot be reconstructed",
+          },
+        ],
+        identities: {},
+        strategy: options.strategy,
+      };
+    const { compileArchivedStatic } = await import(
+      "./conversion/compiled/index.ts"
+    );
+    const meta = input.meta ?? {};
+    const compiledInput = {
+      source,
+      coreUrl: input.coreUrl,
+      resourceMap: input.resourceMap,
+      theme: typeof meta.theme === "string" ? meta.theme : null,
+      template: typeof meta.template === "string" ? meta.template : null,
+      colorMode:
+        meta.colorMode === "dark" ? ("dark" as const) : ("light" as const),
+    };
+    const result = await compileArchivedStatic(compiledInput, {
+      legacyRoot: options.legacyRoot,
+      compiler: options.compiler,
+    });
+    if (
+      options.strategy === "archived-static" ||
+      result.classification !== "manual-blocked"
+    )
+      return { ...result, strategy: options.strategy };
+    const { compileArchivedLocal } = await import(
+      "./conversion/compiled/local.ts"
+    );
+    const local = await compileArchivedLocal(compiledInput, {
+      legacyRoot: options.legacyRoot,
+      compiler: options.localCompiler,
+    });
+    if (local.classification !== "manual-blocked")
+      return { ...local, strategy: options.strategy };
+    const routeIssues = (route: string, issues: readonly unknown[]) =>
+      issues.map((issue) =>
+        issue && typeof issue === "object"
+          ? { ...issue, route }
+          : { issue, route },
+      );
+    return {
+      ...local,
+      strategy: options.strategy,
+      issues: [
+        ...routeIssues("archived-static", result.issues),
+        ...routeIssues("archived-local", local.issues),
+      ],
+    };
+  };
 }
