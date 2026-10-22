@@ -18,6 +18,7 @@ export function readLocalIdentityPlan(tree:unknown):LocalDynamicIdentityPlan {
     if(['Helmet','Import','Value','Query','Mutation'].includes(name))return [];
     const attr=(key:string)=>{const a=node.openingElement.attributes.find((a:any)=>a.name?.name===key);return a?controlLiteral(a.value):undefined;};
     const id=attr('id');
+    if(name==='User')return typeof id==='string'?[{kind:'deferred',children:[{kind:'node',id}]}]:[];
     if(name==='DataTable' && node.children.some((n:any)=>n.type==='JSXElement' && n.openingElement.name.name==='Column')){
       const regions:LocalIdentityRegion[]=typeof id==='string'?[{kind:'node',id}]:[];
       const data=attr('data');

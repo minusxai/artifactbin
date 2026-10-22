@@ -1,3 +1,4 @@
+import {validateBoundPersonRouting} from "./person-admission.ts";
 import {readSlideDeckPlan} from "./slide-deck.ts";
 import {prepareAuthorEffects} from "./author/effect-source.ts";
 import {admitLocalComponent} from "./component-admission.ts";
@@ -31,7 +32,7 @@ const activeUri = (v: string) =>
     v.replace(/[\u0000-\u0020\u007f]/g, "").toLowerCase(),
   );
 const allowed = new Set(
-  "SlideDeck Slide Helmet Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "User SlideDeck Slide Helmet Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -85,6 +86,10 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const bindings = input.datasetBindings ?? [];
   if (historical && bindings.length)
     return blocked("compiled-dataset-unavailable-mode");
+  const proofs=input.boundValueColumns??[];
+  const people=input.personBindings??[];
+  if ((historical&&(proofs.length||people.length)) || !validateBoundPersonRouting(proofs,bindings,people)) return blocked("compiled-person-binding");
+  const usedPeople=new Set<string>(),boundValues=new Set<string>();
   const backendLinks = new Map<string, string>();
   if (input.membersBinding) {
     if (historical || !validCompiledMembersBinding(input.membersBinding))
@@ -250,6 +255,10 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           scalarControls.push(...component.scalarControls);
           dataControls.push(...component.dataControls);
           presentationIdentities.push(...component.presentationIdentityHosts);
+          if(component.selectedPerson){
+            if(!people.some(p=>p.valueName===component.selectedPerson))invalid=true;
+            usedPeople.add(component.selectedPerson);
+          }
           if (component.descendantScope) {
             childLoopTable = component.descendantScope.table;
             if (component.descendantScope.key !== undefined) loopKeys.push({table:childLoopTable,key:component.descendantScope.key});
@@ -528,7 +537,8 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           queries.add(attrs.name);
         }
         if (name === "Value") {
-          const declaration = sourceValueDeclaration(node);
+          const declaration = sourceValueDeclaration(node,proofs);
+          if(node.openingElement.attributes.some((a:any)=>a.name?.name==="source"))boundValues.add(declaration.name);
           expectedDeclarations.push(declaration);
           const attrs = Object.fromEntries(
             node.openingElement.attributes.map((a: any) => [
@@ -556,6 +566,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       }
     };
     walk(tree);
+    if(proofs.some(p=>!boundValues.has(p.valueName))||people.some(p=>!usedPeople.has(p.valueName)||expectedDeclarations.find(d=>d.name===p.valueName)?.type!=="user"))invalid=true;
     if (scalarControls.some(control => expectedDeclarations.find(d => d.name === control.binding)?.type !== control.valueType)) invalid = true;
     slideDeck = readSlideDeckPlan(tree);
     dynamicIdentities = readLocalIdentityPlan(tree);

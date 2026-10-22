@@ -11,6 +11,7 @@ export interface LocalComponentContext {
 }
 /** Family-local facts; source traversal owns symbol resolution and lexical scopes. */
 export interface LocalComponentAdmission {
+  readonly selectedPerson?: string;
   readonly references: readonly string[];
   readonly scalarBindings: readonly string[];
   readonly scalarControls: readonly CompiledScalarControl[];

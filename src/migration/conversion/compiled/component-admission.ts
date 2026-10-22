@@ -1,3 +1,4 @@
+import {admitPersonAttributes} from "./person-admission.ts";
 import {admitSlideDeckComponent} from "./slide-deck.ts";
 import { admitScalarControl } from "./scalar-controls.ts";
 import {
@@ -53,7 +54,7 @@ export const admitLocalComponent: AdmitLocalComponent = (input, context) => {
   }
   if (
     !presentationKitComponent(tag) &&
-    !["Segmented", "Switch", "Slider", "Select", "DataTable", "SlideDeck", "Slide"].includes(tag)
+    !["Segmented", "Switch", "Slider", "Select", "DataTable", "SlideDeck", "Slide", "User"].includes(tag)
   )
     return null;
   const attrs = attributes(node);
@@ -67,6 +68,11 @@ export const admitLocalComponent: AdmitLocalComponent = (input, context) => {
     dataControls: [],
     presentationIdentityHosts: [],
   };
+  if (tag === "User") {
+    const name=admitPersonAttributes(attrs,children.length>0);
+    result.references=[name];result.scalarBindings=[name];result.selectedPerson=name;
+    return result;
+  }
   if (["SlideDeck","Slide"].includes(tag)) {
     admitSlideDeckComponent(tag,attrs);
     return result;
