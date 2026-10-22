@@ -1,0 +1,87 @@
+import path from "node:path";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import type { CompiledChartPlan } from "./contracts.ts";
+/** Dev-only bundler inputs. All dependencies are read from the archived, installed compiler. */
+export async function chartRendererSources(
+  archivedRoot: string,
+  plans: readonly CompiledChartPlan[],
+) {
+  const root = path.resolve(archivedRoot, "node_modules");
+  for (const [name, version] of [
+    ["vega-view", "6.1.2"],
+    ["vega-runtime", "7.1.3"],
+    ["vega-interpreter", "2.3.1"],
+  ]) {
+    const pkg = JSON.parse(
+      await readFile(path.join(root, name!, "package.json"), "utf8"),
+    );
+    if (pkg.version !== version)
+      throw Error("Unexpected archived chart dependency version");
+  }
+  const runtimePath = fileURLToPath(new URL("./runtime.ts", import.meta.url));
+  const entry = `import {View} from 'vega-view';
+import {transforms} from 'vega-dataflow';
+import * as tx from 'vega-transforms';
+import * as vtx from 'vega-view-transforms';
+import * as encode from 'vega-encode';
+import {expressionInterpreter} from 'vega-interpreter';
+import {createCompiledCharts} from ${JSON.stringify(runtimePath)};
+Object.assign(transforms,tx,vtx,encode);
+export const charts=createCompiledCharts(${JSON.stringify(plans)},{
+create:(runtime,element)=>new View(runtime,{expr:expressionInterpreter,renderer:'svg',container:element,hover:true,loader:{load:()=>Promise.reject(Error('Chart resource unavailable')),sanitize:()=>Promise.reject(Error('Chart navigation unavailable'))}}),
+observe:(element,resize)=>{const observer=new ResizeObserver(resize);observer.observe(element);return ()=>observer.disconnect();}
+});`;
+  return {
+    entry,
+    plugin: {
+      name: "offline-chart-renderer",
+      setup(b: any) {
+        b.onResolve({ filter: /^vega(?:-[a-z-]+)?$/ }, (args: any) => {
+          if (args.path === "vega-loader")
+            return { path: "chart-no-loader", namespace: "offline-chart" };
+          if (["vega", "vega-parser", "vega-lite"].includes(args.path))
+            throw Error("Chart compiler cannot enter browser bundle");
+          if (
+            [
+              "vega-runtime",
+              "vega-functions",
+              "vega-expression",
+              "vega-interpreter",
+            ].includes(args.path)
+          )
+            return { path: path.join(root, args.path, "index.js") };
+          return undefined;
+        });
+        b.onLoad({ filter: /.*/, namespace: "offline-chart" }, () => ({
+          contents:
+            "const refuse=()=>{throw Error('Chart resource unavailable')};export const loader=()=>({load:refuse,sanitize:refuse});export const read=refuse;export const responseType=refuse;",
+          loader: "js",
+        }));
+        b.onLoad(
+          { filter: /[/\\]vega-expression[/\\]src[/\\]parser\.js$/ },
+          () => ({
+            contents:
+              "export default ()=>{throw Error('Chart expressions must be compiled offline')};",
+            loader: "js",
+          }),
+        );
+        b.onLoad(
+          { filter: /[/\\]vega-expression[/\\]src[/\\]codegen\.js$/ },
+          () => ({
+            contents: "export default ()=>({functions:{}});",
+            loader: "js",
+          }),
+        );
+        b.onLoad(
+          { filter: /[/\\]vega-runtime[/\\]src[/\\]expression\.js$/ },
+          () => ({
+            contents:
+              "const refuse=()=>{throw Error('Compiled charts require the expression interpreter')};export default {operator:refuse,parameter:refuse,event:refuse,handler:refuse,encode:refuse,codegen:{get:refuse,comparator:refuse}};",
+            loader: "js",
+          }),
+        );
+      },
+    },
+  };
+}
