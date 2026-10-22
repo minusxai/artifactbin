@@ -120,7 +120,7 @@ test(
           issues: [],
         }),
       });
-      const archive = new PostgresStreamArchive(db, schema, true);
+      const archive = new PostgresStreamArchive(db, schema, true, {batchRows: 1});
       await archive.initialize();
       const part = {
         table: "artifact_edits",
@@ -140,6 +140,10 @@ test(
       assert.equal(
         await archive.archivePart("fixture", part, records()),
         "unchanged",
+      );
+      assert.deepEqual(
+        (await db.query(`SELECT ordinal::int, record FROM "${schema}_migration".stream_rows WHERE namespace='fixture' AND path='edits-0.ndjson' ORDER BY ordinal`)).rows,
+        [{ordinal:0,record:{artifact_id:"source",removed:"old"}},{ordinal:1,record:{artifact_id:"source",inserted:"new"}}],
       );
       await assert.rejects(
         archive.archivePart(
