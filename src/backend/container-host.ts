@@ -1,3 +1,5 @@
+import { removeBackendContainer } from "./container-cleanup.ts";
+import { dockerCommand } from "./reaper.ts";
 import { deploymentIdentity } from "./deployment-identity.ts";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -61,8 +63,6 @@ const containerArguments = (name: string, imageId: string, network: string, labe
   "--user=10001:10001",
   imageId,
 ];
-const missing = (e: any) =>
-  /No such container|No such object/i.test(e?.stderr ?? "");
 /** The owner's secrets as the sandbox takes them: names that fit the workerd config, bounded values. */
 function checkedEnv(env: BackendEnv): Record<string, string> {
   try {
@@ -71,24 +71,7 @@ function checkedEnv(env: BackendEnv): Record<string, string> {
     throw new BackendHostError("input_quota");
   }
 }
-/** Force-remove a container and prove it is gone. */
-async function removeContainer(name: string): Promise<boolean> {
-  try {
-    try {
-      await exec("docker", ["rm", "-f", name], { timeout: 5000 });
-    } catch (e: any) {
-      if (!missing(e)) throw e;
-    }
-    try {
-      await exec("docker", ["inspect", name], { timeout: 5000 });
-      return false;
-    } catch (e: any) {
-      return missing(e);
-    }
-  } catch {
-    return false;
-  }
-}
+const removeContainer = (name: string) => removeBackendContainer(dockerCommand, name);
 /** A sandbox kept running for the next call of the same backend version. */
 interface Sandbox {
   name: string;
