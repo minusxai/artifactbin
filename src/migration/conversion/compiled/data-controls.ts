@@ -2,8 +2,6 @@ import { readSourceLiteral } from "./source-literal.ts";
 import type {
   CompiledDataControl,
   CompiledDataColumn,
-  CompiledDisplayTable,
-  CompiledDataControlLimits,
 } from "./data-control-contracts.ts";
 const reserved = new Set(["constructor", "prototype", "__proto__"]);
 const ref = (v: unknown) =>
@@ -224,56 +222,7 @@ export function admitDataControl(
     ...(columns ? { columns } : {}),
   };
 }
-/** Select must never quietly offer only a display window of a larger query. */
-export async function completeControlOptions(
-  initial: CompiledDisplayTable,
-  read: (offset: number, limit: number) => Promise<CompiledDisplayTable>,
-  limits: Partial<CompiledDataControlLimits> = {},
-): Promise<CompiledDisplayTable> {
-  const cap = {
-    maxRows: 10000,
-    maxBytes: 1024 * 1024,
-    pageSize: 500,
-    ...limits,
-  };
-  const deadline = Date.now() + 5000;
-  let table = initial,
-    rows = [...initial.rows],
-    bytes = new TextEncoder().encode(JSON.stringify(initial)).byteLength;
-  for (
-    let pages = 0;
-    table.totalRows !== undefined
-      ? rows.length < table.totalRows
-      : table.truncated;
-    pages++
-  ) {
-    if (
-      Date.now() > deadline ||
-      pages > 20 ||
-      rows.length >= cap.maxRows ||
-      bytes > cap.maxBytes
-    )
-      throw Error("Select options exceed the supported limit");
-    table = await read(rows.length, cap.pageSize);
-    if (
-      !table ||
-      JSON.stringify(table.columns) !== JSON.stringify(initial.columns) ||
-      !Array.isArray(table.rows) ||
-      !table.rows.length ||
-      table.totalRows !== initial.totalRows
-    )
-      throw Error("Select option snapshot changed");
-    rows.push(...table.rows);
-    bytes += new TextEncoder().encode(JSON.stringify(table)).byteLength;
-  }
-  if (
-    rows.length > cap.maxRows ||
-    bytes > cap.maxBytes ||
-    (initial.totalRows !== undefined && rows.length !== initial.totalRows)
-  )
-    throw Error("Select options exceed the supported limit");
-  return { ...initial, rows, truncated: false, totalRows: rows.length };
-}
+export { completeControlOptions } from "./control-options.ts";
 
 /** JSX shorthand attributes mean true; all values use the shared bounded grammar. */
 export function controlLiteral(node: any): unknown {
