@@ -1,4 +1,5 @@
 import {readSlideDeckPlan} from "./slide-deck.ts";
+import {prepareAuthorEffects} from "./author/effect-source.ts";
 import {admitLocalComponent} from "./component-admission.ts";
 import {validCompiledMembersBinding} from "./members-binding.ts";
 import type {AdmittedAuthorMountProps} from "./author/prop-contracts.ts";
@@ -58,7 +59,13 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const author = input.authorPlan;
   if (author) {
     try {
-      admitAuthorSource(author.script);
+      if (author.mode === "effects") {
+        if (author.exports.length || author.mounts.length) throw Error("Effect components refused");
+        prepareAuthorEffects(author.script);
+      } else {
+        if (author.mode !== undefined && author.mode !== "components") throw Error("Unknown author mode");
+        admitAuthorSource(author.script);
+      }
       if (
         Buffer.byteLength(author.script) > 1024 * 1024 ||
         author.exports.length > 64 ||
