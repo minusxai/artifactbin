@@ -115,12 +115,12 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
   const fragment = parseFragment(output.html);
   const visit = (node: any) => {
     if (node.tagName) {
-      if (["script", "iframe", "object", "embed"].includes(node.tagName))
+      if (!prototype && ["script", "iframe", "object", "embed"].includes(node.tagName))
         unsafe = true;
       for (const a of [...node.attrs]) {
         if (author && Object.hasOwn(compiledAuthorMountAttributes, a.name))
           a.name = compiledAuthorMountAttributes[a.name];
-        if (
+        if (!prototype && (
           (["href", "src", "action", "formaction", "xlink:href"].includes(
             a.name,
           ) &&
@@ -129,7 +129,7 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
           a.name === "srcdoc" ||
           (!prototype && ["src", "srcset", "poster"].includes(a.name) &&
             !a.value.startsWith("data:"))
-        )
+        ))
           unsafe = true;
         if (a.name === "id") {
           if (Object.hasOwn(identities, a.value)) unsafe = true;
@@ -140,7 +140,7 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
       const authorComponent = node.attrs.find(
         (a: any) => a.name === "data-migration-author-component",
       )?.value;
-      if (authorComponent) {
+      if (authorComponent && !prototype) {
         const id = node.attrs.find((a: any) => a.name === "id")?.value;
         if (
           !author?.mounts.some(
@@ -177,7 +177,7 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
   if(!prototype&&!reconcileSlideDeckHtml(fragment,plan.input.slideDeck))return blocked("compiled-slide-output");
   const initialIdentities = new Set(initialDynamicIdentities(plan.dynamicIdentities, Object.fromEntries(plan.manifest.declarations.map(d => [d.name,d.default]))));
   const allowedIdentities = new Set(allowedInitialDynamicIdentities(plan.dynamicIdentities, Object.fromEntries(plan.manifest.declarations.map(d => [d.name,d.default]))));
-  if (unsafe || (!prototype && ([...initialIdentities].some((id) => !Object.hasOwn(identities, id)) || [...plan.renderedIdentities].some(id => Object.hasOwn(identities,id) && !allowedIdentities.has(id)))) || (author && authorMounts.size !== author.mounts.length))
+  if (unsafe || (!prototype && ([...initialIdentities].some((id) => !Object.hasOwn(identities, id)) || [...plan.renderedIdentities].some(id => Object.hasOwn(identities,id) && !allowedIdentities.has(id)))) || (!prototype && author && authorMounts.size !== author.mounts.length))
     return blocked("compiled-local-output");
   return {
     ok: true,

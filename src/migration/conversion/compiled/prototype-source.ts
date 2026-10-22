@@ -4,6 +4,7 @@ import {sourceValueDeclaration} from './source-manifest.ts';
 import {historicalSourceValueDeclaration} from './historical-bound-value.ts';
 import {readContextReferences} from './context-source.ts';
 import {readStaticMermaidPlans} from './mermaid-source.ts';
+import {readsLegacyViewerMarkup} from './viewer-source.ts';
 import {readSlideDeckPlan} from './slide-deck.ts';
 import type {CompiledMigrationInput} from './contracts.ts';
 import type {AdmittedLocalSource} from './source-admission-contracts.ts';
@@ -46,5 +47,5 @@ export function readPrototypeSource(input:CompiledMigrationInput,backendLinks:Re
  try{mermaids=readStaticMermaidPlans(tree);}catch{/* Use the archived component when no static adapter applies. */}
  try{slideDeck=readSlideDeckPlan(tree);}catch{/* Use compiled presentation behavior. */}
  const dynamicIdentities={regions:[]};
- return {sourceAdmission:'offline-prototype',input:{...input,sourceAdmission:'offline-prototype',contexts,mermaids,slideDeck,dataControls:[],presentationIdentities:[],dynamicIdentities},manifest:{declarations},renderedIdentities:identities,dynamicIdentities,historical,backendLinks,queryNames:queries,datasetNames:imports,mutationNames:mutations,chartCount,vegaCount,author:input.authorPlan,authorProps:[]};
+ return {sourceAdmission:'offline-prototype',input:{...input,sourceAdmission:'offline-prototype',viewerUnavailable:historical&&readsLegacyViewerMarkup(input.source),contexts,mermaids,slideDeck,dataControls:[],presentationIdentities:[],dynamicIdentities},manifest:{declarations},renderedIdentities:identities,dynamicIdentities,historical,backendLinks,queryNames:queries,datasetNames:imports,mutationNames:mutations,chartCount,vegaCount,author:input.authorPlan,authorProps:[]};
 }
