@@ -23,7 +23,7 @@ export function readLocalIdentityPlan(tree:unknown):LocalDynamicIdentityPlan {
       const data=attr('data');
       for(const column of node.children.filter((n:any)=>n.type==='JSXElement')){
         const columnAttr=(key:string)=>{const a=column.openingElement.attributes.find((a:any)=>a.name?.name===key);return a?controlLiteral(a.value):undefined;};
-        const header=columnAttr('id');if(typeof header==='string')regions.push({kind:'node',id:header});
+        const header=columnAttr('id');if(typeof header==='string')regions.push({kind:'deferred',children:[{kind:'node',id:header}]});
         const children=column.children.flatMap((n:any)=>visit(n,depth+1));
         if(children.length){
           const rowKey=attr('rowKey'),col=columnAttr('col');

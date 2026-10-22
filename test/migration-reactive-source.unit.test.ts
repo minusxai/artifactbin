@@ -38,7 +38,7 @@ test('source admission refuses ambient execution, unresolved cells, unscoped row
 test('read-only column markup preserves headers separately from durable cell instances',()=>{
   const result=admitLocalSource({...base,source:prefix+'<DataTable id="table" data="$rows" rowKey="key"><Column id="header" col="label" title="Label"><span id="cell">{$_row.label}</span></Column></DataTable>'});
   assert.ok(result.ok);
-  assert.deepEqual(result.plan.dynamicIdentities.regions,[{kind:'node',id:'table'},{kind:'node',id:'header'},{kind:'cell',owner:'table',table:'rows',rowKey:'key',column:'label',children:[{kind:'node',id:'cell'}]}]);
+  assert.deepEqual(result.plan.dynamicIdentities.regions,[{kind:'node',id:'table'},{kind:'deferred',children:[{kind:'node',id:'header'}]},{kind:'cell',owner:'table',table:'rows',rowKey:'key',column:'label',children:[{kind:'node',id:'cell'}]}]);
   for(const markup of [
     '<Column col="label"><span>{$_row.label}</span></Column>',
     '<DataTable id="table" data="$rows" rowKey="key"><Column col="label" col="key"/></DataTable>',
@@ -90,4 +90,12 @@ test('row buttons may update viewer-local declared scalar state using scoped row
  assert.equal(admitLocalSource({...base,source:head+body('{selected:"$_row.label"}')}).ok,true);
  for(const value of ['{selected:"$_row.missing"}','{missing:"$_row.label"}','{selected:"$_value"}','{selected:"$_row.constructor"}'])assert.equal(admitLocalSource({...base,source:head+body(value)}).ok,false,value);
  assert.equal(admitLocalSource({...base,source:head+'<Button set={{selected:"$_row.label"}}>Pick</Button>'}).ok,false);
+});
+
+import {initialDynamicIdentities,allowedInitialDynamicIdentities} from '../src/migration/conversion/compiled/dynamic-identities.ts';
+test('query table headers remain source-owned when empty previews defer their rendering',()=>{
+ const result=admitLocalSource({...base,source:'<Query name="rows">{`select 1 as key`}</Query><DataTable id="table" data="$rows" rowKey="key"><Column id="header" col="key"/></DataTable>'});
+ assert.ok(result.ok);
+ assert.deepEqual(initialDynamicIdentities(result.plan.dynamicIdentities,{}),['table']);
+ assert.deepEqual(allowedInitialDynamicIdentities(result.plan.dynamicIdentities,{}),['table','header']);
 });
