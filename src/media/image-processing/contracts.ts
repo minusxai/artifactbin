@@ -63,3 +63,7 @@ export interface RasterResult {
   readonly primary: Uint8Array | null;
   readonly small: Uint8Array | null;
 }
+/** Controller-owned cleanup command; never exposed to an uploaded file or app runtime. */
+export interface ImageContainerCommands {
+  (arguments_: readonly string[], timeoutMs: number): Promise<string>;
+}
