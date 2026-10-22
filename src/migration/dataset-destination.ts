@@ -1,3 +1,5 @@
+import { migrationDatasetTablePlans as tablePlans } from "./dataset-table-plans.ts";
+import type { TablePlan } from "./dataset-table-plans.ts";
 import { registerDatasetMutationOperations } from "../persistence/dataset-mutations.ts";
 import { createHash } from "node:crypto";
 import type { SqlReader, LegacyRow } from "./contracts.ts";
@@ -7,12 +9,6 @@ import type {
 } from "./dataset-destination-contracts.ts";
 import { destinationSchemas } from "./destination-schema.ts";
 
-type TablePlan = {
-  table: string;
-  keys: readonly string[];
-  rows: LegacyRow[];
-  json: readonly string[];
-};
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
   if (value && typeof value === "object")
@@ -25,107 +21,6 @@ function canonical(value: unknown): string {
       "}"
     );
   return JSON.stringify(value);
-}
-function tablePlans(batch: DatasetMigrationBatch): TablePlan[] {
-  const m = batch.metadata,
-    n = m.sourceNamespace;
-  const plan = (
-    table: string,
-    keys: string[],
-    rows: LegacyRow[],
-    json: string[] = [],
-  ): TablePlan => ({
-    table,
-    keys,
-    rows: rows.map((row) => ({ source_namespace: n, ...row })),
-    json,
-  });
-  return [
-    plan(
-      "dataset_resources",
-      ["legacy_id"],
-      m.resources.map((r) => ({
-        legacy_id: r.legacyId,
-        current_version: r.currentVersion,
-        policy_revision: r.policyRevision,
-        owner: r.owner,
-        generation: r.generation,
-        access: r.access,
-        deleted: r.deleted,
-        writable: r.writable === true,
-        snapshot: r.snapshot,
-      })),
-      ["access", "snapshot"],
-    ),
-    plan(
-      "dataset_versions",
-      ["legacy_id", "version"],
-      m.versions.map((r) => ({
-        legacy_id: r.legacyId,
-        version: r.version,
-        catalog: r.tables,
-        source_catalog: r.catalog,
-        unavailable_tables: r.unavailableTables,
-      })),
-      ["catalog", "source_catalog", "unavailable_tables"],
-    ),
-    plan(
-      "dataset_principals",
-      ["kind", "legacy_id"],
-      m.principals.map((r) => ({
-        actor: r.actor,
-        kind: r.kind,
-        legacy_id: r.legacyId,
-        identity: r.identity,
-        expires_at:
-          r.expiresAt === null ? null : new Date(r.expiresAt).toISOString(),
-      })),
-    ),
-    plan(
-      "dataset_groups",
-      ["legacy_group_id"],
-      m.groups.map((r) => ({
-        owner: r.owner,
-        legacy_group_id: r.legacyGroupId,
-      })),
-    ),
-    plan(
-      "dataset_pages",
-      ["page_id", "page_version"],
-      m.pages.map((r) => ({
-        page_id: r.pageId,
-        page_version: r.pageVersion,
-        snapshot: r.snapshot,
-      })),
-      ["snapshot"],
-    ),
-    plan(
-      "dataset_bindings",
-      ["backend_id", "backend_version", "page_id", "page_version", "name"],
-      m.bindings.map((r) => {
-        const { tables: _, ...descriptor } = r;
-        return {
-          backend_id: r.backendId,
-          backend_version: r.backendVersion,
-          page_id: r.page.id,
-          page_version: r.page.version,
-          name: r.name,
-          dataset_id: r.dataset.id,
-          dataset_version: r.dataset.version,
-          descriptor,
-        };
-      }),
-      ["descriptor"],
-    ),
-    plan(
-      "dataset_page_joins",
-      ["page_id", "legacy_user_id"],
-      m.acceptedJoins.map((r) => ({
-        page_id: r.pageId,
-        legacy_user_id: r.legacyUserId,
-      })),
-    ),
-  ];
 }
 /** Strict compare-or-insert only. No upserts can restore revoked policy or change attribution. */
 export class PostgresDatasetMetadataDestination
@@ -200,6 +95,8 @@ export class PostgresDatasetMetadataDestination
           const row = r.value as LegacyRow;
           if (p.table === "dataset_principals" && row.expires_at !== null)
             row.expires_at = new Date(String(row.expires_at)).toISOString();
+          if (p.table === "dataset_page_joins" && row.joined_at !== null)
+            row.joined_at = new Date(String(row.joined_at)).toISOString();
           return row;
         });
         const existing = new Map(rows.map((row) => [key(row, p.keys), row]));

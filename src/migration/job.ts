@@ -1,3 +1,4 @@
+import { verifyMigrationJob } from "./job-verification.ts";
 import { prepareMigrationJobDatasets } from "./job-datasets.ts";
 import { writeFile } from "node:fs/promises";
 import { destinationSchemas } from "./destination-schema.ts";
@@ -18,12 +19,14 @@ export async function runMigrationJob(
   ports: MigrationJobPorts = {},
 ): Promise<MigrationJobSummary> {
   destinationSchemas(options.schema);
+  if (options.apply && options.verifyOnly)
+    throw new Error("Choose apply or verify-only");
   if (
     ![1, 2].includes(options.concurrency) ||
     (options.apply && options.concurrency !== 1)
   )
     throw new Error("Destination writes require concurrency 1");
-  if (options.apply && !ports.connectDestination)
+  if ((options.apply || options.verifyOnly) && !ports.connectDestination)
     throw new Error("Explicit isolated destination connection required");
   const source = await prepareMigrationJobSource(options);
   source.preparedDatasets = await prepareMigrationJobDatasets(source, options, {
@@ -64,6 +67,7 @@ export async function runMigrationJob(
     source.maps,
   );
   const planned = await planMigrationJob(source, options, planner, preflight);
+  planned.compilerIdentity = compilerIdentity;
   if ((await identify()) !== compilerIdentity)
     throw new Error(
       "Compiler provenance changed during planning; use frozen source checkouts",
@@ -86,6 +90,27 @@ export async function runMigrationJob(
         planned,
         planner,
         destination,
+        connection.db,
+      );
+      await verifyMigrationJob(
+        source,
+        options,
+        planned,
+        planner,
+        connection.db,
+      );
+    } finally {
+      await connection.close();
+    }
+  }
+  if (options.verifyOnly) {
+    const connection = await ports.connectDestination!();
+    try {
+      await verifyMigrationJob(
+        source,
+        options,
+        planned,
+        planner,
         connection.db,
       );
     } finally {
@@ -115,6 +140,10 @@ export async function runMigrationJob(
       (r) => r.ready && !ready.has(r.pageId),
     ).length,
     readinessReport: options.reportPath + ".readiness.json",
+    verificationReport:
+      options.apply || options.verifyOnly
+        ? options.reportPath + ".verification.json"
+        : undefined,
     result: planned.totals,
     identitySummary: source.identitySummary,
     groupSummary: source.groupSummary,

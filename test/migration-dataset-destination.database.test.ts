@@ -1,3 +1,4 @@
+import { verifyMigrationDatasetMetadata } from "../src/migration/dataset-verification.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -57,6 +58,17 @@ test(
         created: 0,
         unchanged: 1,
       });
+      assert.equal(await verifyMigrationDatasetMetadata(db, schema, batch), 1);
+      await db.query(
+        "UPDATE dataset_principals SET expires_at='2028-01-01' WHERE source_namespace='fixture'",
+      );
+      await assert.rejects(
+        verifyMigrationDatasetMetadata(db, schema, batch),
+        /dataset policy/,
+      );
+      await db.query(
+        "UPDATE dataset_principals SET expires_at='2027-01-01' WHERE source_namespace='fixture'",
+      );
       const changed = structuredClone(batch);
       changed.metadata.principals = [
         { ...batch.metadata.principals[0]!, actor: "other@example.test" },
@@ -121,6 +133,14 @@ test(
           ],
         },
       };
+      bound.metadata.acceptedJoins = [
+        {
+          pageId: "abc123",
+          legacyUserId: "joined-user",
+          joinedAt: "2026-10-21T12:30:00+05:30",
+        },
+        { pageId: "abc123", legacyUserId: "historical-user" },
+      ];
       const binding = bound.metadata.bindings[0]!;
       bound.metadata.operations = [
         {
@@ -141,7 +161,7 @@ test(
         },
       ];
       assert.deepEqual(await destination.import(bound), {
-        created: 2,
+        created: 4,
         unchanged: 0,
       });
       assert.equal(
@@ -153,6 +173,60 @@ test(
         1,
       );
       await destination.import(bound);
+      assert.deepEqual(
+        (
+          await db.query(
+            "SELECT legacy_user_id,joined_at FROM dataset_page_joins ORDER BY legacy_user_id",
+          )
+        ).rows.map((r: { legacy_user_id: string; joined_at: Date | null }) => ({
+          ...r,
+          joined_at: r.joined_at?.toISOString() ?? null,
+        })),
+        [
+          { legacy_user_id: "historical-user", joined_at: null },
+          {
+            legacy_user_id: "joined-user",
+            joined_at: "2026-10-21T07:00:00.000Z",
+          },
+        ],
+      );
+      // Include directly seeded authority rows so the independent verifier checks the full namespace.
+      const verified = structuredClone(bound);
+      verified.metadata.resources = (
+        await db.query(
+          "SELECT * FROM dataset_resources WHERE source_namespace='bound'",
+        )
+      ).rows.map((r: Record<string, unknown>) => ({
+        legacyId: String(r.legacy_id),
+        currentVersion: Number(r.current_version),
+        policyRevision: Number(r.policy_revision),
+        owner: String(r.owner),
+        generation: Number(r.generation),
+        access: r.access,
+        deleted: r.deleted,
+        snapshot: r.snapshot,
+        writable: r.writable,
+      })) as typeof verified.metadata.resources;
+      verified.metadata.versions = [
+        {
+          legacyId: "dataset",
+          version: 1,
+          tables: [],
+          catalog: {},
+          unavailableTables: [],
+        },
+      ];
+      await verifyMigrationDatasetMetadata(db, schema, verified);
+      await db.query(
+        "UPDATE dataset_page_joins SET joined_at='2026-01-01' WHERE legacy_user_id='joined-user'",
+      );
+      await assert.rejects(
+        verifyMigrationDatasetMetadata(db, schema, verified),
+        /dataset policy/,
+      );
+      await db.query(
+        "UPDATE dataset_page_joins SET joined_at='2026-10-21T07:00:00Z' WHERE legacy_user_id='joined-user'",
+      );
       await db.query("DELETE FROM dataset_mutation_operations");
       await assert.rejects(destination.import(bound), /operation was removed/);
       assert.equal(

@@ -4,7 +4,7 @@ import {registerMigrationBackends} from "./backend-preparation.ts";
 import {MAX_PAGE_SOURCE} from '../af-contracts.ts';
 import {createHash,randomBytes} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
-import {prepareForSave} from '../page/page-model.ts';
+import {prepareMigrationPageSources} from "./page-source-preparation.ts";
 import {normalizePath} from '../path-model.ts';
 import {planMigrationGroups} from './groups.ts';
 import {planMigrationIdentities,isPreservedNonloginActor} from './identities.ts';
@@ -105,10 +105,8 @@ export class PostgresMigrationDestination implements ImportDestination {
    if(!current?.conversion.html)throw new Error('Missing converted head');
    // IDs are reserved with ordinary INSERT: existing destination identities can never be overwritten.
    await this.db.query('INSERT INTO file_ids(id,owner,kind,published,created_at) VALUES($1,$2,\'page\',true,$3)',[page.pageId,owner,Number(new Date(String(page.original.created_at??0)))||0]);
-   const path=publicationPath(page);const nodeIds=new Set<string>();
-   for(const r of page.revisions)for(const id of Object.values(r.conversion.identities))nodeIds.add(id);
-   for(const row of page.identities)if(typeof row.source_id==='string')nodeIds.add(row.source_id);
-   const normalized=page.revisions.map(r=>({version:r.version,prepared:prepareForSave(r.conversion.html!,{id:page.pageId,version:r.version,origin:this.options.origin,knownOrigins:[],reserved:nodeIds})}));
+   const path=publicationPath(page);
+   const normalized=prepareMigrationPageSources(page,this.options.origin);
    if(normalized.some(r=>Buffer.byteLength(r.prepared.source)>MAX_PAGE_SOURCE))throw new Error('Normalized HTML exceeds destination source limit');
    const preparedHead=normalized.find(r=>String(r.version)===head)!.prepared;
    const nextNodeId=Number(preparedHead.meta.nextNodeId??1);

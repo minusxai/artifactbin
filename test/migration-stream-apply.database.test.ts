@@ -159,6 +159,59 @@ test(
         1,
       );
       assert.deepEqual(await readFile(join(directory, "media", sha256)), bytes);
+      const verification = JSON.parse(
+        await readFile(report + ".verification.json", "utf8"),
+      );
+      assert.equal(verification.raw.rows, 4);
+      assert.equal(verification.runtime.pages, 2);
+      const verify = (name: string, flag = "--verify-isolated") =>
+        spawnSync(
+          process.execPath,
+          [
+            "--experimental-strip-types",
+            fileURLToPath(
+              new URL("../scripts/migration/import-stream.ts", import.meta.url),
+            ),
+            join(directory, "source"),
+            join(directory, "index"),
+            schema,
+            join(directory, name),
+            flag,
+            "--editor-manage-restricted",
+          ],
+          {
+            encoding: "utf8",
+            env: {
+              PATH: process.env.PATH,
+              MIGRATION_DESTINATION_DATABASE_URL:
+                process.env.MIGRATION_TEST_DATABASE_URL,
+              MIGRATION_PUBLIC_ORIGIN: "http://localhost:8787",
+              MIGRATION_MEDIA_PLAN: join(directory, "plan.json"),
+              MIGRATION_MEDIA_RECEIPTS: join(directory, "receipts.json"),
+              MIGRATION_MEDIA_STAGING_DIRECTORY: join(directory, "media"),
+            },
+          },
+        );
+      const restarted = verify("restart.ndjson", "--apply-isolated");
+      assert.equal(restarted.status, 0, restarted.stderr);
+      const resumed = JSON.parse(
+        await readFile(join(directory, "restart.ndjson.summary.json"), "utf8"),
+      );
+      assert.equal(resumed.result.created, 0);
+      assert.equal(resumed.result.unchanged, 2);
+      const verified = verify("independent.ndjson");
+      assert.equal(verified.status, 0, verified.stderr);
+      await db.query(
+        `UPDATE "${schema}_migration".stream_rows SET record='{}' WHERE ordinal=0`,
+      );
+      const corrupted = verify("corrupted.ndjson");
+      assert.notEqual(corrupted.status, 0);
+      assert.match(corrupted.stderr, /raw row mismatch/);
+      assert.equal(
+        (await db.query(`SELECT count(*)::int AS n FROM "${schema}".files`))
+          .rows[0].n,
+        2,
+      );
     } finally {
       await db.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await db.query(`DROP SCHEMA IF EXISTS "${schema}_migration" CASCADE`);

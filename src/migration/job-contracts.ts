@@ -21,6 +21,8 @@ export interface MigrationJobOptions {
   schema: string;
   reportPath: string;
   apply: boolean;
+  /** Compare existing destination only; cannot be combined with apply. */
+  verifyOnly?: boolean;
   concurrency: 1 | 2;
   origin: string;
   legacyOrigins: readonly string[];
@@ -84,6 +86,7 @@ export interface MigrationJobSummary {
   inventory: JobInventory;
   dependencyBlocked: number;
   readinessReport: string;
+  verificationReport?: string;
   datasets?: {
     imports: MigrationJobDatasets["scan"]["statistics"];
     verifiedObjects: number;

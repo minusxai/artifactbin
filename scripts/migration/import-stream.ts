@@ -9,11 +9,12 @@ const [sourceDirectory, indexDirectory, schema, reportPath, ...flags] =
   process.argv.slice(2);
 if (!sourceDirectory || !indexDirectory || !schema || !reportPath)
   throw new Error(
-    "Usage: node --experimental-strip-types scripts/migration/import-stream.ts <private-export-directory> <private-index-directory> <dedicated-schema> <new-private-report.ndjson> [--apply-isolated] [--editor-manage-restricted] [--conversion-strategy=strict|archived-static|archived-functional] [--concurrency=1|2]",
+    "Usage: node --experimental-strip-types scripts/migration/import-stream.ts <private-export-directory> <private-index-directory> <dedicated-schema> <new-private-report.ndjson> [--apply-isolated|--verify-isolated] [--editor-manage-restricted] [--conversion-strategy=strict|archived-static|archived-functional] [--concurrency=1|2]",
   );
 destinationSchemas(schema);
 const allowed = [
   "--apply-isolated",
+  "--verify-isolated",
   "--editor-manage-restricted",
   "--conversion-strategy=strict",
   "--conversion-strategy=archived-static",
@@ -27,8 +28,13 @@ for (const prefix of ["--conversion-strategy=", "--concurrency="])
   if (flags.filter((f) => f.startsWith(prefix)).length > 1)
     throw new Error("Choose one " + prefix);
 const apply = flags.includes("--apply-isolated");
+const verifyOnly = flags.includes("--verify-isolated");
+if (apply && verifyOnly) throw new Error("Choose apply or verify-only");
 const databaseUrl = process.env.MIGRATION_DESTINATION_DATABASE_URL;
-if (apply && (!databaseUrl || !process.env.MIGRATION_PUBLIC_ORIGIN))
+if (
+  (apply || verifyOnly) &&
+  (!databaseUrl || !process.env.MIGRATION_PUBLIC_ORIGIN)
+)
   throw new Error(
     "Explicit MIGRATION_DESTINATION_DATABASE_URL and MIGRATION_PUBLIC_ORIGIN required",
   );
@@ -52,6 +58,7 @@ const options: MigrationJobOptions = {
   schema,
   reportPath,
   apply,
+  verifyOnly,
   concurrency: flags.includes("--concurrency=2") ? 2 : 1,
   origin: process.env.MIGRATION_PUBLIC_ORIGIN ?? "http://localhost:8787",
   legacyOrigins: (process.env.MIGRATION_LEGACY_ORIGINS ?? "")
@@ -77,20 +84,21 @@ const options: MigrationJobOptions = {
       : undefined,
 };
 const ports: MigrationJobPorts = {
-  connectDestination: apply
-    ? async () => {
-        const require = createRequire(import.meta.url);
-        const { Client } = require("pg");
-        const db = new Client({ connectionString: databaseUrl });
-        try {
-          await db.connect();
-        } catch (error) {
-          await db.end();
-          throw error;
+  connectDestination:
+    apply || verifyOnly
+      ? async () => {
+          const require = createRequire(import.meta.url);
+          const { Client } = require("pg");
+          const db = new Client({ connectionString: databaseUrl });
+          try {
+            await db.connect();
+          } catch (error) {
+            await db.end();
+            throw error;
+          }
+          return { db, close: () => db.end() };
         }
-        return { db, close: () => db.end() };
-      }
-    : undefined,
+      : undefined,
 };
 const summary = await runMigrationJob(options, ports);
 process.stdout.write(JSON.stringify(summary) + "\n");

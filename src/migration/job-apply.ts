@@ -1,9 +1,12 @@
+import { selectMigrationDatasetMetadata } from "./dataset-selection.ts";
 import { PostgresDatasetMetadataDestination } from "./dataset-destination.ts";
 import { rewriteMigrationLinks } from "./links.ts";
 import { open } from "node:fs/promises";
 import { stageMigrationMedia } from "./media.ts";
-import { PostgresStreamArchive } from "./stream-postgres.ts";
-import { readPartRows } from "./stream.ts";
+import {
+  archiveMigrationSources,
+  readMigrationArchiveSources,
+} from "./archive-sources.ts";
 import { applyMigration, migrationPageDigest } from "./import.ts";
 import type { SqlReader } from "./contracts.ts";
 import type { PostgresMigrationDestination } from "./postgres.ts";
@@ -33,14 +36,16 @@ export async function applyMigrationJob(
       await stageMigrationMedia(media.assets, options.media?.stagingDirectory);
     }
 
-    const archive = new PostgresStreamArchive(db, options.schema, true);
-    await archive.initialize();
-    for (const part of manifest.parts)
-      await archive.archivePart(
-        manifest.sourceNamespace,
-        part,
-        readPartRows(options.sourceDirectory, part),
-      );
+    await archiveMigrationSources(
+      db,
+      options.schema,
+      await readMigrationArchiveSources({
+        baseDirectory: options.sourceDirectory,
+        relationDirectory: source.datasets
+          ? options.datasets?.relationDirectory
+          : undefined,
+      }),
+    );
     await destination.prepare({ manifest: base, maps });
     for (const id of ids) {
       if (!ready.has(maps.pages[id]!)) continue;
@@ -80,30 +85,9 @@ export async function applyMigrationJob(
     }
     if (source.preparedDatasets && source.datasets) {
       const metadata = source.preparedDatasets.metadata;
-      const bindings = metadata.bindings.filter((b) => ready.has(b.page.id));
-      const datasets = new Set(bindings.map((b) => b.dataset.id));
       await new PostgresDatasetMetadataDestination(db, options.schema).import({
         ...source.datasets.provenance,
-        metadata: {
-          ...metadata,
-          bindings,
-          operations: metadata.operations?.filter((r) =>
-            bindings.some(
-              (b) =>
-                b.backendId === r.operation.backendId &&
-                b.backendVersion === r.operation.backendVersion &&
-                b.page.id === r.operation.page.id &&
-                b.page.version === r.operation.page.version &&
-                b.name === r.bindingName,
-            ),
-          ),
-          pages: metadata.pages.filter((p) => ready.has(p.pageId)),
-          resources: metadata.resources.filter((r) => datasets.has(r.legacyId)),
-          versions: metadata.versions.filter((v) => datasets.has(v.legacyId)),
-          acceptedJoins: metadata.acceptedJoins.filter((j) =>
-            ready.has(j.pageId),
-          ),
-        },
+        metadata: selectMigrationDatasetMetadata(metadata, ready),
       });
     }
     await applied.sync();

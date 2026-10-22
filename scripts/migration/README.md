@@ -1,0 +1,27 @@
+# Isolated migration operation
+
+The streaming importer copies every original base row into a migration-only archive, including deleted records, unsupported formats and prunable edit history. Supplemental relations are archived separately, with the exact original manifest and independent-snapshot provenance. They are not presented as part of the base transaction. Active HTML pages are admitted only after complete conversion, identity, access and dependency planning.
+
+## Prepare without destination writes
+
+Freeze both converter and archived compiler checkouts, including generated fonts/islands and package locks. Use private source, index, cache, object receipts, origins and report paths; these contain user content. Run `scripts/migration/import-stream.ts` with the explicit archived-functional strategy and all dataset/media inputs, without `--apply-isolated`. Keep the resulting compiler identity, base and supplemental manifest hashes, readiness report, object verification and conversion classifications together. A completed plan does not mean every artifact is functionally supported.
+
+Before applying, independently verify raw source parts against the derived index, verify every staged object against its full SHA-256 and expected size, and review blocked pages and unavailable historical contexts. Close the disk budget using actual final normalized HTML bytes plus raw JSONB, indexes, WAL, backup and rollback headroom. Original NDJSON byte totals and per-source upper bounds alone do not close this gate. The postimport verification report includes actual normalized source bytes, but that is not a preapply capacity estimate.
+
+Use a dedicated destination database and an allowed dedicated runtime schema; never `public` or another reserved schema. Take and verify a restorable destination backup. Preserve source service state until independent verification and cutover review finish. Source snapshots can become stale: do not assume this one-time importer captures subsequent source writes. Freeze source writes or arrange a separately reviewed final consistent export before cutover.
+
+## Apply and restart
+
+Only an explicitly approved apply uses `--apply-isolated`, an explicit database URL and public origin, and concurrency 1. Every manifest and raw part is independently durable. Every page is transactional with its historical sources, comments, assets, backend registrations and durable receipt. Dataset bindings/operations and current authority are imported in their own transaction after pages. There is no global transaction across the corpus.
+
+An interruption may leave earlier parts/pages committed. Reuse exactly the same immutable inputs and compiler provenance, with a **new private report path**, to resume. Existing receipts prevent duplication, but are not proof that actual rows remain correct. Existing authority must match exactly; reruns refuse revoked or changed memberships, principals and policy instead of restoring authority. Do not delete receipts or overwrite live changes to force a rerun.
+
+The importer does not copy legacy passwords, token secrets or sessions. Reserved archival user/token/orphan principals have no credentials, handles or sessions. Group authority is explicit; display-only group links are archived without granting membership. Unsupported/deleted raw rows remain private archive records and are not executable legacy runtime content.
+
+## Independent verification and cutover
+
+A successful apply automatically runs a repeatable-read, read-only verification transaction. `--verify-isolated` instead of `--apply-isolated` independently reruns the same checks against an existing destination; it performs no archive initialization, inserts or repairs. Supply the same source, supplemental relations, object receipts, frozen compilers, cache and origins, with a new report path.
+
+The verifier rehashes original parts and compares every actual archived JSONB row and ordinal, exact part inventories, counts and full manifest provenance. It compares actual normalized historical HTML/identities, page ownership and ACLs, live comments and threads, exact referenced historical context, snapshots, media descriptors, compiled backend content/links, group memberships, nonlogin credential/session exclusion, dataset catalogs and policy, immutable principal mappings, original join timestamps and server mutation descriptors. It refuses missing, changed or extra records even if durable receipts match. It does not execute page scripts or mutate datasets.
+
+A private `.verification.json` is written only after all checks succeed. Preserve it with the plan and independent staged-byte verification. Browser behavior, fresh authorization under revocation, dataset mutations and object delivery still require their own functional evidence; SQL equality is not that evidence. Cut over only after the full readiness, capacity, source-write consistency, behavior and rollback gates are explicitly satisfied. No migration command deploys or changes DNS.
