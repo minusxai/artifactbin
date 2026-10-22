@@ -19,6 +19,7 @@ export interface CompiledMembersOptions {
   changed(snapshot: CompiledMembersSnapshot | null): void;
 }
 export interface CompiledMembersAdapter {
+  /** Failed reads are not cached: the next call starts a fresh request. */
   read(): Promise<CompiledMembersSnapshot>;
   refresh(): Promise<CompiledMembersSnapshot>;
   dispose(): void;

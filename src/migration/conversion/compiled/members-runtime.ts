@@ -56,20 +56,22 @@ export function createCompiledMembers(
     current = null;
     const work = Promise.resolve()
       .then(() => options.read())
-      .then(
-        (value) => {
-          if (disposed || ticket !== epoch) throw unavailable();
-          const next = snapshot(value);
-          current = next;
-          inflight = null;
-          options.changed(structuredClone(next));
-          return structuredClone(next);
-        },
-        () => {
-          if (ticket === epoch) inflight = null;
-          throw unavailable();
-        },
-      );
+      .then((value) => {
+        if (disposed || ticket !== epoch) throw unavailable();
+        const next = snapshot(value);
+        current = next;
+        options.changed(structuredClone(next));
+        return structuredClone(next);
+      })
+      .catch(() => {
+        if (ticket === epoch) current = null;
+        throw unavailable();
+      })
+      .finally(() => {
+        // Validation/publication failures must release this request too. An
+        // obsolete completion must never clear a replacement request.
+        if (ticket === epoch) inflight = null;
+      });
     inflight = work;
     options.changed(null);
     return work;

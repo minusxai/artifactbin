@@ -85,3 +85,46 @@ test("invalid or excessive member responses are refused and never exposed as cur
     adapter.dispose();
   }
 });
+
+test("malformed successful responses release inflight state so the next read can recover", async () => {
+  let calls = 0;
+  const seen: unknown[] = [];
+  const adapter = createCompiledMembers({
+    read: async () =>
+      ++calls === 1 ? { ...first, generation: "invalid" } : empty,
+    watch: () => () => {},
+    changed: (s) => seen.push(s),
+  });
+  await assert.rejects(adapter.read(), /Page members unavailable/);
+  assert.deepEqual(await adapter.read(), empty);
+  assert.equal(calls, 2);
+  assert.deepEqual(seen, [null, null, empty]);
+  adapter.dispose();
+});
+test("obsolete validation failures do not clear a newer inflight read or restore disposed members", async () => {
+  const pending: ((value: unknown) => void)[] = [];
+  const seen: unknown[] = [];
+  const adapter = createCompiledMembers({
+    read: () => new Promise((resolve) => pending.push(resolve)),
+    watch: () => () => {},
+    changed: (s) => seen.push(s),
+  });
+  const old = adapter.read();
+  await Promise.resolve();
+  const next = adapter.refresh();
+  await Promise.resolve();
+  pending[0]!({ ...first, generation: "invalid" });
+  await assert.rejects(old);
+  const joined = adapter.read();
+  assert.equal(pending.length, 2);
+  pending[1]!(empty);
+  assert.deepEqual(await next, empty);
+  assert.deepEqual(await joined, empty);
+  const retired = adapter.refresh();
+  await Promise.resolve();
+  adapter.dispose();
+  pending[2]!(first);
+  await assert.rejects(retired);
+  await assert.rejects(adapter.read());
+  assert.notDeepEqual(seen.at(-1), first);
+});
