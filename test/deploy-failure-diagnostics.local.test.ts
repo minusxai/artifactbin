@@ -71,3 +71,43 @@ else if(args[0]==='logs'){process.stdout.write('startup-error environment-secret
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("secret-file redaction reads at most 64 KiB from each mounted file", () => {
+  const proof = spawnSync(
+    "python3",
+    [
+      "-c",
+      `
+import importlib.util
+import sys
+sys.dont_write_bytecode=True
+from pathlib import Path
+from unittest.mock import patch
+spec=importlib.util.spec_from_file_location("capture", "deploy/capture-rollout-failure.py")
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+class BoundedFile:
+ def __enter__(self):return self
+ def __exit__(self,*args):pass
+ def read(self,limit):
+  assert limit == 65536, "unbounded secret read"
+  return b"bounded-secret"
+class Receipt:
+ def write(self,value):pass
+ def __enter__(self):return self
+ def __exit__(self,*args):pass
+calls=[]
+def command(args, **kwargs):
+ if "ps" in args:return "container"
+ if "inspect" in args:return '[{"Config":{"Env":["SECRET_FILE=/run/secret"]},"Mounts":[{"Destination":"/run/secret","Source":"/private/secret"}],"State":{}}]'
+ return "bounded-secret"
+def secret_open(path,*args,**kwargs):
+ calls.append(str(path));return BoundedFile()
+with patch.object(module,"command",command),patch.object(Path,"open",secret_open),patch.object(Path,"mkdir"),patch.object(Path,"chmod"),patch.object(module.os,"open",return_value=7),patch.object(module.os,"fdopen",return_value=Receipt()):
+ module.capture(Path("/private/receipt"), "a"*40,17,["docker","compose"])
+assert calls == ["/private/secret","/private/secret"]
+`,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(proof.status, 0, proof.stderr);
+});

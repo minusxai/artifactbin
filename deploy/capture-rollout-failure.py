@@ -86,7 +86,8 @@ def capture(root: Path, revision: str, status: int, compose: list[str]) -> Path:
                     for mount in mounts:
                         if mount.get("Destination") == destination:
                             try:
-                                secrets.append(Path(mount["Source"]).read_bytes()[:65536].decode().strip())
+                                with Path(mount["Source"]).open("rb") as stream:
+                                    secrets.append(stream.read(65536).decode().strip())
                             except (OSError, UnicodeError):
                                 pass
             evidence["image"] = container.get("Config", {}).get("Image")
