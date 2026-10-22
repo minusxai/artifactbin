@@ -7,6 +7,8 @@ import type {
 export interface DestinationOptions {
   ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride;
   schema: string;
+  /** Immutable source identity for pure access preflight before any destination is opened. */
+  sourceNamespace?: string;
   /** Trusted operator role for runtime schema DDL only; archive/data work retains the connecting role. */
   runtimeOwnerRole?: string;
   origin: string;

@@ -98,6 +98,7 @@ export async function runMigrationJob(
   );
   const destinationOptions = {
     schema: options.schema,
+    sourceNamespace: source.manifest.sourceNamespace,
     runtimeOwnerRole: options.runtimeOwnerRole,
     ownershipOverride: options.ownershipOverride,
     origin: options.origin,

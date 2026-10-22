@@ -42,7 +42,7 @@ export class PostgresMigrationDestination implements ImportDestination {
  private readonly db:SqlReader;
  private readonly options:DestinationOptions;
  private readonly names:DestinationSchemas;
- constructor(db:SqlReader,options:DestinationOptions,maps?:MigrationMaps){if(options.runtimeOwnerRole !== undefined && !/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(options.runtimeOwnerRole))throw Error("Invalid runtime owner role");this.names=destinationSchemas(options.schema);this.db=db;this.options={...options};if(maps)this.maps=maps;}
+ constructor(db:SqlReader,options:DestinationOptions,maps?:MigrationMaps){if(options.runtimeOwnerRole !== undefined && !/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(options.runtimeOwnerRole))throw Error("Invalid runtime owner role");this.names=destinationSchemas(options.schema);this.db=db;this.options={...options};this.namespace=options.sourceNamespace??'';if(maps)this.maps=maps;}
  private get schema(){return this.names.runtime}
  private get archive(){return this.names.archive}
  private async transaction<T>(operation:()=>Promise<T>):Promise<T>{
@@ -51,6 +51,7 @@ export class PostgresMigrationDestination implements ImportDestination {
  }
  async prepare(input:DestinationPreparation):Promise<void>{
   if(!this.options.isolated)throw new Error('An explicitly isolated destination is required');
+  if(this.options.sourceNamespace!==undefined&&this.options.sourceNamespace!==input.manifest.sourceNamespace)throw Error("Destination source namespace differs");
   this.maps=input.maps;this.namespace=input.manifest.sourceNamespace;
   const schemaSql=await readFile(new URL('../schema.sql',import.meta.url),'utf8');
   await this.transaction(async()=>{
