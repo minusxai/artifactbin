@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { KNOWN_AF_ORIGINS } from "./af-contracts.ts";
 import { createBackendHost } from "./backend/container-host.ts";
+import { remoteDatasetSqlExecutor } from "./backend/dataset-sql-transport.ts";
 import { remoteBackendHost } from "./backend/execution-service.ts";
 import { loadResourceConfiguration } from "./connectors/config.ts";
 import { withCapabilityAuthority } from "./backend/capability-authority.ts";
@@ -35,7 +36,7 @@ export function serviceConfig(env = process.env) {
     from = env.PAGEGI_EMAIL_FROM;
   if (Boolean(key) !== Boolean(from))
     throw Error("Configure both PAGEGI_RESEND_API_KEY and PAGEGI_EMAIL_FROM");
-  let backendHost;
+  let backendHost, datasetSqlExecutor;
   if (env.PAGEGI_BACKEND_EXECUTOR === "remote") {
     let secret = env.PAGEGI_EXECUTION_SECRET;
     if (env.PAGEGI_EXECUTION_SECRET_FILE) {
@@ -50,6 +51,13 @@ export function serviceConfig(env = process.env) {
       !secret
     )
       throw Error("Configure execution transport and secret");
+    const transport = {
+      endpoint: env.PAGEGI_EXECUTION_ENDPOINT,
+      socketPath: env.PAGEGI_EXECUTION_SOCKET,
+      secret,
+    };
+    if (env.PAGEGI_DATASET_MUTATION_DIRECTORY)
+      datasetSqlExecutor = remoteDatasetSqlExecutor(transport);
     backendHost = remoteBackendHost({
       endpoint: env.PAGEGI_EXECUTION_ENDPOINT,
       socketPath: env.PAGEGI_EXECUTION_SOCKET,
@@ -61,6 +69,13 @@ export function serviceConfig(env = process.env) {
       sandboxNetwork: env.PAGEGI_SANDBOX_NETWORK || undefined,
     });
   }
+  if (
+    env.PAGEGI_DATASET_MUTATION_DIRECTORY &&
+    (!datasetSqlExecutor || !env.PAGEGI_DATASET_DIRECTORY)
+  )
+    throw Error(
+      "Dataset mutation storage requires remote execution and source storage",
+    );
   if (env.PAGEGI_RESOURCE_CONFIG) {
     if (!backendHost)
       throw Error("Resource configuration requires backend execution");
@@ -86,6 +101,12 @@ export function serviceConfig(env = process.env) {
       ? { datasetDirectory: env.PAGEGI_DATASET_DIRECTORY }
       : {}),
     ...(backendHost ? { backendHost } : {}),
+    ...(datasetSqlExecutor
+      ? {
+          datasetSqlExecutor,
+          datasetMutationDirectory: env.PAGEGI_DATASET_MUTATION_DIRECTORY,
+        }
+      : {}),
     ...(secretsKey ? { secretsKey } : {}),
     schema: env.PAGEGI_DATABASE_SCHEMA || "public",
     platformOrigin: env.PAGEGI_PLATFORM_ORIGIN,

@@ -285,6 +285,9 @@ export interface AfServiceOptions {
   mediaDirectory?: string;
   /** Dedicated immutable dataset object mount; absent configuration denies dataset reads. */
   datasetDirectory?: string;
+  /** App-only writable content-addressed overlay; requires remote SQL execution. */
+  datasetMutationDirectory?: string;
+  datasetSqlExecutor?: import("../backend/dataset-sql-contracts.ts").DatasetSqlExecutor;
   /** Random source for file IDs; tests may inject a deterministic one. */
   randomBytes?: (count: number) => Uint8Array;
 }

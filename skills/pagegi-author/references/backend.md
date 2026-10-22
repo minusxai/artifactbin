@@ -173,3 +173,9 @@ A field that failed in the platform keeps the error message "Backend execution f
 | `backend_unavailable` | `rejected` or `unknown` | The platform could not run backends just then. Try again later. |
 
 When the caller is the page's owner, the error also carries `extensions.detail`: the first line of what the backend said (for `backend_rejected`, the thrown error's message), at most 200 characters, never source or a stack. Everyone else gets the code alone, so a page must not rely on `detail` being there.
+
+### Registered dataset mutations
+
+A backend with a server-registered dataset operation can call `await caps.dataset.mutate({ operation: "rename", requestId, params: { name: "Updated" } })`. The operation name selects a saved SQL operation tied to this backend version and page revision. The request contains no SQL, dataset identity, caller identity or policy. Parameters are named JSON scalars; reserved policy parameters cannot be supplied. Use a stable request ID of 16–128 letters, digits, underscores or hyphens for retries of the same operation and parameters.
+
+The result contains `affected`, `rowCount`, `version` and `generation`. Repeating the same request returns its committed receipt after current access is checked. Missing registrations, revoked access and stale page revisions are denied. A concurrent row change may return `dataset_changed`; refresh authoritative data before another attempt. Successful writes preserve prior dataset versions and notify pages with current live bindings.

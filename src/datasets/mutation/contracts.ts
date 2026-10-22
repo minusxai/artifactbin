@@ -58,6 +58,13 @@ export interface DatasetMutationResult {
   version: number;
   generation: number;
 }
+export interface DatasetMutationService {
+  mutate(
+    context: DatasetCallContext,
+    request: unknown,
+    signal?: AbortSignal,
+  ): Promise<DatasetMutationResult>;
+}
 export interface DatasetMutationLease {
   id: string;
   attempt: number;

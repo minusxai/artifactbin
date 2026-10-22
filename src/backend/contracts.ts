@@ -97,6 +97,11 @@ export type BackendCapabilityRequest =
       kind: "dataset";
       operation: "read";
       input: import("../datasets/contracts.ts").DatasetReadRequest;
+    }
+  | {
+      kind: "dataset";
+      operation: "mutate";
+      input: import("../datasets/mutation/contracts.ts").DatasetMutationRequest;
     };
 /**
  * `caps.store`: the backend file's one JSON document, kept by the platform.

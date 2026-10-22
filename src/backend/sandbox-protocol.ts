@@ -85,6 +85,56 @@ function checkedCapabilityFrame(
   }
   if (req.kind === "dataset") {
     const input = req.input;
+    if (req.operation === "mutate") {
+      if (
+        Object.keys(req).sort().join() !== "input,kind,operation" ||
+        !record(input) ||
+        Object.keys(input).sort().join() !== "operation,params,requestId" ||
+        typeof input.operation !== "string" ||
+        !input.operation ||
+        input.operation.length > 128 ||
+        typeof input.requestId !== "string" ||
+        !/^[A-Za-z0-9_-]{16,128}$/.test(input.requestId) ||
+        !record(input.params) ||
+        Object.keys(input.params).length > 256
+      )
+        throw Error();
+      const params: Record<string, string | number | boolean | null> = {};
+      for (const [key, value] of Object.entries(input.params)) {
+        if (
+          !key ||
+          key.length > 128 ||
+          key.startsWith("__policy_") ||
+          key.startsWith("_me__") ||
+          key === "_now" ||
+          !(
+            value === null ||
+            typeof value === "string" ||
+            typeof value === "boolean" ||
+            (typeof value === "number" && Number.isFinite(value))
+          )
+        )
+          throw Error();
+        Object.defineProperty(params, key, {
+          value,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
+      return {
+        id,
+        request: {
+          kind: "dataset",
+          operation: "mutate",
+          input: {
+            operation: input.operation,
+            requestId: input.requestId,
+            params,
+          },
+        },
+      };
+    }
     if (
       req.operation !== "read" ||
       Object.keys(req).sort().join() !== "input,kind,operation" ||

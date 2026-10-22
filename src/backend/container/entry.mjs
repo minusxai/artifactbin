@@ -168,6 +168,8 @@ export default {
             dataset: Object.freeze({
               read: async (input) =>
                 capability({ kind: "dataset", operation: "read", input }),
+              mutate: async (input) =>
+                capability({ kind: "dataset", operation: "mutate", input }),
             }),
             // This backend file's one JSON document, kept by the platform.
             store: Object.freeze({

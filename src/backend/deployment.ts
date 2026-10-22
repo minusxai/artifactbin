@@ -16,11 +16,11 @@ import {
  * (src/backend/af-files.ts) and keeps its version.
  */
 export const BACKEND_RUNTIME =
-  "workerd@1.20261019.1/esbuild@0.25.12/protocol@3";
+  "workerd@1.20261019.1/esbuild@0.25.12/protocol@4";
 export const digest = (text: string) =>
   createHash("sha256").update(text).digest("hex");
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-// protocol@3: npm modules bundled in, `env` bindings, public network.
+// protocol@4: named dataset mutation capabilities and trusted dataset-change failures.
 const CURRENT = new RegExp(
   "^" + escape(BACKEND_RUNTIME) + "(?:/image:(sha256:[a-f0-9]{64}))?$",
 );

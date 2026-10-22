@@ -1,7 +1,7 @@
-import { createDatasetReadRepository } from "./persistence/datasets.ts";
-import { createReadonlyDatasetObjectStore } from "./datasets/object-store.ts";
-import { createDatasetReadService } from "./datasets/service.ts";
-import { DatasetReadError } from "./datasets/contracts.ts";
+import { createDatasetRuntime } from "./datasets/runtime.ts";
+import { createDatasetInvalidationReader } from "./persistence/dataset-invalidations.ts";
+import { createBackendStoreInvalidationReader } from "./persistence/backend-store-invalidations.ts";
+import { createLiveInvalidationConsumer } from "./live-invalidation.ts";
 import { createTrashService } from "./trash/service.ts";
 // @ts-check
 import { parseRequestBody, parseFileRoute } from "./server/request.ts";
@@ -90,6 +90,8 @@ export function createService({
   secretsKey,
   mediaDirectory,
   datasetDirectory,
+  datasetMutationDirectory,
+  datasetSqlExecutor,
   testLogin = false,
   knownOrigins = [DEFAULT_AF_ORIGIN],
   randomBytes = (count) => new Uint8Array(cryptoRandomBytes(count)),
@@ -160,12 +162,13 @@ export function createService({
   const ids = createIdReservationStore(repository.sql, { randomBytes, now });
   /** @type {Promise<import("./server/af-api-contracts.ts").AfRouteModule | null> | undefined} */
   let backendRoutes;
-  const datasets = datasetDirectory
-    ? createDatasetReadService({
-        ...createDatasetReadRepository(repository.sql, now),
-        read: createReadonlyDatasetObjectStore(datasetDirectory).read,
-      })
-    : { read: async () => { throw new DatasetReadError("denied"); } };
+  const datasetRuntime = createDatasetRuntime({
+    database: repository.sql,
+    sourceDirectory: datasetDirectory,
+    mutationDirectory: datasetMutationDirectory,
+    executor: datasetSqlExecutor,
+    now,
+  });
   const backendRouteModule = () =>
     (backendRoutes ||= backendFilesModule.optional().then((module) =>
       module
@@ -173,7 +176,8 @@ export function createService({
             database: repository.sql,
             host: backendHost,
             caller: createPageCaller(now),
-            datasets,
+            datasets: datasetRuntime.reads,
+            datasetMutations: datasetRuntime.mutations,
             secrets: secretsStore && ((client, owner) => secretsStore.env(client, owner)),
           })
         : null,
@@ -713,6 +717,21 @@ export function createService({
     authorize: (id, token, revision) =>
       collaboration.authorizeLive(id, token, revision),
   });
+  /** @type {import('./live-invalidation-contracts.ts').LiveInvalidationConsumer[]} */
+  const invalidations = [];
+  const startInvalidations = () => {
+    for (const reader of [
+      createDatasetInvalidationReader(repository.sql),
+      createBackendStoreInvalidationReader(repository.sql),
+    ])
+      invalidations.push(
+        createLiveInvalidationConsumer({
+          reader,
+          changed: (id) => live.changed(id),
+        }),
+      );
+  };
+  server.once("listening", startInvalidations);
   /** @type {Promise<void> | undefined} */
   let closing;
   return {
@@ -726,10 +745,19 @@ export function createService({
           () => live.close(),
           () => runners.close(),
           () => backendHost?.close?.(),
-          () => repository.close(),
+          () => {
+            server.off("listening", startInvalidations);
+            return Promise.all(
+              invalidations.map((consumer) => consumer.close()),
+            );
+          },
+          () => datasetRuntime.close(),
         ].map((dispose) => Promise.resolve().then(dispose)),
-      ).then((results) => {
-        const failed = results.find((result) => result.status === "rejected");
+      ).then(async (results) => {
+        const databaseCleanup = await Promise.allSettled([repository.close()]);
+        const failed = [...results, ...databaseCleanup].find(
+          (result) => result.status === "rejected",
+        );
         if (failed?.status === "rejected") throw failed.reason;
       });
       return closing;

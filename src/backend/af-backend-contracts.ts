@@ -159,6 +159,7 @@ export interface BackendFilesModule {
     secrets?: import("../server/secrets-contracts.ts").SecretsEnvPort;
     /** Explicit server binding service; absent means every dataset capability is denied. */
     datasets?: import("../datasets/contracts.ts").DatasetReadService;
+    datasetMutations?: import("../datasets/mutation/contracts.ts").DatasetMutationService;
     /** B's resolver from credential to caller, so C never parses tokens itself. */
     caller(
       client: SqlClient,
