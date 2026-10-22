@@ -99,3 +99,24 @@ test("initial observer failure propagates after draining both subscriptions and 
   });
   assert.equal(f.listeners.size, 0);
 });
+
+test('opt-in refresh clears sensitive remote identity synchronously and suppresses obsolete receipts',async()=>{
+ const state=createLocalStore({});let notify=()=>{};const jobs:Array<(value:any)=>void>=[];const seen:any[]=[];
+ const watch=createQueryWatch<{backend:unknown}>({state,signature:()=>'',local:()=>({}),empty:{backend:null},clearOnRefresh:true,remote:{acquire:()=>()=>{},subscribe:f=>{notify=f;return()=>{};},fetch:()=>new Promise(resolve=>jobs.push(resolve))}});
+ const sub=watch.subscribe(result=>seen.push(result.data.backend));
+ jobs.shift()!({data:{backend:{id:'first'}}});for(let i=0;i<5;i++)await Promise.resolve();assert.deepEqual(seen.at(-1),{id:'first'});
+ notify();assert.equal(seen.at(-1),null);notify();assert.equal(seen.at(-1),null);
+ jobs.shift()!({data:{backend:{id:'obsolete'}}});for(let i=0;i<5;i++)await Promise.resolve();assert.equal(seen.at(-1),null);
+ jobs.shift()!({data:{backend:{id:null}}});for(let i=0;i<5;i++)await Promise.resolve();assert.deepEqual(seen.at(-1),{id:null});
+ sub.unsubscribe();notify();assert.deepEqual(seen.at(-1),{id:null});
+});
+
+test('opt-in refresh failures retain empty identity and disposed requests cannot publish',async()=>{
+ const state=createLocalStore({});let notify=()=>{};let resolve!:(value:any)=>void;let reject!:(error:Error)=>void;const seen:any[]=[];
+ const watch=createQueryWatch<{backend:unknown}>({state,signature:()=>'',local:()=>({}),empty:{backend:null},clearOnRefresh:true,remote:{acquire:()=>()=>{},subscribe:f=>{notify=f;return()=>{};},fetch:()=>new Promise((a,b)=>{resolve=a;reject=b;})}});
+ const sub=watch.subscribe(result=>seen.push(result));reject(Error('revoked'));for(let i=0;i<5;i++)await Promise.resolve();assert.equal(seen.at(-1).data.backend,null);assert.equal(seen.at(-1).errors.length,1);
+ notify();assert.equal(seen.at(-1).data.backend,null);assert.equal(seen.at(-1).errors,undefined);const count=seen.length;sub.unsubscribe();resolve({data:{backend:{id:'late'}}});for(let i=0;i<5;i++)await Promise.resolve();assert.equal(seen.length,count);
+});
+test('clearOnRefresh has no effect on local-only query publications',async()=>{
+ const state=createLocalStore({count:1});const seen:any[]=[];const sub=createQueryWatch({state,clearOnRefresh:true,signature:d=>String(d.count),local:d=>d,empty:{}}).subscribe(r=>seen.push(r.data));await state.write({expected:{count:1},next:{count:2}});assert.deepEqual(seen,[{count:1},{count:2}]);sub.unsubscribe();
+});

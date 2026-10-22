@@ -453,9 +453,11 @@ export function createClient(options: ClientOptions): AfClient {
   function watchQuery<T>({
     query: document,
     variables,
+    clearOnRefresh,
   }: {
     query: DocumentNode;
     variables?: Variables;
+    clearOnRefresh?: boolean;
   }): ObservableQuery<T> {
     const op = operation(document, variables);
     if (op.node.operation !== "query")
@@ -466,6 +468,7 @@ export function createClient(options: ClientOptions): AfClient {
     const names = [...new Set(localFields.map((field) => field.name.value))];
     read(localFields, op, {});
     const watched = createQueryWatch<T>({
+      clearOnRefresh,
       state,
       signature: (current) =>
         names.map((name) => canonical(own(current, name))).join("\u0000"),

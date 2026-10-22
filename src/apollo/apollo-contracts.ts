@@ -16,6 +16,8 @@ import type { AfJson, AfJsonObject, Outcome } from "../af-contracts.ts";
 export type Variables = AfJsonObject;
 
 export interface QueryOptions {
+  /** watchQuery only: synchronously clear remote fields before each refresh. */
+  clearOnRefresh?: boolean;
   query: DocumentNode;
   variables?: Variables;
 }

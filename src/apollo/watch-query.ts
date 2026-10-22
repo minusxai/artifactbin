@@ -5,6 +5,7 @@ import type {
   StatePort,
 } from "./apollo-contracts.ts";
 export interface QueryWatchOptions {
+  clearOnRefresh?:boolean;
   state: StatePort;
   signature(document: AfJsonObject): string;
   local(document: AfJsonObject): AfJsonObject;
@@ -65,6 +66,7 @@ export function createQueryWatch<T>(
       const refresh = () => {
         if (!active || !options.remote) return;
         generation++;
+        if(options.clearOnRefresh){snapshot={data:options.empty};publish();if(!active)return;}
         dirty = true;
         if (running) return;
         running = true;
