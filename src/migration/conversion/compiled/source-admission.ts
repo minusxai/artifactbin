@@ -1,3 +1,4 @@
+import{readContextReferences}from"./context-source.ts";
 import{validCompiledViewerBinding}from"./viewer-binding.ts";
 import{readsLegacyViewerMarkup}from"./viewer-source.ts";
 import {readStaticMermaidPlans} from "./mermaid-source.ts";
@@ -36,7 +37,7 @@ const activeUri = (v: string) =>
     v.replace(/[\u0000-\u0020\u007f]/g, "").toLowerCase(),
   );
 const allowed = new Set(
-  "Mermaid User SlideDeck Slide Helmet Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "Mermaid User SlideDeck Slide Helmet Context Import Value Query Mutation Question Chart Select Segmented Switch Slider DataTable Column For Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -174,6 +175,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const loopTables = new Set<string>();
   const loopKeys: {table:string;key:string}[] = [];
   const rowReads: {table:string;field:string}[] = [];
+  let contexts:readonly import("./context-contracts.ts").CompiledContextReference[]=[];
   let mermaids: readonly import("./mermaid-contracts.ts").CompiledMermaidPlan[]=[];
   let slideDeck: import("./slide-deck-contracts.ts").CompiledSlideDeck | undefined;
   let dynamicIdentities: import("./reactive-source-contracts.ts").LocalDynamicIdentityPlan = {regions:[]};
@@ -218,6 +220,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     const tree = Parser.extend(jsx()).parseExpressionAt(text, 0, {
       ecmaVersion: "latest",
     }) as any;
+    contexts=readContextReferences(tree);
     if (tree.end !== text.length) return blocked("compiled-source");
     const authorPaths = new Set<string>();
     const authorAttributes = new WeakSet<object>();
@@ -304,7 +307,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
             !author?.exports.includes(name))
         )
           invalid = true;
-        if (!["Helmet", "Value", "Query", "Import", "Mutation"].includes(name)) {
+        if (!["Helmet", "Context", "Value", "Query", "Import", "Mutation"].includes(name)) {
           const ids = node.openingElement.attributes.filter((a: any) => a.name?.name === "id");
           if (ids.length > 1) invalid = true;
           for (const attribute of ids) {
@@ -655,7 +658,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     )
   )
     return blocked("compiled-data-control");
-  input = { ...input, viewerUnavailable:historical&&viewerMarkup, mermaids, slideDeck, dataControls, dynamicIdentities, presentationIdentities };
+  input = { ...input, contexts, viewerUnavailable:historical&&viewerMarkup, mermaids, slideDeck, dataControls, dynamicIdentities, presentationIdentities };
   return {
     ok: true,
     plan: {

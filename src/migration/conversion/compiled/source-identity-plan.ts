@@ -15,7 +15,7 @@ export function readLocalIdentityPlan(tree:unknown,viewer=false):LocalDynamicIde
     }
     if(node.type!=='JSXElement')return [];
     const name=node.openingElement.name.name;
-    if(['Helmet','Import','Value','Query','Mutation'].includes(name))return [];
+    if(['Helmet','Context','Import','Value','Query','Mutation'].includes(name))return [];
     const attr=(key:string)=>{const a=node.openingElement.attributes.find((a:any)=>a.name?.name===key);return a?controlLiteral(a.value):undefined;};
     const id=attr('id');
     if(name==='User')return typeof id==='string'?[{kind:'deferred',children:[{kind:'node',id}]}]:[];

@@ -33,3 +33,11 @@ test('supporting references follow ready target mapping, explicit legacy fallbac
   assert.throws(()=>rewriteMigrationLinks(html,activeMaps,{...options,legacyOrigins:[],readyPages:new Set()}),/Supporting document requires legacy origin/);
  }
 });
+
+import{admitLocalSource}from'../src/migration/conversion/compiled/source-admission.ts';
+test('source admission derives supporting references and overwrites caller context metadata',()=>{
+ const source='<Helmet><Context src="ref:Ab1234"/><Value name="n" type="number" default={1}/></Helmet><p id="body">{$n}</p>';
+ const result=admitLocalSource({source,coreUrl:'/af/v1/core.js',contexts:[{legacyId:'Forged'}]});assert.ok(result.ok);assert.deepEqual(result.plan.input.contexts,[{legacyId:'Ab1234'}]);
+ const empty=admitLocalSource({source:'<Value name="n"/><p>None</p>',coreUrl:'/af/v1/core.js',contexts:[{legacyId:'Forged'}]});assert.ok(empty.ok);assert.deepEqual(empty.plan.input.contexts,[]);
+ assert.equal(admitLocalSource({source:'<Value name="n"/><Context src="ref:Ab1234"/>',coreUrl:'/af/v1/core.js'}).ok,false);
+});
