@@ -1,3 +1,4 @@
+import { originalMigrationOwner, resolveMigrationOwnership, validateMigrationOwnershipOverride } from "./ownership-override.ts";
 import { ensureSchema } from "../persistence/schema.ts";
 import {projectMigrationCommentState} from "./comment-state.ts";
 import {legacyDocumentSource} from "./conversion/index.ts";
@@ -71,10 +72,18 @@ export class PostgresMigrationDestination implements ImportDestination {
    await ensureSchema(this.db, this.options.schema + "_migration");
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.archives(namespace text PRIMARY KEY,digest text NOT NULL,manifest jsonb NOT NULL,maps jsonb NOT NULL)`);
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.receipts(key text PRIMARY KEY,digest text NOT NULL,page_id text NOT NULL,imported_at timestamptz NOT NULL DEFAULT now())`);
+   await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.ownership_assignments(namespace text NOT NULL,page_id text NOT NULL,assignment jsonb NOT NULL,PRIMARY KEY(namespace,page_id))`);
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.comment_states(namespace text NOT NULL,page_id text NOT NULL,comment_id text NOT NULL,original_revision text NOT NULL,raw jsonb NOT NULL,replay jsonb NOT NULL,PRIMARY KEY(namespace,page_id,comment_id))`);
    const text=JSON.stringify(input.manifest);const old=(await this.db.query(`SELECT digest FROM ${this.archive}.archives WHERE namespace=$1 FOR UPDATE`,[this.namespace])).rows[0];
    if(old&&old.digest!==digest(text))throw new Error('Source archive changed; use a new migration namespace');
    if(!old)await this.db.query(`INSERT INTO ${this.archive}.archives VALUES($1,$2,$3::jsonb,$4::jsonb)`,[this.namespace,digest(text),text,JSON.stringify(input.maps)]);
+   validateMigrationOwnershipOverride(this.options.ownershipOverride,input.manifest.sourceNamespace);
+   if(this.options.ownershipOverride){
+    const actor=this.options.ownershipOverride.targetEmail;
+    const existing=(await this.db.query("SELECT principal_kind FROM accounts WHERE actor=$1",[actor])).rows[0];
+    if(existing&&existing.principal_kind!=="user")throw new Error("Ownership target is not a user account");
+    await this.db.query("INSERT INTO accounts(actor) VALUES($1) ON CONFLICT(actor) DO NOTHING",[actor]);
+   }
    for(const actor of new Set([...Object.values(input.maps.users),...Object.values(input.maps.tokens),...Object.values(input.maps.orphans??{})]))await this.db.query('INSERT INTO accounts(actor) VALUES($1) ON CONFLICT(actor) DO NOTHING',[actor]);
    for (const actor of Object.values(input.maps.orphans ?? {})) {
     const account = (await this.db.query('SELECT principal_kind,salt,password,handle FROM accounts WHERE actor=$1', [actor])).rows[0];
@@ -101,7 +110,12 @@ export class PostgresMigrationDestination implements ImportDestination {
  }
  supportsExactAccess(page:PlannedPage):boolean {
   if(page.owner?.kind==='orphan'&&(page.original.user_id!==null||page.original.group_id!==null||(page.original.token_id!==null&&page.original.token_id!=='')||this.maps.orphans?.[page.legacyId]!==page.owner.id||(this.namespace&&preservedOrphanActor(this.namespace,page.original)!==page.owner.id)))return false;
-  try{destinationAccess(page,this.maps);normalizePath(publicationPath(page));}catch{return false;}
+  try{
+   if(this.options.ownershipOverride||page.ownershipAssignment){
+   const expected=resolveMigrationOwnership(page.original,this.namespace,originalMigrationOwner(page.original,this.namespace,this.maps),this.options.ownershipOverride);
+   if(JSON.stringify(expected.owner)!==JSON.stringify(page.owner)||JSON.stringify(expected.ownershipAssignment)!==JSON.stringify(page.ownershipAssignment))return false;
+   }
+   destinationAccess(page,this.maps);normalizePath(publicationPath(page));}catch{return false;}
   if(page.owner?.kind!=='user'&&page.owner?.kind!=='token'&&page.owner?.kind!=='group'&&page.owner?.kind!=='orphan')return false;
   if(page.original.deleted_at)return false;
   if(!this.options.editorManageRestricted&&(page.access.linkRole==='editor'||page.access.shares.some(s=>s.role==='editor')))return false;
@@ -114,6 +128,7 @@ export class PostgresMigrationDestination implements ImportDestination {
    await this.db.query('SELECT pg_advisory_xact_lock(hashtext($1))',[key]);
    const old=(await this.db.query(`SELECT digest,page_id FROM ${this.archive}.receipts WHERE key=$1`,[key])).rows[0];
    if(old){if(old.digest!==checksum||old.page_id!==page.pageId)throw new Error('Migration receipt conflicts with changed content');return 'unchanged';}
+   if(page.ownershipAssignment)await this.db.query(`INSERT INTO ${this.archive}.ownership_assignments(namespace,page_id,assignment) VALUES($1,$2,$3::jsonb)`,[this.namespace,page.pageId,JSON.stringify(page.ownershipAssignment)]);
    const owner=page.owner!.id;const head=String(page.original.version);const current=page.revisions.find(r=>String(r.version)===head);
    if(!current?.conversion.html)throw new Error('Missing converted head');
    // IDs are reserved with ordinary INSERT: existing destination identities can never be overwritten.

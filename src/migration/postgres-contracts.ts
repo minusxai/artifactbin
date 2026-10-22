@@ -5,6 +5,7 @@ import type {
   SqlReader,
 } from "./contracts.ts";
 export interface DestinationOptions {
+  ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride;
   schema: string;
   /** Trusted operator role for runtime schema DDL only; archive/data work retains the connecting role. */
   runtimeOwnerRole?: string;

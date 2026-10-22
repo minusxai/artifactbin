@@ -1,3 +1,8 @@
+import {
+  originalMigrationOwner,
+  resolveMigrationOwnership,
+  validateMigrationOwnershipOverride,
+} from "./ownership-override.ts";
 import { validateMigrationSourceAdmission } from "./source-admission-policy.ts";
 import { validateNativeProgramExclusions } from "./programs/native-admission.ts";
 import { createMigrationQueryCompiler } from "./query-compiler.ts";
@@ -36,6 +41,27 @@ export async function runMigrationJob(
   if ((options.apply || options.verifyOnly) && !ports.connectDestination)
     throw new Error("Explicit isolated destination connection required");
   const source = await prepareMigrationJobSource(options);
+  validateMigrationOwnershipOverride(
+    options.ownershipOverride,
+    source.manifest.sourceNamespace,
+    source.ids,
+  );
+  // Validate every selected immutable head before dataset/backend preparation, including excluded pages.
+  for (const entry of options.ownershipOverride?.entries ?? []) {
+    const selected = await source.readArtifact(entry.legacyId);
+    const artifact = selected.artifacts.find((a) => a.id === entry.legacyId);
+    if (!artifact) throw Error("Ownership override source head missing");
+    resolveMigrationOwnership(
+      artifact,
+      source.manifest.sourceNamespace,
+      originalMigrationOwner(
+        artifact,
+        source.manifest.sourceNamespace,
+        source.maps,
+      ),
+      options.ownershipOverride,
+    );
+  }
   source.preparedDatasets = await prepareMigrationJobDatasets(source, options, {
     host: ports.backendHost,
   });
@@ -73,6 +99,7 @@ export async function runMigrationJob(
   const destinationOptions = {
     schema: options.schema,
     runtimeOwnerRole: options.runtimeOwnerRole,
+    ownershipOverride: options.ownershipOverride,
     origin: options.origin,
     isolated: options.apply,
     editorManageRestricted: options.editorManageRestricted,

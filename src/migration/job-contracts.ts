@@ -16,6 +16,7 @@ import type {
 } from "./dependency-contracts.ts";
 import type { MigrationMediaIndex } from "./media-contracts.ts";
 export interface MigrationJobOptions {
+  ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride;
   excludedNativeProgramSources?: readonly import("./programs/native-contracts.ts").NativeProgramExclusionDecision[];
   sourceDirectory: string;
   indexDirectory: string;

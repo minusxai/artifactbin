@@ -1,3 +1,4 @@
+import { resolveMigrationOwnership } from "./ownership-override.ts";
 import type { BoundValueColumnProof } from "./conversion/compiled/bound-value-contracts.ts";
 import { preservedOrphanActor } from "./orphans.ts";
 import { convertNativeProgramPage } from "./programs/native-page.ts";
@@ -78,6 +79,7 @@ export function allocateMigrationMaps(
 export async function planMigration(
   manifest: MigrationManifest,
   options: {
+    ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride;
     maps: MigrationMaps;
     convert: Converter;
     coreUrl: string;
@@ -378,7 +380,12 @@ export async function planMigration(
     pages.push({
       legacyId: artifact.id,
       pageId: id,
-      owner: newOwner ? { kind: ownerKind, id: newOwner } : null,
+      ...resolveMigrationOwnership(
+        artifact,
+        manifest.sourceNamespace,
+        newOwner ? { kind: ownerKind, id: newOwner } : null,
+        options.ownershipOverride,
+      ),
       disposition: issues.length ? "blocked" : "ready",
       issues,
       revisions,

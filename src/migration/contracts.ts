@@ -87,6 +87,7 @@ export interface PlannedRevision {
   conversion: ConversionOutput;
 }
 export interface PlannedPage {
+  ownershipAssignment?: import("./ownership-override-contracts.ts").MigrationOwnershipAssignment;
   serverQueries?: readonly import("./query-preparation-contracts.ts").MigrationQueryReceipt[];
   backendAllocation?: { sourceNamespace: string; inventorySha256: string };
   backends?: readonly MigrationBackendReceipt[];

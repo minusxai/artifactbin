@@ -33,6 +33,7 @@ export function createMigrationJobPlanner(
   const planArtifact = async (artifact: MigrationManifest) => {
     const plan = await planMigration(artifact, {
       maps,
+      ownershipOverride: options.ownershipOverride,
       convert,
       excludedNativeProgramSources: options.excludedNativeProgramSources,
       nativeProgramBinding: (id, version) => {
