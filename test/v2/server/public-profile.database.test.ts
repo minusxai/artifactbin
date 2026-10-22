@@ -26,7 +26,10 @@ test("public profiles paginate owner public pages only and follow current handle
       const response = await server.request("/api/publish", {
         token: owner,
         body: {
-          source: page("<h1>" + title + "</h1>"),
+          source: page("<h1>" + title + "</h1>").replace(
+            "<title>Test page</title>",
+            "<title>" + title + "</title>",
+          ),
           requestId: title,
           visibility,
         },
@@ -53,17 +56,34 @@ test("public profiles paginate owner public pages only and follow current handle
     assert.equal(first.status, 200);
     const html = await first.text();
     assert.doesNotMatch(html, /Hidden|Other public|profile-owner@/);
-    const ids = [a, b].sort();
-    assert.match(html, new RegExp("/a/" + ids[0]));
+    const firstId = /href="\/a\/([A-Za-z0-9]{6})"/.exec(html)![1]!;
+    const ids = [firstId, firstId === a ? b : a];
+    assert(html.includes("/a/" + ids[0]), "first profile page link");
     assert.doesNotMatch(html, new RegExp("/a/" + ids[1]));
     const next = await (
       await server.request("/@alice?limit=1&after=" + ids[0])
     ).text();
-    assert.match(next, new RegExp("/a/" + ids[1]));
+    assert(next.includes("/a/" + ids[1]), "second profile page link");
     assert.doesNotMatch(next, /Profile pages/);
     const tab = await browser.newPage();
     await tab.goto(server.origin + "/@alice");
     assert.equal(await tab.locator("h1").textContent(), "@alice");
+    assert.equal(
+      await tab
+        .getByRole("link", { name: "artifactbin", exact: true })
+        .getAttribute("href"),
+      "/",
+    );
+    await tab.goto(server.origin + "/@alice?limit=1");
+    const pagination = tab.getByRole("navigation", { name: "Profile pages" });
+    await pagination.getByRole("link", { name: "Next", exact: true }).focus();
+    assert.equal(
+      await pagination
+        .getByRole("link", { name: "Next", exact: true })
+        .evaluate((el) => getComputedStyle(el).outlineStyle),
+      "solid",
+    );
+    await tab.goto(server.origin + "/@alice");
     assert.equal(await tab.locator("main li a").count(), 2);
     assert.equal(
       (await server.request("/@alice", { method: "HEAD" })).status,

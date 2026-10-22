@@ -7,7 +7,7 @@ test("archived person links use trusted core origin and refuse unknown kit shape
     source,
     coreUrl: "https://platform.example/af/v1/core.js",
   });
-  assert.match(output, /"https:\/\/platform.example"/);
+  assert.match(output, /https:\/\/platform.example/);
   assert.doesNotMatch(output, /location|baseURI/);
   assert.match(output, /encodeURIComponent/);
   assert.throws(() =>
@@ -22,4 +22,40 @@ test("archived person links use trusted core origin and refuse unknown kit shape
   });
   assert.match(relative, /data-af-server/);
   assert.doesNotMatch(relative, /location|baseURI/);
+});
+test("relative core uses absolute downloaded metadata and unknown origin disables profile links", async () => {
+  const { compiledPersonProfileHref } = await import(
+    "../../../src/migration/conversion/compiled/person-profile.ts"
+  );
+  assert.equal(
+    compiledPersonProfileHref("alice", "/af/v1/core.js", {
+      src: "https://platform.example/af/v1/core.js",
+    }),
+    "https://platform.example/@alice",
+  );
+  assert.equal(
+    compiledPersonProfileHref("_alice__", "/af/v1/core.js", {
+      server: "https://platform.example",
+    }),
+    "https://platform.example/@_alice__",
+  );
+  for (const core of [
+    undefined,
+    {},
+    { src: "/af/v1/core.js" },
+    { server: "javascript:alert(1)" },
+    { server: "https://token@platform.example" },
+  ])
+    assert.equal(
+      compiledPersonProfileHref("alice", "/af/v1/core.js", core),
+      undefined,
+    );
+  assert.equal(
+    compiledPersonProfileHref(
+      "alice",
+      "https://platform.example/af/v1/core.js",
+      { server: "https://runner.example" },
+    ),
+    "https://platform.example/@alice",
+  );
 });
