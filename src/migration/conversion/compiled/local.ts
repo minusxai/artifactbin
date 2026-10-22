@@ -75,11 +75,12 @@ export async function compileArchivedLocal(
       ? '<p role="status" data-migration-dataset-status>Historical data is unavailable. This saved page does not load datasets, evaluate queries, or perform shared data writes.</p>'
       : '<p role="status" data-migration-dataset-status>Loading protected data…</p>'
     : "";
+  const chartStatus=plan.unavailableCharts?'<p role="status" data-migration-chart-status>Some saved chart forms are unavailable in this compiler.</p>':"";
   const authorStatus = author
     ? '<p role="status" data-migration-author-status>Starting page components…</p>'
     : "";
   const packagedBody=input.viewerBinding||input.viewerUnavailable?viewerContentHtml(body,Boolean(input.viewerUnavailable)):body;
-  const prefix = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}${context.head}<title>${esc(output.title)}</title>${compiledStylesheetMarkup(output.css)}</head><body>${status}${authorStatus}${packagedBody}`;
+  const prefix = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}${context.head}<title>${esc(output.title)}</title>${compiledStylesheetMarkup(output.css)}</head><body>${status}${chartStatus}${authorStatus}${packagedBody}`;
   let html:string;
   try{html=prefix+compiledJavascriptMarkup(output.javascript,plan.sourceAdmission==="offline-prototype")+"</body></html>";}catch{return blocked("compiled-page-limit");}
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE) {
@@ -90,12 +91,13 @@ export async function compileArchivedLocal(
   const compatibility = [...new Set((input.dataControls ?? []).flatMap(p =>
     p.compatibility ?? []))];
   return {
-    classification: historical ? "renderable" : "functional",
+    classification: historical || plan.unavailableCharts ? "renderable" : "functional",
     html,
     identities,
     issues: [],
     capabilities: [
       "local-scalars",
+      ...(plan.unavailableCharts?["unavailable-chart-forms"]:[]),
       ...(input.mermaids?.length && plan.sourceAdmission!=="offline-prototype" ? ["offline-mermaid-flowcharts"] : []),
       ...(input.slideDeck ? ["slide-deck-navigation"] : []),
       "archived-kit",

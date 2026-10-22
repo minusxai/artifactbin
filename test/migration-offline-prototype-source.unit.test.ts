@@ -24,3 +24,14 @@ test('direct converter validates the explicit offline policy before reading sour
  for(const strategy of ['strict','archived-static']as const)assert.throws(()=>createMigrationConverter({strategy,sourceAdmission:'offline-prototype'}),/requires archived-functional/);
  assert.throws(()=>createMigrationConverter({strategy:'archived-functional',sourceAdmission:'unknown' as any}),/Unknown migration source admission policy/);
 });
+test('prototype leaves unknown historical chart forms to the archived component placeholder',()=>{
+ const base={coreUrl:'/af/v1/core.js'};
+ const unknown=admitLocalSource({...base,source:'<Question id="plot" data="$rows" viz={{kind:"bar"}}/>'},'offline-prototype');
+ assert.equal(unknown.ok,true);if(unknown.ok)assert.equal(unknown.plan.vegaCount,0);
+ const known=admitLocalSource({...base,source:'<Question id="plot" data="$rows" viz={{kind:"vega-lite",spec:{}}}/>'},'offline-prototype');
+ assert.equal(known.ok,true);if(known.ok)assert.equal(known.plan.vegaCount,1);
+});
+test('unsupported chart forms produce an explicit renderable result rather than a functional chart claim',async()=>{
+ const result=await compileArchivedLocal({coreUrl:'/af/v1/core.js',source:'<Question id="plot" data="$rows" viz={{kind:"bar"}}/>'},{sourceAdmission:'offline-prototype',compiler:{async compile(){return {html:'<div id="plot">Chart unavailable</div>',css:'',javascript:'globalThis.ready=true;',title:'Proof',build:'frozen',capabilities:[],rootAttributes:{},modules:[],declarations:[],queryNames:[],datasetNames:[],mutationNames:[],chartPlans:0};}}});
+ assert.equal(result.classification,'renderable');assert.ok(result.capabilities.includes('unavailable-chart-forms'));assert.match(result.html!,/data-migration-chart-status/);
+});

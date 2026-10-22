@@ -15,6 +15,7 @@ export async function prepareArchivedChartPlans(
   archivedRoot: string,
   options: {
     colorMode: "light" | "dark";
+    sourceAdmission?:import("../local-contracts.ts").CompiledSourceAdmission;
     tables?: Record<
       string,
       {
@@ -61,7 +62,7 @@ export async function prepareArchivedChartPlans(
         const attr = (name: string) =>
           node.attributes.find((a: any) => a.name === name)?.value;
         const vizAttr = attr("viz");
-        if (vizAttr && !(vizAttr.static && isKitQuestionView(vizAttr.json))) {
+        if (vizAttr && !(vizAttr.static && isKitQuestionView(vizAttr.json)) && !(options.sourceAdmission==="offline-prototype" && vizAttr.static && !["vega","vega-lite","recipe"].includes(vizAttr.json?.kind))) {
           if (!vizAttr.static)
             throw Error(
               "Templated chart requires a finite offline plan adapter",

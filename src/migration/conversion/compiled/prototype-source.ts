@@ -14,7 +14,7 @@ export function readPrototypeSource(input:CompiledMigrationInput,backendLinks:Re
  const text='<>'+input.source+'</>',tree=Parser.extend(jsx()).parseExpressionAt(text,0,{ecmaVersion:'latest'}) as any;
  if(tree.end!==text.length)throw Error('Incomplete source');
  const declarations:import('./local-contracts.ts').LocalDeclaration[]=[],names=new Set<string>(),queries=new Set<string>(),imports=new Set<string>(),mutations=new Set<string>(),identities=new Set<string>();
- let chartCount=0,vegaCount=0;
+ let chartCount=0,vegaCount=0,unavailableCharts=0;
  const name=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z][A-Za-z0-9_]*$/.test(v)&&!['constructor','prototype','__proto__'].includes(v);
  function walk(node:any):void {
   if(!node||typeof node!=='object')return;
@@ -35,7 +35,7 @@ export function readPrototypeSource(input:CompiledMigrationInput,backendLinks:Re
     const reset=typeof attrs.reset==='string'?attrs.reset.trim().split(/\s+/).filter(Boolean):[];
     if(!historical&&JSON.stringify(reset)!==JSON.stringify(binding?.reset??[]))throw Error('Mutation reset differs');mutations.add(attrs.name);
    }
-   if(tag==='Chart'||tag==='Question'){chartCount++;const kind=node.openingElement.attributes.find((a:any)=>a.name?.name==='viz')?.value?.expression?.properties?.find((p:any)=>(p.key?.name??p.key?.value)==='kind')?.value?.value??'table';if(!['table','single_value'].includes(kind))vegaCount++;}
+   if(tag==='Chart'||tag==='Question'){chartCount++;const kind=node.openingElement.attributes.find((a:any)=>a.name?.name==='viz')?.value?.expression?.properties?.find((p:any)=>(p.key?.name??p.key?.value)==='kind')?.value?.value??'table';if(['vega','vega-lite','recipe'].includes(kind))vegaCount++;else if(!['table','single_value'].includes(kind))unavailableCharts++;}
   }
   for(const [k,v]of Object.entries(node)){if(k==='start'||k==='end')continue;if(Array.isArray(v))v.forEach(walk);else if(v&&typeof v==='object')walk(v);}
  }
@@ -47,5 +47,5 @@ export function readPrototypeSource(input:CompiledMigrationInput,backendLinks:Re
  try{mermaids=readStaticMermaidPlans(tree);}catch{/* Use the archived component when no static adapter applies. */}
  try{slideDeck=readSlideDeckPlan(tree);}catch{/* Use compiled presentation behavior. */}
  const dynamicIdentities={regions:[]};
- return {sourceAdmission:'offline-prototype',input:{...input,sourceAdmission:'offline-prototype',viewerUnavailable:historical&&readsLegacyViewerMarkup(input.source),contexts,mermaids,slideDeck,dataControls:[],presentationIdentities:[],dynamicIdentities},manifest:{declarations},renderedIdentities:identities,dynamicIdentities,historical,backendLinks,queryNames:queries,datasetNames:imports,mutationNames:mutations,chartCount,vegaCount,author:input.authorPlan,authorProps:[]};
+ return {sourceAdmission:'offline-prototype',input:{...input,sourceAdmission:'offline-prototype',viewerUnavailable:historical&&readsLegacyViewerMarkup(input.source),contexts,mermaids,slideDeck,dataControls:[],presentationIdentities:[],dynamicIdentities},manifest:{declarations},renderedIdentities:identities,dynamicIdentities,historical,backendLinks,queryNames:queries,datasetNames:imports,mutationNames:mutations,chartCount,vegaCount,unavailableCharts,author:input.authorPlan,authorProps:[]};
 }

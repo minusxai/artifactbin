@@ -180,6 +180,7 @@ const hasCharts = (nodes: readonly any[]): boolean =>
 const chartPlans = hasCharts(presentationNodes)
   ? await prepareArchivedChartPlans(presentationNodes, archived, root, {
       colorMode: parts.mode,
+      sourceAdmission:input.sourceAdmission,
       tables:
         results?.tables ??
         Object.fromEntries(
