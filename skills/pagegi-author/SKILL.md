@@ -199,6 +199,7 @@ const result = await client.mutate({
 - In one mutation request, fields run in the order written, even across namespaces. Each field has its own outcome: one can succeed while another is rejected.
 - Render backend results from `watchQuery` directly; they stay remote and authoritative. Keep only the viewer's filters, drafts and other local choices in `updateQuery`. Offline files need a connection for fresh backend data; comments and saved views retain an inert rendering of what the viewer saw.
 - Write each query or mutation as one `gql` template. Don't insert one `gql` document into another; to fetch from several backends, put them all in the same template, as above.
+- Form values are strings. Convert and validate them before GraphQL variables: `Float` and `Int` need finite JavaScript numbers, not numeric strings.
 - Remote calls can fail, or the page can be offline, so check `errors`. Each backend mutation field's outcome is in `result.extensions.outcomes`, keyed by its path, for example `{ "billing.pay": "committed" }`.
 - `watchQuery` watches local fields and backend namespaces together. Server changes and reconnects refresh backend results automatically; no polling is needed. Subscribe to `{ data, errors }`; backend fields start as `null` until the first response and become `null` on a refused read. Unsubscribe when the view is removed. `updateQuery` works on local state only.
 - If a mutation's outcome is unknown (for example the connection dropped), don't assume it failed and don't retry it automatically.
@@ -261,7 +262,7 @@ When you publish or save, `scripts/publish.mjs` replaces your file with the page
 
 ## Unique ID per node
 
-Every element has a unique, stable `data-af-id`. The platform builds on this: comments, selections shared between viewers and history views all find elements by their ID. You build none of those features yourself.
+Every element has a unique, stable `data-af-id`. This is separate from the HTML `id`: `getElementById("total")` needs `id="total"`; use `[data-af-id="total"]` to select a platform identity. The platform builds on this: comments, selections shared between viewers and history views all find elements by their ID. You build none of those features yourself.
 
 For elements written in your HTML, add them without an ID and let the save (or `node scripts/check.mjs page.html --write-ids`) number them; keep the IDs already there, and never edit `nextNodeId` by hand. For elements your script creates, the platform can't see them when it saves, so set `data-af-id` yourself from the data:
 

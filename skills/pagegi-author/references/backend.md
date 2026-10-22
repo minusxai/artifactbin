@@ -148,6 +148,8 @@ The platform runs eight calls at a time across all pages; a call arriving while 
 
 ## Publishing
 
+GraphQL `Float` and `Int` variables must be JavaScript numbers. HTML inputs return strings: convert with `Number`, check `Number.isFinite` (and `Number.isInteger` for `Int`), then send. Keep any pending operation's numeric arguments in that form for exact retries.
+
 Link each file from the page with `<link rel="af-backend" href="…" data-af-name="…">`. Publishing the page publishes its linked files with it, and each file gets a version tied to that page revision. Every viewer who can open the page can call its backends, signed in or not, with no approval step; use `@auth` to limit who may call a field.
 
 ## Outcomes
@@ -160,6 +162,8 @@ A mutation sent to a backend settles as one of:
 - `unknown`: it was sent, but no answer came back, or your resolver threw after it started. It may or may not have happened; check before trying again.
 
 The page reads each field's outcome from `result.extensions.outcomes`, keyed by its path, such as `billing.pay`.
+
+For idempotent mutations, durably keep the request ID and exact arguments before sending. An explicit retry after an unknown result uses that same ID and arguments. Bind each backend receipt to the verified caller and arguments; reject reuse with different inputs or another caller. Return the original receipt for a matching retry. A changed draft is a new operation with a new ID.
 
 A field that failed in the platform keeps the error message "Backend execution failed" (or "Backend request rejected before execution") and says why in the error's `extensions.code`:
 
