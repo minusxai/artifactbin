@@ -34,47 +34,53 @@ async function bound(
     ).rows[0] ?? null
   );
 }
-/** Re-read both policies and identity facts for every before/after-I/O authorization. */
+/** Re-read both policies and identity facts for every before/after-I/O authorization.
+ * Cancellable runtime lookups opt into a one-second acquisition+SQL budget per transaction;
+ * unscoped callers retain the configured database policy. */
 export function createDatasetReadRepository(
   database: SqlDatabase,
   now = Date.now,
 ): DatasetReadRepository {
   return {
-    binding: (context, name) =>
-      database.transaction(async (client) => {
-        const row = await bound(client, context, name);
-        const saved = row ? decodeDatasetBinding(row, context, name) : null;
-        if (!saved || !row) return null;
-        const resolution = (
-          await client.query(
-            `SELECT r.current_version,r.generation,r.policy_revision,v.catalog FROM dataset_resources r
+    binding: (context, name, signal) =>
+      database.transaction(
+        async (client) => {
+          const row = await bound(client, context, name);
+          const saved = row ? decodeDatasetBinding(row, context, name) : null;
+          if (!saved || !row) return null;
+          const resolution = (
+            await client.query(
+              `SELECT r.current_version,r.generation,r.policy_revision,v.catalog FROM dataset_resources r
           JOIN dataset_versions v ON v.source_namespace=r.source_namespace AND v.legacy_id=r.legacy_id AND v.version=CASE WHEN $3='live' THEN r.current_version ELSE $4 END
           WHERE r.source_namespace=$1 AND r.legacy_id=$2 AND NOT r.deleted`,
-            [
-              row.source_namespace,
-              saved.dataset.id,
-              saved.mode,
-              saved.dataset.version,
-            ],
-          )
-        ).rows[0];
-        if (!resolution || !Array.isArray(resolution.catalog)) return null;
-        return {
-          ...saved,
-          tables: resolution.catalog as DatasetBinding["tables"],
-          revision: {
-            version:
-              saved.mode === "live"
-                ? Number(resolution.current_version)
-                : saved.dataset.version,
-            generation: Number(resolution.generation),
-            policyRevision: Number(resolution.policy_revision),
-          },
-        };
-      }),
-    authority: (context, binding) =>
-      database.transaction((client) =>
-        loadDatasetAuthority(client, context, binding, now()),
+              [
+                row.source_namespace,
+                saved.dataset.id,
+                saved.mode,
+                saved.dataset.version,
+              ],
+            )
+          ).rows[0];
+          if (!resolution || !Array.isArray(resolution.catalog)) return null;
+          return {
+            ...saved,
+            tables: resolution.catalog as DatasetBinding["tables"],
+            revision: {
+              version:
+                saved.mode === "live"
+                  ? Number(resolution.current_version)
+                  : saved.dataset.version,
+              generation: Number(resolution.generation),
+              policyRevision: Number(resolution.policy_revision),
+            },
+          };
+        },
+        signal ? { signal, timeoutMs: 1000 } : undefined,
+      ),
+    authority: (context, binding, signal) =>
+      database.transaction(
+        (client) => loadDatasetAuthority(client, context, binding, now()),
+        signal ? { signal, timeoutMs: 1000 } : undefined,
       ),
   };
 }

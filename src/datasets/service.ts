@@ -88,8 +88,11 @@ async function requireAuthority(
   ports: DatasetReadPorts,
   context: DatasetCallContext,
   b: DatasetResolvedBinding,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const authority = await ports.authority(context, b);
+  signal?.throwIfAborted();
+  const authority = await ports.authority(context, b, signal);
+  signal?.throwIfAborted();
   if (!authority || !authorized(context, b, authority))
     throw new DatasetReadError("denied");
   if (!sameRevision(b, authority))
@@ -102,7 +105,8 @@ export function createDatasetReadService(
     async read(context, value, signal) {
       signal?.throwIfAborted();
       const r = requestOf(value);
-      const found = await ports.binding(context, r.binding);
+      const found = await ports.binding(context, r.binding, signal);
+      signal?.throwIfAborted();
       const b = found ? structuredClone(found) : null;
       if (
         !b ||
@@ -128,7 +132,7 @@ export function createDatasetReadService(
       if (matches.length !== 1) throw new DatasetReadError("denied");
       const table = matches[0]!;
       validateTable(table);
-      await requireAuthority(ports, context, b);
+      await requireAuthority(ports, context, b, signal);
       if (
         r.expectedVersion !== undefined &&
         (r.expectedVersion !== b.revision.version ||
@@ -140,7 +144,7 @@ export function createDatasetReadService(
         await ports.read(table.object.key, signal),
         signal,
       );
-      await requireAuthority(ports, context, b);
+      await requireAuthority(ports, context, b, signal);
       signal?.throwIfAborted();
       const result: DatasetReadResult = {
         version: b.revision.version,

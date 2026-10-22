@@ -569,3 +569,30 @@ test("explicit pinned reads keep their original catalog version under fresh curr
   assert.equal(result.generation, 2);
   assert.deepEqual(result.rows, [{ amount: 1 }]);
 });
+test("read cancellation reaches binding and both authority lookups", async () => {
+  const abort = new AbortController();
+  const received: unknown[] = [];
+  const service = createDatasetReadService({
+    binding: async (_context, _name, signal) => {
+      received.push(signal);
+      return binding;
+    },
+    authority: async (_context, _binding, signal) => {
+      received.push(signal);
+      return authority;
+    },
+    read: async (_key, signal) => {
+      received.push(signal);
+      return (async function* () {
+        yield bytes;
+      })();
+    },
+  });
+  await service.read(
+    context,
+    { binding: "sales", schema: "public", table: "rows", offset: 0, limit: 1 },
+    abort.signal,
+  );
+  assert.equal(received.length, 4);
+  assert.ok(received.every((signal) => signal === abort.signal));
+});

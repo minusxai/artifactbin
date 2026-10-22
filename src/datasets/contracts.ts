@@ -74,15 +74,18 @@ export interface DatasetReadAuthority {
   /** Includes the server-derived legacy user/token principal mapping; never page input. */
   facts: AuthorizationFacts;
 }
+/** Supplied cancellation must reach adapter-owned I/O, including registry and authority lookups. */
 export interface DatasetReadPorts {
   binding(
     context: DatasetCallContext,
     name: string,
+    signal?: AbortSignal,
   ): Promise<DatasetResolvedBinding | null>;
   /** Must freshly resolve current page/dataset ACL, identity and policy, including after I/O. */
   authority(
     context: DatasetCallContext,
     binding: DatasetBinding,
+    signal?: AbortSignal,
   ): Promise<DatasetReadAuthority | null>;
   read(key: string, signal?: AbortSignal): Promise<AsyncIterable<Uint8Array>>;
 }

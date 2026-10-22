@@ -55,3 +55,72 @@ test("person registry reads stop at a bounded PostgreSQL deadline without changi
     await env.cleanup();
   }
 });
+test("cancellable dataset binding and authority queries cannot retain blocked PostgreSQL work", async () => {
+  const env = await testDatabase();
+  const lock = await env.pool.connect();
+  try {
+    for (const path of [
+      "schema.sql",
+      "backend/af-schema.sql",
+      "datasets/schema.sql",
+    ])
+      await env.pool.query(
+        await readFile(new URL("../src/" + path, import.meta.url), "utf8"),
+      );
+    const database = createSqlDatabase({
+      pool: env.pool,
+      initialize: async () => {},
+      statementTimeoutMs: 15000,
+    });
+    const { createDatasetReadRepository } = await import(
+      "../src/persistence/datasets.ts"
+    );
+    const repository = createDatasetReadRepository(database);
+    const context = {
+      backendId: "Back12",
+      backendVersion: "version",
+      pageId: "Page12",
+      subject: null,
+    };
+    await lock.query("BEGIN");
+    await lock.query("LOCK TABLE dataset_bindings IN ACCESS EXCLUSIVE MODE");
+    for (const operation of ["binding", "authority"] as const) {
+      const signal = new AbortController().signal;
+      const start = Date.now();
+      const result =
+        operation === "binding"
+          ? repository.binding(context, "people", signal)
+          : repository.authority(
+              context,
+              {
+                name: "people",
+                mode: "live",
+                backendId: context.backendId,
+                backendVersion: context.backendVersion,
+                page: {
+                  id: context.pageId,
+                  version: 1,
+                  legacyId: "OldPg1",
+                  editId: "edit",
+                },
+                dataset: { id: "data", version: 1, policyRevision: 0 },
+                tables: [],
+              },
+              signal,
+            );
+      await assert.rejects(result);
+      assert.ok(Date.now() - start < 2000);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const active = await env.pool.query(
+        "SELECT count(*)::int AS count FROM pg_stat_activity WHERE state='active' AND query LIKE 'SELECT b.*,v.catalog FROM dataset_bindings b%' AND pid<>pg_backend_pid()",
+      );
+      assert.equal(active.rows[0].count, 0);
+    }
+    await lock.query("ROLLBACK");
+    assert.equal(await repository.binding(context, "people"), null);
+  } finally {
+    await lock.query("ROLLBACK");
+    lock.release();
+    await env.cleanup();
+  }
+});
