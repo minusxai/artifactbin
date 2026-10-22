@@ -52,6 +52,7 @@ export function installBridge(boot) {
     receiver.postMessage({ pagegi: true, channel: boot.channel, ...data }, "*");
   const images = createImageClient({send,id:()=>crypto.randomUUID(),schedule});
   const remote = createRemoteClient({
+    initialAccess:boot.access,
     send,
     id: () => crypto.randomUUID(),
     online: () => navigator.onLine,

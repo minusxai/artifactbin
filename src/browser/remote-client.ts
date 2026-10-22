@@ -22,7 +22,7 @@ export function createRemoteClient(options: RemoteClientOptions): RemoteClient {
     string,
     { resolve(reply: Reply): void; reject(error: Error): void; cancel(): void }
   >();
-  return {
+  const client: RemoteClient = {
     setAccess(snapshot) {
       if (disposed || access.state === "disposed") return;
       if (
@@ -155,4 +155,6 @@ export function createRemoteClient(options: RemoteClientOptions): RemoteClient {
       pending.clear();
     },
   };
+  if (options.initialAccess) client.setAccess(options.initialAccess);
+  return client;
 }

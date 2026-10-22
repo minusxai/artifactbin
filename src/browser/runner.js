@@ -33,6 +33,7 @@ addEventListener("message", (event) => {
       load: m.load ?? null,
       channel: m.appChannel,
       viewer: m.viewer,
+      access:m.access,
     },
     m.bridge,
     typeof m.designSystem?.href === "string" && m.designSystem.href.startsWith("data:text/css;base64,")

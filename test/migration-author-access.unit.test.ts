@@ -158,3 +158,106 @@ test("disposing author bindings aborts an access wait and cannot dispatch after 
   await Promise.resolve();
   assert.equal(calls, 0);
 });
+
+test("real remote client rejects an uninitialized waiter rather than retargeting the first new caller packet", async () => {
+  const { createRemoteClient } = await import(
+    "../src/browser/remote-client.ts"
+  );
+  const remote = createRemoteClient({
+    send() {},
+    id: () => "id",
+    online: () => true,
+    schedule: () => () => {},
+  });
+  const f = fixture();
+  const options = {
+    ...f.options,
+    authorizationContext: remote.port.authorizationContext!,
+    access: {
+      read: remote.port.access!,
+      subscribe: remote.port.subscribeAccess!,
+    },
+  };
+  const pending = awaitAuthorAccess(options);
+  remote.setAccess({ epoch: 1, state: "pending", context: null });
+  remote.setAccess({ epoch: 1, state: "allowed", context: "caller-B" });
+  await assert.rejects(pending, /initialized/);
+  remote.dispose();
+});
+test("real remote client waits only within the trusted bootstrap generation", async () => {
+  const { createRemoteClient } = await import(
+    "../src/browser/remote-client.ts"
+  );
+  for (const replace of [false, true]) {
+    const remote = createRemoteClient({
+      initialAccess: { epoch: 7, state: "pending", context: null },
+      send() {},
+      id: () => "id",
+      online: () => true,
+      schedule: () => () => {},
+    });
+    const f = fixture();
+    const options = {
+      ...f.options,
+      authorizationContext: remote.port.authorizationContext!,
+      access: {
+        read: remote.port.access!,
+        subscribe: remote.port.subscribeAccess!,
+      },
+    };
+    const pending = awaitAuthorAccess(options);
+    remote.setAccess({
+      epoch: replace ? 8 : 7,
+      state: "allowed",
+      context: replace ? "caller-B" : "caller-A",
+    });
+    if (replace) await assert.rejects(pending, /caller changed/);
+    else assert.deepEqual(await pending, { epoch: 7, context: "caller-A" });
+    remote.dispose();
+  }
+});
+
+test("held old baseline cannot replace a newer invalidation or make an old waiter dispatch for the new caller", async () => {
+  const { createRemoteClient } = await import(
+    "../src/browser/remote-client.ts"
+  );
+  const remote = createRemoteClient({
+    initialAccess: { epoch: 4, state: "pending", context: null },
+    send() {},
+    id: () => "id",
+    online: () => true,
+    schedule: () => () => {},
+  });
+  const f = fixture();
+  let calls = 0;
+  f.options.adapter.mutate = async () => {
+    calls++;
+    return { affected: 1, rowCount: 1, version: 1, generation: 1 };
+  };
+  const { authorApolloPorts } = await import(
+    "../src/migration/conversion/compiled/author/apollo-ports.ts"
+  );
+  const p = authorApolloPorts(
+    {} as never,
+    {} as never,
+    () => {
+      throw Error("unused");
+    },
+    {
+      ...f.options,
+      authorizationContext: remote.port.authorizationContext!,
+      access: {
+        read: remote.port.access!,
+        subscribe: remote.port.subscribeAccess!,
+      },
+    },
+  );
+  const pending = p.mutation!("save", {});
+  remote.setAccess({ epoch: 5, state: "pending", context: null });
+  remote.setAccess({ epoch: 4, state: "allowed", context: "old-A" });
+  assert.equal(remote.port.access!().epoch, 5);
+  remote.setAccess({ epoch: 5, state: "allowed", context: "new-B" });
+  await assert.rejects(pending, /caller changed/);
+  assert.equal(calls, 0);
+  remote.dispose();
+});

@@ -30,6 +30,10 @@ export function awaitAuthorAccess(
         return;
       }
       const current = access.read();
+      if (current.epoch === null) {
+        finish(Error("Author access generation not initialized"));
+        return;
+      }
       if (epoch !== null && epoch !== current.epoch) {
         finish(Error("Author mutation caller changed"));
         return;

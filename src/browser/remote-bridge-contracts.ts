@@ -28,6 +28,8 @@ export interface RemoteBridgeResponse {
 }
 
 export interface RemoteClientOptions {
+  /** Trusted placement snapshot captured before any authored code runs. */
+  initialAccess?: import("../apollo/apollo-contracts.ts").RemoteAccessSnapshot;
   send(message: {
     kind: "remote-request";
     id: string;

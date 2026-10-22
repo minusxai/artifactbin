@@ -27,6 +27,8 @@ export interface PlacementOptions {
   historyFrame: HTMLIFrameElement;
   /** What the page's core needs for the viewer's own local state; read on every live mount. */
   localState(): LocalStateBoot;
+  /** Trusted access generation included in the bridge bootstrap, never guessed by the page. */
+  access?(): import("../apollo/apollo-contracts.ts").RemoteAccessSnapshot;
   /** The viewer's own appearance picks, passed to the page's core. */
   viewer(): import("./core/host-contracts.ts").ViewerAppearance;
   bridge: string;

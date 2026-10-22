@@ -419,6 +419,7 @@ async function bootPlatform() {
       shell,
       frame,
       historyFrame,
+      access:()=>authorAccess.project({active:gate.active,historical:documentView.historical,phase:authorAccessState,context:authorizationContext()}),
       localState() {
         const load = loadState;
         loadState = null;

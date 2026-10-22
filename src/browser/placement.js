@@ -16,6 +16,7 @@ export function createPlacement({
   frame,
   historyFrame,
   localState,
+  access,
   viewer,
   bridge,
   designSystem = null,
@@ -70,6 +71,7 @@ export function createPlacement({
           revision,
           channel,
           local: true,
+          access:access?.(),
           sourceStyles: [...new DOMParser().parseFromString(source, "text/html").querySelectorAll("style")].map(style => style.textContent ?? ""),
           viewer: viewer(),
         });
@@ -102,6 +104,7 @@ export function createPlacement({
             snapshot,
             revision,
             ...localState(),
+            access:access?.(),
             viewer: viewer(),
             bridge,
             designSystem,
