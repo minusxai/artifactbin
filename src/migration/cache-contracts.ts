@@ -13,4 +13,6 @@ export interface CachedConverter {
 /** Frozen source roots whose bytes define emitted conversion output. */
 export interface CompilerIdentityInputs {
   migrationRoot: string;
+  /** Verified external resource manifest and face digest closure, never a path or unverified claim. */
+  compilerResourceDigest?: string;
 }

@@ -1,3 +1,4 @@
+import { migrationFontPackageInputs } from "./compiler-font-inputs.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, lstat, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -106,6 +107,11 @@ export async function archivedCompilerIdentity(
   },
 ): Promise<string> {
   const hash = createHash("sha256");
+  if (inputs.compilerResourceDigest !== undefined) {
+    if (!/^[a-f0-9]{64}$/.test(inputs.compilerResourceDigest))
+      throw Error("Invalid verified compiler resource digest");
+    hash.update("external-resources:" + inputs.compilerResourceDigest + "\0");
+  }
   async function tree(directory: string): Promise<void> {
     for (const item of (await readdir(directory, { withFileTypes: true })).sort(
       (a, b) => a.name.localeCompare(b.name),
@@ -144,6 +150,10 @@ export async function archivedCompilerIdentity(
     ]) {
       hash.update("legacy-tree:" + relative + "\0");
       await tree(join(legacyRoot, relative));
+    }
+    for (const font of await migrationFontPackageInputs(legacyRoot)) {
+      hash.update("legacy-font-package:" + font.name + "\0");
+      await tree(font.directory);
     }
     for (const name of [
       "package.json",

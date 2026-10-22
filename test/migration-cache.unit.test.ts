@@ -146,12 +146,21 @@ test("compiler provenance covers transitive source, dependency locks and generat
     [legacyRoot, "services/app/public/fonts/fixture.woff2"],
     [legacyRoot, "services/app/public/islands/manifest.json"],
     [legacyRoot, "services/app/scripts/copy-assets.mjs"],
+    [legacyRoot, "node_modules/@fontsource-variable/fixture/package.json"],
+    [legacyRoot, "node_modules/@fontsource-variable/fixture/metadata.json"],
+    [legacyRoot, "node_modules/@fontsource-variable/fixture/index.css"],
+    [legacyRoot, "node_modules/@fontsource-variable/fixture/files/latin.woff2"],
+    [legacyRoot, "node_modules/wawoff2/package.json"],
+    [legacyRoot, "node_modules/wawoff2/build/decompress_binding.js"],
   ] as const;
   try {
     for (const [base, relative] of files) {
       const path = join(base, relative);
       await mkdir(join(path, ".."), { recursive: true });
-      await writeFile(path, "original");
+      await writeFile(
+        path,
+        relative.endsWith("package.json") ? "{}" : "original",
+      );
     }
     const identity = () =>
       archivedCompilerIdentity(legacyRoot, { migrationRoot });
@@ -159,11 +168,27 @@ test("compiler provenance covers transitive source, dependency locks and generat
     assert.equal(await identity(), original);
     for (const [base, relative] of files) {
       const path = join(base, relative);
-      await writeFile(path, "changed");
+      await writeFile(
+        path,
+        relative.endsWith("package.json") ? '{"changed":true}' : "changed",
+      );
       assert.notEqual(await identity(), original, relative);
-      await writeFile(path, "original");
+      await writeFile(
+        path,
+        relative.endsWith("package.json") ? "{}" : "original",
+      );
       assert.equal(await identity(), original);
     }
+    const withResources = (compilerResourceDigest: string) =>
+      archivedCompilerIdentity(legacyRoot, {
+        migrationRoot,
+        compilerResourceDigest,
+      });
+    assert.notEqual(
+      await withResources("a".repeat(64)),
+      await withResources("b".repeat(64)),
+    );
+    await assert.rejects(withResources("unverified"), /resource digest/);
     await rm(join(legacyRoot, "services/app/public/fonts"), {
       recursive: true,
     });
