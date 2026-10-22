@@ -154,6 +154,7 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
             refuse();
         }
         if (
+          !(sourceAdmission === "offline-prototype" && tag === "Select") &&
           node.children.some(
             (child: any) =>
               !(child.type === "JSXText" && !child.value.trim()) &&

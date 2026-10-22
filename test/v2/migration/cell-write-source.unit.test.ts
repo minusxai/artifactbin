@@ -189,3 +189,10 @@ test('prototype wire typing requires exact query columns and a parsed native con
  assert.throws(()=>typeLegacyCellWriteSites(sites,{rows:[{name:'id',type:null}]},'offline-prototype'));
  assert.throws(()=>typeLegacyCellWriteSites(sites.map(({wireType,...site})=>site),unknown,'offline-prototype'));
 });
+test('prototype Select keeps custom trigger presentation with the same mutation authority',()=>{
+ const source='<DataTable data="$rows" rowKey="id"><Column col="title"><Select value="$_row.title" run="$save" options="$choices"><button type="button">Choose</button></Select></Column></DataTable>';
+ assert.throws(()=>readLegacyCellWriteSites(source));
+ const sites=readLegacyCellWriteSites(source,undefined,'offline-prototype');
+ assert.equal(sites.length,1);assert.equal(sites[0]!.mutationName,'save');assert.equal(sites[0]!.column,'title');
+ assert.throws(()=>readLegacyCellWriteSites(source.replace('type="button"','run="$other"'),undefined,'offline-prototype'));
+});
