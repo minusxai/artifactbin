@@ -369,3 +369,20 @@ test("generation change during model execution discards the computed answer", as
   };
   await assert.rejects(f.read(), /dataset_changed/);
 });
+test("fixed model deadline aborts an unresponsive controller", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const f = fixture();
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => (entered = resolve));
+  let executionSignal: AbortSignal | undefined;
+  f.ports.models!.execute = async (_job, signal) => {
+    executionSignal = signal;
+    entered();
+    return new Promise(() => {});
+  };
+  const pending = f.read();
+  await started;
+  t.mock.timers.tick(10000);
+  await assert.rejects(pending, /result_limit/);
+  assert.equal(executionSignal?.aborted, true);
+});
