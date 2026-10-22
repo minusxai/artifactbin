@@ -114,6 +114,8 @@ test("all immutable versions and current resource authority stay separate; brows
   assert.equal(browser.includes(digest), false);
   assert.equal(browser.includes("policy"), false);
   assert.match(generatedDatasetBackendSource, /caps\.dataset\.read/);
+  assert.match(generatedDatasetBackendSource, /caps\.dataset\.mutate/);
+  assert.match(generatedDatasetBackendSource, /@auth\(role: VIEWER\)/);
 });
 test("changed duplicate version metadata and ambiguous object receipts fail closed", () => {
   const a = input();

@@ -13,11 +13,14 @@ import type {
 import { canonical, record, receiptMap, catalogVersion } from "./catalog.ts";
 export const generatedDatasetBackendSource = `export const typeDefs = \`
  scalar DatasetRows
+ scalar DatasetParams
  type DatasetColumn { name: String! type: String! }
  type DatasetWindow { version: Int! generation: Int! schema: String! table: String! columns: [DatasetColumn!]! rows: DatasetRows! offset: Int! nextOffset: Int totalRows: Int! }
+ type DatasetMutationResult { affected: Int! rowCount: Int! version: Int! generation: Int! }
+ type Mutation { mutate(operation: String!, requestId: String!, params: DatasetParams!): DatasetMutationResult! @auth(role: VIEWER) }
  type Query { read(binding: String!, schema: String!, table: String!, offset: Int!, limit: Int!, expectedVersion: Int, expectedGeneration: Int): DatasetWindow! }
 \`;
-export default { Query: { read: (args, _principal, caps) => caps.dataset.read(args) } };
+export default { Query: { read: (args, _principal, caps) => caps.dataset.read(args) }, Mutation: { mutate: (args, _principal, caps) => caps.dataset.mutate(args) } };
 `;
 function principal(row: LegacyRow): Principal {
   return row.group_id
