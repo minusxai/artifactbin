@@ -6,7 +6,7 @@ const attributes=new Set('name id class style xmlns xmlns:xlink viewBox width he
 // in image-set(), escaped URL identifiers and inherited paint are not resources
 // we can validate by looking for css-tree Url nodes alone.
 const cssFunctions=new Set('rgb rgba hsl hsla hwb lab lch oklab oklch color color-mix calc min max clamp drop-shadow'.split(' '));
-const cssProperties=new Set('--mermaid-font-family alignment-baseline animation animation-name animation-duration animation-timing-function animation-iteration-count animation-direction animation-fill-mode animation-delay background background-color border border-color border-style border-width border-radius color cursor display dominant-baseline fill fill-opacity fill-rule filter font font-family font-size font-style font-weight font-variant height width min-height min-width max-height max-width line-height letter-spacing margin margin-top margin-right margin-bottom margin-left opacity overflow padding padding-top padding-right padding-bottom padding-left pointer-events position stroke stroke-opacity stroke-dasharray stroke-dashoffset stroke-linecap stroke-linejoin stroke-width text-align text-anchor text-decoration transform transform-origin transition vertical-align visibility white-space word-break z-index'.split(' '));
+const cssProperties=new Set('--mermaid-font-family alignment-baseline animation animation-name animation-duration animation-timing-function animation-iteration-count animation-direction animation-fill-mode animation-delay background background-color box-shadow border border-color border-style border-width border-radius color cursor display dominant-baseline fill fill-opacity fill-rule filter font font-family font-size font-style font-weight font-variant height width min-height min-width max-height max-width line-height letter-spacing margin margin-top margin-right margin-bottom margin-left opacity overflow padding padding-top padding-right padding-bottom padding-left pointer-events position stroke stroke-opacity stroke-dasharray stroke-dashoffset stroke-linecap stroke-linejoin stroke-width text-align text-anchor text-decoration transform transform-origin transition vertical-align visibility white-space word-break z-index'.split(' '));
 /** Trusted renderer output still crosses an active-DOM boundary: no foreign HTML,
  * loading attributes, active handlers, unscoped CSS or unresolved resource IDs. */
 export function sanitizeMermaidSvg(source:string):{svg:string;width:number;height:number} {
@@ -40,7 +40,7 @@ export function sanitizeMermaidSvg(source:string):{svg:string;width:number;heigh
    if(node.type==='Url'){if(!/^#[A-Za-z_][\w:.-]*$/.test(node.value))throw Error('External Mermaid paint');refs.push(node.value.slice(1));}
    if(node.type==='Raw')throw Error('Unsupported Mermaid CSS grammar');
    if(node.type==='Declaration'){
-    if(!cssProperties.has(node.property))throw Error('Unsupported Mermaid CSS property');
+    if(!cssProperties.has(node.property))throw Error('Unsupported Mermaid CSS property: '+node.property);
     let targetsRoot=rootInline;
     if(!inline&&this.rule?.prelude?.type==='SelectorList')this.rule.prelude.children.forEach((selector:any)=>{let descendant=false;selector.children.forEach((part:any)=>{if(part.type==='Combinator')descendant=true;});if(!descendant)targetsRoot=true;});
     if(node.property==='stroke'&&targetsRoot&&!(rootInline&&generate(node.value)==='none'&&node.important))throw Error('Root Mermaid stroke must be isolated');

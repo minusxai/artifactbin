@@ -26,3 +26,9 @@ test('SVG XML stylesheet entities preserve local child selectors without opening
 
 test('SVG CSS loading functions, inherited paint and escaped grammar fail closed',async()=>{const {sanitizeMermaidSvg}=await import('../src/migration/conversion/compiled/mermaid-svg.ts');for(const declaration of ['background-image:image-set("https://example.invalid/x" 1x)','background:-webkit-image-set("https://example.invalid/x" 1x)','fill:u\\72l("https://example.invalid/x")','fill:var(--outside-paint)','fill:inherit','stroke:context-stroke','background:attr(data-src url)','all:inherit','f\\69ll:red'])assert.throws(()=>sanitizeMermaidSvg('<svg id="seq" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20"><style>#seq{'+declaration+'}</style></svg>'),declaration);
 const svg='<svg id="seq" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20"><style>@keyframes move{from{opacity:0}to{opacity:1}}#seq{animation:move 1s;filter:drop-shadow(0 1px 2px rgba(0,0,0,.2))}</style></svg>';const safe=sanitizeMermaidSvg(svg).svg;assert.equal(sanitizeMermaidSvg(safe).svg,safe);});
+test('frozen Mermaid label shadows preserve local presentation without CSS resources',async()=>{
+ const {sanitizeMermaidSvg}=await import('../src/migration/conversion/compiled/mermaid-svg.ts');
+ const svg=(value:string)=>'<svg id="seq" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20"><style>#seq .label{box-shadow:'+value+'}</style></svg>';
+ assert.match(sanitizeMermaidSvg(svg('0 1px 2px rgba(0,0,0,.2)')).svg,/box-shadow/);
+ assert.throws(()=>sanitizeMermaidSvg(svg('url(https://example.invalid/x)')));
+});
