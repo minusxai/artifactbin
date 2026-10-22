@@ -121,6 +121,43 @@ for (const [name, engine] of Object.entries({ chromium, webkit, firefox }))
         }
         await held.close();
       }
+      for (const persisted of [false, true]) {
+        const held = await browser.newPage();
+        held.setDefaultTimeout(10000);
+        await held.addInitScript(() => {
+          const Native = globalThis.Blob;
+          globalThis.Blob = class extends Native {
+            constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+              super(
+                options?.type === "text/javascript"
+                  ? [
+                      'await new Promise(resolve=>{document.documentElement.setAttribute("data-import-held","");window.addEventListener("release-import",resolve,{once:true});});\n',
+                      ...(parts ?? []),
+                    ]
+                  : parts,
+                options,
+              );
+            }
+          };
+        });
+        await held.goto(base + "/");
+        await held.locator("html[data-import-held]").waitFor();
+        await held.evaluate((persisted) => {
+          window.dispatchEvent(
+            new PageTransitionEvent("pagehide", { persisted }),
+          );
+          window.dispatchEvent(new Event("release-import"));
+        }, persisted);
+        await held
+          .locator("[data-migration-runtime-status]")
+          .waitFor({ state: "detached" });
+        assert.equal(
+          await held.locator("#content").getAttribute("data-executed"),
+          persisted ? "yes" : null,
+        );
+        assert.equal(await held.locator('[role="alert"]').count(), 0);
+        await held.close();
+      }
       for (const failure of ["unsupported", "corrupt", "module-error"]) {
         const broken = await browser.newPage();
         broken.setDefaultTimeout(10000);

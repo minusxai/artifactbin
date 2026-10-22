@@ -31,7 +31,15 @@ export function mountCompiledPayload(
       );
     },
     createURL: (source) =>
-      URL.createObjectURL(new Blob([source], { type: "text/javascript" })),
+      URL.createObjectURL(
+        new Blob(
+          [
+            'if(document.documentElement.hasAttribute("data-af-compiled-retired"))throw Error("Compiled module load cancelled");\n',
+            source,
+          ],
+          { type: "text/javascript" },
+        ),
+      ),
     revokeURL: (url) => URL.revokeObjectURL(url),
     importModule: (url) => import(url),
     error() {
@@ -41,7 +49,13 @@ export function mountCompiledPayload(
       document.documentElement.setAttribute("data-af-compiled-status", "error");
     },
   });
-  const hide = (event: PageTransitionEvent) => loader.pagehide(event.persisted);
+  const hide = (event: PageTransitionEvent) => {
+    // Revocation alone cannot cancel an already fetched native import. This
+    // document-local marker gates evaluation before the generated body starts.
+    if (!event.persisted)
+      document.documentElement.setAttribute("data-af-compiled-retired", "");
+    loader.pagehide(event.persisted);
+  };
   target.addEventListener("pagehide", hide);
   void loader.settled.finally(() => {
     target.removeEventListener("pagehide", hide);
