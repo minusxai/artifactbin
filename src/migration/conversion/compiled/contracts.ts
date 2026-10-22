@@ -2,6 +2,8 @@ import type { ConversionResult } from "../contracts.ts";
 export interface CompiledMigrationInput {
   source: string;
   coreUrl: string;
+  /** Exact archived img URL -> verified ACL media endpoint. Static assembler only. */
+  resourceMap?: Readonly<Record<string, string>>;
   theme?: string | null;
   template?: string | null;
   colorMode?: "light" | "dark";

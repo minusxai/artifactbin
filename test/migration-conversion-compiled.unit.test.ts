@@ -103,3 +103,41 @@ test("compiled path refuses unresolved resources and unsafe core configuration",
     "manual-blocked",
   );
 });
+
+test("only explicit verified media mappings replace archived image dependencies", async () => {
+  const target = "/af/v1/ids/Ab1234/assets/1/original/" + "a".repeat(64);
+  const imageCompiler = {
+    compile: async () => ({
+      ...(await compiler.compile({} as never)),
+      html: '<img id="image" src="/legacy/example.png">',
+    }),
+  };
+  const input = {
+    source: '<img id="image" src="/legacy/example.png"/>',
+    coreUrl: "/af/v1/core.js",
+  };
+  assert.equal(
+    (await compileArchivedStatic(input, { compiler: imageCompiler }))
+      .classification,
+    "manual-blocked",
+  );
+  const mapped = await compileArchivedStatic(
+    { ...input, resourceMap: { "/legacy/example.png": target } },
+    { compiler: imageCompiler },
+  );
+  assert.equal(mapped.classification, "renderable");
+  assert.ok(mapped.html!.includes(target));
+  assert.ok(!mapped.html!.includes("/legacy/example.png"));
+  for (const url of [
+    "https://example.invalid/arbitrary.png",
+    "/af/v1/ids/Ab1234/assets/0/original/" + "a".repeat(64),
+    target + "?token=secret",
+  ]) {
+    const result = await compileArchivedStatic(
+      { ...input, resourceMap: { "/legacy/example.png": url } },
+      { compiler: imageCompiler },
+    );
+    assert.equal(result.classification, "manual-blocked");
+    assert.equal(result.html, null);
+  }
+});

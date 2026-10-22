@@ -1,4 +1,6 @@
 /** Explicit migration-only archived static compiler. Never used as a runtime fallback. */
+import { MAX_PAGE_SOURCE } from "../../../af-contracts.ts";
+import { canonicalMediaUrl } from "./media.ts";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -162,6 +164,16 @@ export async function compileArchivedStatic(
 ): Promise<CompiledMigrationResult> {
   const blocked = preflight(input);
   if (blocked) return blocked;
+  if (
+    Object.values(input.resourceMap ?? {}).some(
+      (value) => !canonicalMediaUrl(value),
+    )
+  )
+    return refused(
+      "compiled-media",
+      "Media mapping must use a canonical verified ACL endpoint",
+    );
+  const mappedMedia = new Set<string>();
   let compiled: ArchivedStaticOutput;
   try {
     compiled = await (options.compiler?.compile(input) ??
@@ -200,10 +212,19 @@ export async function compileArchivedStatic(
       );
       for (const a of node.attrs) {
         if (
+          node.tagName === "img" &&
+          a.name === "src" &&
+          Object.hasOwn(input.resourceMap ?? {}, a.value)
+        ) {
+          a.value = input.resourceMap![a.value];
+          mappedMedia.add(a.value);
+        }
+        if (
           (["src", "srcset", "poster"].includes(a.name) ||
             (node.tagName === "image" &&
               ["href", "xlink:href"].includes(a.name))) &&
-          !a.value.startsWith("data:")
+          !a.value.startsWith("data:") &&
+          !mappedMedia.has(a.value)
         )
           invalid = true;
         if (
@@ -240,6 +261,11 @@ export async function compileArchivedStatic(
     .map(([k, v]) => ` ${k}="${esc(v)}"`)
     .join("");
   const html = `<!doctype html><html${attrs}><head><script src="${esc(input.coreUrl)}" data-af="core"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(compiled.title)}</title><style>${compiled.css}</style></head><body>${serialize(fragment)}</body></html>`;
+  if (html.length > MAX_PAGE_SOURCE)
+    return refused(
+      "compiled-page-limit",
+      "Compiled HTML exceeds the platform source limit",
+    );
   return {
     classification: "renderable",
     html,
