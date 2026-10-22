@@ -319,7 +319,10 @@ test("job prepares exact live head bindings and real compiled receipts without i
     viewerReceipts.map((r) => r.viewer),
     [undefined, { sourceNamespace: "fixture" }],
   );
-  assert.ok(viewer.viewerBindings.get(JSON.stringify(["abc123", 2])));
+  assert.deepEqual(viewer.viewerBindings.get(JSON.stringify(["abc123", 2])), {
+    backendNamespace: "legacyData",
+    backendHref: new URL(viewerReceipts.find(r => r.viewer)!.backendHref).pathname,
+  });
   assert.equal(viewer.viewerBindings.has(JSON.stringify(["abc123", 1])), false);
   assert.deepEqual(viewer.scan.historicalServiceVersions.get("abc123"), [1]);
 });

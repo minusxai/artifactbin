@@ -131,7 +131,7 @@ export async function prepareMigrationJobDatasets(
             ),
             {
               backendNamespace: receipt.backendNamespace,
-              backendHref: receipt.backendHref,
+              backendHref: new URL(receipt.backendHref).pathname,
             },
           );
     }
