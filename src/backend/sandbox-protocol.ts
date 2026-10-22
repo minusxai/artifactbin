@@ -143,8 +143,22 @@ function checkedCapabilityFrame(
       req.operation !== "read" ||
       Object.keys(req).sort().join() !== "input,kind,operation" ||
       !record(input) ||
-      Object.keys(input).sort().join() !==
-        "binding,limit,offset,schema,table" ||
+      ![
+        "binding,limit,offset,schema,table",
+        "binding,expectedGeneration,expectedVersion,limit,offset,schema,table",
+      ].includes(Object.keys(input).sort().join()) ||
+      (input.expectedVersion !== undefined &&
+        (typeof input.expectedVersion !== "number" ||
+          !Number.isSafeInteger(input.expectedVersion) ||
+          input.expectedVersion < 1 ||
+          typeof input.expectedGeneration !== "number" ||
+          !Number.isSafeInteger(input.expectedGeneration) ||
+          input.expectedGeneration < 1)) ||
+      (input.expectedVersion === undefined &&
+        input.expectedGeneration !== undefined) ||
+      (typeof input.offset === "number" &&
+        input.offset > 0 &&
+        input.expectedVersion === undefined) ||
       typeof input.binding !== "string" ||
       !input.binding ||
       typeof input.schema !== "string" ||
@@ -171,6 +185,12 @@ function checkedCapabilityFrame(
           table: input.table,
           offset: input.offset,
           limit: input.limit,
+          ...(input.expectedVersion !== undefined
+            ? {
+                expectedVersion: input.expectedVersion,
+                expectedGeneration: input.expectedGeneration as number,
+              }
+            : {}),
         },
       },
     };

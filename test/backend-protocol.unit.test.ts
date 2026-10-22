@@ -391,7 +391,7 @@ test("only trusted dataset_mutation_rejected capability errors cross the sandbox
 });
 
 test('dataset pagination frames preserve a complete pinned version/generation pair',async()=>{
- const seen:unknown[]=[];const f=fixture(async request=>{seen.push(request);return null;});
+ const seen:unknown[]=[];const f=fixture(async (_principal,request)=>{seen.push(request);return null;});
  const input={binding:'sales',schema:'public',table:'rows',offset:415,limit:500,expectedVersion:1,expectedGeneration:1};
  f.call.receive(frame({kind:'capability',id:1,request:{kind:'dataset',operation:'read',input}}));
  await new Promise(resolve=>setImmediate(resolve));
@@ -400,5 +400,7 @@ test('dataset pagination frames preserve a complete pinned version/generation pa
   const denied=fixture(async()=>{assert.fail('invalid pagination reached capability');});
   denied.call.receive(frame({kind:'capability',id:1,request:{kind:'dataset',operation:'read',input:{...input,...changed}}}));
   assert.ok(denied.errors.length);
+  await denied.call.close();
  }
+ await f.call.close();
 });
