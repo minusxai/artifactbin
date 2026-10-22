@@ -118,13 +118,25 @@ export async function externalCompile(
           APP__PUBLIC_BASE_URL: "https://example.invalid",
           TSX_TSCONFIG_PATH: path.join(root, "tsconfig.json"),
         },
+        detached: process.platform !== "win32",
         stdio: ["pipe", "pipe", "pipe"],
       },
     );
+    let failure: Error | undefined;
+    const terminate = (error?: Error) => {
+      failure ??= error;
+      try {
+        if (process.platform !== "win32" && child.pid)
+          process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH")
+          failure ??= Error("Archived compiler termination failed");
+      }
+    };
     const timer = setTimeout(
       () => {
-        child.kill("SIGKILL");
-        reject(Error("Archived compiler timed out"));
+        terminate(Error("Archived compiler timed out"));
       },
       Math.min(options.timeoutMs ?? MAX_COMPILER_TIME_MS, MAX_COMPILER_TIME_MS),
     );
@@ -133,15 +145,22 @@ export async function externalCompile(
     child.stdout.on("data", (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > MAX_COMPILED_OUTPUT_BYTES) {
-        child.kill("SIGKILL");
-        reject(Error("Archived compiler output exceeds limit"));
+        terminate(Error("Archived compiler output exceeds limit"));
       } else chunks.push(chunk);
     });
     // Diagnostics may contain authored material. Never relay raw stderr to callers or logs.
     child.stderr.resume();
-    child.on("error", reject);
+    child.on("error", (error) => {
+      failure ??= error;
+    });
     child.on("close", (code) => {
       clearTimeout(timer);
+      // Retire descendants even when the runner exits normally or unexpectedly.
+      terminate();
+      if (failure) {
+        reject(failure);
+        return;
+      }
       if (code !== 0) {
         reject(Error("Archived static compilation refused"));
         return;
