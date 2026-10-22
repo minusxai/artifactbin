@@ -1,3 +1,4 @@
+import { archivedRuntimePlan } from "./runtime-plan.ts";
 import { archivedDialogFocusSource } from "./dialog-source.ts";
 import {readLegacyCellWriteSites} from "./cell-write-source.ts";
 import{readsLegacyViewer}from"./viewer-source.ts";
@@ -307,6 +308,15 @@ if (flow.queries.length && !input.datasetUnavailable) {
     membersBinding:input.membersBinding,
   };
 }
+const runtimePlan = archivedRuntimePlan({
+  sql: Boolean(sql), author: Boolean(author), charts: Boolean(chartSources),
+  datasetMutations: Boolean(input.datasetMutations?.length),
+  dataControls: Boolean(input.dataControls?.length), slideDeck: Boolean(input.slideDeck),
+  mermaid: Boolean(input.mermaids?.length), dialogFocus: Boolean(input.dialogFocus),
+  person: Boolean(input.personBindings?.length), viewer: Boolean(input.viewerBinding),
+  members: Boolean(input.membersBinding), fonts: Boolean(fontResources.receipts.length),
+  context: Boolean(input.contexts?.length),
+});
 const sqlitePath = Object.keys(buildManifest.files).find((v: string) =>
   /^\/islands\/sqlite-engine-[a-f0-9]+\.js$/.test(v),
 );
@@ -479,11 +489,7 @@ const bundled = await bundle({
         });
         b.onResolve({ filter: /^(@mx\/|solid-js)/ }, (args: any) => {
           if (
-            (sql ||
-              author ||
-              chartSources ||
-              input.datasetMutations?.length ||
-              input.dataControls?.length || input.slideDeck || input.mermaids?.length || input.dialogFocus) &&
+            runtimePlan.kitGraph === "source" &&
             args.path.startsWith("solid-js")
           ) {
             const suffix = args.path.slice("solid-js".length);
@@ -494,11 +500,7 @@ const bundled = await bundle({
             return { path: path.join(root, "node_modules/solid-js", file) };
           }
           if (
-            (sql ||
-              author ||
-              chartSources ||
-              input.datasetMutations?.length ||
-              input.dataControls?.length || input.slideDeck || input.mermaids?.length || input.dialogFocus) &&
+            runtimePlan.kitGraph === "source" &&
             (args.path === "@mx/rt" || args.path.startsWith("@mx/kit/"))
           ) {
             const relative =
