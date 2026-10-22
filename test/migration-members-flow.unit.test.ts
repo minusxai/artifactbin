@@ -55,3 +55,11 @@ test('offline prototype keeps an unused validated service binding without granti
  const result=await prepareLocalFlow(archived,raw,[],{},{},[],[],binding,undefined,'offline-prototype');assert.deepEqual(result.results,{tables:{},errors:{}});
  await assert.rejects(prepareLocalFlow(archived,raw,[],{},{},[],[],{...binding,backendHref:'https://example.invalid'},undefined,'offline-prototype'));
 });
+test('offline prototype clock queries use the existing evaluation clock without viewer authority',async()=>{
+ for(const builtin of ['_now','_tz']){
+  const result=await prepareLocalFlow(archive(builtin),raw,[],{},{},[],[],binding,undefined,'offline-prototype');
+  assert.deepEqual(result.flow.queries[0].reads.builtins,[builtin]);
+ }
+ for(const builtin of ['_me','_me.id','_members','unknown'])
+  await assert.rejects(prepareLocalFlow(archive(builtin),raw,[],{},{},[],[],undefined,undefined,'offline-prototype'));
+});

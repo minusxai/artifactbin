@@ -73,7 +73,7 @@ export async function prepareLocalFlow(
         q.engine !== "sqlite" ||
         q.source ||
         q.reads.builtins.some(
-          (b: string) => !(b === "_members" && membersBinding) && !(["_me","_me.id"].includes(b) && viewerBinding),
+          (b: string) => !(b === "_members" && membersBinding) && !(["_me","_me.id"].includes(b) && viewerBinding) && !(sourceAdmission==="offline-prototype" && ["_now","_tz"].includes(b)),
         ),
     ) ||
     flow.imports.some(

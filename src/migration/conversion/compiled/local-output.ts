@@ -72,7 +72,7 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
     (!prototype && /\/api\/|\/islands\/|@mx\/boot|EventSource|WebSocket|parseJsx|parseExpressionAt|new Function|\beval\s*\(/.test(
       output.javascript,
     )) ||
-    /<\/style/i.test(output.css) ||
+    (!prototype && /<\/style/i.test(output.css)) ||
     Buffer.byteLength(output.html + output.css + output.javascript) >
       MAX_COMPILED_OUTPUT_BYTES
   )

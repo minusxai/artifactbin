@@ -1,3 +1,4 @@
+import {compiledStylesheetMarkup} from "./css-payload.ts";
 import{viewerContentHtml}from"./viewer-gate.ts";
 /** Explicit offline compiler orchestration. Admission owns source capabilities
  * and output safety; this module invokes the compiler and packages the page. */
@@ -78,7 +79,7 @@ export async function compileArchivedLocal(
     ? '<p role="status" data-migration-author-status>Starting page components…</p>'
     : "";
   const packagedBody=input.viewerBinding||input.viewerUnavailable?viewerContentHtml(body,Boolean(input.viewerUnavailable)):body;
-  const prefix = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}${context.head}<title>${esc(output.title)}</title><style>${output.css}</style></head><body>${status}${authorStatus}${packagedBody}`;
+  const prefix = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}${context.head}<title>${esc(output.title)}</title>${compiledStylesheetMarkup(output.css)}</head><body>${status}${authorStatus}${packagedBody}`;
   let html:string;
   try{html=prefix+compiledJavascriptMarkup(output.javascript,plan.sourceAdmission==="offline-prototype")+"</body></html>";}catch{return blocked("compiled-page-limit");}
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE) {
