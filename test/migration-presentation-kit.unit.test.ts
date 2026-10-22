@@ -17,7 +17,7 @@ test("archived presentation capabilities preserve shells, deferred content and t
     "transparent",
   );
   const content = admitPresentationKit("TooltipContent", {}, ["Tooltip"]);
-  assert.equal(content.identity, "deferred");
+  assert.equal(content.identity, "direct");
   assert.equal(content.portal, true);
   assert.equal(
     admitPresentationKit("TooltipContent", { forceMount: true }, ["Tooltip"])
@@ -29,7 +29,7 @@ test("archived presentation capabilities preserve shells, deferred content and t
     "AccordionItem",
   ]);
   assert.equal(accordion.identity, "direct");
-  assert.equal(accordion.conditionalChildren, true);
+  assert.equal(accordion.conditionalChildren, false);
   assert.equal(
     admitPresentationKit("AccordionContent", { forceMount: true }, [
       "Accordion",

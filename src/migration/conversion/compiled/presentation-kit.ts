@@ -3,6 +3,8 @@ import type {
   PresentationKitTag,
 } from "./presentation-kit-contracts.ts";
 
+// The archived compiler forces AccordionContent and TooltipContent forceMount=true
+// in both served and browser output (compiler kitParts), preserving hidden identities.
 const definitions: Record<
   PresentationKitTag,
   Omit<PresentationKitCapability, "tag">
@@ -22,7 +24,7 @@ const definitions: Record<
   },
   AccordionContent: {
     identity: "direct",
-    conditionalChildren: true,
+    conditionalChildren: false,
     portal: false,
     requiredAncestor: "AccordionItem",
   },
@@ -43,8 +45,8 @@ const definitions: Record<
     requiredAncestor: "Tooltip",
   },
   TooltipContent: {
-    identity: "deferred",
-    conditionalChildren: true,
+    identity: "direct",
+    conditionalChildren: false,
     portal: true,
     requiredAncestor: "Tooltip",
   },
