@@ -16,7 +16,13 @@ test(
     const schema = "migration_viewer_" + process.pid;
     try {
       await db.query(
-        `CREATE SCHEMA ${schema}; SET search_path TO ${schema}; CREATE TABLE accounts(actor text PRIMARY KEY); CREATE TABLE groups(owner text PRIMARY KEY); CREATE TABLE files(id text PRIMARY KEY,head text,deleted_at bigint); CREATE TABLE af_page_backends(file_id text,version text,page_id text,page_version bigint);`,
+        `CREATE SCHEMA ${schema}; SET search_path TO ${schema}; CREATE TABLE accounts(actor text PRIMARY KEY); CREATE TABLE groups(owner text PRIMARY KEY); CREATE TABLE files(id text PRIMARY KEY,head text,deleted_at bigint);`,
+      );
+      await db.query(
+        await readFile(
+          new URL("../src/backend/af-schema.sql", import.meta.url),
+          "utf8",
+        ),
       );
       await db.query(
         await readFile(
@@ -25,7 +31,10 @@ test(
         ),
       );
       await db.query(
-        "INSERT INTO files VALUES('Page12','2',NULL); INSERT INTO af_page_backends VALUES('Back12','v1','Page12',1),('Back12','v1','Page12',2)",
+        `INSERT INTO files VALUES('Page12','2',NULL);
+         INSERT INTO af_backend_files(file_id,owner,head_version) VALUES('Back12','fixture','v1');
+         INSERT INTO af_backend_versions(file_id,version,page_id,page_version,type_defs,deployment) VALUES('Back12','v1','Page12',2,'fixture','{}');
+         INSERT INTO af_page_backends(page_id,page_version,position,name,file_id,version) VALUES('Page12',1,0,'viewer','Back12','v1'),('Page12',2,0,'viewer','Back12','v1')`,
       );
       const binding = {
         backendId: "Back12",
