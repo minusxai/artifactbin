@@ -5,6 +5,8 @@ import {
   registerMigrationBackends,
 } from "../src/migration/backend-preparation.ts";
 import { generatedDatasetBackendSource } from "../src/migration/datasets/import-metadata.ts";
+import { readBackendModule } from "../src/backend/af-module.ts";
+import { boundedBackendSchema } from "../src/graphql/execution-policy.ts";
 import { sealDeployment, digest } from "../src/backend/deployment.ts";
 import type { MigrationBackendPreparationInput } from "../src/migration/backend-preparation-contracts.ts";
 const input: MigrationBackendPreparationInput = {
@@ -43,10 +45,18 @@ const input: MigrationBackendPreparationInput = {
     },
   ],
 };
+const moduleInfo = await readBackendModule(generatedDatasetBackendSource);
+const schema = boundedBackendSchema(moduleInfo.typeDefs);
 const deployment = sealDeployment(
   generatedDatasetBackendSource,
   "test compiled bundle",
-  { typeDefs: generatedDatasetBackendSource.split("`")[1]!, fields: ["read"] },
+  {
+    typeDefs: moduleInfo.typeDefs,
+    fields: [
+      ...Object.keys(schema.getQueryType()?.getFields() ?? {}),
+      ...Object.keys(schema.getMutationType()?.getFields() ?? {}),
+    ],
+  },
 );
 test("one fixed compiled source yields stable per-page backend IDs and exact per-revision binding receipts", async () => {
   let calls = 0;
@@ -134,6 +144,7 @@ test("group pages and malformed Import descriptors fail before compilation; empt
   assert.deepEqual(await prepareMigrationBackends({ ...input, pages: [] }), {
     receipts: [],
     bindings: [],
+    operations: [],
   });
 });
 test("registration rejects altered compiled receipts before touching destination SQL", async () => {
@@ -210,4 +221,74 @@ test("later revisions that remove Imports still emit an empty-backend receipt", 
     [true, true, false],
   );
   assert.equal(prepared.bindings.length, 2);
+});
+
+test("named mutations pin trusted SQL to exact backend, page revision and binding", async () => {
+  const mutation = {
+    name: "reserve",
+    bindingName: "sales",
+    datasetLegacyId: "ds",
+    target: { schema: "public", table: "rows" },
+    sqlSchema: "sales",
+    sql: "delete from sales.rows where id=$id",
+    paramTypes: { id: "number" as const },
+    conflictMode: "refuse" as const,
+  };
+  const page = input.pages[0]!;
+  const revised = {
+    ...input,
+    pages: [
+      {
+        ...page,
+        revisions: [
+          {
+            ...page.revisions[0]!,
+            editId: "original-edit",
+            mutations: [mutation],
+          },
+        ],
+      },
+    ],
+  };
+  const host = { compile: async () => deployment, invoke: async () => null };
+  const prepared = await prepareMigrationBackends(revised, { host });
+  assert.deepEqual(prepared.operations, [
+    {
+      sourceNamespace: "fixture",
+      bindingName: "sales",
+      operation: {
+        name: "reserve",
+        backendId: prepared.receipts[0]!.backendId,
+        backendVersion: deployment.version,
+        page: {
+          id: "Page12",
+          version: 1,
+          legacyId: "old-page",
+          editId: "original-edit",
+        },
+        datasetId: "ds",
+        target: mutation.target,
+        sqlSchema: "sales",
+        sql: mutation.sql,
+        paramTypes: { id: "number" },
+        conflictMode: "refuse",
+      },
+    },
+  ]);
+  for (const revision of [
+    { ...revised.pages[0]!.revisions[0]!, editId: undefined },
+    {
+      ...revised.pages[0]!.revisions[0]!,
+      mutations: [{ ...mutation, datasetLegacyId: "other" }],
+    },
+    { ...revised.pages[0]!.revisions[0]!, mutations: [mutation, mutation] },
+  ]) {
+    await assert.rejects(
+      prepareMigrationBackends(
+        { ...input, pages: [{ ...page, revisions: [revision] }] },
+        { host },
+      ),
+      /Invalid/,
+    );
+  }
 });

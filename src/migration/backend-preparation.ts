@@ -117,6 +117,46 @@ export async function prepareMigrationBackends(
           invalid();
         names.add(binding.name);
       }
+      const operationNames = new Set<string>();
+      for (const mutation of revision.mutations ?? []) {
+        const binding = revision.imports.find(
+          (b) => b.name === mutation.bindingName,
+        );
+        if (
+          !revision.editId ||
+          !nonempty(revision.editId) ||
+          !binding ||
+          binding.datasetLegacyId !== mutation.datasetLegacyId ||
+          !/^[A-Za-z][A-Za-z0-9_]*$/.test(mutation.name) ||
+          operationNames.has(mutation.name.toLowerCase()) ||
+          mutation.conflictMode !== "refuse" ||
+          mutation.sqlSchema !== binding.name ||
+          !nonempty(mutation.target.schema) ||
+          !nonempty(mutation.target.table) ||
+          typeof mutation.sql !== "string" ||
+          !mutation.sql.length ||
+          Buffer.byteLength(mutation.sql) > 64000 ||
+          (mutation.expectedAffected !== undefined &&
+            (!Number.isSafeInteger(mutation.expectedAffected) ||
+              mutation.expectedAffected < 0)) ||
+          !mutation.paramTypes ||
+          Object.entries(mutation.paramTypes).some(
+            ([name, type]) =>
+              !/^[A-Za-z][A-Za-z0-9_]*$/.test(name) ||
+              ["constructor", "prototype", "__proto__"].includes(name) ||
+              ![
+                "number",
+                "string",
+                "boolean",
+                "date",
+                "timestamp",
+                "user",
+              ].includes(type),
+          )
+        )
+          invalid();
+        operationNames.add(mutation.name.toLowerCase());
+      }
     }
     if (
       page.owner.kind === "group" &&
@@ -129,7 +169,7 @@ export async function prepareMigrationBackends(
   const required = pages.filter((page) =>
     page.revisions.some((revision) => revision.imports.length),
   );
-  if (!required.length) return { receipts: [], bindings: [] };
+  if (!required.length) return { receipts: [], bindings: [], operations: [] };
   const host =
     ports.host ??
     createBackendHost({
@@ -144,7 +184,8 @@ export async function prepareMigrationBackends(
     if (!ports.host) await host.close?.();
   }
   const receipts: MigrationBackendReceipt[] = [],
-    bindings: MigrationBackendPreparation["bindings"][number][] = [];
+    bindings: MigrationBackendPreparation["bindings"][number][] = [],
+    operations: MigrationBackendPreparation["operations"][number][] = [];
   for (const page of required) {
     let backendId = "";
     for (let attempt = 0; attempt < 10000; attempt++) {
@@ -173,6 +214,25 @@ export async function prepareMigrationBackends(
         bundleSha256: digest(deployment.bundle),
         deployment,
       });
+      for (const mutation of revision.mutations ?? []) {
+        const { bindingName, datasetLegacyId, ...authored } = mutation;
+        operations.push({
+          sourceNamespace: input.sourceNamespace,
+          bindingName,
+          operation: {
+            ...authored,
+            backendId,
+            backendVersion: deployment.version,
+            page: {
+              id: page.pageId,
+              version: revision.version,
+              legacyId: page.legacyId,
+              editId: revision.editId!,
+            },
+            datasetId: datasetLegacyId,
+          },
+        });
+      }
       for (const binding of revision.imports)
         bindings.push({
           pageLegacyId: page.legacyId,
@@ -185,7 +245,7 @@ export async function prepareMigrationBackends(
         });
     }
   }
-  return { receipts, bindings };
+  return { receipts, bindings, operations };
 }
 /** The caller owns the page transaction and search_path. This function never begins or commits one. */
 export const registerMigrationBackends: MigrationBackendRegistrar = async (

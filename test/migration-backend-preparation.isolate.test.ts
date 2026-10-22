@@ -10,6 +10,7 @@ import {
   prepareMigrationBackends,
   registerMigrationBackends,
 } from "../src/migration/backend-preparation.ts";
+import { registerDatasetMutationOperations } from "../src/persistence/dataset-mutations.ts";
 import { createBackendRoutes } from "../src/backend/af-files.ts";
 import { createSqlDatabase } from "../src/persistence/sql.ts";
 import { createDatasetReadRepository } from "../src/persistence/datasets.ts";
@@ -41,6 +42,22 @@ test(
               owner: { kind: "user", id: "owner" },
               revisions: [1, 2, 3].map((version) => ({
                 version,
+                editId: "old-edit",
+                mutations:
+                  version === 2
+                    ? [
+                        {
+                          name: "remove",
+                          bindingName: "sales",
+                          datasetLegacyId: "ds",
+                          target: { schema: "public", table: "rows" },
+                          sqlSchema: "sales",
+                          sql: "delete from sales.rows where value=$value",
+                          paramTypes: { value: "number" as const },
+                          conflictMode: "refuse" as const,
+                        },
+                      ]
+                    : [],
                 imports:
                   version !== 2
                     ? []
@@ -155,7 +172,7 @@ test(
       };
       const originalOwner = { userId: "old-owner", tokenId: null };
       await env.pool.query(
-        "INSERT INTO dataset_resources VALUES('fixture','ds',1,0,'owner',1,$1,false,$2)",
+        "INSERT INTO dataset_resources(source_namespace,legacy_id,current_version,policy_revision,owner,generation,access,deleted,snapshot) VALUES('fixture','ds',1,0,'owner',1,$1,false,$2)",
         [
           datasetAccess,
           {
@@ -191,6 +208,33 @@ test(
       await env.pool.query(
         "INSERT INTO dataset_bindings VALUES($1,$2,'Page12',2,'sales','fixture','ds',1,$3)",
         [receipt.backendId, receipt.deployment.version, descriptor],
+      );
+      await database.transaction(async (client) => {
+        await registerDatasetMutationOperations(client, prepared.operations);
+        await registerDatasetMutationOperations(client, prepared.operations);
+      });
+      assert.deepEqual(
+        (
+          await env.pool.query(
+            "SELECT source_namespace,binding_name,operation FROM dataset_mutation_operations",
+          )
+        ).rows,
+        prepared.operations.map((r) => ({
+          source_namespace: r.sourceNamespace,
+          binding_name: r.bindingName,
+          operation: r.operation,
+        })),
+      );
+      await assert.rejects(
+        database.transaction((client) =>
+          registerDatasetMutationOperations(
+            client,
+            prepared.operations.map((r) => ({
+              ...r,
+              operation: { ...r.operation, sql: "delete from sales.rows" },
+            })),
+          ),
+        ),
       );
       await env.pool.query(
         "INSERT INTO dataset_principals VALUES('fixture','member','user','old-member','user',NULL)",

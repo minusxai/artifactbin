@@ -1,3 +1,4 @@
+import type { DatasetOperationRegistration } from "./mutation/repository-contracts.ts";
 import type { AccessPolicy } from "../contracts.ts";
 import type { DatasetBinding, DatasetTable } from "./contracts.ts";
 import type { DatasetSnapshot, DocumentSnapshot } from "./policy/contracts.ts";
@@ -5,6 +6,8 @@ import type { DatasetSnapshot, DocumentSnapshot } from "./policy/contracts.ts";
 export interface DatasetImportMetadata {
   sourceNamespace: string;
   bindings: readonly DatasetBinding[];
+  /** Trusted publication registry, inserted in the binding transaction; never browser metadata. */
+  operations?: readonly DatasetOperationRegistration[];
   pages: readonly {
     pageId: string;
     pageVersion: number;
