@@ -65,45 +65,47 @@ async function fixture(
     conversionStrategy: "strict",
   };
 }
-test("typed job bounds conversion concurrency and never opens a dry-run destination", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "migration-job-"));
-  try {
-    const options = await fixture(directory);
-    let active = 0,
-      peak = 0,
-      calls = 0,
-      connections = 0;
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const summary = await runMigrationJob(options, {
-      connectDestination: async () => {
-        connections++;
-        throw new Error("No destination permitted");
-      },
-      convert: async () => {
-        active++;
-        peak = Math.max(peak, active);
-        if (++calls === 2) release();
-        await gate;
-        active--;
-        return {
-          classification: "renderable",
-          html: "<p>Fixture</p>",
-          issues: [],
-          identities: {},
-        };
-      },
-    });
-    assert.equal(peak, 2);
-    assert.equal(calls, 3);
-    assert.equal(connections, 0);
-    assert.equal(summary.inventory.markup?.ready, 3);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
+for (const concurrency of [1, 2, 3, 4] as const)
+  test(`typed dry-run job bounds conversion concurrency at ${concurrency} without opening a destination`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), "migration-job-"));
+    try {
+      const options = await fixture(directory);
+      options.concurrency = concurrency;
+      let active = 0,
+        peak = 0,
+        calls = 0,
+        connections = 0;
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const summary = await runMigrationJob(options, {
+        connectDestination: async () => {
+          connections++;
+          throw new Error("No destination permitted");
+        },
+        convert: async () => {
+          active++;
+          peak = Math.max(peak, active);
+          if (++calls === Math.min(concurrency, 3)) release();
+          await gate;
+          active--;
+          return {
+            classification: "renderable",
+            html: "<p>Fixture</p>",
+            issues: [],
+            identities: {},
+          };
+        },
+      });
+      assert.equal(peak, Math.min(concurrency, 3));
+      assert.equal(calls, 3);
+      assert.equal(connections, 0);
+      assert.equal(summary.inventory.markup?.ready, 3);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 test("failed complete preflight never opens an actual destination", async () => {
   const directory = await mkdtemp(join(tmpdir(), "migration-job-"));
   try {

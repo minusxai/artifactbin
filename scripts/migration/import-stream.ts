@@ -9,7 +9,7 @@ const [sourceDirectory, indexDirectory, schema, reportPath, ...flags] =
   process.argv.slice(2);
 if (!sourceDirectory || !indexDirectory || !schema || !reportPath)
   throw new Error(
-    "Usage: node --experimental-strip-types scripts/migration/import-stream.ts <private-export-directory> <private-index-directory> <dedicated-schema> <new-private-report.ndjson> [--apply-isolated|--verify-isolated] [--editor-manage-restricted] [--conversion-strategy=strict|archived-static|archived-functional] [--concurrency=1|2]",
+    "Usage: node --experimental-strip-types scripts/migration/import-stream.ts <private-export-directory> <private-index-directory> <dedicated-schema> <new-private-report.ndjson> [--apply-isolated|--verify-isolated] [--editor-manage-restricted] [--conversion-strategy=strict|archived-static|archived-functional] [--concurrency=1|2|3|4]",
   );
 destinationSchemas(schema);
 const allowed = [
@@ -23,6 +23,8 @@ const allowed = [
   "--conversion-strategy=archived-functional",
   "--concurrency=1",
   "--concurrency=2",
+  "--concurrency=3",
+  "--concurrency=4",
 ];
 if (flags.some((f) => !allowed.includes(f)))
   throw new Error("Unknown import flag");
@@ -92,7 +94,13 @@ const options: MigrationJobOptions = {
   apply,
   verifyOnly,
   measureStorage: flags.includes("--measure-storage"),
-  concurrency: flags.includes("--concurrency=2") ? 2 : 1,
+  concurrency: flags.includes("--concurrency=4")
+    ? 4
+    : flags.includes("--concurrency=3")
+      ? 3
+      : flags.includes("--concurrency=2")
+        ? 2
+        : 1,
   origin: process.env.MIGRATION_PUBLIC_ORIGIN ?? "http://localhost:8787",
   legacyOrigins: (process.env.MIGRATION_LEGACY_ORIGINS ?? "")
     .split(",")
