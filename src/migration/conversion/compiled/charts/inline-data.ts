@@ -11,6 +11,7 @@ export function readChartInlineData(
     if (
       typeof format !== "object" ||
       Array.isArray(format) ||
+      Object.getOwnPropertySymbols(format).length > 0 ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(format)) ||
       Object.values(Object.getOwnPropertyDescriptors(format)).some(
         (p) => !Object.hasOwn(p, "value"),
@@ -38,11 +39,13 @@ export function readChartInlineData(
       throw Error("Chart inline data unavailable");
     if (Array.isArray(value) && value.length > 10000)
       throw Error("Chart inline data limit");
+    if (Object.getOwnPropertySymbols(value).length)
+      throw Error("Chart inline data unavailable");
     const prototype = Object.getPrototypeOf(value);
     if (
-      !Array.isArray(value) &&
-      prototype !== Object.prototype &&
-      prototype !== null
+      Array.isArray(value)
+        ? prototype !== Array.prototype
+        : prototype !== Object.prototype && prototype !== null
     )
       throw Error("Chart inline data unavailable");
     for (const [key, property] of Object.entries(

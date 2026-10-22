@@ -43,3 +43,20 @@ test("inline JSON refuses arbitrary formats, getters and unbounded structures", 
   for (const data of ["[]", {}, [{ value: Infinity }], [() => 0], [new Date()]])
     assert.throws(() => readChartInlineData(data));
 });
+
+test("inline chart copy never invokes inherited JSON hooks or symbol formats", () => {
+  let called = false;
+  const rows: any = [];
+  Object.setPrototypeOf(rows, {
+    toJSON() {
+      called = true;
+      return [];
+    },
+  });
+  assert.throws(() => readChartInlineData(rows, { copy: true }));
+  assert.equal(called, false);
+  assert.throws(() =>
+    readChartInlineData([{}], { [Symbol("hidden")]: true } as any),
+  );
+  assert.throws(() => readChartInlineData([{ [Symbol("hidden")]: 1 }]));
+});
