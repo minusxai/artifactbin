@@ -122,3 +122,45 @@ test("external HTML has a fixed sourceQuery operation and leaks no source SQL re
   assert.match(converted.html!, /textContent/);
   assert.match(converted.html!, /&lt;unsafe&gt;/);
 });
+
+test("rendered metadata round-trips hostile schema table and column names without creating scripts", () => {
+  const schema = "<schema>",
+    table = "</script><script>danger()</script>",
+    column = "<column>";
+  const external = source();
+  external.tables = [
+    {
+      schema,
+      table,
+      queryName: "datasetTable0",
+      columns: [{ name: column, type: "string" }],
+    },
+  ];
+  const stored = {
+    name: "dataset",
+    legacyRef: "ref:fixture",
+    backendHref: "/af/v1/ids/ABC123",
+    backendNamespace: "legacyData",
+    mode: "live" as const,
+    version: 1,
+    tables: [{ schema, table, columns: [{ name: column, type: "string" }] }],
+  };
+  for (const inputSource of [
+    external,
+    { kind: "stored" as const, binding: stored },
+  ]) {
+    const html = convertStandaloneDatasetPage({
+      title: "Data",
+      coreUrl: "/af/v1/core.js",
+      source: inputSource,
+    }).html!;
+    const literal = /const (?:source|binding)=(.*),makeReader=/.exec(html)?.[1];
+    assert.ok(literal);
+    const metadata = JSON.parse(literal);
+    assert.equal(metadata.tables[0].schema, schema);
+    assert.equal(metadata.tables[0].table, table);
+    assert.equal(metadata.tables[0].columns[0].name, column);
+    assert.equal((html.match(/<script\b/g) || []).length, 2);
+    assert.deepEqual(checkPage(html), []);
+  }
+});
