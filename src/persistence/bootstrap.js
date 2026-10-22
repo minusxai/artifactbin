@@ -7,6 +7,7 @@ const schemaSQL = readFileSync(
 );
 /** Brief C's tables (BACKEND_SCHEMA_FILE) run after ours when that file exists. */
 const backendSchema = new URL("../backend/af-schema.sql", import.meta.url);
+const datasetSchema = new URL("../datasets/schema.sql", import.meta.url);
 /**
  * Creates the configured schema when it is missing, then the tables in it.
  * @param {import('./sql.ts').SqlPool} pool
@@ -33,6 +34,8 @@ export function createInitializer(pool, schema = "public") {
         await c.query(schemaSQL);
         if (existsSync(backendSchema))
           await c.query(readFileSync(backendSchema, "utf8"));
+        if (existsSync(datasetSchema))
+          await c.query(readFileSync(datasetSchema, "utf8"));
       })
       .catch((error) => {
         ready = undefined;
