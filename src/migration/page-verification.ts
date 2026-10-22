@@ -26,9 +26,14 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
   for await (const page of input.pages) {
     ready.add(page.pageId);
     const owner = page.owner?.id;
+    const normalized = prepareMigrationPageSources(page, input.origin);
+    const preparedHead = normalized.find(
+      (r) => r.version === page.original.version,
+    )!.prepared;
+    const liveComments = page.comments.filter((c) => !c.deleted_at);
     const file = (
       await db.query(
-        `SELECT owner,head,path,access FROM ${runtime}.files WHERE id=$1`,
+        `SELECT owner,head,path,access,deleted_at,seed,sequence::text,source_digest,next_node_id,generation,share FROM ${runtime}.files WHERE id=$1`,
         [page.pageId],
       )
     ).rows;
@@ -40,6 +45,13 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
           head: String(page.original.version),
           path: publicationPath(page),
           access: destinationAccess(page, input.maps),
+          deleted_at: null,
+          seed: preparedHead.state,
+          sequence: String(liveComments.length),
+          source_digest: digest(preparedHead.source),
+          next_node_id: Number(preparedHead.meta.nextNodeId ?? 1),
+          generation: 1,
+          share: null,
         },
       ],
       "page owner/head/ACL",
@@ -54,7 +66,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
       [{ owner, kind: "page", published: true }],
       "page ID ownership registry",
     );
-    const normalized = prepareMigrationPageSources(page, input.origin);
+
     const sources = (
       await db.query(
         `SELECT revision,content,node_ids,digest FROM ${runtime}.sources WHERE file_id=$1 ORDER BY revision::bigint`,
@@ -191,6 +203,47 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
       "compiled backend links",
     );
     totals.backendLinks += expectedLinks.length;
+    equal(
+      (
+        await db.query(
+          `SELECT page_version FROM ${runtime}.af_backend_pages WHERE page_id=$1`,
+          [page.pageId],
+        )
+      ).rows,
+      page.backends?.length
+        ? [
+            {
+              page_version: Math.max(
+                ...page.backends.map((b) => b.pageVersion),
+              ),
+            },
+          ]
+        : [],
+      "current backend page pointer",
+    );
+    for (const id of new Set(
+      (page.backends ?? []).filter((b) => b.linked).map((b) => b.backendId),
+    )) {
+      equal(
+        (
+          await db.query(
+            `SELECT version FROM ${runtime}.af_backend_versions WHERE file_id=$1 ORDER BY version`,
+            [id],
+          )
+        ).rows,
+        [
+          ...new Set(
+            page
+              .backends!.filter((b) => b.linked && b.backendId === id)
+              .map((b) => b.deployment.version),
+          ),
+        ]
+          .sort()
+          .map((version) => ({ version })),
+        "backend version inventory",
+      );
+    }
+
     for (const b of page.backends ?? []) {
       if (!b.linked) continue;
       equal(

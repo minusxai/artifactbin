@@ -193,6 +193,48 @@ test(
           origin: "http://localhost:8787",
         });
       assert.equal((await verify()).comments, 3);
+      const baseline = (
+        await db.query(`SELECT * FROM "${schema}".files WHERE id=$1`, [
+          plan.pages[0]!.pageId,
+        ])
+      ).rows[0];
+      for (const [column, value] of Object.entries({
+        deleted_at: 123456789,
+        seed: { tampered: true },
+        sequence: 999,
+        source_digest: "tampered",
+        next_node_id: 999999,
+        generation: 2,
+        share: "public",
+      })) {
+        await db.query(
+          `UPDATE "${schema}".files SET ${column}=$2 WHERE id=$1`,
+          [
+            plan.pages[0]!.pageId,
+            column === "seed" ? JSON.stringify(value) : value,
+          ],
+        );
+        await assert.rejects(verify(), /page owner\/head\/ACL/);
+        await db.query(
+          `UPDATE "${schema}".files SET ${column}=$2 WHERE id=$1`,
+          [
+            plan.pages[0]!.pageId,
+            column === "seed"
+              ? JSON.stringify(baseline[column])
+              : baseline[column],
+          ],
+        );
+      }
+      await db.query(
+        `INSERT INTO "${schema}".af_backend_pages VALUES ($1,999)`,
+        [plan.pages[0]!.pageId],
+      );
+      await assert.rejects(verify(), /current backend page pointer/);
+      await db.query(
+        `DELETE FROM "${schema}".af_backend_pages WHERE page_id=$1`,
+        [plan.pages[0]!.pageId],
+      );
+
       await db.query(
         `UPDATE "${schema}".files SET access=jsonb_set(access,'{visibility}','"public"') WHERE id=$1`,
         [plan.pages[0]!.pageId],
