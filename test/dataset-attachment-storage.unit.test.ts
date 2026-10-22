@@ -115,18 +115,33 @@ test("declared image type cannot hide another payload and no decoder receives it
 test("failed processor output cleanup stops future staging without republishing", async () => {
   const directory = await mkdtemp(join(tmpdir(), "attachments-"));
   try {
-    const p = processor(), process = p.process;
+    const p = processor(),
+      process = p.process;
     let calls = 0;
     p.process = async (...args) => {
       calls++;
-      return { ...(await process(...args)), dispose: async () => { throw Error("cleanup failed"); } };
+      return {
+        ...(await process(...args)),
+        dispose: async () => {
+          throw Error("cleanup failed");
+        },
+      };
     };
     const storage = createDatasetAttachmentStorage({ directory, processor: p });
-    const upload = () => ({ requestId: "request_123", filename: "image.png", contentType: "image/png" as const, body: (async function* () { yield png; })() });
+    const upload = () => ({
+      requestId: "request_123",
+      filename: "image.png",
+      contentType: "image/png" as const,
+      body: (async function* () {
+        yield png;
+      })(),
+    });
     await assert.rejects(storage.stage(upload()), /cleanup failed/);
     await assert.rejects(storage.stage(upload()), { code: "unavailable" });
     assert.equal(calls, 1);
     assert.deepEqual(await readdir(join(directory, "objects")), []);
     assert.deepEqual(await readdir(join(directory, "staging")), []);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
