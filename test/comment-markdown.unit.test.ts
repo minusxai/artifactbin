@@ -48,6 +48,13 @@ test("unsafe links and raw HTML remain literal text; bounded input never execute
 });
 
 test("mailbox links keep their readable legacy label without mail headers", () => {
+  for (const value of [
+    "mailto:a,b@example.test",
+    "mailto:a;b@example.test",
+    "mailto:a@example.test,b@example.test",
+    "mailto:a@example.test;b@example.test",
+  ])
+    assert.equal(safeHref(value), null);
   assert.equal(
     safeHref("mailto:reader@example.test"),
     "mailto:reader@example.test",

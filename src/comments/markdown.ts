@@ -32,7 +32,7 @@ export function safeHref(url: string): string | null {
   if (lower.startsWith("mailto:")) {
     // A single mailbox only: no headers, control escapes or navigation-capable schemes.
     const address = cleaned.slice(7);
-    return /^[^@\s<>?%]+@[^@\s<>?%]+$/.test(address) ? cleaned : null;
+    return /^[^@\s<>?%,;]+@[^@\s<>?%,;]+$/.test(address) ? cleaned : null;
   }
   if (!SCHEMES.some((scheme) => lower.startsWith(scheme))) return null;
   try {
