@@ -153,8 +153,9 @@ export async function completeControlOptions(
     bytes = new TextEncoder().encode(JSON.stringify(initial)).byteLength;
   for (
     let pages = 0;
-    table.truncated ||
-    (table.totalRows !== undefined && rows.length < table.totalRows);
+    table.totalRows !== undefined
+      ? rows.length < table.totalRows
+      : table.truncated;
     pages++
   ) {
     if (

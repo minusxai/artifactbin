@@ -68,7 +68,7 @@ test("Select options collect complete SQL pages under explicit limits and refuse
   const pages: number[] = [];
   const full = await completeControlOptions(initial, async (offset) => {
     pages.push(offset);
-    return { ...initial, rows: [{ id: offset + 1 }], truncated: offset < 2 };
+    return { ...initial, rows: [{ id: offset + 1 }], truncated: true };
   });
   assert.deepEqual(full.rows, [{ id: 1 }, { id: 2 }, { id: 3 }]);
   assert.deepEqual(pages, [1, 2]);

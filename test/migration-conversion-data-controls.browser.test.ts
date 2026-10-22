@@ -11,7 +11,7 @@ test(
   async () => {
     const result = await compileArchivedLocal(
       {
-        source: `<Helmet><Value name="choice" type="number" default={0}/><Value name="items" type="table" value={${JSON.stringify(Array.from({ length: 601 }, (_, i) => ({ id: i, label: `Option ${i}` })))}}/><Query name="rows">{\`select * from items\`}</Query></Helmet><Select id="pick" value="$choice" options="$rows"/><DataTable id="grid" data="$rows" height={240}/><p id="selected">{$choice}</p>`,
+        source: `<Helmet><Value name="choice" type="number" default={0}/><Value name="items" type="table" value={${JSON.stringify(Array.from({ length: 1201 }, (_, i) => ({ id: i, label: `Option ${i}` })))}}/><Query name="rows">{\`select * from items\`}</Query><Query name="gridRows">{\`select * from items\`}</Query></Helmet><Select id="pick" value="$choice" options="$rows"/><DataTable id="grid" data="$gridRows" height={240}/><p id="selected">{$choice}</p>`,
         coreUrl: "/af/v1/core.js",
       },
       { legacyRoot: root! },
@@ -66,16 +66,39 @@ test(
       );
       await page.locator('#pick button[aria-haspopup="listbox"]').click();
       await page
-        .getByRole("option", { name: "Option 600", exact: true })
+        .getByRole("option", { name: "Option 1200", exact: true })
         .click();
       await page.waitForFunction(
         () =>
-          document.querySelector("#selected")?.textContent?.trim() === "600",
+          document.querySelector("#selected")?.textContent?.trim() === "1200",
+      );
+      await page.waitForFunction(
+        () =>
+          document.querySelector("[data-migration-control-status]")
+            ?.textContent === "",
+      );
+      await page
+        .locator("#grid")
+        .getByRole("button", { name: "Load more rows", exact: true })
+        .click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector('#grid [aria-label="Row count"]')
+            ?.textContent === "1,201 of 1,201 rows",
+      );
+      await page.locator('#grid [aria-label="Sort by id"]').click();
+      await page.locator('#grid [aria-label="Sort by id"]').click();
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector("#grid tbody tr td")
+            ?.textContent?.trim()
+            .replaceAll(",", "") === "1200",
       );
       await page.reload();
       await page.waitForFunction(
         () =>
-          document.querySelector("#selected")?.textContent?.trim() === "600",
+          document.querySelector("#selected")?.textContent?.trim() === "1200",
       );
       assert.match(await page.locator("#grid").innerText(), /Option/);
       assert.deepEqual(errors, []);
