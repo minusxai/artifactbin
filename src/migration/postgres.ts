@@ -61,9 +61,9 @@ export class PostgresMigrationDestination implements ImportDestination {
 
    for(const group of planMigrationGroups(input.manifest,input.maps.users).groups){
     if(input.maps.groups[group.legacyId]!==group.actor)throw new Error('Group mapping mismatch');
-    const existingAccount=(await this.db.query('SELECT principal_kind FROM accounts WHERE actor=$1',[group.actor])).rows[0];if(existingAccount&&existingAccount.principal_kind!=='group')throw new Error('Group principal conflicts with existing account');
+    const existingAccount=(await this.db.query('SELECT principal_kind,salt,password,handle FROM accounts WHERE actor=$1',[group.actor])).rows[0];if(existingAccount&&(existingAccount.principal_kind!=='group'||existingAccount.salt!==null||existingAccount.password!==null||existingAccount.handle!==null))throw new Error('Group principal conflicts with existing account');
     const existingGroup=(await this.db.query('SELECT active FROM groups WHERE owner=$1',[group.actor])).rows[0];if(existingGroup&&existingGroup.active!==group.active)throw new Error('Group activation conflicts with existing authority');
-    const existingMembers=(await this.db.query('SELECT actor,role FROM group_memberships WHERE owner=$1',[group.actor])).rows;if(existingMembers.some(member=>!group.members.some(m=>m.actor===member.actor&&m.role===member.role)))throw new Error('Group membership conflicts with existing authority');
+    const existingMembers=(await this.db.query('SELECT actor,role FROM group_memberships WHERE owner=$1',[group.actor])).rows;if((existingGroup&&existingMembers.length!==group.members.length)||existingMembers.some(member=>!group.members.some(m=>m.actor===member.actor&&m.role===member.role)))throw new Error('Group membership conflicts with existing authority');
     await this.db.query("INSERT INTO accounts(actor,principal_kind,name) VALUES($1,'group',$2) ON CONFLICT(actor) DO NOTHING",[group.actor,group.name]);
     await this.db.query('INSERT INTO groups(owner,active) VALUES($1,$2) ON CONFLICT(owner) DO NOTHING',[group.actor,group.active]);
     for(const member of group.members)await this.db.query('INSERT INTO group_memberships(owner,actor,role) VALUES($1,$2,$3) ON CONFLICT(owner,actor) DO NOTHING',[group.actor,member.actor,member.role]);
