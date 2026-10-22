@@ -1,3 +1,4 @@
+import { prepareMigrationJobDatasets } from "./job-datasets.ts";
 import { writeFile } from "node:fs/promises";
 import { destinationSchemas } from "./destination-schema.ts";
 import { createMigrationConverter } from "./convert.ts";
@@ -25,6 +26,13 @@ export async function runMigrationJob(
   if (options.apply && !ports.connectDestination)
     throw new Error("Explicit isolated destination connection required");
   const source = await prepareMigrationJobSource(options);
+  source.preparedDatasets = await prepareMigrationJobDatasets(source, options, {
+    host: ports.backendHost,
+  });
+  const identify =
+    ports.compilerIdentity ??
+    (() => archivedCompilerIdentity(options.archivedRoot ?? ""));
+  const compilerIdentity = await identify();
   let convert =
     ports.convert ??
     createMigrationConverter({
@@ -34,9 +42,7 @@ export async function runMigrationJob(
   const cache = options.conversionCacheDirectory
     ? cachedMigrationConverter(convert, {
         directory: options.conversionCacheDirectory,
-        compilerIdentity: await archivedCompilerIdentity(
-          options.archivedRoot ?? "",
-        ),
+        compilerIdentity,
         strategy: options.conversionStrategy,
       })
     : null;
@@ -58,6 +64,10 @@ export async function runMigrationJob(
     source.maps,
   );
   const planned = await planMigrationJob(source, options, planner, preflight);
+  if ((await identify()) !== compilerIdentity)
+    throw new Error(
+      "Compiler provenance changed during planning; use frozen source checkouts",
+    );
   if (options.apply) {
     if (planned.linksRequireLegacyOrigin)
       throw new Error(
@@ -87,6 +97,20 @@ export async function runMigrationJob(
     complete: true,
     dryRun: !options.apply,
     inventory: planned.inventory,
+    datasets: source.preparedDatasets
+      ? {
+          imports: source.preparedDatasets.scan.statistics,
+          verifiedObjects: source.datasets!.verifiedObjects,
+          verifiedBytes: source.datasets!.verifiedBytes,
+          preparedBindings: source.preparedDatasets.metadata.bindings.length,
+          blockedPages: source.preparedDatasets.issues.size,
+          omittedUnmappedTokenPrincipals:
+            source.preparedDatasets.omittedUnmappedTokenPrincipals,
+          historicalUnavailableRevisions: [
+            ...source.preparedDatasets.scan.historicalImportVersions.values(),
+          ].reduce((sum, versions) => sum + versions.length, 0),
+        }
+      : undefined,
     dependencyBlocked: planned.readinessRows.filter(
       (r) => r.ready && !ready.has(r.pageId),
     ).length,
@@ -97,6 +121,7 @@ export async function runMigrationJob(
     conversionStrategy: options.conversionStrategy,
     conversionCache: cache?.stats,
     conversionProvenance: planned.conversionProvenance,
+    compilerIdentity,
   };
   await writeFile(
     options.reportPath + ".summary.json",

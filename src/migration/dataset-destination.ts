@@ -51,6 +51,7 @@ function tablePlans(batch: DatasetMigrationBatch): TablePlan[] {
         generation: r.generation,
         access: r.access,
         deleted: r.deleted,
+        writable: r.writable === true,
         snapshot: r.snapshot,
       })),
       ["access", "snapshot"],

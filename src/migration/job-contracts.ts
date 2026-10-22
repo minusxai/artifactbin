@@ -1,3 +1,5 @@
+import type { MigrationJobDatasets } from "./job-dataset-contracts.ts";
+import type { BackendHost } from "../backend/contracts.ts";
 import type { MigrationDatasetSource } from "./dataset-source-contracts.ts";
 import type {
   Converter,
@@ -36,6 +38,8 @@ export interface MigrationJobPorts {
     close: () => Promise<void>;
   }>;
   convert?: Converter;
+  backendHost?: BackendHost;
+  compilerIdentity?: () => Promise<string>;
 }
 export interface MigrationJobSource {
   manifest: StreamManifest;
@@ -46,6 +50,7 @@ export interface MigrationJobSource {
   groupSummary: Record<string, number>;
   media: MigrationMediaIndex | null;
   datasets?: MigrationDatasetSource;
+  preparedDatasets?: MigrationJobDatasets;
   resourceMap?: Readonly<Record<string, string>>;
   readArtifact: (id: string) => Promise<MigrationManifest>;
 }
@@ -70,6 +75,7 @@ export interface MigrationJobPlan {
   pageDigests: Map<string, string>;
   linksRequireLegacyOrigin: boolean;
   conversionProvenance: Record<string, number>;
+  compilerIdentity?: string;
 }
 
 export interface MigrationJobSummary {
@@ -78,10 +84,20 @@ export interface MigrationJobSummary {
   inventory: JobInventory;
   dependencyBlocked: number;
   readinessReport: string;
+  datasets?: {
+    imports: MigrationJobDatasets["scan"]["statistics"];
+    verifiedObjects: number;
+    verifiedBytes: number;
+    preparedBindings: number;
+    blockedPages: number;
+    omittedUnmappedTokenPrincipals: number;
+    historicalUnavailableRevisions: number;
+  };
   result: JobTotals;
   identitySummary: Record<string, number>;
   groupSummary: Record<string, number>;
   conversionStrategy: MigrationConversionStrategy;
   conversionCache?: { hits: number; misses: number; invalid: number };
   conversionProvenance: Record<string, number>;
+  compilerIdentity?: string;
 }

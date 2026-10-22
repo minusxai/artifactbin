@@ -1,5 +1,5 @@
-import type {MigrationBackendReceipt} from "./backend-preparation-contracts.ts";
-import type {DatasetBrowserBinding} from "./datasets/planner-contracts.ts";
+import type { MigrationBackendReceipt } from "./backend-preparation-contracts.ts";
+import type { DatasetBrowserBinding } from "./datasets/planner-contracts.ts";
 /** Offline migration records contain private content. Never commit exported manifests. */
 export type LegacyRow = Record<string, unknown>;
 export interface LegacyArtifact extends LegacyRow {
@@ -26,17 +26,31 @@ export interface MigrationManifest {
 export interface SqlReader {
   query(sql: string, values?: unknown[]): Promise<{ rows: LegacyRow[] }>;
 }
-export interface ConversionInput { datasetBindings?:readonly DatasetBrowserBinding[]; resourceMap?:Readonly<Record<string,string>>; source: string; coreUrl: string; document?: unknown; meta?: Record<string,unknown> }
+export interface ConversionInput {
+  datasetUnavailable?: { reason: "historical-binding-unavailable" };
+  datasetBindings?: readonly DatasetBrowserBinding[];
+  resourceMap?: Readonly<Record<string, string>>;
+  source: string;
+  coreUrl: string;
+  document?: unknown;
+  meta?: Record<string, unknown>;
+}
 export interface ConversionOutput {
-  classification: 'renderable' | 'functional' | 'manual-blocked';
+  classification: "renderable" | "functional" | "manual-blocked";
   html: string | null;
-  outputBytes?:number;
+  outputBytes?: number;
   issues: readonly unknown[];
   identities: Record<string, string>;
-  strategy?: 'strict'|'archived-static'|'archived-functional'|'media-wrapper';
-  provenance?: {compiler:string;build:string;mode:string};
+  strategy?:
+    | "strict"
+    | "archived-static"
+    | "archived-functional"
+    | "media-wrapper";
+  provenance?: { compiler: string; build: string; mode: string };
 }
-export type Converter = (input: ConversionInput) => ConversionOutput | Promise<ConversionOutput>;
+export type Converter = (
+  input: ConversionInput,
+) => ConversionOutput | Promise<ConversionOutput>;
 export interface MigrationMaps {
   pages: Record<string, string>;
   users: Record<string, string>;
@@ -51,20 +65,33 @@ export interface PlannedRevision {
   conversion: ConversionOutput;
 }
 export interface PlannedPage {
-  backends?:readonly MigrationBackendReceipt[];
+  backendAllocation?: { sourceNamespace: string; inventorySha256: string };
+  backends?: readonly MigrationBackendReceipt[];
   legacyId: string;
   pageId: string;
-  owner: { kind: 'user' | 'group' | 'token'; id: string } | null;
-  disposition: 'ready' | 'blocked';
+  owner: { kind: "user" | "group" | "token"; id: string } | null;
+  disposition: "ready" | "blocked";
   issues: string[];
   revisions: PlannedRevision[];
   /** Full original ACL; destination adapter must implement its exact semantics. */
   access: { visibility: string; linkRole: string; shares: LegacyRow[] };
   original: LegacyArtifact;
-  assetDependencies?:string[];
-  assets?: {revision:string;variant:'original'|'small';sha256:string;contentType:string;filename:string|null;bytes:number}[];
+  assetDependencies?: string[];
+  assets?: {
+    revision: string;
+    variant: "original" | "small";
+    sha256: string;
+    contentType: string;
+    filename: string | null;
+    bytes: number;
+  }[];
   comments: LegacyRow[];
-  unavailableCommentContexts?: {commentId:string;status:'unavailable';originalRevision:string;reason:'not-retained'}[];
+  unavailableCommentContexts?: {
+    commentId: string;
+    status: "unavailable";
+    originalRevision: string;
+    reason: "not-retained";
+  }[];
   identities: LegacyRow[];
 }
 export interface MigrationPlan {
@@ -78,6 +105,10 @@ export interface MigrationPlan {
 export interface ImportDestination {
   /** Must transact content, all revisions, identities, comments and receipt atomically.
    * Same key+digest is a no-op; a changed digest must fail rather than overwrite. */
-  importPage(key: string, digest: string, page: PlannedPage): Promise<'created' | 'unchanged'>;
+  importPage(
+    key: string,
+    digest: string,
+    page: PlannedPage,
+  ): Promise<"created" | "unchanged">;
   supportsExactAccess(page: PlannedPage): boolean;
 }

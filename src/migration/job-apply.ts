@@ -1,3 +1,4 @@
+import { PostgresDatasetMetadataDestination } from "./dataset-destination.ts";
 import { rewriteMigrationLinks } from "./links.ts";
 import { open } from "node:fs/promises";
 import { stageMigrationMedia } from "./media.ts";
@@ -76,6 +77,24 @@ export async function applyMigrationJob(
       await applied.writeFile(
         JSON.stringify({ legacyId: id, pageId: maps.pages[id], result }) + "\n",
       );
+    }
+    if (source.preparedDatasets && source.datasets) {
+      const metadata = source.preparedDatasets.metadata;
+      const bindings = metadata.bindings.filter((b) => ready.has(b.page.id));
+      const datasets = new Set(bindings.map((b) => b.dataset.id));
+      await new PostgresDatasetMetadataDestination(db, options.schema).import({
+        ...source.datasets.provenance,
+        metadata: {
+          ...metadata,
+          bindings,
+          pages: metadata.pages.filter((p) => ready.has(p.pageId)),
+          resources: metadata.resources.filter((r) => datasets.has(r.legacyId)),
+          versions: metadata.versions.filter((v) => datasets.has(v.legacyId)),
+          acceptedJoins: metadata.acceptedJoins.filter((j) =>
+            ready.has(j.pageId),
+          ),
+        },
+      });
     }
     await applied.sync();
   } finally {

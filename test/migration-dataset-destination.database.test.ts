@@ -79,7 +79,7 @@ test(
         ),
       );
       await db.query(
-        `INSERT INTO files VALUES ('abc123'); INSERT INTO af_backend_files(file_id,owner,head_version) VALUES ('def456','owner@example.test','version1'); INSERT INTO af_backend_versions(file_id,version,page_id,page_version,type_defs,deployment) VALUES ('def456','version1','abc123',1,'fixture','{}'); INSERT INTO af_page_backends VALUES ('abc123',1,0,'legacyDatasets','def456','version1'); INSERT INTO dataset_resources VALUES ('bound','dataset',1,0,'owner@example.test',1,'{}',false,'{}'); INSERT INTO dataset_versions VALUES ('bound','dataset',1,'[]','{}','[]')`,
+        `INSERT INTO files VALUES ('abc123'); INSERT INTO af_backend_files(file_id,owner,head_version) VALUES ('def456','owner@example.test','version1'); INSERT INTO af_backend_versions(file_id,version,page_id,page_version,type_defs,deployment) VALUES ('def456','version1','abc123',1,'fixture','{}'); INSERT INTO af_page_backends VALUES ('abc123',1,0,'legacyDatasets','def456','version1'); INSERT INTO dataset_resources VALUES ('bound','dataset',1,0,'owner@example.test',1,'{}',false,'{}',false); INSERT INTO dataset_versions VALUES ('bound','dataset',1,'[]','{}','[]')`,
       );
       const bound: DatasetMigrationBatch = {
         ...batch,
@@ -106,6 +106,7 @@ test(
           bindings: [
             {
               name: "sales",
+              mode: "live",
               backendId: "def456",
               backendVersion: "version1",
               page: {

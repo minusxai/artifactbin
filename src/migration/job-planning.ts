@@ -1,3 +1,4 @@
+import { migrationDatasetVersionKey } from "./job-dataset-contracts.ts";
 import { open, writeFile } from "node:fs/promises";
 import {
   planMigration,
@@ -26,10 +27,18 @@ export function createMigrationJobPlanner(
   convert: Converter,
 ): MigrationPagePlanner {
   const { maps, media, resourceMap } = source;
-  const planArtifact = (artifact: MigrationManifest) =>
-    planMigration(artifact, {
+  const planArtifact = async (artifact: MigrationManifest) => {
+    const plan = await planMigration(artifact, {
       maps,
       convert,
+      datasetBindings: (id, version) =>
+        source.preparedDatasets?.bindings.get(
+          migrationDatasetVersionKey(id, version),
+        ) ?? [],
+      datasetUnavailable: (id, version) =>
+        source.preparedDatasets?.scan.historicalImportVersions
+          .get(id)
+          ?.includes(version) ?? false,
       coreUrl: "/af/v1/core.js",
       media: media
         ? {
@@ -39,6 +48,19 @@ export function createMigrationJobPlanner(
           }
         : undefined,
     });
+    for (const page of plan.pages) {
+      const datasets = source.preparedDatasets;
+      if (!datasets) continue;
+      page.backends = datasets.backends.get(page.legacyId);
+      if (page.backends?.length) page.backendAllocation = datasets.allocation;
+      const reasons = datasets.issues.get(page.legacyId);
+      if (reasons?.length) {
+        page.disposition = "blocked";
+        page.issues.push(...reasons);
+      }
+    }
+    return plan;
+  };
   return planArtifact;
 }
 export async function planMigrationJob(

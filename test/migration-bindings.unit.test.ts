@@ -32,6 +32,7 @@ test("conversion receives exact bindings pinned separately for every saved page 
   const seen: number[] = [];
   const binding = (version: number): DatasetBrowserBinding => ({
     name: "rows",
+    mode: "live",
     legacyRef: "dataset:fixture",
     backendNamespace: "store",
     backendHref: "/af/v1/ids/def456",

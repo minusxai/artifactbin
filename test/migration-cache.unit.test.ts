@@ -48,6 +48,7 @@ test("private conversion cache varies full inputs/compiler, retries corrupt and 
     assert.equal(calls, 4);
     const binding = {
       name: "rows",
+      mode: "live" as const,
       legacyRef: "dataset:fixture",
       backendNamespace: "store",
       backendHref: "/af/v1/ids/abc123",

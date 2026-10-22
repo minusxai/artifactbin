@@ -126,3 +126,33 @@ test("failed complete preflight never opens an actual destination", async () => 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("compiler provenance changes abort before destination connects", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "migration-provenance-"));
+  try {
+    const options = await fixture(directory);
+    options.apply = true;
+    options.concurrency = 1;
+    let identities = 0,
+      connections = 0;
+    await assert.rejects(
+      runMigrationJob(options, {
+        compilerIdentity: async () => (++identities === 1 ? "before" : "after"),
+        convert: () => ({
+          classification: "renderable",
+          html: "<p>Fixture</p>",
+          issues: [],
+          identities: {},
+        }),
+        connectDestination: async () => {
+          connections++;
+          throw new Error("Must not connect");
+        },
+      }),
+      /provenance changed/,
+    );
+    assert.equal(connections, 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
