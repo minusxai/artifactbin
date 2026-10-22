@@ -145,6 +145,19 @@ test("backend watchers follow cross-viewer commits and reconnect, and stop after
       pages.push(page);
     }
     const [writer, observer] = pages;
+    const graphqlResponses = new Map(pages.map((page) => [page, []]));
+    const pageErrors = new Map(pages.map((page) => [page, []]));
+    for (const page of pages) {
+      page.on("pageerror", (error) => pageErrors.get(page).push(error.message));
+      page.on("response", async (response) => {
+        if (!response.url().endsWith("/graphql")) return;
+        const result = await response.json().catch(() => null);
+        graphqlResponses.get(page).push({
+          status: response.status(),
+          errors: result?.errors?.map((error) => error.message) ?? [],
+        });
+      });
+    }
     let disconnected = false;
     let observerSocket;
     const changedWaiters = new Set();
@@ -177,16 +190,53 @@ test("backend watchers follow cross-viewer commits and reconnect, and stop after
     });
     const app = (page) => page.frameLocator("#pg-frame");
     async function values(page, count) {
-      // Inspect the watcher result rather than a local state mirror or mutation result.
-      await app(page).locator(`#count:text-is("${count}")`).waitFor();
-      await app(page)
-        .locator(`#doubled:text-is("${count * 2}")`)
-        .waitFor();
-      assert.equal(await app(page).locator("#error").textContent(), "");
+      try {
+        // Inspect the watcher result rather than a local state mirror or mutation result.
+        await app(page).locator(`#count:text-is("${count}")`).waitFor();
+        await app(page)
+          .locator(`#doubled:text-is("${count * 2}")`)
+          .waitFor();
+        assert.equal(await app(page).locator("#error").textContent(), "");
+      } catch (error) {
+        throw Error(
+          `Watcher did not display count ${count}: ${JSON.stringify(await diagnostics(page))}`,
+          { cause: error },
+        );
+      }
+    }
+    async function diagnostics(page) {
+      const displayed = {};
+      for (const id of ["count", "doubled", "mutation", "error"]) {
+        try {
+          displayed[id] = await app(page)
+            .locator(`#${id}`)
+            .textContent({ timeout: 500 });
+        } catch {
+          displayed[id] = "<unavailable>";
+        }
+      }
+      return {
+        displayed,
+        graphql: graphqlResponses.get(page).slice(-6),
+        pageErrors: pageErrors.get(page).slice(-6),
+      };
+    }
+    async function mutationResult(page, count) {
+      try {
+        await app(page)
+          .locator("#mutation:text-is(" + JSON.stringify(String(count)) + ")")
+          .waitFor();
+      } catch (error) {
+        throw Error(
+          `Mutation did not display committed value ${count}: ${JSON.stringify(await diagnostics(page))}`,
+          { cause: error },
+        );
+      }
     }
     await Promise.all(pages.map((page) => page.goto(`${origin}/a/${id}`)));
     await Promise.all(pages.map((page) => values(page, 0)));
     await app(writer).locator("#increment").click();
+    await mutationResult(writer, 1);
     await Promise.all(pages.map((page) => values(page, 1)));
     await Promise.all(
       pages.map((page) => app(page).locator("#increment").click()),
@@ -202,6 +252,7 @@ test("backend watchers follow cross-viewer commits and reconnect, and stop after
       observerSocket.server.close(),
     ]);
     await app(writer).locator("#increment").click();
+    await mutationResult(writer, 4);
     await values(writer, 4);
     disconnected = false;
     await values(observer, 4);
