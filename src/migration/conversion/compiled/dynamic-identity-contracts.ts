@@ -7,3 +7,6 @@ export interface DynamicIdentityController {
   flush(): void;
   dispose(): void;
 }
+export interface DynamicIdentityScope { readonly tag: 'repeat' | 'table'; readonly owner: string; readonly column?: string }
+/** Unowned native instances remain DOM identifiers and never become comment anchors. */
+export type DynamicIdentityOwnership = 'page' | 'unowned-instance' | 'unrelated' | 'invalid';

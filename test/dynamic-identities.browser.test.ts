@@ -49,3 +49,22 @@ test('audited deferred portal children normalize before user interaction, reopen
   await page.waitForFunction(()=>(window as any).identityErrors.length===1);assert.equal(await page.locator('#portal-content').last().getAttribute('data-af-id'),null);
  }finally{await browser.close();}
 });
+test('unowned native scopes stay DOM-only while every mixed or malformed page scope refuses',async()=>{
+ const bundle=await build({entryPoints:[fileURLToPath(new URL('../src/migration/conversion/compiled/dynamic-identity-dom.ts',import.meta.url))],bundle:true,write:false,format:'iife',globalName:'identityRuntime'});
+ const browser=await chromium.launch();try{const page=await browser.newPage();await page.setContent('<main id="root"></main>');await page.addScriptTag({content:'window.__name=value=>value;'+bundle.outputFiles[0]!.text});
+ const result=await page.evaluate(()=>{
+  const runtime=(window as any).identityRuntime,root=document.querySelector('main')!;
+  const plan={regions:[{kind:'node',id:'root'},{kind:'repeat',owner:'rows',table:'items',keyBy:'key',children:[{kind:'node',id:'child'}]}]};
+  const instance=(owner:string,source:string,scope?:unknown)=>'mx-instance-'+encodeURIComponent(JSON.stringify([scope??['repeat',owner,'string','one'],source]));
+  const foreign=document.createElement('button');foreign.id=instance('native-rows','native-child');foreign.setAttribute('data-af-id','forged');root.append(foreign);
+  const pageNode=document.createElement('a');pageNode.id=instance('rows','child');foreign.append(pageNode);
+  const duplicateForeign=foreign.cloneNode(false) as Element;duplicateForeign.removeAttribute('data-af-id');root.append(duplicateForeign);
+  const controller=runtime.installDynamicIdentities(document,plan,()=>{});controller.flush();
+  const stable=pageNode.getAttribute('data-af-id');root.prepend(foreign);controller.flush();const stableAfter=pageNode.getAttribute('data-af-id');
+  const cases=[instance('rows','native-child'),instance('native-rows','child'),instance('native-rows','root'),instance('rows','child',['repeat','rows','index',0]),'mx-instance-%broken',instance('native-rows','native-child',['repeat','native-rows','string','one','extra'])];
+  const refused=cases.map(id=>{const e=document.createElement('i');e.id=id;root.append(e);try{controller.flush();return false;}catch{return e.getAttribute('data-af-id')===null;}finally{e.remove();}});
+  const duplicate=pageNode.cloneNode(false);root.append(duplicate);let duplicateRefused=false;try{controller.flush();}catch{duplicateRefused=true;}controller.dispose();
+  return{foreignIdentity:foreign.getAttribute('data-af-id'),duplicateForeignIdentity:duplicateForeign.getAttribute('data-af-id'),stable,stableAfter,refused,duplicateRefused};
+ });assert.equal(result.foreignIdentity,null);assert.equal(result.duplicateForeignIdentity,null);assert.ok(result.stable);assert.equal(result.stable,result.stableAfter);assert.ok(result.refused.every(Boolean));assert.equal(result.duplicateRefused,true);
+ }finally{await browser.close();}
+});
