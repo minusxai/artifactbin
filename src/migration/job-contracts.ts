@@ -30,6 +30,7 @@ export interface MigrationJobOptions {
   legacyOrigins: readonly string[];
   editorManageRestricted: boolean;
   conversionStrategy: MigrationConversionStrategy;
+  sourceAdmission?: import("./conversion-strategy-contracts.ts").MigrationSourceAdmission;
   archivedRoot?: string;
   fontBundle?: import("./conversion/compiled/fonts/capture-contracts.ts").CapturedFontBundleInput;
   conversionCacheDirectory?: string;
@@ -113,6 +114,7 @@ export interface MigrationJobSummary {
   identitySummary: Record<string, number>;
   groupSummary: Record<string, number>;
   conversionStrategy: MigrationConversionStrategy;
+  sourceAdmission?: import("./conversion-strategy-contracts.ts").MigrationSourceAdmission;
   conversionCache?: { hits: number; misses: number; invalid: number };
   conversionProvenance: Record<string, number>;
   compilerIdentity?: string;

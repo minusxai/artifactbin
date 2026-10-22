@@ -16,6 +16,7 @@ const allowed = [
   "--apply-isolated",
   "--verify-isolated",
   "--measure-storage",
+  "--offline-prototype-source-admission",
   "--editor-manage-restricted",
   "--conversion-strategy=strict",
   "--conversion-strategy=archived-static",
@@ -78,6 +79,9 @@ const options: MigrationJobOptions = {
         }
       : undefined,
   sourceDirectory,
+  sourceAdmission: flags.includes("--offline-prototype-source-admission")
+    ? "offline-prototype"
+    : "strict",
   datasets:
     datasetReceipts && relationDirectory
       ? { receiptsPath: datasetReceipts, relationDirectory }

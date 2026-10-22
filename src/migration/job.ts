@@ -1,3 +1,4 @@
+import { validateMigrationSourceAdmission } from "./source-admission-policy.ts";
 import { createMigrationQueryCompiler } from "./query-compiler.ts";
 import { measureMigrationStorage } from "./storage-measurement.ts";
 import { verifyMigrationJob } from "./job-verification.ts";
@@ -21,6 +22,7 @@ export async function runMigrationJob(
   options: MigrationJobOptions,
   ports: MigrationJobPorts = {},
 ): Promise<MigrationJobSummary> {
+  const sourceAdmission = validateMigrationSourceAdmission(options);
   destinationSchemas(options.schema);
   if (options.apply && options.verifyOnly)
     throw new Error("Choose apply or verify-only");
@@ -42,6 +44,7 @@ export async function runMigrationJob(
     ports.convert ??
     createMigrationConverter({
       strategy: options.conversionStrategy,
+      sourceAdmission,
       legacyRoot: options.archivedRoot,
       fontBundle: options.fontBundle,
     });
@@ -181,6 +184,7 @@ export async function runMigrationJob(
     identitySummary: source.identitySummary,
     groupSummary: source.groupSummary,
     conversionStrategy: options.conversionStrategy,
+    sourceAdmission,
     conversionCache: cache?.stats,
     conversionProvenance: planned.conversionProvenance,
     compilerIdentity,
