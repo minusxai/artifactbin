@@ -45,6 +45,25 @@ observe:(element,resize)=>{const observer=new ResizeObserver(resize);observer.ob
     plugin: {
       name: "offline-chart-renderer",
       setup(b: any) {
+        // The kit imports pure drawing helpers from chart.ts; its unused lazy
+        // loader must still resolve before tree-shaking. Route that one trusted
+        // controller edge to the explicit offline module, never the old compiler.
+        b.onResolve({ filter: /^\.\/chart-controller$/ }, (args: any) => {
+          if (
+            path.resolve(args.importer) !==
+            path.resolve(archivedRoot, "services/app/lib/islands/chart.ts")
+          )
+            throw Error("Unexpected archived chart controller import");
+          return {
+            path: "kit-chart-controller",
+            namespace: "offline-chart-kit",
+          };
+        });
+        b.onLoad({ filter: /.*/, namespace: "offline-chart-kit" }, () => ({
+          contents:
+            "import {charts} from 'migration-charts';export const mountChart=charts.mountChart;",
+          loader: "js",
+        }));
         b.onResolve({ filter: /^vega(?:-[a-z-]+)?$/ }, (args: any) => {
           if (args.path === "vega-loader")
             return { path: "chart-no-loader", namespace: "offline-chart" };
