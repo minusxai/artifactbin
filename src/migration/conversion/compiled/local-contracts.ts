@@ -22,6 +22,7 @@ export interface ArchivedLocalOutput extends ArchivedStaticOutput {
   queryNames?: string[];
   datasetNames?: string[];
   authorExports?: string[];
+  chartPlans?: number;
   declarations: LocalDeclaration[];
   /** Audited migration-time bundle inputs; no authored source or absolute paths. */
   modules: string[];

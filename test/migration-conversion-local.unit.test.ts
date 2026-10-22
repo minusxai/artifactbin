@@ -438,3 +438,48 @@ test("explicit historical unavailability retains readable page without a backend
   assert.doesNotMatch(boot, /readCompiledDataset|pageEngine|client.query/);
   assert.match(boot, /Historical data is unavailable/);
 });
+
+test("charts require an explicit offline chart plan and declared data source", async () => {
+  const source =
+    '<Helmet><Query name="rows">{`select 1 as amount`}</Query></Helmet><Question data="$rows" viz={{engine:"vega-lite",spec:{mark:"bar"}}}/>';
+  let calls = 0;
+  const compiler = {
+    compile: async () => {
+      calls++;
+      return {
+        ...output,
+        declarations: [],
+        queryNames: ["rows"],
+        chartPlans: 1,
+      };
+    },
+  };
+  const result = await compileArchivedLocal({ ...input, source }, { compiler });
+  assert.equal(result.classification, "functional");
+  assert.ok(result.capabilities.includes("compiled-charts"));
+  assert.equal(calls, 1);
+  const missing = await compileArchivedLocal(
+    { ...input, source },
+    {
+      compiler: {
+        compile: async () => ({
+          ...output,
+          declarations: [],
+          queryNames: ["rows"],
+        }),
+      },
+    },
+  );
+  assert.equal(missing.classification, "manual-blocked");
+  const bad = await compileArchivedLocal(
+    {
+      ...input,
+      source: source.replace(
+        ' viz={{engine:"vega-lite",spec:{mark:"bar"}}}',
+        "",
+      ),
+    },
+    { compiler },
+  );
+  assert.equal(bad.classification, "manual-blocked");
+});

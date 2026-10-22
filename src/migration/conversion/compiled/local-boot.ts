@@ -15,12 +15,14 @@ export function localBootSource(
   },
   author?: CompiledAuthorPlan,
   unavailableQueries?: readonly string[],
+  charts = false,
 ): string {
   const imports = sql?.bindings?.length ?? 0;
   return `import {client,gql} from '@afbin/apollo';
 import {hydrateIsland} from '@mx/rt';
 import {createSignal,createRoot,createEffect,untrack} from 'solid-js';
 ${author ? "import {mount as mountAuthor} from 'migration-author-entry';import {authorApolloPorts} from 'migration-author-ports';" : ""}
+${charts ? "import {charts} from 'migration-charts';" : ""}
 ${imports ? "import {readCompiledDataset} from 'migration-datasets';" : ""}
 ${sql ? "import {pageEngine} from 'migration-sqlite';" : ""}
 const declarations=${JSON.stringify(declarations)};
@@ -44,7 +46,7 @@ export function boot({TREE}) {
  client.updateQuery({query},data=>({...data,compiledPage:{...checked(data.compiledPage),...patch}}));};
  const store={getValue:name=>values()[name],setValue:(name,v)=>write({[name]:v}),setValues:write};
  const unavailable=()=>Promise.reject(Error('Shared data is not supported by this migration'));
- const context={values, value:name=>values()[name],table,tableSnapshot:table,pending:()=>pending(),error:name=>queryErrors()[name],people:()=>({}),setValue:store.setValue,mutate:unavailable,writesUnavailable:()=>null,mutationUnavailable:()=>null,mutating:()=>false,assetsUrl:()=>null,viewer:()=>null,drawings:()=>({}),valueType:name=>declarations.find(d=>d.name===name)?.type,nullable:name=>declarations.find(d=>d.name===name)?.default===null,declaresQueries:()=>${Boolean(sql)},writes:{current:()=>[],subscribe:()=>()=>{},dismiss:()=>{}},store:()=>store,trustedPortal:()=>null,loadChart:unavailable};
+ const context={values, value:name=>values()[name],table,tableSnapshot:table,pending:()=>pending(),error:name=>queryErrors()[name],people:()=>({}),setValue:store.setValue,mutate:unavailable,writesUnavailable:()=>null,mutationUnavailable:()=>null,mutating:()=>false,assetsUrl:()=>null,viewer:()=>null,drawings:()=>({}),valueType:name=>declarations.find(d=>d.name===name)?.type,nullable:name=>declarations.find(d=>d.name===name)?.default===null,declaresQueries:()=>${Boolean(sql)},writes:{current:()=>[],subscribe:()=>()=>{},dismiss:()=>{}},store:()=>store,trustedPortal:()=>null,loadChart:${charts ? "async()=>charts" : "unavailable"}};
  let ready=false;
  client.watchQuery({query}).subscribe(({data})=>{if(!ready){ready=true;hydrateIsland('d-',TREE,context);}setState(checked(data.compiledPage));void run();});
  ${author ? authorDocumentBoot(author) : ""}

@@ -2,6 +2,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { prepareArchivedChartPlans } from "./charts/archived.ts";
+import { chartRendererSources } from "./charts/renderer-source.ts";
 import { prepareAuthorBundle } from "./author/compiler.ts";
 import { rewriteCompiledMounts } from "./author-document.ts";
 import { prepareLocalFlow } from "./local-engine.ts";
@@ -117,6 +119,27 @@ if (input.datasetUnavailable) {
     input.datasetBindings ?? [],
   ));
 } else if (rawFlow.imports.length) throw Error("Import requires a query");
+const hasCharts = (nodes: readonly any[]): boolean =>
+  nodes.some(
+    (n) =>
+      n.type === "element" &&
+      (["Question", "Chart"].includes(n.tag) || hasCharts(n.children ?? [])),
+  );
+const chartPlans = hasCharts(parts.runtime.data.nodes)
+  ? await prepareArchivedChartPlans(parts.runtime.data.nodes, archived, root, {
+      colorMode: parts.mode,
+      tables:
+        results?.tables ??
+        Object.fromEntries(
+          declarations
+            .filter((d: any) => d.type === "table")
+            .map((d: any) => [d.name, { columns: d.columns, rows: d.default }]),
+        ),
+    })
+  : [];
+const chartSources = chartPlans.length
+  ? await chartRendererSources(root, chartPlans)
+  : null;
 const generated = generate({
   nodes: parts.runtime.data.nodes,
   colorMode: parts.mode,
@@ -204,9 +227,21 @@ const bundled = await bundle({
   metafile: true,
   external: ["@afbin/apollo"],
   plugins: [
+    ...(chartSources ? [chartSources.plugin] : []),
     {
       name: "migration-only",
       setup(b: any) {
+        if (chartSources) {
+          b.onResolve({ filter: /^migration-charts$/ }, () => ({
+            path: "charts",
+            namespace: "migration-charts",
+          }));
+          b.onLoad({ filter: /.*/, namespace: "migration-charts" }, () => ({
+            contents: chartSources.entry,
+            loader: "js",
+            resolveDir: root,
+          }));
+        }
         b.onResolve({ filter: /^@artifactbin\/contracts$/ }, () => ({
           path: "scalar-query-contracts",
           namespace: "migration-contracts",
@@ -259,6 +294,7 @@ const bundled = await bundle({
             input.datasetUnavailable
               ? rawFlow.queries.map((q: any) => q.name)
               : undefined,
+            Boolean(chartSources),
           ),
           loader: "js",
         }));
@@ -302,7 +338,10 @@ const bundled = await bundle({
           };
         });
         b.onResolve({ filter: /^(@mx\/|solid-js)/ }, (args: any) => {
-          if ((sql || author) && args.path.startsWith("solid-js")) {
+          if (
+            (sql || author || chartSources) &&
+            args.path.startsWith("solid-js")
+          ) {
             const suffix = args.path.slice("solid-js".length);
             const file =
               suffix === ""
@@ -311,7 +350,7 @@ const bundled = await bundle({
             return { path: path.join(root, "node_modules/solid-js", file) };
           }
           if (
-            (sql || author) &&
+            (sql || author || chartSources) &&
             (args.path === "@mx/rt" || args.path.startsWith("@mx/kit/"))
           ) {
             const relative =
@@ -343,7 +382,12 @@ const modules = Object.entries(bundleOutput.inputs)
     ([v, info]: any) =>
       info.bytesInOutput > 0 && !v.startsWith("migration:") && v !== "<stdin>",
   )
-  .map(([v]) => path.basename(v));
+  .map(([v]) => {
+    const relative = v
+      .replaceAll("\\", "/")
+      .match(/(?:^|\/)node_modules\/(vega-[^/]+\/.+)$/);
+    return relative ? relative[1] : path.basename(v);
+  });
 if (/\/api\/|\/islands\/|EventSource|WebSocket|@mx\/boot/.test(javascript))
   throw Error("Legacy platform transport in browser bundle");
 const sheets = documentStyleSheets({
@@ -394,6 +438,7 @@ process.stdout.write(
     javascript,
     declarations,
     authorExports: author?.exports ?? [],
+    chartPlans: chartPlans.length,
     datasetNames: rawFlow.imports.map((i: any) => i.name),
     queryNames: rawFlow.queries.map((q: any) => q.name),
     modules,

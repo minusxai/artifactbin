@@ -46,7 +46,7 @@ const activeUri = (v: string) =>
   );
 const json = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 const allowed = new Set(
-  "Helmet Import Value Query Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "Helmet Import Value Query Question Chart Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -132,6 +132,8 @@ export async function compileArchivedLocal(
     backendLinks.set(b.backendNamespace, b.backendHref);
   }
   let invalid = false;
+  let chartCount = 0,
+    vegaCount = 0;
   const imports = new Set<string>();
   const declarations = new Set<string>();
   const tableNames = new Set<string>();
@@ -197,6 +199,23 @@ export async function compileArchivedLocal(
             !author?.exports.includes(name))
         )
           invalid = true;
+        if (["Question", "Chart"].includes(name)) {
+          chartCount++;
+          const attrs = node.openingElement.attributes;
+          const data = attrs.find((a: any) => a.name?.name === "data");
+          const viz = attrs.find((a: any) => a.name?.name === "viz");
+          if (
+            !viz ||
+            !data ||
+            typeof data.value?.value !== "string" ||
+            !/^\$[A-Za-z][A-Za-z0-9_]*$/.test(data.value.value)
+          )
+            invalid = true;
+          const kind = viz?.value?.expression?.properties?.find(
+            (p: any) => (p.key?.name ?? p.key?.value) === "kind",
+          )?.value?.value;
+          if (!["table", "single_value"].includes(kind)) vegaCount++;
+        }
         if (name === "Import") {
           const attrs = Object.fromEntries(
             node.openingElement.attributes.map((a: any) => [
@@ -388,6 +407,12 @@ export async function compileArchivedLocal(
     output.modules.some(
       (m) =>
         m !== "dataflow.ts" &&
+        ![
+          "vega-dataflow/build/vega-dataflow.js",
+          "vega-expression/src/parser.js",
+          "vega-functions/src/parser.js",
+          "vega-runtime/src/dataflow.js",
+        ].includes(m) &&
         /boot|editor|transport|page-store|dataflow|jsx\/|parser|page-runtime/i.test(
           m,
         ),
@@ -400,6 +425,13 @@ export async function compileArchivedLocal(
       MAX_COMPILED_OUTPUT_BYTES
   )
     return blocked("compiled-local-output");
+  if (
+    vegaCount &&
+    (!Number.isSafeInteger(output.chartPlans) ||
+      !output.chartPlans ||
+      output.chartPlans > vegaCount)
+  )
+    return blocked("compiled-chart-output");
   const state: Record<string, unknown> = Object.create(null);
   for (const d of output.declarations) {
     if (
@@ -519,6 +551,7 @@ export async function compileArchivedLocal(
           ]
         : []),
       ...(author ? ["authored-components"] : []),
+      ...(chartCount ? ["compiled-charts"] : []),
     ],
     provenance: {
       compiler: author ? "archived-author" : "archived-local",
