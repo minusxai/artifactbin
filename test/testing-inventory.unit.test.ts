@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   classifyTests,
+  discoverTests,
   selectAcceptanceTests,
   selectTests,
   setupRequirements,
@@ -89,6 +90,40 @@ test("v2 acceptance stages select all acceptance tests or one capability", () =>
     selectAcceptanceTests(all, "v2:database").map((x) => x.file),
     ["test/v2/server/publish.database.test.ts"],
   );
-  assert.throws(() => selectAcceptanceTests(all, "v2:typo"), /Unknown test stage/);
+  assert.throws(
+    () => selectAcceptanceTests(all, "v2:typo"),
+    /Unknown test stage/,
+  );
   assert.throws(() => selectAcceptanceTests(all, "unit"), /Unknown test stage/);
+});
+
+test("cross-viewer backend watcher journey declares real sandbox setup and runs in the isolate shard", async () => {
+  const { selectTests: selectCI } = await import("../scripts/ci/inventory.ts");
+  const all = discoverTests();
+  const journey = all.find((test) => /\/backend-watch\./.test(test.file));
+  assert.ok(journey);
+  assert.equal(journey.capability, "isolate");
+  assert.deepEqual(setupRequirements([journey]), {
+    build: true,
+    postgres: true,
+    browsers: ["chromium"],
+    backend: true,
+  });
+  const files = { testFiles: all.map((test) => test.file) };
+  assert.ok(selectCI(files, 2, 4).includes(journey.file));
+  assert.ok(!selectCI(files, 3, 4).includes(journey.file));
+});
+
+test("public profile browser journey requests browser setup and never enters the database-only shard", async () => {
+  const { selectTests: selectCI } = await import("../scripts/ci/inventory.ts");
+  const all = discoverTests();
+  const journey = all.find((test) => /\/public-profile\./.test(test.file));
+  assert.ok(journey);
+  assert.equal(journey.capability, "browser");
+  const needs = setupRequirements([journey]);
+  assert.equal(needs.postgres, true);
+  assert.ok(needs.browsers.includes("chromium"));
+  const files = { testFiles: all.map((test) => test.file) };
+  assert.ok(selectCI(files, 3, 4).includes(journey.file));
+  assert.ok(!selectCI(files, 0, 4).includes(journey.file));
 });

@@ -108,7 +108,7 @@ test("backend watchers follow cross-viewer commits and reconnect, and stop after
         linkRole: "viewer",
       },
     });
-    assert.equal(publication.status, 201);
+    assert.equal(publication.status, 201, JSON.stringify(publication.body));
     const id = publication.body.id;
     async function sharing(change) {
       const current = await request(`/api/files/${id}/sharing`, {

@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chromium } from "playwright";
+import { chromium, type Browser } from "playwright";
 import { page, startServer } from "../support/server.ts";
 test("public profiles paginate owner public pages only and follow current handles in a browser", async () => {
   const server = await startServer();
-  const browser = await chromium.launch();
+  let browser: Browser | undefined;
   try {
+    browser = await chromium.launch();
     const token = await server.token("profile-owner@example.test");
     const other = await server.token("profile-other@example.test");
     assert.equal(
@@ -103,7 +104,10 @@ test("public profiles paginate owner public pages only and follow current handle
     assert.equal((await server.request("/@alice-new")).status, 200);
     assert.equal((await server.request("/@missing-person")).status, 404);
   } finally {
-    await browser.close();
-    await server.close();
+    try {
+      await browser?.close();
+    } finally {
+      await server.close();
+    }
   }
 });
