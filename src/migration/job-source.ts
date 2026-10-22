@@ -1,3 +1,4 @@
+import { readMigrationDatasetSource } from "./dataset-source.ts";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readStreamManifest, readPartRows } from "./stream.ts";
@@ -102,7 +103,16 @@ export async function prepareMigrationJobSource(
         options.legacyOrigins,
       )
     : undefined;
+  const datasets = options.datasets
+    ? await readMigrationDatasetSource({
+        baseDirectory: options.sourceDirectory,
+        base: manifest,
+        relationDirectory: options.datasets.relationDirectory,
+        receiptsPath: options.datasets.receiptsPath,
+      })
+    : undefined;
   return {
+    datasets,
     manifest,
     base,
     maps,

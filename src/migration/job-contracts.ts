@@ -1,3 +1,4 @@
+import type { MigrationDatasetSource } from "./dataset-source-contracts.ts";
 import type {
   Converter,
   MigrationManifest,
@@ -25,6 +26,7 @@ export interface MigrationJobOptions {
   conversionStrategy: MigrationConversionStrategy;
   archivedRoot?: string;
   conversionCacheDirectory?: string;
+  datasets?: { receiptsPath: string; relationDirectory: string };
   media?: { planPath: string; receiptsPath: string; stagingDirectory?: string };
 }
 export interface MigrationJobPorts {
@@ -43,6 +45,7 @@ export interface MigrationJobSource {
   identitySummary: Record<string, number>;
   groupSummary: Record<string, number>;
   media: MigrationMediaIndex | null;
+  datasets?: MigrationDatasetSource;
   resourceMap?: Readonly<Record<string, string>>;
   readArtifact: (id: string) => Promise<MigrationManifest>;
 }

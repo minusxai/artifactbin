@@ -36,8 +36,18 @@ const mediaPlan = process.env.MIGRATION_MEDIA_PLAN;
 const mediaReceipts = process.env.MIGRATION_MEDIA_RECEIPTS;
 if (Boolean(mediaPlan) !== Boolean(mediaReceipts))
   throw new Error("Media plan and receipts must be supplied together");
+const datasetReceipts = process.env.MIGRATION_DATASET_RECEIPTS;
+const relationDirectory = process.env.MIGRATION_RELATION_SOURCE_DIRECTORY;
+if (Boolean(datasetReceipts) !== Boolean(relationDirectory))
+  throw new Error(
+    "Dataset receipts and supplemental relation source must be supplied together",
+  );
 const options: MigrationJobOptions = {
   sourceDirectory,
+  datasets:
+    datasetReceipts && relationDirectory
+      ? { receiptsPath: datasetReceipts, relationDirectory }
+      : undefined,
   indexDirectory,
   schema,
   reportPath,
