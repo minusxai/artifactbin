@@ -19,15 +19,15 @@ test('packed package runs through npm exec with no repository dependencies',()=>
  const {execFile}=await import('node:child_process'); const {promisify}=await import('node:util'); const {createServer}=await import('node:http');
  const exec=promisify(execFile), cwd=new URL('.',import.meta.url);
  const packed=await exec('npm',['pack','--json','--pack-destination',home],{cwd}); const tarball=join(home,JSON.parse(packed.stdout)[0].filename);
- const packageBytes=await readFile(tarball);
  const server=createServer((req,res)=>{
-  if(req.url==='/skills/artefactbin-skill.tgz') {res.end(packageBytes);return;}
   assert.equal(req.url,'/skills/pagegi-author.tgz');res.end(valid());
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  try {
   const origin=`http://127.0.0.1:${server.address().port}`;
-  const result=await exec('npm',['exec','--yes','--package',`${origin}/skills/artefactbin-skill.tgz`,'--','artefactbin-skill','--origin',origin],{cwd:home,env:{...process.env,HOME:home,npm_config_cache:join(home,'npm-cache')},timeout:30000});
+  // Exercise npm's real bin installation from the packed local tarball. Registry
+  // audit/update traffic is unrelated to this contract and must stay offline.
+  const result=await exec('npm',['exec','--yes','--package',tarball,'--','artefactbin-skill','--origin',origin],{cwd:home,env:{PATH:process.env.PATH,HOME:home,npm_config_cache:join(home,'npm-cache'),npm_config_offline:'true',npm_config_audit:'false',npm_config_update_notifier:'false',npm_config_registry:origin,npm_config_userconfig:join(home,'.npmrc')},timeout:30000});
   assert.match(result.stdout,/Installed artifactbin-author/);
   assert.match(await readFile(join(home,'.claude/skills/artifactbin-author/SKILL.md'),'utf8'),new RegExp(origin));
  } finally {await new Promise(resolve=>server.close(resolve));}
