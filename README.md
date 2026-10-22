@@ -21,7 +21,7 @@ npm start                         # node src/server-main.js
 | `PAGEGI_DATABASE_URL`, `PAGEGI_DATABASE_SCHEMA` | Postgres connection and schema (default `public`). |
 | `PAGEGI_PLATFORM_ORIGIN`, `PAGEGI_RUNNER_ORIGIN` | Public origin, and the per-page runner origin pattern such as `https://{document}.runner.example` (see Deployment). |
 | `PAGEGI_KNOWN_ORIGINS` | Comma-separated origins rewritten to this server when a page is saved, besides `https://pagegi.artifactbin.dev` and the earlier `https://artifactbin.dev`. |
-| `PAGEGI_RESEND_API_KEY`, `PAGEGI_EMAIL_FROM` | Email-code sign-in through Resend. |
+| `PAGEGI_RESEND_API_KEY`, `PAGEGI_EMAIL_FROM` | Email-code sign-in through Resend. `PAGEGI_EMAIL_FROM` sets the exact sender name and verified address, for example `Artifactbin <login@example.com>`. |
 | `PAGEGI_PASSWORD_LOGIN` | `false` disables the password route (set it in production). |
 | `PAGEGI_TEST_LOGIN` | `1` enables `POST /api/auth/test-token` for development and tests only. |
 | `PAGEGI_BACKEND_EXECUTOR` and friends | Backend execution; see [`src/backend/README.md`](src/backend/README.md). |
