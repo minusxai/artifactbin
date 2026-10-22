@@ -44,7 +44,7 @@ test("relative core uses absolute downloaded metadata and unknown origin disable
     {},
     { src: "/af/v1/core.js" },
     { server: "javascript:alert(1)" },
-    { server: "https://token@platform.example" },
+    { server: "https://external.example@platform.example" },
   ])
     assert.equal(
       compiledPersonProfileHref("alice", "/af/v1/core.js", core),
