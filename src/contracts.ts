@@ -437,6 +437,7 @@ export interface LiveHub {
 
 /** The library lists only owned documents; opening uses the portable runtime. */
 export interface LibraryFile {
+  visibility?: "private" | "unlisted" | "public";
   path: string;
   /** Canonical owner namespace qualified document address. */
   url: string;

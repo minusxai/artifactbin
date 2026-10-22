@@ -1,5 +1,7 @@
 import { createLibraryActions } from "./actions.ts";
 import {
+  htmlDownloadName,
+  folderContents,
   libraryListing,
   filterLibraryEntries,
   librarySurface,
@@ -45,6 +47,7 @@ export function mountFiles({
     for (const mode of ["gallery", "list"])
       $("layout-" + mode).setAttribute("aria-pressed", String(layout === mode));
   }
+  $("visibility-filter").onchange = render;
   $("layout-gallery").onclick = () => setLayout("gallery");
   $("layout-list").onclick = () => setLayout("list");
   setLayout(layout);
@@ -269,7 +272,7 @@ export function mountFiles({
           const url = URL.createObjectURL(await r.blob());
           const a = document.createElement("a");
           a.href = url;
-          a.download = nameOf(path);
+          a.download = htmlDownloadName(path);
           a.click();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch (e) {
@@ -314,6 +317,27 @@ export function mountFiles({
     }
     return mark;
   }
+  function visibilityMark(file) {
+    const mark = document.createElement("span");
+    mark.className = "visibility-mark";
+    mark.setAttribute("role", "img");
+    mark.setAttribute(
+      "aria-label",
+      nameOf(file.path) + " is " + file.visibility,
+    );
+    mark.title = file.visibility;
+    const shape =
+      file.visibility === "public"
+        ? '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18"/>'
+        : file.visibility === "private"
+          ? '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'
+          : '<path d="m3 3 18 18M10.5 10.5a2 2 0 0 0 3 3M9 5a11 11 0 0 1 12 7 15 15 0 0 1-4 5M6 6a16 16 0 0 0-3 6 11 11 0 0 0 12 7"/>';
+    mark.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+      shape +
+      "</svg>";
+    return mark;
+  }
   function renderDiscovered(container, entries) {
     container.replaceChildren();
     for (const file of entries) {
@@ -327,6 +351,7 @@ export function mountFiles({
       link.href = file.url;
       link.textContent = decode(file.title) || nameOf(file.path);
       info.append(link);
+      if (file.visibility) info.append(visibilityMark(file));
       const meta = document.createElement("span");
       meta.className = "file-meta";
       meta.textContent =
@@ -341,9 +366,13 @@ export function mountFiles({
     const list = $("files");
     list.replaceChildren();
     const query = $("search").value.toLowerCase();
+    const visibilities = $("visibility-filter").value
+      ? [$("visibility-filter").value]
+      : [];
     const visibleShared = filterLibraryEntries(
       sharedFiles.map((file) => ({ ...file, title: decode(file.title || "") })),
       query,
+      visibilities,
     );
     renderDiscovered($("shared-files"), visibleShared);
     $("shared-documents").hidden = !visibleShared.length;
@@ -363,8 +392,9 @@ export function mountFiles({
     }
     const listing = libraryListing({
       folder,
-      files: files.map((f) => ({ path: f.path, title: decode(f.title || "") })),
+      files: files.map((f) => ({ ...f, title: decode(f.title || "") })),
       folders,
+      visibilities,
       query,
     });
     const missing = listing.state === "missing";
@@ -411,8 +441,22 @@ export function mountFiles({
       if (!isFile) {
         mark.className = "folder-mark";
         mark.setAttribute("aria-hidden", "true");
+        const contents = folderContents(path, files);
+        mark.classList.add("folder-cover");
         mark.innerHTML =
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7V5h6l2 3h10v12H3z"/></svg>';
+          '<span class="folder-cover-tab"></span><span class="folder-cover-back"></span><span class="folder-cover-papers"></span><span class="folder-cover-front"></span>';
+        mark.querySelector(".folder-cover-tab").textContent = contents.count
+          ? contents.count + " artifact" + (contents.count === 1 ? "" : "s")
+          : "empty folder";
+        contents.previews.forEach((file, index) => {
+          const paper = previewMark(file);
+          paper.classList.add("folder-cover-paper");
+          paper.style.setProperty(
+            "--paper-position",
+            String(index / Math.max(1, contents.previews.length - 1)),
+          );
+          mark.querySelector(".folder-cover-papers").append(paper);
+        });
       }
       const info = document.createElement("div");
       info.className = "file-info";
@@ -424,13 +468,14 @@ export function mountFiles({
         : nameOf(path);
       link.setAttribute("aria-label", nameOf(path));
       info.append(link);
+      if (isFile && entry.visibility) info.append(visibilityMark(entry));
       const meta = document.createElement("span");
       meta.className = "file-meta";
       meta.textContent = isFile
         ? entry.commentCount +
           " " +
           (entry.commentCount === 1 ? "comment" : "comments")
-        : "Folder";
+        : folderContents(path, files).count + " artifacts";
       row.append(check, mark, info, meta, rowMenu(path, isFile ? entry : null));
       row.onclick = (e) => {
         if (e.target.closest("a,button,input,details")) return;

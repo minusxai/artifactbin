@@ -90,3 +90,35 @@ test("shared-only libraries retain search and suppress first-artifact onboarding
     noResults: true,
   });
 });
+
+test("visibility filters compose with search and leave folders navigable", async () => {
+  const { filterLibraryEntries, htmlDownloadName, folderContents } =
+    await import("../src/library-client/listing.ts");
+  const entries = [
+    { path: "/report", visibility: "private" as const },
+    { path: "/public", visibility: "public" as const },
+  ];
+  assert.deepEqual(filterLibraryEntries(entries, "", ["private"]), [
+    entries[0],
+  ]);
+  assert.deepEqual(
+    libraryListing({
+      folder: "/",
+      files: entries,
+      folders: ["/work"],
+      query: "",
+      visibilities: ["public"],
+    }).visible,
+    ["/work", "/public"],
+  );
+  assert.equal(htmlDownloadName("/Report"), "Report.html");
+  assert.equal(htmlDownloadName("/Report.HTM"), "Report.HTM");
+  assert.deepEqual(
+    folderContents("/work", [
+      { path: "/work/a" },
+      { path: "/work/nested/b" },
+      { path: "/other" },
+    ]),
+    { count: 2, previews: [{ path: "/work/a" }, { path: "/work/nested/b" }] },
+  );
+});

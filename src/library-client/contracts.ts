@@ -3,6 +3,7 @@ export interface LibraryProfile {
   image: string | null;
 }
 export interface LibraryFile {
+  visibility?: "private" | "unlisted" | "public";
   path: string;
   fileId: string;
   title: string;
@@ -96,6 +97,7 @@ export interface LibraryActionsOptions {
 export type LibraryLayout = "gallery" | "list";
 /** Search applies to owned and shared artifacts using the same path/title fields. */
 export interface LibrarySearchEntry {
+  visibility?: "private" | "unlisted" | "public";
   path: string;
   title?: string;
 }

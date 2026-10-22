@@ -31,7 +31,7 @@ export function createDocumentCatalog(sql) {
       sql.transaction(async (client) => {
         const rows = (
           await client.query(
-            `SELECT f.id, f.path, f.head, a.space, left(s.content,8192) AS content,
+            `SELECT f.id, f.path, f.head, f.access->>'visibility' AS visibility, a.space, left(s.content,8192) AS content,
         (SELECT count(*)::int FROM comments c WHERE c.file_id=f.id) AS comments
         FROM files f JOIN accounts a ON a.actor=f.owner JOIN sources s ON s.file_id=f.id AND s.revision=f.head
         WHERE f.owner=$1 ORDER BY f.id`,
@@ -45,13 +45,15 @@ export function createDocumentCatalog(sql) {
           sourceRevision: String(r.head),
           title: documentTitle(String(r.content)),
           commentCount: Number(r.comments),
+          visibility: /** @type {import("../contracts.ts").Visibility} */ (
+            r.visibility || "unlisted"
+          ),
         }));
       }),
     sharedLink: (id) =>
       sql.transaction(async (client) => {
-        const r = (
-          await client.query("SELECT id FROM files WHERE id=$1", [id])
-        ).rows[0];
+        const r = (await client.query("SELECT id FROM files WHERE id=$1", [id]))
+          .rows[0];
         return r ? address(String(r.id)) : null;
       }),
     resolveSharedPath: (space, path) =>
@@ -69,7 +71,7 @@ export function createDocumentCatalog(sql) {
       sql.transaction(async (client) => {
         const rows = (
           await client.query(
-            `SELECT f.id,f.path,f.owner,f.head,f.access,a.space,left(s.content,8192) AS content,
+            `SELECT f.id,f.path,f.owner,f.head,f.access->>'visibility' AS visibility,a.space,left(s.content,8192) AS content,
        (SELECT count(*)::int FROM comments c WHERE c.file_id=f.id) AS comments
        FROM files f JOIN accounts a ON a.actor=f.owner JOIN sources s ON s.file_id=f.id AND s.revision=f.head
        WHERE ${publicOnly ? "f.access->>'visibility'='public'" : "f.owner<>$1 AND (f.access->'shares' ? $1 OR EXISTS (SELECT 1 FROM group_memberships gm JOIN groups g ON g.owner=gm.owner WHERE gm.owner=f.owner AND gm.actor=$1 AND g.active))"} ORDER BY f.id`,
@@ -83,6 +85,9 @@ export function createDocumentCatalog(sql) {
           title: documentTitle(String(r.content)),
           sourceRevision: String(r.head),
           commentCount: Number(r.comments),
+          visibility: /** @type {import("../contracts.ts").Visibility} */ (
+            r.visibility || "unlisted"
+          ),
           shared: true,
           owner: String(r.owner),
         }));
