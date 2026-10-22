@@ -70,6 +70,7 @@ export async function runMigrationJob(
   );
   const destinationOptions = {
     schema: options.schema,
+    runtimeOwnerRole: options.runtimeOwnerRole,
     origin: options.origin,
     isolated: options.apply,
     editorManageRestricted: options.editorManageRestricted,

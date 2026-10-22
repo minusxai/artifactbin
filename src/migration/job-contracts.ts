@@ -19,6 +19,8 @@ export interface MigrationJobOptions {
   sourceDirectory: string;
   indexDirectory: string;
   schema: string;
+  /** Trusted operator role used only for runtime schema DDL during destination preparation. */
+  runtimeOwnerRole?: string;
   reportPath: string;
   apply: boolean;
   /** Compare existing destination only; cannot be combined with apply. */

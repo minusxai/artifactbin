@@ -192,3 +192,51 @@ test("read-only storage measurement reproduces final normalized UTF8 bytes witho
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("typed job passes the trusted runtime owner only to destination preparation", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "migration-role-job-"));
+  try {
+    const options = await fixture(directory);
+    let closed = 0,
+      switched = 0;
+    await assert.rejects(
+      runMigrationJob(
+        {
+          ...options,
+          apply: true,
+          concurrency: 1,
+          runtimeOwnerRole: "runtime_owner",
+        },
+        {
+          convert: () => ({
+            classification: "renderable",
+            html: "<p>Fixture</p>",
+            issues: [],
+            identities: {},
+          }),
+          connectDestination: async () => ({
+            db: {
+              query: async (sql) => {
+                if (sql === "SELECT current_user AS role")
+                  return { rows: [{ role: "migration_role" }] };
+                if (sql === 'SET LOCAL ROLE "runtime_owner"') {
+                  switched++;
+                  throw Error("scoped owner boundary reached");
+                }
+                return { rows: [] };
+              },
+            },
+            close: async () => {
+              closed++;
+            },
+          }),
+        },
+      ),
+      /scoped owner boundary reached/,
+    );
+    assert.equal(switched, 1);
+    assert.equal(closed, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
