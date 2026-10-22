@@ -98,7 +98,7 @@ observe:(element,resize)=>{const observer=new ResizeObserver(resize);observer.ob
             path.resolve(args.importer) !==
             path.resolve(archivedRoot, "services/app/lib/islands/kit/data.tsx")
           )
-            throw Error("Unexpected archived deferred chart import");
+            return undefined;
           return { path: "kit-chart-defer", namespace: "offline-chart-defer" };
         });
         b.onLoad({ filter: /.*/, namespace: "offline-chart-defer" }, () => ({
