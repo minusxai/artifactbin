@@ -1,3 +1,4 @@
+import { socialPreview, socialPreviewCard } from "./server/social-preview.ts";
 import { serveLegacyAddress } from "./server/legacy-addresses-http.ts";
 import { createLegacyRawRepository } from "./server/legacy-addresses-repository.ts";
 import {parsePageRevision,pageRevisionQuery} from "./server/page-revision.ts";
@@ -260,6 +261,16 @@ export function createService({
       if (legacy) {
         res.writeHead(legacy.status, legacy.headers);
         return res.end(legacy.body);
+      }
+      const cardAddress = /^\/a\/([A-Za-z0-9]{6})\/export$/.exec(url.pathname);
+      if (cardAddress) {
+        if (!['GET', 'HEAD'].includes(req.method || '') || url.searchParams.get('mode') !== 'card') fail(404, 'Not found');
+        const card = await socialPreviewCard({authorize: async () => {
+          const found = await pages.address(credential(req) || cookieToken(req), cardAddress[1], parsePageRevision(url.searchParams));
+          if (found.kind !== 'page') fail(404, 'Not found');
+        }});
+        res.writeHead(200, {'Content-Type': card.contentType, 'Content-Length': card.bytes.byteLength, 'Cache-Control': card.cacheControl, 'X-Content-Type-Options': 'nosniff', Vary: 'Cookie, Authorization'});
+        return res.end(req.method === 'HEAD' ? undefined : card.bytes);
       }
       if (await serveLegacyAddress(req, res, url, credential(req) || cookieToken(req),
         { raw: legacyRaw, media },
@@ -673,7 +684,9 @@ export function createService({
       Link: `</api/library/${id}/source${revisionQuery}>; rel="alternate"; type="text/plain"`,
       "Content-Security-Policy": `default-src 'self'; script-src 'self' ${hostedStartupScriptPolicy}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:; frame-src 'self' ${new URL(runner).origin}; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`,
     });
-    res.end(hostedShell({ title: documentTitle(found.page.source), boot }));
+    res.end(hostedShell({ title: documentTitle(found.page.source), boot,
+      preview: socialPreview(found.page.source, {url: fileAddress(origin, id) + revisionQuery,
+        imageUrl: fileAddress(origin, id) + '/export?mode=card' + (selection.kind === 'saved' ? '&version=' + selection.version : '')}) }));
   }
   /**
    * @param {import("node:http").ServerResponse} res

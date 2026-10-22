@@ -190,3 +190,24 @@ test("legacy address composition preserves exact selected downloads and raw sour
     assert.equal((await server.request(`/a/${id}/raw?v=1&version=2`, { token })).status, 400);
   } finally { await server.close(); }
 });
+
+test("social metadata selects the saved title and card reads require current page access", async () => {
+  const { server, token, id } = await fixture("private");
+  try {
+    const shell = await server.request(`/a/${id}?version=1`, { token });
+    assert.equal(shell.status, 200);
+    const html = await shell.text();
+    assert.ok(html.includes('property="og:title"'));
+    assert.ok(html.includes('version=1'));
+    const path = `/a/${id}/export?mode=card&version=1`;
+    const card = await server.request(path, { token });
+    assert.equal(card.status, 200);
+    assert.equal(card.headers.get("content-type"), "image/png");
+    assert.deepEqual([...new Uint8Array(await card.arrayBuffer()).slice(0, 8)], [137,80,78,71,13,10,26,10]);
+    assert.equal((await server.request(path)).status, 404);
+    assert.equal((await server.request(`/a/${id}/export?mode=card&version=999`, { token })).status, 404);
+    const removed = await server.request(`/api/files/${id}`, { token, method: "DELETE" });
+    assert.equal(removed.status, 200);
+    assert.equal((await server.request(path, { token })).status, 404);
+  } finally { await server.close(); }
+});
