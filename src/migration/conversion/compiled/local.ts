@@ -65,7 +65,7 @@ export async function compileArchivedLocal(
         `<link rel="af-backend" href="${esc(href)}" data-af-name="${esc(name)}">`,
     )
     .join("");
-  const status = imports.size
+  const status = imports.size || historical
     ? historical
       ? '<p role="status" data-migration-dataset-status>Historical data is unavailable. This saved page does not load datasets, evaluate queries, or perform shared data writes.</p>'
       : '<p role="status" data-migration-dataset-status>Loading protected data…</p>'

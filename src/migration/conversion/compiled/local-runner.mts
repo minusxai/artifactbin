@@ -1,3 +1,4 @@
+import {readsLegacyMembers} from "./members-source.ts";
 import { preservePresentationHosts } from "./presentation-hosts.ts";
 import {forwardArchivedMembersContext} from "./members-engine.ts";
 import { gzipSync } from "node:zlib";
@@ -124,7 +125,11 @@ const rawFlow = {
 let flow: any = rawFlow;
 let results: any = null;
 if (input.datasetUnavailable) {
-  flow = { ...rawFlow, imports: [], queries: [] };
+  const bound=rawFlow.values.some((v:any)=>v.kind==="scalar"&&typeof v.source==="string"&&v.source.length>0);
+  if(!rawFlow.imports.length&&!bound&&!(await readsLegacyMembers(input.source)))throw Error("Historical service dependency missing");
+  flow = { ...rawFlow, imports: [], queries: [], values:rawFlow.values.map((v:any)=>{
+    const {source,column,constraints,...local}=v;void source;void column;void constraints;return local;
+  }) };
   results = { tables: {}, errors: {} };
 } else if (rawFlow.queries.length) {
   ({ flow, results } = await prepareLocalFlow(
