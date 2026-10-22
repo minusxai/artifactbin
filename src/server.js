@@ -534,6 +534,8 @@ export function createService({
           if (saved.changed) live.changed(id, false);
           return send(saved.status, saved.value);
         }
+        case "comments.thread":
+          return send(200,await comments.thread(id,credential(req),command.commentId));
         case "comments.list":
           return send(200, await comments.list(id, credential(req), command.since));
         case "comments.add": {
