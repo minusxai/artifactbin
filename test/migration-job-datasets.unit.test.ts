@@ -162,7 +162,12 @@ test("job prepares exact live head bindings and real compiled receipts without i
     "backendNamespace",
     "name",
     "paramTypes",
+    "recoveryScope",
   ]);
+  assert.match(browser.recoveryScope, /^[a-f0-9]{64}$/);
+  assert.equal("sql" in browser, false);
+  assert.equal("target" in browser, false);
+  assert.equal("sourceNamespace" in browser, false);
   assert.equal(plan.mutations.has(JSON.stringify(["abc123", 1])), false);
   assert.equal(
     plan.metadata.operations?.[0]?.operation.page.editId,
