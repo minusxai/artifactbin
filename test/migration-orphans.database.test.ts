@@ -29,7 +29,7 @@ test(
             version: 1,
             user_id: null,
             group_id: null,
-            token_id: null,
+            token_id: "",
             source: "<p>Retained</p>",
             document: null,
             visibility: "public",
@@ -81,9 +81,16 @@ test(
       const fake = structuredClone(plan.pages[0]!);
       fake.original.token_id = "missing";
       assert.equal(destination.supportsExactAccess(fake), false);
+      // Simulate a conflicting account created before the archival-principal guard existed.
+      await db.query(
+        `ALTER TABLE "${schema}".accounts DISABLE TRIGGER group_principal_guard`,
+      );
       await db.query(
         `UPDATE "${schema}".accounts SET handle='claimed' WHERE actor=$1`,
         [actor],
+      );
+      await db.query(
+        `ALTER TABLE "${schema}".accounts ENABLE TRIGGER group_principal_guard`,
       );
       await assert.rejects(
         destination.prepare({ manifest, maps: plan.maps }),

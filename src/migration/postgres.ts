@@ -86,7 +86,7 @@ export class PostgresMigrationDestination implements ImportDestination {
   });
  }
  supportsExactAccess(page:PlannedPage):boolean {
-  if(page.owner?.kind==='orphan'&&(page.original.user_id!==null||page.original.group_id!==null||page.original.token_id!==null||this.maps.orphans?.[page.legacyId]!==page.owner.id||(this.namespace&&preservedOrphanActor(this.namespace,page.original)!==page.owner.id)))return false;
+  if(page.owner?.kind==='orphan'&&(page.original.user_id!==null||page.original.group_id!==null||(page.original.token_id!==null&&page.original.token_id!=='')||this.maps.orphans?.[page.legacyId]!==page.owner.id||(this.namespace&&preservedOrphanActor(this.namespace,page.original)!==page.owner.id)))return false;
   try{destinationAccess(page,this.maps);normalizePath(publicationPath(page));}catch{return false;}
   if(page.owner?.kind!=='user'&&page.owner?.kind!=='token'&&page.owner?.kind!=='group'&&page.owner?.kind!=='orphan')return false;
   if(page.original.deleted_at)return false;

@@ -54,7 +54,7 @@ export type Converter = (
   input: ConversionInput,
 ) => ConversionOutput | Promise<ConversionOutput>;
 export interface MigrationMaps {
-  /** Only exact all-NULL owner rows; never missing referenced identities. */
+  /** Only NULL user/group and NULL or empty token; never missing referenced identities. */
   orphans?: Record<string, string>;
   pages: Record<string, string>;
   users: Record<string, string>;

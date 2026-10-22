@@ -123,7 +123,7 @@ export function planMigrationIdentities(
         actor,
         classification: "preserved-nonlogin",
         reason:
-          "Ownerless artifact preserved with an unclaimable principal; original owner columns are all NULL",
+          "Ownerless artifact preserved with an unclaimable principal; original user/group are NULL and token is NULL or the empty sentinel",
       });
     }
   }

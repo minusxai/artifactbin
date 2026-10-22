@@ -7,11 +7,15 @@ import { destinationAccess } from "../src/migration/postgres.ts";
 import { permissions } from "../src/access.ts";
 import { emailAddress } from "../src/email.ts";
 import type { MigrationManifest } from "../src/migration/contracts.ts";
-test("only exact all-NULL ownership preserves an unclaimable per-artifact principal and unchanged audience", async () => {
+test("only exact absent ownership preserves an unclaimable per-artifact principal and unchanged audience", async () => {
   const row = { id: "abc123", user_id: null, group_id: null, token_id: null };
   const actor = preservedOrphanActor("fixture", row)!;
   assert.match(actor, /^legacy-orphan:[a-f0-9]{64}$/);
   assert.equal(actor, preservedOrphanActor("fixture", row));
+  assert.equal(
+    actor,
+    preservedOrphanActor("fixture", { ...row, token_id: "" }),
+  );
   assert.notEqual(
     actor,
     preservedOrphanActor("fixture", { ...row, id: "def456" }),
@@ -44,6 +48,7 @@ test("only exact all-NULL ownership preserves an unclaimable per-artifact princi
     artifacts: [
       {
         ...row,
+        token_id: "",
         version: 1,
         format: "markup",
         source: "<p>Retained</p>",
