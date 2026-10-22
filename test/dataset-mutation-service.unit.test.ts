@@ -180,8 +180,8 @@ test("known pre-execution authority and object failures become durable terminal 
   );
   assert.deepEqual(b.calls, ["begin", "dataset_unavailable"]);
 });
-test("combined user and system parameter budget is checked before execute with terminal admission refusal", async () => {
-  for (const count of [255, 256]) {
+test("fixed caller budget reserves trusted system parameters before durable admission", async () => {
+  for (const count of [239, 240, 241]) {
     const f = fixture();
     const params = Object.fromEntries(
       Array.from({ length: count }, (_, i) => ["p" + i, 1]),
@@ -189,24 +189,32 @@ test("combined user and system parameter budget is checked before execute with t
     const original = f.ports.head;
     f.ports.head = async (...args) => {
       const h = (await original(...args))!;
-      return { ...h, systemParams: { _now: "2026-01-01" } };
+      return {
+        ...h,
+        systemParams: Object.fromEntries(
+          Array.from({ length: 16 }, (_, i) => ["_me__" + i, 1]),
+        ),
+      };
     };
     f.ports.operation = async () => ({
       ...operation,
       paramTypes: Object.fromEntries(
-        [...Object.keys(params), "_now"].map((k) => [k, "number" as const]),
+        [
+          ...Object.keys(params),
+          ...Array.from({ length: 16 }, (_, i) => "_me__" + i),
+        ].map((k) => [k, "number" as const]),
       ),
     });
     const result = createDatasetMutationService(f.ports).mutate(context, {
       ...request,
       params,
     });
-    if (count === 255) {
+    if (count <= 240) {
       await result;
       assert.ok(f.calls.includes("execute"));
     } else {
-      await assert.rejects(result, /invalid_job/);
-      assert.deepEqual(f.calls, ["begin", "invalid_job"]);
+      await assert.rejects(result, /invalid_request/);
+      assert.deepEqual(f.calls, []);
     }
   }
 });

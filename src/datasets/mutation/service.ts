@@ -22,7 +22,7 @@ function request(value: unknown): DatasetMutationRequest {
     typeof value.requestId !== "string" ||
     !/^[A-Za-z0-9_-]{16,128}$/.test(value.requestId) ||
     !record(value.params) ||
-    Object.keys(value.params).length > limits.maxParams
+    Object.keys(value.params).length > limits.maxCallerParams
   )
     throw new DatasetMutationError("invalid_request");
   for (const [k, v] of Object.entries(value.params))
@@ -120,6 +120,8 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
         rows.length * table.columns.length > limits.maxCells
       )
         return terminal("input_limit");
+      if (Object.keys(head.systemParams).length > limits.maxSystemParams)
+        return terminal("invalid_job");
       const job = {
         kind: "dataset-sql" as const,
         engineVersion: "sqlite-3.53.4-effect-v1" as const,

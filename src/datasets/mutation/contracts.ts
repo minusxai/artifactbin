@@ -121,10 +121,13 @@ export const DATASET_SQL_LIMITS = Object.freeze({
   maxRows: 10000,
   maxCells: 1000000,
   maxSqlBytes: 64000,
+  /** Fixed caller budget leaves reserved space for trusted identity/time bindings. */
+  maxCallerParams: 240,
+  maxSystemParams: 16,
   maxParams: 256,
   timeoutMs: 5000,
   wallMs: 7000,
   memoryMiB: 256,
   cpu: 1,
-  maxQueue: 16,
+  maxQueue: 0,
 });
