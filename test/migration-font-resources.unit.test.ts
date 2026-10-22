@@ -26,7 +26,7 @@ test("font requests retain exact CSS2 axes and reject ambient fetch or ambiguous
   for (const url of [
     "http://fonts.googleapis.com/css2?family=A",
     "https://fonts.googleapis.com.evil.test/css2?family=A",
-    "https://name@fonts.googleapis.com/css2?family=A",
+    "https://external.example@fonts.googleapis.com/css2?family=A",
     "https://fonts.googleapis.com:444/css2?family=A",
     "https://fonts.googleapis.com/css2?family=A#x",
     "https://fonts.googleapis.com/css2?family=A&text=secret",
