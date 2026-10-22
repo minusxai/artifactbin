@@ -26,9 +26,10 @@ const literal = (node: any): unknown =>
       ? node.quasis[0]?.value.cooked
       : undefined;
 /** Only builtin tokens outside SQL strings, identifiers and comments are rewritten. */
-function builtinSql(text: string): string {
+function builtinSql(text: string): { sql: string; nowLiteral: boolean } {
   let out = "",
-    i = 0;
+    i = 0,
+    nowLiteral = false;
   while (i < text.length) {
     const c = text[i]!;
     if (c === "'" || c === '"' || c === "`" || c === "[") {
@@ -40,6 +41,14 @@ function builtinSql(text: string): string {
           else break;
         }
       }
+      if (
+        c === "'" &&
+        text
+          .slice(start + 1, i - 1)
+          .replaceAll("''", "'")
+          .toLowerCase() === "now"
+      )
+        nowLiteral = true;
       out += text.slice(start, i);
     } else if (text.startsWith("--", i) || text.startsWith("/*", i)) {
       const line = text.startsWith("--", i);
@@ -63,7 +72,7 @@ function builtinSql(text: string): string {
       i++;
     }
   }
-  return out;
+  return { sql: out, nowLiteral };
 }
 export async function extractLegacyMutations(
   source: string,
@@ -116,6 +125,7 @@ export async function extractLegacyMutations(
             parent !== "Helmet" ||
             typeof name !== "string" ||
             !identifier.test(name) ||
+            name.length > 128 ||
             reserved.has(name)
           )
             throw Error();
@@ -158,7 +168,7 @@ export async function extractLegacyMutations(
             )
               throw Error();
             // Reset is viewer state, retained by the browser interpreter, never an authority input.
-            declarations.push({ name, sql: builtinSql(sql), expected });
+            declarations.push({ name, ...builtinSql(sql), expected });
           }
         }
       }
@@ -200,6 +210,21 @@ export async function extractLegacyMutations(
       const prepared = db.prepare(d.sql, "any");
       try {
         const a = prepared.analysis;
+        if (
+          d.nowLiteral &&
+          a.functions.some((name) =>
+            [
+              "date",
+              "time",
+              "datetime",
+              "julianday",
+              "strftime",
+              "unixepoch",
+              "timediff",
+            ].includes(name),
+          )
+        )
+          throw Error("unbound clock");
         if (a.kind === "select" || a.writes.length !== 1) throw Error();
         const w = a.writes[0]!,
           catalog = catalogByAlias.get(w.schema.toLowerCase());

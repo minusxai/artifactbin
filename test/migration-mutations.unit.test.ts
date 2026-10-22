@@ -73,3 +73,18 @@ test("quoted and commented builtin lookalikes remain untouched", async () => {
   assert.deepEqual(result.issues, []);
   assert.equal(result.mutations[0]?.sql, sql);
 });
+
+test("legacy clock semantics refuse ambient now while preserving server-bound clock and literal data", async () => {
+  const rejected = await extractLegacyMutations(
+    wrap("update bookings.rows set who=datetime('now')"),
+    catalogs,
+  );
+  assert.ok(rejected.issues.length);
+  assert.deepEqual(rejected.mutations, []);
+  const accepted = await extractLegacyMutations(
+    wrap("update bookings.rows set who=$_now"),
+    catalogs,
+  );
+  assert.deepEqual(accepted.issues, []);
+  assert.deepEqual(accepted.mutations[0]?.paramTypes, {});
+});
