@@ -1,3 +1,5 @@
+import {createDatasetMembersService} from "../src/datasets/members.ts";
+import {createDatasetMembersRepository} from "../src/persistence/dataset-members.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
@@ -43,6 +45,7 @@ test(
               revisions: [1, 2, 3].map((version) => ({
                 version,
                 editId: "old-edit",
+                readsMembers: version === 2 ? true as const : undefined,
                 mutations:
                   version === 2
                     ? [
@@ -247,6 +250,7 @@ test(
         database,
         host,
         caller: createPageCaller(),
+        datasetMembers: createDatasetMembersService(createDatasetMembersRepository(database)),
         datasets: createDatasetReadService({
           ...createDatasetReadRepository(database),
           read: createReadonlyDatasetObjectStore(directory).read,
@@ -274,6 +278,28 @@ test(
           errors?: unknown[];
         };
       };
+      const members = async () => {
+        const response = await routes.handle({
+          method: "POST", url: new URL("https://example.test/api/files/Page12/graphql"),
+          credential: "fixture-member", signal: new AbortController().signal,
+          body: {query: "{ legacyData { members { generation rows } } }"},
+        });
+        assert.equal(response?.status,200);
+        return response!.body as {data?:{legacyData?:{members?:{generation:string;rows:unknown[]}}};errors?:unknown[]};
+      };
+      await env.pool.query("INSERT INTO dataset_page_joins(page_id,source_namespace,legacy_user_id,joined_at) VALUES('Page12','fixture','accepted-user','2020-01-02T00:00:00Z')");
+      const joined = await members();
+      assert.equal(joined.errors,undefined);
+      assert.deepEqual(joined.data?.legacyData?.members?.rows,[{user_id:"accepted-user",joined_at:"2020-01-02T00:00:00.000Z"}]);
+      assert.match(joined.data!.legacyData!.members!.generation,/^[a-f0-9]{64}$/);
+      await env.pool.query("DELETE FROM dataset_page_joins WHERE page_id='Page12'");
+      const revokedJoin=await members();
+      assert.equal(revokedJoin.errors,undefined);
+      assert.deepEqual(revokedJoin.data?.legacyData?.members?.rows,[]);
+      assert.notEqual(revokedJoin.data?.legacyData?.members?.generation,joined.data?.legacyData?.members?.generation);
+      await env.pool.query("UPDATE files SET access=$1",[{...pageAccess,visibility:"private",shares:{}}]);
+      await assert.rejects(members(),/access to this document/);
+      await env.pool.query("UPDATE files SET access=$1",[pageAccess]);
       const member = await read("fixture-member");
       assert.equal(member.errors, undefined);
       assert.deepEqual(member.data?.legacyData?.read, {
@@ -382,6 +408,22 @@ test(
         ).rows[0].count,
         1,
       );
+      // A membership-only revision has no Import and must not inherit dataset authority.
+      const membershipOnly = await prepareMigrationBackends({
+        sourceNamespace:"fixture",origin:"https://example.test",allocatedIds:["Page12"],
+        pages:[{legacyId:"OldPg1",pageId:"Page12",owner:{kind:"user",id:"owner"},revisions:[{version:4,editId:"members-edit",readsMembers:true,imports:[],mutations:[]}]}],
+      },{host});
+      await env.pool.query("UPDATE files SET head='4'");
+      await database.transaction(client=>registerMigrationBackends(client,membershipOnly.receipts));
+      assert.equal((await env.pool.query("SELECT count(*)::int AS count FROM dataset_bindings WHERE page_id='Page12' AND page_version=4")).rows[0].count,0);
+      await env.pool.query("INSERT INTO dataset_page_joins(page_id,source_namespace,legacy_user_id,joined_at) VALUES('Page12','fixture','accepted-only','2020-02-01T00:00:00Z')");
+      const only=await members();
+      assert.equal(only.errors,undefined);
+      assert.deepEqual(only.data?.legacyData?.members?.rows,[{user_id:"accepted-only",joined_at:"2020-02-01T00:00:00.000Z"}]);
+      await env.pool.query("DELETE FROM dataset_page_joins WHERE page_id='Page12'");
+      assert.deepEqual((await members()).data?.legacyData?.members?.rows,[]);
+      await env.pool.query("UPDATE files SET access=$1",[{...pageAccess,visibility:"private",shares:{}}]);
+      await assert.rejects(members(),/access to this document/);
     } finally {
       await host.close?.();
       await env.cleanup();
