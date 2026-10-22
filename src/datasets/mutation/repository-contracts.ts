@@ -30,3 +30,16 @@ export type RegisterDatasetOperations = (
   client: SqlClient,
   registrations: readonly DatasetOperationRegistration[],
 ) => Promise<void>;
+
+/** Loads current original-user and document-membership facts under the caller's
+ * commit transaction, then validates actual assigned user fields. */
+export type ValidateDatasetUserWrites = (
+  client: SqlClient,
+  context: { namespace: string; operation: DatasetMutationOperation },
+  head: import("./contracts.ts").DatasetMutationHead,
+  outcome: Extract<
+    import("../sql/engine/sql-contracts.ts").MutationOutcome,
+    { affected: number }
+  >,
+  now: number,
+) => Promise<void>;

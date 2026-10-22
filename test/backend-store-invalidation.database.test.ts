@@ -130,7 +130,7 @@ test("store outbox sequence allocation cannot overtake an earlier uncommitted ev
         await env.pool.query(
           "SELECT backend_id FROM backend_store_invalidations ORDER BY sequence",
         )
-      ).rows.map((r) => r.backend_id),
+      ).rows.map((r: { backend_id: string }) => r.backend_id),
       ["Bk0001", "Bk0002"],
     );
   } finally {
