@@ -1,0 +1,46 @@
+import type { CompiledBackend, BackendHost } from "../backend/contracts.ts";
+import type { DatasetImportBindingInput } from "./datasets/planner-contracts.ts";
+import type { SqlReader } from "./contracts.ts";
+export interface MigrationBackendPage {
+  legacyId: string;
+  pageId: string;
+  owner: { kind: "user" | "token" | "group"; id: string };
+  revisions: readonly {
+    version: number;
+    imports: readonly {
+      name: string;
+      legacyRef: string;
+      datasetLegacyId: string;
+      datasetVersion: number;
+    }[];
+  }[];
+}
+export interface MigrationBackendPreparationInput {
+  sourceNamespace: string;
+  origin: string;
+  /** Every page, backend, and reserved ID in this destination namespace. */
+  allocatedIds: readonly string[];
+  pages: readonly MigrationBackendPage[];
+}
+export interface MigrationBackendReceipt {
+  pageLegacyId: string;
+  pageId: string;
+  pageVersion: number;
+  owner: string;
+  backendId: string;
+  backendNamespace: "legacyData";
+  backendHref: string;
+  sourceSha256: string;
+  bundleSha256: string;
+  deployment: CompiledBackend;
+}
+export interface MigrationBackendPreparation {
+  receipts: readonly MigrationBackendReceipt[];
+  bindings: readonly DatasetImportBindingInput[];
+}
+export interface MigrationBackendPreparationPorts {
+  host?: BackendHost;
+}
+export interface MigrationBackendRegistrar {
+  (db: SqlReader, receipts: readonly MigrationBackendReceipt[]): Promise<void>;
+}
