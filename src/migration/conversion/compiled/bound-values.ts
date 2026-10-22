@@ -14,22 +14,29 @@ import { MAX_COMPILED_SOURCE_BYTES } from "./contracts.ts";
 function refuse(): never {
   throw Error("Unsupported bound Value authority");
 }
-function containsBound(n: any): boolean {
+function containsBound(n: any, tags: readonly string[] = ["Value"]): boolean {
   if (!n || typeof n !== "object") return false;
   if (
     n.type === "JSXElement" &&
-    n.openingElement.name.name === "Value" &&
+    tags.includes(n.openingElement.name.name) &&
     n.openingElement.attributes.some(
       (a: any) => a.type === "JSXAttribute" && a.name?.name === "source",
     )
   )
     return true;
   return Object.values(n).some((v) =>
-    Array.isArray(v) ? v.some(containsBound) : containsBound(v),
+    Array.isArray(v) ? v.some((child) => containsBound(child, tags)) : containsBound(v, tags),
   );
 }
 /** Source-only classification for historical service availability; never grants authority. */
 export function hasLegacyBoundValueSource(source: string): boolean {
+  return hasLegacySourceDeclaration(source, ["Value"]);
+}
+/** Historical service classification only; source attributes never establish authority. */
+export function hasLegacySourceService(source: string): boolean {
+  return hasLegacySourceDeclaration(source, ["Value", "Query", "Mutation"]);
+}
+function hasLegacySourceDeclaration(source: string, tags: readonly string[]): boolean {
   try {
     if (
       typeof source !== "string" ||
@@ -40,7 +47,7 @@ export function hasLegacyBoundValueSource(source: string): boolean {
       tree = Parser.extend(jsx()).parseExpressionAt(text, 0, {
         ecmaVersion: "latest",
       }) as any;
-    return tree.end === text.length && containsBound(tree);
+    return tree.end === text.length && containsBound(tree, tags);
   } catch {
     return false;
   }

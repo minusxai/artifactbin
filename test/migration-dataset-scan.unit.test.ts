@@ -158,6 +158,19 @@ test("dataset scan retains literal dependencies and pins initial receipt to trus
     ),
     [1],
   );
+  for (const [historicalSource, unavailable] of [
+    ['<Helmet><Mutation name="save" source="ref:data01">{`insert into rows values (1)`}</Mutation></Helmet>', true],
+    ['<Helmet><Query name="rows" source="ref:data01">{`select * from rows`}</Query></Helmet>', true],
+    ['<Helmet><Value name="rows" type="table"/><Mutation name="save">{`insert into rows values (1)`}</Mutation></Helmet>', false],
+    ['<p>{`<Mutation source="ref:data01"/>`}</p>', false],
+  ] as const) {
+    source.readArtifact = async (id) => {
+      const artifact = await readOriginal(id);
+      if (id === "abc123") artifact.tables.artifact_versions = [{artifact_id: "abc123", version: 1, format: "markup", source: historicalSource}];
+      return artifact;
+    };
+    assert.equal((await scanMigrationDatasetImports(source)).historicalServiceVersions.has("abc123"), unavailable);
+  }
   source.readArtifact = readOriginal;
   source.maps.users = {};
   const unresolved = await scanMigrationDatasetImports(source);

@@ -6,7 +6,7 @@ import {
 import { hasLegacyServerModule } from "./query-source.ts";
 import { compileNativeProgramResolver } from "./programs/native-compiler.ts";
 import { readsMigrationViewer } from "./job-viewer.ts";
-import { hasLegacyBoundValueSource } from "./conversion/compiled/bound-values.ts";
+import { hasLegacySourceService } from "./conversion/compiled/bound-values.ts";
 import { readsMigrationMembers } from "./job-members.ts";
 import {
   extractLegacyImports,
@@ -117,7 +117,7 @@ export async function scanMigrationDatasetImports(
       if (Number(row.version) !== head.version) {
         if (
           extracted.imports.length ||
-          hasLegacyBoundValueSource(text) ||
+          hasLegacySourceService(text) ||
           (await readsMigrationViewer(source, text, [])) ||
           (await readsMigrationMembers(source, text, []))
         ) {
