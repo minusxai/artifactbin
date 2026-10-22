@@ -48,6 +48,11 @@ function admit(value: unknown): void {
   for (const [key, item] of Object.entries(value)) {
     if (["url", "href", "assets"].includes(key) && item != null)
       throw Error("Chart resource requires an adapter");
+    if (
+      key === "type" &&
+      ["crossfilter", "resolvefilter"].includes(String(item).toLowerCase())
+    )
+      throw Error("Crossfilter transforms require an adapter");
     if (key === "type" && item === "image")
       throw Error("Image marks unsupported");
     if (key === "source" && ["window", "timer"].includes(String(item)))

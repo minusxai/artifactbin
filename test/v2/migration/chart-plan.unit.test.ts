@@ -33,6 +33,10 @@ test("chart migration refuses external resources, templated specs and unsupporte
   for (const viz of [
     { kind: "recharts" },
     {
+      kind: "vega",
+      spec: { data: [{ name: "main", transform: [{ type: "crossfilter" }] }] },
+    },
+    {
       kind: "vega-lite",
       spec: { data: { url: "https://example.invalid/data" } },
     },

@@ -18,6 +18,13 @@ export async function chartRendererSources(
     ["vega-functions", "6.1.3"],
     ["vega-expression", "6.2.2"],
     ["vega-dataflow", "6.1.3"],
+    ["vega-geo", "5.1.3"],
+    ["vega-force", "5.1.3"],
+    ["vega-hierarchy", "5.1.3"],
+    ["vega-label", "2.1.3"],
+    ["vega-regression", "2.1.3"],
+    ["vega-voronoi", "5.1.3"],
+    ["vega-wordcloud", "5.1.3"],
     ["vega-runtime", "7.1.3"],
     ["vega-interpreter", "2.3.1"],
   ]) {
@@ -33,9 +40,16 @@ import {transforms} from 'vega-dataflow';
 import * as tx from 'vega-transforms';
 import * as vtx from 'vega-view-transforms';
 import * as encode from 'vega-encode';
+import * as geo from 'vega-geo';
+import * as force from 'vega-force';
+import * as hierarchy from 'vega-hierarchy';
+import * as label from 'vega-label';
+import * as regression from 'vega-regression';
+import * as voronoi from 'vega-voronoi';
+import * as wordcloud from 'vega-wordcloud';
 import {expressionInterpreter} from 'vega-interpreter';
 import {createCompiledCharts} from ${JSON.stringify(runtimePath)};
-Object.assign(transforms,tx,vtx,encode);
+Object.assign(transforms,tx,vtx,encode,geo,force,hierarchy,label,regression,voronoi,wordcloud);
 export const charts=createCompiledCharts(${JSON.stringify(plans)},{
 create:(runtime,element)=>new View(runtime,{expr:expressionInterpreter,renderer:'svg',container:element,hover:true,loader:{load:()=>Promise.reject(Error('Chart resource unavailable')),sanitize:()=>Promise.reject(Error('Chart navigation unavailable'))}}),
 observe:(element,resize)=>{const observer=new ResizeObserver(resize);observer.observe(element);return ()=>observer.disconnect();}
@@ -86,7 +100,10 @@ observe:(element,resize)=>{const observer=new ResizeObserver(resize);observer.ob
           loader: "js",
         }));
         b.onLoad(
-          { filter: /[/\\]vega-expression[/\\]src[/\\]parser\.js$/ },
+          {
+            filter:
+              /[/\\]vega-(?:expression|functions)[/\\]src[/\\]parser\.js$/,
+          },
           () => ({
             contents:
               "export default ()=>{throw Error('Chart expressions must be compiled offline')};",
