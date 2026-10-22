@@ -1,4 +1,5 @@
-import { readdirSync } from "node:fs";
+import { migrationTestRequirements } from "./migration-requirements.ts";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type {
   TestCapability,
@@ -63,15 +64,26 @@ function listFiles(root: string, start: string): string[] {
   visit(start);
   return files;
 }
+function describeTests(root: string, start: string): TestDescriptor[] {
+  return classifyTests(listFiles(root, start)).map((test) => ({
+    ...test,
+    requirements: {
+      ...test.requirements,
+      migration: migrationTestRequirements(
+        readFileSync(join(root, test.file), "utf8"),
+      ),
+    },
+  }));
+}
 /** Recursively discover the complete Node test surface, including tests added in new module folders. */
 export function discoverTests(root = process.cwd()): TestDescriptor[] {
-  return classifyTests(listFiles(root, "test"));
+  return describeTests(root, "test");
 }
 /** Discover only the v2 acceptance tests under test/v2. */
 export function discoverAcceptanceTests(
   root = process.cwd(),
 ): TestDescriptor[] {
-  return classifyTests(listFiles(root, ACCEPTANCE_ROOT));
+  return describeTests(root, ACCEPTANCE_ROOT);
 }
 /** `v2` selects every acceptance test; `v2:<capability>` selects one capability. */
 export function selectAcceptanceTests(
@@ -89,6 +101,8 @@ export function selectTests(
   stage: string,
 ): TestDescriptor[] {
   if (stage === "all") return [...all];
+  if (stage === "required-migration")
+    return all.filter((test) => test.requirements.migration?.length);
   if (stage === "integration")
     return all.filter((test) => test.capability !== "unit");
   if (!capabilities.includes(stage as TestCapability))

@@ -28,7 +28,8 @@
     "test:v2:browser": "node --import tsx scripts/testing/run.ts v2:browser",
     "test:v2:isolate": "node --import tsx scripts/testing/run.ts v2:isolate",
     "test:v2:all": "node --import tsx scripts/testing/run.ts v2",
-    "build:dataset-sql": "docker build -f src/datasets/sql/container/Dockerfile -t pagegi-dataset-sql:local ."
+    "build:dataset-sql": "docker build -f src/datasets/sql/container/Dockerfile -t pagegi-dataset-sql:local .",
+    "test:migration-required": "node --import tsx scripts/testing/run.ts required-migration"
   },
   "dependencies": {
     "@sqlite.org/sqlite-wasm": "3.53.4-build1",

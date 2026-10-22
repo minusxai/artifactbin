@@ -1,3 +1,4 @@
+// @requires migration-database
 import { verifyMigrationDatasetMetadata } from "../src/migration/dataset-verification.ts";
 import test from "node:test";
 import assert from "node:assert/strict";

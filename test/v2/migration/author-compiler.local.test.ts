@@ -1,3 +1,4 @@
+// @requires archived-compiler
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { compileAuthorScript } from "../../../src/migration/conversion/compiled/author/compiler.ts";

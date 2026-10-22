@@ -1,3 +1,4 @@
+// @requires archived-compiler
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';import path from 'node:path';import {createRequire} from 'node:module';
 import {build} from 'esbuild';import {chromium,firefox,webkit} from 'playwright';

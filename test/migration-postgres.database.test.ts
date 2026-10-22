@@ -1,3 +1,4 @@
+// @requires migration-database
 import { verifyMigrationRuntime } from "../src/migration/page-verification.ts";
 import test from "node:test";
 import assert from "node:assert/strict";

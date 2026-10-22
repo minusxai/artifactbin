@@ -1,3 +1,4 @@
+// @requires archived-compiler
 import {test} from 'node:test';import assert from 'node:assert/strict';import {createServer} from 'node:http';import {readFile} from 'node:fs/promises';import {chromium} from 'playwright';import {compileArchivedLocal} from '../src/migration/conversion/compiled/local.ts';
 const root=process.env.PAGEGI_ARCHIVED_COMPILER_ROOT;
 test('saved no-Import services show unavailable state and never request current data',{skip:!root},async()=>{

@@ -1,3 +1,4 @@
+import { requiredMigrationInputs } from "./migration-requirements.ts";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -28,12 +29,29 @@ async function run(argv: string[]): Promise<void> {
 async function main(): Promise<void> {
   if (options.length)
     throw Error(
-      "Usage: node scripts/testing/run.ts [unit|local|database|browser|isolate|integration|all|v2|v2:<capability>]",
+      "Usage: node scripts/testing/run.ts [unit|local|database|browser|isolate|integration|all|required-migration|v2|v2:<capability>]",
     );
   const tests = stage.startsWith("v2")
     ? selectAcceptanceTests(discoverAcceptanceTests(), stage)
     : selectTests(discoverTests(), stage);
   if (!tests.length) throw Error(`No tests discovered for stage ${stage}`);
+  if (stage === "required-migration") {
+    const inputs = requiredMigrationInputs(process.env, existsSync);
+    const pg = createRequire(import.meta.url)("pg");
+    const pool = new pg.Pool({
+      connectionString: inputs.databaseUrl,
+      connectionTimeoutMillis: 1500,
+    });
+    try {
+      await pool.query("SELECT 1");
+    } catch {
+      throw Error(
+        "Required migration verification needs reachable disposable PostgreSQL at MIGRATION_TEST_DATABASE_URL",
+      );
+    } finally {
+      await pool.end();
+    }
+  }
   const needs = setupRequirements(tests);
   if (needs.postgres) {
     const pg = createRequire(import.meta.url)("pg");
