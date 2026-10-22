@@ -1,4 +1,5 @@
 /** Explicit offline route; never a fallback for blocked static conversion. */
+import { MAX_PAGE_SOURCE } from "../../../af-contracts.ts";
 import { Parser } from "acorn";
 import { safeInlineModule } from "./module-safety.ts";
 import jsx from "acorn-jsx";
@@ -38,7 +39,7 @@ const activeUri = (v: string) =>
   );
 const json = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 const allowed = new Set(
-  "Helmet Value Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "Helmet Value Query Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -66,13 +67,20 @@ export async function compileArchivedLocal(
   if (
     strict.issues.some(
       (i) =>
-        !["component", "value", "action-adapter", "reference"].includes(i.code),
+        ![
+          "component",
+          "value",
+          "action-adapter",
+          "reference",
+          "data-adapter",
+        ].includes(i.code),
     )
   )
     return blocked("compiled-capability");
   let invalid = false;
   const declarations = new Set<string>();
   const references = new Set<string>();
+  const queries = new Set<string>();
   const safeExpression = (node: any): boolean => {
     if (node.type === "Literal")
       return (
@@ -143,7 +151,7 @@ export async function compileArchivedLocal(
             invalid = true;
           if (
             attr.type === "JSXAttribute" &&
-            ["value", "checked"].includes(attr.name.name) &&
+            ["value", "checked", "data"].includes(attr.name.name) &&
             typeof attr.value?.value === "string" &&
             attr.value.value.startsWith("$")
           )
@@ -176,6 +184,22 @@ export async function compileArchivedLocal(
           )
             invalid = true;
         }
+        if (name === "Query") {
+          const attrs = Object.fromEntries(
+            node.openingElement.attributes.map((a: any) => [
+              a.name.name,
+              a.value?.value,
+            ]),
+          );
+          if (
+            !/^[A-Za-z][A-Za-z0-9_]*$/.test(attrs.name) ||
+            Object.keys(attrs).some((k) => !["id", "name"].includes(k)) ||
+            queries.has(attrs.name) ||
+            ["constructor", "prototype", "__proto__"].includes(attrs.name)
+          )
+            invalid = true;
+          queries.add(attrs.name);
+        }
         if (name === "Value") {
           const attrs = Object.fromEntries(
             node.openingElement.attributes.map((a: any) => [
@@ -203,11 +227,18 @@ export async function compileArchivedLocal(
       }
     };
     walk(tree);
-    if ([...references].some((name) => !declarations.has(name))) invalid = true;
+    if (
+      [...references].some(
+        (name) => !declarations.has(name) && !queries.has(name),
+      )
+    )
+      invalid = true;
   } catch {
     return blocked("compiled-source");
   }
-  if (invalid || declarations.size === 0) return blocked("compiled-capability");
+  if ([...queries].some((q) => declarations.has(q))) invalid = true;
+  if (invalid || (declarations.size === 0 && queries.size === 0))
+    return blocked("compiled-capability");
   let output: ArchivedLocalOutput;
   try {
     output = await (options.compiler?.compile(input) ??
@@ -231,10 +262,12 @@ export async function compileArchivedLocal(
     !output.javascript ||
     !Array.isArray(output.declarations) ||
     !Array.isArray(output.modules) ||
-    output.modules.some((m) =>
-      /boot|editor|transport|page-store|dataflow|jsx\/|parser|page-runtime/i.test(
-        m,
-      ),
+    output.modules.some(
+      (m) =>
+        m !== "dataflow.ts" &&
+        /boot|editor|transport|page-store|dataflow|jsx\/|parser|page-runtime/i.test(
+          m,
+        ),
     ) ||
     /\/api\/|\/islands\/|@mx\/boot|EventSource|WebSocket|parseJsx|parseExpressionAt|new Function|\beval\s*\(/.test(
       output.javascript,
@@ -256,6 +289,11 @@ export async function compileArchivedLocal(
     state[d.name] = d.default;
   }
   if (Object.keys(state).length !== declarations.size)
+    return blocked("compiled-local-output");
+  if (
+    (output.queryNames ?? []).length !== queries.size ||
+    [...queries].some((q) => !output.queryNames?.includes(q))
+  )
     return blocked("compiled-local-output");
   const identities: Record<string, string> = Object.create(null);
   let unsafe = false;
@@ -294,12 +332,20 @@ export async function compileArchivedLocal(
     .filter(([key]) => ["class", "data-theme"].includes(key))
     .map(([key, value]) => ` ${key}="${esc(value)}"`)
     .join("");
+  const html = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state })}</script><title>${esc(output.title)}</title><style>${output.css}</style></head><body>${serialize(fragment)}<script type="module">${output.javascript.replace(/<\/script/gi, "<\\/script")}</script></body></html>`;
+  if (Buffer.byteLength(html) > MAX_PAGE_SOURCE)
+    return blocked("compiled-page-limit");
   return {
     classification: "functional",
-    html: `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state })}</script><title>${esc(output.title)}</title><style>${output.css}</style></head><body>${serialize(fragment)}<script type="module">${output.javascript.replace(/<\/script/gi, "<\\/script")}</script></body></html>`,
+    html,
     identities,
     issues: [],
-    capabilities: ["local-scalars", "archived-kit", "inlined-fonts"],
+    capabilities: [
+      "local-scalars",
+      "archived-kit",
+      "inlined-fonts",
+      ...(queries.size ? ["local-sql-queries"] : []),
+    ],
     provenance: {
       compiler: "archived-local",
       build: output.build,

@@ -19,7 +19,6 @@ const split = storyBodyFor(input.source);
 if (
   !split ||
   split.content.script ||
-  split.content.queries.length ||
   split.content.mutations.length ||
   split.content.imports.length
 )
@@ -68,12 +67,60 @@ if (
   )
 )
   throw Error("Unsupported value type");
-const flow = {
+const rawFlow = {
   imports: [],
-  queries: [],
+  queries: split.content.queries,
   mutations: [],
   values: split.content.values,
 };
+let flow: any = rawFlow;
+let results: any = null;
+if (rawFlow.queries.length) {
+  const { prepareCompile, compileDataflow } = await archived(
+    "lib/dataflow/compile-dataflow.ts",
+  );
+  const ctx = await prepareCompile(rawFlow, async () => null);
+  const compiled = compileDataflow(rawFlow, ctx, split.body);
+  if (!compiled.ok) throw Error("Local query compilation refused");
+  flow = compiled.compiled;
+  if (
+    flow.imports.length ||
+    flow.mutations.length ||
+    flow.queries.some(
+      (q: any) =>
+        q.engine !== "sqlite" ||
+        q.source ||
+        q.reads.imports.length ||
+        q.reads.builtins.length,
+    )
+  )
+    throw Error("Only local scalar SQL queries admitted");
+  const { createPageEngine } = await archived("lib/page-store/page-engine.ts");
+  const engine = createPageEngine({
+    load: async () => ctx.engine,
+    fetch: async () => {
+      throw Error("Imports are unsupported");
+    },
+  });
+  engine.prepare(flow, []);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  if (!engine.ready(flow, [])) throw Error("Local engine failed to prepare");
+  results = await engine.run(
+    flow,
+    flow.queries.map((q: any) => q.name),
+    {
+      values: Object.fromEntries(
+        declarations.map((d: any) => [d.name, d.default]),
+      ),
+      localTables: {},
+      userId: null,
+      now: new Date().toISOString(),
+      tz: "UTC",
+    },
+  );
+  if (Object.keys(results.errors).length)
+    throw Error("Default local queries failed");
+}
 const generated = generate({
   nodes: parts.runtime.data.nodes,
   colorMode: parts.mode,
@@ -103,7 +150,7 @@ const rendered = (
   )
 ).render({
   values: Object.fromEntries(declarations.map((d: any) => [d.name, d.default])),
-  results: null,
+  results,
   mermaidImages: {},
   drawings: {},
 });
@@ -121,13 +168,24 @@ const source = await transformSolid(
   { generate: "dom", hydratable: true },
   { moduleName: "@mx/rt" },
 );
-const manifest = JSON.parse(
+const buildManifest = JSON.parse(
   await readFile(
     path.join(root, "services/app/public/islands/manifest.json"),
     "utf8",
   ),
-).manifest;
-const { build: bundle } = await import(
+);
+const manifest = buildManifest.manifest;
+let sql: any;
+if (flow.queries.length) {
+  const wasm = await readFile(
+    path.join(root, "services/app/public", buildManifest.sqliteWasm),
+  );
+  sql = { flow, wasmBase64: wasm.toString("base64"), tables: results.tables };
+}
+const sqlitePath = Object.keys(buildManifest.files).find((v: string) =>
+  /^\/islands\/sqlite-engine-[a-f0-9]+\.js$/.test(v),
+);
+const { build: bundle, transform: stripTypes } = await import(
   pathToFileURL(path.join(root, "node_modules/esbuild/lib/main.js")).href
 );
 const bundled = await bundle({
@@ -136,6 +194,8 @@ const bundled = await bundle({
   write: false,
   format: "esm",
   platform: "browser",
+  alias: { "@": path.join(root, "services/app") },
+  define: { "process.env.NODE_ENV": JSON.stringify("production") },
   minify: true,
   treeShaking: true,
   metafile: true,
@@ -144,15 +204,81 @@ const bundled = await bundle({
     {
       name: "migration-only",
       setup(b: any) {
+        b.onResolve({ filter: /^@artifactbin\/contracts$/ }, () => ({
+          path: "scalar-query-contracts",
+          namespace: "migration-contracts",
+        }));
+        b.onLoad({ filter: /.*/, namespace: "migration-contracts" }, () => ({
+          contents: [
+            ["sql.ts", "DISPLAY_ROWS,isQueryFailure"],
+            ["sql-analysis.ts", "paramSqlName"],
+            ["sql-functions.ts", "SQL_FUNCTIONS,MUTATION_ONLY_FUNCTIONS"],
+            [
+              "artifact-reference.ts",
+              "ARTIFACT_ID_PATTERN,ARTIFACT_REFERENCE_PATTERN",
+            ],
+            ["membership.ts", "MEMBER_COLUMNS"],
+          ]
+            .map(
+              ([file, names]) =>
+                `export {${names}} from ${JSON.stringify(path.join(root, "services/contracts/src", file))};`,
+            )
+            .join("\n"),
+          loader: "js",
+          resolveDir: root,
+        }));
+        b.onLoad({ filter: /\.tsx$/ }, async (args: any) => {
+          if (!args.path.startsWith(path.join(root, "services/app/")))
+            throw Error("Unexpected TSX dependency");
+          const stripped = await stripTypes(await readFile(args.path, "utf8"), {
+            loader: "tsx",
+            jsx: "preserve",
+          });
+          return {
+            contents: await transformSolid(
+              stripped.code,
+              { generate: "dom", hydratable: true },
+              { moduleName: "solid-js/web" },
+            ),
+            loader: "js",
+            resolveDir: path.dirname(args.path),
+          };
+        });
         b.onResolve({ filter: /^@mx\/boot$/ }, () => ({
           path: "local",
           namespace: "migration",
         }));
         b.onLoad({ filter: /.*/, namespace: "migration" }, () => ({
-          contents: localBootSource(declarations),
+          contents: localBootSource(declarations, sql),
           loader: "js",
         }));
+        b.onResolve({ filter: /^migration-sqlite$/ }, () => {
+          if (!sqlitePath) throw Error("No archived SQLite engine");
+          return {
+            path: path.join(root, "services/app/lib/islands/sqlite-engine.ts"),
+          };
+        });
         b.onResolve({ filter: /^(@mx\/|solid-js)/ }, (args: any) => {
+          if (sql && args.path.startsWith("solid-js")) {
+            const suffix = args.path.slice("solid-js".length);
+            const file =
+              suffix === ""
+                ? "dist/solid.js"
+                : suffix + "/dist/" + suffix.slice(1) + ".js";
+            return { path: path.join(root, "node_modules/solid-js", file) };
+          }
+          if (
+            sql &&
+            (args.path === "@mx/rt" || args.path.startsWith("@mx/kit/"))
+          ) {
+            const relative =
+              args.path === "@mx/rt"
+                ? "rt.tsx"
+                : args.path.replace("@mx/", "") + ".tsx";
+            return {
+              path: path.join(root, "services/app/lib/islands", relative),
+            };
+          }
           const file = manifest[args.path];
           if (!file) throw Error("Unmapped archived browser import");
           return { path: path.join(root, "services/app/public", file) };
@@ -224,6 +350,7 @@ process.stdout.write(
     css,
     javascript,
     declarations,
+    queryNames: flow.queries.map((q: any) => q.name),
     modules,
     title: parts.title,
     build: build.id,

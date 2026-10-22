@@ -141,3 +141,19 @@ test("only explicit verified media mappings replace archived image dependencies"
     assert.equal(result.html, null);
   }
 });
+
+test("static compiled output obeys the unchanged product page source limit", async () => {
+  const result = await compileArchivedStatic(
+    { source: "<p>Example</p>", coreUrl: "/af/v1/core.js" },
+    {
+      compiler: {
+        compile: async () => ({
+          ...(await compiler.compile({} as never)),
+          css: "é".repeat(2_000_000),
+        }),
+      },
+    },
+  );
+  assert.equal(result.classification, "manual-blocked");
+  assert.equal(result.issues[0]?.code, "compiled-page-limit");
+});

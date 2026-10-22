@@ -12,6 +12,7 @@ export interface LocalScalarDeclaration {
 }
 export interface ArchivedLocalOutput extends ArchivedStaticOutput {
   javascript: string;
+  queryNames?: string[];
   declarations: LocalScalarDeclaration[];
   /** Audited migration-time bundle inputs; no authored source or absolute paths. */
   modules: string[];

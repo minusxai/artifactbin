@@ -35,7 +35,7 @@ test("local route refuses author execution and all data adapters before invoking
   let calls = 0;
   for (const source of [
     "<script>alert(1)</script>",
-    '<Query name="rows">select 1</Query>',
+    '<Import name="rows" ref="missing"/>',
     '<Button run="$save">Save</Button>',
     '<Select value="$region"/>',
     "<SlideDeck><div>one</div></SlideDeck>",
@@ -147,4 +147,106 @@ test("Apollo boot applies atomic scalar writes and reprojects persisted state af
   boot({ TREE: () => null });
   assert.equal(context.value("count"), 9);
   assert.equal(context.value("label"), "typed");
+});
+
+test("local SQL declarations require an explicit offline query engine plan", async () => {
+  const source =
+    '<Helmet><Value name="n" type="number" default={2}/><Query name="total">{`select $n * 2 as total`}</Query></Helmet><Number id="total" data="$total"/>';
+  let calls = 0;
+  const result = await compileArchivedLocal(
+    { ...input, source },
+    {
+      compiler: {
+        compile: async () => {
+          calls++;
+          return {
+            ...output,
+            declarations: [{ name: "n", type: "number", default: 2 }],
+            queryNames: ["total"],
+          };
+        },
+      },
+    },
+  );
+  assert.equal(calls, 1);
+  assert.equal(result.classification, "functional");
+  assert.ok(result.capabilities.includes("local-sql-queries"));
+});
+
+test("local query projection ignores stale runs after later Apollo state changes", async () => {
+  const { localBootSource } = await import(
+    "../src/migration/conversion/compiled/local-boot.ts"
+  );
+  let saved: any = { compiledPage: { n: 2 } },
+    observer: any,
+    context: any;
+  const runs: Array<(answer: any) => void> = [];
+  const client = {
+    watchQuery: () => ({
+      subscribe: (fn: any) => {
+        observer = fn;
+        fn({ data: saved });
+      },
+    }),
+    updateQuery: (_: any, update: any) => {
+      saved = update(saved);
+      observer({ data: saved });
+    },
+  };
+  const createSignal = (initial: any) => {
+    let value = initial;
+    return [
+      () => value,
+      (next: any) => {
+        value = next;
+      },
+    ];
+  };
+  const source = localBootSource([{ name: "n", type: "number", default: 2 }], {
+    flow: { queries: [{ name: "total" }] },
+    wasmBase64: "",
+    tables: { total: { rows: [{ total: 4 }], columns: [] } },
+  })
+    .replace(/^import .*;$/gm, "")
+    .replace("export function boot", "function boot");
+  const engine = {
+    prepare: () => {},
+    ready: () => true,
+    run: () => new Promise((resolve) => runs.push(resolve)),
+  };
+  const boot = Function(
+    "client",
+    "gql",
+    "hydrateIsland",
+    "createSignal",
+    "pageEngine",
+    source + ";return boot;",
+  )(
+    client,
+    () => ({}),
+    (_: any, _tree: any, c: any) => {
+      context = c;
+    },
+    createSignal,
+    () => engine,
+  );
+  boot({ TREE: () => null });
+  context.setValue("n", 3);
+  assert.equal(runs.length, 2);
+  runs[1]!({ tables: { total: { rows: [{ total: 6 }] } }, errors: {} });
+  await Promise.resolve();
+  runs[0]!({ tables: { total: { rows: [{ total: 4 }] } }, errors: {} });
+  await Promise.resolve();
+  assert.equal(context.table("total").rows[0].total, 6);
+  assert.equal(context.pending(), false);
+});
+
+test("local HTML that exceeds the existing platform page source limit remains blocked", async () => {
+  const result = await compileArchivedLocal(input, {
+    compiler: {
+      compile: async () => ({ ...output, css: "é".repeat(2_000_000) }),
+    },
+  });
+  assert.equal(result.classification, "manual-blocked");
+  assert.equal(result.issues[0]?.code, "compiled-page-limit");
 });

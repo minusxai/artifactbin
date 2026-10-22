@@ -261,7 +261,7 @@ export async function compileArchivedStatic(
     .map(([k, v]) => ` ${k}="${esc(v)}"`)
     .join("");
   const html = `<!doctype html><html${attrs}><head><script src="${esc(input.coreUrl)}" data-af="core"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(compiled.title)}</title><style>${compiled.css}</style></head><body>${serialize(fragment)}</body></html>`;
-  if (html.length > MAX_PAGE_SOURCE)
+  if (Buffer.byteLength(html) > MAX_PAGE_SOURCE)
     return refused(
       "compiled-page-limit",
       "Compiled HTML exceeds the platform source limit",
