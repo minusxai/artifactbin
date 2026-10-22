@@ -54,7 +54,7 @@ test("HTTP sandbox viewer capability uses original mapped identity and fresh pag
     });
     assert.equal(reserved.status, 201);
     const backendId = reserved.body.ids[0];
-    const backend = `export const typeDefs='type Viewer { generation:String! id:String } type Query { viewer:Viewer! forged:Viewer! }';export default {Query:{viewer:(_a,_p,caps)=>caps.dataset.viewer(),forged:(_a,_p,caps)=>caps.dataset.viewer({subject:'forged'})}};`;
+    const backend = `export const typeDefs='type Viewer { generation:String! id:String } type Availability { canAttempt:Boolean! } type Query { viewer:Viewer! forged:Viewer! availability:Availability! }';export default {Query:{availability:(_a,_p,caps)=>caps.dataset.mutationAvailability({operation:'unregistered'}),viewer:(_a,_p,caps)=>caps.dataset.viewer(),forged:(_a,_p,caps)=>caps.dataset.viewer({subject:'forged'})}};`;
     const publication = await request("/api/publish", {
       token: owner,
       body: {
@@ -92,6 +92,9 @@ test("HTTP sandbox viewer capability uses original mapped identity and fresh pag
         token,
         body: { query: "{legacyData{viewer{generation id}}}" },
       });
+    const advisory=await request(`/api/files/${id}/graphql`,{token:owner,body:{query:'{legacyData{availability{canAttempt}}}'}});
+    assert.equal(advisory.status,200);
+    assert.deepEqual(advisory.body.data.legacyData.availability,{canAttempt:false});
     const mapped = await query(owner);
     assert.equal(mapped.status, 200);
     assert.equal(mapped.body.data.legacyData.viewer.id, "original-reader");
