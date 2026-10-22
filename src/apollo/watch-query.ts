@@ -28,7 +28,31 @@ export function createQueryWatch<T>(
         generation = 0;
       let snapshot: QueryResult = { data: options.empty };
       let last = options.signature(options.state.read());
-      const publish = () => {
+      let stopState = () => {},
+        stopRemote = () => {};
+      const close = () => {
+        if (!active) return;
+        active = false;
+        generation++;
+        try {
+          stopState();
+        } finally {
+          try {
+            stopRemote();
+          } finally {
+            release?.();
+          }
+        }
+      };
+      const publish = (propagate = false) => {
+        try {
+          publishResult();
+        } catch (error) {
+          close();
+          if (propagate) throw error;
+        }
+      };
+      const publishResult = () => {
         if (!active) return;
         next({
           ...snapshot,
@@ -65,22 +89,13 @@ export function createQueryWatch<T>(
               }
               if (!active || generation !== expected) continue;
               snapshot = result;
-              try {
-                publish();
-              } catch {
-                active = false;
-                stopState();
-                stopRemote();
-                release?.();
-              }
+              publish();
             }
           } finally {
             running = false;
           }
         })();
       };
-      let stopState = () => {},
-        stopRemote = () => {};
       try {
         stopState = options.state.subscribe((document) => {
           const key = options.signature(document);
@@ -90,24 +105,14 @@ export function createQueryWatch<T>(
           }
         });
         stopRemote = options.remote?.subscribe(refresh) ?? (() => {});
-        publish();
+        publish(true);
         refresh();
       } catch (error) {
-        active = false;
-        stopState();
-        stopRemote();
-        release?.();
+        close();
         throw error;
       }
       return {
-        unsubscribe() {
-          if (!active) return;
-          active = false;
-          generation++;
-          stopState();
-          stopRemote();
-          release?.();
-        },
+        unsubscribe: close,
       };
     },
   };
