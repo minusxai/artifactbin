@@ -21,6 +21,7 @@ export interface DatasetImportMetadata {
     legacyId: string; version: number; tables: readonly DatasetTable[];
     /** Complete original catalog, including unsupported model/external metadata; never executed or returned. */
     catalog: unknown;
+    unavailableTables: readonly { schema: string; name: string; reason: "external" | "model" }[];
   }[];
   /** Token rows retain ownership provenance only: they never authenticate a dataset caller. */
   principals: readonly { actor: string; kind: "user" | "token"; legacyId: string; identity: "user" | "guest" | "testuser" }[];
