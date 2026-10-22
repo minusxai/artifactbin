@@ -76,7 +76,7 @@ test('registered row mutations require a durable renderer row scope and existing
 test('presentation kit admission requires exact context and literal audited props',()=>{
  const head='<Value name="n" type="number"/>';
  for(const body of ['<Tooltip id="tip"><TooltipTrigger id="trigger">Help</TooltipTrigger><TooltipContent id="content">Details</TooltipContent></Tooltip>','<Dialog id="dialog"><DialogTrigger>Open</DialogTrigger><DialogContent><DialogClose>Close</DialogClose></DialogContent></Dialog>','<Avatar><AvatarFallback>AB</AvatarFallback></Avatar>'])assert.equal(admitLocalSource({...base,source:head+body}).ok,true,body);
- for(const body of ['<TooltipTrigger>Missing context</TooltipTrigger>','<Dialog><DialogContent run="$save"/></Dialog>','<Tooltip open="$n"/>','<Accordion type="multiple"/>','<Avatar onClick="evil"/>'])assert.equal(admitLocalSource({...base,source:head+body}).ok,false,body);
+ for(const body of ['<TooltipTrigger>Missing context</TooltipTrigger>','<Dialog><DialogContent run="$save"/></Dialog>','<Tooltip open="$n"/>','<Accordion type="invalid"/>','<Avatar onClick="evil"/>'])assert.equal(admitLocalSource({...base,source:head+body}).ok,false,body);
 });
 
 test('presentation identity hosts are derived from source and replace supplied hosts',()=>{

@@ -14,3 +14,12 @@ test('disclosure preserves exact static API and refuses missing context, executa
  // Required values remain required; no identities or synthetic values repair malformed source.
  assert.throws(()=>admitPresentationKit('AccordionItem',{id:'item'},['Accordion']));
 });
+test('frozen Accordion accepts multiple spelling without inventing array state, and Dialog asChild remains an inert boolean hint',()=>{
+ assert.equal(admitPresentationKit('Accordion',{type:'multiple'}).tag,'Accordion');
+ for(const tag of ['DialogTrigger','DialogClose']){
+  assert.equal(admitPresentationKit(tag,{asChild:true},['Dialog']).tag,tag);
+  assert.throws(()=>admitPresentationKit(tag,{asChild:'true'},['Dialog']));
+ }
+ assert.throws(()=>admitPresentationKit('Accordion',{type:'invalid'}));
+ assert.throws(()=>admitPresentationKit('Accordion',{type:'multiple',value:['first','second']}));
+});

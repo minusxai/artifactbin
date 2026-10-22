@@ -116,8 +116,10 @@ const api: Record<PresentationKitTag, readonly string[]> = {
   TooltipTrigger: [],
   TooltipContent: ["forceMount"],
   Dialog: ["defaultOpen", "open"],
-  DialogTrigger: ["wrapsControl", "disabled"],
-  DialogClose: ["wrapsControl", "disabled"],
+  // Frozen compiler ignores asChild and derives wrapsControl from actual child structure.
+  // Admission retains that inert boolean spelling without granting a wrapper/runtime override.
+  DialogTrigger: ["wrapsControl", "disabled", "asChild"],
+  DialogClose: ["wrapsControl", "disabled", "asChild"],
   // run/args belong to the mutation adapter, never this presentation capability.
   DialogContent: ["stacked"],
   Avatar: ["size"],
@@ -180,6 +182,7 @@ export function admitPresentationKit(
       }
       if (
         [
+          "asChild",
           "collapsible",
           "disabled",
           "forceMount",
@@ -192,7 +195,8 @@ export function admitPresentationKit(
         if (typeof value !== "boolean")
           throw Error("Invalid presentation boolean");
       } else if (!text(value)) throw Error("Invalid presentation text");
-      if (key === "type" && value !== "single")
+      // Frozen Accordion consumes one string even with type="multiple"; never synthesize array state.
+      if (key === "type" && value !== "single" && value !== "multiple")
         throw Error("Unsupported Accordion type");
       if (
         key === "orientation" &&

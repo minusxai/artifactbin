@@ -101,7 +101,7 @@ test("only static archived props are admitted without executable actions or gues
     "Accordion",
   );
   for (const attrs of [
-    { type: "multiple" },
+    { type: "invalid" },
     { defaultValue: "$open" },
     { onValueChange: "handler" },
     { disabled: true },
