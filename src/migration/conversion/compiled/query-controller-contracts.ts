@@ -44,6 +44,9 @@ export interface CompiledQueryConfiguration {
 }
 export interface CompiledQueryController {
   refresh(): Promise<boolean>;
+  /** Refresh and await the latest coherent publication across dependency replacements,
+   * bounded by one total deadline and cancelled with the caller principal. */
+  refreshUntilSettled(signal: AbortSignal): Promise<boolean>;
   fetchPage(
     name: string,
     page: unknown,

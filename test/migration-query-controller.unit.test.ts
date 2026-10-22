@@ -520,3 +520,62 @@ for (const action of ["supersede", "dispose"] as const)
     await flush();
     assert.equal(publications.length, count);
   });
+
+test("coherent publication barrier keeps one deadline across replaced query runs", async () => {
+  const clock = injectedClock(),
+    pending: ReturnType<typeof deferred<CompiledQueryAnswer>>[] = [];
+  const { controller } = setup({
+    clock: clock.port,
+    engine: {
+      prepare() {},
+      ready: () => true,
+      run: () => {
+        const value = deferred<CompiledQueryAnswer>();
+        pending.push(value);
+        return value.promise;
+      },
+      page: async () => table,
+    },
+  });
+  const principal = new AbortController();
+  const result = controller.refreshUntilSettled(principal.signal);
+  await flush();
+  clock.advance(12);
+  controller.invalidate();
+  void controller.refresh();
+  await flush();
+  assert.equal(pending.length, 2);
+  pending[0]!.resolve(answer());
+  await flush();
+  clock.advance(8);
+  assert.equal(await result, false);
+  controller.dispose();
+  await flush();
+  assert.equal(clock.timers.size, 0);
+});
+for (const action of ["abort", "dispose"] as const)
+  test(`coherent publication barrier releases observer and deadline on ${action}`, async () => {
+    const clock = injectedClock(),
+      run = deferred<CompiledQueryAnswer>();
+    const { controller } = setup({
+      clock: clock.port,
+      engine: {
+        prepare() {},
+        ready: () => true,
+        run: () => run.promise,
+        page: async () => table,
+      },
+    });
+    const principal = new AbortController(),
+      pending = controller.refreshUntilSettled(principal.signal);
+    await flush();
+    assert.equal(clock.timers.size, 2);
+    if (action === "abort") principal.abort();
+    else controller.dispose();
+    assert.equal(await pending, false);
+    controller.dispose();
+    await flush();
+    assert.equal(clock.timers.size, 0);
+    run.resolve(answer());
+    await flush();
+  });

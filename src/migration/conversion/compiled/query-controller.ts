@@ -3,6 +3,7 @@ import type {
   CompiledQueryPorts,
   CompiledQueryConfiguration,
   CompiledQueryAnswer,
+  CompiledQueryPublication,
 } from "./query-controller-contracts.ts";
 import { completeControlOptions } from "./control-options.ts";
 import { controlPageRequest } from "./data-controls.ts";
@@ -21,6 +22,11 @@ export function createCompiledQueryController(
     disposed = false,
     scope = new AbortController();
   const queries = new Set(configuration.queries);
+  const observers = new Set<(event: CompiledQueryPublication) => void>();
+  const publish = (event: CompiledQueryPublication) => {
+    ports.publish(event);
+    for (const observer of [...observers]) observer(event);
+  };
   const check = (current: number, signal: AbortSignal, deadline: number) => {
     if (disposed || current !== generation || signal.aborted)
       throw Error("Query snapshot cancelled");
@@ -72,14 +78,14 @@ export function createCompiledQueryController(
     scope.abort();
     scope = new AbortController();
   };
-  return {
+  const controller: CompiledQueryController = {
     async refresh() {
       if (disposed || ports.availability() === "blocked") return false;
       retire();
       const current = generation,
         signal = scope.signal,
         deadline = ports.clock.now() + configuration.deadlineMs;
-      ports.publish({ state: "pending" });
+      publish({ state: "pending" });
       try {
         check(current, signal, deadline);
         ports.engine.prepare();
@@ -128,12 +134,12 @@ export function createCompiledQueryController(
             );
           check(current, signal, deadline);
         }
-        ports.publish({ state: "settled", answer });
+        publish({ state: "settled", answer });
         return !Object.keys(answer.errors).length;
       } catch {
         if (!disposed && current === generation) {
           scope.abort();
-          ports.publish({
+          publish({
             state: "failed",
             errors: Object.fromEntries(
               configuration.queries.map((name) => [name, "Local query failed"]),
@@ -142,6 +148,37 @@ export function createCompiledQueryController(
         }
         return false;
       }
+    },
+    refreshUntilSettled(signal) {
+      if (disposed || signal.aborted || ports.availability() !== "ready")
+        return Promise.resolve(false);
+      const deadline = ports.clock.now() + configuration.deadlineMs;
+      return new Promise<boolean>((resolve) => {
+        let settled = false,
+          stopDeadline = () => {};
+        const finish = (ok: boolean) => {
+          if (settled) return;
+          settled = true;
+          stopDeadline();
+          signal.removeEventListener("abort", abort);
+          observers.delete(observe);
+          resolve(
+            ok && !signal.aborted && !disposed && ports.clock.now() < deadline,
+          );
+        };
+        const abort = () => finish(false);
+        const observe = (event: CompiledQueryPublication) => {
+          if (disposed || event.state === "failed") finish(false);
+          else if (event.state === "settled")
+            finish(!Object.keys(event.answer.errors).length);
+        };
+        observers.add(observe);
+        signal.addEventListener("abort", abort, { once: true });
+        stopDeadline = ports.clock.schedule(abort, configuration.deadlineMs);
+        // A dependency can synchronously invalidate this refresh and queue its
+        // replacement. Only a current publication settles the principal gate.
+        void controller.refresh().catch(abort);
+      });
     },
     async fetchPage(name, page, columns) {
       const current = generation,
@@ -163,16 +200,17 @@ export function createCompiledQueryController(
     invalidate() {
       if (disposed) return;
       retire();
-      ports.publish({ state: "cleared" });
+      publish({ state: "cleared" });
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       retire();
-      ports.publish({ state: "cleared" });
+      publish({ state: "cleared" });
       scope.abort();
     },
   };
+  return controller;
 }
 
 /** Native timers are owned by each wait and released on cancellation. */
