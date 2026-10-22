@@ -67,6 +67,9 @@ if (Boolean(fontBundleDirectory) !== Boolean(fontBundleManifestSha256))
     "Font bundle directory and manifest digest must be supplied together",
   );
 const options: MigrationJobOptions = {
+  ownershipOverride: process.env.MIGRATION_OWNERSHIP_OVERRIDE
+    ? JSON.parse(process.env.MIGRATION_OWNERSHIP_OVERRIDE)
+    : undefined,
   excludedNativeProgramSources: process.env
     .MIGRATION_EXCLUDED_NATIVE_PROGRAM_SOURCES
     ? JSON.parse(process.env.MIGRATION_EXCLUDED_NATIVE_PROGRAM_SOURCES)

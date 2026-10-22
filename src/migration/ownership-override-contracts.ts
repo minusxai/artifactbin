@@ -4,6 +4,7 @@ export interface MigrationOwnershipOverride {
   sourceNamespace: string;
   targetEmail: string;
   entries: readonly { legacyId: string; sourceSha256: string }[];
+  datasetWriteGrants?: readonly import("./ownership-dataset-grants-contracts.ts").MigrationOwnershipDatasetWriteGrant[];
   scopeSha256: string;
 }
 export interface MigrationOwnershipAssignment {

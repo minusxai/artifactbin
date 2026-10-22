@@ -6,6 +6,7 @@ import type { MigrationBackendReceipt } from "./backend-preparation-contracts.ts
 import type { MigrationDatasetImportScan } from "./dataset-scan-contracts.ts";
 export interface MigrationJobDatasets {
   metadata: DatasetImportMetadata;
+  ownershipDatasetGrants?: readonly import("./ownership-dataset-grants-contracts.ts").MigrationOwnershipDatasetGrantAudit[];
   datasetAttachments?: ReadonlyMap<
     string,
     readonly { backendNamespace: string; bindingName: string }[]

@@ -1,3 +1,6 @@
+import { validateMigrationOwnershipDatasetGrantBatch } from "./ownership-dataset-grants.ts";
+import { persistMigrationOwnershipDatasetGrantAudit } from "./ownership-dataset-grant-audit.ts";
+import type { MigrationOwnershipOverride } from "./ownership-override-contracts.ts";
 import { registerDatasetAttachments } from "../persistence/dataset-attachments.ts";
 import { registerSavedQueries } from "../persistence/dataset-queries.ts";
 import { validateMigrationPersonBindings } from "./person-binding-validation.ts";
@@ -31,7 +34,13 @@ export class PostgresDatasetMetadataDestination
 {
   private readonly names: ReturnType<typeof destinationSchemas>;
   private readonly db: SqlReader;
-  constructor(db: SqlReader, schema: string) {
+  private readonly ownershipOverride?: MigrationOwnershipOverride;
+  constructor(
+    db: SqlReader,
+    schema: string,
+    ownershipOverride?: MigrationOwnershipOverride,
+  ) {
+    this.ownershipOverride = ownershipOverride;
     this.db = db;
     this.names = destinationSchemas(schema);
   }
@@ -45,6 +54,11 @@ export class PostgresDatasetMetadataDestination
       !batch.metadata.sourceNamespace
     )
       throw new Error("Invalid dataset export provenance");
+    validateMigrationOwnershipDatasetGrantBatch(
+      batch.metadata,
+      batch.ownershipDatasetGrants,
+      this.ownershipOverride,
+    );
     validateMigrationPersonBindings(batch.metadata);
     const plans = tablePlans(batch);
     const key = (row: LegacyRow, keys: readonly string[]) =>
@@ -158,6 +172,13 @@ export class PostgresDatasetMetadataDestination
         throw new Error("Dataset migration receipt differs");
       if (receipt && missing.length)
         throw new Error("Dataset migration metadata was removed after import");
+      await persistMigrationOwnershipDatasetGrantAudit(
+        this.db,
+        this.names.archive,
+        batch.metadata.sourceNamespace,
+        batch.ownershipDatasetGrants ?? [],
+        Boolean(receipt),
+      );
       for (const { plan: p, row } of missing) {
         const columns = Object.keys(row);
         await this.db.query(

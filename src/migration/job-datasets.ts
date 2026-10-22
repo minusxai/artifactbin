@@ -1,4 +1,5 @@
-import {projectMigrationDatasetOwnership} from "./job-dataset-ownership.ts";
+import { prepareMigrationOwnershipDatasetGrants } from "./ownership-dataset-grants.ts";
+import { projectMigrationDatasetOwnership } from "./job-dataset-ownership.ts";
 import { projectMigrationAttachmentBindings } from "./attachment-bindings.ts";
 import { legacyDocumentSource } from "./conversion/index.ts";
 import { readLegacyPersonValueNames } from "./conversion/compiled/person-source.ts";
@@ -30,7 +31,10 @@ export async function prepareMigrationJobDatasets(
   ports: MigrationBackendPreparationPorts = {},
 ): Promise<MigrationJobDatasets | undefined> {
   if (!source.datasets) return undefined;
-  const scan = await scanMigrationDatasetImports(source, options.ownershipOverride);
+  const scan = await scanMigrationDatasetImports(
+    source,
+    options.ownershipOverride,
+  );
   const issues = new Map(
     [...scan.issues].map(([id, reasons]) => [id, [...reasons]]),
   );
@@ -256,7 +260,12 @@ export async function prepareMigrationJobDatasets(
           })),
       );
       accumulator.add({
-        ...projectMigrationDatasetOwnership(plan.metadata,artifact.artifacts[0]!,source,options.ownershipOverride),
+        ...projectMigrationDatasetOwnership(
+          plan.metadata,
+          artifact.artifacts[0]!,
+          source,
+          options.ownershipOverride,
+        ),
         principals: [],
         groups: [],
         personBindings: registeredPersons,
@@ -310,8 +319,15 @@ export async function prepareMigrationJobDatasets(
   const inventory = Object.entries(source.maps.pages).sort(([a], [b]) =>
     a.localeCompare(b),
   );
+  const metadata = accumulator.finish();
+  const ownershipDatasetGrants = await prepareMigrationOwnershipDatasetGrants(
+    source,
+    metadata,
+    options.ownershipOverride,
+  );
   return {
-    metadata: accumulator.finish(),
+    metadata,
+    ownershipDatasetGrants,
     boundValueColumns,
     membersBindings,
     viewerBindings,

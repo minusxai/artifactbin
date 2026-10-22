@@ -22,7 +22,7 @@ test("job prepares exact live head bindings and real compiled receipts without i
     schemaVersion: 1,
     sourceNamespace: "fixture",
     exportedAt: "epoch",
-    tables: { users: [{ id: "owner", kind: "user" }] },
+    tables: { users: [{ id: "owner", kind: "account" }] },
     artifacts: [],
     tokenOwners: [
       { id: "token", user_id: "owner" },

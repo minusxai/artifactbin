@@ -1,3 +1,6 @@
+import { validateMigrationOwnershipDatasetGrantBatch } from "./ownership-dataset-grants.ts";
+import { verifyMigrationOwnershipDatasetGrantAudit } from "./ownership-dataset-grant-audit.ts";
+import type { MigrationOwnershipOverride } from "./ownership-override-contracts.ts";
 import { migrationDatasetTablePlans } from "./dataset-table-plans.ts";
 import { destinationSchemas } from "./destination-schema.ts";
 import {
@@ -11,7 +14,13 @@ export async function verifyMigrationDatasetMetadata(
   db: SqlReader,
   schema: string,
   batch: DatasetMigrationBatch,
+  ownershipOverride?: MigrationOwnershipOverride,
 ): Promise<number> {
+  validateMigrationOwnershipDatasetGrantBatch(
+    batch.metadata,
+    batch.ownershipDatasetGrants,
+    ownershipOverride,
+  );
   const { runtime, archive } = destinationSchemas(schema);
   let count = 0;
   for (const plan of migrationDatasetTablePlans(batch)) {
@@ -120,6 +129,12 @@ export async function verifyMigrationDatasetMetadata(
       },
     ],
     "dataset independent snapshot provenance",
+  );
+  count += await verifyMigrationOwnershipDatasetGrantAudit(
+    db,
+    archive,
+    batch.metadata.sourceNamespace,
+    batch.ownershipDatasetGrants ?? [],
   );
   return count;
 }

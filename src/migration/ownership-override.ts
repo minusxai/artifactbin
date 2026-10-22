@@ -33,6 +33,18 @@ export function migrationOwnershipScopeDigest(
     schemaVersion: policy.schemaVersion,
     sourceNamespace: policy.sourceNamespace,
     targetEmail: policy.targetEmail,
+    ...(policy.datasetWriteGrants?.length
+      ? {
+          datasetWriteGrants: [...policy.datasetWriteGrants]
+            .sort((a, b) => a.legacyId.localeCompare(b.legacyId))
+            .map((g) => ({
+              ...g,
+              operations: [...g.operations].sort((a, b) =>
+                JSON.stringify(a).localeCompare(JSON.stringify(b)),
+              ),
+            })),
+        }
+      : {}),
     entries: [...policy.entries].sort((a, b) =>
       a.legacyId.localeCompare(b.legacyId),
     ),
@@ -64,6 +76,33 @@ export function validateMigrationOwnershipOverride(
     )
       throw new Error("Invalid migration ownership source scope");
     seen.add(entry.legacyId);
+  }
+  const datasets = new Set<string>();
+  for (const grant of policy.datasetWriteGrants ?? []) {
+    if (
+      !grant.legacyId ||
+      datasets.has(grant.legacyId) ||
+      seen.has(grant.legacyId) ||
+      !/^[a-f0-9]{64}$/.test(grant.sourceSha256) ||
+      !/^[a-f0-9]{64}$/.test(grant.originalResourceSha256) ||
+      !grant.operations.length
+    )
+      throw Error("Invalid ownership dataset grant scope");
+    datasets.add(grant.legacyId);
+    const operations = new Set<string>();
+    for (const op of grant.operations) {
+      const key = JSON.stringify([op.pageLegacyId, op.operationName]);
+      if (
+        !seen.has(op.pageLegacyId) ||
+        typeof op.operationName !== "string" ||
+        !op.operationName ||
+        op.operationName.length > 1024 ||
+        op.operationName.includes("\0") ||
+        operations.has(key)
+      )
+        throw Error("Invalid ownership dataset operation scope");
+      operations.add(key);
+    }
   }
 }
 export function resolveMigrationOwnership(

@@ -1,3 +1,4 @@
+import { projectMigrationOwnershipDatasetGrants } from "./ownership-dataset-grants.ts";
 import { migrationPageQueryRegistrations } from "./query-registrations.ts";
 import type { MigrationSavedQueryRegistration } from "./query-registrations.ts";
 import { writeFile } from "node:fs/promises";
@@ -61,15 +62,24 @@ export async function verifyMigrationJob(
       );
     const datasetRows =
       source.preparedDatasets && source.datasets
-        ? await verifyMigrationDatasetMetadata(db, options.schema, {
-            ...source.datasets.provenance,
-            profileAssets: source.supplementalAssets?.profiles,
-            queryRegistrations,
-            metadata: selectMigrationDatasetMetadata(
-              source.preparedDatasets.metadata,
-              ready,
-            ),
-          })
+        ? await verifyMigrationDatasetMetadata(
+            db,
+            options.schema,
+            {
+              ...source.datasets.provenance,
+              profileAssets: source.supplementalAssets?.profiles,
+              queryRegistrations,
+              ...projectMigrationOwnershipDatasetGrants(
+                selectMigrationDatasetMetadata(
+                  source.preparedDatasets.metadata,
+                  ready,
+                ),
+                source.preparedDatasets.ownershipDatasetGrants,
+                options.ownershipOverride,
+              ),
+            },
+            options.ownershipOverride,
+          )
         : 0;
     result = {
       complete: true,

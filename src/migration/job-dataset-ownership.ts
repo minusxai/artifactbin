@@ -9,7 +9,7 @@ export const projectMigrationDatasetOwnership:ProjectMigrationDatasetOwnership=(
  const {ownershipAssignment}=resolveMigrationOwnership(artifact,source.manifest.sourceNamespace,originalMigrationOwner(artifact,source.manifest.sourceNamespace,source.maps),policy);
  if(!ownershipAssignment)return metadata;
  const target=ownershipAssignment.assignedOwner.id;
- const candidates=(source.base.tables.users??[]).filter(user=>typeof user.email==='string'&&user.email.trim().toLowerCase()===target&&!user.merged_into_user_id&&user.kind==='user'&&source.maps.users[String(user.id)]===target);
+ const candidates=(source.base.tables.users??[]).filter(user=>typeof user.email==='string'&&user.email.trim().toLowerCase()===target&&!user.merged_into_user_id&&(user.kind==='user'||user.kind==='account')&&source.maps.users[String(user.id)]===target);
  if(candidates.length!==1)throw Error('Ownership assignment requires one canonical source user');
  const userId=String(candidates[0]!.id);
  if(!metadata.principals.some(principal=>principal.kind==='user'&&principal.legacyId===userId&&principal.actor===target))throw Error('Ownership assignment canonical dataset principal unavailable');

@@ -1,3 +1,4 @@
+import { projectMigrationOwnershipDatasetGrants } from "./ownership-dataset-grants.ts";
 import { migrationPageQueryRegistrations } from "./query-registrations.ts";
 import type { MigrationSavedQueryRegistration } from "./query-registrations.ts";
 import { selectMigrationDatasetMetadata } from "./dataset-selection.ts";
@@ -103,11 +104,19 @@ export async function applyMigrationJob(
     }
     if (source.preparedDatasets && source.datasets) {
       const metadata = source.preparedDatasets.metadata;
-      await new PostgresDatasetMetadataDestination(db, options.schema).import({
+      await new PostgresDatasetMetadataDestination(
+        db,
+        options.schema,
+        options.ownershipOverride,
+      ).import({
         ...source.datasets.provenance,
         profileAssets: source.supplementalAssets?.profiles,
         queryRegistrations,
-        metadata: selectMigrationDatasetMetadata(metadata, ready),
+        ...projectMigrationOwnershipDatasetGrants(
+          selectMigrationDatasetMetadata(metadata, ready),
+          source.preparedDatasets.ownershipDatasetGrants,
+          options.ownershipOverride,
+        ),
       });
     }
     await applied.sync();
