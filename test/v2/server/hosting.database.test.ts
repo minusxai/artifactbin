@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 const run = promisify(execFile);
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DESIGN_SYSTEMS, SKILL_ARCHIVE_PATH } from "../../../src/af-contracts.ts";
+import { DEFAULT_AF_ORIGIN, DESIGN_SYSTEMS, SKILL_ARCHIVE_PATH } from "../../../src/af-contracts.ts";
 import type { PublishResponse } from "../../../src/server/af-api-contracts.ts";
 import { skillFile, skillFiles } from "../support/skill.ts";
 import { page, startServer } from "../support/server.ts";
@@ -114,19 +114,34 @@ test("one command installs the skill for every coding agent on the machine, from
     assert.ok(script.includes(`${server.origin}/skills/pagegi-author.tgz`), "downloads the archive from this server");
     // A machine with Claude Code and Pi, without Codex or OpenCode.
     mkdirSync(join(home, ".pi"), { recursive: true });
+    // An older installation can contain local notes; retain it outside discovery.
+    const legacy = join(home, ".claude/skills/pagegi-author");
+    mkdirSync(legacy, { recursive: true });
+    writeFileSync(join(legacy, "SKILL.md"), "old author skill");
+    writeFileSync(join(legacy, "local-notes.txt"), "retain local changes");
+    writeFileSync(join(home, ".claude/skills/unrelated.txt"), "unrelated");
     // The server answers from this process, so the install must run without blocking it.
     const { stdout: output } = await run("sh", ["-c", `curl -fsSL ${server.origin}/install.sh | sh`], { env: { ...process.env, HOME: home }, encoding: "utf8" });
     for (const folder of [".claude/skills", ".pi/agent/skills"]) {
-      assert.equal(readFileSync(join(home, folder, "pagegi-author/SKILL.md"), "utf8"), skillFile("SKILL.md"), folder);
-      assert.ok(statSync(join(home, folder, "pagegi-author/scripts/publish.mjs")).mode & 0o100, `${folder}: scripts stay executable`);
-      assert.ok(output.includes(`Installed Artifactbin author skill in ${join(home, folder)}`));
+      assert.equal(readFileSync(join(home, folder, "artifactbin-author/SKILL.md"), "utf8"), skillFile("SKILL.md").replaceAll(DEFAULT_AF_ORIGIN, server.origin), folder);
+      assert.ok(statSync(join(home, folder, "artifactbin-author/scripts/publish.mjs")).mode & 0o100, `${folder}: scripts stay executable`);
+      assert.ok(output.includes(`Installed artifactbin-author in ${join(home, folder)}`));
     }
     assert.ok(!existsSync(join(home, ".agents")) && !existsSync(join(home, ".config/opencode")), "no folders for absent harnesses");
     assert.match(output, /Done: the skill is in 2 folder\(s\)/);
-    // Running it again replaces the copy instead of failing or nesting.
-    writeFileSync(join(home, ".claude/skills/pagegi-author/stale.txt"), "old");
+    assert.ok(!existsSync(legacy), "legacy skill is no longer discovered");
+    const backups = join(home, ".af/skill-backups");
+    const [backup] = readdirSync(backups);
+    assert.equal(readFileSync(join(backups, backup!, "pagegi-author/local-notes.txt"), "utf8"), "retain local changes");
+    assert.equal(readFileSync(join(backups, backup!, "pagegi-author/SKILL.md"), "utf8"), "old author skill");
+    assert.equal(readFileSync(join(home, ".claude/skills/unrelated.txt"), "utf8"), "unrelated");
+    // Running it again replaces the canonical copy instead of failing or nesting.
+    writeFileSync(join(home, ".claude/skills/artifactbin-author/stale.txt"), "old");
     await run("sh", ["-c", `curl -fsSL ${server.origin}/install.sh | sh`], { env: { ...process.env, HOME: home }, encoding: "utf8" });
-    assert.ok(!existsSync(join(home, ".claude/skills/pagegi-author/stale.txt")), "an older copy is replaced");
+    assert.ok(!existsSync(join(home, ".claude/skills/artifactbin-author/stale.txt")), "an older copy is replaced");
+    assert.equal(readdirSync(backups).length, 1, "repeated install does not duplicate the legacy backup");
+    assert.deepEqual(readdirSync(join(home, ".claude/skills")).sort(), ["artifactbin-author", "unrelated.txt"]);
+    assert.equal(readFileSync(join(backups, backup!, "pagegi-author/local-notes.txt"), "utf8"), "retain local changes");
   } finally {
     rmSync(home, { recursive: true, force: true });
     await server.close();
