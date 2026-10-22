@@ -44,6 +44,10 @@ export interface MigrationQueryCompilerInput {
 export interface MigrationQueryCompilerOutput {
   flow: MigrationQueryFlow;
   module: CompiledLegacyServerModule;
+  program?: {
+    resolver: import("./programs/runtime-contracts.ts").ProgramResolverSource;
+    manifest: import("./programs/runtime-contracts.ts").ProgramBindingManifest;
+  };
 }
 export type MigrationQueryCompiler = (
   input: MigrationQueryCompilerInput,
@@ -54,6 +58,10 @@ export interface MigrationQueryReceipt {
   moduleSourceSha256: string;
   flowSourceSha256: string;
   compilerIdentity: string;
+  program?: {
+    resolver: import("./programs/runtime-contracts.ts").ProgramResolverSource;
+    manifest: import("./programs/runtime-contracts.ts").ProgramBindingManifest;
+  };
   plan: Omit<RegisteredServerQueryPlan, "registration">;
 }
 

@@ -96,3 +96,40 @@ test("program state is isolated and stale query completion cannot replace latest
   assert.equal(second.bindings.signal("$region")[0](), "initial");
   await second.close();
 });
+
+test("confirmed program writes reset admitted defaults without erasing newer edits", async () => {
+  const finish = deferred<void>();
+  const runtime = createProgramBindings(
+    { ...manifest, resets: { insert: ["region"] } },
+    {
+      authorize: async () => {},
+      query: async () => [],
+      mutate: () => finish.promise,
+    },
+  );
+  await runtime.start();
+  const [read, set] = runtime.bindings.signal("$region");
+  set("submitted");
+  const pending = runtime.bindings.mutation("$insert")();
+  await Promise.resolve();
+  await Promise.resolve();
+  set("newer");
+  finish.resolve();
+  await pending;
+  assert.equal(read(), "newer");
+  await runtime.close();
+  const next = createProgramBindings(
+    { ...manifest, resets: { insert: ["region"] } },
+    {
+      authorize: async () => {},
+      query: async () => [],
+      mutate: async () => {},
+    },
+  );
+  await next.start();
+  const [value, change] = next.bindings.signal("$region");
+  change("submitted");
+  await next.bindings.mutation("$insert")();
+  assert.equal(value(), "initial");
+  await next.close();
+});

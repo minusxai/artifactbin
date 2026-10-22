@@ -228,3 +228,50 @@ test("existing page GraphQL route injects captured dataset authority into a link
     data: { data: { count: 7 } },
   });
 });
+
+test("reserved program binding capabilities reach only the invocation handler, including anonymous readers", async () => {
+  let connectorCalls = 0,
+    programCalls = 0;
+  const host = withCapabilityAuthority(
+    {
+      compile: async () => deployment,
+      invoke: async (request) =>
+        request.capabilityHandler!(
+          request.principal,
+          {
+            kind: "invoke",
+            resource: "program-bindings",
+            operation: "authorize",
+            input: {},
+          },
+          new AbortController().signal,
+        ),
+    },
+    {
+      grants: [],
+      host: {
+        invoke: async () => {
+          connectorCalls++;
+          return null;
+        },
+        transaction: async () => [],
+        close: async () => {},
+      },
+    } as never,
+  );
+  const result = await host.invoke({
+    deployment,
+    principal: { tenant: "document", subject: null },
+    input: { field: "run", args: null },
+    env: {},
+    reuse: { kind: "one-shot" },
+    capabilityHandler: async () => {
+      programCalls++;
+      return "allowed";
+    },
+  });
+  assert.equal(result, "allowed");
+  assert.equal(programCalls, 1);
+  assert.equal(connectorCalls, 0);
+  await host.close();
+});

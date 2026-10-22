@@ -1,3 +1,4 @@
+import { hasLegacyServerModule } from "./query-source.ts";
 import { readsMigrationViewer } from "./job-viewer.ts";
 import { hasLegacyBoundValueSource } from "./conversion/compiled/bound-values.ts";
 import { readsMigrationMembers } from "./job-members.ts";
@@ -41,6 +42,7 @@ export async function scanMigrationDatasetImports(
     let hasImports = false;
     let hasMembers = false;
     let hasViewer = false;
+    let hasProgram = false;
     for (const row of originals) {
       if ((row.format ?? head.format) !== "markup") continue;
       let text: string | null;
@@ -109,6 +111,8 @@ export async function scanMigrationDatasetImports(
           statistics.headImports += extracted.imports.length;
         else statistics.historicalImports += extracted.imports.length;
       }
+      const runsProgram = hasLegacyServerModule(text);
+      if (runsProgram) hasProgram = true;
       const readsViewer = await readsMigrationViewer(source, text, imports);
       if (readsViewer) {
         hasViewer = true;
@@ -124,9 +128,10 @@ export async function scanMigrationDatasetImports(
         imports,
         ...(readsMembers ? { readsMembers: true as const } : {}),
         ...(readsViewer ? { readsViewer: true as const } : {}),
+        ...(runsProgram ? { runsProgram: true as const } : {}),
       });
     }
-    if (!hasImports && !hasMembers && !hasViewer) continue;
+    if (!hasImports && !hasMembers && !hasViewer && !hasProgram) continue;
     if (hasImports) statistics.pagesWithImports++;
     heads.set(id, head.version);
     const kind = head.group_id ? "group" : head.user_id ? "user" : "token";

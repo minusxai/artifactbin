@@ -1,6 +1,7 @@
 /** Offline subprocess only. Archived parser/compiler modules do not enter the server graph. */
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { compileProgramResolver } from "./programs/compiler.ts";
 import { compileLegacyServerModule } from "./server-module.ts";
 const root = path.resolve(process.argv[2] ?? "");
 const archived = (relative: string) =>
@@ -63,4 +64,31 @@ const module = await compileLegacyServerModule(split.content.serverScript, {
   queries: raw.queries.map((q: any) => q.name),
   mutations: raw.mutations.map((m: any) => m.name),
 });
-process.stdout.write(JSON.stringify({ flow: result.compiled, module }));
+const manifest = {
+  values: result.compiled.values
+    .filter((v: any) => v.kind === "scalar")
+    .map((v: any) => v.name),
+  queries: result.compiled.queries.map((q: any) => q.name),
+  mutations: result.compiled.mutations.map((m: any) => m.name),
+  resets: Object.fromEntries(
+    result.compiled.mutations
+      .filter((m: any) => m.reset?.length)
+      .map((m: any) => [m.name, m.reset]),
+  ),
+  defaults: Object.fromEntries(
+    result.compiled.values
+      .filter((v: any) => v.kind === "scalar")
+      .map((v: any) => [v.name, v.default]),
+  ),
+};
+const resolver = await compileProgramResolver(
+  split.content.serverScript,
+  manifest,
+);
+process.stdout.write(
+  JSON.stringify({
+    flow: result.compiled,
+    module,
+    program: { resolver, manifest },
+  }),
+);

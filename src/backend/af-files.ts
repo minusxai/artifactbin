@@ -1,3 +1,4 @@
+import { hash } from "../server/text.ts";
 import { datasetCapabilityHandler } from "../datasets/capability.ts";
 /**
  * Backend files: compile and version them with the page that links them, and
@@ -343,6 +344,7 @@ export function createBackendRoutes(options: {
   ): Promise<PageCaller>;
   secrets?: SecretsEnvPort;
   datasets?: import("../datasets/contracts.ts").DatasetReadService;
+  programs?: import("../server/saved-program-host-contracts.ts").SavedProgramHost;
   datasetPerson?: import("../datasets/person-contracts.ts").DatasetPersonService;
   datasetAvailability?: import("../datasets/mutation/availability-contracts.ts").DatasetMutationAvailabilityService;
   datasetViewer?: import("../datasets/viewer-contracts.ts").DatasetViewerService;
@@ -454,6 +456,26 @@ export function createBackendRoutes(options: {
             "backend_unavailable",
           );
         const deployment = await runnable(host, pageId, link);
+        if (call.field === "run" && options.programs) {
+          const input = call.args as Record<string, unknown>;
+          if (typeof input.inputJson !== "string")
+            throw new FieldNotExecuted("field_rejected", "field_rejected");
+          const result = await options.programs.invoke(
+            {
+              pageId,
+              backendId: link.id,
+              backendVersion: deployment.version,
+              principal: {
+                tenant: call.principal.tenant,
+                subject: call.principal.subject,
+              },
+              tokenHash: request.credential ? hash(request.credential) : null,
+            },
+            input.inputJson,
+            call.signal,
+          );
+          if (result !== null) return result;
+        }
         // caps.store reaches this file's own document.
         const storeCapabilities = store.handler(link.id);
         const capabilities = options.datasets

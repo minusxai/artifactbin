@@ -1,3 +1,4 @@
+import { assertSavedProgramRegistration } from "../programs/registration.ts";
 import { verifyDeployment } from "../backend/deployment.ts";
 import type { CompiledBackend } from "../backend/contracts.ts";
 import { createHash } from "node:crypto";
@@ -22,6 +23,22 @@ export async function registerSavedQueries(
     !v.sourceNamespace
   )
     throw Error("query_registration_invalid");
+  assertSavedProgramRegistration(v);
+  for (const name of v.program?.manifest.mutations ?? []) {
+    const operations = await client.query(
+      "SELECT 1 FROM dataset_mutation_operations WHERE backend_id=$1 AND backend_version=$2 AND page_id=$3 AND page_version=$4 AND name=$5 AND source_namespace=$6",
+      [
+        r.backendId,
+        r.backendVersion,
+        r.pageId,
+        r.pageVersion,
+        name,
+        v.sourceNamespace,
+      ],
+    );
+    if (operations.rows.length !== 1)
+      throw Error("program_operation_registration_unavailable");
+  }
   const source = (
     await client.query(
       `SELECT s.content FROM sources s

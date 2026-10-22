@@ -1,3 +1,4 @@
+import { createSavedProgramHost } from "./server/saved-program-host.ts";
 import { serveDatasetAttachments } from "./server/dataset-attachment-http.ts";
 import { supplementalRepository } from "./persistence/supplemental-media.ts";
 import { createSupplementalService } from "./media/supplemental-service.ts";
@@ -188,6 +189,7 @@ export function createService({
             host: backendHost,
             caller: createPageCaller(now),
             datasets: datasetRuntime.reads,
+            ...(backendHost ? {programs:createSavedProgramHost({database:repository.sql,host:backendHost,reads:datasetRuntime.reads,mutations:datasetRuntime.mutations,executor:datasetSqlExecutor,now})}:{}),
             datasetMutations: datasetRuntime.mutations,
             datasetMembers: datasetRuntime.members,
             datasetViewer: datasetRuntime.viewer,

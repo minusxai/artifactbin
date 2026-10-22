@@ -144,7 +144,7 @@ export const compileProgramResolver: CompileProgramResolver = async (
   });
   const runtime = await build({
     stdin: {
-      contents: `export {createProgramBindings} from ${JSON.stringify(fileURLToPath(new URL("./runtime.ts", import.meta.url)))};export {assertStorable} from ${JSON.stringify(fileURLToPath(new URL("../../apollo/storable.ts", import.meta.url)))};`,
+      contents: `export {createProgramBindings} from ${JSON.stringify(fileURLToPath(new URL("../../programs/runtime.ts", import.meta.url)))};export {assertStorable} from ${JSON.stringify(fileURLToPath(new URL("../../apollo/storable.ts", import.meta.url)))};`,
       loader: "js",
       resolveDir: dirname(fileURLToPath(import.meta.url)),
     },

@@ -232,7 +232,7 @@ test("named mutations pin trusted SQL to exact backend, page revision and bindin
     target: { schema: "public", table: "rows" },
     sqlSchema: "sales",
     sql: "delete from sales.rows where id=$id",
-    analysis: {operation: "delete" as const, columns: []},
+    analysis: { operation: "delete" as const, columns: [] },
     paramTypes: { id: "number" as const },
     conflictMode: "refuse" as const,
   };
@@ -267,7 +267,10 @@ test("named mutations pin trusted SQL to exact backend, page revision and bindin
     },
   ]);
   assert.ok(!JSON.stringify(prepared.browserMutations).includes("delete from"));
-  assert.equal(Object.hasOwn(prepared.browserMutations[0]!.mutation,"analysis"),false);
+  assert.equal(
+    Object.hasOwn(prepared.browserMutations[0]!.mutation, "analysis"),
+    false,
+  );
   const scope = prepared.browserMutations[0]!.mutation.recoveryScope;
   assert.match(scope, /^[a-f0-9]{64}$/);
   const rowMutation = {
@@ -531,4 +534,24 @@ test("editing-cell receipts keep typed generated SQL slot private, preserve valu
     false,
   );
   await assert.rejects(prepare("number", "ordinary"), /Invalid/);
+});
+
+test("an admitted server-handler head receives the fixed callable backend without dataset imports", async () => {
+  const prepared = await prepareMigrationBackends(
+    {
+      ...input,
+      pages: [
+        {
+          ...input.pages[0]!,
+          revisions: [{ version: 1, imports: [], runsProgram: true }],
+        },
+      ],
+    },
+    { host: { compile: async () => deployment, invoke: async () => null } },
+  );
+  assert.equal(prepared.receipts.length, 1);
+  assert.equal(prepared.receipts[0]!.linked, true);
+  assert.equal(prepared.receipts[0]!.program, true);
+  assert.equal(prepared.bindings.length, 0);
+  assert.ok(schema.getMutationType()?.getFields().run);
 });

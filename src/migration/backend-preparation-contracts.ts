@@ -17,6 +17,8 @@ export interface MigrationBackendPage {
     readsMembers?: true;
     /** Read-only original viewer identity, current saved head only. */
     readsViewer?: true;
+    /** Exact head declares a server handler; no code runs during preparation. */
+    runsProgram?: true;
     imports: readonly {
       name: string;
       legacyRef: string;
@@ -42,6 +44,7 @@ export interface MigrationBackendReceipt {
   /** Present only when this revision declared the trusted membership relation. */
   members?: { sourceNamespace: string };
   viewer?: { sourceNamespace: string };
+  program?: true;
   backendId: string;
   backendNamespace: "legacyData";
   backendHref: string;

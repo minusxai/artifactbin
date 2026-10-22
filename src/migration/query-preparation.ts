@@ -1,3 +1,4 @@
+import { assertSavedProgramRegistration } from "./programs/registration.ts";
 import { createHash } from "node:crypto";
 import type {
   ColumnType,
@@ -148,11 +149,28 @@ export async function prepareMigrationQueryReceipt(
   const plan = { queries, scalars, tables, imports };
   if (Buffer.byteLength(JSON.stringify(plan)) > 8 * 1024 * 1024)
     throw Error("query_plan_limit");
+  if (result.program)
+    assertSavedProgramRegistration({
+      sourceNamespace: "offline",
+      moduleSourceSha256: result.module.sourceSha256,
+      program: result.program,
+      plan: {
+        ...plan,
+        registration: {
+          backendId: "offline",
+          backendVersion: "offline",
+          pageId: "offline",
+          pageVersion: input.version,
+          sourceSha256: hash(input.source),
+        },
+      },
+    });
   return {
     pageVersion: input.version,
     moduleSourceSha256: result.module.sourceSha256,
     flowSourceSha256: hash(input.source),
     compilerIdentity: input.compilerIdentity,
     plan,
+    ...(result.program ? { program: result.program } : {}),
   };
 }

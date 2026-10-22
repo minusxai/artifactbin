@@ -62,7 +62,9 @@ export function withCapabilityAuthority(
       // The server handler owns store and explicit dataset bindings. Dataset
       // reads recheck their own audience; anonymous connector access stays denied.
       const handler: BackendCapabilityHandler = (ignored, request, s) =>
-        request.kind === "store" || request.kind === "dataset"
+        request.kind === "store" ||
+        request.kind === "dataset" ||
+        (request.kind === "invoke" && request.resource === "program-bindings")
           ? store
             ? store(ignored, request, s)
             : Promise.reject(new ConnectorError("DENIED"))

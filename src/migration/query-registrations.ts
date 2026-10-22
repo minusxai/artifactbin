@@ -21,6 +21,7 @@ export function migrationPageQueryRegistrations(
     return {
       sourceNamespace,
       moduleSourceSha256: receipt.moduleSourceSha256,
+      ...(receipt.program ? { program: receipt.program } : {}),
       migrationProvenance: {
         flowSourceSha256: receipt.flowSourceSha256,
         compilerIdentity: receipt.compilerIdentity,

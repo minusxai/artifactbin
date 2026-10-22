@@ -190,7 +190,8 @@ export async function prepareMigrationBackends(
     if (
       page.owner.kind === "group" &&
       page.revisions.some(
-        (r) => r.imports.length || r.readsMembers || r.readsViewer,
+        (r) =>
+          r.imports.length || r.readsMembers || r.readsViewer || r.runsProgram,
       )
     )
       throw new Error(
@@ -202,7 +203,8 @@ export async function prepareMigrationBackends(
       (revision) =>
         revision.imports.length ||
         revision.readsMembers ||
-        revision.readsViewer,
+        revision.readsViewer ||
+        revision.runsProgram,
     ),
   );
   if (!required.length)
@@ -249,7 +251,11 @@ export async function prepareMigrationBackends(
         pageId: page.pageId,
         pageVersion: revision.version,
         linked:
-          revision.imports.length > 0 || readsMembers === true || readsViewer,
+          revision.imports.length > 0 ||
+          readsMembers === true ||
+          readsViewer ||
+          revision.runsProgram === true,
+        ...(revision.runsProgram ? { program: true as const } : {}),
         ...(readsViewer
           ? { viewer: { sourceNamespace: input.sourceNamespace } }
           : {}),
@@ -345,6 +351,8 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
       receipt.pageId === receipt.backendId ||
       !positive(receipt.pageVersion) ||
       typeof receipt.linked !== "boolean" ||
+      (receipt.program !== undefined &&
+        (receipt.program !== true || !receipt.linked)) ||
       (receipt.viewer !== undefined &&
         (!receipt.linked || !nonempty(receipt.viewer.sourceNamespace))) ||
       (receipt.members !== undefined &&
