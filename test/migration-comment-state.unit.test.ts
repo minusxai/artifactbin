@@ -82,3 +82,46 @@ test("unavailable compiled store and mismatching historical declarations cannot 
   });
   assert.equal(r.status.status, "available");
 });
+test("array prototypes, symbols and extra properties are refused without invoking serialization hooks", () => {
+  let calls = 0;
+  const inherited: unknown[] = [];
+  Object.setPrototypeOf(inherited, {
+    toJSON() {
+      calls++;
+      return [];
+    },
+  });
+  const accessor: unknown[] = [];
+  Object.defineProperty(accessor, "extra", {
+    get() {
+      calls++;
+      return 1;
+    },
+  });
+  const symbol: unknown[] = [];
+  Object.defineProperty(symbol, Symbol("extra"), {
+    get() {
+      calls++;
+      return 1;
+    },
+  });
+  const extra: unknown[] = [];
+  Object.defineProperty(extra, "toJSON", {
+    value() {
+      calls++;
+      return [];
+    },
+  });
+  for (const rows of [inherited, accessor, symbol, extra]) {
+    const r = projectMigrationCommentState({
+      ...input,
+      raw: { v: 2, state: { $: { rows } } },
+    });
+    assert.deepEqual(r.status, {
+      status: "unavailable",
+      reason: "invalid-state",
+    });
+    assert.equal(r.snapshot, null);
+    assert.equal(calls, 0);
+  }
+});

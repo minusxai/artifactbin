@@ -18,15 +18,23 @@ function bounded(value: unknown): boolean {
     if (v === null || typeof v === "boolean") return true;
     if (typeof v === "string") return v.length <= 32768;
     if (typeof v === "number") return Number.isFinite(v);
-    if (Array.isArray(v))
-      return (
-        v.length <= 4096 &&
-        Array.from({ length: v.length }, (_, i) =>
-          Object.getOwnPropertyDescriptor(v, String(i)),
-        ).every((d) => !!d && "value" in d && visit(d.value, depth + 1))
-      );
+    if (Array.isArray(v)) {
+      if (
+        Object.getPrototypeOf(v) !== Array.prototype ||
+        v.length > 4096 ||
+        Reflect.ownKeys(v).length !== v.length + 1 ||
+        Object.getOwnPropertySymbols(v).length
+      )
+        return false;
+      const descriptors = Object.getOwnPropertyDescriptors(v);
+      return Array.from(
+        { length: v.length },
+        (_, i) => descriptors[String(i)],
+      ).every((d) => !!d && "value" in d && visit(d.value, depth + 1));
+    }
     return (
       record(v) &&
+      Object.getOwnPropertySymbols(v).length === 0 &&
       Object.entries(Object.getOwnPropertyDescriptors(v)).every(
         ([k, d]) =>
           k.length > 0 &&
