@@ -51,11 +51,9 @@ const STORE_LIMIT_BYTES = 60 * 1024;
 /** Store-limit errors this module threw: a resolver can set `code` on anything, but not join this set. */
 const storeLimitErrors = new WeakSet();
 const datasetChangedErrors = new WeakSet();
-const datasetMutationRejectedErrors = new WeakSet();
 function datasetMutationRejectedError() {
   const error = Error("dataset_mutation_rejected");
   error.code = "dataset_mutation_rejected";
-  datasetMutationRejectedErrors.add(error);
   return error;
 }
 function datasetChangedError() {
@@ -72,7 +70,7 @@ function storeLimitError() {
   storeLimitErrors.add(error);
   return error;
 }
-function codeOf(error) {
+function codeOf(error, invocationRefusals) {
   return typeof error === "object" &&
     error !== null &&
     storeLimitErrors.has(error)
@@ -83,12 +81,13 @@ function codeOf(error) {
       ? "dataset_changed"
       : typeof error === "object" &&
           error !== null &&
-          datasetMutationRejectedErrors.has(error)
+          invocationRefusals.has(error)
         ? "dataset_mutation_rejected"
         : "backend_rejected";
 }
 export default {
   async fetch(req, env) {
+    const invocationRefusals = new Set();
     try {
       const request = await req.json();
       // Every binding but the capability bridge is one of the owner's secrets.
@@ -130,7 +129,6 @@ export default {
           pending = 0,
           bytes = 0;
         let effectfulDispatches = 0;
-        const invocationRefusals = new Set();
         const capability = async (request) => {
           validate(request);
           const body = JSON.stringify(request);
@@ -149,8 +147,6 @@ export default {
             effectfulDispatches++;
             // A later possible effect invalidates an earlier caught refusal:
             // rethrowing it cannot prove the whole field saved nothing.
-            for (const error of invocationRefusals)
-              datasetMutationRejectedErrors.delete(error);
             invocationRefusals.clear();
           }
           pending++;
@@ -259,7 +255,7 @@ export default {
       const message = detailOf(error);
       return Response.json({
         ok: false,
-        code: codeOf(error),
+        code: codeOf(error, invocationRefusals),
         ...(message === undefined ? {} : { message }),
       });
     }

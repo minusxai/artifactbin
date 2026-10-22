@@ -40,3 +40,35 @@ test("a dataset refusal proves field rejection only while it is the sole potenti
     await host.close?.();
   }
 });
+
+test("a caught refusal from an earlier warm invocation cannot classify a later write as rejected", async () => {
+  const host = createBackendHost({ sandboxNetwork: "none" });
+  try {
+    const deployment = await host.compile(
+      `let saved;export const typeDefs='type Query { run(mode:String!): String }';export default {Query:{run:async({mode},p,caps)=>{if(mode==='capture'){try{await caps.dataset.mutate({operation:'save',requestId:'warm_request_00001',params:{}});}catch(error){saved=error;}return 'captured';}await caps.store.set({saved:true},{expected:0});throw saved;}}};`,
+    );
+    let writes = 0;
+    const invoke = (mode: string) =>
+      host.invoke({
+        deployment,
+        principal: { tenant: "page", subject: "caller" },
+        input: { field: "run", args: { mode } },
+        env: {},
+        reuse: { kind: "file", scope: { owner: "owner", fileId: "backend" } },
+        capabilityHandler: async (_principal, request) => {
+          if (request.kind === "dataset")
+            throw new BackendDatasetMutationRejectedError();
+          if (request.kind === "store" && request.operation === "set") {
+            writes++;
+            return { version: 1 };
+          }
+          throw Error();
+        },
+      });
+    assert.equal(await invoke("capture"), "captured");
+    await assert.rejects(invoke("write"), { code: "backend_rejected" });
+    assert.equal(writes, 1);
+  } finally {
+    await host.close?.();
+  }
+});
