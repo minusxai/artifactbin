@@ -179,3 +179,42 @@ test("known pre-execution authority and object failures become durable terminal 
   );
   assert.deepEqual(b.calls, ["begin", "dataset_unavailable"]);
 });
+test("combined user and system parameter budget is checked before execute with terminal admission refusal", async () => {
+  for (const count of [255, 256]) {
+    const f = fixture();
+    const params = Object.fromEntries(
+      Array.from({ length: count }, (_, i) => ["p" + i, 1]),
+    );
+    const original = f.ports.head;
+    f.ports.head = async (...args) => {
+      const h = (await original(...args))!;
+      return { ...h, systemParams: { _now: "2026-01-01" } };
+    };
+    f.ports.operation = async () => ({
+      ...operation,
+      paramTypes: Object.fromEntries(
+        [...Object.keys(params), "_now"].map((k) => [k, "number" as const]),
+      ),
+    });
+    const result = createDatasetMutationService(f.ports).mutate(context, {
+      ...request,
+      params,
+    });
+    if (count === 255) {
+      await result;
+      assert.ok(f.calls.includes("execute"));
+    } else {
+      await assert.rejects(result, /invalid_job/);
+      assert.deepEqual(f.calls, ["begin", "invalid_job"]);
+    }
+  }
+});
+test("durable prior refusal replays without SQL or new refusal write", async () => {
+  const f = fixture();
+  f.ports.begin = async () => ({ kind: "refused", code: "row_changed" });
+  await assert.rejects(
+    createDatasetMutationService(f.ports).mutate(context, request),
+    /row_changed/,
+  );
+  assert.deepEqual(f.calls, []);
+});

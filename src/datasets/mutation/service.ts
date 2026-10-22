@@ -1,3 +1,4 @@
+import { validateDatasetSqlJob } from "../sql/job.ts";
 import type { DatasetCallContext } from "../contracts.ts";
 import { selectDatasetMutationPolicy } from "./policy.ts";
 import {
@@ -75,6 +76,7 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
         throw new DatasetMutationError("invalid_request");
       const start = await ports.begin(context, operation, input);
       if (start.kind === "replay") return start.result;
+      if (start.kind === "refused") throw new DatasetMutationError(start.code);
       if (start.kind === "busy") throw new DatasetMutationError("inflight");
       const lease = start.lease;
       const terminal = async (code: string): Promise<never> => {
@@ -134,6 +136,11 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
       };
       if (Buffer.byteLength(JSON.stringify(job)) > limits.inputBytes)
         return terminal("input_limit");
+      try {
+        validateDatasetSqlJob(job);
+      } catch {
+        return terminal("invalid_job");
+      }
       // Transport exceptions leave the durable lease inflight: execution outcome is unknown, so never replay it.
       const out = await ports.execute(job, signal);
       if ("error" in out)

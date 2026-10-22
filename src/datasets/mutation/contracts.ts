@@ -61,6 +61,7 @@ export interface DatasetMutationLease {
   attempt: number;
 }
 export type DatasetMutationBegin =
+  | { kind: "refused"; code: string }
   | { kind: "replay"; result: DatasetMutationResult }
   | { kind: "busy" }
   | { kind: "lease"; lease: DatasetMutationLease };
