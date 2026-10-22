@@ -26,6 +26,7 @@ const FLAGS: Record<string, { value: boolean; scripts: readonly AfScriptName[] }
   "--code": { value: true, scripts: ["auth"] },
   "--test-token": { value: false, scripts: ["auth"] },
   "--logout": { value: false, scripts: ["auth"] },
+  "--visibility": { value: true, scripts: ["publish"] },
   "--new": { value: false, scripts: ["publish"] },
   "--force": { value: false, scripts: ["publish"] },
   "--pull": { value: false, scripts: ["publish"] },
@@ -94,7 +95,10 @@ export function parseArguments(command: AfScriptName, argv: readonly string[]): 
     const mode: PublishMode = modes.length ? (modes[0]!.slice(2) as PublishMode) : "publish";
     if (mode === "delete" && !flags.has("--yes")) throw usage("--delete removes the page for everyone. Add --yes to confirm.");
     if (mode !== "delete" && flags.has("--yes")) throw usage("--yes only goes with --delete.");
-    return { kind: "publish", file, mode, json: flags.has("--json") };
+    const visibility = flags.get("--visibility");
+    if (visibility !== undefined && !["private", "unlisted", "public"].includes(String(visibility))) throw usage("--visibility must be private, unlisted or public.");
+    if (visibility !== undefined && mode !== "publish" && mode !== "new") throw usage("--visibility only sets the initial policy of a new page.");
+    return { kind: "publish", file, mode, json: flags.has("--json"), ...(visibility === undefined ? {} : { visibility: visibility as import("../contracts.ts").Visibility }) };
   }
   if (command === "check") return { kind: "check", file, writeIds: flags.has("--write-ids"), json: flags.has("--json") };
   const widthText = flags.get("--width");
@@ -190,7 +194,7 @@ export async function run(script: AfScriptName, argv: readonly string[], io: Io)
       case "shot":
         return await shot(command, io);
       case "publish": {
-        const outcome = await publishPage(command.file, command.mode, { env: io.env, cwd: io.cwd, ports: ports(io) });
+        const outcome = await publishPage(command.file, command.mode, { env: io.env, cwd: io.cwd, ports: ports(io), visibility: command.visibility });
         if (command.json) io.stdout(JSON.stringify(outcome.json, null, 2) + "\n");
         else {
           const text = describe(outcome);

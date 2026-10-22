@@ -38,9 +38,9 @@ cleanup() {
   rm -rf "$tmp"
   if [ -n "$stage" ]; then
     if [ -e "$stage/previous" ] || [ -L "$stage/previous" ]; then
-      if ! [ -e "$folder/pagegi-author" ] && ! [ -L "$folder/pagegi-author" ]; then
+      if ! [ -e "$folder/artifactbin-author" ] && ! [ -L "$folder/artifactbin-author" ]; then
         # Leave the backup intact if restoration itself fails.
-        mv "$stage/previous" "$folder/pagegi-author" || exit 1
+        mv "$stage/previous" "$folder/artifactbin-author" || exit 1
       fi
     fi
     rm -rf "$stage"
@@ -67,6 +67,17 @@ done < "$tmp/types"
 mkdir "$tmp/extracted"
 tar -xzf "$tmp/skill.tgz" -C "$tmp/extracted"
 [ -f "$tmp/extracted/pagegi-author/SKILL.md" ] || { echo "Missing SKILL.md" >&2; exit 1; }
+# All archive assets are text. Match npm installation: helpers and examples use this server.
+replacement=$(printf '%s' '${base}' | sed 's/[\\&|]/\\&/g')
+find "$tmp/extracted/pagegi-author" -type f -exec sh -c '
+  set -eu
+  replacement=$1; shift
+  for file do
+    sed "s|https://app\\.artefactbin\\.dev|$replacement|g" "$file" > "$file.origin"
+    cat "$file.origin" > "$file"
+    rm "$file.origin"
+  done
+' sh "$replacement" {} +
 installed=0
 set -- ${folders}
 while [ $# -ge 3 ]; do
@@ -74,16 +85,23 @@ while [ $# -ge 3 ]; do
   # Claude Code's folder is always used; another harness's only when that harness is present.
   if [ "$folder" = "$HOME/.claude/skills" ] || [ -d "$marker" ] || [ -d "$alternate" ]; then
     mkdir -p "$folder"
-    stage=$(mktemp -d "$folder/.pagegi-author.XXXXXX")
-    cp -R "$tmp/extracted/pagegi-author" "$stage/pagegi-author"
-    if [ -e "$folder/pagegi-author" ] || [ -L "$folder/pagegi-author" ]; then
-      mv "$folder/pagegi-author" "$stage/previous"
+    stage=$(mktemp -d "$folder/.artifactbin-author.XXXXXX")
+    cp -R "$tmp/extracted/pagegi-author" "$stage/artifactbin-author"
+    if [ -e "$folder/artifactbin-author" ] || [ -L "$folder/artifactbin-author" ]; then
+      mv "$folder/artifactbin-author" "$stage/previous"
     fi
     # Both renames stay on the destination filesystem; the exit trap restores on failure.
-    mv "$stage/pagegi-author" "$folder/pagegi-author"
+    mv "$stage/artifactbin-author" "$folder/artifactbin-author"
     rm -rf "$stage"
     stage=
-    echo "Installed Artifactbin author skill in $folder"
+    # Move the previous installation out of agent discovery, retaining every file.
+    if [ -e "$folder/pagegi-author" ] || [ -L "$folder/pagegi-author" ]; then
+      mkdir -p "$HOME/.af/skill-backups"
+      backup=$(mktemp -d "$HOME/.af/skill-backups/pagegi-author-XXXXXX")
+      mv "$folder/pagegi-author" "$backup/pagegi-author"
+      echo "Previous pagegi-author retained at $backup/pagegi-author"
+    fi
+    echo "Installed artifactbin-author in $folder"
     installed=$((installed + 1))
   fi
 done

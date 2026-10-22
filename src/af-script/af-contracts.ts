@@ -42,7 +42,7 @@
  *                          set (and only it), else the first standard install
  *                          path that exists. Default width 1280; the PNG is
  *                          exactly --width pixels wide.
- *   publish.mjs <file> [--new|--force|--pull|--delete --yes] [--json]
+ *   publish.mjs <file> [--new|--force|--pull|--delete --yes] [--visibility private|unlisted|public] [--json]
  *   comments.mjs <file|id> [--context|--reply|--on|--edit|--resolve|--reopen|--watch] [--json]
  *                          The page lifecycle; see ./lifecycle-contracts.ts for
  *                          the .af/ sidecar, the journal and their exit codes.
@@ -94,7 +94,7 @@ export type AfCommand =
       /** --state: a JSON file of local state to open the page with (`#af-state=`). */
       state: string | null;
     }
-  | { kind: "publish"; file: string; mode: PublishMode; json: boolean }
+  | { kind: "publish"; file: string; mode: PublishMode; json: boolean; visibility?: import("../contracts.ts").Visibility }
   | { kind: "comments"; target: string; action: CommentsAction; json: boolean }
   | { kind: "auth"; action: import("./auth-contracts.ts").AuthAction; json: boolean }
   | { kind: "secrets"; action: SecretsAction; json: boolean };

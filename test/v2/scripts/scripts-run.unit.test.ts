@@ -232,3 +232,10 @@ test("add sends the saved token for AF_SERVER when AF_TOKEN is unset, and a 401 
   assert.equal(await run("add", ["c.ts"], { ...none.io, ports: { fs } }), 2);
   assert.match(none.out.stderr, /^Not signed in to http:\/\/new\.test\. To reserve IDs, run node scripts\/auth\.mjs --email <address> to sign in, or set AF_TOKEN/);
 });
+
+test("publish accepts only an initial visibility and rejects invalid values or noncreation modes", async () => {
+  const { parseArguments } = await script();
+  assert.deepEqual(parseArguments("publish", ["p.html", "--visibility", "private"]), {kind:"publish",file:"p.html",mode:"publish",json:false,visibility:"private"});
+  for (const args of [["p.html","--visibility","secret"], ["p.html","--pull","--visibility","private"], ["p.html","--force","--visibility","public"], ["p.html","--delete","--yes","--visibility","private"]])
+    assert.throws(() => parseArguments("publish", args), /Usage/);
+});

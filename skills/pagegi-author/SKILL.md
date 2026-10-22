@@ -3,13 +3,13 @@ name: artifactbin-author
 description: Write an Artifactbin page. It's a normal HTML file; keep viewer state in @afbin/apollo local state, and share data through backends.
 ---
 
-# Author a Artifactbin page
+# Author an Artifactbin page
 
 An Artifactbin page is a normal HTML file. Write it the way you'd write any web page, with any scripts, styles and libraries. The platform adds saving, sharing, comments, presence, design systems and history on top.
 
 ## Installation
 
-Install this skill with `npx https://app.artefactbin.dev/skills/artefactbin-skill.tgz` and restart your coding agent. This command only installs the skill; use the HTTP API and scripts below to author pages. For another server, install with `--origin https://your-server.example`. Credentials are stored separately per server origin; signing in to one server never signs you in to another.
+Install this skill with `npx https://app.artefactbin.dev/skills/artefactbin-skill.tgz` and restart your coding agent. This command only installs the skill; use the HTTP API and scripts below to author pages. For another server, install with `--origin https://your-server.example`. Upgrades retain any old `pagegi-author` installation, including local changes, under `~/.af/skill-backups/` outside agent discovery. Credentials are stored separately per server origin; signing in to one server never signs you in to another.
 
 ## Core concept
 
@@ -28,7 +28,7 @@ An Artifactbin page is a normal HTML file with one extra line: the core script.
 </html>
 ```
 
-The core is what makes this a Artifactbin page. It provides the `@afbin/*` libraries (see Local state contract), and it adds saving, sharing, comments, presence and design systems around your page. Always include it, first in `<head>` before any other script, so it's ready before your code runs. (If a file arrives without it, the platform adds it there as a fallback.) When a page is downloaded, the platform inlines the core, the design system and the downloading viewer's local state, and records on the core tag which server the file came from and which version it is, so the file works on its own: opened from disk, its state is kept in that browser across reloads, and a small "Download page" button saves it again with its current state. Opened while that server is reachable, the file shows the same platform bar as the hosted page: it reads the page's comments, tells the viewer when the server has a newer version, and offers Connect, which signs the viewer in on the server, in a window of the server's own, never in the file. Connected, the viewer comments, sees who else is there, shares, and calls backends as they would on the hosted page, and the bar's "Download HTML" saves the file with its current state. Without the server, backend calls settle as `offline`. The file never holds an account token.
+The core is what makes this an Artifactbin page. It provides the `@afbin/*` libraries (see Local state contract), and it adds saving, sharing, comments, presence and design systems around your page. Always include it, first in `<head>` before any other script, so it's ready before your code runs. (If a file arrives without it, the platform adds it there as a fallback.) When a page is downloaded, the platform inlines the core, the design system and the downloading viewer's local state, and records on the core tag which server the file came from and which version it is, so the file works on its own: opened from disk, its state is kept in that browser across reloads, and a small "Download page" button saves it again with its current state. Opened while that server is reachable, the file shows the same platform bar as the hosted page: it reads the page's comments, tells the viewer when the server has a newer version, and offers Connect, which signs the viewer in on the server, in a window of the server's own, never in the file. Connected, the viewer comments, sees who else is there, shares, and calls backends as they would on the hosted page, and the bar's "Download HTML" saves the file with its current state. Without the server, backend calls settle as `offline`. The file never holds an account token.
 
 Don't build your own toolbar, comments, sign-in, dark-mode switch or design-system picker; the platform already provides them.
 
@@ -277,7 +277,8 @@ Then a comment on product 42 stays on product 42, even after the list is re-sort
 Use the scripts. Sign in once with `node scripts/auth.mjs --email <address>`, then run it again with `--code <code>` from the email; the other scripts then use the saved token for `AF_SERVER` (default `https://app.artefactbin.dev`). If a harness set `AF_TOKEN` and `AF_SERVER`, skip signing in: the scripts use them instead.
 
 ```sh
-node scripts/publish.mjs page.html                     # publish, or save your changes
+node scripts/publish.mjs page.html --visibility private # first publish, private from creation
+node scripts/publish.mjs page.html                     # save your changes
 node scripts/comments.mjs page.html                    # list comment threads
 node scripts/comments.mjs page.html --context c1       # the page as the commenter saw it
 node scripts/comments.mjs page.html --reply c1 --body "Fixed."
@@ -288,7 +289,7 @@ node scripts/comments.mjs page.html --reply c1 --body "Fixed."
 - **Keep the `.af/` folder** the scripts write next to the page, and don't edit it. It holds what the server last saved, so they can merge and retry safely.
 - **Trash is recoverable:** deleting retains IDs, all versions and storage usage; use `GET /api/trash` and `POST /api/trash/:id/restore`. Links and page APIs stop working while trashed. See `references/http-api.md`.
 - **Imported group pages retain their group owner:** active group editors can edit, share and delete them; viewers can read. Group membership never grants account secrets. Group backend files and execution are unsupported; see `references/http-api.md`.
-- **New pages are unlisted:** anyone with the link can view them. To change that, see Sharing in `references/http-api.md`.
+- **Choose initial access:** use `--visibility private` for a private first publish (or `--new --visibility private` for a private fork). Without the flag, new pages are unlisted: anyone with the link can view them. The flag only applies to creation; omit it for subsequent saves. To change an existing page's access, see Sharing in `references/http-api.md`.
 - **Keep the token out of the page.**
 
 Read [`references/scripts.md`](references/scripts.md) for every flag (`--pull`, `--new`, `--force`, `--watch`) and exit code, and [`references/http-api.md`](references/http-api.md) for the HTTP API underneath, including sharing, paths and deployed backends.

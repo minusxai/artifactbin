@@ -88,7 +88,7 @@ export interface PublishJournal {
   /** ISO time the journal was written. */
   time: string;
   /** The exact JSON body sent; a replay sends these bytes again. */
-  body: { source: string; files?: Record<FileId, string>; requestId?: string };
+  body: { source: string; files?: Record<FileId, string>; requestId?: string; visibility?: import("../contracts.ts").Visibility };
   /** Backend files in the body, by ID, with their path relative to the .af/ parent. */
   backends: Record<FileId, string>;
   /** --force: the remote head this save overwrites, already backed up. */

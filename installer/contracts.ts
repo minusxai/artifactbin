@@ -7,4 +7,6 @@ export interface InstallOptions {
 export interface InstalledSkill {
   folder: string;
   name: "artifactbin-author";
+  /** Legacy installation retained outside agent discovery, when present. */
+  legacyBackup?: string;
 }

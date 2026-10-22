@@ -33,13 +33,13 @@ Presence settings are private to the reader’s browser on that origin and survi
 
 ## Install the author skill
 
-One command installs the skill for every coding agent on the machine (Claude Code always; Codex, Pi and OpenCode when they are installed), replacing an older copy:
-
 ```sh
-curl -fsSL https://pagegi.artifactbin.dev/install.sh | sh
+npx https://app.artefactbin.dev/skills/artefactbin-skill.tgz
 ```
 
-The script downloads `/skills/pagegi-author.tgz` from the server it came from and extracts it into each harness's skills folder (`~/.claude/skills`, `~/.agents/skills`, `~/.pi/agent/skills`, `~/.config/opencode/skills`). Restart the agent so it loads the skill. A self-hosted server serves its own `/install.sh`; its scripts then need `AF_SERVER` set to that server's origin for every script, including `auth.mjs`, which saves its token per server, since they default to `https://pagegi.artifactbin.dev`. The signed-in home page's "New page" button gives the same instructions as text to paste into an agent.
+Restart your coding agent after installation. This installs `artifactbin-author` for Claude Code and discovers Codex, Pi and OpenCode from their existing home folders. It only installs the skill: pages are normal HTML files, authored with the skill's scripts and HTTP API, with no authoring CLI.
+
+For a self-hosted server, add `--origin https://your-server.example`. The installer configures the examples and scripts for that origin; credentials stay separate per server in `~/.af/credentials.json`. Upgrades replace only the canonical skill. An older `pagegi-author` installation is retained under `~/.af/skill-backups/`, outside agent discovery, including any local changes. Unrelated skills are preserved.
 
 ## Signing in
 

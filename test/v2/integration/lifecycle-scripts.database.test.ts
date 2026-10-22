@@ -284,3 +284,25 @@ test("comments: a reply, a stale resolve, and --watch resuming after a restart w
     await server.close();
   }
 });
+
+test("built publish helper creates a private page atomically and ordinary saves retain its policy", async () => {
+  const server = await startServer(), ws = workspace();
+  try {
+    const token = await server.token("author@example.test");
+    const env = { AF_SERVER: server.origin, AF_TOKEN: token }, dir = ws.dir("private");
+    writeFileSync(join(dir, "page.html"), TODO_PAGE);
+    const result = await ws.run("publish", ["page.html", "--visibility", "private", "--json"], dir, env);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const created = publishJson(result), id = created.id!;
+    const policy = await (await server.request(`/api/files/${id}/sharing`, { token })).json();
+    assert.equal(policy.policy.visibility, "private");
+    assert.equal((await server.request(`/api/files/${id}/source`)).status, 403);
+    const source = readFileSync(join(dir, "page.html"), "utf8");
+    writeFileSync(join(dir, "page.html"), source.replace("Team todo list", "Private todo list"));
+    const saved = await ws.run("publish", ["page.html", "--json"], dir, env);
+    assert.equal(saved.code, 0, saved.stdout + saved.stderr);
+    assert.equal(publishJson(saved).version, 2);
+    assert.equal((await server.request(`/api/files/${id}/source`)).status, 403);
+    assert.equal((await server.request(`/api/files/${id}/source`, {token})).status, 200);
+  } finally { ws.cleanup(); await server.close(); }
+});

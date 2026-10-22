@@ -54,3 +54,19 @@ test('help gives the canonical installation command and explains its install-onl
  assert.match(result.stdout,/Installs only the Artifactbin author skill/);
  assert.doesNotMatch(result.stdout,/npx artefactbin-skill/);
 });
+
+test('legacy installation is retained outside discovery and repeat install leaves one canonical skill',()=>fixture(async home=>{
+ const parent=join(home,'.claude/skills');
+ await mkdir(join(parent,'pagegi-author'),{recursive:true});
+ await writeFile(join(parent,'pagegi-author/SKILL.md'),'old contract');
+ await writeFile(join(parent,'pagegi-author/custom-notes'),'keep my changes');
+ await writeFile(join(parent,'unrelated'),'keep');
+ const [installed]=await installSkill({home,origin:'https://custom.example:444',archive:valid()});
+ assert.ok(installed.legacyBackup);
+ assert.equal(await readFile(join(installed.legacyBackup,'custom-notes'),'utf8'),'keep my changes');
+ assert.equal(await readFile(join(installed.legacyBackup,'SKILL.md'),'utf8'),'old contract');
+ await installSkill({home,origin:'https://custom.example:444',archive:valid()});
+ assert.deepEqual((await readdir(parent)).sort(),['artifactbin-author','unrelated']);
+ assert.match(await readFile(join(parent,'artifactbin-author/scripts/auth.mjs'),'utf8'),/https:\/\/custom\.example:444/);
+ assert.equal(await readFile(join(parent,'unrelated'),'utf8'),'keep');
+}));

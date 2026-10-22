@@ -191,6 +191,9 @@ first with auth.mjs, or set AF_TOKEN; uses AF_SERVER (default
 https://app.artefactbin.dev).
 
 Flags
+  --visibility <policy>  initial private, unlisted or public policy for
+                         a new page (default unlisted); never changes
+                         an existing page's sharing
   --pull          replace the file with the published page (a changed
                   local copy is backed up in .af/backups/ first)
   --new           publish the file as a new page of your own
@@ -206,7 +209,7 @@ Exit codes
   4 conflict                  5 no answer: run the same command again
 
 Examples
-  node scripts/publish.mjs page.html
+  node scripts/publish.mjs page.html --visibility private
   node scripts/publish.mjs page.html --pull
 ```
 

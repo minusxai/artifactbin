@@ -24,7 +24,7 @@ function agent(server: FakeServer, account = "alice", dir = DIR, fs = new Memory
     read: () => fs.files.get(file)!,
     write: (text: string) => fs.files.set(file, text),
     edit: (change: (source: string) => string) => fs.files.set(file, change(fs.files.get(file)!)),
-    publish: (mode: PublishMode = "publish") => publishPage("page.html", mode, { env, cwd: dir, ports }),
+    publish: (mode: PublishMode = "publish", visibility?: import("../../../src/contracts.ts").Visibility) => publishPage("page.html", mode, { env, cwd: dir, ports, visibility }),
     sidecar: () => fs.under(`${dir}/.af`),
   };
 }
@@ -515,4 +515,39 @@ test("--delete removes the page and its .af records; only the owner can", async 
   assert.equal(server.pages.has(id), false);
   assert.deepEqual(a.sidecar(), []);
   assert.match(deleted.json.message, /--new/);
+});
+
+test("initial private visibility is sent atomically in creation and cannot silently change an existing page", async () => {
+  const server = new FakeServer(), a = agent(server);
+  a.write(page("<h1>Private draft</h1>"));
+  const first = await a.publish("publish", "private");
+  assert.equal(first.code, 0, first.json.message);
+  assert.equal(server.requests("POST", /^\/api\/publish$/)[0]!.body!.visibility, "private");
+  const before = server.log.length;
+  const existing = await a.publish("publish", "public");
+  assert.equal(existing.code, 2);
+  assert.match(existing.json.message, /initial|new page/);
+  assert.equal(server.log.length, before, "a visibility flag never changes an existing policy");
+  const fork = await a.publish("new", "private");
+  assert.equal(fork.code, 0, fork.json.message);
+  assert.equal(server.requests("POST", /^\/api\/publish$/).at(-1)!.body!.visibility, "private");
+});
+
+test("an unresolved private creation keeps its policy and request identity across replay", async () => {
+  const server = new FakeServer(), a = agent(server);
+  a.write(page("<h1>Private draft</h1>"));
+  server.fail((request) => request.path === "/api/publish", "hang-before");
+  void a.publish("publish", "private");
+  await settle();
+  const journal = JSON.parse(a.fs.files.get(`${DIR}/.af/journal/new-page.html.json`)!) as PublishJournal;
+  assert.equal(journal.body.visibility, "private");
+  const before = server.log.length;
+  const mismatch = await a.publish("publish", "public");
+  assert.equal(mismatch.code, 2);
+  assert.equal(server.log.length, before, "a different requested policy cannot replay an uncertain creation");
+  const replay = await a.publish();
+  assert.equal(replay.code, 0, replay.json.message);
+  const requests = server.requests("POST", /^\/api\/publish$/);
+  assert.deepEqual(requests.map(r => [r.body!.requestId, r.body!.visibility]), [[journal.key,"private"],[journal.key,"private"]]);
+  assert.equal(server.pages.size, 1);
 });

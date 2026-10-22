@@ -9735,6 +9735,9 @@ first with auth.mjs, or set AF_TOKEN; uses AF_SERVER (default
 https://app.artefactbin.dev).
 
 Flags
+  --visibility <policy>  initial private, unlisted or public policy for
+                         a new page (default unlisted); never changes
+                         an existing page's sharing
   --pull          replace the file with the published page (a changed
                   local copy is backed up in .af/backups/ first)
   --new           publish the file as a new page of your own
@@ -9750,7 +9753,7 @@ Exit codes
   4 conflict                  5 no answer: run the same command again
 
 Examples
-  node scripts/publish.mjs page.html
+  node scripts/publish.mjs page.html --visibility private
   node scripts/publish.mjs page.html --pull
 `,
   comments: `Usage: node scripts/comments.mjs <page.html | page ID> [flags]
@@ -10119,13 +10122,13 @@ async function publishPage(file, mode, context) {
     throw error;
   }
   try {
-    return await lifecycle(run2, mode);
+    return await lifecycle(run2, mode, context.visibility);
   } catch (error) {
     if (error instanceof Failure) return { code: error.code, json: { status: "error", ...run2.result, message: error.message } };
     throw error;
   }
 }
-async function lifecycle(run2, mode) {
+async function lifecycle(run2, mode, visibility) {
   const source = await run2.sidecar.read(run2.file);
   if (source === null) throw new Failure(EXIT.usage, `Cannot read ${run2.shown}: no such file.`);
   const meta = readMeta2(source);
@@ -10133,6 +10136,8 @@ async function lifecycle(run2, mode) {
   run2.result.id = id;
   const pending = await run2.pendingJournal(id);
   if (pending) {
+    if (visibility !== void 0 && (pending.kind !== "create" || (pending.body.visibility ?? "unlisted") !== visibility))
+      throw new Failure(EXIT.usage, "An earlier request has a different initial visibility. Resolve it by running the original command before publishing another page.");
     if (mode === "pull" || mode === "delete")
       throw new Failure(
         EXIT.refused,
@@ -10143,19 +10148,23 @@ async function lifecycle(run2, mode) {
       outcome.json.message += ` Run the same command again to continue with --${mode}.`;
     return outcome;
   }
-  if (mode === "new") return create(run2, source, true);
+  if (mode === "new") return create(run2, source, true, visibility);
   if (!id) {
-    if (mode === "publish") return create(run2, source, false);
+    if (mode === "publish") return create(run2, source, false, visibility);
     throw new Failure(EXIT.usage, `${run2.shown} has no page ID in its meta block, so there is nothing to ${mode}. Run publish.mjs ${run2.shown} to publish it.`);
   }
+  if (visibility !== void 0 && mode !== "publish")
+    throw new Failure(EXIT.usage, "--visibility only sets the initial policy of a new page.");
   if (mode === "pull") return pull(run2, id, source);
   if (mode === "delete") return remove(run2, id);
   if (mode === "force") return force(run2, id, source);
   const base = await run2.sidecar.read(run2.basePath(id));
-  if (base === null && Object.hasOwn(await run2.sidecar.ids(), id)) return create(run2, source, false);
+  if (base === null && Object.hasOwn(await run2.sidecar.ids(), id)) return create(run2, source, false, visibility);
+  if (visibility !== void 0)
+    throw new Failure(EXIT.usage, "--visibility only sets the initial policy of a new page; use the sharing API for an existing page.");
   return save2(run2, id, source, base, meta);
 }
-async function create(run2, source, fork) {
+async function create(run2, source, fork, visibility) {
   const proposal = fork ? stripIdentity(source) : source;
   const { files: files2, paths } = await run2.backends(proposal);
   const requestId = run2.ports.random();
@@ -10165,7 +10174,7 @@ async function create(run2, source, fork) {
     id: fork ? run2.result.id ?? null : null,
     baseVersion: null,
     digest: digest(source),
-    body: { source: proposal, ...Object.keys(files2).length ? { files: files2 } : {}, requestId },
+    body: { source: proposal, ...Object.keys(files2).length ? { files: files2 } : {}, requestId, ...visibility === void 0 ? {} : { visibility } },
     backends: paths
   });
 }
@@ -10630,6 +10639,7 @@ var FLAGS = {
   "--code": { value: true, scripts: ["auth"] },
   "--test-token": { value: false, scripts: ["auth"] },
   "--logout": { value: false, scripts: ["auth"] },
+  "--visibility": { value: true, scripts: ["publish"] },
   "--new": { value: false, scripts: ["publish"] },
   "--force": { value: false, scripts: ["publish"] },
   "--pull": { value: false, scripts: ["publish"] },
@@ -10697,7 +10707,10 @@ Run node scripts/${command}.mjs --help for every flag.`);
     const mode = modes.length ? modes[0].slice(2) : "publish";
     if (mode === "delete" && !flags.has("--yes")) throw usage("--delete removes the page for everyone. Add --yes to confirm.");
     if (mode !== "delete" && flags.has("--yes")) throw usage("--yes only goes with --delete.");
-    return { kind: "publish", file, mode, json: flags.has("--json") };
+    const visibility = flags.get("--visibility");
+    if (visibility !== void 0 && !["private", "unlisted", "public"].includes(String(visibility))) throw usage("--visibility must be private, unlisted or public.");
+    if (visibility !== void 0 && mode !== "publish" && mode !== "new") throw usage("--visibility only sets the initial policy of a new page.");
+    return { kind: "publish", file, mode, json: flags.has("--json"), ...visibility === void 0 ? {} : { visibility } };
   }
   if (command === "check") return { kind: "check", file, writeIds: flags.has("--write-ids"), json: flags.has("--json") };
   const widthText = flags.get("--width");
@@ -10789,7 +10802,7 @@ async function run(script, argv, io) {
       case "shot":
         return await shot(command, io);
       case "publish": {
-        const outcome = await publishPage(command.file, command.mode, { env: io.env, cwd: io.cwd, ports: ports(io) });
+        const outcome = await publishPage(command.file, command.mode, { env: io.env, cwd: io.cwd, ports: ports(io), visibility: command.visibility });
         if (command.json) io.stdout(JSON.stringify(outcome.json, null, 2) + "\n");
         else {
           const text = describe2(outcome);

@@ -59,7 +59,16 @@ export async function installSkill({home,origin,archive}, fs={mkdir,mkdtemp,writ
    }
    if(await exists(destination)){ await fs.rename(destination,join(stage,'previous')); backed=true; }
    await fs.rename(next,destination); replaced=true;
-   installed.push({folder:parent,name:NAME});
+   const legacy=join(parent,'pagegi-author');
+   let legacyBackup;
+   if(await exists(legacy)) {
+    const backups=join(home,'.af','skill-backups');
+    await fs.mkdir(backups,{recursive:true});
+    const backup=await fs.mkdtemp(join(backups,'pagegi-author-'));
+    legacyBackup=join(backup,'pagegi-author');
+    await fs.rename(legacy,legacyBackup);
+   }
+   installed.push({folder:parent,name:NAME,...(legacyBackup?{legacyBackup}:{})});
   } catch(error) {
    if(backed&&!replaced) {
     try { await fs.rename(join(stage,'previous'),destination); backed=false; }
@@ -83,7 +92,10 @@ async function main(args) {
  const chunks=[]; let size=0;
  for await(const chunk of response.body) { size+=chunk.length; if(size>8*1024*1024) throw Error('Skill archive is too large.'); chunks.push(chunk); }
  const installed=await installSkill({home:homedir(),origin,archive:Buffer.concat(chunks)});
- for(const result of installed) console.log(`Installed ${result.name} in ${result.folder}`);
+ for(const result of installed) {
+  console.log(`Installed ${result.name} in ${result.folder}`);
+  if(result.legacyBackup) console.log(`Previous pagegi-author retained at ${result.legacyBackup}`);
+ }
  console.log('Restart your coding agent to load the skill.');
 }
 if(process.argv[1]&&realpathSync(resolve(process.argv[1]))===fileURLToPath(import.meta.url)) main(process.argv.slice(2)).catch(error=>{console.error(error.message);process.exitCode=1;});

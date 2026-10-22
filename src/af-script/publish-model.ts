@@ -26,6 +26,8 @@ import { adoptPlatformMeta, mergePages, readMeta, stripIdentity } from "./page-m
 import { Failure, Sidecar, connect, digest, serverMessage, stamp, type Sent, type Server } from "./transport.ts";
 
 export interface PublishContext {
+  /** Initial policy only; never changes an existing page's sharing. */
+  visibility?: import("../contracts.ts").Visibility;
   env: Readonly<Record<string, string | undefined>>;
   cwd: string;
   ports: LifecyclePorts;
@@ -349,14 +351,14 @@ export async function publishPage(file: string, mode: PublishMode, context: Publ
     throw error;
   }
   try {
-    return await lifecycle(run, mode);
+    return await lifecycle(run, mode, context.visibility);
   } catch (error) {
     if (error instanceof Failure) return { code: error.code, json: { status: "error", ...run.result, message: error.message } };
     throw error;
   }
 }
 
-async function lifecycle(run: Run, mode: PublishMode): Promise<PublishOutcome> {
+async function lifecycle(run: Run, mode: PublishMode, visibility?: import("../contracts.ts").Visibility): Promise<PublishOutcome> {
   const source = await run.sidecar.read(run.file);
   if (source === null) throw new Failure(EXIT.usage, `Cannot read ${run.shown}: no such file.`);
   const meta = readMeta(source);
@@ -366,6 +368,8 @@ async function lifecycle(run: Run, mode: PublishMode): Promise<PublishOutcome> {
   // A write whose outcome is unknown comes first: replay it with the same key.
   const pending = await run.pendingJournal(id);
   if (pending) {
+    if (visibility !== undefined && (pending.kind !== "create" || (pending.body.visibility ?? "unlisted") !== visibility))
+      throw new Failure(EXIT.usage, "An earlier request has a different initial visibility. Resolve it by running the original command before publishing another page.");
     if (mode === "pull" || mode === "delete")
       throw new Failure(
         EXIT.refused,
@@ -377,22 +381,26 @@ async function lifecycle(run: Run, mode: PublishMode): Promise<PublishOutcome> {
     return outcome;
   }
 
-  if (mode === "new") return create(run, source, true);
+  if (mode === "new") return create(run, source, true, visibility);
   if (!id) {
-    if (mode === "publish") return create(run, source, false);
+    if (mode === "publish") return create(run, source, false, visibility);
     throw new Failure(EXIT.usage, `${run.shown} has no page ID in its meta block, so there is nothing to ${mode}. Run publish.mjs ${run.shown} to publish it.`);
   }
+  if (visibility !== undefined && mode !== "publish")
+    throw new Failure(EXIT.usage, "--visibility only sets the initial policy of a new page.");
   if (mode === "pull") return pull(run, id, source);
   if (mode === "delete") return remove(run, id);
   if (mode === "force") return force(run, id, source);
 
   const base = await run.sidecar.read(run.basePath(id));
   // An ID add.mjs reserved for this page, never published: publish it under that ID.
-  if (base === null && Object.hasOwn(await run.sidecar.ids(), id)) return create(run, source, false);
+  if (base === null && Object.hasOwn(await run.sidecar.ids(), id)) return create(run, source, false, visibility);
+  if (visibility !== undefined)
+    throw new Failure(EXIT.usage, "--visibility only sets the initial policy of a new page; use the sharing API for an existing page.");
   return save(run, id, source, base, meta);
 }
 
-async function create(run: Run, source: string, fork: boolean): Promise<PublishOutcome> {
+async function create(run: Run, source: string, fork: boolean, visibility?: import("../contracts.ts").Visibility): Promise<PublishOutcome> {
   const proposal = fork ? stripIdentity(source) : source;
   const { files, paths } = await run.backends(proposal);
   const requestId = run.ports.random();
@@ -402,7 +410,7 @@ async function create(run: Run, source: string, fork: boolean): Promise<PublishO
     id: fork ? (run.result.id ?? null) : null,
     baseVersion: null,
     digest: digest(source),
-    body: { source: proposal, ...(Object.keys(files).length ? { files } : {}), requestId },
+    body: { source: proposal, ...(Object.keys(files).length ? { files } : {}), requestId, ...(visibility === undefined ? {} : { visibility }) },
     backends: paths,
   });
 }
