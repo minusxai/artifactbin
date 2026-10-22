@@ -95,7 +95,6 @@ test("unknown addresses are 404: another ID, a slug on a missing page, an unknow
       `/a/${published.id}/extra`,
       `/a/${published.id}-slug/extra`,
       "/a/",
-      `/@${handle}`,
       `/@${handle}/`,
       `/@${handle}/missing.html`,
       `/@${handle}/../old.html`,

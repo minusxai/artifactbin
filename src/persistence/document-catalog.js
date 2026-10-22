@@ -1,3 +1,4 @@
+import { PUBLIC_LIBRARY_FILE_PREDICATE } from "./public-library-policy.ts";
 // @ts-check
 import { AF_PAGE_PATH } from "../af-contracts.ts";
 import { documentTitle } from "../server/text.ts";
@@ -78,7 +79,7 @@ export function createDocumentCatalog(sql) {
             `SELECT f.id,f.path,f.owner,f.head,f.access->>'visibility' AS visibility,a.space,left(s.content,8192) AS content,
        (SELECT count(*)::int FROM comments c WHERE c.file_id=f.id) AS comments
        FROM files f JOIN accounts a ON a.actor=f.owner JOIN sources s ON s.file_id=f.id AND s.revision=f.head
-       WHERE f.deleted_at IS NULL AND (${publicOnly ? "f.access->>'visibility'='public'" : "f.owner<>$1 AND (f.access->'shares' ? $1 OR EXISTS (SELECT 1 FROM group_memberships gm JOIN groups g ON g.owner=gm.owner WHERE gm.owner=f.owner AND gm.actor=$1 AND g.active))"}) ORDER BY f.id`,
+       WHERE ${publicOnly ? PUBLIC_LIBRARY_FILE_PREDICATE : "f.deleted_at IS NULL"} AND (${publicOnly ? "TRUE" : "f.owner<>$1 AND (f.access->'shares' ? $1 OR EXISTS (SELECT 1 FROM group_memberships gm JOIN groups g ON g.owner=gm.owner WHERE gm.owner=f.owner AND gm.actor=$1 AND g.active))"}) ORDER BY f.id`,
             publicOnly ? [] : [actor],
           )
         ).rows;

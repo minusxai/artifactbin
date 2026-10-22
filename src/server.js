@@ -1,6 +1,8 @@
 import { supplementalRepository } from "./persistence/supplemental-media.ts";
 import { createSupplementalService } from "./media/supplemental-service.ts";
 import { serveSupplemental } from "./media/supplemental-http.ts";
+import { createPublicProfileRoute } from "./server/public-profile-route.ts";
+import { createPublicProfileRepository } from "./persistence/public-profiles.ts";
 import { createDatasetRuntime } from "./server/dataset-runtime.ts";
 import { createDatasetInvalidationReader } from "./persistence/dataset-invalidations.ts";
 import { createBackendStoreInvalidationReader } from "./persistence/backend-store-invalidations.ts";
@@ -162,6 +164,7 @@ export function createService({
     database: repository.sql,
     actor: (credential) => accounts.actor(hash(credential)),
   });
+  const publicProfile = createPublicProfileRoute(createPublicProfileRepository(repository.sql));
   const ids = createIdReservationStore(repository.sql, { randomBytes, now });
   /** @type {Promise<import("./server/af-api-contracts.ts").AfRouteModule | null> | undefined} */
   let backendRoutes;
@@ -224,6 +227,8 @@ export function createService({
       }
       /** The server's public origin: written into saved pages and addresses. */
       const origin = platformOrigin || boundary.origin;
+      const profile = await publicProfile(req.method || "GET", url);
+      if (profile) {res.writeHead(profile.status, profile.headers);return res.end(profile.body);}
       const asset = assets.resolve(req.method || "GET", url, {
         signedIn: !!cookieToken(req),
       });

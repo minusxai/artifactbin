@@ -164,3 +164,7 @@ An account's optional public name, used in `/@<handle>/<path>` page addresses (s
 - **`handle`:** 3 to 32 lowercase letters, digits, underscores and hyphens, without a hyphen at either end or two in a row. Underscores may appear anywhere, including repeated or at either end; existing public handles retain their exact spelling. It is trimmed and lowercased before it is checked, so handles are unique regardless of case. Platform words and the server's own top-level paths (such as `api`, `af`, `a`, `connect`, `admin`) are refused with `422`.
 - Changing or removing a handle frees the old one at once: its `/@<old>/…` addresses answer `404` (no redirect) and another account may take it. `/a/<id>` never changes.
 - Every route needs your account token; `401` without one.
+
+## Public profiles
+
+`GET /@<handle>` returns an HTML list of that account’s current public pages. Private, unlisted and deleted pages are excluded, including for a signed-in owner. Unknown or changed handles return 404. `HEAD` returns the same status without a body. Optional `limit` is 1–50 (default 24); the Next link supplies the opaque `after` page cursor. Profile links from a page must use the platform origin, not its isolated runner origin.

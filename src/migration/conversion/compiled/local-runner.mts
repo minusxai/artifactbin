@@ -1,6 +1,7 @@
 import {prepareArchivedMermaid} from "./mermaid-prepare.ts";
 import {mermaidRuntimeSource} from "./mermaid-runtime.ts";
 import {readsLegacyMembers} from "./members-source.ts";
+import { archivedPersonProfileSource } from "./person-profile.ts";
 import { preservePresentationHosts } from "./presentation-hosts.ts";
 import {forwardArchivedMembersContext} from "./members-engine.ts";
 import { gzipSync } from "node:zlib";
@@ -353,7 +354,9 @@ const bundled = await bundle({
         b.onLoad({ filter: /\.tsx$/ }, async (args: any) => {
           if (!args.path.startsWith(path.join(root, "services/app/")))
             throw Error("Unexpected TSX dependency");
-          const stripped = await stripTypes(await readFile(args.path, "utf8"), {
+          let source = await readFile(args.path, "utf8");
+          if (input.personBindings?.length && args.path === path.join(root,"services/app/lib/islands/kit/people.tsx")) source = archivedPersonProfileSource({source,coreUrl:input.coreUrl});
+          const stripped = await stripTypes(source, {
             loader: "tsx",
             jsx: "preserve",
           });
