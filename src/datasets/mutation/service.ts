@@ -52,7 +52,12 @@ function bound(
     operation.backendId === context.backendId &&
     operation.backendVersion === context.backendVersion &&
     operation.page.id === context.pageId &&
-    Buffer.byteLength(operation.sql) <= limits.maxSqlBytes
+    Buffer.byteLength(operation.sql) <= limits.maxSqlBytes &&
+    (operation.sqlSchema === undefined ||
+      (typeof operation.sqlSchema === "string" &&
+        !!operation.sqlSchema &&
+        operation.sqlSchema.length <= 128 &&
+        !operation.sqlSchema.includes("\0")))
   );
 }
 /** Controller execute port is mandatory: this service never runs SQL on the application event loop. */
@@ -120,7 +125,7 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
         engineVersion: "sqlite-3.53.4-effect-v1" as const,
         input: {
           table: {
-            schema: table.schema,
+            schema: operation.sqlSchema ?? table.schema,
             name: table.name,
             columns: structuredClone([...table.columns]),
             rows,

@@ -18,6 +18,8 @@ export interface DatasetMutationOperation {
   page: { id: string; version: number; legacyId: string; editId: string };
   datasetId: string;
   target: { schema: string; table: string };
+  /** Trusted authored Import alias; canonical target remains the policy/CAS identity. */
+  sqlSchema?: string;
   sql: string;
   paramTypes: Record<string, DatasetColumn["type"]>;
   expectedAffected?: number;

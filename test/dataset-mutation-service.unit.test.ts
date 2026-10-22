@@ -219,3 +219,32 @@ test("durable prior refusal replays without SQL or new refusal write", async () 
   );
   assert.deepEqual(f.calls, []);
 });
+test("trusted Import SQL alias changes only engine schema while canonical policy and CAS target stay fixed", async () => {
+  const f = fixture();
+  f.ports.operation = async () => ({
+    ...operation,
+    sqlSchema: "bookings",
+    sql: "update bookings.rows set value=$value",
+  });
+  const execute = f.ports.execute,
+    commit = f.ports.commit;
+  f.ports.execute = async (job, signal) => {
+    assert.equal(job.input.table.schema, "bookings");
+    return execute(job, signal);
+  };
+  f.ports.commit = async (input) => {
+    assert.deepEqual(input.operation.target, {
+      schema: "public",
+      table: "rows",
+    });
+    return commit(input);
+  };
+  await createDatasetMutationService(f.ports).mutate(context, request);
+  await assert.rejects(
+    createDatasetMutationService(f.ports).mutate(context, {
+      ...request,
+      sqlSchema: "forged",
+    }),
+    /invalid_request/,
+  );
+});
