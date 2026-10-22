@@ -104,3 +104,13 @@ test(
     }
   },
 );
+test('offline prototype executes archived browser effects through the packaged module',{skip:!root},async()=>{
+ const {compileArchivedAuthor}=await import('../src/migration/conversion/compiled/local.ts');
+ const script='window.addEventListener("click",()=>document.querySelector("#effect").textContent="Clicked");document.querySelector("#effect").textContent="Started";';
+ const result=await compileArchivedAuthor({source:'<Helmet><script>{'+JSON.stringify(script)+'}</script></Helmet><button id="effect">Pending</button>',coreUrl:'/af/v1/core.js'},{legacyRoot:root!,sourceAdmission:'offline-prototype'});
+ assert.equal(result.classification,'functional',JSON.stringify(result.issues));
+ const core=await readFile(new URL('../dist/core.js',import.meta.url),'utf8');
+ const server=createServer((req,res)=>res.writeHead(200,{'content-type':req.url==='/af/v1/core.js'?'text/javascript':'text/html'}).end(req.url==='/af/v1/core.js'?core:result.html));
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const browser=await chromium.launch();
+ try{const page=await browser.newPage(),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(`http://127.0.0.1:${(server.address() as {port:number}).port}/proof`);await page.getByRole('button',{name:'Started',exact:true}).click();await page.getByRole('button',{name:'Clicked',exact:true}).waitFor();await page.reload();await page.getByRole('button',{name:'Started',exact:true}).waitFor();assert.deepEqual(errors,[]);}finally{await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
