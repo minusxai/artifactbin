@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { projectMigrationCommentContext } from "../src/migration/comment-projection.ts";
 import type { PlannedRevision } from "../src/migration/contracts.ts";
-const revisions = [
+const revisions: PlannedRevision[] = [
   {
     version: 1,
     original: {},
@@ -23,7 +23,7 @@ const revisions = [
       identities: { anchor: "head-target", orphan: "head-only-target" },
     },
   },
-] satisfies PlannedRevision[];
+];
 test("thread anchor uses its exact recorded revision and preserves orphan IDs without head remapping", () => {
   assert.deepEqual(
     projectMigrationCommentContext({
