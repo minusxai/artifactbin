@@ -29,6 +29,20 @@ export async function runMigrationJob(
   ports: MigrationJobPorts = {},
 ): Promise<MigrationJobSummary> {
   if (
+    options.storageCapacity !== undefined &&
+    (options.storageCapacity !== "operator-verified" ||
+      !options.apply ||
+      options.verifyOnly ||
+      options.measureStorage)
+  )
+    throw Error(
+      "Operator-verified storage capacity requires apply without verify-only or storage measurement",
+    );
+  const measureStorage = Boolean(
+    options.measureStorage ||
+      (options.apply && options.storageCapacity !== "operator-verified"),
+  );
+  if (
     options.historicalUnavailable !== undefined &&
     options.historicalUnavailable !== "preserve"
   ) throw Error("Unknown historical preservation policy");
@@ -124,7 +138,7 @@ export async function runMigrationJob(
     throw new Error(
       "Compiler provenance changed during planning; use frozen source checkouts",
     );
-  if (options.measureStorage || options.apply) {
+  if (measureStorage) {
     await measureMigrationStorage(source, options, planned, planner);
     if ((await identify()) !== compilerIdentity)
       throw Error("Compiler provenance changed during storage measurement");
@@ -203,10 +217,10 @@ export async function runMigrationJob(
       (r) => r.ready && !ready.has(r.pageId),
     ).length,
     readinessReport: options.reportPath + ".readiness.json",
-    storageReport:
-      options.measureStorage || options.apply
-        ? options.reportPath + ".storage.json"
-        : undefined,
+    storageReport: measureStorage
+      ? options.reportPath + ".storage.json"
+      : undefined,
+    ...(options.storageCapacity ? { storageCapacity: options.storageCapacity } : {}),
     verificationReport:
       options.apply || options.verifyOnly
         ? options.reportPath + ".verification.json"

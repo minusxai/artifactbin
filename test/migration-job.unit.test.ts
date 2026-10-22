@@ -110,14 +110,15 @@ for (const concurrency of [1, 2, 3, 4, 8] as const)
       await rm(directory, { recursive: true, force: true });
     }
   });
-test("failed complete preflight never opens an actual destination", async () => {
+for (const capacity of [undefined, "operator-verified"] as const)
+test(`failed complete preflight never opens an actual destination (${capacity ?? "default"})`, async () => {
   const directory = await mkdtemp(join(tmpdir(), "migration-job-"));
   try {
     const options = await fixture(directory, true);
     let connections = 0;
     await assert.rejects(
       runMigrationJob(
-        { ...options, apply: true, concurrency: 1 },
+        { ...options, apply: true, concurrency: 1, storageCapacity: capacity },
         {
           connectDestination: async () => {
             connections++;
@@ -133,11 +134,13 @@ test("failed complete preflight never opens an actual destination", async () => 
   }
 });
 
-test("compiler provenance changes abort before destination connects", async () => {
+for (const capacity of [undefined, "operator-verified"] as const)
+test(`compiler provenance changes abort before destination connects (${capacity ?? "default"})`, async () => {
   const directory = await mkdtemp(join(tmpdir(), "migration-provenance-"));
   try {
     const options = await fixture(directory);
     options.apply = true;
+    options.storageCapacity = capacity;
     options.concurrency = 1;
     let identities = 0,
       connections = 0;
@@ -255,3 +258,72 @@ test("explicit historical policy reports unavailable revisions separately while 
  const readiness=JSON.parse(await readFile(result.readinessReport,"utf8"));assert.deepEqual(readiness.historicalUnavailable,{pages:1,revisions:1});assert.equal(readiness.readiness.ready.length,1);
  } finally {await rm(directory,{recursive:true,force:true});}
 });
+
+for (const capacity of [undefined, "operator-verified"] as const)
+  test(`apply ${capacity ?? "default"} preserves preflight and controls only aggregate measurement`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), "migration-capacity-"));
+    try {
+      const options = await fixture(directory);
+      options.apply = true;
+      options.concurrency = 1;
+      options.storageCapacity = capacity;
+      let calls = 0,
+        connections = 0;
+      await assert.rejects(
+        runMigrationJob(options, {
+          compilerIdentity: async () => "pinned",
+          convert: () => {
+            calls++;
+            return {
+              classification: "renderable",
+              html: "<p>Fixture</p>",
+              issues: [],
+              identities: {},
+            };
+          },
+          connectDestination: async () => {
+            connections++;
+            throw Error("destination boundary");
+          },
+        }),
+        /destination boundary/,
+      );
+      assert.equal(connections, 1);
+      assert.equal(calls, capacity ? 3 : 6);
+      if (capacity)
+        await assert.rejects(readFile(options.reportPath + ".storage.json"), {
+          code: "ENOENT",
+        });
+      else
+        assert.equal(
+          JSON.parse(
+            await readFile(options.reportPath + ".storage.json", "utf8"),
+          ).measurement.pages,
+          3,
+        );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+for (const changes of [
+  { apply: false },
+  { apply: true, measureStorage: true },
+  { apply: true, verifyOnly: true },
+  { apply: true, storageCapacity: "unknown" },
+])
+  test(`capacity attestation refuses incompatible configuration ${JSON.stringify(changes)}`, async () => {
+    const options = {
+      sourceDirectory: "missing",
+      indexDirectory: "missing",
+      schema: "isolated_fixture",
+      reportPath: "missing",
+      concurrency: 1,
+      origin: "http://localhost",
+      legacyOrigins: [],
+      editorManageRestricted: true,
+      conversionStrategy: "strict",
+      storageCapacity: "operator-verified",
+      ...changes,
+    } as MigrationJobOptions;
+    await assert.rejects(runMigrationJob(options), /capacity/i);
+  });

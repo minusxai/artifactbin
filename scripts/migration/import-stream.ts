@@ -10,13 +10,14 @@ const [sourceDirectory, indexDirectory, schema, reportPath, ...flags] =
   process.argv.slice(2);
 if (!sourceDirectory || !indexDirectory || !schema || !reportPath)
   throw new Error(
-    "Usage: node --experimental-strip-types scripts/migration/import-stream.ts <private-export-directory> <private-index-directory> <dedicated-schema> <new-private-report.ndjson> [--apply-isolated|--verify-isolated] [--editor-manage-restricted] [--preserve-unavailable-history] [--conversion-strategy=strict|archived-static|archived-functional] [--concurrency=1|2|3|4|5|6|7|8]",
+    "Usage: node --experimental-strip-types scripts/migration/import-stream.ts <private-export-directory> <private-index-directory> <dedicated-schema> <new-private-report.ndjson> [--apply-isolated|--verify-isolated] [--capacity-verified] [--editor-manage-restricted] [--preserve-unavailable-history] [--conversion-strategy=strict|archived-static|archived-functional] [--concurrency=1|2|3|4|5|6|7|8]",
   );
 destinationSchemas(schema);
 const allowed = [
   "--apply-isolated",
   "--verify-isolated",
   "--measure-storage",
+  "--capacity-verified",
   "--preserve-unavailable-history",
   "--offline-prototype-source-admission",
   "--editor-manage-restricted",
@@ -113,6 +114,9 @@ const options: MigrationJobOptions = {
   apply,
   verifyOnly,
   measureStorage: flags.includes("--measure-storage"),
+  storageCapacity: flags.includes("--capacity-verified")
+    ? "operator-verified"
+    : undefined,
   concurrency: Number(
     flags.find((flag) => flag.startsWith("--concurrency="))?.split("=")[1] ?? 1,
   ) as MigrationJobOptions["concurrency"],
