@@ -8,7 +8,7 @@ import { createPublicProfileRepository } from "./persistence/public-profiles.ts"
 import { createDatasetRuntime } from "./server/dataset-runtime.ts";
 import { createDatasetInvalidationReader } from "./persistence/dataset-invalidations.ts";
 import { createBackendStoreInvalidationReader } from "./persistence/backend-store-invalidations.ts";
-import { createLiveInvalidationConsumer } from "./live-invalidation.ts";
+import { createServiceLifecycle } from "./server/service-lifecycle.ts";
 import { createTrashService } from "./trash/service.ts";
 // @ts-check
 import { parseRequestBody, parseFileRoute } from "./server/request.ts";
@@ -754,50 +754,20 @@ export function createService({
     authorize: (id, token, revision) =>
       collaboration.authorizeLive(id, token, revision),
   });
-  /** @type {import('./live-invalidation-contracts.ts').LiveInvalidationConsumer[]} */
-  const invalidations = [];
-  const startInvalidations = () => {
-    for (const reader of [
-      createDatasetInvalidationReader(repository.sql),
-      createBackendStoreInvalidationReader(repository.sql),
-    ])
-      invalidations.push(
-        createLiveInvalidationConsumer({
-          reader,
-          changed: (id) => live.changedAndWait(id),
-        }),
-      );
-  };
-  server.once("listening", startInvalidations);
-  /** @type {Promise<void> | undefined} */
-  let closing;
+  const lifecycle = createServiceLifecycle({
+    server,
+    invalidationReaders: [
+      () => createDatasetInvalidationReader(repository.sql),
+      () => createBackendStoreInvalidationReader(repository.sql),
+    ],
+    live,
+    runners,
+    backend: backendHost,
+    datasets: datasetRuntime,
+    repository,
+  });
   return {
     server,
-    close: () => {
-      if (closing) return closing;
-      // Start every disposal even if another throws; do not leave owned pools or
-      // execution work alive when one cleanup fails.
-      closing = Promise.allSettled(
-        [
-          () => live.close(),
-          () => runners.close(),
-          () => backendHost?.close?.(),
-          () => {
-            server.off("listening", startInvalidations);
-            return Promise.all(
-              invalidations.map((consumer) => consumer.close()),
-            );
-          },
-          () => datasetRuntime.close(),
-        ].map((dispose) => Promise.resolve().then(dispose)),
-      ).then(async (results) => {
-        const databaseCleanup = await Promise.allSettled([repository.close()]);
-        const failed = [...results, ...databaseCleanup].find(
-          (result) => result.status === "rejected",
-        );
-        if (failed?.status === "rejected") throw failed.reason;
-      });
-      return closing;
-    },
+    close: lifecycle.close,
   };
 }
