@@ -30,7 +30,8 @@
  *                                  4,000,000 UTF-16 characters (413 "files are too large"); at most 64
  *                                  submitted files, each 262,144 UTF-8 bytes (422 source_quota), with
  *                                  1,048,576 bundled npm bytes total per backend (422).
- *   GET  /api/files/:id/source[?version=N]                 → 200 SourceResponse, ETag: "<version>"
+ *   GET  /api/files/:id/source                              → 200 SourceResponse, ETag: "<version>"
+ *                                  Optional ?version=N selects an exact saved revision.
  *   PUT  /api/files/:id/source     SaveRequest + If-Match: <version> [+ Idempotency-Key] → 200 SaveResponse
  *                                  409 SaveConflict { error, version, source } when If-Match is not
  *                                  the current version; 428 when If-Match is missing
