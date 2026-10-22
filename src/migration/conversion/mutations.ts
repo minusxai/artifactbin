@@ -98,6 +98,24 @@ export async function extractLegacyMutations(
       ecmaVersion: "latest",
     }) as any;
     if (tree.end !== text.length) throw Error();
+    const containsMutation = (node: any): boolean => {
+      if (!node || typeof node !== "object") return false;
+      if (
+        node.type === "JSXElement" &&
+        node.openingElement.name.type === "JSXIdentifier" &&
+        node.openingElement.name.name === "Mutation"
+      )
+        return true;
+      return Object.entries(node).some(
+        ([key, value]) =>
+          !["start", "end"].includes(key) &&
+          (Array.isArray(value)
+            ? value.some(containsMutation)
+            : containsMutation(value)),
+      );
+    };
+    // Read-only pages retain their existing admission; mutation restrictions apply only to actual declarations.
+    if (!containsMutation(tree)) return result;
     const declarations: any[] = [],
       params = new Map<string, any>(),
       importNames = new Map<string, string>();
@@ -169,8 +187,19 @@ export async function extractLegacyMutations(
                 (!Number.isSafeInteger(expected) || (expected as number) < 0))
             )
               throw Error();
-            // Reset is viewer state, retained by the browser interpreter, never an authority input.
-            declarations.push({ name, ...builtinSql(sql), expected });
+            const resetValue = a.get("reset");
+            if (a.has("reset") && typeof resetValue !== "string")
+              throw Error("invalid reset declaration");
+            const reset =
+              typeof resetValue === "string"
+                ? resetValue.trim().split(/\s+/).filter(Boolean)
+                : [];
+            declarations.push({
+              reset,
+              name,
+              ...builtinSql(sql),
+              expected,
+            });
           }
         }
       }
@@ -243,6 +272,8 @@ export async function extractLegacyMutations(
           )
         )
           throw Error();
+        if (d.reset.some((name: string) => !params.get(name)))
+          throw Error("reset requires declared scalar");
         const paramTypes: Record<string, any> = {};
         for (const p of a.params) {
           if (p === "_me__id" || p === "_now") continue;
@@ -258,6 +289,7 @@ export async function extractLegacyMutations(
           sqlSchema: catalog.name,
           sql: d.sql,
           paramTypes,
+          ...(d.reset.length ? { reset: d.reset } : {}),
           ...(d.expected !== undefined ? { expectedAffected: d.expected } : {}),
           conflictMode: "refuse",
         });

@@ -2,6 +2,7 @@ import type { CompiledBackend, BackendHost } from "../backend/contracts.ts";
 import type { DatasetImportBindingInput } from "./datasets/planner-contracts.ts";
 import type { LegacyMutationDescriptor } from "./conversion/mutation-contracts.ts";
 import type { DatasetOperationRegistration } from "../datasets/mutation/repository-contracts.ts";
+import type { CompiledDatasetMutation } from "./conversion/compiled/dataset-mutations-contracts.ts";
 import type { SqlReader } from "./contracts.ts";
 export interface MigrationBackendPage {
   legacyId: string;
@@ -46,6 +47,12 @@ export interface MigrationBackendPreparation {
   bindings: readonly DatasetImportBindingInput[];
   /** Saved atomically with dataset bindings after canonical backend registration. */
   operations: readonly DatasetOperationRegistration[];
+  /** Browser-safe projection; full registry descriptors must never reach generated HTML. */
+  browserMutations: readonly {
+    pageLegacyId: string;
+    pageVersion: number;
+    mutation: CompiledDatasetMutation;
+  }[];
 }
 export interface MigrationBackendPreparationPorts {
   host?: BackendHost;

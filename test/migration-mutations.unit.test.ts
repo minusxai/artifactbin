@@ -99,3 +99,27 @@ test("local SQLite namespaces cannot masquerade as persistent Import targets", a
     assert.ok(result.issues.length);
   }
 });
+
+test("read-only documents retain admission independent of mutation-only parameter constraints", async () => {
+  const result = await extractLegacyMutations(
+    '<Helmet><Import name="bookings" src="ref:ABC123"/><Value name="filter" default="all"/></Helmet>',
+    catalogs,
+  );
+  assert.deepEqual(result, { mutations: [], issues: [] });
+});
+test("literal reset preserves only declared scalar names and rejects dynamic/table/missing targets", async () => {
+  const good = await extractLegacyMutations(
+    wrap("delete from bookings.rows where id=$id", 'name="book" reset="id"'),
+    catalogs,
+  );
+  assert.deepEqual(good.issues, []);
+  assert.deepEqual(good.mutations[0]?.reset, ["id"]);
+  for (const attr of ["reset={unknown}", 'reset="missing"']) {
+    const bad = await extractLegacyMutations(
+      wrap("delete from bookings.rows", `name="book" ${attr}`),
+      catalogs,
+    );
+    assert.ok(bad.issues.length);
+    assert.deepEqual(bad.mutations, []);
+  }
+});

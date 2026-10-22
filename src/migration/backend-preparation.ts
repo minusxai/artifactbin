@@ -169,7 +169,8 @@ export async function prepareMigrationBackends(
   const required = pages.filter((page) =>
     page.revisions.some((revision) => revision.imports.length),
   );
-  if (!required.length) return { receipts: [], bindings: [], operations: [] };
+  if (!required.length)
+    return { receipts: [], bindings: [], operations: [], browserMutations: [] };
   const host =
     ports.host ??
     createBackendHost({
@@ -185,7 +186,9 @@ export async function prepareMigrationBackends(
   }
   const receipts: MigrationBackendReceipt[] = [],
     bindings: MigrationBackendPreparation["bindings"][number][] = [],
-    operations: MigrationBackendPreparation["operations"][number][] = [];
+    operations: MigrationBackendPreparation["operations"][number][] = [],
+    browserMutations: MigrationBackendPreparation["browserMutations"][number][] =
+      [];
   for (const page of required) {
     let backendId = "";
     for (let attempt = 0; attempt < 10000; attempt++) {
@@ -215,7 +218,22 @@ export async function prepareMigrationBackends(
         deployment,
       });
       for (const mutation of revision.mutations ?? []) {
-        const { bindingName, datasetLegacyId, ...authored } = mutation;
+        const {
+          bindingName,
+          datasetLegacyId,
+          reset: _localReset,
+          ...authored
+        } = mutation;
+        browserMutations.push({
+          pageLegacyId: page.legacyId,
+          pageVersion: revision.version,
+          mutation: {
+            name: mutation.name,
+            backendNamespace: "legacyData",
+            paramTypes: { ...mutation.paramTypes },
+            ...(mutation.reset?.length ? { reset: [...mutation.reset] } : {}),
+          },
+        });
         operations.push({
           sourceNamespace: input.sourceNamespace,
           bindingName,
@@ -245,7 +263,7 @@ export async function prepareMigrationBackends(
         });
     }
   }
-  return { receipts, bindings, operations };
+  return { receipts, bindings, operations, browserMutations };
 }
 /** The caller owns the page transaction and search_path. This function never begins or commits one. */
 export const registerMigrationBackends: MigrationBackendRegistrar = async (

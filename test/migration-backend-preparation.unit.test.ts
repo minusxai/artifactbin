@@ -145,6 +145,7 @@ test("group pages and malformed Import descriptors fail before compilation; empt
     receipts: [],
     bindings: [],
     operations: [],
+    browserMutations: [],
   });
 });
 test("registration rejects altered compiled receipts before touching destination SQL", async () => {
@@ -252,6 +253,18 @@ test("named mutations pin trusted SQL to exact backend, page revision and bindin
   };
   const host = { compile: async () => deployment, invoke: async () => null };
   const prepared = await prepareMigrationBackends(revised, { host });
+  assert.deepEqual(prepared.browserMutations, [
+    {
+      pageLegacyId: "old-page",
+      pageVersion: 1,
+      mutation: {
+        name: "reserve",
+        backendNamespace: "legacyData",
+        paramTypes: { id: "number" },
+      },
+    },
+  ]);
+  assert.ok(!JSON.stringify(prepared.browserMutations).includes("delete from"));
   assert.deepEqual(prepared.operations, [
     {
       sourceNamespace: "fixture",

@@ -21,6 +21,8 @@ export interface LegacyMutationDescriptor {
   sql: string;
   paramTypes: Record<string, DatasetColumn["type"]>;
   expectedAffected?: number;
+  /** Viewer-local fields reset only after confirmed commit and only if still unchanged. */
+  reset?: readonly string[];
   conflictMode: "refuse";
 }
 export interface LegacyMutationExtraction {
