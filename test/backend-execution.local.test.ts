@@ -719,3 +719,50 @@ test("a capability the host gives up on settles at once and frees the service's 
     await f.close();
   }
 });
+
+test("trusted dataset_changed survives the remote execution capability roundtrip while raw codes are scrubbed", async () => {
+  const { BackendDatasetChangedError } = await import(
+    "../src/backend/contracts.ts"
+  );
+  const f = await fixture({
+    async compile() {
+      throw Error();
+    },
+    async invoke({ principal, capabilityHandler }) {
+      return capabilityHandler!(principal, {
+        kind: "dataset",
+        operation: "read",
+        input: {
+          binding: "data",
+          schema: "public",
+          table: "rows",
+          offset: 0,
+          limit: 1,
+        },
+      },new AbortController().signal);
+    },
+  });
+  try {
+    for (const trusted of [true, false])
+      await assert.rejects(
+        f.client.invoke({
+          deployment: {} as never,
+          principal,
+          input: { field: "read", args: null },
+          env: {},
+          reuse: { kind: "one-shot" },
+          capabilityHandler: async () => {
+            throw trusted
+              ? new BackendDatasetChangedError()
+              : Object.assign(Error("private detail"), {
+                  code: "dataset_changed",
+                });
+          },
+        }),
+        { code: trusted ? "dataset_changed" : "backend_rejected" },
+      );
+  } finally {
+    await f.client.close();
+    await f.close();
+  }
+});

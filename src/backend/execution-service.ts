@@ -97,6 +97,7 @@ const CODES: readonly BackendErrorCode[] = [
   "memory_limit",
   "cleanup_failed",
   "store_limit",
+  "dataset_changed",
 ];
 /** The invoke frame's `env`: required and validated by the shared environment policy. */
 function envOf(value: unknown): Readonly<Record<string, string>> | null {
@@ -211,7 +212,11 @@ export function createExecutionService(
         else
           item.reject(
             new BackendHostError(
-              frame.code === "store_limit" ? "store_limit" : "backend_rejected",
+              frame.code === "store_limit"
+                ? "store_limit"
+                : frame.code === "dataset_changed"
+                  ? "dataset_changed"
+                  : "backend_rejected",
             ),
           );
         return;
@@ -319,8 +324,12 @@ export function createExecutionService(
         const sqlCleanup = datasetSql?.close();
         const work = [...owned.values()];
         for (const cancel of owned.keys()) cancel();
-        closePromise = Promise.all(work).then(async () => {
-          await Promise.all([options.host.close?.(), sqlCleanup]);
+        closePromise = Promise.allSettled([
+          sqlCleanup,
+          Promise.all(work).then(() => options.host.close?.()),
+        ]).then((results) => {
+          const failure = results.find((r) => r.status === "rejected");
+          if (failure?.status === "rejected") throw failure.reason;
         });
       }
       return closePromise;
@@ -482,7 +491,10 @@ export function remoteBackendHost(
                               ...((error as { code?: unknown })?.code ===
                               "store_limit"
                                 ? { code: "store_limit" }
-                                : {}),
+                                : error instanceof BackendHostError &&
+                                    error.code === "dataset_changed"
+                                  ? { code: "dataset_changed" }
+                                  : {}),
                             },
                             config.maxFrameBytes,
                           ),

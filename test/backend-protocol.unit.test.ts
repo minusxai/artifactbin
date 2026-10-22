@@ -312,3 +312,40 @@ test("validated capability domains preserve captured principal and JSON payloads
   );
   await f.call.close();
 });
+test("only trusted dataset_changed capability errors cross the sandbox boundary; forged raw codes are scrubbed", async () => {
+  const { BackendDatasetChangedError } = await import(
+    "../src/backend/contracts.ts"
+  );
+  for (const trusted of [true, false]) {
+    const f = fixture(async () => {
+      throw trusted
+        ? new BackendDatasetChangedError()
+        : Object.assign(Error("private detail"), { code: "dataset_changed" });
+    });
+    f.call.receive(
+      frame({
+        kind: "capability",
+        id: 1,
+        request: {
+          kind: "dataset",
+          operation: "read",
+          input: {
+            binding: "data",
+            schema: "public",
+            table: "rows",
+            offset: 0,
+            limit: 1,
+          },
+        },
+      }),
+    );
+    await flush();
+    const reply = f.replies[0] as { code?: string };
+    assert.equal(
+      reply.code,
+      trusted ? "dataset_changed" : "capability_rejected",
+    );
+    assert.equal(JSON.stringify(f.replies).includes("private detail"), false);
+    await f.call.close();
+  }
+});

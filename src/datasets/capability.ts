@@ -1,3 +1,4 @@
+import { BackendDatasetChangedError } from "../backend/contracts.ts";
 import type {
   BackendCapabilityHandler,
   BackendJson,
@@ -21,7 +22,17 @@ export function datasetCapabilityHandler(
       principal.subject !== bound.subject
     )
       throw new DatasetReadError("denied");
-    const result = await service.read(bound, request.input, signal);
+    let result;
+    try {
+      result = await service.read(bound, request.input, signal);
+    } catch (error) {
+      if (
+        error instanceof DatasetReadError &&
+        (error as { code: string }).code === "dataset_changed"
+      )
+        throw new BackendDatasetChangedError();
+      throw error;
+    }
     return JSON.parse(JSON.stringify(result)) as BackendJson;
   };
 }

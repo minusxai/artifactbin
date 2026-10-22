@@ -265,3 +265,74 @@ test("controller shutdown aborts SQL immediately while generic backend cleanup r
     await new Promise<void>((r) => server.close(() => r()));
   }
 });
+test("SQL cleanup rejection is handled immediately while shutdown still waits for held generic work", async () => {
+  const { remoteBackendHost } = await import(
+    "../src/backend/execution-service.ts"
+  );
+  let started!: () => void, release!: () => void;
+  const ready = new Promise<void>((r) => {
+    started = r;
+  });
+  const unhandled: unknown[] = [];
+  const observe = (error: unknown) => {
+    unhandled.push(error);
+  };
+  process.on("unhandledRejection", observe);
+  const service = createExecutionService({
+    secret: key,
+    host: {
+      async compile() {
+        started();
+        return new Promise((_r, reject) => {
+          release = () => reject(Error("stopped"));
+        });
+      },
+      async invoke() {
+        throw Error();
+      },
+    },
+    datasetSql: {
+      async execute() {
+        throw Error();
+      },
+      async close() {
+        throw Error("sql_cleanup_failed");
+      },
+    },
+  });
+  const server = createServer(service);
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const port = (server.address() as { port: number }).port;
+  const backend = remoteBackendHost({
+    endpoint: `http://127.0.0.1:${port}/v1/execute`,
+    secret: key,
+  });
+  const running = backend.compile("source").catch(() => {});
+  try {
+    await ready;
+    let settled = false;
+    const closing = service.close();
+    void closing.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(unhandled, []);
+    assert.equal(settled, false);
+    release();
+    await assert.rejects(closing, /sql_cleanup_failed/);
+    await running;
+  } finally {
+    release?.();
+    await backend.close();
+    await service.close().catch(() => {});
+    process.off("unhandledRejection", observe);
+    server.closeAllConnections();
+    await new Promise<void>((r) => server.close(() => r()));
+  }
+});

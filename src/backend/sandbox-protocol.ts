@@ -170,7 +170,8 @@ export function sandboxFailure(
   return code === "memory_limit" ||
     code === "build_rejected" ||
     code === "output_quota" ||
-    code === "store_limit"
+    code === "store_limit" ||
+    code === "dataset_changed"
     ? code
     : "backend_rejected";
 }
@@ -263,12 +264,19 @@ export function createSandboxCall(
           .catch((error: unknown) => {
             const storeLimit =
               (error as { code?: unknown })?.code === "store_limit";
+            const datasetChanged =
+              error instanceof BackendHostError &&
+              error.code === "dataset_changed";
             return {
               kind: "capability-result",
               id: capability.id,
               ok: false,
-              code: storeLimit ? "store_limit" : "capability_rejected",
-              outcome: storeLimit ? "rejected" : "unknown",
+              code: storeLimit
+                ? "store_limit"
+                : datasetChanged
+                  ? "dataset_changed"
+                  : "capability_rejected",
+              outcome: storeLimit || datasetChanged ? "rejected" : "unknown",
             };
           })
           .then((reply) => {

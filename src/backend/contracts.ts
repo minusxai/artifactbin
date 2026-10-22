@@ -183,7 +183,8 @@ export type BackendErrorCode =
   | "memory_limit"
   | "cleanup_failed"
   /** A store write over BACKEND_STORE_LIMIT_BYTES reached the resolver uncaught: nothing was saved. */
-  | "store_limit";
+  | "store_limit"
+  | "dataset_changed";
 export class BackendHostError extends Error {
   readonly code: BackendErrorCode;
   /**
@@ -197,6 +198,13 @@ export class BackendHostError extends Error {
     this.name = "BackendHostError";
     const bounded = boundedDetail(detail);
     if (bounded !== undefined) this.detail = bounded;
+  }
+}
+/** A trusted dataset read saw a different current version/generation; no rows are returned. */
+export class BackendDatasetChangedError extends BackendHostError {
+  constructor() {
+    super("dataset_changed");
+    this.name = "BackendDatasetChangedError";
   }
 }
 /** A store write refused for size; the sandbox learns this code (never a handler's text) and the resolver may catch it. */

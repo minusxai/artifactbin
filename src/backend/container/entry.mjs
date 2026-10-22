@@ -50,6 +50,13 @@ function detailOf(error) {
 const STORE_LIMIT_BYTES = 60 * 1024;
 /** Store-limit errors this module threw: a resolver can set `code` on anything, but not join this set. */
 const storeLimitErrors = new WeakSet();
+const datasetChangedErrors = new WeakSet();
+function datasetChangedError() {
+  const error = Error("dataset_changed");
+  error.code = "dataset_changed";
+  datasetChangedErrors.add(error);
+  return error;
+}
 function storeLimitError() {
   const error = Error(
     "The store document is limited to 60 KB of JSON; nothing was saved",
@@ -63,7 +70,11 @@ function codeOf(error) {
     error !== null &&
     storeLimitErrors.has(error)
     ? "store_limit"
-    : "backend_rejected";
+    : typeof error === "object" &&
+        error !== null &&
+        datasetChangedErrors.has(error)
+      ? "dataset_changed"
+      : "backend_rejected";
 }
 export default {
   async fetch(req, env) {
@@ -129,7 +140,9 @@ export default {
             if (!reply.ok)
               throw reply.code === "store_limit"
                 ? storeLimitError()
-                : Error("capability rejected");
+                : reply.code === "dataset_changed"
+                  ? datasetChangedError()
+                  : Error("capability rejected");
             validate(reply.value);
             return reply.value;
           } finally {
