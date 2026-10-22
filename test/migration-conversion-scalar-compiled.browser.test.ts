@@ -2,21 +2,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { build } from "esbuild";
 import { chromium } from "playwright";
 import { compileArchivedLocal } from "../src/migration/conversion/compiled/local.ts";
 const root = process.env.PAGEGI_ARCHIVED_COMPILER_ROOT;
 test(
-  "compiled segmented, switch and slider controls preserve viewer state on reload",
+  "compiled numeric segmented, switch and slider controls preserve typed viewer state on reload",
   { skip: !root },
   async () => {
     const result = await compileArchivedLocal(
       {
         source:
-          '<Helmet><Value name="mode" type="string" default="a"/><Value name="enabled" type="boolean" default={false}/><Value name="amount" type="number" default={2}/></Helmet><Segmented id="segments" value="$mode" options={["a","b"]}/><Switch id="switch" checked="$enabled" label="Enabled"/><Slider id="slider" value="$amount" min={0} max={10} step={1} label="Amount"/><p id="selected">{$mode}</p><p id="amount">{$amount}</p>',
+          '<Helmet><Value name="mode" type="string" default="a"/><Value name="enabled" type="boolean" default={false}/><Value name="amount" type="number" default={2}/><Value name="optional" type="number" default={null}/><Query name="rows">{`select $amount as amount`}</Query></Helmet><Segmented id="segments" value="$mode" options={["a","b"]}/><Switch id="switch" checked="$enabled" label="Enabled"/><Segmented id="numeric" value="$amount" options={[{value:2,label:"Two"},{value:5,label:"Five"}]}/><Segmented id="nullable" value="$optional" options={[{value:3,label:"Three"}]}/><p id="optional">{$optional}</p><Slider id="slider" value="$amount" min={0} max={10} step={1} label="Amount"/><p id="selected">{$mode}</p><p id="amount">{$amount}</p>',
         coreUrl: "/af/v1/core.js",
       },
-      { legacyRoot: root! },
+      { legacyRoot: root!, sourceAdmission: "offline-prototype" },
     );
     assert.equal(
       result.classification,
@@ -24,10 +24,17 @@ test(
       JSON.stringify(result.issues),
     );
     assert.ok(result.html);
-    const core = await readFile(
-      new URL("../dist/core.js", import.meta.url),
-      "utf8",
-    );
+    const core = (
+      await build({
+        entryPoints: ["src/browser/core/core.ts"],
+        bundle: true,
+        write: false,
+        format: "iife",
+        target: "es2022",
+        minify: true,
+        legalComments: "none",
+      })
+    ).outputFiles[0]!.text;
     const server = createServer((request, response) => {
       if (request.url === "/af/v1/core.js")
         response
@@ -64,6 +71,29 @@ test(
         .click();
       await page.waitForFunction(
         () => document.querySelector("#selected")?.textContent === "b",
+      );
+      await page
+        .locator("#numeric")
+        .getByRole("button", { name: "Five", exact: true })
+        .click();
+      await page.waitForFunction(
+        () => document.querySelector("#amount")?.textContent === "5",
+        undefined,
+        { timeout: 2000 },
+      );
+      await page
+        .locator("#nullable")
+        .getByRole("button", { name: "Three", exact: true })
+        .click();
+      await page.waitForFunction(
+        () => document.querySelector("#optional")?.textContent === "3",
+      );
+      await page
+        .locator("#nullable")
+        .getByRole("button", { name: "All", exact: true })
+        .click();
+      await page.waitForFunction(
+        () => document.querySelector("#optional")?.textContent === "",
       );
       await page.getByRole("switch", { name: "Enabled" }).click();
       await page.waitForFunction(

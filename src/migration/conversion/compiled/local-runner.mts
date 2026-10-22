@@ -1,3 +1,4 @@
+import {archivedScalarChoiceSource} from "./scalar-choice-kit-source.ts";
 import { validCompiledBrowserImports } from "./browser-imports.ts";
 import { archivedRuntimePlan } from "./runtime-plan.ts";
 import {archivedDialogMutationFormSource} from "./dialog-form-source.ts";
@@ -415,6 +416,7 @@ const bundled = await bundle({
           if (!args.path.startsWith(path.join(root, "services/app/")))
             throw Error("Unexpected TSX dependency");
           let source = await readFile(args.path, "utf8");
+          if(args.path===path.join(root,"services/app/lib/islands/kit/controls.tsx"))source=archivedScalarChoiceSource(source);
           if(attachmentSites.length && args.path===path.join(root,"services/app/lib/islands/kit/upload/control.tsx"))source=archivedFileUploadControlSource(source);
           if (input.personBindings?.length && args.path === path.join(root,"services/app/lib/islands/kit/people.tsx")) source = archivedPersonProfileSource({source,coreUrl:input.coreUrl});
           if(input.datasetMutations?.some(binding=>binding.valueParam)&&args.path===path.join(root,"services/app/lib/islands/kit/cells.tsx"))source=archivedExplicitCellOptionsSource(source);
