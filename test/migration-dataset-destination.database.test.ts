@@ -72,6 +72,66 @@ test(
           .rows[0].n,
         0,
       );
+      await db.query(
+        await readFile(
+          new URL("../src/backend/af-schema.sql", import.meta.url),
+          "utf8",
+        ),
+      );
+      await db.query(
+        `INSERT INTO files VALUES ('abc123'); INSERT INTO af_backend_files(file_id,owner,head_version) VALUES ('def456','owner@example.test','version1'); INSERT INTO af_backend_versions(file_id,version,page_id,page_version,type_defs,deployment) VALUES ('def456','version1','abc123',1,'fixture','{}'); INSERT INTO af_page_backends VALUES ('abc123',1,0,'legacyDatasets','def456','version1'); INSERT INTO dataset_resources VALUES ('bound','dataset',1,0,'owner@example.test',1,'{}',false,'{}'); INSERT INTO dataset_versions VALUES ('bound','dataset',1,'[]','{}','[]')`,
+      );
+      const bound: DatasetMigrationBatch = {
+        ...batch,
+        metadata: {
+          ...batch.metadata,
+          sourceNamespace: "bound",
+          principals: [],
+          pages: [
+            {
+              pageId: "abc123",
+              pageVersion: 1,
+              snapshot: {
+                id: "legacy-page",
+                editId: "edit",
+                owner: { userId: "original-user", tokenId: null },
+                visibility: "private",
+                format: "markup",
+                deleted: false,
+                ownerIsTestUser: false,
+                acceptedJoinUserIds: [],
+              },
+            },
+          ],
+          bindings: [
+            {
+              name: "sales",
+              backendId: "def456",
+              backendVersion: "version1",
+              page: {
+                id: "abc123",
+                version: 1,
+                legacyId: "legacy-page",
+                editId: "edit",
+              },
+              dataset: { id: "dataset", version: 1, policyRevision: 0 },
+              tables: [],
+            },
+          ],
+        },
+      };
+      assert.deepEqual(await destination.import(bound), {
+        created: 2,
+        unchanged: 0,
+      });
+      const wrong = structuredClone(bound);
+      wrong.metadata.bindings = [
+        { ...bound.metadata.bindings[0]!, backendVersion: "wrong-version" },
+      ];
+      await assert.rejects(
+        destination.import(wrong),
+        /existing compiled backend/,
+      );
     } finally {
       await db.query(
         `DROP SCHEMA IF EXISTS ${schema} CASCADE; DROP SCHEMA IF EXISTS ${schema}_migration CASCADE`,

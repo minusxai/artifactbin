@@ -173,13 +173,12 @@ export class PostgresDatasetMetadataDestination
       );
       for (const binding of batch.metadata.bindings) {
         const compiled = await this.db.query(
-          `SELECT 1 FROM ${this.names.runtime}.af_backend_versions v JOIN ${this.names.runtime}.af_page_backends p ON p.file_id=v.file_id AND p.version=v.version WHERE v.file_id=$1 AND v.version=$2 AND p.page_id=$3 AND p.page_version=$4 AND p.name=$5`,
+          `SELECT 1 FROM ${this.names.runtime}.af_backend_versions v JOIN ${this.names.runtime}.af_page_backends p ON p.file_id=v.file_id AND p.version=v.version WHERE v.file_id=$1 AND v.version=$2 AND p.page_id=$3 AND p.page_version=$4`,
           [
             binding.backendId,
             binding.backendVersion,
             binding.page.id,
             binding.page.version,
-            binding.name,
           ],
         );
         if (!compiled.rows.length)
