@@ -64,6 +64,7 @@ function fixture() {
             acceptedJoinUserIds: [],
           },
           dataset: {
+            ...{ version: 1, generation: 1 },
             id: "data",
             owner: { userId: "owner", tokenId: null },
             visibility: "public",

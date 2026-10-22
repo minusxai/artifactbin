@@ -39,6 +39,7 @@ function head(): DatasetMutationHead {
         acceptedJoinUserIds: ["viewer"],
       },
       dataset: {
+        ...{ version: 1, generation: 1 },
         id: "data",
         owner: { userId: "owner", tokenId: null },
         visibility: "public",

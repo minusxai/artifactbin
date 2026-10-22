@@ -71,6 +71,7 @@ test("anonymous dataset reads reach trusted binding service while anonymous conn
         datasetCalls++;
         return {
           version: 1,
+          generation: 1,
           schema: "public",
           table: "rows",
           columns: [],
@@ -190,6 +191,7 @@ test("existing page GraphQL route injects captured dataset authority into a link
         reads++;
         return {
           version: 2,
+          generation: 1,
           schema: "public",
           table: "rows",
           columns: [],

@@ -29,6 +29,7 @@ test("real backend isolate reads only explicit dataset capability bindings for i
           calls++;
           return {
             version: 4,
+            generation: 1,
             schema: "public",
             table: "rows",
             columns: [{ name: "value", type: "number" }],
@@ -54,6 +55,7 @@ test("real backend isolate reads only explicit dataset capability bindings for i
     });
     assert.deepEqual(result, {
       version: 4,
+      generation: 1,
       schema: "public",
       table: "rows",
       columns: [{ name: "value", type: "number" }],
