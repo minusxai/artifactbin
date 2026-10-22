@@ -1,3 +1,4 @@
+import { decodeDatasetSqlOutcome } from "../datasets/sql/outcome.ts";
 import { request as httpRequest, type RequestListener } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { timingSafeEqual } from "node:crypto";
@@ -56,22 +57,33 @@ export function datasetSqlListener(
       done = false,
       running = false;
     const chunks: Buffer[] = [];
-    const finish = (status: number, data?: string) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
+    const releaseInput = () => {
       if (!running) {
         owned.delete(controller);
         release();
       }
+    };
+    const finish = (status: number, data?: string) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      chunks.length = 0;
       controller.abort();
+      if (!running) req.once("close", releaseInput);
       if (!res.destroyed)
         res
           .writeHead(status, {
             "content-type": "application/json",
             "cache-control": "no-store",
           })
-          .end(data);
+          .end(data, () => {
+            if (!req.complete) req.destroy();
+            releaseInput();
+          });
+      else {
+        req.destroy();
+        releaseInput();
+      }
     };
     const timer = setTimeout(() => finish(504), 25000);
     controller.signal.addEventListener(
@@ -101,6 +113,7 @@ export function datasetSqlListener(
       try {
         job = JSON.parse(Buffer.concat(chunks, total).toString("utf8"));
         validateDatasetSqlJob(job);
+        chunks.length = 0;
       } catch {
         finish(400);
         return;
@@ -233,7 +246,7 @@ export function remoteDatasetSqlExecutor(
                     Array.isArray(value)
                   )
                     throw Error();
-                  finish(undefined, value as MutationOutcome);
+                  finish(undefined, decodeDatasetSqlOutcome(job, value));
                 } catch {
                   finish(Error("sql_invalid_result"));
                 }

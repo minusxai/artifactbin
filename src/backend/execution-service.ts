@@ -316,10 +316,11 @@ export function createExecutionService(
     close() {
       if (!closePromise) {
         closed = true;
+        const sqlCleanup = datasetSql?.close();
         const work = [...owned.values()];
         for (const cancel of owned.keys()) cancel();
         closePromise = Promise.all(work).then(async () => {
-          await Promise.all([options.host.close?.(), datasetSql?.close()]);
+          await Promise.all([options.host.close?.(), sqlCleanup]);
         });
       }
       return closePromise;

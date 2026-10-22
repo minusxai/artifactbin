@@ -1,3 +1,4 @@
+import { decodeDatasetSqlOutcome } from "../datasets/sql/outcome.ts";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { dockerCommand } from "./reaper.ts";
@@ -115,7 +116,7 @@ export function createDatasetSqlExecutor(
               );
               if (!value || typeof value !== "object" || Array.isArray(value))
                 throw Error();
-              finish(undefined, value as MutationOutcome);
+              finish(undefined, decodeDatasetSqlOutcome(job, value));
             } catch {
               finish(Error("sql_invalid_result"));
             }
