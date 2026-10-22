@@ -16,7 +16,14 @@ export async function decodeCompiledPage(payload:CompiledPagePayload,signal:Abor
   const css=payload.stylesheet===null?"":await unpack(payload.stylesheet),javascript=await unpack(payload.javascript);
   if(signal?.aborted)throw Error('Compiled page cancelled');
   const style=document.createElement('style');style.setAttribute('data-af-compiled-stylesheet','');style.textContent=css;document.head.append(style);
-  await document.fonts.ready;
+  let stopWaiting: (()=>void)|undefined;
+  try{
+   await Promise.race([document.fonts.ready,new Promise<never>((_resolve,reject)=>{
+    const abort=()=>reject(Error("Compiled page cancelled"));
+    stopWaiting=()=>signal?.removeEventListener("abort",abort);
+    if(signal?.aborted)abort();else signal?.addEventListener("abort",abort,{once:true});
+   })]);
+  }finally{stopWaiting?.();}
   if(signal?.aborted)throw Error('Compiled page cancelled');
   return javascript;
  }finally{pending?.remove();}

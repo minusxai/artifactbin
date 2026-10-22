@@ -21,3 +21,8 @@ test('an empty stylesheet needs no stream while an empty executable module remai
  const valid=extract('','export {};');let installed='pending';const document={querySelector:()=>null,createElement:()=>({setAttribute(){},set textContent(v:string){installed=v;}}),head:{append(){}},fonts:{ready:Promise.resolve()}}as any;
  assert.equal(await decodeCompiledPage(valid,undefined,decodeCompiledJavascript,decodeAscii91,document),'export {};');assert.equal(installed,'');assert.throws(()=>compiledPageMarkup('body{}',''));
 });
+test('page navigation cancels a stalled font wait and reveals saved content',{timeout:2000},async()=>{
+ const valid=extract('body{color:red}','export {};'),controller=new AbortController();let removed=false;
+ const document={querySelector:()=>({remove(){removed=true;}}),createElement:()=>({setAttribute(){},textContent:''}),head:{append(){setTimeout(()=>controller.abort(),5);}},fonts:{ready:new Promise(()=>{})}}as any;
+ await assert.rejects(decodeCompiledPage(valid,controller.signal,decodeCompiledJavascript,decodeAscii91,document),/cancel/i);assert.equal(removed,true);
+});

@@ -43,6 +43,7 @@ export function mountCompiledPayload(
     revokeURL: (url) => URL.revokeObjectURL(url),
     importModule: (url) => import(url),
     error() {
+      document.querySelector("[data-af-compiled-style-pending]")?.remove();
       status.setAttribute("role", "alert");
       status.textContent =
         "This page could not start. Its saved content is still available below.";
