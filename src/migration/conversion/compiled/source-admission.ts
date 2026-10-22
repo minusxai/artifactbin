@@ -1,4 +1,5 @@
 import {admitLocalComponent} from "./component-admission.ts";
+import {validCompiledMembersBinding} from "./members-binding.ts";
 import type {AdmittedAuthorMountProps} from "./author/prop-contracts.ts";
 import {admitAuthorProps} from "./author/props.ts";
 import type { PresentationIdentityHost } from "./presentation-kit-contracts.ts";
@@ -77,6 +78,11 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   if (historical && bindings.length)
     return blocked("compiled-dataset-unavailable-mode");
   const backendLinks = new Map<string, string>();
+  if (input.membersBinding) {
+    if (historical || !validCompiledMembersBinding(input.membersBinding))
+      return blocked("compiled-members-binding");
+    backendLinks.set(input.membersBinding.backendNamespace, input.membersBinding.backendHref);
+  }
   if (
     !Array.isArray(bindings) ||
     bindings.some((b) => !b) ||
