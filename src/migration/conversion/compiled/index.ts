@@ -88,13 +88,14 @@ function preflight(
   walk(root);
   return unsupported ? refused("compiled-capability", unsupported) : null;
 }
-async function externalCompile(
+export async function externalCompile(
   input: CompiledMigrationInput,
   options: CompiledMigrationOptions,
+  runnerName = "runner.mts",
 ): Promise<ArchivedStaticOutput> {
   if (!options.legacyRoot) throw Error("Archived compiler root is required");
   const root = path.resolve(options.legacyRoot);
-  const runner = fileURLToPath(new URL("./runner.mts", import.meta.url));
+  const runner = fileURLToPath(new URL(runnerName, import.meta.url));
   return await new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
