@@ -7,6 +7,8 @@ export interface CompiledMigrationInput {
   source: string;
   /** Internal source-admitted plan, overwritten before invoking the compiler. */
   dataControls?: readonly CompiledDataControl[];
+  /** Derived from admitted source, never accepted as caller authority. */
+  dynamicIdentities?: import("./reactive-source-contracts.ts").LocalDynamicIdentityPlan;
   /** Set only by the explicit author-document offline migration route. */
   authorPlan?: CompiledAuthorPlan;
   coreUrl: string;
