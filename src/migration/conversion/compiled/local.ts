@@ -6,6 +6,11 @@ import {
   compiledAuthorMountAttributes,
 } from "./author-document.ts";
 import { admitAuthorSource } from "./author/admission.ts";
+import {
+  createCompiledDatasetMutations,
+  compiledDatasetMutationDocument,
+} from "./dataset-mutations.ts";
+import { parse as parseGraphql } from "graphql";
 import { validDatasetBinding } from "./dataset-reader.ts";
 import { validLocalValue } from "./local-state.ts";
 import { safeInlineModule } from "./module-safety.ts";
@@ -46,7 +51,7 @@ const activeUri = (v: string) =>
   );
 const json = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 const allowed = new Set(
-  "Helmet Import Value Query Question Chart Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "Helmet Import Value Query Mutation Question Chart Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -132,6 +137,40 @@ export async function compileArchivedLocal(
     backendLinks.set(b.backendNamespace, b.backendHref);
   }
   let invalid = false;
+  const registeredMutations = input.datasetMutations ?? [];
+  try {
+    if (
+      !Array.isArray(registeredMutations) ||
+      registeredMutations.length > 64 ||
+      registeredMutations.some(
+        (b) => !b || !backendLinks.has(b.backendNamespace),
+      ) ||
+      (historical && registeredMutations.length)
+    )
+      throw Error();
+    createCompiledDatasetMutations({
+      bindings: registeredMutations,
+      client: {
+        mutate: async () => {
+          throw Error();
+        },
+      },
+      documents: Object.fromEntries(
+        registeredMutations.map((b) => [
+          b.backendNamespace,
+          parseGraphql(compiledDatasetMutationDocument(b.backendNamespace)),
+        ]),
+      ),
+      requestId: () => "",
+      values: () => ({}),
+      reset: () => {},
+      committed: () => {},
+    });
+  } catch {
+    return blocked("compiled-mutation-binding");
+  }
+  const mutations = new Set<string>();
+  const mutationRuns = new Set<string>();
   let chartCount = 0,
     vegaCount = 0;
   const imports = new Set<string>();
@@ -300,20 +339,78 @@ export async function compileArchivedLocal(
                   references.add(prop.value.value.slice(1));
               }
           }
+          if (attr.name?.name === "run") {
+            const run = attr.value?.value;
+            if (
+              name !== "Button" ||
+              typeof run !== "string" ||
+              !/^\$[A-Za-z][A-Za-z0-9_]*$/.test(run)
+            )
+              invalid = true;
+            else mutationRuns.add(run.slice(1));
+          }
+          if (attr.name?.name === "args") {
+            if (
+              name !== "Button" ||
+              attr.value?.expression?.type !== "ObjectExpression"
+            )
+              invalid = true;
+            else
+              for (const prop of attr.value.expression.properties) {
+                const value = prop.value?.value;
+                if (typeof value === "string" && value.startsWith("$"))
+                  references.add(value.slice(1));
+              }
+          }
           if (
             attr.type !== "JSXAttribute" ||
             typeof attr.name.name !== "string" ||
-            [
-              "run",
-              "args",
-              "row",
-              "rowScope",
-              "options",
-              "query",
-              "table",
-            ].includes(attr.name.name)
+            ["row", "rowScope", "options", "query", "table"].includes(
+              attr.name.name,
+            )
           )
             invalid = true;
+        }
+        if (name === "Mutation") {
+          const attrs = Object.fromEntries(
+            node.openingElement.attributes.map((a: any) => [
+              a.name?.name,
+              a.value?.value,
+            ]),
+          );
+          if (
+            !registeredMutations.some((b) => b.name === attrs.name) ||
+            mutations.has(attrs.name) ||
+            Object.keys(attrs).some((k) => !["id", "name", "reset"].includes(k))
+          )
+            invalid = true;
+          const metadata = registeredMutations.find(
+            (b) => b.name === attrs.name,
+          );
+          const reset =
+            typeof attrs.reset === "string"
+              ? attrs.reset.trim().split(/\s+/).filter(Boolean)
+              : [];
+          if (
+            (attrs.reset !== undefined && typeof attrs.reset !== "string") ||
+            JSON.stringify(reset) !== JSON.stringify(metadata?.reset ?? [])
+          )
+            invalid = true;
+          const payload = node.children.filter(
+            (c: any) => c.type !== "JSXText" || c.value.trim(),
+          );
+          if (
+            payload.length !== 1 ||
+            !(
+              payload[0]?.type === "JSXText" ||
+              (payload[0]?.type === "JSXExpressionContainer" &&
+                (typeof payload[0].expression?.value === "string" ||
+                  (payload[0].expression?.type === "TemplateLiteral" &&
+                    !payload[0].expression.expressions.length)))
+            )
+          )
+            invalid = true;
+          mutations.add(attrs.name);
         }
         if (name === "Query") {
           const attrs = Object.fromEntries(
@@ -368,6 +465,17 @@ export async function compileArchivedLocal(
   } catch {
     return blocked("compiled-source");
   }
+  if (
+    registeredMutations.length !== mutations.size ||
+    [...mutations].some(
+      (n) => declarations.has(n) || queries.has(n) || imports.has(n),
+    ) ||
+    [...mutationRuns].some((n) => !mutations.has(n)) ||
+    registeredMutations.some((b) =>
+      b.reset?.some((n: string) => !declarations.has(n) || tableNames.has(n)),
+    )
+  )
+    invalid = true;
   if (
     [...queries].some((q) => declarations.has(q)) ||
     [...scalarBindings].some((n) => tableNames.has(n))
@@ -432,6 +540,11 @@ export async function compileArchivedLocal(
       output.chartPlans > vegaCount)
   )
     return blocked("compiled-chart-output");
+  if (
+    (output.mutationNames ?? []).length !== mutations.size ||
+    [...mutations].some((n) => !output.mutationNames?.includes(n))
+  )
+    return blocked("compiled-mutation-output");
   const state: Record<string, unknown> = Object.create(null);
   for (const d of output.declarations) {
     if (
@@ -552,6 +665,7 @@ export async function compileArchivedLocal(
         : []),
       ...(author ? ["authored-components"] : []),
       ...(chartCount ? ["compiled-charts"] : []),
+      ...(mutations.size ? ["registered-dataset-mutations"] : []),
     ],
     provenance: {
       compiler: author ? "archived-author" : "archived-local",

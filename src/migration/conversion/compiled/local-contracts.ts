@@ -20,6 +20,7 @@ export type LocalDeclaration = LocalScalarDeclaration | LocalTableDeclaration;
 export interface ArchivedLocalOutput extends ArchivedStaticOutput {
   javascript: string;
   queryNames?: string[];
+  mutationNames?: string[];
   datasetNames?: string[];
   authorExports?: string[];
   chartPlans?: number;

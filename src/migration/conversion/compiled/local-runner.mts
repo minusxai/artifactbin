@@ -21,7 +21,11 @@ for await (const chunk of process.stdin) {
 const input = JSON.parse(text) as CompiledMigrationInput;
 const { storyBodyFor } = await archived("lib/document/body.ts");
 const split = storyBodyFor(input.source);
-if (!split || split.content.script || split.content.mutations.length)
+if (
+  !split ||
+  split.content.script ||
+  split.content.mutations.length !== (input.datasetMutations ?? []).length
+)
   throw Error("Only local scalar documents admitted");
 const [
   { prepareStoryParts },
@@ -295,6 +299,7 @@ const bundled = await bundle({
               ? rawFlow.queries.map((q: any) => q.name)
               : undefined,
             Boolean(chartSources),
+            input.datasetMutations ?? [],
           ),
           loader: "js",
         }));
@@ -328,6 +333,12 @@ const bundled = await bundle({
             resolveDir: root,
           }),
         );
+        b.onResolve({ filter: /^migration-mutations$/ }, () => ({
+          path: path.join(
+            path.dirname(new URL(import.meta.url).pathname),
+            "dataset-mutations.ts",
+          ),
+        }));
         b.onResolve({ filter: /^migration-datasets$/ }, () => ({
           path: path.join(import.meta.dirname, "dataset-reader.ts"),
         }));
@@ -339,7 +350,7 @@ const bundled = await bundle({
         });
         b.onResolve({ filter: /^(@mx\/|solid-js)/ }, (args: any) => {
           if (
-            (sql || author || chartSources) &&
+            (sql || author || chartSources || input.datasetMutations?.length) &&
             args.path.startsWith("solid-js")
           ) {
             const suffix = args.path.slice("solid-js".length);
@@ -350,7 +361,7 @@ const bundled = await bundle({
             return { path: path.join(root, "node_modules/solid-js", file) };
           }
           if (
-            (sql || author || chartSources) &&
+            (sql || author || chartSources || input.datasetMutations?.length) &&
             (args.path === "@mx/rt" || args.path.startsWith("@mx/kit/"))
           ) {
             const relative =
@@ -440,6 +451,7 @@ process.stdout.write(
     authorExports: author?.exports ?? [],
     chartPlans: chartPlans.length,
     datasetNames: rawFlow.imports.map((i: any) => i.name),
+    mutationNames: split.content.mutations.map((m: any) => m.name),
     queryNames: rawFlow.queries.map((q: any) => q.name),
     modules,
     title: parts.title,

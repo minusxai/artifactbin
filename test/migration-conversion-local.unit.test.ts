@@ -483,3 +483,57 @@ test("charts require an explicit offline chart plan and declared data source", a
   );
   assert.equal(bad.classification, "manual-blocked");
 });
+
+test("persistent mutation controls require exact registered routing metadata", async () => {
+  const source =
+    '<Helmet><Import name="items" src="ref:Abcd12"/><Value name="amount" type="number" default={2}/><Query name="total">{`select sum(amount) as total from items.rows`}</Query><Mutation name="save" reset="amount">{`insert into items.rows(amount) values($amount)`}</Mutation></Helmet><Button run="$save" args={{amount:"$amount"}}>Save</Button>';
+  const binding = {
+    name: "items",
+    legacyRef: "ref:Abcd12",
+    backendNamespace: "legacyDatasets",
+    backendHref: "/af/v1/ids/Bac123",
+    version: 3,
+    mode: "live" as const,
+    tables: [
+      {
+        schema: "main",
+        table: "rows",
+        columns: [{ name: "amount", type: "number" }],
+      },
+    ],
+  };
+  const compiler = {
+    compile: async () => ({
+      ...output,
+      declarations: [{ name: "amount", type: "number" as const, default: 2 }],
+      queryNames: ["total"],
+      datasetNames: ["items"],
+      mutationNames: ["save"],
+    }),
+  };
+  const base = { ...input, source, datasetBindings: [binding] };
+  const metadata = {
+    name: "save",
+    backendNamespace: "legacyDatasets",
+    paramTypes: { amount: "number" as const },
+    reset: ["amount"],
+  };
+  const good = await compileArchivedLocal(
+    { ...base, datasetMutations: [metadata] },
+    { compiler },
+  );
+  assert.equal(good.classification, "functional");
+  assert.ok(good.capabilities.includes("registered-dataset-mutations"));
+  for (const datasetMutations of [
+    undefined,
+    [],
+    [{ ...metadata, name: "different" }],
+    [{ ...metadata, backendNamespace: "unknown" }],
+  ]) {
+    assert.equal(
+      (await compileArchivedLocal({ ...base, datasetMutations }, { compiler }))
+        .classification,
+      "manual-blocked",
+    );
+  }
+});
