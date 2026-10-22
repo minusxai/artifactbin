@@ -1,4 +1,5 @@
 // @requires migration-database
+import { createHash } from "node:crypto";
 import { verifyMigrationDatasetMetadata } from "../src/migration/dataset-verification.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -19,6 +20,12 @@ test(
     try {
       await db.query(
         `CREATE SCHEMA ${schema}; CREATE SCHEMA ${schema}_migration; SET search_path TO ${schema}; CREATE TABLE accounts(actor text PRIMARY KEY); CREATE TABLE groups(owner text PRIMARY KEY); CREATE TABLE files(id text PRIMARY KEY);`,
+      );
+      await db.query(
+        await readFile(
+          new URL("../src/backend/af-schema.sql", import.meta.url),
+          "utf8",
+        ),
       );
       await db.query(
         await readFile(
@@ -239,8 +246,54 @@ test(
           },
         },
       ];
+      const savedContent = "exact canonical saved page";
+      const savedDigest = createHash("sha256")
+        .update(savedContent)
+        .digest("hex");
+      await db.query(
+        "CREATE TABLE sources(file_id text,revision text,content text,digest text)",
+      );
+      await db.query("INSERT INTO sources VALUES('abc123','1',$1,$2)", [
+        savedContent,
+        savedDigest,
+      ]);
+      bound.queryRegistrations = [
+        {
+          sourceNamespace: "bound",
+          moduleSourceSha256: "c".repeat(64),
+          migrationProvenance: {
+            flowSourceSha256: "d".repeat(64),
+            compilerIdentity: "e".repeat(64),
+          },
+          plan: {
+            registration: {
+              backendId: "def456",
+              backendVersion: "version1",
+              pageId: "abc123",
+              pageVersion: 1,
+              sourceSha256: savedDigest,
+            },
+            queries: [
+              {
+                name: "summary",
+                sql: "select * from sales.rows",
+                dependencies: [],
+              },
+            ],
+            scalars: {},
+            tables: [],
+            imports: [
+              {
+                schema: "sales",
+                table: "rows",
+                read: { binding: "sales", schema: "public", table: "rows" },
+              },
+            ],
+          },
+        },
+      ];
       assert.deepEqual(await destination.import(bound), {
-        created: 6,
+        created: 7,
         unchanged: 0,
       });
       assert.equal(
@@ -282,6 +335,36 @@ test(
         },
       ];
       await verifyMigrationDatasetMetadata(db, schema, verified);
+      const changedQueries = structuredClone(bound);
+      changedQueries.queryRegistrations![0]!.plan.queries = [
+        { name: "summary", sql: "select 9", dependencies: [] },
+      ];
+      await assert.rejects(
+        destination.import(changedQueries),
+        /metadata differs/,
+      );
+      await db.query("UPDATE sources SET content='corrupted'");
+      await assert.rejects(destination.import(bound), /source_mismatch/);
+      await db.query("UPDATE sources SET content=$1", [savedContent]);
+      await db.query(
+        "ALTER TABLE dataset_query_registrations DISABLE TRIGGER dataset_queries_immutable",
+      );
+      await db.query(
+        "UPDATE dataset_query_registrations SET registration=jsonb_set(registration,'{moduleSourceSha256}',to_jsonb($1::text))",
+        ["f".repeat(64)],
+      );
+      await assert.rejects(
+        verifyMigrationDatasetMetadata(db, schema, verified),
+        /dataset policy/,
+      );
+      await db.query(
+        "UPDATE dataset_query_registrations SET registration=$1::jsonb",
+        [JSON.stringify(bound.queryRegistrations![0])],
+      );
+      await db.query(
+        "ALTER TABLE dataset_query_registrations ENABLE TRIGGER dataset_queries_immutable",
+      );
+
       await db.query(
         "UPDATE dataset_page_joins SET joined_at='2026-01-01T00:00:00Z' WHERE legacy_user_id='joined-user'",
       );

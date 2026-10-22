@@ -75,6 +75,7 @@ export interface PlannedRevision {
   conversion: ConversionOutput;
 }
 export interface PlannedPage {
+  serverQueries?: readonly import("./query-preparation-contracts.ts").MigrationQueryReceipt[];
   backendAllocation?: { sourceNamespace: string; inventorySha256: string };
   backends?: readonly MigrationBackendReceipt[];
   legacyId: string;

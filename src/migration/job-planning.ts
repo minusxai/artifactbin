@@ -1,3 +1,5 @@
+import { prepareMigrationPageQueries } from "./job-queries.ts";
+import type { MigrationQueryCompiler } from "./query-preparation-contracts.ts";
 import { migrationDatasetVersionKey } from "./job-dataset-contracts.ts";
 import { open, writeFile } from "node:fs/promises";
 import {
@@ -25,6 +27,7 @@ export function createMigrationJobPlanner(
   source: MigrationJobSource,
   options: MigrationJobOptions,
   convert: Converter,
+  queries?: { compiler: MigrationQueryCompiler; compilerIdentity: string },
 ): MigrationPagePlanner {
   const { maps, media, resourceMap } = source;
   const planArtifact = async (artifact: MigrationManifest) => {
@@ -79,6 +82,11 @@ export function createMigrationJobPlanner(
         page.issues.push(...reasons);
       }
     }
+    await prepareMigrationPageQueries(
+      plan.pages,
+      source.preparedDatasets,
+      queries,
+    );
     for (const page of plan.pages) {
       const comments = new Set(
         page.comments.filter((c) => !c.deleted_at).map((c) => String(c.id)),

@@ -1,3 +1,4 @@
+import { registerSavedQueries } from "../persistence/dataset-queries.ts";
 import { validateMigrationPersonBindings } from "./person-binding-validation.ts";
 import { migrationDatasetTablePlans as tablePlans } from "./dataset-table-plans.ts";
 import type { TablePlan } from "./dataset-table-plans.ts";
@@ -166,6 +167,17 @@ export class PostgresDatasetMetadataDestination
         );
         result.created++;
       }
+      for (const registration of batch.queryRegistrations ?? [])
+        await registerSavedQueries(
+          {
+            query: async (text, values) => ({
+              ...(await this.db.query(text, values ? [...values] : undefined)),
+              rowCount: null,
+            }),
+            release: () => {},
+          },
+          registration,
+        );
       const operations = batch.metadata.operations ?? [];
       if (receipt)
         for (const { operation: o } of operations) {

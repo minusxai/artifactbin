@@ -1,3 +1,5 @@
+import { migrationPageQueryRegistrations } from "./query-registrations.ts";
+import type { MigrationSavedQueryRegistration } from "./query-registrations.ts";
 import { selectMigrationDatasetMetadata } from "./dataset-selection.ts";
 import { PostgresDatasetMetadataDestination } from "./dataset-destination.ts";
 import { rewriteMigrationLinks } from "./links.ts";
@@ -27,6 +29,7 @@ export async function applyMigrationJob(
 ): Promise<void> {
   const { ids, maps, manifest, base, media } = source;
   const ready = new Set(planned.readiness.ready);
+  const queryRegistrations: MigrationSavedQueryRegistration[] = [];
 
   const applied = await open(options.reportPath + ".apply.ndjson", "wx", 0o600);
   try {
@@ -80,6 +83,14 @@ export async function applyMigrationJob(
             },
           );
         }
+      for (const page of plan.pages)
+        queryRegistrations.push(
+          ...migrationPageQueryRegistrations(
+            page,
+            manifest.sourceNamespace,
+            options.origin,
+          ),
+        );
       const result = await applyMigration(plan, destination, {
         dryRun: false,
         globallyReadyPages: ready,
@@ -95,6 +106,7 @@ export async function applyMigrationJob(
       await new PostgresDatasetMetadataDestination(db, options.schema).import({
         ...source.datasets.provenance,
         profileAssets: source.supplementalAssets?.profiles,
+        queryRegistrations,
         metadata: selectMigrationDatasetMetadata(metadata, ready),
       });
     }

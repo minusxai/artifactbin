@@ -1,3 +1,4 @@
+import { createMigrationQueryCompiler } from "./query-compiler.ts";
 import { measureMigrationStorage } from "./storage-measurement.ts";
 import { verifyMigrationJob } from "./job-verification.ts";
 import { prepareMigrationJobDatasets } from "./job-datasets.ts";
@@ -51,7 +52,17 @@ export async function runMigrationJob(
       })
     : null;
   if (cache) convert = cache.convert;
-  const planner = createMigrationJobPlanner(source, options, convert);
+  const planner = createMigrationJobPlanner(
+    source,
+    options,
+    convert,
+    options.archivedRoot
+      ? {
+          compiler: createMigrationQueryCompiler(options.archivedRoot),
+          compilerIdentity,
+        }
+      : undefined,
+  );
   const destinationOptions = {
     schema: options.schema,
     origin: options.origin,

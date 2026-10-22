@@ -1,3 +1,5 @@
+import { migrationPageQueryRegistrations } from "./query-registrations.ts";
+import type { MigrationSavedQueryRegistration } from "./query-registrations.ts";
 import { writeFile } from "node:fs/promises";
 import { readMigrationArchiveSources } from "./archive-sources.ts";
 import { verifyMigrationArchives } from "./archive-verification.ts";
@@ -43,11 +45,26 @@ export async function verifyMigrationJob(
       source.base,
       source.maps,
     );
+    const queryRegistrations: MigrationSavedQueryRegistration[] = [];
+    for await (const page of readPreparedMigrationPages(
+      source,
+      options,
+      planned,
+      planner,
+    ))
+      queryRegistrations.push(
+        ...migrationPageQueryRegistrations(
+          page,
+          source.manifest.sourceNamespace,
+          options.origin,
+        ),
+      );
     const datasetRows =
       source.preparedDatasets && source.datasets
         ? await verifyMigrationDatasetMetadata(db, options.schema, {
             ...source.datasets.provenance,
             profileAssets: source.supplementalAssets?.profiles,
+            queryRegistrations,
             metadata: selectMigrationDatasetMetadata(
               source.preparedDatasets.metadata,
               ready,

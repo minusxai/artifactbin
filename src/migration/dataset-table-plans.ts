@@ -9,6 +9,12 @@ export type TablePlan = {
 export function migrationDatasetTablePlans(
   batch: DatasetMigrationBatch,
 ): TablePlan[] {
+  if (
+    batch.queryRegistrations?.some(
+      (r) => r.sourceNamespace !== batch.metadata.sourceNamespace,
+    )
+  )
+    throw Error("query_namespace_mismatch");
   const m = batch.metadata,
     n = m.sourceNamespace;
   const plan = (
@@ -151,6 +157,19 @@ export function migrationDatasetTablePlans(
         joined_at:
           r.joinedAt == null ? null : new Date(r.joinedAt).toISOString(),
       })),
+    ),
+    plan(
+      "dataset_query_registrations",
+      ["backend_id", "backend_version", "page_id", "page_version"],
+      (batch.queryRegistrations ?? []).map((r) => ({
+        backend_id: r.plan.registration.backendId,
+        backend_version: r.plan.registration.backendVersion,
+        page_id: r.plan.registration.pageId,
+        page_version: r.plan.registration.pageVersion,
+        source_sha256: r.plan.registration.sourceSha256,
+        registration: r,
+      })),
+      ["registration"],
     ),
   ];
 }
