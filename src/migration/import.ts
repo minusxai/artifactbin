@@ -77,6 +77,10 @@ export async function planMigration(
     convert: Converter;
     coreUrl: string;
     media?: MigrationMediaOptions;
+    personBindings?: (
+      legacyId: string,
+      version: number,
+    ) => readonly { valueName: string; backendNamespace: string }[];
     membersBinding?: (
       legacyId: string,
       version: number,
@@ -197,6 +201,10 @@ export async function planMigration(
             Number(original.version) !== artifact.version &&
             options.datasetUnavailable?.(artifact.id, Number(original.version))
               ? { reason: "historical-binding-unavailable" }
+              : undefined,
+          personBindings:
+            Number(original.version) === artifact.version
+              ? options.personBindings?.(artifact.id, Number(original.version))
               : undefined,
           membersBinding:
             Number(original.version) === artifact.version

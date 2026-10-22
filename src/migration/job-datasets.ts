@@ -72,6 +72,10 @@ export async function prepareMigrationJobDatasets(
     import("./conversion/compiled/dataset-mutations-contracts.ts").CompiledDatasetMutation[]
   >();
   const bindings = new Map<string, DatasetBrowserBinding[]>();
+  const personBindings = new Map<
+    string,
+    { valueName: string; backendNamespace: string }[]
+  >();
   const membersBindings = new Map<
     string,
     { backendNamespace: string; backendHref: string }
@@ -150,21 +154,32 @@ export async function prepareMigrationJobDatasets(
           manifestSha256: source.datasets.provenance.relationManifestSha256,
         },
       });
+      const registeredPersons = projectMigrationPersonBindings(
+        source.manifest.sourceNamespace,
+        page.pageId,
+        boundValueColumns.get(
+          migrationDatasetVersionKey(
+            page.legacyId,
+            scan.heads.get(page.legacyId)!,
+          ),
+        ) ?? [],
+        plan.metadata.bindings,
+      );
+      personBindings.set(
+        migrationDatasetVersionKey(
+          page.legacyId,
+          scan.heads.get(page.legacyId)!,
+        ),
+        registeredPersons.map((person) => ({
+          valueName: person.valueName,
+          backendNamespace: "legacyData",
+        })),
+      );
       accumulator.add({
         ...plan.metadata,
         principals: [],
         groups: [],
-        personBindings: projectMigrationPersonBindings(
-          source.manifest.sourceNamespace,
-          page.pageId,
-          boundValueColumns.get(
-            migrationDatasetVersionKey(
-              page.legacyId,
-              scan.heads.get(page.legacyId)!,
-            ),
-          ) ?? [],
-          plan.metadata.bindings,
-        ),
+        personBindings: registeredPersons,
         operations: prepared.operations.filter(
           (r) => r.operation.page.id === page.pageId,
         ),
@@ -218,6 +233,7 @@ export async function prepareMigrationJobDatasets(
     metadata: accumulator.finish(),
     boundValueColumns,
     membersBindings,
+    personBindings,
     scan,
     bindings,
     mutations,

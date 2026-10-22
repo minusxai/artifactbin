@@ -32,6 +32,7 @@ test("conversion receives exact bindings pinned separately for every saved page 
   const seen: number[] = [];
   const boundSeen: unknown[] = [];
   const membersSeen: unknown[] = [];
+  const personSeen: unknown[] = [];
   const unavailableSeen: unknown[] = [];
   const binding = (version: number): DatasetBrowserBinding => ({
     name: "rows",
@@ -52,6 +53,9 @@ test("conversion receives exact bindings pinned separately for every saved page 
     coreUrl: "/af/v1/core.js",
     datasetBindings: (_id, version) => [binding(version)],
     datasetUnavailable: () => true,
+    personBindings: () => [
+      { valueName: "who", backendNamespace: "legacyData" },
+    ],
     membersBinding: () => ({
       backendNamespace: "legacyData",
       backendHref: "/af/v1/ids/def456",
@@ -73,6 +77,7 @@ test("conversion receives exact bindings pinned separately for every saved page 
       seen.push(input.datasetBindings![0]!.version);
       boundSeen.push(input.boundValueColumns);
       membersSeen.push(input.membersBinding);
+      personSeen.push(input.personBindings);
       unavailableSeen.push(input.datasetUnavailable);
       return {
         classification: "functional",
@@ -90,6 +95,10 @@ test("conversion receives exact bindings pinned separately for every saved page 
   assert.deepEqual(membersSeen, [
     undefined,
     { backendNamespace: "legacyData", backendHref: "/af/v1/ids/def456" },
+  ]);
+  assert.deepEqual(personSeen, [
+    undefined,
+    [{ valueName: "who", backendNamespace: "legacyData" }],
   ]);
   assert.equal(boundSeen[0], undefined);
   assert.deepEqual(boundSeen[1], [
