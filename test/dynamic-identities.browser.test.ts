@@ -22,8 +22,9 @@ test('dynamic branches, keyed reorder and later mounts keep exact identities; co
    const mount=document.createElement('section');mount.id='mount';root.append(mount);await tick();const mountIdentity=mount.getAttribute('data-af-id');mount.removeAttribute('id');await tick();const removedIdentity=mount.getAttribute('data-af-id');
    const duplicate=document.createElement('div');duplicate.id=rows[0]!.id;root.append(duplicate);await tick();
    const collision={errors,duplicate:duplicate.getAttribute('data-af-id'),original:rows[0]!.id};controller.dispose();
-   return {branchIdentity,reassigned,before,after,mountIdentity,removedIdentity,collision};
+   root.replaceChildren();const invalid=document.createElement('div');invalid.id='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat','rows','index',0],'child']));root.append(invalid);const other=runtime.installDynamicIdentities(document,plan,()=>{});let invalidRefused=false;try{other.flush();}catch{invalidRefused=true;}other.dispose();
+   return {branchIdentity,reassigned,before,after,mountIdentity,removedIdentity,collision,invalidRefused,invalidIdentity:invalid.getAttribute('data-af-id')};
   });
-  assert.equal(result.branchIdentity,'branch');assert.equal(result.reassigned,'alternate');assert.deepEqual(result.before,result.after);assert.notEqual(result.before[0],result.before[1]);assert.equal(result.mountIdentity,'mount');assert.equal(result.removedIdentity,null);assert.equal(result.collision.errors.length,1);assert.equal(result.collision.duplicate,null);assert.equal(result.collision.original,result.before[0]);
+  assert.equal(result.branchIdentity,'branch');assert.equal(result.reassigned,'alternate');assert.deepEqual(result.before,result.after);assert.notEqual(result.before[0],result.before[1]);assert.equal(result.mountIdentity,'mount');assert.equal(result.removedIdentity,null);assert.equal(result.collision.errors.length,1);assert.equal(result.collision.duplicate,null);assert.equal(result.collision.original,result.before[0]);assert.equal(result.invalidRefused,true);assert.equal(result.invalidIdentity,null);
  }finally{await browser.close();}
 });
