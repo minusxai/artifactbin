@@ -211,7 +211,7 @@ An account's optional public name, used in `/@<handle>/<path>` page addresses (s
 | `GET /@<handle>` | Public profile HTML |
 | `HEAD /@<handle>` | Same status and headers, without a body |
 
-`GET /@<handle>` returns an HTML list of that account’s current public pages. Private, unlisted and deleted pages are excluded, including for a signed-in owner. Unknown or changed handles return 404. `HEAD` returns the same status without a body. Optional `limit` is 1–50 (default 24); the Next link supplies the opaque `after` page cursor. Profile links from a page must use the platform origin, not its isolated runner origin.
+`GET /@<handle>` returns an HTML list of that account’s current public pages. Private, unlisted and deleted pages are excluded, including for a signed-in owner. The page shows the account’s photo beside the handle when it has one, as the earlier product’s profile did; the display name, email and memberships are never shown. Unknown or changed handles return 404. `HEAD` returns the same status without a body. Optional `limit` is 1–50 (default 24); the Next link supplies the opaque `after` page cursor. Profile links from a page must use the platform origin, not its isolated runner origin.
 
 ## Dataset image attachments
 

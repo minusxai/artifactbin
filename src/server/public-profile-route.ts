@@ -1,6 +1,8 @@
-import type {
-  PublicProfileRepository,
-  PublicProfileResponse,
+import {
+  PROFILE_IMAGE_MAX_LENGTH,
+  PROFILE_IMAGE_PATTERN,
+  type PublicProfileRepository,
+  type PublicProfileResponse,
 } from "./public-profile-contracts.ts";
 import { normalizeHandle, handleProblem } from "./handles.ts";
 import { publicProfileHtml } from "./public-profile-view.ts";
@@ -13,6 +15,17 @@ const headers = {
   "Content-Security-Policy":
     "default-src 'none'; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; frame-ancestors 'none'",
 };
+/** Only a page that carries the account's photo may load an inline image. */
+const headersWithPhoto = {
+  ...headers,
+  "Content-Security-Policy":
+    "default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data:; base-uri 'none'; frame-ancestors 'none'",
+};
+const profileImage = (value: unknown): value is string | null =>
+  value === null ||
+  (typeof value === "string" &&
+    value.length <= PROFILE_IMAGE_MAX_LENGTH &&
+    PROFILE_IMAGE_PATTERN.test(value));
 export function createPublicProfileRoute(repository: PublicProfileRepository) {
   return async (
     method: string,
@@ -63,6 +76,7 @@ export function createPublicProfileRoute(repository: PublicProfileRepository) {
     if (!page) return error(404, "Profile not found");
     if (
       page.handle !== handle ||
+      !profileImage(page.image) ||
       !Array.isArray(page.files) ||
       page.files.length > limit ||
       new Set(page.files.map((f) => f.id)).size !== page.files.length ||
@@ -78,7 +92,7 @@ export function createPublicProfileRoute(repository: PublicProfileRepository) {
       throw Error("Invalid public profile result");
     return {
       status: 200,
-      headers,
+      headers: page.image ? headersWithPhoto : headers,
       body: method === "HEAD" ? "" : publicProfileHtml(page, limit),
     };
   };
