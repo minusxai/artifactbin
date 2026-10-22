@@ -27,11 +27,52 @@ const ports: ChartCompilerPorts = {
 test("offline chart plan carries the exact envelope and AST runtime, without executing expressions", () => {
   const plan = compileChartPlan(input, ports);
   assert.equal(plan.key, chartEnvelopeKey({ source: input.viz }));
-  assert.deepEqual(plan.runtime, { operators: [] });
+  assert.deepEqual(plan.runtime, {
+    operators: [],
+    eventConfig: { bind: "none", window: false, timer: false, selector: false },
+  });
 });
 test("chart migration refuses external resources, templated specs and unsupported visualizations", () => {
   for (const viz of [
     { kind: "recharts" },
+    {
+      kind: "vega",
+      spec: {
+        signals: [
+          {
+            name: "choice",
+            value: "x",
+            bind: { input: "text", onfocus: "alert(1)" },
+          },
+        ],
+      },
+    },
+    {
+      kind: "vega",
+      spec: {
+        signals: [
+          {
+            name: "time",
+            on: [{ events: { type: "timer", throttle: 10 }, update: "1" }],
+          },
+        ],
+      },
+    },
+    {
+      kind: "vega",
+      spec: {
+        marks: [
+          {
+            type: "rect",
+            encode: {
+              update: {
+                fill: { value: "url(https://example.invalid/paint.svg#x)" },
+              },
+            },
+          },
+        ],
+      },
+    },
     {
       kind: "vega",
       spec: { data: [{ name: "main", transform: [{ type: "crossfilter" }] }] },
@@ -82,4 +123,21 @@ test("Question tables and single values retain the kit's reactive renderer", () 
   );
   assert.equal(isKitQuestionView({ kind: "bar" }), false);
   assert.equal(isKitQuestionView({ kind: "vega-lite" }), false);
+});
+
+test("compiled runtime refuses selector and timer streams and binding controls", () => {
+  for (const runtime of [
+    { streams: [{ source: "body", type: "click" }] },
+    { streams: [{ source: "timer", type: 10 }] },
+    { bindings: [{ input: "text" }] },
+  ])
+    assert.throws(() =>
+      compileChartPlan(input, { ...ports, parse: () => runtime }),
+    );
+  assert.doesNotThrow(() =>
+    compileChartPlan(input, {
+      ...ports,
+      parse: () => ({ streams: [{ source: "view", type: "click" }] }),
+    }),
+  );
 });

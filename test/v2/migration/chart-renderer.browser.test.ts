@@ -123,3 +123,97 @@ test(
     }
   },
 );
+
+test(
+  "resolved field and expression paints cannot load external SVG resources",
+  { skip: !root },
+  async () => {
+    const { parse } = await import(
+      pathToFileURL(path.join(root!, "node_modules/vega/build/vega.module.js"))
+        .href
+    );
+    const browser = await chromium.launch({ headless: true });
+    try {
+      for (const fill of [
+        { field: "paint" },
+        { signal: "'ur' + 'l(https://example.invalid/chart-probe.svg#paint)'" },
+      ]) {
+        const spec = {
+          width: 100,
+          height: 100,
+          data: [{ name: "main" }],
+          marks: [
+            {
+              type: "rect",
+              from: { data: "main" },
+              encode: {
+                update: {
+                  x: { value: 0 },
+                  y: { value: 0 },
+                  width: { value: 100 },
+                  height: { value: 100 },
+                  fill,
+                },
+              },
+            },
+          ],
+        };
+        const viz = { kind: "vega", spec };
+        const envelope = { source: viz };
+        const plan = compileChartPlan(
+          {
+            viz,
+            columns: [],
+            rows: [],
+            width: 100,
+            height: 100,
+            colorMode: "light",
+          },
+          {
+            envelope: () => envelope,
+            resolve: () => ({ ok: true }),
+            infer: () => [],
+            plan: () => ({ vegaSpec: spec }),
+            parse,
+          },
+        );
+        const sources = await chartRendererSources(root!, [plan]);
+        const out = await build({
+          stdin: {
+            contents:
+              sources.entry +
+              `\ncharts.mountChart({element:document.getElementById('chart'),envelope:${JSON.stringify(envelope)},rows:[{paint:'url(https://example.invalid/chart-probe.svg#paint)'}]});`,
+            resolveDir: root,
+          },
+          plugins: [sources.plugin],
+          bundle: true,
+          write: false,
+          format: "esm",
+          platform: "browser",
+          minify: true,
+        });
+        const page = await browser.newPage();
+        const requests: string[] = [];
+        const errors: string[] = [];
+        await page.route("**/*", (route) => {
+          requests.push(route.request().url());
+          void route.abort();
+        });
+        page.on("pageerror", (error) => errors.push(error.message));
+        await page.setContent(
+          `<div id="chart"></div><script type="module">${out.outputFiles[0]!.text}</script>`,
+        );
+        await page.locator('#chart[data-mx-chart-state="error"]').waitFor();
+        assert.match(
+          await page.locator("#chart").innerText(),
+          /Chart unavailable/,
+        );
+        assert.deepEqual(requests, []);
+        assert.deepEqual(errors, []);
+        await page.close();
+      }
+    } finally {
+      await browser.close();
+    }
+  },
+);

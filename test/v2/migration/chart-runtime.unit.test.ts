@@ -59,3 +59,30 @@ test("compiled chart feeds changing query rows, reports readiness and releases o
     /compiled/,
   );
 });
+
+test("oversized live rows report a visible limitation without throwing from kit effects", () => {
+  const attributes = new Map();
+  const element = {
+    setAttribute: (key: string, value: string) => attributes.set(key, value),
+    textContent: "",
+  } as unknown as HTMLElement;
+  const envelope = { source: { kind: "vega" } };
+  const module = createCompiledCharts(
+    [{ key: chartEnvelopeKey(envelope), runtime: {}, width: 640, height: 300 }],
+    {
+      create: () => {
+        throw Error("must not allocate a renderer");
+      },
+      observe: () => () => {},
+    },
+  );
+  assert.doesNotThrow(() =>
+    module.mountChart({
+      element,
+      envelope,
+      rows: Array.from({ length: 10001 }, () => ({ amount: 1 })),
+    }),
+  );
+  assert.equal(attributes.get("data-mx-chart-state"), "error");
+  assert.match(element.textContent ?? "", /Chart unavailable/);
+});

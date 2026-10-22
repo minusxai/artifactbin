@@ -12,6 +12,7 @@ export async function chartRendererSources(
     ["vega", "6.3.1"],
     ["vega-lite", "6.4.3"],
     ["vega-view", "6.1.2"],
+    ["vega-scenegraph", "5.2.1"],
     ["vega-encode", "5.2.2"],
     ["vega-transforms", "5.2.2"],
     ["vega-view-transforms", "5.2.2"],
@@ -35,8 +36,11 @@ export async function chartRendererSources(
       throw Error("Unexpected archived chart dependency version");
   }
   const runtimePath = fileURLToPath(new URL("./runtime.ts", import.meta.url));
+  const paintPath = fileURLToPath(new URL("./paint.ts", import.meta.url));
   const entry = `import {View} from 'vega-view';
 import {transforms} from 'vega-dataflow';
+import {SVGRenderer,renderModule} from 'vega-scenegraph';
+import {assertChartPaints} from ${JSON.stringify(paintPath)};
 import * as tx from 'vega-transforms';
 import * as vtx from 'vega-view-transforms';
 import * as encode from 'vega-encode';
@@ -50,8 +54,19 @@ import * as wordcloud from 'vega-wordcloud';
 import {expressionInterpreter} from 'vega-interpreter';
 import {createCompiledCharts} from ${JSON.stringify(runtimePath)};
 Object.assign(transforms,tx,vtx,encode,geo,force,hierarchy,label,regression,voronoi,wordcloud);
+class SafeSVGRenderer extends SVGRenderer {
+_render(scene,markTypes){assertChartPaints(scene,{isColor:value=>CSS.supports('color',value)});return super._render(scene,markTypes);}
+}
+renderModule('migration-svg',{...renderModule('svg'),renderer:SafeSVGRenderer});
 export const charts=createCompiledCharts(${JSON.stringify(plans)},{
-create:(runtime,element)=>new View(runtime,{expr:expressionInterpreter,renderer:'svg',container:element,hover:true,loader:{load:()=>Promise.reject(Error('Chart resource unavailable')),sanitize:()=>Promise.reject(Error('Chart navigation unavailable'))}}),
+create:(runtime,element)=>{
+ const view=new View({...runtime,bindings:[],eventConfig:{bind:"none",window:false,timer:false,selector:false}},{expr:expressionInterpreter,renderer:'migration-svg',container:element,hover:true,loader:{load:()=>Promise.reject(Error('Chart resource unavailable')),sanitize:()=>Promise.reject(Error('Chart navigation unavailable'))}});
+ let failed=false;
+ const logger={level(){return this;},error(){failed=true;element.setAttribute('data-mx-chart-state','error');element.setAttribute('aria-busy','false');element.setAttribute('role','status');element.textContent='Chart unavailable. Reload the page after checking its data.';return this;},warn(){return this;},info(){return this;},debug(){return this;}};
+ view.logger(logger);
+ const adapter={data(name,rows){view.data(name,rows);return adapter;},width(value){view.width(value);return adapter;},height(value){view.height(value);return adapter;},resize(){view.resize();return adapter;},async runAsync(){await view.runAsync();if(failed)throw Error('Chart rendering failed');return adapter;},finalize(){view.finalize();}};
+ return adapter;
+},
 observe:(element,resize)=>{const observer=new ResizeObserver(resize);observer.observe(element);return ()=>observer.disconnect();}
 });`;
   return {
@@ -76,6 +91,19 @@ observe:(element,resize)=>{const observer=new ResizeObserver(resize);observer.ob
         b.onLoad({ filter: /.*/, namespace: "offline-chart-kit" }, () => ({
           contents:
             "import {charts} from 'migration-charts';export const mountChart=charts.mountChart;",
+          loader: "js",
+        }));
+        b.onResolve({ filter: /^\.\.\/defer-engine$/ }, (args: any) => {
+          if (
+            path.resolve(args.importer) !==
+            path.resolve(archivedRoot, "services/app/lib/islands/kit/data.tsx")
+          )
+            throw Error("Unexpected archived deferred chart import");
+          return { path: "kit-chart-defer", namespace: "offline-chart-defer" };
+        });
+        b.onLoad({ filter: /.*/, namespace: "offline-chart-defer" }, () => ({
+          contents:
+            "export function deferEngine(host,start){const timer=setTimeout(start,0);return ()=>clearTimeout(timer);}",
           loader: "js",
         }));
         b.onResolve({ filter: /^vega(?:-[a-z-]+)?$/ }, (args: any) => {

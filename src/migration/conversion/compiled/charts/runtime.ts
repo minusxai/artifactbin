@@ -26,16 +26,40 @@ export function createCompiledCharts(
           throw Error("Chart row limit exceeded");
         return JSON.parse(chartEnvelopeKey(rows)) as Record<string, unknown>[];
       };
-      let pending = copyRows(input.rows);
+      const showError = () => {
+        element.setAttribute("data-mx-chart-error", "Chart rendering failed");
+        element.setAttribute("data-mx-chart-state", "error");
+        element.setAttribute("aria-busy", "false");
+        element.setAttribute("role", "status");
+        element.textContent =
+          "Chart unavailable. Reload the page after checking its data.";
+      };
+      let pending: Record<string, unknown>[];
+      try {
+        pending = copyRows(input.rows);
+      } catch {
+        showError();
+        let stopped = false;
+        return {
+          update() {
+            if (stopped) throw Error("Chart disposed");
+          },
+          destroy() {
+            stopped = true;
+          },
+        };
+      }
+
       const view = ports.create(
         JSON.parse(JSON.stringify(plan.runtime)),
         element,
       );
+      let failed = false;
       let disposed = false,
         running = false,
         dirty = true;
       const draw = async () => {
-        if (disposed || running) return;
+        if (disposed || running || failed) return;
         running = true;
         try {
           while (dirty && !disposed) {
@@ -61,12 +85,8 @@ export function createCompiledCharts(
           }
         } catch {
           if (!disposed) {
-            element.setAttribute(
-              "data-mx-chart-error",
-              "Chart rendering failed",
-            );
-            element.setAttribute("data-mx-chart-state", "error");
-            element.setAttribute("aria-busy", "false");
+            failed = true;
+            showError();
           }
         } finally {
           running = false;
@@ -86,7 +106,13 @@ export function createCompiledCharts(
       return {
         update(rows) {
           if (disposed) throw Error("Chart disposed");
-          pending = copyRows(rows);
+          try {
+            pending = copyRows(rows);
+          } catch {
+            failed = true;
+            showError();
+            return;
+          }
           dirty = true;
           void draw();
         },

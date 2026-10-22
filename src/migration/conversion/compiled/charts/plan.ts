@@ -36,7 +36,7 @@ export function chartEnvelopeKey(value: unknown): string {
 }
 function admit(value: unknown): void {
   if (typeof value === "string") {
-    if (/\{\$|(?:^|[^a-z])(?:window|document|timer):/.test(value))
+    if (/url\s*\(|\{\$|(?:^|[^a-z])(?:window|document|timer):/.test(value))
       throw Error("Dynamic chart spec or ambient events unsupported");
     return;
   }
@@ -46,6 +46,10 @@ function admit(value: unknown): void {
     return;
   }
   for (const [key, item] of Object.entries(value)) {
+    if (key === "bind" && item != null)
+      throw Error("Chart signal bindings require an adapter");
+    if (key === "type" && item === "timer")
+      throw Error("Ambient chart events unsupported");
     if (["url", "href", "assets"].includes(key) && item != null)
       throw Error("Chart resource requires an adapter");
     if (
@@ -133,6 +137,31 @@ export function compileChartPlan(
       ),
     ),
   ) as Record<string, unknown>;
+  const verify = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(verify);
+      return;
+    }
+    const record = value as Record<string, unknown>;
+    if (
+      Array.isArray(record.streams) &&
+      record.streams.some(
+        (stream: any) => stream.source && stream.source !== "view",
+      )
+    )
+      throw Error("Nonlocal chart events unsupported");
+    if (Array.isArray(record.bindings) && record.bindings.length)
+      throw Error("Chart signal bindings unsupported");
+    Object.values(record).forEach(verify);
+  };
+  verify(runtime);
+  runtime.eventConfig = {
+    bind: "none",
+    window: false,
+    timer: false,
+    selector: false,
+  };
   return { key, runtime, width, height };
 }
 
