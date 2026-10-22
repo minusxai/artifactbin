@@ -265,22 +265,44 @@ test("a local resolver that throws saves nothing", async () => {
   assert.ok(unknown.errors?.length);
 });
 
-test("the todo example's local state operations work as written", async () => {
+test("the todo example watches shared results while keeping only viewer choices local", async () => {
   const { gql, createClient, createLocalStore } = await apollo();
+  // Execute the query declarations from the shipped example, rather than a
+  // duplicate query that can keep passing after the example changes.
   const todo = skillFile("examples/todo.html");
-  for (const line of [
-    "const VIEW = gql`{ todos { id text done } filter draft }`;",
-    "const SEEN = gql`{ todos { id text done } }`;",
-    "const FILTER = gql`{ filter }`;",
-    "const DRAFT = gql`{ draft }`;",
-  ])
-    assert.ok(todo.includes(line), line);
-  assert.match(todo, /client\.updateQuery\(\{ query: SEEN \}, \(\) => \(\{ todos: data\.team\.list \}\)\)/);
-  const client = createClient({ backends: ["team"], state: createLocalStore() });
+  const declarations = ["VIEW", "FILTER", "DRAFT"].map((name) => {
+    const declaration = todo.match(new RegExp("const " + name + " = gql`[^`]+`;"));
+    assert.ok(declaration, `example declares ${name}`);
+    return "export " + declaration[0];
+  });
+  const queries = await runSnippet(
+    "import { gql } from '@afbin/apollo';\n" + declarations.join("\n"),
+    { "@afbin/apollo": { gql } },
+  );
+  const VIEW = queries.VIEW as ReturnType<typeof gql>;
+  const FILTER = queries.FILTER as ReturnType<typeof gql>;
+  const DRAFT = queries.DRAFT as ReturnType<typeof gql>;
+  const store = createLocalStore();
+  const listeners = new Set<() => void>();
+  let rows: AfJsonObject[] = [{ id: "1", text: "Ship", done: true }];
+  const client = createClient({ backends: ["team"], state: store, remote: {
+    online: () => true,
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    async execute() { return { data: { team: { list: rows } } }; },
+  } });
   let latest: AfJsonObject = {};
-  client.watchQuery({ query: gql`{ todos { id text done } filter draft }` }).subscribe(({ data }) => (latest = data));
-  await client.updateQuery({ query: gql`{ todos { id text done } }` }, () => ({ todos: [{ id: "1", text: "Ship", done: true }] }));
-  await client.updateQuery({ query: gql`{ filter }` }, () => ({ filter: "done" }));
-  await client.updateQuery({ query: gql`{ draft }` }, () => ({ draft: "Milk" }));
-  assert.deepEqual(latest, { todos: [{ id: "1", text: "Ship", done: true }], filter: "done", draft: "Milk" });
+  const subscription = client.watchQuery({ query: VIEW }).subscribe(({ data }) => (latest = data));
+  assert.deepEqual(latest, { team: null, filter: null, draft: null });
+  await tick();
+  await client.updateQuery({ query: FILTER }, () => ({ filter: "done" }));
+  await client.updateQuery({ query: DRAFT }, () => ({ draft: "Milk" }));
+  assert.deepEqual(latest, { team: { list: rows }, filter: "done", draft: "Milk" });
+  assert.deepEqual(store.read(), { filter: "done", draft: "Milk" });
+  rows = [{ id: "2", text: "Changed by another viewer", done: false }];
+  for (const notify of listeners) notify();
+  await tick();
+  assert.deepEqual(latest, { team: { list: rows }, filter: "done", draft: "Milk" });
+  assert.deepEqual(store.read(), { filter: "done", draft: "Milk" }, "remote records never become local state");
+  subscription.unsubscribe();
+  assert.equal(listeners.size, 0);
 });
