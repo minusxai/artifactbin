@@ -1,12 +1,12 @@
+import {admitLocalComponent} from "./component-admission.ts";
 import type {AdmittedAuthorMountProps} from "./author/prop-contracts.ts";
 import {admitAuthorProps} from "./author/props.ts";
 import type { PresentationIdentityHost } from "./presentation-kit-contracts.ts";
-import { presentationKitComponent, admitPresentationKit } from "./presentation-kit.ts";
-import { admitScalarControl } from "./scalar-controls.ts";
+import { presentationKitComponent } from "./presentation-kit.ts";
 import type { CompiledScalarControl } from "./scalar-control-contracts.ts";
 import {readLocalReactiveExpression} from "./reactive-source.ts";
 import {readLocalIdentityPlan, validIdentityConditions} from "./source-identity-plan.ts";
-import { admitDataControl, admitDataColumn, controlLiteral } from "./data-controls.ts";
+import { controlLiteral } from "./data-controls.ts";
 import type { CompiledDataControl } from "./data-control-contracts.ts";
 /** Source capability admission only: never invokes a compiler or evaluates source. */
 import { Parser } from "acorn";
@@ -228,20 +228,18 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       if (node.type === "JSXElement") {
         const name = node.openingElement.name.name;
         if (loopTable && !loopDepth && !["Column", "Button", "span", "strong", "em", "b", "i", "small", "code", "br", "p", "div", "a"].includes(name)) invalid = true;
-        if (presentationKitComponent(name)) {
-          const attributes = node.openingElement.attributes;
-          if (new Set(attributes.map((a:any)=>a.name?.name)).size !== attributes.length) invalid = true;
-          const presentationAttrs = Object.fromEntries(attributes.map((a:any)=> {
-            if (a.type !== "JSXAttribute" || typeof a.name?.name !== "string") throw Error("Invalid presentation attribute");
-            return [a.name.name, controlLiteral(a.value)];
-          }));
-          const capability = admitPresentationKit(name, presentationAttrs, ancestors);
-          if (capability.identity === "transparent" && typeof presentationAttrs.id === "string") {
-            if (name !== "Tooltip" && name !== "TooltipProvider") throw Error("Unsupported transparent identity host");
-            presentationIdentities.push({tag:name,id:presentationAttrs.id});
+        const component = admitLocalComponent(node, {ancestors, parentTag: parent?.type === "JSXElement" ? parent.openingElement.name.name : undefined, rowTable:loopTable});
+        if (component) {
+          for (const reference of component.references) references.add(reference);
+          for (const binding of component.scalarBindings) scalarBindings.add(binding);
+          scalarControls.push(...component.scalarControls);
+          dataControls.push(...component.dataControls);
+          presentationIdentities.push(...component.presentationIdentityHosts);
+          if (component.descendantScope) {
+            childLoopTable = component.descendantScope.table;
+            if (component.descendantScope.key !== undefined) loopKeys.push({table:childLoopTable,key:component.descendantScope.key});
           }
         }
-        if (name === "Column" && (parent?.type !== "JSXElement" || parent.openingElement.name.name !== "DataTable")) invalid = true;
         if (
           typeof name !== "string" ||
           ["script", "iframe", "object", "embed"].includes(
@@ -317,62 +315,6 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
           )
             invalid = true;
           imports.add(attrs.name);
-        }
-        if (["Segmented", "Switch", "Slider"].includes(name)) {
-          const attributes = node.openingElement.attributes;
-          if (new Set(attributes.map((a:any)=>a.name?.name)).size !== attributes.length) invalid = true;
-          const attrs = Object.fromEntries(attributes.map((a:any)=> {
-            if (a.type !== "JSXAttribute" || typeof a.name?.name !== "string") throw Error("Invalid scalar control attribute");
-            return [a.name.name, controlLiteral(a.value)];
-          }));
-          const plan = admitScalarControl(name, attrs, node.children.some((c:any)=> !(c.type === "JSXText" && !c.value.trim()) && !(c.type === "JSXExpressionContainer" && c.expression.type === "JSXEmptyExpression")));
-          scalarControls.push(plan);
-          references.add(plan.binding);
-          scalarBindings.add(plan.binding);
-          if (plan.options) {
-            dataControls.push(plan.options);
-            if (typeof plan.options.options === "string") references.add(plan.options.options);
-          }
-        }
-        if (name === "Select" || name === "DataTable") {
-          if (new Set(node.openingElement.attributes.map((a:any)=>a.name?.name)).size !== node.openingElement.attributes.length) invalid = true;
-          const attrs = Object.fromEntries(
-            node.openingElement.attributes.map((a: any) => {
-              if (a.type !== "JSXAttribute" || typeof a.name?.name !== "string")
-                throw Error("Invalid control attribute");
-              return [a.name.name, controlLiteral(a.value)];
-            }),
-          );
-          const meaningful = node.children.filter((c: any) => !(c.type === "JSXText" && !c.value.trim()) && !(c.type === "JSXExpressionContainer" && c.expression.type === "JSXEmptyExpression"));
-          const columns = name === "DataTable" && meaningful.length ? meaningful.map((column: any) => {
-            if (column.type !== "JSXElement" || column.openingElement.name.name !== "Column") throw Error("Only readonly Columns are supported");
-            if (new Set(column.openingElement.attributes.map((a:any)=>a.name?.name)).size !== column.openingElement.attributes.length || column.openingElement.attributes.some((a:any)=>a.name?.name==='hasContent')) throw Error("Ambiguous Column attributes");
-            return admitDataColumn(Object.fromEntries(column.openingElement.attributes.map((a:any) => {
-              if (a.type !== "JSXAttribute" || typeof a.name?.name !== "string") throw Error("Invalid Column attribute");
-              return [a.name.name, controlLiteral(a.value)];
-            })), column.children.some((c:any) => !(c.type === "JSXText" && !c.value.trim()) && !(c.type === "JSXExpressionContainer" && c.expression.type === "JSXEmptyExpression")));
-          }) : undefined;
-          if (columns?.length) {
-            if (loopTable) invalid = true;
-            const data = attrs.data;
-            if (typeof data !== "string" || !/^\$[A-Za-z]\w*$/.test(data)) invalid = true;
-            else {
-              childLoopTable = data.slice(1);
-              if (typeof attrs.rowKey === "string") loopKeys.push({table:childLoopTable,key:attrs.rowKey});
-            }
-          }
-          const plan = admitDataControl(
-            name,
-            attrs,
-            meaningful.length > 0,
-            columns,
-          );
-          dataControls.push(plan);
-          if (plan.kind === "select") {
-            references.add(plan.value);
-            scalarBindings.add(plan.value);
-            if (typeof plan.options === "string") references.add(plan.options);
-          } else references.add(plan.data);
         }
         for (const attr of node.openingElement.attributes) {
           if (authorAttributes.has(attr)) continue;
