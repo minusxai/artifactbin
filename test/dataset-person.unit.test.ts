@@ -152,3 +152,20 @@ test("person scan capacity is finite and private profile keys and unsafe images 
     );
   }
 });
+
+test("verified opaque avatar identity becomes only the captured page/value route", async () => {
+  const f = fixture();
+  f.ports.card = async () => ({
+    name: "N",
+    handle: null,
+    image: "a".repeat(64),
+  });
+  const card = await createDatasetPersonService(f.ports).person(context, {
+    valueName: "selected",
+    userId: "original-user",
+  });
+  assert.equal(
+    card?.image,
+    "/af/v1/ids/Page12/person-images/selected/" + "a".repeat(64),
+  );
+});

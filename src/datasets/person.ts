@@ -3,17 +3,6 @@ import type {
   DatasetPersonPorts,
   DatasetPersonService,
 } from "./person-contracts.ts";
-function safeImage(image: string): boolean {
-  if (image.length > 4096) return false;
-  try {
-    const url = new URL(image);
-    return (
-      url.protocol === "https:" && !url.username && !url.password && !url.hash
-    );
-  } catch {
-    return false;
-  }
-}
 const denied = (): never => {
   throw new DatasetReadError("denied");
 };
@@ -162,14 +151,22 @@ export function createDatasetPersonService(
             typeof card.name !== "string" ||
             card.name.length > 4096 ||
             (typeof card.handle === "string" && card.handle.length > 4096) ||
-            (typeof card.image === "string" && !safeImage(card.image)) ||
+            (typeof card.image === "string" &&
+              !/^[a-f0-9]{64}$/.test(card.image)) ||
             !card.name ||
             (card.handle !== null && typeof card.handle !== "string") ||
             (card.image !== null && typeof card.image !== "string"))
         )
           throw new DatasetReadError("invalid_dataset");
         return card
-          ? { name: card.name, handle: card.handle, image: card.image }
+          ? {
+              name: card.name,
+              handle: card.handle,
+              image:
+                card.image === null
+                  ? null
+                  : `/af/v1/ids/${binding.pageId}/person-images/${binding.valueName}/${card.image}`,
+            }
           : null;
       } finally {
         clearTimeout(timer);

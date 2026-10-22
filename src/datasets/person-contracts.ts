@@ -4,6 +4,12 @@ export interface DatasetPersonCard {
   handle: string | null;
   image: string | null;
 }
+/** Private catalog profile. image is only an opaque verified profileAssetId, never a URL. */
+export interface DatasetStoredPersonCard {
+  name: string;
+  handle: string | null;
+  image: string | null;
+}
 /** Trusted publication descriptor. Never accepted as runtime page input. */
 export interface DatasetPersonBinding {
   sourceNamespace: string;
@@ -28,7 +34,7 @@ export interface DatasetPersonPorts {
     sourceNamespace: string,
     legacyUserId: string,
     signal?: AbortSignal,
-  ): Promise<DatasetPersonCard | null>;
+  ): Promise<DatasetStoredPersonCard | null>;
 }
 export interface DatasetPersonService {
   person(
