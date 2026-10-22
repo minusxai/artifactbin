@@ -96,6 +96,10 @@
  *                                  (both percent-encoded), exactly as /a/<id>, with ?download=1 too;
  *                                  a renamed or missing path, an unknown or freed handle, or anything
  *                                  that is not a handle (an email address): 404
+ *   GET  /@<handle>/<id>           a link the earlier product showed, also as /@<handle>/<id>-<title>:
+ *                                  when the handle's library has no such path, 308 to /a/<id> with the
+ *                                  query kept (the target applies the rules above); any other handle
+ *                                  path that resolves nothing stays 404 with no redirect
  *   GET  /af/v1/ids/<id>           any file by ID, exactly as /a/<id> for a page;
  *                                  backend: 200 { id, kind: "backend", name?, version } to its owner, else 404
  *   GET  /af/v1/ids/<id>/assets/<revision>/<variant>/<sha256> → 200 exact immutable media bytes, 206 single Range;

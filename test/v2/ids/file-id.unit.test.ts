@@ -93,3 +93,12 @@ test("a request path names a page by ID (with any title slug) or by its owner's 
   ])
     assert.equal(parseAddressPath(path), null, path);
 });
+
+test("legacyHandleAddressId: one segment that is an ID, or an ID and a hyphenated slug", async () => {
+  const { legacyHandleAddressId } = await ids();
+  assert.equal(legacyHandleAddressId("/Ab12Cd"), "Ab12Cd");
+  assert.equal(legacyHandleAddressId("/Ab12Cd-"), "Ab12Cd");
+  assert.equal(legacyHandleAddressId("/Ab12Cd-quarterly report.html"), "Ab12Cd");
+  for (const path of ["/Ab12C", "/Ab12Cd7", "/Ab12Cd.html", "/Ab12Cd/extra", "/Ab12Cd-slug/extra", "/x/Ab12Cd", "Ab12Cd", "/", "", "/Ab12C-d", "/notes.html"])
+    assert.equal(legacyHandleAddressId(path), null, path);
+});
