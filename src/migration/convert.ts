@@ -21,6 +21,7 @@ export const convertMigrationContent: Converter = (input) =>
 export function createMigrationConverter(
   options: MigrationConversionOptions,
 ): Converter {
+  if(options.sourceAdmission === "offline-prototype" && options.strategy !== "archived-functional")throw Error("Offline prototype admission requires archived-functional conversion");
   if (options.strategy === "strict")
     return async (input) => ({
       ...(await convertMigrationContent(input)),
@@ -100,12 +101,14 @@ export function createMigrationConverter(
     const local = await compileArchivedLocal(compiledInput, {
       ...compilerOptions,
       compiler: options.localCompiler,
+      sourceAdmission: options.sourceAdmission,
     });
     if (local.classification !== "manual-blocked")
       return { ...local, strategy: options.strategy };
     const authored = await compileArchivedAuthor(compiledInput, {
       ...compilerOptions,
       compiler: options.localCompiler,
+      sourceAdmission: options.sourceAdmission,
     });
     if (authored.classification !== "manual-blocked")
       return { ...authored, strategy: options.strategy };

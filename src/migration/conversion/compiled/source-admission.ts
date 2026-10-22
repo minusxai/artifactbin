@@ -1,5 +1,6 @@
 import {readLegacyCellWriteSites} from "./cell-write-source.ts";
 import type {LegacyCellWriteSite} from "./cell-write-contracts.ts";
+import {readPrototypeSource} from "./prototype-source.ts";
 import{readContextReferences}from"./context-source.ts";
 import{validCompiledViewerBinding}from"./viewer-binding.ts";
 import{readsLegacyViewerMarkup}from"./viewer-source.ts";
@@ -43,7 +44,10 @@ const allowed = new Set(
     " ",
   ),
 );
-export const admitLocalSource: AdmitLocalSource = (input) => {
+export const admitLocalSource: AdmitLocalSource = (input, mode="strict") => {
+  if(!["strict","offline-prototype"].includes(mode))return blocked("compiled-source-policy");
+  input={...input,sourceAdmission:mode};
+  const prototype=mode==="offline-prototype";
   try {
     const url = new URL(input.coreUrl, "https://example.invalid");
     if (
@@ -63,9 +67,9 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const strict = convertLegacyJsx(input);
   const commonAttributeIssue = (issue: {code:string;message:string}) => issue.code === "attribute" && ["value", "viz", "options", "columns", "sort", "metrics", "each"].some(name => issue.message === "Dynamic attribute requires an adapter: " + name);
   const genericIssueSupported = (issue: {code:string;message:string}) => commonAttributeIssue(issue) || ["expression", "component", "value", "action-adapter", "reference", "data-adapter"].includes(issue.code);
-  if (strict.issues.some(issue => !genericIssueSupported(issue) && !(input.authorPlan && ["attribute", "event"].includes(issue.code)))) return blocked("compiled-capability");
+  if (!prototype && strict.issues.some(issue => !genericIssueSupported(issue) && !(input.authorPlan && ["attribute", "event"].includes(issue.code)))) return blocked("compiled-capability");
   const author = input.authorPlan;
-  if (author) {
+  if (author && !prototype) {
     try {
       if (author.mode === "effects") {
         if (author.lifecycle !== undefined || author.exports.length || author.mounts.length) throw Error("Effect components refused");
@@ -169,6 +173,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       if(historical || [...cellSites.values()].some(site=>!registeredMutations.find(binding=>binding.name===site.mutationName)?.valueParam) || registeredMutations.some(binding=>binding.valueParam&&![...cellSites.values()].some(site=>site.mutationName===binding.name)))return blocked("compiled-cell-binding");
     }
   } catch {return blocked("compiled-cell-binding");}
+  if(prototype){try{return {ok:true,plan:readPrototypeSource(input,backendLinks,historical)};}catch{return blocked("compiled-source");}}
   const mutations = new Set<string>();
   const mutationRuns = new Set<string>();
   let chartCount = 0,

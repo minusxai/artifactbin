@@ -35,8 +35,10 @@ export interface ArchivedLocalOutput extends ArchivedStaticOutput {
   /** Audited migration-time bundle inputs; no authored source or absolute paths. */
   modules: string[];
 }
+export type CompiledSourceAdmission = "strict" | "offline-prototype";
 export interface ArchivedLocalOptions
   extends Omit<CompiledMigrationOptions, "compiler"> {
+  sourceAdmission?: CompiledSourceAdmission;
   compiler?: {
     compile(input: CompiledMigrationInput): Promise<ArchivedLocalOutput>;
   };

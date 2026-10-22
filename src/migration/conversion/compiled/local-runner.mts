@@ -42,6 +42,7 @@ for await (const chunk of process.stdin) {
     throw Error("Input exceeds limit");
 }
 const input = JSON.parse(text) as CompiledMigrationInput;
+const prototype=input.sourceAdmission==="offline-prototype";
 const { storyBodyFor } = await archived("lib/document/body.ts");
 const split = storyBodyFor(input.source);
 if (
@@ -196,11 +197,11 @@ const generated = generate({
   build: build.id,
   kitServer: await loadKitServer(),
 });
-if (
+if (!prototype && (
   generated.unported.length ||
   generated.partial.length ||
   generated.behaviors.some((behavior:string)=>behavior!=="@mx/deck" || !input.slideDeck || input.slideDeck.slides.length<2)
-)
+))
   throw Error("Interactive behavior requires a migration adapter");
 const rendered = (
   await ssrModuleOf(
@@ -457,6 +458,7 @@ const bundled = await bundle({
           }),
         );
         b.onResolve({filter:/^@mx\/kit\/mermaid$/},()=>{
+          if(prototype&&!preparedMermaids.length)return;
           if(!preparedMermaids.length)throw Error("Mermaid plan missing");
           return {path:"mermaid",namespace:"migration-mermaid"};
         });
@@ -548,7 +550,7 @@ const modules = Object.entries(bundleOutput.inputs)
       .match(/(?:^|\/)node_modules\/(vega-[^/]+\/.+)$/);
     return relative ? relative[1] : path.basename(v);
   });
-validateCompiledTransport({javascript,...(mermaidSource?{sourceMap:bundled.outputFiles.find((file:any)=>file.path.endsWith(".map"))!.text,mermaid:{entry:{name:"migration-local-entry.js",source},runtime:{name:"migration-mermaid:mermaid",source:mermaidSource},plans:preparedMermaids}}:{})});
+if(!prototype)validateCompiledTransport({javascript,...(mermaidSource?{sourceMap:bundled.outputFiles.find((file:any)=>file.path.endsWith(".map"))!.text,mermaid:{entry:{name:"migration-local-entry.js",source},runtime:{name:"migration-mermaid:mermaid",source:mermaidSource},plans:preparedMermaids}}:{})});
 process.stdout.write(
   JSON.stringify({
     html,

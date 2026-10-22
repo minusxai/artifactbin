@@ -35,7 +35,7 @@ export async function compileArchivedLocal(
   input: CompiledMigrationInput,
   options: ArchivedLocalOptions,
 ): Promise<CompiledLocalResult> {
-  const admittedSource = admitLocalSource(input);
+  const admittedSource = admitLocalSource(input,options.sourceAdmission);
   if (!admittedSource.ok) return blocked(admittedSource.code);
   const plan = admittedSource.plan;
   input = plan.input;

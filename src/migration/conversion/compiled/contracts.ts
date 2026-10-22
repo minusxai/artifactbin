@@ -4,6 +4,8 @@ import type { CompiledDatasetMutation } from "./dataset-mutations-contracts.ts";
 import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 import type { ConversionResult } from "../contracts.ts";
 export interface CompiledMigrationInput {
+  /** Internal migration policy, overwritten from the explicit offline compiler options. */
+  sourceAdmission?: import("./local-contracts.ts").CompiledSourceAdmission;
   source: string;
   /** Source-derived Dialog runtime adapter, overwritten during admission. */
   dialogFocus?: boolean;

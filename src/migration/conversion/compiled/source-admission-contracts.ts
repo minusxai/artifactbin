@@ -19,6 +19,7 @@ export type ReconcileLocalDeclarations = (
 /** A successfully admitted source owns its complete capability and state manifest.
  * Compiler output may implement this plan; it cannot add or reinterpret it. */
 export interface AdmittedLocalSource {
+  readonly sourceAdmission?: import("./local-contracts.ts").CompiledSourceAdmission;
   readonly input: import("./contracts.ts").CompiledMigrationInput;
   readonly manifest: LocalSourceManifest;
   /** Authored IDs on rendered JSX nodes must survive compiler output unchanged. */
@@ -39,4 +40,5 @@ export type LocalSourceAdmission =
   | { readonly ok: false; readonly code: string };
 export type AdmitLocalSource = (
   input: import("./contracts.ts").CompiledMigrationInput,
+  mode?: import("./local-contracts.ts").CompiledSourceAdmission,
 ) => LocalSourceAdmission;

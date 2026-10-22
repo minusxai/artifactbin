@@ -21,6 +21,7 @@ const activeUri = (v: string) =>
   );
 export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
   const output = raw as ArchivedLocalOutput;
+  const prototype=plan.sourceAdmission==="offline-prototype";
   const {
     author,
     vegaCount,
@@ -55,7 +56,7 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
     ) ||
     !Array.isArray(output.modules) ||
     output.modules.some((m) => typeof m !== "string") ||
-    output.modules.some(
+    (!prototype && output.modules.some(
       (m) =>
         m !== "dataflow.ts" &&
         ![
@@ -67,10 +68,10 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
         /boot|editor|transport|page-store|dataflow|jsx\/|parser|page-runtime/i.test(
           m,
         ),
-    ) ||
-    /\/api\/|\/islands\/|@mx\/boot|EventSource|WebSocket|parseJsx|parseExpressionAt|new Function|\beval\s*\(/.test(
+    )) ||
+    (!prototype && /\/api\/|\/islands\/|@mx\/boot|EventSource|WebSocket|parseJsx|parseExpressionAt|new Function|\beval\s*\(/.test(
       output.javascript,
-    ) ||
+    )) ||
     /<\/style/i.test(output.css) ||
     Buffer.byteLength(output.html + output.css + output.javascript) >
       MAX_COMPILED_OUTPUT_BYTES
@@ -126,7 +127,7 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
             activeUri(a.value)) ||
           /^on/i.test(a.name) ||
           a.name === "srcdoc" ||
-          (["src", "srcset", "poster"].includes(a.name) &&
+          (!prototype && ["src", "srcset", "poster"].includes(a.name) &&
             !a.value.startsWith("data:"))
         )
           unsafe = true;
@@ -172,11 +173,11 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
     if(plan.input.slideDeck && node.content)visit(node.content);
   };
   visit(fragment);
-  if(!reconcileMermaidHtml(fragment,plan.input.mermaids??[],Boolean(plan.input.slideDeck)))return blocked("compiled-mermaid-output");
-  if(!reconcileSlideDeckHtml(fragment,plan.input.slideDeck))return blocked("compiled-slide-output");
+  if(!prototype&&!reconcileMermaidHtml(fragment,plan.input.mermaids??[],Boolean(plan.input.slideDeck)))return blocked("compiled-mermaid-output");
+  if(!prototype&&!reconcileSlideDeckHtml(fragment,plan.input.slideDeck))return blocked("compiled-slide-output");
   const initialIdentities = new Set(initialDynamicIdentities(plan.dynamicIdentities, Object.fromEntries(plan.manifest.declarations.map(d => [d.name,d.default]))));
   const allowedIdentities = new Set(allowedInitialDynamicIdentities(plan.dynamicIdentities, Object.fromEntries(plan.manifest.declarations.map(d => [d.name,d.default]))));
-  if (unsafe || [...initialIdentities].some((id) => !Object.hasOwn(identities, id)) || [...plan.renderedIdentities].some(id => Object.hasOwn(identities,id) && !allowedIdentities.has(id)) || (author && authorMounts.size !== author.mounts.length))
+  if (unsafe || (!prototype && ([...initialIdentities].some((id) => !Object.hasOwn(identities, id)) || [...plan.renderedIdentities].some(id => Object.hasOwn(identities,id) && !allowedIdentities.has(id)))) || (author && authorMounts.size !== author.mounts.length))
     return blocked("compiled-local-output");
   return {
     ok: true,
