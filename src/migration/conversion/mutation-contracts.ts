@@ -1,4 +1,8 @@
 import type { DatasetColumn } from "../../datasets/contracts.ts";
+import type {
+  DatasetMutationParameterType,
+  DatasetMutationRowParameters,
+} from "../../datasets/mutation/parameter-contracts.ts";
 import type { ConversionIssue } from "./contracts.ts";
 /** Catalogs are trusted migration inventory, never declarations supplied by page JavaScript. */
 export interface LegacyMutationImportCatalog {
@@ -19,7 +23,9 @@ export interface LegacyMutationDescriptor {
   /** Exact Import namespace used by SQLite, distinct from the canonical catalog target. */
   sqlSchema: string;
   sql: string;
-  paramTypes: Record<string, DatasetColumn["type"]>;
+  paramTypes: Record<string, DatasetMutationParameterType>;
+  /** Fixed SQL row bindings; full server paramTypes includes these generated parameter names. */
+  rowParams?: DatasetMutationRowParameters;
   expectedAffected?: number;
   /** Viewer-local fields reset only after confirmed commit and only if still unchanged. */
   reset?: readonly string[];
