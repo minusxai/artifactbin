@@ -175,3 +175,9 @@ test('prototype cell scope ignores compiler-owned presentation but preserves exa
  assert.deepEqual(readLegacyCellWriteSites(source,undefined,'offline-prototype'),[{mutationName:'save',dataName:'rows',column:'title',rowKey:'id',tag:'input'}]);
  for(const bad of [source.replace('run="$save"','run={$name}'),source.replace('value="$_row.title"','value="$_row.other"'),source.replace('rowKey="id"',''),cell('{...attrs}')])assert.throws(()=>readLegacyCellWriteSites(bad,undefined,'offline-prototype'));
 });
+test('dialog submission is separate from editing-cell mutation scope',()=>{
+ const dialog='<DialogContent run="$create"><input name="title"/></DialogContent>';
+ assert.deepEqual(readLegacyCellWriteSites(dialog),[]);
+ assert.deepEqual(readLegacyCellWriteSites(dialog+source),readLegacyCellWriteSites(source));
+ assert.throws(()=>readLegacyCellWriteSites('<Unknown run="$create"/>'));
+});

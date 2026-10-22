@@ -43,7 +43,7 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
       const tag = node.openingElement.name.name;
       if (!root && ["DataTable", "For"].includes(tag)) return false;
       if (
-        tag !== "Button" &&
+        !["Button", "DialogContent"].includes(tag) &&
         node.openingElement.attributes.some((a: any) => a.name?.name === "run")
       )
         return true;
@@ -87,7 +87,7 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
         next = scope && name(column) ? { ...scope, column } : undefined;
       }
       const run = selected("run");
-      if (run !== undefined && tag !== "Button") {
+      if (run !== undefined && !["Button", "DialogContent"].includes(tag)) {
         if (!["input", "textarea", "Select"].includes(tag) || !next?.column)
           refuse();
         const mutationName = ref(run),
