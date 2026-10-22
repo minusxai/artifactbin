@@ -49,6 +49,8 @@ export interface ConversionInput {
   meta?: Record<string, unknown>;
 }
 export interface ConversionOutput {
+  /** Source-only normalization receipt; original source/document remain untouched. */
+  sourceNormalization?: import("./conversion/compiled/legacy-script-contracts.ts").LegacyScriptNormalizationReceipt;
   /** Explicit migration receipt; the retained document is never modified. */
   sourceRecovery?: {
     kind: "retained-graph-empty-separators" | "retained-graph-missing-root-content" | "retired-source-wrapper";

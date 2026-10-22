@@ -112,10 +112,30 @@ export function createMigrationConverter(
         };
       }
     }
+    let sourceNormalization: import("./contracts.ts").ConversionOutput["sourceNormalization"];
+    if (
+      source !== null &&
+      options.strategy === "archived-functional" &&
+      options.sourceAdmission === "offline-prototype" &&
+      options.legacyRoot
+    ) {
+      const { normalizeArchivedManagedFrames } = await import(
+        "./conversion/compiled/legacy-scripts.ts"
+      );
+      const normalized = await normalizeArchivedManagedFrames(
+        source,
+        options.legacyRoot,
+      );
+      if (normalized) {
+        source = normalized.source;
+        sourceNormalization = normalized.receipt;
+      }
+    }
     const finish = (
       output: import("./contracts.ts").ConversionOutput,
     ): import("./contracts.ts").ConversionOutput => ({
       ...output,
+      ...(sourceNormalization ? { sourceNormalization } : {}),
       ...(sourceRecovery ? { sourceRecovery } : {}),
       ...(sourceRecovery?.kind === "retained-graph-missing-root-content" &&
       output.html
@@ -207,6 +227,7 @@ export function createMigrationConverter(
       );
     return {
       ...local,
+      ...(sourceNormalization ? { sourceNormalization } : {}),
       ...(sourceRecovery ? { sourceRecovery } : {}),
       strategy: options.strategy,
       issues: [
