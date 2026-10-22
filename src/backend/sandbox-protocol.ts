@@ -89,6 +89,28 @@ function checkedCapabilityFrame(
       return { id, request: { kind: "dataset", operation: "members" } };
     }
     const input = req.input;
+    if (req.operation === "person") {
+      if (
+        Object.keys(req).sort().join() !== "input,kind,operation" ||
+        !record(input) ||
+        Object.keys(input).sort().join() !== "userId,valueName" ||
+        typeof input.valueName !== "string" ||
+        !/^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(input.valueName) ||
+        ["constructor", "prototype", "__proto__"].includes(input.valueName) ||
+        typeof input.userId !== "string" ||
+        !input.userId ||
+        Buffer.byteLength(input.userId) > 16384
+      )
+        throw Error();
+      return {
+        id,
+        request: {
+          kind: "dataset",
+          operation: "person",
+          input: { valueName: input.valueName, userId: input.userId },
+        },
+      };
+    }
     if (req.operation === "mutate") {
       if (
         Object.keys(req).sort().join() !== "input,kind,operation" ||

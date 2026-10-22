@@ -343,6 +343,7 @@ export function createBackendRoutes(options: {
   ): Promise<PageCaller>;
   secrets?: SecretsEnvPort;
   datasets?: import("../datasets/contracts.ts").DatasetReadService;
+  datasetPerson?: import("../datasets/person-contracts.ts").DatasetPersonService;
   datasetMembers?: import("../datasets/members-contracts.ts").DatasetMembersService;
   datasetMutations?: import("../datasets/mutation/contracts.ts").DatasetMutationService;
   log?(line: string): void;
@@ -465,6 +466,7 @@ export function createBackendRoutes(options: {
               storeCapabilities,
               options.datasetMutations,
               options.datasetMembers,
+              options.datasetPerson,
             )
           : storeCapabilities;
         try {

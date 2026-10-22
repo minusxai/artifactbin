@@ -1,3 +1,5 @@
+import { createDatasetPersonService } from "../datasets/person.ts";
+import { createDatasetPersonRepository } from "../persistence/dataset-person.ts";
 import { createDatasetMembersService } from "../datasets/members.ts";
 import { createDatasetMembersRepository } from "../persistence/dataset-members.ts";
 import { createReadonlyDatasetObjectStore } from "../datasets/object-store.ts";
@@ -59,6 +61,10 @@ export function createDatasetRuntime(
   let closing: Promise<void> | undefined;
   return {
     reads,
+    person: createDatasetPersonService({
+      ...createDatasetPersonRepository(database),
+      reads,
+    }),
     members: createDatasetMembersService(
       createDatasetMembersRepository(database, now),
     ),

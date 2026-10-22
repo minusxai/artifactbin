@@ -11,6 +11,7 @@ export interface DatasetRuntimeOptions {
 }
 export interface DatasetRuntime {
   reads: DatasetReadService;
+  person: import("../datasets/person-contracts.ts").DatasetPersonService;
   members: import("../datasets/members-contracts.ts").DatasetMembersService;
   mutations?: DatasetMutationService;
   close(): Promise<void>;

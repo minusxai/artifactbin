@@ -96,6 +96,11 @@ export type BackendCapabilityRequest =
   | { kind: "dataset"; operation: "members" }
   | {
       kind: "dataset";
+      operation: "person";
+      input: { valueName: string; userId: string };
+    }
+  | {
+      kind: "dataset";
       operation: "read";
       input: import("../datasets/contracts.ts").DatasetReadRequest;
     }
