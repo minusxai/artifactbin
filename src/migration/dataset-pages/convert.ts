@@ -19,7 +19,7 @@ export function convertStandaloneDatasetPage(
         ]
       : [];
   return {
-    classification: plan.kind === "ready" ? "functional" : "renderable",
+    classification: plan.kind === "ready" ? "functional" : "manual-blocked",
     html: renderStandaloneDatasetPage(plan),
     identities: Object.fromEntries(ids.map((id) => [id, id])),
     issues: plan.kind === "unavailable" ? [{ code: plan.reason }] : [],

@@ -198,7 +198,7 @@ test("adapter emits a valid ordinary page and reports external unavailability", 
     coreUrl: "/af/v1/core.js",
     source: { kind: "external", registered: false },
   });
-  assert.equal(external.classification, "renderable");
+  assert.equal(external.classification, "manual-blocked");
   assert.deepEqual(external.issues, [
     { code: "external-registration-required" },
   ]);
