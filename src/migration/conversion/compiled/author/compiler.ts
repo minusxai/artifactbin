@@ -47,8 +47,8 @@ export async function prepareAuthorBundle(
   const bindingsPath = fileURLToPath(new URL("./bindings.ts", import.meta.url));
   const cleanupPath = fileURLToPath(new URL("./cleanup.ts", import.meta.url));
   const entry = `import {setAuthorPorts} from 'author-closure';
-import {createSignal,untrack,createContext,useContext,createComponent} from 'solid-js';
-import {render} from 'solid-js/web';
+import {createSignal,untrack,createContext,useContext,createComponent,createRoot} from 'solid-js';
+import {insert} from 'solid-js/web';
 import {createAuthorBindings} from ${JSON.stringify(bindingsPath)};
 import {drainAuthorCleanups} from ${JSON.stringify(cleanupPath)};
 const MountScope=createContext(null);
@@ -59,7 +59,7 @@ export async function mount(ports,mounts){
  const bindings=createAuthorBindings(ports,${JSON.stringify(names)},reactive);
  setAuthorPorts(bindings);
  const stops=[];const identities=new Set();
- try{const components=await import('authored-module');for(const item of mounts){if(identities.has(item.identity))throw Error('Duplicate author mount identity');identities.add(item.identity);const component=components[item.component];if(typeof component!=='function')throw Error('Unknown author component');stops.push(render(()=>bindings.mount(item.identity,()=>component(item.props??{})),item.element));}}
+ try{const components=await import('authored-module');for(const item of mounts){if(identities.has(item.identity))throw Error('Duplicate author mount identity');identities.add(item.identity);const component=components[item.component];if(typeof component!=='function')throw Error('Unknown author component');createRoot(dispose=>{stops.push(()=>{try{dispose();}finally{item.element.textContent='';}});insert(item.element,bindings.mount(item.identity,()=>component(item.props??{})),item.element.firstChild?null:undefined);});}}
  catch(error){try{drainAuthorCleanups([...stops.splice(0),()=>bindings.dispose()]);}catch(cleanup){throw new AggregateError([error,cleanup],'Author mount failed');}throw error;}
  return ()=>drainAuthorCleanups([...stops.splice(0),()=>bindings.dispose()]);
 }`;

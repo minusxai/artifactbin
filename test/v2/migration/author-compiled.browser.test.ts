@@ -91,7 +91,7 @@ test(
  function Later(){const [n,set]=createSignal(0,{name:'late'});return <button onClick={()=>set(v=>v+1)}>late:{n()}</button>}
  export function Delayed(){const [show,set]=createSignal(false);return <div><button onClick={()=>set(v=>!v)}>toggle</button><Show when={show()}><Later/></Show><button onClick={()=>setShared(v=>v+1)}>module:{shared()}</button></div>}
  export function Cleanup(props){const [n,set]=createSignal(0,{name:'cleanup'});props.accept(query('$rows').ready);onCleanup(()=>{set(v=>v+1);if(props.fail)throw Error('authored cleanup failed')});return <p>cleanup:{n()}</p>}
- export function Fail(){throw Error('authored mount failed')}
+ export function Fail(){const [n,set]=createSignal(0,{name:'failed-root'});onCleanup(()=>set(v=>v+1));throw Error('authored mount failed')}
  `,
       { values: [], queries: ["rows"], mutations: [] },
       { archivedRoot: archivedRoot! },
@@ -104,7 +104,7 @@ test(
  const mounts=[['first','Delayed'],['second','Delayed'],['cleanup1','Cleanup'],['cleanup2','Cleanup']].map(([id,component])=>({identity:id,component,element:document.getElementById(id),props:{fail:id==='cleanup1',accept:promise=>waits.push(promise)}}));
  const stop=await createAuthorModule().mount(ports,mounts);
  window.finish=async()=>{let threw=false;try{stop()}catch(error){threw=error instanceof AggregateError}const settled=await Promise.allSettled(waits);return {threw,subscriptions,rejected:settled.every(item=>item.status==='rejected'),values:Object.fromEntries(values)}};
- window.catchPath=async()=>{let failed=false;const pending=[];try{await createAuthorModule().mount(ports,[{identity:'catch-cleanup',component:'Cleanup',element:document.createElement('div'),props:{fail:true,accept:p=>pending.push(p)}},{identity:'fail',component:'Fail',element:document.createElement('div')}])}catch{failed=true}return {failed,subscriptions,rejected:(await Promise.allSettled(pending)).every(item=>item.status==='rejected')}};
+ window.catchPath=async()=>{let failed=false;const pending=[];try{await createAuthorModule().mount(ports,[{identity:'catch-cleanup',component:'Cleanup',element:document.createElement('div'),props:{fail:true,accept:p=>pending.push(p)}},{identity:'fail',component:'Fail',element:document.createElement('div')}])}catch{failed=true}return {failed,subscriptions,failedRootCleanup:values.get('author:[\"fail\",\"failed-root\"]'),rejected:(await Promise.allSettled(pending)).every(item=>item.status==='rejected')}};
  </script>`;
     const server = createServer((req, res) => {
       res.setHeader(
@@ -173,6 +173,7 @@ test(
       assert.equal(result.values['author:["cleanup2","cleanup"]'], 1);
       assert.deepEqual(await page.evaluate(() => (window as any).catchPath()), {
         failed: true,
+        failedRootCleanup: 1,
         subscriptions: 0,
         rejected: true,
       });
