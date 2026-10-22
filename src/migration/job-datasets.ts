@@ -1,3 +1,5 @@
+import { legacyDocumentSource } from "./conversion/index.ts";
+import { readLegacyPersonValueNames } from "./conversion/compiled/person-source.ts";
 import { projectMigrationPersonBindings } from "./person-binding-validation.ts";
 import { projectMigrationProfiles } from "./profiles.ts";
 import { prepareMigrationBoundValues } from "./job-bound-values.ts";
@@ -168,15 +170,25 @@ export async function prepareMigrationJobDatasets(
         ) ?? [],
         plan.metadata.bindings,
       );
+      const headSource = artifact.artifacts[0]!;
+      const personNames = new Set(
+        readLegacyPersonValueNames(
+          headSource.source?.trim()
+            ? headSource.source
+            : (legacyDocumentSource(headSource.document) ?? ""),
+        ),
+      );
       personBindings.set(
         migrationDatasetVersionKey(
           page.legacyId,
           scan.heads.get(page.legacyId)!,
         ),
-        registeredPersons.map((person) => ({
-          valueName: person.valueName,
-          backendNamespace: "legacyData",
-        })),
+        registeredPersons
+          .filter((person) => personNames.has(person.valueName))
+          .map((person) => ({
+            valueName: person.valueName,
+            backendNamespace: "legacyData",
+          })),
       );
       accumulator.add({
         ...plan.metadata,
