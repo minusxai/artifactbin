@@ -151,13 +151,13 @@ test("a deployment of an older runtime generation no longer verifies, so it is r
   const { sealDeployment, BACKEND_RUNTIME } = await import(
     "../src/backend/deployment.ts"
   );
-  for (const protocol of ["protocol@1", "protocol@2"])
+  for (const protocol of ["protocol@1", "protocol@2", "protocol@3"])
     assert.throws(
       () =>
         sealDeployment("source", "compiled", {
           typeDefs: "type Query{value:String}",
           fields: ["value"],
-          runtime: BACKEND_RUNTIME.replace("protocol@3", protocol),
+          runtime: BACKEND_RUNTIME.replace(/protocol@\d+/, protocol),
         }),
       /schema_rejected/,
     );

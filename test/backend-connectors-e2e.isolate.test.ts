@@ -13,6 +13,7 @@ import {
 } from "../src/backend/execution-service.ts";
 import { withCapabilityAuthority } from "../src/backend/capability-authority.ts";
 import { configureResources } from "../src/connectors/config.ts";
+import { BACKEND_RUNTIME } from "../src/backend/deployment.ts";
 import type { BackendJson } from "../src/backend/contracts.ts";
 
 const source = `
@@ -92,7 +93,8 @@ test(
         "CREATE TABLE items (tenant text,id text,value text,PRIMARY KEY(tenant,id))",
       );
       const deployment = await remote.compile(source);
-      assert.match(deployment.runtime, /protocol@3\/image:sha256:/);
+      assert.equal(deployment.runtime.slice(0, BACKEND_RUNTIME.length), BACKEND_RUNTIME);
+      assert.match(deployment.runtime.slice(BACKEND_RUNTIME.length), /^\/image:sha256:[a-f0-9]{64}$/);
       const connection = new URL(db.connectionString);
       connection.searchParams.set(
         "options",

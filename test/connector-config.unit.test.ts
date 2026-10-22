@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { BACKEND_RUNTIME } from "../src/backend/deployment.ts";
 import { configureResources } from "../src/connectors/config.ts";
 import { withCapabilityAuthority } from "../src/backend/capability-authority.ts";
 import type { BackendHost, CompiledBackend } from "../src/backend/contracts.ts";
@@ -444,7 +445,7 @@ test("authority close awaits both cleanups on failure and blocks compile immedia
 });
 
 test("capability authority preserves trusted backend-file scope in both protocol paths", async () => {
-  for (const runtime of ["workerd/esbuild/protocol@1/image:x", "workerd/esbuild/protocol@3/image:x"]) {
+  for (const runtime of ["workerd/esbuild/protocol@1/image:x", BACKEND_RUNTIME + "/image:sha256:" + "a".repeat(64)]) {
     const received: Parameters<BackendHost["invoke"]>[] = [];
     const backend: BackendHost = {
       compile: async () => deployment,

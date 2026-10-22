@@ -59,7 +59,7 @@ test("deployments stored before this change, versioned by their whole content, s
 test("a runtime is current when its generation matches, whatever image it recorded", () => {
   assert.equal(isCurrentRuntime(BACKEND_RUNTIME), true);
   assert.equal(isCurrentRuntime(BACKEND_RUNTIME + image("c")), true);
-  assert.equal(isCurrentRuntime(BACKEND_RUNTIME.replace("protocol@2", "protocol@1") + image("c")), true);
+  assert.equal(isCurrentRuntime(BACKEND_RUNTIME.replace(/protocol@\d+/, "protocol@1") + image("c")), false);
   assert.equal(isCurrentRuntime("workerd@1.0.0/esbuild@0.1.0/protocol@2" + image("c")), false);
   assert.equal(isCurrentRuntime(BACKEND_RUNTIME + "/image:latest"), false);
   assert.equal(isCurrentRuntime(BACKEND_RUNTIME + "-next"), false);
