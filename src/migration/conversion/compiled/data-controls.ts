@@ -1,3 +1,4 @@
+import { readSourceLiteral } from "./source-literal.ts";
 import type {
   CompiledDataControl,
   CompiledDataColumn,
@@ -274,31 +275,9 @@ export async function completeControlOptions(
   return { ...initial, rows, truncated: false, totalRows: rows.length };
 }
 
-/** Interpret only literal JSON syntax, never execute author expressions. */
+/** JSX shorthand attributes mean true; all values use the shared bounded grammar. */
 export function controlLiteral(node: any): unknown {
-  if (node === null) return true;
-  if (node?.type === "Literal") return node.value;
-  if (node?.type === "JSXExpressionContainer")
-    return controlLiteral(node.expression);
-  if (node?.type === "ArrayExpression")
-    return node.elements.map(controlLiteral);
-  if (node?.type === "ObjectExpression") {
-    const out: Record<string, unknown> = Object.create(null);
-    for (const p of node.properties) {
-      if (p.type !== "Property" || p.computed || p.method || p.kind !== "init")
-        throw Error("Nonliteral control property");
-      const key = p.key.name ?? p.key.value;
-      if (
-        typeof key !== "string" ||
-        reserved.has(key) ||
-        Object.hasOwn(out, key)
-      )
-        throw Error("Invalid control property");
-      out[key] = controlLiteral(p.value);
-    }
-    return out;
-  }
-  throw Error("Nonliteral control attribute");
+  return node === null ? true : readSourceLiteral(node);
 }
 /** Never pass arbitrary page/sort requests to the offline engine bridge. */
 export function controlPageRequest(

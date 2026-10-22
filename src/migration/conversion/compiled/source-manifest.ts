@@ -1,5 +1,6 @@
 import type { BoundValueColumnProof } from "./bound-value-contracts.ts";
 import { validBoundValueProof } from "./bound-value-proof.ts";
+import { readSourceLiteral as literal } from "./source-literal.ts";
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
 import { MAX_COMPILED_SOURCE_BYTES } from "./contracts.ts";
@@ -14,61 +15,8 @@ const forbidden = new Set(["__proto__", "constructor", "prototype"]);
 function refuse(): never {
   throw Error("Unsupported source declaration");
 }
-/** Decode the admitted literal grammar only. This never evaluates JavaScript. */
-function literal(node: Node | undefined): unknown {
-  if (!node) return refuse();
-  if (node.type === "JSXExpressionContainer") return literal(node.expression);
-  if (
-    node.type === "Literal" &&
-    (node.value === null ||
-      ["string", "boolean", "number"].includes(typeof node.value))
-  ) {
-    if (typeof node.value === "number" && !Number.isFinite(node.value))
-      refuse();
-    return node.value;
-  }
-  if (node.type === "TemplateLiteral" && !node.expressions.length)
-    return node.quasis[0]?.value.cooked;
-  if (
-    node.type === "UnaryExpression" &&
-    ["-", "+"].includes(node.operator) &&
-    node.argument?.type === "Literal" &&
-    typeof node.argument.value === "number"
-  ) {
-    const value =
-      node.operator === "-" ? -node.argument.value : +node.argument.value;
-    if (!Number.isFinite(value)) refuse();
-    return value;
-  }
-  if (node.type === "ArrayExpression")
-    return node.elements.map((entry: Node) => literal(entry));
-  if (node.type === "ObjectExpression") {
-    const value: Record<string, unknown> = {};
-    for (const property of node.properties) {
-      if (
-        property.type !== "Property" ||
-        property.computed ||
-        property.method ||
-        property.kind !== "init"
-      )
-        refuse();
-      const rawKey = property.key.name ?? property.key.value;
-      const key = typeof rawKey === "number" ? String(rawKey) : rawKey;
-      if (
-        typeof key !== "string" ||
-        forbidden.has(key) ||
-        Object.hasOwn(value, key)
-      )
-        refuse();
-      value[key] = literal(property.value);
-    }
-    return value;
-  }
-  return refuse();
-}
 /** Shared offline literal decoder; never evaluates source. */
-export const readLocalSourceLiteral = (node: Node | undefined): unknown =>
-  literal(node);
+export const readLocalSourceLiteral = (node: Node | undefined): unknown => literal(node);
 function inferredColumns(rows: Record<string, unknown>[]) {
   const columns = new Map<string, LocalColumnType | "">();
   for (const row of rows)
