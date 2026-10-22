@@ -7,3 +7,6 @@ export interface StreamArchiveDestination {
  archivePart(namespace:string,part:StreamPart,rows:AsyncIterable<LegacyRow>):Promise<'created'|'unchanged'>;
 }
 export type StreamSql=SqlReader;
+
+/** Bounded wire batches; an individual oversized record is sent alone. */
+export interface StreamArchiveBatchOptions {batchRows?:number;batchBytes?:number}
