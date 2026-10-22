@@ -1,3 +1,4 @@
+import { validCompiledBrowserImports } from "./browser-imports.ts";
 import { archivedRuntimePlan } from "./runtime-plan.ts";
 import {archivedDialogMutationFormSource} from "./dialog-form-source.ts";
 import {prepareCompiledFileUploads} from "./file-upload-admission.ts";
@@ -560,11 +561,7 @@ const bundled = await bundle({
 });
 const javascript = bundled.outputFiles.find((file:any)=>file.path.endsWith(".js"))!.text;
 const bundleOutput: any = Object.entries(bundled.metafile.outputs).find(([file])=>file.endsWith(".js"))![1];
-if (
-  bundleOutput.imports.some(
-    (v: any) => !v.external || v.path !== "@afbin/apollo",
-  )
-)
+if (!validCompiledBrowserImports(bundleOutput.imports, prototype))
   throw Error("Unexpected browser import");
 const modules = Object.entries(bundleOutput.inputs)
   .filter(
