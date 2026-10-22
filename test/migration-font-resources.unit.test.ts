@@ -156,3 +156,19 @@ test("font width axis remains an explicit CSS face stretch range", async () => {
   );
   assert(result.css.includes("font-stretch:75% 100%"));
 });
+test("font Unicode descriptors reject invalid scalar ranges rather than losing coverage in the browser", async () => {
+  const { validFontUnicodeRange } = await import(
+    "../src/migration/conversion/compiled/fonts/inline.ts"
+  );
+  for (const value of ["U+0-10FFFF", "U+4??", "U+0000-00FF, U+1F1E6-1F1FF"])
+    assert(validFontUnicodeRange(value));
+  for (const value of [
+    "U+110000",
+    "U+FFFF-0000",
+    "U+4?F",
+    "U+??????",
+    "U+0000;src:x",
+    "",
+  ])
+    assert(!validFontUnicodeRange(value));
+});

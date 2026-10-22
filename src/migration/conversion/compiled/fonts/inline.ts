@@ -97,6 +97,26 @@ export function parsePinnedFontRequest(raw: string): PinnedFontRequest {
   }
   return { families, display: display as PinnedFontRequest["display"] };
 }
+export function validFontUnicodeRange(value: string): boolean {
+  return (
+    typeof value === "string" &&
+    value.length <= 8192 &&
+    value.split(",").every((part) => {
+      const raw = part.trim(),
+        range = /^U\+([0-9A-F]{1,6})(?:-([0-9A-F]{1,6}))?$/i.exec(raw),
+        wildcard = /^U\+([0-9A-F]{0,5})(\?{1,6})$/i.exec(raw);
+      let min: number, max: number;
+      if (range) {
+        min = parseInt(range[1]!, 16);
+        max = parseInt(range[2] ?? range[1]!, 16);
+      } else if (wildcard && wildcard[1]!.length + wildcard[2]!.length <= 6) {
+        min = parseInt(wildcard[1] + wildcard[2]!.replaceAll("?", "0"), 16);
+        max = parseInt(wildcard[1] + wildcard[2]!.replaceAll("?", "F"), 16);
+      } else return false;
+      return min <= max && max <= 0x10ffff;
+    })
+  );
+}
 function faceCss(face: PinnedFontFace, request: PinnedFontRequest): string {
   const width = face.axes.find((axis) => axis.tag === "wdth");
   const stretch = width
@@ -172,9 +192,7 @@ export async function inlinePinnedFontImports(
         (total += face.bytes.byteLength) > MAX_FONT_TOTAL_BYTES ||
         Buffer.from(face.bytes).subarray(0, 4).toString() !== "wOF2" ||
         createHash("sha256").update(face.bytes).digest("hex") !== face.sha256 ||
-        !/^U\+[0-9A-F?]{1,6}(?:-[0-9A-F]{1,6})?(?:\s*,\s*U\+[0-9A-F?]{1,6}(?:-[0-9A-F]{1,6})?)*$/i.test(
-          face.unicodeRange,
-        )
+        !validFontUnicodeRange(face.unicodeRange)
       )
         throw Error("Invalid pinned font bytes or descriptors");
       if (
