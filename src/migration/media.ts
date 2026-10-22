@@ -1,32 +1,8 @@
-import {createHash,randomUUID} from 'node:crypto';import {constants} from 'node:fs';import {lstat,mkdir,open,readFile,link,unlink} from 'node:fs/promises';import {join} from 'node:path';
-import type {MigrationMediaIndex,MigratedAsset} from './media-contracts.ts';import type {ConversionOutput} from './contracts.ts';
-const esc=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-async function readJson(path:string):Promise<unknown>{const info=await lstat(path);if(!info.isFile()||info.size>32*1024*1024)throw new Error('Invalid bounded media manifest');return JSON.parse(await readFile(path,'utf8'));}
-async function verifiedBytes(path:string,bytes:number,sha256:string,copy?:Awaited<ReturnType<typeof open>>):Promise<void>{
- const source=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);try{const info=await source.stat();if(!info.isFile()||info.size!==bytes)throw new Error('Media length differs from receipt');const hash=createHash('sha256');let count=0;for await(const chunk of source.createReadStream({autoClose:false})){count+=chunk.length;if(count>bytes)throw new Error('Media length exceeds receipt');hash.update(chunk);if(copy)await copy.writeFile(chunk);}if(count!==bytes||hash.digest('hex')!==sha256)throw new Error('Media digest differs from receipt');}finally{await source.close();}
-}
-export async function readMigrationMedia(planPath:string,receiptPath:string):Promise<MigrationMediaIndex>{
- const plan=await readJson(planPath) as {objects:Record<string,unknown>[]};const receipts=await readJson(receiptPath) as Record<string,unknown>[];if(!Array.isArray(plan.objects)||!Array.isArray(receipts))throw new Error('Invalid media plan');const byKey=new Map<string,Record<string,unknown>>();for(const receipt of receipts){const key=String(receipt.objectKey);if(byKey.has(key))throw new Error('Duplicate media receipt');byKey.set(key,receipt);}
- const assets:MigratedAsset[]=[];const references=new Set<string>();const objects=new Set<string>();
- for(const object of plan.objects){const key=String(object.objectKey);if(objects.has(key))throw new Error('Duplicate media object');objects.add(key);const receipt=byKey.get(key);if(!receipt||receipt.status!=='copied'||typeof receipt.path!=='string'||typeof receipt.sha256!=='string'||!/^([a-f0-9]{64})$/.test(receipt.sha256)||!Number.isSafeInteger(receipt.bytes)||Number(receipt.bytes)<0)throw new Error('Missing verified media receipt');const bytes=Number(receipt.bytes);if(object.expectedBytes!==undefined&&object.expectedBytes!==bytes)throw new Error('Media expected length differs from receipt');await verifiedBytes(receipt.path,bytes,receipt.sha256);
-  if(!Array.isArray(object.references)||typeof object.contentType!=='string'||!/^[-\w.+]+\/[-\w.+]+$/.test(object.contentType))throw new Error('Invalid media descriptor');
-  for(const reference of object.references){const ref=reference as Record<string,unknown>;if(typeof ref.artifactId!=='string'||!Number.isSafeInteger(ref.version)||Number(ref.version)<1||!['original','small'].includes(String(ref.variant)))throw new Error('Invalid media reference');const identity=JSON.stringify([ref.artifactId,ref.version,ref.variant]);if(references.has(identity))throw new Error('Ambiguous media reference');references.add(identity);assets.push({artifactId:ref.artifactId,version:Number(ref.version),variant:ref.variant as 'original'|'small',sha256:receipt.sha256,bytes,path:receipt.path,contentType:object.contentType,filename:typeof ref.filename==='string'?ref.filename:null,...(Number.isSafeInteger(ref.width)&&Number(ref.width)>0?{width:Number(ref.width)}:{})});}
- }
- return {assets,verifiedObjects:objects.size};
-}
-/** Immutable local staging only; exclusive content addresses cannot overwrite existing bytes. */
-export async function stageMigrationMedia(assets:readonly MigratedAsset[],directory:string):Promise<void>{
- await mkdir(directory,{recursive:true,mode:0o700});const info=await lstat(directory);if(!info.isDirectory()||info.mode&0o077)throw new Error('Media staging directory must be private');const seen=new Set<string>();for(const asset of assets){if(!/^[a-f0-9]{64}$/.test(asset.sha256)||!Number.isSafeInteger(asset.bytes)||asset.bytes<0)throw new Error('Invalid staged media address');if(seen.has(asset.sha256))continue;seen.add(asset.sha256);const target=join(directory,asset.sha256);try{await verifiedBytes(target,asset.bytes,asset.sha256);continue;}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
- const temporary=target+'.'+randomUUID()+'.partial';const file=await open(temporary,'wx',0o600);try{await verifiedBytes(asset.path,asset.bytes,asset.sha256,file);await file.sync();await file.close();try{await link(temporary,target);}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;await verifiedBytes(target,asset.bytes,asset.sha256);}}finally{await file.close().catch(()=>{});await unlink(temporary).catch(()=>{});}}
-}
-export function migrationAssetUrl(asset:MigratedAsset,pageId:string,origin:string):string {const base=new URL(origin);if(!['http:','https:'].includes(base.protocol)||base.username||base.password||!/^[A-Za-z0-9]{6}$/.test(pageId)||!Number.isSafeInteger(asset.version)||asset.version<1||!['original','small'].includes(asset.variant)||!/^[a-f0-9]{64}$/.test(asset.sha256))throw new Error('Invalid media URL');return new URL('/af/v1/ids/'+encodeURIComponent(pageId)+'/assets/'+asset.version+'/'+asset.variant+'/'+asset.sha256,origin).href;}
-export function convertMigrationMedia(input:{format:string;version:number;pageId:string;title?:string;coreUrl:string;origin:string;assets:readonly MigratedAsset[]}):ConversionOutput{
- const assets=input.assets.filter(a=>a.version===input.version);const original=assets.find(a=>a.variant==='original');if(!original)return {classification:'manual-blocked',html:null,issues:['Missing verified original media bytes for saved revision'],identities:{}};
- const url=esc(migrationAssetUrl(original,input.pageId,input.origin));const title=esc(input.title??'Imported media');const content=input.format==='image'?`<img data-af-id="media" src="${url}" alt="${title}">`:`<a data-af-id="media" href="${url}" download>${title}</a>`;
- return {classification:'renderable',html:`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><script data-af="core" src="${esc(input.coreUrl)}"></script></head><body><main>${content}</main></body></html>`,issues:[],identities:{media:'media'},strategy:'media-wrapper'};
-}
-
-/** Only documented exact legacy byte URLs are mapped; HTML links and ref: expressions are not guessed. */
-export function migrationResourceMap(assets:readonly MigratedAsset[],pages:Record<string,string>,origin:string,legacyOrigins:readonly string[]):Record<string,string>{
- const result:Record<string,string>={};for(const asset of assets){const pageId=pages[asset.artifactId];if(!pageId)continue;if(asset.variant==='small'&&!asset.width)continue;const old='/a/'+encodeURIComponent(asset.artifactId)+'/raw?v='+asset.version+(asset.variant==='small'?'&w='+asset.width:'');const target=migrationAssetUrl(asset,pageId,origin);for(const url of [old,...legacyOrigins.map(base=>new URL(old,base).href)]){if(result[url]&&result[url]!==target)throw new Error('Ambiguous legacy media URL');result[url]=target;}}return result;
-}
+/** Migration media ports: receipt verification, immutable staging, and rendering stay independent. */
+export { readMigrationMedia } from "./media-receipts.ts";
+export { stageMigrationMedia } from "./media-staging.ts";
+export {
+  migrationAssetUrl,
+  convertMigrationMedia,
+  migrationResourceMap,
+} from "./media-render.ts";
