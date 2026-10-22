@@ -38,7 +38,7 @@ Don't add your own `<script type="importmap">`: the core adds the page's import 
 
 Keep viewer-specific state in local state, through `client` from `@afbin/apollo`: filters, the open tab, selections and drafts. Render shared backend data directly from `watchQuery` results. Don't keep state in plain variables.
 
-Local state belongs to the viewer. It's saved in their browser, so it's still there when they come back, and other viewers never see it. To share data between viewers, use a backend (see Remote state contract).
+Local state belongs to the viewer: their edits are saved in their browser and do not change another viewer's working state. It is not a place for secrets. Downloads include the downloading viewer's state; comments and shared viewer snapshots send state and rendered content to the server so authorized viewers can see that saved view. A state address also carries its state to anyone you share it with. Do not promise that drafts or other local fields never leave the device. To keep data shared and current between viewers, use a backend (see Remote state contract).
 
 Local state needs no schema or resolvers. Read it with a query, and write it back with `updateQuery`:
 

@@ -4,7 +4,7 @@ SKILL.md covers the basics: read with a query, write with `client.updateQuery`. 
 
 ## Whose state it is
 
-Local state belongs to one viewer. The platform keeps it in that viewer's browser, for that page, so it's still there after a reload or a new version of the page. Other viewers never see it, and nothing you write there reaches the server.
+Local state belongs to one viewer. The platform keeps their working state in their browser, for that page, so it survives reloads and new page versions without changing another viewer's working state. This is a scope for edits, not a confidentiality boundary: downloads include local state, comments and shared viewer snapshots send state and rendered content to the server for authorized viewers, and shared state addresses carry their state to recipients. Never put secrets in local state or promise that a draft stays only on the device.
 
 A viewer opening the page for the first time starts from the page's `<script type="application/json" data-af="state">` block, or from nothing if it has none.
 
