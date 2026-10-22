@@ -1,6 +1,6 @@
 /** Explicit migration-only archived static compiler. Never used as a runtime fallback. */
 import { MAX_PAGE_SOURCE } from "../../../af-contracts.ts";
-import { canonicalMediaUrl } from "./media.ts";
+import { canonicalMediaUrl, mappedSrcset } from "./media.ts";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -174,6 +174,7 @@ export async function compileArchivedStatic(
       "Media mapping must use a canonical verified ACL endpoint",
     );
   const mappedMedia = new Set<string>();
+  const mappedSets = new Set<string>();
   let compiled: ArchivedStaticOutput;
   try {
     compiled = await (options.compiler?.compile(input) ??
@@ -212,6 +213,18 @@ export async function compileArchivedStatic(
       );
       for (const a of node.attrs) {
         if (
+          (node.tagName === "img" ||
+            (node.tagName === "source" &&
+              node.parentNode?.tagName === "picture")) &&
+          a.name === "srcset"
+        ) {
+          const mapped = mappedSrcset(a.value, input.resourceMap ?? {});
+          if (mapped) {
+            a.value = mapped;
+            mappedSets.add(mapped);
+          } else invalid = true;
+        }
+        if (
           node.tagName === "img" &&
           a.name === "src" &&
           Object.hasOwn(input.resourceMap ?? {}, a.value)
@@ -224,7 +237,8 @@ export async function compileArchivedStatic(
             (node.tagName === "image" &&
               ["href", "xlink:href"].includes(a.name))) &&
           !a.value.startsWith("data:") &&
-          !mappedMedia.has(a.value)
+          !mappedMedia.has(a.value) &&
+          !(a.name === "srcset" && mappedSets.has(a.value))
         )
           invalid = true;
         if (

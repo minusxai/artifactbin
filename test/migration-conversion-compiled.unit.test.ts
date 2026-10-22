@@ -157,3 +157,46 @@ test("static compiled output obeys the unchanged product page source limit", asy
   assert.equal(result.classification, "manual-blocked");
   assert.equal(result.issues[0]?.code, "compiled-page-limit");
 });
+
+test("verified srcset mapping preserves every candidate descriptor and refuses partial resolution", async () => {
+  const first = "/af/v1/ids/Ab1234/assets/1/small/" + "a".repeat(64),
+    second = "/af/v1/ids/Ab1234/assets/1/original/" + "b".repeat(64);
+  const imageCompiler = {
+    compile: async () => ({
+      ...(await compiler.compile({} as never)),
+      html: '<img src="/old-small.png" srcset="/old-small.png 480w, /old-large.png 960w">',
+    }),
+  };
+  const input = {
+    source:
+      '<img src="/old-small.png" srcSet="/old-small.png 480w, /old-large.png 960w"/>',
+    coreUrl: "/af/v1/core.js",
+  };
+  const map = { "/old-small.png": first, "/old-large.png": second };
+  const result = await compileArchivedStatic(
+    { ...input, resourceMap: map },
+    { compiler: imageCompiler },
+  );
+  assert.equal(result.classification, "renderable");
+  assert.ok(result.html!.includes(first + " 480w, " + second + " 960w"));
+  const missing = await compileArchivedStatic(
+    { ...input, resourceMap: { "/old-small.png": first } },
+    { compiler: imageCompiler },
+  );
+  assert.equal(missing.classification, "manual-blocked");
+  const invalid = {
+    compile: async () => ({
+      ...(await imageCompiler.compile()),
+      html: '<img src="/old-small.png" srcset="/old-small.png 1x, /old-large.png 1x">',
+    }),
+  };
+  assert.equal(
+    (
+      await compileArchivedStatic(
+        { ...input, resourceMap: map },
+        { compiler: invalid },
+      )
+    ).classification,
+    "manual-blocked",
+  );
+});

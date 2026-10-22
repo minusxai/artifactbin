@@ -12,4 +12,4 @@ The migration bundle resolves archived compiled kit and Solid modules from the a
 
 The caller must choose this strategy explicitly. All corpus content and browser proof files belong outside the repository. A modified example proves adapter behavior only; it is not evidence that an unchanged corpus document has migrated.
 
-`resourceMap` applies only to static output: each exact old image URL maps to a verified canonical ACL media endpoint supplied by the importer. Shape validation grants no authorization. Missing mappings and unstructured srcset variants remain blocked. Local hydration requires source and SSR media mapping together and does not yet support this port.
+`resourceMap` applies only to static output: each exact old image URL maps to a verified canonical ACL media endpoint supplied by the importer. Shape validation grants no authorization. Each srcset candidate is resolved independently and retains its width/density descriptor. Missing candidates, duplicate or mixed descriptors, and invalid targets remain blocked. Local hydration requires source and SSR media mapping together and does not yet support this port.
