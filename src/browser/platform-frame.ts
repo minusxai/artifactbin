@@ -1,4 +1,6 @@
 import { imagePath, readPlatformImage } from "./platform-image.ts";
+import { createAttachmentHTTP } from "./dataset-attachment-http.ts";
+import { attachmentRead, attachmentUpload, attachmentScope } from "./dataset-attachment-validation.ts";
 import { pairingExchange } from "./pairing-exchange.ts";
 import { readBoundedJSON } from "./bounded-response.ts";
 import { wireRequest, wireResult } from "./comment-wire.ts";
@@ -102,7 +104,10 @@ export function createPlatformSession(
     abort = new AbortController(),
     live: ReturnType<typeof connectLive> | undefined;
   const imageReads = new Map<string, AbortController>();
+  const attachmentRequests = new Map<string, AbortController>();
+  const attachments = createAttachmentHTTP({origin,pageId:()=>binding.fileId||null,authority:()=>authorizationContext,headers:()=>credential(),fetch:fetcher});
   function invalidateImages() {
+    for(const request of attachmentRequests.values())request.abort();
     authorizationContext = null;
     for (const read of imageReads.values()) read.abort();
     imageReads.clear();
@@ -313,6 +318,26 @@ export function createPlatformSession(
       if (size(command) > PLATFORM_MAX_BYTES)
         throw Error("Platform message too large");
       switch (command.kind) {
+        case "attachment.cancel":
+          attachmentRequests.get(command.id)?.abort();
+          return null;
+        case "attachment": {
+          if(pairing||!binding.fileId||!authorizationContext||command.authorizationContext!==authorizationContext)throw Error("Attachment caller changed");
+          if(typeof command.id!=="string"||!command.id||command.id.length>100||attachmentRequests.has(command.id)||attachmentRequests.size>=2)throw Error("Attachment request unavailable");
+          const valid=command.operation==="upload"?attachmentUpload(command.request):command.operation==="read"?attachmentRead(command.request):command.operation==="availability"&&attachmentScope(command.request);
+          if(!valid)throw Error("Invalid attachment request");
+          const controller=new AbortController(),version=generation,epoch=identityEpoch;
+          attachmentRequests.set(command.id,controller);
+          const signal=AbortSignal.any([abort.signal,controller.signal,AbortSignal.timeout(60000)]);
+          try{
+            const raw=command.request as import("./dataset-attachment-bridge-contracts.ts").AttachmentUpload & import("./dataset-attachment-bridge-contracts.ts").AttachmentRead;
+            const scope={backendNamespace:raw.backendNamespace,bindingName:raw.bindingName};
+            const value=command.operation==="upload"?await attachments.upload({...scope,requestId:raw.requestId,filename:raw.filename,contentType:raw.contentType,blob:raw.blob},signal):command.operation==="read"?await attachments.read({...scope,ref:raw.ref},signal):await attachments.availability(scope,signal);
+            active(version);
+            if(pairing||epoch!==identityEpoch||command.authorizationContext!==authorizationContext)throw Error("Attachment caller changed");
+            return value;
+          }finally{if(attachmentRequests.get(command.id)===controller)attachmentRequests.delete(command.id);}
+        }
         case "pair":
           return pair(command.pairGeneration);
         case "request":

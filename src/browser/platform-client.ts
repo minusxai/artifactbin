@@ -212,6 +212,16 @@ export function createPlatformClient(
   };
   return {
     ready,
+    attachments(context) {
+      async function invoke(operation:"upload"|"read"|"availability",request:import("./dataset-attachment-bridge-contracts.ts").AttachmentScope,signal?:AbortSignal):Promise<any>{
+        signal?.throwIfAborted();const id=crypto.randomUUID();
+        const cancel=()=>{void command({kind:"attachment.cancel",id}).catch(()=>{});};
+        signal?.addEventListener("abort",cancel,{once:true});
+        try {const value=await command({kind:"attachment",id,operation,request,authorizationContext:context},65000);signal?.throwIfAborted();return value;}
+        finally{signal?.removeEventListener("abort",cancel);}
+      }
+      return {upload:(r,s)=>invoke("upload",r,s),read:(r,s)=>invoke("read",r,s),availability:(r,s)=>invoke("availability",r,s)};
+    },
     pair: () =>
       command({ kind: "pair", pairGeneration: ++pairGeneration }, 305000),
     request: (operation) => command({ kind: "request", operation }),

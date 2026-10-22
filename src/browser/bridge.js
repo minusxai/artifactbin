@@ -1,4 +1,5 @@
 import { createImageClient } from "./image-client.ts";
+import { createAttachmentClient } from "./dataset-attachment-client.ts";
 // The page-side half of a hosted page, installed by the runner before the
 // page's own HTML. It registers the CoreHost the core uses for the viewer's
 // own local state (kept in this browser, keyed by the page), backend calls
@@ -51,6 +52,7 @@ export function installBridge(boot) {
   const send = (data) =>
     receiver.postMessage({ pagegi: true, channel: boot.channel, ...data }, "*");
   const images = createImageClient({send,id:()=>crypto.randomUUID(),schedule});
+  const datasetAttachments = createAttachmentClient({send,id:()=>crypto.randomUUID(),schedule});
   const remote = createRemoteClient({
     initialAccess:boot.access,
     send,
@@ -96,6 +98,7 @@ export function installBridge(boot) {
     },
     remote: () => remote.port,
     image: (url,signal) => images.load(url,signal),
+    datasetAttachment: datasetAttachments,
   };
   /** @type {import("./core/host-contracts.ts").LocalAttachment | null} */
   let attached = null;
@@ -275,6 +278,7 @@ export function installBridge(boot) {
     if (event.persisted) return;
     remote.dispose();
     images.dispose();
+    datasetAttachments.dispose();
     selectionLayer.remove();
     document.removeEventListener("selectionchange", selectionChanged);
   });
@@ -292,8 +296,10 @@ export function installBridge(boot) {
       return;
     }
     if (m.kind === "image-response") { images.receive(m.response); return; }
+    if (m.kind === "attachment-response") { datasetAttachments.receive(m.response); return; }
     if (m.kind === "authorization-context") {
       images.setAuthority(typeof m.context==="string"?m.context:null);
+      datasetAttachments.setAuthority(typeof m.context==="string"?m.context:null);
       if(m.access&&typeof m.access==='object')remote.setAccess(m.access);
       else remote.setAuthorizationContext(typeof m.context === "string" ? m.context : null);
       return;

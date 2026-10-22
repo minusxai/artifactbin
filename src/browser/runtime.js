@@ -1,6 +1,8 @@
 // @ts-check
 import {createRemoteAccess} from "./remote-access.ts";
 import { createImageHost } from "./image-host.ts";
+import { createAttachmentHost } from "./dataset-attachment-host.ts";
+import { createAttachmentHTTP } from "./dataset-attachment-http.ts";
 import { createCommentAttachmentResources } from "./comment-attachment-resources.ts";
 import { readPlatformImage, platformImageBlob } from "./platform-image.ts";
 import { supplementalAddress } from "../media/supplemental-address.ts";
@@ -52,7 +54,7 @@ async function bootPlatform() {
   /** @type {import('../apollo/apollo-contracts.ts').RemoteAccessSnapshot['state']} */
   let authorAccessState='pending';
   const host = createDocumentHost({
-    invalidateCollaboration: () => { authorAccessState='pending';sendApp({pagegi:true,kind:'authorization-context',context:null,access:authorAccess.invalidate()});imageHost.invalidate(); attachmentResources.setAuthority(null); collaboration.disconnect(); },
+    invalidateCollaboration: () => { authorAccessState='pending';datasetAttachmentHost.invalidate();sendApp({pagegi:true,kind:'authorization-context',context:null,access:authorAccess.invalidate()});imageHost.invalidate(); attachmentResources.setAuthority(null); collaboration.disconnect(); },
     readState: () => saved,
     updateState: (reducer) => { saved = reducer(saved); },
     // A downloaded file comments as the hosted view does: signed in, with the server's permission.
@@ -73,7 +75,9 @@ async function bootPlatform() {
     return gate.active && !documentView.historical && authorAccessState === "allowed"
       ? current.permissions?.authorizationContext ?? null : null;
   }
+  let datasetAttachmentContext = /** @type {string|null} */ (null);
   function sendAuthorizationContext() {
+    if(datasetAttachmentContext!==authorizationContext()){datasetAttachmentHost.invalidate();datasetAttachmentContext=authorizationContext();}
     if(!authorizationContext())imageHost.invalidate();
     const context=authorizationContext();
     const access=authorAccess.project({active:gate.active,historical:documentView.historical,phase:authorAccessState,context});
@@ -273,6 +277,16 @@ async function bootPlatform() {
       return readPlatformImage(await fetch(supplementalAddress(address),{method:"GET",credentials:"same-origin",redirect:"error",headers:backendHeaders(),signal}),signal);
     },
     reply:response=>sendApp({pagegi:true,kind:"image-response",response}),
+  });
+  const attachmentHTTP = local?null:createAttachmentHTTP({origin:location.origin,pageId:()=>saved.fileId||null,authority:authorizationContext,headers:backendHeaders,fetch:(url,init)=>fetch(url,init)});
+  function attachmentPort(){if(local)return broker().attachments(authorizationContext()||"");if(!attachmentHTTP)throw Error("Attachment unavailable");return attachmentHTTP;}
+  const datasetAttachmentHost = createAttachmentHost({
+    pageId:()=>saved.fileId||null,authority:authorizationContext,active:()=>gate.active&&!documentView.historical,
+    port:{
+      upload:(request,signal)=>attachmentPort().upload(request,signal),
+      read:(request,signal)=>attachmentPort().read(request,signal),
+      availability:(request,signal)=>attachmentPort().availability(request,signal),
+    },reply:response=>sendApp({pagegi:true,kind:"attachment-response",response}),
   });
   const remoteHost = createRemoteHost({
     authorizationContext,
@@ -488,6 +502,7 @@ async function bootPlatform() {
       sendApp({ pagegi: true, kind: "remote-invalidated" });
     },
     onInvalidated() {
+      datasetAttachmentHost.invalidate();
       attachmentResources.setAuthority(null);
       sendApp({ pagegi: true, kind: "remote-invalidated" });
     },
@@ -702,6 +717,7 @@ async function bootPlatform() {
             () => commentPanel.dispose(),
             () => attachmentResources.dispose(),
             () => imageHost.invalidate(),
+            () => datasetAttachmentHost.invalidate(),
             () => chrome.dispose(),
             () => connection.dispose(),
             () => presence.cancel(),
@@ -832,7 +848,7 @@ async function bootPlatform() {
   const appMessageRouting = {
     accepts: (event) => placement?.accepts(event) === true,
     active: () => gate.active,
-    backend: (message) => imageHost.handle(message)||remoteHost.handle(message),
+    backend: (message) => datasetAttachmentHost.handle(message)||imageHost.handle(message)||remoteHost.handle(message),
   };
   addEventListener("message", (e) => {
     if (!admitAppMessage(e, appMessageRouting)) return;

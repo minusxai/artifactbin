@@ -44,6 +44,8 @@ export interface CoreHost {
   remote(): RemotePort;
   /** Internal migrated person-card image port: exact page-bound URL, no arbitrary fetch. */
   image?(url:string,signal?:AbortSignal):Promise<Blob>;
+  /** Internal fixed-Import binary attachment port; never a credentialed fetch API. */
+  datasetAttachment?: import("../dataset-attachment-bridge-contracts.ts").AttachmentPort;
 }
 
 /** What the core gives a platform runtime that attaches to a downloaded file. */

@@ -67,6 +67,8 @@ export interface PlatformBackendResult {
   body: unknown;
 }
 export type PlatformCommand =
+  | { kind: "attachment.cancel"; id: string }
+  | { kind: "attachment"; id: string; authorizationContext: string; operation: "upload"|"read"|"availability"; request: import("./dataset-attachment-bridge-contracts.ts").AttachmentUpload | import("./dataset-attachment-bridge-contracts.ts").AttachmentRead | import("./dataset-attachment-bridge-contracts.ts").AttachmentScope }
   | { kind: "init"; binding: PlatformBinding }
   | { kind: "pair"; pairGeneration: number }
   | { kind: "request"; operation: PlatformOperation }
@@ -128,6 +130,7 @@ export interface PlatformImage {
   base64: string;
 }
 export interface PlatformClient {
+  attachments(context: string): import("./dataset-attachment-bridge-contracts.ts").AttachmentPort;
   ready: Promise<void>;
   pair(): Promise<PlatformConnection>;
   /** Caller operations refuse transport while pairing; permissions must be refreshed after any pairing attempt. */
