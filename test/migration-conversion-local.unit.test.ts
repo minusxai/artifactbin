@@ -348,3 +348,56 @@ test("table viewer state validates schema, reloads saved rows, and keeps scalar 
   boot({ TREE: () => null });
   assert.deepEqual(context.table("rows").rows, [{ amount: 9 }]);
 });
+
+test("dataset Imports require exact manifest bindings and emit no fetched rows", async () => {
+  const source =
+    '<Helmet><Import name="items" src="ref:Abcd12"/><Query name="total">{`select sum(amount) as total from items.rows`}</Query></Helmet><Number data="$total"/>';
+  const binding = {
+    name: "items",
+    legacyRef: "ref:Abcd12",
+    backendNamespace: "legacyDatasets",
+    backendHref: "/af/v1/ids/Bac123",
+    version: 3,
+    tables: [
+      {
+        schema: "main",
+        table: "rows",
+        columns: [{ name: "amount", type: "number" }],
+      },
+    ],
+  };
+  let calls = 0;
+  const compiler = {
+    compile: async () => {
+      calls++;
+      return {
+        ...output,
+        declarations: [],
+        queryNames: ["total"],
+        datasetNames: ["items"],
+      };
+    },
+  };
+  const result = await compileArchivedLocal(
+    { ...input, source, datasetBindings: [binding] },
+    { compiler },
+  );
+  assert.equal(result.classification, "functional");
+  assert.equal(calls, 1);
+  assert.match(result.html!, /rel="af-backend"/);
+  assert.match(result.html!, /data-af-name="legacyDatasets"/);
+  assert.match(result.html!, /Loading protected data/);
+  assert.match(result.html!, /"compiledPage":\{\}/);
+  for (const datasetBindings of [
+    [],
+    [{ ...binding, legacyRef: "ref:Other1" }],
+    [binding, binding],
+  ]) {
+    const bad = await compileArchivedLocal(
+      { ...input, source, datasetBindings },
+      { compiler },
+    );
+    assert.equal(bad.classification, "manual-blocked");
+  }
+  assert.equal(calls, 1);
+});

@@ -2,6 +2,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { prepareLocalFlow } from "./local-engine.ts";
 import { localBootSource } from "./local-boot.ts";
 import type { CompiledMigrationInput } from "./contracts.ts";
 const root = path.resolve(process.argv[2] ?? "");
@@ -16,12 +17,7 @@ for await (const chunk of process.stdin) {
 const input = JSON.parse(text) as CompiledMigrationInput;
 const { storyBodyFor } = await archived("lib/document/body.ts");
 const split = storyBodyFor(input.source);
-if (
-  !split ||
-  split.content.script ||
-  split.content.mutations.length ||
-  split.content.imports.length
-)
+if (!split || split.content.script || split.content.mutations.length)
   throw Error("Only local scalar documents admitted");
 const [
   { prepareStoryParts },
@@ -78,7 +74,7 @@ const localTables = Object.fromEntries(
     .map((d: any) => [d.name, d.default]),
 );
 const rawFlow = {
-  imports: [],
+  imports: split.content.imports,
   queries: split.content.queries,
   mutations: [],
   values: split.content.values,
@@ -86,49 +82,15 @@ const rawFlow = {
 let flow: any = rawFlow;
 let results: any = null;
 if (rawFlow.queries.length) {
-  const { prepareCompile, compileDataflow } = await archived(
-    "lib/dataflow/compile-dataflow.ts",
-  );
-  const ctx = await prepareCompile(rawFlow, async () => null);
-  const compiled = compileDataflow(rawFlow, ctx, split.body);
-  if (!compiled.ok) throw Error("Local query compilation refused");
-  flow = compiled.compiled;
-  if (
-    flow.imports.length ||
-    flow.mutations.length ||
-    flow.queries.some(
-      (q: any) =>
-        q.engine !== "sqlite" ||
-        q.source ||
-        q.reads.imports.length ||
-        q.reads.builtins.length,
-    )
-  )
-    throw Error("Only local scalar SQL queries admitted");
-  const { createPageEngine } = await archived("lib/page-store/page-engine.ts");
-  const engine = createPageEngine({
-    load: async () => ctx.engine,
-    fetch: async () => {
-      throw Error("Imports are unsupported");
-    },
-  });
-  engine.prepare(flow, []);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  if (!engine.ready(flow, [])) throw Error("Local engine failed to prepare");
-  results = await engine.run(
-    flow,
-    flow.queries.map((q: any) => q.name),
-    {
-      values: scalarValues,
-      localTables,
-      userId: null,
-      now: new Date().toISOString(),
-      tz: "UTC",
-    },
-  );
-  if (Object.keys(results.errors).length)
-    throw Error("Default local queries failed");
-}
+  ({ flow, results } = await prepareLocalFlow(
+    archived,
+    rawFlow,
+    split.body,
+    scalarValues,
+    localTables,
+    input.datasetBindings ?? [],
+  ));
+} else if (rawFlow.imports.length) throw Error("Import requires a query");
 const generated = generate({
   nodes: parts.runtime.data.nodes,
   colorMode: parts.mode,
@@ -189,7 +151,12 @@ if (flow.queries.length) {
   const wasm = await readFile(
     path.join(root, "services/app/public", buildManifest.sqliteWasm),
   );
-  sql = { flow, wasmBase64: wasm.toString("base64"), tables: results.tables };
+  sql = {
+    flow,
+    wasmBase64: wasm.toString("base64"),
+    tables: results.tables,
+    bindings: input.datasetBindings ?? [],
+  };
 }
 const sqlitePath = Object.keys(buildManifest.files).find((v: string) =>
   /^\/islands\/sqlite-engine-[a-f0-9]+\.js$/.test(v),
@@ -260,6 +227,9 @@ const bundled = await bundle({
         b.onLoad({ filter: /.*/, namespace: "migration" }, () => ({
           contents: localBootSource(declarations, sql),
           loader: "js",
+        }));
+        b.onResolve({ filter: /^migration-datasets$/ }, () => ({
+          path: path.join(import.meta.dirname, "dataset-reader.ts"),
         }));
         b.onResolve({ filter: /^migration-sqlite$/ }, () => {
           if (!sqlitePath) throw Error("No archived SQLite engine");
@@ -359,6 +329,7 @@ process.stdout.write(
     css,
     javascript,
     declarations,
+    datasetNames: flow.imports.map((i: any) => i.name),
     queryNames: flow.queries.map((q: any) => q.name),
     modules,
     title: parts.title,

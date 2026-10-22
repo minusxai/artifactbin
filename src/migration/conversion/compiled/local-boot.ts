@@ -1,17 +1,27 @@
+import { datasetBootSetup, datasetBootStatus } from "./dataset-boot.ts";
+import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 import { validLocalValue } from "./local-state.ts";
 import type { LocalDeclaration } from "./local-contracts.ts";
 /** Generated module imports only the already-compiled kit context bridge and Apollo. */
 export function localBootSource(
   declarations: LocalDeclaration[],
-  sql?: { flow: unknown; wasmBase64: string; tables: unknown },
+  sql?: {
+    flow: unknown;
+    wasmBase64: string;
+    tables: unknown;
+    bindings?: readonly CompiledDatasetBinding[];
+  },
 ): string {
+  const imports = sql?.bindings?.length ?? 0;
   return `import {client,gql} from '@afbin/apollo';
 import {hydrateIsland} from '@mx/rt';
 import {createSignal} from 'solid-js';
+${imports ? "import {readCompiledDataset} from 'migration-datasets';" : ""}
 ${sql ? "import {pageEngine} from 'migration-sqlite';" : ""}
 const declarations=${JSON.stringify(declarations)};
 const validLocalValue=(()=>{const __name=f=>f;return ${validLocalValue.toString()};})();
-${sql ? `const flow=${JSON.stringify(sql.flow)};const engine=pageEngine(async()=>Uint8Array.from(atob(${JSON.stringify(sql.wasmBase64)}),c=>c.charCodeAt(0)),async()=>{throw Error('Remote imports are unavailable');});` : ""}
+${datasetBootSetup(sql?.bindings ?? [])}
+${sql ? `const flow=${JSON.stringify(sql.flow)};const engine=pageEngine(async()=>Uint8Array.from(atob(${JSON.stringify(sql.wasmBase64)}),c=>c.charCodeAt(0)),${imports ? "readImport" : "async()=>{throw Error('Remote imports are unavailable');}"});` : ""}
 const query=gql\`{ compiledPage }\`;
 export function boot({TREE}) {
  const [state,setState]=createSignal(Object.fromEntries(declarations.map(d=>[d.name,d.default])));
@@ -22,7 +32,8 @@ export function boot({TREE}) {
  const [queryErrors,setQueryErrors]=createSignal({});
  const [pending,setPending]=createSignal(false);
  let generation=0;
- ${sql ? `setTables(${JSON.stringify(sql.tables)});const run=async()=>{const current=++generation;setPending(true);try{engine.prepare(flow,[]);const deadline=Date.now()+5000;while(!engine.ready(flow,[])){if(Date.now()>deadline)throw Error("Local engine loading timed out");await new Promise(resolve=>setTimeout(resolve,10));}const answer=await engine.run(flow,flow.queries.map(q=>q.name),{values:values(),localTables:localTables(),userId:null,now:new Date().toISOString(),tz:'UTC'});if(current===generation){setTables(answer.tables);setQueryErrors(answer.errors);}}catch{if(current===generation)setQueryErrors(Object.fromEntries(flow.queries.map(q=>[q.name,'Local query failed'])));}finally{if(current===generation)setPending(false);}};` : "const run=()=>{};"}
+ ${sql ? `setTables(${JSON.stringify(sql.tables)});const run=async()=>{const current=++generation;setPending(true);try{engine.prepare(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"});const deadline=Date.now()+${imports ? 15000 : 5000};while(!engine.ready(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"})){${imports ? "if(datasetReadFailed)throw Error('Dataset read unavailable');" : ""}if(Date.now()>deadline)throw Error("Local engine loading timed out");await new Promise(resolve=>setTimeout(resolve,10));}const answer=await engine.run(flow,flow.queries.map(q=>q.name),{values:values(),localTables:localTables(),userId:null,now:new Date().toISOString(),tz:'UTC'});if(current===generation){setTables(answer.tables);setQueryErrors(answer.errors);${imports ? "setDatasetStatus(Object.keys(answer.errors).length?'Protected data queries could not be evaluated.':'');" : ""}}}catch{if(current===generation){setTables({});setQueryErrors(Object.fromEntries(flow.queries.map(q=>[q.name,'Local query failed'])));${imports ? "setDatasetStatus('Protected data is unavailable. Check access and refresh data.');" : ""}}}finally{if(current===generation)setPending(false);}};` : "const run=()=>{};"}
+ ${imports ? datasetBootStatus : ""}
  const checked=(next)=>Object.fromEntries(declarations.map(d=>{const v=next?.[d.name];return [d.name,validLocalValue(d,v)?v:d.default];}));
  const write=patch=>{for(const [name,v]of Object.entries(patch)){const d=declarations.find(d=>d.name===name);if(!d||!validLocalValue(d,v))throw Error('Invalid local scalar write');}
  client.updateQuery({query},data=>({...data,compiledPage:{...checked(data.compiledPage),...patch}}));};

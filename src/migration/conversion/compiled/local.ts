@@ -1,6 +1,7 @@
 /** Explicit offline route; never a fallback for blocked static conversion. */
 import { MAX_PAGE_SOURCE } from "../../../af-contracts.ts";
 import { Parser } from "acorn";
+import { validDatasetBinding } from "./dataset-reader.ts";
 import { validLocalValue } from "./local-state.ts";
 import { safeInlineModule } from "./module-safety.ts";
 import jsx from "acorn-jsx";
@@ -40,7 +41,7 @@ const activeUri = (v: string) =>
   );
 const json = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 const allowed = new Set(
-  "Helmet Value Query Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "Helmet Import Value Query Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -82,7 +83,31 @@ export async function compileArchivedLocal(
     )
   )
     return blocked("compiled-capability");
+  const bindings = input.datasetBindings ?? [];
+  const backendLinks = new Map<string, string>();
+  if (
+    !Array.isArray(bindings) ||
+    bindings.some((b) => !b) ||
+    bindings.length > 16 ||
+    new Set(bindings.map((b) => b.name)).size !== bindings.length ||
+    bindings.some(
+      (b) =>
+        !validDatasetBinding(b) ||
+        !/^ref:[A-Za-z0-9]{6}$/.test(b.legacyRef) ||
+        ["compiledPage", "authorSignals"].includes(b.backendNamespace),
+    )
+  )
+    return blocked("compiled-dataset-binding");
+  for (const b of bindings) {
+    if (
+      backendLinks.has(b.backendNamespace) &&
+      backendLinks.get(b.backendNamespace) !== b.backendHref
+    )
+      return blocked("compiled-dataset-binding");
+    backendLinks.set(b.backendNamespace, b.backendHref);
+  }
   let invalid = false;
+  const imports = new Set<string>();
   const declarations = new Set<string>();
   const tableNames = new Set<string>();
   const scalarBindings = new Set<string>();
@@ -145,6 +170,28 @@ export async function compileArchivedLocal(
           (/^[A-Z]/.test(name) && !allowed.has(name))
         )
           invalid = true;
+        if (name === "Import") {
+          const attrs = Object.fromEntries(
+            node.openingElement.attributes.map((a: any) => [
+              a.name?.name,
+              a.value?.value,
+            ]),
+          );
+          const binding = bindings.find(
+            (b) => b.name === attrs.name && b.legacyRef === attrs.src,
+          );
+          if (
+            !binding ||
+            imports.has(attrs.name) ||
+            node.openingElement.attributes.length !== 2 ||
+            Object.keys(attrs).some((k) => !["name", "src"].includes(k)) ||
+            node.children.some(
+              (c: any) => c.type !== "JSXText" || c.value.trim(),
+            )
+          )
+            invalid = true;
+          imports.add(attrs.name);
+        }
         for (const attr of node.openingElement.attributes) {
           if (
             attr.value?.expression?.type === "ArrayExpression" &&
@@ -152,6 +199,7 @@ export async function compileArchivedLocal(
           )
             invalid = true;
           const attrName = attr.name?.name?.toLowerCase();
+          if (attrName === "data-migration-dataset-status") invalid = true;
           const attrValue = attr.value?.value ?? attr.value?.expression?.value;
           if (
             /^on/.test(attrName) ||
@@ -264,6 +312,11 @@ export async function compileArchivedLocal(
     [...scalarBindings].some((n) => tableNames.has(n))
   )
     invalid = true;
+  if (
+    imports.size !== bindings.length ||
+    [...imports].some((n) => declarations.has(n) || queries.has(n))
+  )
+    invalid = true;
   if (invalid || (declarations.size === 0 && queries.size === 0))
     return blocked("compiled-capability");
   let output: ArchivedLocalOutput;
@@ -322,6 +375,11 @@ export async function compileArchivedLocal(
     [...queries].some((q) => !output.queryNames?.includes(q))
   )
     return blocked("compiled-local-output");
+  if (
+    (output.datasetNames ?? []).length !== imports.size ||
+    [...imports].some((n) => !output.datasetNames?.includes(n))
+  )
+    return blocked("compiled-local-output");
   const identities: Record<string, string> = Object.create(null);
   let unsafe = false;
   const fragment = parseFragment(output.html);
@@ -359,7 +417,16 @@ export async function compileArchivedLocal(
     .filter(([key]) => ["class", "data-theme"].includes(key))
     .map(([key, value]) => ` ${key}="${esc(value)}"`)
     .join("");
-  const html = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state })}</script><title>${esc(output.title)}</title><style>${output.css}</style></head><body>${serialize(fragment)}<script type="module">${output.javascript.replace(/<\/script/gi, "<\\/script")}</script></body></html>`;
+  const links = [...backendLinks]
+    .map(
+      ([name, href]) =>
+        `<link rel="af-backend" href="${esc(href)}" data-af-name="${esc(name)}">`,
+    )
+    .join("");
+  const status = imports.size
+    ? '<p role="status" data-migration-dataset-status>Loading protected data…</p>'
+    : "";
+  const html = `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state })}</script>${links}<title>${esc(output.title)}</title><style>${output.css}</style></head><body>${status}${serialize(fragment)}<script type="module">${output.javascript.replace(/<\/script/gi, "<\\/script")}</script></body></html>`;
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE)
     return blocked("compiled-page-limit");
   return {
@@ -373,6 +440,7 @@ export async function compileArchivedLocal(
       "inlined-fonts",
       ...(queries.size ? ["local-sql-queries"] : []),
       ...(tableNames.size ? ["local-inline-tables"] : []),
+      ...(imports.size ? ["protected-dataset-reads"] : []),
     ],
     provenance: {
       compiler: "archived-local",

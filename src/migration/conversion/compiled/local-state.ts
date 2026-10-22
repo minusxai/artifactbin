@@ -11,6 +11,7 @@ export function validLocalValue(d: LocalDeclaration, value: unknown): boolean {
   if (
     !Array.isArray(d.columns) ||
     d.columns.length > 256 ||
+    d.columns.some((c) => !c || typeof c !== "object") ||
     new Set(d.columns.map((c) => c.name)).size !== d.columns.length ||
     d.columns.some(
       (c) =>

@@ -1,7 +1,10 @@
+import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 import type { ConversionResult } from "../contracts.ts";
 export interface CompiledMigrationInput {
   source: string;
   coreUrl: string;
+  /** Explicit manifest bindings; metadata only, never dataset rows. */
+  datasetBindings?: readonly CompiledDatasetBinding[];
   /** Exact archived img URL -> verified ACL media endpoint. Static assembler only. */
   resourceMap?: Readonly<Record<string, string>>;
   theme?: string | null;
