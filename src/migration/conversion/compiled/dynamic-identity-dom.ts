@@ -14,6 +14,7 @@ export function installDynamicIdentities(root:Document|Element,plan:LocalDynamic
       source(region.id);
       if(scope)repeated.set(region.id,scope);else direct.add(region.id);
     }else if(region.kind==='conditional'){collect(region.yes,scope);collect(region.no,scope);}
+    else if(region.kind==='deferred')collect(region.children,scope);
     else {if(scope)throw Error('Nested instance identity unsupported');
       if(region.kind==='repeat'){source(region.owner);direct.add(region.owner);collect(region.children,{tag:'repeat',owner:region.owner});}
       else collect(region.children,{tag:'table',owner:region.owner,column:region.column});

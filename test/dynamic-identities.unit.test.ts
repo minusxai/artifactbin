@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {archivedInstanceId,initialDynamicIdentities,evaluateLocalReactiveExpression} from '../src/migration/conversion/compiled/dynamic-identities.ts';
+import {archivedInstanceId,initialDynamicIdentities,allowedInitialDynamicIdentities,evaluateLocalReactiveExpression} from '../src/migration/conversion/compiled/dynamic-identities.ts';
 import type {LocalDynamicIdentityPlan} from '../src/migration/conversion/compiled/reactive-source-contracts.ts';
 const plan:LocalDynamicIdentityPlan={regions:[{kind:'node',id:'root'},{kind:'conditional',test:{kind:'signal',name:'open'},yes:[{kind:'node',id:'shown'}],no:[{kind:'node',id:'hidden'}]},{kind:'repeat',owner:'rows',table:'items',keyBy:'key',children:[{kind:'node',id:'child'}]}]};
 test('initial identities follow branches and retain repeat owner without preview rows',()=>{
@@ -26,4 +26,14 @@ test('relational branches reject mixed types and null without JS coercion',()=>{
 test('preview emits Column header but defers all cell child identities',()=>{
  const cells:LocalDynamicIdentityPlan={regions:[{kind:'node',id:'table'},{kind:'node',id:'column-header'},{kind:'cell',owner:'table',table:'items',rowKey:'id',column:'label',children:[{kind:'node',id:'label-link'}]}]};
  assert.deepEqual(initialDynamicIdentities(cells,{}),['table','column-header']);
+});
+test('explicit deferred subtree is not required at preview while ordinary source nodes remain required',()=>{
+ const deferred:LocalDynamicIdentityPlan={regions:[{kind:'node',id:'trigger'},{kind:'deferred',children:[{kind:'node',id:'portal-content'},{kind:'node',id:'portal-action'}]}]};
+ assert.deepEqual(initialDynamicIdentities(deferred,{}),['trigger']);
+});
+
+test('hidden deferred SSR is permitted without permitting inactive branches or row/cell templates',()=>{
+ const deferred:LocalDynamicIdentityPlan={regions:[{kind:'node',id:'trigger'},{kind:'deferred',children:[{kind:'node',id:'shell'},{kind:'conditional',test:{kind:'literal',value:false},yes:[{kind:'node',id:'inactive'}],no:[{kind:'node',id:'active'}]},{kind:'repeat',owner:'rows',table:'items',keyBy:'id',children:[{kind:'node',id:'template'}]},{kind:'cell',owner:'table',table:'items',rowKey:'id',column:'label',children:[{kind:'node',id:'cell'}]}]}]};
+ assert.deepEqual(initialDynamicIdentities(deferred,{}),['trigger']);
+ assert.deepEqual(allowedInitialDynamicIdentities(deferred,{}),['trigger','shell','active','rows']);
 });

@@ -33,15 +33,21 @@ export function evaluateLocalReactiveExpression(expr:LocalReactiveExpression,con
 }
 /** Compiler preview deliberately renders no repeat rows. Deferred templates are
  * provenance, not DOM targets until the archived runtime emits keyed instances. */
-export function initialDynamicIdentities(plan:LocalDynamicIdentityPlan,values:Readonly<Record<string,unknown>>):string[]{
+function resolveInitialIdentities(plan:LocalDynamicIdentityPlan,values:Readonly<Record<string,unknown>>,includeDeferred:boolean):string[]{
   const result:string[]=[];
   const visit=(regions:readonly LocalIdentityRegion[])=>{for(const region of regions){
     if(region.kind==='node')result.push(region.id);
     else if(region.kind==='repeat')result.push(region.owner);
     else if(region.kind==='cell')continue;
+    else if(region.kind==='deferred'){if(includeDeferred)visit(region.children);}
     else visit(evaluateLocalReactiveExpression(region.test,{values})?region.yes:region.no);
   }};
   visit(plan.regions);
   if(new Set(result).size!==result.length)throw new Error('Duplicate dynamic source identity');
   return result;
 }
+
+export function initialDynamicIdentities(plan:LocalDynamicIdentityPlan,values:Readonly<Record<string,unknown>>):string[]{return resolveInitialIdentities(plan,values,false);}
+/** Deferred presentation may already exist as a hidden SSR shell. These IDs are
+ * permitted if present, without requiring unrendered templates or branches. */
+export function allowedInitialDynamicIdentities(plan:LocalDynamicIdentityPlan,values:Readonly<Record<string,unknown>>):string[]{return resolveInitialIdentities(plan,values,true);}
