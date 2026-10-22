@@ -85,15 +85,11 @@ export async function projectCommentPersons<
   client: SqlClient,
   pageId: string,
   comments: readonly T[],
-): Promise<(T & CommentBodyPresentation)[]> {
+): Promise<(Omit<T, "personLinks"> & CommentBodyPresentation)[]> {
   // Projection is rebuilt from current authority; never preserve a cached or caller-supplied mapping.
-  comments = comments.map((comment) => {
-    const clean = { ...comment };
-    delete clean.personLinks;
-    return clean;
-  });
-  if (!comments.some((comment) => personMentionIds(comment.body).length))
-    return [...comments];
+  const current = comments.map(({ personLinks: _previous, ...clean }) => clean);
+  if (!current.some((comment) => personMentionIds(comment.body).length))
+    return [...current];
   // An unapplied postbase packet has no mapping. Do not catch unrelated database errors.
   if (
     !(
@@ -102,14 +98,14 @@ export async function projectCommentPersons<
       )
     ).rows[0]?.relation
   )
-    return [...comments];
+    return [...current];
   const rows = (
     await client.query(
       `SELECT m.comment_id,m.legacy_user_id,m.body_sha256,a.handle FROM retained_comment_persons m JOIN comments c ON c.file_id=m.page_id AND c.id=m.comment_id JOIN files f ON f.id=c.file_id JOIN dataset_principals p ON p.source_namespace=m.source_namespace AND p.kind='user' AND p.legacy_id=m.legacy_user_id JOIN accounts a ON a.actor=p.actor WHERE m.page_id=$1 AND m.comment_id=ANY($2::text[])`,
-      [pageId, comments.map((c) => c.id)],
+      [pageId, current.map((c) => c.id)],
     )
   ).rows;
-  return comments.map((comment) => {
+  return current.map((comment) => {
     const hash = commentBodySha256(comment.body),
       ids = new Set(personMentionIds(comment.body));
     const personLinks: CommentPersonLink[] = [];

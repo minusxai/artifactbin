@@ -73,7 +73,7 @@ test("comment images use authenticated bytes and keyboard-accessible Blob views;
     );
     assert.match(await thumbnail.locator("img").getAttribute("src"), /^blob:/);
     assert.equal(
-      await page.locator(".pg-message > p").first().textContent(),
+      await page.locator(".pg-comment-body").first().textContent(),
       "Original body <b>plain</b>",
     );
     assert.equal(await page.locator(".pg-message b").count(), 0);
