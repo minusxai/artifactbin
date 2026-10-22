@@ -15,7 +15,13 @@ export function createCompiledMutationAvailability(
     allowed.clear();
     const prior = stops;
     stops = [];
-    for (const release of prior) release();
+    for (const release of prior) {
+      try {
+        release();
+      } catch {
+        /* Every old watch loses authority even if its cleanup fails. */
+      }
+    }
     ports.changed();
   };
   const reconnect = () => {

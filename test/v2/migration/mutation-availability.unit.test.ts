@@ -182,3 +182,29 @@ test("generated cell boot checks fresh advisory receipts without probing or losi
   await store.mutate("save", value, row);
   assert.equal(calls.length, 2);
 });
+test("one throwing subscription cleanup never prevents other releases or failclosed reconnect", () => {
+  const released: string[] = [];
+  let attaches = 0;
+  const availability = createCompiledMutationAvailability({
+    bindings: [
+      { name: "one", backendNamespace: "data" },
+      { name: "two", backendNamespace: "data" },
+    ],
+    watch(binding, next) {
+      attaches++;
+      next({ canAttempt: true });
+      return () => {
+        released.push(binding.name);
+        if (binding.name === "one") throw Error("release failed");
+      };
+    },
+    changed() {},
+  });
+  availability.reconnect();
+  assert.deepEqual(released, ["one", "two"]);
+  assert.equal(attaches, 4);
+  assert.equal(availability.unavailable("two"), null);
+  availability.dispose();
+  assert.deepEqual(released, ["one", "two", "one", "two"]);
+  assert.notEqual(availability.unavailable("two"), null);
+});
