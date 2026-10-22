@@ -195,7 +195,7 @@ test("job prepares exact live head bindings and real compiled receipts without i
       if (id !== page.id) return artifact;
       const clone = structuredClone(artifact);
       clone.artifacts[0]!.source =
-        '<Helmet><Import name="sales" src="ref:data01"/><Value name="who" source="ref:data01" column="who"/></Helmet>';
+        '<Helmet><Import name="sales" src="ref:data01"/><Value name="who" source="ref:data01" column="who"/><Mutation name="choose">{`update sales.rows set who=$who`}</Mutation></Helmet>';
       return clone;
     },
   };
@@ -219,6 +219,10 @@ test("job prepares exact live head bindings and real compiled receipts without i
     ],
   );
   assert.equal(bound!.metadata.personBindings?.length, 1);
+  assert.equal(
+    bound!.metadata.operations?.[0]!.operation.paramTypes.who,
+    "user",
+  );
   assert.deepEqual(bound!.metadata.profiles, [
     { legacyUserId: "owner", name: "owner", handle: null, image: null },
   ]);

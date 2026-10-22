@@ -1,3 +1,5 @@
+import type { BoundValueColumnProof } from "./conversion/compiled/bound-value-contracts.ts";
+import { migrationDatasetVersionKey } from "./job-dataset-contracts.ts";
 import { legacyDocumentSource } from "./conversion/index.ts";
 import { extractLegacyMutations } from "./conversion/mutations.ts";
 import { catalogVersion, receiptMap } from "./datasets/catalog.ts";
@@ -8,6 +10,10 @@ export async function prepareMigrationHeadMutations(
   source: MigrationJobSource,
   pages: readonly MigrationBackendPage[],
   issues: Map<string, string[]>,
+  boundValueColumns: ReadonlyMap<
+    string,
+    readonly BoundValueColumnProof[]
+  > = new Map(),
 ): Promise<MigrationBackendPage[]> {
   if (!source.datasets) return [...pages];
   const receipts = receiptMap(source.datasets.receipts);
@@ -33,7 +39,13 @@ export async function prepareMigrationHeadMutations(
         ? artifact.source
         : legacyDocumentSource(artifact.document);
       if (text === null) throw Error("Current document source is unavailable");
-      const extracted = await extractLegacyMutations(text, catalogs);
+      const extracted = await extractLegacyMutations(
+        text,
+        catalogs,
+        boundValueColumns.get(
+          migrationDatasetVersionKey(page.legacyId, artifact.version),
+        ),
+      );
       if (extracted.issues.length) {
         issues.set(
           page.legacyId,

@@ -42,16 +42,18 @@ export async function prepareMigrationJobDatasets(
     }
     return hasImports;
   });
-  const executable = await prepareMigrationHeadMutations(
+  const boundValueColumns = await prepareMigrationBoundValues(
     source,
     candidates,
     issues,
   );
-  const boundValueColumns = await prepareMigrationBoundValues(
+  const executable = await prepareMigrationHeadMutations(
     source,
-    executable,
+    candidates,
     issues,
+    boundValueColumns,
   );
+
   const prepared = await prepareMigrationBackends(
     {
       sourceNamespace: source.manifest.sourceNamespace,
