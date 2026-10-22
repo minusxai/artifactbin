@@ -15,6 +15,8 @@ export interface MigrationBackendPage {
     mutations?: readonly LegacyMutationDescriptor[];
     /** Canonical source-declared current-page accepted membership relation. */
     readsMembers?: true;
+    /** Read-only original viewer identity, current saved head only. */
+    readsViewer?: true;
     imports: readonly {
       name: string;
       legacyRef: string;
@@ -39,6 +41,7 @@ export interface MigrationBackendReceipt {
   owner: string;
   /** Present only when this revision declared the trusted membership relation. */
   members?: { sourceNamespace: string };
+  viewer?: { sourceNamespace: string };
   backendId: string;
   backendNamespace: "legacyData";
   backendHref: string;

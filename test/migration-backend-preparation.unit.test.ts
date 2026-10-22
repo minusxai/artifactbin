@@ -423,3 +423,47 @@ test("a declared membership-only revision receives a real compiled backend witho
     sourceNamespace: input.sourceNamespace,
   });
 });
+
+test("viewer-only current revisions receive a compiled capability receipt without Imports or historical identity rebinding", async () => {
+  const current: MigrationBackendPreparationInput = {
+    ...input,
+    pages: [
+      {
+        ...input.pages[0]!,
+        revisions: [
+          { version: 1, imports: [] },
+          { version: 2, imports: [], readsViewer: true },
+        ],
+      },
+    ],
+  };
+  const prepared = await prepareMigrationBackends(current, {
+    host: { compile: async () => deployment, invoke: async () => null },
+  });
+  assert.deepEqual(
+    prepared.receipts.map((r) => ({ linked: r.linked, viewer: r.viewer })),
+    [
+      { linked: false, viewer: undefined },
+      { linked: true, viewer: { sourceNamespace: "fixture" } },
+    ],
+  );
+  assert.deepEqual(prepared.bindings, []);
+  await assert.rejects(
+    prepareMigrationBackends(
+      {
+        ...current,
+        pages: [
+          {
+            ...current.pages[0]!,
+            revisions: [
+              { version: 1, imports: [], readsViewer: true },
+              { version: 2, imports: [] },
+            ],
+          },
+        ],
+      },
+      { host: { compile: async () => deployment, invoke: async () => null } },
+    ),
+    /Invalid migration backend preparation/,
+  );
+});

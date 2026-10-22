@@ -1,3 +1,4 @@
+import { registerMigrationViewerBinding } from "./viewer-registration.ts";
 import { registerDatasetMemberBinding } from "../persistence/dataset-members.ts";
 import {
   validDatasetMutationParameterMap,
@@ -117,6 +118,13 @@ export async function prepareMigrationBackends(
     const versions = new Set<number>();
     for (const revision of page.revisions) {
       if (
+        revision.readsViewer !== undefined &&
+        (revision.readsViewer !== true ||
+          revision.version !==
+            Math.max(...page.revisions.map((r) => r.version)))
+      )
+        invalid();
+      if (
         !positive(revision.version) ||
         versions.has(revision.version) ||
         revision.imports.length > 1000
@@ -172,7 +180,9 @@ export async function prepareMigrationBackends(
     }
     if (
       page.owner.kind === "group" &&
-      page.revisions.some((r) => r.imports.length || r.readsMembers)
+      page.revisions.some(
+        (r) => r.imports.length || r.readsMembers || r.readsViewer,
+      )
     )
       throw new Error(
         "Group-owned pages with dataset Imports cannot use backend execution",
@@ -180,7 +190,10 @@ export async function prepareMigrationBackends(
   }
   const required = pages.filter((page) =>
     page.revisions.some(
-      (revision) => revision.imports.length || revision.readsMembers,
+      (revision) =>
+        revision.imports.length ||
+        revision.readsMembers ||
+        revision.readsViewer,
     ),
   );
   if (!required.length)
@@ -218,6 +231,7 @@ export async function prepareMigrationBackends(
     for (const revision of [...page.revisions].sort(
       (a, b) => a.version - b.version,
     )) {
+      const readsViewer = revision.readsViewer === true;
       const readsMembers =
         revision.readsMembers ||
         revision.mutations?.some((m) => m.readsMembers);
@@ -225,7 +239,11 @@ export async function prepareMigrationBackends(
         pageLegacyId: page.legacyId,
         pageId: page.pageId,
         pageVersion: revision.version,
-        linked: revision.imports.length > 0 || readsMembers === true,
+        linked:
+          revision.imports.length > 0 || readsMembers === true || readsViewer,
+        ...(readsViewer
+          ? { viewer: { sourceNamespace: input.sourceNamespace } }
+          : {}),
         ...(readsMembers
           ? { members: { sourceNamespace: input.sourceNamespace } }
           : {}),
@@ -316,6 +334,8 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
       receipt.pageId === receipt.backendId ||
       !positive(receipt.pageVersion) ||
       typeof receipt.linked !== "boolean" ||
+      (receipt.viewer !== undefined &&
+        (!receipt.linked || !nonempty(receipt.viewer.sourceNamespace))) ||
       (receipt.members !== undefined &&
         (!receipt.linked || !nonempty(receipt.members.sourceNamespace))) ||
       !nonempty(receipt.owner) ||
@@ -427,6 +447,14 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
         ? { [receipt.backendId]: receipt.deployment }
         : {},
     });
+    if (receipt.viewer)
+      await registerMigrationViewerBinding(db, {
+        backendId: receipt.backendId,
+        backendVersion: receipt.deployment.version,
+        pageId: receipt.pageId,
+        pageVersion: receipt.pageVersion,
+        sourceNamespace: receipt.viewer.sourceNamespace,
+      });
     if (receipt.members)
       await registerDatasetMemberBinding(client, {
         backendId: receipt.backendId,
