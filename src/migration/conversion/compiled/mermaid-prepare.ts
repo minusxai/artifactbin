@@ -36,6 +36,7 @@ export async function prepareArchivedMermaid(root:string,input:MermaidPreparatio
   const prepared:PreparedMermaidPlan[]=[];
   for(const plan of input.plans){
    const variants={} as PreparedMermaidPlan['variants'] as any;
+   let compiledClass:string|undefined;
    for(const mode of ['light','dark']as const){
     let deadline:ReturnType<typeof setTimeout>|undefined;
     const drawn=await Promise.race([page.evaluate(async({plan,mode})=>{
@@ -53,11 +54,14 @@ export async function prepareArchivedMermaid(root:string,input:MermaidPreparatio
      const svg=decodeURIComponent(image.src.slice('data:image/svg+xml;charset=utf-8,'.length));
      const probe=document.createElement('div');probe.innerHTML=svg;host.append(probe);
      const textWidths=[...probe.querySelectorAll('text')].map(el=>(el as SVGTextElement).getBBox().width);probe.remove();
-     return {svg,palette,textWidths};
+     return {svg,palette,textWidths,type:image.type,compiledClass:host.getAttribute('class')??''};
     },{plan,mode}),new Promise<never>((_resolve,reject)=>{deadline=setTimeout(()=>reject(Error('Mermaid preparation timeout')),15000);})]).finally(()=>clearTimeout(deadline));
-    const safe=sanitizeMermaidSvg(drawn.svg);variants[mode]={...safe,palette:drawn.palette,textWidths:drawn.textWidths};
+    if(!["flowchart-v2","sequence"].includes(drawn.type))throw Error("Unsupported Mermaid rendered type");
+    if(compiledClass!==undefined&&compiledClass!==drawn.compiledClass)throw Error('Mermaid compiled class changed');
+    compiledClass=drawn.compiledClass;
+    const safe=sanitizeMermaidSvg(drawn.svg);variants[mode]={...safe,type:drawn.type,palette:drawn.palette,textWidths:drawn.textWidths};
    }
-   prepared.push({...plan,variants});
+   prepared.push({...plan,compiledClass:compiledClass!,variants});
   }
   if(network.length)throw Error('Mermaid attempted a network resource');
   return prepared;

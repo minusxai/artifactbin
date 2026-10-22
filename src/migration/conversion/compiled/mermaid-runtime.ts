@@ -21,7 +21,7 @@ export function Mermaid(p){
   const update=async()=>{
    const current=++generation;
    try{
-    if(!plan||p.code!==plan.code||p.title!==plan.title||p.className!==plan.className||p.imageKey)throw Error('Unsupported diagram context');
+    if(!plan||p.code!==plan.code||p.title!==plan.title||(p.class??'')!==plan.compiledClass||p.className!==undefined||p.imageKey)throw Error('Unsupported diagram context');
     const themed=host.closest('[data-mx-inline-story]')??host.closest('.dark, .light');
     const root=themed??document.documentElement;
     const mode=root.classList.contains('dark')?'dark':root.classList.contains('light')?'light':p.colorMode??'light';
@@ -40,7 +40,7 @@ export function Mermaid(p){
   const fonts=()=>update();document.fonts?.addEventListener('loadingdone',fonts);
   onCleanup(()=>{disposed=true;generation++;stop();cancelAnimationFrame(resizeFrame);resize.disconnect();document.fonts?.removeEventListener('loadingdone',fonts);});
  });
- return <figure ref={host} class={join('min-w-0',p.inGridItem?'flex h-full w-full flex-col':'my-4',p.className)} data-mx-mermaid-state={error()?'error':shown()?'ready':'pending'} data-mermaid-type={shown()?'flowchart-v2':undefined} {...rest}>
+ return <figure ref={host} class={join('min-w-0',p.inGridItem?'flex h-full w-full flex-col':'my-4',p.className)} data-mx-mermaid-state={error()?'error':shown()?'ready':'pending'} data-mermaid-type={shown()?.type} {...rest}>
  <figcaption class={p.inGridItem?'border-b border-border px-3 py-2 font-mono text-sm font-medium':'mb-2 font-mono text-sm font-medium'}>{name()}</figcaption>
  <Show when={!error()} fallback={<p role="alert" class={join('text-sm text-destructive',p.inGridItem&&'p-3')}>{error()}</p>}>
  <Show when={shown()} fallback={<p role="status" class={join('text-sm text-muted-foreground',p.inGridItem&&'p-3')}>Rendering diagram…</p>}>

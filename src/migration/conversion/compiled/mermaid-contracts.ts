@@ -11,6 +11,7 @@ export interface MermaidPalette {
   fontFamily: string; fontSize: string; fontMono: string; dark: boolean;
 }
 export interface CompiledMermaidVariant {
+  readonly type: "flowchart-v2" | "sequence";
   readonly svg: string;
   readonly width: number;
   readonly height: number;
@@ -19,6 +20,8 @@ export interface CompiledMermaidVariant {
   readonly textWidths: readonly number[];
 }
 export interface PreparedMermaidPlan extends CompiledMermaidPlan {
+  /** Exact frozen compiler recipe output, bound to its SSR host. */
+  readonly compiledClass: string;
   readonly variants: Readonly<Record<'light' | 'dark', CompiledMermaidVariant>>;
 }
 export interface MermaidPreparationInput {

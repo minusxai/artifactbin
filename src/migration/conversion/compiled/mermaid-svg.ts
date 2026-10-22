@@ -1,7 +1,7 @@
 import {parseFragment} from 'parse5';
 import {parse,walk,generate} from 'css-tree';
-const tags=new Set('svg g defs marker path rect polygon polyline line circle ellipse text tspan title desc style clipPath use filter fedropshadow'.split(' '));
-const attributes=new Set('id class style xmlns xmlns:xlink viewBox width height x y x1 x2 y1 y2 d cx cy r rx ry points fill fill-opacity stroke stroke-width stroke-dasharray stroke-dashoffset stroke-linecap stroke-linejoin stroke-opacity opacity transform markerWidth markerHeight markerUnits marker-start marker-mid marker-end orient refX refY preserveAspectRatio text-anchor dominant-baseline font-family font-size font-weight font-style dy dx lengthAdjust textLength clip-path clipPathUnits role aria-roledescription aria-labelledby aria-describedby aria-hidden focusable tabindex href xlink:href alignment-baseline filter stdDeviation flood-color flood-opacity'.split(' '));
+const tags=new Set('svg g defs symbol marker path rect polygon polyline line circle ellipse text tspan title desc style clipPath use filter fedropshadow'.split(' '));
+const attributes=new Set('name id class style xmlns xmlns:xlink viewBox width height x y x1 x2 y1 y2 d cx cy r rx ry points fill fill-opacity fill-rule clip-rule stroke stroke-width stroke-dasharray stroke-dashoffset stroke-linecap stroke-linejoin stroke-opacity opacity transform markerWidth markerHeight markerUnits marker-start marker-mid marker-end orient refX refY preserveAspectRatio text-anchor dominant-baseline font-family font-size font-weight font-style dy dx lengthAdjust textLength clip-path clipPathUnits role aria-roledescription aria-labelledby aria-describedby aria-hidden focusable tabindex href xlink:href alignment-baseline filter stdDeviation flood-color flood-opacity'.split(' '));
 /** Trusted renderer output still crosses an active-DOM boundary: no foreign HTML,
  * loading attributes, active handlers, unscoped CSS or unresolved resource IDs. */
 export function sanitizeMermaidSvg(source:string):{svg:string;width:number;height:number} {
@@ -14,7 +14,16 @@ export function sanitizeMermaidSvg(source:string):{svg:string;width:number;heigh
  if(!box||box.length!==4||!box.every(Number.isFinite)||box[2]<=0||box[3]<=0||box[2]>100000||box[3]>100000)throw Error('Invalid Mermaid bounds');
  const rootId=root.attrs.find((a:any)=>a.name==='id')?.value;
  const css=(text:string,inline=false)=>{
-  const tree=parse(text,{context:inline?'declarationList':'stylesheet'});
+  // XMLSerializer escapes child combinators in SVG style text. Validate the
+  // decoded CSS that the SVG XML parser sees, then emit inert HTML-fragment CSS.
+  const decoded=text.replace(/&([^;]+);/g,(_all,entity:string)=>{
+   const named:Record<string,string>={gt:'>',lt:'<',amp:'&',quot:'"',apos:"'"};
+   if(Object.hasOwn(named,entity))return named[entity]!;
+   const numeric=/^#(?:x([0-9a-f]+)|([0-9]+))$/i.exec(entity);if(!numeric)throw Error('Unsupported Mermaid CSS entity');
+   const value=Number.parseInt(numeric[1]??numeric[2]!,numeric[1]?16:10);
+   if(!Number.isInteger(value)||value<=0||value>0x10ffff||value>=0xd800&&value<=0xdfff)throw Error('Invalid Mermaid CSS entity');return String.fromCodePoint(value);
+  });
+  const tree=parse(decoded,{context:inline?'declarationList':'stylesheet'});
   const animations=new Map<string,string>();
   walk(tree,(node:any)=>{if(node.type==='Atrule'){if(node.name!=='keyframes'||!rootId||node.prelude?.children?.first?.type!=='Identifier')throw Error('Mermaid CSS at-rule unsupported');const name=node.prelude.children.first.name;animations.set(name,rootId+'-'+name);node.prelude.children.first.name=rootId+'-'+name;}});
   walk(tree,function(this:any,node:any){
@@ -27,14 +36,14 @@ export function sanitizeMermaidSvg(source:string):{svg:string;width:number;heigh
    if(node.type==='Declaration'&&/^(?:behavior|-moz-binding)$/i.test(node.property))throw Error('Active Mermaid CSS');
    if(node.type==='Function'&&/^expression$/i.test(node.name))throw Error('Active Mermaid CSS');
   });
-  return generate(tree);
+  const rendered=generate(tree);if(rendered.includes('<'))throw Error('Active Mermaid stylesheet text');return rendered;
  };
  const visit=(node:any)=>{
   if(!node.tagName){if(node.nodeName!=='#text')throw Error('Unexpected Mermaid node');return;}
   if(node.namespaceURI!=='http://www.w3.org/2000/svg'||!tags.has(node.tagName))throw Error('Unexpected Mermaid element: '+node.tagName);
   for(const attr of node.attrs){
    const name=attr.prefix?attr.prefix+':'+attr.name:attr.name;
-   if(!attributes.has(name)&&!/^data-(?:edge|id|points|look|et)$/.test(name))throw Error('Unexpected Mermaid attribute: '+name);
+   if(!attributes.has(name)&&!/^data-(?:edge|id|points|look|et|type|from|to)$/.test(name))throw Error('Unexpected Mermaid attribute: '+name);
    if(name==='id'){if(!/^[A-Za-z_][\w:.-]*$/.test(attr.value)||ids.has(attr.value))throw Error('Duplicate Mermaid identity');ids.add(attr.value);}
    if(name==='href'||name==='xlink:href'){if(!/^#[A-Za-z_][\w:.-]*$/.test(attr.value))throw Error('External Mermaid link');refs.push(attr.value.slice(1));}
    if(name==='style')attr.value=css(attr.value,true);
