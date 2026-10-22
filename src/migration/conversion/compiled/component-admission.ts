@@ -69,6 +69,11 @@ export const admitLocalComponent: AdmitLocalComponent = (input, context) => {
   if (presentationKitComponent(tag)) {
     const capability = admitPresentationKit(tag, attrs, context.ancestors);
     result.identityLifecycle = capability;
+    if (capability.scalarBinding) {
+      result.references = [capability.scalarBinding.binding];
+      result.scalarBindings = [capability.scalarBinding.binding];
+      result.scalarControls = [capability.scalarBinding];
+    }
     if (capability.identity === "transparent" && typeof attrs.id === "string") {
       if (tag !== "Tooltip" && tag !== "TooltipProvider")
         throw Error("Unsupported transparent identity host");
