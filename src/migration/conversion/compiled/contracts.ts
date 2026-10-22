@@ -1,9 +1,12 @@
+import type { CompiledDataControl } from "./data-control-contracts.ts";
 import type { CompiledAuthorPlan } from "./author-document-contracts.ts";
 import type { CompiledDatasetMutation } from "./dataset-mutations-contracts.ts";
 import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 import type { ConversionResult } from "../contracts.ts";
 export interface CompiledMigrationInput {
   source: string;
+  /** Internal source-admitted plan, overwritten before invoking the compiler. */
+  dataControls?: readonly CompiledDataControl[];
   /** Set only by the explicit author-document offline migration route. */
   authorPlan?: CompiledAuthorPlan;
   coreUrl: string;

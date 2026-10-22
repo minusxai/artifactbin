@@ -1,4 +1,6 @@
 /** Explicit offline route; never a fallback for blocked static conversion. */
+import { admitDataControl, controlLiteral } from "./data-controls.ts";
+import type { CompiledDataControl } from "./data-control-contracts.ts";
 import { MAX_PAGE_SOURCE } from "../../../af-contracts.ts";
 import { Parser } from "acorn";
 import {
@@ -51,7 +53,7 @@ const activeUri = (v: string) =>
   );
 const json = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 const allowed = new Set(
-  "Helmet Import Value Query Mutation Question Chart Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
+  "Helmet Import Value Query Mutation Question Chart Select DataTable Number Cell Button Input Textarea Card CardHeader CardTitle CardDescription CardAction CardContent CardFooter Badge Alert AlertTitle AlertDescription Grid GridItem Markdown Icon Table TableHeader TableBody TableFooter TableRow TableHead TableCell TableCaption Separator Skeleton Progress".split(
     " ",
   ),
 );
@@ -84,6 +86,9 @@ export async function compileArchivedLocal(
           [
             "Dynamic attribute requires an adapter: value",
             "Dynamic attribute requires an adapter: viz",
+            "Dynamic attribute requires an adapter: options",
+            "Dynamic attribute requires an adapter: columns",
+            "Dynamic attribute requires an adapter: sort",
           ].includes(i.message)
         ) &&
         ![
@@ -179,6 +184,7 @@ export async function compileArchivedLocal(
   const imports = new Set<string>();
   const declarations = new Set<string>();
   const tableNames = new Set<string>();
+  const dataControls: CompiledDataControl[] = [];
   const scalarBindings = new Set<string>();
   const references = new Set<string>();
   const queries = new Set<string>();
@@ -283,10 +289,34 @@ export async function compileArchivedLocal(
             invalid = true;
           imports.add(attrs.name);
         }
+        if (name === "Select" || name === "DataTable") {
+          const attrs = Object.fromEntries(
+            node.openingElement.attributes.map((a: any) => {
+              if (a.type !== "JSXAttribute" || typeof a.name?.name !== "string")
+                throw Error("Invalid control attribute");
+              return [a.name.name, controlLiteral(a.value)];
+            }),
+          );
+          const plan = admitDataControl(
+            name,
+            attrs,
+            node.children.some(
+              (c: any) => c.type !== "JSXText" || c.value.trim(),
+            ),
+          );
+          dataControls.push(plan);
+          if (plan.kind === "select") {
+            references.add(plan.value);
+            scalarBindings.add(plan.value);
+            if (typeof plan.options === "string") references.add(plan.options);
+          } else references.add(plan.data);
+        }
         for (const attr of node.openingElement.attributes) {
           if (
             attr.value?.expression?.type === "ArrayExpression" &&
-            !(name === "Value" && attr.name?.name === "value")
+            !(name === "Value" && attr.name?.name === "value") &&
+            !(name === "Select" && attr.name?.name === "options") &&
+            !(name === "DataTable" && attr.name?.name === "columns")
           )
             invalid = true;
           const attrName = attr.name?.name?.toLowerCase();
@@ -368,9 +398,10 @@ export async function compileArchivedLocal(
           if (
             attr.type !== "JSXAttribute" ||
             typeof attr.name.name !== "string" ||
-            ["row", "rowScope", "options", "query", "table"].includes(
+            (["row", "rowScope", "options", "query", "table"].includes(
               attr.name.name,
-            )
+            ) &&
+              !(name === "Select" && attr.name.name === "options"))
           )
             invalid = true;
         }
@@ -496,6 +527,19 @@ export async function compileArchivedLocal(
     invalid = true;
   if (invalid || (declarations.size === 0 && queries.size === 0 && !author))
     return blocked("compiled-capability");
+  if (
+    dataControls.some((p) =>
+      p.kind === "select"
+        ? !declarations.has(p.value) ||
+          tableNames.has(p.value) ||
+          (typeof p.options === "string" &&
+            !queries.has(p.options) &&
+            !tableNames.has(p.options))
+        : !queries.has(p.data) && !tableNames.has(p.data),
+    )
+  )
+    return blocked("compiled-data-control");
+  input = { ...input, dataControls };
   let output: ArchivedLocalOutput;
   try {
     output = await (options.compiler?.compile(input) ??
