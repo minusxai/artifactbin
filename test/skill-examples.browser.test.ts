@@ -7,6 +7,11 @@ import { chromium } from "playwright";
 
 declare global {
   interface Window {
+    exampleStatus: {
+      calls(): number;
+      refresh(): void;
+      reply(kind: "denied" | "success"): void;
+    };
     authoredIntervals: number[];
     probe: {
       calls(): number;
@@ -137,3 +142,84 @@ for (const [example, namespace] of [
       await browser.close();
     }
   });
+
+test("todo: absent backend, pending read and revoked access have distinct authoritative states", async () => {
+  const browser = await chromium.launch();
+  const source = readFileSync(
+    "skills/pagegi-author/examples/todo.html",
+    "utf8",
+  );
+  const script = /<script type="module">([\s\S]*?)<\/script>/.exec(source)![1]!;
+  try {
+    for (const declared of [false, true]) {
+      const page = await browser.newPage();
+      const markup = source.replace(/<script[\s\S]*?<\/script>/g, "");
+      await page.setContent(
+        declared ? markup : markup.replace(/<link rel="af-backend"[^>]*>/, ""),
+      );
+      const bundle = await build({
+        stdin: {
+          resolveDir: process.cwd(),
+          contents: `
+        import {createClient,createLocalStore,gql} from './src/apollo/client.ts';
+        let calls=0,settle;const listeners=new Set();
+        const stale=[{id:'stale',text:'Stale local row',done:false}];
+        const store=createLocalStore({draft:'Unsent draft',filter:'all',todos:stale,team:{list:stale}});
+        const remote={online:()=>true,subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn)},execute(){calls++;return new Promise(resolve=>{settle=resolve})}};
+        const client=createClient({state:store,backends:${declared ? "['team']" : "[]"},remote});
+        window.api={client,gql};window.exampleStatus={calls:()=>calls,refresh(){for(const fn of listeners)fn()},reply(kind){settle(kind==='denied'?{data:{team:null},errors:[{message:'Access denied',path:['team']}]}:{data:{team:{list:[{id:'fresh',text:'Fresh authorized row',done:false}]}}})}};
+      `,
+        },
+        bundle: true,
+        write: false,
+        format: "iife",
+        platform: "browser",
+      });
+      await page.addScriptTag({ content: bundle.outputFiles[0]!.text });
+      await page.addScriptTag({
+        type: "module",
+        content: script.replace(
+          "import { gql, client } from '@afbin/apollo';",
+          "const {gql,client}=window.api;",
+        ),
+      });
+      await page
+        .locator('#filters button[data-filter="all"][aria-pressed="true"]')
+        .waitFor();
+      assert.equal(await page.inputValue("#text"), "Unsent draft");
+      if (!declared) {
+        assert.equal(
+          await page.locator("#read-status").textContent(),
+          "Shared list unavailable. Connect or check your access.",
+        );
+        assert.equal(
+          await page.evaluate(() => window.exampleStatus.calls()),
+          0,
+        );
+      } else {
+        assert.equal(
+          await page.locator("#read-status").textContent(),
+          "Loading shared list…",
+        );
+        assert.equal(await page.locator("#list li").count(), 0);
+        await page.evaluate(() => window.exampleStatus.reply("success"));
+        await page.getByText("Fresh authorized row", { exact: true }).waitFor();
+        assert.equal(await page.locator("#read-status").textContent(), "");
+        await page.evaluate(() => window.exampleStatus.refresh());
+        await page.waitForFunction(() => window.exampleStatus.calls() === 2);
+        await page.evaluate(() => window.exampleStatus.reply("denied"));
+        await page
+          .getByText("Shared list unavailable. Connect or check your access.")
+          .waitFor();
+      }
+      assert.equal(
+        await page.locator("#list li").count(),
+        0,
+        "missing/revoked shared data cannot be replaced by local mirrors",
+      );
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
+});

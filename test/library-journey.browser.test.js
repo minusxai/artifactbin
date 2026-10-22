@@ -613,9 +613,11 @@ try {
       .isVisible(),
     false,
   );
-  // No backend runs on this server, so the shared list is offline; the draft is the viewer's own local state.
+  // No backend runs on this server, so fresh shared data is unavailable; the draft stays in viewer state.
   await app.getByPlaceholder("Add a task").fill("Milk");
-  await app.getByText("Offline: showing the list as you last saw it.").waitFor();
+  await app.getByText("Shared list unavailable. Connect or check your access.").waitFor();
+  assert.equal(await app.getByPlaceholder("Add a task").inputValue(), "Milk");
+  assert.equal(await app.locator("#list li").count(), 0);
   await app
     .getByRole("heading", { name: "Team todo list", exact: true })
     .click({ button: "right" });

@@ -18,6 +18,8 @@ To share data between viewers, use a backend. See [`backend.md`](backend.md) for
 
 A watch may also select backend namespaces, alongside local fields. Local fields emit immediately and backend fields initially emit `null`; the first remote response supplies their data. Authorized server changes and reconnects trigger fresh reads automatically, without a polling timer. Callback results include `errors` when a read fails or access is refused; the affected backend fields are `null`. Remote results never enter the viewer’s local state. Dispose subscriptions when removing a view (`subscription.unsubscribe()`); `client.dispose()` stops all watches. At most 16 remote watches may be active per client, each keeping one request and one coalesced invalidation.
 
+A namespace is remote only when its `<link rel="af-backend" data-af-name="…">` declaration exists. If a page supports running without that link, show the shared data as unavailable; never substitute a same-named local field.
+
 A field that has never been written is `null`, so give it a default when you read it: `data.products ?? []`.
 
 ## Writing

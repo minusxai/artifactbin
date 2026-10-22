@@ -49,6 +49,8 @@
     const list = document.querySelector('#list');
     const input = document.querySelector('#text');
     const status = document.querySelector('#status');
+    // A server that only hosts pages may omit this example's backend declaration.
+    const hasTeamBackend = !!document.querySelector('link[rel~="af-backend"][data-af-name="team"]');
 
     async function run(mutation, variables, path) {
       status.textContent = '';
@@ -61,12 +63,12 @@
     }
 
     const view = client.watchQuery({ query: VIEW }).subscribe(({ data, errors }) => {
-      document.querySelector('#read-status').textContent = errors?.length ? 'Shared list unavailable. Connect or check your access.' : !data.team ? 'Loading shared list…' : '';
+      document.querySelector('#read-status').textContent = !hasTeamBackend || errors?.length ? 'Shared list unavailable. Connect or check your access.' : !data.team ? 'Loading shared list…' : '';
       const filter = data.filter ?? 'all';
       for (const button of document.querySelectorAll('#filters button'))
         button.setAttribute('aria-pressed', String(button.dataset.filter === filter));
       if (input.value !== (data.draft ?? '')) input.value = data.draft ?? '';
-      const shown = (data.team?.list ?? []).filter((t) => filter === 'all' || (filter === 'done') === t.done);
+      const shown = (hasTeamBackend ? data.team?.list ?? [] : []).filter((t) => filter === 'all' || (filter === 'done') === t.done);
       list.replaceChildren(...shown.map((todo) => {
         const li = document.createElement('li');
         li.dataset.afId = 'todo-' + todo.id;

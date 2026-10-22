@@ -34,8 +34,8 @@ const withMutation = (html: string) =>
 );
 
 const items = (page: Page) => page.locator("#list li span").allTextContents();
-/** The list as the downloading viewer last saw it: their local state, written into the file. */
-const SEEN = [
+/** Legacy local mirrors may still be in older downloads; they never substitute for shared backend results. */
+const STALE_LOCAL_ROWS = [
   { id: "1", text: "Milk", done: false },
   { id: "2", text: "Bread", done: true },
 ];
@@ -54,10 +54,10 @@ for (const [name, engine] of engines) {
       const html = await download.text();
       assert.ok(!html.includes(token), "the account token never enters the file");
       const file = join(dir, "todo.html");
-      // As if the viewer had seen two tasks when they downloaded it.
+      // A legacy download has stale mirrored rows alongside the viewer's actual draft and filter.
       writeFileSync(
         file,
-        withMutation(html).replace(/data-af="state">[^<]*</, `data-af="state">${JSON.stringify({ todos: SEEN })}<`),
+        withMutation(html).replace(/data-af="state">[^<]*</, `data-af="state">${JSON.stringify({ todos: STALE_LOCAL_ROWS, filter: "done", draft: "Unsent draft" })}<`),
       );
       // The file names its server; from here on that server is unreachable.
       assert.match(html, new RegExp(`data-af-server="${server.origin}"`));
@@ -70,13 +70,16 @@ for (const [name, engine] of engines) {
       await page.goto(pathToFileURL(file).href);
       await page.locator("html[data-outcome]").waitFor({ state: "attached" });
       assert.equal(await page.locator("html").getAttribute("data-outcome"), "offline", "backend calls settle offline");
-      await page.locator("#list li span", { hasText: "Bread" }).waitFor();
-      assert.deepEqual(await items(page), ["Milk", "Bread"], "the file's state is shown");
+      await page.getByText("Shared list unavailable. Connect or check your access.").waitFor();
+      assert.deepEqual(await items(page), [], "offline downloads cannot present stale local mirrors as shared data");
+      await page.locator('#filters button[data-filter="done"][aria-pressed="true"]').waitFor();
+      assert.equal(await page.inputValue("#text"), "Unsent draft");
       await page.click('#filters button[data-filter="open"]');
       await page.fill("#text", "Eggs");
       await page.reload();
       await page.locator('#filters button[data-filter="open"][aria-pressed="true"]').waitFor();
-      assert.deepEqual(await items(page), ["Milk"], "state survives a reload");
+      await page.getByText("Shared list unavailable. Connect or check your access.").waitFor();
+      assert.deepEqual(await items(page), [], "a reload keeps shared data unavailable");
       assert.equal(await page.inputValue("#text"), "Eggs");
 
       // The one control saves the page with its current state.
@@ -88,7 +91,7 @@ for (const [name, engine] of engines) {
       const again = readFileSync(savedFile, "utf8");
       assert.match(again, /^<!DOCTYPE html>/i);
       const savedState = JSON.parse(/data-af="state">([^<]*)</.exec(again)![1]!);
-      assert.deepEqual(savedState, { todos: SEEN, filter: "open", draft: "Eggs" });
+      assert.deepEqual(savedState, { todos: STALE_LOCAL_ROWS, filter: "open", draft: "Eggs" });
       assert.equal((again.match(/<script type="importmap"/g) ?? []).length, 0, "the core's import map is not saved");
       assert.equal((again.match(/data-af="core"/g) ?? []).length, 1);
       assert.ok(!again.includes("<af-download"), "the control is not part of the page");
@@ -98,7 +101,8 @@ for (const [name, engine] of engines) {
       const reopened = await fresh.newPage();
       await reopened.goto(pathToFileURL(savedFile).href);
       await reopened.locator('#filters button[data-filter="open"][aria-pressed="true"]').waitFor();
-      assert.deepEqual(await items(reopened), ["Milk"]);
+      await reopened.getByText("Shared list unavailable. Connect or check your access.").waitFor();
+      assert.deepEqual(await items(reopened), [], "reopening cannot expose stale local mirrors");
       assert.equal(await reopened.inputValue("#text"), "Eggs");
       await fresh.close();
       await context.close();

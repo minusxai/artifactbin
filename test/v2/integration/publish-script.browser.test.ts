@@ -57,7 +57,7 @@ async function eventually<T>(read: () => Promise<T>, expected: T) {
 }
 
 test("chromium: a page saved by publish.mjs loads with the viewer's same state and the new source", async () => {
-  // Backends compile but never run here: the page shows the list as the viewer last saw it.
+  // Backends compile but never run here: only viewer-local state persists; shared rows remain unavailable.
   const server = await startServer({ backendHost: compileOnlyHost() });
   const browser = await chromium.launch();
   const root = mkdtempSync(join(tmpdir(), "af-publish-browser-"));
@@ -88,7 +88,8 @@ test("chromium: a page saved by publish.mjs loads with the viewer's same state a
     );
     await page.goto(created.url!);
     let frame = await app(page);
-    await eventually(() => frame.locator("#list li span").allTextContents(), ["Seeded"]);
+    await frame.getByText("Shared list unavailable. Connect or check your access.").waitFor();
+    assert.deepEqual(await frame.locator("#list li span").allTextContents(), [], "local seed rows never substitute for authoritative shared data");
     await frame.fill("#text", "Alpha");
     await frame.click('#filters button[data-filter="done"]');
     await eventually(() => frame.locator("#list li span").allTextContents(), []);
@@ -104,7 +105,8 @@ test("chromium: a page saved by publish.mjs loads with the viewer's same state a
     await eventually(() => frame.locator('#filters button[aria-pressed="true"]').textContent(), "Done");
     assert.equal(await frame.inputValue("#text"), "Alpha");
     await frame.click('#filters button[data-filter="all"]');
-    await eventually(() => frame.locator("#list li span").allTextContents(), ["Seeded"]);
+    await frame.getByText("Shared list unavailable. Connect or check your access.").waitFor();
+    assert.deepEqual(await frame.locator("#list li span").allTextContents(), [], "local seed rows never substitute for authoritative shared data");
     assert.deepEqual(errors, []);
   } finally {
     rmSync(root, { recursive: true, force: true });

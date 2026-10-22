@@ -52,10 +52,10 @@ const htmlAttributes = (page: Page) =>
     renderBlocking: document.querySelector('link[data-af="design-system"]')?.getAttribute("blocking") === "render",
   }));
 
-const withState = (todos: unknown) =>
+const withState = (state: unknown) =>
   skillFile("examples/todo.html").replace(
     "</head>",
-    `  <script type="application/json" data-af="state">${JSON.stringify({ todos })}</script>\n</head>`,
+    `  <script type="application/json" data-af="state">${JSON.stringify(state)}</script>\n</head>`,
   );
 
 for (const [name, engine] of engines) {
@@ -63,7 +63,10 @@ for (const [name, engine] of engines) {
     const site = await staticHost({
       "/todo.html": skillFile("examples/todo.html"),
       "/dossier.html": skillFile("examples/todo.html").replace("<html", '<html data-af-design-system="dossier"'),
-      "/saved.html": withState([{ id: "s1", text: "From the file", done: true }]),
+      "/saved.html": withState({
+        draft: "Unsent draft", filter: "done",
+        todos: [{ id: "s1", text: "Stale shared row", done: true }],
+      }),
     });
     const browser = await engine.launch();
     try {
@@ -79,7 +82,7 @@ for (const [name, engine] of engines) {
         renderBlocking: true,
       });
       // Opened on its own the shared list is out of reach; the viewer's own state still works and persists.
-      await light.getByText("Offline: showing the list as you last saw it.").waitFor();
+      await light.getByText("Shared list unavailable. Connect or check your access.").waitFor();
       await light.fill("#text", "Write tests");
       await light.click('#filters button[data-filter="open"]');
       await light.locator('#filters button[data-filter="open"][aria-pressed="true"]').waitFor();
@@ -97,7 +100,10 @@ for (const [name, engine] of engines) {
 
       const saved = await browser.newPage();
       await saved.goto(`${site.origin}/saved.html`);
-      await saved.locator('#list li[data-af-id="todo-s1"].done').waitFor();
+      await saved.getByText("Shared list unavailable. Connect or check your access.").waitFor();
+      assert.equal(await saved.inputValue("#text"), "Unsent draft");
+      await saved.locator('#filters button[data-filter="done"][aria-pressed="true"]').waitFor();
+      assert.equal(await saved.locator("#list li").count(), 0, "saved local state cannot substitute stale shared backend rows");
     } finally {
       await browser.close();
       await site.close();
