@@ -17,7 +17,8 @@ export type ReadLocalReactiveExpression = (node: unknown) => LocalReactiveRead |
 export type LocalIdentityRegion =
   | { readonly kind: "node"; readonly id: string }
   | { readonly kind: "conditional"; readonly test: LocalReactiveExpression; readonly yes: readonly LocalIdentityRegion[]; readonly no: readonly LocalIdentityRegion[] }
-  | { readonly kind: "repeat"; readonly owner: string; readonly table: string; readonly keyBy: string; readonly children: readonly LocalIdentityRegion[] };
+  | { readonly kind: "repeat"; readonly owner: string; readonly table: string; readonly keyBy: string; readonly children: readonly LocalIdentityRegion[] }
+  | { readonly kind: "cell"; readonly owner: string; readonly table: string; readonly rowKey: string; readonly column: string; readonly children: readonly LocalIdentityRegion[] };
 export interface LocalDynamicIdentityPlan {
   readonly regions: readonly LocalIdentityRegion[];
 }
