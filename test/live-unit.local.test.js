@@ -10,6 +10,7 @@ async function fixture(t, heartbeatMs = 20) {
   let time = 1000,
     reads = 0;
   const revoked = new Set();
+  let blocked = null;
   const server = createServer(),
     presence = new Map();
   const hub = liveHub({
@@ -19,6 +20,7 @@ async function fixture(t, heartbeatMs = 20) {
     heartbeatMs,
     authorize: async (id, token, sourceRevision) => {
       reads++;
+      if (blocked) await blocked;
       if (token === "bad" || revoked.has(token))
         throw Object.assign(Error("Denied"), { status: 403 });
       return {
@@ -64,6 +66,7 @@ async function fixture(t, heartbeatMs = 20) {
     hub,
     reads: () => reads,
     revoke: (actor) => revoked.add(actor),
+    hold: () => { let release; blocked = new Promise((resolve) => { release = resolve; }); return () => { blocked = null; release(); }; },
     advance: () => {
       time = 60000;
     },
@@ -175,3 +178,51 @@ for (const trigger of ["presence", "cursor", "broadcast", "changed", "heartbeat"
     assert.equal(a.messages.slice(before).some((message) => ["viewers", "changed", "heartbeat"].includes(message.type)), false);
   });
 }
+
+test("arrival admission bounds frames behind slow authority and discards work after close", async (t) => {
+  const f = await fixture(t, 10000), a = await f.connect();
+  await wait();
+  const release = f.hold();
+  const closed = once(a.ws, "close");
+  for (let i = 0; i < 40; i++)
+    a.send({ type: "presence", presence: { sessionId: "session", sourceRevision: "rev" } });
+  await closed;
+  const count = f.reads();
+  release();
+  await wait();
+  assert.equal(f.reads(), count);
+  assert.ok(!f.presence.get("file")?.session);
+});
+test("slow broadcasts coalesce into bounded recipient authorization", async (t) => {
+  const f = await fixture(t, 10000), a = await f.connect();
+  await wait();
+  const before = f.reads(), release = f.hold();
+  for (let i = 0; i < 100; i++) {
+    f.hub.presenceChanged("file", 0);
+    f.hub.changed("file");
+  }
+  await wait();
+  assert.equal(f.reads() - before, 1);
+  release();
+  await wait();
+  assert.ok(f.reads() - before <= 2);
+  assert.equal(a.ws.readyState, WebSocket.OPEN);
+});
+
+test("arrival admission also bounds queued bytes while authorization is held", async (t) => {
+  const f = await fixture(t, 10000), a = await f.connect();
+  await wait();
+  const release = f.hold();
+  a.send({ type: "presence", presence: { sessionId: "session", sourceRevision: "rev" } });
+  await wait();
+  const closed = once(a.ws, "close");
+  const raw = JSON.stringify({ type: "presence", padding: "x".repeat(1100000) });
+  a.ws.send(raw);
+  a.ws.send(raw);
+  await closed;
+  const count = f.reads();
+  release();
+  await wait();
+  assert.equal(f.reads(), count);
+  assert.ok(!f.presence.get("file")?.session);
+});

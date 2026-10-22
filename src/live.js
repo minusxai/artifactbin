@@ -1,3 +1,4 @@
+import { LIVE_QUEUE_LIMITS } from "./live-contracts.ts";
 import { WebSocketServer, WebSocket } from "ws";
 import { validateLoadedSnapshot } from "./comment-model.ts";
 import { presenceUpdate, visiblePresence, text, fail } from "./model.ts";
@@ -37,6 +38,7 @@ export function liveHub({
   // A live authorization is a single-operation fact, never a durable socket grant.
   // Rechecking the repository also observes revocation by another server process.
   async function refresh(ws, c, revision = c.auth.sourceRevision) {
+    if (stopped || ws.readyState !== WebSocket.OPEN) return false;
     const epoch = epochs.get(c.id) || 0;
     const auth = await authorize(c.id, c.token, revision);
     if (ws.readyState !== WebSocket.OPEN) return false;
@@ -44,19 +46,40 @@ export function liveHub({
       fail(403, "Access revoked");
     return auth;
   }
-  async function broadcast(id, generation) {
-    await Promise.all([...clients].map(async ([ws, c]) => {
-      if (c.id !== id || !c.auth) return;
+  const broadcasts = new Map();
+  let stopped = false;
+  function scheduleBroadcast(id, viewers, changed) {
+    if (stopped) return;
+    let job = broadcasts.get(id);
+    if (job) {
+      job.viewers ||= viewers;
+      job.changed ||= changed;
+      return;
+    }
+    job = { viewers, changed };
+    broadcasts.set(id, job);
+    void (async () => {
       try {
-        const auth = await refresh(ws, c);
-        if (!auth) return;
-        send(ws, {
-          type: "viewers",
-          viewers: visiblePresence(presence.get(id) || {}, clock(auth.file.generation)),
-        });
-      } catch { closeRevoked(ws, c); }
-    }));
+        while (!stopped && (job.viewers || job.changed)) {
+          const sendViewers = job.viewers, sendChanged = job.changed;
+          job.viewers = job.changed = false;
+          await Promise.all([...clients].map(async ([ws, c]) => {
+            if (c.id !== id || !c.auth || ws.readyState !== WebSocket.OPEN) return;
+            try {
+              const auth = await refresh(ws, c);
+              if (!auth || stopped) return;
+              if (sendViewers) send(ws, {
+                type: "viewers",
+                viewers: visiblePresence(presence.get(id) || {}, clock(auth.file.generation)),
+              });
+              if (sendChanged) send(ws, { type: "changed" });
+            } catch { closeRevoked(ws, c); }
+          }));
+        }
+      } finally { broadcasts.delete(id); }
+    })();
   }
+  const broadcast = (id, generation) => scheduleBroadcast(id, true, false);
   const upgrade = (req, socket, head) => {
     const match = /^\/api\/files\/([^/?]+)\/live$/.exec(req.url);
     if (!acceptUpgrade(req) || !match || wss.clients.size >= 1000) {
@@ -95,6 +118,7 @@ export function liveHub({
     ws.on("close", () => {
       clearTimeout(timeout);
       clients.delete(ws);
+      queue.length = 0;
       if (c.auth && c.sessionId) {
         const entries = presence.get(id);
         if (entries?.[c.sessionId]?.actor === c.auth.actor)
@@ -102,14 +126,12 @@ export function liveHub({
         broadcast(id, c.auth.file.generation);
       }
     });
+    const queue = [];
+    let pendingBytes = 0, processing = false;
     const handleMessage = async (raw, binary) => {
+      if (stopped || ws.readyState !== WebSocket.OPEN) return;
       try {
         if (binary) fail(422, "Text messages required");
-        if (now() - c.window >= 1000) {
-          c.window = now();
-          c.count = 0;
-        }
-        if (++c.count > 60) fail(429, "Too many updates");
         const m = JSON.parse(raw.toString());
         if (c.busy && c.auth && m.type === "cursor") return;
         if (c.busy) fail(429, "Wait for authentication");
@@ -208,10 +230,36 @@ export function liveHub({
         );
       }
     };
-    // Keep async checks in frame order; mouse updates cannot overtake revocation.
-    let pending = Promise.resolve();
+    // Bound admission synchronously, including the executing frame, while
+    // serializing async authorization. Closed sockets discard queued work.
     ws.on("message", (raw, binary) => {
-      pending = pending.then(() => handleMessage(raw, binary));
+      if (stopped || ws.readyState !== WebSocket.OPEN) return;
+      if (now() - c.window >= 1000) { c.window = now(); c.count = 0; }
+      const bytes = raw.length;
+      if (++c.count > LIVE_QUEUE_LIMITS.framesPerSecond ||
+          queue.length + (processing ? 1 : 0) >= LIVE_QUEUE_LIMITS.pendingFrames ||
+          pendingBytes + bytes > LIVE_QUEUE_LIMITS.pendingBytes) {
+        queue.length = 0;
+        ws.close(4400, "Too many pending updates");
+        return;
+      }
+      pendingBytes += bytes;
+      queue.push({ raw, binary, bytes });
+      if (processing) return;
+      processing = true;
+      void (async () => {
+        try {
+          while (queue.length && !stopped && ws.readyState === WebSocket.OPEN) {
+            const frame = queue.shift();
+            await handleMessage(frame.raw, frame.binary);
+            pendingBytes -= frame.bytes;
+          }
+        } finally {
+          queue.length = 0;
+          pendingBytes = 0;
+          processing = false;
+        }
+      })();
     });
   });
   let heartbeatBusy = false;
@@ -228,7 +276,7 @@ export function liveHub({
       ws.ping();
       if (c.auth) {
         try {
-          if (!await refresh(ws, c)) continue;
+          if (!await refresh(ws, c) || stopped) continue;
           const entry = presence.get(c.id)?.[c.sessionId];
           if (entry && entry.actor === c.auth.actor) entry.lastSeen = now();
           send(ws, { type: "heartbeat" });
@@ -263,12 +311,12 @@ export function liveHub({
         if (c.id === id && c.auth) {
           if (revoke || c.auth.expires <= now())
             ws.close(revoke === "policy" ? 1012 : 4403, "Access changed");
-          else void refresh(ws, c).then((valid) => {
-            if (valid) send(ws, { type: "changed" });
-          }).catch(() => closeRevoked(ws, c));
+          else scheduleBroadcast(id, false, true);
         }
     },
     close() {
+      stopped = true;
+      broadcasts.clear();
       clearInterval(heartbeat);
       server.off("upgrade", upgrade);
       for (const ws of clients.keys()) ws.terminate();
