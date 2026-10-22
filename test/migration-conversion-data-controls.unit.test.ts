@@ -188,7 +188,7 @@ test("named readonly Column specs preserve table scopes and refuse ambiguous or 
       "DataTable",
       { id: "table", data: "$rows", rowKey: "key" },
       true,
-      [...columns, columns[0]],
+      [...columns, columns[0]!],
     ),
   );
   assert.throws(() =>
