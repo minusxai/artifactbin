@@ -37,7 +37,7 @@ test(
           allocatedIds: ["Page12"],
           pages: [
             {
-              legacyId: "old-page",
+              legacyId: "OldPg1",
               pageId: "Page12",
               owner: { kind: "user", id: "owner" },
               revisions: [1, 2, 3].map((version) => ({
@@ -157,7 +157,7 @@ test(
         page: {
           id: "Page12",
           version: 2,
-          legacyId: "old-page",
+          legacyId: "OldPg1",
           editId: "old-edit",
         },
         dataset: { id: "ds", version: 1, policyRevision: 0 },
@@ -193,7 +193,7 @@ test(
         "INSERT INTO dataset_pages VALUES('Page12',2,'fixture',$1)",
         [
           {
-            id: "old-page",
+            id: "OldPg1",
             editId: "old-edit",
             owner: originalOwner,
             visibility: "public",
@@ -289,6 +289,69 @@ test(
       assert.deepEqual((await read("")).data?.legacyData?.read?.rows, [
         { value: 7 },
       ]);
+      // Exact legacy semantics: explicit source-artifact read grants permit guests
+      // for public/unlisted audiences, while private remains an audience ceiling.
+      const sourceGrant = {
+        version: 2,
+        allow: [{ actions: ["read"], from: { artifact: "OldPg1" } }],
+      };
+      await env.pool.query(
+        "UPDATE dataset_resources SET policy_revision=1,snapshot=jsonb_set(snapshot,'{policy}',$1::jsonb)",
+        [JSON.stringify(sourceGrant)],
+      );
+      await env.pool.query("UPDATE files SET share_hash=$1", [
+        hash("fixture-share"),
+      ]);
+      for (const pageVisibility of ["public", "unlisted"]) {
+        await env.pool.query(
+          "UPDATE files SET access=jsonb_set(access,'{visibility}',$1::jsonb)",
+          [JSON.stringify(pageVisibility)],
+        );
+        for (const datasetVisibility of ["public", "unlisted"]) {
+          await env.pool.query(
+            "UPDATE dataset_resources SET access=jsonb_set(access,'{visibility}',$1::jsonb)",
+            [JSON.stringify(datasetVisibility)],
+          );
+          const guest = await read(
+            pageVisibility === "unlisted" ? "fixture-share" : "",
+          );
+          assert.equal(guest.errors, undefined);
+          assert.deepEqual(guest.data?.legacyData?.read?.rows, [{ value: 7 }]);
+        }
+      }
+      await env.pool.query(
+        "UPDATE files SET access=jsonb_set(access,'{visibility}','\"public\"')",
+      );
+      await env.pool.query(
+        "UPDATE dataset_resources SET access=jsonb_set(access,'{visibility}','\"private\"')",
+      );
+      assert.ok((await read("")).errors?.length);
+      await env.pool.query(
+        "UPDATE dataset_resources SET access=jsonb_set(access,'{visibility}','\"public\"'),snapshot=jsonb_set(snapshot,'{policy}',$1::jsonb)",
+        [
+          JSON.stringify({
+            version: 2,
+            allow: [{ actions: ["read"], from: { artifact: "Other1" } }],
+          }),
+        ],
+      );
+      assert.ok((await read("")).errors?.length);
+      await env.pool.query(
+        "UPDATE dataset_resources SET policy_revision=2,snapshot=jsonb_set(snapshot,'{policy}',$1::jsonb)",
+        [JSON.stringify({ version: 2, allow: [] })],
+      );
+      assert.ok((await read("")).errors?.length);
+      await env.pool.query(
+        "UPDATE dataset_resources SET snapshot=jsonb_set(snapshot,'{policy}',$1::jsonb)",
+        [JSON.stringify(sourceGrant)],
+      );
+      await env.pool.query(
+        "UPDATE files SET access=jsonb_set(access,'{visibility}','\"private\"')",
+      );
+      await assert.rejects(read(""), /access to this document/);
+      await env.pool.query(
+        "UPDATE files SET access=jsonb_set(access,'{visibility}','\"public\"')",
+      );
       await env.pool.query("UPDATE dataset_resources SET deleted=true");
       assert.ok((await read("fixture-member")).errors?.length);
       await env.pool.query("UPDATE files SET head='3'");
