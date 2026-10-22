@@ -1,3 +1,5 @@
+import { planDatasetMetadata } from "../../src/migration/datasets/import-metadata.ts";
+import { additiveRowSha256 } from "../../src/migration/dataset-pages/additive-authority.ts";
 import { createHash } from "node:crypto";
 import { datasetPageArtifactSha256 } from "../../src/migration/dataset-pages/scan.ts";
 import { boundedBackendSchema } from "../../src/graphql/execution-policy.ts";
@@ -131,6 +133,22 @@ export function standaloneDatasetFixture(external = false) {
       },
     },
   };
+  options.standaloneDatasetPages!.heads[0]!.resourceSha256 = additiveRowSha256(
+    planDatasetMetadata({
+      manifest: {
+        ...base,
+        artifacts: [artifact],
+        tables: { ...base.tables, relations: [] },
+      },
+      maps: source.maps,
+      receipts: source.datasets!.receipts,
+      bindings: [],
+      relationProvenance: {
+        exportedAt: base.exportedAt,
+        manifestSha256: "b".repeat(64),
+      },
+    }).metadata.resources[0],
+  );
   return { artifact, source, options };
 }
 export const standaloneDatasetHost = {

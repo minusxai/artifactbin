@@ -1,4 +1,7 @@
-import { additiveAuthoritySha256 } from "./additive-authority.ts";
+import {
+  additiveAuthoritySha256,
+  additiveRowSha256,
+} from "./additive-authority.ts";
 import { projectMigrationDatasetOwnership } from "../job-dataset-ownership.ts";
 import { scanStandaloneDatasetPages } from "./scan.ts";
 import { prepareMigrationBackends } from "../backend-preparation.ts";
@@ -40,6 +43,10 @@ export async function prepareStandaloneDatasetJob(
     source.manifest.sourceNamespace,
   );
   const backends = new Map<string, typeof prepared.receipts>();
+  const pageSources = new Map<
+    string,
+    import("./contracts.ts").StandaloneDatasetPageInput["source"]
+  >();
   const bindings = new Map<
     string,
     import("../datasets/planner-contracts.ts").DatasetBrowserBinding[]
@@ -96,6 +103,31 @@ export async function prepareStandaloneDatasetJob(
       issues.set(page.legacyId, ["dataset-source-registration-required"]);
       continue;
     }
+    let missingResourceAdmission = false;
+    for (const resource of plan.metadata.resources) {
+      if (
+        admission.base.inventory.resources.some(
+          (existing) => existing.legacyId === resource.legacyId,
+        )
+      )
+        continue;
+      const expected = admission.heads.find(
+        (h) => h.legacyId === resource.legacyId,
+      )?.resourceSha256;
+      if (!expected) {
+        missingResourceAdmission = true;
+        continue;
+      }
+      if (
+        !/^[a-f0-9]{64}$/.test(expected) ||
+        additiveRowSha256(resource) !== expected
+      )
+        throw Error("Standalone original resource descriptor differs");
+    }
+    if (missingResourceAdmission) {
+      issues.set(page.legacyId, ["dataset-resource-admission-required"]);
+      continue;
+    }
     accumulator.add(
       projectMigrationDatasetOwnership(
         {
@@ -116,17 +148,50 @@ export async function prepareStandaloneDatasetJob(
       page.legacyId,
       prepared.receipts.filter((r) => r.pageLegacyId === page.legacyId),
     );
-    for (const row of plan.browserBindings)
+    for (const row of plan.browserBindings) {
+      pageSources.set(
+        migrationDatasetVersionKey(row.pageLegacyId, row.pageVersion),
+        { kind: "stored", binding: row.binding },
+      );
       bindings.set(
         migrationDatasetVersionKey(row.pageLegacyId, row.pageVersion),
         [row.binding],
       );
+    }
+    if (page.revisions[0]!.standaloneExternalDataset) {
+      const receipt = prepared.receipts.find(
+        (r) =>
+          r.pageLegacyId === page.legacyId &&
+          r.pageVersion === page.revisions[0]!.version,
+      )!;
+      const tables = (
+        artifact.artifacts[0]!.meta as {
+          catalog: { tables: { schema: string; name: string }[] };
+        }
+      ).catalog.tables;
+      pageSources.set(
+        migrationDatasetVersionKey(page.legacyId, receipt.pageVersion),
+        {
+          kind: "external",
+          registered: true,
+          backendNamespace: "legacyData",
+          backendHref: new URL(receipt.backendHref).pathname,
+          tables: page.revisions[0]!.sourceQueries!.map((query, i) => ({
+            schema: tables[i]!.schema,
+            table: tables[i]!.name,
+            queryName: query.name,
+            columns: query.columns,
+          })),
+        },
+      );
+    }
   }
   const heads = new Map(
     pages.map((p) => [p.legacyId, p.revisions[0]!.version]),
   );
   return {
     metadata: accumulator.finish(),
+    standaloneDatasetSources: pageSources,
     sourceQueryRegistrations: prepared.sourceQueryRegistrations,
     scan: {
       pages,

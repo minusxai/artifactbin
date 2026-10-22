@@ -1,4 +1,4 @@
-import {verifyAdditiveDatasetBase,additiveAuthoritySha256,additiveRowSha256,normalizeAdditiveRow} from "./dataset-pages/additive-authority.ts";
+import {verifyAdditiveDatasetBase,additiveAuthoritySha256,additiveDatasetBatchFingerprint,additiveRowSha256,normalizeAdditiveRow} from "./dataset-pages/additive-authority.ts";
 import { verifySourceQueries } from "../persistence/source-queries.ts";
 import { validateMigrationSourceQueryBatch } from "./source-query-preparation.ts";
 import type { MigrationSourceQueryRegistration } from "../datasets/source-query/contracts.ts";
@@ -145,8 +145,7 @@ export async function verifyMigrationDatasetMetadata(
   );
   if(batch.additive){
     const receipt=(await db.query(`SELECT fingerprint,base_fingerprint FROM ${archive}.dataset_additive_receipts WHERE source_namespace=$1 AND authority_sha256=$2`,[batch.metadata.sourceNamespace,additiveAuthoritySha256(batch.additive)])).rows;
-    const {createHash}=await import("node:crypto");
-    equal(receipt,[{fingerprint:createHash("sha256").update(canonicalMigrationValue({...batch,additive:additiveAuthoritySha256(batch.additive)})).digest("hex"),base_fingerprint:batch.additive.base.inventory.datasetFingerprint}],"additive dataset receipt");
+    equal(receipt,[{fingerprint:additiveDatasetBatchFingerprint(batch),base_fingerprint:batch.additive.base.inventory.datasetFingerprint}],"additive dataset receipt");
   }
   count += await verifyMigrationOwnershipDatasetGrantAudit(
     db,

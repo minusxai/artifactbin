@@ -1,4 +1,4 @@
-import {verifyAdditiveDatasetBase,additiveAuthoritySha256} from "./dataset-pages/additive-authority.ts";
+import {verifyAdditiveDatasetBase,additiveAuthoritySha256,additiveDatasetBatchFingerprint} from "./dataset-pages/additive-authority.ts";
 import {
   registerSourceQueries,
   verifySourceQueries,
@@ -95,7 +95,7 @@ export class PostgresDatasetMetadataDestination
         if (users.has(p.actor)) throw new Error("Ambiguous dataset user actor");
         users.add(p.actor);
       }
-    const digest = createHash("sha256").update(canonical(batch.additive ? {...batch,additive:additiveAuthoritySha256(batch.additive)} : batch)).digest("hex");
+    const digest = batch.additive ? additiveDatasetBatchFingerprint(batch) : createHash("sha256").update(canonical(batch)).digest("hex");
     const result = { created: 0, unchanged: 0 };
     await this.db.query("BEGIN");
     try {

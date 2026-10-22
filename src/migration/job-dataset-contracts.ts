@@ -6,6 +6,7 @@ import type { MigrationBackendReceipt } from "./backend-preparation-contracts.ts
 import type { MigrationDatasetImportScan } from "./dataset-scan-contracts.ts";
 export interface MigrationJobDatasets {
   metadata: DatasetImportMetadata;
+  standaloneDatasetSources?: ReadonlyMap<string, import("./dataset-pages/contracts.ts").StandaloneDatasetPageInput["source"]>;
   sourceQueries?: ReadonlyMap<
     string,
     readonly import("./conversion/compiled/source-query-contracts.ts").CompiledSourceQueryBinding[]

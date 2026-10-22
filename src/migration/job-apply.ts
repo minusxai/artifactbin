@@ -44,7 +44,7 @@ export async function applyMigrationJob(
     if(options.standaloneDatasetPages){
       if(!source.datasets||!source.preparedDatasets)throw Error("Additive dataset preparation missing");
       await db.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
-      try{await verifyAdditiveDatasetBase(db,options.schema,{...source.datasets.provenance,metadata:source.preparedDatasets.metadata,additive:options.standaloneDatasetPages});await db.query("COMMIT");}catch(error){await db.query("ROLLBACK");throw error;}
+      try{await verifyAdditiveDatasetBase(db,options.schema,{...source.datasets.provenance,metadata:source.preparedDatasets.metadata,sourceQueryRegistrations:source.preparedDatasets.sourceQueryRegistrations,additive:options.standaloneDatasetPages});await db.query("COMMIT");}catch(error){await db.query("ROLLBACK");throw error;}
     }
     await archiveMigrationSources(
       db,

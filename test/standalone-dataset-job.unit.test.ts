@@ -154,6 +154,19 @@ test("external admission binds exact source and canonical declarations before co
   );
   assert.equal(prepared.metadata.bindings.length, 0);
   assert.equal(prepared.sourceQueryRegistrations!.length, 1);
+  source.preparedDatasets = prepared;
+  const pagePlan = await createMigrationJobPlanner(
+    source,
+    options,
+    async () => {
+      throw Error("dataset is not markup");
+    },
+  )(await source.readArtifact(artifact.id));
+  assert.equal(pagePlan.pages[0]!.disposition, "ready");
+  const html = pagePlan.pages[0]!.revisions[0]!.conversion.html!;
+  assert.ok(html.includes(receipt.backendId));
+  assert.ok(!html.includes(sql));
+  assert.ok(!html.includes(query.resource));
   options.standaloneDatasetPages!.external![0]!.declarations =
     options.standaloneDatasetPages!.external![0]!.declarations.replace(
       "SELECT 1",
@@ -165,5 +178,24 @@ test("external admission binds exact source and canonical declarations before co
         host: standaloneDatasetHost,
       }),
     /declaration differs/,
+  );
+});
+test("new original dataset resources require their own reviewed descriptor digest", async () => {
+  const { artifact, source, options } = standaloneDatasetFixture();
+  delete options.standaloneDatasetPages!.heads[0]!.resourceSha256;
+  const missing = await prepareMigrationJobDatasets(source, options, {
+    host: standaloneDatasetHost,
+  });
+  assert.deepEqual(missing!.issues.get(artifact.id), [
+    "dataset-resource-admission-required",
+  ]);
+  assert.equal(missing!.metadata.resources.length, 0);
+  options.standaloneDatasetPages!.heads[0]!.resourceSha256 = "f".repeat(64);
+  await assert.rejects(
+    () =>
+      prepareMigrationJobDatasets(source, options, {
+        host: standaloneDatasetHost,
+      }),
+    /resource descriptor differs/,
   );
 });

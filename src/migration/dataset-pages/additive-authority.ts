@@ -60,6 +60,15 @@ export const additiveAuthoritySha256 = (
       verificationReport: { sha256: admission.base.verificationReport.sha256 },
     },
   });
+export function additiveDatasetBatchFingerprint(
+  batch: DatasetMigrationBatch,
+): string {
+  if (!batch.additive) throw Error("Missing additive authority");
+  return additiveRowSha256({
+    ...batch,
+    additive: additiveAuthoritySha256(batch.additive),
+  });
+}
 export async function validateAdditiveVerification(
   approval: AdditiveDatasetBaseApproval,
 ) {
@@ -131,6 +140,48 @@ export async function verifyAdditiveDatasetBase(
   );
   const pageIds = new Set(batch.metadata.pages.map((p) => p.pageId));
   const scope = new Set(admission.heads.map((h) => h.legacyId));
+  const externalPages = new Map(
+    (admission.external ?? []).map((e) => [e.legacyId, e]),
+  );
+  if (
+    externalPages.size !== (admission.external ?? []).length ||
+    [...externalPages.values()].some(
+      (e) =>
+        !admission.heads.some(
+          (h) =>
+            h.legacyId === e.legacyId &&
+            h.version === e.version &&
+            h.artifactSha256 === e.artifactSha256,
+        ),
+    )
+  )
+    throw Error("Invalid additive external scope");
+  const groups = batch.sourceQueryRegistrations ?? [];
+  const expectedExternal = batch.metadata.pages.filter((p) =>
+    externalPages.has(p.snapshot.id),
+  );
+  if (
+    groups.length !== expectedExternal.length ||
+    new Set(groups.map((g) => g.receipt.pageLegacyId)).size !== groups.length
+  )
+    throw Error("Incomplete additive external registrations");
+  for (const group of groups) {
+    const approved = externalPages.get(group.receipt.pageLegacyId);
+    const page = expectedExternal.find(
+      (p) => p.snapshot.id === group.receipt.pageLegacyId,
+    );
+    if (
+      !approved ||
+      !page ||
+      group.receipt.pageId !== page.pageId ||
+      group.receipt.pageVersion !== page.pageVersion ||
+      approved.version !== page.pageVersion ||
+      !/^[A-Za-z0-9]{6}$/.test(group.receipt.backendId) ||
+      !/^[a-f0-9]{64}$/.test(group.receipt.deployment.version)
+    )
+      throw Error("Invalid additive external saved authority");
+    same(group.queries, approved.queries, "external registered queries");
+  }
   if (
     batch.metadata.resources.some((r) => !scope.has(r.legacyId)) ||
     batch.metadata.versions.some((v) => !scope.has(v.legacyId)) ||
@@ -138,20 +189,23 @@ export async function verifyAdditiveDatasetBase(
     batch.metadata.personBindings?.length ||
     batch.metadata.pages.some(
       (p) =>
-        p.snapshot.standaloneDataset?.datasetId !== p.snapshot.id ||
-        p.snapshot.standaloneDataset.version !== p.pageVersion ||
+        (!externalPages.has(p.snapshot.id) &&
+          (p.snapshot.standaloneDataset?.datasetId !== p.snapshot.id ||
+            p.snapshot.standaloneDataset.version !== p.pageVersion)) ||
+        (externalPages.has(p.snapshot.id) &&
+          p.snapshot.standaloneDataset !== undefined) ||
         !admission.heads.some(
           (h) => h.legacyId === p.snapshot.id && h.version === p.pageVersion,
         ),
     ) ||
     batch.ownershipDatasetGrants?.length ||
-    batch.sourceQueryRegistrations?.length ||
     batch.metadata.operations?.length ||
     batch.metadata.attachments?.length ||
     batch.metadata.pages.some(
       (p) =>
         p.snapshot.format !== "dataset" ||
-        p.snapshot.standaloneDataset?.kind !== "dataset-self-read-v1" ||
+        (!externalPages.has(p.snapshot.id) &&
+          p.snapshot.standaloneDataset?.kind !== "dataset-self-read-v1") ||
         !scope.has(p.snapshot.id),
     ) ||
     batch.metadata.bindings.some(
@@ -168,6 +222,7 @@ export async function verifyAdditiveDatasetBase(
   const ownIds = new Set([
     ...pageIds,
     ...batch.metadata.bindings.map((b) => b.backendId),
+    ...groups.map((g) => g.receipt.backendId),
   ]);
   const currentIds = (
     await db.query(`SELECT id FROM ${runtime}.file_ids`)
@@ -275,11 +330,19 @@ export async function verifyAdditiveDatasetBase(
         additiveRowSha256(normalizeAdditiveRow(r)),
       ]),
     );
-    if (
-      plan.table === "dataset_resources" &&
-      [...own.keys()].some((key) => !expected.has(key))
-    )
-      throw Error("Additive dataset resource absent from completed base");
+    if (plan.table === "dataset_resources")
+      for (const resource of batch.metadata.resources) {
+        if (expected.has(canonical([resource.legacyId]))) continue;
+        const approved = admission.heads.find(
+          (h) => h.legacyId === resource.legacyId,
+        )?.resourceSha256;
+        if (
+          !approved ||
+          !/^[a-f0-9]{64}$/.test(approved) ||
+          additiveRowSha256(resource) !== approved
+        )
+          throw Error("Additive original resource descriptor not approved");
+      }
     for (const [key, digest] of own)
       if (expected.has(key))
         same(

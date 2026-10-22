@@ -6,6 +6,8 @@ export interface StandaloneDatasetJobAdmission {
     legacyId: string;
     version: number;
     artifactSha256: string;
+    /** Required to introduce an original resource not present in the completed base. */
+    resourceSha256?: string;
   }[];
   /** Entire frozen source-ID and base backend-ID inventory, including deleted/blocked source artifacts. */
   reservedFileIds: readonly string[];

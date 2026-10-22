@@ -81,10 +81,10 @@ export function createMigrationJobPlanner(
         source.preparedDatasets?.bindings.get(
           migrationDatasetVersionKey(id, version),
         ) ?? [],
-      ...(options.standaloneDatasetPages ? { standaloneDatasetBinding: (id:string, version:number) => {
-        const receipt=source.preparedDatasets?.backends.get(id)?.find(r=>r.pageVersion===version&&r.linked&&r.standaloneDataset);
-        const binding=source.preparedDatasets?.bindings.get(migrationDatasetVersionKey(id,version))?.[0];
-        return receipt&&binding ? binding : undefined;
+      ...(options.standaloneDatasetPages ? { standaloneDatasetSource: (id:string, version:number) => {
+        const receipt=source.preparedDatasets?.backends.get(id)?.find(r=>r.pageVersion===version&&r.linked&&(r.standaloneDataset||r.standaloneExternalDataset));
+        const binding=source.preparedDatasets?.standaloneDatasetSources?.get(migrationDatasetVersionKey(id,version));
+        return receipt&&binding && ((binding.kind==="stored"&&receipt.standaloneDataset)||(binding.kind==="external"&&binding.registered&&receipt.standaloneExternalDataset)) ? binding : undefined;
       }} : {}),
       datasetUnavailable: (id, version) =>
         source.preparedDatasets?.scan.historicalServiceVersions
