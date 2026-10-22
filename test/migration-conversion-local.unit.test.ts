@@ -162,6 +162,7 @@ test("local SQL declarations require an explicit offline query engine plan", asy
           return {
             ...output,
             declarations: [{ name: "n", type: "number", default: 2 }],
+            html: '<div id="total">4</div>',
             queryNames: ["total"],
           };
         },

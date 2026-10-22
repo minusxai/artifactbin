@@ -17,6 +17,8 @@ export type ReconcileLocalDeclarations = (
 export interface AdmittedLocalSource {
   readonly input: import("./contracts.ts").CompiledMigrationInput;
   readonly manifest: LocalSourceManifest;
+  /** Authored IDs on rendered JSX nodes must survive compiler output unchanged. */
+  readonly renderedIdentities: ReadonlySet<string>;
   readonly historical: boolean;
   readonly backendLinks: ReadonlyMap<string, string>;
   readonly queryNames: ReadonlySet<string>;

@@ -129,7 +129,7 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
         if (a.name === "id") {
           if (Object.hasOwn(identities, a.value)) unsafe = true;
           identities[a.value] = a.value;
-          node.attrs.push({ name: "data-af-id", value: a.value });
+
         }
       }
       const authorComponent = node.attrs.find(
@@ -147,13 +147,15 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
         authorMounts.add(id);
       }
       node.attrs = node.attrs.filter(
-        (a: any) => !["data-mx-ast", "data-mx-source-node-id"].includes(a.name),
+        (a: any) => !["data-af-id", "data-mx-ast", "data-mx-source-node-id"].includes(a.name),
       );
+      const id = node.attrs.find((a: any) => a.name === "id");
+      if (id) node.attrs.push({ name: "data-af-id", value: id.value });
     }
     for (const c of node.childNodes ?? []) visit(c);
   };
   visit(fragment);
-  if (unsafe || (author && authorMounts.size !== author.mounts.length))
+  if (unsafe || [...plan.renderedIdentities].some((id) => !Object.hasOwn(identities, id)) || (author && authorMounts.size !== author.mounts.length))
     return blocked("compiled-local-output");
   return {
     ok: true,

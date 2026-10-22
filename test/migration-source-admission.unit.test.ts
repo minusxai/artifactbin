@@ -179,6 +179,7 @@ test("Mutation expectedAffected admits only the trusted extractor's literal shap
   const metadata = {
     name: "save",
     backendNamespace: "legacyData",
+    recoveryScope: "a".repeat(64),
     paramTypes: { amount: "number" as const },
   };
   const base = {
@@ -213,6 +214,41 @@ test("Mutation expectedAffected admits only the trusted extractor's literal shap
     });
     assert.ok(accepted.ok);
     assert.deepEqual(accepted.plan.input.datasetMutations, [metadata]);
+  }
+  for (const recoveryScope of [
+    undefined,
+    "",
+    "A".repeat(64),
+    "a".repeat(63),
+    "not-a-scope",
+  ]) {
+    const candidate = {
+      ...base,
+      datasetMutations: [{ ...metadata, recoveryScope }],
+    };
+    assert.equal(
+      admitLocalSource({
+        ...candidate,
+        source: source("expectedAffected={1}"),
+      } as import("../src/migration/conversion/compiled/contracts.ts").CompiledMigrationInput)
+        .ok,
+      false,
+    );
+  }
+  for (const backendNamespace of [
+    "compiledPage",
+    "authorSignals",
+    "datasetMutationIntents",
+  ]) {
+    assert.equal(
+      admitLocalSource({
+        ...base,
+        datasetBindings: [{ ...base.datasetBindings[0]!, backendNamespace }],
+        datasetMutations: [{ ...metadata, backendNamespace }],
+        source: source("expectedAffected={1}"),
+      }).ok,
+      false,
+    );
   }
   for (const flag of [
     "expectedAffected={-1}",

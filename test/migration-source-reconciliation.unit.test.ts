@@ -117,3 +117,35 @@ test("source-owned string defaults survive safe JSON-script packaging exactly", 
   assert.ok(state);
   assert.equal(JSON.parse(state).compiledPage.text, value);
 });
+
+
+test("rendered source identities cannot disappear or change during compilation", async () => {
+  const source = '<Value name="count" type="number" default={2}/><p id="stable">{$count}</p>';
+  for (const html of ['<p id="replacement">2</p>', '<p>2</p>']) {
+    const result = await compileArchivedLocal({source, coreUrl: input.coreUrl}, {
+      compiler: {compile: async () => ({...output, html, declarations: [output.declarations[0]!]})},
+    });
+    assert.equal(result.classification, "manual-blocked");
+    assert.equal(result.html, null);
+  }
+});
+
+test("rendered identities are canonical even when compiler provenance conflicts", async () => {
+  const result = await compileArchivedLocal({...input, source: input.source + '<span id="stable">text</span>'}, {
+    compiler: {compile: async () => ({...output, html: '<p>2</p><span id="stable" data-af-id="wrong">text</span><i id="generated">extra</i>'})},
+  });
+  assert.equal(result.classification, "functional");
+  assert.match(result.html!, /<span id="stable" data-af-id="stable">/);
+  assert.doesNotMatch(result.html!, /data-af-id="wrong"/);
+  assert.match(result.html!, /id="generated" data-af-id="generated"/);
+});
+
+
+test("duplicate authored identities refuse before invoking the compiler", async () => {
+  let calls = 0;
+  const result = await compileArchivedLocal({source: '<p id="same">one</p><span id="same">two</span>', coreUrl: input.coreUrl}, {
+    compiler: {compile: async () => { calls++; return output; }},
+  });
+  assert.equal(result.classification, "manual-blocked");
+  assert.equal(calls, 0);
+});

@@ -115,6 +115,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     backendLinks.set(b.backendNamespace, b.backendHref);
   }
   const expectedDeclarations: LocalDeclaration[] = [];
+  const renderedIdentities = new Set<string>();
   let invalid = false;
   const registeredMutations = input.datasetMutations ?? [];
   try {
@@ -122,7 +123,10 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
       !Array.isArray(registeredMutations) ||
       registeredMutations.length > 64 ||
       registeredMutations.some(
-        (b) => !b || !backendLinks.has(b.backendNamespace),
+        (b) =>
+          !b ||
+          !backendLinks.has(b.backendNamespace) ||
+          !/^[a-f0-9]{64}$/.test(b.recoveryScope),
       ) ||
       (historical && registeredMutations.length)
     )
@@ -218,6 +222,17 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
             !author?.exports.includes(name))
         )
           invalid = true;
+        if (!["Helmet", "Value", "Query", "Import", "Mutation"].includes(name)) {
+          const ids = node.openingElement.attributes.filter((a: any) => a.name?.name === "id");
+          if (ids.length > 1) invalid = true;
+          for (const attribute of ids) {
+            try {
+              const id = controlLiteral(attribute.value);
+              if (typeof id !== "string" || !id || renderedIdentities.has(id)) invalid = true;
+              else renderedIdentities.add(id);
+            } catch { invalid = true; }
+          }
+        }
         if (["Question", "Chart"].includes(name)) {
           chartCount++;
           const attrs = node.openingElement.attributes;
@@ -543,6 +558,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     plan: {
       input,
       manifest: { declarations: expectedDeclarations },
+      renderedIdentities,
       historical,
       backendLinks,
       queryNames: queries,
