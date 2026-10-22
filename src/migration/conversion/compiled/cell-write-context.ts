@@ -20,6 +20,7 @@ export function validateCompiledCellWriteContexts(
   source: string,
   flow: CompiledCellWriteFlow,
   bindings: readonly CompiledDatasetMutation[],
+  sourceAdmission:import("./local-contracts.ts").CompiledSourceAdmission="strict",
 ): void {
   const columns: Record<string, readonly DatasetColumn[]> = Object.create(null);
   for (const query of flow.queries)
@@ -27,7 +28,7 @@ export function validateCompiledCellWriteContexts(
   for (const value of flow.values)
     if (value.kind === "table") columns[value.name] = value.columns ?? [];
   const sites = typeLegacyCellWriteSites(
-    readLegacyCellWriteSites(source),
+    readLegacyCellWriteSites(source,undefined,sourceAdmission),
     columns,
   );
   for (const site of sites) {

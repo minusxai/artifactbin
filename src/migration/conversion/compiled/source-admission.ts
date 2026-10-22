@@ -171,7 +171,7 @@ export const admitLocalSource: AdmitLocalSource = (input, mode="strict") => {
   const cellSites = new Map<number,LegacyCellWriteSite>();
   try {
     if(registeredMutations.some(binding=>binding.valueParam)) {
-      readLegacyCellWriteSites(input.source,(node,site)=>cellSites.set((node as any).start,site));
+      readLegacyCellWriteSites(input.source,(node,site)=>cellSites.set((node as any).start,site),mode);
       if(historical || [...cellSites.values()].some(site=>!registeredMutations.find(binding=>binding.name===site.mutationName)?.valueParam) || registeredMutations.some(binding=>binding.valueParam&&![...cellSites.values()].some(site=>site.mutationName===binding.name)))return blocked("compiled-cell-binding");
     }
   } catch {return blocked("compiled-cell-binding");}

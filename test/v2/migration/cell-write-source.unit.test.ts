@@ -168,3 +168,10 @@ test('native editing input constraints preserve fixed mutation scope and reject 
  for(const attrs of ['min={0}','min="-1" max={100} step="any"','min={-2} max={2} step={0.25}'])assert.deepEqual(readLegacyCellWriteSites(cell(attrs)),expected);
  for(const attrs of ['min={window.limit}','max={()=>1}','step={{value:1}}','min={true}','step={1e999}'])assert.throws(()=>readLegacyCellWriteSites(cell(attrs)));
 });
+test('prototype cell scope ignores compiler-owned presentation but preserves exact mutation authority',()=>{
+ const cell=(extra:string)=>'<DataTable data="$rows" rowKey="id"><Column col="title"><input type="text" value="$_row.title" run="$save" '+extra+'/></Column></DataTable>';
+ const source=cell('style={{width:"12rem"}} title="Edit title" placeholder={$hint} data-extra="presentation"');
+ assert.throws(()=>readLegacyCellWriteSites(source));
+ assert.deepEqual(readLegacyCellWriteSites(source,undefined,'offline-prototype'),[{mutationName:'save',dataName:'rows',column:'title',rowKey:'id',tag:'input'}]);
+ for(const bad of [source.replace('run="$save"','run={$name}'),source.replace('value="$_row.title"','value="$_row.other"'),source.replace('rowKey="id"',''),cell('{...attrs}')])assert.throws(()=>readLegacyCellWriteSites(bad,undefined,'offline-prototype'));
+});

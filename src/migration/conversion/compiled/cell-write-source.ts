@@ -23,12 +23,14 @@ function refuse(): never {
 export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
   source,
   visit,
+  sourceAdmission="strict",
 ) => {
   if (
     typeof source !== "string" ||
     Buffer.byteLength(source) > MAX_COMPILED_SOURCE_BYTES
   )
     refuse();
+  if(!["strict","offline-prototype"].includes(sourceAdmission))refuse();
   const text = "<>" + source + "</>";
   const tree = Parser.extend(jsx()).parseExpressionAt(text, 0, {
     ecmaVersion: "latest",
@@ -122,6 +124,8 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
               : []),
         ]);
         for (const attribute of attributes) {
+          // Compiler-owned presentation does not grant a mutation target or value source.
+          if(sourceAdmission==="offline-prototype" && attribute.type==="JSXAttribute" && !["run","value","type","options","multiple","allowCreate","valueFormat","nullable","exclude"].includes(attribute.name?.name))continue;
           if (
             attribute.type !== "JSXAttribute" ||
             !allowed.has(attribute.name?.name)

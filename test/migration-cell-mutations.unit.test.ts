@@ -131,3 +131,10 @@ test("publication records only the sole SQLite authorizer write action and exact
   assert.deepEqual(r.issues,[]);assert.deepEqual(r.mutations[0]?.analysis,analysis);
  }
 });
+test('prototype presentation attributes do not change verified publication descriptors',async()=>{
+ const plain=await extractLegacyMutations(source(),catalogs);
+ const decorated=source().replace('<input ','<input style={{width:"12rem"}} title="Edit" placeholder={$hint} ');
+ assert.ok((await extractLegacyMutations(decorated,catalogs)).issues.length);
+ const result=await extractLegacyMutations(decorated,catalogs,[],'offline-prototype');assert.deepEqual(result,plain);
+ for(const invalid of [decorated.replace('data.rows set title','missing.rows set title'),decorated.replace('value="$_row.title"','value="$_row.other"'),decorated.replace('rowKey="id"','')])assert.ok((await extractLegacyMutations(invalid,catalogs,[],'offline-prototype')).issues.length);
+});

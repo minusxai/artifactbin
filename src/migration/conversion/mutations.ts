@@ -119,6 +119,7 @@ export async function extractLegacyMutations(
   source: string,
   catalogs: readonly LegacyMutationImportCatalog[],
   boundValueColumns: readonly BoundValueColumnProof[] = [],
+  sourceAdmission:import("../conversion-strategy-contracts.ts").MigrationSourceAdmission="strict",
 ): Promise<LegacyMutationExtraction> {
   const result: LegacyMutationExtraction = { mutations: [], issues: [] };
   const issue = () =>
@@ -324,7 +325,7 @@ export async function extractLegacyMutations(
         },
       );
       const typed = typeLegacyCellWriteSites(
-        readLegacyCellWriteSites(source),
+        readLegacyCellWriteSites(source,undefined,sourceAdmission),
         legacyCellWriteQueryColumns(db, queries),
       );
       for (const site of typed) cellTypes.set(site.mutationName, site.type);

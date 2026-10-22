@@ -170,7 +170,7 @@ if (input.datasetUnavailable) {
     input.sourceAdmission,
   ));
 } else if (rawFlow.imports.length) throw Error("Import requires a query");
-if(!input.datasetUnavailable&&input.datasetMutations?.some(binding=>binding.valueParam))validateCompiledCellWriteContexts(input.source,flow,input.datasetMutations??[]);
+if(!input.datasetUnavailable&&input.datasetMutations?.some(binding=>binding.valueParam))validateCompiledCellWriteContexts(input.source,flow,input.datasetMutations??[],input.sourceAdmission);
 const hasCharts = (nodes: readonly any[]): boolean =>
   nodes.some(
     (n) =>
@@ -433,7 +433,7 @@ const bundled = await bundle({
             input.slideDeck,
             input.personBindings ?? [],
             input.viewerBinding,
-            input.datasetMutations?.some(binding=>binding.valueParam)?readLegacyCellWriteSites(input.source).flatMap(site=>site.optionsQuery?[site.optionsQuery]:[]):[],
+            input.datasetMutations?.some(binding=>binding.valueParam)?readLegacyCellWriteSites(input.source,undefined,input.sourceAdmission).flatMap(site=>site.optionsQuery?[site.optionsQuery]:[]):[],
             attachmentSites,
           ),
           loader: "js",

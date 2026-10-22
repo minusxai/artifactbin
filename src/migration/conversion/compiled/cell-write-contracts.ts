@@ -14,6 +14,7 @@ export interface TypedLegacyCellWriteSite extends LegacyCellWriteSite {
 export type ReadLegacyCellWriteSites = (
   source: string,
   visit?: (node: unknown, site: LegacyCellWriteSite) => void,
+  sourceAdmission?:import("./local-contracts.ts").CompiledSourceAdmission,
 ) => readonly LegacyCellWriteSite[];
 export type TypeLegacyCellWriteSites = (
   sites: readonly LegacyCellWriteSite[],
