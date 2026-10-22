@@ -114,3 +114,15 @@ CREATE TABLE IF NOT EXISTS dataset_person_bindings (
 );
 DROP TRIGGER IF EXISTS dataset_person_bindings_immutable ON dataset_person_bindings;
 CREATE TRIGGER dataset_person_bindings_immutable BEFORE UPDATE ON dataset_person_bindings FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+
+-- Offline compiler-owned query declarations. A saved source tuple can never be replaced.
+CREATE TABLE IF NOT EXISTS dataset_query_registrations (
+ backend_id text NOT NULL, backend_version text NOT NULL, page_id text NOT NULL,
+ page_version bigint NOT NULL CHECK(page_version>0), source_sha256 text NOT NULL CHECK(source_sha256 ~ '^[a-f0-9]{64}$'),
+ source_namespace text NOT NULL, registration jsonb NOT NULL,
+ PRIMARY KEY(backend_id,backend_version,page_id,page_version),
+ FOREIGN KEY(page_id,page_version,source_namespace) REFERENCES dataset_pages(page_id,page_version,source_namespace),
+ FOREIGN KEY(backend_id,backend_version) REFERENCES af_backend_versions(file_id,version)
+);
+DROP TRIGGER IF EXISTS dataset_queries_immutable ON dataset_query_registrations;
+CREATE TRIGGER dataset_queries_immutable BEFORE UPDATE OR DELETE ON dataset_query_registrations FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
