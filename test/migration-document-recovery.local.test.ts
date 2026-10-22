@@ -9,3 +9,11 @@ test('only explicit prototype conversion recovers an AST-proven missing empty gr
  const strict=await createMigrationConverter({strategy:'archived-functional',legacyRoot:root!})(input);assert.equal(strict.classification,'manual-blocked');assert.equal(strict.sourceRecovery,undefined);
  const recovered=await createMigrationConverter({strategy:'archived-functional',sourceAdmission:'offline-prototype',legacyRoot:root!})(input);assert.notEqual(recovered.classification,'manual-blocked',JSON.stringify(recovered.issues));assert.equal(recovered.sourceRecovery?.kind,'retained-graph-empty-separators');assert.equal(recovered.sourceRecovery?.repairedNodes,1);assert.match(recovered.sourceRecovery!.documentSha256,/^[a-f0-9]{64}$/);assert.equal(JSON.stringify(document),before);
 });
+
+test('partial root recovery renders visible losses with warning, never functional', {skip:!root}, async()=>{
+ const document={schema:3,kind:'graph',nodes:{$root:{parts:['','','',''],children:['a','missing','b']},a:{parts:['<p>Before</p>'],children:[]},b:{parts:['<p>After</p>'],children:[]}}};
+ const before=JSON.stringify(document);
+ const input={source:'',document,coreUrl:'/af/v1/core.js'};
+ const result=await createMigrationConverter({strategy:'archived-functional',sourceAdmission:'offline-prototype',legacyRoot:root!})(input);
+ assert.equal(result.classification,'renderable');assert.match(result.html!,/Original saved content unavailable/);assert.equal(result.sourceRecovery?.kind,'retained-graph-missing-root-content');assert.equal(result.sourceRecovery?.missingNodes,1);assert.ok(result.issues.some((i:any)=>i.code==='document-partial-recovery'));assert.equal(JSON.stringify(document),before);
+});

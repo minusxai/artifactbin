@@ -64,3 +64,23 @@ export const recoverLegacyDocumentSource: RecoverLegacyDocumentSource = (
     return null;
   }
 };
+
+/** Missing root children have exact retained sibling positions; nested losses remain refused. */
+export function recoverPartialLegacyDocument(document: unknown): import("./document-recovery-contracts.ts").LegacyPartialDocumentRecovery | null {
+  try {
+    if (!document || typeof document !== "object" || Buffer.byteLength(JSON.stringify(document)) > MAX_COMPILED_SOURCE_BYTES) return null;
+    const graph = structuredClone(document) as {schema?:unknown;kind?:unknown;nodes?:Record<string,{parts?:unknown;children?:unknown}>};
+    if(graph.schema!==3 || graph.kind!=="graph" || !graph.nodes || Array.isArray(graph.nodes)) return null;
+    const root=graph.nodes.$root;
+    if(!root || !Array.isArray(root.parts) || !root.parts.every(p=>p==="") || !Array.isArray(root.children) || root.parts.length!==root.children.length+1) return null;
+    const missing=new Set<string>();
+    for(const [key,node] of Object.entries(graph.nodes)) {
+      if(!node || !Array.isArray(node.children) || !node.children.every(c=>typeof c==="string")) return null;
+      for(const child of node.children) if(!Object.hasOwn(graph.nodes,child)) {if(key!=="$root") return null;missing.add(child);}
+    }
+    if(!missing.size) return null;
+    for(const key of missing) Object.defineProperty(graph.nodes,key,{value:{parts:['<p role="note">Original saved content unavailable</p>'],children:[]},enumerable:true});
+    const source=legacyDocumentSource(graph);
+    return Buffer.byteLength(source)<=MAX_COMPILED_SOURCE_BYTES ? {source,missingNodes:missing.size}:null;
+  } catch {return null;}
+}

@@ -58,6 +58,12 @@ export function createMigrationConverter(
         sourceRecovery={kind:"retained-graph-empty-separators",repairedNodes:recovered.repairedNodes,documentSha256:createHash("sha256").update(JSON.stringify(input.document)).digest("hex"),sourceSha256:createHash("sha256").update(source).digest("hex")};
       }
     }
+    if (source === null && options.sourceAdmission === "offline-prototype") {
+      const {recoverPartialLegacyDocument}=await import("./conversion/document-recovery.ts");
+      const partial=recoverPartialLegacyDocument(input.document);
+      if(partial){source=partial.source;sourceRecovery={kind:"retained-graph-missing-root-content",repairedNodes:0,missingNodes:partial.missingNodes,documentSha256:createHash("sha256").update(JSON.stringify(input.document)).digest("hex"),sourceSha256:createHash("sha256").update(source).digest("hex")};}
+    }
+    const finish = (output: import("./contracts.ts").ConversionOutput): import("./contracts.ts").ConversionOutput => ({...output,...(sourceRecovery?{sourceRecovery}:{}),...(sourceRecovery?.kind==="retained-graph-missing-root-content" && output.html ? {classification:"renderable" as const,issues:[...output.issues,{code:"document-partial-recovery",message:"Original saved content unavailable at retained root positions",missingNodes:sourceRecovery.missingNodes}]}:{})});
     if (source === null)
       return {
         classification: "manual-blocked",
@@ -105,7 +111,7 @@ export function createMigrationConverter(
       options.strategy === "archived-static" ||
       result.classification !== "manual-blocked"
     )
-      return { ...result, strategy: options.strategy, ...(sourceRecovery?{sourceRecovery}:{}) };
+      return finish({ ...result, strategy: options.strategy });
     const { compileArchivedLocal, compileArchivedAuthor } = await import(
       "./conversion/compiled/local.ts"
     );
@@ -115,14 +121,14 @@ export function createMigrationConverter(
       sourceAdmission: options.sourceAdmission,
     });
     if (local.classification !== "manual-blocked")
-      return { ...local, strategy: options.strategy, ...(sourceRecovery?{sourceRecovery}:{}) };
+      return finish({ ...local, strategy: options.strategy });
     const authored = await compileArchivedAuthor(compiledInput, {
       ...compilerOptions,
       compiler: options.localCompiler,
       sourceAdmission: options.sourceAdmission,
     });
     if (authored.classification !== "manual-blocked")
-      return { ...authored, strategy: options.strategy, ...(sourceRecovery?{sourceRecovery}:{}) };
+      return finish({ ...authored, strategy: options.strategy });
     const routeIssues = (route: string, issues: readonly unknown[]) =>
       issues.map((issue) =>
         issue && typeof issue === "object"

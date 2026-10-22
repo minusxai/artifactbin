@@ -12,3 +12,6 @@ export type RecoverLegacyDocumentSource = (
   document: unknown,
   oracle: LegacyDocumentRecoveryOracle,
 ) => LegacyDocumentSourceRecovery | null;
+
+/** Partial rendering only: root sibling positions are retained, missing content is explicit. */
+export interface LegacyPartialDocumentRecovery { source: string; missingNodes: number; }

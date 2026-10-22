@@ -48,3 +48,14 @@ test("changed wrappers, changed semantic AST, ambiguous parts and cycles remain 
   cycle.nodes.wrapper.children = ["wrapper", "b"];
   assert.equal(recover(cycle, oracle), null);
 });
+
+test("partial recovery preserves exact root sibling placement and marks unavailable content", async () => {
+ const {recoverPartialLegacyDocument: partial}=await import('../src/migration/conversion/document-recovery.ts');
+ const original={schema:3,kind:'graph',nodes:{$root:{parts:['','','',''],children:['a','missing','b']},a:{parts:['<p>A</p>'],children:[]},b:{parts:['<p>B</p>'],children:[]}}};
+ const before=JSON.stringify(original);
+ assert.deepEqual(partial(original),{source:'<p>A</p><p role="note">Original saved content unavailable</p><p>B</p>',missingNodes:1});
+ assert.equal(JSON.stringify(original),before);
+ assert.equal(partial({...original,nodes:{...original.nodes,a:{parts:['<div>','</div>'],children:['nested-missing']}}}),null);
+ assert.equal(partial({...original,nodes:{...original.nodes,$root:{parts:['<script>','','','</script>'],children:['a','missing','b']}}}),null);
+ assert.equal(partial({...original,nodes:{...original.nodes,a:{parts:['',''],children:['a']}}}),null);
+});
