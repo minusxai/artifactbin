@@ -16,8 +16,6 @@ services:
     tmpfs: [/tmp]
     ports: ['127.0.0.1:8897:8787']
     depends_on:
-      postgres:
-        condition: service_healthy
       execution:
         condition: service_healthy
     env_file: .env.production
@@ -29,10 +27,13 @@ services:
       PAGEGI_DATASET_MUTATION_DIRECTORY: /run/pagegi-dataset-mutations
       PAGEGI_MEDIA_DIRECTORY: /run/pagegi-media
       PAGEGI_DATASET_DIRECTORY: /run/pagegi-datasets
+      PAGEGI_DATABASE_SCHEMA: artefactv2
     volumes:
       - ./execution-secret:/run/pagegi-execution-secret:ro
       - ./resource-config:/run/pagegi-resource-config:ro
       - ./dataset-attachments:/run/pagegi-dataset-attachments:rw
+      # Public database CA; connection credentials stay in the private environment file.
+      - ./database-ca.pem:/run/pagegi/database-ca.pem:ro
       - ./dataset-mutations:/run/pagegi-dataset-mutations:rw
       # Immutable imported media; ACLs are checked by the application, never a static server.
       - ./media:/run/pagegi-media:ro
@@ -85,27 +86,6 @@ services:
       timeout: 5s
       retries: 6
       start_period: 15s
-    logging:
-      driver: json-file
-      options: {max-size: 10m, max-file: '3'}
-
-  postgres:
-    image: postgres:17-bookworm
-    restart: unless-stopped
-    mem_limit: 1g
-    cpus: 1
-    env_file: .env.database
-    environment:
-      POSTGRES_USER: artefactv2_admin
-      POSTGRES_DB: artefactv2
-    volumes:
-      - ./postgres-data:/var/lib/postgresql/data
-      - ./init-database.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U artefactv2_admin -d artefactv2']
-      interval: 5s
-      timeout: 5s
-      retries: 10
     logging:
       driver: json-file
       options: {max-size: 10m, max-file: '3'}

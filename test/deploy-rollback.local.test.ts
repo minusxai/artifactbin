@@ -28,9 +28,10 @@ if(name==='docker'){
  const config=fs.readFileSync(args[args.indexOf('-f')+1],'utf8');
  fs.appendFileSync(process.env.CALL_LOG,JSON.stringify({args,config,app:process.env.PAGEGI_IMAGE,backend:process.env.PAGEGI_BACKEND_IMAGE,sql:process.env.PAGEGI_DATASET_SQL_IMAGE,processor:process.env.PAGEGI_IMAGE_PROCESSOR_IMAGE})+'\\n');
  if(args.includes('exec')){process.stdout.write('private-dump');process.exit(0);}
- if((process.env.FAIL_STAGE==='postgres'&&args.at(-1)==='postgres')||(process.env.FAIL_STAGE==='rollout'&&args.includes('--no-build')&&config==='new-composition\\n'))process.exit(17);
+ if((process.env.FAIL_STAGE==='rollout'&&args.includes('--no-build')&&config==='new-composition\\n'))process.exit(17);
  process.exit(0);
 }
+if(name==='python3'&&args[0].endsWith('/backup-schema.py')){if(process.env.FAIL_STAGE==='backup')process.exit(17);fs.writeFileSync(args[2],'schema-backup');fs.writeFileSync(args[2]+'.verified','restore proof');process.exit(0);}
 if(name==='stat'){process.stdout.write(args[1]==='%g'?'1000':String(fs.statSync(args.at(-1)).size));process.exit(0);}
 if(name==='install'){
  let a=[];for(let i=0;i<args.length;i++){if(['-o','-g'].includes(args[i]))i++;else a.push(args[i]);}
@@ -39,7 +40,7 @@ if(name==='install'){
 }
 process.exit(0);
 `;
-for (const failure of ["rollout", "postgres", "", "initial"]) {
+for (const failure of ["rollout", "backup", "", "initial"]) {
   test(`isolated receiver ${failure ? `recovers from ${failure} failure` : "retains previous composition after success"}`, () => {
     const dir = mkdtempSync(join(tmpdir(), "afv2-rollout-")),
       root = join(dir, "root"),

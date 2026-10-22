@@ -4,9 +4,43 @@ The product branch has its own deployment environment, `artefactv2`. Pull reques
 
 Install the reviewed `deploy/receive-artefactv2.sh` as root-owned `/usr/local/sbin/artefactv2-deploy`, mode755, and `deploy/extract.py` at `/usr/local/lib/artefactv2/extract.py`. Restrict a dedicated deployment key to `sudo -n /usr/local/sbin/artefactv2-deploy "$SSH_ORIGINAL_COMMAND"`, with SSH's `restrict` option and narrowly scoped sudo authorization. The privileged receiver is installed by an administrator, never replaced by an uploaded release. The upload protocol remains `deploy <40-character SHA>` with the tested Git archive on stdin.
 
-Provision `/opt/artefactv2/.env.production`, `.env.database`, `execution-secret/transport-secret`, and `resource-config` privately. The app and execution secret must be readable by container UID1000. Use independent admin (`POSTGRES_PASSWORD`) and app (`ARTEFACTV2_APP_DATABASE_PASSWORD`) passwords in `.env.database`. The fresh-volume init script creates the nonsuperuser `artefactv2` app role, granting schema creation only inside the new database and no cluster authority. `PAGEGI_DATABASE_URL` in `.env.production` uses the app password, targeting `postgres:5432/artefactv2` as role `artefactv2`; the bootstrap admin is `artefactv2_admin` and is used only for initialization and backups. Initialization refuses a missing app password. Never point this application at another deployment's database or bind mount. Set the platform and per-page runner origins explicitly; the runner may not be a descendant of the platform hostname. Set `PAGEGI_BACKEND_EXECUTOR=remote`, `PAGEGI_EXECUTION_SECRET_FILE=/run/pagegi-execution-secret/transport-secret`, and app email/auth settings as required. The receiver reads `DOCKER_GID` from the host socket when deploying.
+Provision `/opt/artefactv2/.env.production`, `.env.backup`, `database-ca.pem`,
+`execution-secret/transport-secret`, and `resource-config` privately. The application
+uses the existing remote database with `PAGEGI_DATABASE_SCHEMA=artefactv2` and a
+restricted login that owns only the runtime schema, without database creation,
+role administration, or access to the older deployment's schemas. The migration
+archive is the separate `artefactv2_migration` schema. Provision and copy data under
+coordinated maintenance before changing the application URL; the receiver never
+creates a database or role. Preserve the old database and its data during cutover.
 
-The separate Compose project is `artefactv2`, release root `/opt/artefactv2`, images `artefactv2:<sha>` and `artefactv2-backend:<sha>`, loopback ingress8897. It has an independent PostgreSQL container and data directory, release lock, backups, current/previous image pointers and rollback. Its execution controller has deployment identity `artefactv2`, owning only `artefactv2.backend=1` containers, the `artefactv2-sandbox` network and `artefactv2-sb` bridge. Egress rules use `ARTEFACTV2-SANDBOX` and `artefactv2-sandbox-egress.service`. The legacy default identifiers remain unchanged for other installations. Queues and warm pools are controller-local. Both controllers still have host Docker authority; stronger isolation requires separate engines.
+Set `PAGEGI_DATABASE_URL` privately with certificate verification enabled:
+`sslmode=verify-full&sslrootcert=/run/pagegi/database-ca.pem`. The public CA bundle
+is mounted read-only; the application and transport secret must be readable by
+container UID1000. Set platform and runner origins explicitly, remote execution
+configuration, and email/auth settings as required. Concrete connection addresses
+and credentials belong only in private provisioning.
+
+The composition runs the app and its execution controller, with no PostgreSQL
+service or local database dependency. Existing local database volumes are never
+removed by deployment. The project retains its independent release lock, object
+mounts, backups and current/previous image pointers. Backend and image containers
+keep their separate deployment ownership labels; the application has no Docker
+socket. Both controllers still have host Docker authority; stronger separation
+requires separate engines.
+
+Before each rollout, `backup-schema.py` reads root-private mode0600 `.env.backup`
+as literal libpq `KEY=value` lines. Supply `PGHOST`, `PGDATABASE`, `PGUSER`,
+`PGPASSWORD`, `PGSSLMODE=verify-full`, `PGSSLROOTCERT` (the host CA path), and
+optionally `PGPORT`. The backup login must read both exact schemas `artefactv2`
+and `artefactv2_migration`; it need not administer the shared database. Backup
+commands never include a connection URI or password in their arguments. A custom
+archive contains only these schemas and excludes ownership and privilege grants.
+Before publishing the dump and its `.verified` marker, the receiver restores it
+with `--exit-on-error` into a disposable offline PostgreSQL verifier: no network,
+ports, production mounts or credentials, read-only root filesystem and bounded
+memory/tmpfs. Restore failure prevents rollout and removes the verifier. The receiver requires the PostgreSQL18 client and a fixed
+`postgres:18-bookworm` verifier, matching the remote server major version.
+
 
 Route public hosts to loopback8897 with the original Host header. Provision matching wildcard DNS/TLS for runner hostnames; a certificate for `*.example.test` does not cover `*.runner.example.test`. Validate nginx before reloading and preserve unrelated hosts. Credentials and concrete host topology belong in private provisioning, not committed configuration.
 
@@ -14,7 +48,7 @@ The execution controller also uses the fixed SQL job image
 `artefactv2-dataset-sql:<sha>`, built from the release project context with
 `src/datasets/sql/container/Dockerfile`. Only execution receives
 `PAGEGI_DATASET_SQL_IMAGE`; the application has no Docker socket. Every gated
-release builds all three immutable images. Current/previous dataset SQL pointers
+release builds all four immutable images. Current/previous dataset SQL pointers
 and the Compose `.env` follow successful deployment and rollback alongside the
 existing app/backend pointers. No existing backend image tag is reused for SQL.
 CI caches SQL images independently by every copied SQL source and mutation wire

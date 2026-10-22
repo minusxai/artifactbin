@@ -69,7 +69,6 @@ rollback_rollout() {
 }
 trap rollback_rollout ERR
 # The composition is the release's, never a host-edited copy.
-install -m 0644 "$release/deploy/init-artefactv2-database.sh" "$root/init-database.sh"
 cp "$release/deploy/compose.artefactv2.yaml" "$root/compose.yaml.tmp"
 mv "$root/compose.yaml.tmp" "$root/compose.yaml"
 # Backend sandboxes run on the Docker bridge `artefactv2-sb` (network artefactv2-sandbox, created by the
@@ -128,10 +127,10 @@ install -o root -g root -m 0644 "$egress_tmp" "$egress_unit"
 rm -f "$egress_tmp"
 systemctl daemon-reload && systemctl enable --now artefactv2-sandbox-egress.service
 "$egress_script"
-"${compose[@]}" up -d --wait --wait-timeout 90 postgres
+# The shared remote database is provisioned separately; never start or alter a local database.
+# The backup role reads only this deployment's runtime and archive schemas.
 backup="$root/backups/$(date +%s%N).dump"
-(umask 077; "${compose[@]}" exec -T postgres pg_dump -U artefactv2_admin -d artefactv2 -Fc > "$backup.tmp")
-mv "$backup.tmp" "$backup"
+python3 "$release/deploy/backup-schema.py" "$root/.env.backup" "$backup"
 export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image" PAGEGI_IMAGE_PROCESSOR_IMAGE="$image_processor_image" PAGEGI_DATASET_SQL_IMAGE="$dataset_sql_image"
 "${compose[@]}" up -d --no-build --wait --wait-timeout 120
 trap - ERR
