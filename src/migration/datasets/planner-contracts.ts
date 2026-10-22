@@ -17,6 +17,7 @@ export interface DatasetImportBindingInput {
   backendVersion: string;
   backendNamespace: string;
   name: string;
+  mode?: "live" | "pinned";
   legacyRef: string;
   datasetLegacyId: string;
   datasetVersion: number;
@@ -24,6 +25,7 @@ export interface DatasetImportBindingInput {
 /** Metadata-only contract supplied to conversion; no policy, rows, object keys or credentials. */
 export interface DatasetBrowserBinding {
   name: string;
+  mode: "live" | "pinned";
   legacyRef: string;
   backendNamespace: string;
   backendHref: string;

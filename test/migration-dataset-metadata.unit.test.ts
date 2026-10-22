@@ -212,3 +212,27 @@ test("external catalog is archived as unavailable and conflicting legacy aliases
     "dataset/" + "f".repeat(32);
   assert.throws(() => planDatasetMetadata(b));
 });
+test("writability derives only explicit legacy readwrite and unversioned imports remain live", () => {
+  const a = input();
+  assert.equal(planDatasetMetadata(a).metadata.resources[0]?.writable, false);
+  a.manifest.artifacts[0]!.access = "readwrite";
+  const p = planDatasetMetadata(a);
+  assert.equal(p.metadata.resources[0]?.writable, true);
+  assert.equal(p.browserBindings[0]?.binding.mode, "live");
+});
+test("historical saved page uses only exact proven archived edit identity, never the current edit id", () => {
+  const a = input();
+  a.manifest.artifacts[1]!.version = 2;
+  assert.throws(() => planDatasetMetadata(a));
+  a.manifest.tables.artifact_versions!.push({
+    artifact_id: "document",
+    format: "markup",
+    version: 1,
+    edit_id: "proven-historical-edit",
+    source: "old",
+  });
+  const p = planDatasetMetadata(a);
+  assert.equal(p.metadata.bindings[0]?.page.editId, "proven-historical-edit");
+  delete a.manifest.tables.artifact_versions!.at(-1)!.edit_id;
+  assert.throws(() => planDatasetMetadata(a));
+});

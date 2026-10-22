@@ -14,8 +14,8 @@ import { canonical, record, receiptMap, catalogVersion } from "./catalog.ts";
 export const generatedDatasetBackendSource = `export const typeDefs = \`
  scalar DatasetRows
  type DatasetColumn { name: String! type: String! }
- type DatasetWindow { version: Int! schema: String! table: String! columns: [DatasetColumn!]! rows: DatasetRows! offset: Int! nextOffset: Int totalRows: Int! }
- type Query { read(binding: String!, schema: String!, table: String!, offset: Int!, limit: Int!): DatasetWindow! }
+ type DatasetWindow { version: Int! generation: Int! schema: String! table: String! columns: [DatasetColumn!]! rows: DatasetRows! offset: Int! nextOffset: Int totalRows: Int! }
+ type Query { read(binding: String!, schema: String!, table: String!, offset: Int!, limit: Int!, expectedVersion: Int, expectedGeneration: Int): DatasetWindow! }
 \`;
 export default { Query: { read: (args, _principal, caps) => caps.dataset.read(args) } };
 `;
@@ -223,6 +223,7 @@ export function planDatasetMetadata(
       policyRevision: snapshot.policyRevision,
       owner: owner(row, maps),
       generation: 1,
+      writable: row.access === "readwrite",
       access: access(
         row,
         (manifest.tables.artifact_shares ?? []).filter(
@@ -241,7 +242,31 @@ export function planDatasetMetadata(
   const bindingKeys = new Set<string>();
   const pageKeys = new Set<string>();
   for (const b of input.bindings) {
-    const page = artifacts.get(b.pageLegacyId);
+    const headPage = artifacts.get(b.pageLegacyId);
+    const archivedPages = (manifest.tables.artifact_versions ?? []).filter(
+      (r) =>
+        r.artifact_id === b.pageLegacyId &&
+        r.version === b.pageVersion &&
+        r.format === "markup",
+    );
+    if (archivedPages.some((r) => canonical(r) !== canonical(archivedPages[0])))
+      throw Error("Ambiguous historical page binding");
+    // Historical row identity is supplied only after independently verified edit-log proof.
+    // Missing historical ACL fields retain the current resource authority, as legacy version reads did.
+    const page =
+      headPage && b.pageVersion === headPage.version
+        ? headPage
+        : headPage && archivedPages[0]
+          ? {
+              ...headPage,
+              ...archivedPages[0],
+              id: headPage.id,
+              edit_id: archivedPages[0].edit_id,
+            }
+          : undefined;
+    const mode = b.mode ?? "live";
+    if (mode !== "live" && mode !== "pinned")
+      throw Error("Invalid dataset binding mode");
     const dataset = artifacts.get(b.datasetLegacyId);
     const version = versions.get(
       JSON.stringify([b.datasetLegacyId, b.datasetVersion]),
@@ -318,6 +343,7 @@ export function planDatasetMetadata(
       metadata.bindings as Array<DatasetImportMetadata["bindings"][number]>
     ).push({
       name: b.name,
+      ...({ mode } as object),
       backendId: b.backendId,
       backendVersion: b.backendVersion,
       page: {
@@ -339,6 +365,7 @@ export function planDatasetMetadata(
       binding: {
         name: b.name,
         legacyRef: b.legacyRef,
+        mode,
         backendNamespace: b.backendNamespace,
         backendHref: "/af/v1/ids/" + b.backendId,
         version: b.datasetVersion,
