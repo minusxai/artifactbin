@@ -49,3 +49,7 @@ test('live comment relation failures block planning before destination mutation'
 test('destination source limit explicitly blocks oversized output without truncating retained originals',async()=>{
  const source='x'.repeat(4_000_001);const p=await planMigration(manifest,{maps,coreUrl:'/af/v1/core.js',convert:()=>({classification:'renderable',html:source,issues:[],identities:{}})});assert.equal(p.pages[0]!.disposition,'blocked');assert.equal(p.pages[0]!.revisions[0]!.conversion.html,null);assert.equal(p.pages[0]!.revisions[0]!.conversion.outputBytes,4_000_001);assert.equal(p.archive,manifest);
 });
+
+test('actual page imports refuse unresolved global media dependency preflight before mutation',async()=>{
+ const p=await planMigration(manifest,{maps,convert:converter,coreUrl:'/af/v1/core.js'});p.pages[0]!.assetDependencies=['/af/v1/ids/target/assets/1/original/'+'a'.repeat(64)];let writes=0;await assert.rejects(applyMigration(p,{supportsExactAccess:()=>true,importPage:async()=>{writes++;return 'created';}},{dryRun:false}),/Global media dependency preflight/);assert.equal(writes,0);
+});

@@ -1,3 +1,4 @@
+import {mediaDependencies} from './dependencies.ts';
 import {convertMigrationMedia} from './media.ts';
 import type {MigrationMediaOptions} from './media-contracts.ts';
 import {MAX_PAGE_SOURCE} from '../af-contracts.ts';
@@ -60,18 +61,20 @@ export async function planMigration(manifest:MigrationManifest, options:{maps:Mi
    if(!versions.has(Number(comment.anchor_version??artifact.version)))unavailableCommentContexts.push({commentId:String(comment.id),status:'unavailable',originalRevision:String(comment.anchor_version??artifact.version),reason:'not-retained'});
    if(comment.root_id&&!commentIds.has(comment.root_id))issues.push('Comment references missing root');
   }
-  pages.push({legacyId:artifact.id,pageId:id,owner:newOwner?{kind:ownerKind,id:newOwner}:null,disposition:issues.length?'blocked':'ready',issues,revisions,access:{visibility:artifact.visibility,linkRole:artifact.link_role??'viewer',shares:rows('artifact_shares')},original:artifact,assets:options.media?.assets.filter(a=>a.artifactId===artifact.id&&versions.has(a.version)).map(a=>({revision:String(a.version),variant:a.variant,sha256:a.sha256,contentType:a.contentType,filename:a.filename,bytes:a.bytes})),comments:rows('annotations'),unavailableCommentContexts,identities:rows('artifact_source_ids')});
+  pages.push({legacyId:artifact.id,pageId:id,owner:newOwner?{kind:ownerKind,id:newOwner}:null,disposition:issues.length?'blocked':'ready',issues,revisions,access:{visibility:artifact.visibility,linkRole:artifact.link_role??'viewer',shares:rows('artifact_shares')},original:artifact,assetDependencies:[...new Set(revisions.flatMap(r=>r.conversion.html?mediaDependencies(r.conversion.html,id):[]))].sort(),assets:options.media?.assets.filter(a=>a.artifactId===artifact.id&&versions.has(a.version)).map(a=>({revision:String(a.version),variant:a.variant,sha256:a.sha256,contentType:a.contentType,filename:a.filename,bytes:a.bytes})),comments:rows('annotations'),unavailableCommentContexts,identities:rows('artifact_source_ids')});
  }
  return {schemaVersion:1,sourceNamespace:manifest.sourceNamespace,maps,pages,archive:manifest};
 }
-export async function applyMigration(plan:MigrationPlan,destination:ImportDestination,options:{dryRun:boolean}):Promise<{created:number;unchanged:number;blocked:number}>{
+export const migrationPageDigest=(page:PlannedPage):string=>hash(canonical(page));
+export async function applyMigration(plan:MigrationPlan,destination:ImportDestination,options:{dryRun:boolean;globallyReadyPages?:ReadonlySet<string>}):Promise<{created:number;unchanged:number;blocked:number}>{
  const result={created:0,unchanged:0,blocked:0};
  // Preflight the entire batch before allowing any mutation.
+ if(!options.dryRun)for(const page of plan.pages)if(page.disposition==='ready'&&page.assetDependencies?.length&&!options.globallyReadyPages?.has(page.pageId))throw new Error('Global media dependency preflight required');
  if(!options.dryRun) for(const page of plan.pages)if(page.disposition==='ready'&&!destination.supportsExactAccess(page))throw new Error('Destination cannot preserve exact access semantics');
  for(const page of plan.pages){
   if(page.disposition==='blocked'||!destination.supportsExactAccess(page)){result.blocked++;continue;}
   if(options.dryRun)continue;
-  const outcome=await destination.importPage(`${plan.sourceNamespace}:${page.legacyId}`,hash(canonical(page)),page);result[outcome]++;
+  const outcome=await destination.importPage(`${plan.sourceNamespace}:${page.legacyId}`,migrationPageDigest(page),page);result[outcome]++;
  }
  return result;
 }

@@ -58,6 +58,7 @@ export interface PlannedPage {
   /** Full original ACL; destination adapter must implement its exact semantics. */
   access: { visibility: string; linkRole: string; shares: LegacyRow[] };
   original: LegacyArtifact;
+  assetDependencies?:string[];
   assets?: {revision:string;variant:'original'|'small';sha256:string;contentType:string;filename:string|null;bytes:number}[];
   comments: LegacyRow[];
   unavailableCommentContexts?: {commentId:string;status:'unavailable';originalRevision:string;reason:'not-retained'}[];
