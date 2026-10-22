@@ -42,11 +42,10 @@ function publish(root: string, args: string[], env: Record<string, string>): Pro
 }
 
 async function app(page: Page): Promise<Frame> {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    for (const frame of page.frames()) if (await frame.$("#list").catch(() => null)) return frame;
-    await page.waitForTimeout(100);
-  }
-  throw Error("todo page did not load");
+  await page.frameLocator("#pg-frame").locator("#list").waitFor({ state: "attached", timeout: 10_000 });
+  const frame = await (await page.$("#pg-frame"))?.contentFrame();
+  if (!frame) throw Error("todo page did not load");
+  return frame;
 }
 async function eventually<T>(read: () => Promise<T>, expected: T) {
   for (let attempt = 0; attempt < 100; attempt++) {
