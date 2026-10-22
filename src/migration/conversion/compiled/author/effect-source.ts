@@ -55,6 +55,69 @@ export function prepareAuthorEffects(source: string): PreparedAuthorEffects {
     time = false;
   const visit = (node: any, parent?: any, key?: string) => {
     if (!node || typeof node !== "object") return;
+    if (
+      node.type === "MemberExpression" &&
+      node.computed &&
+      !(
+        node.property.type === "Literal" &&
+        Number.isSafeInteger(node.property.value) &&
+        node.property.value >= 0
+      )
+    )
+      throw Error("Only literal numeric effect indexing is supported");
+    if (
+      node.type === "Identifier" &&
+      node.name === "Object" &&
+      !(
+        parent?.type === "MemberExpression" &&
+        parent.object === node &&
+        !parent.computed &&
+        ["keys", "values", "entries", "fromEntries", "freeze", "is"].includes(
+          parent.property.name,
+        )
+      )
+    )
+      throw Error("Reflective effect mutation is unsupported");
+    if (
+      node.type === "Property" &&
+      (node.computed ||
+        (node.key?.name !== "once" &&
+          node.key?.value !== "once" &&
+          /^on[a-z]/i.test(node.key?.name ?? node.key?.value ?? "")))
+    )
+      throw Error("Effect handler properties are unsupported");
+    if (
+      node.type === "AssignmentExpression" ||
+      node.type === "UpdateExpression"
+    ) {
+      const target = node.left ?? node.argument;
+      if (
+        (target?.type === "MemberExpression" &&
+          /^(on[a-z]|innerHTML$|outerHTML$)/i.test(
+            target.property?.name ?? target.property?.value ?? "",
+          )) ||
+        (target?.type === "Identifier" && /^on[a-z]/i.test(target.name))
+      )
+        throw Error("Unowned effect handler writes are unsupported");
+    }
+    if (
+      node.type === "CallExpression" &&
+      node.callee?.type === "MemberExpression" &&
+      ["setAttribute", "setAttributeNS", "insertAdjacentHTML"].includes(
+        node.callee.property?.name,
+      )
+    ) {
+      const name =
+        node.arguments[node.callee.property.name === "setAttributeNS" ? 1 : 0];
+      if (
+        node.callee.property.name === "insertAdjacentHTML" ||
+        name?.type !== "Literal" ||
+        typeof name.value !== "string" ||
+        /^on/i.test(name.value) ||
+        name.value.toLowerCase() === "srcdoc"
+      )
+        throw Error("Unowned effect HTML handlers are unsupported");
+    }
     if (node.type === "NewExpression")
       throw Error("Unowned constructed effects are unsupported");
     if (node.type?.startsWith("Export"))

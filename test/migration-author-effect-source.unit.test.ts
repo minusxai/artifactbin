@@ -63,3 +63,24 @@ test("effect imports and reflection cannot escape root or listener ownership", (
   ])
     assert.throws(() => prepareAuthorEffects(source));
 });
+test("computed acquisition handler properties and reflective mutation refuse untracked effects", () => {
+  for (const source of [
+    `const listen=document['add'+'EventListener'].bind(document);listen('click',()=>{});`,
+    `const make=(()=>{})['con'+'structor'];make('code')();`,
+    `document.onclick=()=>{};`,
+    `document['on'+'click']=()=>{};`,
+    `Object.assign(document,{onclick:()=>{}});`,
+    `Object.defineProperty(document,'onclick',{value:()=>{}});`,
+    `document.addEventListener.call(document,'click',()=>{});`,
+    `document.addEventListener.apply(document,['click',()=>{}]);`,
+    `document.addEventListener.bind(document)('click',()=>{});`,
+  ])
+    assert.throws(() => prepareAuthorEffects(source), source);
+});
+test("listener once options remain ordinary options rather than DOM handler properties", () => {
+  assert.doesNotThrow(() =>
+    prepareAuthorEffects(
+      `document.addEventListener('click',()=>{}, {once:true,capture:true});`,
+    ),
+  );
+});
