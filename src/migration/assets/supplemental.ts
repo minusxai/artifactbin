@@ -7,13 +7,15 @@ const SHA = /^[a-f0-9]{64}$/;
 const MAX_BYTES = 32 * 1024 * 1024;
 function fail(): never { throw Error("Invalid supplemental asset proof"); }
 async function regularBytes(path: string, maximum: number): Promise<Buffer> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.size > maximum) fail();
-    const bytes = await file.readFile();
-    if (bytes.length !== stat.size) fail();
-    return bytes;
+    // One sentinel byte catches growth without allowing a changing file to grow the allocation.
+    const bytes=Buffer.alloc(stat.size+1);let length=0;
+    while(length<bytes.length){const read=await file.read(bytes,length,bytes.length-length,length);if(!read.bytesRead)break;length+=read.bytesRead;}
+    if(length!==stat.size)fail();
+    return bytes.subarray(0,length);
   } finally { await file.close(); }
 }
 /** Derive the static raster dimensions from stored bytes, never from captured viewport metadata. */

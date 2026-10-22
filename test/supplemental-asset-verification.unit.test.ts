@@ -1,6 +1,7 @@
+import { execFileSync, spawnSync } from "node:child_process";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, symlink, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, symlink, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -21,4 +22,16 @@ test("corrupt, missing and symlinked bytes cannot become descriptors",()=>fixtur
 test("receipt path traversal, arbitrary URLs, duplicate keys and failed copies are refused",()=>fixture(async(root,manifest)=>{
  for(const objectKey of ["../escape","https://example.invalid/a","avatar/synthetic/"+"0".repeat(32),"comment-images/../original.webp"]){await writeFile(manifest,JSON.stringify([{objectKey,status:"copied",sha256:sha,bytes:bytes.length}]));await assert.rejects(readVerifiedSupplementalAssets(manifest,root));}
  const row={objectKey:"comment-images/synthetic/original.webp",status:"copied",sha256:sha,bytes:bytes.length};await writeFile(manifest,JSON.stringify([row,row]));await assert.rejects(readVerifiedSupplementalAssets(manifest,root));await writeFile(manifest,JSON.stringify([{...row,status:"failed"}]));await assert.rejects(readVerifiedSupplementalAssets(manifest,root));
+}));
+
+test("FIFO receipt and object paths reject promptly; directories and symlink roots are not files",()=>fixture(async(root,manifest)=>{
+ const check=(receipt:string,directory:string)=>{
+  const result=spawnSync(process.execPath,["--import","tsx","--input-type=module","-e",`import assert from 'node:assert/strict';import {readVerifiedSupplementalAssets} from './src/migration/assets/supplemental.ts';await assert.rejects(readVerifiedSupplementalAssets(process.argv[1],process.argv[2]));`,receipt,directory],{cwd:process.cwd(),timeout:2000,encoding:"utf8"});
+  assert.equal(result.error,undefined,"verifier must not block opening a non-regular file");assert.equal(result.status,0,result.stderr);
+ };
+ const fifo=join(root,"receipt-fifo");execFileSync("mkfifo",[fifo]);check(fifo,root);
+ await rm(join(root,sha));execFileSync("mkfifo",[join(root,sha)]);check(manifest,root);
+ await rm(join(root,sha));await mkdir(join(root,sha));await assert.rejects(readVerifiedSupplementalAssets(manifest,root));
+ await assert.rejects(readVerifiedSupplementalAssets(root,root));
+ const alias=join(root,"alias");await symlink(root,alias);await assert.rejects(readVerifiedSupplementalAssets(manifest,alias));
 }));
