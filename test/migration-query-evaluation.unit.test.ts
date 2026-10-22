@@ -1,3 +1,7 @@
+import {
+  createCompiledQueryController,
+  compiledQueryClock,
+} from "../src/migration/conversion/compiled/query-controller.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runInNewContext } from "node:vm";
@@ -71,6 +75,8 @@ test("one option evaluation retains its clock across completion pages crossing a
       .replace(/^import .*;\n/gm, "")
       .replace("export function boot", "function boot") + ";boot({TREE:{}});";
   runInNewContext(executable, {
+    createCompiledQueryController,
+    compiledQueryClock,
     AbortController,
     TextEncoder,
     Date: AdvancingDate,

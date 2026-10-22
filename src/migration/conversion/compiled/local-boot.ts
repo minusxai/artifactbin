@@ -1,6 +1,5 @@
 import{viewerBootSource}from"./viewer-boot.ts";
 import type{CompiledViewerBinding}from"./viewer-contracts.ts";
-import {createControlOptionsLifecycle} from "./control-options-lifecycle.ts";
 import { personBootSource } from "./person-boot.ts";
 import type { CompiledPersonBinding } from "./person-contracts.ts";
 import { membersBootSource } from "./members-boot.ts";
@@ -9,7 +8,6 @@ import { dynamicIdentityBoot } from "./dynamic-identity-boot.ts";
 import type { LocalDynamicIdentityPlan } from "./reactive-source-contracts.ts";
 import { decodeCompiledWasm } from "./wasm.ts";
 import type { CompiledWasmPayload } from "./wasm-contracts.ts";
-import { completeControlOptions, controlPageRequest } from "./data-controls.ts";
 import type { CompiledDataControl } from "./data-control-contracts.ts";
 import { datasetMutationBoot } from "./dataset-mutation-boot.ts";
 import type { CompiledDatasetMutation } from "./dataset-mutations-contracts.ts";
@@ -56,13 +54,10 @@ ${personBindings.length ? "import {createCompiledPeople} from 'migration-people'
 ${viewerBinding ? "import {createCompiledViewer} from 'migration-viewer';" : ""}
 ${members ? "import {createCompiledMembers} from 'migration-members';" : ""}
 ${imports ? "import {readCompiledDataset} from 'migration-datasets';" : ""}
-${sql ? "import {pageEngine} from 'migration-sqlite';" : ""}
+${sql ? "import {pageEngine} from 'migration-sqlite';import {createCompiledQueryController,compiledQueryClock} from 'migration-query-controller';" : ""}
 const decodeCompiledWasm=(()=>{const __name=f=>f;return ${decodeCompiledWasm.toString()};})();
 const declarations=${JSON.stringify(declarations)};
 const optionQueries=${JSON.stringify([...new Set([...cellOptionQueries,...controls.flatMap((p) => (p.kind === "select" && typeof p.options === "string" ? [p.options] : []))])])};
-const completeControlOptions=(()=>{const __name=f=>f;return ${completeControlOptions.toString()};})();
-const createControlOptionsLifecycle=(()=>{const __name=f=>f;return ${createControlOptionsLifecycle.toString()};})();
-const controlPageRequest=(()=>{const __name=f=>f;return ${controlPageRequest.toString()};})();
 const validLocalValue=(()=>{const __name=f=>f;return ${validLocalValue.toString()};})();
 ${datasetBootSetup(sql?.bindings ?? [])}
 ${sql ? `const flow=${JSON.stringify(sql.flow)};const engine=pageEngine(async()=>${sql.wasm ? `decodeCompiledWasm(${JSON.stringify(sql.wasm)})` : `Uint8Array.from(atob(${JSON.stringify(sql.wasmBase64)}),c=>c.charCodeAt(0))`},${imports ? "readImport" : "async()=>{throw Error('Remote imports are unavailable');}"});` : ""}
@@ -78,11 +73,17 @@ export function boot({TREE}) {
  const [controlError,setControlError]=createSignal('');
  const [pending,setPending]=createSignal(false);
  ${controls.length || members ? "const controlStatus=document.createElement('p');controlStatus.setAttribute('role','status');controlStatus.dataset.migrationControlStatus='';document.body.append(controlStatus);createRoot(()=>createEffect(()=>{controlStatus.textContent=controlError()||(pending()?'Loading data controls…':'');}));" : ""}
- let generation=0;
- const controlRuns=createControlOptionsLifecycle();
- const stopControlRuns=()=>{generation++;controlRuns.dispose();};
+ let queryController;
+ const stopControlRuns=()=>queryController?.dispose();
  window.addEventListener('pagehide',event=>{if(!event.persisted)stopControlRuns();});
- ${sql ? `setTables(Object.fromEntries(Object.entries(${JSON.stringify(sql.tables)}).filter(([name,t])=>!optionQueries.includes(name)||!t.truncated)));const run=async()=>{${viewerBinding ? "if(!viewerAvailable)return false;" : ""}${identities ? "if(identityFailed)return;" : ""}const attempt=controlRuns.begin();if(!attempt)return;const current=++generation;setPending(true);setControlError('');try{${members ? "const memberRows=(await membersAdapter.read()).rows;" : ""}engine.prepare(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"});const deadline=Date.now()+${imports ? 15000 : 5000};while(!engine.ready(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"})){${imports ? "if(datasetReadFailed)throw Error('Dataset read unavailable');" : ""}if(attempt.signal.aborted)throw Error("Data controls cancelled");if(Date.now()>deadline)throw Error("Local engine loading timed out");await new Promise(resolve=>setTimeout(resolve,10));}const evaluation={values:values(),localTables:localTables(),userId:${viewerBinding ? "viewer()?.id??null" : "null"},now:new Date().toISOString(),tz:'UTC'${members ? ",members:memberRows" : ""}};const answer=await engine.run(flow,flow.queries.map(q=>q.name),evaluation);if(attempt.signal.aborted)throw Error("Data controls cancelled");for(const name of optionQueries){if(flow.queries.some(q=>q.name===name)&&(!answer.tables[name]||answer.errors[name]))throw Error("Select options unavailable");if(answer.tables[name])answer.tables[name]=await completeControlOptions(answer.tables[name],(offset,limit)=>engine.page(flow,name,{offset,limit},evaluation),{},{signal:attempt.signal});}if(current===generation){setTables(answer.tables);setQueryErrors(answer.errors);${imports ? "setDatasetStatus(Object.keys(answer.errors).length?'Protected data queries could not be evaluated.':'');" : ""}return !Object.keys(answer.errors).length;}}catch{if(current===generation){setTables({});setControlError('Data controls are unavailable. Refresh data or check the supported row limits.');setQueryErrors(Object.fromEntries(flow.queries.map(q=>[q.name,'Local query failed'])));${imports ? "setDatasetStatus('Protected data is unavailable. Check access and refresh data.');" : ""}}}finally{attempt.finish();if(current===generation)setPending(false);}};` : viewerBinding ? "const run=async()=>viewerAvailable;" : "const run=()=>{};"}
+ ${sql ? `setTables(Object.fromEntries(Object.entries(${JSON.stringify(sql.tables)}).filter(([name,t])=>!optionQueries.includes(name)||!t.truncated)));
+ queryController=createCompiledQueryController({queries:flow.queries.map(q=>q.name),optionQueries,deadlineMs:${imports ? 15000 : 5000}},{
+ engine:{prepare:()=>engine.prepare(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"}),ready:()=>engine.ready(flow,${imports ? "flow.imports.map(i=>i.name)" : "[]"}),run:evaluation=>engine.run(flow,flow.queries.map(q=>q.name),evaluation),page:(name,page,evaluation)=>engine.page(flow,name,page,evaluation)},
+ evaluation:async()=>{${members ? "const memberRows=(await membersAdapter.read()).rows;" : ""}return {values:values(),localTables:localTables(),userId:${viewerBinding ? "viewer()?.id??null" : "null"},now:new Date().toISOString(),tz:'UTC'${members ? ",members:memberRows" : ""}};},
+ availability:()=>${viewerBinding ? "!viewerAvailable?'blocked':" : ""}${identities ? "identityFailed?'blocked':" : ""}${imports ? "datasetReadFailed?'failed':" : ""}'ready',
+ clock:compiledQueryClock,
+ publish:event=>{if(event.state==='pending'){setPending(true);setControlError('');return;}setPending(false);if(event.state==='settled'){setTables(event.answer.tables);setQueryErrors(event.answer.errors);${imports ? "setDatasetStatus(Object.keys(event.answer.errors).length?'Protected data queries could not be evaluated.':'');" : ""}}else{setTables({});setQueryErrors(event.state==='failed'?event.errors:{});if(event.state==='failed'){setControlError('Data controls are unavailable. Refresh data or check the supported row limits.');${imports ? "setDatasetStatus('Protected data is unavailable. Check access and refresh data.');" : ""}}}}
+ });const run=()=>queryController.refresh();` : viewerBinding ? "const run=async()=>viewerAvailable;" : "const run=()=>{};"}
  ${members ? membersBootSource(sql!.membersBinding!) : ""}
  ${imports ? datasetBootStatus : ""}
  ${identities ? dynamicIdentityBoot(identities) : ""}
@@ -90,7 +91,7 @@ export function boot({TREE}) {
  const write=patch=>{${identities ? "if(identityFailed)throw Error('Page identities unavailable');" : ""}for(const [name,v]of Object.entries(patch)){const d=declarations.find(d=>d.name===name);if(!d||!validLocalValue(d,v))throw Error('Invalid local scalar write');}
  client.updateQuery({query},data=>({...data,compiledPage:{...checked(data.compiledPage),...patch}}));};
  const store={getValue:name=>values()[name],setValue:(name,v)=>write({[name]:v}),setValues:write};
- ${sql ? `store.fetchPage=async(name,page)=>{${viewerBinding ? "if(!viewerAvailable)throw Error('Reader identity unavailable');" : ""}if(!flow.queries.some(q=>q.name===name))throw Error('Undeclared table query');const current=generation;${members ? "const memberRows=(await membersAdapter.read()).rows;" : ""}const request=controlPageRequest(page,table(name)?.columns??[]);const answer=await engine.page(flow,name,request,{values:values(),localTables:localTables(),userId:${viewerBinding ? "viewer()?.id??null" : "null"},now:new Date().toISOString(),tz:'UTC'${members ? ",members:memberRows" : ""}});if(current!==generation)throw Error('Table snapshot changed');return answer;};` : ""}
+ ${sql ? `store.fetchPage=(name,page)=>queryController.fetchPage(name,page,table(name)?.columns??[]);` : ""}
  const unavailable=()=>Promise.reject(Error('Shared data is not supported by this migration'));
  ${mutations.length ? datasetMutationBoot(mutations, Boolean(imports)) : ""}
  ${personBindings.length ? personBootSource(personBindings) : ""}

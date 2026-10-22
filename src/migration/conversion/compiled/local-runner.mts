@@ -455,6 +455,7 @@ const bundled = await bundle({
         b.onLoad({filter:/.*/,namespace:"migration-mermaid"},async()=>({contents:await transformSolid(mermaidRuntimeSource(preparedMermaids),{generate:"dom",hydratable:true},{moduleName:"solid-js/web"}),loader:"js",resolveDir:root}));
         b.onResolve({filter:/^migration-mermaid-theme$/},()=>({path:path.join(root,"services/app/lib/islands/kit/theme-watch.ts")}));
         b.onResolve({filter:/^migration-deck$/},()=>({path:path.join(import.meta.dirname,"deck-runtime.ts")}));
+        b.onResolve({filter:/^migration-query-controller$/},()=>({path:path.join(import.meta.dirname,"query-controller.ts")}));
         b.onResolve({ filter: /^migration-readiness$/ }, () => ({
           path: path.join(import.meta.dirname, "readiness.ts"),
         }));

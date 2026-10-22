@@ -1,3 +1,4 @@
+import {createCompiledQueryController,compiledQueryClock} from "../src/migration/conversion/compiled/query-controller.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { compileArchivedLocal } from "../src/migration/conversion/compiled/local.ts";
@@ -229,6 +230,8 @@ test("local query projection ignores stale runs after later Apollo state changes
     "markCompiledReady",
     "createSignal",
     "pageEngine",
+    "createCompiledQueryController",
+    "compiledQueryClock",
     source + ";return boot;",
   )(
     {addEventListener(){}},
@@ -240,14 +243,17 @@ test("local query projection ignores stale runs after later Apollo state changes
     () => {},
     createSignal,
     () => engine,
+    createCompiledQueryController,compiledQueryClock,
   );
   boot({ TREE: () => null });
+  for(let i=0;i<12;i++)await Promise.resolve();
   context.setValue("n", 3);
+  for(let i=0;i<12;i++)await Promise.resolve();
   assert.equal(runs.length, 2);
   runs[1]!({ tables: { total: { rows: [{ total: 6 }] } }, errors: {} });
-  await Promise.resolve();
+  for(let i=0;i<12;i++)await Promise.resolve();
   runs[0]!({ tables: { total: { rows: [{ total: 4 }] } }, errors: {} });
-  await Promise.resolve();
+  for(let i=0;i<12;i++)await Promise.resolve();
   assert.equal(context.table("total").rows[0].total, 6);
   assert.equal(context.pending(), false);
 });
