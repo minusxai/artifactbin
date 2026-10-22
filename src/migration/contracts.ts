@@ -9,7 +9,7 @@ export interface LegacyArtifact extends LegacyRow {
   version: number;
   user_id: string | null;
   group_id: string | null;
-  token_id: string;
+  token_id: string | null;
   source: string | null;
   document: unknown;
   visibility: string;
@@ -54,6 +54,8 @@ export type Converter = (
   input: ConversionInput,
 ) => ConversionOutput | Promise<ConversionOutput>;
 export interface MigrationMaps {
+  /** Only exact all-NULL owner rows; never missing referenced identities. */
+  orphans?: Record<string, string>;
   pages: Record<string, string>;
   users: Record<string, string>;
   groups: Record<string, string>;
@@ -71,7 +73,7 @@ export interface PlannedPage {
   backends?: readonly MigrationBackendReceipt[];
   legacyId: string;
   pageId: string;
-  owner: { kind: "user" | "group" | "token"; id: string } | null;
+  owner: { kind: "user" | "group" | "token" | "orphan"; id: string } | null;
   disposition: "ready" | "blocked";
   issues: string[];
   revisions: PlannedRevision[];

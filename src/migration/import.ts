@@ -1,3 +1,4 @@
+import { preservedOrphanActor } from "./orphans.ts";
 import type { CompiledDatasetMutation } from "./conversion/compiled/dataset-mutations-contracts.ts";
 import type { DatasetBrowserBinding } from "./datasets/planner-contracts.ts";
 import { mediaDependencies } from "./dependencies.ts";
@@ -112,20 +113,32 @@ export async function planMigration(
     maps.pages[artifact.id] = id;
     occupied.add(id);
     const issues: string[] = [];
-    const ownerKind = artifact.group_id
-      ? "group"
-      : artifact.user_id
-        ? "user"
-        : "token";
+    const orphan = preservedOrphanActor(manifest.sourceNamespace, artifact);
+    const ownerKind = orphan
+      ? "orphan"
+      : artifact.group_id
+        ? "group"
+        : artifact.user_id
+          ? "user"
+          : "token";
     const oldOwner = artifact.group_id ?? artifact.user_id ?? artifact.token_id;
+    if (orphan) {
+      maps.orphans ??= {};
+      if (maps.orphans[artifact.id] && maps.orphans[artifact.id] !== orphan)
+        throw new Error("Orphan identity map mismatch");
+      maps.orphans[artifact.id] = orphan;
+    }
     const newOwner =
-      maps[
-        ownerKind === "group"
-          ? "groups"
-          : ownerKind === "user"
-            ? "users"
-            : "tokens"
-      ][oldOwner];
+      orphan ??
+      (oldOwner
+        ? maps[
+            ownerKind === "group"
+              ? "groups"
+              : ownerKind === "user"
+                ? "users"
+                : "tokens"
+          ][oldOwner]
+        : undefined);
     if (!newOwner) issues.push(`Unmapped ${ownerKind} owner`);
     const revisions: PlannedRevision[] = [];
     const oldRevisions = (manifest.tables.artifact_versions ?? []).filter(

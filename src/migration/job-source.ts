@@ -1,3 +1,4 @@
+import { preservedOrphanActor } from "./orphans.ts";
 import { readMigrationDatasetSource } from "./dataset-source.ts";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import {
   indexedArtifactHeaders,
   readIndexedAccounts,
   readIndexedArtifact,
+  readIndexedArtifactHead,
 } from "./stream-index.ts";
 import { buildAccountMaps } from "./postgres.ts";
 import { allocateMigrationMaps } from "./import.ts";
@@ -80,15 +82,21 @@ export async function prepareMigrationJobSource(
     blocked: identities.filter((i) => i.classification === "blocked").length,
   };
   // Only small account/ID metadata is retained across artifacts, never document/history/edit bodies.
-  for await (const header of indexedArtifactHeaders(options.indexDirectory))
-    if (header.format === "folder") {
-      const artifact = await readIndexedArtifact(
-        options.indexDirectory,
-        manifest,
-        header.id,
-      );
-      base.artifacts.push(artifact.artifacts[0]!);
+  let preservedOrphans = 0;
+  for await (const header of indexedArtifactHeaders(options.indexDirectory)) {
+    const head = await readIndexedArtifactHead(
+      options.indexDirectory,
+      header.id,
+    );
+    const orphan = preservedOrphanActor(manifest.sourceNamespace, head);
+    if (orphan) {
+      maps.orphans ??= {};
+      maps.orphans[head.id] = orphan;
+      preservedOrphans++;
     }
+    if (header.format === "folder") base.artifacts.push(head);
+  }
+  Object.assign(identitySummary, { preservedOrphans });
   const media = options.media
     ? await readMigrationMedia(
         options.media.planPath,

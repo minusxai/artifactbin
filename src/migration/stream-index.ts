@@ -40,3 +40,10 @@ export async function readIndexedArtifact(indexDirectory:string,manifest:StreamM
  const artifacts=tables.artifacts as LegacyArtifact[];if(artifacts.length!==1||artifacts[0]?.id!==id)throw new Error('Invalid indexed artifact identity');
  return {schemaVersion:1,sourceNamespace:manifest.sourceNamespace,exportedAt:manifest.exportedAt,tables,artifacts,tokenOwners:[]};
 }
+
+/** Reads only the current head row; never loads its potentially huge version/edit history. */
+export async function readIndexedArtifactHead(indexDirectory: string, id: string): Promise<LegacyArtifact> {
+ const rows = await rowsIfExists(join(indexDirectory, key(id), 'artifacts.ndjson'));
+ if (rows.length !== 1 || rows[0]?.id !== id) throw new Error('Invalid indexed artifact identity');
+ return rows[0] as LegacyArtifact;
+}

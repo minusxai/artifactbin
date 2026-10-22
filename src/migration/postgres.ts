@@ -1,3 +1,4 @@
+import {preservedOrphanActor} from "./orphans.ts";
 import {registerMigrationBackends} from "./backend-preparation.ts";
 import {MAX_PAGE_SOURCE} from '../af-contracts.ts';
 import {createHash,randomBytes} from 'node:crypto';
@@ -54,7 +55,12 @@ export class PostgresMigrationDestination implements ImportDestination {
    const text=JSON.stringify(input.manifest);const old=(await this.db.query(`SELECT digest FROM ${this.archive}.archives WHERE namespace=$1 FOR UPDATE`,[this.namespace])).rows[0];
    if(old&&old.digest!==digest(text))throw new Error('Source archive changed; use a new migration namespace');
    if(!old)await this.db.query(`INSERT INTO ${this.archive}.archives VALUES($1,$2,$3::jsonb,$4::jsonb)`,[this.namespace,digest(text),text,JSON.stringify(input.maps)]);
-   for(const actor of new Set([...Object.values(input.maps.users),...Object.values(input.maps.tokens)]))await this.db.query('INSERT INTO accounts(actor) VALUES($1) ON CONFLICT(actor) DO NOTHING',[actor]);
+   for(const actor of new Set([...Object.values(input.maps.users),...Object.values(input.maps.tokens),...Object.values(input.maps.orphans??{})]))await this.db.query('INSERT INTO accounts(actor) VALUES($1) ON CONFLICT(actor) DO NOTHING',[actor]);
+   for (const actor of Object.values(input.maps.orphans ?? {})) {
+    const account = (await this.db.query('SELECT principal_kind,salt,password,handle FROM accounts WHERE actor=$1', [actor])).rows[0];
+    if (!/^legacy-orphan:[a-f0-9]{64}$/.test(actor) || !account || account.principal_kind !== 'user' || account.salt !== null || account.password !== null || account.handle !== null)
+     throw new Error('Orphan principal conflicts with existing account');
+   }
    for(const user of input.manifest.tables.users??[]){
     const actor=input.maps.users[String(user.id)];if(!actor)continue;
     if(typeof user.name==='string')await this.db.query('UPDATE accounts SET name=COALESCE(name,$2) WHERE actor=$1',[actor,user.name]);
@@ -80,8 +86,9 @@ export class PostgresMigrationDestination implements ImportDestination {
   });
  }
  supportsExactAccess(page:PlannedPage):boolean {
+  if(page.owner?.kind==='orphan'&&(page.original.user_id!==null||page.original.group_id!==null||page.original.token_id!==null||this.maps.orphans?.[page.legacyId]!==page.owner.id||(this.namespace&&preservedOrphanActor(this.namespace,page.original)!==page.owner.id)))return false;
   try{destinationAccess(page,this.maps);normalizePath(publicationPath(page));}catch{return false;}
-  if(page.owner?.kind!=='user'&&page.owner?.kind!=='token'&&page.owner?.kind!=='group')return false;
+  if(page.owner?.kind!=='user'&&page.owner?.kind!=='token'&&page.owner?.kind!=='group'&&page.owner?.kind!=='orphan')return false;
   if(page.original.deleted_at)return false;
   if(!this.options.editorManageRestricted&&(page.access.linkRole==='editor'||page.access.shares.some(s=>s.role==='editor')))return false;
   return true;
