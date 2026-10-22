@@ -46,6 +46,22 @@ test("private conversion cache varies full inputs/compiler, retries corrupt and 
       strategy: "static",
     }).convert(input);
     assert.equal(calls, 4);
+    const binding = {
+      name: "rows",
+      legacyRef: "dataset:fixture",
+      backendNamespace: "store",
+      backendHref: "/af/v1/ids/abc123",
+      version: 1,
+      tables: [],
+    };
+    await a.convert({ ...input, datasetBindings: [binding] });
+    await a.convert({ ...input, datasetBindings: [binding] });
+    assert.equal(calls, 5);
+    await a.convert({
+      ...input,
+      datasetBindings: [{ ...binding, version: 2 }],
+    });
+    assert.equal(calls, 6);
     let attempts = 0;
     const flaky = cachedMigrationConverter(
       () => {

@@ -1,3 +1,4 @@
+import type {DatasetBrowserBinding} from "./datasets/planner-contracts.ts";
 /** Offline migration records contain private content. Never commit exported manifests. */
 export type LegacyRow = Record<string, unknown>;
 export interface LegacyArtifact extends LegacyRow {
@@ -24,7 +25,7 @@ export interface MigrationManifest {
 export interface SqlReader {
   query(sql: string, values?: unknown[]): Promise<{ rows: LegacyRow[] }>;
 }
-export interface ConversionInput { resourceMap?:Readonly<Record<string,string>>; source: string; coreUrl: string; document?: unknown; meta?: Record<string,unknown> }
+export interface ConversionInput { datasetBindings?:readonly DatasetBrowserBinding[]; resourceMap?:Readonly<Record<string,string>>; source: string; coreUrl: string; document?: unknown; meta?: Record<string,unknown> }
 export interface ConversionOutput {
   classification: 'renderable' | 'functional' | 'manual-blocked';
   html: string | null;

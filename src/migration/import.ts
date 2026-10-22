@@ -1,3 +1,4 @@
+import type {DatasetBrowserBinding} from "./datasets/planner-contracts.ts";
 import {mediaDependencies} from './dependencies.ts';
 import {convertMigrationMedia} from './media.ts';
 import type {MigrationMediaOptions} from './media-contracts.ts';
@@ -23,7 +24,7 @@ export function allocateMigrationMaps(namespace:string,ids:readonly string[],ini
  for(const id of sorted)if(!maps.pages[id]){maps.pages[id]=pageId(namespace,id,occupied);occupied.add(maps.pages[id]!);}
  return maps;
 }
-export async function planMigration(manifest:MigrationManifest, options:{maps:MigrationMaps;convert:Converter;coreUrl:string;media?:MigrationMediaOptions}):Promise<MigrationPlan> {
+export async function planMigration(manifest:MigrationManifest, options:{maps:MigrationMaps;convert:Converter;coreUrl:string;media?:MigrationMediaOptions;datasetBindings?:(legacyId:string,version:number)=>readonly DatasetBrowserBinding[]}):Promise<MigrationPlan> {
  if(manifest.schemaVersion!==1)throw new Error('Unsupported manifest schema');
  const maps=allocateMigrationMaps(manifest.sourceNamespace,manifest.artifacts.map(a=>a.id),options.maps); const occupied=new Set(Object.values(maps.pages));
  if(occupied.size!==Object.values(maps.pages).length || [...occupied].some(id=>!(/^[a-zA-Z0-9]{6}$/).test(id)))throw new Error('Invalid or duplicate page identity map');
@@ -45,7 +46,7 @@ export async function planMigration(manifest:MigrationManifest, options:{maps:Mi
   for(const original of [...oldRevisions.filter(r=>!matchingArchives.includes(r)),artifact].sort((a,b)=>Number(a.version)-Number(b.version))){
    const version=Number(original.version); if(!Number.isSafeInteger(version)||version<1||versions.has(version))throw new Error('Invalid or duplicate source revision');versions.add(version);
    const format=String(original.format); let conversion:ConversionOutput;
-   if(format==='markup')conversion=await options.convert({resourceMap:options.media?.resourceMap,source:typeof original.source==='string'?original.source:'',document:original.document,meta:original.meta&&typeof original.meta==='object'&&!Array.isArray(original.meta)?original.meta as Record<string,unknown>:undefined,coreUrl:options.coreUrl});
+   if(format==='markup')conversion=await options.convert({datasetBindings:options.datasetBindings?.(artifact.id,Number(original.version)),resourceMap:options.media?.resourceMap,source:typeof original.source==='string'?original.source:'',document:original.document,meta:original.meta&&typeof original.meta==='object'&&!Array.isArray(original.meta)?original.meta as Record<string,unknown>:undefined,coreUrl:options.coreUrl});
    else if(options.media&&['image','file','pdf'].includes(format))conversion=convertMigrationMedia({format,version,pageId:id,title:String(original.title??artifact.title??''),coreUrl:options.coreUrl,origin:options.media.origin,assets:options.media.assets.filter(a=>a.artifactId===artifact.id)});
    else conversion={classification:'manual-blocked' as const,html:null,issues:[`Unsupported format: ${format}`],identities:{}};
    if(conversion.html!==null){const outputBytes=Buffer.byteLength(conversion.html);conversion={...conversion,outputBytes};if(outputBytes>MAX_PAGE_SOURCE)conversion={...conversion,classification:'manual-blocked',html:null,issues:[...conversion.issues,{code:'destination-source-limit',message:'Converted HTML exceeds destination source limit',outputBytes,limitBytes:MAX_PAGE_SOURCE}]};}

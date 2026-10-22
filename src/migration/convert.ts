@@ -65,6 +65,7 @@ export function createMigrationConverter(
       source,
       coreUrl: input.coreUrl,
       resourceMap: input.resourceMap,
+      datasetBindings: input.datasetBindings,
       theme: typeof meta.theme === "string" ? meta.theme : null,
       template: typeof meta.template === "string" ? meta.template : null,
       colorMode:
