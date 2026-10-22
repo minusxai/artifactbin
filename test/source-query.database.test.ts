@@ -155,3 +155,60 @@ test("bounded JSON rows normalize native timestamp types even when driver column
     await db.cleanup();
   }
 });
+
+test("native timestamp metadata scales to maximum 256 columns within a bounded response", async () => {
+  const db = await testDatabase();
+  try {
+    const columns = Array.from({ length: 256 }, (_, i) => ({
+      name: "time_" + i,
+      type: "timestamp" as const,
+    }));
+    const sql =
+      "SELECT " +
+      columns
+        .map((c) => `timestamp '2026-10-15 00:00:00' AS "${c.name}"`)
+        .join(",");
+    const service = createSourceQueryService({
+      pool: () => db.pool,
+      registry: async () => ({
+        pageLegacyId: "legacy",
+        pageVersion: 1,
+        name: "times",
+        sourceRef: "ref:ABC123",
+        resource: "source-ABC123",
+        params: {},
+        columns,
+        backendId: "BACK01",
+        backendVersion: "1",
+        pageId: "PAGE01",
+        sourceNamespace: "test",
+        sql,
+        sqlSha256: createHash("sha256").update(sql).digest("hex"),
+      }),
+      authority: async () => ({
+        generation: "stable",
+        userId: null,
+        now: "2026-10-22T00:00:00Z",
+        tz: "UTC",
+      }),
+    });
+    const result = await service.query(
+      {
+        backendId: "BACK01",
+        backendVersion: "1",
+        pageId: "PAGE01",
+        subject: "user:test",
+      },
+      { name: "times", valuesJson: "{}", offset: 0, limit: 1 },
+    );
+    assert.equal(Object.keys(result.rows[0]!).length, 256);
+    assert.ok(
+      Object.values(result.rows[0]!).every(
+        (v) => v === "2026-10-15T00:00:00.000Z",
+      ),
+    );
+    assert.ok(Buffer.byteLength(JSON.stringify(result)) < 65536);
+  } finally {
+    await db.cleanup();
+  }
+});
