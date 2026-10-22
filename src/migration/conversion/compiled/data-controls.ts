@@ -1,5 +1,6 @@
 import type {
   CompiledDataControl,
+  CompiledDataColumn,
   CompiledDisplayTable,
   CompiledDataControlLimits,
 } from "./data-control-contracts.ts";
@@ -19,8 +20,12 @@ export function admitDataControl(
   tag: string,
   attrs: Record<string, unknown>,
   hasChildren = false,
+  columns?: readonly CompiledDataColumn[],
 ): CompiledDataControl {
-  if (hasChildren || !["Select", "DataTable"].includes(tag))
+  if (
+    (hasChildren && !(tag === "DataTable" && columns?.length)) ||
+    !["Select", "DataTable"].includes(tag)
+  )
     throw Error("Unsupported data control");
   const allowed =
     tag === "Select"
@@ -76,6 +81,34 @@ export function admitDataControl(
       options:
         typeof options === "string" ? options.slice(1) : (options as unknown[]),
     };
+  }
+  if (columns) {
+    if (
+      !hasChildren ||
+      !columns.length ||
+      columns.length > 256 ||
+      attrs.columns !== undefined ||
+      attrs.transpose === true
+    )
+      throw Error("Unsupported Column templates");
+    const names = new Set<string>();
+    for (const column of columns) {
+      const { hasContent, ...props } = column;
+      if (typeof hasContent !== "boolean")
+        throw Error("Invalid Column content");
+      admitDataColumn(props, hasContent);
+      if (names.has(column.col)) throw Error("Duplicate Column");
+      names.add(column.col);
+    }
+    if (
+      columns.some((c) => c.hasContent) &&
+      (!text(attrs.id) ||
+        !attrs.id ||
+        !text(attrs.rowKey) ||
+        !attrs.rowKey ||
+        reserved.has(attrs.rowKey as string))
+    )
+      throw Error("Column content requires a durable table scope");
   }
   for (const key of ["transpose", "edge", "sticky"])
     if (attrs[key] !== undefined && typeof attrs[key] !== "boolean")
@@ -187,6 +220,7 @@ export function admitDataControl(
     kind: "table",
     data: (attrs.data as string).slice(1),
     ...(attrs.transpose === true ? { comparison: true as const } : {}),
+    ...(columns ? { columns } : {}),
   };
 }
 /** Select must never quietly offer only a display window of a larger query. */
@@ -292,4 +326,32 @@ export function controlPageRequest(
     limit: page.limit,
     ...(page.sort ? { sort: { col: page.sort.col, dir: page.sort.dir } } : {}),
   };
+}
+
+/** Strict Column metadata uses the same rendering fields as literal table columns. */
+export function admitDataColumn(
+  attrs: Record<string, unknown>,
+  hasContent = false,
+): CompiledDataColumn {
+  const { id, ...spec } = attrs;
+  if (id !== undefined && (!text(id) || !id))
+    throw Error("Invalid Column identity");
+  if (
+    Object.keys(spec).some(
+      (k) =>
+        ![
+          "col",
+          "title",
+          "fmt",
+          "align",
+          "width",
+          "bar",
+          "colorScale",
+        ].includes(k),
+    )
+  )
+    throw Error("Unsupported Column attribute");
+  admitDataControl("DataTable", { data: "$rows", columns: [spec] });
+  if (reserved.has(spec.col as string)) throw Error("Invalid Column name");
+  return { ...attrs, hasContent } as unknown as CompiledDataColumn;
 }

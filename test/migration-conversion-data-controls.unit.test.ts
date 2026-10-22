@@ -157,3 +157,46 @@ test("read-only comparison preserves authored metrics and rejects silently ignor
       }),
     );
 });
+test("named readonly Column specs preserve table scopes and refuse ambiguous or writable templates", () => {
+  const columns = [
+    { id: "name-column", col: "name", hasContent: true },
+    {
+      id: "score-column",
+      col: "score",
+      fmt: ".1f",
+      bar: true,
+      hasContent: false,
+    },
+  ];
+  assert.equal(
+    admitDataControl(
+      "DataTable",
+      { id: "table", data: "$rows", rowKey: "key" },
+      true,
+      columns,
+    ).kind,
+    "table",
+  );
+  for (const attrs of [
+    { data: "$rows" },
+    { id: "table", data: "$rows" },
+    { id: "table", data: "$rows", rowKey: "key", transpose: true },
+  ])
+    assert.throws(() => admitDataControl("DataTable", attrs, true, columns));
+  assert.throws(() =>
+    admitDataControl(
+      "DataTable",
+      { id: "table", data: "$rows", rowKey: "key" },
+      true,
+      [...columns, columns[0]],
+    ),
+  );
+  assert.throws(() =>
+    admitDataControl(
+      "DataTable",
+      { id: "table", data: "$rows", rowKey: "key" },
+      true,
+      [{ ...columns[0], run: "save" }] as any,
+    ),
+  );
+});
