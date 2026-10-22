@@ -54,3 +54,13 @@ CREATE TABLE IF NOT EXISTS af_backend_stores (
 
 -- Backends run for every viewer who can open the page; per-viewer approvals are gone.
 DROP TABLE IF EXISTS af_backend_approvals;
+
+-- Durable store changes survive app restart and are read independently by every
+-- app process. Entries identify backend files, shared across deployment versions.
+CREATE TABLE IF NOT EXISTS backend_store_invalidations (
+  sequence bigserial PRIMARY KEY,
+  backend_id text NOT NULL,
+  store_version bigint NOT NULL CHECK(store_version > 0),
+  created_at bigint NOT NULL,
+  UNIQUE(backend_id,store_version)
+);

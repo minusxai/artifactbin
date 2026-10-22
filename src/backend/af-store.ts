@@ -18,6 +18,8 @@ import {
   type BackendStoreWrite,
 } from "./contracts.ts";
 
+import { recordBackendStoreInvalidation } from "./store-invalidations.ts";
+
 function storable(value: BackendJson): string {
   let text: string;
   try {
@@ -32,8 +34,14 @@ function storable(value: BackendJson): string {
 }
 
 function version(expected: unknown): number {
-  if (typeof expected !== "number" || !Number.isSafeInteger(expected) || expected < 0)
-    throw new TypeError("expected must be the version you read (0 when the store is empty)");
+  if (
+    typeof expected !== "number" ||
+    !Number.isSafeInteger(expected) ||
+    expected < 0
+  )
+    throw new TypeError(
+      "expected must be the version you read (0 when the store is empty)",
+    );
   return expected;
 }
 
@@ -41,12 +49,21 @@ export function createBackendStore(database: SqlDatabase): BackendStore {
   async function get(fileId: string): Promise<BackendStoreDocument> {
     return database.transaction(async (client) => {
       const row = (
-        await client.query("SELECT value, version FROM af_backend_stores WHERE file_id = $1", [fileId])
+        await client.query(
+          "SELECT value, version FROM af_backend_stores WHERE file_id = $1",
+          [fileId],
+        )
       ).rows[0];
-      return row ? { value: row.value as BackendJson, version: Number(row.version) } : { value: null, version: 0 };
+      return row
+        ? { value: row.value as BackendJson, version: Number(row.version) }
+        : { value: null, version: 0 };
     });
   }
-  async function set(fileId: string, value: BackendJson, expected: number): Promise<BackendStoreWrite> {
+  async function set(
+    fileId: string,
+    value: BackendJson,
+    expected: number,
+  ): Promise<BackendStoreWrite> {
     const text = storable(value);
     const from = version(expected);
     return database.transaction(async (client) => {
@@ -62,9 +79,19 @@ export function createBackendStore(database: SqlDatabase): BackendStore {
                WHERE file_id = $1 AND version = $3 RETURNING version`,
               [fileId, text, from],
             );
-      if (written.rows[0]) return { version: Number(written.rows[0].version) };
+      if (written.rows[0]) {
+        const next = Number(written.rows[0].version);
+        await recordBackendStoreInvalidation(client, {
+          backendId: fileId,
+          storeVersion: next,
+        });
+        return { version: next };
+      }
       const current = (
-        await client.query("SELECT version FROM af_backend_stores WHERE file_id = $1", [fileId])
+        await client.query(
+          "SELECT version FROM af_backend_stores WHERE file_id = $1",
+          [fileId],
+        )
       ).rows[0];
       return { conflict: true, version: current ? Number(current.version) : 0 };
     });
@@ -74,10 +101,14 @@ export function createBackendStore(database: SqlDatabase): BackendStore {
     set,
     handler(fileId): BackendCapabilityHandler {
       return async (_principal, request) => {
-        if (request.kind !== "store") throw new Error("No resources are connected to this backend");
-        if (request.operation === "get") return { ...(await get(fileId)) } as unknown as BackendJson;
+        if (request.kind !== "store")
+          throw new Error("No resources are connected to this backend");
+        if (request.operation === "get")
+          return { ...(await get(fileId)) } as unknown as BackendJson;
         if (request.operation === "set")
-          return { ...(await set(fileId, request.value, request.expected)) } as unknown as BackendJson;
+          return {
+            ...(await set(fileId, request.value, request.expected)),
+          } as unknown as BackendJson;
         throw new TypeError("Unknown store operation");
       };
     },
