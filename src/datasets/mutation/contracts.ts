@@ -26,6 +26,8 @@ export interface DatasetMutationOperation {
   sql: string;
   paramTypes: Record<string, DatasetMutationParameterType>;
   rowParams?: DatasetMutationRowParameters;
+  /** Trusted registration may read only its current page accepted membership. */
+  readsMembers?: true;
   expectedAffected?: number;
   /** Retries must be explicitly authored as fresh-row operations; never inferred from SQL text. */
   conflictMode: "refuse" | "rerun-fresh";
@@ -45,6 +47,7 @@ export interface DatasetMutationHead {
   documentWriterCanRead: boolean;
   /** Server-only system bindings such as _me__id and _now; never copied from request params. */
   systemParams: Readonly<Record<string, DatasetCell>>;
+  members?: import("../members-contracts.ts").DatasetMembersSnapshot;
   /** Preserve legacy user constraints for transaction-time validation of actual assignments. */
   tables: readonly (Omit<DatasetTable, "columns"> & {
     columns: readonly import("../sql/engine/sql-contracts.ts").DatasetColumn[];

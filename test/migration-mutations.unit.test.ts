@@ -161,3 +161,22 @@ test("row token rewriting excludes literals and comments and rejects collisions 
     assert.deepEqual(result.mutations, []);
   }
 });
+
+test("registered mutations may read only the current page accepted-members relation", async () => {
+  const good = await extractLegacyMutations(
+    wrap(
+      "delete from bookings.rows where who in (select user_id from _members)",
+    ),
+    catalogs,
+  );
+  assert.deepEqual(good.issues, []);
+  assert.equal(good.mutations[0]?.readsMembers, true);
+  for (const sql of [
+    "delete from _members",
+    "delete from bookings.rows where who in (select user_id from arbitrary._members)",
+  ]) {
+    const bad = await extractLegacyMutations(wrap(sql), catalogs);
+    assert.ok(bad.issues.length);
+    assert.deepEqual(bad.mutations, []);
+  }
+});

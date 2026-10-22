@@ -239,6 +239,14 @@ export async function extractLegacyMutations(
     if (declarations.length > 128) throw Error();
     const catalogByAlias = new Map<string, LegacyMutationImportCatalog>();
     db = new SqliteDatabase(await loadSqliteModule());
+    db.createTable({
+      schema: "main",
+      table: "_members",
+      columns: [
+        { name: "user_id", type: "user" },
+        { name: "joined_at", type: "timestamp" },
+      ],
+    });
     for (const catalog of catalogs) {
       const alias = catalog.name.toLowerCase();
       // Only source-declared Imports may grant a catalog namespace.
@@ -289,8 +297,9 @@ export async function extractLegacyMutations(
           !table ||
           a.reads.some(
             (r) =>
-              r.schema.toLowerCase() !== w.schema.toLowerCase() ||
-              r.table.toLowerCase() !== w.table.toLowerCase(),
+              !(r.schema === "main" && r.table === "_members") &&
+              (r.schema.toLowerCase() !== w.schema.toLowerCase() ||
+                r.table.toLowerCase() !== w.table.toLowerCase()),
           )
         )
           throw Error();
@@ -324,6 +333,9 @@ export async function extractLegacyMutations(
           sqlSchema: catalog.name,
           sql: d.sql,
           paramTypes,
+          ...(a.reads.some((r) => r.schema === "main" && r.table === "_members")
+            ? { readsMembers: true as const }
+            : {}),
           ...(Object.keys(rowParams).length ? { rowParams } : {}),
           ...(d.reset.length ? { reset: d.reset } : {}),
           ...(d.expected !== undefined ? { expectedAffected: d.expected } : {}),

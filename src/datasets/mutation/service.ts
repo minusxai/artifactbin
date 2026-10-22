@@ -145,6 +145,7 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
         return terminal("input_limit");
       if (Object.keys(head.systemParams).length > limits.maxSystemParams)
         return terminal("invalid_job");
+      if (operation.readsMembers && !head.members) return terminal("denied");
       const job = {
         kind: "dataset-sql" as const,
         engineVersion: "sqlite-3.53.4-effect-v1" as const,
@@ -155,6 +156,23 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
             columns: structuredClone([...table.columns]),
             rows,
           },
+          ...(operation.readsMembers
+            ? {
+                reads: [
+                  {
+                    schema: "main",
+                    table: "_members",
+                    columns: [
+                      { name: "user_id", type: "user" as const },
+                      { name: "joined_at", type: "timestamp" as const },
+                    ],
+                    rows: head.members
+                      ? head.members.rows.map((row) => ({ ...row }))
+                      : [],
+                  },
+                ],
+              }
+            : {}),
           sql: operation.sql,
           params: { ...input.params, ...head.systemParams },
           paramTypes: Object.fromEntries(

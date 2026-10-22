@@ -26,6 +26,8 @@ export interface LegacyMutationDescriptor {
   paramTypes: Record<string, DatasetMutationParameterType>;
   /** Fixed SQL row bindings; full server paramTypes includes these generated parameter names. */
   rowParams?: DatasetMutationRowParameters;
+  /** Read-only accepted joins of the current executing page. */
+  readsMembers?: true;
   expectedAffected?: number;
   /** Viewer-local fields reset only after confirmed commit and only if still unchanged. */
   reset?: readonly string[];

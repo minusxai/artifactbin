@@ -157,6 +157,8 @@ export async function prepareMigrationBackends(
           (mutation.expectedAffected !== undefined &&
             (!Number.isSafeInteger(mutation.expectedAffected) ||
               mutation.expectedAffected < 0)) ||
+          (mutation.readsMembers !== undefined &&
+            mutation.readsMembers !== true) ||
           !validDatasetMutationParameterMap(mutation.paramTypes) ||
           !validDatasetMutationRowParameters(
             mutation.rowParams,

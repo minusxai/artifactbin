@@ -532,3 +532,75 @@ test("concurrent receipt replay cannot deadlock a committing mutation", async ()
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("a changed accepted join snapshot cannot publish a staged membership-dependent mutation", async () => {
+  const { env } = await fixture();
+  const directory = await mkdtemp(join(tmpdir(), "members-mutation-"));
+  try {
+    const database = createSqlDatabase({
+      pool: env.pool,
+      initialize: async () => {},
+      statementTimeoutMs: 15000,
+    });
+    const objects = createDatasetMutationObjectStore(directory),
+      repo = createDatasetMutationRepository({
+        database,
+        objects,
+        now: () => 100,
+      });
+    const memberOperation = {
+      ...operation,
+      readsMembers: true as const,
+      sql: "UPDATE rows SET name=$name WHERE EXISTS(SELECT 1 FROM _members)",
+    };
+    await env.pool.query(
+      "UPDATE dataset_resources SET writable=true,access=jsonb_set(access,'{shares}','{\"member\":\"editor\"}')",
+    );
+    await env.pool.query(
+      "UPDATE dataset_page_joins SET joined_at='2020-01-01T00:00:00Z'",
+    );
+    await database.transaction((c) =>
+      registerDatasetMutationOperations(c, [
+        {
+          sourceNamespace: "legacy",
+          bindingName: "sales",
+          operation: memberOperation,
+        },
+      ]),
+    );
+    const start = await repo.begin(context, memberOperation, {
+      operation: "rename",
+      requestId: "members-request",
+      params: { name: "new" },
+    });
+    assert.equal(start.kind, "lease");
+    if (start.kind !== "lease") throw Error();
+    const head = await repo.head(context, memberOperation);
+    assert.ok(head?.members);
+    const rows = [{ name: "new" }],
+      stored = await objects.persist(rows);
+    await env.pool.query("DELETE FROM dataset_page_joins");
+    const result = await repo.commit({
+      context,
+      operation: memberOperation,
+      lease: start.lease,
+      head,
+      object: stored,
+      outcome: {
+        rows,
+        columns: [...head.tables[0]!.columns],
+        affected: 1,
+        analysis: { operation: "update", columns: ["name"], functions: [] },
+      } as import("../src/datasets/sql/engine/sql-contracts.ts").MutationResult,
+    });
+    assert.equal(result.kind, "conflict");
+    assert.equal(
+      (await env.pool.query("SELECT current_version FROM dataset_resources"))
+        .rows[0].current_version,
+      "1",
+    );
+  } finally {
+    await env.cleanup();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

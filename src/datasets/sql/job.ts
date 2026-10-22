@@ -39,6 +39,7 @@ export function validateDatasetSqlJob(
           "paramTypes",
           "policy",
           "expectedAffected",
+          "reads",
         ].includes(k),
     ) ||
     typeof input.sql !== "string" ||
@@ -49,6 +50,35 @@ export function validateDatasetSqlJob(
     Object.values(input.params).some((v) => !scalar(v))
   )
     return deny();
+  if (input.reads !== undefined) {
+    if (!Array.isArray(input.reads) || input.reads.length !== 1) return deny();
+    const relation = input.reads[0];
+    if (
+      !record(relation) ||
+      Object.keys(relation).sort().join() !== "columns,rows,schema,table" ||
+      relation.schema !== "main" ||
+      relation.table !== "_members" ||
+      JSON.stringify(relation.columns) !==
+        JSON.stringify([
+          { name: "user_id", type: "user" },
+          { name: "joined_at", type: "timestamp" },
+        ]) ||
+      !Array.isArray(relation.rows) ||
+      relation.rows.length > limits.maxRows
+    )
+      return deny();
+    for (const row of relation.rows)
+      if (
+        !record(row) ||
+        Object.keys(row).sort().join() !== "joined_at,user_id" ||
+        typeof row.user_id !== "string" ||
+        !row.user_id ||
+        row.user_id.length > 16384 ||
+        typeof row.joined_at !== "string" ||
+        !Number.isFinite(Date.parse(row.joined_at))
+      )
+        return deny();
+  }
   const table = input.table;
   if (
     typeof table.name !== "string" ||

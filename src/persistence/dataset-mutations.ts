@@ -1,3 +1,4 @@
+import { loadDatasetMembers } from "./dataset-members.ts";
 import {
   validDatasetMutationParameterMap,
   validDatasetMutationRowParameters,
@@ -61,6 +62,7 @@ export const registerDatasetMutationOperations: RegisterDatasetOperations =
         !Number.isSafeInteger(o.page.version) ||
         o.page.version < 1 ||
         !["refuse", "rerun-fresh"].includes(o.conflictMode) ||
+        (o.readsMembers !== undefined && o.readsMembers !== true) ||
         !validDatasetMutationParameterMap(o.paramTypes) ||
         !validDatasetMutationRowParameters(o.rowParams, o.paramTypes)
       )
@@ -284,6 +286,10 @@ async function currentHead(
     true,
   );
   if (!authority) return null;
+  const members = reg.operation.readsMembers
+    ? await loadDatasetMembers(client, context, now)
+    : undefined;
+  if (reg.operation.readsMembers && !members) return null;
   const version = (
     await client.query(
       "SELECT catalog,source_catalog,unavailable_tables FROM dataset_versions WHERE source_namespace=$1 AND legacy_id=$2 AND version=$3",
@@ -296,6 +302,7 @@ async function currentHead(
     : undefined;
   return {
     authority,
+    ...(members ? { members } : {}),
     generation: Number(resource.generation),
     version: Number(resource.current_version),
     policyRevision: Number(resource.policy_revision),
@@ -515,7 +522,8 @@ export function createDatasetMutationRepository({
         // Re-executing against different policy or table metadata would be a hidden rerun.
         if (
           !same(selectDatasetMutationPolicy(head, operation), selected) ||
-          !same(head.tables, fresh.tables)
+          !same(head.tables, fresh.tables) ||
+          !same(head.members, fresh.members)
         )
           return { kind: "conflict" };
         try {

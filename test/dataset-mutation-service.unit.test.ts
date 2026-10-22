@@ -435,3 +435,19 @@ test('nullable row parameters reach real SQLite as scalars with no string conver
  await createDatasetMutationService(f.ports).mutate(context,{...request,params:{value:2,row__old:0}});
  assert.equal(f.calls.includes('commit'),true);
 });
+
+test("registered membership reads are server snapshots and remain read-only in real SQLite", async () => {
+  const {createDatasetMutationEngine}=await import('../src/datasets/sql/engine.ts');
+  const engine=await createDatasetMutationEngine();
+  const f=fixture(),head=f.ports.head;
+  f.ports.operation=async()=>({...operation,readsMembers:true,sql:"update rows set value=$value where exists(select 1 from _members where user_id='accepted')"});
+  f.ports.head=async(...args)=>({...(await head(...args))!,members:{generation:'a'.repeat(64),rows:[{user_id:'accepted',joined_at:'2020-01-01T00:00:00.000Z'}]}});
+  f.ports.execute=async job=>{assert.equal(job.input.reads?.[0]?.table,'_members');return engine.mutate(job.input);};
+  f.ports.persist=async rows=>{assert.deepEqual(rows,[{value:1}]);return object;};
+  await createDatasetMutationService(f.ports).mutate(context,request);
+  assert.ok(f.calls.includes('commit'));
+  const missing=fixture();missing.ports.operation=f.ports.operation;
+  await assert.rejects(createDatasetMutationService(missing.ports).mutate(context,request));assert.ok(!missing.calls.includes('execute'));
+  const invalid=fixture();invalid.ports.operation=async()=>({...operation,readsMembers:true,sql:'delete from _members'});invalid.ports.head=f.ports.head;invalid.ports.execute=async job=>engine.mutate(job.input);
+  await assert.rejects(createDatasetMutationService(invalid.ports).mutate(context,request));assert.ok(!invalid.calls.includes('commit'));
+});
