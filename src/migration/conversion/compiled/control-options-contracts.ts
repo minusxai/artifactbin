@@ -19,3 +19,12 @@ export type CompleteControlOptions = (
   limits?: Partial<CompiledDataControlLimits>,
   runtime?: CompiledControlOptionsRuntime,
 ) => Promise<CompiledDisplayTable>;
+/** One boot owns these attempts; superseding or disposing aborts pending completion. */
+export interface CompiledControlOptionsAttempt {
+  readonly signal: AbortSignal;
+  finish(): void;
+}
+export interface CompiledControlOptionsLifecycle {
+  begin(): CompiledControlOptionsAttempt | null;
+  dispose(): void;
+}
