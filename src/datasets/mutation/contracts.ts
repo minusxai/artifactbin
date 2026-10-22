@@ -1,5 +1,6 @@
 import type {
   DatasetMutationParameterType,
+  DatasetMutationValueParameter,
   DatasetMutationRowParameters,
 } from "./parameter-contracts.ts";
 import type {
@@ -26,6 +27,7 @@ export interface DatasetMutationOperation {
   sql: string;
   paramTypes: Record<string, DatasetMutationParameterType>;
   rowParams?: DatasetMutationRowParameters;
+  valueParam?: DatasetMutationValueParameter;
   /** Trusted registration may read only its current page accepted membership. */
   readsMembers?: true;
   expectedAffected?: number;

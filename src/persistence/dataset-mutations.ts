@@ -1,6 +1,7 @@
 import { loadDatasetMembers } from "./dataset-members.ts";
 import {
   validDatasetMutationParameterMap,
+  validDatasetMutationValueParameter,
   validDatasetMutationRowParameters,
 } from "../datasets/mutation/parameter-scalars.ts";
 import { createHash, randomUUID } from "node:crypto";
@@ -64,7 +65,8 @@ export const registerDatasetMutationOperations: RegisterDatasetOperations =
         !["refuse", "rerun-fresh"].includes(o.conflictMode) ||
         (o.readsMembers !== undefined && o.readsMembers !== true) ||
         !validDatasetMutationParameterMap(o.paramTypes) ||
-        !validDatasetMutationRowParameters(o.rowParams, o.paramTypes)
+        !validDatasetMutationRowParameters(o.rowParams, o.paramTypes) ||
+        !validDatasetMutationValueParameter(o.valueParam, o.paramTypes)
       )
         deny();
       const binding = (

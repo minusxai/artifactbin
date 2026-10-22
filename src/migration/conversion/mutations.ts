@@ -1,4 +1,10 @@
 /** Offline-only publication analysis. Source is parsed, SQL is prepared, neither is evaluated. */
+import { legacyCellWriteQueryColumns } from "./cell-write-query-columns.ts";
+import {
+  readLegacyCellWriteSites,
+  typeLegacyCellWriteSites,
+} from "./compiled/cell-write-source.ts";
+import type { LegacyCellWriteQuery } from "./cell-write-query-contracts.ts";
 import type { BoundValueColumnProof } from "./compiled/bound-value-contracts.ts";
 import { validBoundValueProof } from "./compiled/bound-value-proof.ts";
 import { Parser } from "acorn";
@@ -31,6 +37,7 @@ const literal = (node: any): unknown =>
 function builtinSql(text: string): {
   sql: string;
   nowLiteral: boolean;
+  cellValue: boolean;
   rowFields: string[];
   ordinaryParams: string[];
 } {
@@ -38,7 +45,8 @@ function builtinSql(text: string): {
     ordinaryParams = new Set<string>();
   let out = "",
     i = 0,
-    nowLiteral = false;
+    nowLiteral = false,
+    cellValue = false;
   while (i < text.length) {
     const c = text[i]!;
     if (c === "'" || c === '"' || c === "`" || c === "[") {
@@ -82,9 +90,17 @@ function builtinSql(text: string): {
         i += field[0].length;
       } else {
         const param = /^\$([A-Za-z_]\w*)/.exec(text.slice(i));
-        if (param) ordinaryParams.add(param[1]!);
-        out += c;
-        i++;
+        if (param?.[1] === "_value") {
+          if (text[i + param[0].length] === ".")
+            throw Error("nested cell builtin");
+          cellValue = true;
+          out += "$cell__value";
+          i += param[0].length;
+        } else {
+          if (param) ordinaryParams.add(param[1]!);
+          out += c;
+          i++;
+        }
       }
     } else {
       out += c;
@@ -94,6 +110,7 @@ function builtinSql(text: string): {
   return {
     sql: out,
     nowLiteral,
+    cellValue,
     rowFields: [...rowFields],
     ordinaryParams: [...ordinaryParams],
   };
@@ -141,6 +158,7 @@ export async function extractLegacyMutations(
     };
     // Read-only pages retain their existing admission; mutation restrictions apply only to actual declarations.
     if (!containsMutation(tree)) return result;
+    const queryNodes: any[] = [];
     const declarations: any[] = [],
       params = new Map<string, any>(),
       importNames = new Map<string, string>();
@@ -161,6 +179,7 @@ export async function extractLegacyMutations(
       if (node.type === "JSXElement") {
         const tag = node.openingElement.name.name;
         next = tag;
+        if (tag === "Query") queryNodes.push({ node, parent });
         if (["Import", "Value", "Mutation"].includes(tag)) {
           const a = attrsOf(node),
             name = a.get("name");
@@ -277,10 +296,50 @@ export async function extractLegacyMutations(
         });
       }
     }
+    const cellTypes = new Map<
+      string,
+      import("../../datasets/contracts.ts").DatasetColumn["type"]
+    >();
+    if (declarations.some((d) => d.cellValue)) {
+      const queries: LegacyCellWriteQuery[] = queryNodes.map(
+        ({ node, parent }) => {
+          const attrs = attrsOf(node),
+            name = attrs.get("name");
+          const children = node.children.filter(
+            (c: any) => c.type !== "JSXText" || c.value.trim(),
+          );
+          const sql =
+            children.length === 1 &&
+            children[0].type === "JSXExpressionContainer"
+              ? literal(children[0].expression)
+              : undefined;
+          if (
+            parent !== "Helmet" ||
+            [...attrs.keys()].some((k) => k !== "name") ||
+            typeof name !== "string" ||
+            typeof sql !== "string"
+          )
+            throw Error("Unsupported cell query");
+          return { name, sql: builtinSql(sql).sql };
+        },
+      );
+      const typed = typeLegacyCellWriteSites(
+        readLegacyCellWriteSites(source),
+        legacyCellWriteQueryColumns(db, queries),
+      );
+      for (const site of typed) cellTypes.set(site.mutationName, site.type);
+    }
     const names = new Set<string>();
     for (const d of declarations) {
       if (names.has(d.name.toLowerCase())) throw Error();
       names.add(d.name.toLowerCase());
+      if (
+        d.cellValue &&
+        (!cellTypes.has(d.name) ||
+          params.has("cell__value") ||
+          d.ordinaryParams.includes("cell__value"))
+      )
+        throw Error("Cell parameter collision or unknown type");
       const prepared = db.prepare(d.sql, "any");
       try {
         const a = prepared.analysis;
@@ -336,7 +395,12 @@ export async function extractLegacyMutations(
             (params.has(p) && !params.get(p))
           )
             throw Error();
-          paramTypes[p] = rowKeys.has(p) ? null : (params.get(p) ?? null);
+          paramTypes[p] =
+            d.cellValue && p === "cell__value"
+              ? cellTypes.get(d.name)
+              : rowKeys.has(p)
+                ? null
+                : (params.get(p) ?? null);
         }
         result.mutations.push({
           name: d.name,
@@ -350,6 +414,14 @@ export async function extractLegacyMutations(
             ? { readsMembers: true as const }
             : {}),
           ...(Object.keys(rowParams).length ? { rowParams } : {}),
+          ...(d.cellValue
+            ? {
+                valueParam: {
+                  param: "cell__value",
+                  type: cellTypes.get(d.name)!,
+                },
+              }
+            : {}),
           ...(d.reset.length ? { reset: d.reset } : {}),
           ...(d.expected !== undefined ? { expectedAffected: d.expected } : {}),
           conflictMode: "refuse",

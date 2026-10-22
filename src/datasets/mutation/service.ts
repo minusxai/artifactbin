@@ -2,6 +2,7 @@ import {
   datasetMutationSystemParameter,
   matchesDatasetMutationScalar,
   validDatasetMutationParameterMap,
+  validDatasetMutationValueParameter,
   validDatasetMutationRowParameters,
 } from "./parameter-scalars.ts";
 import { validateDatasetSqlJob } from "../sql/job.ts";
@@ -86,6 +87,10 @@ export function createDatasetMutationService(ports: DatasetMutationPorts) {
       );
       if (
         !validDatasetMutationParameterMap(operation.paramTypes) ||
+        !validDatasetMutationValueParameter(
+          operation.valueParam,
+          operation.paramTypes,
+        ) ||
         !validDatasetMutationRowParameters(
           operation.rowParams,
           operation.paramTypes,

@@ -451,3 +451,44 @@ test("registered membership reads are server snapshots and remain read-only in r
   const invalid=fixture();invalid.ports.operation=async()=>({...operation,readsMembers:true,sql:'delete from _members'});invalid.ports.head=f.ports.head;invalid.ports.execute=async job=>engine.mutate(job.input);
   await assert.rejects(createDatasetMutationService(invalid.ports).mutate(context,request));assert.ok(!invalid.calls.includes('commit'));
 });
+test("cell registration rejects forged metadata and wrong scalar values before acquiring a mutation lease", async () => {
+  for (const [valueParam, value] of [
+    [{ param: "cell__value", type: "number" }, "1"],
+    [{ param: "cell__value", type: null }, 1],
+    [{ param: "other", type: "number" }, 1],
+    [{ param: "cell__value", type: "string" }, 1],
+  ] as const) {
+    const f = fixture();
+    f.ports.operation = async () =>
+      ({
+        ...operation,
+        paramTypes: { cell__value: "number" },
+        valueParam,
+      }) as unknown as DatasetMutationOperation;
+    await assert.rejects(
+      createDatasetMutationService(f.ports).mutate(context, {
+        ...request,
+        params: { cell__value: value },
+      }),
+      /invalid_request/,
+    );
+    assert.deepEqual(f.calls, []);
+  }
+  const f = fixture();
+  f.ports.operation = async () => ({
+    ...operation,
+    paramTypes: { cell__value: "number" },
+    valueParam: { param: "cell__value", type: "number" },
+  });
+  f.ports.begin = async (_context, _operation, input) => {
+    assert.deepEqual(input.params, { cell__value: null });
+    return { kind: "replay", result: f.result };
+  };
+  assert.deepEqual(
+    await createDatasetMutationService(f.ports).mutate(context, {
+      ...request,
+      params: { cell__value: null },
+    }),
+    f.result,
+  );
+});
