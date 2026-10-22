@@ -81,11 +81,44 @@ export function validateTable(table: DatasetTable): void {
   )
     invalid();
 }
+export function projectRow(
+  row: Record<string, unknown>,
+  table: DatasetTable,
+): Record<string, DatasetCell> {
+  const entries: [string, DatasetCell][] = [];
+  for (const c of table.columns)
+    entries.push([
+      c.name,
+      cell(Object.hasOwn(row, c.name) ? row[c.name] : undefined, c.type),
+    ]);
+  return Object.fromEntries(entries);
+}
+function boundedRowCount(text: string): void {
+  let depth = 0,
+    quoted = false,
+    escaped = false,
+    count = 1;
+  for (const char of text) {
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+      continue;
+    }
+    if (char === '"') {
+      quoted = true;
+      continue;
+    }
+    if (char === "[" || char === "{") depth++;
+    else if (char === "]" || char === "}") depth--;
+    else if (char === "," && depth === 1 && ++count > 100000) invalid();
+  }
+}
 export async function readRows(
   table: DatasetTable,
   source: AsyncIterable<Uint8Array>,
   signal?: AbortSignal,
-): Promise<Record<string, DatasetCell>[]> {
+): Promise<Record<string, unknown>[]> {
   validateTable(table);
   let size = 0;
   const chunks: Uint8Array[] = [];
@@ -103,22 +136,16 @@ export async function readRows(
     invalid();
   let data: unknown;
   try {
-    data = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)),
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(
+      Buffer.concat(chunks),
     );
+    boundedRowCount(text);
+    data = JSON.parse(text);
   } catch {
     return invalid();
   }
   if (!Array.isArray(data)) return invalid();
-  return data.map((row) => {
-    if (!row || typeof row !== "object" || Array.isArray(row)) return invalid();
-    const entries: [string, DatasetCell][] = [];
-    // Only declared columns are exposed; missing fields are SQL NULL in legacy loading.
-    for (const c of table.columns)
-      entries.push([
-        c.name,
-        cell(Object.hasOwn(row, c.name) ? row[c.name] : undefined, c.type),
-      ]);
-    return Object.fromEntries(entries);
-  });
+  for (const row of data)
+    if (!row || typeof row !== "object" || Array.isArray(row)) invalid();
+  return data as Record<string, unknown>[];
 }

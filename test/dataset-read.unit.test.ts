@@ -393,3 +393,45 @@ test("response pagination reduces the window to fit the capability frame and res
   assert.equal(second.rows.length, 1);
   assert.equal(second.nextOffset, null);
 });
+test("tiny sparse tables do not expand every row across a wide catalog and excessive row arrays refuse", async () => {
+  for (const count of [10000, 100001]) {
+    const data = Buffer.from(
+      JSON.stringify(Array.from({ length: count }, () => ({}))),
+    );
+    const digest = createHash("sha256").update(data).digest("hex");
+    const f = fixture({
+      binding: async () => ({
+        ...binding,
+        tables: [
+          {
+            schema: "public",
+            name: "rows",
+            columns: Array.from({ length: 1024 }, (_, i) => ({
+              name: "c" + i,
+              type: "string",
+            })),
+            object: {
+              key: "dataset/" + digest.slice(0, 32),
+              sha256: digest,
+              bytes: data.length,
+            },
+          },
+        ],
+      }),
+      read: async () =>
+        (async function* () {
+          yield data;
+        })(),
+    });
+    if (count > 100000)
+      await assert.rejects(f.service.read(context, request), {
+        code: "invalid_dataset",
+      });
+    else {
+      const result = await f.service.read(context, request);
+      assert.equal(result.totalRows, 10000);
+      assert.equal(result.rows.length, 1);
+      assert.equal(Object.keys(result.rows[0]!).length, 1024);
+    }
+  }
+});

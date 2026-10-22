@@ -10,7 +10,7 @@ import {
   type DatasetReadResult,
 } from "./contracts.ts";
 import { datasetReadable } from "./policy/read.ts";
-import { readRows, validateTable } from "./rows.ts";
+import { readRows, validateTable, projectRow } from "./rows.ts";
 function requestOf(value: unknown): DatasetReadRequest {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new DatasetReadError("invalid_request");
@@ -103,7 +103,7 @@ export function createDatasetReadService(
       };
       const end = Math.min(rows.length, r.offset + r.limit);
       for (let i = r.offset; i < end; i++) {
-        result.rows.push(rows[i]!);
+        result.rows.push(projectRow(rows[i]!, table));
         result.nextOffset = i + 1 < rows.length ? i + 1 : null;
         if (Buffer.byteLength(JSON.stringify(result)) > DATASET_RESULT_BYTES) {
           result.rows.pop();
