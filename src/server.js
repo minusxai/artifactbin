@@ -2,6 +2,8 @@ import { socialPreview, socialPreviewCard } from "./server/social-preview.ts";
 import { serveLegacyAddress } from "./server/legacy-addresses-http.ts";
 import { createLegacyRawRepository } from "./server/legacy-addresses-repository.ts";
 import {parsePageRevision,pageRevisionQuery} from "./server/page-revision.ts";
+import { createRetainedFolderService } from "./retained-folders/service.ts";
+import { createRetainedFolderRoute } from "./retained-folders/http.ts";
 import { createSavedProgramHost } from "./server/saved-program-host.ts";
 import { serveDatasetAttachments } from "./server/dataset-attachment-http.ts";
 import { supplementalRepository } from "./persistence/supplemental-media.ts";
@@ -176,6 +178,7 @@ export function createService({
     actor: (credential) => accounts.actor(hash(credential)),
   });
   const publicProfile = createPublicProfileRoute(createPublicProfileRepository(repository.sql));
+  const retainedFolder = createRetainedFolderRoute(createRetainedFolderService(repository.sql, now));
   const ids = createIdReservationStore(repository.sql, { randomBytes, now });
   /** @type {Promise<import("./server/af-api-contracts.ts").AfRouteModule | null> | undefined} */
   let backendRoutes;
@@ -275,6 +278,11 @@ export function createService({
       if (await serveLegacyAddress(req, res, url, credential(req) || cookieToken(req),
         { raw: legacyRaw, media },
         (next, id) => address(req, res, next, origin, id))) return;
+      const folder = await retainedFolder(req.method || "GET", url, credential(req) || cookieToken(req));
+      if (folder) {
+        res.writeHead(folder.status, folder.headers);
+        return res.end(folder.body);
+      }
       // A page's address: /a/<id>, /a/<id>-<title> or /@<handle>/<path>.
       const pageAddress = parseAddressPath(url.pathname);
       if (pageAddress) {

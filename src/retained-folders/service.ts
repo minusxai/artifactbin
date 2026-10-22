@@ -16,10 +16,6 @@ export function createRetainedFolderService(
   return {
     read: (legacyId, credential, namespace) =>
       database.transaction(async (client) => {
-        const session = credential
-          ? await loadSession(client, hash(credential))
-          : null;
-        const actor = credential ? accountActor(session, now()) : null;
         const candidates = (
           await client.query(
             "SELECT r.*,a.principal_kind FROM retained_folders r JOIN accounts a ON a.actor=r.owner WHERE r.legacy_id=$1 AND ($2::text IS NULL OR r.namespace=$2) AND r.state='live' LIMIT 2",
@@ -27,6 +23,10 @@ export function createRetainedFolderService(
           )
         ).rows;
         if (candidates.length !== 1) return null;
+        const session = credential
+          ? await loadSession(client, hash(credential))
+          : null;
+        const actor = credential ? accountActor(session, now()) : null;
         const selectedOwner = String(candidates[0]!.owner);
         // Match mutation lock order: path lock before folder/file row locks.
         await pathLock(client, selectedOwner);
