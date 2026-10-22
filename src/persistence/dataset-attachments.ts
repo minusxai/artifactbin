@@ -185,12 +185,12 @@ export function createDatasetAttachmentRepository({
         ).rows;
         if (rows.length !== 1) deny();
         const fresh = await authority(client, c, now());
+        // The declaration restricts source MIME; the isolated processor may encode a different verified raster type.
         if (
           !fresh ||
           fresh.generation !== initial.generation ||
           !datasetAttachmentAllowed(c, fresh, "insert") ||
-          !fresh.registration.acceptedTypes.includes(request.contentType) ||
-          !fresh.registration.acceptedTypes.includes(staged.object.contentType)
+          !fresh.registration.acceptedTypes.includes(request.contentType)
         )
           deny();
         return fresh;

@@ -51,3 +51,10 @@ Only `--apply` deletes eligible files. The receiver runs this policy after a
 successful deployment, under its deployment lock. Protect migration recovery
 points before deploying; retention does not replace an independently verified
 pre-import backup or a measured database/WAL/object/image disk budget.
+
+Dataset image attachments use the independent private writable mount
+`/opt/artefactv2/dataset-attachments` (UID1000, mode0700). Compose enables
+`PAGEGI_DATASET_ATTACHMENT_DIRECTORY=/run/pagegi-dataset-attachments` only in
+the app; neither execution nor image jobs mount attachment storage. Deployment
+creates the directory without replacing existing contents. It is separate from
+imported datasets and media, and remains retained across rollout and rollback.

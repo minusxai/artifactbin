@@ -12,6 +12,8 @@ export DOCKER_GID="$(stat -c %g /var/run/docker.sock)"
 mkdir -p "$root/releases" "$root/backups"
 # Only the trusted application writes mutation objects; imported source stores stay read-only.
 install -d -o 1000 -g 1000 -m 0700 "$root/dataset-mutations"
+# Dataset image outputs are private app-owned storage, separate from imported objects.
+install -d -o 1000 -g 1000 -m 0700 "$root/dataset-attachments"
 # The app reads this private persistent object mount as UID1000; deployments never replace its contents.
 install -d -o 1000 -g 1000 -m 0700 "$root/datasets"
 exec 9>"$root/deploy.lock"

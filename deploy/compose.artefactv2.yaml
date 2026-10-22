@@ -25,12 +25,14 @@ services:
       # The execution service below, over the project network; this overrides any socket in .env.production.
       PAGEGI_EXECUTION_ENDPOINT: http://execution:8788/v1/execute
       PAGEGI_EXECUTION_SOCKET: ''
+      PAGEGI_DATASET_ATTACHMENT_DIRECTORY: /run/pagegi-dataset-attachments
       PAGEGI_DATASET_MUTATION_DIRECTORY: /run/pagegi-dataset-mutations
       PAGEGI_MEDIA_DIRECTORY: /run/pagegi-media
       PAGEGI_DATASET_DIRECTORY: /run/pagegi-datasets
     volumes:
       - ./execution-secret:/run/pagegi-execution-secret:ro
       - ./resource-config:/run/pagegi-resource-config:ro
+      - ./dataset-attachments:/run/pagegi-dataset-attachments:rw
       - ./dataset-mutations:/run/pagegi-dataset-mutations:rw
       # Immutable imported media; ACLs are checked by the application, never a static server.
       - ./media:/run/pagegi-media:ro

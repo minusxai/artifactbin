@@ -50,6 +50,11 @@ for (const failure of ["rollout", "postgres", "", "initial"]) {
         recursive: true,
       });
       mkdirSync(join(dir, "systemd"));
+      mkdirSync(join(root, "dataset-attachments"));
+      writeFileSync(
+        join(root, "dataset-attachments", "retained"),
+        "existing attachment",
+      );
       const release = join(root, "releases", revision, "deploy");
       writeFileSync(
         join(release, "compose.artefactv2.yaml"),
@@ -102,6 +107,10 @@ for (const failure of ["rollout", "postgres", "", "initial"]) {
           FAIL_STAGE: failure === "initial" ? "rollout" : failure,
         },
       });
+      assert.equal(
+        readFileSync(join(root, "dataset-attachments", "retained"), "utf8"),
+        "existing attachment",
+      );
       const calls = readFileSync(log, "utf8")
         .trim()
         .split("\n")
