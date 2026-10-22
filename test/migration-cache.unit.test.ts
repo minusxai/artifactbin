@@ -1,9 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, readdir, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  writeFile,
+  readdir,
+  rm,
+  mkdir,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cachedMigrationConverter } from "../src/migration/cache.ts";
+import {
+  archivedCompilerIdentity,
+  cachedMigrationConverter,
+} from "../src/migration/cache.ts";
 test("private conversion cache varies full inputs/compiler, retries corrupt and failed records", async () => {
   const directory = await mkdtemp(join(tmpdir(), "migration-cache-"));
   let calls = 0;
@@ -76,5 +86,47 @@ test("private conversion cache varies full inputs/compiler, retries corrupt and 
     assert.equal(attempts, 2);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("compiler provenance covers transitive source, dependency locks and generated font bytes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "compiler-inputs-"));
+  const migrationRoot = join(root, "migration");
+  const legacyRoot = join(root, "legacy");
+  const files = [
+    [migrationRoot, "src/apollo/helper.ts"],
+    [migrationRoot, "package.json"],
+    [migrationRoot, "package-lock.json"],
+    [legacyRoot, "package.json"],
+    [legacyRoot, "package-lock.json"],
+    [legacyRoot, "services/app/package.json"],
+    [legacyRoot, "services/app/lib/data/story/story-font-manifest.json"],
+    [legacyRoot, "services/app/public/fonts/fixture.woff2"],
+    [legacyRoot, "services/app/public/islands/manifest.json"],
+    [legacyRoot, "services/app/scripts/copy-assets.mjs"],
+  ] as const;
+  try {
+    for (const [base, relative] of files) {
+      const path = join(base, relative);
+      await mkdir(join(path, ".."), { recursive: true });
+      await writeFile(path, "original");
+    }
+    const identity = () =>
+      archivedCompilerIdentity(legacyRoot, { migrationRoot });
+    const original = await identity();
+    assert.equal(await identity(), original);
+    for (const [base, relative] of files) {
+      const path = join(base, relative);
+      await writeFile(path, "changed");
+      assert.notEqual(await identity(), original, relative);
+      await writeFile(path, "original");
+      assert.equal(await identity(), original);
+    }
+    await rm(join(legacyRoot, "services/app/public/fonts"), {
+      recursive: true,
+    });
+    await assert.rejects(identity, { code: "ENOENT" });
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });

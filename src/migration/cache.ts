@@ -5,6 +5,7 @@ import { createReadStream } from "node:fs";
 import { readdir } from "node:fs/promises";
 import type { Converter, ConversionOutput } from "./contracts.ts";
 import type {
+  CompilerIdentityInputs,
   CachedConverter,
   ConversionCacheOptions,
 } from "./cache-contracts.ts";
@@ -100,6 +101,9 @@ export function cachedMigrationConverter(
 /** Include both adapter code and archived build manifest; path alone is not compiler provenance. */
 export async function archivedCompilerIdentity(
   legacyRoot: string,
+  inputs: CompilerIdentityInputs = {
+    migrationRoot: new URL("../../", import.meta.url).pathname,
+  },
 ): Promise<string> {
   const hash = createHash("sha256");
   async function tree(directory: string): Promise<void> {
@@ -108,30 +112,47 @@ export async function archivedCompilerIdentity(
     )) {
       if (item.isSymbolicLink())
         throw new Error("Compiler provenance must not contain symlinks");
-      hash.update(item.name + "\0");
-      if (item.isDirectory()) await tree(join(directory, item.name));
-      else if (item.isFile())
+      hash.update(
+        JSON.stringify([item.isDirectory() ? "directory" : "file", item.name]) +
+          "\0",
+      );
+      if (item.isDirectory()) {
+        await tree(join(directory, item.name));
+        hash.update("end-directory\0");
+      } else if (item.isFile()) {
+        const fileHash = createHash("sha256");
         for await (const chunk of createReadStream(join(directory, item.name)))
-          hash.update(chunk);
+          fileHash.update(chunk);
+        hash.update(fileHash.digest("hex") + "\0");
+      }
     }
   }
-  await tree(new URL("./conversion/", import.meta.url).pathname);
-  hash.update(await readFile(new URL("./convert.ts", import.meta.url)));
-  // The migration compiler also bundles dependencies owned by this application (for example chart runtimes).
+  // Hash all local source: conversion bundles import shared Apollo/runtime helpers too.
+  hash.update("migration-source\0");
+  await tree(join(inputs.migrationRoot, "src"));
   for (const name of ["package.json", "package-lock.json"]) {
     hash.update("migration-package:" + name + "\0");
-    hash.update(await readFile(new URL("../../" + name, import.meta.url)));
+    hash.update(await readFile(join(inputs.migrationRoot, name)));
   }
-  // Archived source and built islands both affect emitted CSS/HTML; hash bytes rather than assuming build labels are fresh.
   if (legacyRoot) {
-    await tree(join(legacyRoot, "services/app/lib"));
-    await tree(join(legacyRoot, "services/app/public/islands"));
-  }
-  for (const name of legacyRoot ? ["package.json", "package-lock.json"] : [])
-    try {
-      hash.update(await readFile(join(legacyRoot, name)));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    // These are required generated inputs, not optional caches. Missing builds fail closed.
+    for (const relative of [
+      "services/app/lib",
+      "services/app/public/islands",
+      "services/app/public/fonts",
+      "services/app/scripts",
+    ]) {
+      hash.update("legacy-tree:" + relative + "\0");
+      await tree(join(legacyRoot, relative));
     }
+    for (const name of [
+      "package.json",
+      "package-lock.json",
+      "services/app/package.json",
+    ]) {
+      hash.update("legacy-package:" + name + "\0");
+      hash.update(await readFile(join(legacyRoot, name)));
+    }
+  }
   return hash.digest("hex");
 }

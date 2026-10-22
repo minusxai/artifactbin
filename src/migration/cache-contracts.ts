@@ -9,3 +9,8 @@ export interface CachedConverter {
   convert: Converter;
   stats: { hits: number; misses: number; invalid: number };
 }
+
+/** Frozen source roots whose bytes define emitted conversion output. */
+export interface CompilerIdentityInputs {
+  migrationRoot: string;
+}
