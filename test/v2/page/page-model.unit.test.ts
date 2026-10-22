@@ -267,3 +267,14 @@ test("a downloaded copy inlines the core, the design system and the state, and s
   assert.equal(parsePage(back.source).core.src, `${ORIGIN}/af/v1/core.js`);
   assert.doesNotMatch(back.source, /window\.__core|data:text\/css|data-af-server|data-af-revision/);
 });
+
+ test("saving resolves root-relative core URLs for an isolated runner without changing other scripts", async () => {
+  const { prepareForSave, parsePage } = await model();
+  for (const prefix of ["", "<script>1</script>"]) {
+    const input = `<!doctype html><html><head>${prefix}<script src="/af/v1/core.js" defer></script><script src="/custom.js"></script></head><body><p>Saved</p></body></html>`;
+    const saved = prepareForSave(input, save).source;
+    assert.equal(parsePage(saved).core.src, `${ORIGIN}/af/v1/core.js`);
+    assert.match(saved, /src="\/custom.js"/);
+    assert.equal(prepareForSave(saved, save).source, saved);
+  }
+ });

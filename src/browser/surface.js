@@ -10,10 +10,18 @@
  * @param {{revision:string,[key:string]:unknown}} boot
  * @param {string} bridge
  * @param {{name:string,href:string} | null} [designSystem]
+ * @param {string} [platformOrigin] Trusted server-issued origin for root-relative core URLs.
  */
-export function createAppHTML(source, boot, bridge, designSystem = null) {
+export function createAppHTML(source, boot, bridge, designSystem = null, platformOrigin = "") {
   const doc = new DOMParser().parseFromString(source, "text/html");
   doc.querySelectorAll("base").forEach((el) => el.remove());
+  if (platformOrigin) {
+    for (const script of doc.querySelectorAll("script[src]")) {
+      const src = script.getAttribute("src")?.trim() ?? "";
+      if (src === "/af/v1/core.js")
+        script.setAttribute("src", new URL(src, platformOrigin).href);
+    }
+  }
   if (designSystem) {
     const link = doc.createElement("link");
     link.rel = "stylesheet";

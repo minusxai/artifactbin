@@ -193,7 +193,7 @@ export interface PageModelModule {
   /**
    * Make the core the first script in <head>: insert
    * `<script src="${origin}/af/v1/core.js"></script>` when missing, move it
-   * when another script precedes it, and turn an inline `data-af="core"`
+   * when another script precedes it, resolve root-relative core URLs against origin, and turn an inline `data-af="core"`
    * script back into the src form.
    */
   ensureCore(html: string, origin: string): string;

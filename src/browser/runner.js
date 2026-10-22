@@ -39,6 +39,7 @@ addEventListener("message", (event) => {
     typeof m.designSystem?.href === "string" && m.designSystem.href.startsWith("data:text/css;base64,")
       ? { name: String(m.designSystem.name), href: m.designSystem.href }
       : null,
+    platform,
   );
   document.open();
   document.write(html);

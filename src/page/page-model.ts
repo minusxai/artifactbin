@@ -390,7 +390,13 @@ function placeCore(html: string, tag: string, after: readonly string[]): string 
 }
 
 export function ensureCore(html: string, origin: string): string {
-  const core = findCore(parseSource(html));
+  let core = findCore(parseSource(html));
+  const src = core.element && attribute(core.element, "src");
+  const start = core.element && attributeValueStart(html, core.element, "src");
+  if (src?.trim().startsWith("/") && !src.trim().startsWith("//") && start != null) {
+    html = applyEdits(html, [{ start, end: start + src.length, text: trimOrigin(origin) + src.trim() }]);
+    core = findCore(parseSource(html));
+  }
   if (core.tag.present && core.tag.first && core.inHead && !core.tag.inline) return html;
   const location = core.element?.sourceCodeLocation;
   const tag = location && !core.tag.inline ? html.slice(location.startOffset, location.endOffset) : coreScriptTag(origin);
