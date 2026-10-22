@@ -48,7 +48,7 @@ export function createMigrationJobPlanner(
           migrationDatasetVersionKey(id, version),
         ) ?? [],
       datasetUnavailable: (id, version) =>
-        source.preparedDatasets?.scan.historicalImportVersions
+        source.preparedDatasets?.scan.historicalServiceVersions
           .get(id)
           ?.includes(version) ?? false,
       coreUrl: "/af/v1/core.js",

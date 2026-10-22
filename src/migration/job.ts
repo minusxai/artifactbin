@@ -140,7 +140,7 @@ export async function runMigrationJob(
           omittedUnmappedTokenPrincipals:
             source.preparedDatasets.omittedUnmappedTokenPrincipals,
           historicalUnavailableRevisions: [
-            ...source.preparedDatasets.scan.historicalImportVersions.values(),
+            ...source.preparedDatasets.scan.historicalServiceVersions.values(),
           ].reduce((sum, versions) => sum + versions.length, 0),
         }
       : undefined,

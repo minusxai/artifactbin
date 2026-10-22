@@ -1,3 +1,4 @@
+import { hasLegacyBoundValueSource } from "./conversion/compiled/bound-values.ts";
 import { readsMigrationMembers } from "./job-members.ts";
 import {
   extractLegacyImports,
@@ -16,6 +17,7 @@ export async function scanMigrationDatasetImports(
   const versions = new Map<string, number | null>();
   const heads = new Map<string, number>();
   const historicalImportVersions = new Map<string, number[]>();
+  const historicalServiceVersions = new Map<string, number[]>();
   const statistics = {
     pagesWithImports: 0,
     pagesWithMembers: 0,
@@ -51,6 +53,16 @@ export async function scanMigrationDatasetImports(
       const extracted = extractLegacyImports(text);
       if (extracted.issues.length) continue; // The content converter retains the complete syntax/capability refusal.
       if (Number(row.version) !== head.version) {
+        if (
+          extracted.imports.length ||
+          hasLegacyBoundValueSource(text) ||
+          (await readsMigrationMembers(source, text, []))
+        ) {
+          const list = historicalServiceVersions.get(id) ?? [];
+          list.push(Number(row.version));
+          historicalServiceVersions.set(id, list);
+        }
+
         if (extracted.imports.length) {
           hasImports = true;
           statistics.historicalImports += extracted.imports.length;
@@ -130,5 +142,12 @@ export async function scanMigrationDatasetImports(
       revisions: revisions.sort((a, b) => a.version - b.version),
     });
   }
-  return { pages, issues, heads, historicalImportVersions, statistics };
+  return {
+    pages,
+    issues,
+    heads,
+    historicalImportVersions,
+    historicalServiceVersions,
+    statistics,
+  };
 }

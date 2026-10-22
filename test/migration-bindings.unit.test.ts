@@ -32,6 +32,7 @@ test("conversion receives exact bindings pinned separately for every saved page 
   const seen: number[] = [];
   const boundSeen: unknown[] = [];
   const membersSeen: unknown[] = [];
+  const unavailableSeen: unknown[] = [];
   const binding = (version: number): DatasetBrowserBinding => ({
     name: "rows",
     mode: "live",
@@ -50,6 +51,7 @@ test("conversion receives exact bindings pinned separately for every saved page 
     },
     coreUrl: "/af/v1/core.js",
     datasetBindings: (_id, version) => [binding(version)],
+    datasetUnavailable: () => true,
     membersBinding: () => ({
       backendNamespace: "legacyData",
       backendHref: "/af/v1/ids/def456",
@@ -71,6 +73,7 @@ test("conversion receives exact bindings pinned separately for every saved page 
       seen.push(input.datasetBindings![0]!.version);
       boundSeen.push(input.boundValueColumns);
       membersSeen.push(input.membersBinding);
+      unavailableSeen.push(input.datasetUnavailable);
       return {
         classification: "functional",
         html: "<p>Fixture</p>",
@@ -80,6 +83,10 @@ test("conversion receives exact bindings pinned separately for every saved page 
     },
   });
   assert.deepEqual(seen, [1, 2]);
+  assert.deepEqual(unavailableSeen, [
+    { reason: "historical-binding-unavailable" },
+    undefined,
+  ]);
   assert.deepEqual(membersSeen, [
     undefined,
     { backendNamespace: "legacyData", backendHref: "/af/v1/ids/def456" },

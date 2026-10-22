@@ -88,6 +88,7 @@ test("dataset scan retains literal dependencies and pins initial receipt to trus
     [[], [3]],
   );
   assert.deepEqual(result.historicalImportVersions.get("abc123"), [1]);
+  assert.deepEqual(result.historicalServiceVersions.get("abc123"), [1]);
   assert.deepEqual(result.statistics, {
     pagesWithImports: 1,
     pagesWithMembers: 0,
@@ -116,6 +117,47 @@ test("dataset scan retains literal dependencies and pins initial receipt to trus
     notMembers.pages[0]!.revisions.find((r) => r.version === 2)!.readsMembers,
     undefined,
   );
+  const readOriginal = source.readArtifact;
+  source.readArtifact = async (id) => {
+    const artifact = await readOriginal(id);
+    if (id === "abc123")
+      artifact.tables.artifact_versions = [
+        {
+          artifact_id: "abc123",
+          version: 1,
+          format: "markup",
+          source:
+            '<Helmet><Query name="people">{`select user_id from _members`}</Query></Helmet>',
+        },
+      ];
+    return artifact;
+  };
+  const historicalMembers = await scanMigrationDatasetImports(source);
+  assert.deepEqual(historicalMembers.historicalServiceVersions.get("abc123"), [
+    1,
+  ]);
+  assert.equal(historicalMembers.historicalImportVersions.has("abc123"), false);
+  source.readArtifact = async (id) => {
+    const artifact = await readOriginal(id);
+    if (id === "abc123")
+      artifact.tables.artifact_versions = [
+        {
+          artifact_id: "abc123",
+          version: 1,
+          format: "markup",
+          source:
+            '<Helmet><Value name="who" source="ref:data01" column="who"/></Helmet>',
+        },
+      ];
+    return artifact;
+  };
+  assert.deepEqual(
+    (await scanMigrationDatasetImports(source)).historicalServiceVersions.get(
+      "abc123",
+    ),
+    [1],
+  );
+  source.readArtifact = readOriginal;
   source.maps.users = {};
   const unresolved = await scanMigrationDatasetImports(source);
   assert.equal(unresolved.pages.length, 0);
