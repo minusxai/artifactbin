@@ -68,6 +68,14 @@ test(
         )
           external.push(url.origin);
       });
+      await page.addInitScript(() => {
+        const schedule = window.requestAnimationFrame;
+        (window as any).__openingFrames = [];
+        window.requestAnimationFrame = (callback) =>
+          (window as any).__holdOpeningFocus
+            ? ((window as any).__openingFrames.push(callback), 0)
+            : schedule.call(window, callback);
+      });
       await page.goto(
         `http://127.0.0.1:${(server.address() as { port: number }).port}/proof`,
       );
@@ -115,13 +123,11 @@ test(
           .catch(async () =>
             assert.fail(
               JSON.stringify(
-                await page
-                  .locator("#tooltip-content")
-                  .evaluate((node) => ({
-                    rect: node.getBoundingClientRect().toJSON(),
-                    side: node.getAttribute("data-side"),
-                    parent: node.parentElement?.getAttribute("style"),
-                  })),
+                await page.locator("#tooltip-content").evaluate((node) => ({
+                  rect: node.getBoundingClientRect().toJSON(),
+                  side: node.getAttribute("data-side"),
+                  parent: node.parentElement?.getAttribute("style"),
+                })),
               ),
             ),
           );
@@ -171,6 +177,9 @@ test(
       await page.waitForFunction(
         () => !!document.querySelector("#tooltip-content")?.closest("[hidden]"),
       );
+      await page.evaluate(() => {
+        (window as any).__holdOpeningFocus = true;
+      });
       await page.locator("#dialog-trigger").click();
       await page.waitForFunction(
         () =>
@@ -193,6 +202,12 @@ test(
         true,
       );
       await page.keyboard.press("Shift+Tab");
+      await page.evaluate(() => {
+        (window as any).__holdOpeningFocus = false;
+        const frames = (window as any).__openingFrames.splice(0);
+        if (!frames.length) throw Error("Opening focus frame was not held");
+        for (const frame of frames) frame(performance.now());
+      });
       assert.equal(
         await page
           .locator("#dialog-close")

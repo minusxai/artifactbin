@@ -1,3 +1,4 @@
+import { archivedDialogFocusSource } from "./dialog-source.ts";
 import{readsLegacyViewer}from"./viewer-source.ts";
 import {validateCompiledCellWriteContexts} from "./cell-write-context.ts";
 import {archivedExplicitCellOptionsSource} from "./cell-kit-source.ts";
@@ -367,6 +368,7 @@ const bundled = await bundle({
           let source = await readFile(args.path, "utf8");
           if (input.personBindings?.length && args.path === path.join(root,"services/app/lib/islands/kit/people.tsx")) source = archivedPersonProfileSource({source,coreUrl:input.coreUrl});
           if(input.datasetMutations?.some(binding=>binding.valueParam)&&args.path===path.join(root,"services/app/lib/islands/kit/cells.tsx"))source=archivedExplicitCellOptionsSource(source);
+          if (args.path === path.join(root,"services/app/lib/islands/kit/dialog.tsx")) source = archivedDialogFocusSource(source,path.join(import.meta.dirname,"dialog-focus.ts"));
           const stripped = await stripTypes(source, {
             loader: "tsx",
             jsx: "preserve",
@@ -477,7 +479,7 @@ const bundled = await bundle({
               author ||
               chartSources ||
               input.datasetMutations?.length ||
-              input.dataControls?.length || input.slideDeck || input.mermaids?.length) &&
+              input.dataControls?.length || input.slideDeck || input.mermaids?.length || input.dialogFocus) &&
             args.path.startsWith("solid-js")
           ) {
             const suffix = args.path.slice("solid-js".length);
@@ -492,7 +494,7 @@ const bundled = await bundle({
               author ||
               chartSources ||
               input.datasetMutations?.length ||
-              input.dataControls?.length || input.slideDeck || input.mermaids?.length) &&
+              input.dataControls?.length || input.slideDeck || input.mermaids?.length || input.dialogFocus) &&
             (args.path === "@mx/rt" || args.path.startsWith("@mx/kit/"))
           ) {
             const relative =

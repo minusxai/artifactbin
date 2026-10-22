@@ -139,6 +139,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
   const renderedIdentities = new Set<string>();
   const authorProps: AdmittedAuthorMountProps[] = [];
   let invalid = false;
+  let dialogFocus = false;
   let hasSlideDeck = false;
   let statelessChildrenSupported = true;
   const registeredMutations = input.datasetMutations ?? [];
@@ -278,6 +279,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
         invalid = true;
       if (node.type === "JSXElement") {
         const name = node.openingElement.name.name;
+        if (name === "Dialog") dialogFocus = true;
         if (name === "SlideDeck") hasSlideDeck = true;
         if (loopTable && !loopDepth && !["Column", "Button", "span", "strong", "em", "b", "i", "small", "code", "br", "p", "div", "a"].includes(name)) invalid = true;
         const component = admitLocalComponent(node, {ancestors, parentTag: parent?.type === "JSXElement" ? parent.openingElement.name.name : undefined, rowTable:loopTable});
@@ -658,7 +660,7 @@ export const admitLocalSource: AdmitLocalSource = (input) => {
     )
   )
     return blocked("compiled-data-control");
-  input = { ...input, contexts, viewerUnavailable:historical&&viewerMarkup, mermaids, slideDeck, dataControls, dynamicIdentities, presentationIdentities };
+  input = { ...input, dialogFocus, contexts, viewerUnavailable:historical&&viewerMarkup, mermaids, slideDeck, dataControls, dynamicIdentities, presentationIdentities };
   return {
     ok: true,
     plan: {

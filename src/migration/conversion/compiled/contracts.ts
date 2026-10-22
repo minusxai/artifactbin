@@ -5,6 +5,8 @@ import type { CompiledDatasetBinding } from "./dataset-contracts.ts";
 import type { ConversionResult } from "../contracts.ts";
 export interface CompiledMigrationInput {
   source: string;
+  /** Source-derived Dialog runtime adapter, overwritten during admission. */
+  dialogFocus?: boolean;
   /** Source-owned supporting document, overwritten during admission. */
   contexts?: readonly import("./context-contracts.ts").CompiledContextReference[];
   /** Source-owned static diagrams, overwritten before offline preparation. */
