@@ -17,3 +17,5 @@ export interface CompiledPersonPorts {
   ): () => void;
   changed(cards: Readonly<Record<string, CompiledPersonCard>>): void;
 }
+/** Offline source consumer classification only; never a profile authorization. */
+export type ReadLegacyPersonValueNames = (source: string) => readonly string[];
