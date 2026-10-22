@@ -244,7 +244,7 @@ test(
         executionSecret: null,
         principal: ["subject", "tenant"],
         caps: ["dataset", "invoke", "store", "transaction"],
-        dataset: ["mutate", "read"],
+        dataset: ["members", "mutate", "person", "read"],
         env: "undefined",
       });
       assert.equal(JSON.stringify(isolation).includes("host-secret"), false);
