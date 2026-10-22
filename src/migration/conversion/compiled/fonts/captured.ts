@@ -86,7 +86,7 @@ export async function prepareArchivedFontResources(
           sha256: face.sha256,
         });
       }
-      return faces;
+      return { faces, omittedRequests: sheet.omittedRequests ?? [] };
     },
   };
 }

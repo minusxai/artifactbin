@@ -149,13 +149,35 @@ export async function inlinePinnedFontImports(
       throw Error("Unsupported font import rule");
     const raw = children[0].value,
       request = parsePinnedFontRequest(raw),
-      faces = await resolve(request, {
+      resolved = await resolve(request, {
         requestUrl: raw,
         requestSha256: createHash("sha256").update(raw).digest("hex"),
       });
+    const faces = "faces" in resolved ? resolved.faces : resolved;
+    const omitted = "faces" in resolved ? resolved.omittedRequests : [];
+    const tupleKey = (value: {
+      family: string;
+      axes: readonly FontAxisRange[];
+    }) => JSON.stringify(value);
+    const omissionKeys = new Set(omitted.map(tupleKey));
+    if (
+      omitted.length > request.families.length ||
+      omissionKeys.size !== omitted.length ||
+      omitted.some(
+        (value) =>
+          !request.families.some(
+            (requested) => tupleKey(requested) === tupleKey(value),
+          ),
+      ) ||
+      request.families.some(
+        (value) => !faces.some((face) => face.family === value.family),
+      )
+    )
+      throw Error("Invalid provider font omissions");
     if (!faces.length) throw Error("Pinned font faces unavailable");
     for (const family of request.families)
       if (
+        !omissionKeys.has(tupleKey(family)) &&
         !faces.some(
           (face) =>
             face.family === family.family &&
@@ -177,6 +199,27 @@ export async function inlinePinnedFontImports(
       )
         throw Error("Pinned font axis proof mismatch");
     for (const face of faces) {
+      if (
+        omitted.some(
+          (value) =>
+            value.family === face.family &&
+            face.style ===
+              (value.axes.find((axis) => axis.tag === "ital")?.min === 1
+                ? "italic"
+                : "normal") &&
+            value.axes.every(
+              (axis) =>
+                axis.tag === "ital" ||
+                face.axes.some(
+                  (found) =>
+                    found.tag === axis.tag &&
+                    found.min === axis.min &&
+                    found.max === axis.max,
+                ),
+            ),
+        )
+      )
+        throw Error("Provider omission contradicts returned face");
       if (
         !["normal", "italic"].includes(face.style) ||
         face.weight.length !== 2 ||
@@ -231,6 +274,7 @@ export async function inlinePinnedFontImports(
     });
     receipts.push({
       requestSha256: createHash("sha256").update(raw).digest("hex"),
+      ...(omitted.length ? { omittedRequests: omitted } : {}),
       faces: faces.map((face) => ({
         sha256: face.sha256,
         bytes: face.bytes.byteLength,

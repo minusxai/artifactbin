@@ -14,6 +14,7 @@ export interface CapturedFontStylesheetReceipt {
   readonly requestSha256: string;
   readonly stylesheetSha256: string;
   readonly stylesheetBytes: number;
+  readonly omittedRequests?: readonly import("./contracts.ts").FontRequestOmission[];
   readonly faces: readonly CapturedFontFaceReceipt[];
 }
 export interface CapturedFontManifest {

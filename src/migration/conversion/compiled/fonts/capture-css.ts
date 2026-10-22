@@ -122,6 +122,20 @@ export function admitCapturedFontCss(
   if (
     !faces.length ||
     request.families.some(
+      (f) => !faces.some((face) => face.family === f.family),
+    )
+  )
+    throw Error("Captured font request incomplete");
+  return faces;
+}
+/** Exact provider omissions are data, never generated faces or substitute families. */
+export function capturedFontOmissions(
+  faces: readonly CapturedFontDescriptor[],
+  requestUrl: string,
+) {
+  const request = parsePinnedFontRequest(requestUrl);
+  return request.families
+    .filter(
       (f) =>
         !faces.some(
           (face) =>
@@ -130,11 +144,18 @@ export function admitCapturedFontCss(
               (f.axes.find((a) => a.tag === "ital")?.min === 1
                 ? "italic"
                 : "normal") &&
-            face.weight[0] === f.axes.find((a) => a.tag === "wght")?.min &&
-            face.weight[1] === f.axes.find((a) => a.tag === "wght")?.max,
+            f.axes.every(
+              (a) =>
+                a.tag === "ital" ||
+                a.tag === "opsz" ||
+                (a.tag === "wght" &&
+                  a.min === face.weight[0] &&
+                  a.max === face.weight[1]) ||
+                (a.tag === "wdth" &&
+                  a.min === face.stretch?.[0] &&
+                  a.max === face.stretch?.[1]),
+            ),
         ),
     )
-  )
-    throw Error("Captured font request incomplete");
-  return faces;
+    .map((f) => ({ family: f.family, axes: f.axes }));
 }

@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { admitCapturedFontCss } from "./capture-css.ts";
+import { admitCapturedFontCss, capturedFontOmissions } from "./capture-css.ts";
 import { FONT_CAPTURE_LIMITS as limits } from "./capture-contracts.ts";
 import type {
   CapturedFontBundleInput,
@@ -110,6 +110,11 @@ export async function verifyCapturedFontBundle(
       new TextDecoder("utf-8", { fatal: true }).decode(cssBytes),
       sheet.requestUrl,
     );
+    if (
+      JSON.stringify(capturedFontOmissions(descriptors, sheet.requestUrl)) !==
+      JSON.stringify(sheet.omittedRequests ?? [])
+    )
+      throw Error("Font bundle omission receipt mismatch");
     if (descriptors.length !== sheet.faces.length)
       throw Error("Font bundle descriptor count mismatch");
     files.set(cssPath, cssBytes);

@@ -20,7 +20,17 @@ export interface PinnedFontFace {
   readonly bytes: Uint8Array;
   readonly sha256: string;
 }
+export interface FontRequestOmission {
+  readonly family: string;
+  readonly axes: readonly FontAxisRange[];
+}
+export interface ResolvedFontSet {
+  readonly faces: readonly PinnedFontFace[];
+  /** Exact provider omissions only, never permission to omit a whole family. */
+  readonly omittedRequests: readonly FontRequestOmission[];
+}
 export interface InlinedFontReceipt {
+  readonly omittedRequests?: readonly FontRequestOmission[];
   readonly requestSha256: string;
   readonly faces: readonly {
     readonly sha256: string;
@@ -34,7 +44,7 @@ export interface InlinedFontStylesheet {
 export type ResolvePinnedFonts = (
   request: PinnedFontRequest,
   context?: { readonly requestUrl: string; readonly requestSha256: string },
-) => Promise<readonly PinnedFontFace[]>;
+) => Promise<readonly PinnedFontFace[] | ResolvedFontSet>;
 export const MAX_FONT_BYTES = 2_000_000;
 export const MAX_FONT_TOTAL_BYTES = 8_000_000;
 export const MAX_FONT_FACES = 64;

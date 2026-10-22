@@ -1,6 +1,6 @@
 import { validateWoff2Bounds } from "./woff2.ts";
 import { createHash } from "node:crypto";
-import { admitCapturedFontCss } from "./capture-css.ts";
+import { admitCapturedFontCss, capturedFontOmissions } from "./capture-css.ts";
 import { fontCaptureAddress } from "./capture-policy.ts";
 import { parsePinnedFontRequest } from "./inline.ts";
 import { FONT_CAPTURE_LIMITS as limits } from "./capture-contracts.ts";
@@ -152,6 +152,9 @@ export async function captureFontJob(
         requestSha256: hash(requestUrl),
         stylesheetSha256,
         stylesheetBytes: cssBytes.byteLength,
+        ...(capturedFontOmissions(descriptors, requestUrl).length
+          ? { omittedRequests: capturedFontOmissions(descriptors, requestUrl) }
+          : {}),
         faces,
       });
     }

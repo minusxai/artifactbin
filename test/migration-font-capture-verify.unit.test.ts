@@ -10,7 +10,7 @@ test("immutable capture replay verifies original CSS, descriptors and every font
   const directory = await mkdtemp(path.join(tmpdir(), "font-bundle-"));
   try {
     const request =
-        "https://fonts.googleapis.com/css2?family=Example:wght@400&display=swap",
+        "https://fonts.googleapis.com/css2?family=Example:ital,wght@0,400;1,400&display=swap",
       css = `@font-face{font-family:'Example';font-style:normal;font-weight:400;font-display:swap;src:url(https://fonts.gstatic.com/s/example/v1/a.woff2) format('woff2');unicode-range:U+0000-00FF}`,
       bytes = Buffer.alloc(52);
     bytes.write("wOF2");
@@ -48,6 +48,21 @@ test("immutable capture replay verifies original CSS, descriptors and every font
     });
     assert.match(verified.resourceDigest, /^[a-f0-9]{64}$/);
     assert.equal(verified.files.size, 2);
+    assert.equal(verified.manifest.stylesheets[0]?.omittedRequests?.length, 1);
+    const tampered = JSON.parse(manifest);
+    tampered.stylesheets[0].omittedRequests = [];
+    const changedManifest = JSON.stringify(tampered);
+    await writeFile(path.join(directory, "manifest.json"), changedManifest);
+    await assert.rejects(() =>
+      verifyCapturedFontBundle({
+        directory,
+        manifestSha256: createHash("sha256")
+          .update(changedManifest)
+          .digest("hex"),
+      }),
+    );
+    await writeFile(path.join(directory, "manifest.json"), manifest);
+
     const font = [...job.files.keys()].find((n) => n.endsWith(".woff2"))!;
     const corrupt = Buffer.from(bytes);
     corrupt[47] = 1;
