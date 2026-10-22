@@ -22,14 +22,16 @@ The server is `https://app.artefactbin.dev`. If `AF_SERVER` and `AF_TOKEN` are s
 | `POST /api/ids` | `{ count }`, with header `Idempotency-Key` | `{ ids }`: IDs reserved for you, for files you haven't published yet. `scripts/add.mjs` calls this. |
 | `GET /api/files/:id/source` | | `{ source, version }`, plus an `ETag` header |
 | `PUT /api/files/:id/source` | `{ source }`, with header `If-Match: <version>` and optionally `Idempotency-Key` | `{ version, source }` |
-| `DELETE /api/files/:id` | | `{ id, deleted: true }`. Only the page's owner can delete it. |
+| `DELETE /api/files/:id` | | `{ id, deleted: true }`. The owner, or an active editor of an imported group page, can delete it. |
 
 - **`files`:** any linked backend files that aren't published yet, by ID: `{ "Bk7Qa2": "<file contents>" }`. The same field works on `PUT /source`.
-- **`requestId`:** any unique string you choose. If a publish times out, send the same request again with the same `requestId`; it won't create a second page. The same `requestId` with a different body is rejected with `409`.
+- **`requestId`:** a nonempty unique string you choose, at most 200 characters. If a publish times out, send the same request again with the same `requestId`; it won't create a second page. The same `requestId` with a different body is rejected with `409`.
+- **Reservation retries:** `POST /api/ids` requires integer `count` from 1 to 100; `400` for an invalid count or missing/empty/overlong `Idempotency-Key` (at most 200 characters). Reusing a key with the same count returns the original IDs; `422` if reused with another count.
+- **Publish failures:** `409`, `files: <id> was published by another request`, means a submitted backend ID was already published by another request. `503` means backend files could not be compiled now because the backend host is busy or unavailable; try again later with the same request.
 - **`id` in the meta block:** leave it out for a new page. An ID there must be one you reserved with `POST /api/ids` and haven't published yet; any other ID (someone else's, already published, unknown) is rejected with `422` naming it, so a copied page is never published under a new ID by accident.
-- **Without a token:** `POST /api/ids`, `POST /api/publish`, `DELETE /api/files/:id` and `/api/paths` answer `401`; the page routes under `/api/files/:id/` (source, comments, sharing, backends, graphql) answer `403`, even on an unlisted page. Only the page's address (the hosted view) works for anyone with the link.
+- **Without a token:** `POST /api/ids`, `POST /api/publish`, `DELETE /api/files/:id` and `/api/paths` answer `401`. For a private or unlisted page, routes under `/api/files/:id/` require a token or page grant (`403` without one). A public page's read routes, such as source and comments, allow anonymous access under its link role. Sharing and write routes still enforce their own permissions. An unlisted page's hosted view works for anyone with the link.
 - **`source` in the response:** the page exactly as the platform saved it, with the header metadata block (`id`, `version`) and every `data-af-id` filled in. Replace your local file with it.
-- **Size limits:** submitted and normalized saved HTML are each limited to 6,000,000 UTF-8 bytes, including platform metadata and node IDs (`422` when exceeded). Leave room for metadata when publishing a new page. The complete JSON request is independently limited to 8,000,000 wire bytes (`413`); JSON escaping and other fields count, so some HTML below the page limit can still exceed the request limit. Linked backend files retain their separate aggregate limit of 4,000,000 UTF-16 characters and each backend's existing source quota. Downloads may be larger because they inline the core, design system, and viewer state; the submitted and saved page limits still apply if a download is republished.
+- **Size limits:** submitted and normalized saved HTML are each limited to 6,000,000 UTF-8 bytes, including platform metadata and node IDs (`422` when exceeded). Leave room for metadata when publishing a new page. The complete JSON request is independently limited to 8,000,000 wire bytes (`413`); JSON escaping and other fields count, so some HTML below the page limit can still exceed the request limit. Linked backend files have a separate aggregate limit of 4,000,000 UTF-16 characters (`413`, `files are too large`). A publish or save may submit at most 64 backend files; each file is limited to 262,144 UTF-8 bytes, and each backend's bundled npm packages to 1,048,576 bytes total. Invalid backend files return `422`; a file over its source quota is reported as `files: <id> could not be compiled: source_quota`. Downloads may be larger because they inline the core, design system, and viewer state; the submitted and saved page limits still apply if a download is republished.
 - **`url` in the response:** the page's address, `https://app.artefactbin.dev/a/<id>` (see Addresses).
 - **`If-Match`:** a save is rejected with `409` if someone else saved first. The `409` body is `{ error, version, source }`: the current version and its source. Merge your change into that source and save again with the new version.
 - **Deleting:** `DELETE /api/files/:id` moves the page to indefinitely recoverable trash. Versions, comments, IDs and storage usage are retained. Hosted, download, source, comment and backend routes stop working while trashed. `GET /api/trash` lists managed deleted items; `POST /api/trash/:id/restore` restores the same ID and version. If the original parent folder is absent, restoration uses the root. A path collision returns `409` without overwriting anything. `POST /api/trash/folders` with `{ path }` atomically trashes a folder subtree; restoring its returned ID restores that subtree. These endpoints accept `?owner=` for an active group editor's namespace. No permanent purge is exposed.
@@ -37,6 +39,24 @@ The server is `https://app.artefactbin.dev`. If `AF_SERVER` and `AF_TOKEN` are s
 - **`data-af="state"`:** a block in a published or saved page becomes the page's starting state, where each viewer's own local state begins. It is taken out of the saved source. A save without one keeps the current starting state.
 - **`visibility`:** `private`, `unlisted` or `public`. **`linkRole`:** `viewer`, `commenter` or `editor`, for people who open the link.
 - Pages are unlisted by default: anyone with the link can view. Pass visibility to change that.
+
+## Trash
+
+| Method and path | Body | Returns |
+|---|---|---|
+| `GET /api/trash` | | `{ entries }`: deleted pages and folders you manage |
+| `POST /api/trash/folders` | `{ path }` | `{ id, deletedIds }`: atomically trash the folder subtree |
+| `POST /api/trash/:id/restore` | | `{ id, path, restoredIds }`: restore the same IDs; `409` on a path collision |
+
+These routes require your account token. Use `?owner=` for an imported group's namespace as an active editor. Missing original parent folders restore at root. All versions remain retained; no permanent purge is exposed.
+
+## Installing the author skill
+
+| Method and path | Returns |
+|---|---|
+| `GET /skills/pagegi-author.tgz` | The author skill tarball, with a top-level `pagegi-author/` directory; used by both installers |
+| `GET /skills/artefactbin-skill.tgz` | The npm-installable skill installer package |
+| `GET /install.sh` | Shell installer that downloads the author skill |
 
 ## Addresses
 
@@ -71,6 +91,13 @@ Imported image, file and PDF pages can contain immutable media links. These link
 | `PUT /api/files/:id/comments/:commentId` | The change, for example `{ resolved: true }`, with header `If-Match: <revision>` | The updated comment |
 | `GET /api/files/:id/context/:commentId` | | `{ comment, source, state, url }`: the page source and the commenter's own local state when they commented |
 
+| Method and path | Returns |
+|---|---|
+| `GET /api/files/:id/comments/:commentId/attachments/:attachmentId/:variant` | Protected imported raster attachment bytes |
+| `HEAD /api/files/:id/comments/:commentId/attachments/:attachmentId/:variant` | Same authorization and headers, without a body |
+| `GET /af/v1/ids/:id/person-images/:valueName/:opaqueAssetId` | Protected WebP bytes for the current registered person selection |
+| `HEAD /af/v1/ids/:id/person-images/:valueName/:opaqueAssetId` | Same authorization and headers, without a body |
+
 Imported comments may include read-only `attachments`: `{ id, name, variants }`, where each variant has `variant` (`original`, `preview`, or `thumbnail`), `mimeType`, `width`, `height`, `bytes`, and `sha256`. These describe verified raster bytes; creating or editing a comment cannot add attachments. Preserve the comment's body, quote and anchor independently of its images. Prefer `preview` for the expanded view: it retains annotations baked into that image; `original` is the unannotated capture.
 
 `GET` or `HEAD /api/files/:id/comments/:commentId/attachments/:attachmentId/:variant` reads one attachment under the page's current read permission, including fresh group membership. A readable public or unlisted page permits its guest image reads; a private page requires its own valid account or page grant. A grant for another page does not apply. Missing or denied images return `404`; temporarily unavailable stored bytes return `503`. Responses are private and not cached, have no credentialed CORS access, and support one byte range on `GET`. Never put a credential in an image URL. The hosted comment panel and connected downloaded file fetch images through the trusted connection and use temporary Blob URLs; a disconnected file keeps its text but cannot retrieve private images.
@@ -90,7 +117,7 @@ Use `context` before acting on a comment. It shows exactly what the commenter sa
 
 ## Retrying safely
 
-Saves (`PUT /source`) and new comments and replies (`POST /comments`) accept an `Idempotency-Key` header: any string you choose, 1 to 200 printable characters (longer or empty is `400`), new for each change you mean to make.
+Saves (`PUT /source`) and new comments and replies (`POST /comments`) accept an `Idempotency-Key` header: any string you choose, 1 to 200 printable ASCII characters, without leading or trailing spaces (invalid keys return `400`), new for each change you mean to make.
 
 - If the request timed out or you don't know whether it worked, send it again with the same key and the same body. If the first one worked, you get its original response, even if the page changed since. Nothing is saved twice. If it didn't work, the request runs now.
 - The same key with a different body is rejected with `422`.
@@ -141,7 +168,7 @@ Backend files are published with the page (`files` above). To see what's deploye
 
 | Method and path | Body | Returns |
 |---|---|---|
-| `GET /api/files/:id/backends` | | Each linked backend's name, file, version and `typeDefs` |
+| `GET /api/files/:id/backends` | | `{ backends: [...] }`. Each linked backend's `name`, `id`, `version` and `typeDefs` |
 
 Pages call backend fields through `client`, not over HTTP.
 
@@ -175,11 +202,16 @@ An account's optional public name, used in `/@<handle>/<path>` page addresses (s
 
 ## Public profiles
 
+| Method and path | Returns |
+|---|---|
+| `GET /@<handle>` | Public profile HTML |
+| `HEAD /@<handle>` | Same status and headers, without a body |
+
 `GET /@<handle>` returns an HTML list of that account’s current public pages. Private, unlisted and deleted pages are excluded, including for a signed-in owner. Unknown or changed handles return 404. `HEAD` returns the same status without a body. Optional `limit` is 1–50 (default 24); the Next link supplies the opaque `after` page cursor. Profile links from a page must use the platform origin, not its isolated runner origin.
 
 ## Dataset image attachments
 
-A saved page with a registered live dataset upload binding can use `GET /api/files/:id/dataset-attachments/:namespace/:binding` to check `{ canAttempt }`. Upload with `POST` to the same path using the raw PNG, JPEG or WebP body, its exact `Content-Type`, a percent-encoded filename in `X-Filename`, and a stable `Idempotency-Key`. The receipt contains `{ ref, url, name, contentType, size }`; an exact retry may include `replayed: true`. Keep the same key and body after an uncertain response.
+A saved page with a registered live dataset upload binding can use `GET /api/files/:id/dataset-attachments/:namespace/:binding` to check `{ canAttempt }`. Upload with `POST` to the same path using the raw PNG, JPEG or WebP body, its exact `Content-Type`, a percent-encoded filename in `X-Filename`, and a stable `Idempotency-Key`. The receipt contains `{ ref, url, name, contentType, size }`; an exact retry may include `replayed: true`. Dataset attachment keys must be 8 to 120 characters matching `^[A-Za-z0-9_.-]{8,120}$`; invalid keys return `400`. This is stricter than the save/comment key grammar above. Keep the same key and body after an uncertain response.
 
 Uploads require a fresh authenticated viewer and an explicit dataset v2 insert grant. Downloads use `GET /api/files/:id/dataset-attachments/:namespace/:binding/:fileId` (or `HEAD` for headers) and independently require the current dataset read grant. Returned URLs remain protected and use private no-store responses. Save the `dfile:` ref through the page's dataset mutation; never put credentials in the page or attachment URL.
 

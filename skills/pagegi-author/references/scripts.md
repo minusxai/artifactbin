@@ -199,7 +199,7 @@ Flags
   --new           publish the file as a new page of your own
   --force         save over the published page even if it changed
                   (the published version is backed up in .af/backups/)
-  --delete --yes  delete the published page (owner only)
+  --delete --yes  trash the page (owner or imported group editor)
   --json          print machine-readable output
   --help          show this help
 
@@ -264,7 +264,7 @@ Published page.html as lOUAug, version 1. page.html now holds the saved source.
 https://app.artefactbin.dev/a/lOUAug
 ```
 
-`--force` saves your file over a page that changed since you started, after backing up the published version in `.af/backups/`. `--delete --yes` deletes the page for everyone (only its owner can) and removes its records from `.af/`.
+`--force` saves your file over a page that changed since you started, after backing up the published version in `.af/backups/`. `--delete --yes` moves the page to recoverable trash for everyone (the owner, or an active editor of an imported group page, can do this) and removes its records from `.af/`.
 
 With `--json` it prints one object: `{ status, id, version, url, wrote, backups, conflict, message }`. `status` is `created`, `saved`, `unchanged`, `merged`, `conflict`, `pulled`, `forked`, `forced`, `deleted`, `pending` (no answer) or `error`. `conflict` is `{ remote, diff, regions }` with the overlapping line ranges, the same on every run until the conflict is resolved.
 

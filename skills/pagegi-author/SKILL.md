@@ -94,7 +94,7 @@ Every Artifactbin file has one short ID (six letters and digits). A backend file
 
 A page's address, the `url` a publish returns, is `https://app.artefactbin.dev/a/<id>`. Anything after the ID and a hyphen is ignored, so `https://app.artefactbin.dev/a/<id>-<title>` opens the same page with a readable link. If your account has chosen a handle (`references/http-api.md`, Handle), a page with a path in your library also opens at `https://app.artefactbin.dev/@<handle>/<path>` (the path is the one `GET /api/paths` lists), until it is renamed or moved or the handle changes; share `url` when in doubt. `https://app.artefactbin.dev/af/v1/ids/<id>` opens any file by ID as well. Every form behaves the same: a private page asks a signed-out visitor to sign in, and anything unknown is 404.
 
-A page can link any number of backend files. `data-af-name` is required and must be unique on the page; it's the namespace the page queries the file's fields under (see Remote state contract).
+A publish or save can submit at most 64 backend files. Each backend source is limited to 262,144 UTF-8 bytes; bundled npm packages are limited to 1,048,576 bytes total per backend. `data-af-name` is required and must be unique on the page; it's the namespace the page queries the file's fields under (see Remote state contract).
 
 `backends/billing.ts` (`Bk7Qa2`):
 

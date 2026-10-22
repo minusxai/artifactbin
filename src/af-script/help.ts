@@ -79,7 +79,7 @@ Flags
   --new           publish the file as a new page of your own
   --force         save over the published page even if it changed
                   (the published version is backed up in .af/backups/)
-  --delete --yes  delete the published page (owner only)
+  --delete --yes  trash the page (owner or imported group editor)
   --json          print machine-readable output
   --help          show this help
 

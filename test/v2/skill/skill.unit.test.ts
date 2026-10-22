@@ -159,3 +159,44 @@ test("every file the References section names exists", () => {
   for (const file of named)
     if (!file.includes("<")) assert.ok(existsSync(repositoryPath(`${SKILL_ROOT}/${file}`)), file);
 });
+
+test("author publishing contract states backend quotas, returned IDs and independent failure limits", () => {
+  const http = skillFile("references/http-api.md");
+  for (const file of ["SKILL.md", "references/backend.md", "references/http-api.md"]) {
+    const text = skillFile(file);
+    for (const bound of ["64", "262,144", "1,048,576"]) assert.ok(text.includes(bound), `${file}: ${bound}`);
+    assert.doesNotMatch(text, /any number of backend files|any number of them/);
+  }
+  assert.match(http, /Each linked backend's `name`, `id`, `version` and `typeDefs`/);
+  assert.match(http, /4,000,000 UTF-16 characters[^\n]*413[^\n]*files are too large/);
+  assert.match(http, /count[^\n]*1[^\n]*100/);
+  assert.match(http, /400[^\n]*Idempotency-Key/);
+  assert.match(http, /422[^\n]*another count/);
+  assert.match(http, /requestId[^\n]*200/);
+  assert.match(http, /409[^\n]*files: <id> was published by another request/);
+  assert.match(http, /503[^\n]*backend[^\n]*compil/);
+});
+
+test("author permissions distinguish anonymous public reads from management and document upload retry grammar", () => {
+  const http = skillFile("references/http-api.md");
+  assert.match(http, /private or unlisted[^\n]*403/);
+  assert.match(http, /public page[^\n]*read routes[^\n]*anonymous/i);
+  for (const file of ["references/http-api.md", "references/scripts.md"])
+    assert.match(skillFile(file), /owner, or an active editor of an imported group page/);
+  assert.match(http, /1 to 200 printable ASCII characters[^\n]*leading or trailing spaces/);
+  assert.ok(http.includes("`^[A-Za-z0-9_.-]{8,120}$`"));
+  assert.match(http, /attachment[^\n]*8 to 120[^\n]*400/);
+});
+
+test("author route tables expose trash, installation, public profiles and protected image reads", () => {
+  const routes = new Set([...skillFile("references/http-api.md").matchAll(/^\| `(GET|HEAD|POST|PUT|DELETE) (\/[^`]+)`/gm)].map((m) => `${m[1]} ${m[2]}`));
+  for (const route of [
+    "GET /api/trash", "POST /api/trash/folders", "POST /api/trash/:id/restore",
+    "GET /skills/pagegi-author.tgz", "GET /skills/artefactbin-skill.tgz", "GET /install.sh",
+    "GET /@<handle>", "HEAD /@<handle>",
+    ...["GET", "HEAD"].flatMap((method) => [
+      `${method} /api/files/:id/comments/:commentId/attachments/:attachmentId/:variant`,
+      `${method} /af/v1/ids/:id/person-images/:valueName/:opaqueAssetId`,
+    ]),
+  ]) assert.ok(routes.has(route), `missing author-facing route: ${route}`);
+});

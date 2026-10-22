@@ -19,14 +19,22 @@
  *   POST /api/ids                  { count } + Idempotency-Key → 201 { ids } (200 on replay)
  *                                  400 no key or bad count (1..100); 401 no token; 422 key reused with another count
  *   POST /api/publish              PublishRequest           → 201 PublishResponse (200 on requestId replay)
- *                                  409 when the requestId was used for a different publish; 422 naming
- *                                  the ID when the meta block names one that is not the caller's
+ *                                  409 when the requestId was used for a different publish;
+ *                                  requestId must be a nonempty string of at most 200 characters.
+ *                                  409 "files: <id> was published by another request" for an already
+ *                                  published backend reservation; 503 when backend compilation is busy/unavailable.
+ *                                  422 naming the ID when the meta block names one that is not the caller's
  *                                  unpublished reservation (never silently published under a new ID)
+ *                                  Submitted and saved HTML: 6,000,000 UTF-8 bytes each (422).
+ *                                  JSON request: 8,000,000 wire bytes (413). Backend files aggregate:
+ *                                  4,000,000 UTF-16 characters (413 "files are too large"); at most 64
+ *                                  submitted files, each 262,144 UTF-8 bytes (422 source_quota), with
+ *                                  1,048,576 bundled npm bytes total per backend (422).
  *   GET  /api/files/:id/source                              → 200 SourceResponse, ETag: "<version>"
  *   PUT  /api/files/:id/source     SaveRequest + If-Match: <version> [+ Idempotency-Key] → 200 SaveResponse
  *                                  409 SaveConflict { error, version, source } when If-Match is not
  *                                  the current version; 428 when If-Match is missing
- *   DELETE /api/files/:id                                   → 200 DeleteResponse (owner only)
+ *   DELETE /api/files/:id                                   → 200 DeleteResponse (owner or active editor of an imported group page)
  *                                  401 without a valid account token; 404 for everyone else
  *   GET  /api/files/:id/comments                            → 200 CommentsResponse
  *                                  ?since=<cursor> lists only later changes; 400 when the cursor is malformed
@@ -58,6 +66,11 @@
  *   POST /api/paths                PathChange (src/contracts.ts: folder, move, move-many,
  *                                  remove-folder)           → 200 { entries }; 404 unknown path,
  *                                  409 path taken, 422 invalid path or kind
+ *   GET  /api/trash                                         → 200 { entries } managed deleted pages/folders
+ *   POST /api/trash/folders        { path }                 → 200 { id, deletedIds } atomically trash subtree
+ *   POST /api/trash/:id/restore                            → 200 { id, path, restoredIds }; 409 path collision
+ *                                  All three require an account; ?owner= selects an imported group
+ *                                  namespace for an active editor. Missing parent restores at root.
  *   GET  /api/secrets                                       → 200 SecretsListResponse (names and times, never values)
  *   PUT  /api/secrets/:name        { value }                → 200 SecretWriteResponse (create or replace)
  *                                  422 bad name (SECRET_NAME), bad value (1..4096 bytes) or a 65th secret
@@ -74,14 +87,24 @@
  *
  * Without a token: the account routes (/api/ids, /api/publish, DELETE
  * /api/files/:id, /api/paths, /api/secrets, /api/account/handle) are 401; the page routes under /api/files/:id/
- * are 403 even on an unlisted page, whose hosted view (/af/v1/ids/:id) works
- * for anyone with the link. The link role applies to anonymous viewers too.
+ * require a token or page grant for private/unlisted pages (403 without one). Public
+ * page read routes accept anonymous viewers under the link role; sharing and write
+ * routes still enforce their own permission checks. The hosted unlisted view works
+ * for anyone with the link.
  *   GET  /api/files/:id/backends   (C)                      → 200 BackendsResponse
  *   GET /api/files/:id/dataset-attachments/:namespace/:binding → 200 { canAttempt }
  *   POST /api/files/:id/dataset-attachments/:namespace/:binding → 200 protected attachment receipt (raw image body)
+ *                                  Required Idempotency-Key: /^[A-Za-z0-9_.-]{8,120}$/; 400 invalid.
+ *                                  Exact retry returns the original receipt; changed input is 409.
  *   GET /api/files/:id/dataset-attachments/:namespace/:binding/:fileId → private image bytes
  *   HEAD /api/files/:id/dataset-attachments/:namespace/:binding/:fileId → private image headers
  *   POST /api/files/:id/graphql    (C) RemoteRequest        → 200 RemoteResponse
+ *   GET  /api/files/:id/comments/:commentId/attachments/:attachmentId/:variant → protected raster bytes
+ *   HEAD /api/files/:id/comments/:commentId/attachments/:attachmentId/:variant → same headers, no body
+ *   GET  /af/v1/ids/:id/person-images/:valueName/:opaqueAssetId → currently selected, page-bound WebP bytes
+ *   HEAD /af/v1/ids/:id/person-images/:valueName/:opaqueAssetId → same headers, no body
+ *                                  Supplemental images: current page read permission; 404 denied/missing,
+ *                                  206 single byte range, 416 bad range, 503 authorized bytes unavailable.
  *   GET  /af/v1/core.js                                     → 200 text/javascript (the built core)
  *   GET  /af/v1/design-systems/<name>.css                   → 200 text/css, byte-equal to
  *                                  skills/pagegi-author/design-systems/<name>.css; 404 for other names
@@ -92,6 +115,8 @@
  *                                  `-<anything>` after the ID (a title slug) is ignored.
  *   GET  /a/<id>?download=1        page: 200 text/html attachment from PageModelModule.toPortable, with the
  *                                  server's origin and the version's digest on the core tag and no credential
+ *   GET  /@<handle>               public profile HTML; current public pages only; 404 unknown handle
+ *   HEAD /@<handle>               same status and headers, no body
  *   GET  /@<handle>/<path>         the page at <path> in the library of the account with that handle
  *                                  (both percent-encoded), exactly as /a/<id>, with ?download=1 too;
  *                                  a renamed or missing path, an unknown or freed handle, or anything
@@ -109,7 +134,9 @@
  *   HEAD /af/v1/ids/<id>/assets/<revision>/<variant>/<sha256> → same authorization/headers, no body
  *   GET  /skills/pagegi-author.tgz                          → 200 application/gzip, cacheable: the whole
  *                                  author skill (skills/pagegi-author/) as a gzip tarball with a
- *                                  top-level pagegi-author/ directory (SkillArchive); other /skills/ paths 404
+ *                                  top-level pagegi-author/ directory (SkillArchive)
+ *   GET  /skills/artefactbin-skill.tgz                      → 200 npm-installable skill installer archive
+ *   GET  /install.sh                                       → 200 shell installer
  *
  * `:id` is always a six-character file ID. The old 12-character document IDs,
  * /d/, /documents/, /f/ paths, /api/files/:id/backend/* and the shared-state
@@ -123,7 +150,7 @@ export interface PublishRequest {
   source: string;
   /** Linked backend files by ID: `{ "Bk7Qa2": "<file contents>" }`. */
   files?: Record<FileId, string>;
-  /** Client-chosen; a repeat with the same requestId returns the first result and creates nothing. */
+  /** Nonempty, at most 200 characters; an exact repeat returns the first result and creates nothing. */
   requestId: string;
   path?: string;
   /** Default "unlisted": anyone with the link can view. */

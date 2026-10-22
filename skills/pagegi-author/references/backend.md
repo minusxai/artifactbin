@@ -2,7 +2,7 @@
 
 ## The file
 
-A lambda is one TypeScript file, linked from the page with a required `data-af-name`. A page can link any number of them. It exports `typeDefs` and a default object of resolvers. It may import `@afbin/apollo`, npm packages pinned to an exact version, and Node built-ins such as `node:crypto` (see Packages and the network).
+A lambda is one TypeScript file, linked from the page with a required `data-af-name`. A publish or save can submit at most 64 backend files. Each backend source is limited to 262,144 UTF-8 bytes; bundled npm packages are limited to 1,048,576 bytes total per backend. It exports `typeDefs` and a default object of resolvers. It may import `@afbin/apollo`, npm packages pinned to an exact version, and Node built-ins such as `node:crypto` (see Packages and the network).
 
 `typeDefs` must be a plain string, or a `gql` template with no `${…}` inside it. The platform reads the schema without running your code.
 
