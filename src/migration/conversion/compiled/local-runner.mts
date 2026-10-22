@@ -177,22 +177,37 @@ const hasCharts = (nodes: readonly any[]): boolean =>
       n.type === "element" &&
       (["Question", "Chart"].includes(n.tag) || hasCharts(n.children ?? [])),
   );
-const chartPlans = hasCharts(presentationNodes)
-  ? await prepareArchivedChartPlans(presentationNodes, archived, root, {
-      colorMode: parts.mode,
-      sourceAdmission:input.sourceAdmission,
-      tables:
-        results?.tables ??
-        Object.fromEntries(
-          declarations
-            .filter((d: any) => d.type === "table")
-            .map((d: any) => [d.name, { columns: d.columns, rows: d.default }]),
-        ),
-    })
-  : [];
-const chartSources = chartPlans.length
-  ? await chartRendererSources(root, chartPlans)
-  : null;
+let archivedChartController = false;
+let chartPlans: import("./charts/contracts.ts").CompiledChartPlan[] = [];
+try {
+  chartPlans = hasCharts(presentationNodes)
+    ? await prepareArchivedChartPlans(presentationNodes, archived, root, {
+        colorMode: parts.mode,
+        sourceAdmission: input.sourceAdmission,
+        tables:
+          results?.tables ??
+          Object.fromEntries(
+            declarations
+              .filter((d: any) => d.type === "table")
+              .map((d: any) => [
+                d.name,
+                { columns: d.columns, rows: d.default },
+              ]),
+          ),
+      })
+    : [];
+} catch (error) {
+  if (!prototype) throw error;
+  archivedChartController = true;
+}
+const chartSources = archivedChartController
+  ? {
+      entry: `import * as charts from ${JSON.stringify(path.join(root, "services/app/lib/islands/chart-controller.ts"))};export {charts};`,
+      plugin: { name: "prototype-archived-chart-controller", setup() {} },
+    }
+  : chartPlans.length
+    ? await chartRendererSources(root, chartPlans)
+    : null;
 const generated = generate({
   nodes: presentationNodes,
   colorMode: parts.mode,
@@ -241,7 +256,7 @@ css = isolateArchivedThemeVariables(css);
 const archivedFonts = await prepareArchivedFontResources(root, process.argv[3] ? JSON.parse(process.argv[3]) : undefined);
 const fontResources = await inlinePinnedFontImports(css, archivedFonts.resolve,prototype?"preserve-unresolved":"strict");
 css = fontResources.css;
-// No network, old origin, asset endpoint or deployment host is carried into migrated styles.
+// Strict conversion requires closed styles; prototype conversion preserves authored resource behavior.
 const { parse: parseCss, walk: walkCss } = await import("css-tree");
 const cssTree = parseCss(css, { positions: true });
 const urls: Array<{
@@ -571,6 +586,7 @@ process.stdout.write(
     declarations,
     authorExports: author?.exports ?? [],
     chartPlans: chartPlans.length,
+    chartRuntime: archivedChartController ? "archived-controller" : "compiled-plans",
     datasetNames: rawFlow.imports.map((i: any) => i.name),
     mutationNames: split.content.mutations.map((m: any) => m.name),
     queryNames: rawFlow.queries.map((q: any) => q.name),

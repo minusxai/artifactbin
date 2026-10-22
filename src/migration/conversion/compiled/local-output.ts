@@ -79,6 +79,7 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
     return blocked("compiled-local-output");
   if (
     vegaCount &&
+    !(prototype && output.chartRuntime === "archived-controller") &&
     (!Number.isSafeInteger(output.chartPlans) ||
       !output.chartPlans ||
       output.chartPlans > vegaCount)

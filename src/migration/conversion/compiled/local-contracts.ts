@@ -31,6 +31,7 @@ export interface ArchivedLocalOutput extends ArchivedStaticOutput {
   datasetNames?: string[];
   authorExports?: string[];
   chartPlans?: number;
+  chartRuntime?: "compiled-plans" | "archived-controller";
   declarations: LocalDeclaration[];
   /** Audited migration-time bundle inputs; no authored source or absolute paths. */
   modules: string[];
