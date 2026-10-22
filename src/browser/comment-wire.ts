@@ -63,6 +63,7 @@ export function acceptedComment(
     parentId: record.parentId,
     sourceRevision: record.version === null ? null : revisionOf(record.version, page),
     ...(record.context ? { context: record.context } : {}),
+    ...(record.stateReplay ? {stateReplay:record.stateReplay}:{}),
     appStateId: null,
     publishedBy: record.author,
     createdAt: record.createdAt,

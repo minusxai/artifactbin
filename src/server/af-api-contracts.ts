@@ -183,6 +183,7 @@ export interface CommentInput {
 export interface CommentRecord {
   attachments?: readonly import("../comment-attachment-contracts.ts").CommentAttachment[];
   context?: import("../contracts.ts").CommentContextStatus;
+  stateReplay?: import("../contracts.ts").CommentStateReplay;
   id: string;
   nodeId: string | null;
   quote: string;

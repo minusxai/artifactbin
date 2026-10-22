@@ -214,6 +214,24 @@ test("comment panel owns composition, permission refresh, thread lifecycle and s
         });
       },
     );
+    await t.test("unavailable saved state preserves a readable historical context action", async () => {
+      const historical = await browser.newPage();
+      await historical.setContent('<div id="layer"></div>');
+      await historical.addScriptTag({ content: bundle.outputFiles[0].text });
+      await historical.evaluate(() => {
+        state.sourceRevision = "1"; state.live = true;
+        state.comments.push({ id: "state-only", nodeId: "a", quote: "Retained quote", body: "Readable body", parentId: null,
+          publishedBy: "alice", createdAt: "2025-01-01", sourceRevision: "1", appStateId: null,
+          stateReplay: { status: "unavailable", reason: "unproven-signal" } });
+        panel.render();
+      });
+      await historical.locator(".pg-pin").click();
+      await historical.getByText("Saved interactive state unavailable", { exact: true }).waitFor();
+      assert.equal(await historical.getByText("Readable body", { exact: true }).count(), 1);
+      await historical.getByRole("button", { name: "View context" }).click();
+      assert.equal(await historical.evaluate(() => calls.some(c => c.kind === 'view' && c.id === 'state-only')), true);
+      await historical.close();
+    });
     await t.test("unavailable historical context is labeled without a replay action or node highlight", async () => {
       const historical = await browser.newPage();
       await historical.setContent('<div id="layer"></div>');

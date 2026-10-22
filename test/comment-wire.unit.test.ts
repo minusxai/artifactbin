@@ -183,3 +183,9 @@ test("imported image metadata follows comments without changing body, thread or 
   const posted = wireRequest({ kind: "comments.create", comment, snapshot: null }, page);
   assert.equal(Object.hasOwn((posted.body as {comment: object}).comment, "attachments"), false);
 });
+test("unavailable imported interactive state keeps its original source and quote without fabricating a snapshot",()=>{
+ const original={...record("imported",1),stateReplay:{status:"unavailable",reason:"unproven-signal"}};
+ const context=wireResult({kind:"context.get",id:"imported"},{comment:original,source:"<p>Historical</p>",state:null,url:"https://example.test/page"},page) as import("../src/contracts.ts").Context;
+ assert.equal(context.source,"<p>Historical</p>");assert.equal(context.comment.quote,original.quote);assert.equal(context.snapshot,null);
+ assert.deepEqual(context.comment.stateReplay,original.stateReplay);
+});

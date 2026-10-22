@@ -34,6 +34,7 @@ export function commentRecord(comment: AcceptedComment): CommentRecord {
     parentId: comment.parentId,
     version: comment.sourceRevision === null ? null : Number(comment.sourceRevision),
     ...(comment.context ? { context: comment.context } : {}),
+    ...(comment.stateReplay ? {stateReplay:comment.stateReplay}:{}),
     author: comment.publishedBy,
     createdAt: comment.createdAt,
     revision: comment.revision,

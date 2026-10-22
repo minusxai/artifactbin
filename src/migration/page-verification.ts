@@ -1,3 +1,5 @@
+import {projectMigrationCommentState} from "./comment-state.ts";
+import {legacyDocumentSource} from "./conversion/index.ts";
 import { migrationCommentAssetRecords } from "./assets/comment-records.ts";
 import { createHash } from "node:crypto";
 import { destinationSchemas } from "./destination-schema.ts";
@@ -13,7 +15,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
   schema,
   input,
 ) => {
-  const { runtime } = destinationSchemas(schema);
+  const { runtime, archive } = destinationSchemas(schema);
   const totals = {
     pages: 0,
     sources: 0,
@@ -126,6 +128,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
     const comments = page.comments.filter((c) => !c.deleted_at);
     let sequence = 0;
     const snapshots: Record<string, unknown>[] = [];
+    const archivedStates:Record<string,unknown>[]=[];
     const expected = comments.map((c) => {
       const root = c.root_id ? comments.find((r) => r.id === c.root_id) : c;
       if (!root) throw Error("Missing expected comment root");
@@ -133,19 +136,12 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
         root,
         revisions: page.revisions,
       });
-      const snapshot =
-        context.sourceRevision === null || c.view_state == null
-          ? null
-          : "legacy-" + String(c.id);
-      if (snapshot)
-        snapshots.push({
-          id: snapshot,
-          source_revision: context.sourceRevision,
-          schema_version: 1,
-          state: {},
-          view: c.view_state,
-          rendered: null,
-        });
+      const original=page.revisions.find(r=>String(r.version)===context.sourceRevision)?.original;
+      const legacySource=original?(typeof original.source==='string'&&original.source.trim()?original.source:legacyDocumentSource(original.document)):null;
+      const replay=c.view_state==null?null:projectMigrationCommentState({raw:c.view_state,sourceRevision:context.sourceRevision,legacySource,initialState:normalized.find(r=>String(r.version)===context.sourceRevision)?.prepared.state??null});
+      const snapshot=replay?.snapshot?'legacy-'+String(c.id):null;
+      if(replay)archivedStates.push({comment_id:String(c.id),original_revision:String(root.anchor_version??'unknown'),raw:replay.raw,replay:replay.status});
+      if(snapshot&&replay?.snapshot)snapshots.push({id:snapshot,source_revision:context.sourceRevision,schema_version:replay.snapshot.schema,state:replay.snapshot.state,view:replay.snapshot.view,rendered:null});
       return {
         id: String(c.id),
         node_id: context.nodeId,
@@ -163,12 +159,13 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
         fingerprint: digest(JSON.stringify(c)),
         sequence: String(++sequence),
         context_status: context.contextStatus,
+        state_replay:replay?.status??null,
         changed: null,
       };
     });
     const actualComments = (
       await db.query(
-        `SELECT id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence::text,context_status,changed::text FROM ${runtime}.comments WHERE file_id=$1 ORDER BY sequence`,
+        `SELECT id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence::text,context_status,state_replay,changed::text FROM ${runtime}.comments WHERE file_id=$1 ORDER BY sequence`,
         [page.pageId],
       )
     ).rows;
@@ -190,6 +187,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
       "comment snapshots",
     );
     totals.snapshots += snapshots.length;
+    equal((await db.query(`SELECT comment_id,original_revision,raw,replay FROM ${archive}.comment_states WHERE page_id=$1 ORDER BY comment_id`,[page.pageId])).rows,archivedStates.sort((a,b)=>String(a.comment_id).localeCompare(String(b.comment_id))),"original comment state archive and explicit replay status");
     const assets = (
       await db.query(
         `SELECT revision,variant,sha256,content_type,filename,byte_length::text,storage_key FROM ${runtime}.page_assets WHERE page_id=$1 ORDER BY revision,variant`,

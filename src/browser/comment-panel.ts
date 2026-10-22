@@ -538,6 +538,7 @@ export function createCommentPanel(options: CommentPanelOptions): CommentPanel {
         const reply = button("Reply", () => expand(true), actions);
         reply.prepend(icon("reply")!);
       }
+      if(c.stateReplay?.status === "unavailable") para("Saved interactive state unavailable", actions, "pg-caption");
       if (c.context?.status === "unavailable")
         para("Original context unavailable", actions, "pg-caption");
       else button("View context", () => options.actions.view(c), actions);

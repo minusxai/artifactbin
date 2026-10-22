@@ -77,6 +77,8 @@ Bound person-card images use `/af/v1/ids/:id/person-images/:valueName/:opaqueAss
 
 Imported comments whose original page version was not retained have `version: null`, `nodeId: null`, and `context: { status: "unavailable", originalRevision: "17", reason: "not-retained" }`. Their body, quote, author and thread remain intact. Their context response includes the same `context` metadata and `source: null`, `state: null`, `url: null`; there is no original view to replay or node to highlight. Never treat the current page as their original context.
 
+Imported comments may also carry `stateReplay`: `{ status: "available", viewport: "document-start" }` when saved interactive state was mapped exactly, or `{ status: "unavailable", reason }` when it could not be proven. This is separate from source availability: an unavailable interactive state can still have a readable historical `source` and quote, with `state: null`. The original imported payload remains archived; it is never interpreted as a viewport or silently replaced by the current state. Ordinary newly authored snapshots are unchanged.
+
 Use `context` before acting on a comment. It shows exactly what the commenter saw: `state` is their local state (their filters, open tab and drafts), and `url` is the page's address with `#af-state=` of that state, so opening it shows the page as they saw it.
 
 - **`comment`:** `{ nodeId, quote, body }`, where `nodeId` is the `data-af-id` the comment is on, or `null` for the whole page. To reply, add `parentId`: the ID of the comment you are answering.

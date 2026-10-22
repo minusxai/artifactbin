@@ -154,3 +154,16 @@ CREATE TABLE IF NOT EXISTS comment_attachment_assets (
   PRIMARY KEY(page_id,comment_id,attachment_id,variant),
   FOREIGN KEY(page_id,comment_id) REFERENCES comments(file_id,id)
 );
+
+-- Migration replay status never changes the availability of a retained source.
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS state_replay jsonb;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='comments'::regclass AND conname='comments_state_replay') THEN
+    ALTER TABLE comments ADD CONSTRAINT comments_state_replay CHECK (
+      state_replay IS NULL OR COALESCE((state_replay='{"status":"available","viewport":"document-start"}'::jsonb OR
+      (jsonb_typeof(state_replay)='object' AND state_replay->>'status'='unavailable'
+       AND state_replay->>'reason' IN ('source-unavailable','unsupported-format','invalid-state','unproven-signal','unproven-value')
+       AND state_replay - 'status' - 'reason' = '{}'::jsonb)), false)
+    );
+  END IF;
+END $$;

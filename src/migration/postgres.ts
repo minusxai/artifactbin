@@ -1,3 +1,5 @@
+import {projectMigrationCommentState} from "./comment-state.ts";
+import {legacyDocumentSource} from "./conversion/index.ts";
 import {projectMigrationAccountProfiles} from "./account-profiles.ts";
 import type {MigrationAccountProfileSummary} from "./account-profile-contracts.ts";
 import { migrationCommentAssetRecords } from "./assets/comment-records.ts";
@@ -57,6 +59,7 @@ export class PostgresMigrationDestination implements ImportDestination {
    await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.archive}`);
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.archives(namespace text PRIMARY KEY,digest text NOT NULL,manifest jsonb NOT NULL,maps jsonb NOT NULL)`);
    await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.receipts(key text PRIMARY KEY,digest text NOT NULL,page_id text NOT NULL,imported_at timestamptz NOT NULL DEFAULT now())`);
+   await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.archive}.comment_states(namespace text NOT NULL,page_id text NOT NULL,comment_id text NOT NULL,original_revision text NOT NULL,raw jsonb NOT NULL,replay jsonb NOT NULL,PRIMARY KEY(namespace,page_id,comment_id))`);
    const text=JSON.stringify(input.manifest);const old=(await this.db.query(`SELECT digest FROM ${this.archive}.archives WHERE namespace=$1 FOR UPDATE`,[this.namespace])).rows[0];
    if(old&&old.digest!==digest(text))throw new Error('Source archive changed; use a new migration namespace');
    if(!old)await this.db.query(`INSERT INTO ${this.archive}.archives VALUES($1,$2,$3::jsonb,$4::jsonb)`,[this.namespace,digest(text),text,JSON.stringify(input.maps)]);
@@ -119,9 +122,13 @@ export class PostgresMigrationDestination implements ImportDestination {
     const author=this.maps.users[String(c.author_user_id)]??this.maps.tokens[String(c.author_token_id)];if(!author)throw new Error('Unmapped comment author');
     const root=c.root_id?comments.find(r=>r.id===c.root_id):c;if(!root)throw new Error('Comment references missing root');
     const {sourceRevision:revision,nodeId:mapped,contextStatus}=projectMigrationCommentContext({root,revisions:page.revisions});
-    const snapshot=revision===null||c.view_state===null||c.view_state===undefined?null:'legacy-'+String(c.id);
-    if(snapshot)await this.db.query('INSERT INTO snapshots(file_id,id,source_revision,schema_version,state,view,rendered) VALUES($1,$2,$3,1,$4::jsonb,$5::jsonb,NULL)',[page.pageId,snapshot,revision,'{}',JSON.stringify(c.view_state)]);
-    await this.db.query('INSERT INTO comments(file_id,id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence,context_status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb)',[page.pageId,String(c.id),mapped,String(c.quote??c.snippet??''),String(c.body??''),revision,c.root_id??null,snapshot,author,String(c.created_at),Number(c.revision??1),root.status==='resolved',digest(JSON.stringify(c)),++sequence,contextStatus?JSON.stringify(contextStatus):null]);
+    const original=page.revisions.find(r=>String(r.version)===revision)?.original;
+    const legacySource=original?(typeof original.source==='string'&&original.source.trim()?original.source:legacyDocumentSource(original.document)):null;
+    const replay=c.view_state===null||c.view_state===undefined?null:projectMigrationCommentState({raw:c.view_state,sourceRevision:revision,legacySource,initialState:normalized.find(r=>String(r.version)===revision)?.prepared.state??null});
+    const snapshot=replay?.snapshot?'legacy-'+String(c.id):null;
+    if(replay)await this.db.query(`INSERT INTO ${this.archive}.comment_states(namespace,page_id,comment_id,original_revision,raw,replay) VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb)`,[this.namespace,page.pageId,String(c.id),String(root.anchor_version??'unknown'),JSON.stringify(replay.raw),JSON.stringify(replay.status)]);
+    if(snapshot&&replay?.snapshot)await this.db.query('INSERT INTO snapshots(file_id,id,source_revision,schema_version,state,view,rendered) VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,NULL)',[page.pageId,snapshot,revision,replay.snapshot.schema,JSON.stringify(replay.snapshot.state),JSON.stringify(replay.snapshot.view)]);
+    await this.db.query('INSERT INTO comments(file_id,id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence,context_status,state_replay) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb)',[page.pageId,String(c.id),mapped,String(c.quote??c.snippet??''),String(c.body??''),revision,c.root_id??null,snapshot,author,String(c.created_at),Number(c.revision??1),root.status==='resolved',digest(JSON.stringify(c)),++sequence,contextStatus?JSON.stringify(contextStatus):null,replay?JSON.stringify(replay.status):null]);
    }
    for(const asset of migrationCommentAssetRecords(page.commentAssets??[])) await this.db.query('INSERT INTO comment_attachment_assets(page_id,comment_id,attachment_id,variant,name,sha256,byte_length,width,height,content_type,storage_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [page.pageId,asset.comment_id,asset.attachment_id,asset.variant,asset.name,asset.sha256,asset.byte_length,asset.width,asset.height,asset.content_type,asset.storage_key]);
    await this.db.query('UPDATE files SET sequence=$2 WHERE id=$1',[page.pageId,sequence]);

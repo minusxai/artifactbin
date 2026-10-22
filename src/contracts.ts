@@ -41,6 +41,10 @@ export interface RemoteReference {
   share: string;
   head?: SourceRevision;
 }
+/** Imported state replay is separate from whether the original source exists. */
+export type CommentStateReplay =
+ | { status: "available"; viewport: "document-start" }
+ | { status: "unavailable"; reason: "source-unavailable" | "unsupported-format" | "invalid-state" | "unproven-signal" | "unproven-value" };
 export interface CommentDraft {
   id: Id;
   nodeId: Id | null;
@@ -58,6 +62,7 @@ export interface Comment extends Omit<CommentDraft, "sourceRevision"> {
   sourceRevision: SourceRevision | null;
   /** Absent on ordinary comments; unavailable historical context is never replayed. */
   context?: CommentContextStatus;
+  stateReplay?: CommentStateReplay;
   appStateId: Id | null;
   publishedBy: string | null;
   createdAt: string;

@@ -397,7 +397,7 @@ test(
       );
       assert.equal(
         (await q(`count(*)::int AS n FROM "${schema}".snapshots`)).rows[0].n,
-        1,
+        0,
       );
       assert.equal(
         (await q(`access->>'visibility' AS v FROM "${schema}".files`)).rows[0]

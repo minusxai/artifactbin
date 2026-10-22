@@ -20,6 +20,7 @@ function decodeComment(r: Record<string, unknown>): AcceptedComment {
     body: r.body as string,
     sourceRevision: r.source_revision as string | null,
     ...(r.context_status ? { context: r.context_status as AcceptedComment["context"] } : {}),
+    ...(r.state_replay ? {stateReplay:r.state_replay as AcceptedComment["stateReplay"]}:{}),
     parentId: r.parent_id as string | null,
     appStateId: r.app_state_id as string | null,
     publishedBy: r.published_by as string,
