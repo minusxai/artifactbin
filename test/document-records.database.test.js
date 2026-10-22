@@ -66,6 +66,7 @@ test("shared record readers load complete scalar headers and sessions, and disti
         expires: 123456,
         purpose: "backend",
         backendVersion: "v1",
+        groupAuthority: { actor: "owner", memberships: [] },
       });
       assert.equal(await loadSession(c, "missing"), null);
       assert.equal(await loadDocumentHeader(c, "missing"), null);
@@ -73,6 +74,7 @@ test("shared record readers load complete scalar headers and sessions, and disti
       const expected = {
         id: "File01",
         owner: "owner",
+        ownerKind: "user",
         shareHash: "hash",
         generation: 3,
         head: "1",

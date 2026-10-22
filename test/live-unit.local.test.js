@@ -48,6 +48,7 @@ async function fixture(t, heartbeatMs = 20) {
     ws.on("error", () => {});
     ws.on("message", (d) => messages.push(JSON.parse(d)));
     await once(ws, "open");
+    if (token === null) return { ws, messages, send: (m) => ws.send(JSON.stringify(m)) };
     const ready = once(ws, "message");
     ws.send(
       JSON.stringify({
@@ -225,4 +226,15 @@ test("arrival admission also bounds queued bytes while authorization is held", a
   await wait();
   assert.equal(f.reads(), count);
   assert.ok(!f.presence.get("file")?.session);
+});
+
+test("invalid unauthenticated frames close without unhandled rejection or presence", async (t) => {
+  const f = await fixture(t, 10000);
+  for (const raw of ["{broken", JSON.stringify({ type: "presence" }), JSON.stringify({ type: "auth", token: "bad", sessionId: "session", sourceRevision: "rev" })]) {
+    const a = await f.connect(null), closed = once(a.ws, "close");
+    a.ws.send(raw);
+    await closed;
+    assert.ok(a.messages.some((message) => message.type === "error"));
+    assert.equal(f.presence.size, 0);
+  }
 });

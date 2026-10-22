@@ -58,7 +58,7 @@ test("identity operations preserve unique accounts, atomically commit challenges
         value: "committed",
       };
     });
-    assert.deepEqual(await repository.readSession("hashed"), session);
+    assert.deepEqual(await repository.readSession("hashed"), { ...session, groupAuthority: { actor: session.actor, memberships: [] } });
     assert.equal(await repository.readSession("raw-secret"), null);
     await assert.rejects(
       repository.withEmailChallenge("other", () => ({

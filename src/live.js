@@ -32,7 +32,7 @@ export function liveHub({
   }
   function closeRevoked(ws, c) {
     const entries = presence.get(c.id);
-    if (entries?.[c.sessionId]?.actor === c.auth?.actor) delete entries[c.sessionId];
+    if (entries?.[c.sessionId] && c.auth && entries[c.sessionId].actor === c.auth.actor) delete entries[c.sessionId];
     ws.close(4403, "Access changed");
   }
   // A live authorization is a single-operation fact, never a durable socket grant.
@@ -121,7 +121,7 @@ export function liveHub({
       queue.length = 0;
       if (c.auth && c.sessionId) {
         const entries = presence.get(id);
-        if (entries?.[c.sessionId]?.actor === c.auth.actor)
+        if (entries?.[c.sessionId] && entries[c.sessionId].actor === c.auth.actor)
           delete entries[c.sessionId];
         broadcast(id, c.auth.file.generation);
       }
@@ -219,7 +219,7 @@ export function liveHub({
           message: e.status ? e.message : "Live connection failed",
         });
         const entries = presence.get(id);
-        if (entries?.[c.sessionId]?.actor === c.auth?.actor) delete entries[c.sessionId];
+        if (entries?.[c.sessionId] && c.auth && entries[c.sessionId].actor === c.auth.actor) delete entries[c.sessionId];
         ws.close(
           e.status === 403
             ? 4403
