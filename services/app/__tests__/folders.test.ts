@@ -54,7 +54,7 @@ describe('creating a folder', () => {
 
   it('refuses the retired folder field by name', async () => {
     const o = await owner();
-    const r = await create(o.token, { markup: '<h1>x</h1>', folder: '2026/08' });
+    const r = await create(o.token, { html: '<h1>x</h1>', folder: '2026/08' });
     expect(r.status).toBe(400);
     expect(r.body.error).toBe('folder_retired');
     expect(String(r.body.hint ?? r.body.details)).toContain('parent_id');
@@ -65,21 +65,21 @@ describe('filing under a folder', () => {
   it('a document created with parent_id carries the folder as its ancestors; nested folders extend it', async () => {
     const o = await owner();
     const f = (await create(o.token, { format: 'folder', title: 'Reports' })).body;
-    const d = await create(o.token, { markup: '<h1>Q3</h1>', title: 'Q3', parent_id: f.id });
+    const d = await create(o.token, { html: '<h1>Q3</h1>', title: 'Q3', parent_id: f.id });
     expect(d.status, JSON.stringify(d.body)).toBe(201);
     expect((await readBack(o.token, d.body.id)).body).toMatchObject({ parent_id: f.id, ancestor_ids: [f.id] });
     const sub = (await create(o.token, { format: 'folder', title: '2026', parent_id: f.id })).body;
-    const deep = (await create(o.token, { markup: '<p>deep</p>', parent_id: sub.id })).body;
+    const deep = (await create(o.token, { html: '<p>deep</p>', parent_id: sub.id })).body;
     expect((await readBack(o.token, deep.id)).body).toMatchObject({ parent_id: sub.id, ancestor_ids: [f.id, sub.id] });
   });
 
   it('a parent that is unknown, not a folder, or another owner\'s folder is one refusal: invalid_parent', async () => {
     const o = await owner('a');
     const other = await owner('b');
-    const doc = (await create(o.token, { markup: '<p>x</p>' })).body;
+    const doc = (await create(o.token, { html: '<p>x</p>' })).body;
     const theirs = (await create(other.token, { format: 'folder', title: 'Theirs' })).body;
     for (const parent_id of ['zzzzzz', doc.id, theirs.id]) {
-      const r = await create(o.token, { markup: '<p>y</p>', parent_id });
+      const r = await create(o.token, { html: '<p>y</p>', parent_id });
       expect(r.status, parent_id).toBe(400);
       expect(r.body.error, parent_id).toBe('invalid_parent');
     }
@@ -88,7 +88,7 @@ describe('filing under a folder', () => {
   it('parent validation runs AFTER the scope: a row this caller cannot reach is the uniform 404, whatever the body', async () => {
     const o = await owner('a');
     const stranger = await owner('b');
-    const doc = (await create(o.token, { markup: '<p>x</p>' })).body;
+    const doc = (await create(o.token, { html: '<p>x</p>' })).body;
     const r = await move(stranger.actor, doc.id, 'zzzzzz');
     expect(r.status).toBe(404);
   });
@@ -101,7 +101,7 @@ describe('filing under a folder', () => {
       expect(r.status, `level ${level}: ${JSON.stringify(r.body)}`).toBe(201);
       parent = r.body.id;
     }
-    const seventh = await create(o.token, { markup: '<p>7</p>', parent_id: parent });
+    const seventh = await create(o.token, { html: '<p>7</p>', parent_id: parent });
     expect(seventh.status).toBe(400);
     expect(seventh.body.error).toBe('invalid_parent');
   });
@@ -112,7 +112,7 @@ describe('moving', () => {
     const o = await owner();
     const a = (await create(o.token, { format: 'folder', title: 'A' })).body;
     const b = (await create(o.token, { format: 'folder', title: 'B', parent_id: a.id })).body;
-    const c = (await create(o.token, { markup: '<p>c</p>', parent_id: b.id })).body;
+    const c = (await create(o.token, { html: '<p>c</p>', parent_id: b.id })).body;
     const x = (await create(o.token, { format: 'folder', title: 'X' })).body;
     // document → root
     expect((await move(o.actor, c.id, null)).status).toBe(200);
@@ -147,7 +147,7 @@ describe('deleting and forking a folder', () => {
     const o = await owner();
     const f = (await create(o.token, { format: 'folder', title: 'F' })).body;
     const sub = (await create(o.token, { format: 'folder', title: 'S', parent_id: f.id })).body;
-    const d = (await create(o.token, { markup: '<p>d</p>', parent_id: sub.id })).body;
+    const d = (await create(o.token, { html: '<p>d</p>', parent_id: sub.id })).body;
     const gone = await j(await deleteRoute(request(`/api/artifacts/${f.id}`, { method: 'DELETE', token: o.token }), params(f.id)));
     expect(gone.status).toBe(200);
     expect(gone.body.error).toBeUndefined();
@@ -169,8 +169,8 @@ describe('deleting and forking a folder', () => {
     const o = await owner();
     const stranger = await owner('stranger');
     const f = (await create(o.token, { format: 'folder', title: 'F' })).body;
-    const mine = (await create(o.token, { markup: '<p>mine</p>', parent_id: f.id })).body;
-    const theirs = (await create(stranger.token, { markup: '<p>theirs</p>' })).body;
+    const mine = (await create(o.token, { html: '<p>mine</p>', parent_id: f.id })).body;
+    const theirs = (await create(stranger.token, { html: '<p>theirs</p>' })).body;
     const db = await getDb();
     await db.query('UPDATE artifacts SET ancestor_ids = $2::text[] WHERE id = $1', [theirs.id, [f.id]]);
 
@@ -220,27 +220,27 @@ describe('a folder is not a document', () => {
       request(`/api/artifacts/${folder.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: folder.edit_id, source: '<p>After</p>' } }),
       params(folder.id),
     ));
-    expect(refusedFolder.status).toBe(400);
-    expect(refusedFolder.body).toMatchObject({ error: 'invalid_edit_body' });
+    expect(refusedFolder.status).toBe(404);
+    expect(refusedFolder.body).toMatchObject({ error: 'not_found' });
     expect((await getArtifactById(folder.id))!.title, 'the title is unchanged').toBe('Before');
     const ds = (await create(o.token, { dataset: [{ a: 1 }] })).body;
     const refused = await j(await editRoute(
       request(`/api/artifacts/${ds.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: ds.edit_id, source: '<p>No</p>' } }),
       params(ds.id),
     ));
-    expect(refused.status).toBe(400);
-    expect(refused.body).toMatchObject({ error: 'invalid_edit_body' });
+    expect(refused.status).toBe(404);
+    expect(refused.body).toMatchObject({ error: 'not_found' });
   });
 
   it('the list carries parent_id and ancestor_ids and the shelf files folders in their own partition', async () => {
     const o = await owner();
     const f = (await create(o.token, { format: 'folder', title: 'F' })).body;
-    await create(o.token, { markup: '<p>d</p>', parent_id: f.id });
+    await create(o.token, { html: '<p>d</p>', parent_id: f.id });
     const list = await j(await listRoute(request('/api/artifacts', { token: o.token })));
     expect(list.status).toBe(200);
     const rows: any[] = list.body.artifacts;
     expect(rows.find((r) => r.id === f.id)).toMatchObject({ format: 'folder', parent_id: null, ancestor_ids: [] });
-    expect(rows.find((r) => r.format === 'markup')).toMatchObject({ parent_id: f.id, ancestor_ids: [f.id] });
+    expect(rows.find((r) => r.format === 'html')).toMatchObject({ parent_id: f.id, ancestor_ids: [f.id] });
     for (const r of rows) expect(r).not.toHaveProperty('folder');
     const shelf = buildShelf(rows.map((r) => ({ ...r, updated_at: r.updated_at })));
     expect(shelf.folders.map((r: any) => r.id)).toEqual([f.id]);
@@ -380,7 +380,7 @@ describe("a folder's PUT is a metadata edit", () => {
     }
     // …and the PATCH door is not folder-only: a DOCUMENT renames through it too.
     // (From folder-page.test.ts, which asserted the folder half a second time.)
-    const doc = (await create(o.token, { markup: '<h1>x</h1>', title: 'Doc' })).body;
+    const doc = (await create(o.token, { html: '<h1>x</h1>', title: 'Doc' })).body;
     const renamed = await j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { title: 'Doc renamed' }, actor: o.actor, origin: 'same' }), params(doc.id)));
     expect(renamed.status, JSON.stringify(renamed.body)).toBe(200);
     expect((await getArtifactById(doc.id))!.title).toBe('Doc renamed');
