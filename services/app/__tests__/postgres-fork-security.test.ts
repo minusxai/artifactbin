@@ -46,38 +46,17 @@ it('refuses a shared editor fork and copying the dataset-bound secret into a new
  const copied=await create(request('/api/artifacts',{method:'POST',token:editor.token.token,json:{dataset:definition,visibility:'public'}}));expect(copied.status).toBe(403);
  expect(Number((await artifactQuery<{n:string}>(db,'SELECT count(*) n FROM artifacts')).rows[0].n)).toBe(1);
 });
-/*
- * A POSTGRES dataset is the one target a deep fork never copies: the copy would
- * name a catalog whose password stays bound to the original
- * (`postgresForkRefusal`), so it could not answer a single query. The ref is
- * left exactly as it is, and whatever the publish door already said about it,
- * it keeps saying.
- *
- * A <Mutation> over a Postgres dataset is refused TWICE at publish — `access:
- * readwrite` is refused on the dataset itself (artifact-wire, "Postgres
- * datasets are read-only") and the stored mutation compiler refuses the
- * statement ("only stored datasets are writable") — so the page cannot be
- * published by anyone, its own owner included. The plan is asserted directly
- * for that reason: there is no door that builds the page the plan must skip.
- * What IS reachable is a page that READS one, and it forks with its ref intact.
- */
-it('a native page fork retains the Postgres ref without copying its secret-bound dataset',async()=>{
- const owner=await user('pg-writer'),forker=await user('pg-forker'),{id}=await postgresDataset(owner),db=await harness.db();
+/** Native GraphQL bindings accept stored datasets only; refusal must not copy a credential-bound catalog. */
+it('refuses an unsupported Postgres page binding without creating a page or copying its secret',async()=>{
+ const owner=await user('pg-writer'),forker=await user('pg-forker'),{id,definition}=await postgresDataset(owner),db=await harness.db();
  const actor=identityForUser(forker.account.id, forker.token.id);
  const html=`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${id}"></head><body>Live rows</body></html>`;
  expect(await forkDatasetPreview(actor,{format:'html',source:html} as ArtifactRow)).toEqual([]);
- const page=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{visibility:'public',title:'Live rows',
-  html}}));
- expect(page.status,await page.clone().text()).toBe(201);
- const before=Number((await artifactQuery<{n:string}>(db,'SELECT count(*) n FROM artifacts')).rows[0].n);
- current.id=forker.account.id;current.email=forker.account.email??'';
- const pageId=(await page.json()).id as string;
- const preview=await forkRoute(request(`/api/my/artifacts/${pageId}/fork`,{method:'POST',json:{dry_run:true}}),ctx(pageId));
- expect(preview.status,await preview.clone().text()).toBe(200);
- expect(await preview.json()).toEqual({datasets:[]});
- expect(Number((await artifactQuery<{n:string}>(db,'SELECT count(*) n FROM artifacts')).rows[0].n)).toBe(before);
- const forked=await forkRoute(request(`/api/my/artifacts/${pageId}/fork`,{method:'POST'}),ctx(pageId));
- expect(forked.status,await forked.clone().text()).toBe(201);
- const copy=(await artifactQuery<{source:string}>(db,'SELECT document,source FROM artifacts WHERE id=$1',[(await forked.json()).id])).rows[0]!;
- expect(copy.source).toContain(`ref:${id}`);
+ const count=async()=>Number((await artifactQuery<{n:string}>(db,'SELECT count(*) n FROM artifacts')).rows[0].n);
+ const before=await count();
+ const page=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{visibility:'public',title:'Live rows',html}}));
+ expect(page.status).toBe(400);expect(await page.json()).toMatchObject({error:'dataset_stable_identity_unavailable'});
+ expect(await count()).toBe(before);
+ expect((await artifactQuery<{dataset_id:string}>(db,'SELECT dataset_id FROM dataset_secrets WHERE id=$1',[definition.connection.passwordSecretId])).rows).toEqual([{dataset_id:id}]);
+ expect(Number((await artifactQuery<{n:string}>(db,'SELECT count(*) n FROM dataset_secrets')).rows[0].n)).toBe(1);
 });
