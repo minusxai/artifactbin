@@ -504,7 +504,7 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
   )) {
     const page = (
       await db.query(
-        "SELECT f.owner,a.principal_kind FROM files f JOIN accounts a ON a.actor=f.owner WHERE f.id=$1 FOR UPDATE",
+        "SELECT f.owner,a.principal_kind FROM files f JOIN accounts a ON a.actor=f.owner WHERE f.id=$1 FOR UPDATE OF f FOR SHARE OF a",
         [receipt.pageId],
       )
     ).rows[0];
