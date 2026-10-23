@@ -6,7 +6,7 @@ export interface HtmlAnnotationPaint { pins: readonly HtmlAnnotationPin[]; mode:
 export interface HtmlAnnotationPosition { id: string; status: 'exact' | 'missing' | 'ambiguous'; rect: { x: number; y: number; width: number; height: number } }
 const box = (rect: { x: number; y: number; width: number; height: number }) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
 /** Resolve identities only in their declared scope; missing/duplicate scopes never fall back globally. */
-export function htmlAnchorElements(doc:Document,nodeId:string,ancestorId?:string):Element[]{
+function htmlAnchorElements(doc:Document,nodeId:string,ancestorId?:string):Element[]{
  const nodes=[...doc.querySelectorAll('[data-af-id]')];
  const ancestors=ancestorId ? nodes.filter(node=>node.getAttribute('data-af-id')===ancestorId) : null;
  const scope=ancestors ? ancestors.length===1 ? [...ancestors[0]!.querySelectorAll('[data-af-id]')] : [] : nodes;
