@@ -25,6 +25,7 @@ export function legacyCellWriteQueryColumns(
       throw Error("Invalid cell query");
     names.add(q.name.toLowerCase());
   }
+  const origins = new Map<string,{schema:string;table:string;column:string}>();
   let pending = [...queries];
   while (pending.length) {
     const next: LegacyCellWriteQuery[] = [];
@@ -53,7 +54,10 @@ export function legacyCellWriteQueryColumns(
               ? c.declaredType
               : null;
           all.push({ name: c.name, type: type ?? "string" });
-          if (type || sourceAdmission==="offline-prototype") known.push({ name: c.name, type });
+          const origin=c.origin?.schema.toLowerCase()==="main"
+            ? origins.get(key(c.origin.table,c.origin.column)) : c.origin;
+          if(origin)origins.set(key(q.name,c.name),origin);
+          if (type || sourceAdmission==="offline-prototype") known.push({ name: c.name, type, ...(origin?{origin}: {}) });
           if (!type) unknown.add(key(q.name, c.name));
         }
         db.createTable({ schema: "main", table: q.name, columns: all });

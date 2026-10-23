@@ -93,7 +93,7 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
         const mutationName = ref(run),
           value = selected("value");
         if (!mutationName || value !== "$_row." + next.column) refuse();
-        if (tag === "Select" && selected("options") === undefined) refuse();
+        const implicitUserOptions = tag === "Select" && selected("options") === undefined;
         if (
           tag === "input" &&
           !["text", "number", "date", "datetime-local", undefined].includes(
@@ -165,7 +165,7 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
           )
         )
           refuse();
-        if (tag === "Select")
+        if (tag === "Select" && !implicitUserOptions)
           admitDataControl("Select", {
             value: "$cell",
             options: selected("options"),
@@ -184,6 +184,7 @@ export const readLegacyCellWriteSites: ReadLegacyCellWriteSites = (
               : "string",
           } : {}),
           ...(optionsQuery ? { optionsQuery } : {}),
+          ...(implicitUserOptions ? {implicitUserOptions:true as const}:{}),
         };
         out.push(site);
         visit?.(node, site);
@@ -223,6 +224,7 @@ export const typeLegacyCellWriteSites: TypeLegacyCellWriteSites = (
       )
     )
       refuse();
+    if(site.implicitUserOptions && fields[0]?.type!=="user")refuse();
     const type = fieldType!,
       prior = mutations.get(site.mutationName);
     if (prior !== undefined && prior !== type) refuse();

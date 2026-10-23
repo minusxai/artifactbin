@@ -43,7 +43,7 @@ test("editing cells refuse missing row identity, mismatched fields, ambient user
   for (const input of [
     source.replace(' rowKey="id"', ""),
     source.replace("$_row.title", "$_row.other"),
-    source.replace(' options="$choices"', ""),
+
     '<input value="$_row.title" run="$save"/>',
   ])
     assert.throws(() => readLegacyCellWriteSites(input));
@@ -195,4 +195,13 @@ test('prototype Select keeps custom trigger presentation with the same mutation 
  const sites=readLegacyCellWriteSites(source,undefined,'offline-prototype');
  assert.equal(sites.length,1);assert.equal(sites[0]!.mutationName,'save');assert.equal(sites[0]!.column,'title');
  assert.throws(()=>readLegacyCellWriteSites(source.replace('type="button"','run="$other"'),undefined,'offline-prototype'));
+});
+test("implicit Select choices require proven user column, never string or computed fallback",()=>{
+ const source='<DataTable data="$rows" rowKey="id"><Column col="owner"><Select value="$_row.owner" run="$save_owner"/></Column></DataTable>';
+ const sites=readLegacyCellWriteSites(source);
+ assert.equal(sites[0]?.implicitUserOptions,true);
+ for(const mode of ["strict","offline-prototype"] as const){
+  assert.equal(typeLegacyCellWriteSites(sites,{rows:[{name:"id",type:"string"},{name:"owner",type:"user"}]},mode)[0]?.type,"user");
+  for(const type of ["string",null] as const)assert.throws(()=>typeLegacyCellWriteSites(sites,{rows:[{name:"id",type:"string"},{name:"owner",type}]},mode));
+ }
 });

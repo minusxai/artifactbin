@@ -34,6 +34,8 @@ export interface LegacyMutationDescriptor {
   valueParam?: DatasetMutationValueParameter;
   /** Read-only accepted joins of the current executing page. */
   readsMembers?: true;
+  /** Offline exact column origin, retained server-side for authorized implicit choices. */
+  cellUserChoice?: {name:string;column:string;bindingName:string;schema:string;table:string;sourceColumn:string};
   expectedAffected?: number;
   /** Viewer-local fields reset only after confirmed commit and only if still unchanged. */
   reset?: readonly string[];

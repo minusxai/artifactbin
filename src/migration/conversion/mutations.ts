@@ -297,6 +297,7 @@ export async function extractLegacyMutations(
         });
       }
     }
+    const cellUserChoices=new Map<string,NonNullable<import("./mutation-contracts.ts").LegacyMutationDescriptor["cellUserChoice"]>>();
     const cellTypes = new Map<
       string,
       import("../../datasets/contracts.ts").DatasetColumn["type"]
@@ -324,12 +325,25 @@ export async function extractLegacyMutations(
           return { name, sql: builtinSql(sql).sql };
         },
       );
+      const queryColumns=legacyCellWriteQueryColumns(db,queries,sourceAdmission);
       const typed = typeLegacyCellWriteSites(
         readLegacyCellWriteSites(source,undefined,sourceAdmission),
-        legacyCellWriteQueryColumns(db, queries,sourceAdmission),
+        queryColumns,
         sourceAdmission,
       );
-      for (const site of typed) cellTypes.set(site.mutationName, site.type);
+      for (const site of typed) {
+        cellTypes.set(site.mutationName, site.type);
+        if(site.implicitUserOptions){
+          const origin=queryColumns[site.dataName]?.find(c=>c.name===site.column)?.origin;
+          const catalog=origin&&catalogByAlias.get(origin.schema.toLowerCase());
+          const table=catalog?.tables.find(t=>t.name.toLowerCase()===origin?.table.toLowerCase());
+          if(!origin||!catalog||!table||!table.columns.some(c=>c.name===origin.column&&c.type==="user"))throw Error("Implicit choices require exact imported user origin");
+          const descriptor={name:site.dataName,column:site.column,bindingName:catalog.name,schema:table.schema,table:table.name,sourceColumn:origin.column};
+          const prior=cellUserChoices.get(site.mutationName);
+          if(prior&&JSON.stringify(prior)!==JSON.stringify(descriptor))throw Error("Ambiguous implicit choice binding");
+          cellUserChoices.set(site.mutationName,descriptor);
+        }
+      }
     }
     const names = new Set<string>();
     for (const d of declarations) {
@@ -406,6 +420,7 @@ export async function extractLegacyMutations(
         }
         result.mutations.push({
           name: d.name,
+          ...(cellUserChoices.has(d.name)?{cellUserChoice:cellUserChoices.get(d.name)!}:{}),
           bindingName: catalog.name,
           datasetLegacyId: catalog.datasetLegacyId,
           target: { schema: table.schema, table: table.name },

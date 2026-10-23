@@ -16,6 +16,7 @@ export interface CompiledMigrationInput {
   /** Source-owned static diagrams, overwritten before offline preparation. */
   mermaids?: readonly import("./mermaid-contracts.ts").CompiledMermaidPlan[];
   /** Public routing only; matched against trusted bound Value proofs at admission. */
+  cellUserChoiceBindings?: readonly import("./cell-user-choice-contracts.ts").CompiledCellUserChoiceBinding[];
   personBindings?: readonly import("./person-contracts.ts").CompiledPersonBinding[];
   /** Source-derived static slide navigation, overwritten at admission. */
   slideDeck?: import("./slide-deck-contracts.ts").CompiledSlideDeck;
