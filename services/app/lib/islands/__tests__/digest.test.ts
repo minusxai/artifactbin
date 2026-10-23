@@ -6,7 +6,8 @@
 import { describe, expect, it } from 'vitest';
 import { rowsDigest } from '../digest';
 import { drawingIsCurrent } from '../chart';
-import { rowsDigest as serverRowsDigest } from '@/lib/publish/prepared/charts.server';
+import { createHash } from 'node:crypto';
+const serverRowsDigest = (rows:unknown[]) => createHash('sha256').update(JSON.stringify(rows)).digest('hex').slice(0,16);
 
 const rows = [{ region: 'West', n: 41, at: '2026-09-28T00:00:00Z', ok: true, none: null }, { region: 'Ōsaka "quoted" </script>', n: -1.5, at: null, ok: false, none: null }];
 

@@ -19,7 +19,6 @@ import { parseContentInput } from '@/lib/publish/document/input';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
-import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 
 const harness = useAppHarness();
 
@@ -60,7 +59,6 @@ describe('themes on stored rows', () => {
       )
     ).json();
     // Let the publish warmup finish before simulating a legacy stored row.
-    await drainPreparedPageWarmups();
     const db = await harness.db();
     await db.query(
       `UPDATE artifacts SET meta = meta || '{"theme":"nocturne","colorMode":null,"cssCompileVersion":"v-legacy","compiledCss":".stale-theme-sentinel{}"}' WHERE id = $1`,
@@ -75,8 +73,7 @@ describe('themes on stored rows', () => {
       expect(html, phase).toMatch(/<html[^>]*class="dark"/);
       expect(html, phase).not.toContain('stale-theme-sentinel');
       expect(html, phase).toContain('[data-theme="nocturne"]');
-      await drainPreparedPageWarmups();
-    }
+      }
   });
 });
 

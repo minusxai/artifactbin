@@ -57,7 +57,7 @@ export default {
         'lib/html-runtime/{browser-client,build.server,index}.ts',
         'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
         // Server bundle workers (scripts/build/build-server.mjs).
-        'lib/publish/prepared/draft-compile-worker.ts', 'lib/runner/runtime.ts',
+        'lib/runner/runtime.ts',
         // Build and generator scripts run by path (scripts/lib/afbin-run.mjs, scripts/lib/dev-runner.mjs, CI).
         'scripts/{build-libraries,build-server-reader,generate-geo-boundaries}.mjs',
         'skills/**/*.jsx',

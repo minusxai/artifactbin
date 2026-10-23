@@ -7,7 +7,6 @@ import {POST as apiMutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {POST as browserMutate} from '@/app/a/[id]/mutate/route';
 import {getArtifactById,declarationsForRow} from '@/lib/artifacts';
 import {liveFrameFor} from '@/lib/publish/data/frame';
-import {readerIslandData} from '@/lib/publish/prepared/prepare-runtime.server';
 import {getDb} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {services,setServices} from '@/lib/platform';
@@ -74,9 +73,8 @@ it('projects notification rules out of page bootstrap and live-frame runtime dat
  const {document}=await fixture('',true);const row=(await getArtifactById(document.id))!;
  const declared=(await declarationsForRow(row))!;
  expect(declared.flow.notifications).toHaveLength(2);
- const runtime=readerIslandData({refData:{},dataflow:{flow:declared.flow}});
  const frame=await liveFrameFor(row);
- for(const flow of [runtime.dataflow?.flow,frame.dataflow?.flow]){
+ for(const flow of [frame.dataflow?.flow]){
   expect(flow).toBeDefined();expect(flow!.notifications).toBeUndefined();
   expect(flow!.mutations[0]?.notifies).toBe(true);
   expect(JSON.stringify(flow)).not.toContain('first_status');

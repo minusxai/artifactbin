@@ -29,7 +29,6 @@ import { setServices } from '@/lib/platform';
 import { attachDomain, removeDomain, setDomainResolver, verifyDomain, type DomainResolver } from '@/lib/serving';
 import { mintToken } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
-import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { urlHash } from '@/lib/document/asset-url';
 import { claimToken, createUser, setUsername } from '@/lib/accounts';
@@ -351,7 +350,6 @@ describe('everything else on a verified host is 404', () => {
 
   it('serves the live story fragment for the owner\'s public post as a guest', async () => {
     const w = shared();
-    await drainPreparedPageWarmups();
     const fragment = await app().request(`${HOST}/a/${w.post.id}/story`, { headers: { cookie: 'authjs.session-token=forged' } });
     expect(fragment.status, await fragment.clone().text()).toBe(200);
     expect(await fragment.text()).toContain('Hello from my blog');

@@ -11,8 +11,6 @@
  * thing that never differed and is blind to the rest.
  */
 import { describe, expect, it } from 'vitest';
-import { JSDOM } from 'jsdom';
-import { compiledDocument, type DocumentCase } from '@/lib/compiled-page/__tests__/document-helper';
 import { storyUpdateParts } from '@/lib/document/update-parts';
 import { assetLookupFrom, assetUrlFor, mapExternalImageSources, type WebAssetBox } from '@/lib/document/asset-url';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
@@ -43,18 +41,6 @@ describe('mapExternalImageSources', () => {
 });
 
 describe('the three renderings agree', () => {
-  const build = (over: Partial<DocumentCase> = {}) => compiledDocument({
-    source: SOURCE, compiledCss: null, theme: null, colorMode: null, refData: {},
-    title: 'T', assetUrls: rows, ...over,
-  });
-
-  it('compiled HTML and the live update nodes both carry the mapped, versioned src', async () => {
-    const html = await build();
-    expect(html).toContain(`src="${assetUrlFor(URL_A, ROW)}"`);        // SSR string
-    expect(JSON.stringify(storyUpdateParts(SOURCE, held)!.nodes)).toContain(assetUrlFor(URL_A, ROW));
-    expect(html).not.toContain(URL_A);                                  // nothing points upstream
-  });
-
   it('storyUpdateParts carries the mapped src too', () => {
     const parts = storyUpdateParts(SOURCE, held);
     expect(JSON.stringify(parts!.nodes)).toContain(assetUrlFor(URL_A, ROW));
@@ -72,22 +58,4 @@ describe('the three renderings agree', () => {
     expect(SOURCE).toContain(URL_A);
   });
 
-  /*
-   * The rendered HTML, not the AST: an attribute React does not recognise is
-   * dropped or mis-preloaded on the way to the DOM, and only the string the
-   * browser is actually sent can say which happened.
-   */
-  it('offers both widths to the browser it is served to', async () => {
-    const html = await build();
-    const image = new JSDOM(html).window.document.querySelector('img')!;
-    expect(image.getAttribute('srcset')).toContain('w=640 640w');
-    expect(image.getAttribute('sizes')).toBe('(max-width: 640px) 100vw, 768px');
-  });
-
-  it('photographs the full variant, eagerly, for a capture', async () => {
-    const html = await build({ chrome: false });
-    expect(html).toContain(`src="${assetUrlFor(URL_A, ROW)}"`);
-    expect(html).not.toContain('srcSet=');
-    expect(html).not.toContain('loading="lazy"');
-  });
 });

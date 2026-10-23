@@ -18,8 +18,6 @@ export { loadSsrModule } from '../compiled-page/bundle.server';
 export { documentStyleSheets } from '../page-styles';
 
 // ---- Story runtime: the prepared runtime, its island data and the document CSS.
-export { prepareStoryRuntime } from '../publish/prepared/prepare-runtime.server';
-export type { PreparedStoryRuntime } from '../publish/prepared/prepared-runtime';
 export { ISLANDS_PATH } from '../story-runtime/contract';
 export type { ServedResults, StoryIslandData } from '../story-runtime/contract';
 export { compileStoryCss, compileStoryCssWithExtras } from '../data/story/story-css.server';

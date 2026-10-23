@@ -6,7 +6,6 @@ import { createAppServer } from '@/server/app';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
-import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { request, useAppHarness } from './harness';
 
 useAppHarness();
@@ -49,7 +48,6 @@ it('serves the one Solid entry for every address the app answers, whatever the f
     file: await publish({ title: 'Notes', file: { filename: 'notes.txt', contentType: 'text/plain', base64: Buffer.from('hi').toString('base64') } }),
     starter: await publish({ title: null, markup: START_PLACEHOLDER_MARKUP }),
   };
-  await drainPreparedPageWarmups();
   for (const [format, id] of Object.entries(served)) {
     const response = await app.request(`http://localhost/a/${id}`, { headers: accept });
     expect(response.status, format).toBe(200);
