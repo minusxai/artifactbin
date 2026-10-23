@@ -59,3 +59,21 @@ const changed=await client.mutate({mutation:gql`mutation {garden{increment}}`});
 Direct authenticated clients use `GET /api/artifacts/ID/graphql?revision=VERSION` for `{sdl,revision}`. Run `POST /api/artifacts/ID/graphql` with `{"revision":"VERSION","query":"query {garden{count}}","variables":{}}`; omit optional variables/operationName when absent. Query the schema for the saved page version being used. GraphQL errors and permission refusals are failures, not successful results.
 
 The shared-app example keeps tasks in the backend store and a display preference in viewer-local Apollo state. Check it as an editor and a viewer; viewers must not be able to run the editor mutation.
+
+## Owner secret bindings
+
+A backend can declare `export const secretBindings = ['API_TOKEN']` and read a
+configured value with `await caps.secrets.get('API_TOKEN')`. Names must be unique
+uppercase identifiers (at most 32 names, each at most 64 characters). Values are
+never published in HTML, source, immutable metadata or downloads. Each value is
+encrypted separately for that backend file and its owner.
+
+Using the original authenticated session or bearer token, the owner configures
+`/api/my/backends/BACKEND_ID/VERSION/secrets`: `PUT {"name":"API_TOKEN","value":"…"}`
+sets or rotates a value; `DELETE {"name":"API_TOKEN"}` revokes it; `GET` lists
+configured names only. Responses never include values. Other page editors cannot
+configure owner credentials. A published version must declare the name; missing
+or revoked bindings fail. Rotation and revocation take effect on the next read,
+including for older published versions. Never return credentials from resolvers
+or write them into shared state. Platform receipts and events redact literal
+values read during that run; this does not prevent owner-authored network leaks.

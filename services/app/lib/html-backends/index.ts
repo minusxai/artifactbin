@@ -12,8 +12,8 @@ export async function commitHtmlBackends(tx:Queryable,pageId:string,ownerId:stri
   // A removed name still recovers its own stable backend ID when explicitly reintroduced.
   const old=prior?.backendId??(await tx.query<{backend_id:string}>('SELECT backend_id FROM html_backend_versions WHERE page_id=$1 AND name=$2 LIMIT 1',[pageId,backend.name])).rows[0]?.backend_id;
   const backendId=old??generateFileId();
-  const version=createHash('sha256').update(JSON.stringify([backend.source,backend.typeDefs,backend.compiled])).digest('hex');
-  await tx.query(`INSERT INTO html_backend_versions(backend_id,version,page_id,name,source,type_defs,compiled,owner_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,[backendId,version,pageId,backend.name,backend.source,backend.typeDefs,backend.compiled,ownerId]);
+  const version=createHash('sha256').update(JSON.stringify([backend.source,backend.typeDefs,backend.compiled,backend.secretBindings??[]])).digest('hex');
+  await tx.query(`INSERT INTO html_backend_versions(backend_id,version,page_id,name,source,type_defs,compiled,owner_id,secret_bindings) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb) ON CONFLICT DO NOTHING`,[backendId,version,pageId,backend.name,backend.source,backend.typeDefs,backend.compiled,ownerId,JSON.stringify(backend.secretBindings??[])]);
   await tx.query('INSERT INTO html_backend_stores(backend_id,value,version) VALUES($1,NULL,0) ON CONFLICT DO NOTHING',[backendId]);
   links.push({kind:'backend',name:backend.name,backendId,version});
  }
@@ -21,8 +21,8 @@ export async function commitHtmlBackends(tx:Queryable,pageId:string,ownerId:stri
 }
 /** Internal execution adapter: access is established by the resolved immutable page link. */
 export async function getHtmlBackendVersion(backendId:string,version:string):Promise<HtmlBackendVersionRecord|null>{
- const row=(await (await getDb()).query<{backend_id:string;page_id:string;name:string;version:string;source:string;type_defs:string;compiled:string;owner_id:string}>('SELECT * FROM html_backend_versions WHERE backend_id=$1 AND version=$2',[backendId,version])).rows[0];
- return row?{backendId:row.backend_id,pageId:row.page_id,name:row.name,version:row.version,source:row.source,typeDefs:row.type_defs,compiled:row.compiled,ownerId:row.owner_id}:null;
+ const row=(await (await getDb()).query<{backend_id:string;page_id:string;name:string;version:string;source:string;type_defs:string;compiled:string;owner_id:string;secret_bindings:string[]}>('SELECT * FROM html_backend_versions WHERE backend_id=$1 AND version=$2',[backendId,version])).rows[0];
+ return row?{backendId:row.backend_id,pageId:row.page_id,name:row.name,version:row.version,source:row.source,typeDefs:row.type_defs,compiled:row.compiled,ownerId:row.owner_id,secretBindings:row.secret_bindings??[]}:null;
 }
 export async function getHtmlBackendStore(backendId:string):Promise<HtmlBackendStoreValue>{
  const row=(await (await getDb()).query<{value:HtmlJson|null;version:number}>('SELECT value,version FROM html_backend_stores WHERE backend_id=$1',[backendId])).rows[0];

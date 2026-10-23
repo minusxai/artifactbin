@@ -3,6 +3,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 import type { RunStart, RunLookup, RunReceipt, RunnerJson, RunnerLimits, RunnerService, RunEvent, RunSnapshot } from '@artifactbin/contracts';
+import {redactRunSecrets} from './secret-redaction';
 import { bundleSource } from './compiler';
 import { initializeStore, ownedRun, type RunnerDatabase, type RunRow } from './store';
 const worker = fileURLToPath(new URL('./runner-worker.mjs', import.meta.url));
@@ -42,6 +43,7 @@ interface Active {
     eventBytes: number;
     rpcCount: number;
     requestCount: number;
+    secrets: Set<string>;
     inflight: Set<number>;
     tail: Promise<unknown>;
     requests: RunReceipt['requests'];
@@ -117,7 +119,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 reason = 'event_persistence_failed';
                 output = null;
             }
-            await persist(id, { admitted_at: run.admittedAt, started_at: run.startedAt }, status, reason, output, run.requests, run.usage, cpuMs);
+            await persist(id, { admitted_at: run.admittedAt, started_at: run.startedAt }, status, reason===null?null:String(redactRunSecrets(reason,run.secrets)), redactRunSecrets(output,run.secrets), run.requests, run.usage, cpuMs);
             active.delete(id);
             run.resolve();
             void pump();
@@ -167,7 +169,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
         try {
             let value: RunnerJson;
             if (msg.operation === 'emit') {
-                const event = msg.args ?? null;
+                const event = redactRunSecrets(msg.args ?? null,r.secrets);
                 r.eventBytes += Buffer.byteLength(json(event, 256 * 1024));
                 if (r.sequence >= 1000 || r.eventBytes > 4 * 1024 * 1024)
                     throw Error('event_limit');
@@ -180,7 +182,9 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
             else {
                 if (msg.operation !== 'ai.next' && ++r.requestCount > r.limits.maxRequests)
                     throw Error('request_limit');
+                if(msg.operation==='artifactbin.pageBackend.store.set'&&JSON.stringify(redactRunSecrets(msg.args??null,r.secrets))!==JSON.stringify(msg.args??null))throw Error('backend_secret_export_forbidden');
                 value = await options.capabilities({ runId: id, callId, request: r.request, signal: r.controller.signal, requests: r.requests, usage: r.usage }, msg.operation, msg.args ?? null);
+                if(msg.operation==='artifactbin.pageBackend.secrets.get'&&typeof value==='string'&&value.length)r.secrets.add(value);
             }
             if (!r.finishing)
                 r.child!.stdin.write(json({ type: 'response', id: callId, value }, 2 * 1024 * 1024) + '\n');
@@ -305,7 +309,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 }
                 let resolve!: () => void;
                 const done = new Promise<void>(r => resolve = r);
-                active.set(id, { request, bundle, limits, admittedAt, startedAt: null, controller: new AbortController(), resolve, done, sequence: 0, eventBytes: 0, rpcCount: 0, requestCount: 0, inflight: new Set(), tail: Promise.resolve(), requests: [], usage: [] });
+                active.set(id, { request, bundle, limits, admittedAt, startedAt: null, controller: new AbortController(), resolve, done, sequence: 0, eventBytes: 0, rpcCount: 0, requestCount: 0, secrets:new Set(), inflight: new Set(), tail: Promise.resolve(), requests: [], usage: [] });
                 void pump();
                 return { runId: id };
             }

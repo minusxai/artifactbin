@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 import type { HtmlJson, PageResolverFieldCall, RunnerService, RunStart, RunnerJson } from '@artifactbin/contracts';
 import { services } from '@/lib/platform';
 import { boundedBackendSchema } from './execution-policy';
+import {secretBindingNames} from '@/lib/html-backend-secrets/contracts';
 import { FieldFailed, FieldNotExecuted } from './contracts';
-export interface CompiledPageBackend {typeDefs:string;compiled:string}
+export interface CompiledPageBackend {typeDefs:string;compiled:string;secretBindings?:string[]}
 export interface PageBackendRecord extends CompiledPageBackend {backendId:string;version:string;source:string;ownerId:string;pageId:string}
 export interface PageBackendFetchResult {status:number;url:string;contentType:string;body:string}
 export type PageBackendFetcher=(url:string)=>Promise<PageBackendFetchResult>;
@@ -16,10 +17,10 @@ async function backendProgram(source:string):Promise<string>{
  const transformed=await transform(source,{loader:'ts',format:'cjs',target:'es2022'});
  return `const Backend=(()=>{const module={exports:{}};const exports=module.exports;${transformed.code};return module.exports})();
 export default async function(input,host){
- if(input.kind==='schema'){if(typeof Backend.typeDefs!=='string'||!Backend.default||typeof Backend.default!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs};}
+ if(input.kind==='schema'){if(typeof Backend.typeDefs!=='string'||!Backend.default||typeof Backend.default!=='object')throw Error('invalid_backend_exports');return {typeDefs:Backend.typeDefs,secretBindings:Backend.secretBindings??[]};}
  const fn=Backend.default[input.field];if(typeof fn!=='function')throw Error('missing_resolver');
  const principal=Object.freeze(input.principal);
- const caps=Object.freeze({fetch:async(url)=>{const r=await host.artifactbin.call('pageBackend.fetch',{url});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({'content-type':r.contentType}),text:async()=>r.body,json:async()=>JSON.parse(r.body)});},store:Object.freeze({get:()=>host.artifactbin.call('pageBackend.store.get',{}),set:async(value,options)=>{const result=await host.artifactbin.call('pageBackend.store.set',{value,expected:options.expected});if(!result.ok){const e=Error('conflict');e.code='conflict';throw e;}return result.version;}})});
+ const caps=Object.freeze({secrets:Object.freeze({get:(name)=>host.artifactbin.call('pageBackend.secrets.get',{name})}),fetch:async(url)=>{const r=await host.artifactbin.call('pageBackend.fetch',{url});return Object.freeze({ok:r.status>=200&&r.status<300,status:r.status,url:r.url,headers:Object.freeze({'content-type':r.contentType}),text:async()=>r.body,json:async()=>JSON.parse(r.body)});},store:Object.freeze({get:()=>host.artifactbin.call('pageBackend.store.get',{}),set:async(value,options)=>{const result=await host.artifactbin.call('pageBackend.store.set',{value,expected:options.expected});if(!result.ok){const e=Error('conflict');e.code='conflict';throw e;}return result.version;}})});
  return await fn(input.args,principal,caps);
  }`;
 }
@@ -41,7 +42,7 @@ export function createBackendCompiler(runner:RunnerService){return async(source:
  const compiled=await backendProgram(source);
  const result=await run(runner,{requestId:randomUUID(),userId:'page-backend-compiler',artifactId:'page-backend-compiler',artifactVersion:'compile',document:{source:compiled,editId:'compile'},program:{source:compiled,language:'javascript'},input:{kind:'schema'},limits},signal);
  if(!result||typeof result!=='object'||Array.isArray(result)||typeof result.typeDefs!=='string')throw Error('invalid_backend_exports');
- boundedBackendSchema(result.typeDefs);return {compiled,typeDefs:result.typeDefs};
+ boundedBackendSchema(result.typeDefs);return {compiled,typeDefs:result.typeDefs,secretBindings:secretBindingNames(result.secretBindings)};
 };}
 export function compilePageBackend(source:string,signal?:AbortSignal):Promise<CompiledPageBackend>{return createBackendCompiler(services().runner)(source,signal);}
 export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>){return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
@@ -50,11 +51,15 @@ export function createBackendInvoker(runner:RunnerService,load:(fileId:string,ve
  return run(runner,{requestId:randomUUID(),userId:backend.ownerId,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal);
 };}
 /** Called only by trusted runner composition using its admitted request snapshot. */
-export async function pageBackendCapability(store:PageBackendStore,request:RunStart,operation:string,args:RunnerJson,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,fetcher?:PageBackendFetcher):Promise<RunnerJson>{
+export async function pageBackendCapability(store:PageBackendStore,request:RunStart,operation:string,args:RunnerJson,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,fetcher?:PageBackendFetcher,secretReader?:(backend:PageBackendRecord,name:string)=>Promise<string>):Promise<RunnerJson>{
  if(!request.artifactId||!(request.input&&typeof request.input==='object'&&!Array.isArray(request.input)&&request.input.kind==='invoke'))throw Error('backend_capability_forbidden');
  const backend=request.artifactVersion?await load(request.artifactId,request.artifactVersion):null;
  const principal=request.input.principal;
  if(!backend||backend.backendId!==request.artifactId||backend.version!==request.artifactVersion||backend.ownerId!==request.userId||backend.compiled!==request.program.source||!principal||typeof principal!=='object'||Array.isArray(principal)||principal.tenant!==backend.pageId)throw Error('backend_capability_forbidden');
+ if(operation==='artifactbin.pageBackend.secrets.get'){
+  if(!secretReader||!args||typeof args!=='object'||Array.isArray(args)||typeof args.name!=='string'||!backend.secretBindings?.includes(args.name))throw Error('backend_secret_forbidden');
+  return secretReader(backend,args.name);
+ }
  if(operation==='artifactbin.pageBackend.fetch'){
   if(!fetcher||!args||typeof args!=='object'||Array.isArray(args)||typeof args.url!=='string'||args.url.length>8192)throw Error('backend_capability_forbidden');
   return {...await fetcher(args.url)};

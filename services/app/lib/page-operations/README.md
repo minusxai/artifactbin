@@ -35,3 +35,20 @@ examples import-free and never put credentials in HTML or browser configuration.
 
 An execution failure after admission has an unknown mutation outcome. The host
 never automatically retries it. Archived page revisions permit queries only.
+
+A backend may export `secretBindings = ['API_TOKEN']`. These names are immutable
+version metadata; values are held separately, encrypted and scoped to the backend
+file and its owner. A resolver reads a declared value with
+`await caps.secrets.get('API_TOKEN')`. Missing or revoked values fail closed.
+The host verifies the admitted owner, exact source version and declaration on
+every call, including direct capability calls.
+
+Owners configure values using the existing authenticated session or bearer API:
+`/api/my/backends/{backendId}/{version}/secrets` accepts `PUT {name,value}`,
+`DELETE {name}`, and `GET`. Responses contain configured names only. Page editors
+cannot configure another owner's credentials. Configuration never changes HTML,
+backend source, version metadata or download content. Rotation and revocation
+apply to already published versions immediately. Platform receipts and emitted
+events redact literal values read during that run; attempts to write those literal
+values into shared backend state are rejected. This is not a general information
+flow restriction on owner-authored backend network requests.

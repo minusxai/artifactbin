@@ -4,10 +4,11 @@ import type {RunnerJson,RunStart} from '@artifactbin/contracts';
 import {getHtmlBackendVersion,getHtmlBackendStore,setHtmlBackendStore} from '@/lib/html-backends';
 import {json} from '@/lib/http';
 import {fetchPageBackendResource} from './public-fetch';
+import {backendSecrets} from '@/lib/html-backend-secrets';
 import {pageBackendCapability} from './backend';
 const store={get:getHtmlBackendStore,set:setHtmlBackendStore};
 export async function localPageBackendCapability(request:RunStart,operation:string,input:RunnerJson,signal?:AbortSignal):Promise<RunnerJson>{
- return pageBackendCapability(store,request,operation,input,getHtmlBackendVersion,url=>fetchPageBackendResource(url,signal));
+ return pageBackendCapability(store,request,operation,input,getHtmlBackendVersion,url=>fetchPageBackendResource(url,signal),(backend,name)=>backendSecrets.get({ownerId:backend.ownerId,backendId:backend.backendId},backend.secretBindings??[],name));
 }
 /** Sole retained runner endpoint: accepts only host-attested, immutable file store calls. */
 export async function pageBackendOperation(request:Request,operation:string,input:RunnerJson,documentSource?:string):Promise<Response>{
