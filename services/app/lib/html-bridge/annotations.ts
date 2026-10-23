@@ -19,6 +19,7 @@ export function createHtmlAnnotationPainter(doc: Document) {
   Object.assign(overlay.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: '2147483646' });
   doc.documentElement.append(overlay);
   return {
+    ownsOverlay:(node:Node)=>node===overlay||overlay.contains(node),
     paint(input: HtmlAnnotationPaint): HtmlAnnotationPosition[] {
       overlay.replaceChildren();
       return input.pins.map((pin) => {

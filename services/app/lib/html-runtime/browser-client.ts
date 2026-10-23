@@ -27,6 +27,7 @@ export const client = createClient({ backends: config.backends ?? [], state, rem
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../story-runtime/contract';
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }
+import {observeHtmlDom} from '../html-bridge/observe';
 import { htmlSelection } from '../html-bridge/selection';
 import { createHtmlAnnotationPainter, htmlAnchorElements, type HtmlAnnotationPaint } from '../html-bridge/annotations';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
@@ -53,6 +54,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
   let suppressClick = false;
   let drag: { x: number; y: number; target: Node } | null = null;
   const layout = () => post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions: painter.paint(annotations) } });
+  const observation=observeHtmlDom(win,painter.ownsOverlay,()=>{if(annotations.pins.length)layout();});
   const click = (event: MouseEvent) => {
     if (suppressClick) { suppressClick = false; event.preventDefault(); return; }
     const target = (event.target as Element)?.closest?.('[data-af-id]');
@@ -120,6 +122,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
     },
     dispose() {
       relay = null;
+      observation.dispose();
       painter.dispose();
       win.document.documentElement.style.cursor = cursor;
       win.document.removeEventListener('keydown', key);

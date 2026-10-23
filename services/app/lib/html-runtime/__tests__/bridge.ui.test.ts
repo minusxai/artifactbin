@@ -87,3 +87,22 @@ it('captures dynamic IDs through the actual core bridge and clicks only the scop
  expect(events.map(item=>item.event).filter(event=>(event as {type?:string})?.type==='mx:annotation-pin')).toHaveLength(1);
  bridge.dispose();
 });
+it('batches authored DOM changes, ignores its own overlay and detaches observation',async()=>{
+ vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'p1',revision:'1',backends:[],savedNodeIds:['tasks']});
+ document.body.innerHTML='<ul data-af-id="tasks"><li data-af-id="task:123">Task</li></ul>';
+ const frames=new Map<number,FrameRequestCallback>();let next=0;
+ vi.spyOn(window,'requestAnimationFrame').mockImplementation(callback=>{frames.set(++next,callback);return next;});
+ vi.spyOn(window,'cancelAnimationFrame').mockImplementation(id=>{frames.delete(id);});
+ const {startFrameBridge}=await import('../browser-client');const events:Array<{kind:string;[key:string]:unknown}>=[];
+ const bridge=startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'p1',nodes:[],editId:'1',source:null}});
+ bridge.receive({kind:'send',command:{type:'mx:annotations',mode:'on',pins:[{id:'c1',path:'task:123',anchor:{kind:'html-node',v:1,revision:'1',nodeId:'task:123',ancestorId:'tasks',quote:''}}],openId:null,hoverId:null}});
+ await Promise.resolve();expect(frames.size).toBe(0);
+ document.querySelector('li')!.remove();document.querySelector('ul')!.append(document.createElement('li'));
+ await Promise.resolve();expect(frames.size).toBe(1);
+ const flush=()=>{const pending=[...frames.values()];frames.clear();for(const callback of pending)callback(0);};flush();await Promise.resolve();
+ const layout=events.map(item=>item.event as {type?:string;positions?:{status:string}[]}).filter(event=>event?.type==='mx:annotation-layout').at(-1);
+ expect(layout?.positions?.[0]?.status).toBe('missing');expect(frames.size).toBe(0);
+ document.querySelector('ul')!.innerHTML='<li data-af-id="task:123">Task</li>';await Promise.resolve();expect(frames.size).toBe(1);
+ bridge.dispose();expect(frames.size).toBe(0);document.querySelector('ul')!.append(document.createElement('li'));await Promise.resolve();expect(frames.size).toBe(0);
+ vi.restoreAllMocks();
+});
