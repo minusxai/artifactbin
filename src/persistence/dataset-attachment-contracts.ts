@@ -9,3 +9,7 @@ export interface RegisterDatasetAttachments {
   client: SqlClient;
   registrations: readonly DatasetAttachmentRegistration[];
 }
+
+export interface RegisterInactiveDatasetAttachments extends RegisterDatasetAttachments {
+ publication: import("./inactive-registration-contracts.ts").InactivePageRegistration;
+}

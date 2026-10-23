@@ -33,6 +33,7 @@ export interface DeletedArtifactPlanningInput {
   protectedPageIds: ReadonlySet<string>;
 }
 export interface DeletedDestinationPreparation {
+  publications?: readonly import("./inactive-publication-contracts.ts").DeletedMigrationPublicationContext[];
   sourceNamespace: string;
   archiveDigest: string;
   maps: MigrationMaps;

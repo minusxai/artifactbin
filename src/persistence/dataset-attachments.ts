@@ -16,6 +16,7 @@ import {
 import type {
   DatasetAttachmentRepositoryOptions,
   RegisterDatasetAttachments,
+  RegisterInactiveDatasetAttachments,
 } from "./dataset-attachment-contracts.ts";
 import { loadDatasetAuthority } from "./datasets.ts";
 import { loadGroupAuthority } from "./group-memberships.ts";
@@ -96,12 +97,42 @@ function record(row: Record<string, unknown>): DatasetAttachmentRecord {
   };
 }
 /** Registry publication is in the exact saved-page transaction and cannot silently replace an earlier registration. */
-export async function registerDatasetAttachments({
-  client,
-  registrations,
-}: RegisterDatasetAttachments): Promise<void> {
+export async function registerDatasetAttachments(
+  input: RegisterDatasetAttachments,
+): Promise<void> {
+  return registerAttachments(input);
+}
+/** Trusted offline publication path only; invocation authority never consumes this proof. */
+export async function registerInactiveDatasetAttachments(
+  input: RegisterInactiveDatasetAttachments,
+): Promise<void> {
+  const p = input.publication;
+  if (
+    p.kind !== "inactive-page-registration-v1" ||
+    !Number.isSafeInteger(p.pageVersion) ||
+    p.pageVersion < 1 ||
+    !Number.isFinite(p.deletedAt) ||
+    !p.sourceNamespace ||
+    ![p.artifactSha256, p.admissionSha256].every((h) =>
+      /^[a-f0-9]{64}$/.test(h),
+    )
+  )
+    deny();
+  return registerAttachments(input, p);
+}
+async function registerAttachments(
+  { client, registrations }: RegisterDatasetAttachments,
+  publication?: import("./inactive-registration-contracts.ts").InactivePageRegistration,
+): Promise<void> {
   for (const r of registrations) {
     const b = r.binding;
+    if (
+      publication &&
+      (publication.pageId !== b.page.id ||
+        publication.pageVersion !== b.page.version ||
+        publication.sourceNamespace !== r.sourceNamespace)
+    )
+      deny();
     if (
       b.mode !== "live" ||
       !r.acceptedTypes.length ||
@@ -112,7 +143,7 @@ export async function registerDatasetAttachments({
       deny();
     const rows = (
       await client.query(
-        `SELECT b.descriptor FROM dataset_bindings b JOIN files f ON f.id=b.page_id AND f.head=b.page_version::text AND f.deleted_at IS NULL
+        `SELECT b.descriptor FROM dataset_bindings b JOIN files f ON f.id=b.page_id AND f.head=b.page_version::text AND ${publication ? "f.deleted_at=$8" : "f.deleted_at IS NULL"}
    WHERE b.backend_id=$1 AND b.backend_version=$2 AND b.page_id=$3 AND b.page_version=$4 AND b.name=$5 AND b.source_namespace=$6
    AND EXISTS(SELECT 1 FROM af_page_backends p WHERE p.page_id=b.page_id AND p.page_version=b.page_version AND p.file_id=b.backend_id AND p.version=b.backend_version AND p.name=$7)`,
         [
@@ -123,6 +154,7 @@ export async function registerDatasetAttachments({
           b.name,
           r.sourceNamespace,
           r.backendNamespace,
+          ...(publication ? [publication.deletedAt] : []),
         ],
       )
     ).rows;
@@ -143,15 +175,30 @@ export async function registerDatasetAttachments({
         JSON.stringify(r),
       ],
     );
-    const existing = await registration(client, {
-      backendId: b.backendId,
-      backendVersion: b.backendVersion,
-      pageId: b.page.id,
-      subject: null,
-      credentialHash: null,
-      bindingName: b.name,
-      backendNamespace: r.backendNamespace,
-    });
+    const existing = publication
+      ? ((
+          await client.query(
+            `SELECT a.registration FROM dataset_attachment_bindings a JOIN files f ON f.id=a.page_id AND f.head=a.page_version::text AND f.deleted_at=$7 WHERE a.backend_id=$1 AND a.backend_version=$2 AND a.page_id=$3 AND a.page_version=$4 AND a.name=$5 AND a.source_namespace=$6`,
+            [
+              b.backendId,
+              b.backendVersion,
+              b.page.id,
+              b.page.version,
+              b.name,
+              r.sourceNamespace,
+              publication.deletedAt,
+            ],
+          )
+        ).rows[0]?.registration as DatasetAttachmentRegistration | undefined)
+      : await registration(client, {
+          backendId: b.backendId,
+          backendVersion: b.backendVersion,
+          pageId: b.page.id,
+          subject: null,
+          credentialHash: null,
+          bindingName: b.name,
+          backendNamespace: r.backendNamespace,
+        });
     if (!existing || hash(existing) !== hash(r)) deny();
   }
 }
