@@ -48,7 +48,7 @@ export { grantsOf, grantsPermitRead, grantsPermitWrite } from './dataset-policy/
 
 /** Serving: what may be served, and archived versions. */
 export { UnservableDocument, refusingUnservable, servableDocument, unservable } from './servable';
-export { VERSION_PARAM, archivedReadOnly, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
+export { VERSION_PARAM, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
 
 /** Route adapters (one route family each). */
 export { resolveImageReference } from './image-references';

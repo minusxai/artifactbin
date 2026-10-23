@@ -26,7 +26,7 @@ import { sqlExtensions } from '@/lib/sql/extensions';
 import { importedRows, importedTables } from '@/lib/datasets/catalog';
 import { storedRowStats } from '@/lib/datasets/dataset-store';
 import { childrenTableFor } from '@/lib/artifacts';
-import type { RanDataflow, StoryViewer } from '@/lib/story-runtime/contract';
+import type { RanDataflow } from '@/lib/story-runtime/contract';
 
 /**
  * Run one of a stored document's declared mutations. Everything a reader
@@ -307,29 +307,6 @@ async function mutationAccessFor(doc: ArtifactRow, flow: CompiledDataflow, state
  * never to decide what a viewer may see.
  */
 const drawsPeople = (source: string | null | undefined): boolean => /<User(?:Image|Handle)?[\s/>]/.test(source ?? '');
-/**
- * WHO IS READING, as the document may show them (lib/story-runtime/contract
- * StoryViewer): the viewer's own account id — `$_me` — and, only for a document
- * that draws a person, their card.
- *
- * The card comes from the SAME `people` lookup a DataTable cell has always
- * used, so nothing new about anyone is exposed: one row, by id, for the person
- * who is already logged in and asking. A guest gets null and no query at all,
- * and a document that never names a person pays nothing beyond the id it
- * already had in hand.
- */
-export async function viewerIdentityFor(
-  row: Pick<ArtifactRow, 'source'>,
-  userId: string | null | undefined,
-): Promise<StoryViewer | null> {
-  if (!userId) return null;
-  if (!drawsPeople(row.source)) return { id: userId };
-  try {
-    const cards = await people(await getDb(), [userId]);
-    return { id: userId, card: cards[userId] ?? null };
-  } catch { return { id: userId }; }
-}
-
 interface DataflowRunOptions {
   members?:Row[];
   /**

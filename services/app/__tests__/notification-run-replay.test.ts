@@ -1,12 +1,11 @@
-/** Run identity proofs through real HTTP handlers and isolated persistence. */
+/** Retained commit-engine run identities; the author-facing Notify syntax is retired. */
 import {expect,it} from 'vitest';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {request,useAppHarness} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
-import {POST as apiMutate} from '@/app/api/artifacts/[id]/mutate/route';
-import {POST as browserMutate} from '@/app/a/[id]/mutate/route';
-import {getArtifactById,declarationsForRow} from '@/lib/artifacts';
-import {liveFrameFor} from '@/lib/publish/data/frame';
+import {notificationMutationFixture} from './notification-mutation-fixture';
+import {nativeHtml} from './native-html-fixture';
+import {getArtifactById} from '@/lib/artifacts';
 import {getDb} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {services,setServices} from '@/lib/platform';
@@ -14,16 +13,15 @@ import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {newEditId} from '@/lib/document/splice';
 
 useAppHarness();
-async function fixture(predicate='',readerQuery=false){
+async function fixture(predicate=''){
  const token=await mintToken('mxmx_test_notification_run_replay');
  const datasetResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:0}],access:'readwrite'}}));
  expect(datasetResponse.status,await datasetResponse.clone().text()).toBe(201);const dataset=await datasetResponse.json();
- const markup=`<Helmet><Import name="tasks" src="ref:${dataset.id}" /><Mutation name="increment">{\`update tasks.rows set n=n+$amount ${predicate}\`}</Mutation>${readerQuery ? '<Query name="current">{`select n from tasks.rows`}</Query>' : ''}<Notify name="first_status" on="increment">{\`select null as "to", 'Changed' as message from tasks.rows\`}</Notify><Notify name="second_status" on="increment">{\`select null as "to", 'Reviewed' as message\`}</Notify></Helmet><p>Counter</p>`;
- const documentResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup}}));
+ const documentResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml('<p>Counter</p>')}}));
  expect(documentResponse.status,await documentResponse.clone().text()).toBe(201);const document=await documentResponse.json();
  const context={params:Promise.resolve({id:document.id})};
- const api=(key:string)=>apiMutate(request(`/api/artifacts/${document.id}/mutate`,{method:'POST',token:token.token,headers:{'Idempotency-Key':key},json:{name:'increment',args:{amount:1}}}),context);
- const browser=(key:string)=>browserMutate(request(`/a/${document.id}/mutate`,{method:'POST',token:token.token,json:{mutation:'increment',args:{amount:1},operationKey:key}}),context);
+ const send=notificationMutationFixture(token,document,dataset,`update tasks.rows set n=n+$amount ${predicate}`,[{name:'first_status',sql:`select null as "to", 'Changed' as message from tasks.rows`},{name:'second_status',sql:`select null as "to", 'Reviewed' as message`}]);
+ const api=(key:string)=>send(key,'api'),browser=(key:string)=>send(key,'browser');
  const rows=async()=>loadDatasetRows((await getArtifactById(dataset.id))!);
  return {token,dataset,document,context,api,browser,rows,db:await getDb()};
 }
@@ -69,15 +67,5 @@ it.each(['api','browser'] as const)('shares one canonical receipt across %s-firs
  expect((await db.query('SELECT response FROM mutation_receipts WHERE response IS NOT NULL')).rows).toHaveLength(1);
 });
 
-it('projects notification rules out of page bootstrap and live-frame runtime data',async()=>{
- const {document}=await fixture('',true);const row=(await getArtifactById(document.id))!;
- const declared=(await declarationsForRow(row))!;
- expect(declared.flow.notifications).toHaveLength(2);
- const frame=await liveFrameFor(row);
- for(const flow of [frame.dataflow?.flow]){
-  expect(flow).toBeDefined();expect(flow!.notifications).toBeUndefined();
-  expect(flow!.mutations[0]?.notifies).toBe(true);
-  expect(JSON.stringify(flow)).not.toContain('first_status');
- }
- expect(declared.flow.notifications).toHaveLength(2);
-});
+// Bootstrap secrecy is now exercised by native-html-serving.test.ts and native-html-core.test.ts;
+// compiled dataflow/Notify runtime projections are retired with that authoring protocol.

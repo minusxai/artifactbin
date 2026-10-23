@@ -165,8 +165,8 @@ describe('createHttpBackend', () => {
       addEventListener(name: string, fn: (e: { data?: string }) => void) { this.listeners[name] = fn; }
       close() { this.closed = true; }
     });
-    const onPing = vi.fn(), onData = vi.fn(), onAnnotations = vi.fn();
-    const stop = backend.live({ onPing, onData, onAnnotations });
+    const onPing = vi.fn(), onData = vi.fn(), onAnnotations = vi.fn(), onPresence = vi.fn();
+    const stop = backend.live({ onPing, onData, onAnnotations, onPresence });
     const source = sources[0]!;
     expect(source.url).toBe('/a/AbC123/events');
     source.onmessage!({ data: 'not json' });
@@ -179,6 +179,9 @@ describe('createHttpBackend', () => {
     expect(onData).toHaveBeenCalledWith({ datasets: ['D1'], version: 2 });
     source.listeners.annotations!({});
     expect(onAnnotations).toHaveBeenCalledTimes(1);
+    source.listeners.presence!({data: JSON.stringify([{id:'viewer',cursor:null,selection:null}])});
+    expect(onPresence).toHaveBeenCalledWith([{id:'viewer',cursor:null,selection:null}]);
+    expect(sources).toHaveLength(1);
     stop();
     expect(source.closed).toBe(true);
 
@@ -280,4 +283,12 @@ describe('createHttpBackend', () => {
     expect(calls[0]!.init).toMatchObject({ method: 'POST', credentials: 'same-origin' });
     transport.dispose();
   });
+});
+
+it('publishes ephemeral reader geometry through the online backend only',async()=>{
+ const body={session:'tab',revision:'1',visible:true,cursor:null,selection:null};
+ const calls=stubFetch(json({id:'public-roster-id'}));
+ expect(await createHttpBackend('AbC123').publishPresence(body)).toBe('public-roster-id');
+ expect(calls[0]).toEqual({url:'/api/artifacts/AbC123/presence',init:{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:false}});
+ stubFetch(json({},403));expect(await createHttpBackend('AbC123').publishPresence(body)).toBeNull();
 });

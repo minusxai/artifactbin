@@ -1,3 +1,4 @@
+import {nativeSource} from './native-publication-fixture';
 /** Legacy ownership cookies prove adoption after email login; they are never login credentials. */
 import { describe, expect, it } from 'vitest';
 import { POST as exchangeRoute, DELETE as clearSession } from '@/app/api/session/token/route';
@@ -40,7 +41,7 @@ describe('legacy ownership proofs', () => {
     const userId = account?.id ?? guest!.userId;
     const token = await mintToken('old browser', userId);
     const cookie = await agentCookie([token.id]);
-    const artifact = await createArtifact(token.id, userId, { format: 'markup', source: '<p id="private">Private</p>', visibility: 'private', meta: {} });
+    const artifact = await createArtifact(token.id, userId, { format: 'html', source: nativeSource('<p id="private">Private</p>'), visibility: 'private', meta: {} });
     expect(await sessionActor(request('/api/my/artifacts', { cookie }))).toMatchObject({ credential: 'none', userId: null, tokenId: null });
     expect((await listMine(request('/api/my/artifacts', { cookie }))).status).toBe(401);
     for (const [handler, path] of [[raw, `/a/${artifact.id}/raw`], [events, `/a/${artifact.id}/events`]] as const) {
@@ -61,7 +62,7 @@ describe('legacy ownership proofs', () => {
   });
   it('an email account can read its private artifact after login', async () => {
     const account = await createUser({ email: 'mxmx_test_private_account@example.com' });
-    const artifact = await createArtifact('', account.id, { format: 'markup', source: '<p id="private">Private</p>', visibility: 'private', meta: {} });
+    const artifact = await createArtifact('', account.id, { format: 'html', source: nativeSource('<p id="private">Private</p>'), visibility: 'private', meta: {} });
     setSession({ user: { id: account.id, email: account.email } });
     expect((await raw(request(`/a/${artifact.id}/raw`), params(artifact.id))).status).toBe(200);
   });

@@ -1,6 +1,6 @@
 import {planHtmlClone} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
-import {authorizeDatasetBinding} from '@/lib/dataset-graphql';
+import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
 import { newArtifactDestination, afterCreated, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, byteQuotaFor, compiledForRow, createArtifact, getArtifact, getArtifactById, getArtifactFor, getLinkReadableArtifact, grantsOf, grantsPermitRead, refLoaderForActor, reserveArtifactIds, rowToResolvedRef, unservable } from '@/lib/artifacts';
 import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 import type {ArtifactDestination, Visibility} from '@artifactbin/contracts';
@@ -309,6 +309,7 @@ async function forkInput(
       const plan=await planHtmlClone(actor,source.id,(htmlLinks??[]) as import('@artifactbin/contracts').HtmlPageLink[],{backend:getHtmlBackendVersion,authorizeDataset:authorizeDatasetBinding});
       return {...carried,format:'html',source:source.source,meta,...plan};
     }catch(error){
+      if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);
       if(error instanceof Error&&error.message==='dataset_not_found')return json({error:'dataset_not_found'},400);
       throw error;
     }

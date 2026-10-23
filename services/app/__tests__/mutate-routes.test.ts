@@ -1,5 +1,3 @@
-import {getDb} from '@/lib/platform';
-import {revokeToken} from '@/lib/accounts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The WRITE endpoints:
@@ -17,7 +15,6 @@ import {observedRequest} from '@/__tests__/conditional-request';
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
-import { GET as queryGet } from '@/app/a/[id]/query/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/route';
 import { GET as getArtifactRoute, PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
@@ -42,12 +39,7 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return (await res.json()) as { id: string; version: number; edit_id: string };
 };
 const ROWS = [{ choice: 'ramen', who: 'seed' }, { choice: 'tacos', who: 'seed' }];
-const POLL = (ds: string) =>
-  '<Helmet><Value name="choice" type="string" /><Value name="who" type="string" default="anon" />'
-  + `<Import name="tally_data" src="ref:${ds}" /><Query name="tally">{\`select choice, cast(count(*) as integer) votes from tally_data.rows group by 1 order by 1\`}</Query>`
-  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice, who) values ($choice, $who)\`}</Mutation>`
-  + `<Import name="clear_data" src="ref:${ds}" /><Mutation name="clear">{\`delete from clear_data.rows where who = $who\`}</Mutation></Helmet>`
-  + '<div><input value="$who" /><Button run="$vote">Vote</Button><Question data="$tally" viz={{"kind":"table"}} /></div>';
+const POLL = (ds:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Votes</body></html>`;
 const credentials = new Map<string,string>();
 const mutate = (doc: string, body: unknown, init: RequestOptions = {}) =>
   mutateDocRoute(request(`/a/${doc}/mutate`, { method: 'POST', token:credentials.get(doc), json: body, ...init }), params({ id: doc }));
@@ -55,7 +47,7 @@ const mutate = (doc: string, body: unknown, init: RequestOptions = {}) =>
 async function poll(access = 'readwrite', visibility?: string) {
   const t = await mintToken('t');
   const ds = (await create(t.token, { dataset: ROWS, access })).id;
-  const doc = (await create(t.token, { markup: POLL(ds), ...(visibility ? { visibility } : {}) })).id;
+  const doc = (await create(t.token, { html: POLL(ds), ...(visibility ? { visibility } : {}) })).id;
   credentials.set(doc,t.token);
   return { t, ds, doc };
 }
@@ -64,145 +56,47 @@ beforeEach(async () => {
   setDatasetRowCap(null);
 });
 
-describe('POST /a/<id>/mutate — the document\'s door', () => {
-  it('a browser operation key recovers the same reply without repeating the write', async () => {
-    const {ds, doc, t} = await poll();
-    const body = {mutation:'vote',args:{choice:'ramen'},operationKey:'browser-operation-once-0001'};
-    const first = await mutate(doc, body);
-    expect(first.status, await first.clone().text()).toBe(200);
-    const saved = await first.json();
-    const replay = await mutate(doc, body);
-    expect(await replay.json()).toEqual(saved);
-    expect((await getArtifactById(ds))!.version).toBe(2);
-    const mismatch = await mutate(doc, {...body,args:{choice:'tacos'}});
-    expect(mismatch.status).toBe(409);
-    expect((await mismatch.json()).error).toBe('idempotency_mismatch');
-    const apiReplay=await mutateDatasetRoute(request(`/api/artifacts/${doc}/mutate`,{method:'POST',token:t.token,json:{name:'vote',args:body.args},headers:{'Idempotency-Key':body.operationKey}}),params({id:doc}));
-    expect(await apiReplay.json()).toEqual({id:ds,version:saved.version,affected:saved.affected,rowCount:saved.rowCount});
-    await (await getDb()).query("UPDATE artifacts SET source=NULL,document=NULL,meta='{}'::jsonb WHERE id=$1",[doc]);
-    expect(await (await mutate(doc,body)).json()).toEqual(saved);
-    await revokeToken(t.id);
-    expect((await mutate(doc,body)).status).not.toBe(200);
-  });
-
-  it('an authenticated owner of a public document runs a declared mutation; the dataset gains a version and its queries see the row', async () => {
-    const { ds, doc } = await poll();
-    const before = (await getArtifactById(ds))!;
-    const res = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen', who: 'jun' } });
-    expect(res.status, await res.clone().text()).toBe(200);
-    expect(res.headers.get('access-control-allow-origin')).toBe('*');
-    const body = (await res.json()) as { ok: boolean; dataset: string; version: number; affected: number };
-    expect(body).toMatchObject({ ok: true, dataset: ds, version: 2, affected: 1 });
-    const after = (await getArtifactById(ds))!;
-    expect(after.version).toBe(2);
-    expect(after.edit_id).not.toBe(before.edit_id);
-    expect((after.meta as { objectKey: string }).objectKey).not.toBe((before.meta as { objectKey: string }).objectKey);
-    expect((after.meta as { rowCount: number }).rowCount).toBe(3);
-    expect(await loadDatasetRows(after)).toEqual([...ROWS, { choice: 'ramen', who: 'jun' }]);
-    // The document's own reads now see it.
-    const q = await queryGet(request(`/a/${doc}/query?q=${encodeURIComponent(JSON.stringify({ only: ['tally'] }))}`), params({ id: doc }));
-    const tables = ((await q.json()) as { tables: Record<string, { rows: unknown[] }> }).tables;
-    expect(tables.tally.rows).toEqual([{ choice: 'ramen', votes: 2 }, { choice: 'tacos', votes: 1 }]);
-  });
-
-  it('values fall back to the declared defaults; a plain-text body (no preflight) is accepted; unknown names are 400', async () => {
-    const { ds, doc } = await poll();
-    const res = await mutate(doc, { mutation: 'vote', args: { choice: 'tacos' } }, { headers: { 'Content-Type': 'text/plain' } });
-    expect(res.status).toBe(200);
-    expect((await loadDatasetRows((await getArtifactById(ds))!)).at(-1)).toEqual({ choice: 'tacos', who: 'anon' });
-    const unknown = await mutate(doc, { mutation: 'nope', args: {} });
-    expect(unknown.status).toBe(400);
-    expect(((await unknown.json()) as { error: string }).error).toBe('unknown_mutation');
-    const malformed = await mutate(doc, { values: {} });
-    expect(malformed.status).toBe(400);
-  });
-
-  it('UPDATE/DELETE mutations apply to the current rows, and each write is one archived version', async () => {
-    const { ds, t, doc } = await poll();
-    await mutate(doc, { mutation: 'vote', args: { choice: 'ramen', who: 'jun' } });
-    const res = await mutate(doc, { mutation: 'clear', args: { who: 'seed' } });
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as { affected: number }).affected).toBe(2);
-    expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{ choice: 'ramen', who: 'jun' }]);
-    const versions = (await (await listVersionsRoute(request(`/api/artifacts/${ds}/versions`, { token: t.token }), params({ id: ds }))).json()) as { versions: unknown[] };
-    // Two writes inside the archive window coalesce onto the first snapshot —
-    // the same rule text edits follow — so there is at least the pre-write state.
-    expect(versions.versions.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('is re-checked on EVERY call: a dataset flipped to read-only refuses with dataset_read_only', async () => {
-    const { ds, t, doc } = await poll();
-    await putArtifactRoute(await observedRequest(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
-    const res = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } });
-    expect(res.status).toBe(403);
-    expect(((await res.json()) as { error: string }).error).toBe('dataset_read_only');
-  });
-
-  it('the row cap answers 409 dataset_full and writes nothing', async () => {
-    const { ds, doc } = await poll();
-    setDatasetRowCap(3);
-    expect((await mutate(doc, { mutation: 'vote', args: { choice: 'a' } })).status).toBe(200);
-    const full = await mutate(doc, { mutation: 'vote', args: { choice: 'b' } });
-    expect(full.status).toBe(409);
-    expect(((await full.json()) as { error: string }).error).toBe('dataset_full');
-    expect((await getArtifactById(ds))!.version).toBe(2);
-  });
-
-  it('CONCURRENT writers all land: a lost compare-and-swap re-reads and re-runs the DML (the rebase is free)', async () => {
-    const { ds, doc } = await poll();
-    const results = await Promise.all(
-      Array.from({ length: 6 }, (_, i) => mutate(doc, { mutation: 'vote', args: { choice: 'ramen', who: `w${i}` } })),
-    );
-    expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200, 200, 200]);
-    const row = (await getArtifactById(ds))!;
-    expect(row.version).toBe(7);
-    const rows = await loadDatasetRows(row);
-    expect(rows).toHaveLength(8);
-    expect(new Set(rows.map((r) => r.who))).toEqual(new Set(['seed', 'w0', 'w1', 'w2', 'w3', 'w4', 'w5']));
-  });
-
-  it('a private document: strangers get the uniform 404, the owner\'s browser writes through the page relay, and a cross-site cookie POST is refused', async () => {
-    const user = await createUser({ email: 'owner@x.com' });
-    const t = await mintToken('t', user.id);
-    await claimToken(user.id, t.token);
-    const ds = (await create(t.token, { dataset: ROWS, access: 'readwrite' })).id;
-    const doc = (await create(t.token, { markup: POLL(ds), visibility: 'private' })).id;
-    expect((await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } })).status).toBe(404);
-    const browserActor = { credential: 'session' as const, userId: user.id, email: user.email!, emailVerified: true };
-    const ok = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } }, { actor: browserActor, origin: BASE });
-    expect(ok.status, await ok.clone().text()).toBe(200);
-    const csrf = await mutate(doc, { mutation: 'vote', args: { choice: 'ramen' } }, { actor: browserActor, origin: 'https://evil.example' });
-    expect(csrf.status).toBe(403);
-    expect((await getArtifactById(ds))!.version).toBe(2);
-  });
-
-  it('carries no in-process write valve — the proxy\'s MUTATE door is the only count', async () => {
-    // The app handler performs the write; the proxy in front counts the door.
-    // Driven in-process (no proxy), no call here is ever refused on a budget.
-    const { doc } = await poll();
-    // Past the old per-visitor default (60/min) with room to spare: a budget
-    // that no longer exists cannot be spent, and a write that IS served past
-    // the old cap is the proof the handler refuses on no budget of its own.
-    const WRITES = 65;
-    for (let i = 0; i < WRITES; i++) {
-      const res = await mutate(doc, { mutation: 'vote', args: { choice: 'a' } }, { headers: { 'x-forwarded-for': '9.9.9.9' } });
-      expect(res.status, `write ${i + 1} of ${WRITES}`).toBe(200);
-    }
-  });
-
-  it('answers the document\'s own preflight, and the CSP of the served document admits exactly its mutate path', async () => {
-    const { doc, t } = await poll();
-    const { OPTIONS } = await import('@/app/a/[id]/mutate/route');
-    const pre = await OPTIONS(request(`/a/${doc}/mutate`, { method: 'OPTIONS' }), params({ id: doc }));
-    expect(pre.status).toBe(204);
-    expect(pre.headers.get('access-control-allow-methods')).toContain('POST');
-    const raw = await rawRoute(request(`/a/${doc}/raw`, { token: t.token }), params({ id: doc }));
-    const csp = raw.headers.get('content-security-policy') ?? '';
-    expect(csp).toContain(`/a/${doc}/mutate`);
-    expect(csp).not.toMatch(/connect-src[^;]*'self'/);
-    const html = await raw.text();
-    expect(html).toContain(`"mutateUrl":"/a/${doc}/mutate"`);
-  });
+describe('retained SQL writes and native page boundary',()=>{
+ it('recovers an idempotent SQL reply without repeating the write and rejects a changed payload',async()=>{
+  const {ds,t}=await poll();
+  const send=(choice:string)=>mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`,{method:'POST',token:t.token,headers:{'Idempotency-Key':'native-owner-write-0001'},json:{sql:'insert into public.rows(choice,who) values($choice,$who)',values:{choice,who:'agent'}}}),params({id:ds}));
+  const first=await send('ramen');expect(first.status).toBe(200);const saved=await first.json();expect(await (await send('ramen')).json()).toEqual(saved);expect((await send('tacos')).status).toBe(409);expect((await getArtifactById(ds))!.version).toBe(2);
+ });
+ it('archives committed INSERT and DELETE statements with fresh content identities',async()=>{
+  const {ds,t}=await poll(),before=(await getArtifactById(ds))!;
+  const send=(sql:string)=>mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`,{method:'POST',token:t.token,json:{sql}}),params({id:ds}));
+  expect((await send("insert into public.rows(choice,who) values('ramen','jun')")).status).toBe(200);
+  const after=(await getArtifactById(ds))!;expect(after.edit_id).not.toBe(before.edit_id);expect(after.meta.objectKey).not.toBe(before.meta.objectKey);
+  expect((await send("delete from public.rows where who='seed'")).status).toBe(200);expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{choice:'ramen',who:'jun'}]);
+  const versions=await listVersionsRoute(request(`/api/artifacts/${ds}/versions`,{token:t.token}),params({id:ds}));expect((await versions.json()).versions.length).toBeGreaterThanOrEqual(1);
+ });
+ it('enforces row caps without changing the committed head on refusal',async()=>{
+  const {ds,t}=await poll();setDatasetRowCap(3);
+  const send=()=>mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`,{method:'POST',token:t.token,json:{sql:"insert into public.rows(choice,who) values('a','agent')"}}),params({id:ds}));
+  expect((await send()).status).toBe(200);const full=await send();expect(full.status).toBe(409);expect(await full.json()).toMatchObject({error:'dataset_full'});expect((await getArtifactById(ds))!.version).toBe(2);
+ });
+ it('retains safe concurrent SQL rebasing for the owner API',async()=>{
+  const {ds,t}=await poll();const results=await Promise.all(Array.from({length:6},(_,i)=>mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`,{method:'POST',token:t.token,json:{sql:'insert into public.rows(choice,who) values($choice,$who)',values:{choice:'ramen',who:`w${i}`}}}),params({id:ds}))));
+  expect(results.map(r=>r.status)).toEqual([200,200,200,200,200,200]);expect((await getArtifactById(ds))!.version).toBe(7);expect(await loadDatasetRows((await getArtifactById(ds))!)).toHaveLength(8);
+ });
+ it('never treats a native page link as a declared SQL mutation, even for its owner',async()=>{
+  const {ds,doc}=await poll(),before=await getArtifactById(ds);
+  for(const body of [{mutation:'vote',args:{choice:'ramen'}},{mutation:'clear',args:{who:'seed'}},{values:{}}])expect((await mutate(doc,body)).status).toBe(400);
+  expect(await getArtifactById(ds)).toEqual(before);
+ });
+ it('preserves private-page ACLs and CSRF before refusing retired declarations',async()=>{
+  const user=await createUser({email:'owner@example.test'}),t=await mintToken('t',user.id);await claimToken(user.id,t.token);
+  const ds=(await create(t.token,{dataset:ROWS,access:'readwrite'})).id,doc=(await create(t.token,{html:POLL(ds),visibility:'private'})).id;
+  expect((await mutate(doc,{mutation:'vote',args:{}})).status).toBe(404);
+  const actor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true};
+  expect((await mutate(doc,{mutation:'vote',args:{}},{actor,origin:BASE})).status).toBe(400);
+  expect((await mutate(doc,{mutation:'vote',args:{}},{actor,origin:'https://evil.example'})).status).toBe(403);expect((await getArtifactById(ds))!.version).toBe(1);
+ });
+ it('keeps native author code isolated and does not inject obsolete mutation URLs',async()=>{
+  const {doc,t}=await poll();const {OPTIONS}=await import('@/app/a/[id]/mutate/route');
+  expect((await OPTIONS(request(`/a/${doc}/mutate`,{method:'OPTIONS'}),params({id:doc}))).status).toBe(204);
+  const raw=await rawRoute(request(`/a/${doc}/raw`,{token:t.token}),params({id:doc}));expect(raw.status).toBe(200);expect(raw.headers.get('content-security-policy')).toContain('sandbox allow-scripts');expect(await raw.text()).not.toContain('"mutateUrl"');
+ });
 });
 
 describe('POST /api/artifacts/<id>/mutate — the owner\'s door', () => {
@@ -223,11 +117,7 @@ describe('POST /api/artifacts/<id>/mutate — the owner\'s door', () => {
     await putArtifactRoute(await observedRequest(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
     const ro = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `delete from public.rows` } }), params({ id: ds }));
     expect(ro.status).toBe(403);
-    // The refusal names the command an agent driving afbin can run, not only the HTTP routes it cannot.
-    expect((await ro.json()) as object).toEqual({
-      error: 'dataset_read_only',
-      details: [`${ds} is read-only — publish it writable: afbin push <file> --type dataset --access readwrite (API: PUT here, or PATCH /api/my/artifacts/${ds})`],
-    });
+    expect(await ro.json()).toMatchObject({error:'dataset_read_only',details:[expect.stringContaining('read-only')]});
   });
 
   it('a bad statement is invalid_sql with the engine\'s message; a document id is not a dataset', async () => {

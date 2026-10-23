@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import {describe,it,expect} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
@@ -22,7 +23,7 @@ describe('company delegated test identities',()=>{
   expect(await admitDeploymentIdentity({userId:child.id})).toBe(true);
   expect((await resolveToken(child.token))?.userId).toBe(child.id);
   expect(await getGroupRole(child.id,group.id)).toBeNull();
-  const publish=(destination?:{type:'personal'})=>createArtifact(request('/api/artifacts',{method:'POST',token:child.token,json:{markup:'<p id="body">Delegated test fixture</p>',...(destination?{destination}:{})}}));
+  const publish=(destination?:{type:'personal'})=>createArtifact(request('/api/artifacts',{method:'POST',token:child.token,json:{html:nativeHtml('<p id="body">Delegated test fixture</p>'),...(destination?{destination}:{})}}));
   expect((await publish()).status).toBe(403);
   const personal=await publish({type:'personal'});expect(personal.status).toBe(201);
   const created=await personal.json();expect(created.owner).toEqual({type:'personal'});

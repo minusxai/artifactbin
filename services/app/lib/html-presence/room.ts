@@ -12,7 +12,7 @@ interface PresenceRoomPorts {
 /** Ephemeral fanout: geometry batches never query the database. Artifact wakeups suspend delivery until ACL revalidation. */
 export async function createPresenceRoom(ports:PresenceRoomPorts){
  const entries=new Map<string,PresenceViewer>(),drops:Array<()=>Promise<void>>=[];
- let closed=false,checking=false,again=false,authorized=true,flushTimer:unknown,heartbeat:unknown;
+ let closed=false,checking=false,again=false,authorized=false,flushTimer:unknown,heartbeat:unknown;
  const dispose=()=>{if(closed)return;closed=true;ports.clock.clearTimeout(flushTimer);ports.clock.clearInterval(heartbeat);for(const drop of drops)void drop().catch(()=>{});entries.clear();ports.close();};
  const flush=()=>{flushTimer=undefined;if(closed||!authorized||checking)return;const roster=presenceRoster([...entries.values()],ports.revision,ports.clock.now());entries.clear();for(const entry of roster)entries.set(entry.id,entry);try{ports.send(roster);}catch{dispose();}};
  const schedule=()=>{if(!closed&&flushTimer===undefined)flushTimer=ports.clock.setTimeout(flush,75);};
@@ -35,6 +35,7 @@ export async function createPresenceRoom(ports:PresenceRoomPorts){
  };
  try{for(const subscribe of [()=>ports.subscribe(receive,dispose),()=>ports.subscribeAcl(()=>void revalidate(),dispose)]){const drop=await subscribe();if(closed){await drop();return{dispose};}drops.push(drop);}}
  catch{dispose();throw new Error('Presence unavailable');}
+ await revalidate();if(closed)return{dispose};
  heartbeat=ports.clock.setInterval(()=>void revalidate(),3000);schedule();
  return{dispose};
 }

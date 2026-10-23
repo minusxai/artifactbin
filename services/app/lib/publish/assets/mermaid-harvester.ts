@@ -158,7 +158,7 @@ async function harvestVersion(artifactId: string, version: number): Promise<Harv
  * Claim the next due job and run it. True when a job was run (so the caller
  * looks for another), false when none is due. Never throws.
  */
-export async function runNextMermaidHarvest(): Promise<boolean> {
+async function runNextMermaidHarvest(): Promise<boolean> {
   const db = await getDb();
   const token = randomUUID();
   const claimed = (await db.query<{ artifact_id: string; version: number; attempts: number }>(`

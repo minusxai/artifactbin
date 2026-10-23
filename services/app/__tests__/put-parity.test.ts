@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { getArtifactById } from '@/lib/artifacts';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
@@ -36,7 +37,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 async function subject() {
   const t = await mintToken('parity');
   const made = await (await createArtifact(
-    request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>v1</h1>', visibility: 'public' } }),
+    request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml('<h1>v1</h1>'), visibility: 'public' } }),
   )).json();
   return { token: t.token, actor: { userId: t.userId!, email: t.email!, emailVerified: true, credential: 'session' as const }, id: made.id as string };
 }
@@ -45,13 +46,13 @@ describe('the bearer and browser replace paths answer alike', () => {
   it('both return the same FIELDS on a successful replace', async () => {
     const a = await subject();
     const viaBearer = await (await putBearer(
-      await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<h1 id="heading">bearer</h1>' } }),
+      await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { html:nativeHtml('<h1 id="heading">bearer</h1>') } }),
       params({ id: a.id }),
     )).json();
 
     const b = await subject();
     const viaBrowser = await (await putBrowser(
-      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', actor: b.actor, json: { markup: '<h1 id="heading">browser</h1>' } }),
+      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', actor: b.actor, json: { html:nativeHtml('<h1 id="heading">browser</h1>') } }),
       params({ id: b.id }),
     )).json();
 
@@ -62,8 +63,8 @@ describe('the bearer and browser replace paths answer alike', () => {
       expect(wire.edit_id, 'a replace must hand back the new head pointer').toEqual(expect.any(String));
       expect(wire.version).toBe(2);
       // Operation commits return the canonical authoring graph and source.
-      expect(wire.document.kind).toBe('graph');
-      expect(wire.markup).toContain('<h1 id="heading">');
+      expect(wire.document).toBeUndefined();
+      expect(wire.html).toContain('id="heading"');
       expect(wire.visibility).toBe('public'); // Explicitly published public fixture.
     }
   });
@@ -71,24 +72,24 @@ describe('the bearer and browser replace paths answer alike', () => {
   it('both reject a stale expectedVersion with the same 409 body', async () => {
     const a = await subject();
     const bearer = await putBearer(
-      await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<p>x</p>', expectedVersion: 99 } }),
+      await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { html:nativeHtml('<p>x</p>'), expectedVersion: 99 } }),
       params({ id: a.id }),
     );
     const b = await subject();
     const browser = await putBrowser(
-      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', actor: b.actor, json: { markup: '<p>x</p>', expectedVersion: 99 } }),
+      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', actor: b.actor, json: { html:nativeHtml('<p>x</p>'), expectedVersion: 99 } }),
       params({ id: b.id }),
     );
     expect([bearer.status, browser.status]).toEqual([409, 409]);
-    for(const response of [bearer,browser])expect(await response.json()).toMatchObject({error:'doc_changed',version:1,edit_id:expect.any(String),source:expect.any(String)});
+    for(const response of [bearer,browser])expect(await response.json()).toMatchObject({error:'version_conflict',currentVersion:1,currentState:expect.any(String)});
   });
 
   it('both refuse legacy anonymous credentials without changing the document', async () => {
     const a = await subject();
     const legacy = await mintToken('legacy', null);
     setSession(null);
-    const bearer = await putBearer(await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: legacy.token, json: { markup: '<p>x</p>', visibility: 'private' } }), params({ id: a.id }));
-    const browser = await putBrowser(await observedRequest(`/api/my/artifacts/${a.id}`, { method: 'PUT', cookie: await agentCookie([legacy.id]), json: { markup: '<p>x</p>', visibility: 'private' } }), params({ id: a.id }));
+    const bearer = await putBearer(await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: legacy.token, json: { html:nativeHtml('<p>x</p>'), visibility: 'private' } }), params({ id: a.id }));
+    const browser = await putBrowser(await observedRequest(`/api/my/artifacts/${a.id}`, { method: 'PUT', cookie: await agentCookie([legacy.id]), json: { html:nativeHtml('<p>x</p>'), visibility: 'private' } }), params({ id: a.id }));
     expect([bearer.status, browser.status]).toEqual([401, 401]);
     for (const response of [bearer, browser]) expect(await response.json()).toMatchObject({ error: 'unauthorized' });
     expect((await getArtifactById(a.id))?.version).toBe(1);
@@ -125,11 +126,11 @@ describe('the bearer and browser replace paths answer alike', () => {
     const stranger = await subject();
     // stranger's credential, mine's id.
     const bearer = await putBearer(
-      await observedRequest(`/api/artifacts/${mine.id}`, { method: 'PUT', token: stranger.token, json: { markup: '<p>x</p>' } }),
+      await observedRequest(`/api/artifacts/${mine.id}`, { method: 'PUT', token: stranger.token, json: { html:nativeHtml('<p>x</p>') } }),
       params({ id: mine.id }),
     );
     const browser = await putBrowser(
-      await observedRequest(`/api/my/artifacts/${mine.id}`, { method: 'PUT', actor: stranger.actor, json: { markup: '<p>x</p>' } }),
+      await observedRequest(`/api/my/artifacts/${mine.id}`, { method: 'PUT', actor: stranger.actor, json: { html:nativeHtml('<p>x</p>') } }),
       params({ id: mine.id }),
     );
     expect([bearer.status, browser.status]).toEqual([404, 404]);

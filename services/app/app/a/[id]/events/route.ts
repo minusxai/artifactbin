@@ -1,3 +1,6 @@
+import {createPresenceRoom} from '@/lib/html-presence/room';
+import {presenceChannel} from '@/lib/html-presence/channel.server';
+import {PRESENCE_EVENT,type PresenceViewer} from '@/lib/html-presence/contract';
 /**
  * GET /a/:id/events — Server-Sent Events carrying this artifact's document
  * as it changes, so an open page (viewing OR editing) stays live.
@@ -19,7 +22,7 @@ import { canReadArtifact, getArtifactById, ownsArtifact, effectiveRole } from '@
 import { canAnnotate } from '@artifactbin/contracts';
 import { authorHandle, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
-import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
+import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
 import { changedSince, marksOf, marksOfToken, tokenOf,liveDatasetIds } from '@/lib/publish/realtime/dataset-marks';
 import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
@@ -81,6 +84,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const writer = writable.getWriter();
   let closed = false;
   let unsubscribe: (() => Promise<void>) | undefined;
+  let presenceRoom:Awaited<ReturnType<typeof createPresenceRoom>>|undefined;
+  let presenceWriting=false,latestPresence:PresenceViewer[]|null=null;
+  const writePresence=()=>{if(closed||presenceWriting||!latestPresence)return;const viewers=latestPresence;latestPresence=null;presenceWriting=true;void writer.write(encoder.encode(`event: ${PRESENCE_EVENT}\ndata: ${JSON.stringify(viewers)}\n\n`)).catch(()=>void close()).finally(()=>{presenceWriting=false;writePresence();});};
 
   /**
    * WHERE THIS READER STANDS: the mark of every dataset the stream follows (lib/publish/prepared/served-results
@@ -93,6 +99,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    */
   const marks = marksOfToken(new URL(request.url).searchParams.get('since'));
   const position = () => {
+    if (initial.format === 'html') return '';
     for (const datasetId of [...marks.keys()]) if (!datasetUnsubs.has(datasetId)) marks.delete(datasetId);
     return marks.size ? `id: ${tokenOf(marks)}\n` : '';
   };
@@ -107,7 +114,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   let sharedQueue = Promise.resolve();
   const pushHtmlShared = (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => sharedQueue = sharedQueue.then(async () => {
     if (row.format !== 'html' || closed) return;
-    const current = await htmlSharedRevisions(await getDb(), htmlLiveLinks(row.meta));
+    const current = await htmlSharedRevisions(await getDb(), htmlLiveLinks(row.meta), {mayReadDataset:async datasetId=>{const dataset=await getArtifactById(datasetId);return !!dataset&&dataset.format==='dataset'&&await canReadArtifact(dataset,actor);}});
     if (closed) return;
     const changed = changedHtmlSharedRevisions(sharedMarks, current);
     sharedMarks = new Map(current.map(mark => [mark.name, mark.revision]));
@@ -156,6 +163,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (closed) return;
     closed = true;
     clearInterval(keepalive);
+    presenceRoom?.dispose();latestPresence=null;
     if (unsubscribe) await unsubscribe().catch(() => {});
     if (annotationsUnsub) await annotationsUnsub().catch(() => {});
     for (const drop of datasetUnsubs.values()) await drop().catch(() => {});
@@ -220,7 +228,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       }
     }
     // Newly followed: marked now that they are subscribed (a mark the reader brought is kept for the catch-up).
-    if (added.length) for (const [datasetId, mark] of await marksOf(added)) if (!marks.has(datasetId)) marks.set(datasetId, mark);
+    if (row.format !== 'html' && added.length) for (const [datasetId, mark] of await marksOf(added)) if (!marks.has(datasetId)) marks.set(datasetId, mark);
   };
 
   // Last stylesheet sent on THIS connection, so repeats can be skipped.
@@ -240,6 +248,22 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     by: await authorHandle(row),
   });
 
+  let presenceRevision:string|undefined,replacingPresence=false;
+  const followPresence=async(row:NonNullable<Awaited<ReturnType<typeof getArtifactById>>>)=>{
+    if(closed||row.format!=='html'||presenceRevision===String(row.version))return;
+    // A new source revision replaces only its presence room, never the document stream.
+    replacingPresence=true;presenceRoom?.dispose();replacingPresence=false;
+    latestPresence=null;presenceRevision=String(row.version);
+    const room=await createPresenceRoom({revision:String(row.version),
+      authorize:async()=>{const current=await getArtifactById(id);return !!current&&await canReadArtifact(current,actor);},
+      subscribe:(receive,lost)=>subscribeChannel(presenceChannel(id),receive,lost),
+      subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),
+      send:viewers=>{latestPresence=viewers;writePresence();},close:()=>{if(!replacingPresence)void close();},
+      clock:{now:Date.now,setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>),setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>)}
+    });
+    presenceRoom=room;if(closed)room.dispose();
+  };
+
   const queueRow = (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => {
     frameQueue = frameQueue.then(async () => {
       if (closed || row.version < lastVersionSent) return;
@@ -253,6 +277,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // A FOLDER's one data dependency is ITSELF, which is what makes a
       // child's publish reach an open folder page through the path a dataset
       // write already travels.
+      await followPresence(row);
       await followDatasets(row);
       await pushHtmlShared(row);
       await send(frame);
@@ -330,7 +355,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * dataset this document reads and nothing else, exactly as a wakeup would.
    */
   const since = new URL(request.url).searchParams.get('since');
-  if (since) {
+  if (since && initial.format !== 'html') {
     void changedSince(since, [...datasetUnsubs.keys()])
       .then(async (changed) => { for (const datasetId of changed) await wakeDataset(datasetId); })
       .catch(() => { /* a failed catch-up is a missed wakeup: the next change still arrives */ });

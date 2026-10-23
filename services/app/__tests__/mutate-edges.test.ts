@@ -32,10 +32,7 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return (await res.json()) as { id: string };
 };
 const ROWS = [{ choice: 'ramen' }];
-const DOC = (ds: string) =>
-  `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows\`}</Query>`
-  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice) values ('x')\`}</Mutation></Helmet>`
-  + '<div><Button run="$vote">Vote</Button><Question data="$q" viz={{"kind":"table"}} /></div>';
+const DOC = (ds: string) => `<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Votes</body></html>`;
 
 beforeEach(async () => {
   await resetLiveSubscriptions();
@@ -61,18 +58,12 @@ async function alwaysContended(datasetId: string) {
 }
 
 describe('contention', () => {
-  it('answers 503 dataset_busy with Retry-After on the document door — never a 400 about SQL', async () => {
-    const t = await mintToken('t');
-    const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
-    const doc = (await create(t.token, { markup: DOC(ds) })).id;
-    await alwaysContended(ds);
-    const res = await mutateDocRoute(request(`/a/${doc}/mutate`, { method: 'POST', token:t.token, json: { mutation: 'vote' } }), params({ id: doc }));
-    expect(res.status).toBe(503);
-    expect(res.headers.get('Retry-After')).toBe('1');
-    const body = (await res.json()) as { error: string; detail: string };
-    expect(body.error).toBe('dataset_busy');
-    expect(body.detail).toMatch(/try again/i);
-    vi.restoreAllMocks();
+  it('does not execute retired declared mutations from a native page', async () => {
+    const t=await mintToken('t'),ds=(await create(t.token,{dataset:ROWS,access:'readwrite'})).id;
+    const doc=(await create(t.token,{html:DOC(ds)})).id;
+    const before=await getArtifactById(ds);
+    const res=await mutateDocRoute(request(`/a/${doc}/mutate`,{method:'POST',token:t.token,json:{mutation:'vote'}}),params({id:doc}));
+    expect(res.status).toBe(400);expect(await res.json()).toMatchObject({error:'unknown_mutation'});expect(await getArtifactById(ds)).toEqual(before);
   });
 
   it('answers the same on the owner door', async () => {
@@ -93,7 +84,7 @@ describe('the stream releases what it watched', () => {
   it('drops the document AND dataset channels when the client goes away', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
-    const doc = (await create(t.token, { markup: DOC(ds) })).id;
+    const doc = (await create(t.token, { html: DOC(ds) })).id;
     const controller = new AbortController();
     const request = new Request(`${BASE}/a/${doc}/events`, { signal: controller.signal });
     const res = await eventsRoute(request, params({ id: doc }));
@@ -109,8 +100,8 @@ describe('the stream releases what it watched', () => {
   it('two streams over the same dataset SHARE its channel, and one leaving keeps the other watching', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
-    const a = (await create(t.token, { markup: DOC(ds) })).id;
-    const b = (await create(t.token, { markup: DOC(ds) })).id;
+    const a = (await create(t.token, { html: DOC(ds) })).id;
+    const b = (await create(t.token, { html: DOC(ds) })).id;
     const first = new AbortController();
     const resA = await eventsRoute(new Request(`${BASE}/a/${a}/events`, { signal: first.signal }), params({ id: a }));
     const resB = await eventsRoute(new Request(`${BASE}/a/${b}/events`), params({ id: b }));

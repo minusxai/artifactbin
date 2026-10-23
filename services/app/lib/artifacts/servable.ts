@@ -48,8 +48,9 @@ interface StoredRow {
 const isGraph = (document: unknown): boolean =>
   !!document && typeof document === 'object' && (document as { kind?: unknown }).kind === 'graph';
 
-/** Why the current code does not serve this row, or null when it does. Only markup is judged. */
+/** Native HTML requires source bytes; legacy markup additionally requires its stored graph and syntax marker. */
 export function unservable(row: StoredRow): UnservableDocument | null {
+  if (row.format === 'html') return typeof row.source === 'string' && row.source.trim() ? null : new UnservableDocument(row.version, 'unreadable');
   if (row.format !== 'markup') return null;
   // A row read without its `document` column is judged by the source it decoded to.
   if (('document' in row && !isGraph(row.document)) || typeof row.source !== 'string') return new UnservableDocument(row.version, 'unreadable');

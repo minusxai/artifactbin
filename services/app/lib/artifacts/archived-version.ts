@@ -35,13 +35,6 @@ import { servableDocument } from '@/lib/artifacts/servable';
 /** The parameter's name, in one place: the three doors and the export URL. */
 export const VERSION_PARAM = 'version';
 
-/**
- * What a refused write says to the person who pressed it. The chrome line that
- * says WHICH version this is lives with the bar that draws it
- * (solid/document/DocumentChrome archivedBanner).
- */
-export const archivedReadOnly = (version: number): string => `Version ${version} is read-only`;
-
 /** One archived version, resolved: its stored bytes and the metadata it was saved with. */
 export interface ArchivedRender {
   /** The version being shown. */

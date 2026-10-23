@@ -23,6 +23,7 @@ export function fakeBackend(
   overrides: Partial<ArtifactBackend> = {},
 ): ArtifactBackend {
   return {
+    publishPresence: vi.fn(async () => null),
     mode: Object.keys(missing).length ? 'offline' : 'online',
     unavailable: (feature) => missing[feature] ?? null,
     load: vi.fn(async () => null),

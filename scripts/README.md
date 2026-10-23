@@ -77,21 +77,15 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/gates/gate-comments.mjs` | The owner pins feedback to a node; the agent answers. | `gates.mjs` |
 | `scripts/gates/gate-data-journey.mjs` | A dataset becomes numbers on a page that re-runs its own queries. | `gates.mjs` |
 | `scripts/gates/gate-datasets-in-documents.mjs` | Editable cells that write real rows, under every sharing permission. | `gates.mjs` |
-| `scripts/gates/gate-editor-engine.mjs` | The editor engine end to end. | `gates.mjs` |
-| `scripts/gates/gate-editor-exits.mjs` | Every way out of the editor, on desktop and phone. | `gates.mjs` |
-| `scripts/gates/gate-editor-path.mjs` | The human path into and around the editor. | `gates.mjs` |
 | `scripts/gates/gate-exports.mjs` | What the exporter photographs, checked as pixels. | `gates.mjs` |
-| `scripts/gates/gate-inplace-edit.mjs` | Reading, editing, an agent write and exit on one document. | `gates.mjs` |
 | `scripts/gates/gate-kit-and-fonts.mjs` | The component kit and its type; the compiled reader handover. | `gates.mjs` |
 | `scripts/gates/gate-live.mjs` | Someone else writes and the open page follows without a reload. | `gates.mjs` |
+| `scripts/gates/gate-presence.mjs` | Reader cursors, selections and preferences stay isolated across accounts and tabs on the shared document stream. | `gates.mjs` |
 | `scripts/gates/gate-media.mjs` | Files, images and web URLs from the author to a stranger's browser. | `gates.mjs` |
-| `scripts/gates/gate-mermaid-prerender.mjs` | Published Mermaid diagrams draw from stored SVG that matches the engine. | `gates.mjs` |
 | `scripts/gates/gate-offline-file.mjs` | The offline file and the screenshot comment in Chromium, Firefox and WebKit. | `gates.mjs` |
 | `scripts/gates/gate-own-origin-script.mjs` | A script document on its own origin: framed, queried, edited, exported. | `gates.mjs` |
 | `scripts/gates/gate-reader-shell.mjs` | Who is served what at `/a/<id>`. | `gates.mjs` |
 | `scripts/gates/gate-reading-geometry.mjs` | Where a document sits, moves and scrolls at desktop and phone widths. | `gates.mjs` |
-| `scripts/gates/gate-sessions.mjs` | Live browser sessions and test users through the real CLI. | `gates.mjs` |
-| `scripts/gates/gate-viz-editor.mjs` | Building a chart by clicking. | `gates.mjs` |
 
 ## CLI conformance
 
@@ -103,7 +97,6 @@ Run one with `node scripts/gate-container.mjs <name>`.
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/build/html-core.mjs` | Prebuild the immutable HTML browser core for relocated server bundles. | `scripts/build/build-server.mjs` |
 | `scripts/build/build-server.mjs` | Bundle a server entry into one ESM file with native packages external. | `npm run build`, `ci.yml` |
 | `scripts/build/build-islands.mjs` | The shared reader island build and its manifest. | `npm run build:islands -w services/app`, `ci.yml`, downstream |
 | `scripts/build/build-gate-inputs.mjs` | Build only what the browser gates run: app, server bundle, CLI bundle. | `ci.yml`, `gate-container.mjs` |

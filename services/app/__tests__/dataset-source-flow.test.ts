@@ -1,114 +1,190 @@
-import {expect,it} from 'vitest';
-import {DISPLAY_ROWS} from '@artifactbin/contracts';
-import {request,useAppHarness} from './harness';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import {POST as create} from '@/app/api/artifacts/route';
-import {POST as query} from '@/app/a/[id]/query/route';
-import {POST as tableQuery} from '@/app/a/[id]/tables/route';
-import {GET as getArtifact} from '@/app/api/artifacts/[id]/route';
-import {POST as mutateRows} from '@/app/api/artifacts/[id]/mutate/route';
-import {POST as mutate} from '@/app/a/[id]/mutate/route';
-import { runDocumentDataflow } from '@/lib/document-data';
+/** Native dataset namespaces replace JSX Import/Query chains; direct catalog SQL remains separate. */
+import { expect, it } from "vitest";
+import { request, useAppHarness, mintAccountToken } from "./harness";
+import { nativeHtml } from "./native-html-fixture";
+import { POST as create } from "@/app/api/artifacts/route";
+import { POST as graphql } from "@/app/api/artifacts/[id]/graphql/route";
+import { POST as tableQuery } from "@/app/a/[id]/tables/route";
+import { POST as mutateRows } from "@/app/api/artifacts/[id]/mutate/route";
 useAppHarness();
-const ctx=(id:string)=>({params:Promise.resolve({id})});
-
-it('aggregates complete stored source inputs beyond both source page limits while bounding displayed rows', async () => {
- const token=await mintToken('large migration owner');
- const rows=Array.from({length:10005},(_,i)=>({n:i+1}));
- const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:rows}}));
- expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
- const markup=`<Helmet><Import name="upstream_data" src="ref:${id}" /><Query name="upstream">{\`select * from upstream_data.rows\`}</Query><Import name="filtered_data" src="ref:${id}" /><Query name="filtered">{\`select * from filtered_data.rows where n > 10000\`}</Query><Query name="stats">{\`select count(*) as n, median(n) as middle, sum(n) as total from upstream_data.rows\`}</Query><Query name="tail">{\`select sum(n) as total from filtered_data.rows where n > 10000\`}</Query></Helmet><DataTable data="$stats" />`;
- const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup,visibility:'public'}}));
- expect(doc.status,await doc.clone().text()).toBe(201);const docId=(await doc.json()).id;
- const response=await query(request(`/a/${docId}/query`,{method:'POST',token:token.token,json:{}}),ctx(docId));
- expect(response.status,await response.clone().text()).toBe(200);const state=await response.json();
- expect(state.errors).toEqual({});
- expect(state.tables.stats.rows).toEqual([{n:10005,middle:5003,total:50055015}]);
- // What travels is the display window, with the true count; the aggregate above read every stored row.
- expect(state.tables.upstream.rows).toHaveLength(DISPLAY_ROWS);
- expect(state.tables.upstream).toMatchObject({truncated:true,totalRows:10005});
- expect(state.tables.tail.rows).toEqual([{total:50015}]);
+const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+async function fixture(dataset: unknown) {
+  const owner = await mintAccountToken("dataset source");
+  const publish = async (json: Record<string, unknown>) => {
+    const response = await create(
+      request("/api/artifacts", { method: "POST", token: owner.token, json }),
+    );
+    expect(response.status, await response.clone().text()).toBe(201);
+    return (await response.json()).id as string;
+  };
+  const id = await publish({
+    dataset,
+    access: "readwrite",
+    visibility: "public",
+  });
+  const page = await publish({
+    html: nativeHtml(
+      `<link rel="af-dataset" data-af-name="data" href="ref:${id}"><h1>Dataset</h1>`,
+    ),
+    visibility: "public",
+  });
+  const run = async (
+    query: string,
+    variables: Record<string, unknown> = {},
+  ) => {
+    const response = await graphql(
+      request(`/api/artifacts/${page}/graphql`, {
+        method: "POST",
+        token: owner.token,
+        json: { revision: "1", query, variables },
+      }),
+      ctx(page),
+    );
+    expect(response.status, await response.clone().text()).toBe(200);
+    const body = await response.json();
+    expect(body.errors).toBeUndefined();
+    return body.data.data;
+  };
+  const schema = await run(
+    "{data{schema{tables{id label columns{id label}}}}}",
+  );
+  return {
+    id,
+    page,
+    owner,
+    publish,
+    run,
+    tables: schema.schema.tables as {
+      id: string;
+      label: string;
+      columns: { id: string; label: string }[];
+    }[],
+  };
+}
+it("aggregates complete stored inputs beyond display windows and bounds paginated output", async () => {
+  const f = await fixture(
+      Array.from({ length: 10005 }, (_, i) => ({ n: i + 1 })),
+    ),
+    table = f.tables[0]!,
+    column = table.columns[0]!;
+  const result = await f.run(
+    'query($table:ID!,$column:ID!){data{query(tableId:$table,first:1,aggregates:[{id:"count",operation:COUNT},{id:"total",operation:SUM,columnId:$column}]){source{truncated totalRows storedRows} rows{cells{value{number}}}} rows(tableId:$table,first:2){rows{id} pageInfo{hasNextPage endCursor}}}}',
+    { table: table.id, column: column.id },
+  );
+  expect(
+    result.query.rows[0].cells.map(
+      (c: { value: { number: number } }) => c.value.number,
+    ),
+  ).toEqual([10005, 50055015]);
+  expect(result.query).toMatchObject({
+    source: { truncated: false, totalRows: 10005 },
+  });
+  expect(result.rows.rows).toHaveLength(2);
+  expect(result.rows.pageInfo.hasNextPage).toBe(true);
+  const filtered = await f.run(
+    'query($table:ID!,$column:ID!){data{query(tableId:$table,first:1,filters:[{columnId:$column,operator:GT,parameter:"minimum"}],parameters:[{name:"minimum",value:{type:NUMBER,number:10000}}],aggregates:[{id:"tail",operation:SUM,columnId:$column}]){rows{cells{value{number}}}}}}',
+    { table: table.id, column: column.id },
+  );
+  expect(filtered.query.rows[0].cells[0].value.number).toBe(50015);
 });
-
-it('does not return complete source inputs after document authorization is revoked', async () => {
- const source='<Helmet><Import name="upstream_data" src="ref:abc123" /><Query name="upstream">{`select * from upstream_data.rows`}</Query><Query name="stats">{`select median(n) as n from upstream_data.rows`}</Query></Helmet>';
- const columns=[{name:'n',type:'number' as const}];
- const load=async(id:string)=>({id,format:'dataset',columns});
- const table={tables:{rows:{rows:[{n:1},{n:3}],columns}}};
- await expect(runDocumentDataflow(source,load,async()=>table,{authorize:async()=>{throw new Error('revoked');}})).rejects.toThrow('revoked');
- let reads=0;
- await expect(runDocumentDataflow(source,load,async()=>++reads===1?table:null)).rejects.toThrow('Dataset source is unavailable');
- const missing=await runDocumentDataflow(source,load,async()=>null);
- expect(missing?.state.tables.stats).toBeUndefined();
- expect(missing?.state.errors.upstream).toMatch(/upstream_data/);
+it("discovers multi-schema tables and changes only the explicitly selected stable table", async () => {
+  const f = await fixture({
+    kind: "stored",
+    defaultSchema: "sales",
+    tables: [
+      { schema: "sales", name: "orders", rows: [{ total: 12 }, { total: 8 }] },
+      { schema: "support", name: "tickets", rows: [{ total: 10 }] },
+    ],
+  });
+  expect(f.tables.map((t) => t.label).sort()).toEqual(["orders", "tickets"]);
+  const table = f.tables.find((t) => t.label === "tickets")!,
+    column = table.columns[0]!;
+  const read = await f.run(
+    "query($table:ID!){data{rows(tableId:$table,first:2){revision rows{id}}}}",
+    { table: table.id },
+  );
+  const write = await f.run(
+    'mutation($table:ID!,$column:ID!,$row:ID!,$revision:String!){data{writeRows(tableId:$table,expectedRevision:$revision,requestId:"table-isolation",changes:[{kind:UPDATE,rowId:$row,cells:[{columnId:$column,value:{type:NUMBER,number:11}}]}]){outcome}}}',
+    {
+      table: table.id,
+      column: column.id,
+      row: read.rows.rows[0].id,
+      revision: read.rows.revision,
+    },
+  );
+  expect(write.writeRows.outcome).toBe("committed");
+  const response = await tableQuery(
+    request(`/a/${f.id}/tables`, {
+      method: "POST",
+      json: { sql: "select total from sales.orders order by total" },
+    }),
+    ctx(f.id),
+  );
+  expect((await response.json()).rows).toEqual([{ total: 8 }, { total: 12 }]);
+  const changed = await tableQuery(
+    request(`/a/${f.id}/tables`, {
+      method: "POST",
+      json: { sql: "select total from support.tickets" },
+    }),
+    ctx(f.id),
+  );
+  expect((await changed.json()).rows).toEqual([{ total: 11 }]);
 });
-it('publishes a multi-schema dataset and queries it through source, including a dependent local query',async()=>{
- const token=await mintToken('owner');
- const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:{kind:'stored',defaultSchema:'sales',tables:[{schema:'sales',name:'orders',rows:[{id:1,total:12},{id:2,total:8}]},{schema:'support',name:'tickets',rows:[{order_id:1,subject:'Help'}]}]}}}));
- expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
- const source=`<Helmet><Import name="orders_data" src="ref:${id}" /><Query name="orders">{\`select * from orders_data.orders\`}</Query><Query name="summary">{\`select sum(total) as total from orders\`}</Query></Helmet><DataTable data="$summary" />`;
- const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:source}}));
- expect(doc.status,await doc.clone().text()).toBe(201);const docId=(await doc.json()).id;
- const result=await query(request(`/a/${docId}/query`,{method:'POST',token:token.token,json:{}}),ctx(docId));
- expect(result.status,await result.clone().text()).toBe(200);expect((await result.json()).tables.summary.rows).toEqual([{total:20}]);
- const page=await query(request(`/a/${docId}/query`,{method:'POST',token:token.token,json:{page:{name:'orders',offset:1,limit:1,sort:{col:'total',dir:'desc'}}}}),ctx(docId));
- expect(page.status,await page.clone().text()).toBe(200);expect((await page.json()).tables.orders.rows).toEqual([{id:2,total:8}]);
- const joined=await tableQuery(request(`/a/${id}/tables`,{method:'POST',json:{sql:'select o.total, t.subject from sales.orders o join support.tickets t on o.id=t.order_id'}}),ctx(id));
- expect(joined.status,await joined.clone().text()).toBe(200);expect((await joined.json()).rows).toEqual([{total:12,subject:'Help'}]);
- const wire=await getArtifact(request(`/api/artifacts/${id}`,{token:token.token}),ctx(id));expect((await wire.json()).meta.catalog.tables).toHaveLength(2);
+it("does not admit folder projections as dataset namespaces", async () => {
+  const f = await fixture([{ n: 1 }]);
+  const folder = await f.publish({
+    format: "folder",
+    title: "Reports",
+    visibility: "public",
+  });
+  // Folder listing behavior belongs to the retained folder API; JSX SQL-import publication is retired.
+  const response = await create(
+    request("/api/artifacts", {
+      method: "POST",
+      token: f.owner.token,
+      json: {
+        html: nativeHtml(
+          `<link rel="af-dataset" data-af-name="children" href="ref:${folder}"><p>Folder</p>`,
+        ),
+      },
+    }),
+  );
+  expect(response.status).toBe(400);
 });
-it('mutates only the explicitly named stored table without changing public.rows',async()=>{
- const token=await mintToken('owner');
- const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{access:'readwrite',dataset:{kind:'stored',tables:[{schema:'public',name:'rows',rows:[{n:1}]},{schema:'public',name:'other',rows:[{n:10}]}]}}}));
- expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
- const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet><Import name="edit_data" src="ref:${id}" /><Mutation name="edit">{\`update edit_data.other set n=11\`}</Mutation></Helmet><Button run="$edit">Edit</Button>`}}));
- expect(doc.status,await doc.clone().text()).toBe(201);const did=(await doc.json()).id;
- expect((await mutate(request(`/a/${did}/mutate`,{method:'POST',token:token.token,json:{mutation:'edit'}}),ctx(did))).status).toBe(200);
- const rows=await tableQuery(request(`/a/${id}/tables`,{method:'POST',json:{sql:'select * from public.rows'}}),ctx(id));expect((await rows.json()).rows).toEqual([{n:1}]);
- const other=await tableQuery(request(`/a/${id}/tables`,{method:'POST',json:{sql:'select * from public.other'}}),ctx(id));expect((await other.json()).rows).toEqual([{n:11}]);
-});
-
-it('queries a folder through the same source syntax, including pagination', async () => {
- const token = await mintToken('folder owner');
- const publish = async (json: Record<string, unknown>) => {
-  const response = await create(request('/api/artifacts', {method:'POST', token:token.token, json}));
-  expect(response.status, await response.clone().text()).toBe(201);
-  return (await response.json()).id as string;
- };
- const folder = await publish({format:'folder', title:'Reports', visibility:'public'});
- await publish({markup:'<p>One</p>', title:'One', parent_id:folder, visibility:'public'});
- await publish({markup:'<p>Two</p>', title:'Two', parent_id:folder, visibility:'public'});
- const doc = await publish({visibility:'public',markup:`<Helmet><Import name="children_data" src="ref:${folder}" /><Query name="children">{\`select title from children_data.rows\`}</Query></Helmet><DataTable data="$children" />`});
- const response = await query(request(`/a/${doc}/query`, {method:'POST', token:token.token, json:{page:{name:'children',offset:1,limit:1,sort:{col:'title',dir:'asc'}}}}), ctx(doc));
- expect(response.status, await response.clone().text()).toBe(200);
- expect((await response.json()).tables.children.rows).toEqual([{title:'Two'}]);
-});
-
-it('uses catalog table names at the direct mutation HTTP boundary and refuses implicit aliases', async () => {
- const token = await mintToken('writer');
- const response = await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite'}}));
- expect(response.status).toBe(201);
- const id = (await response.json()).id;
- const valid = await mutateRows(request(`/api/artifacts/${id}/mutate`,{method:'POST',token:token.token,json:{sql:'update public.rows set n=2'}}),ctx(id));
- expect(valid.status,await valid.clone().text()).toBe(200);
- const retired = await mutateRows(request(`/api/artifacts/${id}/mutate`,{method:'POST',token:token.token,json:{sql:`update ref_${id} set n=3`}}),ctx(id));
- expect(retired.status).toBe(400);
- const rows = await tableQuery(request(`/a/${id}/tables`,{method:'POST',json:{sql:'select n from public.rows'}}),ctx(id));
- expect((await rows.json()).rows).toEqual([{n:2}]);
-});
-
-it('executes stored source queries and still refuses DuckDB-only SQL at publish, by name',async()=>{
- const token=await mintToken('legacy query owner');
- const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{hours:1},{hours:2},{hours:3},{hours:10}]}}));
- expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
- const publish=async(helmet:string)=>{const r=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet>${helmet}</Helmet><DataTable data="$legacy" />`}}));expect(r.status).toBe(400);return JSON.stringify(await r.json());};
- // source= uses the dataset's own catalog, for stored as well as connected datasets.
- const stored=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet><Query name="legacy" source="ref:${id}">{\`select median(hours) as median from public.rows\`}</Query></Helmet><DataTable data="$legacy" />`}}));
- expect(stored.status,await stored.clone().text()).toBe(201);
- const documentId=(await stored.json()).id;
- const result=await query(request(`/a/${documentId}/query`,{method:'POST',token:token.token,json:{only:['legacy']}}),ctx(documentId));
- expect(result.status,await result.clone().text()).toBe(200);
- expect((await result.json()).tables.legacy.rows).toEqual([{median:2.5}]);
- // DuckDB-only syntax is SQLite's own refusal of the statement, located at the Query.
- expect(await publish(`<Import name="legacy_data" src="ref:${id}" /><Query name="legacy">{\`select median(hours::double) as median from legacy_data.rows\`}</Query>`)).toMatch(/<Query> \\"legacy\\" unrecognized token/);
+it("keeps direct writes catalog-scoped and refuses retired implicit SQL aliases", async () => {
+  const f = await fixture([{ n: 1 }]);
+  const valid = await mutateRows(
+    request(`/api/artifacts/${f.id}/mutate`, {
+      method: "POST",
+      token: f.owner.token,
+      json: { sql: "update public.rows set n=2" },
+    }),
+    ctx(f.id),
+  );
+  expect(valid.status, await valid.clone().text()).toBe(200);
+  const retired = await mutateRows(
+    request(`/api/artifacts/${f.id}/mutate`, {
+      method: "POST",
+      token: f.owner.token,
+      json: { sql: `update ref_${f.id} set n=3` },
+    }),
+    ctx(f.id),
+  );
+  expect(retired.status).toBe(400);
+  const rows = await tableQuery(
+    request(`/a/${f.id}/tables`, {
+      method: "POST",
+      json: { sql: "select n from public.rows" },
+    }),
+    ctx(f.id),
+  );
+  expect((await rows.json()).rows).toEqual([{ n: 2 }]);
+  const invalid = await tableQuery(
+    request(`/a/${f.id}/tables`, {
+      method: "POST",
+      json: { sql: "select n::double from public.rows" },
+    }),
+    ctx(f.id),
+  );
+  expect(invalid.status).toBe(400);
 });

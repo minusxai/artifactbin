@@ -29,6 +29,7 @@ function routePaths(dir: string, prefix: string, out: string[] = []): string[] {
 
 /** Routes that are deliberately NOT operations, each with its reason beside it here. */
 const EXCEPTIONS = new Set([
+  '/api/artifacts/{id}/presence', // ephemeral browser reader geometry; original page ACL, no durable artifact operation
   '/api/artifacts/{id}/graphql', // native page GraphQL transport; fields are admitted by the page schema
   '/api/artifacts/{id}/edits', // retired atomic JSX editing route; answers 404
   '/api/artifacts/{id}/runs', // asynchronous execution admission; authoring adapter pins the program, no document edit

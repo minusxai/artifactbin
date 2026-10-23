@@ -1,4 +1,3 @@
-import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 /**
  * The bearer/cookie route wrapper, and the two in-memory web-ingest allowances
  * it owns.
@@ -8,13 +7,12 @@ import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
  * resolve never falls back to a cookie identity. The operator's secret is
  * lib/admin-auth's, with its own uniform 404.
  */
-import { cliReleaseVersion, WEB_INGEST_MAX_PER_HOUR } from '../platform/config';
 import { isCrossSiteRequest, json, unauthorized } from '../http/http';
+import {WEB_INGEST_MAX_PER_HOUR} from '../platform/config';
 import type { Harness } from '@/lib/platform';
 import type { RequestIdentity, TokenHoldingActor } from './actors';
 import { isCookieCredential, resolveRequestIdentity, sessionActor } from './request-identity';
 import { matchesWorkspaceAccount } from './guest-owner';
-import {cliNpmRequired} from './cli-version-support';
 
 /** The identity a token door admits: always a token, the presented bearer or the browser's agent cookie. */
 export type TokenIdentity = RequestIdentity & TokenHoldingActor;
@@ -121,7 +119,6 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     request: Request,
     routeCtx?: { params: Promise<Record<string, string>> },
   ): Promise<Response> => {
-    const protocol=request.headers.get('X-Artifactbin-Protocol');
     // An explicit dry run is a QUESTION — "would this work?" — and on this door it leaves no trace.
     const dryRun=['GET','HEAD'].includes(request.method)&&request.headers.get('X-Artifactbin-Dry-Run')==='1';
     const resolved=await resolveRequestIdentity(request,'token',{dryRun,readOnly:options.readOnly});
@@ -131,11 +128,6 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     if (!holdsToken(actor)) return unauthorized(request);
     // A cookie authorizes a mutation only from our own site.
     if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
-    const npmRequired=cliNpmRequired(request);
-    if(npmRequired)return npmRequired;
-    // Old clients inspect this header before JSON errors: keep required protocol in the body
-    // so a future incompatible server cannot mask its concrete npm launch instruction.
-    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,required_version:cliReleaseVersion(),hint:'Run afbin update, then retry.'}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-CLI-Version':cliReleaseVersion()}});
     const account=actor.userId??actor.tokenId;
     const expectedAccount=request.headers.get('X-Artifactbin-Account');
     if(expectedAccount&&!await matchesWorkspaceAccount(expectedAccount,account))return json({error:'account_mismatch',expected_account:expectedAccount,actual_account:account,hint:'Use the credentials for this workspace account.'},409);
@@ -143,15 +135,11 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     const response=await handler(request, { actor, clientHarness: resolved.clientHarness, params });
     const headers=new Headers(response.headers);
     headers.set('X-Artifactbin-Account',expectedAccount||account);
-    headers.set('X-Artifactbin-Protocol',String(CLI_PROTOCOL_VERSION));
-    {const released=cliReleaseVersion();if(released)headers.set('X-Artifactbin-CLI-Version',released);}
     return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
   };
 }
 
-/** Does this request intend to CHANGE something? (GET/HEAD/OPTIONS do not.) */
-const isMutation = (request: Request): boolean =>
-  !['GET', 'HEAD', 'OPTIONS'].includes(request.method.toUpperCase());
+const isMutation=(request:Request):boolean=>!['GET','HEAD','OPTIONS'].includes(request.method.toUpperCase());
 
 /**
  * The browser-credential guard for session routes (/api/my/*): an account

@@ -1,3 +1,4 @@
+import type {PresencePublication,PresenceViewer} from '@/lib/html-presence/contract';
 /**
  * THE ARTIFACT BACKEND — every server call the document surface makes while
  * reading, editing and commenting, behind one interface.
@@ -148,6 +149,7 @@ export interface MembersAnswer {
  * read with `liveFrame()`, and annotations with `listAnnotations('open')`.
  */
 interface LiveHandlers {
+  onPresence?: (viewers: PresenceViewer[]) => void;
   /** A head ping (`{editId, version, by}`), parsed; the subscriber validates it. */
   onPing: (ping: ArtifactVersionPing) => void;
   /** A dataset under this document changed (a named `data` frame), parsed. */
@@ -198,6 +200,8 @@ export interface ArtifactBackend {
    * `since` is the served results' mark (ServedResults.since): the stream first
    * reports every dataset that changed after the page's rows were computed.
    */
+  /** Ephemeral platform-owned reader session; null when refused or unavailable. */
+  publishPresence(input: PresencePublication): Promise<string | null>;
   live(handlers: LiveHandlers, options?: { since?: string }): () => void;
   /** The complete document a ping announced (GET /a/<id>/events/frame). Null when refused. */
   liveFrame(): Promise<ArtifactLiveEvent | null>;

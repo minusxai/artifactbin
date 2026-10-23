@@ -1,6 +1,7 @@
 import type {AccessActor} from '@/lib/accounts';
+import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 import type {HtmlPageVersion,PageNamespaceSource,PageOperationRequest,HtmlJsonObject} from '@artifactbin/contracts';
-import {getArtifactHeaderById,effectiveRole} from '@/lib/artifacts';
+import {getArtifactHeaderById,effectiveRole,accessMoved} from '@/lib/artifacts';
 import {readHtmlPage} from '@/lib/html-publication';
 import {getHtmlBackendVersion} from '@/lib/html-backends';
 import {createPageOperations,createBackendInvoker,pageOperationKind} from '@/lib/page-operations';
@@ -17,9 +18,9 @@ async function sources(_actor:AccessActor,page:HtmlPageVersion):Promise<readonly
  }));
  return [...backends,...datasetNamespaceSources(page.links.filter(link=>link.kind==='dataset'))];
 }
-function operations(actor:AccessActor,page:HtmlPageVersion){
+function operations(actor:AccessActor,page:HtmlPageVersion,retainReadFence?:(verify:()=>Promise<void>)=>void){
  const backend=createBackendInvoker(services().runner,getHtmlBackendVersion);
- const dataset=createDatasetNamespaceInvoker(actor,page.links.filter(link=>link.kind==='dataset'),createRetainedDatasetGraphql());
+ const dataset=createDatasetNamespaceInvoker(actor,page.links.filter(link=>link.kind==='dataset'),createRetainedDatasetGraphql({retainReadFence}));
  return createPageOperations({readPage:readHtmlPage,role:async(a,id)=>{const row=await getArtifactHeaderById(id);return row?effectiveRole(row,a):'none';},sources,invoke:call=>{
   const link=page.links.find(link=>link.name===call.namespace);
   if(!link)throw Error('namespace_not_linked');
@@ -31,10 +32,21 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
  const actor=await requestOrSessionActor(request);
  if(refusesCrossSite(request,actor))return json({error:'forbidden'},403);
  try{
+  const admitted=await getArtifactHeaderById(pageId);if(!admitted)throw Error('page_unavailable');
+  const verifyPage=async(revision:string)=>{
+   const currentActor=await requestOrSessionActor(request,{revalidate:true});
+   if(JSON.stringify(currentActor)!==JSON.stringify(actor))throw Error('page_unavailable');
+   const current=await getArtifactHeaderById(pageId);
+   if(!current||accessMoved(admitted,current)||current.edit_id!==admitted.edit_id||current.version!==admitted.version||JSON.stringify(current.meta.htmlLinks)!==JSON.stringify(admitted.meta.htmlLinks))throw Error('page_unavailable');
+   await readHtmlPage(currentActor,pageId,revision);
+  };
+  const readHeaders={'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'};
   if(request.method==='GET'){
    const revision=new URL(request.url).searchParams.get('revision')??undefined;
    const page=await readHtmlPage(actor,pageId,revision);
-   return json({sdl:await operations(actor,page).schema(actor,pageId,page.revision),revision:page.revision});
+   const sdl=await operations(actor,page).schema(actor,pageId,page.revision);
+   await verifyPage(page.revision);
+   return json({sdl,revision:page.revision},200,readHeaders);
   }
   const body=await readJson(request);
   if(!body||typeof body.query!=='string'||typeof body.revision!=='string'||(body.operationName!==undefined&&typeof body.operationName!=='string')||(body.variables!==undefined&&(!body.variables||typeof body.variables!=='object'||Array.isArray(body.variables))))return json({error:'invalid_graphql_request'},400);
@@ -44,6 +56,14 @@ export async function pageGraphql(request:Request,pageId:string):Promise<Respons
   if(operationKind==='mutation'&&head.revision!==body.revision)return json({error:'archived_page_readonly'},403);
   const page=await readHtmlPage(actor,pageId,body.revision);
   const operation:PageOperationRequest={pageId,revision:body.revision,query:body.query,...(body.variables?{variables:body.variables as HtmlJsonObject}:{}),...(typeof body.operationName==='string'?{operationName:body.operationName}:{})};
-  return json(await operations(actor,page).execute(actor,operation,request.signal));
+  // Mutations conserve their durable receipts; this final fence only withholds read results.
+  const readFences:Array<()=>Promise<void>>=[];
+  const result=await operations(actor,page,operationKind==='query'?verify=>{readFences.push(verify);}:undefined).execute(actor,operation,request.signal);
+  if(operationKind==='query'){
+   for(const verify of readFences)await verify();
+   await verifyPage(page.revision);
+   return json(result,200,readHeaders);
+  }
+  return json(result);
  }catch{return json({error:'page_operation_unavailable'},404);}
 }

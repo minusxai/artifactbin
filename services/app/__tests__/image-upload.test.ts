@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * Raw-body image upload: an image can be POSTed as its own bytes with a
  * `Content-Type: image/*` header, on both the bearer route (agents) and its
@@ -90,9 +91,9 @@ describe('bearer raw-body image upload', () => {
 
   it('still accepts a JSON content body (no regression)', async () => {
     const t = await mintToken('t');
-    const res = await bearerCreate(jsonReq('/api/artifacts', { token: t.token, body: { title: 'h', markup: '<h1>hi</h1>' } }));
+    const res = await bearerCreate(jsonReq('/api/artifacts', { token: t.token, body: { title: 'h', html: nativeHtml('<h1>hi</h1>') } }));
     expect(res.status).toBe(201);
-    expect((await res.json()).format).toBe('markup');
+    expect((await res.json()).format).toBe('html');
   });
 });
 
@@ -178,7 +179,7 @@ describe('session raw-body image upload', () => {
       ...(stored as StoredContent), title: null, description: null,
     });
     const doc = await createArtifact(tokenA.id, user.id, {
-      format: 'markup', source: `<div data-design="tw"><img src="ref:${img.id}" alt="" /></div>`,
+      format: 'html', source: nativeHtml(`<div><img src="ref:${img.id}" alt="" /></div>`),
       meta: { refs: [{ id: img.id, kind: 'image' }] }, title: 'doc', description: null,
     });
 
@@ -190,9 +191,9 @@ describe('session raw-body image upload', () => {
   it('still accepts a JSON content body (session create twin)', async () => {
     const user = await createUser({ email: 'e@example.com' });
     sessionUser.id = user.id;
-    const res = await sessionCreate(jsonReq('/api/my/artifacts', { body: { title: 'doc', markup: '<h1>Hello</h1>' } }));
+    const res = await sessionCreate(jsonReq('/api/my/artifacts', { body: { title: 'doc', html: nativeHtml('<h1>Hello</h1>') } }));
     expect(res.status).toBe(201);
-    expect((await res.json()).format).toBe('markup');
+    expect((await res.json()).format).toBe('html');
   });
 });
 
@@ -246,11 +247,11 @@ describe('previewing an image', () => {
     expect((await res.json()).error).toBe('image_not_previewable');
   });
 
-  it('still compiles a draft document, which is what the route is for', async () => {
+  it('previews native HTML without generating a retired JSX stylesheet', async () => {
     const t = await mintToken('t');
-    const res = await preview({ markup: '<h1 className="text-2xl">Draft</h1>' }, t.token);
+    const res = await preview({ html: nativeHtml('<h1 className="text-2xl">Draft</h1>') }, t.token);
     expect(res.status).toBe(200);
-    expect(typeof (await res.json()).css).toBe('string');
+    expect(await res.json()).toEqual({html:'',format:'html'});
   });
 });
 

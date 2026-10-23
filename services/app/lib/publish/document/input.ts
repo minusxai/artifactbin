@@ -97,7 +97,7 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
     return { format: 'folder', source: '', meta: {}, derivedTitle: null };
   }
   if (body.program !== undefined || body.format === 'program') return json({error:'unsupported_format'},400);
-  if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image_pdf' }, 400);
+  if (present.length !== 1) return json({ error: 'one_of_html_dataset_viz_image_pdf_file' }, 400);
   const kind = present[0];
   if(kind==='html'){
     const source=String(body.html);

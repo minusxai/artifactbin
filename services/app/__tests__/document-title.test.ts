@@ -1,9 +1,9 @@
 import {getArtifactById, updateSharingFor} from '@/lib/artifacts';
 import { identityForUser } from '@/lib/accounts';
-import {documentEditBody} from './prepared-document';
+import {artifactState} from '@/lib/artifacts';
 import {patchMetadata} from '@/__tests__/conditional-request';
 /**
- * What a document is CALLED follows its own heading until someone names it.
+ * The native head title names a page until an explicit title overrides it.
  *
  * The failure this guards: /api/start seeds a document, an agent rewrites its
  * heading through an ordinary edit, and every surface keeps saying the seeded
@@ -12,7 +12,7 @@ import {patchMetadata} from '@/__tests__/conditional-request';
 import { describe, expect, it } from 'vitest';
 import { artifactMetadata } from '@/test/helpers/pages';
 import { POST as startRoute } from '@/app/api/start/route';
-import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
+import { PUT as editRoute } from '@/app/api/artifacts/[id]/route';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 
@@ -41,12 +41,12 @@ const start = async (): Promise<Start> => {
 };
 
 /** Match the seeded heading text without depending on its freshly generated id. */
-const PLACEHOLDER_H1 = '>Untitled</h1>';
+const PLACEHOLDER_H1 = '>Untitled document</title>';
 
-async function editBody(id:string,old:string,value:string){const row=(await getArtifactById(id))!;return documentEditBody(row,{source:row.source!.replace(old,value)});}
+async function editBody(id:string,old:string,value:string){const row=(await getArtifactById(id))!;return {html:row.source!.replace(old,value),expectedVersion:row.version,expectedState:artifactState(row)};}
 const retitle = async (doc: Start, heading: string) => {
   const res = await editRoute(
-    request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: await editBody(doc.id,PLACEHOLDER_H1,`>${heading}</h1>`) }),
+    request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: doc.token, json: await editBody(doc.id,PLACEHOLDER_H1,`>${heading}</title>`) }),
     params({ id: doc.id }),
   );
   expect(res.status).toBe(200);
@@ -59,10 +59,10 @@ const pageTitle = async (id: string) => {
   return meta.title;
 };
 
-describe('the page title follows the document', () => {
+describe('the page title follows the native head', () => {
   it('reads the heading an agent wrote, not the seeded name', async () => {
     const doc = await start();
-    expect(await pageTitle(doc.id)).toBe('Untitled'); // the placeholder's own heading
+    expect(await pageTitle(doc.id)).toBe('Untitled document'); // the placeholder's own heading
     await retitle(doc, 'Q3 Revenue Review');
     expect(await pageTitle(doc.id)).toBe('Q3 Revenue Review');
   });
@@ -71,20 +71,20 @@ describe('the page title follows the document', () => {
     const doc = await start();
     await retitle(doc, 'First Draft');
     const res = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: await editBody(doc.id,'First Draft','Second Draft') }),
+      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: doc.token, json: await editBody(doc.id,'First Draft','Second Draft') }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
     expect(await pageTitle(doc.id)).toBe('Second Draft');
   });
 
-  it('stops following once someone names it explicitly', async () => {
+  it('an explicit title carried with a replacement wins over its head title', async () => {
     const doc = await start();
     const res = await patchMetadata(doc.token,doc.id,{title:'Named by hand'});
     expect(res.status).toBe(200);
     await res.json();
     const headingEdit = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: await editBody(doc.id,PLACEHOLDER_H1,'>A New Heading</h1>') }),
+      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: doc.token, json: {...await editBody(doc.id,PLACEHOLDER_H1,'>A New Heading</title>'),title:'Named by hand'} }),
       params({ id: doc.id }),
     );
     expect(headingEdit.status).toBe(200);

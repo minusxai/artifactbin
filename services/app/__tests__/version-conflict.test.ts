@@ -1,5 +1,4 @@
-import {getArtifactById} from '@/lib/artifacts';
-import {documentPublicationBody} from './prepared-document';
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {observedRequest} from '@/__tests__/conditional-request';
 /** Both observed version and state are required; stale replacements never overwrite the head. */
 import { describe, expect, it } from 'vitest';
@@ -18,7 +17,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 
 async function createDoc(token: string) {
   const res = await createArtifactRoute(
-    request('/api/artifacts', { method: 'POST', token: token, json: { markup: '<h1 className="text-2xl">v1</h1>' } }),
+    request('/api/artifacts', { method: 'POST', token: token, json: { html:nativeHtml('<h1 className="text-2xl">v1</h1>') } }),
   );
   expect(res.status).toBe(201);
   return (await res.json()) as { id: string; version: number };
@@ -31,7 +30,7 @@ describe('expectedVersion on PUT', () => {
 
     // The "agent" edits first (v1 → v2).
     const agentPut = await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1 className="text-2xl">agent edit</h1>', expectedVersion: 1 } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { html:nativeHtml('<h1 className="text-2xl">agent edit</h1>'), expectedVersion: 1 } }),
       params({ id: doc.id }),
     );
     expect(agentPut.status).toBe(200);
@@ -39,22 +38,22 @@ describe('expectedVersion on PUT', () => {
 
     // The "human", still holding v1, saves — stale, must 409 and change nothing.
     const stale = await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1 className="text-2xl">human edit</h1>', expectedVersion: 1 } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { html:nativeHtml('<h1 className="text-2xl">human edit</h1>'), expectedVersion: 1 } }),
       params({ id: doc.id }),
     );
     expect(stale.status).toBe(409);
-    const conflict = (await stale.json()) as { error: string; version: number };
-    expect(conflict.error).toBe('doc_changed');
-    expect(conflict.version).toBe(2);
+    const conflict = (await stale.json()) as { error: string; currentVersion: number };
+    expect(conflict.error).toBe('version_conflict');
+    expect(conflict.currentVersion).toBe(2);
 
     const unchanged = await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: t.token }), params({ id: doc.id }));
-    const wire = (await unchanged.json()) as { version: number; markup: string };
+    const wire = (await unchanged.json()) as { version: number; html: string };
     expect(wire.version).toBe(2);
-    expect(wire.markup).toContain('agent edit'); // the stale write left no trace
+    expect(wire.html).toContain('agent edit'); // the stale write left no trace
 
     // Replay against the version the 409 reported → converges as v3.
     const replay = await putArtifact(
-      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1 className="text-2xl">human edit</h1>', expectedVersion: conflict.version } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { html:nativeHtml('<h1 className="text-2xl">human edit</h1>'), expectedVersion: conflict.currentVersion } }),
       params({ id: doc.id }),
     );
     expect(replay.status).toBe(200);
@@ -68,21 +67,20 @@ describe('expectedVersion on PUT', () => {
 
   it('omitted expectedVersion refuses replacement without changing the head', async () => {
     const t = await mintToken('t');const doc = await createDoc(t.token);
-    const res = await putArtifact(request(`/api/artifacts/${doc.id}`, {method:'PUT',token:t.token,json:{markup:'<p>Changed</p>'}}),params({id:doc.id}));
-    expect(res.status).toBe(400);expect((await res.json()).error).toBe('jsonb_operations_required');
+    const res = await putArtifact(request(`/api/artifacts/${doc.id}`, {method:'PUT',token:t.token,json:{html:nativeHtml('<p>Changed</p>')}}),params({id:doc.id}));
+    expect(res.status).toBe(400);expect((await res.json()).error).toBe('version_required');
     const read=await getArtifactRoute(request(`/api/artifacts/${doc.id}`,{token:t.token}),params({id:doc.id}));expect((await read.json()).version).toBe(1);
   });
 
   it('a non-numeric expectedVersion is a 400, not a silent overwrite', async () => {
     const t = await mintToken('t');
     const doc = await createDoc(t.token);
-    const prepared=documentPublicationBody((await getArtifactById(doc.id))!,{markup:'<p>x</p>'},true);
-    (prepared.document_update.patch as unknown as {baseVersion:unknown}).baseVersion='one';
+    const prepared={html:nativeHtml('<p>x</p>'),expectedVersion:'one',expectedState:'0'.repeat(64)};
     const res = await putArtifact(
       request(`/api/artifacts/${doc.id}`, { method:'PUT',token:t.token,json:prepared }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe('invalid_edit_body');
+    expect(((await res.json()) as { error: string }).error).toBe('invalid_expected_version');
   });
 });

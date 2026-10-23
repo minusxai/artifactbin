@@ -1,3 +1,4 @@
+import {PRESENCE_EVENT,type PresencePublication,type PresenceViewer} from '@/lib/html-presence/contract';
 /**
  * THE ONLINE BACKEND — the surface's existing requests, moved here verbatim:
  * the same URLs (including where a call site did or did not encode the id),
@@ -44,6 +45,7 @@ export function artifactRequests(id: string) {
     head: () => fetch(path),
     version: (n: number) => fetch(`${path}/versions/${n}`),
     edits: (body: unknown) => fetch(`${path}/edits`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }),
+    htmlUpdate: (body: unknown) => fetch(path, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(body) }),
     patch: (body: unknown) => fetch(path, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) }),
     revert: (body: unknown) => fetch(`${path}/revert`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }),
   };
@@ -168,6 +170,10 @@ export function createHttpBackend(id: string): ArtifactBackend {
     async revert(input) {
       return answer(await artifactRequests(id).revert(input));
     },
+    async publishPresence(input: PresencePublication) {
+      const response=await fetch(`/api/artifacts/${encodeURIComponent(id)}/presence`,{method:'POST',credentials:'same-origin',headers:JSON_HEADERS,body:JSON.stringify(input),keepalive:!input.visible});
+      if(!response.ok)return null;const body=await response.json() as {id?:unknown};return typeof body.id==='string'?body.id:null;
+    },
     live(handlers, options) {
       // Reconnecting, with a heartbeat watchdog and a catch-up on wake (lib/live-stream).
       const stream = openLiveStream({
@@ -178,6 +184,7 @@ export function createHttpBackend(id: string): ArtifactBackend {
           handlers.onPing(ping);
         },
         events: {
+          [PRESENCE_EVENT]: data => {try {const viewers:unknown=JSON.parse(data);if(Array.isArray(viewers))handlers.onPresence?.(viewers as PresenceViewer[]);}catch{}},
           [STORY_DATA_EVENT]: (data) => {
             try { handlers.onData(JSON.parse(data) as ArtifactDataEvent); } catch { /* a malformed frame is a dropped wakeup, nothing more */ }
           },

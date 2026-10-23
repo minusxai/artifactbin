@@ -45,9 +45,10 @@ describe('checkGates', () => {
   const known = gateNamesOnDisk(readdirSync(path.join(SCRIPTS, 'gates')));
 
   it('accepts real gates and names every unknown one at once', () => {
-    expect(() => checkGates(['editor-path', 'inplace-edit'], known)).not.toThrow();
-    expect(() => checkGates(['editor-path', 'nope', 'nada'], known)).toThrow(/unknown gate\(s\): nope, nada/);
+    expect(() => checkGates(['live', 'data-journey'], known)).not.toThrow();
+    expect(() => checkGates(['live', 'nope', 'nada'], known)).toThrow(/unknown gate\(s\): nope, nada/);
     expect(() => checkGates(['container'], known)).toThrow(/unknown gate/);
+    expect(() => checkGates(['editor-path', 'inplace-edit'], known)).toThrow(/unknown gate\(s\): editor-path, inplace-edit/);
   });
 });
 

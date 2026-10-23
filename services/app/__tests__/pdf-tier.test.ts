@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * THE PDF TIER at its door — `pdf` (a base64 data: URL) and `pdfUrl` (a public
  * URL imported through web-ingest), the two shapes an agent has.
@@ -232,16 +233,16 @@ describe('the preview door', () => {
 
   it('still previews markup, which is what the route is for', async () => {
     const t = await mintToken('t');
-    const res = await preview(request('/api/preview', { method: 'POST', token: t.token, json: { markup: '<div data-design="tw" className="p-8"><h1 className="text-2xl">Draft</h1></div>' } }));
+    const res = await preview(request('/api/preview', { method: 'POST', token: t.token, json: { html: nativeHtml('<div data-design="tw" className="p-8"><h1 className="text-2xl">Draft</h1></div>') } }));
     expect(res.status).toBe(200);
-    expect((await res.json()).format).toBe('markup');
+    expect((await res.json()).format).toBe('html');
   });
 });
 
 describe('the one-of rule', () => {
   it('a pdf beside a markup is refused, like every other pair', async () => {
     const t = await mintToken('t');
-    const res = await create(t.token, { markup: '<div><p>x</p></div>', pdf: samplePdfDataUrl(1) });
+    const res = await create(t.token, { html: nativeHtml('<div><p>x</p></div>'), pdf: samplePdfDataUrl(1) });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/one_of/);
   });
@@ -266,7 +267,7 @@ describe('the two quotas share one code and must not share one story', () => {
     // 1, not 0: zero DISABLES the count cap (0 ⇒ unlimited), and the token
     // already holds the one artifact the byte leg above stored.
     setArtifactQuotaForTests(1);
-    const byCount = await create(t.token, { markup: '<div data-design="tw"><p>x</p></div>' });
+    const byCount = await create(t.token, { html: nativeHtml('<div data-design="tw"><p>x</p></div>') });
     expect(byCount.status).toBe(403);
     const details = (await byCount.json()).details.join(' ');
     expect(details).toMatch(/count/i);

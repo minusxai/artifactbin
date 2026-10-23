@@ -292,11 +292,11 @@ const editCommentOp: Operation = {
   errors: [
     NOT_FOUND,
     { status: 400, code: 'invalid_annotation_edit', fix: 'send the new text as a non-empty body' },
-    { status: 403, code: 'account_required', fix: 'run `afbin auth` and sign in with the account that wrote the comment' },
+    { status: 403, code: 'account_required', fix: 'follow /llms/http-auth and sign in with the account that wrote the comment' },
     { status: 409, code: 'annotation_conflict', fix: 'read the current conversation and retry with its revision; the comment was not changed' },
   ],
   async run(ctx, input) {
-    if (!ctx.actor.userId) return reply({ error: 'account_required', hint: 'Run `afbin auth` and sign in with an account; an anonymous credential wrote no comments to edit.' }, 403);
+    if (!ctx.actor.userId) return reply({ error: 'account_required', hint: 'Follow /llms/http-auth and sign in with an account; an anonymous credential wrote no comments to edit.' }, 403);
     const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
     if (refusal) return fromResponse(refusal);
     return fromResponse(await respondToAnnotationEdit(input, ctx.actor, String(input.id), String(input.comment_id), ctx.author.kind, ctx.mutationReceipt));
@@ -320,7 +320,7 @@ const listArtifactsOp: Operation = {
     if(input.search!==undefined&&(typeof input.search!=='string'||input.search.length>1000))return reply({error:'invalid_filter',field:'search'},400);
     const filters={...(input.type?{type:input.type as 'artifact'|'folder'|'dataset'|'file'}:{}),...(input.visibility?{visibility:input.visibility as 'private'|'unlisted'|'public'}:{}),relationship:(input.relationship??'all') as 'all'|'owned'|'shared',...(input.search?{search:String(input.search)}:{}),...(input.parent_id?{parent_id:String(input.parent_id)}:{})};
     const scope=createHash('sha256').update(JSON.stringify([ctx.actor.userId??ctx.actor.tokenId,filters])).digest('hex');
-    if(page.cursor&&page.cursor.scope!==scope)return reply({error:'invalid_cursor',hint:'Restart this collection without --cursor; the filters changed.'},400);
+    if(page.cursor&&page.cursor.scope!==scope)return reply({error:'invalid_cursor',hint:'Restart this collection without cursor; the filters changed.'},400);
     const result = await listArtifactPageFor(ctx.actor, page.limit, page.cursor as {created: string; id: string} | undefined,filters);
     return reply({ artifacts: result.rows.map((r) => artifactSummaryToWire(r, ctx.base)), next_cursor: result.next ? encodeCursor('artifacts', {...result.next,scope}) : null });
   },
@@ -510,7 +510,7 @@ const mutateDatasetOp: Operation = {
   errors: [
     NOT_FOUND,
     { status: 400, code: 'not_a_dataset', fix: 'only datasets hold rows — this id is another tier' },
-    { status: 403, code: 'dataset_read_only', fix: 'publish the dataset writable first: afbin push <file> --type dataset --access readwrite, or set access: readwrite on it here' },
+    { status: 403, code: 'dataset_read_only', fix: 'publish the dataset with access: readwrite, or update its access policy here' },
     { status: 400, code: 'invalid_sql', fix: 'one statement, INSERT/UPDATE/DELETE only, naming a catalog table such as public.rows — the detail says what was wrong' },
     { status: 409, code: 'dataset_full', fix: 'the write would cross the row cap — delete rows or split the dataset' },
     { status: 503, code: 'dataset_busy', fix: 'concurrent writes contended — retry after a moment (Retry-After rides the response)' },

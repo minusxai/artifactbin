@@ -15,7 +15,7 @@ export function startHtmlPresence(win:Window,publish:(geometry:PresenceGeometry)
    const mark=doc.createElement('div');mark.setAttribute('data-af-presence-cursor',viewer.id);mark.textContent=`↖ ${viewer.label}`;Object.assign(mark.style,{position:'fixed',left:`${x}px`,top:`${y}px`,color:'#2563eb',font:'12px sans-serif',background:'white',borderRadius:'3px',padding:'2px',pointerEvents:'none',userSelect:'none'});layer.append(mark);
   }
  };
- const move=(event:PointerEvent)=>{const node=(event.target as Element)?.closest?.('[data-af-id]');if(!node||!safe(node)||target(node.getAttribute('data-af-id')!)!==node){cursor=null;emit();return;}const rect=node.getBoundingClientRect();cursor=rect.width>0&&rect.height>0?{nodeId:node.getAttribute('data-af-id')!,x:Math.max(0,Math.min(1,(event.clientX-rect.x)/rect.width)),y:Math.max(0,Math.min(1,(event.clientY-rect.y)/rect.height))}:null;emit();};
+ const move=(event:PointerEvent)=>{const origin=event.target as Element;const node=origin?.closest?.('[data-af-id]');if(!node||!safe(origin)||!safe(node)||target(node.getAttribute('data-af-id')!)!==node){cursor=null;emit();return;}const rect=node.getBoundingClientRect();cursor=rect.width>0&&rect.height>0?{nodeId:node.getAttribute('data-af-id')!,x:Math.max(0,Math.min(1,(event.clientX-rect.x)/rect.width)),y:Math.max(0,Math.min(1,(event.clientY-rect.y)/rect.height))}:null;emit();};
  const leave=()=>{cursor=null;emit();};
  const selection=()=>emit();
  doc.addEventListener('pointermove',move);doc.addEventListener('pointerleave',leave);doc.addEventListener('selectionchange',selection);win.addEventListener('scroll',paint,true);win.addEventListener('resize',paint);

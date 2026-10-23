@@ -7,3 +7,6 @@ export const readerDefaults: ReaderPreferences = { visible: true, shareCursor: t
 export interface PresenceViewer extends PresenceGeometry { id: string; label: string; revision: string; seen: number }
 export interface PresencePublication extends PresenceGeometry { session: string; revision: string; visible: boolean }
 export interface PresencePaint { viewers: PresenceViewer[]; preferences: ReaderPreferences }
+
+/** Named frame on the document's existing live stream. */
+export const PRESENCE_EVENT = 'presence';

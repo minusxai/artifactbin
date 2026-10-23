@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import {it,expect} from 'vitest';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -19,7 +20,7 @@ it('team host composes real public auth and preserves separate owners and anonym
  await db.query('INSERT INTO users (id,email,name,username) VALUES ($1,$2,$3,$4),($5,$6,$7,$8)',
  ['usr_team1','mxmx_test_team1@example.test','First','team1','usr_team2','mxmx_test_team2@example.test','Second','team2']);
  const first=(await mintToken('first','usr_team1',db)).token,second=(await mintToken('second','usr_team2',db)).token;
- const create=await host.fetch(new Request(origin+'/api/artifacts',{method:'POST',headers:{authorization:'Bearer '+first,'content-type':'application/json'},body:JSON.stringify({markup:'<p>Team private</p>',visibility:'private'})}));
+ const create=await host.fetch(new Request(origin+'/api/artifacts',{method:'POST',headers:{authorization:'Bearer '+first,'content-type':'application/json'},body:JSON.stringify({html:nativeHtml('<p>Team private</p>'),visibility:'private'})}));
  expect(create.status).toBe(201);const artifact=await create.json();
  expect((await host.fetch(new Request(origin+'/api/artifacts/'+artifact.id,{headers:{authorization:'Bearer '+first}}))).status).toBe(200);
  for(const token of [undefined,second,'invalid']){
@@ -47,7 +48,7 @@ it('team host composes real public auth and preserves separate owners and anonym
  expect(issued.status).toBe(201);const httpToken=(await issued.json()).access_token;expect(httpToken).toBeTruthy();
 
  // A real authenticated browser acquires its own app identity and can publish private documents.
- const browserCreate=await host.fetch(new Request(origin+'/api/my/artifacts',{method:'POST',headers:{cookie,origin,'content-type':'application/json'},body:JSON.stringify({markup:'<p>Browser owner</p>',visibility:'private'})}));
+ const browserCreate=await host.fetch(new Request(origin+'/api/my/artifacts',{method:'POST',headers:{cookie,origin,'content-type':'application/json'},body:JSON.stringify({html:nativeHtml('<p>Browser owner</p>'),visibility:'private'})}));
  expect(browserCreate.status).toBe(201);
  const browserArtifact=await browserCreate.json();
  expect((await host.fetch(new Request(origin+'/api/artifacts/'+browserArtifact.id,{headers:{authorization:'Bearer '+httpToken}}))).status).toBe(200);

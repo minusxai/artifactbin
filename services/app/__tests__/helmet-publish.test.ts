@@ -1,119 +1,31 @@
-/**
- * Helmet at the publish door: a markup document
- * may carry ONE <Helmet> with <title>/<style>/<script>; canonicalization hoists
- * it to first top-level node; script stays hard-denied in the BODY. The echo in
- * every write response is the stored (canonicalized) source, so agents see the
- * hoist in the response of their own write.
- */
-import { storedMarkup } from '@/test/helpers/echo';
-import { describe, expect, it } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-
-
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { useAppHarness, request } from '@/__tests__/harness';
-
+/** Native head scripts/styles replace retired Helmet hoisting and JSX restrictions. */
+import {describe,expect,it} from 'vitest';
+import {request,useAppHarness,mintAccountToken} from './harness';
+import {POST as create} from '@/app/api/artifacts/route';
 useAppHarness();
-
-
-const create = async (token: string, body: Record<string, unknown>) =>
-  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
-
-const HELMET =
-  '<Helmet><title>Scripted doc</title><style>{`h1 { letter-spacing: -0.02em; }`}</style><script>{`document.body.dataset.ran = "1";`}</script></Helmet>';
-const BODY = '<h1 className="text-4xl font-bold" id="heading">Hello</h1>';
-
-describe('Helmet publish contract', () => {
-  it('publishes a Helmet-bearing document; already-canonical source is stored verbatim', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, { markup: HELMET + BODY });
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as { markup?: string; markup_changed?: boolean; title: string };
-    // Nothing to rewrite: the write says the stored document IS what was sent,
-    // rather than sending it back.
-    expect(body.markup_changed).toBe(false);
-    const stored = storedMarkup(body, HELMET + BODY);
-    expect(stored).toContain('<Helmet>');
-    expect(stored).toContain('document.body.dataset.ran');
-  });
-
-  it('hoists a nested Helmet to the first top-level node (visible in the write echo)', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, { markup: '<div className="p-4">' + HELMET + '<p>body</p></div>' });
-    expect(res.status).toBe(201);
-    const { markup } = (await res.json()) as { markup: string };
-    expect(markup.trimStart().startsWith('<Helmet>')).toBe(true);
-    // Removed from its authored position, present exactly once.
-    expect(markup.match(/<Helmet>/g)).toHaveLength(1);
-  });
-
-  it('derives the stored title from <Helmet><title> when the body has none', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, { markup: HELMET + BODY });
-    const { title } = (await res.json()) as { title: string };
-    expect(title).toBe('Scripted doc');
-  });
-
-  it('an explicit title in the request wins over the Helmet title', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, { markup: HELMET + BODY, title: 'Named by hand' });
-    const { title } = (await res.json()) as { title: string };
-    expect(title).toBe('Named by hand');
-  });
-
-  it('still rejects <script> in the BODY', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, { markup: BODY + '<script>{`alert(1)`}</script>' });
-    expect(res.status).toBe(400);
-    const { error } = (await res.json()) as { error: string };
-    expect(error).toBe('invalid_jsx');
-  });
-
-  it('rejects two Helmets with a diagnostic', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, { markup: HELMET + '<div><Helmet><title>x</title></Helmet></div>' });
-    expect(res.status).toBe(400);
-    const { details } = (await res.json()) as { details: Array<{ message: string }> };
-    expect(details.some((d) => /one <Helmet>/i.test(d.message))).toBe(true);
-  });
-
-  it('rejects `</script` inside the Helmet script', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, {
-      markup: '<Helmet><script>{`var s = "</scr" + "ipt>"; var bad = "</script>";`}</script></Helmet>' + BODY,
-    });
-    expect(res.status).toBe(400);
-    const { details } = (await res.json()) as { details: Array<{ message: string }> };
-    expect(details.some((d) => /<\/script/i.test(d.message))).toBe(true);
-  });
-
-  it('stores the Helmet style as written: an external @import and its siblings are kept', async () => {
-    const t = await mintToken('t');
-    const style = '<Helmet><style>{`@import url("https://fonts.example/x.css"); h1 { color: red; }`}</style></Helmet>';
-    const res = await create(t.token, { markup: style + BODY });
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as { markup?: string; markup_changed: boolean };
-    // CSS is unconstrained: nothing is stripped, so the write stores what was sent and echoes no change.
-    expect(body.markup_changed).toBe(false);
-    const stored = storedMarkup(body, style + BODY);
-    expect(stored).toContain('@import url("https://fonts.example/x.css");');
-    expect(stored).toContain('h1 { color: red; }');
-    const repeated = await create(t.token, { markup: stored });
-    expect(repeated.status, await repeated.clone().text()).toBe(201);
-  });
-
-  it('canonical form is a fixpoint: republishing the echo returns it byte-identical', async () => {
-    const t = await mintToken('t');
-    const first = await create(t.token, { markup: '<div className="p-4">' + HELMET + '<p>body</p></div>' });
-    // The nested Helmet was hoisted, so THIS write echoes.
-    const { markup: canonical, markup_changed } = (await first.json()) as { markup: string; markup_changed: boolean };
-    expect(markup_changed).toBe(true);
-    const second = await create(t.token, { markup: canonical });
-    expect(second.status).toBe(201);
-    // Republishing canonical form changes nothing — which the write now states
-    // outright instead of proving by handing the bytes back.
-    const { markup: again, markup_changed: changedAgain } = (await second.json()) as { markup?: string; markup_changed: boolean };
-    expect(changedAgain).toBe(false);
-    expect(again).toBeUndefined();
-  });
+const page=(head:string,body='<h1>Hello</h1>')=>`<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
+async function publish(html:string,title?:string){
+ const token=await mintAccountToken('native-head');
+ return create(request('/api/artifacts',{method:'POST',token:token.token,json:{html,...(title?{title}:{})}}));
+}
+describe('native head publication',()=>{
+ it('preserves authored head and body scripts after core, along with external CSS imports',async()=>{
+  const html=page('<title>Scripted page</title><style>@import url("https://fonts.example/x.css"); h1 { color: red; }</style><script>document.body.dataset.ready="1"</script>','<h1>Hello</h1><script>console.log("body")</script>');
+  const response=await publish(html);expect(response.status).toBe(201);
+  const wire=await response.json();expect(wire.title).toBe('Scripted page');
+  expect(wire.html).toContain('@import url("https://fonts.example/x.css"); h1 { color: red; }');
+  expect(wire.html).toContain('console.log("body")');
+  expect(wire.html.indexOf('/af/v1/core.js')).toBeLessThan(wire.html.indexOf('document.body.dataset.ready'));
+ });
+ it('an explicit request title wins over the native head title',async()=>{
+  const response=await publish(page('<title>Source title</title>'),'Named by hand');
+  expect(response.status).toBe(201);expect((await response.json()).title).toBe('Named by hand');
+ });
+ it('canonical source is a fixpoint including allocated identities and exactly one core',async()=>{
+  const first=await publish(page('<title>Stable</title>'));expect(first.status).toBe(201);
+  const canonical=(await first.json()).html;
+  const second=await publish(canonical);expect(second.status).toBe(201);
+  expect((await second.json()).html).toBe(canonical);
+  expect(canonical.match(/src="\/af\/v1\/core.js"/g)).toHaveLength(1);
+ });
 });

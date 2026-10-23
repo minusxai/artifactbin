@@ -13,8 +13,8 @@ import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as versionRoute } from '@/app/api/artifacts/[id]/versions/[version]/route';
 import { GET as myVersionRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as restoreRoute } from '@/app/api/artifacts/[id]/restore/route';
-import { documentEditBody } from './prepared-document';
-import { getArtifactById } from '@/lib/artifacts';
+import {nativeHtml} from './native-html-fixture';
+import {observedRequest} from './conditional-request';
 import { artifactQuery } from '@/lib/artifacts/table';
 import { servableDocument, UnservableDocument } from '@/lib/artifacts/servable';
 import { createDocumentGraph } from '@/lib/document/document-graph';
@@ -51,10 +51,10 @@ describe('servableDocument', () => {
 /** Version 1 then version 2 (the head), published through the real doors. */
 async function history() {
   const owner = await mintToken('mxmx_test_unservable');
-  const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { markup: '<p>Version one</p>' } }));
+  const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { html: nativeHtml('<p>Version one</p>') } }));
   expect(created.status, await created.clone().text()).toBe(201);
   const id = (await created.json()).id as string;
-  const replaced = await replaceRoute(request(`/api/artifacts/${id}`, { method: 'PUT', token: owner.token, json: documentEditBody((await getArtifactById(id))!, { source: '<p>Version two</p>', whole: true }) }), params({ id }));
+  const replaced = await replaceRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: owner.token, json: {html:nativeHtml('<p>Version two</p>')} }), params({ id }));
   expect(replaced.status, await replaced.clone().text()).toBe(200);
   const session = { credential: 'session' as const, userId: owner.userId!, email: owner.email!, emailVerified: true };
   return { owner, id, session };
@@ -68,21 +68,13 @@ async function expectRefused(response: Response, reason: RegExp) {
 }
 
 describe('an archived version the current code no longer reads', () => {
-  it('without the data-syntax marker: every door refuses it by name, and nothing rewrites it', async () => {
-    const { owner, id, session } = await history();
-    const db = await harness.db();
-    expect((await db.query("UPDATE artifact_versions SET meta=meta-'dataSyntax' WHERE artifact_id=$1 AND version=1", [id])).rowCount).toBe(1);
-    const predates = /predates the current data syntax/;
-    await expectRefused(await versionRoute(request(`/api/artifacts/${id}/versions/1`, { token: owner.token }), params({ id, version: '1' })), predates);
-    await expectRefused(await myVersionRoute(request(`/api/my/artifacts/${id}/versions/1`, { actor: session }), params({ id, version: '1' })), predates);
-    await expectRefused(await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id })), predates);
-    await expectRefused(await pageData(request(`/api/page/artifact/${id}?version=1`, { actor: session }), params({ id })), predates);
-    // The head is untouched by its history's refusal, and the stored version is left as it was.
-    expect((await serveArtifact(request(`/a/${id}/raw`, { token: owner.token }), params({ id }))).status).toBe(200);
-    expect((await db.query<{ marked: boolean }>("SELECT meta ? 'dataSyntax' AS marked FROM artifact_versions WHERE artifact_id=$1 AND version=1", [id])).rows).toEqual([{ marked: false }]);
+  it('native HTML does not require the retired data-syntax marker or a JSONB graph', async () => {
+    const {owner,id,session}=await history();const db=await harness.db();
+    await db.query("UPDATE artifact_versions SET meta=meta-'dataSyntax',document=NULL WHERE artifact_id=$1 AND version=1",[id]);
+    for(const response of [await versionRoute(request(`/api/artifacts/${id}/versions/1`,{token:owner.token}),params({id,version:'1'})),await myVersionRoute(request(`/api/my/artifacts/${id}/versions/1`,{actor:session}),params({id,version:'1'})),await serveArtifact(request(`/a/${id}/raw?version=1`,{token:owner.token}),params({id})),await pageData(request(`/api/page/artifact/${id}?version=1`,{actor:session}),params({id}))])expect(response.status).toBe(200);
   });
 
-  it('whose stored document is not a graph: decoding never throws, and the doors refuse it', async () => {
+  it('whose native source is missing: decoding never throws, and the doors refuse it', async () => {
     const { owner, id, session } = await history();
     const db = await harness.db();
     await db.query("UPDATE artifact_versions SET document=$2::jsonb, source=NULL WHERE artifact_id=$1 AND version=1", [id, JSON.stringify({ schema: 1, kind: 'source', source: '<p>broken' })]);
@@ -97,10 +89,10 @@ describe('an archived version the current code no longer reads', () => {
   it('still carrying data-annotation-anchor is NOT refused: the attribute is inert, and the version reads and renders', async () => {
     const { owner, id } = await history();
     const legacy = '<main><p id="Ab12" data-annotation-anchor="Ab12">Old revenue line</p></main>';
-    await (await harness.db()).query('UPDATE artifact_versions SET document=$2::jsonb, source=NULL WHERE artifact_id=$1 AND version=1', [id, JSON.stringify(graph(legacy))]);
+    await (await harness.db()).query('UPDATE artifact_versions SET document=NULL, source=$2 WHERE artifact_id=$1 AND version=1', [id,nativeHtml(legacy)]);
     const read = await versionRoute(request(`/api/artifacts/${id}/versions/1`, { token: owner.token }), params({ id, version: '1' }));
     expect(read.status, await read.clone().text()).toBe(200);
-    expect(((await read.json()) as { markup: string }).markup).toBe(legacy);
+    expect(((await read.json()) as { html: string }).html).toBe(nativeHtml(legacy));
     const rendered = await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }));
     expect(rendered.status).toBe(200);
     expect(await rendered.text()).toContain('Old revenue line');
@@ -111,8 +103,8 @@ describe('restoring a trashed head the current code no longer reads', () => {
   it('is refused by name, and the row stays in the trash', async () => {
     const { owner, id } = await history();
     const db = await harness.db();
-    await db.query("UPDATE artifacts SET meta=meta-'dataSyntax', deleted_at=now() WHERE id=$1", [id]);
-    await expectRefused(await restoreRoute(request(`/api/artifacts/${id}/restore`, { method: 'POST', token: owner.token }), params({ id })), /predates the current data syntax/);
+    await db.query("UPDATE artifacts SET source=NULL, deleted_at=now() WHERE id=$1", [id]);
+    await expectRefused(await restoreRoute(request(`/api/artifacts/${id}/restore`, { method: 'POST', token: owner.token }), params({ id })), /no longer reads/);
     expect((await db.query<{ trashed: boolean }>('SELECT deleted_at IS NOT NULL AS trashed FROM artifacts WHERE id=$1', [id])).rows).toEqual([{ trashed: true }]);
   });
 });

@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import { identityForUser, seedOwnerJoin} from '@/lib/accounts';
 import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/document-data/notifications/authority';
 import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
@@ -17,7 +18,7 @@ beforeEach(()=>overrideConfig({internalServiceSecret:'notification-test-service'
 async function fixture(){
  const sender=await createUser({email:'sender@example.com'}),recipient=await createUser({email:'recipient@example.com'}),token=await mintToken('test',sender.id);
  const publish=async(body:object)=>(await create(request('/api/artifacts',{method:'POST',token:token.token,json:body}))).json();
- const doc=await publish({markup:'<p>Tasks</p>',visibility:'unlisted'}),source=await publish({dataset:[{n:1}],visibility:'unlisted'}),db=await getDb();
+ const doc=await publish({html: nativeHtml('<p>Tasks</p>'),visibility:'unlisted'}),source=await publish({dataset:[{n:1}],visibility:'unlisted'}),db=await getDb();
  const input={origin:{mutationName:'change'},bindings:{userId:sender.id}};
  await db.query("INSERT INTO notification_jobs(id,mutation_run_id,document_id,input) VALUES('job','run',$1,$2::jsonb)",[doc.id,JSON.stringify(input)]);
  await seedOwnerJoin(db,doc.id,recipient.id);

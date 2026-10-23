@@ -44,8 +44,17 @@ describe('v3 validation isolation', () => {
     const steps = workflow('runner-design.yml').jobs['linux-worker'].steps;
     const selected = ref => new Set(steps.filter(step => !step.if || admitted(step.if, 'push', '', ref)).flatMap(step => step.run?.match(/services\/[\w/.-]+\.test\.ts/g) ?? []));
     const v3 = selected('refs/heads/artifactbinv3');
-    for (const file of ['services/app/__tests__/runner-page-boundary.test.ts','services/app/__tests__/lambda-operations.test.ts','services/runner/__tests__/runner-service.test.ts','services/runner/__tests__/runner-container-lifecycle.test.ts','services/runner/__tests__/runner-orchestration.test.ts','services/app/server/__tests__/retired-execution.test.ts']) expect(v3.has(file)).toBe(true);
-    for (const file of ['services/app/__tests__/runner-design.test.ts','services/app/__tests__/runner-api.test.ts','services/app/__tests__/lambda-artifact.test.ts']) {
+    expect([...v3].sort()).toEqual([
+      'services/app/__tests__/runner-page-boundary.test.ts',
+      'services/app/server/__tests__/retired-execution.test.ts',
+      'services/runner/__tests__/runner-service.test.ts',
+      'services/runner/__tests__/runner-container-lifecycle.test.ts',
+      'services/runner/__tests__/runner-orchestration.test.ts',
+      'services/app/__tests__/page-graphql.test.ts',
+      'services/app/lib/page-operations/__tests__/backend.test.ts',
+      'services/app/lib/page-operations/__tests__/runtime.test.ts',
+    ].sort());
+    for (const file of ['services/app/__tests__/runner-design.test.ts','services/app/__tests__/runner-api.test.ts','services/app/__tests__/lambda-artifact.test.ts','services/app/__tests__/lambda-operations.test.ts']) {
       expect(v3.has(file)).toBe(false);
       expect(selected('refs/heads/main').has(file)).toBe(true);
     }

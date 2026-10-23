@@ -13,7 +13,7 @@ export async function writeBrowserArtifact(id:string,change:Record<string,unknow
  const {source,annotationOps,...fields}=change;
  if(head.format==='html'&&typeof source==='string'){
   if(head.edit_id!==editId)return Response.json({error:'doc_changed',edit_id:head.edit_id,version:head.version,source:head.html},{status:409});
-  const response=await fetch(`/api/my/artifacts/${encodeURIComponent(id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...fields,html:source,expectedVersion:head.version,expectedState:head.state})});
+  const response=await requests.htmlUpdate({...fields,html:source,expectedVersion:head.version,expectedState:head.state});
   if(response.status!==409)return response;
   // A race after the head read is a conflict, never an automatic replacement retry.
   const latest=await requests.head();if(!latest.ok)return response;

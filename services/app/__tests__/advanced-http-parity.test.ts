@@ -1,12 +1,12 @@
-import {documentEditBody,restoreDocument} from './prepared-document';
 import {getArtifactById} from '@/lib/artifacts';
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {describe,expect,it} from 'vitest';
 import {useAppHarness} from './harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {operationHttp} from './operation-http';
 useAppHarness();
 describe('advanced HTTP parity',()=>{
-  it('create → get → update round-trips a markup artifact with refs, token-scoped', async () => {
+  it('create → get → update round-trips a native page with dataset bindings, token-scoped', async () => {
     const t = await mintToken('t');
     const ds = await operationHttp(t.token, 'create_artifact', { title: 'sales', dataset: [{ m: 'Jan', v: 1 }, { m: 'Feb', v: 2 }] });
     expect(ds.isError).toBe(false);
@@ -14,7 +14,7 @@ describe('advanced HTTP parity',()=>{
 
     const story = await operationHttp(t.token, 'create_artifact', {
       title: 'story', visibility: 'public',
-      markup: `<Helmet><Import name="rows_data" src="ref:${ds.data.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
+      html:nativeHtml(`<link rel="af-dataset" data-af-name="rows_data" href="ref:${ds.data.id}"><h1>Dataset page</h1>`),
     });
     expect(story.isError).toBe(false);
     // One URL per artifact, addressed by the one identifier: /a/<id> is the
@@ -24,13 +24,13 @@ describe('advanced HTTP parity',()=>{
     expect(story.data).not.toHaveProperty('editUrl');
 
     const got = await operationHttp(t.token, 'get_artifact', { id: story.data.id as string });
-    expect(got.data.refs).toEqual([{ id: ds.data.id, kind: 'dataset' }]);
+    expect(got.data.html).toContain(`href="ref:${ds.data.id}"`);
+    expect((await getArtifactById(String(story.data.id)))?.meta.htmlLinks).toEqual([{kind:'dataset',name:'rows_data',datasetId:ds.data.id,mode:'live'}]);
 
     const updated = await operationHttp(t.token, 'update_artifact', {
       id: story.data.id as string,
-      markup: `<Helmet><Import name="rows_data" src="ref:${ds.data.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw"><h1 className="text-2xl">v2</h1><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
-      theme: 'terminal',
-    });
+      html:nativeHtml(`<link rel="af-dataset" data-af-name="rows_data" href="ref:${ds.data.id}"><h1>v2</h1>`),
+          });
     expect(updated.isError).toBe(false);
     expect(updated.data.version).toBe(2);
 
@@ -44,9 +44,8 @@ describe('advanced HTTP parity',()=>{
     expect(versions.data.versions).toHaveLength(2);
     const original = await operationHttp(t.token, 'get_version', { id, version: 1 });
     expect(original.isError).toBe(false);
-    const reverted = await restoreDocument(t.token,id,1);
-    expect(reverted.ok).toBe(true);
-    expect((await reverted.json()).version).toBe(3);
+    const reverted = await operationHttp(t.token,'revert_artifact',{id,version:1});
+    expect(reverted.isError).toBe(false);expect(reverted.data.version).toBe(3);
 
     // Another token can read this public document but cannot edit it.
     const other = await mintToken('other');
@@ -67,7 +66,7 @@ describe('advanced HTTP parity',()=>{
     const owner = await mintToken('owner');
     const doc = await operationHttp(owner.token, 'create_artifact', {
       title: 'Payroll', visibility: 'public',
-      markup: '<div data-design="tw"><h1 className="text-2xl">Payroll</h1></div>',
+      html:nativeHtml('<div data-design="tw"><h1 className="text-2xl">Payroll</h1></div>'),
     });
     expect(doc.isError).toBe(false);
 
@@ -78,7 +77,7 @@ describe('advanced HTTP parity',()=>{
     expect(copy.data.forked_from).toBe(doc.data.id);
     expect(copy.data.version).toBe(1);
     expect(copy.data.title).toBe('My copy');
-    expect(String(copy.data.markup)).toContain('Payroll');
+    expect(String(copy.data.html)).toContain('Payroll');
     // The copy is the FORKER's — and the original is untouched for its owner.
     const mine = await operationHttp(forker.token, 'list_artifacts', {});
     expect((mine.data.artifacts as Array<{ id: string }>).map((a) => a.id)).toEqual([copy.data.id]);
@@ -89,84 +88,51 @@ describe('advanced HTTP parity',()=>{
 
   it('fork_artifact answers the uniform not_found for what the token cannot read', async () => {
     const owner = await mintToken('owner');
-    const doc = await operationHttp(owner.token, 'create_artifact', { markup: '<p>secret</p>', visibility: 'unlisted' });
+    const doc = await operationHttp(owner.token, 'create_artifact', { html:nativeHtml('<p>secret</p>'), visibility: 'unlisted' });
     const stranger = await mintToken('stranger');
     // Unlisted reads by link, so the refusal is proved on an id that exists nowhere.
     expect((await operationHttp(stranger.token, 'fork_artifact', { id: 'zzzzzz' })).data.error).toBe('not_found');
     expect((await operationHttp(stranger.token, 'fork_artifact', { id: doc.data.id as string })).isError).toBe(false);
   });
 
-  it('an unknown theme is a real HTTP result carrying the allowed names, not a schema error', async () => {
-    const t = await mintToken('t');
-    // The zod schema deliberately does NOT enum the theme: an unknown name must
-    // reach the publish pipeline, whose 400 lists the live names — an agent's
-    // only route out. A schema enum would answer with a generic zod error.
-    const res = await operationHttp(t.token, 'create_artifact', { markup: '<p>x</p>', theme: 'classical' });
-    expect(res.isError).toBe(true);
-    expect(res.data.error).toBe('unknown_theme');
-    expect(res.data.allowed).toContain('manuscript');
-  });
-
-  it('edit_artifact speaks the concurrent-edit protocol: accept, then doc_changed with head to rebase on', async () => {
-    const t = await mintToken('t');
-    const doc = await operationHttp(t.token, 'create_artifact', { title: 's', markup: '<section><p>alpha text</p><p>beta text</p></section>' });
-    expect(doc.isError).toBe(false);
-    expect(doc.data.edit_id).toMatch(/^[a-f0-9]{32}$/);
-
-    const base=(await getArtifactById(String(doc.data.id)))!;
-    const first = await operationHttp(t.token, 'edit_artifact', {
-      id: doc.data.id,...documentEditBody(base,{source:base.source!.replace('alpha text','ALPHA')}),
-    });
-    expect(first.isError).toBe(false);
-    expect(first.data.edit_id).not.toBe(doc.data.edit_id);
-
-    const clash = await operationHttp(t.token, 'edit_artifact', {
-      id: doc.data.id,...documentEditBody(base,{source:base.source!.replace('alpha','x')}),
-    });
-    expect(clash.isError).toBe(true);
-    expect(clash.data.error).toBe('doc_changed');
-    expect(clash.data.edit_id).toBe(first.data.edit_id);
-    expect(clash.data.source).toContain('ALPHA');
-  });
-
+  // JSX theme-name compilation was retired; native head/style roundtrips are covered by helmet-publish.
   it('surfaces validation diagnostics through HTTP errors', async () => {
     const t = await mintToken('t');
-    const bad = await operationHttp(t.token, 'create_artifact', { title: 'x', markup: '<Bogus>nope</Bogus>' });
+    const bad = await operationHttp(t.token, 'create_artifact', { title: 'x', html:nativeHtml('<p data-af-id="same">A</p><p data-af-id="same">B</p>') });
     expect(bad.isError).toBe(true);
-    expect(JSON.stringify(bad.data)).toContain('Bogus');
+    expect(bad.data.error).toBe('invalid_html');
   });
 
-  it('dataset refresh warns about broken dependents (never blocks)', async () => {
-    const t = await mintToken('t');
-    const ds = await operationHttp(t.token, 'create_artifact', { title: 'sales', dataset: [{ m: 'Jan', v: 1 }] });
-    const story = await operationHttp(t.token, 'create_artifact', {
-      title: 'story',
-      markup: `<Helmet><Import name="rows_data" src="ref:${ds.data.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"vega-lite", spec:{mark:"bar", encoding:{y:{field:"v", type:"quantitative"}}}}} height="200px" /></div>`,
-    });
-    const refreshed = await operationHttp(t.token, 'update_artifact', { id: ds.data.id as string, dataset: [{ m: 'Jan', other: 9 }] });
+  it('a dataset replacement leaves its native consumer and immutable binding unchanged', async () => {
+    const t=await mintToken('binding');
+    const ds=await operationHttp(t.token,'create_artifact',{dataset:[{m:'Jan',v:1}]});
+    const story=await operationHttp(t.token,'create_artifact',{html:nativeHtml(`<link rel="af-dataset" data-af-name="rows_data" href="ref:${ds.data.id}"><h1>Dataset page</h1>`)});
+    expect(story.isError).toBe(false);
+    const refreshed=await operationHttp(t.token,'update_artifact',{id:ds.data.id,dataset:[{m:'Jan',other:9}]});
     expect(refreshed.isError).toBe(false);
-    expect(JSON.stringify(refreshed.data.warnings)).toContain(story.data.id);
+    const current=await operationHttp(t.token,'get_artifact',{id:story.data.id});
+    expect(current.data.html).toBe(story.data.html);expect(current.data.version).toBe(1);
   });
 });
 describe('HTTP optimistic concurrency', () => {
   it('update_artifact with a stale expectedVersion reports doc_changed; replay converges', async () => {
     const t = await mintToken('agent');
-    const created = await operationHttp(t.token, 'create_artifact', { markup: '<h1 className="text-2xl">v1</h1>' });
+    const created = await operationHttp(t.token, 'create_artifact', { html:nativeHtml('<h1 className="text-2xl">v1</h1>') });
     expect(created.isError).toBe(false);
     const id = created.data.id as string;
 
     // A concurrent editor bumps the head (v1 → v2).
-    const other = await operationHttp(t.token, 'update_artifact', { id, markup: '<h1 className="text-2xl">other</h1>' });
+    const other = await operationHttp(t.token, 'update_artifact', { id, html:nativeHtml('<h1 className="text-2xl">other</h1>') });
     expect(other.data.version).toBe(2);
 
     // This agent still holds v1 — the guarded update must conflict, not clobber.
-    const stale = await operationHttp(t.token, 'update_artifact', { id, markup: '<h1 className="text-2xl">mine</h1>', expectedVersion: 1 });
+    const stale = await operationHttp(t.token, 'update_artifact', { id, html:nativeHtml('<h1 className="text-2xl">mine</h1>'), expectedVersion: 1 });
     expect(stale.isError).toBe(true);
-    expect(stale.data.error).toBe('doc_changed');
-    expect(stale.data.version).toBe(2);
+    expect(stale.data.error).toBe('version_conflict');
+    expect(stale.data.currentVersion).toBe(2);
 
     // Replay at the reported head converges.
-    const replay = await operationHttp(t.token, 'update_artifact', { id, markup: '<h1 className="text-2xl">mine</h1>', expectedVersion: 2 });
+    const replay = await operationHttp(t.token, 'update_artifact', { id, html:nativeHtml('<h1 className="text-2xl">mine</h1>'), expectedVersion: 2 });
     expect(replay.isError).toBe(false);
     expect(replay.data.version).toBe(3);
   });

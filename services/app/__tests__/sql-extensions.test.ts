@@ -9,7 +9,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createSql } from '@artifactbin/sql/local';
-import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
 import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
@@ -40,24 +39,13 @@ async function dataset() {
   return { token: t.token, ds: ((await res.json()) as { id: string }).id };
 }
 
-describe('a composition function in a <Mutation>', () => {
-  it('publishes, and running it returns the demand while writing nothing', async () => {
-    const { token, ds } = await dataset();
-    const published = await create(token, { markup: generate(ds) });
-    expect(published.status, await published.clone().text()).toBe(201);
-    const doc = ((await published.json()) as { id: string }).id;
-    const run = await mutateDocRoute(request(`/a/${doc}/mutate`, { method: 'POST', token, json: { mutation: 'gen', args: { who: 'jun' } } }), params({ id: doc }));
-    // The OSS door has no continuation handler: the engine's demand arrives as the failure's detail.
-    expect(run.status).toBe(400);
-    expect(await run.json()).toMatchObject({ detail: 'Execution requires continuation' });
+describe('composition SQL extensions and the native admission boundary', () => {
+  it('refuses retired executable JSX instead of restoring SQL mutation publication', async () => {
+    const {token,ds}=await dataset();
+    const response=await create(token,{markup:generate(ds)});
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({error:'native_html_required'});
     expect((await getArtifactById(ds))!.version).toBe(1);
-  });
-
-  it('a <Query> calling it is refused at publish', async () => {
-    const { token, ds } = await dataset();
-    const res = await create(token, { markup: `<Helmet><Import name="d" src="ref:${ds}" /><Query name="q">{\`select fixture_generate(who) as g from d.rows\`}</Query></Helmet><div />` });
-    expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/fixture_generate/);
   });
 
   it('the owner\'s direct write is analyzed with it and reaches the engine, which demands the result', async () => {

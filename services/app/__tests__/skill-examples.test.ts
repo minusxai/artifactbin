@@ -1,164 +1,24 @@
-/**
- * EVERY DATA EXAMPLE THE SKILL TEACHES IS PUBLISHED, so the docs cannot drift from the product.
- *
- * A ```jsx block holding a `<Helmet>` is a complete document: it goes through the real create door,
- * compiled and bound-checked exactly as an agent's copy would be, with each placeholder dataset id
- * (`ref:abc123`) replaced by a dataset this test publishes first. A placeholder the registry does not
- * know fails, so a new example cannot slip past by naming a dataset nobody made. Blocks without a
- * `<Helmet>` are fragments of a document shown elsewhere and are not published.
- *
- * The booking document is the skill's large worked example: its block in markup-data-example must BE the
- * golden fixture the compiler and server tests run, shown once rather than re-quoted part by part.
- */
-import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
-import type { DatasetColumn } from '@artifactbin/contracts';
-import { POST as create } from '@/app/api/artifacts/route';
-import { parseDatasetDefinition } from '@/lib/datasets/definition';
-import { renderTree, skillTree } from '@/lib/skills';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
-import { examples as starters } from '../../cli/src/teaching';
-import { request, useAppHarness } from './harness';
-
-useAppHarness();
-
-type Row = Record<string, string | number | boolean | null>;
-/** A placeholder dataset: its shape and a few rows. `null` names a placeholder no test here can publish, and says why. */
-type Placeholder = { columns: DatasetColumn[]; rows: Row[] } | { unpublishable: string };
-
-const PLACEHOLDERS: Record<string, Placeholder> = {
-  /** Sales: the dashboard, deck, editorial and filter examples. */
-  abc123: {
-    columns: [{ name: 'day', type: 'date' }, { name: 'month', type: 'string' }, { name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }],
-    rows: [
-      { day: '2026-07-06', month: '2026-07', region: 'EU', revenue: 1200 },
-      { day: '2026-08-03', month: '2026-08', region: 'NA', revenue: 1900 },
-    ],
-  },
-  /** Languages, compared side by side by the transposed DataTable example. */
-  cmp123: {
-    columns: [{ name: 'name', type: 'string' }, { name: 'cost', type: 'number' }, { name: 'score', type: 'number' }],
-    rows: [{ name: 'Go', cost: 12.5, score: 30 }, { name: 'Rust', cost: 10, score: 31 }, { name: 'Ruby', cost: 20, score: 22 }],
-  },
-  /** Sprints, read by the roadmap editors. */
-  def456: { columns: [{ name: 'name', type: 'string' }], rows: [{ name: 'S1' }] },
-  /** The editable roadmap. */
-  rdm123: {
-    columns: [
-      { name: 'id', type: 'number' }, { name: 'item', type: 'string' }, { name: 'owner', type: 'string' }, { name: 'hours', type: 'number' },
-      { name: 'depends_on', type: 'string' }, { name: 'tags', type: 'string' }, { name: 'status', type: 'string' }, { name: 'sprint', type: 'string' },
-    ],
-    rows: [{ id: 1, item: 'Plan', owner: 'TBD', hours: null, depends_on: '[]', tags: '[]', status: 'backlog', sprint: '' }],
-  },
-  /** The notification example has its own explicit task schema. */
-  ntf123: {
-    columns: [{ name: 'id', type: 'number' }, { name: 'title', type: 'string' }, { name: 'status', type: 'string' }, { name: 'assignee', type: 'user' }],
-    rows: [{ id: 1, title: 'Review pricing', status: 'Todo', assignee: null }],
-  },
-  /** Tasks with user fields. */
-  tsk123: {
-    columns: [
-      { name: 'id', type: 'number' }, { name: 'task', type: 'string' },
-      { name: 'assigned_to', type: 'user' }, { name: 'completed_by', type: 'user', constraints: { self: true } },
-    ],
-    rows: [{ id: 1, task: 'Review proposal', assigned_to: null, completed_by: null }],
-  },
-  /** A photo gallery's rows. */
-  bks123: {
-    columns: [{ name: 'id', type: 'string' }, { name: 'title', type: 'string' }, { name: 'cover_ref', type: 'string' }, { name: 'has_photo', type: 'boolean' }, { name: 'position', type: 'number' }],
-    rows: [{ id: 'b1', title: 'Dune', cover_ref: '', has_photo: false, position: 1 }],
-  },
-  /** Daily traffic, the scrolly template's costume. */
-  trf123: { columns: [{ name: 'day', type: 'date' }, { name: 'transits', type: 'number' }], rows: [{ day: '2026-09-01', transits: 41 }] },
-  /** The booking golden's dataset (booking-dataflow.test.ts). */
-  BookRows1: {
-    columns: [
-      { name: 'id', type: 'string' }, { name: 'day', type: 'date' }, { name: 'slot', type: 'string' },
-      { name: 'booked_by', type: 'user' }, { name: 'note', type: 'string' }, { name: 'created_at', type: 'timestamp' },
-    ],
-    rows: [],
-  },
-  /** Connected Postgres: publishing needs a live database; its compile path is covered by the postgres dataflow tests. */
-  pgs123: { unpublishable: 'a connected Postgres database' },
-};
-
-const BASE = 'https://artifactbin.example';
-const GOLDEN = readFileSync(new URL('../lib/publish/__tests__/fixtures/booking.jsx', import.meta.url), 'utf8');
-const docs = renderTree(skillTree(), BASE).filter(({ file }) => file.path.startsWith('artifactbin/'));
-const jsxBlocks = (text: string) => [...text.matchAll(/```jsx\n([\s\S]*?)```/g)].map((m) => m[1]!);
-/** A document's YAML fence is the CLI's to send as metadata; the create door takes the body. */
-const body = (block: string) => block.replace(/^---\n[\s\S]*?\n---\n/, '');
-/**
- * A template's skeleton: the indented document under its "Skeleton (…):" label. It elides its chart
- * specs (`spec":{…}`) by design, so its DATA half is what is published: the Helmet, over an empty body.
- */
-const skeletons = (text: string) => [...text.matchAll(/^skeleton[^\n]*\n\n((?:(?: {2}[^\n]*)?\n)+)/gim)]
-  .map((m) => /<Helmet>[\s\S]*?<\/Helmet>/.exec(m[1]!.replace(/^ {2}/gm, ''))?.[0])
-  .filter((helmet): helmet is string => !!helmet).map((helmet) => `${helmet}\n<main />\n`);
-const examples = [
-  ...docs.flatMap(({ file, text }) => [...jsxBlocks(text), ...skeletons(text)].filter((b) => b.includes('<Helmet>')).map((block, n) => ({ at: `${file.path} #${n + 1}`, block: body(block) }))),
-  // `afbin help <template>`'s starters, which the CLI prints as a file to adapt.
-  ...Object.entries(starters).filter(([, block]) => block.includes('<Helmet>')).map(([name, block]) => ({ at: `afbin starter ${name}`, block })),
-];
-
-async function owner() {
-  const email = 'mxmx_test_skill_examples@example.com';
-  const user = await createUser({ email });
-  const token = await mintToken(email, user.id);
-    await claimToken(user.id, token.token);
-  return token.token;
-}
-
-async function publish(token: string, json: Record<string, unknown>) {
-  const res = await create(request('/api/artifacts', { method: 'POST', token, json }));
-  return { status: res.status, text: await res.text() };
-}
-
-describe('the skill\'s data examples', () => {
-  it('finds the examples it publishes', () => {
-    expect(examples.length).toBeGreaterThan(10);
-  });
-
-  it.each(examples.map((e) => [e.at, e.block] as const))('publishes %s', async (_at, block) => {
-    const refs = [...new Set([...block.matchAll(/ref:([A-Za-z0-9]{6,12})\b/g)].map((m) => m[1]!))];
-    for (const ref of refs) expect(Object.keys(PLACEHOLDERS), `ref:${ref} is not a placeholder this test publishes — add it to PLACEHOLDERS`).toContain(ref);
-    const skip = refs.map((ref) => PLACEHOLDERS[ref]!).find((p) => 'unpublishable' in p);
-    if (skip) return;
-    const token = await owner();
-    let markup = block;
-    for (const ref of refs) {
-      const p = PLACEHOLDERS[ref] as { columns: DatasetColumn[]; rows: Row[] };
-      const made = await publish(token, { dataset: p.rows, columns: p.columns, access: 'readwrite' });
-      expect(made.status, made.text).toBe(201);
-      markup = markup.replaceAll(`ref:${ref}`, `ref:${JSON.parse(made.text).id}`);
-    }
-    const doc = await publish(token, { markup, visibility: 'unlisted' });
-    expect(doc.status, doc.text).toBe(201);
-  });
-});
-
-/** The stored `<Dataset>` definitions a reference tells an agent to save and push (a Postgres one needs a live database and its secret). */
-const definitions = docs.flatMap(({ file, text }) => jsxBlocks(text).filter((b) => b.startsWith('<Dataset kind="stored"')).map((block, n) => [`${file.path} #${n + 1}`, block] as const));
-
-describe('the skill\'s dataset definitions', () => {
-  it('finds them', () => expect(definitions.length).toBeGreaterThanOrEqual(2));
-  it.each(definitions)('creates %s through the publish door', async (_at, block) => {
-    const made = await publish(await owner(), { dataset: parseDatasetDefinition(block) });
-    expect(made.status, made.text).toBe(201);
-  });
-});
-
-describe('the booking walkthrough', () => {
-  const data = docs.find(({ file }) => file.path === 'artifactbin/references/markup-data-example.md')!.text;
-  const walkthrough = /\n## Worked example: a booking page\n([\s\S]*?)(?=\n## |$)/.exec(data)?.[1] ?? '';
-
-  it('carries the golden booking document, byte for byte', () => {
-    expect(jsxBlocks(walkthrough)).toContain(GOLDEN);
-  });
-
-  it('is one example, not a tour: no excerpt of it is quoted again', () => {
-    const excerpts = [...walkthrough.matchAll(/```(?:jsx|sql)\n([\s\S]*?)```/g)].map((m) => m[1]!).filter((b) => b !== GOLDEN);
-    expect(excerpts).toEqual([]);
-  });
+/** Publish the actual installed native examples; resolver execution has separate real-runner coverage. */
+import {describe,expect,it,vi} from 'vitest';
+import {skillTree} from '@/lib/skills';
+import {skillPackageFiles} from '@/lib/skills/package';
+import {POST as publish} from '@/app/api/artifacts/route';
+import {GET as read} from '@/app/api/artifacts/[id]/route';
+import {request,useAppHarness,mintAccountToken} from './harness';
+vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>{
+ const typeDefs=/export const typeDefs\s*=\s*`([\s\S]*?)`/.exec(source)?.[1];if(!typeDefs)throw Error('Missing example schema');return{typeDefs,compiled:source};
+}}));
+useAppHarness();const files=()=>skillPackageFiles(skillTree(),'http://localhost:3000');
+describe('installed native author examples',()=>{
+ it('publishes the report as canonical HTML',async()=>{
+  const owner=await mintAccountToken('sample-report');const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:files()['examples/report.html']}}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();expect(page.format).toBe('html');expect(page.html).toContain('data-af-id=');
+ });
+ it('publishes the CSV separately and binds its real identity in the dashboard',async()=>{
+  const owner=await mintAccountToken('sample-dashboard'),kit=files();const dataset=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:kit['examples/repairs.csv']}}));expect(dataset.status).toBe(201);const data=await dataset.json();
+  const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:kit['examples/csv-dashboard.html']!.replaceAll('DATASET_ID',data.id)}}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();expect(page.html).toContain('ref:'+data.id);expect(page.html).not.toContain('DATASET_ID');
+ });
+ it('publishes the shared app with its declared backend source atomically',async()=>{
+  const owner=await mintAccountToken('sample-app'),kit=files();const response=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:kit['examples/shared-app.html'],backendSources:{garden:kit['examples/garden.ts']}}}));expect(response.status,await response.clone().text()).toBe(201);const page=await response.json();
+  const head=await read(request(`/api/artifacts/${page.id}`,{token:owner.token}),{params:Promise.resolve({id:page.id})});expect(head.status).toBe(200);expect((await head.json()).html).toContain('data-af-name="garden"');
+ });
 });

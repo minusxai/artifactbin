@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * A shared link must unfurl, and the og: tags have to be on the DOCUMENT.
  *
@@ -12,7 +13,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { createArtifact } from '@/lib/artifacts';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { mintExportKey } from '@/lib/platform';
+import { mintExportKey, PUBLIC_BASE_URL } from '@/lib/platform';
 import { useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();
@@ -35,7 +36,7 @@ const serve = async (id: string, query = '') => {
 
 const publish = async (source: string, title: string | null) => {
   const t = await mintToken('t');
-  return createArtifact(t.id, t.userId, { visibility: 'public', format: 'markup', source, meta: {}, title, description: 'A summary' });
+  return createArtifact(t.id, t.userId, { visibility: 'public', format: 'html', source:source.startsWith('<!doctype')?source:nativeHtml(source), meta: {}, title, description: 'A summary' });
 };
 
 describe('the served document unfurls on its own', () => {
@@ -48,25 +49,23 @@ describe('the served document unfurls on its own', () => {
     // og:image is resolved by some scrapers against the page URL and by others
     // not at all. The route knows the public origin from the forwarding
     // headers, so there is no reason to make anyone guess.
-    expect(html).toContain(`property="og:image" content="${BASE}/a/${row.id}/export?mode=card&amp;v=${row.version}&amp;r=3"`);
+    expect(html).toContain(`property="og:image" content="${PUBLIC_BASE_URL}/a/${row.id}/export?mode=card&amp;v=${row.version}&amp;r=3"`);
     expect(html).toContain('name="twitter:card" content="summary_large_image"');
   });
 
-  it('points the card at the link\'s declared values, so the unfurl shows what the link selects', async () => {
-    const row = await publish('<Helmet><Value name="region" type="string" /></Helmet><h1>Region {$region}</h1>', 'Regions');
-    const card = (html: string) => decodeURIComponent(html.match(/property="og:image" content="([^"]*)"/)![1]!.replace(/&amp;/g, '&'));
-    expect(card(await serve(row.id, '?$region=EU&$junk=1'))).toBe(`${BASE}/a/${row.id}/export?mode=card&v=${row.version}&r=3&$region=EU`);
-    expect(card(await serve(row.id))).toBe(`${BASE}/a/${row.id}/export?mode=card&v=${row.version}&r=3`);
+  it('does not attach retired declared-value parameters to native social cards',async()=>{
+    const row=await publish('<h1>Regions</h1>','Regions');const html=await serve(row.id,'?$region=EU&$junk=1');
+    const image=html.match(/property="og:image" content="([^"]*)"/)![1]!;expect(image).not.toContain('$region');expect(image).not.toContain('$junk');
   });
 
-  it('follows the document\'s own heading when nothing named it, like the tab does', async () => {
-    const row = await publish('<h1>Named By Heading</h1>', null);
+  it('follows the native HTML title when the stored row has no title', async () => {
+    const row = await publish('<!doctype html><html><head><title>Named By Heading</title></head><body><h1>Named By Heading</h1></body></html>', null);
     expect(await serve(row.id)).toContain('property="og:title" content="Named By Heading"');
   });
 
-  it('leaves them OUT of a capture render — the exporter is shooting this frame', async () => {
+  it('preserves the authored capture body without injecting reader chrome', async () => {
     const row = await publish('<h1>Q3</h1>', 'Q3');
-    expect(await serve(row.id, '?chrome=0')).not.toContain('og:image');
+    const html=await serve(row.id, `?chrome=0&key=${mintExportKey(row.id)}`);expect(html).toMatch(/<h1[^>]*>Q3<\/h1>/);expect(html).not.toContain('data-mx-document-frame');expect(html).not.toContain('data-mx-domain-footer');
   });
 });
 

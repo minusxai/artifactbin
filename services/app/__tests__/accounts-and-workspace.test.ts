@@ -36,7 +36,7 @@ async function world() {
 describe('a shared link that carries ?intent=fork', () => {
   it('serves a stranger the ordinary app page: the document\'s title and its one frame, and no other iframe', async () => {
     const w = await world();
-    const doc = await w.publish({ title: 'Fork gate', visibility: 'public', markup: '<div class="p-8"><h1>Fork gate</h1><p>The original.</p></div>' });
+    const doc = await w.publish({ title: 'Fork gate', visibility: 'public', html: '<div class="p-8"><h1>Fork gate</h1><p>The original.</p></div>' });
     const res = await app.request(`/a/${doc.id}?intent=fork`, { headers: as(STRANGER) });
     expect(res.status).toBe(200);
     const html = await res.text();
@@ -54,9 +54,9 @@ describe('a folder\'s page', () => {
     // The create echo hands back no markup nobody sent, and a child is filed under the folder at publish.
     expect(folder).toMatchObject({ format: 'folder', visibility: 'public' });
     expect(folder.markup ?? '').toBe('');
-    const opening = await w.publish({ title: 'Opening Note', visibility: 'public', parent_id: folder.id, markup: '<div class="p-8"><h1>Opening Note</h1></div>' });
+    const opening = await w.publish({ title: 'Opening Note', visibility: 'public', parent_id: folder.id, html: '<div class="p-8"><h1>Opening Note</h1></div>' });
     expect(opening.parent_id).toBe(folder.id);
-    await w.publish({ title: 'Quiet Note', parent_id: folder.id, markup: '<div class="p-8"><h1>Quiet Note</h1></div>' });
+    await w.publish({ title: 'Quiet Note', parent_id: folder.id, html: '<div class="p-8"><h1>Quiet Note</h1></div>' });
 
     const owned = await app.request(`/a/${folder.id}`, { headers: as(w.ownerActor) });
     expect(owned.status).toBe(200);

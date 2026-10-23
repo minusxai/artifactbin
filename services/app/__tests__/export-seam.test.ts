@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * THE BROWSER SEAM, pinned. Route-level export tests must not
  * launch Chromium: the app reaches its BrowserService through lib/services (`setServices`/`services()`), so a route
@@ -38,7 +39,7 @@ afterEach(() => setServices({}));
 
 async function doc(): Promise<string> {
   const t = await mintToken('t');
-  const row = await createArtifact(t.id, t.userId, { format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null, visibility: 'public' });
+  const row = await createArtifact(t.id, t.userId, { format: 'html', source: nativeHtml('<div>hi</div>'), meta: {}, title: 'hi', description: null, visibility: 'public' });
   return row.id;
 }
 
@@ -69,23 +70,16 @@ describe('the export route through the browser seam', () => {
     expect(lastRequest().format).toBe('jpg');
   });
 
-  it('a card follows the link\'s declared values, so a shared ?$region=EU unfurls showing EU, and drops undeclared ones', async () => {
-    browser();
-    const t = await mintToken('card-values');
-    const row = await createArtifact(t.id, t.userId, {
-      format: 'markup', source: '<Helmet><Value name="region" type="string" /></Helmet><p>Region {$region}</p>',
-      meta: {}, title: 'regions', description: null, visibility: 'public',
-    });
-    await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=card&$region=EU&$junk=1`), params(row.id));
-    expect(decodeURIComponent(lastRequest().url)).toContain('$region=EU');
-    expect(decodeURIComponent(lastRequest().url)).not.toContain('junk');
+  it('does not forward retired declared-value query parameters into a native social capture',async()=>{
+    browser();const id=await doc();await exportImage(new Request(`${BASE}/a/${id}/export?mode=card&$region=EU&$junk=1`),params(id));
+    expect(lastRequest().url).not.toContain('$region');expect(lastRequest().url).not.toContain('$junk');
   });
 
   it('forwards a saved social-preview crop to the browser', async () => {
     browser();
     const t = await mintToken('crop');
     const row = await createArtifact(t.id, t.userId, {
-      format: 'markup', source: '<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><div>hi</div>',
+      format: 'html', source: '<!doctype html><html><head><meta name="artifactbin:og-crop" content="x=300;y=900;width=800"></head><body><div>hi</div></body></html>',
       meta: {}, title: 'hi', description: null, visibility: 'public',
     });
     await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=card`), params(row.id));
@@ -96,7 +90,7 @@ describe('the export route through the browser seam', () => {
     browser();
     const t = await mintToken('preview');
     const row = await createArtifact(t.id, t.userId, {
-      format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
+      format: 'html', source: nativeHtml('<div>hi</div>'), meta: {}, title: 'hi', description: null,
     });
     const anonymous = await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=preview`), params(row.id));
     expect(anonymous.status).toBe(404);
@@ -120,7 +114,7 @@ describe('the export route through the browser seam', () => {
     browser();
     const t = await mintToken('draft-owner');
     const row = await createArtifact(t.id, t.userId, {
-      format: 'markup', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
+      format: 'html', source: nativeHtml('<div>hi</div>'), meta: {}, title: 'hi', description: null,
     });
     const res = await exportImage(new Request(
       `${BASE}/a/${row.id}/export?mode=preview&format=png&crop=x%3D120%3By%3D640%3Bwidth%3D600`,

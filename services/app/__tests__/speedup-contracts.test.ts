@@ -1,44 +1,18 @@
-import {observedRequest} from '@/__tests__/conditional-request';
-import { createHash } from 'node:crypto';
-import { expect, it } from 'vitest';
-import { useAppHarness, request } from './harness';
-import { POST as createArtifact } from '@/app/api/artifacts/route';
-import { PUT as replaceArtifact } from '@/app/api/artifacts/[id]/route';
-import { getArtifactById } from '@/lib/artifacts';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { COMPILED_DATAFLOW, finalizeArtifactMetadata, readCompiledDataflow, storedCompiledDataflow } from '@/lib/document/parsed-artifact-metadata';
-import { compiledSource } from '@/test/helpers/compiled';
-
+/** Native publication has no JSX compiler manifest: canonical source, identities
+ * and viewer defaults are committed together through the original CAS door. */
+import {expect,it} from 'vitest';
+import {useAppHarness,request,mintAccountToken} from './harness';
+import {POST as create} from '@/app/api/artifacts/route';
+import {PUT as replace} from '@/app/api/artifacts/[id]/route';
+import {getArtifactById,artifactState} from '@/lib/artifacts';
 useAppHarness();
-const source = '<Helmet><Value name="choice" type="string" default="one"/><Query name="a">{`select 1 as n`}</Query><Query name="b">{`select * from a`}</Query></Helmet><p>Hello</p>';
-
-it('create and full replace persist a manifest of the exact final stamped source', async () => {
-  const token = await mintToken('manifest');
-  const response = await createArtifact(request('/api/artifacts', {method:'POST',token:token.token,json:{markup:source}}));
-  expect(response.status).toBe(201);
-  const {id} = await response.json();
-  for (let pass=0;pass<2;pass++) {
-    if(pass) expect((await replaceArtifact(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{markup:source.replace('Hello','Updated')}}),{params:Promise.resolve({id})})).status).toBe(200);
-    const row = (await getArtifactById(id))!;
-    expect(row.source).toMatch(/id="/);
-    const stored=storedCompiledDataflow(row.meta,row.source!);
-    expect(stored).toEqual(await compiledSource(row.source!));
-    expect((row.meta.parsedArtifact as {sourceHash:string}).sourceHash).toBe(createHash('sha256').update(row.source!).digest('hex'));
-    // Every span points at its declaration in the FINAL stamped source.
-    for(const q of stored!.queries)expect(row.source!.slice(q.start,q.end)).toMatch(new RegExp(`^<Query name="${q.name}"`));
-  }
+const html='<!doctype html><html><head><script type="application/json" data-af="state">{"choice":"one"}</script></head><body><p data-af-id="paragraph">Hello</p></body></html>';
+it('commits exact native source and stable identities on create and guarded replacement',async()=>{
+ const token=await mintAccountToken('native-contract');
+ const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html}}));expect(made.status).toBe(201);const {id}=await made.json();
+ const before=(await getArtifactById(id))!;expect(before.source).toContain('data-af-id="paragraph"');expect(before.source).toContain('{"choice":"one"}');
+ const response=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{html:before.source!.replace('Hello','Updated'),expectedVersion:before.version,expectedState:artifactState(before)}}),{params:Promise.resolve({id})});expect(response.status).toBe(200);
+ const after=(await getArtifactById(id))!;expect(after.version).toBe(before.version+1);expect(after.source).toContain('data-af-id="paragraph">Updated');expect(after.source).toContain('{"choice":"one"}');
+ expect(after.meta).not.toHaveProperty('parsedArtifact');
+ const stale=await replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{html,expectedVersion:before.version,expectedState:artifactState(before)}}),{params:Promise.resolve({id})});expect(stale.status).toBe(409);expect(await getArtifactById(id)).toEqual(after);
 });
-
-it('malformed, missing and stale manifest data is reconstructed from canonical source', async () => {
-  const expected=await compiledSource(source);
-  const record=finalizeArtifactMetadata('markup',source,{[COMPILED_DATAFLOW]:expected}).parsedArtifact as Record<string,unknown>;
-  expect(storedCompiledDataflow({parsedArtifact:record},source)).toEqual(expected);
-  for(const parsedArtifact of [null,{...record,schemaVersion:999},{...record,compiled:{values:'bad'}},{...record,sourceHash:'stale'},{...record,compilerRevision:'old'}]) {
-    expect(storedCompiledDataflow({parsedArtifact},source)).toBeNull();
-    expect(await readCompiledDataflow({parsedArtifact},source,async()=>null)).toEqual({ok:true,compiled:expected});
-  }
-  expect(expected.queries.find((q)=>q.name==='b')!.reads.queries).toContain('a');
-});
-
-// The three dataset result-cache cases that sat here moved to shared-result-cache.test.ts,
-// beside the rest of that cache's behaviour. What remains is the parsed-artifact manifest.

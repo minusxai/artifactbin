@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -11,7 +12,7 @@ const base='https://example.test';
 const json=(body:unknown,status=200,headers:Record<string,string>={})=>Response.json(body,{status,headers});
 const npmNotice=(helperBase:string)=>({message:'afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup — then use afbin as before.',hint:`Windows PowerShell: npx.cmd --yes @afbin/cli@latest setup. If Node.js 22+ is missing, run ${helperBase}/chat/install-node.sh (macOS/Linux) or ${helperBase}/chat/install-node.ps1 (Windows) first. Your files, account and skills stay.`});
 const legacyNotice=(helperBase:string)=>({message:'afbin now runs through npm',hint:`Node/npm setup: ${helperBase}/chat/install-node.sh (macOS/Linux), ${helperBase}/chat/install-node.ps1 (Windows). npx --yes @afbin/cli@latest <command>; npx.cmd`});
-function host({cache='no-store',mutates=false,filename='Report.jsx.html',helperBase=base,legacyCopy=false,refreshFails=false}={}){
+function host({cache='no-store',mutates=false,filename='Report.html',helperBase=base,legacyCopy=false,refreshFails=false}={}){
  let rows=[{region:'EU',amount:2}],version=1;const tokens=new Set<string>();
  const calls:Array<{path:string;init:RequestInit}>=[];
  const fetch=async(input:string,init:RequestInit={})=>{
@@ -25,7 +26,7 @@ function host({cache='no-store',mutates=false,filename='Report.jsx.html',helperB
    tokens.add('tok_refreshed');return json({access_token:'mx_test_http_next',refresh_token:'mxr_test_http_next',token_type:'Bearer',expires_in:86400,scope:'artifacts'});
   }
   if(path.startsWith('/api/my/tokens/')){expect(tokens.delete(path.split('/').at(-1)!)).toBe(true);return new Response(null,{status:204});}
-  if(path==='/a/doc123/download')return new Response('<!doctype html><script id="afbin-file">{}</script>',{headers:{'Content-Type':'text/html','Content-Disposition':`attachment; filename="${filename}"`}});
+  if(path==='/a/doc123/download')return new Response('<!doctype html><html><head><script data-af="core">/* inline core */</script></head><body></body></html>',{headers:{'Content-Type':'text/html','Content-Disposition':`attachment; filename="${filename}"`}});
   expect(new Headers(init.headers).get('authorization')).toBe('Bearer mx_test_http_next');
   if(path==='/api/artifacts')return json({id:'csv123'},201);
   if(path.endsWith('/content'))return json(rows);
@@ -50,7 +51,7 @@ it('guest issuance acceptance refuses a minted credential and requires no-store 
  await checkGuestHttpIssuance({base,guestCookie:'guest=session',fetch:async()=>json({error:'email_auth_required'},401,{'Cache-Control':'no-store'})});
  await expect(checkGuestHttpIssuance({base,guestCookie:'guest=session',fetch:async()=>json({access_token:'mx_test_guest'},201)})).rejects.toThrow();
 });
-it.each([{cache:'public'},{mutates:true},{filename:'Report.html'},{helperBase:'http://artifactbin-app:3000'},{helperBase:'https://wrong-public.example'},{legacyCopy:true},{refreshFails:true}])('acceptance catches a broken release contract %j',async options=>{
+it.each([{cache:'public'},{mutates:true},{filename:'Report.txt'},{helperBase:'http://artifactbin-app:3000'},{helperBase:'https://wrong-public.example'},{legacyCopy:true},{refreshFails:true}])('acceptance catches a broken release contract %j',async options=>{
  const fake=host(options);
  await expect(checkDirectHttp({base,fetch:fake.fetch,accountCookie:'email=session',artifactId:'doc123',stamp:'unit',onArtifact:()=>{}})).rejects.toThrow();
 });
@@ -70,7 +71,7 @@ it('acceptance runs against real composed email, artifact and download handlers'
   const accountCookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
   const issued=await post('/api/authentication/token',{}, {cookie:accountCookie});expect(issued.status).toBe(201);
   const token=await issued.json();
-  const created=await post('/api/artifacts',{markup:'<h1>Release acceptance</h1>',title:'Release acceptance',visibility:'private'},{authorization:'Bearer '+token.access_token});expect(created.status).toBe(201);
+  const created=await post('/api/artifacts',{html:nativeHtml('<h1>Release acceptance</h1>'),title:'Release acceptance',visibility:'private'},{authorization:'Bearer '+token.access_token});expect(created.status).toBe(201);
   const ids:string[]=[];
   await checkDirectHttp({base:origin,fetch,accountCookie,artifactId:(await created.json()).id,stamp:'real',onArtifact:(id:string)=>ids.push(id)});
   expect(ids).toHaveLength(1);

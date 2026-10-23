@@ -12,7 +12,6 @@
 export type { DocumentGraph } from './document-graph';
 export { createDocumentGraph, graphSource } from './document-graph';
 export { applyGraphPatch } from './document-graph-patch';
-export type { ProseOperation } from './document-prose';
 export type { StoredDocument } from './document-codec';
 export { decodeDocument } from './document-codec';
 export { nodeIndex, normalizeNodeIds, stampNodeIds, stampNodeIdsInPlace } from './node-ids';
@@ -25,7 +24,6 @@ export { validateMarkupStructure } from './local-validation';
 // ---- Edits: splices, edit batches, source changes and prepared updates.
 export type { EditRecord } from './splice';
 export { newEditId } from './splice';
-export type { StringEdit } from './edit-batch';
 export { rebaseEditBatch } from './edit-batch';
 export { sourcePathToBodyPath } from './edit-compose';
 export { sourceChanges } from './source-changes';

@@ -269,7 +269,7 @@ export function candidateDocument(pathname: string): { id: string } | null {
  * A guessed machine address is answered in the machine's language. A path
  * under `/api/` nobody serves, `/openapi.json` and `/.well-known/ai-plugin.json`
  * answer the same shape `unauthorized()` does: the error, and the one way on —
- * `afbin help`. A page of HTML tells a fetch tool nothing.
+ * `/llms.txt`. A page of HTML tells a fetch tool nothing.
  *
  * Mounted AFTER the real routes (an earlier match wins) and BEFORE the SPA
  * fallback, by EXACT path under `/.well-known/` — a prefix mount there would
@@ -282,8 +282,8 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
   const guessedQuery = /^\/api\/artifacts\/[^/]+\/query\/?$/.test(new URL(c.req.raw.url).pathname);
   return json({
     error: 'not_found',
-    help: guessedQuery ? '/llms/publishing-query' : '/llms.txt',
-    ...(guessedQuery ? { details: ['This route does not exist. Stored document queries use /a/<documentId>/query and select declared queries with {"only":["query_name"]}; they do not accept SQL. Use /llms/publishing-query for methods and access rules.'] } : {}),
+    help: guessedQuery ? '/llms/html-datasets' : '/llms.txt',
+    ...(guessedQuery ? { details: ['Read linked dataset schema and rows through the page GraphQL endpoint /api/artifacts/<pageId>/graphql. Use /llms/html-datasets for namespaces, discovery and permissions.'] } : {}),
   }, 404, { 'Cache-Control': 'no-store' });
 };
 

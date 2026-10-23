@@ -1,5 +1,5 @@
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
-import type {HtmlBackendLink,HtmlDatasetLink} from '@artifactbin/contracts';
+import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
@@ -7,14 +7,13 @@ import { identityForUser } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from './table';
 import type { AccessActor } from '@/lib/accounts';
-import type { DocumentGraph, DocumentUpdate } from '@artifactbin/contracts';
+import type { DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import {
-  type ProseOperation, sourceChanges, annotationEffects, type AnnotationRecord, type AnnotationReceipt, newEditId, type StringEdit,
+  sourceChanges, annotationEffects, type AnnotationRecord, type AnnotationReceipt, newEditId,
   nodeIndex, stampNodeIds,
 } from '../document';
-import type { DocumentOperation } from '@artifactbin/contracts';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '@/lib/accounts';
 import { documentMentions } from './membership/document-mentions';
@@ -119,8 +118,9 @@ export async function artifactQuotaExceeded(tokenId: string, creating = 1): Prom
 
 /** First owning report attachment freezes unresolved memberOf scopes atomically. */
 async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<void> {
- if(document.format!=='markup')return;
- const refs=(document.meta.refs as Array<{id:string}>|undefined)??[];
+ if(document.format!=='html'&&document.format!=='markup')return;
+ const bindings=(document.meta.htmlLinks??[]) as readonly HtmlPageLink[];
+ const refs=document.format==='html'?bindings.filter((link):link is HtmlDatasetLink=>link.kind==='dataset'&&link.mode==='live').map(link=>({id:link.datasetId})):(document.meta.refs as Array<{id:string}>|undefined)??[];
  for(const ref of [...refs].sort((a,b)=>a.id.localeCompare(b.id))) {
   const dataset=(await artifactQuery<ArtifactRow>(tx,"SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
   const catalog=dataset?catalogOf(dataset):null;
@@ -729,35 +729,6 @@ async function wakeParents({ from, to }: { from: string | null; to: string | nul
 function sayMoved(actor: AccessActor, id: string, moved: { from: string | null; to: string | null } | null): void {
   if (!moved || moved.from === moved.to) return;
   void emit(actorSubject(actor), 'moved', { kind: 'artifact', id }, { from_parent_id: moved.from, to_parent_id: moved.to });
-}
-
-// ── The concurrent-edit protocol ─────────────────────────────────────────────
-
-/**
- * One edit against a claimed base version. Agents send the Edit-tool diff;
- * the WYSIWYG sends its whole re-serialized source (the splice is derived by
- * prefix/suffix diff — sound because stored source is canonical).
- */
-export interface EditInput {
-  documentUpdate?:DocumentUpdate;
-  /**
-   * The caller answers with the patch, not the document, when the patch lands where it was prepared (the browser
-   * editor's save): the commit then never returns or decodes the new document, and the outcome says `withheld`.
-   */
-  patchEcho?: true;
-  operations?:DocumentOperation[];
-  text?: ProseOperation;
-  annotationOps?: AnnotationOperation[];
-  baseEditId: string;
-  /** The content change, if this edit has one. */
-  change?: { oldString: string; newString: string } | { newSource: string } | { edits: StringEdit[] };
-  /**
-   * Document-level attributes. Deliberately NOT node-scoped: a title or theme
-   * belongs to the whole document, has no span to conflict on, and (for theme)
-   * recompiles the stylesheet — so these apply to head and never reject, which
-   * is what lets the editor persist a theme flip while an agent is writing.
-   */
-  meta?: { title?: string | null; theme?: string | null; colorMode?: 'light' | 'dark' | null };
 }
 
 // ── The reference graph ──────────────────────────────────────────────────────

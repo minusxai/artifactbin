@@ -1,6 +1,8 @@
+import {htmlAssetLinks} from '@/lib/html-page';
+import {trackEvent} from '@/lib/platform/analytics';
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
 import {htmlBackendNames,htmlPageDeclarations} from '@/lib/html-page';
-import {authorizeDatasetBinding} from '@/lib/dataset-graphql';
+import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
 import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import type {PreparedHtmlBackend} from '@/lib/html-backends';
 /**
@@ -32,7 +34,10 @@ async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor
   const {datasets}=htmlPageDeclarations(body.html);
   await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
   return datasets;
- }catch{return json({error:'invalid_dataset_binding'},400);}
+ }catch(error){
+  if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);
+  return json({error:'invalid_dataset_binding'},400);
+ }
 }
 
 async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):Promise<PreparedHtmlBackend[]|undefined|Response>{
@@ -185,9 +190,8 @@ export async function replaceArtifactWithBody(
   if (expected.expectedVersion !== undefined && expected.expectedVersion !== current.version || expected.expectedState !== undefined && expected.expectedState !== artifactState(current)) {
     return json({error:expected.expectedVersion !== undefined && expected.expectedVersion !== current.version?'version_conflict':'state_conflict',currentVersion:current.version,currentState:artifactState(current)},409);
   }
+  const htmlDatasets=await prepareHtmlDatasets(body,owner);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
-
-  const htmlDatasets=await prepareHtmlDatasets(body,actor);if(htmlDatasets instanceof Response)return htmlDatasets;
   const htmlBackends=await prepareHtmlBackends(body);if(htmlBackends instanceof Response)return htmlBackends;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
@@ -237,6 +241,8 @@ export async function replaceArtifactWithBody(
   if (row instanceof Response) return row;
   if (isVersionConflict(row)) return json({ error: row.reason ?? 'version_conflict', currentVersion: row.currentVersion, ...(row.currentState ? {currentState:row.currentState} : {}) }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
+
+  if(row.format==='html')void trackEvent('edit',row.id,{userId:actor.userId??null});
 
   // Dataset/viz refresh: warn about dependents whose bindings no longer
   // resolve (warnings, never blocks).
@@ -310,9 +316,8 @@ export async function createArtifactFromBody(
   if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
 
 
+  const htmlDatasets=await prepareHtmlDatasets(body,publicationActor);if(htmlDatasets instanceof Response)return htmlDatasets;
   if (options.dryRun) return preflightReply(prepared);
-
-  const htmlDatasets=await prepareHtmlDatasets(body,actor);if(htmlDatasets instanceof Response)return htmlDatasets;
   const htmlBackends=await prepareHtmlBackends(body,true);if(htmlBackends instanceof Response)return htmlBackends;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
@@ -369,7 +374,7 @@ export async function refreshAssetsFor(
   if (id) {
     const row = await getArtifactFor(actor, id);
     if (!row) return json({ error: 'not_found' }, 404);
-    const named = collectExternalAssetUrls(row.source ?? '').all;
+    const named = row.format==='html' ? htmlAssetLinks(row.source ?? '').imageUrls : collectExternalAssetUrls(row.source ?? '').all;
     const held = await lookupWebAssets(named);
     urls = named.filter((u) => held.has(u));
     // The bytes belong to whoever the DOCUMENT belongs to, exactly as they did

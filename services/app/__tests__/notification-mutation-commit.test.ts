@@ -3,7 +3,8 @@ import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artif
 import {expect,it} from 'vitest';
 import {useAppHarness,request} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
-import {POST as mutate} from '@/app/api/artifacts/[id]/mutate/route';
+import {notificationMutationFixture} from './notification-mutation-fixture';
+import {nativeHtml} from './native-html-fixture';
 import { getArtifactById, changeMembership } from '@/lib/artifacts';
 import { membershipInbox, notificationJobStore, evaluateNotificationQuery } from '@/lib/document-data';
 import {getDb} from '@/lib/platform';
@@ -18,11 +19,10 @@ async function fixture(notificationSql=`select null as "to", 'Counter is ' || ca
  const token=await mintToken('mxmx_test_notify_commit',userId);
  const created=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:0}],access:'readwrite'}}));
  expect(created.status).toBe(201);const dataset=await created.json();
- const declarations=`<Import name="tasks" src="ref:${dataset.id}" /><Mutation name="increment">{\`update tasks.rows set n=n+$amount\`}</Mutation>`;
- const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet>${declarations}<Notify name="counter_status" on="increment">{\`${notificationSql}\`}</Notify><Notify name="second_status" on="increment">{\`${secondSql}\`}</Notify></Helmet><p>Counter</p>`}}));
+ const docResponse=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml('<p>Counter</p>')}}));
  expect(docResponse.status,await docResponse.clone().text()).toBe(201);const doc=await docResponse.json();
  const db=await getDb();
- const send=(key:string)=>mutate(request(`/api/artifacts/${doc.id}/mutate`,{method:'POST',token:token.token,headers:{'Idempotency-Key':key},json:{name:'increment',args:{amount:1}}}),{params:Promise.resolve({id:doc.id})});
+ const send=notificationMutationFixture(token,doc,dataset,'update tasks.rows set n=n+$amount',[{name:'counter_status',sql:notificationSql},{name:'second_status',sql:secondSql}]);
  return {db,dataset,doc,send,token};
 }
 

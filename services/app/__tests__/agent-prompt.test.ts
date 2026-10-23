@@ -27,10 +27,10 @@ beforeEach(async () => {
 
 describe('POST /api/my/artifacts/:id/agent-prompt', () => {
   it('returns the existing-document paste without minting an unused token', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
+    const user = await createUser({ email: 'owner@example.test' });
     const agentOne = await mintToken('agent-one', user.id);
     const createRes = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: agentOne.token, json: { title: 'doc', markup: '<section><p>hello</p></section>' } }),
+      request('/api/artifacts', { method: 'POST', token: agentOne.token, json: { title: 'doc', html: '<!doctype html><html><head></head><body><p>hello</p></body></html>' } }),
     );
     expect(createRes.status).toBe(201);
     const { id } = (await createRes.json()) as { id: string };
@@ -48,11 +48,11 @@ describe('POST /api/my/artifacts/:id/agent-prompt', () => {
   });
 
   it('404s a document the session does not own, 401s no session', async () => {
-    const owner = await createUser({ email: 'v@minusx.ai' });
-    const stranger = await createUser({ email: 'w@minusx.ai' });
+    const owner = await createUser({ email: 'owner@example.test' });
+    const stranger = await createUser({ email: 'reader@example.test' });
     const t = await mintToken('t', owner.id);
     const createRes = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<section><p>hi</p></section>' } }),
+      request('/api/artifacts', { method: 'POST', token: t.token, json: { html: '<!doctype html><html><head></head><body><p>hi</p></body></html>' } }),
     );
     const { id } = (await createRes.json()) as { id: string };
 
