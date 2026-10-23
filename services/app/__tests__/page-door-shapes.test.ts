@@ -76,7 +76,8 @@ describe('the JSON door keeps the shape of everything that is not a framed docum
     const w = await world();
     const created = await createBrowserArtifact(request('/api/my/artifacts', { method: 'POST', actor: w.actor, json: artifactStarter('deck') }));
     const body = await w.answer((await created.json() as { id: string }).id);
-    expect(Object.keys(body).sort()).toEqual([...DOC_TOP, 'surface'].sort());
+    expect(Object.keys(body).sort()).toEqual([...DOC_TOP, 'surface','cspRequest'].sort());
+    expect(body.cspRequest).toMatchObject({status:'none',denied:false});
     expect(Object.keys(body.surface).sort()).toEqual([...BASE_SURFACE, 'heading', 'runtime', 'starter'].sort());
     expect(body.surface.starter).toBe(false);
     expect(shape(body.surface.runtime)).toEqual({data:{},title:'string'});

@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /** Reader URLs use the shared app document; explicit raw/export keeps its sandbox. */
 import { pagesSite } from '@/lib/http/pages-origin';
 import { describe, expect, it } from 'vitest';
@@ -15,7 +16,7 @@ const app=createAppServer({actorSecret:secret,indexHtml:async()=>shell});
 const actor=(value:Actor)=>({[ACTOR_HEADER]:signActor(value,secret)});
 const publish=async(visibility:'public'|'unlisted'|'private'='public',source='<h1 id="heading">Readable body</h1>',userId:string|null=null)=>{
  const token=await mintToken('reader',userId);
- const row=await createArtifact(token.id,userId,{format:'markup',source,meta:{},title:'Document',description:null,visibility});
+ const row=await createArtifact(token.id,userId,{format:'html',source:nativeHtml(source),meta:{},title:'Document',description:null,visibility});
  return {token,row};
 };
 describe('reader delivery over HTTP',()=>{
@@ -48,12 +49,11 @@ describe('reader delivery over HTTP',()=>{
   const {row}=await publish(),raw=await app.request(`/a/${row.id}/raw?chrome=0`),page=await app.request(`/a/${row.id}`);
   expect(raw.headers.get('content-security-policy')).toContain('sandbox');expect(page.headers.get('content-security-policy')).not.toContain('sandbox');expect(await raw.text()).toContain('Readable body');
  });
- it('keeps scripts inert and live selections in prepared data',async()=>{
-  const {row}=await publish('public','<Helmet><Value name="count" type="number" default={0}/><script>{`globalThis.shouldNotRun=true`}</script></Helmet><p>{$count}</p>');
-  // The script runs in the document's own frame, so it is the framed document's prepared data that carries it — as inert JSON, never an executable script.
-  const doc=await(await framedDocument(app,`/a/${row.id}?$count=4`))!.text();expect(doc).toMatch(/"authorScript":"[^"]*globalThis\.shouldNotRun = true;/);expect(doc).not.toContain('<script>globalThis.shouldNotRun');expect(doc).not.toMatch(/<script(?![^>]*type="application\/json")[^>]*>[^<]*shouldNotRun/);expect(doc).toContain('"values":{"count":4}');
-  // The app page frames the document and never needs the script: its data (all it reads of a framed runtime is the title and the dataflow) carries none, and nothing of it is executable there either.
-  const html=await(await app.request(`/a/${row.id}?$count=4`)).text();expect(html).not.toContain('shouldNotRun');expect(html).not.toContain('authorScript');expect(html).toContain('"values":{"count":4}');
+ it('keeps author scripts and viewer defaults in the isolated native frame, never the platform shell',async()=>{
+  const {row}=await publish('public','<script type="application/json" data-af="state">{"count":0}</script><script type="module">globalThis.shouldNotRun=true</script><p>Counter</p>');
+  const doc=await(await framedDocument(app,`/a/${row.id}`))!.text();
+  expect(doc).toContain('globalThis.shouldNotRun=true');expect(doc).toContain('data-af="state"');expect(doc).toContain('"count":0');
+  const html=await(await app.request(`/a/${row.id}`)).text();expect(html).not.toContain('shouldNotRun');expect(html).not.toContain('data-af="state"');expect(html).toContain('data-mx-document-frame');
  });
  it('keeps datasets on their existing app representation',async()=>{
   const token=await mintToken('dataset'),row=await createArtifact(token.id, token.userId,{format:'dataset',source:null,meta:{},title:'Data',description:null,visibility:'public'});

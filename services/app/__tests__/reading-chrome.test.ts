@@ -1,65 +1,12 @@
-/**
- * The served document carries its reading chrome — the outline, the table
- * rules — from the SERVER, and not for a capture. Checked at the door a reader
- * actually comes through (/a/<id>/raw), so what the unit tests say about the
- * runtime is also true of the bytes on the wire.
- */
-import { describe, expect, it } from 'vitest';
-import { GET as rawRoute } from '@/app/a/[id]/raw/route';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-
-
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser, setUsername } from '@/lib/accounts';
-import { request, useAppHarness } from '@/__tests__/harness';
-
+/** Native reading chrome is authored HTML; platform controls stay outside the
+ * runner. Retired kit outline/scrolly synthesis is covered by authored navigation
+ * and responsive geometry in gate-reading-geometry. */
+import {expect,it} from 'vitest';
+import {GET as raw} from '@/app/a/[id]/raw/route';
+import {POST as create} from '@/app/api/artifacts/route';
+import {mintAccountToken,request,useAppHarness} from './harness';
 useAppHarness();
-
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
-const create = async (token: string, markup: string, template: 'editorial' | 'scrolly' = 'editorial') => {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { markup, template, visibility: 'public' } }));
-  expect(res.status, await res.clone().text()).toBe(201);
-  return ((await res.json()) as { id: string }).id;
-};
-const SECTIONED = '<article data-design="tw" className="mx-auto max-w-2xl">'
-  + ['Why', 'How', 'Limits'].map((t, i) => `<section><h2 className="text-2xl font-semibold">${i + 1}. ${t}</h2><p>text</p></section>`).join('')
-  + '<table><thead><tr><th>a</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table></article>';
-
-describe('the served document', () => {
-  it('carries no reader chrome of the app\'s: the app page frames it and draws its own bar', async () => {
-    const user = await createUser({ email: 'breadcrumb@example.com' });
-    const t = await mintToken('owner', user.id);
-    await setUsername(user.id, 'breadcrumbowner');
-    await claimToken(user.id, t.token);
-    const id = await create(t.token, '<h1>Quarterly review</h1>');
-    const html = await (await rawRoute(request(`/a/${id}/raw`, { actor: { userId: user.id, email: user.email, emailVerified: true, credential: 'session' } }), params({ id }))).text();
-    expect(html).toContain('Quarterly review');
-    expect(html).not.toMatch(/data-mx-reader-chrome|mx-reader-byline|data-mx-spa-idle/);
-  });
-
-  it('carries the outline rail in its SSR body, and the table rules in its head', async () => {
-    const t = await mintToken('t');
-    const id = await create(t.token, SECTIONED);
-    const html = await (await rawRoute(request(`/a/${id}/raw`, { token: t.token }), params({ id }))).text();
-    expect(html).toContain('class="mx-outline"');
-    expect(html).toContain('Go to section 2: 2. How');
-    expect(html).toMatch(/\.mx-outline\s*\{[^}]*padding:\s*56px 20px 36px 24px/s);
-    // The rule carries an opt-out now: the kit's own DataTable is already in a
-    // scroll box, and giving the table one breaks its sticky header.
-    expect(html).toMatch(/:where\(\[data-mx-story-root\]\) table:not\(\[data-mx-kit-table\]\)\s*\{/);
-  });
-
-  it('a CAPTURE has no outline — it would land in every og card', async () => {
-    const t = await mintToken('t');
-    const id = await create(t.token, SECTIONED);
-    const html = await (await rawRoute(request(`/a/${id}/raw?chrome=0`, { token: t.token }), params({ id }))).text();
-    expect(html).not.toContain('mx-outline');
-  });
-
-  it('a SCROLLY with the same sections has no outline', async () => {
-    const t = await mintToken('t');
-    const id = await create(t.token, SECTIONED, 'scrolly');
-    const html = await (await rawRoute(request(`/a/${id}/raw`, { token: t.token }), params({ id }))).text();
-    expect(html).not.toContain('class="mx-outline"');
-  });
+const html='<!doctype html><html><head><style>.table-scroll{overflow-x:auto}</style></head><body><nav aria-label="Contents"><a href="#how">How</a></nav><section id="how"><h2>How</h2><p>Details</p></section><div class="table-scroll"><table><tr><td>Value</td></tr></table></div></body></html>';
+it.each(['','?chrome=0'])('keeps authored reading navigation/table rules in native delivery%s without platform chrome',async(query)=>{
+ const token=await mintAccountToken('native-reading');const created=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html,visibility:'public'}}));expect(created.status).toBe(201);const page=await created.json();const response=await raw(request(`/a/${page.id}/raw${query}`),{params:Promise.resolve({id:page.id})});expect(response.status).toBe(200);const body=await response.text();expect(body).toContain('aria-label="Contents"');expect(body).toContain('href="#how"');expect(body).toContain('.table-scroll{overflow-x:auto}');expect(body).not.toMatch(/data-mx-reader-chrome|mx-reader-byline|data-mx-spa-idle/);
 });

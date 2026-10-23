@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import { describe, expect, it } from 'vitest';
 import { useAppHarness, request, setSession, mintAccountToken } from './harness';
 import { identityForUser, createUser } from '@/lib/accounts';
@@ -39,7 +40,7 @@ async function world() {
   await setGroupMember(owner.id, group.id, member.id, 'viewer');
   const make = async (visibility: 'private' | 'unlisted', grouped: boolean) => {
     await setAccountPreferences(owner.id, grouped ? { type: 'group', id: group.id } : { type: 'personal' });
-    const response = await publish(request('/api/artifacts', { method: 'POST', token: token.token, json: { visibility, markup: '<h1 id="t">Hello</h1><p id="p">Body</p>', ...(grouped ? {} : { destination: { type: 'personal' } }) } }));
+    const response = await publish(request('/api/artifacts', { method: 'POST', token: token.token, json: { visibility, html: nativeHtml('<h1 id="t">Hello</h1><p id="p">Body</p>'), ...(grouped ? {} : { destination: { type: 'personal' } }) } }));
     expect(response.status).toBe(201);
     return (await response.json() as { id: string }).id;
   };
