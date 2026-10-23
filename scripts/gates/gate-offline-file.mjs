@@ -61,12 +61,18 @@ async function reading(engineName, browser) {
   await run(async () => {
     const context = await browser.newContext();
     try {
-      await context.setOffline(true);
+      // Linux WebKit refuses file navigation while its network process is
+      // offline. Block every HTTP request before loading the local file instead,
+      // then make the entire context offline before exercising its behavior.
+      // Requests are still observed below: an attempted external dependency fails.
+      if (engineName === 'webkit') await context.route(/^https?:/, route => route.abort('internetdisconnected'));
+      else await context.setOffline(true);
       const page = await context.newPage();
       const outside = [], errors = [];
       page.on('request', request => { if (/^https?:/.test(request.url())) outside.push(request.url()); });
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(pathToFileURL(file).href);
+      if (engineName === 'webkit') await context.setOffline(true);
       await step('HTML, authored styles and portable media render without a server', async () => {
         await expect(page.getByRole('heading', { name: 'Portable native page' })).toBeVisible();
         await expect(page.locator('h1')).toHaveCSS('color', 'rgb(20, 90, 40)');
