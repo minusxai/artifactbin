@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * `GET /a/<id>/assets?u=<url>` — the per-document FIRST-REQUEST import.
@@ -71,12 +72,12 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const ask = (id: string, url: string, opts: Parameters<typeof request>[1] = {}) =>
   docAssets(request(`/a/${id}/assets?u=${encodeURIComponent(url)}`, opts), params(id));
 
-const MARKUP = '<Helmet><Value name="pick" type="string" /></Helmet><div><img src="$pick" alt="a" /></div>';
+const MARKUP = nativeHtml('<img alt="a" id="pick"><script type="module">document.querySelector("#pick").dataset.dynamic="true"</script>');
 
 /** An email account explicitly publishes a public document for logged-out readers. */
 async function publicDoc() {
   const t = await mintToken('anon');
-  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: MARKUP } }));
+  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', html: MARKUP } }));
   expect(res.status).toBe(201);
   return { token: t, id: (await res.json()).id as string };
 }
@@ -85,7 +86,7 @@ async function publicDoc() {
 async function privateDoc() {
   const user = await createUser({ email: `mxmx_test_owner_${Math.random().toString(36).slice(2, 8)}@example.com` });
   const t = await mintToken('owner', user.id);
-  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'private', markup: MARKUP } }));
+  const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'private', html: MARKUP } }));
   expect(res.status).toBe(201);
   return { token: t, user, id: (await res.json()).id as string };
 }
@@ -154,10 +155,10 @@ describe('who pays: the document owner, never the reader', () => {
   it('charges the OWNER for a URL a stranger caused us to fetch', async () => {
     const owner = await createUser({ email: `mxmx_test_payer_${Math.random().toString(36).slice(2, 8)}@example.com` });
     const t = await mintToken('payer', owner.id);
-    const created = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', markup: MARKUP } }));
+    const created = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { visibility: 'public', html: MARKUP } }));
     const id = (await created.json()).id as string;
     // Public, so a stranger may read it — and the stranger is who asks.
-    await putArtifact(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { markup: MARKUP, visibility: 'public' } }), params(id));
+    await putArtifact(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { html: MARKUP, visibility: 'public' } }), params(id));
 
     const reader = await mintToken('a passer-by');
     const res = await ask(id, `${web}/paid.png`, { token: reader.token });
