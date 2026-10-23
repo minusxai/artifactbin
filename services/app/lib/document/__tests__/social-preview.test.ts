@@ -80,3 +80,8 @@ it('preserves native metadata identity and unrelated attributes while changing i
  const source='<!doctype html><html><head><meta data-af-id="stable-7" name="artifactbin:og-crop" content="x=0;y=0;width=800" data-extra="keep"></head><body>Page</body></html>';
  expect(writeSocialPreviewCrop(source,{x:10,y:20,width:600})).toBe(source.replace('x=0;y=0;width=800','x=10;y=20;width=600'));
 });
+
+it('keeps the identity of a native preview meta whose content was missing',()=>{
+ const source='<html><head><meta data-af-id="saved-meta" name="artifactbin:og-crop"></head><body>Page</body></html>';
+ expect(writeSocialPreviewCrop(source,{x:0,y:0,width:800})).toBe(source.replace('name="artifactbin:og-crop">','name="artifactbin:og-crop" content="x=0;y=0;width=800">'));
+});

@@ -92,9 +92,14 @@ function writePreviewMeta(source: string, name: string, markup: string | null): 
 
   if (found.element) {
     // Keep the original identity and unrelated attributes when updating a meta.
-    if (markup && found.element.contentStart !== undefined && found.element.contentEnd !== undefined) {
+    if (markup) {
       const content = /content="[^"]*"/.exec(markup)?.[0];
-      if (content) return source.slice(0, found.element.contentStart) + content + source.slice(found.element.contentEnd);
+      if (content) {
+        if (found.element.contentStart !== undefined && found.element.contentEnd !== undefined)
+          return source.slice(0, found.element.contentStart) + content + source.slice(found.element.contentEnd);
+        const tag = source.slice(found.element.start, found.element.end).replace(/\/?>$/, close => ` ${content}${close}`);
+        return source.slice(0, found.element.start) + tag + source.slice(found.element.end);
+      }
     }
     return source.slice(0, found.element.start)
       + (markup ?? '')
