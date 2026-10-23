@@ -56,7 +56,7 @@ it('starts one artifact and leaves the Solid route for its document', async () =
   render(() => <App />);
   await waitFor(() => expect(calls.filter(call => call.url === '/api/start?mode=blank')).toHaveLength(1));
   expect(calls).toContainEqual({ url: '/api/start?mode=blank', method: 'POST' });
-  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/a/doc_1/edit'));
+  await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/a/doc_1'));
 });
 
 it('preserves explicit external-agent handoff instead of opening the editor', async () => {

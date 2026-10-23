@@ -21,6 +21,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { liveChannelCount, resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
+import {sseStream} from '@/__tests__/sse';
 
 const harness = useAppHarness();
 
@@ -89,12 +90,12 @@ describe('the stream releases what it watched', () => {
     const request = new Request(`${BASE}/a/${doc}/events`, { signal: controller.signal });
     const res = await eventsRoute(request, params({ id: doc }));
     expect(res.status).toBe(200);
-    expect(liveChannelCount()).toBe(2);
-    void res.body?.cancel().catch(() => {});
+    const stream=sseStream(res.body!);await stream.next(2);
+    // The page and dataset are joined by one page-local presence channel.
+    expect(liveChannelCount()).toBe(3);
+    stream.close();
     controller.abort();
-    // The close path awaits each unsubscribe; give it a turn to finish.
-    await new Promise((r) => setTimeout(r, 100));
-    expect(liveChannelCount()).toBe(0);
+    await vi.waitFor(()=>expect(liveChannelCount()).toBe(0));
   });
 
   it('two streams over the same dataset SHARE its channel, and one leaving keeps the other watching', async () => {
@@ -104,15 +105,18 @@ describe('the stream releases what it watched', () => {
     const b = (await create(t.token, { html: DOC(ds) })).id;
     const first = new AbortController();
     const resA = await eventsRoute(new Request(`${BASE}/a/${a}/events`, { signal: first.signal }), params({ id: a }));
-    const resB = await eventsRoute(new Request(`${BASE}/a/${b}/events`), params({ id: b }));
-    // doc a, doc b, and ONE shared dataset channel.
-    expect(liveChannelCount()).toBe(3);
-    void resA.body?.cancel().catch(() => {});
+    const second=new AbortController();
+    const resB = await eventsRoute(new Request(`${BASE}/a/${b}/events`,{signal:second.signal}), params({ id: b }));
+    const streamA=sseStream(resA.body!),streamB=sseStream(resB.body!);
+    await Promise.all([streamA.next(2),streamB.next(2)]);
+    // Two page channels, two presence channels, and ONE shared dataset channel.
+    expect(liveChannelCount()).toBe(5);
+    streamA.close();
     first.abort();
-    await new Promise((r) => setTimeout(r, 100));
-    // b's document channel and the still-shared dataset channel.
-    expect(liveChannelCount()).toBe(2);
-    void resB.body?.cancel().catch(() => {});
+    // Page b retains its document, presence and shared dataset subscriptions.
+    await vi.waitFor(()=>expect(liveChannelCount()).toBe(3));
+    streamB.close();second.abort();
+    await vi.waitFor(()=>expect(liveChannelCount()).toBe(0));
     expect((await getArtifactById(ds))!.access).toBe('readwrite');
   });
 });

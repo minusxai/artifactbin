@@ -23,7 +23,8 @@ it('serves the human tour with current templates, live design systems and a link
   expect(main.querySelector('img[src^="/story-themes/"]')).toBeNull();
   expect(main.querySelector('link[href*="design-system"]')).toBeNull();
   for (const template of STORY_TEMPLATE_NAMES) expect(main).toHaveTextContent(template);
-  for (const field of ['markup', 'dataset', 'viz', 'image']) expect(main).toHaveTextContent(field);
+  for (const field of ['html', 'dataset', 'image']) expect(main).toHaveTextContent(field);
+  expect(main.textContent).not.toMatch(/afbin (?:push|auth)|JSX|visual source editor/);
   expect(main.textContent).not.toContain('/plugin');
   expect(main.textContent).not.toContain('—');
   expect(screen.getByRole('link', { name: 'Getting started guide' })).toHaveAttribute('href', '/getting-started');
