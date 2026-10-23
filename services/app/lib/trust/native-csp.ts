@@ -1,6 +1,6 @@
 /** Native head declarations use the same narrow HTTPS-origin grammar as consent grants. */
 import {attribute,parseSource} from '@/lib/html-page/html-source';
-import {cspExtensionsOf} from '@/lib/document';
+import {cspExtensionsOf} from '@/lib/document/csp-extensions';
 export type NativeCspDeclaration = ReturnType<typeof cspExtensionsOf>;
 export function nativeCspDeclarations(source:string):NativeCspDeclaration {
  const document=parseSource(source);
