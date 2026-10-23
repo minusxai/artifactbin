@@ -20,6 +20,7 @@ permissions:
 
 jobs:
   release:
+    if: github.ref != 'refs/heads/artifactbinv3'
     name: Bump the CLI and commit the version to main
     runs-on: ubuntu-latest
     timeout-minutes: 15
