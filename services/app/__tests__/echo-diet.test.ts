@@ -1,85 +1,79 @@
-import {observedRequest} from '@/__tests__/conditional-request';
-import {observedTextBody} from './prepared-document';
-/** Creates elide unchanged markup; operation commits return the canonical graph and source. */
-import { beforeEach, describe, expect, it } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
-import { POST as editArtifact } from '@/app/api/artifacts/[id]/edits/route';
-import { mintAccountToken } from './harness';
-import { useAppHarness, request } from '@/__tests__/harness';
-
+/** Native publication echoes a complete canonical HTML file; compiler graph/splice echoes are retired. */
+import { beforeEach, expect, it } from 'vitest';
+import { POST } from '@/app/api/artifacts/route';
+import { GET, PUT, PATCH } from '@/app/api/artifacts/[id]/route';
+import { mintAccountToken, request, useAppHarness } from './harness';
+import { observedRequest } from './conditional-request';
+import { nativeHtml } from './native-html-fixture';
 useAppHarness();
-
-
-
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
-
 let token: string;
-const CANONICAL = '<div className="p-8" id="root"><h1 className="text-4xl font-bold" id="heading">Title</h1><p id="body">Body copy.</p></div>';
-/** HTML's parser closes the <p> at the <div>, so the door rewrites it — the case the echo exists for. */
-const NEEDS_REWRITE = '<div className="p-8"><p className="lead"><div>Block inside a paragraph</div></p></div>';
-
 beforeEach(async () => {
-  const minted = await mintAccountToken('echo');
-  token = minted.token;
+  token = (await mintAccountToken('echo')).token;
 });
-
-async function create(markup: string) {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { markup } }));
-  return { status: res.status, body: await res.json() };
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+const source = nativeHtml(
+  '<h1 data-af-id="heading">Title</h1><p data-af-id="body">Body copy.</p>',
+);
+async function create(html = source) {
+  const response = await POST(
+    request('/api/artifacts', { method: 'POST', token, json: { html } }),
+  );
+  expect(response.status, await response.clone().text()).toBe(201);
+  return response.json();
 }
-
-describe('the write echo is present only when it is news', () => {
-  it('a create whose markup stored unchanged answers markup_changed:false and NO markup', async () => {
-    const { status, body } = await create(CANONICAL);
-    expect(status).toBe(201);
-    expect(body.markup_changed).toBe(false);
-    expect(body.markup).toBeUndefined();
-    // Everything the agent needs to keep working still rides along.
-    expect(body.id).toMatch(/^[A-Za-z0-9]{6,12}$/);
-    expect(body.edit_id).toEqual(expect.any(String));
-    expect(body.url).toContain('/a/');
-  });
-
-  it('a create the door REWROTE echoes the canonical markup and says so', async () => {
-    const { status, body } = await create(NEEDS_REWRITE);
-    expect(status).toBe(201);
-    expect(body.markup_changed).toBe(true);
-    expect(body.markup).toContain('<div');
-    expect(body.markup).not.toBe(NEEDS_REWRITE);
-  });
-
-  it('an operation replacement returns the canonical authoring snapshot', async () => {
-    const { body: made } = await create(CANONICAL);
-    const unchanged = await (await putArtifact(await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: CANONICAL } }), params({ id: made.id }))).json();
-    expect(unchanged.document.kind).toBe('graph');
-    expect(unchanged.markup).toBe(CANONICAL);
-    expect(unchanged.edit_id).toEqual(expect.any(String));
-
-    const rewritten = await (await putArtifact(await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: NEEDS_REWRITE } }), params({ id: made.id }))).json();
-    expect(rewritten.document.kind).toBe('graph');
-    expect(rewritten.markup).toEqual(expect.any(String));
-  });
-
-  it('/edits ALWAYS echoes: its caller sent a splice, not a document', async () => {
-    const { body: made } = await create(CANONICAL);
-    const res = await editArtifact(
-      request(`/api/artifacts/${made.id}/edits`, { method: 'POST', token: token, json: await observedTextBody(made.id,'Body copy.','Different copy.') }),
-      params({ id: made.id }),
+it('returns canonical HTML and publication identity without legacy graph/markup fields', async () => {
+  const made = await create();
+  expect(made.html).toContain('data-af-id="body"');
+  expect(made.id).toMatch(/^[A-Za-z0-9]{6,12}$/);
+  expect(made.edit_id).toEqual(expect.any(String));
+  expect(made.url).toContain('/a/');
+  expect(made.markup).toBeUndefined();
+  expect(made.document).toBeUndefined();
+});
+it('echoes parser normalization and assigned identities so the caller can preserve them', async () => {
+  const input = nativeHtml('<p>Before<div>Block</div></p>'),
+    made = await create(input);
+  expect(made.html).not.toBe(input);
+  expect(made.html).toContain('data-af-id=');
+  const read = await GET(
+    request(`/api/artifacts/${made.id}`, { token }),
+    params(made.id),
+  );
+  expect((await read.json()).html).toBe(made.html);
+});
+it('whole-source PUT echoes the new canonical file and preserves stable node identities', async () => {
+  const made = await create(),
+    html = made.html.replace('Body copy.', 'Different copy.');
+  const response = await PUT(
+    await observedRequest(`/api/artifacts/${made.id}`, {
+      method: 'PUT',
+      token,
+      json: { html },
+    }),
+    params(made.id),
+  );
+  expect(response.status).toBe(200);
+  const body = await response.json();
+  expect(body.html).toContain('Different copy.');
+  expect(body.html).toContain('data-af-id="body"');
+  expect(body.version).toBe(2);
+  expect(body.markup).toBeUndefined();
+  expect(body.document).toBeUndefined();
+});
+it('metadata-only PATCH preserves the canonical file and changes only metadata', async () => {
+  const made = await create(),
+    response = await PATCH(
+      await observedRequest(`/api/artifacts/${made.id}`, {
+        method: 'PATCH',
+        token,
+        json: { title: 'Named' },
+      }),
+      params(made.id),
     );
-    const body = await res.json();
-    expect(res.status).toBe(200);
-    expect(body.markup).toContain('Different copy.');
-  });
-
-  it('a write that carried no markup at all is unaffected — nothing to compare against', async () => {
-    const { body: made } = await create(CANONICAL);
-    const res = await putArtifact(
-      await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: CANONICAL, title: 'Named' } }),
-      params({ id: made.id }),
-    );
-    const body = await res.json();
-    expect(body.title ?? 'Named').toBeTruthy();
-    expect(body.document.kind).toBe('graph');
-  });
+  expect(response.status).toBe(200);
+  const body = await (
+    await GET(request(`/api/artifacts/${made.id}`, { token }), params(made.id))
+  ).json();
+  expect(body.title).toBe('Named');
+  expect(body.html).toBe(made.html);
 });

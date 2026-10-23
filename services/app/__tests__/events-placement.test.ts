@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import { setSession } from './harness';
 import {getDb} from '@/lib/platform';
 import type {EventEnvelope} from '@artifactbin/contracts';
@@ -62,7 +63,7 @@ describe('a create says where it landed', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect((await said('created')).at(-1)?.payload).toMatchObject({ parent_id: null });
     await listen();
-    const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
+    const doc = await w.mk({ html: nativeHtml('<h1>x</h1>'), title: 'D', parent_id: folder.id });
     await new Promise((r) => setTimeout(r, 50));
     const created = (await said('created')).at(-1);
     expect(created?.object_id).toBe(doc.id);
@@ -74,7 +75,7 @@ describe('a move is its own verb, at both placement doors', () => {
   it('PATCH parent_id says artifact.moved once, naming both ends', async () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
-    const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
+    const doc = await w.mk({ html: nativeHtml('<h1>x</h1>'), title: 'D' });
     await listen();
     const r = await patchRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: folder.id }, cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
@@ -86,7 +87,7 @@ describe('a move is its own verb, at both placement doors', () => {
   it('a move back to the root names the root as null', async () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
-    const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
+    const doc = await w.mk({ html: nativeHtml('<h1>x</h1>'), title: 'D', parent_id: folder.id });
     await listen();
     await patchRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: null }, cookie: w.cookie }), params(doc.id));
     expect((await said('moved'))[0]?.payload).toMatchObject({ from_parent_id: folder.id, to_parent_id: null });
@@ -95,13 +96,13 @@ describe('a move is its own verb, at both placement doors', () => {
   it('a PUT that files the row says it too, and a PUT that does not says nothing', async () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
-    const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
+    const doc = await w.mk({ html: nativeHtml('<h1>x</h1>'), title: 'D' });
     await listen();
-    const filed = await replaceOneRoute(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', json: { markup: '<h1>y</h1>', title: 'D', parent_id: folder.id }, token: w.token }), params(doc.id));
+    const filed = await replaceOneRoute(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', json: { html: nativeHtml('<h1>y</h1>'), title: 'D', parent_id: folder.id }, token: w.token }), params(doc.id));
     expect(filed.status).toBe(200);
     expect((await said('moved'))[0]).toMatchObject({ object_id: doc.id, payload: { from_parent_id: null, to_parent_id: folder.id } });
     await listen();
-    const plain = await replaceOneRoute(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', json: { markup: '<h1>z</h1>', title: 'D' }, token: w.token }), params(doc.id));
+    const plain = await replaceOneRoute(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', json: { html: nativeHtml('<h1>z</h1>'), title: 'D' }, token: w.token }), params(doc.id));
     expect(plain.status).toBe(200);
     expect((await said('moved'))).toHaveLength(0);
   });
@@ -110,13 +111,13 @@ describe('a move is its own verb, at both placement doors', () => {
 describe('a delete is said once, at the door, and never twice', () => {
   it('DELETE says artifact.deleted with the format and no subtree, and says nothing else', async () => {
     const w = await world();
-    const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
+    const doc = await w.mk({ html: nativeHtml('<h1>x</h1>'), title: 'D' });
     await listen();
     const r = await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE', cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
     await new Promise((res) => setTimeout(res, 80));
     expect((await said('deleted'))).toHaveLength(1);
-    expect((await said('deleted'))[0]).toMatchObject({ object_id: doc.id, subject_kind: 'user', subject_id: w.userId, payload: { format: 'markup', subtree: 0 } });
+    expect((await said('deleted'))[0]).toMatchObject({ object_id: doc.id, subject_kind: 'user', subject_id: w.userId, payload: { format: 'html', subtree: 0 } });
     // The verb `trashed` does not exist: there is one deletion, and this is it.
     expect(await verbs()).not.toContain('trashed');
   });
@@ -124,8 +125,8 @@ describe('a delete is said once, at the door, and never twice', () => {
   it('deleting a folder counts what went with it', async () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
-    await w.mk({ markup: '<h1>a</h1>', title: 'A', parent_id: folder.id });
-    await w.mk({ markup: '<h1>b</h1>', title: 'B', parent_id: folder.id });
+    await w.mk({ html: nativeHtml('<h1>a</h1>'), title: 'A', parent_id: folder.id });
+    await w.mk({ html: nativeHtml('<h1>b</h1>'), title: 'B', parent_id: folder.id });
     await listen();
     await deleteRoute(request(`/api/my/artifacts/${folder.id}`, { method: 'DELETE', cookie: w.cookie }), params(folder.id));
     await new Promise((res) => setTimeout(res, 80));
@@ -135,7 +136,7 @@ describe('a delete is said once, at the door, and never twice', () => {
   it('a restore says where the row landed', async () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
-    const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
+    const doc = await w.mk({ html: nativeHtml('<h1>x</h1>'), title: 'D', parent_id: folder.id });
     await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE', cookie: w.cookie }), params(doc.id));
     await listen();
     const r = await restoreRoute(request(`/api/my/artifacts/${doc.id}/restore`, { method: 'POST', cookie: w.cookie }), params(doc.id));
@@ -147,7 +148,7 @@ describe('a delete is said once, at the door, and never twice', () => {
   it('a restore whose folder is still in the trash says it landed at the root', async () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
-    const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
+    const doc = await w.mk({ html: nativeHtml('<h1>x</h1>'), title: 'D', parent_id: folder.id });
     await deleteRoute(request(`/api/my/artifacts/${folder.id}`, { method: 'DELETE', cookie: w.cookie }), params(folder.id));
     // Restore the CHILD alone: its folder is still trashed, so it re-roots.
     await listen();

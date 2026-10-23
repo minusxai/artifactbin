@@ -1,140 +1,160 @@
-import {observedSourceBody} from './prepared-document';
-/**
- * THE FRAME IS STATELESS AND COMPLETE, AND THE STREAM CARRIES ONLY PINGS.
- *
- * Before: `/a/<id>/events` re-ran the whole story pipeline (parse, SSR nodes,
- * DuckDB) PER CONNECTION on every wakeup, and omitted CSS/dataflow "when
- * unchanged since the last frame on this connection" — which made the frame
- * uncacheable and the stream unrelayable by anything blind to content.
- *
- * Now: the stream says "version N happened" (`{editId, version, by}`), a
- * client fetches `GET /a/<id>/events/frame`, which answers the WHOLE frame —
- * CSS always, the declarations' signature always, never dataflow rows (the
- * client re-runs its queries through the transport it already has when the
- * signature moves) — under the read ACL, cached per (id, edit_id). A relay
- * that can only forward `{channel, edit_id}` is now enough.
- */
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { GET as authorizeRoute } from '@/app/a/[id]/events/authorize/route';
-import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
-import { GET as eventsRoute } from '@/app/a/[id]/events/route';
-
-
+/** Retained dataset viewer frames and native publication pings. Native pages reload raw HTML;
+ * compiler nodes/CSS/dataflow projections are replaced by native-html-serving/core tests. */
+import { afterAll, beforeEach, expect, it } from 'vitest';
+import { POST } from '@/app/api/artifacts/route';
+import { PUT } from '@/app/api/artifacts/[id]/route';
+import { POST as mutate } from '@/app/api/artifacts/[id]/mutate/route';
+import { GET as authorize } from '@/app/a/[id]/events/authorize/route';
+import { GET as frame } from '@/app/a/[id]/events/frame/route';
+import { GET as events } from '@/app/a/[id]/events/route';
+import { GET as raw } from '@/app/a/[id]/raw/route';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { resetFrameCache, frameBuilds } from '@/lib/publish/data/frame';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
-import { useAppHarness, setSession } from '@/__tests__/harness';
-
+import { request, useAppHarness, mintAccountToken } from './harness';
+import { observedRequest } from './conditional-request';
+import { nativeHtml } from './native-html-fixture';
+import { readEvents } from './sse';
 useAppHarness();
-beforeEach(() => setSession(() => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null, emailVerified: true } } : null)));
-
-const BASE = 'http://localhost:3000';
-const sessionUser = { id: '', email: '' };
-const params = (id: string) => ({ params: Promise.resolve({ id }) });
-const jreq = (path: string, method = 'GET', body?: unknown, token?: string) =>
-  new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
-const DOC = (ds: string) => `<div><Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select count(*) as n from q_data.rows\`}</Query></Helmet><p>hello</p><Number data="$q" /></div>`;
-
-async function firstEvent(body: ReadableStream<Uint8Array>): Promise<Record<string, unknown>> {
-  const reader = body.getReader();
-  const { value } = await reader.read();
-  await reader.cancel();
-  const line = new TextDecoder().decode(value).split('\n').find((l) => l.startsWith('data:'))!;
-  return JSON.parse(line.slice(5));
-}
-
-beforeEach(async () => { resetFrameCache();
-  sessionUser.id = ''; sessionUser.email = '';
+beforeEach(async () => {
+  resetFrameCache();
   await resetLiveSubscriptions();
 });
-afterAll(async () => { await resetLiveSubscriptions(); });
-
-async function publicDoc() {
-  const t = await mintToken('t');
-  const ds = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { dataset: [{ a: 1 }, { a: 2 }] }, t.token))).json();
-  const doc = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: DOC(ds.id), visibility: 'public' }, t.token))).json();
-  return { t, ds, doc };
+afterAll(resetLiveSubscriptions);
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+async function fixture() {
+  const owner = await mintAccountToken('frames');
+  const create = async (json: object) => {
+    const r = await POST(
+      request('/api/artifacts', {
+        method: 'POST',
+        token: owner.token,
+        json: { visibility: 'public', ...json },
+      }),
+    );
+    expect(r.status, await r.clone().text()).toBe(201);
+    return r.json();
+  };
+  return { owner, create };
 }
-
-describe('GET /a/<id>/events/frame', () => {
-  it('derives Markdown headings on every version for parser-free live readers', async () => {
-    const t = await mintToken('heading');
-    const markup = (heading: string) => `<Markdown id="body">{${JSON.stringify(`# ${heading}\n\nDetails`)}}</Markdown>`;
-    const doc = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: markup('First heading'), visibility: 'public' }, t.token))).json();
-    const first = await (await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id))).json();
-    expect(first).toMatchObject({ heading: 'First heading', version: 1 });
-    const edit = await editsRoute(jreq(`/api/artifacts/${doc.id}/edits`, 'POST', await observedSourceBody(doc.id, markup('Updated heading')), t.token), params(doc.id));
-    expect(edit.status).toBe(200);
-    const next = await (await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id))).json();
-    expect(next).toMatchObject({ heading: 'Updated heading', version: 2 });
-  });
-
-  it('answers the COMPLETE frame: nodes, CSS (always), author CSS, design, the declarations signature — and never dataflow rows', async () => {
-    const { doc, ds } = await publicDoc();
-    const res = await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id));
-    expect(res.status).toBe(200);
-    expect(res.headers.get('cache-control')).toContain('no-store');
-    const frame = await res.json();
-    expect(frame).toMatchObject({ editId: doc.edit_id, version: 1, format: 'markup' });
-    expect(Array.isArray(frame.nodes)).toBe(true);
-    expect(frame).toHaveProperty('compiledCss');
-    expect(frame).toHaveProperty('authorCss');
-    expect(typeof frame.declarations).toBe('string');
-    expect(frame.dataflow?.flow, 'the FLOW travels so a client can rebind').toBeTruthy();
-    expect(frame.dataflow?.state, 'rows never travel — the client re-runs').toBeUndefined();
-    expect(frame.datasets).toEqual([ds.id]);
-  });
-
-  it('is cached per (id, edit_id): two readers cost one build, and an edit costs one more', async () => {
-    const { t, doc } = await publicDoc();
-    const before = frameBuilds();
-    await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id));
-    await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id));
-    expect(frameBuilds() - before).toBe(1);
-    const edit = await editsRoute(jreq(`/api/artifacts/${doc.id}/edits`, 'POST', await observedSourceBody(doc.id,'<div><p>changed</p></div>'), t.token), params(doc.id));
-    expect(edit.status).toBe(200);
-    const fresh = await (await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id))).json();
-    expect(fresh.version).toBe(2);
-    expect(frameBuilds() - before).toBe(2);
-  });
-
-  it('runs the read ACL: a private document is the uniform 404 to a stranger and a frame to its owner', async () => {
-    const owner = await createUser({ email: 'mxmx_test_owner@example.com' });
-    const t = await mintToken('o', owner.id); await claimToken(owner.id, t.token);
-    const doc = await (await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: '<div><p>secret</p></div>', visibility: 'private' }, t.token))).json();
-    expect((await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id))).status).toBe(404);
-    expect((await frameRoute(jreq(`/a/nope00/events/frame`), params('nope00'))).status).toBe(404);
-    sessionUser.id = owner.id; sessionUser.email = owner.email;
-    expect((await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id))).status).toBe(200);
-  });
+it('serves the latest native headings and full HTML after a whole-source publication', async () => {
+  const { owner, create } = await fixture(),
+    doc = await create({
+      html: nativeHtml('<h1>First heading</h1><p>Details</p>'),
+    });
+  expect(
+    await (await raw(request(`/a/${doc.id}/raw`), params(doc.id))).text(),
+  ).toContain('First heading');
+  const changed = await PUT(
+    await observedRequest(`/api/artifacts/${doc.id}`, {
+      method: 'PUT',
+      token: owner.token,
+      json: { html: nativeHtml('<h1>Updated heading</h1><p>Details</p>') },
+    }),
+    params(doc.id),
+  );
+  expect(changed.status).toBe(200);
+  const next = await raw(request(`/a/${doc.id}/raw`), params(doc.id));
+  expect(next.status).toBe(200);
+  expect(await next.text()).toContain('Updated heading');
 });
-
-describe('GET /a/<id>/events/authorize', () => {
-  it('names the channels a relay must subscribe — the document and every dataset it reads — under the read ACL', async () => {
-    const { doc, ds } = await publicDoc();
-    const res = await authorizeRoute(jreq(`/a/${doc.id}/events/authorize`), params(doc.id));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.editId).toBe(doc.edit_id);
-    expect(body.channels).toEqual([`artifact_${doc.id.toLowerCase()}`, `artifact_${ds.id.toLowerCase()}`]);
-    expect((await authorizeRoute(jreq(`/a/nope00/events/authorize`), params('nope00'))).status).toBe(404);
+it('dataset frames contain complete preview data and no compiler flow', async () => {
+  const { create } = await fixture(),
+    ds = await create({ dataset: [{ a: 1 }, { a: 2 }] }),
+    response = await frame(request(`/a/${ds.id}/events/frame`), params(ds.id));
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toContain('no-store');
+  const body = await response.json();
+  expect(body).toMatchObject({
+    editId: ds.edit_id,
+    version: 1,
+    format: 'dataset',
+    source: null,
   });
+  expect(JSON.parse(body.dataPreview)).toEqual([{ a: 1 }, { a: 2 }]);
+  expect(body.dataflow).toBeUndefined();
 });
-
-describe('GET /a/<id>/events is a PING stream', () => {
-  it('sends the current head as {editId, version, by} and nothing a relay would have to understand', async () => {
-    const { doc } = await publicDoc();
-    const res = await eventsRoute(jreq(`/a/${doc.id}/events`), params(doc.id));
-    // The stream's own shape, from live-events.test.ts, which asserted this ping twice.
-    expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toContain('text/event-stream');
-    expect(res.headers.get('Cache-Control')).toContain('no-store');
-    const ping = await firstEvent(res.body!);
-    expect(ping).toEqual({ editId: doc.edit_id, version: 1, by: null });
-    expect(ping).not.toHaveProperty('nodes');
-    expect(ping).not.toHaveProperty('source');
+it('caches dataset frames per committed edit head and refreshes after a mutation', async () => {
+  const { owner, create } = await fixture(),
+    ds = await create({ dataset: [{ a: 1 }], access: 'readwrite' });
+  const before = frameBuilds();
+  await frame(request(`/a/${ds.id}/events/frame`), params(ds.id));
+  await frame(request(`/a/${ds.id}/events/frame`), params(ds.id));
+  expect(frameBuilds() - before).toBe(1);
+  expect(
+    (
+      await mutate(
+        request(`/api/artifacts/${ds.id}/mutate`, {
+          method: 'POST',
+          token: owner.token,
+          json: { sql: 'insert into public.rows (a) values (2)' },
+        }),
+        params(ds.id),
+      )
+    ).status,
+  ).toBe(200);
+  const next = await (
+    await frame(request(`/a/${ds.id}/events/frame`), params(ds.id))
+  ).json();
+  expect(next.version).toBe(2);
+  expect(JSON.parse(next.dataPreview)).toEqual([{ a: 1 }, { a: 2 }]);
+  expect(frameBuilds() - before).toBe(2);
+});
+it('dataset frame access is the same uniform private-resource boundary', async () => {
+  const { owner, create } = await fixture(),
+    ds = await create({ dataset: [{ secret: 1 }], visibility: 'private' });
+  expect(
+    (await frame(request(`/a/${ds.id}/events/frame`), params(ds.id))).status,
+  ).toBe(404);
+  expect(
+    (await frame(request('/a/nope00/events/frame'), params('nope00'))).status,
+  ).toBe(404);
+  expect(
+    (
+      await frame(
+        request(`/a/${ds.id}/events/frame`, {
+          actor: {
+            credential: 'session',
+            userId: owner.userId!,
+            email: owner.email!,
+            emailVerified: true,
+          },
+        }),
+        params(ds.id),
+      )
+    ).status,
+  ).toBe(200);
+});
+it('authorizes the native page and every live dataset dependency for a relay', async () => {
+  const { create } = await fixture(),
+    ds = await create({ dataset: [{ a: 1 }] }),
+    doc = await create({
+      html: `<!doctype html><html><head><link rel="af-dataset" data-af-name="rows" href="ref:${ds.id}"></head><body>Rows</body></html>`,
+    });
+  const response = await authorize(
+    request(`/a/${doc.id}/events/authorize`),
+    params(doc.id),
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    editId: doc.edit_id,
+    channels: [
+      `artifact_${doc.id.toLowerCase()}`,
+      `artifact_${ds.id.toLowerCase()}`,
+    ],
   });
+  expect(
+    (await authorize(request('/a/nope00/events/authorize'), params('nope00')))
+      .status,
+  ).toBe(404);
+});
+it('native source publication streams only a head ping, not HTML or compiler nodes', async () => {
+  const { create } = await fixture(),
+    doc = await create({ html: nativeHtml('<p>Hello</p>') }),
+    response = await events(request(`/a/${doc.id}/events`), params(doc.id));
+  expect(response.status).toBe(200);
+  expect(response.headers.get('Content-Type')).toContain('text/event-stream');
+  expect(response.headers.get('Cache-Control')).toContain('no-store');
+  const [ping] = await readEvents(response.body!, 1);
+  expect(ping?.event).toBe('message');
+  expect(ping?.data).toEqual({ editId: doc.edit_id, version: 1, by: null });
 });

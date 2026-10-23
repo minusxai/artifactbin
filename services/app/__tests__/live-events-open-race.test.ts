@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The opening frame must be a read taken AFTER the subscription exists.
@@ -36,7 +37,7 @@ vi.mock('@/lib/accounts/request-identity', async (importOriginal) => {
 });
 
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
-import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
+import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
@@ -60,7 +61,7 @@ describe('a write that commits while the stream is opening', () => {
   it('is in the opening frame — the first frame is current state', async () => {
     const { token } = await mintAccountToken('stream-opening-race');
     const created = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', markup: '<p id="status">before</p>', visibility: 'public' } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', html: nativeHtml('<p id="status">before</p>'), visibility: 'public' } }),
     );
     expect(created.status, await created.clone().text()).toBe(201);
     const doc = (await created.json()) as { id: string };
@@ -68,7 +69,7 @@ describe('a write that commits while the stream is opening', () => {
     let newEditId = '';
     duringSetup = async () => {
       const put = await putArtifact(
-        await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<p id="status">after</p>' } }),
+        await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { html: nativeHtml('<p id="status">after</p>') } }),
         params({ id: doc.id }),
       );
       expect(put.status).toBe(200);
@@ -85,8 +86,8 @@ describe('a write that commits while the stream is opening', () => {
       `the opening frame is stale — the reader never learns about the write (got ${JSON.stringify(frames.map((f) => f.editId))}, current is ${newEditId})`,
     ).toBe(newEditId);
     // …and the frame that ping points at is the state after the write.
-    const frame = await (await frameRoute(request(`/a/${doc.id}/events/frame`), params({ id: doc.id }))).json();
-    expect(frame.source).toBe('<p id="status">after</p>');
+    const frame = await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }));
+    expect(frame.status).toBe(200);expect(await frame.text()).toContain('>after</p>');
     await resetLiveSubscriptions();
   });
 });
