@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import {describe,expect,it} from 'vitest';
 import {request,useAppHarness,mintAccountToken} from './harness';
 import {createUser} from '@/lib/accounts';
@@ -44,10 +45,10 @@ describe('publication uses shared account destination through the real HTTP hand
  it('applies the saved group to new documents and permits explicit personal publication',async()=>{
   const a=await account('owner');const group=await createGroup(a.user.id,{handle:'publishing',name:'Publishing'});
   await setAccountPreferences(a.user.id,{type:'group',id:group.id});
-  const grouped=await create(a.token,{markup:'<p id="intro">Group content</p>'});
+  const grouped=await create(a.token,{html:nativeHtml('<p id="intro">Group content</p>')});
   expect(grouped.status,JSON.stringify(grouped.body)).toBe(201);
   expect(await owner(grouped.body.id)).toMatchObject({user_id:null,group_id:group.id,creator_user_id:a.user.id});
-  const personal=await create(a.token,{markup:'<p id="intro">Personal content</p>',destination:{type:'personal'}});
+  const personal=await create(a.token,{html:nativeHtml('<p id="intro">Personal content</p>'),destination:{type:'personal'}});
   expect(personal.status,JSON.stringify(personal.body)).toBe(201);
   expect(await owner(personal.body.id)).toMatchObject({user_id:a.user.id,group_id:null,creator_user_id:a.user.id});
  });
@@ -55,20 +56,20 @@ describe('publication uses shared account destination through the real HTTP hand
   const a=await account('owner');const group=await createGroup(a.user.id,{handle:'publishing',name:'Publishing'});
   const folder=await create(a.token,{format:'folder',title:'Personal folder'});expect(folder.status).toBe(201);
   await setAccountPreferences(a.user.id,{type:'group',id:group.id});
-  const child=await create(a.token,{markup:'<p id="intro">Child</p>',parent_id:folder.body.id});
+  const child=await create(a.token,{html:nativeHtml('<p id="intro">Child</p>'),parent_id:folder.body.id});
   expect(child.status,JSON.stringify(child.body)).toBe(201);
   expect(await owner(child.body.id)).toMatchObject({user_id:a.user.id,group_id:null});
-  const conflict=await create(a.token,{markup:'<p id="intro">Wrong owner</p>',parent_id:folder.body.id,destination:{type:'group',id:group.id}});
+  const conflict=await create(a.token,{html:nativeHtml('<p id="intro">Wrong owner</p>'),parent_id:folder.body.id,destination:{type:'group',id:group.id}});
   expect(conflict.status).toBeGreaterThanOrEqual(400);expect(conflict.status).toBeLessThan(500);
  });
  it('lets viewers choose a default but refuses publication and never falls back after membership removal',async()=>{
   const a=await account('owner'),b=await account('member');const group=await createGroup(a.user.id,{handle:'publishing',name:'Publishing'});
   await setGroupMember(a.user.id,group.id,b.user.id,'viewer');
   await setAccountPreferences(b.user.id,{type:'group',id:group.id});
-  const denied=await create(b.token,{markup:'<p id="intro">Viewer cannot publish</p>'});
+  const denied=await create(b.token,{html:nativeHtml('<p id="intro">Viewer cannot publish</p>')});
   expect(denied.status).toBeGreaterThanOrEqual(400);expect(denied.status).toBeLessThan(500);
   await removeGroupMember(a.user.id,group.id,b.user.id);
-  const unavailable=await create(b.token,{markup:'<p id="intro">No silent personal fallback</p>'});
+  const unavailable=await create(b.token,{html:nativeHtml('<p id="intro">No silent personal fallback</p>')});
   expect(unavailable.status).toBeGreaterThanOrEqual(400);expect(unavailable.status).toBeLessThan(500);
   const db=await getDb();expect((await db.query('SELECT id FROM artifacts WHERE user_id=$1 OR creator_user_id=$1',[b.user.id])).rows).toEqual([]);
  });

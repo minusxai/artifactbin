@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * THE APP OWNS TOKENS. Every token route is served by the app itself, driven here as the real handlers, no proxy:
  * the actor arrives ATTACHED to the Request (utils attachActor), exactly as the proxy hands it over.
@@ -45,7 +46,7 @@ describe('token routes served by the app', () => {
     const folder = await createArtifact(request('/api/artifacts', { method: 'POST', token: String(first.token), json: { format: 'folder', title: 'Folder' } }));
     expect(folder.status).toBe(201);
     expect((await json(await issue())).has_created_document).toBe(false);
-    const document = await createArtifact(request('/api/artifacts', { method: 'POST', token: String(first.token), json: { markup: '<p id="intro">Hello</p>' } }));
+    const document = await createArtifact(request('/api/artifacts', { method: 'POST', token: String(first.token), json: { html:nativeHtml('<p id="intro">Hello</p>') } }));
     expect(document.status).toBe(201);
     const { id } = await document.json();
     await (await harness.db()).query('UPDATE artifacts SET user_id=$2, deleted_at=now() WHERE id=$1', [id, recipient.id]);
