@@ -1,0 +1,25 @@
+import {beforeEach,expect,it} from 'vitest';
+import {GET,POST} from '@/app/api/artifacts/[id]/presence/route';
+import {request,useAppHarness} from './harness';
+import {createUser} from '@/lib/accounts';
+import {runWithRequest} from '@/lib/platform';
+const harness=useAppHarness();let owner:Awaited<ReturnType<typeof createUser>>;
+beforeEach(async()=>{owner=await createUser({email:'mxmx_test_presence@example.com'});await(await harness.db()).query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,version) VALUES ('prespublic','tok_presence',$1,'html','public',1),('presprivate','tok_presence',$1,'html','private',1)",[owner.id]);});
+const params=(id:string)=>({params:Promise.resolve({id})});
+const session='00000000-0000-4000-8000-000000000001';
+const actor=()=>({credential:'session' as const,userId:owner.id,email:owner.email,emailVerified:true});
+const publish=(id:string,body:unknown,options:Parameters<typeof request>[1]={})=>{const req=request(`/api/artifacts/${id}/presence`,{method:'POST',origin:'same',json:body,...options});return runWithRequest(req,()=>POST(req,params(id)));};
+it('enforces the original read ACL, source revision and exact platform origin before ephemeral publication',async()=>{
+ expect((await publish('presprivate',{session,revision:'1'})).status).toBe(404);
+ expect((await publish('prespublic',{session,revision:'2'})).status).toBe(400);
+ expect((await publish('prespublic',{session,revision:'1'},{origin:'https://elsewhere.example'})).status).toBe(403);
+ expect((await publish('presprivate',{session,revision:'1'},{actor:actor()})).status).toBe(200);
+ const req=request('/api/artifacts/presprivate/presence');expect((await runWithRequest(req,()=>GET(req,params('presprivate')))).status).toBe(404);
+});
+it('assigns distinct public identities per window without broadcasting session secrets or page-controlled names',async()=>{
+ const a=await(await publish('prespublic',{session,revision:'1',label:'Spoofed',cursor:{nodeId:'p',x:.4,y:.5}},{actor:actor()})).json();
+ const b=await(await publish('prespublic',{session:session.replace(/1$/,'2'),revision:'1'},{actor:actor()})).json();
+ const again=await(await publish('prespublic',{session,revision:'1'},{actor:actor()})).json();
+ expect(a.id).toMatch(/^[a-f0-9]{64}$/);expect(a.id).not.toBe(b.id);expect(again.id).toBe(a.id);expect(JSON.stringify(a)).not.toContain(session);
+ const guest=await(await publish('prespublic',{session,revision:'1'})).json();expect(guest.id).not.toBe(a.id);
+});

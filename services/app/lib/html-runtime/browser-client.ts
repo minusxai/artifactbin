@@ -1,3 +1,5 @@
+import {startHtmlPresence} from '../html-bridge/presence';
+import type {PresencePaint} from '../html-presence/contract';
 import { followAppLinks } from '@/lib/islands/frame-links';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { createClient, gql, readStateFragment } from './apollo/client';
@@ -51,12 +53,13 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
   let canAnnotate = false;
   let annotations: HtmlAnnotationPaint = { pins: [], mode: 'off', openId: null, hoverId: null };
   const painter = createHtmlAnnotationPainter(win.document);
+  const presence = startHtmlPresence(win, geometry => post({kind:'event',event:{type:'mx:presence',nonce,geometry}}));
   let pick: 'block' | 'area' | 'select' | null = null;
   const cursor = win.document.documentElement.style.cursor;
   let suppressClick = false;
   let drag: { x: number; y: number; target: Node } | null = null;
   const layout = () => post({ kind: 'event', event: { type: 'mx:annotation-layout', nonce, positions: painter.paint(annotations) } });
-  const observation=observeHtmlDom(win,painter.ownsOverlay,()=>{if(annotations.pins.length)layout();});
+  const observation=observeHtmlDom(win,node=>painter.ownsOverlay(node)||presence.ownsOverlay(node),()=>{if(annotations.pins.length)layout();presence.paint();});
   const click = (event: MouseEvent) => {
     if (suppressClick) { suppressClick = false; event.preventDefault(); return; }
     const target = (event.target as Element)?.closest?.('[data-af-id]');
@@ -123,6 +126,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
       }
       if (payload.kind === 'send') {
         const command = payload.command as Partial<HtmlAnnotationPaint> & { type?: string; annotate?: boolean; canComment?: boolean; pick?: typeof pick; path?: string | null; reveal?: boolean; datasets?: string[] };
+        if (command?.type === 'mx:presence') presence.receive(payload.command as PresencePaint);
         if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) for (const listener of invalidationListeners) try { listener(names); } catch { /* One subscriber cannot stop the others. */ } }
         if (command?.type === 'mx:selection-actions') canAnnotate = command.annotate === true;
         if (command?.type === 'mx:annotations') { annotations = { pins: command.pins ?? [], mode: command.mode ?? 'off', openId: command.openId ?? null, hoverId: command.hoverId ?? null }; canAnnotate = command.canComment ?? canAnnotate; pick = command.pick ?? null; win.document.documentElement.style.cursor = pick ? 'crosshair' : cursor; }
@@ -135,6 +139,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
       relay = null;
       observation.dispose();
       painter.dispose();
+      presence.dispose();
       win.document.documentElement.style.cursor = cursor;
       win.document.removeEventListener('keydown', key);
       win.document.removeEventListener('pointerdown', down);
