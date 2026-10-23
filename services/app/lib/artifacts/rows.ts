@@ -54,7 +54,7 @@ export async function getArtifactHeaderById(id: string): Promise<ArtifactHeader 
  * Did the row's ACCESS change between the header an admission decided on and the whole row read after it? Then the
  * admission is asked again of the row that is served.
  */
-export const accessMoved = (decided: ArtifactHeader, loaded: ArtifactRow): boolean =>
+export const accessMoved = (decided: ArtifactHeader, loaded: ArtifactHeader): boolean =>
   decided.visibility !== loaded.visibility || decided.link_role !== loaded.link_role || decided.user_id !== loaded.user_id
   || (decided.group_id ?? null) !== (loaded.group_id ?? null) || decided.token_id !== loaded.token_id || (decided.sharing_revision ?? 0) !== (loaded.sharing_revision ?? 0);
 
