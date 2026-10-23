@@ -29,7 +29,7 @@
 import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
 import { sleep } from './lib/sleep.mjs';
 import { createChecker } from './lib/assert.mjs';
-import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
+import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { documentFrame, documentLocator } from './lib/page-facts.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -59,13 +59,17 @@ async function until(read, want, budgetMs = 10000) {
   return last;
 }
 
-const LINK_DOC = '<!doctype html><html><head><title>General access</title></head><body style="padding:40px;font:18px sans-serif"><h1>General access</h1><p id="claim" data-af-id="claim">Anyone with this link may comment on it.</p></body></html>';
+const LINK_DOC =
+  '<!doctype html><html><head><title>General access</title></head><body style="padding:40px;font:18px sans-serif"><h1>General access</h1><p id="claim" data-af-id="claim">Anyone with this link may comment on it.</p></body></html>';
 
 /** Every admitted role reads the same document in its frame; capabilities differ below. */
 const hasDocument = async (page) => {
   const doc = await documentFrame(page).catch(() => null);
   if (!doc) return false;
-  await doc.locator('#claim').waitFor({ timeout: 20000 }).catch(() => {});
+  await doc
+    .locator('#claim')
+    .waitFor({ timeout: 20000 })
+    .catch(() => {});
   return (await doc.locator('#claim').count()) === 1;
 };
 
@@ -92,7 +96,11 @@ const commentControls = async (page) => {
   return n;
 };
 const CONTROLS = '[aria-label="Artifact controls"]';
-const controlsOpen = (page) => page.locator(CONTROLS).isVisible().catch(() => false);
+const controlsOpen = (page) =>
+  page
+    .locator(CONTROLS)
+    .isVisible()
+    .catch(() => false);
 const openControls = async (page) => {
   if (await controlsOpen(page)) return;
   await openArtifactControls(page);
@@ -106,10 +114,14 @@ const closeControls = async (page) => {
 
 const sink = await startMailSink();
 const browser = await launchChromium();
-const contextFor = () => browser.newContext({ viewport: { width: 1400, height: 950 } });
+const contextFor = () =>
+  browser.newContext({ viewport: { width: 1400, height: 950 } });
 const [ownerCtx, strangerCtx] = await Promise.all([contextFor(), contextFor()]);
-const [owner, stranger] = await Promise.all([ownerCtx, strangerCtx].map((ctx) => ctx.newPage()));
-const signedIn = async (ctx) => Boolean((await ctx.cookies(BASE)).find((c) => /better-auth/.test(c.name)));
+const [owner, stranger] = await Promise.all(
+  [ownerCtx, strangerCtx].map((ctx) => ctx.newPage()),
+);
+const signedIn = async (ctx) =>
+  Boolean((await ctx.cookies(BASE)).find((c) => /better-auth/.test(c.name)));
 
 // Two people sign in at once: the sink reads each code by its address, so parallel logins cannot cross.
 await Promise.all([
@@ -117,27 +129,54 @@ await Promise.all([
   loginViaEmail(stranger, BASE, sink, STRANGER_EMAIL),
 ]);
 check(await signedIn(ownerCtx), 'owner logged in');
-check(await signedIn(strangerCtx), 'a second person is signed in — and was never invited to anything');
+check(
+  await signedIn(strangerCtx),
+  'a second person is signed in — and was never invited to anything',
+);
 
 // The owner's token: guest-owned, then adopted by the verified session.
 const anon = await connectAgent(BASE, { email: OWNER_EMAIL });
 const claimed = await mergeGuestIntoAccount(owner, BASE, anon.token);
 check(claimed === 200, 'owner adopted the guest connection');
 const api = async (path, init = {}) => {
-  const res = await fetch(`${BASE}${path}`, { ...init, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon.token}`, ...(init.headers ?? {}) } });
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${anon.token}`,
+      ...(init.headers ?? {}),
+    },
+  });
   if (!res.ok) throw new Error(`${path} → ${res.status} ${await res.text()}`);
   return res.json();
 };
 
-const linkDoc = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'General access gate', visibility: 'public', html: LINK_DOC }) });
+const linkDoc = await api('/api/artifacts', {
+  method: 'POST',
+  body: JSON.stringify({
+    title: 'General access gate',
+    visibility: 'public',
+    html: LINK_DOC,
+  }),
+});
 check(!!linkDoc.id, `published a public document (${linkDoc.id})`);
 
-const sharingPut = (page) => page.waitForResponse((r) => r.url().includes('/sharing') && r.request().method() === 'PUT' && r.status() === 200, { timeout: 15000 });
+const sharingPut = (page) =>
+  page.waitForResponse(
+    (r) =>
+      r.url().includes('/sharing') &&
+      r.request().method() === 'PUT' &&
+      r.status() === 200,
+    { timeout: 15000 },
+  );
 
 // ═════════ GENERAL ACCESS: the link carries a role ═════════
 // ── 1. link = can view: the stranger is served the DOCUMENT ──────────────
 await stranger.goto(`${BASE}/a/${linkDoc.id}`, { waitUntil: 'load' });
-check(await hasDocument(stranger), 'link=can view: a signed-in stranger gets the framed document');
+check(
+  await hasDocument(stranger),
+  'link=can view: a signed-in stranger gets the framed document',
+);
 check((await commentControls(stranger)) === 0, '…and no comment control');
 
 // ── 2. the owner flips ONE control ───────────────────────────────────────
@@ -151,11 +190,17 @@ const linkRole = owner.locator('[aria-label="Link role"]');
 const openShare = async (page) => {
   if (await linkRole.isVisible().catch(() => false)) return;
   await openControls(page);
-  await page.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
+  await page
+    .getByLabel('Owner actions')
+    .getByLabel('Share', { exact: true })
+    .click();
   await linkRole.waitFor({ timeout: 15000 });
 };
 await openShare(owner);
-check((await linkRole.textContent() ?? '').includes('can view'), 'general access starts at can view');
+check(
+  ((await linkRole.textContent()) ?? '').includes('can view'),
+  'general access starts at can view',
+);
 await Promise.all([
   sharingPut(owner),
   (async () => {
@@ -164,56 +209,108 @@ await Promise.all([
   })(),
 ]);
 check(
-  (await until(() => linkRole.textContent(), (t) => (t ?? '').includes('can comment'))) !== undefined
-    && ((await linkRole.textContent()) ?? '').includes('can comment'),
+  (await until(
+    () => linkRole.textContent(),
+    (t) => (t ?? '').includes('can comment'),
+  )) !== undefined &&
+    ((await linkRole.textContent()) ?? '').includes('can comment'),
   'the owner set the link to can comment',
 );
 // ── 2b. the SAME link, reloaded: now the shell ────────────────────────────
 await stranger.reload({ waitUntil: 'load' });
-check(await hasDocument(stranger), 'link=can comment: the same framed document remains available');
+check(
+  await hasDocument(stranger),
+  'link=can comment: the same framed document remains available',
+);
 // Inside the open popover, so the two absences below are real absences.
 await openControls(stranger);
-check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 1, '…with the comments control');
-check((await stranger.locator('[aria-label="Edit artifact"]').count()) === 0, '…and NO edit button — a commenter is not an editor');
-check((await stranger.getByLabel('Document actions').getByLabel('Share', { exact: true }).count()) === 0
-  && await stranger.getByLabel('Owner actions').count() === 0, '…and no permissions-sharing control: the ACL stays the owner\'s');
+check(
+  (await stranger.locator('[aria-label="Toggle comments"]').count()) === 1,
+  '…with the comments control',
+);
+check(
+  (await stranger.locator('[aria-label="Edit artifact"]').count()) === 0,
+  '…and NO edit button — a commenter is not an editor',
+);
+check(
+  (await stranger
+    .getByLabel('Document actions')
+    .getByLabel('Share', { exact: true })
+    .count()) === 0 &&
+    (await stranger.getByLabel('Owner actions').count()) === 0,
+  "…and no permissions-sharing control: the ACL stays the owner's",
+);
 await closeControls(stranger);
 
 // ── 2c. …on the framed document ───────────────────────────────────────────
-check(await stranger.locator('iframe[data-mx-document-frame]').count() === 1 && await stranger.locator('#claim').count() === 0,
-  'commenting uses one native document on its runner origin');
+check(
+  (await stranger.locator('iframe[data-mx-document-frame]').count()) === 1 &&
+    (await stranger.locator('#claim').count()) === 0,
+  'commenting uses one native document on its runner origin',
+);
 
 // ── 3. they comment, from selection to saved thread ──────────────────────
 // The selection and its action bubble live in the document's frame; the composer is the app page's.
 const frame = documentLocator(stranger);
 await frame.locator('#claim').waitFor({ timeout: 15000 });
-await frame.locator('#claim').click({clickCount:3});
-await frame.locator('#claim').click({button:'right'});
-check(await stranger.locator('[aria-label="Edit selected text"]').count() === 0,
- 'a native selection offers commenting without source editing');
-const composer = await until(() => stranger.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
+await frame.locator('#claim').click({ clickCount: 3 });
+await frame.locator('#claim').click({ button: 'right' });
+check(
+  (await stranger.locator('[aria-label="Edit selected text"]').count()) === 0,
+  'a native selection offers commenting without source editing',
+);
+const composer = await until(
+  () => stranger.locator('[aria-label="Annotation comment"]').count(),
+  (n) => n === 1,
+  10000,
+);
 check(composer === 1, 'the composer opens on those words');
-await stranger.locator('[aria-label="Annotation comment"]').fill('a stranger with the link, saying something');
+await stranger
+  .locator('[aria-label="Annotation comment"]')
+  .fill('a stranger with the link, saying something');
 await stranger.locator('[aria-label="Save annotation"]').click();
 const saved = await until(
-  () => fetch(`${BASE}/api/artifacts/${linkDoc.id}/annotations`, { headers: { Authorization: `Bearer ${anon.token}` } })
-    .then((r) => r.json()).then((j) => j.annotations?.length ?? 0),
-  (n) => n === 1, 15000,
+  () =>
+    fetch(`${BASE}/api/artifacts/${linkDoc.id}/annotations`, {
+      headers: { Authorization: `Bearer ${anon.token}` },
+    })
+      .then((r) => r.json())
+      .then((j) => j.annotations?.length ?? 0),
+  (n) => n === 1,
+  15000,
 );
-check(saved === 1, 'the comment is stored — a person nobody invited left feedback');
+check(
+  saved === 1,
+  'the comment is stored — a person nobody invited left feedback',
+);
 
 // ── 3b. the owner never reloaded ──────────────────────────────────────────
 // The count rides the app bar's Comment button (solid/document/DocumentChrome), kept live by the page's stream.
-const ownerComment = owner.locator('header[aria-label="Page bar"] [aria-label="Comment"]');
-const live = await until(async () => ((await ownerComment.textContent()) ?? '').trim(), (t) => t === '1', 20000);
-check(live === '1', 'the owner watches the count arrive over the live stream — no reload');
+const ownerComment = owner.locator(
+  'header[aria-label="Page bar"] [aria-label="Comment"]',
+);
+const live = await until(
+  async () => ((await ownerComment.textContent()) ?? '').trim(),
+  (t) => t === '1',
+  20000,
+);
+check(
+  live === '1',
+  'the owner watches the count arrive over the live stream — no reload',
+);
 
 // ── 4. logged OUT on the same link: the anonymous ceiling ────────────────
 const anonCtx = await contextFor();
 const visitor = await anonCtx.newPage();
 await visitor.goto(`${BASE}/a/${linkDoc.id}`, { waitUntil: 'load' });
-check(await hasDocument(visitor), 'logged out on a link-commentable document: the framed document — anonymous caps at viewer');
-check((await commentControls(visitor)) === 0, '…and no comment control, so the crawler path is untouched');
+check(
+  await hasDocument(visitor),
+  'logged out on a link-commentable document: the framed document — anonymous caps at viewer',
+);
+check(
+  (await commentControls(visitor)) === 0,
+  '…and no comment control, so the crawler path is untouched',
+);
 
 // ── 5. flipped back, the stranger loses it ───────────────────────────────
 await openShare(owner);
@@ -225,8 +322,14 @@ await Promise.all([
   })(),
 ]);
 await stranger.reload({ waitUntil: 'load' });
-check(await hasDocument(stranger), 'demoted to can view: the framed document remains readable');
-check((await commentControls(stranger)) === 0, '…and the comment control is gone');
+check(
+  await hasDocument(stranger),
+  'demoted to can view: the framed document remains readable',
+);
+check(
+  (await commentControls(stranger)) === 0,
+  '…and the comment control is gone',
+);
 await anonCtx.close();
 
 await browser.close();
