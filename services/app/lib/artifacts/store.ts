@@ -405,26 +405,6 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
   await tx.query('SELECT pg_notify($1, $2)', [artifactChannel(after.id), after.edit_id]);
 }
 
-/**
- * Commit an already-published markup source while the caller holds the
- * artifact row lock. Migration and ordinary whole-document paths share this
- * single reservation/history boundary; events are emitted by the caller only
- * after its surrounding transaction commits.
- */
-export interface PreparedMarkupWrite {
- source:string;meta:Record<string,unknown>;ids:string[];
- update:DocumentUpdate;
-}
-export async function commitNormalizedMarkup(
- tx:Queryable,actor:AccessActor|null,current:ArtifactRow,
- normalized:PreparedMarkupWrite & {title?:string|null;description?:string|null;format?:ArtifactFormat},
-):Promise<ArtifactRow>{
- const scope=actor?editorScope(actor):{val:current.id,where:(param:string)=>`id=${param}`};
- const committed=await commitDocumentUpdate(tx,actor,scope,current.id,normalized.update);
- if(!committed?.applied)throw new Error('artifact changed after identity preparation');
- return committed.row;
-}
-
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
   const db = await getDb();
   const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
