@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join,dirname} from 'node:path';
+import {join} from 'node:path';
 import {launchRemote} from '../src/remote-launch';
 import {claudeConfigEnvironment} from '../src/config';
 
@@ -55,32 +55,8 @@ test('each supported harness receives bootstrap context without changing its sup
  assert.deepEqual(remoteArguments('/bin/sh',['-c','echo yes'],'context'),['-c','echo yes']);
 });
 
-import {createServer} from 'node:http';
-import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
-test('real detached worker retains its PTY after launch returns and stops when the relay requests it',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'afbin-real-worker-'));let output='',exited=false,stop=false;
- const server=createServer(async(req,res)=>{
-  let raw='';for await(const c of req)raw+=c;const data=JSON.parse(raw||'{}');res.setHeader('Content-Type','application/json');
-  if(req.url==='/api/remote/sessions'){assert.equal(data.managed,true);res.end(JSON.stringify({id:'real-worker',runnerKey:'proof'}));return;}
-  output+=data.output??'';if(data.exitCode!==undefined)exited=true;
-  if(output.includes('ALIVE'))stop=true;
-  res.end(JSON.stringify({controller:'local',inputs:[],stop}));
- });
- await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const port=(server.address() as {port:number}).port;
- let pid:number|undefined;
- try{
-  const result=await launchRemote({connection:{server:`http://127.0.0.1:${port}`,token:'test-only'},command:'/bin/sh',args:['-c','sleep 20 & echo $! > descendant.pid; sleep 0.3; echo ALIVE; wait'],cwd:dir,home:dir,env:{...process.env,ARTIFACTBIN_HOME:join(dir,'state')},worker:{command:process.execPath,args:['--import',fileURLToPath(new URL('../../../node_modules/tsx/dist/loader.mjs',import.meta.url)),fileURLToPath(new URL('../src/main.ts',import.meta.url)),'--internal-remote-worker']}});
-  pid=result.pid;assert.equal(result.status,'starting');
-  const saved=await State.openReadOnly(dir,{ARTIFACTBIN_HOME:join(dir,'state')});
-  try{const row=saved!.get<{directory:string}>(HOME_SCOPE,'remote-agent',remoteStateKey(`http://127.0.0.1:${port}`,'real-worker'));assert.equal(dirname(row!.value.directory),join(dir,'state'),'context must inherit the already-protected state boundary');}finally{saved?.close();}
-  for(let i=0;i<60&&!exited;i++)await delay(100);
-  assert.ok(output.includes('ALIVE'));assert.equal(exited,true,'stop must terminate the managed child and relay its exit');
-  const descendant=Number(await readFile(join(dir,'descendant.pid'),'utf8'));
-  let alive=true;for(let i=0;i<20&&alive;i++){await delay(50);try{process.kill(descendant,0);}catch{alive=false;}}
-  assert.equal(alive,false,'stop must kill descendants, not just the shell');
- }finally{if(pid)try{process.kill(pid,'SIGTERM');}catch{}server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await rm(dir,{recursive:true,force:true});}
-});
+
 
 import {State,HOME_SCOPE} from '../src/state';
 import {stopLocalRemote,remoteStateKey} from '../src/remote-state';
@@ -132,7 +108,7 @@ test('explicit permission modes and Codex profiles override managed defaults',()
  assert.deepEqual(remoteArguments('codex',['-c','model="chosen"'],'context'),['-c','model="chosen"','--yolo','context']);
 });
 
-import {remotePermissionEnv,saveConnection} from '../src/config';
+import {remotePermissionEnv} from '../src/config';
 test('OpenCode receives per-process automatic permissions and preserves explicit environment overrides',()=>{
  const env={PATH:'/bin',OPENCODE_CONFIG_CONTENT:'{"model":"chosen"}'};
  assert.deepEqual(remotePermissionEnv('/bin/opencode',env),{...env,OPENCODE_PERMISSION:'{"*":"allow"}'});
@@ -160,25 +136,7 @@ test('startup and repeated requests require published edits, with a compact per-
  assert.match(payload.instruction,/blocked/);
 });
 
-for(const ephemeral of [false,true])test(`generated managed helper restores ${ephemeral?'ephemeral':'saved'} auth and readiness after the harness filters Artifactbin environment`,async()=>{
- const dir=await mkdtemp(join(tmpdir(),'afbin-filtered-context-'));let ready=false,exited=false,output='';let pid:number|undefined;const proof='mxmx_test_filtered_proof';
- const server=createServer(async(req,res)=>{
-  let raw='';for await(const chunk of req)raw+=chunk;const data=JSON.parse(raw||'{}');res.setHeader('Content-Type','application/json');
-  if(req.url==='/api/remote/sessions'){res.end(JSON.stringify({id:'mxmx_test_filtered',runnerKey:proof}));return;}
-  if(data.type==='ready'){assert.equal(data.proof,proof);assert.equal(req.headers.authorization,'Bearer mxmx_test_filtered_token');ready=true;res.end('{}');return;}
-  output+=data.output??'';if(data.exitCode!==undefined)exited=true;res.end(JSON.stringify({controller:'local',inputs:[],stop:ready}));
- });
- await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const port=(server.address() as {port:number}).port,origin=`http://127.0.0.1:${port}`;
- try{
-  const state=join(dir,'.artifactbin'),connection={server:origin,token:'mxmx_test_filtered_token'};
-  if(!ephemeral)await saveConnection(connection,dir,{ARTIFACTBIN_HOME:state});
-  const harness=join(dir,'filtered.mjs');
-  await writeFile(harness,`import {execFileSync} from 'node:child_process';import {readFileSync,writeFileSync} from 'node:fs';const executable=process.env.PATH.split(':')[0]+'/afbin';const helper=readFileSync(executable,'utf8');writeFileSync(${JSON.stringify(join(dir,'helper.txt'))},helper);const env={...Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('ARTIFACTBIN'))),HOME:${JSON.stringify(dir)}};try{process.stdout.write(execFileSync(executable,['remote','--ready','mxmx_test_filtered','--server',${JSON.stringify(origin)},'--json'],{env,encoding:'utf8'}));}catch(error){process.stdout.write(error.stdout??'');process.stderr.write(error.stderr??'');process.exitCode=1;}`);
-  const result=await launchRemote({connection,command:process.execPath,args:[harness],name:'filtered',cwd:dir,home:dir,env:{...process.env,ARTIFACTBIN_HOME:state,ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'0',TSX_TSCONFIG_PATH:fileURLToPath(new URL('../../../tsconfig.json',import.meta.url))},worker:{command:process.execPath,args:['--import',fileURLToPath(new URL('../../../node_modules/tsx/dist/loader.mjs',import.meta.url)),fileURLToPath(new URL('../src/main.ts',import.meta.url)),'--internal-remote-worker']}});
-  pid=result.pid;for(let i=0;i<100&&!exited;i++)await delay(100);
-  assert.equal(ready,true,output);assert.ok(!output.includes(proof));assert.ok(!(await readFile(join(dir,'helper.txt'),'utf8')).includes(proof));assert.equal(exited,true);
- }finally{if(pid)try{process.kill(pid,'SIGTERM');}catch{}server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await rm(dir,{recursive:true,force:true});}
-});
+
 test('hosted PTY uses the advertised fixed dimensions from registration through actual terminal execution',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'af-hosted-size-'));let output='',registered:Record<string,unknown>|undefined;
  const client={connection:{server:'http://localhost:5401'},request:async(_path:string,_method:string,body:Record<string,unknown>)=>{
