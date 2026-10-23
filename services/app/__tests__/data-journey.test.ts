@@ -27,21 +27,15 @@ async function owner() {
   return { t, publish, created };
 }
 
-const SALES = (ds: string, column: string) => `<Helmet><Value name="region" type="string" />
-<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select region, sum(${column}) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query></Helmet>
-<div><select aria-label="Region" value="$region" options="$sales" /><p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" /></p></div>`;
-
-describe('publishing a dataflow', () => {
-  it('refuses a column the dataset lacks as invalid_sql, the compiler naming the query and the column', async () => {
-    const o = await owner();
-    const ds = await o.created({ dataset: [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }] });
-    expect((await o.publish({ markup: SALES(ds, 'revenue') })).status).toBe(201);
-    const bad = await o.publish({ markup: SALES(ds, 'revenu') });
-    expect(bad.status).toBe(400);
-    const body = (await bad.json()) as { error: string; details: unknown };
-    expect(body.error).toBe('invalid_sql');
-    expect(JSON.stringify(body.details)).toContain('<Query> \\"sales\\" reads revenu — no such column');
-  });
+describe('native dataset column validation',()=>{
+ it('discovers stable columns and rejects unknown IDs before executing a query',async()=>{
+  const {createRetainedDatasetGraphql}=await import('@/lib/dataset-graphql/retained');
+  const o=await owner(),id=await o.created({dataset:[{region:'EU',revenue:837}]});
+  const api=createRetainedDatasetGraphql(),binding={kind:'dataset' as const,name:'sales',datasetId:id,mode:'live' as const},actor=identityForUser(o.t.userId,o.t.id),signal=new AbortController().signal;
+  const table=(await api.schema(actor,binding,signal)).tables[0]!;
+  expect((await api.read(actor,binding,{tableId:table.id,columnIds:[table.columns[0]!.id],first:1},signal)).rows).toHaveLength(1);
+  await expect(api.read(actor,binding,{tableId:table.id,columnIds:['missing-column'],first:1},signal)).rejects.toThrow();
+ });
 });
 
 describe('a dataset under an access policy', () => {
