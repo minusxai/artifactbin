@@ -13,8 +13,8 @@ it.each(['/@cee', '/@cee/'])('renders the public profile at %s, filters its shel
     if (url === '/api/page/session') return Response.json({ user: { id: 'reader', email: 'r@example.com', username: 'reader', image: null }, kind: 'account', onboarded: true });
     if (url === '/api/my/people') return Response.json({ autoAccept: false, unread: 0, next: null, blocks: [], notifications: [] });
     if (url === '/api/page/profile/%40cee') return Response.json({ kind: 'public-profile', handle: 'cee', owner: { id: 'owner', image: null }, social: { following: 2, followers: 3, relation: { youFollow: false, followsYou: true, known: [], knownTotal: 0 } }, authed: true, anon: false, files: [
-      { id: 'a', title: 'First note', description: 'hello', format: 'markup', version: 1, updated_at: '2026-09-28T12:00:00Z' },
-      { id: 'b', title: 'Second note', format: 'markup', version: 1, updated_at: '2026-09-27T12:00:00Z' },
+      { id: 'a', title: 'First note', description: 'hello', format: 'html', version: 1, updated_at: '2026-09-28T12:00:00Z' },
+      { id: 'b', title: 'Second note', format: 'html', version: 1, updated_at: '2026-09-27T12:00:00Z' },
       { id: 'asset', title: 'Asset', format: 'image', version: 1, updated_at: '2026-09-27T12:00:00Z' },
       { id: 'folder', title: 'Reports', format: 'folder', version: 1, updated_at: '2026-09-27T12:00:00Z' },
     ] });

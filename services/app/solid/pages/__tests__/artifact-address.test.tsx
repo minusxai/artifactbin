@@ -19,7 +19,7 @@ vi.mock('@/solid/lib/served-frame', async (original) => ({ ...(await original<ty
 
 const FOLDER = { folder: { id: 'fold01', title: 'Reports', trail: [], count: { documents: 0, folders: 0 }, rows: [] }, role: 'viewer' };
 const IMAGE = { role: 'viewer', kind: 'none', surface: { id: 'img001', editId: 'e1', format: 'image', title: 'Sunset', version: 1, dataPreview: '', columns: [] } };
-const DOCUMENT = { role: 'viewer', surface: { id: 'doc001', format: 'markup' } };
+const DOCUMENT = { role: 'viewer', surface: { id: 'doc001', format: 'html' } };
 
 /** Every request the page makes, answered by URL: the kind door says `kinds[id]`, the page door `pages[id]`. */
 let requests: string[];
@@ -52,7 +52,7 @@ beforeEach(() => { vi.stubGlobal('EventSource', class { addEventListener() {} re
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.mocked(replaceDocument).mockClear(); window.history.replaceState(null, '', '/'); });
 
 it('crosses to the server with ONE kind request and no page payload when it was told nothing about a document', async () => {
-  serve({ doc001: 'markup' }, { doc001: DOCUMENT });
+  serve({ doc001: 'html' }, { doc001: DOCUMENT });
   await navigate('/a/doc001');
   await waitFor(() => expect(replaceDocument).toHaveBeenCalledTimes(1));
   expect(replaceDocument).toHaveBeenCalledWith('/a/doc001');
@@ -111,7 +111,7 @@ it('keeps the unservable state: a page answer of 410 is a load failure with a re
 
 it('never crosses an address the server itself just served: a document there is a dead end, not a reload loop', async () => {
   vi.mocked(claimServedPath).mockReturnValue(true);
-  serve({ doc001: 'markup' }, { doc001: DOCUMENT });
+  serve({ doc001: 'html' }, { doc001: DOCUMENT });
   await navigate('/a/doc001');
   await waitFor(() => expect(screen.getByLabelText('Not found')).toBeInTheDocument());
   expect(kindRequests()).toEqual([]);
@@ -120,7 +120,7 @@ it('never crosses an address the server itself just served: a document there is 
 
 it('treats the address after the one the server served as a client navigation, in the same route instance', async () => {
   vi.mocked(claimServedPath).mockReturnValueOnce(true);
-  serve({ doc001: 'markup' }, { fold01: FOLDER, doc001: DOCUMENT });
+  serve({ doc001: 'html' }, { fold01: FOLDER, doc001: DOCUMENT });
   await navigate('/a/fold01');
   await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Reports'));
   expect(kindRequests()).toEqual([]);
@@ -134,7 +134,7 @@ it('treats the address after the one the server served as a client navigation, i
 it('claims the address the ROUTER is at, not the address bar, which still holds the page the client came from', async () => {
   // The server served the app at `/` (Home); a click on a link to a document creates the address before the bar moves.
   vi.mocked(claimServedPath).mockImplementation((path) => path === '/');
-  serve({ doc001: 'markup' }, { doc001: DOCUMENT });
+  serve({ doc001: 'html' }, { doc001: DOCUMENT });
   window.history.replaceState(null, '', '/');
   render(() => <Router><Route path="/" component={() => <a href="/a/doc001">go</a>} /><Route path="/a/:id" component={ArtifactAddressRoute} /></Router>);
   screen.getByRole('link', { name: 'go' }).click();
@@ -144,7 +144,7 @@ it('claims the address the ROUTER is at, not the address bar, which still holds 
 });
 
 it('asks one kind question per address, however often it re-renders', async () => {
-  serve({ doc001: 'markup' }, { doc001: DOCUMENT });
+  serve({ doc001: 'html' }, { doc001: DOCUMENT });
   await navigate('/a/doc001');
   await waitFor(() => expect(replaceDocument).toHaveBeenCalled());
   await vi.dynamicImportSettled();

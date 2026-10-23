@@ -54,7 +54,7 @@ it('renders a data tier here: an image alias is the data page, not a crossing', 
 
 it('crosses a document to the server, whose page for it is the compiled one, without fetching its page', async () => {
   vi.stubGlobal('EventSource', class { addEventListener() {} removeEventListener() {} close() {} });
-  const fetched = answering({ role: 'viewer', surface: { format: 'markup' } });
+  const fetched = answering({ role: 'viewer', surface: { format: 'html' } });
   vi.stubGlobal('fetch', fetched);
   await at('/@bob/doc001-hello');
   await waitFor(() => expect(replaceDocument).toHaveBeenCalledWith('/@bob/doc001-hello'));

@@ -50,7 +50,7 @@ export function ProfilePage(): JSX.Element {
           <p class="text-sm text-muted">Public profile</p>
           <div class="mt-2 flex items-center gap-3"><Show when={answer().owner}><Avatar userId={answer().owner!.id} image={answer().owner!.image ?? null} initial={answer().handle!} size={48} /></Show><h1 class="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-3xl font-semibold tracking-tight text-fg"><a href={path()} aria-label="Profile root" class="min-w-0 break-all no-underline transition-colors hover:text-accent"><span class="text-accent">@</span>{answer().handle}</a></h1></div>
           <Show when={answer().owner && answer().social}><Social ownerId={answer().owner!.id} social={answer().social!} signedIn={!!answer().authed} /></Show>
-          <p class="mt-4 text-sm text-muted">{(answer().files ?? []).filter(row => row.format === 'markup' || row.format === 'folder').length} public artifact{(answer().files ?? []).filter(row => row.format === 'markup' || row.format === 'folder').length === 1 ? '' : 's'}</p>
+          <p class="mt-4 text-sm text-muted">{(answer().files ?? []).filter(row => row.format === 'html' || row.format === 'folder').length} public artifact{(answer().files ?? []).filter(row => row.format === 'html' || row.format === 'folder').length === 1 ? '' : 's'}</p>
         </header>
         <Show when={answer().files?.length} fallback={<Panel class="px-6 py-12 text-center"><SectionHeading>No public artifacts yet</SectionHeading><p class="mt-2 text-sm text-muted">Public documents shared by this person will appear here.</p></Panel>}><ProfileShelf handle={answer().handle!} rows={answer().files!} /></Show>
       </main>
@@ -83,7 +83,7 @@ function ProfileShelf(props: { handle: string; rows: ShelfRow[] }): JSX.Element 
   const initialView = (): 'grid' | 'list' => { try { return localStorage.getItem('artifactbin:shelf-view') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; } };
   const [view, setView] = createSignal<'grid' | 'list'>(initialView());
   const choose = (next: 'grid' | 'list') => { setView(next); try { localStorage.setItem('artifactbin:shelf-view', next); } catch { /* Optional preference. */ } };
-  const visible = createMemo(() => buildShelf(props.rows.filter(row => (row.format === 'markup' || row.format === 'folder') && `${row.title ?? ''} ${row.description ?? ''} ${row.format}`.toLowerCase().includes(query().trim().toLowerCase()))));
+  const visible = createMemo(() => buildShelf(props.rows.filter(row => (row.format === 'html' || row.format === 'folder') && `${row.title ?? ''} ${row.description ?? ''} ${row.format}`.toLowerCase().includes(query().trim().toLowerCase()))));
   const url = (row: ShelfRow) => canonicalArtifactPath(row, props.handle);
   return <section aria-label="Shelf" data-shelf-view={view()} class="flex flex-col gap-4">
     <div class="flex items-center gap-3"><SearchField label="Search artifacts" value={query()} onValue={setQuery} class="flex-1" /><ToggleGroup label="Shelf view" iconOnly value={view()} onChange={next => choose(next as 'grid' | 'list')} options={[{ value: 'grid', label: 'Grid view', icon: () => <LayoutGrid size={14} /> }, { value: 'list', label: 'List view', icon: () => <List size={14} /> }]} /></div>
