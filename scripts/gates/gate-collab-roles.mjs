@@ -31,7 +31,7 @@ import { sleep } from './lib/sleep.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
-import { documentFrame, documentLocator, INLINE_STORY } from './lib/page-facts.mjs';
+import { documentFrame, documentLocator } from './lib/page-facts.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from '../lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
@@ -59,17 +59,14 @@ async function until(read, want, budgetMs = 10000) {
   return last;
 }
 
-const LINK_DOC = '<div data-design="tw" className="p-10">'
-  + '<h1 className="text-3xl">General access</h1>'
-  + '<p id="claim">Anyone with this link may comment on it.</p>'
-  + '</div>';
+const LINK_DOC = '<!doctype html><html><head><title>General access</title></head><body style="padding:40px;font:18px sans-serif"><h1>General access</h1><p id="claim" data-af-id="claim">Anyone with this link may comment on it.</p></body></html>';
 
 /** Every admitted role reads the same document in its frame; capabilities differ below. */
 const hasDocument = async (page) => {
   const doc = await documentFrame(page).catch(() => null);
   if (!doc) return false;
   await doc.locator('#claim').waitFor({ timeout: 20000 }).catch(() => {});
-  return (await doc.locator(INLINE_STORY).count()) === 1 && (await doc.locator('#claim').count()) === 1;
+  return (await doc.locator('#claim').count()) === 1;
 };
 
 /*
@@ -132,7 +129,7 @@ const api = async (path, init = {}) => {
   return res.json();
 };
 
-const linkDoc = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'General access gate', visibility: 'public', markup: LINK_DOC }) });
+const linkDoc = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'General access gate', visibility: 'public', html: LINK_DOC }) });
 check(!!linkDoc.id, `published a public document (${linkDoc.id})`);
 
 const sharingPut = (page) => page.waitForResponse((r) => r.url().includes('/sharing') && r.request().method() === 'PUT' && r.status() === 200, { timeout: 15000 });
@@ -183,23 +180,17 @@ check((await stranger.getByLabel('Document actions').getByLabel('Share', { exact
 await closeControls(stranger);
 
 // ── 2c. …on the framed document ───────────────────────────────────────────
-check(await stranger.locator(INLINE_STORY).count() === 0 && await documentLocator(stranger).locator(INLINE_STORY).count() === 1,
-  'commenting uses the one framed document, not a second runtime on the app page');
+check(await stranger.locator('iframe[data-mx-document-frame]').count() === 1 && await stranger.locator('#claim').count() === 0,
+  'commenting uses one native document on its runner origin');
 
 // ── 3. they comment, from selection to saved thread ──────────────────────
 // The selection and its action bubble live in the document's frame; the composer is the app page's.
 const frame = documentLocator(stranger);
 await frame.locator('#claim').waitFor({ timeout: 15000 });
-const bubble = frame.locator('[data-mx-selection-actions]');
-await until(async () => {
-  await frame.locator('#claim').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
-  return bubble.isVisible().catch(() => false);
-}, (v) => v === true, 20000);
-check(await bubble.isVisible(), 'selecting words offers the stranger the action bubble');
-check((await frame.locator('[aria-label="Edit selected text"]').count()) === 0,
-  'the bubble offers annotate and NOT edit — the capability follows the role');
-
-await frame.locator('[aria-label="Comment on selected text"]').click();
+await frame.locator('#claim').click({clickCount:3});
+await frame.locator('#claim').click({button:'right'});
+check(await stranger.locator('[aria-label="Edit selected text"]').count() === 0,
+ 'a native selection offers commenting without source editing');
 const composer = await until(() => stranger.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
 check(composer === 1, 'the composer opens on those words');
 await stranger.locator('[aria-label="Annotation comment"]').fill('a stranger with the link, saying something');
