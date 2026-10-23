@@ -1,6 +1,18 @@
 import type {AccessActor} from '@/lib/accounts';
 import {canReadArtifact,getArtifactById,getVersionFor,writerFor,type ArtifactRow} from '@/lib/artifacts';
 import type {HtmlDatasetLink} from '@artifactbin/contracts';
+import {catalogOf} from '@/lib/datasets/catalog';
+export class DatasetBindingUnsupportedError extends Error {
+ readonly code='dataset_stable_identity_unavailable';
+ readonly hint='Native dataset bindings require stored CSV/JSON rows. Import rows into a stored dataset before linking this page.';
+ constructor(){super('dataset_stable_identity_unavailable');}
+}
+/** Only catalogs with stored row objects can supply native stable row identity. */
+export function datasetBindingCatalog(row:Pick<ArtifactRow,'meta'>){
+ const catalog=catalogOf(row);
+ if(!catalog||catalog.kind!=='stored'||catalog.tables.some(table=>!table.objectKey||table.sql!==undefined))throw new DatasetBindingUnsupportedError();
+ return catalog;
+}
 const unavailable=()=>new Error('dataset_not_found');
 export async function authorizedDataset(actor:AccessActor,id:string){
  const row=await getArtifactById(id);
@@ -23,4 +35,4 @@ export async function resolveDatasetBinding(actor:AccessActor,binding:HtmlDatase
  return {...current,...version,version:Number(binding.revision)} as ArtifactRow;
 }
 /** Publication authorizes the original dataset, independently of page readership. */
-export async function authorizeDatasetBinding(actor:AccessActor,binding:HtmlDatasetLink):Promise<void>{await resolveDatasetBinding(actor,binding);}
+export async function authorizeDatasetBinding(actor:AccessActor,binding:HtmlDatasetLink):Promise<void>{datasetBindingCatalog(await resolveDatasetBinding(actor,binding));}

@@ -60,4 +60,4 @@ export function createDatasetGraphql(port:DatasetGraphqlPort):DatasetGraphql<Acc
 }
 export {datasetNamespaceSources,createDatasetNamespaceInvoker} from './namespace';
 
-export {authorizeDatasetBinding} from './authority';
+export {authorizeDatasetBinding,DatasetBindingUnsupportedError} from './authority';

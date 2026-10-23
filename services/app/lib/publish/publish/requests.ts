@@ -2,7 +2,7 @@ import {htmlAssetLinks} from '@/lib/html-page';
 import {trackEvent} from '@/lib/platform/analytics';
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
 import {htmlBackendNames,htmlPageDeclarations} from '@/lib/html-page';
-import {authorizeDatasetBinding} from '@/lib/dataset-graphql';
+import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
 import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import type {PreparedHtmlBackend} from '@/lib/html-backends';
 /**
@@ -34,7 +34,10 @@ async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor
   const {datasets}=htmlPageDeclarations(body.html);
   await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
   return datasets;
- }catch{return json({error:'invalid_dataset_binding'},400);}
+ }catch(error){
+  if(error instanceof DatasetBindingUnsupportedError)return json({error:error.code,hint:error.hint},400);
+  return json({error:'invalid_dataset_binding'},400);
+ }
 }
 
 async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):Promise<PreparedHtmlBackend[]|undefined|Response>{

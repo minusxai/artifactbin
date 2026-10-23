@@ -1,7 +1,6 @@
 import {createHash} from 'node:crypto';
 import type {DatasetSourceInfo} from '@artifactbin/contracts';
 import {artifactState,durableMutation} from '@/lib/artifacts';
-import {catalogOf} from '@/lib/datasets/catalog';
 import {executeCatalog} from '@/lib/datasets/execute';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {objectStore} from '@/lib/object-store';
@@ -9,20 +8,18 @@ import {canWriteDataset,canUseDataPolicy,isMutationRefused,mutateDataset} from '
 import type {DatasetGraphqlPort} from './types';
 import {createDatasetGraphql} from './index';
 import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
-import {authorizedDataset,resolveDatasetBinding} from './authority';
+import {authorizedDataset,resolveDatasetBinding,datasetBindingCatalog} from './authority';
 const unavailable=()=>new Error('dataset_not_found');
 /** Original dataset object store, executor, grants, version CAS and durable receipt ledger. */
 export function retainedDatasetGraphqlPort():DatasetGraphqlPort {
  return {
   async snapshot(actor,binding,signal){
-   signal.throwIfAborted();const row=await resolveDatasetBinding(actor,binding),catalog=catalogOf(row);if(!catalog)throw unavailable();
-   if(catalog.kind!=='stored')throw new Error('dataset_stable_identity_unavailable');
+   signal.throwIfAborted();const row=await resolveDatasetBinding(actor,binding),catalog=datasetBindingCatalog(row);
    const rowIds:Record<string,readonly string[]>={},sources:Record<string,DatasetSourceInfo>={};
    const saved=(row.meta as {graphqlRowIds?:Record<string,{objectKey:string;ids:string[]}>}).graphqlRowIds;
    for(const table of catalog.tables){
-    if(!table.objectKey||table.sql)throw new Error('dataset_stable_identity_unavailable');
     const tableId=tableIdentity(table),rows=await loadDatasetRows({meta:{objectKey:table.objectKey}}),prior=saved?.[tableId];
-    rowIds[tableId]=rowIdsForObject(row.id,tableId,table.objectKey,rows.length,prior);
+    rowIds[tableId]=rowIdsForObject(row.id,tableId,table.objectKey!,rows.length,prior);
     const metadata=row.meta as {truncated?:unknown;totalRows?:unknown};
     const truncated=table.schema==='public'&&table.name==='rows'&&metadata.truncated===true;
     sources[tableId]={truncated,storedRows:rows.length,totalRows:truncated?(typeof metadata.totalRows==='number'&&Number.isSafeInteger(metadata.totalRows)&&metadata.totalRows>=rows.length?metadata.totalRows:null):rows.length};
