@@ -1,7 +1,7 @@
 import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
-import { InstallArtifact } from '../document/InstallArtifact';
+import {artifactAppPath} from '@/lib/serving/artifact-pwa';
 import { createEffect, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import { Portal } from 'solid-js/web';
@@ -345,7 +345,7 @@ export function DocumentPage(): JSX.Element {
       <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc'}>
         <div class="fixed left-6" style={{ top: `${APP_BAR_H + 12}px` }}><Suspense fallback={<PendingReaderAction label="Loading agent handoff" readyLabel="Copy for agent" />}><CopyAgentButton id={id!} template="doc" /></Suspense></div>
       </Show>
-      <Show when={page?.surface?.pwaEnabled}><InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} /></Show>
+      <Show when={page?.surface?.pwaEnabled && location.pathname === artifactAppPath(id!) && new URLSearchParams(location.search).has('install')}><ReaderNotice label="App installation" load={() => import('../document/InstallArtifact')}>{({InstallArtifact}) => <InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} />}</ReaderNotice></Show>
       <Show when={fork() && id}><Suspense fallback={<PendingReaderDialog title="Fork artifact" onClose={() => setFork(false)} />}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>
     </TrustedUi>
     {/* The document's notice takes its own row above the frame (the frame shrinks), never over it. */}

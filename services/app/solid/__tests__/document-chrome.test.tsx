@@ -21,6 +21,7 @@ let served: HTMLElement | null = null;
 let mockCsp: Record<string, unknown> | undefined;
 let mockScriptFailure: {errors:string[]} | undefined;
 let mockTemplate: string | null = null;
+let mockPwa = false;
 let mockSourceLength: number | undefined;
 let mockLive = () => null as ArtifactLiveEvent | null;
 let mockSelectionBridge = false;
@@ -39,11 +40,12 @@ vi.mock('../document/create-framed-story', async (importOriginal) => {
   } };
 });
 vi.mock('../editor/create-live-artifact', () => ({ createLiveArtifact: () => () => mockLive() }));
-vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, scriptFailure: mockScriptFailure, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'html', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, scriptFailure: mockScriptFailure, surface: { id: 'doc12345', template: mockTemplate, pwaEnabled: mockPwa, title: mockTitle, format: 'html', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/lib/http/login-href', () => ({ loginHref: vi.fn(() => '/login') }));
 import { loginHref } from '@/lib/http/login-href';
 vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));
 import { copyText } from '../lib/copy-text';
+import {captureInstallPrompt} from '@/lib/serving/pwa-install';
 vi.mock('@/solid/lib/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
 // The test exercises the real editor tabs; CodeMirror geometry is outside this page-level contract.
 vi.mock('../editor/SourceEditor', () => ({ default: () => <textarea aria-label="Markup source" /> }));
@@ -59,6 +61,7 @@ beforeEach(() => {
   mockCsp = undefined;
   mockScriptFailure = undefined;
   mockTemplate = null;
+  mockPwa = false;
   mockSourceLength = undefined;
   mockLive = () => null;
   mockSelectionBridge = false;
@@ -83,7 +86,7 @@ function mount(path = '/a/doc') {
   host.append(frame);
   document.body.append(host);
   served = host;
-  const view = render(() => <Router><Route path="/a/:id" component={DocumentPage} /></Router>);
+  const view = render(() => <Router><Route path="/a/:id" component={DocumentPage} /><Route path="/a/:id/app" component={DocumentPage} /></Router>);
   // What the page posts to its frame (the bridge's envelopes, the hash): the window the frame has once the page
   // adopted it (a move without moveBefore gives the frame a new one).
   const posted = vi.spyOn(frame.contentWindow!, 'postMessage');
@@ -441,7 +444,7 @@ it('a page served without a frame is the 404 page, never a reload', async () => 
   const replace = vi.fn();
   vi.stubGlobal('location', { ...window.location, replace });
   window.history.replaceState(null, '', '/a/doc');
-  render(() => <Router><Route path="/a/:id" component={DocumentPage} /></Router>);
+  render(() => <Router><Route path="/a/:id" component={DocumentPage} /><Route path="/a/:id/app" component={DocumentPage} /></Router>);
   await vi.dynamicImportSettled();
   expect(screen.queryByLabelText('Artifact viewport')?.querySelector('iframe') ?? null).toBeNull();
   expect(replace).not.toHaveBeenCalled();
@@ -638,4 +641,16 @@ it('loads stored script diagnostics in the trusted frame slot without changing t
  expect(await trusted().findByText('Stored script diagnostic')).toBeTruthy();
  expect(document.querySelector('[data-mx-document-frame]')).not.toBeNull();
  expect(window.location.pathname).toBe('/a/doc');
+});
+
+it('loads the requested PWA install dialog and prompts synchronously only on its real button gesture',async()=>{
+ mockPwa=true;mount('/a/doc12345/app/?install=1');
+ const dispose=captureInstallPrompt(window);
+ try {
+  await trusted().findByRole('dialog',{name:'Install A copy'});
+  let gesture=false;const prompt=vi.fn(()=>{expect(gesture).toBe(true);return Promise.resolve({outcome:'dismissed'});});
+  window.dispatchEvent(Object.assign(new Event('beforeinstallprompt',{cancelable:true}),{prompt}));
+  const button=await trusted().findByRole('button',{name:'Install app'});expect(prompt).not.toHaveBeenCalled();
+  gesture=true;fireEvent.click(button);gesture=false;expect(prompt).toHaveBeenCalledOnce();
+ } finally {dispose();}
 });
