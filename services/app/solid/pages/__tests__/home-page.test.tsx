@@ -9,7 +9,7 @@ import { REFRESH_EVENT } from '@/solid/lib/page-data-events';
 import { withPersonalBootstrap } from './home-bootstrap-fetch';
 
 const session = { kind: 'account', user: { id: 'one', email: 'one@example.com', username: 'one', image: null }, onboarded: true };
-const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'markup', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };
+const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'html', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };
 const response = (value: unknown) => Response.json(value);
 const open = () => render(() => <MemoryRouter><Route path="*" component={() => <SessionProvider><HomePage /></SessionProvider>} /></MemoryRouter>);
 const workspaceFetch = (handler: (...args: any[]) => any) => vi.fn(withPersonalBootstrap(handler));
@@ -95,7 +95,7 @@ it.each(['none', 'anon'])('redirects %s sessions with held drafts to login', asy
   expect(screen.queryByText('Private draft')).toBeNull();
 });
 
-const doc = (id: string) => ({ id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'markup', version: 1, visibility: 'public', parent_id: null, ancestor_ids: [], updated_at: '2026-08-20T00:00:00.000Z', views: 0 });
+const doc = (id: string) => ({ id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'html', version: 1, visibility: 'public', parent_id: null, ancestor_ids: [], updated_at: '2026-08-20T00:00:00.000Z', views: 0 });
 const richInsights = { signedIn: true, accountId: 'one', stats: { artifacts: 1004, assets: 204, views: 1234 }, views: {}, viewsOverTime: [0, 2, 5], likes: 3, likesOverTime: [0, 1, 2], followers: 4, forks: 2 };
 function homeFetch(home: unknown, insights: unknown = richInsights) {
   vi.stubGlobal('fetch', workspaceFetch((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? home : url.includes('claimable') ? { claimable: [] } : insights))));
@@ -112,6 +112,20 @@ it('leads a populated workspace with its shelf and shows all account metrics in 
   expect(shelf.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.queryByRole('region', { name: 'Assets' })).toBeNull();
   expect(screen.queryByLabelText('Get started')).toBeNull();
+});
+
+it('counts native HTML pages in the personal Home subtitle, excluding folders and supporting files', async () => {
+  const pages = ['one', 'two', 'three', 'four'].map(id => ({ ...doc(id), format: 'html' }));
+  const folder = { ...doc('folder'), title: 'Research', format: 'folder' };
+  const dataset = { ...doc('data'), title: 'Rows', format: 'dataset' };
+  homeFetch(
+    { signedIn: true, accountId: 'one', artifacts: [...pages, folder, dataset], shared: [] },
+    { ...richInsights, stats: { ...richInsights.stats, artifacts: 4, assets: 1 } },
+  );
+  open();
+  for (const page of pages) await screen.findByLabelText(`Open ${page.title}`);
+  expect(screen.getByText('4 artifacts', { exact: true })).toBeInTheDocument();
+  expect(await screen.findByLabelText('Dashboard metrics')).toHaveTextContent('4');
 });
 
 it('shows only root rows while retaining whole-account dashboard totals', async () => {

@@ -95,7 +95,7 @@ function PersonalHomePage(props:{core:PersonalCore}): JSX.Element {
         <ClaimBanner />
         <Show when={failed()}><div role="alert">Could not refresh your workspace. <Button variant="secondary" size="sm" aria-label="Retry workspace" onClick={load}>Try again</Button></div></Show>
         <Show when={!empty()}><WorkspaceLayout personal workspace={workspace()} insights={detail()} insightsError={Boolean(insights.error())} onCreated={load}>
-          <WorkspaceHeading title="Artifacts"><span class="workspace-heading-meta">{workspace().artifacts.filter(row => row.format === 'markup').length} artifacts</span></WorkspaceHeading>
+          <WorkspaceHeading title="Artifacts"><span class="workspace-heading-meta">{workspace().artifacts.filter(row => row.format === 'html').length} artifacts</span></WorkspaceHeading>
           <Show when={workspace().artifacts.length}><Shelf rows={workspace().artifacts} actions="full" assets={false} scopeParentId={null} onQuery={setSharedQuery} /></Show>
           <SharedWithYou items={workspace().shared} query={sharedQuery()} />
         </WorkspaceLayout></Show>
