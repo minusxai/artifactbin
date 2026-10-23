@@ -49,7 +49,7 @@ describe('native start flow',()=>{
  it('the first native replacement reaches a watching reader and rejects a stale second write',async()=>{
   const account=await mintAccountToken('native-edit');const doc=await(await startRoute(request('/api/start',{method:'POST',token:account.token}))).json();
   const head=await(await read(request(`/api/artifacts/${doc.id}`,{token:account.token}),params(doc.id))).json();
-  const actor={credential:'session' as const,userId:account.userId,email:'watcher@example.test'};
+  const actor={credential:'session' as const,userId:account.userId!,email:'watcher@example.test'};
   const stream=await eventsRoute(request(`/a/${doc.id}/events`,{actor}),params(doc.id));expect(stream.status).toBe(200);
   const reader=stream.body!.getReader(),frames:Record<string,unknown>[]=[],decoder=new TextDecoder();
   const pump=(async()=>{const deadline=Date.now()+3000;while(frames.length<2&&Date.now()<deadline){const part=await Promise.race([reader.read(),new Promise<{done:true,value:undefined}>(resolve=>setTimeout(()=>resolve({done:true,value:undefined}),Math.max(1,deadline-Date.now())))]);if(part.done||!part.value)break;for(const line of decoder.decode(part.value).split('\n\n'))if(line.startsWith('data: '))frames.push(JSON.parse(line.slice(6)));}})();
