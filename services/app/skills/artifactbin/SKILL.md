@@ -28,7 +28,7 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 
 ## Installed resources
 
-The archive is one `artifactbin/` skill folder. Read only the guide needed for the task:
+[Download the author skill]([[ base ]]/skills/artifactbin.zip) and extract its one `artifactbin/` folder into your harness’s skill directory, then reload skills. The archive is one `artifactbin/` skill folder. Read only the guide needed for the task:
 
 - [Authentication](references/http-auth.md): verified email, private credential storage and serialized refresh.
 - [HTML publication](references/html-authoring.md): create, conditional replacement, identity and retry recovery.
