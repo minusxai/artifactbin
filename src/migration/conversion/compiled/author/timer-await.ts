@@ -1,16 +1,16 @@
 import { Parser } from "acorn";
 import type { LowerLegacyTimerAwait } from "./effect-source-contracts.ts";
 /** The archived frame used this exact delay form before installing its controls.
- * Move its continuation into the owned clock, preserving the lexical block and delay.
+ * Only a terminal standalone block may move its continuation into the owned clock;
+ * no later statement may overtake the original awaited work.
  */
 export const lowerLegacyTimerAwait: LowerLegacyTimerAwait = (source, lifetime) => {
   const ast = Parser.parse(source, { ecmaVersion: "latest", sourceType: "module" }) as any;
   const edits: { start: number; end: number; text: string }[] = [];
-  const visit = (node: any): void => {
+  const visit = (node: any, terminal: boolean): void => {
     if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) { for (const item of node) visit(item); return; }
-    if (["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"].includes(node.type)) return;
-    if (node.type === "BlockStatement") {
+    if (!["Program", "BlockStatement"].includes(node.type)) return;
+    if (node.type === "BlockStatement" && terminal) {
       const index = node.body.findIndex((statement: any) => {
         const expression = statement.expression;
         const promise = expression?.argument;
@@ -29,13 +29,14 @@ export const lowerLegacyTimerAwait: LowerLegacyTimerAwait = (source, lifetime) =
         const delay = statement.expression.argument.arguments[0].body.arguments[1].value;
         const tail = source.slice(statement.end, node.end - 1);
         edits.push({ start: statement.start, end: node.end - 1, text: `${lifetime}.timeout(()=>{${tail}},${delay});` });
-        for (const prior of node.body.slice(0,index)) visit(prior);
         return;
       }
     }
-    for (const value of Object.values(node)) visit(value);
+    // Descend only through standalone blocks along the final-statement path.
+    // Functions, conditionals, loops and earlier sibling blocks stay untouched.
+    if (terminal && node.body.length) visit(node.body.at(-1), true);
   };
-  visit(ast);
+  visit(ast, true);
   for (const edit of edits.sort((a,b)=>b.start-a.start)) source = source.slice(0,edit.start)+edit.text+source.slice(edit.end);
   return source;
 };

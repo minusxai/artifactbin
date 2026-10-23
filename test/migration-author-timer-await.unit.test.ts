@@ -10,3 +10,12 @@ test("legacy standalone timer await resumes through the owned clock with its lex
   for(const other of ['{await fetch("/data"); record("bad");}', '{const text="await new Promise(resolve=>setTimeout(resolve,1800))";}', 'async function f(){await new Promise(resolve=>setTimeout(resolve,1800));}', '{function draw(){record(value)};await new Promise(resolve=>setTimeout(resolve,1800));const value=1;draw();}'])
     assert.equal(lowerLegacyTimerAwait(other,"lifetime"),other);
 });
+
+
+test("timer await in a nonterminal block remains unsupported so later statements cannot overtake it", () => {
+  for (const source of [
+    '{await new Promise(resolve=>setTimeout(resolve,1800));record("inside");}record("after");',
+    '{{await new Promise(resolve=>setTimeout(resolve,1800));record("inside");}record("after");}',
+    'if(enabled){await new Promise(resolve=>setTimeout(resolve,1800));record("inside");}',
+  ]) assert.equal(lowerLegacyTimerAwait(source,"lifetime"),source);
+});
