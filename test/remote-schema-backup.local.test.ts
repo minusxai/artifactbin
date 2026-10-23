@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-for (const failure of ["", "dump", "restore"])
+for (const failure of ["", "dump", "restore", "restore-once"])
   test(`remote backup ${failure || "success"} keeps verification honest and scope narrow`, () => {
     const dir = mkdtempSync(join(tmpdir(), "schema-backup-"));
     try {
@@ -31,7 +31,7 @@ if(name==='docker'){
  if(op==='create'){const token=args[args.indexOf('--label',args.indexOf('--label')+1)+1].split('=')[1];state[key]={Labels:{'pagegi.backup-proof-job':token}};save();process.stdout.write(key);process.exit(0);}
  if(op==='inspect'){if(!state[key]){process.stderr.write('No such '+(volume?'volume':'container'));process.exit(1);}process.stdout.write(JSON.stringify([state[key]]));process.exit(0);}
  if(op==='rm'){delete state[key];save();process.exit(0);}
- if(op==='run'){const container=args[args.indexOf('--name')+1],token=args[args.indexOf('--label',args.indexOf('--label')+1)+1].split('=')[1];state[container]={Config:{Labels:{'pagegi.backup-proof-job':token}}};save();if(container.endsWith('-probe'))process.stdout.write(args.at(-1).startsWith('du ')?'1024':'1073741824');else if('${failure}'==='restore'){process.stderr.write('private-host-and-password');process.exit(1);}process.exit(0);}
+ if(op==='run'){const container=args[args.indexOf('--name')+1],token=args[args.indexOf('--label',args.indexOf('--label')+1)+1].split('=')[1];state[container]={Config:{Labels:{'pagegi.backup-proof-job':token}}};save();if(container.endsWith('-probe'))process.stdout.write(args.at(-1).startsWith('du ')?'1024':'1073741824');else if('${failure}'==='restore'||('${failure}'==='restore-once'&&!state.restoreFailed)){state.restoreFailed=true;save();process.stderr.write('private-host-and-password');process.exit(1);}process.exit(0);}
 }
 `;
       for (const name of ["pg_dump", "psql", "docker"])
@@ -80,6 +80,18 @@ if(name==='docker'){
         );
         assert.ok(run.args.includes("--network=none"));
         assert.ok(run.args.includes("--read-only"));
+        assert.equal(run.args[run.args.indexOf("--cpus") + 1], "4");
+        assert.equal(run.args[run.args.indexOf("--memory") + 1], "2048m");
+        assert.equal(run.args[run.args.indexOf("--memory-swap") + 1], "2048m");
+        const proof = run.args[run.args.indexOf("-c") + 1];
+        assert.match(
+          proof,
+          /pg_restore .*--jobs=4 .*--exit-on-error --no-owner --no-privileges \/proof\/archive\.dump/,
+        );
+        assert.doesNotMatch(
+          proof,
+          /--(?:table|exclude|schema-only|data-only|section|use-list)\b/,
+        );
         assert.equal(run.args.includes("-v"), false);
         assert.ok(
           run.args.some((v: string) =>
@@ -87,6 +99,39 @@ if(name==='docker'){
           ),
         );
         assert.equal(calls.at(-1).args[1], "inspect");
+        if (!failure) {
+          const receipt = JSON.parse(
+            readFileSync(output + ".verified", "utf8"),
+          );
+          assert.deepEqual(Object.keys(receipt.stageSeconds).sort(), [
+            "cleanup",
+            "dump",
+            "prepare",
+            "restore",
+            "total",
+          ]);
+          assert.ok(
+            Object.values(receipt.stageSeconds).every(
+              (value) =>
+                typeof value === "number" &&
+                Number.isFinite(value) &&
+                value >= 0,
+            ),
+          );
+        }
+        if (failure === "restore-once") {
+          const retried = spawnSync(
+            "python3",
+            [resolve("deploy/backup-schema.py"), config, output],
+            {
+              env: { ...process.env, PATH: bin + ":" + process.env.PATH },
+              encoding: "utf8",
+            },
+          );
+          assert.equal(retried.status, 0, retried.stderr);
+          assert.equal(existsSync(output + ".verified"), true);
+          assert.equal(existsSync(output + ".tmp"), false);
+        }
       }
     } finally {
       rmSync(dir, { recursive: true, force: true });

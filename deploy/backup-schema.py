@@ -15,6 +15,7 @@ import stat
 import subprocess
 import sys
 import uuid
+from typing import NamedTuple, TypedDict
 
 SCHEMA = "artefactv2"
 ALLOWED = {"PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD", "PGSSLMODE", "PGSSLROOTCERT"}
@@ -45,6 +46,20 @@ MAX_ARCHIVE_BYTES = 32 * GIB
 MAX_VOLUME_BYTES = 64 * GIB
 JOB_SECONDS = 1800
 POLL_SECONDS = 2
+
+class RestoreResources(NamedTuple):
+    jobs: int
+    cpus: int
+    memory_mib: int
+
+RESTORE_RESOURCES = RestoreResources(jobs=4, cpus=4, memory_mib=2048)
+
+class BackupStageSeconds(TypedDict):
+    prepare: float
+    dump: float
+    restore: float
+    cleanup: float
+    total: float
 
 def capacity(source_bytes):
     if not isinstance(source_bytes, int) or source_bytes < 0:
@@ -171,15 +186,16 @@ cat > /proof/archive.dump
 initdb -D /proof/data -A trust --no-locale >/dev/null
 pg_ctl -D /proof/data -o "-k /tmp -c listen_addresses='' -c shared_buffers=64MB -c max_wal_size=256MB -c maintenance_work_mem=64MB" -w start >/dev/null
 createdb -h /tmp recovery
-pg_restore -h /tmp --dbname=recovery --exit-on-error --no-owner --no-privileges /proof/archive.dump
+pg_restore -h /tmp --dbname=recovery --jobs=@JOBS@ --exit-on-error --no-owner --no-privileges /proof/archive.dump
 pg_ctl -D /proof/data -m immediate -w stop >/dev/null
 used=$(du -sk /proof | awk '{print $1}')
 free=$(df -Pk /proof | awk 'NR==2{print $4}')
 case "$used:$free" in *[!0-9:]*|:*) exit 1;; esac
 [ "$used" -le "$1" ] && [ "$free" -ge "$2" ]
 """
+        proof = proof.replace("@JOBS@", str(RESTORE_RESOURCES.jobs))
         self.containers.append(self.name)
-        args = ["docker", "run", "--name", self.name, *self.labels(), "--network=none", "--read-only", "--memory=1g", "--memory-swap=1g", "--cpus=1", "--pids-limit=64", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=postgres", "--tmpfs", "/tmp:rw,nosuid,nodev,size=128m,uid=999,gid=999", *self.mount(), "-i", "--entrypoint", "sh", "postgres:18-bookworm", "-c", proof, "proof", str(maximum // 1024), str((RESERVE_BYTES + 1023) // 1024)]
+        args = ["docker", "run", "--name", self.name, *self.labels(), "--network=none", "--read-only", "--memory", str(RESTORE_RESOURCES.memory_mib) + "m", "--memory-swap", str(RESTORE_RESOURCES.memory_mib) + "m", "--cpus", str(RESTORE_RESOURCES.cpus), "--pids-limit=64", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=postgres", "--tmpfs", "/tmp:rw,nosuid,nodev,size=128m,uid=999,gid=999", *self.mount(), "-i", "--entrypoint", "sh", "postgres:18-bookworm", "-c", proof, "proof", str(maximum // 1024), str((RESERVE_BYTES + 1023) // 1024)]
         with archive.open("rb") as source:
             try:
                 process = subprocess.Popen(args, stdin=source, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -254,6 +270,7 @@ def integer(value):
     return int(value.strip())
 
 def backup(config, destination):
+    started = time.monotonic()
     environment = configuration(config)
     version = capture(["pg_dump", "--version"], env=environment, timeout=15)
     if not version.startswith(b"pg_dump (PostgreSQL) 18."):
@@ -273,9 +290,11 @@ def backup(config, destination):
     try:
         if proof.create() < RESERVE_BYTES:
             raise RuntimeError("Insufficient Docker volume filesystem capacity")
+        dump_started = time.monotonic()
         with partial.open("xb") as output:
             partial.chmod(0o600)
             dump_archive(environment, output, archive_limit, destination.parent, deadline)
+        dump_finished = time.monotonic()
         if partial.stat().st_size > archive_limit:
             raise RuntimeError("Backup archive disk budget exceeded")
         archive_bytes = partial.stat().st_size
@@ -286,10 +305,19 @@ def backup(config, destination):
         restored_bytes = proof.measure_bytes(usage=True)
         if restored_bytes > volume_limit:
             raise RuntimeError("Backup restore disk budget exceeded")
+        restore_finished = time.monotonic()
         proof.close()
+        cleanup_finished = time.monotonic()
+        stage_seconds: BackupStageSeconds = {
+            "prepare": round(dump_started - started, 3),
+            "dump": round(dump_finished - dump_started, 3),
+            "restore": round(restore_finished - dump_finished, 3),
+            "cleanup": round(cleanup_finished - restore_finished, 3),
+            "total": round(cleanup_finished - started, 3),
+        }
         partial.rename(destination)
         with marker.open("x") as verified:
-            verified.write(json.dumps({"verification":"offline restore completed", "sourceBytes":source_bytes, "archiveBytes":destination.stat().st_size, "restoredBytes":restored_bytes, "archiveLimit":archive_limit, "restoreVolumeLimit":volume_limit, "reserveBytes":RESERVE_BYTES}) + "\n")
+            verified.write(json.dumps({"verification":"offline restore completed", "stageSeconds":stage_seconds, "sourceBytes":source_bytes, "archiveBytes":destination.stat().st_size, "restoredBytes":restored_bytes, "archiveLimit":archive_limit, "restoreVolumeLimit":volume_limit, "reserveBytes":RESERVE_BYTES}) + "\n")
         marker.chmod(0o600)
     finally:
         partial.unlink(missing_ok=True)

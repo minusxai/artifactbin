@@ -169,6 +169,8 @@ m.configuration=lambda p:{}
 m.capture=lambda args,**kw:b'pg_dump (PostgreSQL) 18.6' if args[0]=='pg_dump' else str(15*m.GIB).encode()
 for stage in ['before','archive-cap','after','restore','success']:
  calls=[]
+ ticks=iter([10,11,12,15,20,22])
+ m.time.monotonic=lambda:next(ticks)
  class Proof:
   def create(self):calls.append('create');return 60*m.GIB
   def measure_bytes(self,usage=False):return 16*m.GIB if usage else (10 if stage=='after' else 50)*m.GIB
@@ -198,6 +200,7 @@ for stage in ['before','archive-cap','after','restore','success']:
    receipt=json.loads(output.with_name(output.name+'.verified').read_text())
    assert receipt['archiveBytes']==1024 and receipt['restoredBytes']==16*m.GIB
    assert receipt['restoreVolumeLimit']==42*m.GIB
+   assert receipt['stageSeconds']==dict(prepare=2,dump=3,restore=5,cleanup=2,total=12)
   if stage=='before':assert not calls
   else:assert 'close' in calls
   if stage=='after':assert 'restore' not in calls
