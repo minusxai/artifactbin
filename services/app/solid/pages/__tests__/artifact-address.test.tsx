@@ -3,7 +3,7 @@
  * A CLIENT NAVIGATION TO AN ARTIFACT ADDRESS (solid/pages/ArtifactAddress). A document is the server's page, so reaching one
  * must cost ONE full navigation and never the page payload: a link that knows the format (solid/lib/artifact-link) either
  * is not the router's at all (a document) or hands the address the format in `location.state`; an address that is
- * told nothing asks the header-only kind door (`?part=kind`) before it decides. Folders, data tiers and programs
+ * told nothing asks the header-only kind door (`?part=kind`) before it decides. Folders and data tiers
  * keep drawing from their page answer in the app, with no reload.
  */
 import '@testing-library/jest-dom/vitest';
@@ -78,13 +78,11 @@ it.each([['folder', 'fold01', FOLDER], ['image', 'img001', IMAGE]] as const)('as
   expect(replaceDocument).not.toHaveBeenCalled();
 });
 
-it('draws a data tier and a program from their page answers, never as a crossing', async () => {
-  serve({ img001: 'image', prog01: 'program' }, { img001: IMAGE, prog01: { role: 'owner', kind: 'account', surface: { id: 'prog01', format: 'program' } } });
+it('draws an image data tier from its page answer without crossing', async () => {
+  serve({ img001: 'image' }, { img001: IMAGE });
   await navigate('/a/img001');
   await waitFor(() => expect(screen.getByRole('img', { name: 'Sunset' })).toBeInTheDocument());
-  cleanup();
-  await navigate('/a/prog01', { format: 'program' });
-  await waitFor(() => expect(pageRequests()).toContain('/api/page/artifact/prog01'));
+  expect(pageRequests()).toEqual(['/api/page/artifact/img001']);
   expect(replaceDocument).not.toHaveBeenCalled();
 });
 
