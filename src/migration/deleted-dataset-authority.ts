@@ -329,6 +329,9 @@ export async function verifyDeletedDatasetAuthority(
             name: q.name,
             registration: {
               ...q,
+              ...(receipt.historicalSourceQueries
+                ? { historicalAuthority: receipt.historicalSourceQueries }
+                : {}),
               backendId: receipt.backendId,
               backendVersion: receipt.deployment.version,
               pageId: receipt.pageId,
