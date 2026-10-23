@@ -81,7 +81,7 @@ it('acts as a full person inside the sandbox and is refused by name outside it',
     expect(response.status, name).toBe(403);
     const body = (await response.json()) as { error: string; hint?: string };
     expect(body.error, name).toBe('sandbox_only');
-    expect(String(body.hint), name).toContain('--as');
+    expect(String(body.hint), name).toContain('sandbox-owned copy');
   }
   // And it cannot follow the account that made it, either.
   const follow = await followRoute(request(`/api/users/${owner.userId}/follow`, { method: 'POST', actor: asTestUser, origin: 'same' }), params(owner.userId));

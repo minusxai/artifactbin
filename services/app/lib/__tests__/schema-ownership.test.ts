@@ -56,7 +56,7 @@ it('prerendered Mermaid drawings and their per-version harvests belong to the ap
  expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS app\.mermaid_images \([\s\S]*?PRIMARY KEY \(key\)/);
 });
 
-it('remote identities and work receipts belong to app',()=>{expect(declared()['app.remote_agents']).toBe('app');expect(declared()['app.remote_work']).toBe('app');});
+it('fresh schemas omit retired remote identity and work tables',()=>{for(const name of ['remote_agents','remote_work'])expect(declared()['app.'+name]).toBeUndefined();});
 
 it('comment image stages and attachments belong to app',()=>{expect(declared()['app.comment_images']).toBe('app');});
 
@@ -99,11 +99,11 @@ it('mutation run jobs and one recipient result per run belong to the app',()=>{
 });
 it('artifact-specific consent lives on the existing app relation',()=>{expect(declared()['app.relations']).toBe('app');expect(renderedSchema().schema).toContain('explicit_join BOOLEAN NOT NULL DEFAULT false');});
 
-it('co-hosted runner persistence is declared once with owner-scoped admission and occurrence uniqueness',()=>{
+it('native backend runner persistence keeps owner-scoped admission without retired hosted jobs',()=>{
  const sql=renderedSchema().schema;
- for(const table of ['runner_runs','runner_events','hosted_conversations','hosted_branches','runner_schedules','runner_schedule_attempts','runner_schedule_occurrences'])expect(declared()['app.'+table]).toBe('app');
+ for(const table of ['runner_runs','runner_events'])expect(declared()['app.'+table]).toBe('app');
  expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_request ON app.runner_runs (owner, request_key)');
- expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_occurrence ON app.runner_schedule_occurrences (schedule_id, scheduled_at)');
+ for(const table of ['hosted_conversations','hosted_branches','runner_schedules','runner_schedule_attempts','runner_schedule_occurrences'])expect(declared()['app.'+table]).toBeUndefined();
 });
 it('the pages sessions behind the documents\' own origins belong to the app and store only a cookie hash',()=>{
  expect(declared()['app.pages_sessions']).toBe('app');
