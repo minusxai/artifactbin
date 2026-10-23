@@ -46,8 +46,6 @@ export function fakeBackend(
     deleteAnnotation: vi.fn(async () => {}),
     uploadCommentImage: vi.fn(async () => ({ id: 'img' })),
     members: vi.fn(async () => ({ people: [], mentions: {} })),
-    remoteSessions: vi.fn(async () => ({ sessions: [] })),
-    deleteRemoteSession: vi.fn(async () => {}),
     ...overrides,
   };
 }

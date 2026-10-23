@@ -23,7 +23,6 @@ import type { AnnotationWire } from '@/lib/annotations';
 import type { DataflowState } from '@/lib/dataflow';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { QueryTransport } from '@/lib/page-store';
-import type { RemoteSessionInfo } from '../../../contracts/src/remote';
 
 /** Features a backend may not offer. Online, every one is available. */
 export type BackendFeature =
@@ -32,7 +31,6 @@ export type BackendFeature =
   | 'versions'        // version history and restore
   | 'mentions'        // @mention lookup of members
   | 'commentImages'   // screenshots attached to comments
-  | 'remoteSessions'  // agent sessions offered in the comment composer
   | 'live';           // the live event stream
 
 /** Aborts a read whose answer nobody wants any more. */
@@ -154,8 +152,6 @@ export interface MembersAnswer {
   mentions?: Record<string, MembershipStatus>;
 }
 
-/** GET /api/remote/sessions. */
-export interface RemoteSessionsAnswer { sessions?: RemoteSessionInfo[] }
 
 /**
  * What the live stream delivers. The stream carries PINGS; the frame itself is
@@ -242,7 +238,4 @@ export interface ArtifactBackend {
   uploadCommentImage(form: FormData): Promise<{ id: string }>;
   /** `query` omitted reads the saved mentions' statuses; a string (even '') searches people. Null when refused. */
   members(query?: string, options?: RequestOptions): Promise<MembersAnswer | null>;
-  /** The agent sessions a comment can @mention; `{sessions: []}` when refused. */
-  remoteSessions(options?: RequestOptions): Promise<RemoteSessionsAnswer>;
-  deleteRemoteSession(sessionId: string): Promise<void>;
 }

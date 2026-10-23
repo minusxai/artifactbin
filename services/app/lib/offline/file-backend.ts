@@ -57,7 +57,6 @@ export const OFFLINE_REASONS: Record<BackendFeature, string> = {
   versions: 'Version history lives on artifactbin. Open the live version.',
   mentions: 'Mentions need a connection.',
   commentImages: 'Screenshots need a connection.',
-  remoteSessions: 'Agents need a connection.',
   live: 'Live updates need a connection.',
 };
 
@@ -637,7 +636,5 @@ export function createFileBackend(initial: ArtifactFile, hooks: FileBackendHooks
 
     uploadCommentImage: () => refuse('commentImages'),
     async members(query) { return query === undefined ? { mentions: {} } : { people: [] }; },
-    remoteSessions: () => refuse('remoteSessions'),
-    deleteRemoteSession: () => refuse('remoteSessions'),
   };
 }
