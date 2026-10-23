@@ -1,4 +1,3 @@
-import {POST as reserveIdentities} from '@/app/api/artifacts/reservations/route';
 /**
  * THE CLI boot harness — the one way an app test drives the REAL `afbin` against the REAL route
  * handlers. Every `cli-*` test used to hand-roll the same four things: a temp workspace, a minted
@@ -19,70 +18,11 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mintAccountToken } from './harness';
-import { POST as createArtifact, GET as listArtifacts } from '@/app/api/artifacts/route';
-import { GET as readArtifact, PUT as replaceArtifact, PATCH as patchArtifact, DELETE as deleteArtifact } from '@/app/api/artifacts/[id]/route';
-import { GET as readContent } from '@/app/api/artifacts/[id]/content/route';
-import {POST as prepareDocument} from '@/app/api/artifacts/[id]/prepare/route';
-import { POST as postEdit } from '@/app/api/artifacts/[id]/edits/route';
-import { POST as postPreflight } from '@/app/api/artifacts/preflight/route';
 import { runCli } from '../../cli/src/dispatch';
 import { saveConnection, saveDefaultServer } from '../../cli/src/config';
 
 /** The server every fixture connects to. Nothing binds a socket: the transport calls handlers directly. */
-export const CLI_SERVER = 'http://localhost:3000';
-
-/** One request the CLI made, as the transport saw it. */
-export interface CliCall {
-  method: string;
-  /** Pathname only — what most assertions compare. */
-  path: string;
-  /** Pathname plus query, for the routes where the query IS the assertion (`?format=png&slide=2`). */
-  address: string;
-  /** The parsed JSON request body, or null when there was none. Proves what did NOT travel. */
-  body: unknown;
-}
-
-/** `['POST /api/artifacts', ...]` — the usual shape an assertion wants. */
-/** Same, with the query string kept. */
-
-/**
- * A route this fixture does not own. Return a `Response` to answer, or nothing to fall through to
- * the artifacts routes — that is how a test adds `/api/sessions`, `/a/<id>/raw` or `/api/secrets`
- * without re-implementing the artifacts half.
- */
-type ExtraRoute = (request: Request, url: URL) => Promise<Response | undefined | null> | Response | undefined | null;
-
-/**
- * The artifacts API as the CLI addresses it, backed by the real handlers. An unexpected path
- * THROWS rather than 404s: a test that silently exercises a route nobody wired proves nothing.
- */
-export function artifactTransport(calls: CliCall[] = [], extra?: ExtraRoute): typeof fetch {
-  return async (input, init) => {
-    const request = new Request(input as RequestInfo, init);
-    const url = new URL(request.url);
-    const raw = init?.body ? String(init.body) : '';
-    let body: unknown = null;
-    if (raw) { try { body = JSON.parse(raw); } catch { body = raw; } }
-    calls.push({ method: request.method, path: url.pathname, address: `${url.pathname}${url.search}`, body });
-    if (extra) {
-      const answered = await extra(request, url);
-      if (answered) return answered;
-    }
-    if(url.pathname==='/api/artifacts/reservations')return reserveIdentities(request);
-    if (url.pathname === '/api/artifacts') return request.method==='GET'?listArtifacts(request):createArtifact(request);
-    if (url.pathname === '/api/artifacts/preflight') return postPreflight(request);
-    const match = /^\/api\/artifacts\/([^/]+)(\/edits|\/content|\/prepare)?$/.exec(url.pathname);
-    if (!match) throw new Error(`Unexpected route ${request.method} ${url.pathname}`);
-    const context = { params: Promise.resolve({ id: match[1]! }) };
-    if (match[2] === '/prepare') return prepareDocument(request,context);
-    if (match[2] === '/edits') return postEdit(request, context);
-    if (match[2] === '/content') return readContent(request, context);
-    if (request.method === 'GET') return readArtifact(request, context);
-    if (request.method === 'PATCH') return patchArtifact(request, context);
-    if (request.method === 'DELETE') return deleteArtifact(request, context);
-    return replaceArtifact(request, context);
-  };
-}
+const CLI_SERVER = 'http://localhost:3000';
 
 /** What the CLI returned: its exit status, the parsed `--json` envelope, and anything on stderr. */
 interface CliResult {
@@ -122,7 +62,7 @@ interface CliWorkspaceOptions {
 /**
  * A throwaway workspace with the real CLI wired to it. The caller owns the lifetime:
  *
- *   const cli = await cliWorkspace('fork', { fetch: artifactTransport(calls) });
+ *   const cli = await cliWorkspace('fork', { fetch: transport });
  *   try { await cli.connect('real-cli-fork'); … } finally { await cli.cleanup(); }
  */
 export async function cliWorkspace(prefix: string, options: CliWorkspaceOptions = {}): Promise<CliWorkspace> {
