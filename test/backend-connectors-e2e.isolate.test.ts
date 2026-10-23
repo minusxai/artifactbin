@@ -17,7 +17,7 @@ import { BACKEND_RUNTIME } from "../src/backend/deployment.ts";
 import type { BackendJson } from "../src/backend/contracts.ts";
 
 const source = `
-export const typeDefs = 'type Query { put: String list: String forbidden: String transaction: String http: String lost: String slow: String raw: Boolean secrets: String forgeCaller: String sourceQuery: String sourceQueryAvailability: Boolean }';
+export const typeDefs = 'type Query { put: String list: String forbidden: String transaction: String http: String lost: String slow: String raw: Boolean secrets: String forgeCaller: String sourceQuery: String sourceQueryAvailability: Boolean userChoices: String }';
 export default {Query:{
  put:(args,principal,caps)=>caps.invoke({resource:'db',operation:'put',input:args}),
  list:(args,principal,caps)=>caps.invoke({resource:'db',operation:'list',input:args}),
@@ -33,6 +33,7 @@ export default {Query:{
  secrets:(args,principal,caps)=>({ambient:typeof process==='undefined'?null:process.env?.PAGEGI_CONNECTOR_E2E_PRIVATE??null,hostToken:typeof process==='undefined'?null:process.env?.TEST_TOKEN??null,executionSecret:typeof process==='undefined'?null:process.env?.PAGEGI_EXECUTION_SECRET??null,principal:Object.keys(principal).sort(),caps:Object.keys(caps).sort(),dataset:Object.keys(caps.dataset).sort(),env:typeof env}),
  sourceQuery:(args,principal,caps)=>caps.dataset.sourceQuery({name:'unregistered-query',valuesJson:'{}',offset:0,limit:10}),
  sourceQueryAvailability:(args,principal,caps)=>caps.dataset.sourceQueryAvailability({name:'unregistered-query'}),
+ userChoices:(args,principal,caps)=>caps.dataset.userChoices({name:'unregistered-query',column:'owner'}),
  forgeCaller:(args,principal,caps)=>caps.invoke({resource:'api',operation:'echo',input:null,caller:{tenant:'tenant-a',subject:'owner',grants:['api']}}),
 }};
 `;
@@ -205,7 +206,7 @@ test(
       // Connector grants never grant source-query access without a registered
       // dataset authority, for either a connector caller or an ungranted tenant.
       for (const tenant of ["tenant-a", "tenant-c"]) {
-        for (const field of ["sourceQuery", "sourceQueryAvailability"]) {
+        for (const field of ["sourceQuery", "sourceQueryAvailability", "userChoices"]) {
           await assert.rejects(invoke(tenant, field), { code: "backend_rejected" });
         }
       }
@@ -253,7 +254,7 @@ test(
         executionSecret: null,
         principal: ["subject", "tenant"],
         caps: ["dataset", "invoke", "store", "transaction"],
-        dataset: ["members", "mutate", "mutationAvailability", "person", "read", "sourceQuery", "sourceQueryAvailability", "viewer"],
+        dataset: ["members", "mutate", "mutationAvailability", "person", "read", "sourceQuery", "sourceQueryAvailability", "userChoices", "viewer"],
         env: "undefined",
       });
       assert.equal(JSON.stringify(isolation).includes("host-secret"), false);
