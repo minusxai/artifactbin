@@ -46,6 +46,7 @@ export async function prepareMigrationJobDatasets(
     options.ownershipOverride,
     options.sourceQueryRegistrations,
     deletedAdmission,
+    options.sourceAdmission,
   );
   const issues = new Map(
     [...scan.issues].map(([id, reasons]) => [id, [...reasons]]),

@@ -1,3 +1,4 @@
+import { admitsMutationOnlyImports } from "./mutation-only.ts";
 import { readHistoricalRemoteMutationNames } from "./historical-mutations.ts";
 import {archivedScalarChoiceSource} from "./scalar-choice-kit-source.ts";
 import { validCompiledBrowserImports } from "./browser-imports.ts";
@@ -177,7 +178,12 @@ if (input.datasetUnavailable) {
     input.sourceAdmission,
     input.sourceQueries??[],
   ));
-} else if (rawFlow.imports.length) throw Error("Import requires a query");
+} else if (rawFlow.imports.length && !admitsMutationOnlyImports({
+  queryNames: rawFlow.queries.map((q:any)=>q.name),
+  localMutationNames: input.localMutationNames ?? [],
+  declaredMutationNames: split.content.mutations.map((m:any)=>m.name),
+  registeredMutationNames: (input.datasetMutations ?? []).map(m=>m.name),
+})) throw Error("Import requires a query or registered mutation");
 if(!input.datasetUnavailable&&input.datasetMutations?.some(binding=>binding.valueParam))validateCompiledCellWriteContexts(input.source,flow,input.datasetMutations??[],input.sourceAdmission);
 const hasCharts = (nodes: readonly any[]): boolean =>
   nodes.some(

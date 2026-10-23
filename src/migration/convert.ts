@@ -1,3 +1,4 @@
+import {normalizeLegacySourceOperations} from "./conversion/source-operations.ts";
 import { rewriteLegacyRawMediaSource } from "./raw-media.ts";
 import { createHash } from "node:crypto";
 import { validateMigrationSourceAdmission } from "./source-admission-policy.ts";
@@ -112,6 +113,10 @@ export function createMigrationConverter(
           sourceSha256: createHash("sha256").update(source).digest("hex"),
         };
       }
+    }
+    if(source!==null && options.sourceAdmission==='offline-prototype') {
+      try { source=normalizeLegacySourceOperations(source,(input.datasetBindings??[]).map(b=>b.legacyRef)).source; }
+      catch { /* Unsupported source syntax remains an explicit converter refusal. */ }
     }
     let sourceNormalization: import("./contracts.ts").ConversionOutput["sourceNormalization"];
     if (

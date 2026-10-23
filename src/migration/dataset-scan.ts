@@ -1,4 +1,6 @@
 import {createDeletedArtifactAdmissionValidator} from "./deleted-artifact-admission.ts";
+import {legacySourceOperationRefs,normalizeLegacySourceOperations} from "./conversion/source-operations.ts";
+import {catalogVersion,receiptMap} from "./datasets/catalog.ts";
 import { attestMigrationSourceQueries } from "./source-query-preparation.ts";
 import {
   originalMigrationOwner,
@@ -23,6 +25,7 @@ export async function scanMigrationDatasetImports(
   ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride,
   sourceQueryRegistrations: readonly import("../datasets/source-query/contracts.ts").MigrationSourceQueryRegistration[] = [],
   deletedAdmission?: import("./deleted-artifact-contracts.ts").DeletedArtifactAdmission,
+  sourceAdmission: import("./conversion-strategy-contracts.ts").MigrationSourceAdmission = "strict",
 ): Promise<MigrationDatasetImportScan> {
   const assertDeleted = deletedAdmission ? createDeletedArtifactAdmissionValidator(deletedAdmission,source.manifest.sourceNamespace,source.maps) : undefined;
   const pendingSourceQueryPages = new Set(
@@ -116,6 +119,20 @@ export async function scanMigrationDatasetImports(
         text = null;
       }
       if (text === null) continue;
+      // Only independently verified stored dataset catalogs can replace legacy source routing.
+      if(source.datasets && sourceAdmission === "offline-prototype") {
+        const eligible:string[]=[];
+        try {
+          for(const ref of legacySourceOperationRefs(text)) {
+            try {
+              const target=(await source.readArtifact(ref.slice(4))).artifacts[0]!;
+              const catalog=catalogVersion(target,target.id,receiptMap(source.datasets.receipts));
+              if(!catalog.unavailableTables.length && catalog.tables.some(t=>t.schema==='public'&&t.name==='rows'))eligible.push(ref);
+            } catch { /* Ordinary source admission retains the unresolved dependency. */ }
+          }
+          text=normalizeLegacySourceOperations(text,eligible).source;
+        } catch { /* The converter retains unsupported source syntax as blocked. */ }
+      }
       const extracted = extractLegacyImports(text);
       if (extracted.issues.length) continue; // The content converter retains the complete syntax/capability refusal.
       if (Number(row.version) !== head.version) {

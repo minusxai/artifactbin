@@ -1,3 +1,4 @@
+import {normalizeLegacySourceOperations} from "./conversion/source-operations.ts";
 import type { BoundValueColumnProof } from "./conversion/compiled/bound-value-contracts.ts";
 import { migrationDatasetVersionKey } from "./job-dataset-contracts.ts";
 import { legacyDocumentSource } from "./conversion/index.ts";
@@ -51,7 +52,7 @@ export async function prepareMigrationHeadMutations(
         : legacyDocumentSource(artifact.document);
       if (text === null) throw Error("Current document source is unavailable");
       const extracted = await extractLegacyMutations(
-        text,
+        sourceAdmission === "offline-prototype" ? normalizeLegacySourceOperations(text,catalogs.map(c=>`ref:${c.datasetLegacyId}`)).source : text,
         catalogs,
         boundValueColumns.get(
           migrationDatasetVersionKey(page.legacyId, artifact.version),
