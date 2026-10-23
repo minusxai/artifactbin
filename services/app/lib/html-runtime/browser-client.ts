@@ -71,19 +71,27 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
     post({ kind: 'fetch', call: id, path: `/api/artifacts/${encodeURIComponent(config.pageId)}/graphql`, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) });
   });
   for (const ready of [...relayWaiters]) ready();
-  const selection = () => post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: htmlSelection(win, undefined, config.revision, config.savedNodeIds) } });
+  const selection = () => {
+    if (pick === 'area' || !win.getSelection()?.toString().trim()) return;
+    post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: htmlSelection(win, undefined, config.revision, config.savedNodeIds) } });
+  };
   const context = (event: MouseEvent) => {
     if (!canAnnotate) return;
     const selected = htmlSelection(win, event.target as Node, config.revision, config.savedNodeIds);
-    if (selected) { event.preventDefault(); post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action: 'select', selection: selected } }); }
+    if (selected) { event.preventDefault(); post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action: 'annotate', selection: selected } }); }
   };
   const scroll = () => { post({ kind: 'scroll', scrollX: win.scrollX, scrollY: win.scrollY }); selection(); if (annotations.pins.length) layout(); };
-  const down = (event: PointerEvent) => { if (pick && canAnnotate) drag = { x: event.clientX, y: event.clientY, target: event.target as Node }; };
+  const down = (event: PointerEvent) => {
+    if (!pick || !canAnnotate) return;
+    if (pick === 'area') { event.preventDefault(); win.getSelection()?.removeAllRanges(); }
+    drag = { x: event.clientX, y: event.clientY, target: event.target as Node };
+  };
   const up = (event: PointerEvent) => {
     const start = drag; drag = null;
     if (!start || !pick || !canAnnotate || Math.hypot(event.clientX - start.x, event.clientY - start.y) < 5) return;
     suppressClick = true;
-    if (win.getSelection()?.toString().trim()) { selection(); return; }
+    if (pick !== 'area' && win.getSelection()?.toString().trim()) { selection(); return; }
+    if (pick === 'area') win.getSelection()?.removeAllRanges();
     let node = start.target.nodeType === 1 ? start.target as Element : start.target.parentElement;
     while (node && !node.contains(event.target as Node)) node = node.parentElement;
     const selected = htmlSelection(win, node, config.revision, config.savedNodeIds);

@@ -10,7 +10,8 @@ it('uses original frame RPC with explicit HTML anchors and never exposes credent
   bridge.receive({ kind: 'send', command: { type: 'mx:selection-actions', edit: false, annotate: true } });
   const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
   document.querySelector('p')!.dispatchEvent(menu);
-  const action = events.find((item) => item.kind === 'event')?.event as { selection: { anchor: unknown }; nonce: string };
+  const action = events.find((item) => item.kind === 'event')?.event as { action: string; selection: { anchor: unknown }; nonce: string };
+  expect(action.action).toBe('annotate');
   expect(action.selection.anchor).toEqual({ kind: 'html-node', v: 1, revision: '3', nodeId: 'n1', quote: '' });
   expect(action.nonce).toBe((events[0] as { nonce?: string }).nonce);
   expect(menu.defaultPrevented).toBe(true);
@@ -119,4 +120,32 @@ it('installs app link navigation in the native bridge without hijacking handled 
  expect(event.defaultPrevented).toBe(true);expect(posted).toContainEqual({type:'mx:navigate',href:'/a/other'});
  const handled=doc.querySelectorAll('a')[3]!;handled.addEventListener('click',e=>e.preventDefault());handled.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,composed:true}));
  expect(posted).toHaveLength(1);bridge.dispose();
+});
+
+it('keeps area drags separate from native text selection and restores normal selection afterward', async () => {
+  vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '3', backends: [] });
+  const { startFrameBridge } = await import('../browser-client');
+  document.body.innerHTML = '<p data-af-id="n1">Words across the screenshot</p>';
+  const paragraph = document.querySelector('p')!;
+  vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, width: 200, height: 100, top: 0, left: 0, right: 200, bottom: 100, toJSON() {} });
+  const events: Array<{ kind: string; [key: string]: unknown }> = [];
+  const bridge = startFrameBridge({ win: window, post: event => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '3', source: null } });
+  bridge.receive({ kind: 'send', command: { type: 'mx:annotations', canComment: true, pick: 'area' } });
+  const selectText = () => { const range = document.createRange(); range.selectNodeContents(paragraph); window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range); document.dispatchEvent(new Event('selectionchange')); };
+  const selections = () => events.map(item => item.event as {type?: string; selection?: {kind: string; anchor: {quote: string; range?: unknown}; range?: unknown}}).filter(event => event?.type === 'mx:selection');
+  selectText(); expect(selections()).toHaveLength(0);
+  const down = new MouseEvent('pointerdown', {bubbles: true, cancelable: true, clientX: 4, clientY: 4});
+  paragraph.dispatchEvent(down); expect(down.defaultPrevented).toBe(true);
+  selectText(); expect(selections()).toHaveLength(0);
+  paragraph.dispatchEvent(new MouseEvent('pointerup', {bubbles: true, clientX: 100, clientY: 50}));
+  expect(selections()).toHaveLength(1);
+  expect(selections()[0]?.selection).toMatchObject({kind: 'element', anchor: {quote: ''}, range: {v: 1, kind: 'area', box: {x: .02, y: .04, w: .48, h: .46}}});
+  expect(selections()[0]?.selection?.anchor.range).toBeUndefined();
+  bridge.receive({kind: 'send', command: {type: 'mx:annotations', canComment: true, pick: null}});
+  selectText(); expect(selections().at(-1)?.selection).toMatchObject({kind: 'text', anchor: {quote: 'Words across the screenshot'}});
+  const beforeCollapse = selections().length;
+  window.getSelection()!.removeAllRanges(); document.dispatchEvent(new Event('selectionchange')); window.dispatchEvent(new Event('scroll'));
+  expect(selections()).toHaveLength(beforeCollapse);
+  document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+  bridge.dispose(); vi.restoreAllMocks();
 });
