@@ -245,13 +245,7 @@ async function testusersLeg() {
     const signedIn = await post('/api/auth/sign-in/email-otp', { email, otp });
     must(signedIn.status === 200, `the account signs in (${signedIn.status})`);
     const cookie = signedIn.headers.getSetCookie().map(c => c.split(';')[0]).join('; ');
-    const pairing = await (await fetch(`${origin}/oauth/device`, { method: 'POST' })).json();
-    const advertised = new URL(pairing.verification_uri ?? pairing.verification_url ?? origin).origin;
-    const approved = await fetch(`${origin}/oauth/device/approve`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', origin: advertised, Cookie: cookie }, body: new URLSearchParams({ user_code: pairing.user_code, decision: 'approve' }) });
-    must(approved.ok, `device approval ${approved.status}`);
-    const granted = await (await fetch(`${origin}/oauth/device/token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_code: pairing.device_code }) })).json();
-    must(granted?.access_token, `the account's CLI connection is granted ${show(granted)}`);
-    token = granted.access_token;
+    token = (await connectAgent(origin, { cookie })).token;
   });
   if (!token) return;
 
