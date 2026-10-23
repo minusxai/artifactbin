@@ -102,7 +102,7 @@ export function RowActions(props: { row: ShelfRow; level: Actions; folders: Shel
     <Show when={renaming()}><span class="relative z-20 inline-block w-36"><Input size="sm" aria-label="Folder name" autofocus value={draft()} onInput={event => setDraft(event.currentTarget.value)} onBlur={() => void saveName()} onKeyDown={event => { if (event.key === 'Enter') void saveName(); if (event.key === 'Escape') setRenaming(false); }} /></span></Show>
     <Show when={props.level === 'full'}>
       <span class="relative z-10 inline-flex shrink-0 items-center gap-1">
-        <Show when={props.row.format !== 'folder' && props.showEdit !== false}><Tooltip content="edit"><a aria-label={`Edit ${nameOf(props.row)}`} {...artifactLink(`/a/${props.row.id}#edit`, props.row.format)} class="shelf-secondary-action text-muted hover:text-accent"><Pencil size={13} /></a></Tooltip></Show>
+        <Show when={props.row.format === 'dataset' && props.showEdit !== false}><Tooltip content="edit"><a aria-label={`Edit ${nameOf(props.row)}`} {...artifactLink(`/a/${props.row.id}/edit`, props.row.format)} class="shelf-secondary-action text-muted hover:text-accent"><Pencil size={13} /></a></Tooltip></Show>
         <RowMenu name={nameOf(props.row)} items={[
           { label: `Manage sharing for ${nameOf(props.row)}`, text: 'share', icon: () => <span>↗</span>, onSelect: () => setSharing(true) },
           ...(props.row.format === 'folder' ? [{ label: `Rename ${nameOf(props.row)}`, text: 'rename', icon: () => <Pencil size={12} />, onSelect: () => { setDraft(props.row.title ?? ''); setRenaming(true); } }] : []),

@@ -56,3 +56,27 @@ it('rebinds presence to a published source revision without closing document upd
   expect(await stream.named('message',1,200)).toEqual([]);
  }finally{abort.abort();stream.close();}
 });
+
+/** Harness-exempt: the addressed public origin and internal transport URL are the subject. */
+const proxiedPresence=(headers:Record<string,string>)=>new Request('http://internal.test:3000/api/artifacts/prespublic/presence',{
+ method:'POST',headers:{'content-type':'application/json',host:'internal.test:3000','x-forwarded-host':'app.example.test','x-forwarded-proto':'https',...headers},body:JSON.stringify({session,revision:'1',visible:true}),
+});
+it.each([
+ ['a trusted HTTPS proxy', {origin:'https://app.example.test'},200],
+ ['a normal same-origin browser behind the proxy', {origin:'https://app.example.test','sec-fetch-site':'same-origin'},200],
+ ['missing Origin under the existing policy', {},200],
+ ['an unrelated origin', {origin:'https://foreign.example.test'},403],
+ ['a same-site sibling origin', {origin:'https://pages.example.test','sec-fetch-site':'same-site'},403],
+ ['a different scheme', {origin:'http://app.example.test'},403],
+ ['a different port', {origin:'https://app.example.test:8443'},403],
+ ['a malformed Origin', {origin:'not an origin'},403],
+ ['an opaque Origin', {origin:'null'},403],
+ ['a foreign Origin cannot be repaired by same-origin fetch metadata', {origin:'https://foreign.example.test','sec-fetch-site':'same-origin'},403],
+ ['a mismatched forwarded host', {origin:'https://app.example.test','x-forwarded-host':'foreign.example.test'},403],
+ ['an appended spoofed host does not replace the proxy first host', {origin:'https://foreign.example.test','x-forwarded-host':'app.example.test, foreign.example.test'},403],
+ ['malformed forwarded origin fails closed', {origin:'https://app.example.test','x-forwarded-proto':':'},403],
+] satisfies Array<[string,Record<string,string>,number]>)('presence origin boundary admits or refuses %s',async(_name,headers,status)=>{
+ const req=proxiedPresence(headers);const response=await runWithRequest(req,()=>POST(req,params('prespublic')));
+ expect(response.status).toBe(status);if(status===200)expect(await response.json()).toMatchObject({id:expect.stringMatching(/^[a-f0-9]{64}$/)});
+ else expect(await response.text()).toBe('forbidden');
+});
