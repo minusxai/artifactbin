@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { useAppHarness, request } from './harness';
+import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import { POST as create } from '@/app/api/artifacts/route';
 import {exportImage,EXPORT_PNG} from './export-helpers';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { createUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform';
-import { getArtifactById } from '@/lib/artifacts';
+import { getArtifactById,artifactState } from '@/lib/artifacts';
 import { setServices } from '@/lib/platform';
 import { fakeBrowser } from '@artifactbin/utils';
 import { resetExportRenderer } from '@/lib/export';
@@ -96,4 +97,18 @@ it('exports the selected image region and serves the uncropped image only to edi
   expect(overview.status).toBe(200);
   expect(overview.headers.get('Cache-Control')).toBe('private, no-store');
   expect(await sharp(Buffer.from(await overview.arrayBuffer())).metadata()).toMatchObject({ width: 160, height: 160 });
+});
+
+it('uses the archived publication cover reference after the head selects another private image',async()=>{
+ const {token,image}=await fixture();
+ const created=await publish(token,{html:markup(image.id),visibility:'unlisted'});expect(created.status).toBe(201);const doc=await created.json();
+ const blue=await sharp({create:{width:64,height:64,channels:3,background:'#0000ff'}}).png().toBuffer();
+ const next=await (await publish(token,{image:`data:image/png;base64,${blue.toString('base64')}`,visibility:'private'})).json();
+ const head=(await getArtifactById(doc.id))!;
+ const changed=await replace(request(`/api/artifacts/${doc.id}`,{method:'PUT',token,json:{html:markup(next.id),expectedVersion:head.version,expectedState:artifactState(head)}}),params(doc.id));expect(changed.status).toBe(200);
+ setServices({browser:fakeBrowser({ok:false,reason:'unavailable'})});
+ try{
+  const old=await exportImage(request(`/a/${doc.id}/export?mode=card&version=1`,{token}),params(doc.id));expect(old.status).toBe(200);
+  const pixel=await sharp(Buffer.from(await old.arrayBuffer())).resize(1,1).raw().toBuffer();expect(pixel[0]).toBeGreaterThan(240);expect(pixel[2]).toBeLessThan(15);
+ }finally{await resetExportRenderer();setServices({})}
 });
