@@ -30,7 +30,21 @@ export function auditFastSource(source, file) {
       const name = ts.isIdentifier(expression) ? expression.text : ts.isPropertyAccessExpression(expression) ? expression.name.text : '';
       if (forbidden.has(name)) reasons.push(`${file}: ambient ${name}`);
       if ((expression.kind === ts.SyntaxKind.ImportKeyword || name === 'require') && (!node.arguments?.[0] || !ts.isStringLiteral(node.arguments[0]))) reasons.push(`${file}: computed module load`);
-      if (ts.isElementAccessExpression(expression)) reasons.push(`${file}: computed callable capability`);
+      // graphql-js's default field resolver calls a field supplied by the caller.
+      // Keep the exception to this exact reviewed dispatcher, not arbitrary package calls.
+      const graphqlFieldDispatch = /(?:^|\/)node_modules\/graphql\/execution\/execute\.(?:m?js)$/.test(file.replaceAll('\\', '/'))
+        && ts.isElementAccessExpression(expression)
+        && ts.isIdentifier(expression.expression) && expression.expression.text === 'source'
+        && ts.isPropertyAccessExpression(expression.argumentExpression)
+        && ts.isIdentifier(expression.argumentExpression.expression) && expression.argumentExpression.expression.text === 'info'
+        && expression.argumentExpression.name.text === 'fieldName';
+      const graphqlIteratorDispatch = /(?:^|\/)node_modules\/graphql\/execution\/mapAsyncIterator\.(?:m?js)$/.test(file.replaceAll('\\', '/'))
+        && ts.isElementAccessExpression(expression)
+        && ts.isIdentifier(expression.expression) && expression.expression.text === 'iterable'
+        && ts.isPropertyAccessExpression(expression.argumentExpression)
+        && ts.isIdentifier(expression.argumentExpression.expression) && expression.argumentExpression.expression.text === 'Symbol'
+        && expression.argumentExpression.name.text === 'asyncIterator';
+      if (ts.isElementAccessExpression(expression) && !graphqlFieldDispatch && !graphqlIteratorDispatch) reasons.push(`${file}: computed callable capability`);
     }
     ts.forEachChild(node, visit);
   }
