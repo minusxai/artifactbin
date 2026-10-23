@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { BROWSER_SESSION_HEADER, type Actor } from '@artifactbin/contracts';
 import { GET as sessionRoute } from '@/app/api/page/session/route';
-import { GET as sessionsRoute } from '@/app/api/sessions/route';
+import { GET as artifactsRoute } from '@/app/api/artifacts/route';
 import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { requestOrSessionActor, revokeToken, sessionActor } from '@/lib/accounts';
 import { getDb, measureQueries, runWithRequest } from '@/lib/platform';
@@ -89,13 +89,13 @@ describe('GET /api/page/session', () => {
 });
 
 describe('a bearer-token operation request', () => {
-  const call = (token: string) => { const req = request('/api/sessions', { token }); return runWithRequest(req, () => sessionsRoute(req)); };
+  const call = (token: string) => { const req = request('/api/artifacts', { token }); return runWithRequest(req, () => artifactsRoute(req)); };
 
   it('resolves the token and its hosted authority once each', async () => {
     const { token } = await mintAccountToken('budget');
     expect((await call(token)).status).toBe(200);
     const { sql, count } = await recorded(() => call(token));
-    console.info('[budget] bearer GET /api/sessions: statements=%d resolve=%d authority=%d', count, sql.filter((text) => /FROM tokens WHERE token_hash/.test(text)).length, sql.filter((text) => /request_authority/.test(text)).length);
+    console.info('[budget] bearer GET /api/artifacts: statements=%d resolve=%d authority=%d', count, sql.filter((text) => /FROM tokens WHERE token_hash/.test(text)).length, sql.filter((text) => /request_authority/.test(text)).length);
     expect(sql.filter((text) => /FROM tokens WHERE token_hash/.test(text))).toHaveLength(1);
     expect(sql.filter((text) => /request_authority/.test(text))).toHaveLength(1);
   });
@@ -109,7 +109,7 @@ describe('a bearer-token operation request', () => {
 
   it('forgets within a request when that request revokes the token', async () => {
     const { token, id } = await mintAccountToken('inflight');
-    const req = request('/api/sessions', { token });
+    const req = request('/api/artifacts', { token });
     const { resolveToken } = await import('@/lib/accounts');
     await runWithRequest(req, async () => {
       expect(await resolveToken(token)).toMatchObject({ id });

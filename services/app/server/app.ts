@@ -1,5 +1,4 @@
 import {getDeploymentState} from '@/lib/deployment';
-import {renderSetupInstaller} from '@/lib/serving/setup-installers';
 import { artifactAppPath } from '@/lib/serving';
 import { type ArtifactRow, canReadArtifact, getArtifactById, effectiveRole, UnservableDocument } from '@/lib/artifacts';
 import { readableApp, artifactManifest, artifactAppIcon, withArtifactAppHead, artifactPwaEnabled } from '@/lib/serving';
@@ -295,8 +294,8 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
   const guessedQuery = /^\/api\/artifacts\/[^/]+\/query\/?$/.test(new URL(c.req.raw.url).pathname);
   return json({
     error: 'not_found',
-    help: guessedQuery ? 'afbin help publishing-query' : 'afbin help',
-    ...(guessedQuery ? { details: ['This route does not exist. Stored document queries use /a/<documentId>/query and select declared queries with {"only":["query_name"]}; they do not accept SQL. Use afbin help publishing-query for methods and access rules.'] } : {}),
+    help: guessedQuery ? '/llms/publishing-query' : '/llms.txt',
+    ...(guessedQuery ? { details: ['This route does not exist. Stored document queries use /a/<documentId>/query and select declared queries with {"only":["query_name"]}; they do not accept SQL. Use /llms/publishing-query for methods and access rules.'] } : {}),
   }, 404, { 'Cache-Control': 'no-store' });
 };
 
@@ -669,37 +668,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // In development Vite owns /assets and dist/web does not exist yet. Avoid
   // registering a static root that can only warn; production builds it first.
   if (existsSync(webDir)) app.use('/assets/*', precompressedStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
-  // The CLI installer and its uninstaller are fetched with `curl … | sh`; serve both the same way.
-  for (const script of ['/install.sh', '/chat/install.sh', '/chat/uninstall.sh']) app.use(script, async (c, next) => {
-    await next();
-    c.header('content-type', 'text/x-shellscript; charset=utf-8');
-    c.header('cache-control', 'public, max-age=300');
-    c.header('x-content-type-options', 'nosniff');
-  });
-  // Node-only entries reuse the audited helpers. A Unix child cannot change its caller's PATH.
-  for (const extension of ['sh', 'ps1']) app.get(`/chat/install-node.${extension}`, c => {
-    const helper = readFileSync(path.join(publicDir, 'chat', `ensure-node.${extension}`), 'utf8');
-    const body = extension === 'sh' ? `#!/bin/bash\nset -e\n${helper}\nprintf '%s\\n' 'Open a new terminal to use Node, npm and npx.'\n` : helper;
-    c.header('content-type', extension === 'sh' ? 'text/x-shellscript; charset=utf-8' : 'text/plain; charset=utf-8');
-    c.header('cache-control', 'public, max-age=300'); c.header('x-content-type-options', 'nosniff');
-    return c.body(body);
-  });
-  // Compatibility URLs prepare Node and invoke npm; every deployment selects its own origin.
-  for (const installer of ['/install.sh', '/chat/install.sh']) app.get(installer, async (c) => {
-    const script = readFileSync(path.join(publicDir, 'chat', 'install.sh'), 'utf8');
-    const deployment=await getDeploymentState(null);
-    c.header('cache-control',deployment.mode==='company'?'no-store':'public, max-age=300');
-    return c.text(renderSetupInstaller(script,baseUrl(c.req.raw),deployment,'sh'));
-  });
-  app.get('/chat/install.ps1', async c => {
-    const script=readFileSync(path.join(publicDir,'chat','install.ps1'),'utf8');
-    const deployment=await getDeploymentState(null);
-    const body=renderSetupInstaller(script,baseUrl(c.req.raw),deployment,'powershell');
-    c.header('content-type','text/plain; charset=utf-8');c.header('cache-control',deployment.mode==='company'?'no-store':'public, max-age=300');c.header('x-content-type-options','nosniff');
-    return c.body(body);
-  });
-  // Retired executable assets must not fall through to static storage.
-  app.use('/chat/releases/*', async c => c.notFound());
+  app.use('/chat/*', async c => c.notFound());
   // Content-addressed islands and the compatibility libraries carry build-time brotli/gzip siblings.
   app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
@@ -715,12 +684,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const wasGuest = (c.req.header('cookie') ?? '').split(/;\s*/).some(part => part.startsWith(`${AGENT_COOKIE}=`));
     return c.redirect(wasGuest ? '/login?signedOut=1' : '/login', 302);
   });
-  app.on(['GET', 'HEAD'], ['/login', '/login/cli'], async c => {
+  app.on(['GET', 'HEAD'], ['/login'], async c => {
     c.header('Cache-Control', 'no-store');
     const actor = await runWithRequest(c.req.raw, () => sessionActor(c.req.raw));
     if (actor.credential === 'session' && actor.userId) {
       const url = new URL(c.req.url);
-      return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw), url.pathname === '/login/cli'), 302);
+      return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw), false), 302);
     }
     return page(c);
   });
