@@ -1,5 +1,5 @@
 import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
-import type {HtmlBackendLink,HtmlDatasetLink} from '@artifactbin/contracts';
+import type {HtmlBackendLink,HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
@@ -119,8 +119,9 @@ export async function artifactQuotaExceeded(tokenId: string, creating = 1): Prom
 
 /** First owning report attachment freezes unresolved memberOf scopes atomically. */
 async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<void> {
- if(document.format!=='markup')return;
- const refs=(document.meta.refs as Array<{id:string}>|undefined)??[];
+ if(document.format!=='html'&&document.format!=='markup')return;
+ const bindings=(document.meta.htmlLinks??[]) as readonly HtmlPageLink[];
+ const refs=document.format==='html'?bindings.filter((link):link is HtmlDatasetLink=>link.kind==='dataset'&&link.mode==='live').map(link=>({id:link.datasetId})):(document.meta.refs as Array<{id:string}>|undefined)??[];
  for(const ref of [...refs].sort((a,b)=>a.id.localeCompare(b.id))) {
   const dataset=(await artifactQuery<ArtifactRow>(tx,"SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
   const catalog=dataset?catalogOf(dataset):null;

@@ -7,7 +7,7 @@
  */
 
 /** Reader runs (offline, publish/prepared, routes, runner, serving, export). */
-export { dataflowForRow, datasetResolverForActor, datasetsForDocument, holdImport, nameablePeople, refDataForRow, referencedArtifactForRow, runDocumentDataflow, viewerIdentityFor } from './dataflow';
+export { dataflowForRow, datasetResolverForActor, datasetsForDocument, holdImport, nameablePeople, refDataForRow, referencedArtifactForRow, runDocumentDataflow } from './dataflow';
 
 /** Writes (the mutate route, operations, runner). */
 export { runDocumentMutation } from './dataflow';

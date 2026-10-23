@@ -1,6 +1,7 @@
+import {nativeHtml} from './native-html-fixture';
+import {nativeDatasetClient} from './native-dataset-http';
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
 import {patchMetadata} from './conditional-request';
-import {POST as documentMutation} from '@/app/a/[id]/mutate/route';
 import {describe, expect, it} from 'vitest';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
@@ -8,11 +9,10 @@ import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/platform';
 import { getArtifactById, changeMembership } from '@/lib/artifacts';
-import { dataflowForRow, viewerIdentityFor } from '@/lib/document-data';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, claimToken, createUser} from '@/lib/accounts';
-import {people} from '@/lib/datasets/user-fields';
+import {people,userOptions} from '@/lib/datasets/user-fields';
 import {avatarUrl} from '@/lib/accounts';
 import {useAppHarness, request} from '@/__tests__/harness';
 import {GET as rawRoute} from '@/app/a/[id]/raw/route';
@@ -47,7 +47,7 @@ describe('native user fields',()=>{
  });
  it('uses union membership, rejects unknown users and enforces replacements',async()=>{
   const a=await account('owner'), b=await account('member'), c=await account('outsider');
-  const report=await create(a.token,{markup:'<h1>Project</h1>',shares:[{email:b.user.email,role:'viewer'}]});
+  const report=await create(a.token,{html:nativeHtml('<h1>Project</h1>'),shares:[{email:b.user.email,role:'viewer'}]});
   const dataset=await create(a.token,{dataset:[{id:1,assignee:null}],columns:[{name:'assignee',type:'user',constraints:{memberOf:[`ref:${report.id}`]}}],access:'readwrite'});
   expect((await mutate(a.token,dataset.id,`update public.rows set assignee='${b.user.id}'`)).status).toBe(200);
   expect((await mutate(a.token,dataset.id,`update public.rows set assignee='${c.user.id}'`)).status).toBe(403);
@@ -56,22 +56,34 @@ describe('native user fields',()=>{
  it('freezes current on first report attachment and supplies typed member choices',async()=>{
   const a=await account('owner'), b=await account('member');
   const dataset=await create(a.token,{dataset:{kind:'stored',tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'},{name:'assignee',type:'user',constraints:{memberOf:['current']}}],rows:[{id:1,assignee:null}]}]},access:'readwrite'});
-  const markup=`<Helmet><Value name="person" source="ref:${dataset.id}" column="assignee" /><Import name="tasks_data" src="ref:${dataset.id}" /><Query name="tasks">{\`select id,assignee as assigned,upper(assignee) as text_only from tasks_data.rows where $person is null or assignee=$person order by id\`}</Query></Helmet><Select value="$person" label="Person" /><DataTable data="$tasks" />`;
-  const report=await create(a.token,{markup,shares:[{email:b.user.email,role:'viewer'}]});
-  const column=(await getArtifactById(dataset.id))!.meta.columns as Array<{constraints?:{memberOf:string[]}}>;
+  const html=`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Assigned work</h1></body></html>`;
+  const report=await create(a.token,{html,shares:[{email:b.user.email,role:'viewer'}]});
+  expect((await getArtifactById(dataset.id))!.version).toBe(2);
+  const archived=await (await getDb()).query<{meta:{columns:Array<{constraints?:{memberOf:string[]}}>}}> ('SELECT meta FROM artifact_versions WHERE artifact_id=$1 AND version=1',[dataset.id]);
+  expect(archived.rows[0].meta.columns[1].constraints?.memberOf).toEqual(['current']);
+  const column=(await getArtifactById(dataset.id))!.meta.columns as Array<{name:string;type:'user';constraints?:{memberOf:string[]}}>;
   expect(column[1].constraints?.memberOf).toEqual([`ref:${report.id}`]);
-  const flow=await dataflowForRow((await getArtifactById(report.id))!,{viewer:identityForUser(a.user.id, a.tokenId, a.user.email)});
-  expect(flow?.state.errors).toEqual({});
-  expect(flow?.state.tables.tasks.columns).toContainEqual({name:'assigned',type:'user',constraints:{memberOf:[`ref:${report.id}`]}});
-  expect(flow?.state.tables.tasks.columns).toContainEqual({name:'text_only',type:'string'});
-  expect(flow?.state.userOptions?.['tasks.assigned'].map(o=>o.value).sort()).toEqual([a.user.id,b.user.id].sort());
-  expect(flow?.state.userOptions?.person).toHaveLength(2);
+  const options=await userOptions(await getDb(),column[1],a.user.id);
+  expect(options.map(option=>option.value).sort()).toEqual([a.user.id,b.user.id].sort());
   const replacement=await replaceRoute(await observedRequest(`/api/artifacts/${dataset.id}`,{method:'PUT',token:a.token,json:{dataset:{kind:'stored',tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'},{name:'assignee',type:'user',constraints:{memberOf:['current']}}],rows:[{id:1,assignee:null}]}]}}}),ctx(dataset.id));
   expect(replacement.status,await replacement.clone().text()).toBe(200);
   expect((await getArtifactById(dataset.id))!.source).toContain(`ref:${report.id}`);
   expect((await getArtifactById(dataset.id))!.source).not.toContain('current');
-  await create(a.token,{markup});
+  await create(a.token,{html});
   expect(((await getArtifactById(dataset.id))!.meta.columns as typeof column)[1].constraints?.memberOf).toEqual([`ref:${report.id}`]);
+ });
+
+ it('refuses foreign-owner current scope binding without archiving or changing the dataset',async()=>{
+  const owner=await account('scope-owner'),other=await account('scope-other');
+  const dataset=await create(owner.token,{dataset:[{who:null}],columns:[{name:'who',type:'user',constraints:{memberOf:['current']}}],access:'readwrite'});
+  const before=await getArtifactById(dataset.id);
+  const html=`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Foreign scope</h1></body></html>`;
+  const response=await createRoute(request('/api/artifacts',{method:'POST',token:other.token,json:{html}}));
+  expect(response.status,await response.clone().text()).toBe(403);
+  const after=await getArtifactById(dataset.id);
+  expect(after?.version).toBe(before?.version);
+  expect(after?.meta).toEqual(before?.meta);
+  expect((await (await getDb()).query('SELECT version FROM artifact_versions WHERE artifact_id=$1',[dataset.id])).rows).toHaveLength(0);
  });
 
  it('keeps historical self values but rejects explicit unchanged assignments by another writer',async()=>{
@@ -85,75 +97,35 @@ describe('native user fields',()=>{
  });
  it('rechecks membership after shares change and accepts membership in either scope',async()=>{
   const a=await account('owner'), b=await account('member');
-  const one=await create(a.token,{markup:'<h1>One</h1>'});
-  const two=await create(a.token,{markup:'<h1>Two</h1>',shares:[{email:b.user.email,role:'viewer'}]});
+  const one=await create(a.token,{html:nativeHtml('<h1>One</h1>')});
+  const two=await create(a.token,{html:nativeHtml('<h1>Two</h1>'),shares:[{email:b.user.email,role:'viewer'}]});
   const dataset=await create(a.token,{dataset:[{who:null}],columns:[{name:'who',type:'user',constraints:{memberOf:[`ref:${one.id}`,`ref:${two.id}`]}}],access:'readwrite'});
   expect((await mutate(a.token,dataset.id,`update public.rows set who='${b.user.id}'`)).status).toBe(200);
   expect((await patchMetadata(a.token,two.id,{shares:[]})).status).toBe(200);
   expect((await mutate(a.token,dataset.id,`update public.rows set who='${b.user.id}'`)).status).toBe(403);
  });
- it('executes a row button as its caller and rejects an anonymous $_me',async()=>{
-  const a=await account('owner'), b=await account('editor');
+ it('executes a native row update as its caller and refuses a forged self identity',async()=>{
+  const a=await account('owner'),b=await account('editor');
   const dataset=await create(a.token,{dataset:[{id:1,who:null}],columns:[{name:'who',type:'user',constraints:{self:true}}],access:'readwrite',shares:[{email:b.user.email,role:'editor'}]});
-  const markup=`<Helmet><Import name="tasks_data" src="ref:${dataset.id}" /><Query name="tasks">{\`select *, '' as action from tasks_data.rows\`}</Query><Import name="done_data" src="ref:${dataset.id}" /><Mutation name="done" expectedAffected={1}>{\`update done_data.rows set who=$_me.id where id=$_row.id\`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="who"/><Column col="action"><Button run="$done">Complete</Button></Column></DataTable>`;
-  const report=await create(a.token,{markup,shares:[{email:b.user.email,role:'editor'}]});
-  const response=await documentMutation(request(`/a/${report.id}/mutate`,{method:'POST',token:b.token,json:{mutation:'done',args:{},row:{id:1}}}),ctx(report.id));
-  expect(response.status,await response.clone().text()).toBe(200);
+  const report=await create(a.token,{visibility:'public',html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${dataset.id}" data-af-mode="live"></head><body><h1>Tasks</h1></body></html>`});
+  const client=nativeDatasetClient(report.id),schema=await client.schema({token:b.token});
+  expect(schema.body.errors).toBeUndefined();const table=schema.body.data!.records!.schema.tables[0]!;
+  const rows=await client.rows(table.id,{token:b.token});const row=rows.body.data!.records!.rows.rows[0]!;
+  const change=(who:string)=>[{kind:'UPDATE',rowId:row.id,cells:[{columnId:table.columns.find(column=>column.label==='who')!.id,value:{type:'STRING',string:who}}]}];
+  const forged=await client.write(table.id,'1',change(a.user.id),'forged-self',{token:b.token});
+  expect(forged.body.data?.records?.writeRows?.outcome).not.toBe('committed');
+  expect((await getArtifactById(dataset.id))?.version).toBe(1);
+  const valid=await client.write(table.id,'1',change(b.user.id),'own-self',{token:b.token});
+  expect(valid.body.data?.records?.writeRows?.outcome,JSON.stringify(valid.body)).toBe('committed');
   expect((await loadDatasetRows((await getArtifactById(dataset.id))!))[0].who).toBe(b.user.id);
-  const anonymous=await mintToken('anonymous', null);
-  const denied=await mutate(anonymous.token,dataset.id,'update public.rows set who=$_me.id');
-  expect(denied.status).toBe(401);
-  expect((await loadDatasetRows((await getArtifactById(dataset.id))!))[0].who).toBe(b.user.id);
+  const anonymous=await mintToken('anonymous',null);expect((await mutate(anonymous.token,dataset.id,'update public.rows set who=$_me.id')).status).toBe(401);
  });
- /*
-  * WHO IS READING, NAMED. A <User> may show the viewer themselves, and the
-  * label comes from the SAME lookup a DataTable cell has always used: one row,
-  * by id, for the person already logged in and asking. Never an email, never a
-  * directory — a guest is told nothing at all.
-  */
- it('names the viewer to themselves and nobody to a guest',async()=>{
-  const reader=await account('reader'), owner=await account('host');
-  const markup='<Helmet><Value name="rows" type="table" value={[{"n":1}]} /></Helmet><p>Paid by <User userId="$_me.id" /></p>';
-  const report=await create(owner.token,{markup,visibility:'public'});
-  const row=(await getArtifactById(report.id))!;
-  const mine=await dataflowForRow(row,{viewer:identityForUser(reader.user.id, null, reader.user.email)});
-  expect(mine?.state.people).toEqual({[reader.user.id]:{name:'reader',handle:null,image:null}});
-  expect(JSON.stringify(mine?.state.people)).not.toContain('@');
-  expect((await dataflowForRow(row,{}))?.state.people ?? {}).toEqual({});
-  // The island carries the same answer, so first paint needs no query at all —
-  // and a document that names nobody pays for no lookup.
-  expect(await viewerIdentityFor({source:markup},reader.user.id)).toEqual({id:reader.user.id,card:{name:'reader',handle:null,image:null}});
-  expect(await viewerIdentityFor({source:'<p>nobody here</p>'},reader.user.id)).toEqual({id:reader.user.id});
-  expect(await viewerIdentityFor({source:markup},null)).toBeNull();
-  // A face and a handle are the same person as a <User>, so they buy the card too.
-  for(const tag of ['<UserImage userId="$_me.id" />','<UserHandle userId="$_me.id" />'])
-   expect(await viewerIdentityFor({source:`<p>${tag}</p>`},reader.user.id)).toEqual({id:reader.user.id,card:{name:'reader',handle:null,image:null}});
- });
- /*
-  * THE SAME PERSON, NAMED TWICE. A person tag's `id` is the person, not the
-  * element: publish must not treat a second `id="$_me"` as a duplicate NODE id
-  * and re-mint it, which left the second tag naming nobody ("Unknown person").
-  * Through the real publish and the real served page, for every person tag.
-  */
- it('keeps every person tag and resolves the reader through the viewer overlay',async()=>{
-  const reader=await account('twice'), owner=await account('host');
-  const cases=[
-   '<p><User userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>',
-   '<p><UserImage userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>',
-   '<p><UserHandle userId="$_me.id" /> <UserImage userId="$_me.id" size="lg" /></p>',
-   '<Helmet><Value name="rows" type="table" value={[{"n":1},{"n":2}]} /></Helmet><p><User userId="$_me.id" /></p><For each={$rows}><span><UserImage userId="$_me.id" /></span></For>',
-  ];
-  for(const markup of cases){
-   const report=await create(owner.token,{markup,visibility:'public'});
-   const stored=(await getArtifactById(report.id))!.source ?? '';
-   expect(stored.match(/userId="\$_me\.id"/g),stored).toHaveLength(2);
-   const html=await (await rawRoute(request(`/a/${report.id}/raw`,{token:reader.token}),ctx(report.id))).text();
-   const body=html.slice(html.indexOf('class="mx-doc"'));
-   expect(body,markup).not.toContain('data-unknown');
-   expect(body,markup).not.toContain('Unknown person');
-   expect(body,markup).toContain('data-mx-ast');
-   expect(await viewerIdentityFor((await getArtifactById(report.id))!,reader.user.id)).toEqual({id:reader.user.id,card:{name:'twice',handle:null,image:null}});
-  }
+ it('serves authored HTML without injecting the reader identity or account credentials',async()=>{
+  const owner=await account('host'),reader=await account('reader');
+  const report=await create(owner.token,{html:nativeHtml('<p data-af-id="reader-label">Authored label</p>'),visibility:'public'});
+  const response=await rawRoute(request(`/a/${report.id}/raw`,{token:reader.token}),ctx(report.id));expect(response.status).toBe(200);
+  const html=await response.text();expect(html).toContain('Authored label');
+  for(const secret of [reader.token,reader.user.id,reader.user.email!])expect(html).not.toContain(secret);
  });
  /*
   * THE CARD, WHOLE. A person is a name, a handle and a picture, and the picture
@@ -185,7 +157,7 @@ describe('native user fields',()=>{
 
 it('offers accepted joiners in constrained user fields and permits assigning them',async()=>{
  const a=await account('joined_owner'), b=await account('joined_reader');
- const report=await create(a.token,{markup:'<h1>Project</h1>',visibility:'public'});
+ const report=await create(a.token,{html:nativeHtml('<h1>Project</h1>'),visibility:'public'});
  const dataset=await create(a.token,{dataset:[{id:1,assignee:null}],columns:[{name:'assignee',type:'user',constraints:{memberOf:[`ref:${report.id}`]}}],access:'readwrite'});
  await changeMembership(identityForUser(b.user.id, b.tokenId),report.id,{action:'join'});
  expect((await mutate(a.token,dataset.id,`update public.rows set assignee='${b.user.id}'`)).status).toBe(403);

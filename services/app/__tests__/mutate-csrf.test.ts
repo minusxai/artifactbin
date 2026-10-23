@@ -4,7 +4,7 @@
  * and logged-out readers cannot mutate even a public document's dataset.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
+import {nativeDatasetClient} from './native-dataset-http';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getProfileRoute, PATCH as patchProfileRoute } from '@/app/api/my/profile/route';
 import { getArtifactById } from '@/lib/artifacts';
@@ -22,7 +22,6 @@ const sessionUser = { id: '', email: '' };
 
 const mutationRequest = (path: string, init: { token?: string; cookie?: string; origin?: string; body?: unknown } = {}) =>
   request(path, { method: 'POST', token: init.token, cookie: init.cookie, origin: init.origin, headers: { 'Content-Type': 'text/plain' }, json: init.body ?? {} });
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, body: Record<string, unknown>) => {
   const res = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
     method: 'POST',
@@ -33,10 +32,14 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return (await res.json()) as { id: string };
 };
 const ROWS = [{ choice: 'ramen' }];
-const DOC = (ds: string) =>
-  '<Helmet><Value name="choice" type="string" default="ramen" />'
-  + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice) values ($choice)\`}</Mutation></Helmet>`
-  + '<div><Button run="$vote">Vote</Button></div>';
+const DOC=(ds:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="records" href="ref:${ds}" data-af-mode="live"></head><body><h1>Vote</h1></body></html>`;
+const documents=new Map<string,{datasetId:string;tableId:string;columnId:string}>();
+async function bind(token:string,ds:string,visibility:string){
+ const doc=(await create(token,{html:DOC(ds),visibility})).id;
+ const schema=await nativeDatasetClient(doc).schema({token});expect(schema.response.status).toBe(200);
+ const table=schema.body.data!.records!.schema.tables[0]!;
+ documents.set(doc,{datasetId:ds,tableId:table.id,columnId:table.columns.find(column=>column.label==='choice')!.id});return doc;
+}
 
 beforeEach(async () => {
   sessionUser.id = '';
@@ -49,11 +52,13 @@ async function setup() {
   const t = await mintToken('t', user.id);
     await claimToken(user.id, t.token);
   const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
-  const doc = (await create(t.token, { markup: DOC(ds), visibility: 'private' })).id;
+  const doc=await bind(t.token,ds,'private');
   return { t, user, ds, doc };
 }
-const write = (doc: string, init: Parameters<typeof mutationRequest>[1]) =>
-  mutateDocRoute(mutationRequest(`/a/${doc}/mutate`, { ...init, body: { mutation: 'vote', args: { choice: 'tacos' } } }), params({ id: doc }));
+const write=async(doc:string,auth:Parameters<typeof mutationRequest>[1])=>{
+ const bound=documents.get(doc)!;const revision=String((await getArtifactById(bound.datasetId))!.version);
+ return (await nativeDatasetClient(doc).write(bound.tableId,revision,[{kind:'INSERT',cells:[{columnId:bound.columnId,value:{type:'STRING',string:'tacos'}}]}],`csrf_${doc}_${revision}`,auth)).response;
+};
 
 describe('cross-site writes', () => {
   it('refuses one riding an ACCOUNT session, and writes nothing', async () => {
@@ -87,7 +92,7 @@ describe('cross-site writes', () => {
   it('never blocks a BEARER, even with a cross-site Origin — an agent is not a browser', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
-    const doc = (await create(t.token, { markup: DOC(ds), visibility: 'public' })).id;
+    const doc=await bind(t.token,ds,'public');
     const res = await write(doc, { token: t.token, origin: 'https://evil.example' });
     expect(res.status, await res.clone().text()).toBe(200);
     expect((await getArtifactById(ds))!.version).toBe(2);
@@ -121,10 +126,11 @@ describe('cross-site writes', () => {
   it('refuses writes from the anonymous served document, including its opaque origin', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
-    const doc = (await create(t.token, { markup: DOC(ds), visibility: 'public' })).id; // public
+    const doc=await bind(t.token,ds,'public'); // public
     // What a sandboxed document sends: Origin "null", no cookie at all.
     const res = await write(doc, { origin: 'null' });
-    expect(res.status, await res.clone().text()).toBe(403);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({data:{records:{writeRows:{outcome:'rejected',revision:null}}},extensions:{outcomes:{'records.writeRows':'rejected'}}});
     expect((await getArtifactById(ds))!.version).toBe(1);
   });
 });

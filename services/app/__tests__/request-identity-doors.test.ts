@@ -9,11 +9,10 @@
  */
 import {afterEach,beforeEach,describe,expect,it} from 'vitest';
 import type {Actor} from '@artifactbin/contracts';
-import {BROWSER_SESSION_HEADER,CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
+import {BROWSER_SESSION_HEADER} from '@artifactbin/contracts';
 import {nativeHtml} from './native-html-fixture';
 import {setDocumentEditorPolicy} from '@/lib/accounts';
 import {GET as list} from '@/app/api/artifacts/route';
-import {POST as preflight} from '@/app/api/artifacts/preflight/route';
 import {GET as read} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
 import {GET as pageSession} from '@/app/api/page/session/route';
@@ -67,14 +66,14 @@ describe('a session cookie alone',()=>{
 });
 
 describe('the token door protocol',()=>{
- it('answers with the account and protocol headers, refuses a mismatched account with 409 and an old CLI mutation with 426',async()=>{
+ it('pins the account while ignoring retired CLI version headers',async()=>{
   const ok=await list(request('/api/artifacts',{token:a.token}));
   expect(ok.headers.get('X-Artifactbin-Account')).toBe(a.userId);
-  expect(ok.headers.get('X-Artifactbin-Protocol')).toBe(String(CLI_PROTOCOL_VERSION));
+  for(const name of ['X-Artifactbin-Protocol','X-Artifactbin-CLI-Version'])expect(ok.headers.get(name)).toBeNull();
   const mismatch=await list(request('/api/artifacts',{token:a.token,headers:{'X-Artifactbin-Account':b.userId!}}));
   expect(mismatch.status).toBe(409);expect(await mismatch.json()).toMatchObject({error:'account_mismatch',actual_account:a.userId});
-  const old=await preflight(request('/api/artifacts/preflight',{method:'POST',token:a.token,json:{},headers:{'X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION-1)}}));
-  expect(old.status).toBe(426);expect(await old.json()).toMatchObject({error:'cli_update_required'});
+  const legacy=await list(request('/api/artifacts',{token:a.token,headers:{'X-Artifactbin-Protocol':'0','User-Agent':'afbin/0.0.1'}}));
+  expect(legacy.status).toBe(200);expect(legacy.headers.get('X-Artifactbin-Protocol')).toBeNull();
  });
 });
 
