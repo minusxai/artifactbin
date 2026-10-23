@@ -41,8 +41,8 @@ async function world() {
   const user = await createUser({ email: 'pages-owner@example.com' });
   const t = await mintToken('pages-owner', user.id);
     await claimToken(user.id, t.token);
-  const publish = async (markup: string, visibility: string) => {
-    const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml(markup), visibility } }));
+  const publish = async (markup: string, visibility: string,head='') => {
+    const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:`<!doctype html><html><head>${head}</head><body>${markup}</body></html>`, visibility } }));
     expect(res.status, await res.clone().text()).toBe(201);
     return ((await res.json()) as { id: string }).id;
   };
@@ -666,9 +666,9 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
     await fixture?.close();
     fixture = null;
   });
-  /** A private document of the owner's whose Helmet declares `connect` (its publish is the owner's consent). */
+  /** A private document of the owner's whose native head declares `connect` (its publish is the owner's consent). */
   const declaring = async (w: Awaited<ReturnType<typeof world>>, connect: string[], visibility = 'private') => {
-    const id = await w.publish(`<Helmet><meta name="csp-connect" content="${connect.join(' ')}" /></Helmet><h1>Rates</h1>`, visibility);
+    const id = await w.publish('<h1>Rates</h1>', visibility,`<meta name="csp-connect" content="${connect.join(' ')}">`);
     return id;
   };
 
@@ -736,7 +736,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const port = fixture.port;
     setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
     const PLOTLY = 'https://cdn.plot.ly';
-    const id = await w.publish(`<Helmet><meta name="csp-connect" content="https://127.0.0.1:${port}" /><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Weather</h1>`, 'public');
+    const id = await w.publish('<h1>Weather</h1>','public',`<meta name="csp-connect" content="https://127.0.0.1:${port}"><meta name="csp-script" content="${PLOTLY}">`);
     const user = await createUser({ email: 'mxmx_test_pages_reader@example.com' });
     const t = await mintToken('pages-reader', user.id);
     await claimToken(user.id, t.token);
@@ -752,7 +752,10 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
       expect(doc.status).toBe(200);
       const script = (doc.headers.get('content-security-policy') ?? '').split('; ').find((d) => d.startsWith('script-src ')) ?? '';
       const fetched = await app.request(`${self}/a/${id}/fetch?url=${encodeURIComponent(`http://127.0.0.1:${port}/now`)}`, { headers: { origin: self, cookie } });
-      return { script, fetched };
+      const etag=doc.headers.get('etag');expect(etag).toBeTruthy();
+      const cached=await app.request(`${self}/`,{headers:{cookie,'if-none-match':etag!}});expect(cached.status).toBe(304);
+      const head=await app.request(`${self}/`,{method:'HEAD',headers:{cookie}});expect(head.headers.get('etag')).toBe(etag);expect(head.headers.get('content-security-policy')).toBe(doc.headers.get('content-security-policy'));
+      return { script, fetched,etag };
     };
 
     const before = await framedAs(null);
@@ -764,6 +767,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     expect(granted.status, await granted.clone().text()).toBe(200);
     const trust = /((?:__Host-)?afbin_trust=[^;]+)/.exec(granted.headers.get('set-cookie') ?? '')![1]!;
     const after = await framedAs(trust);
+    expect(after.etag).not.toBe(before.etag);
     expect(after.script.split(' ')).toContain(PLOTLY);
     expect(after.fetched.status, await after.fetched.clone().text()).toBe(200);
     expect(await after.fetched.json()).toEqual({ ok: true });
@@ -777,7 +781,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const w = await world();
     const app = framing();
     const PLOTLY = 'https://cdn.plot.ly';
-    const id = await w.publish(`<Helmet><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Chart</h1>`, 'public');
+    const id = await w.publish('<h1>Chart</h1>','public',`<meta name="csp-script" content="${PLOTLY}">`);
     const self = pagesOriginFor(id, site);
     /** A signed-out reader opens the app page (with whatever app-origin cookie they hold) and loads its frame. */
     const framedAsGuest = async (appCookie: string | null) => {

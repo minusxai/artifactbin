@@ -42,7 +42,8 @@ import { captureColor } from '@/lib/mermaid-images/store';
 import type { ArtifactHeader, ArtifactRow } from '@/lib/artifacts';
 import { type StoryIslandData, THEME_KEY, withReaderMode } from '@/lib/story-runtime/contract';
 import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http/pages-origin';
-import { carriedTrust } from '@/lib/trust/document-trust';
+import {storedCspExtensions} from '@/lib/document';
+import { carriedTrust,cspRequestFor } from '@/lib/trust/document-trust';
 import type { DocumentFrame } from './document-frame';
 
 export interface ArtifactPageAnswer {
@@ -363,6 +364,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const body = {
     canonical: canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : authorUsername),
     description: row.description,
+    ...(nativeHtml?{cspRequest:await cspRequestFor({artifact:{id:row.id,version:at?.version??artifact.version,declared:storedCspExtensions(row.meta.htmlCsp)},viewer:actor,request})}:{}),
     role,
     kind,
     /*

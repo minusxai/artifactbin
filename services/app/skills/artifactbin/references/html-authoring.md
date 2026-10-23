@@ -38,3 +38,11 @@ Keep source, the saved request and receipt; keep credentials separately. Non-suc
 Backend source is published atomically with HTML as `backendSources:{"garden":"<TypeScript source>"}`. Declare the matching name in an `af-backend` link; [backend files](html-backends.md) define the store and role contract. Dataset links bind existing data with original dataset permissions; [datasets](html-datasets.md) explain discovery and live/pinned versions.
 
 On an update, unchanged backend sources may be omitted. Keep their HTML namespace links to retain those immutable backend versions. A new or changed backend source needs the matching `backendSources` member. Removing its link unlinks it from the new page version; older versions keep their original binding.
+
+## Network consent
+
+Declare additional network origins with normal `<meta>` elements directly in `<head>`, for example `<meta name="csp-script" content="https://cdn.example.com">`. Supported names are `csp-connect`, `csp-script`, `csp-style` (styles and fonts), `csp-img`, `csp-frame` and `csp-media`. Each accepts at most ten space-separated HTTPS origins: no credentials, paths, queries, fragments, HTTP, eval or policy keywords. A wildcard may only be a complete leading subdomain label (`https://*.example.com`). Invalid declarations refuse publication without saving a version.
+
+The publisher trusts the origins they introduced. Other readers choose Allow once for their browser session, Always for this document (signed-in accounts), or Never; revocation forgets the choice. New origins require new consent. Declarations and their publication history belong to each immutable page version; current access permissions and reader consent still apply. These choices never grant access to another page or account credentials.
+
+On the page runner origin, declared `csp-connect` hosts are reached through the page's guarded `/a/PAGE_ID/fetch?url=ENCODED_HTTPS_URL` door, not directly. The door checks current page access, declared origins and reader consent, then applies the existing public-network, redirect, size and time limits. It forwards no account credentials to the remote host. The page sandbox and platform isolation remain in force.

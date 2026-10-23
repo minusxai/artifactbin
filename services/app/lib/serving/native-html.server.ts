@@ -8,7 +8,9 @@ import type { HtmlRuntimeConfig } from '@/lib/html-runtime';
 import { assembleHtmlPage, downloadableHtml } from '@/lib/html-runtime';
 import { buildHtmlCore } from '@/lib/html-runtime/build.server';
 import type { HtmlPageLink } from '@artifactbin/contracts';
-import { buildDocumentCsp, markupCsp } from '@/lib/page-styles';
+import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styles';
+
+import {EMPTY_CSP_EXTENSIONS,type CspExtensions} from '@/lib/document';
 import { ASSETS_ORIGIN } from '@/lib/platform';
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
 
@@ -32,9 +34,9 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
-export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string}):string {
-  if (!pages)return markupCsp(base,id,ASSETS_ORIGIN??undefined);
-  return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
+export function nativeHtmlPolicy(id:string,base:string,pages?:{self:string;app:string},extensions:CspExtensions=EMPTY_CSP_EXTENSIONS):string {
+  if (!pages)return appendCspExtensions(markupCsp(base,id,ASSETS_ORIGIN??undefined),extensions);
+  return buildDocumentCsp({self:pages.self,app:pages.app,id,assetOrigin:ASSETS_ORIGIN,extensions}).replace(/script-src ([^;]+)/,"script-src 'unsafe-inline' $1");
 }
 /** Stored metadata wins; native head text supplies the same first-paint name for older heads. */
 export function nativeHtmlTitle(row:Pick<ArtifactRow,'title'|'source'>):string {

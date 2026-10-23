@@ -50,7 +50,7 @@ async function opened(request: Request, artifactId: unknown): Promise<{ artifact
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
   if (typeof artifactId !== 'string' || !ID_RE.test(artifactId)) return json({ error: 'invalid_artifact_id' }, 400);
   const artifact = await getArtifactById(artifactId);
-  if (!artifact || artifact.format !== 'markup' || !(actor.tokenId === artifact.token_id || (await canReadArtifact(artifact, actor)))) return json({ error: 'not_found' }, 404);
+  if (!artifact || artifact.format !== 'html' || !(actor.tokenId === artifact.token_id || (await canReadArtifact(artifact, actor)))) return json({ error: 'not_found' }, 404);
   return { artifact, actor, viewer: actor };
 }
 
