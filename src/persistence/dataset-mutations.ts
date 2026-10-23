@@ -1,3 +1,4 @@
+import {canonicalMutationReceiptOperation} from "./dataset-receipt-identity.ts";
 import { loadDatasetMembers } from "./dataset-members.ts";
 import {
   validDatasetMutationParameterMap,
@@ -46,6 +47,7 @@ const same = (a: unknown, b: unknown) =>
 function deny(): never {
   throw new DatasetMutationError("denied");
 }
+const sameReceiptOperation = (a:unknown,b:DatasetMutationOperation) => {if(!a||typeof a!=="object")return false;const x=canonicalMutationReceiptOperation(a as DatasetMutationOperation),y=canonicalMutationReceiptOperation(b);return x!==null&&y!==null&&same(x,y);};
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 
@@ -56,6 +58,7 @@ export const registerDatasetMutationOperations: RegisterDatasetOperations =
       if (
         !r.sourceNamespace ||
         !r.bindingName ||
+        o.receiptIdentity !== undefined ||
         !o.name ||
         o.name.length > 128 ||
         !o.sql ||
@@ -150,6 +153,7 @@ async function registered(
     !binding ||
     binding.mode !== "live" ||
     !op ||
+    !canonicalMutationReceiptOperation(op) ||
     op.name !== name ||
     op.backendId !== context.backendId ||
     op.backendVersion !== context.backendVersion ||
@@ -358,26 +362,28 @@ export function createDatasetMutationRepository({
         // Begin and commit acquire this lock before membership/page/resource/
         // receipt locks, so concurrent replay cannot invert their lock order.
         const peek = await registered(client, context, operation.name);
-        if (!peek || !same(peek.operation, operation)) deny();
+        if (!peek || !sameReceiptOperation(peek.operation, operation)) deny();
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':dataset-mutations:' || $1,0))",
           [peek.namespace],
         );
         if (context.subject) await loadGroupAuthority(client, context.subject);
         const reg = await registered(client, context, operation.name, true);
-        if (!reg || !same(reg.operation, operation)) deny();
+        if (!reg || !sameReceiptOperation(reg.operation, operation)) deny();
         const head = await currentHead(client, context, reg, now());
         if (!head) deny();
-        selectDatasetMutationPolicy(head, operation);
+        selectDatasetMutationPolicy(head, reg.operation);
+        const receiptOperation=canonicalMutationReceiptOperation(operation);
+        if(!receiptOperation)deny();
         const scope = hash([
           context.subject,
           context.backendId,
           context.backendVersion,
           context.pageId,
-          operation.page.version,
+          receiptOperation.page.version,
           request.requestId,
         ]);
-        const fingerprint = hash([operation, request]);
+        const fingerprint = hash([receiptOperation, request]);
         const inserted = await client.query(
           "INSERT INTO dataset_mutation_receipts(scope_key,fingerprint,lease_id,context,operation,request,state,created_at) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,'inflight',$7) ON CONFLICT(scope_key) DO NOTHING",
           [
@@ -385,7 +391,7 @@ export function createDatasetMutationRepository({
             fingerprint,
             randomUUID(),
             JSON.stringify(context),
-            JSON.stringify(operation),
+            JSON.stringify(receiptOperation),
             JSON.stringify(request),
             now(),
           ],
@@ -419,7 +425,7 @@ export function createDatasetMutationRepository({
       database.transaction(async (client) => {
         if (context.subject) await loadGroupAuthority(client, context.subject);
         const reg = await registered(client, context, operation.name, true);
-        return reg && same(reg.operation, operation)
+        return reg && sameReceiptOperation(reg.operation, operation)
           ? currentHead(client, context, reg, now())
           : null;
       }),
@@ -470,7 +476,7 @@ export function createDatasetMutationRepository({
         // A coarse per-source commit lock avoids cross-dataset user-reference lock
         // cycles; SQL work and object staging happen outside this short transaction.
         const peek = await registered(client, context, operation.name);
-        if (!peek || !same(peek.operation, operation))
+        if (!peek || !sameReceiptOperation(peek.operation, operation))
           return { kind: "denied" };
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtextextended(current_schema() || ':dataset-mutations:' || $1,0))",
@@ -486,16 +492,16 @@ export function createDatasetMutationRepository({
         if (
           !receipt ||
           !same(receipt.context, context) ||
-          !same(receipt.operation, operation)
+          !sameReceiptOperation(receipt.operation, operation)
         )
           return { kind: "denied" };
         const reg = await registered(client, context, operation.name, true);
-        if (!reg || !same(reg.operation, operation)) return { kind: "denied" };
+        if (!reg || !sameReceiptOperation(reg.operation, operation)) return { kind: "denied" };
         const fresh = await currentHead(client, context, reg, now(), true);
         if (!fresh) return { kind: "denied" };
         let selected;
         try {
-          selected = selectDatasetMutationPolicy(fresh, operation);
+          selected = selectDatasetMutationPolicy(fresh, reg.operation);
         } catch {
           return { kind: "denied" };
         }

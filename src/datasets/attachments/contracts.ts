@@ -20,6 +20,8 @@ export interface DatasetAttachmentContext extends DatasetCallContext {
 }
 /** Trusted publication record. Browser requests never supply this authority. */
 export interface DatasetAttachmentRegistration {
+  /** Trusted presentation-only revision alias; authority still uses binding.page.version. */
+  receiptIdentity?: import("../receipt-identity-contracts.ts").VisualReceiptIdentity;
   backendNamespace: string;
   sourceNamespace: string;
   binding: DatasetBinding;

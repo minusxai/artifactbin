@@ -16,6 +16,8 @@ import type {
 } from "../sql/engine/sql-contracts.ts";
 /** Authored and validated on publication, never accepted in a browser mutation request. */
 export interface DatasetMutationOperation {
+  /** Trusted presentation-only revision alias; authority still uses page.version. */
+  receiptIdentity?: import("../receipt-identity-contracts.ts").VisualReceiptIdentity;
   name: string;
   backendId: string;
   backendVersion: string;

@@ -1,3 +1,4 @@
+import {canonicalAttachmentReceiptRegistration} from "./dataset-receipt-identity.ts";
 import { loadDocumentHeader, loadSession } from "./document-records.ts";
 import { authorizeDocument } from "../server/document-authorization.ts";
 import { createHash, randomBytes } from "node:crypto";
@@ -57,9 +58,8 @@ async function registration(
       ],
     )
   ).rows;
-  return rows.length === 1
-    ? (rows[0]!.registration as DatasetAttachmentRegistration)
-    : null;
+  const saved=rows.length===1?rows[0]!.registration as DatasetAttachmentRegistration:null;
+  return saved&&canonicalAttachmentReceiptRegistration(saved)?saved:null;
 }
 async function authority(
   client: SqlClient,
@@ -126,6 +126,7 @@ async function registerAttachments(
 ): Promise<void> {
   for (const r of registrations) {
     const b = r.binding;
+    if(r.receiptIdentity!==undefined)deny();
     if (
       publication &&
       (publication.pageId !== b.page.id ||
@@ -246,9 +247,11 @@ export function createDatasetAttachmentRepository({
         async (client) => {
           const fresh = await freshLocked(client),
             datasetId = fresh.registration.binding.dataset.id;
+          const receiptRegistration=canonicalAttachmentReceiptRegistration(fresh.registration);
+          if(!receiptRegistration)deny();
           const fingerprint = hash([
             c.pageId,
-            fresh.registration.binding.page.version,
+            receiptRegistration.binding.page.version,
             c.backendId,
             c.backendVersion,
             c.backendNamespace,
