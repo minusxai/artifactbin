@@ -1,6 +1,9 @@
-/** Archived navigation addresses are separate from persistent node identities. */
+/** Archived pages own a complete design system. Keep platform styles outside
+ * their cascade while following reader mode; navigation paths are not node IDs. */
 export const archivedOutlineNavigation: string = `<script>(()=>{
 const root=document.documentElement;
+const preserveDesign=()=>{for(const sheet of document.querySelectorAll('link[data-af="design-system"],style[data-af="design-system"]')){sheet.disabled=true;if(sheet.media!=='not all')sheet.media='not all';}};
+new MutationObserver(preserveDesign).observe(document.head,{childList:true,subtree:true,attributes:true,attributeFilter:['href','media']});preserveDesign();
 const appearance=()=>{if(!root.hasAttribute('data-af-design-system'))return;const dark=root.getAttribute('data-af-dark')==='true';for(const node of [root,...document.querySelectorAll('[data-mx-inline-story]')]){node.classList.toggle('dark',dark);node.classList.toggle('light',!dark);}};
 new MutationObserver(appearance).observe(root,{attributes:true,attributeFilter:['data-af-dark','data-af-design-system']});appearance();
 const rows=()=>[...document.querySelectorAll('.mx-outline-row[data-mx-target]')];
