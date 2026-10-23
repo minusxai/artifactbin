@@ -23,3 +23,10 @@ it('replaces the canonical core loader while retaining its stable node identity'
   expect(result).toContain('data-af="core" data-af-id="n1"');
   expect(result.match(/core\(\)/g)).toHaveLength(1);
 });
+it('round-trips HTML and line-separator characters in viewer state without executable delimiters', () => {
+  const initialState = { label: '<tag></script>', line: String.fromCharCode(0x2028, 0x2029) };
+  const result = assembleHtmlPage({ html: '<html><body></body></html>', core: 'core()', config: { pageId: 'a', revision: '1', backends: [], initialState } });
+  const config = /<script type="application\/json" data-af="runtime">([\s\S]*?)<\/script>/.exec(result)![1]!;
+  expect(config).not.toContain('</script>');
+  expect(JSON.parse(config).initialState).toEqual(initialState);
+});
