@@ -1,3 +1,4 @@
+import { nativeHtmlTitle } from './native-html.server';
 import { artifactPwaEnabled } from './artifact-pwa.server';
 import { membershipState, selfMembership } from '@/lib/artifacts';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
@@ -122,7 +123,7 @@ export async function framedDocumentSrc(request: Request, id: string, site: Page
   if (!ID_RE.test(id)) return null;
   // The frame's address needs the row's identity and format, never its document.
   const artifact = await getArtifactHeaderById(id);
-  if (!artifact || artifact.format !== 'markup') return null;
+  if (!artifact || (artifact.format !== 'markup' && artifact.format !== 'html')) return null;
   const actor = await sessionActor(request);
   if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor))) return null;
   return admittedFrameSrc(request, artifact, actor, site, search, readerPickOf(request));
@@ -232,7 +233,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    */
   const at = await archivedVersionFor(request, artifact, { capture: exporting });
   if (at === 'not_found') return notFound();
-  const isDoc = artifact.format === 'markup';
+  const nativeHtml = artifact.format === 'html';
+  const isDoc = artifact.format === 'markup' || nativeHtml;
 
   // Browser source editing is no longer a document surface. Authoring APIs remain separate.
   if (search.get('part') === 'editor') return notFound();
@@ -248,6 +250,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     const etag = nodesEtag(artifact, role, at);
     const held = matchingTag(request.headers.get('if-none-match'), etag);
     if (held) return { status: 304, body: null, etag: held };
+    if (nativeHtml) return { status: 200, etag, body: { editId: artifact.edit_id, version: at?.version ?? artifact.version, nodes: [] } };
     const { row, page } = await preparedPageFor(artifact, at, { nodes: true });
     return { status: 200, etag, body: { editId: artifact.edit_id, version: row.version, nodes: page.data.nodes } };
   }
@@ -276,15 +279,15 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
   void social.catch(() => {});
   // The shell only: the tree is the nodes door's and the compiled page is the document origin's.
-  const prepared = isDoc ? await preparedPageFor(artifact, at, {}) : null;
+  const prepared = artifact.format === 'markup' ? await preparedPageFor(artifact, at, {}) : null;
   const row = prepared?.row ?? await servedRow(artifact, at);
   // A starter shows agent instructions until its first real version is published.
-  const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
+  const starterDoc = artifact.format === 'markup' && isStartPlaceholder(row.source ?? null, artifact.version);
 
   const membershipAvailable = !at && prepared?.page.declared?.flow.mutations.some(m => 'import' in m.target) === true;
-  const pwaEnabled = !at && artifactPwaEnabled(row);
+  const pwaEnabled = !nativeHtml && !at && artifactPwaEnabled(row);
   // Published documents, including archived versions, run in their own frame.
-  const framedDocument = !!prepared && !starterDoc;
+  const framedDocument = nativeHtml || (!!prepared && !starterDoc);
   // Only the HTML door draws the frame (and mints its ticket); both doors answer a framed document with its FramedRuntime.
   const framing = !!options.pages && framedDocument;
 
@@ -322,12 +325,12 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     social,
     ownerScope ? hasInvitedUsersFor(ownerScope, id) : Promise.resolve(false),
     // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
-    framing && artifact.format === 'markup' && (readerAdmitted || await canReadArtifact(artifact, actor))
+    framing && isDoc && (readerAdmitted || await canReadArtifact(artifact, actor))
       ? admittedFrameSrc(request, artifact, actor, options.pages!, new URL(request.url).search, readerPick) : Promise.resolve(null),
     membershipAvailable ? membershipOf(actor, artifact.id, readerAdmitted) : Promise.resolve(undefined),
     // What the document asks of the network beyond the default policy, and where this reader stands on it:
     // the consent bar (solid/document/CspConsentBar) draws from this. The served row is the version shown.
-    isDoc ? cspRequestFor({ artifact: row, viewer: actor, request }) : Promise.resolve(null),
+    artifact.format === 'markup' ? cspRequestFor({ artifact: row, viewer: actor, request }) : Promise.resolve(null),
   ] as const);
   const served = firstServed;
   const authorUsername = author?.username ?? null;
@@ -336,17 +339,17 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const follow = artifact.user_id && artifact.user_id !== viewerId ? { userId: artifact.user_id, following, count: followCount } : null;
 
   const framedOrigin = framedSrc?.origin ?? null;
-  const frame: DocumentFrame | null = framedSrc && prepared ? {
+  const frame: DocumentFrame | null = framedSrc && (prepared || nativeHtml) ? {
     src: framedSrc.src,
     contentUrl: `/a/${artifact.id}/raw${at ? `?version=${at.version}` : ''}`,
-    title: row.title || prepared.page.title || 'Document',
-    colorMode: readerPick ?? design.colorMode ?? prepared.page.data.colorMode,
+    title: nativeHtml ? nativeHtmlTitle(row) : row.title || prepared?.page.title || 'Document',
+    colorMode: readerPick ?? design.colorMode ?? prepared?.page.data.colorMode ?? 'light',
     head: {
-      title: prepared.page.title,
+      title: nativeHtml ? nativeHtmlTitle(row) : row.title || prepared?.page.title || 'Document',
       description: row.description,
       // `v`: a new card is a new URL. Chat apps cache an unfurl's image by its URL, so a card that changed (a new share
       // image, an edit) under the same URL kept showing the old one; the raw door's head already carried it.
-      image: `${baseUrl(request)}/a/${artifact.id}/export?mode=card&v=${at?.version ?? artifact.version}&r=${CARD_RENDER_GENERATION}${cardSelectionQuery(new URL(request.url).search, prepared.page.declared?.flow ?? null)}`,
+      image: `${baseUrl(request)}/a/${artifact.id}/export?mode=card&v=${at?.version ?? artifact.version}&r=${CARD_RENDER_GENERATION}${cardSelectionQuery(new URL(request.url).search, prepared?.page.declared?.flow ?? null)}`,
     },
   } : null;
   const surface = {
@@ -358,16 +361,16 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     format: artifact.format,
     visibility: artifact.visibility,
     ...(ownerScope ? { hasInvitedUsers } : {}),
-    title: row.title,
+    title: nativeHtml ? nativeHtmlTitle(row) : row.title,
     author: authorMark,
-    ...(served ? {
+    ...(served || nativeHtml ? {
       // The framed page's own sheet, script and reader data are the frame's, and the tree is the nodes door's: the
       // app keeps what it reads (FramedRuntime), whichever door it asked. The starter's read view, which is app UI
       // rather than a frame, keeps the whole served runtime, less the tree.
-      runtime: (framedDocument ? framedRuntime(served.runtime) : served.runtime) satisfies FramedRuntime,
+      runtime: (nativeHtml ? { title: nativeHtmlTitle(row), data: {} } : framedDocument ? framedRuntime(served!.runtime) : served!.runtime) satisfies FramedRuntime,
       // What the reader's chrome derived from the source: the document's own
       // name (lib/document/title) and whether it is still the starter placeholder.
-      heading: firstHeadingTitle(row.source), starter,
+      heading: nativeHtml ? row.title : firstHeadingTitle(row.source), starter,
     } : {
       // The data tiers: their source is their content (a dataset's only for those who may edit it).
       source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:row.source,
@@ -396,7 +399,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     ...(framedOrigin ? { framedOrigin } : {}),
     // The rail's Join/Joined/Pending pill (solid/document/DocumentChrome).
     ...(membership ? { membership } : {}),
-    version: artifact.version,
+    version: nativeHtml ? at?.version ?? artifact.version : artifact.version,
     // Anyone who may COMMENT has a comment badge to fill: computing this
     // for the owner alone left an editor's and a commenter's count at 0
     // forever, on a control they were being shown.

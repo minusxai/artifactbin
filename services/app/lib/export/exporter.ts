@@ -348,10 +348,11 @@ export async function exportImageResponse(
   }
 
   // Full captures honor canonical reader selections; social cards use saved defaults.
-  const isDocument = artifact.format === 'markup';
-  const flow = isDocument && artifact.source ? declarationsOf(artifact.source) : null;
+  const isDocument = artifact.format === 'markup' || artifact.format === 'html';
+  const isMarkup = artifact.format === 'markup';
+  const flow = isMarkup && artifact.source ? declarationsOf(artifact.source) : null;
   const imageOverview = capture === 'preview' && q.image === '1';
-  const imageId = isDocument && (capture === 'card' || imageOverview) ? socialPreviewImage(artifact.source ?? '') : null;
+  const imageId = isMarkup && (capture === 'card' || imageOverview) ? socialPreviewImage(artifact.source ?? '') : null;
   if (imageId) {
     // The caller has authorized the document; resolve its admitted reference
     // in the owner's scope, never by an unrestricted image-id lookup.
@@ -387,7 +388,7 @@ export async function exportImageResponse(
     ...(version === null ? {} : { version }),
     ...(draftCrop
       ? { crop: draftCrop, volatile: true }
-      : capture === 'card' && isDocument
+      : capture === 'card' && isMarkup
         ? { crop: socialPreviewCrop(artifact.source ?? '') }
       : {}),
     ...(selection.token ? { selection: selection.token } : {}),
@@ -411,7 +412,7 @@ export async function exportImageResponse(
     ).toString(),
     // BY NAME, not by position: a served document is the page itself.
     target: isDocument ? 'body' : 'main',
-    ...(isDocument && artifact.source ? { scriptOrigins: scriptModuleOrigins(artifact.source) } : {}),
+    ...(isMarkup && artifact.source ? { scriptOrigins: scriptModuleOrigins(artifact.source) } : {}),
     ...(slide > 0 ? { slide } : {}),
   };
   const rendered=options.volatile||capture==='preview'

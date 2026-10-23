@@ -11,7 +11,8 @@ import { ID_RE } from '@/lib/platform';
 import { assembleArtifactFile, OFFLINE_FILE_MAX_BYTES, serverTiming, timed, type PhaseTimings } from '@/lib/offline/assemble.server';
 import { offlineFileParts } from '@/lib/offline/bundle.server';
 import { renderArtifactFileHtml } from '@/lib/offline/file-html';
-import { getArtifactById, refusingUnservable } from '@/lib/artifacts';
+import { getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow } from '@/lib/artifacts';
+import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/serving/native-html.server';
 import {GET as rawArtifact} from '../raw/route';
 
 /** A filename every OS accepts, from the document's title. */
@@ -25,6 +26,20 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
   const { id } = await ctx.params;
   if (!ID_RE.test(id)) return json({ error: 'not_found' }, 404);
   const artifact=await getArtifactById(id);
+  if (artifact?.format === 'html') {
+    const actor = await requestOrSessionActor(request);
+    if (actor.tokenId !== artifact.token_id && !await canReadArtifact(artifact, actor)) return json({ error: 'not_found' }, 404);
+    const at = await archivedVersionFor(request, artifact);
+    if (at === 'not_found') return json({ error: 'not_found' }, 404);
+    const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
+    const { html } = await nativeHtmlDocument({ row, offline: true });
+    if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({ error: 'too_large' }, 413);
+    const name = fileName(nativeHtmlTitle(row)).replace(/\.jsx\.html$/, '.html');
+    return new Response(html, { headers: {
+      'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
+      'Content-Disposition': `attachment; filename="${name.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    } });
+  }
   if(artifact?.format==='program'){
     const raw=await rawArtifact(request,ctx);if(!raw.ok)return raw;
     const name=fileName(artifact.title??'program').replace(/\.jsx\.html$/,'.program.json');

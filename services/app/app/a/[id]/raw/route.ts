@@ -54,6 +54,8 @@ import { stylesheetStore } from '@/lib/compiled-page';
 import { matchingTag, notModified, REVALIDATE } from '@/lib/http/revalidation';
 import { preparedHeadFor, preparedPageFor, type PreparedView, recompilePage, reprepareStoredPage } from '@/lib/publish/prepared/prepared-page.server';
 import { cspExtensionsFor } from '@/lib/trust/document-trust';
+import { nativeHtmlDocument, nativeHtmlPolicy } from '@/lib/serving/native-html.server';
+import { etagOf } from '@/lib/http/revalidation';
 
 // The markup document's policy — per document, built in lib/page-styles/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -166,6 +168,22 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
   if (!loaded && accessMoved(header, artifact) && !(await admits(artifact))) return notFound();
 
   switch (artifact.format) {
+    case 'html': {
+      const at = domain ? null : await archivedVersionFor(request, artifact, { capture: byExportKey });
+      if (at === 'not_found') return notFound();
+      const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
+      const base = pages?.site.app ?? baseUrl(request);
+      const policy = nativeHtmlPolicy(id, base, pages ? { self: pages.self, app: pages.site.app } : undefined);
+      const rendered = await nativeHtmlDocument({ row, ...(pages ? { appOrigin: pages.site.app } : {}) });
+      const etag = pages && !key && !at ? etagOf({ html: rendered.html, policy, actor }) : null;
+      const held = etag && matchingTag(asked, etag);
+      if (held) return notModified(held);
+      if (!key && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: actor.userId });
+      return new Response(rendered.html, { headers: {
+        ...COMMON, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': policy,
+        ...(etag ? { ETag: etag, 'Cache-Control': REVALIDATE } : {}),
+      } });
+    }
     case 'file': return serveStoredFile(request, artifact);
     case 'dataset':
     {
