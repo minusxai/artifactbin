@@ -10,7 +10,7 @@ export async function readHtmlPage(actor:AccessActor,pageId:string,revision?:str
  const head=access.row;
  let row:{source:string|null;version:number;meta:Record<string,unknown>;format:string}=head;
  if(revision!==undefined&&revision!==String(head.version)){
-  if(!/^[1-9]\d*$/.test(revision))throw new Error('Page revision not found');
+  if(!/^[1-9]\d*$/.test(revision)||!Number.isSafeInteger(Number(revision)))throw new Error('Page revision not found');
   const archived=(await (await getDb()).query<typeof row>(`SELECT v.source,v.version,v.meta,v.format FROM artifact_versions v JOIN artifacts a ON a.id=v.artifact_id AND a.deleted_at IS NULL WHERE v.artifact_id=$1 AND v.version=$2`,[pageId,Number(revision)])).rows[0];
   if(!archived||archived.format!=='html')throw new Error('Page revision not found');row=archived;
  }

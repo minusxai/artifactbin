@@ -1,5 +1,7 @@
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
-import {htmlBackendNames} from '@/lib/html-page';
+import {htmlBackendNames,htmlPageDeclarations} from '@/lib/html-page';
+import {authorizeDatasetBinding} from '@/lib/dataset-graphql';
+import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import type {PreparedHtmlBackend} from '@/lib/html-backends';
 /**
  * THE PUBLISH REQUESTS — create, replace and asset refresh, the use cases both
@@ -23,6 +25,15 @@ import { getDb } from '@/lib/platform/db';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../assets/web-assets';
 import { checkDocumentData } from '../data/data-checks';
+
+async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor):Promise<readonly HtmlDatasetLink[]|undefined|Response>{
+ if(typeof body.html!=='string')return undefined;
+ try{
+  const {datasets}=htmlPageDeclarations(body.html);
+  await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
+  return datasets;
+ }catch{return json({error:'invalid_dataset_binding'},400);}
+}
 
 async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):Promise<PreparedHtmlBackend[]|undefined|Response>{
  if(body.backendSources===undefined){
@@ -177,12 +188,14 @@ export async function replaceArtifactWithBody(
   }
   if (options.dryRun) return preflightReply(prepared);
 
+  const htmlDatasets=await prepareHtmlDatasets(body,actor);if(htmlDatasets instanceof Response)return htmlDatasets;
   const htmlBackends=await prepareHtmlBackends(body);if(htmlBackends instanceof Response)return htmlBackends;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
     ...(htmlBackends?{htmlBackends}:{}),
+    ...(htmlDatasets?{htmlDatasets}:{}),
     ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : {}),
     ...(body.description===null || typeof body.description === 'string' ? { description: body.description } : {}),
     ...(visibility ? { visibility } : {}),
@@ -300,6 +313,7 @@ export async function createArtifactFromBody(
 
   if (options.dryRun) return preflightReply(prepared);
 
+  const htmlDatasets=await prepareHtmlDatasets(body,actor);if(htmlDatasets instanceof Response)return htmlDatasets;
   const htmlBackends=await prepareHtmlBackends(body,true);if(htmlBackends instanceof Response)return htmlBackends;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
@@ -308,6 +322,7 @@ export async function createArtifactFromBody(
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
     ...(htmlBackends?{htmlBackends}:{}),
+    ...(htmlDatasets?{htmlDatasets}:{}),
     title: body.title===null || typeof body.title === 'string' ? body.title : parsed.derivedTitle,
     description: body.description===null || typeof body.description === 'string' ? body.description : null,
     ...(visibility ? { visibility } : {}),

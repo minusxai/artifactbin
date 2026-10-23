@@ -1,5 +1,5 @@
 import { commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
-import type {HtmlBackendLink} from '@artifactbin/contracts';
+import type {HtmlBackendLink,HtmlDatasetLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
@@ -59,6 +59,7 @@ export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'user_id
 export interface ArtifactInput {
   /** Server-prepared only; never decoded from caller metadata. */
   htmlBackends?:readonly PreparedHtmlBackend[];
+  htmlDatasets?:readonly HtmlDatasetLink[];
   destination?:ArtifactDestination;
   title?: string | null;
   description?: string | null;
@@ -259,8 +260,9 @@ async function insertArtifact(
     const names=htmlBackendNames(input.source??'');
     if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
     const links=await commitHtmlBackends(tx,id,userId??tokenId,input.htmlBackends,[]);
-    input={...input,meta:{...input.meta,htmlLinks:links}};
+    input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
   }
+  if(input.format==='html'&&!input.htmlBackends&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:input.htmlDatasets}};
   const created = await artifactQuery<ArtifactRow>(tx,
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
@@ -640,12 +642,12 @@ async function replaceScoped(
       }catch(error){return json({error:'invalid_html',details:[error instanceof Error?error.message:String(error)]},400);}
     }
     if(input.format==='html'){
-      const previous=(current.meta.htmlLinks??[]) as HtmlBackendLink[];
+      const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');
       const names=htmlBackendNames(input.source??'');
       if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
       const changed=input.htmlBackends?await commitHtmlBackends(tx,id,current.user_id??current.token_id,input.htmlBackends,previous):[];
       const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
-      input={...input,meta:{...input.meta,htmlLinks:links}};
+      input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
     }
     input=retainUserScope(input,current);
     /*

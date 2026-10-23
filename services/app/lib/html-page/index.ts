@@ -1,3 +1,5 @@
+import type {HtmlDatasetLink} from '@artifactbin/contracts';
+import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source';
 import type { CanonicalHtmlOptions, CanonicalHtmlPage } from './contracts';
@@ -41,16 +43,31 @@ export function canonicalizeHtmlPage(input:string, options:CanonicalHtmlOptions=
   seen.add(id);allocated.add(id);edits.push(insertAttribute(html,element,'data-af-id',id));
  }
  html=applyEdits(html,edits);
+ htmlPageDeclarations(html);
  return {html,ledger:{allocatedIds:[...allocated],nextNodeId:next},nodeIds:[...seen]};
 }
-/** A backend namespace is declared in HTML, never inferred from a network URL. */
-export function htmlBackendNames(html:string):string[]{
- const names:string[]=[];
+/** Namespaces are declarations, never inferred from arbitrary network URLs. */
+export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
+ const backends:string[]=[];const datasets:HtmlDatasetLink[]=[];const names=new Set<string>();
  for(const element of allElements(html).all){
-  if(element.tagName!=='link'||!(attribute(element,'rel')??'').split(/\s+/).includes('af-backend'))continue;
+  if(element.tagName!=='link')continue;
+  const rel=(attribute(element,'rel')??'').split(/\s+/);
+  const backend=rel.includes('af-backend'),dataset=rel.includes('af-dataset');
+  if(!backend&&!dataset)continue;
+  if(backend&&dataset)throw new Error('A link declares one namespace kind');
   const name=attribute(element,'data-af-name');
-  if(!name||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__'))throw new Error('Invalid backend namespace');
-  if(names.includes(name))throw new Error('Duplicate backend namespace');names.push(name);
+  if(!name||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__'))throw new Error('Invalid namespace');
+  if(names.has(name))throw new Error('Duplicate namespace');names.add(name);
+  if(names.size>20)throw new Error('Too many namespaces');
+  if(backend){backends.push(name);continue;}
+  const match=/^ref:([A-Za-z0-9]{6,128})$/.exec(attribute(element,'href')??'');
+  if(!match)throw new Error('Dataset href must name an artifact as ref:<id>');
+  const mode=attribute(element,'data-af-mode')??'live';
+  const revision=attribute(element,'data-af-revision');
+  if(mode==='live'&&revision===null)datasets.push({kind:'dataset',name,datasetId:match[1]!,mode:'live'});
+  else if(mode==='pinned'&&revision&&/^[1-9]\d*$/.test(revision)&&Number.isSafeInteger(Number(revision)))datasets.push({kind:'dataset',name,datasetId:match[1]!,mode:'pinned',revision});
+  else throw new Error('Dataset link requires live mode or pinned mode with a valid revision');
  }
- return names;
+ return {backends,datasets};
 }
+export function htmlBackendNames(html:string):string[]{return [...htmlPageDeclarations(html).backends];}

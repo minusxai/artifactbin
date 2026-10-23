@@ -1,22 +1,7 @@
 import type {ContentObjects} from '@/lib/object-store/prepared-objects';
-/**
- * Shared request-body → stored-content translation for POST and PUT. A body
- * carries exactly ONE content field:
- *   - `markup`   — THE document: story JSX over the kit, the data embeds, the
- *     HTML vocabulary and <Helmet>. The ONLY document input there is.
- *   - `dataset` | `viz` | `image` | `pdf` — the data tiers
- *   - `format: 'folder'` — the ONE body with no content field at all. A folder
- *     has NO CONTENT: its page is a listing built from the row, so there is
- *     nothing for a caller to send and nothing here to parse. It leaves with
- *     `source: ''`, and stays that way — the replace door
- *     refuses content on a folder rather than turning it into a document.
- *
- * markdown and html are not inputs: HTML is the VOCABULARY inside a document,
- * and markdown is not an authoring language here at all. Both are rejected by
- * name so an agent that sends the old shape is told what replaced it instead
- * of reading "one of".
- *
- * Returns the stored fields or the error Response the route should send.
+/** Shared JSON content admission for original artifact create/replace routes.
+ * Native pages use `html`: complete HTML, canonicalized under the publication
+ * transaction. Data and byte tiers retain their original inputs and authority.
  */
 import { json } from '../../http/http';
 import { canonicalizeHtmlPage } from '@/lib/html-page';

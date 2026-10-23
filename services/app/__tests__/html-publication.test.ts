@@ -32,3 +32,18 @@ it('rejects retired IDs under the locked head and never writes a foreign or dele
  expect((await send(actor.token,head.html.replace('</body>','<p data-af-id="text">reborn</p></body>'))).status).toBe(400);
  await DELETE(request(`/api/artifacts/${first.id}`,{method:'DELETE',token:actor.token}),params(first.id));expect((await send(actor.token,html)).status).toBe(404);
 });
+it('authorizes dataset declarations and snapshots explicit live and pinned bindings',async()=>{
+ const owner=await mintAccountToken('dataset-owner');const outsider=await mintAccountToken('dataset-other');
+ const datasetReply=await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{name:'One',value:1}],visibility:'private'}}));expect(datasetReply.status).toBe(201);const dataset=await datasetReply.json();
+ const source=`<html><head><link rel="af-dataset" data-af-name="live" href="ref:${dataset.id}"><link rel="af-dataset" data-af-name="old" href="ref:${dataset.id}" data-af-mode="pinned" data-af-revision="1"></head><body>Data</body></html>`;
+ const denied=await POST(request('/api/artifacts',{method:'POST',token:outsider.token,json:{html:source}}));expect(denied.status).toBe(400);
+ const saved=await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:source}}));expect(saved.status).toBe(201);const page=await saved.json();
+ const db=await harness.db();const row=(await db.query<{meta:{htmlLinks:unknown[]}}>('SELECT meta FROM artifacts WHERE id=$1',[page.id])).rows[0];expect(row?.meta.htmlLinks).toEqual([{kind:'dataset',name:'live',datasetId:dataset.id,mode:'live'},{kind:'dataset',name:'old',datasetId:dataset.id,mode:'pinned',revision:'1'}]);
+});
+it('serializes concurrent HTML saves at one observed head',async()=>{
+ const actor=await mintAccountToken('concurrent-html');const created=await (await publish(actor.token)).json();
+ const head=await (await GET(request(`/api/artifacts/${created.id}`,{token:actor.token}),params(created.id))).json();
+ const send=(text:string,key:string)=>PUT(request(`/api/artifacts/${created.id}`,{method:'PUT',token:actor.token,json:{html:head.html.replace('Hello',text),expectedVersion:head.version,expectedState:head.state},headers:{'Idempotency-Key':key}}),params(created.id));
+ const results=await Promise.all([send('One','concurrent-one-0123456789'),send('Two','concurrent-two-0123456789')]);expect(results.map(result=>result.status).sort()).toEqual([200,409]);
+ const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifact_versions WHERE artifact_id=$1',[created.id])).rows[0]?.n).toBe(1);
+});
