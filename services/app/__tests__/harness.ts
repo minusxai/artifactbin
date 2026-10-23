@@ -17,7 +17,6 @@ import { overrideCatalogExecutor } from '@/lib/datasets/execute';
 import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, resetDb } from '@/lib/platform/db';
 import { resetExportRenderer } from '@/lib/export/exporter';
-import { services } from '@/lib/platform/services';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
 import { createHash, randomUUID } from 'node:crypto';
 import { mintToken as mintRawToken, MAX_TOKEN_TTL_MS } from '@/lib/accounts/tokens';
@@ -131,18 +130,6 @@ export function cookieValue(response: Response, name: string = AGENT_COOKIE): { 
     if (match) return { value: match[1] ?? '', cleared: /(?:^|;\s*)Max-Age=0(?:;|$)/i.test(setCookie) };
   }
   return { value: null, cleared: false };
-}
-
-/**
- * Let a write's fire-and-forget work land before a test counts its own queries: the events writer's
- * lazy schema setup and insert, and the analytics row. Waits for the writer's setup, lets every queued
- * continuation run, then passes one statement through the database's serialized queue, so anything
- * already sent has finished.
- */
-export async function settleBackgroundWrites(): Promise<void> {
-  await (services().events as { drain?: () => Promise<void> }).drain?.();
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  await (await getDb()).query('SELECT 1');
 }
 
 /**

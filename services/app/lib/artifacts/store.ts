@@ -776,16 +776,6 @@ export type EditOutcome =
   | { applied: false; reason: 'not_editable' }; // data tiers are values, not documents
 
 /**
- * Save-less editing writes constantly, so `artifact_versions` snapshots
- * coalesce: the first edit after this much quiet archives the pre-edit state,
- * everything inside the burst rides on it. The decision is made in SQL (a NOT
- * EXISTS over the edit log) so it costs no extra round trip.
- */
-
-/** How many times a lost CAS race is retried before we give up and report the conflict. */
-export const MAX_STALE_EDITS = 200;
-
-/**
  * After a patch commit, whose final source only exists once the database has
  * applied it: compile that source under its owner's reach and store the
  * record beside it — unless the row has moved on, in which case the next read
@@ -866,7 +856,7 @@ async function patchesSince(db: Queryable, id: string, baseVersion: number, head
 
 /** Clients own semantic validation and patch preparation. This boundary owns
  * authorization and the atomic operation/dependency/history commit. */
-export async function applyEditScoped(actor: AccessActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
+async function applyEditScoped(actor: AccessActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
   const db = await getDb();
   const scope = opts.scope ?? editorScope(actor);
   if(input.documentUpdate){
