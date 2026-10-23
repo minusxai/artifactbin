@@ -1,4 +1,3 @@
-import {renderSocialPreviewImage} from '../publish/assets/social-preview-image.server';
 /** Export policy and adapters. The DB cache owns refresh coordination; the browser
  * owns readiness/capture/upload; the asset route streams immutable stored images.
  * Routes authorize the artifact before calling this module. */
@@ -8,22 +7,19 @@ import type {RenderRequest} from '@artifactbin/contracts';
 import {getDb} from '../platform/db';
 import {createExportCache,type ExportImage} from './cache';
 import {exportAssetUrl} from './assets';
-import { loadImage } from '@/lib/object-store/image-store';
 import { createHash } from 'node:crypto';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform/config';
 import { services } from '@/lib/platform/services';
-import { ArtifactRow, getArtifactById, VERSION_PARAM } from '@/lib/artifacts';
-import { referencedArtifactForRow } from '@/lib/document-data';
+import { ArtifactRow, VERSION_PARAM } from '@/lib/artifacts';
 import {
-  declarationsOf, SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage,
+  SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop,
   type SocialPreviewCrop,
 } from '../document';
-import { scriptModuleOrigins, scriptRenderAllowance } from './script-origins';
+import { scriptRenderAllowance } from './script-origins';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@artifactbin/contracts';
 import { mintExportKey } from '@/lib/platform/export-read-key';
 import { json } from '../http/http';
 import { objectStore } from '../object-store/index';
-import { urlSelection } from '@/lib/dataflow';
 
 const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
 type ExportFormat = keyof typeof EXPORT_MIME;
@@ -348,38 +344,8 @@ export async function exportImageResponse(
   }
 
   // Full captures honor canonical reader selections; social cards use saved defaults.
-  const isDocument = artifact.format === 'markup';
-  const flow = isDocument && artifact.source ? declarationsOf(artifact.source) : null;
-  const imageOverview = capture === 'preview' && q.image === '1';
-  const imageId = isDocument && (capture === 'card' || imageOverview) ? socialPreviewImage(artifact.source ?? '') : null;
-  if (imageId) {
-    // The caller has authorized the document; resolve its admitted reference
-    // in the owner's scope, never by an unrestricted image-id lookup.
-    const document = await getArtifactById(artifact.id);
-    const image = document ? await referencedArtifactForRow(document, imageId) : null;
-    if (image?.format === 'image') {
-      try {
-        const produceCover=async()=>{
-          const stored = await loadImage(image);
-          if(!stored)throw new Error('Cover unavailable');
-          return renderSocialPreviewImage(stored.body,artifact.source??'',format,imageOverview);
-        };
-        if(imageOverview)return new Response(new Uint8Array(await produceCover()),{headers:{'content-type':EXPORT_MIME[format],'cache-control':'private, no-store','x-content-type-options':'nosniff'}});
-        const cover=await (await sharedCache()).read({
-          cacheKey:`${artifact.id}:cover-g${EXPORT_RENDER_GENERATION}:${format}`,
-          artifactId:artifact.id,revision:`${exportRevision(artifact)}:${image.id}:${exportRevision(image)}`,refresh:q.refresh==='1',
-        },async id=>storeBytes(id,await produceCover(),format));
-        return imageResponse(cover,base,delivery);
-      } catch {
-        // A removed or unreadable asset falls back to the saved document crop.
-      }
-    }
-  }
-  if (imageOverview) return json({ error: 'image_unavailable' }, 404);
-  // A card follows the link's values like the whole page does: a shared `?$region=EU` unfurls showing EU (its key
-  // carries the canonical selection). Only the editor's framing overview is of the document as authored.
-  const selection = capture === 'preview' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
-
+  const isDocument = artifact.format === 'html';
+  if (capture === 'preview' && q.image === '1') return json({ error: 'image_unavailable' }, 404);
   const version = q.version ?? null;
   const options:ImageOptions = {
     refresh:q.refresh==='1',
@@ -387,10 +353,8 @@ export async function exportImageResponse(
     ...(version === null ? {} : { version }),
     ...(draftCrop
       ? { crop: draftCrop, volatile: true }
-      : capture === 'card' && isDocument
-        ? { crop: socialPreviewCrop(artifact.source ?? '') }
+
       : {}),
-    ...(selection.token ? { selection: selection.token } : {}),
     // The headless browser has no session, so a private page would 404 on
     // itself. Mint a signed, seconds-long key scoped to this artifact —
     // minted only AFTER the caller's ACL admitted the requester, and never a
@@ -405,13 +369,12 @@ export async function exportImageResponse(
         // raw route resolves it under the exporter's verified key, so the shot
         // is of that version or it is the uniform 404 — never of the head
         // wearing an archived version's number.
-        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}${version === null ? '' : `&${VERSION_PARAM}=${version}`}${selection.search ? `&${selection.search}` : ''}`
+        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}${version === null ? '' : `&${VERSION_PARAM}=${version}`}`
         : `/a/${artifact.id}?key=${mintExportKey(artifact.id)}`,
       EXPORT_INTERNAL_ORIGIN ?? base,
     ).toString(),
     // BY NAME, not by position: a served document is the page itself.
     target: isDocument ? 'body' : 'main',
-    ...(isDocument && artifact.source ? { scriptOrigins: scriptModuleOrigins(artifact.source) } : {}),
     ...(slide > 0 ? { slide } : {}),
   };
   const rendered=options.volatile||capture==='preview'

@@ -43,7 +43,7 @@ describe('buildIslands', () => {
       expect(url, specifier).toMatch(/^\/islands\/[\w-]+-[0-9a-f]{8,}\.js$/);
       expect(existsSync(path.join(outDir, url.slice('/islands/'.length))), `${specifier} → ${url} exists`).toBe(true);
     }
-    expect(Object.keys(written).sort()).toEqual(['build', 'files', 'manifest', 'offline', 'sqliteWasm', 'ssr']);
+    expect(Object.keys(written).sort()).toEqual(['build', 'files', 'manifest', 'sqliteWasm', 'ssr']);
     expect(written.sqliteWasm).toMatch(/^\/islands\/sqlite3-[0-9a-f]{16}\.wasm$/);
     // Exactly one Solid in the shared graph: its DOM runtime (the event-delegation key is a string literal in solid-js/web)
     // is in one chunk. The frame editor is its own graph (build-islands FRAME_EDITOR) and carries its own copy, in its own file.
@@ -54,7 +54,6 @@ describe('buildIslands', () => {
     expect(solidWebIn(Object.keys(first.files).filter(isEditorFile))).toHaveLength(1);
     // ... and the author script's `solid-js/web`, the page runtime and rt all reach that one chunk.
     for (const specifier of ['@mx/rt', '@mx/page-runtime', 'solid-js/web']) expect(first.closure([first.manifest[specifier]]), specifier).toContain(withSolidWeb[0]);
-    expect(first.offline).toMatch(/^\/islands\/offline-[0-9a-f]{16}\.json\.gzip$/);
   });
 
   it('ships an optional, content-addressed glyph catalog without React in the reader graph', () => {

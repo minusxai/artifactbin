@@ -20,7 +20,7 @@ export type { JsxElement, JsxNode } from '../jsx';
 
 // ---- Document model: the head (Helmet), node ids, validation and canonical source.
 export {
-  canonicalizeMarkup, dataflowOf, declarationsOf, formatMarkupSource, nodeIndex, socialPreviewCrop, socialPreviewImage, splitHelmet, stampNodeIds, stampNodeIdsInPlace,
+  canonicalizeMarkup, dataflowOf, declarationsOf, formatMarkupSource, nodeIndex, stampNodeIds, stampNodeIdsInPlace,
   validateMarkupStructure,
 } from '../document';
 export { assetFormatOf, fileContentType } from '@artifactbin/contracts';
@@ -37,12 +37,11 @@ export type { AnnotationRange } from '../document';
 export { annotationAuthorForAgent } from '../annotations/author';
 export type { AnnotationWire } from '../annotations/store';
 export type { AnnotationAuthor, AnnotationCommentWire } from '@artifactbin/contracts';
-export { validateFileComments } from '../offline/comment-validation';
 
 // ---- Dataflow: compile and evaluate a document's queries locally.
 export { compileWithLoader, validateVizAgainstColumns } from '../dataflow/server';
 export { collectRefUses } from '../dataflow/references';
-export { refName, selectQueries, type ImportTables, evaluateDataflow, type RunDataflowOptions, validateQueryValues, imageReferenceId, REFERENCE_POSITIONS, type CompiledDataflow, type Dataflow, type DataflowState, type DatasetColumn, type RefDataMap } from '../dataflow';
+export { refName, selectQueries, type ImportTables, evaluateDataflow, type RunDataflowOptions, validateQueryValues, REFERENCE_POSITIONS, type CompiledDataflow, type Dataflow, type DataflowState, type DatasetColumn } from '../dataflow';
 
 // ---- Data ingest: CSV and GeoJSON files as typed rows.
 export { coerceRows } from '../data-ingest/coerce';
@@ -50,18 +49,11 @@ export { parseCsv } from '../data-ingest/csv';
 export { geoJsonRows, rowsGeoJson } from '../data-ingest/geojson';
 
 // ---- Designs and templates: the names validation and the teaching accept.
-export { resolveStoredStoryDesign } from '../data/story/story-themes';
 export { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '../validation/atlas-schemas';
-export type { StoryDesignName } from '../validation/atlas-schemas';
 
-// ---- Local artifact file format (the offline `.html` file).
-export { sourceDigest } from '../offline/file-format';
-export type { ArtifactFile } from '../offline/file-format';
-export { readArtifactFileHtml } from '../offline/offer';
 
 // ---- Backend contract: the artifact backend's errors and answers, dataset definitions.
 export { BackendRequestError } from '../artifact-backend/errors';
-export type { ArtifactVersionSnapshot, ArtifactVersionSummary, EditAnswer, LoadedArtifact } from '../artifact-backend/types';
 export { parseDatasetDefinition } from '../datasets/definition';
 export type { CatalogInput, DatasetConnection } from '../datasets/types';
 

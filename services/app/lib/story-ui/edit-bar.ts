@@ -1,6 +1,3 @@
-/** A single document-actions row. Appearance and formatting live in the Selection panel. */
-export const EDIT_BAR_H = 44;
-
 /** The page's own bar, drawn above the editor bar in edit mode. */
 export const APP_BAR_H = 44;
 

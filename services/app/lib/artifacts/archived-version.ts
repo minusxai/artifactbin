@@ -106,7 +106,7 @@ export async function archivedVersionFor(
   if (asked === 'none') return null;
   // Only a DOCUMENT has a version to render. A dataset, an image or a PDF at
   // `?version=` is the uniform 404 — not a second, half-built history view.
-  if (asked === 'invalid' || row.format !== 'markup') return 'not_found';
+  if (asked === 'invalid' || row.format !== 'html') return 'not_found';
   const head = row.version;
   if (opts.capture) {
     if (asked === head) return archived(asked, head, headRender(row));
@@ -126,7 +126,7 @@ export async function archivedVersionForActor(
   row: ArtifactRow,
   asked: number,
 ): Promise<ArchivedRender | 'not_found'> {
-  if (row.format !== 'markup' || !Number.isInteger(asked) || asked < 1) return 'not_found';
+  if (row.format !== 'html' || !Number.isInteger(asked) || asked < 1) return 'not_found';
   const head = row.version;
   // History is an editor's: nobody (no account, no token) reads it.
   if (!actor.userId && !actor.tokenId) return 'not_found';

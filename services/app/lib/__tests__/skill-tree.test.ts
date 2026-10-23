@@ -226,7 +226,7 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
   ];
   it.each(['cli', 'http'] as const)('obeys every tree rule in the %s flavour, less the listed debt', (transport) => {
     const problems = validateSkillTree(tree, (file) => renderSkill(file, { base: SIZE_BASE, transport }));
-    expect(problems.map(rule).sort()).toEqual([...KNOWN].sort());
+    expect(problems.map(rule).sort()).toEqual(KNOWN.filter(item=>transport==='cli'||item!=='artifactbin/SKILL.md: no Contents').sort());
   });
   /**
    * THE byte-cap sweep. It used to be asserted in seven places — the brief, the auth rule, the
@@ -271,18 +271,11 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
       expect(text).toContain('optional historical selection');
     }
   });
-  it('shows transport-appropriate example source from the shared example',()=>{
+  it('keeps native public HTML separate from the retained internal compiler example',()=>{
     const root=tree.get('artifactbin/SKILL.md')!;
     const http=renderSkill(root,{base:BASE,transport:'http'});
-    const cli=renderSkill(root,{base:BASE,transport:'cli'});
-    const example=(text:string)=>text.split('## Example')[1]!.match(/```jsx\n([\s\S]*?)```/)![1]!;
-    expect(example(http).trimStart()).toMatch(/^<Helmet>/);
-    expect(example(cli).trimStart()).toMatch(/^---\n/);
-    expect(example(http)).toContain('<title>Q3 sales review</title>');
-    expect(example(cli)).toContain(example(http));
-    expect(http).toContain('Metadata belongs in JSON request fields.');
-    expect(http).toContain('Do not send a YAML metadata fence.');
-    expect(cli).toContain('YAML metadata fence');
+    expect(http).toContain('normal HTML');expect(http).not.toContain('```jsx');
+    expect(renderSkill(root,{base:BASE,transport:'cli'})).toContain('```jsx');
   });
   it.each([BASE, 'https://artifactbin.dev', 'https://app.artifactbin.dev', 'https://artifacts.company.example'])('keeps both transport roots within budget at %s',base=>{
     expect(Buffer.byteLength(renderSkill(tree.get('artifactbin/SKILL.md')!,{base,transport:'http'}))).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);

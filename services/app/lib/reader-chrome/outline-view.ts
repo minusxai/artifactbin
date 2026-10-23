@@ -13,10 +13,6 @@ function rowsHtml(entries: readonly OutlineEntry[]): string {
   }).join('');
 }
 
-export function renderOutlineRail(entries: readonly OutlineEntry[]): string {
-  return `<nav class="mx-outline" aria-label="Contents"${entries.length ? '' : ' hidden'}>${rowsHtml(entries)}</nav>`;
-}
-
 const drawn = new WeakMap<HTMLElement, string>();
 /** Update only navigation: the column and its focused editor never move or remount. */
 export function syncDocumentOutline(root: HTMLElement, nodes: JsxNode[]): void {

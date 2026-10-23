@@ -15,7 +15,6 @@ import { claimToken, createUser, exchangePagesTicket, issuePagesTicket, pagesSes
 import { DELETE as clearSession } from '@/app/api/session/token/route';
 import { measureQueries } from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
 import { framedDocumentSrc } from '@/lib/serving/artifact-page';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';
@@ -49,7 +48,6 @@ async function world() {
   };
   const secret = await publish(DOC, 'private');
   const other = await publish('<h1>Another</h1>', 'private');
-  await drainPreparedPageWarmups();
   const actor: Actor = { credential: 'session', userId: user.id, email: 'pages-owner@example.com', emailVerified: true };
   return { user, actor, secret, other, token: t, publish };
 }
@@ -109,7 +107,6 @@ describe('the app page frames the document on its own origin', () => {
     const t = await mintToken('public-owner');
     const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>Open</h1>', visibility: 'unlisted' } }));
     const { id } = (await res.json()) as { id: string };
-    await drainPreparedPageWarmups();
     const html = await (await framing().request(`${APP}/a/${id}`, { headers: { accept: 'text/html' } })).text();
     const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&'));
     expect(src.searchParams.get('_pt')).toBe('-');
@@ -123,7 +120,6 @@ describe('the reader\'s selection in the app page\'s address reaches the frame',
   it('forwards every `$` param of the page\'s address into the frame\'s first URL, and the document starts from it', async () => {
     const w = await world();
     const id = await w.publish('<Helmet><Value name="region" type="string" default="north" /><Value name="zoom" type="number" default={2} /></Helmet><p>{$region}</p>', 'private');
-    await drainPreparedPageWarmups();
     const app = framing();
     const self = pagesOriginFor(id, site);
     const page = await app.request(as(`${APP}/a/${id}?$region=west&$zoom=5`, w.actor, { headers: { accept: 'text/html' } }));
@@ -225,7 +221,6 @@ describe('the pages session', () => {
     expect(((await read.json()) as { tables: Record<string, { rows: Array<Record<string, unknown>> }> }).tables.counted!.rows[0]).toMatchObject({ n: 2 });
     // The session mark with no transport behind it is nobody's session: a guest page, the guest marker.
     const open = await w.publish('<h1>Open</h1>', 'unlisted');
-    await drainPreparedPageWarmups();
     const unmarked = await (await app.request(`${APP}/a/${open}`, { headers: { accept: 'text/html', [BROWSER_SESSION_HEADER]: '1', authorization: `Bearer ${w.token.token}` } })).text();
     expect(unmarked).toMatch(/_pt=-/);
   });
@@ -287,7 +282,6 @@ describe('the pages session', () => {
     expect(after.status).toBe(404);
     // A public document rendered to a guest carries nothing of the reader's.
     const open = await w.publish('<Helmet><Value name="region" type="string" default="north" /></Helmet><p>{$region}</p>', 'unlisted');
-    await drainPreparedPageWarmups();
     const reader = await pagesCookie(app, w.actor, open);
     const asGuest = await app.request(`${pagesOriginFor(open, site)}/?_pt=-`, { headers: { cookie: `${COOKIE}=${reader}` } });
     expect(asGuest.status).toBe(200);
@@ -318,7 +312,6 @@ describe('the pages session', () => {
     expect(head.headers.get('set-cookie')).toBeNull();
     expect((await app.request(`${self}/?_pt=${ticket}`)).status).toBe(200);
     const id = await w.publish('<Helmet><Value name="region" type="string" default="north" /></Helmet><p>{$region}</p>', 'public');
-    await drainPreparedPageWarmups();
     const html = await (await app.request(`${pagesOriginFor(id, site)}/?$region=west&_pt=-&x=1`)).text();
     expect(island(html)).toMatchObject({ values: { region: 'west' } });
     expect(html).not.toContain('_pt');
@@ -329,7 +322,6 @@ describe('the pages session', () => {
     const app = framing();
     const cookie = await pagesCookie(app, w.actor, w.secret);
     const readable = await w.publish('<h1>Second</h1>', 'private');
-    await drainPreparedPageWarmups();
     // The same value presented at another document's origin (a buggy proxy, a stolen value) is not that document's session.
     expect((await app.request(`${pagesOriginFor(readable, site)}/`, { headers: { cookie: `${COOKIE}=${cookie}` } })).status).toBe(404);
     const door = await app.request(`${pagesOriginFor(readable, site)}/a/${readable}/query`, { method: 'POST', headers: { origin: pagesOriginFor(readable, site), cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' }, body: '{}' });
@@ -369,7 +361,6 @@ describe('the pages session', () => {
     const app = framing();
     const cookie = await pagesCookie(app, w.actor, w.secret);
     const second = await w.publish('<h1>Second</h1>', 'private');
-    await drainPreparedPageWarmups();
     const cookie2 = await pagesCookie(app, w.actor, second);
     const self = pagesOriginFor(w.secret, site);
     const door = (id: string, value: string) => app.request(`${pagesOriginFor(id, site)}/a/${id}/query`, { method: 'POST', headers: { origin: pagesOriginFor(id, site), cookie: `${COOKIE}=${value}`, 'content-type': 'text/plain' }, body: query(id) });
@@ -471,7 +462,6 @@ describe('a first URL loaded twice', () => {
     // can write the pages name while no HttpOnly cookie is held). The visitor signs in and opens it: the script reads the
     // ticket from its location, and the author holds the planted value. Together they buy nothing.
     const open = await w.publish('<h1>Open</h1>', 'unlisted');
-    await drainPreparedPageWarmups();
     const planted = await pagesCookie(app, w.actor, open);
     const visitor = await createUser({ email: 'mxmx_test_pages_visitor@example.com' });
     const visitorActor: Actor = { credential: 'session', userId: visitor.id, email: visitor.email!, emailVerified: true };
@@ -684,7 +674,6 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
   /** A private document of the owner's whose Helmet declares `connect` (its publish is the owner's consent). */
   const declaring = async (w: Awaited<ReturnType<typeof world>>, connect: string[], visibility = 'private') => {
     const id = await w.publish(`<Helmet><meta name="csp-connect" content="${connect.join(' ')}" /></Helmet><h1>Rates</h1>`, visibility);
-    await drainPreparedPageWarmups();
     return id;
   };
 
@@ -753,7 +742,6 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
     const PLOTLY = 'https://cdn.plot.ly';
     const id = await w.publish(`<Helmet><meta name="csp-connect" content="https://127.0.0.1:${port}" /><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Weather</h1>`, 'public');
-    await drainPreparedPageWarmups();
     const user = await createUser({ email: 'mxmx_test_pages_reader@example.com' });
     const t = await mintToken('pages-reader', user.id);
     await claimToken(user.id, t.token);
@@ -795,7 +783,6 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const app = framing();
     const PLOTLY = 'https://cdn.plot.ly';
     const id = await w.publish(`<Helmet><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Chart</h1>`, 'public');
-    await drainPreparedPageWarmups();
     const self = pagesOriginFor(id, site);
     /** A signed-out reader opens the app page (with whatever app-origin cookie they hold) and loads its frame. */
     const framedAsGuest = async (appCookie: string | null) => {

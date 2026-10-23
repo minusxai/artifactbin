@@ -1,3 +1,4 @@
+import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
 import { InstallArtifact } from '../document/InstallArtifact';
 import { CopyAgentButton } from '../components/CopyAgentButton';
@@ -92,7 +93,7 @@ export function DocumentPage(): JSX.Element {
   const role = () => page?.role ?? 'viewer';
   const archivedNow = () => !!page?.archived;
   const isOwner = () => canGovern(role()) && !archivedNow();
-  const editable = () => canEditRole(role()) && !archivedNow() && ['markup', 'html'].includes(page?.surface?.format ?? '');
+  const editable = () => canEditRole(role()) && !archivedNow() && page?.surface?.format === 'html';
   const annotatable = () => canAnnotateRole(role()) && !archivedNow();
   const backend = id ? createHttpBackend(id) : null;
   const [pwaEnabled, setPwaEnabled] = createSignal(page?.surface?.pwaEnabled === true);
@@ -167,7 +168,13 @@ export function DocumentPage(): JSX.Element {
   const live = backend && page?.surface ? createLiveArtifact({
     backend, id: id!, initialEditId: page.surface.editId ?? '', initialVersion: page.surface.version,
     get enabled() { return ready() && !archivedNow() && typeof EventSource === 'function'; },
-    onData: (event) => { if (event.datasets.includes('_members')) setMembershipRevision((n) => n + 1); },
+    onData: (event) => {
+      if (event.datasets.includes('_members')) setMembershipRevision((n) => n + 1);
+      if (page.surface?.format === 'html') runtimeRef.current?.invalidate?.(event.datasets);
+    },
+    // Reload the original server shell and its ticketed frame together: their trusted
+    // revision changes atomically, while viewer state stays in browser storage.
+    onPublication: page.surface.format === 'html' ? () => replaceDocument(window.location.href) : undefined,
     onAnnotations: setLiveAnnotations,
     since: page.surface.runtime?.data.dataflow?.results?.since,
   }) : () => null;
@@ -248,6 +255,10 @@ export function DocumentPage(): JSX.Element {
       id, framed, nodes: treeOnLoad ? askTree() : [],
       editId: () => page.surface?.editId ?? '',
       source: () => null,
+      htmlContext: page.surface?.format === 'html' ? () => ({
+        revision: String(page.archived?.version ?? page.surface?.version ?? 1),
+        readOnly: !!page.archived,
+      }) : undefined,
       version: live, reading: () => true,
       onPressed: askTreeOnPress,
     });

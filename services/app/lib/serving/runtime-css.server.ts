@@ -20,10 +20,8 @@
  * other page never loads the client half and never asks.
  */
 import type { ArtifactRow } from '@/lib/artifacts';
-import { compileStoryCssWithExtras, STORY_RECIPE_UNION, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
-import { extractClassCandidates, hasRuntimeClasses, isRuntimeClassToken, RUNTIME_CLASS_LIMIT, runtimeClassExtras } from '@/lib/data/story/story-css';
-import { runtimeCssPath } from '@/lib/page-styles';
-import type { IslandPageData } from '@/lib/islands';
+import { compileStoryCssWithExtras, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
+import { isRuntimeClassToken, RUNTIME_CLASS_LIMIT } from '@/lib/data/story/story-css';
 import { etagOf } from '@/lib/http/revalidation';
 
 /** The door's parameters: the version, the compile environment the page was served under, the classes (space-separated). */
@@ -32,40 +30,11 @@ const RUNTIME_CSS_PARAMS = { version: 'v', compile: 'k', extras: 'x' } as const;
 /** A year: the answer never changes for its URL. */
 const IMMUTABLE = 'max-age=31536000, immutable';
 
-/**
- * The page data `css` of `row` (the version served) when it fills classes at runtime, else null. `origin` prefixes
- * the door (the document's own origin; '' for a same-origin relative door). `extras`: what the served sheet already
- * compiled in (the snapshot's classes), which the page must not ask for again.
- */
-export function runtimeCssData(row: Pick<ArtifactRow, 'id' | 'version' | 'source'>, origin: string, extras: readonly string[] = []): RuntimeCssPageData | null {
-  const { version, compile } = RUNTIME_CSS_PARAMS;
-  return runtimeCssPageData(row.source, `${origin.replace(/\/+$/, '')}${runtimeCssPath(row.id)}?${version}=${row.version}&${compile}=${storyCssCompileVersion()}`, extras);
-}
-
-type RuntimeCssPageData = NonNullable<IslandPageData['css']>;
-
-/** The page data `css` of `source` asking at `url` (a host's own door: the local preview's), else null. */
-export function runtimeCssPageData(source: string | null | undefined, url: string, extras: readonly string[] = []): RuntimeCssPageData | null {
-  if (!source || !hasRuntimeClasses(source)) return null;
-  return { url, known: extractClassCandidates(source), ...(extras.length ? { extras: [...extras] } : {}) };
-}
-
 /** The classes a door's URL asks for (`x`, space-separated), sorted and deduped; null when one is not a class or there are too many. */
-export function askedRuntimeClasses(url: URL): string[] | null {
+function askedRuntimeClasses(url: URL): string[] | null {
   const tokens = (url.searchParams.get(RUNTIME_CSS_PARAMS.extras) ?? '').split(' ').filter(Boolean);
   if (tokens.length > RUNTIME_CLASS_LIMIT || !tokens.every(isRuntimeClassToken)) return null;
   return [...new Set(tokens)].sort();
-}
-
-/**
- * The classes a server-drawn story carries that its stored sheet has no rule for: every class attribute of `html`
- * the document does not name and the recipe union does not hold. Empty for a document that fills no class at
- * runtime, whatever it draws (its sheet already covers everything it can render).
- */
-export function renderedRuntimeClasses(source: string | null | undefined, html: string): string[] {
-  if (!source || !hasRuntimeClasses(source)) return [];
-  const known = new Set([...extractClassCandidates(source), ...STORY_RECIPE_UNION]);
-  return runtimeClassExtras(extractClassCandidates(html), known);
 }
 
 /** The door's request, parsed; `error` names what makes it unanswerable (a 400). */

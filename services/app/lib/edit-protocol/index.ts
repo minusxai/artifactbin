@@ -8,7 +8,7 @@
  * unions, so a new message cannot be one without the other. The reader and controller wire (`mx:document`,
  * `mx:reader-mode`, the frame bridge, …) stays in lib/story-runtime/contract.
  */
-import type { CommentViewState } from '@artifactbin/contracts';
+import type { CommentViewState, HtmlNodeAnchor } from '@artifactbin/contracts';
 import type { AnnotationRange } from '@/lib/document';
 import type { EditorBookmark, EditorSelectionChange } from '@/lib/editor-engine/bookmark';
 import type { BlockEdit } from '@/lib/editor-engine/block-edit';
@@ -75,6 +75,8 @@ export interface StoryEditRect { x: number; y: number; width: number; height: nu
  * attribute values, which is what the typography toolbar reasons over.
  */
 export interface StoryEditSelection {
+  /** Native HTML source identity. Never persisted as a compiler path. */
+  anchor?: HtmlNodeAnchor;
   viewState?: CommentViewState;
   viewStateError?: string;
   /** Unclipped drag in this document viewport, separate from the node-relative anchor. */
@@ -306,6 +308,7 @@ export interface StoryAnnotationsMessage {
    * fallback (components keep the attribute in source only).
    */
   pins: Array<{
+    anchor?: HtmlNodeAnchor;
     id: string;
     viewState?: CommentViewState;
     /** Position a resolved preview without painting or interacting with its former highlight. */

@@ -48,14 +48,10 @@ const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
  */
 export const ISLANDS_BROWSER_IMPORTERS = [
   'services/app/solid/',
-  'services/app/lib/cli-toolkit/browser.ts',
-  'services/app/lib/offline/compiled-boot.ts',
-  'services/app/lib/offline/compiled-sqlite.ts',
-  'services/app/lib/offline/solid-entry.tsx',
 ];
 const ISLANDS_BROWSER_LEAVES = [
-  'chart', 'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
-  'live-update', 'module', 'morph/engine', 'person-face', 'rt', 'sqlite-engine', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
+  'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
+  'live-update', 'person-face', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
 ];
 /*
  * Rule 4's seed for the hub modules: every path outside non-test code imported on 2026-10-10, measured
@@ -75,8 +71,6 @@ const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/web/',
   'services/app/lib/frame-edit/',
   'services/app/lib/islands/',
-  'services/app/lib/cli-toolkit/browser.ts',
-  'services/app/lib/page-styles/document-root.ts',
 ];
 const STORY_RUNTIME_BROWSER_LEAVES = [
   'anchor', 'anchor-restore', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-update', 'frame-bridge/parent', 'reader-mode',
@@ -88,7 +82,6 @@ const STORY_RUNTIME_BROWSER_LEAVES = [
 const PAGE_STORE_BROWSER_IMPORTERS = [
   'services/app/lib/islands/',
   'services/app/lib/artifact-backend/http.ts',
-  'services/app/lib/offline/compiled-boot.ts',
 ];
 const PAGE_STORE_BROWSER_LEAVES = ['authenticated-transport', 'fetch-transport', 'page-bindings', 'page-engine', 'store'];
 /**
@@ -123,9 +116,6 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/lib/islands/morph/engine.ts',
   'services/app/lib/islands/url-sync.ts',
   'services/app/lib/islands/viewer.ts',
-  'services/app/lib/offline/file-backend.ts',
-  'services/app/lib/offline/snapshot-current.ts',
-  'services/app/lib/offline/snapshot-transport.ts',
   'services/app/lib/page-store/authenticated-transport.ts',
   'services/app/lib/page-store/dataflow-core.ts',
   'services/app/lib/page-store/fetch-transport.ts',
@@ -140,7 +130,7 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/solid/lib/format.ts',
 ];
 const DATAFLOW_BROWSER_LEAVES = [
-  'builtins', 'compiled-dataflow', 'compiled-flow', 'dataflow', 'dataset-shape', 'evaluate', 'image-source', 'local-state', 'local-tables',
+  'builtins', 'compiled-flow', 'dataflow', 'dataset-shape', 'evaluate', 'image-source', 'local-state', 'local-tables',
   'mutation-request', 'mutation-request-builder', 'number-aggregation', 'number-format', 'placement', 'ref-data', 'scalar-input', 'url-values',
 ];
 /*
@@ -158,27 +148,15 @@ const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/lib/frame-edit/',
   'services/app/lib/annotations/markdown-lite.ts',
   'services/app/lib/artifact-backend/browser-artifact-write.ts',
-  'services/app/lib/cli-toolkit/browser.ts',
-  'services/app/lib/offline/file-backend.ts',
-  'services/app/lib/offline/project-document.ts',
-  'services/app/lib/offline/snapshot-current.ts',
 ];
 const DOCUMENT_BROWSER_LEAVES = [
-  'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'context', 'display-title', 'document-authoring-client', 'document-graph', 'document-graph-patch',
-  'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'node-ids', 'person-mentions', 'pwa-settings',
+  'annotation-edits', 'annotation-range', 'asset-url', 'context', 'display-title', 'document-authoring-client', 'document-graph',
+  'document-update-client', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'person-mentions', 'pwa-settings',
   'query-notebook', 'social-preview', 'source-changes', 'table-catalog', 'update-parts',
 ];
-/**
- * lib/compiled-page: server code uses its index, or one of the three heavy entries the index must not
- * carry (Babel, node:vm; their headers say why); the offline file's browser-bundled HTML writer imports
- * three leaves.
- */
-const COMPILED_PAGE_ENTRIES = ['', 'backfill.server', 'bundle.server', 'compiler'];
-const COMPILED_PAGE_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts'];
-const COMPILED_PAGE_BROWSER_LEAVES = ['agent-discovery', 'carriers', 'story-element'];
-/** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
-const PAGE_STYLES_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts', 'services/app/lib/offline/solid-entry.tsx'];
-const PAGE_STYLES_BROWSER_LEAVES = ['document-root'];
+/** lib/page-styles: retained server consumers use its public index. */
+const PAGE_STYLES_BROWSER_IMPORTERS = [];
+const PAGE_STYLES_BROWSER_LEAVES = [];
 /** lib/accounts: its index, and tokens, which a downstream deployment imports by path (__tests__/downstream-exports.test.ts). */
 const ACCOUNTS_ENTRIES = ['', 'tokens'];
 /**
@@ -201,7 +179,6 @@ export const DEEP_MODULES = {
   'lib/page-store': { entries: [''], browserImporters: PAGE_STORE_BROWSER_IMPORTERS, browserLeaves: PAGE_STORE_BROWSER_LEAVES },
   'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },
-  'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES, browserImporters: COMPILED_PAGE_BROWSER_IMPORTERS, browserLeaves: COMPILED_PAGE_BROWSER_LEAVES },
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
   'lib/accounts': { entries: ACCOUNTS_ENTRIES },
 };
@@ -210,7 +187,7 @@ export const DEEP_MODULES = {
  * preview and team hosts), `browser` and `browser-connect` (the preview's two browser pages).
  * Paths without extension.
  */
-const CLI_TOOLKIT_ENTRIES = ['services/app/lib/cli-toolkit', 'services/app/lib/cli-toolkit/host.server', 'services/app/lib/cli-toolkit/browser', 'services/app/lib/cli-toolkit/browser-connect'];
+const CLI_TOOLKIT_ENTRIES = ['services/app/lib/cli-toolkit', 'services/app/lib/cli-toolkit/host.server'];
 const CLI_SOURCE = 'services/cli/src/';
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
 
@@ -357,7 +334,7 @@ function cliToolkitViolations(graph, entries) {
       if (file.startsWith(CLI_SOURCE) && !entries.includes(importPath(file, specifier))) refused.push(`  ${file} imports ${specifier}`);
     }
   }
-  return refused.length ? [`The CLI imports app code only through lib/cli-toolkit (CLI_TOOLKIT_ENTRIES in scripts/ci/module-graph.mjs): re-export the name from the entry of the bundle that uses it in services/app/lib/cli-toolkit (index.ts: the afbin process; host.server.ts: its preview and team hosts; browser.ts, browser-connect.ts: the preview's browser pages), and import it from there:`, ...refused] : [];
+  return refused.length ? [`The CLI imports app code only through lib/cli-toolkit (CLI_TOOLKIT_ENTRIES in scripts/ci/module-graph.mjs): re-export the name from the entry of the bundle that uses it in services/app/lib/cli-toolkit (index.ts: the afbin process; host.server.ts: the team host), and import it from there:`, ...refused] : [];
 }
 
 /** Graph: Map<from, Map<to, [{ file, specifier }]>> over cross-module imports. */

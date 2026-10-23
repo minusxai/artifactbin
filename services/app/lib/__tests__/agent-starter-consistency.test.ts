@@ -14,7 +14,7 @@ import { gettingStarted } from '@/lib/serving/getting-started';
 import { publicGuideText, llmsText } from '@/lib/serving/agent-references.server';
 import { GET as guideRoute } from '@/app/llms/[topic]/route';
 import { renderSkill } from '@/lib/skills/render';
-import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/compiled-page/agent-discovery';
+import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/serving/agent-discovery';
 import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import {projectSkillLinks} from '@/lib/skills/serve';
@@ -30,6 +30,7 @@ import { request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 
 const BASE = 'http://localhost:3000';
+const legacyGuideText=(topic:string,base:string)=>{const file=skillTree().get(`artifactbin/references/${topic}.md`)!;return projectSkillLinks(file,renderSkill(file,{base,transport:'http'}),base);};
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
 const CLI_ONLY_RETIRED = ['mint','claim'];
@@ -92,26 +93,14 @@ describe('every agent-facing starter says the same thing', () => {
     expect(guide).toContain('HTTP authentication requires an email account');
     expect(guide).toContain('/api/authentication/token');
     expect(guide).toContain('Authorization: Bearer <access_token>');
-    expect(llmsText(BASE)).toContain(`${BASE}/llms/http-authoring`);
-    expect(publicGuideText('http-authoring',BASE)).toContain(`${BASE}/llms/http-document-graph`);
+    expect(llmsText(BASE)).toContain(`${BASE}/llms/html-authoring`);
+    expect(publicGuideText('html-authoring',BASE)).toContain('expectedState');
   });
 
-  it('CLI and HTTP teach the same reply and mobile authoring rules without sharing CLI authentication', () => {
-    const rules = [
-      'URL-only requests get the URL alone.',
-      'At 390px, fix overflow, clipping and unreachable controls. Use numeric roles for figures, text roles for prose; stack crowded stats.',
-    ];
-    const brief = buildQuickSheet(BASE);
-    const httpAuthoring = publicGuideText('http-authoring', BASE)!;
-    const discovery = llmsText(BASE);
-    for (const text of [httpAuthoring, discovery, brief]) {
-      for (const rule of rules) expect(text).toContain(rule);
-    }
-    for (const text of [httpAuthoring, discovery]) {
-      expect(text).not.toContain('Automatic browser approval also applies');
-      expect(text).not.toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
-    }
-    expect(discovery).toContain(`${BASE}/llms/http-api`);
+  it('native HTTP discovery routes to authoring and runtime without command setup',()=>{
+    expect(llmsText(BASE)).toContain(`${BASE}/llms/html-authoring`);
+    expect(llmsText(BASE)).toContain(`${BASE}/llms/html-runtime`);
+    expect(llmsText(BASE)).not.toContain('afbin pull');
   });
 
   it('the ONE exception is the skill\'s prohibition, spelled exactly and only once', () => {
@@ -209,7 +198,7 @@ describe('llms.txt and the discovery head', () => {
 
   it('the guide teaches npm CLI and email HTTP without retired installation or token doors', () => {
     const text = llmsText(BASE);
-    for (const line of ['/skills/artifactbin.zip', 'POST /api/artifacts', 'expectedVersion', `${BASE}/llms/http-api`, 'skill']) expect(text,line).toContain(line);
+    for (const line of ['/skills/artifactbin.zip', 'POST /api/artifacts', 'expectedVersion', `${BASE}/llms/html-authoring`, 'skill']) expect(text,line).toContain(line);
     expect(text).not.toContain('[[');
     const guide = JSON.stringify(gettingStarted(BASE));
     expect(guide).toContain('artifactbin skill');
@@ -241,39 +230,28 @@ describe('public HTTP authoring references', () => {
   });
 
   it('serves a public guide, substitutes the origin and refuses unknown or unsafe topics', async () => {
-    const response = await guideRoute(new Request(BASE + '/llms/http-authoring'), {params:Promise.resolve({topic:'http-authoring'})});
+    const response = await guideRoute(new Request(BASE + '/llms/html-authoring'), {params:Promise.resolve({topic:'html-authoring'})});
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe(MARKDOWN_CONTENT_TYPE);
-    expect(publicGuideText('http-api', BASE + '/')).toBe(publicGuideText('http-api', BASE));
-    expect(await response.text()).toBe(publicGuideText('http-authoring', BASE));
+    expect(publicGuideText('html-authoring', BASE + '/')).toBe(publicGuideText('html-authoring', BASE));
+    expect(await response.text()).toBe(publicGuideText('html-authoring', BASE));
     for (const topic of ['not-a-guide','../markup','Markup','markup.md','%2e%2e','../SKILL','']) {
       expect(publicGuideText(topic, BASE), topic).toBeNull();
       expect((await guideRoute(new Request(BASE + '/llms/unknown'), {params:Promise.resolve({topic})})).status, topic).toBe(404);
     }
   });
 
-  it('teaches source preparation before graph construction and links the format without an install', () => {
-    const text = publicGuideText('http-authoring',BASE)!;
-    expect(text.indexOf('## Prepare an edit from JSX')).toBeLessThan(text.indexOf('// BEGIN HTTP TEXT EDIT'));
-    for (const topic of ['markup','markup-data','design-systems','templates']) expect(text).toContain(`${BASE}/llms/${topic}`);
-    expect(text).toContain('No CLI, bundled code or manual graph construction is needed.');
-  });
-
-  it('teaches the HTTP workflow without duplicating its QA client and fits the production guide budget', () => {
-    const text = publicGuideText('http-authoring', 'https://app.artifactbin.dev')!;
-    expect(text).toContain('Use each link target as served; `.md` appears in source labels, while public guide URLs are extensionless.');
-    expect(text).toContain('Batch independent reads and edits; reserve time for one final response.');
-    expect(text).toContain('After required checks pass, do not repeat unchanged QA.');
-    expect(text).toContain('For DOM probes, use `page.evaluate`.');
-    expect(text).toContain('[copyable HTTP browser QA example](https://app.artifactbin.dev/llms/http-api#browser-preview-and-interactive-qa)');
-    expect(text).not.toContain('const session_id=crypto.randomUUID()');
+  it('teaches canonical HTML replacement with conditional identity and bounded guide size',()=>{
+    const text=publicGuideText('html-authoring',BASE)!;
+    for(const value of ['html','expectedVersion','expectedState','Idempotency-Key'])expect(text).toContain(value);
+    expect(text).not.toContain('/prepare');
     expect(Buffer.byteLength(text)).toBeLessThan(8192);
   });
 });
 
 
 it('the published HTTP comment example creates, replies, resolves, reopens and edits through real handlers', async () => {
-  const guide = publicGuideText('http-api',BASE)!;
+  const guide = legacyGuideText('http-api',BASE)!;
   const script = guide.match(/\/\/ BEGIN HTTP COMMENTS\n([\s\S]*?)\/\/ END HTTP COMMENTS/)?.[1];
   expect(script, 'executable HTTP comment contract is published').toBeTruthy();
   const user = await createUser({email:'http-comments-contract@example.com'});
@@ -302,7 +280,7 @@ it('the published HTTP comment example creates, replies, resolves, reopens and e
 
 
 it('the published browser example preserves a capacity refusal and only polls and closes accepted sessions', async () => {
-  const script = publicGuideText('http-api', BASE)!.match(/## Browser preview and interactive QA[\s\S]*?```js\n([\s\S]*?)```/)?.[1];
+  const script = legacyGuideText('http-api', BASE)!.match(/## Browser preview and interactive QA[\s\S]*?```js\n([\s\S]*?)```/)?.[1];
   expect(script).toBeTruthy();
   const sessions = createBrowserSessions(async () => ({run: async () => ({result:'screenshot',pages:[],attachments:[]}), close:async () => {}}));
   const other: Actor = {credential:'bearer', userId:'another-owner'};
@@ -340,7 +318,7 @@ describe('shared instructions after missing credentials and before publishing cl
   expect(guide).toContain('otherwise ask the user for their email');
   expect(guide.indexOf('otherwise ask the user for their email')).toBeLessThan(guide.indexOf('POST /api/auth/email-otp/send-verification-otp'));
   expect(guide).toContain('Do not invent an email');
-  expect(guide).toContain('No CLI installation or downloaded script is needed.');
+  expect(guide).toContain('No product installation is needed.');
  });
  it('teaches the supported local CLI status read without promising live authentication',()=>{
   const brief=buildQuickSheet(BASE);
@@ -367,7 +345,7 @@ it('keeps live comment tracking from blocking existing work or waiting for proce
  const hint = monitoringGuidance(DEFAULT_SERVER, 'abc123', 'markup') as {monitoring:{instruction:string}};
  expect(hint.monitoring.instruction).toContain('background');
  expect(hint.monitoring.instruction).toContain('existing comments');
- const guide = publicGuideText('monitoring', DEFAULT_SERVER)!;
+ const guide = legacyGuideText('monitoring', DEFAULT_SERVER)!;
  expect(guide).toContain('Do not wait for the watch process to exit');
  expect(guide).toContain('head');
  expect(guide).toContain('wait=0');
@@ -386,8 +364,7 @@ it('teaches every surface to watch with a tool that wakes the agent, never a pla
  const surfaces = {
   instruction,
   cliSkill: section(renderSkill(skill, {base: DEFAULT_SERVER, transport: 'cli'})),
-  httpSkill: section(renderSkill(skill, {base: DEFAULT_SERVER, transport: 'http'})),
-  guide: publicGuideText('monitoring', DEFAULT_SERVER)!.split('\n## CLI')[0]!,
+  guide: legacyGuideText('monitoring', DEFAULT_SERVER)!.split('\n## CLI')[0]!,
  };
  for (const [name, text] of Object.entries(surfaces)) {
   expect(text, name).toContain('After the first successful save or local preview');
@@ -405,7 +382,7 @@ it('teaches every surface to watch with a tool that wakes the agent, never a pla
 });
 
 it('reuses an executable HTTP dataset creation example in both guides', async () => {
- const guides=['http-api','publishing-datasets'].map(topic=>publicGuideText(topic,BASE)!);
+ const guides=['http-api','publishing-datasets'].map(topic=>legacyGuideText(topic,BASE));
  const bodies=guides.map(guide=>{
   const section=guide.split('## HTTP dataset creation')[1];
   expect(section).toBeDefined();
@@ -423,7 +400,8 @@ it('reuses an executable HTTP dataset creation example in both guides', async ()
 
 it('HTTP authentication is direct and reuses the existing rotating credential store',()=>{
  const guide=publicGuideText('http-auth',BASE)!;
- for(const text of [llmsText(BASE),guide]){
+ expect(llmsText(BASE)).toContain(`${BASE}/llms/http-auth`);
+ for(const text of [guide]){
   expect(text).not.toContain('credentials.mjs');
   for(const path of ['/api/auth/email-otp/send-verification-otp','/api/auth/sign-in/email-otp','/api/authentication/token','/oauth/token'])expect(text).toContain(`POST ${path}`);
   expect(text).toContain('Authorization: Bearer <access_token>');
@@ -435,7 +413,7 @@ it('HTTP authentication is direct and reuses the existing rotating credential st
 
 it('keeps sign-in conditional across root guides and discovery', () => {
  for (const text of [buildQuickSheet(BASE), llmsText(BASE)]) {
-  expect(text).toContain('Missing credentials do not mean a new user');
+  expect(text).toContain('Missing credentials do not mean a new');
   expect(text).not.toContain('Install CLI only when requested');
   expect(text).toContain('If sign-in is required');
   expect(text).toContain('email already provided');
@@ -445,7 +423,7 @@ it('keeps sign-in conditional across root guides and discovery', () => {
 
 it('lists every shipped reference in the main reference tree', () => {
  const tree=buildQuickSheet(BASE).split('## Reference tree')[1]!;
- for (const file of skillTree().files.filter(file=>file.ref && file.audience==='agent')) {
+ for (const file of skillTree().files.filter(file=>file.ref && file.audience==='agent'&&!file.file.startsWith('html-'))) {
   expect(tree,file.path).toContain(`](references/${file.file})`);
  }
 });

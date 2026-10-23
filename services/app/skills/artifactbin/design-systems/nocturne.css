@@ -1,0 +1,136 @@
+/* Generated from design-systems/specs/nocturne.json. */
+@font-face { font-family: "Newsreader"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9CfjOCX1hbuyalUrK439vCgIhCBJWxZCPp.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9CfjOCX1hbuyalUrK439vCjohCBJWxZA.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Newsreader"; font-style: italic; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9CfjOCX1hbuyalUrK439vCgIhCBJWxZCPp.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: italic; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9CfjOCX1hbuyalUrK439vCjohCBJWxZA.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 300; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK439DyjIJFJpeBZQ.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 300; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK439DyjIJFJpeBZQ.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK439DyjIJFJpeBZQ.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Cinzel"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/cinzel/v26/8vIJ7ww63mVu7gt7-GT7PkRXM8Xx.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Cinzel"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/cinzel/v26/8vIJ7ww63mVu7gt79mT7PkRXMw.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Cinzel"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/cinzel/v26/8vIJ7ww63mVu7gt7-GT7PkRXM8Xx.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Cinzel"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/cinzel/v26/8vIJ7ww63mVu7gt79mT7PkRXMw.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+:root[data-af-design-system="nocturne"] {
+  --ds-night: #f3e7ca;
+  --ds-night-raised: #faf1dc;
+  --ds-night-sunk: #e9dbb9;
+  --ds-line: #d3b98b;
+  --ds-ink: #1d170f;
+  --ds-ink-soft: #4a3d2c;
+  --ds-ink-muted: #8a7a60;
+  --ds-lamp: #9a5a12;
+  --ds-on-lamp: #fff6e4;
+  --ds-lamp-hot: #b8661f;
+  --ds-lamp-soft: #f3e5c2;
+  --ds-ember: #b8551a;
+  --ds-on-ember: #fff6e4;
+  --ds-cool: #3a5a8a;
+  --ds-positive: #2b5a45;
+  --ds-positive-soft: #dcebe1;
+  --ds-caution: #8a5a00;
+  --ds-caution-soft: #f3e5c2;
+  --ds-negative: #8a2d1c;
+  --ds-negative-soft: #f4dcd8;
+  --background: var(--ds-night);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-night-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-night-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-lamp);
+  --primary-foreground: var(--ds-on-lamp);
+  --secondary: var(--ds-lamp-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-night-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-night-raised);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-night);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-ember);
+  --chart-1: var(--ds-lamp);
+  --chart-2: var(--ds-cool);
+  --chart-3: var(--ds-ember);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-ink-muted);
+  --radius: 2px;
+  --font-display: "Newsreader", Georgia, serif;
+  --font-body: "Newsreader", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --ds-halo: 0 0 0 1px #d3b98b;
+  --ds-glow-text: none;
+  --ds-chip-radius: 999px;
+}
+:root[data-af-design-system="nocturne"][data-af-dark="true"] {
+  --ds-night: #050818;
+  --ds-night-raised: #111940;
+  --ds-night-sunk: #02040f;
+  --ds-line: #2a3568;
+  --ds-ink: #ece6d6;
+  --ds-ink-soft: #b9c8ee;
+  --ds-ink-muted: #8d98c0;
+  --ds-lamp: #ffc76e;
+  --ds-on-lamp: #1a1206;
+  --ds-lamp-hot: #ffe2a8;
+  --ds-lamp-soft: #241d30;
+  --ds-ember: #ff9440;
+  --ds-on-ember: #1a0e04;
+  --ds-cool: #b9c8ee;
+  --ds-positive: #6fcf97;
+  --ds-positive-soft: #10291e;
+  --ds-caution: #ffd27a;
+  --ds-caution-soft: #2e2306;
+  --ds-negative: #ff7a5c;
+  --ds-negative-soft: #3a1412;
+  --background: var(--ds-night);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-night-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-night-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-lamp);
+  --primary-foreground: var(--ds-on-lamp);
+  --secondary: var(--ds-lamp-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-night-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-night-raised);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-night);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-ember);
+  --chart-1: var(--ds-lamp);
+  --chart-2: var(--ds-cool);
+  --chart-3: var(--ds-ember);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-ink-muted);
+  --ds-halo: 0 0 28px rgba(255,199,110,.32);
+  --ds-glow-text: 0 0 30px rgba(255,170,70,.45);
+  --ds-chip-radius: 999px;
+}
+:root[data-af-design-system="nocturne"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+:root[data-af-design-system="nocturne"] .t-display-xl { font-family: "Newsreader", Georgia, serif; font-size: clamp(48px, 7.5vw, 104px); line-height: .92; font-weight: 300; letter-spacing: -0.03em; }
+:root[data-af-design-system="nocturne"] .t-display-l { font-family: "Newsreader", Georgia, serif; font-size: clamp(32px, 4.5vw, 56px); line-height: 1; font-weight: 300; letter-spacing: -0.02em; }
+:root[data-af-design-system="nocturne"] .t-display-italic { font-family: "Newsreader", Georgia, serif; font-size: clamp(32px, 4.5vw, 56px); line-height: 1; font-weight: 400; letter-spacing: -0.02em; font-style: italic; }
+:root[data-af-design-system="nocturne"] .t-caps { font-family: "Cinzel", "Trajan Pro", Georgia, serif; font-size: 12px; line-height: 18px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; }
+:root[data-af-design-system="nocturne"] .t-title { font-family: "Newsreader", Georgia, serif; font-size: 24px; line-height: 30px; font-weight: 500; }
+:root[data-af-design-system="nocturne"] .t-body-l { font-family: "Newsreader", Georgia, serif; font-size: 21px; line-height: 34px; font-weight: 300; }
+:root[data-af-design-system="nocturne"] .t-body { font-family: "Newsreader", Georgia, serif; font-size: 18px; line-height: 30px; font-weight: 400; font-variant-numeric: oldstyle-nums proportional-nums; }
+:root[data-af-design-system="nocturne"] .t-note { font-family: "Newsreader", Georgia, serif; font-size: 15px; line-height: 22px; font-weight: 400; font-style: italic; }
+:root[data-af-design-system="nocturne"] .t-label { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; }
+:root[data-af-design-system="nocturne"] .t-numeral { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }

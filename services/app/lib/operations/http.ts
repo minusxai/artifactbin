@@ -27,6 +27,7 @@ import { OPERATIONS, type OpContext, type Operation, type OpReply } from './regi
  * precisely the retry the receipt exists to answer.
  */
 const AUTHORIZED: Record<string, (actor: AccessActor, input: Record<string, unknown>) => Promise<boolean>> = {
+  update_artifact: async (actor,input) => !!await getArtifactFor(actor,String(input.id)),
   mutate_dataset: async (actor, input) => {const row=await getArtifactById(String(input.id));return !!row&&(input.name?await canReadArtifact(row,actor)||row.token_id===actor.tokenId:grantsOf(row)?await grantsPermitWrite(row,actor)||!!await getArtifactFor(actor,row.id):!!await getArtifactFor(actor,row.id));},
   annotate: async (actor, input) => {
     const access = await readableArtifact(actor, String(input.id));

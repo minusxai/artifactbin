@@ -15,7 +15,7 @@ assertFullTestCoverage(discovered, full);
 const enrolled = JSON.parse(readFileSync('scripts/ci/fast-tests.json', 'utf8'));
 const { fast } = partitionFastTests(full, enrolled);
 for (const file of fast) {
-  const result = await build({entryPoints:[file],bundle:true,write:false,metafile:true,platform:'node',external:['vitest','typescript'],logLevel:'silent'});
+  const result = await build({entryPoints:[file],bundle:true,write:false,metafile:true,platform:'node',format:'esm',external:['vitest','typescript'],logLevel:'silent'});
   if (result.warnings.length) throw new Error(`Unresolved fast graph: ${file}`);
   const sourceReasons = Object.keys(result.metafile.inputs).flatMap(input => auditFastSource(readFileSync(input,'utf8'),input));
   if (sourceReasons.length) throw new Error(`${file}: ${sourceReasons.join(', ')}`);

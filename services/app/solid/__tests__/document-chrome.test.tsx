@@ -38,7 +38,7 @@ vi.mock('../document/create-framed-story', async (importOriginal) => {
   } };
 });
 vi.mock('../editor/create-live-artifact', () => ({ createLiveArtifact: () => () => mockLive() }));
-vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'markup', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'html', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/lib/http/login-href', () => ({ loginHref: vi.fn(() => '/login') }));
 import { loginHref } from '@/lib/http/login-href';
 vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));

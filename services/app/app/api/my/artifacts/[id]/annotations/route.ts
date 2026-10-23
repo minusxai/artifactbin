@@ -1,3 +1,4 @@
+import { parseHtmlNodeAnchor } from '@artifactbin/contracts';
 import { parseCommentViewState } from '../../../../../../../contracts/src/comment-view-state';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
 /**
@@ -32,18 +33,22 @@ type CreateBodyResult = { input: CreateAnnotationInput } | { error: 'invalid_ann
 
 function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
   const invalid = { error: 'invalid_annotation_body' } as const;
+  const anchor = body.anchor === undefined ? undefined : parseHtmlNodeAnchor(body.anchor);
+  if (body.anchor !== undefined && !anchor) return invalid;
   const hasNode = typeof body.node_id === 'string' && body.node_id.length > 0;
-  if (!hasNode) return invalid;
+  if (!hasNode && !anchor) return invalid;
+  if (anchor && (body.node_id !== undefined || body.quote !== undefined)) return invalid;
   if (typeof body.body !== 'string' || body.body.trim().length === 0) return invalid;
   if (body.quote !== undefined && typeof body.quote !== 'string') return invalid;
   const input: CreateAnnotationInput = { body: body.body };
-  input.nodeId = body.node_id as string;
+  if (hasNode) input.nodeId = body.node_id as string;
+  if (anchor) input.anchor = anchor;
   if (body.edit_id !== undefined) { if (typeof body.edit_id !== 'string' || !body.edit_id) return invalid; input.baseEditId=body.edit_id; }
   if (body.attachment_id !== undefined) { if(typeof body.attachment_id!=='string'||!/^cim_[a-z0-9]+$/.test(body.attachment_id)||!input.baseEditId)return invalid; input.attachmentId=body.attachment_id; }
   if (typeof body.quote === 'string') input.quote = body.quote;
   if (body.range !== undefined && body.range !== null) {
     const range = parseAnnotationRange(body.range);
-    if (!range) return { error: 'bad_range' };
+    if (!range || anchor && (!isAreaRange(range) || anchor.quote || anchor.range)) return { error: 'bad_range' };
     // An area has no words: a quote beside one is a contradiction, refused
     // rather than silently dropped — the page never sends it, so a body that
     // does was not made by the page.

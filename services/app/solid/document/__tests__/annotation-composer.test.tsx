@@ -425,3 +425,26 @@ describe('the annotation composer', () => {
     expect(keys[1]).toBe(keys[0]);
   });
 });
+
+it('preserves native HTML selection identity without sending fabricated compiler coordinates or ambient state', async () => {
+  const anchor = { kind: 'html-node' as const, v: 1 as const, revision: '4', nodeId: 'af-node-7', quote: 'Selected words' };
+  layer({ initialSelection: TEXT({ nodeId: 'af-node-7', path: 'af-node-7', anchor }) });
+  await flush();
+  replaceComment(screen.getByLabelText('Annotation comment'), 'Native selection');
+  fireEvent.click(screen.getByLabelText('Save annotation')); await flush();
+  const body = JSON.parse(String(creates()[0]!.init!.body));
+  expect(body).toMatchObject({ anchor, body: 'Native selection' });
+  expect(body).not.toHaveProperty('node_id');
+  expect(body).not.toHaveProperty('range');
+  expect(body).not.toHaveProperty('quote');
+  expect(body).not.toHaveProperty('view_state');
+});
+it('persists native area geometry separately from native text offsets',async()=>{
+ const anchor={kind:'html-node' as const,v:1 as const,revision:'4',nodeId:'af-node-7',quote:''};
+ const range={v:1 as const,kind:'area' as const,box:{x:0.1,y:0.2,w:0.3,h:0.4}};
+ layer({initialSelection:TEXT({nodeId:'af-node-7',path:'af-node-7',anchor,range})});
+ await flush();replaceComment(screen.getByLabelText('Annotation comment'),'Area comment');
+ fireEvent.click(screen.getByLabelText('Save annotation'));await flush();
+ const body=JSON.parse(String(creates()[0]!.init!.body));
+ expect(body).toMatchObject({anchor,range});expect(body).not.toHaveProperty('node_id');
+});

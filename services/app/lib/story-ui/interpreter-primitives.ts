@@ -1,5 +1,5 @@
 /** Framework-free author AST props and names shared by the compiler and the editor. */
-import type { JsxAttribute, JsxElement, JsxNode } from '@/lib/jsx';
+import type { JsxAttribute } from '@/lib/jsx';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { immutableSet } from '@/lib/jsx/immutable-set';
 import { ARGS_ATTR, bindingMap, REF_ATTRS, rowBound, SET_ATTR } from '@/lib/dataflow/dataflow';
@@ -40,21 +40,6 @@ const CONTROLLED_TO_DEFAULT: Record<string, string> = {
  */
 const VALUE_CONTROLLED_TAGS = immutableSet(['Tabs', 'Accordion']);
 const FORM_CONTROL_TAGS = immutableSet(['input', 'textarea', 'select']);
-
-/**
- * The tags that draw something INTERACTIVE, which the HTML content model
- * forbids inside a `<button>`: the browser closes the button early and promotes
- * the inner control to its sibling, so the parsed page and React's tree
- * disagree and hydration fails with error 418 (components/kit/dialog
- * DialogTrigger; the same parse-time reshaping as a `<div>` in a `<tbody>`).
- */
-const INTERACTIVE_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea', 'label', 'Button', 'Select', 'Slider', 'DatePicker', 'Segmented', 'Switch']);
-
-/** Does this trigger already hold a control of its own — at any depth? */
-export function wrapsControl(node: JsxElement): boolean {
-  return node.children.some((child) => child.type === 'element'
-    && (INTERACTIVE_TAGS.has(child.tag) || INTERACTIVE_TAGS.has(child.tag.toLowerCase()) || wrapsControl(child)));
-}
 
 /**
  * An element's props as the renderer writes them: React/Solid spellings, the `style` string as an object, the
@@ -151,10 +136,4 @@ function sanitizeStyleObject(value: unknown): Record<string, string | number> | 
     if (typeof v === 'string' || typeof v === 'number') out[k] = v;
   }
   return Object.keys(out).length > 0 ? out : null;
-}
-
-export function templateIds(nodes: JsxNode[]): Set<string> {
-  const ids = new Set<string>();
-  const visit = (nodes: JsxNode[]) => nodes.forEach(node => { if(node.type === 'element') { const id = node.attributes.find(a=>a.name==='id')?.value; if(id?.static && typeof id.json==='string') ids.add(id.json); visit(node.children); } });
-  visit(nodes); return ids;
 }

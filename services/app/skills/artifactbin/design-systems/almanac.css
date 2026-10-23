@@ -1,0 +1,125 @@
+/* Generated from design-systems/specs/almanac.json. */
+@font-face { font-family: "Instrument Serif"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentserif/v5/jizHRFtNs2ka5fXjeivQ4LroWlx-6zAjgn7Motmp5r61.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Instrument Serif"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentserif/v5/jizHRFtNs2ka5fXjeivQ4LroWlx-6zAjjH7Motmp5g.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Instrument Serif"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentserif/v5/jizBRFtNs2ka5fXjeivQ4LroWlx-6zsTjnTLgNuZ5w.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Instrument Serif"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentserif/v5/jizBRFtNs2ka5fXjeivQ4LroWlx-6zUTjnTLgNs.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHTWEBlwu8Q.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZOIHTWEBlw.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHTWEBlwu8Q.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZOIHTWEBlw.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHTWEBlwu8Q.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZOIHTWEBlw.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthSQBK6PYK3EXw.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthqQBK6PYK0.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEY2tbYf-Vlh3uA.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEYOtbYf-Vlg.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+:root[data-af-design-system="almanac"] {
+  --ds-paper: #F2E7D6;
+  --ds-card: #F8F1E6;
+  --ds-band: #E7CFB4;
+  --ds-screen: #C8D1A9;
+  --ds-paper-sunk: #E8DBC6;
+  --ds-line: #CBBFA9;
+  --ds-ink: #374836;
+  --ds-ink-muted: #6B7A69;
+  --ds-accent: #B44E30;
+  --ds-on-accent: #F2E7D6;
+  --ds-accent-soft: #F0D9CD;
+  --ds-mauve: #846B94;
+  --ds-positive: #3E6B3C;
+  --ds-positive-soft: #DCE6C9;
+  --ds-caution: #8C6A1E;
+  --ds-caution-soft: #F3E5BE;
+  --ds-negative: #B44E30;
+  --ds-negative-soft: #F0D9CD;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-card);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-card);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-accent);
+  --primary-foreground: var(--ds-on-accent);
+  --secondary: var(--ds-band);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-accent-soft);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-accent);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-accent);
+  --chart-1: var(--ds-ink);
+  --chart-2: var(--ds-accent);
+  --chart-3: var(--ds-mauve);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --radius: 4px;
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, Menlo, monospace;
+  --ds-shadow-soft: 23px 23px 0 0 #b44e3020;
+  --ds-shadow-soft-sm: 12px 12px 0 0 #b44e3020;
+  --ds-chip-radius: 0;
+}
+:root[data-af-design-system="almanac"][data-af-dark="true"] {
+  --ds-paper: #1B241B;
+  --ds-card: #243024;
+  --ds-band: #2E3B2E;
+  --ds-screen: #3A4A36;
+  --ds-paper-sunk: #141B14;
+  --ds-line: #3C4A3C;
+  --ds-ink: #F2E7D6;
+  --ds-ink-muted: #A9B5A6;
+  --ds-accent: #E07A58;
+  --ds-on-accent: #1B241B;
+  --ds-accent-soft: #4A2A1E;
+  --ds-mauve: #B7A3C4;
+  --ds-positive: #8FC28C;
+  --ds-positive-soft: #263A26;
+  --ds-caution: #E0B65A;
+  --ds-caution-soft: #3E3218;
+  --ds-negative: #E07A58;
+  --ds-negative-soft: #4A2A1E;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-card);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-card);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-accent);
+  --primary-foreground: var(--ds-on-accent);
+  --secondary: var(--ds-band);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-accent-soft);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-accent);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-accent);
+  --chart-1: var(--ds-ink);
+  --chart-2: var(--ds-accent);
+  --chart-3: var(--ds-mauve);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --ds-shadow-soft: 23px 23px 0 0 #e07a5826;
+  --ds-shadow-soft-sm: 12px 12px 0 0 #e07a5826;
+  --ds-chip-radius: 0;
+}
+:root[data-af-design-system="almanac"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+:root[data-af-design-system="almanac"] .t-display-xl { font-family: "Instrument Serif", Georgia, serif; font-size: clamp(64px, 10.4vw, 160px); line-height: .92; font-weight: 400; letter-spacing: -0.055em; }
+:root[data-af-design-system="almanac"] .t-display-l { font-family: "Instrument Serif", Georgia, serif; font-size: clamp(40px, 5.5vw, 78px); line-height: .98; font-weight: 400; letter-spacing: -0.045em; }
+:root[data-af-design-system="almanac"] .t-display-m { font-family: "Instrument Serif", Georgia, serif; font-size: 40px; line-height: 42px; font-weight: 400; letter-spacing: -0.03em; }
+:root[data-af-design-system="almanac"] .t-title { font-family: "DM Sans", system-ui, sans-serif; font-size: 24px; line-height: 1.2; font-weight: 500; letter-spacing: -0.03em; }
+:root[data-af-design-system="almanac"] .t-numeral-xl { font-family: "Instrument Serif", Georgia, serif; font-size: clamp(72px, 9vw, 120px); line-height: 1; font-weight: 400; letter-spacing: -0.07em; font-variant-numeric: tabular-nums; }
+:root[data-af-design-system="almanac"] .t-body-l { font-family: "DM Sans", system-ui, sans-serif; font-size: 18px; line-height: 1.7; font-weight: 400; }
+:root[data-af-design-system="almanac"] .t-body { font-family: "DM Sans", system-ui, sans-serif; font-size: 16px; line-height: 1.6; font-weight: 400; }
+:root[data-af-design-system="almanac"] .t-body-s { font-family: "DM Sans", system-ui, sans-serif; font-size: 13px; line-height: 1.5; font-weight: 400; }
+:root[data-af-design-system="almanac"] .t-label { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.6; font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; }
+:root[data-af-design-system="almanac"] .t-numeral { font-family: "Instrument Serif", Georgia, serif; font-size: 48px; line-height: 1; font-weight: 400; letter-spacing: -0.06em; font-variant-numeric: tabular-nums; }
+:root[data-af-design-system="almanac"] .t-mono { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.6; font-weight: 400; }

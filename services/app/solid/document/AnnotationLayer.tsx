@@ -19,6 +19,7 @@
  *
  * Mounted for anyone who may comment (the owner, a named editor, or a commenter).
  */
+import { isAreaRange } from '@/lib/document/annotation-range';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { useLocation } from '@solidjs/router';
 import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
@@ -430,7 +431,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       .filter((row) => !row.orphaned && row.anchor)
       .map((row) => {
         const anchor = row.anchor! as typeof row.anchor & { nodeId?: string | null };
-        return { id: row.id, path: anchor.path, key: anchor.key, nodeId: anchor.nodeId, range: row.range, ...(row.view_state ? {viewState: row.view_state} : {}),
+        return { id: row.id, path: anchor.path ?? anchor.nodeId ?? '', key: anchor.key ?? null, nodeId: anchor.nodeId, ...('kind' in anchor && anchor.kind === 'html-node' ? { anchor } : {}), range: row.range, ...(row.view_state ? {viewState: row.view_state} : {}),
           ...(row.status === 'resolved' && (row.id !== inspected || row.id !== open) ? { layoutOnly: true } : {}) };
       });
     const selected = selection();
@@ -500,8 +501,8 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           setSelection((previous) => {
             if (JSON.stringify(previous) === JSON.stringify(reported)) return previous;
             const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId;
-            if (!sameIdentity || reported?.range) return reported;
-            const merged = { ...reported, ...(previous.quote ? { quote: previous.quote } : {}), ...(previous.range ? { range: previous.range } : {}), ...(previous.viewState ? {viewState: previous.viewState} : {}), ...(previous.viewStateError ? {viewStateError: previous.viewStateError} : {}) };
+            if (!sameIdentity || reported?.range || reported?.anchor?.range || reported?.anchor?.quote) return reported;
+            const merged = { ...reported, ...(previous.anchor ? { anchor: previous.anchor } : {}), ...(previous.quote ? { quote: previous.quote } : {}), ...(previous.range ? { range: previous.range } : {}), ...(previous.viewState ? {viewState: previous.viewState} : {}), ...(previous.viewStateError ? {viewStateError: previous.viewStateError} : {}) };
             return JSON.stringify(previous) === JSON.stringify(merged) ? previous : merged;
           });
           setFailure(null);
@@ -618,7 +619,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   const save = async () => {
     const subject = selection();
     if (!subject || !hasReplyText(draft()) || capture.busy() || (capture.required() && !capture.draft())) return;
-    if (!subject.nodeId) {
+    if (!subject.nodeId && !subject.anchor) {
       // Never claims a save is pending: the layer cannot know one is. Say what is true either way.
       // A selection whose source element has no durable id: an element an edit just added, or one never identified.
       setFailure(COMMENT_TARGET_UNSAVED);
@@ -633,10 +634,10 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         if (mutation.signature !== signature) mutation = { signature, key: runtimeId() };
         // The exact words ride along when there are any; a caret comment carries neither key.
         return backend.createAnnotation({
-          node_id: subject.nodeId, body,
+          ...(subject.anchor ? { anchor: subject.anchor } : { node_id: subject.nodeId }), body,
           ...(attachment ?? {}),
-          ...(subject.quote ? { quote: subject.quote } : {}),
-          ...(subject.range ? { range: subject.range } : {}),
+          ...(!subject.anchor && subject.quote ? { quote: subject.quote } : {}),
+          ...(subject.range && (!subject.anchor || isAreaRange(subject.range)) ? { range: subject.range } : {}),
           ...(subject.viewState ? { view_state: subject.viewState, edit_id: attachment?.edit_id ?? props.editId } : {}),
         }, mutation.key);
       };
@@ -782,7 +783,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
   let composerElement: HTMLDivElement | undefined;
   let composerTarget: string | null = null;
   createEffect(on(selection, (current) => {
-    const next = current ? JSON.stringify([current.nodeId ?? null, current.path, current.kind, current.quote ?? null, current.range ?? null]) : null;
+    const next = current ? JSON.stringify([current.anchor ?? null, current.nodeId ?? null, current.path, current.kind, current.quote ?? null, current.range ?? null]) : null;
     if (next !== composerTarget) {
       stopComposerDrag?.();
       stopComposerDrag = undefined;

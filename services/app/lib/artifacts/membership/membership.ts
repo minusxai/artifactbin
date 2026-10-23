@@ -41,15 +41,6 @@ export async function membershipState(actor: AccessActor, id: string): Promise<M
   const mentions=await mentionStatesFor(id,header.version);
   return {mentions,members:rows.filter(m=>m.status==='accepted'),pending:rows.filter(m=>m.status==='pending'),self:rows.find(m=>m.user_id===actor.userId)??null,canManage:canEdit(role),canInvite:!!actor.userId&&canAnnotate(role)};
 }
-/**
- * The viewer's own membership row on a document the caller has ALREADY admitted them to (the page's Join/Joined/Pending
- * pill): the one row, not the member list, the mentions or a second admission. Null without an account or a row.
- */
-export async function selfMembership(actor: AccessActor, id: string): Promise<ArtifactMember | null> {
-  if (!actor.userId) return null;
-  const db=await getDb();
-  return (await db.query<ArtifactMember>(`SELECT ${memberFields} FROM ${JOIN_RELATIONS} m JOIN users u ON u.id=m.user_id WHERE m.artifact_id=$1 AND m.user_id=$2`,[id,actor.userId])).rows[0]??null;
-}
 async function blocked(tx: Queryable, a: string, b: string): Promise<boolean> {
   return !!(await tx.query('SELECT 1 FROM user_blocks WHERE (user_id=$1 AND blocked_user_id=$2) OR (user_id=$2 AND blocked_user_id=$1)',[a,b])).rows.length;
 }
@@ -180,16 +171,12 @@ export async function invitePeople(tx:Queryable,artifact:ArtifactRow,actor:Acces
  await tx.query("SELECT pg_notify('artifact_' || lower($1), 'members')",[artifact.id]);
 }
 
-/** Caller must establish read access to this artifact before exposing these public tag states. */
-export async function savedMentionStates(artifact:ArtifactRow){
- return mentionStatesOfPeople(artifact.id,mentionedPeople(artifact.source??''));
-}
 /** The people a document's source names: every `/people/<id>` in it. Stored with the prepared page (`prepared_pages.mentions`) so nothing rescans the document for them. */
-export function mentionedPeople(source:string):string[]{
+function mentionedPeople(source:string):string[]{
  return [...new Set([...source.matchAll(/\/people\/([A-Za-z0-9_-]{1,128})/g)].map(m=>m[1]!))];
 }
 /**
- * {@link savedMentionStates} for a caller that holds the artifact's header and no document: the people the HEAD version
+ * Mention states for a caller that holds the artifact's header and no document: the people the HEAD version
  * names come from its prepared page (`prepared_pages.mentions`, written when that version was prepared), so listing
  * members never reads the document. A version whose page is not prepared yet, or was prepared before the people were
  * stored, is read as ever — and only if its stored text mentions "people" at all, a superset of the `/people/<id>` the

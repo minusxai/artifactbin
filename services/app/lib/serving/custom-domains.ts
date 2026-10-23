@@ -375,13 +375,13 @@ export function startDomainRecheck(resolve: () => DomainResolver = domainResolve
 
 /** A document the host may serve: the owner's, PUBLIC, a markup document, not in the trash. */
 export function servesDocument(ownerId: string, row: Pick<ArtifactRow, 'user_id' | 'visibility' | 'format'> & { deleted_at?: unknown }): boolean {
-  return row.user_id === ownerId && row.visibility === 'public' && row.format === 'markup' && !row.deleted_at;
+  return row.user_id === ownerId && row.visibility === 'public' && row.format === 'html' && !row.deleted_at;
 }
 
 /** The ref kinds a post embeds by bytes (lib/dataflow/ref-data): `<img src="ref:…">`, a `<File>` card, a PDF. */
 const EMBEDDED_FORMATS = new Set(['image', 'file', 'pdf']);
 /** The owner's public, live markup documents, as the SQL both embed rules below scope to. */
-const OWNER_POSTS_SQL = `user_id = $1 AND visibility = 'public' AND format = 'markup' AND ${LIVE_ARTIFACT_SQL}`;
+const OWNER_POSTS_SQL = `user_id = $1 AND visibility = 'public' AND format = 'html' AND ${LIVE_ARTIFACT_SQL}`;
 
 /** Eligible homepage documents, including documents inside folders, scoped to this owner. */
 export async function domainHomepageOptions(ownerId: string): Promise<Array<{ id: string; title: string }>> {
@@ -480,7 +480,7 @@ function domainPostUrl(hostname: string, row: Pick<ArtifactRow, 'id' | 'title'>)
  * address, on the one canonical origin (APP__PUBLIC_BASE_URL).
  */
 export async function canonicalDocumentUrl(row: Pick<ArtifactRow, 'id' | 'title' | 'user_id' | 'visibility' | 'format'>): Promise<string> {
-  if (row.user_id && row.visibility === 'public' && row.format === 'markup') {
+  if (row.user_id && row.visibility === 'public' && row.format === 'html') {
     const domain = await rowForUser(row.user_id);
     if (domain?.status === 'verified') {
       if (domain.homepage_artifact_id === row.id) return `https://${domain.hostname}/`;

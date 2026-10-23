@@ -2,14 +2,11 @@
 import {expect,it} from 'vitest';
 import type {MutationNotificationJobInput} from '@artifactbin/contracts';
 import {request,useAppHarness} from './harness';
-import {documentPublicationWithResources} from './prepared-document';
 import {POST as create} from '@/app/api/artifacts/route';
-import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {POST as apiMutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {POST as browserMutate} from '@/app/a/[id]/mutate/route';
 import {getArtifactById,declarationsForRow} from '@/lib/artifacts';
 import {liveFrameFor} from '@/lib/publish/data/frame';
-import {readerIslandData} from '@/lib/publish/prepared/prepare-runtime.server';
 import {getDb} from '@/lib/platform';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import {services,setServices} from '@/lib/platform';
@@ -59,21 +56,7 @@ it('schedules nothing for a forced CAS loser and only one run job when the retry
  }finally{setServices({sql});}
 });
 
-it('recovers the canonical result and original run job after the mutation and notification names change',async()=>{
- const {api,rows,db,token,document,context}=await fixture();const key='mxmx_test_notification_renamed_replay';
- const response=await api(key);expect(response.status).toBe(200);const result=await response.json();
- const original=(await db.query<{id:string;input:MutationNotificationJobInput}>('SELECT id,input FROM notification_jobs')).rows;
- const headResponse=await read(request(`/api/artifacts/${document.id}`,{token:token.token}),context);expect(headResponse.status).toBe(200);const head=await headResponse.json();
- expect(head.markup).toEqual(expect.any(String));
- const markup=(head.markup as string).replaceAll('increment','advance').replaceAll('first_status','renamed_first').replaceAll('second_status','renamed_second');
- const update=await documentPublicationWithResources((await getArtifactById(document.id))!,{markup},true);
- const edited=await replace(request(`/api/artifacts/${document.id}`,{method:'PUT',token:token.token,json:update}),context);
- expect(edited.status,await edited.clone().text()).toBe(200);
- const renamed=(await getArtifactById(document.id))!;
- expect(renamed.source).toContain('name="advance"');expect(renamed.source).toContain('name="renamed_first"');expect(renamed.source).not.toContain('name="increment"');
- const replay=await api(key);expect(replay.status,await replay.clone().text()).toBe(200);expect(await replay.json()).toEqual(result);
- expect((await db.query('SELECT id,input FROM notification_jobs')).rows).toEqual(original);expect(await rows()).toEqual([{n:1}]);
-});
+
 
 it.each(['api','browser'] as const)('shares one canonical receipt across %s-first API/browser replay without a second write',async(firstRoute)=>{
  const {api,browser,rows,db,dataset}=await fixture();const key=`mxmx_test_notification_cross_${firstRoute}`;
@@ -90,9 +73,8 @@ it('projects notification rules out of page bootstrap and live-frame runtime dat
  const {document}=await fixture('',true);const row=(await getArtifactById(document.id))!;
  const declared=(await declarationsForRow(row))!;
  expect(declared.flow.notifications).toHaveLength(2);
- const runtime=readerIslandData({refData:{},dataflow:{flow:declared.flow}});
  const frame=await liveFrameFor(row);
- for(const flow of [runtime.dataflow?.flow,frame.dataflow?.flow]){
+ for(const flow of [frame.dataflow?.flow]){
   expect(flow).toBeDefined();expect(flow!.notifications).toBeUndefined();
   expect(flow!.mutations[0]?.notifies).toBe(true);
   expect(JSON.stringify(flow)).not.toContain('first_status');

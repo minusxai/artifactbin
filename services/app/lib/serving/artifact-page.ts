@@ -1,5 +1,4 @@
-import { artifactPwaEnabled } from './artifact-pwa.server';
-import { membershipState, selfMembership } from '@/lib/artifacts';
+import { nativeHtmlTitle } from './native-html.server';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
@@ -13,19 +12,10 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  * the document's frame — the document itself is only ever rendered on its own
  * origin (lib/http/pages-origin, app/a/[id]/raw), never inside the app page.
  *
- * A DOCUMENT is served from its prepared page (lib/publish/prepared/prepared-page.server):
- * the reader payload carries no source, no document graph and no raw
- * stylesheet. Authorized API source readback remains separate from the reader.
- *
- * NOR DOES IT CARRY THE DOCUMENT'S NODE TREE: the app page only relays it to the framed document's edit
- * controller (solid/document/create-framed-story), which classifies comments and selections against it. On a large
- * page it was nearly the whole payload (98% of 2.6 MB measured), inlined into the HTML and again in the JSON. It is
- * the NODES door (`?part=nodes`), asked for while the frame loads. Access is decided from the row's header
- * (lib/artifacts getArtifactHeaderById): a reader who may not read the page is refused without the document being
- * loaded, and the document is read once, after admission.
+ * A native HTML document is assembled only on its runner origin. This answer
+ * carries its original sharing/comment shell and a ticketed frame, never its source.
  */
 import { archivedVersionFor, servedRow } from '@/lib/artifacts';
-import type { AccessActor } from '@/lib/accounts';
 import { UnservableDocument } from '@/lib/artifacts';
 import { countOpenAnnotations } from '@/lib/annotations/store';
 import { canReadArtifact, effectiveRole } from '@/lib/artifacts';
@@ -41,21 +31,17 @@ import {
   issuePagesTicket, ownerUsername, sessionActor,
 } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import {ARTIFACT_FORMATS, type ArtifactFormat, canAnnotate, canEdit, CARD_RENDER_GENERATION, isStartPlaceholder} from '@artifactbin/contracts';
+import {ARTIFACT_FORMATS, type ArtifactFormat, canAnnotate, CARD_RENDER_GENERATION} from '@artifactbin/contracts';
 import {getGroupById} from '@/lib/groups';
-import { cardSelectionQuery } from '@/lib/dataflow';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
 import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
-import { preparedPageFor, servedPage, type TreelessServedRuntime } from '@/lib/publish/prepared/prepared-page.server';
-import { codeFingerprint } from '@/lib/publish/prepared/revalidation.server';
 import { etagOf, matchingTag, notModified, revalidationHeaders } from '@/lib/http/revalidation';
-import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
-import { firstHeadingTitle } from '@/lib/document';
+import { captureColor } from '@/lib/mermaid-images/store';
 import type { ArtifactHeader, ArtifactRow } from '@/lib/artifacts';
 import { type StoryIslandData, THEME_KEY, withReaderMode } from '@/lib/story-runtime/contract';
 import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http/pages-origin';
-import { carriedTrust, cspRequestFor } from '@/lib/trust/document-trust';
+import { carriedTrust } from '@/lib/trust/document-trust';
 import type { DocumentFrame } from './document-frame';
 
 export interface ArtifactPageAnswer {
@@ -95,11 +81,6 @@ const notFound = (): ArtifactPageAnswer => ({ status: 404, body: { error: 'not_f
  */
 export interface FramedRuntime { title: string; data: Pick<StoryIslandData, 'dataflow'> }
 
-function framedRuntime(runtime: TreelessServedRuntime): FramedRuntime {
-  const { dataflow } = runtime.data;
-  return { title: runtime.title, data: dataflow ? { dataflow } : {} };
-}
-
 /**
  * A document frame's first URL for this request's reader (APP__PAGES_HOST): the document's own origin carrying a
  * one-time ticket for exactly that document (the explicit guest marker for a guest), spent in the response that
@@ -122,7 +103,7 @@ export async function framedDocumentSrc(request: Request, id: string, site: Page
   if (!ID_RE.test(id)) return null;
   // The frame's address needs the row's identity and format, never its document.
   const artifact = await getArtifactHeaderById(id);
-  if (!artifact || artifact.format !== 'markup') return null;
+  if (!artifact || artifact.format !== 'html') return null;
   const actor = await sessionActor(request);
   if (actor.tokenId !== artifact.token_id && !(await canReadArtifact(artifact, actor))) return null;
   return admittedFrameSrc(request, artifact, actor, site, search, readerPickOf(request));
@@ -170,7 +151,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const exporting = verifyExportKey(header.id, key ?? undefined);
   const actor = await sessionActor(request);
   if (!admitted && !exporting && actor.tokenId !== header.token_id && !(await canReadArtifact(header, actor))) return notFound();
-  if (!ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
+  if (header.format === 'markup' || header.format === 'program' || !ARTIFACT_FORMATS.includes(header.format as ArtifactFormat)) return notFound();
   if (!admitted && search.get('part') === 'kind') return kindAnswer(header);
   const artifact = admitted ?? await getArtifactById(id);
   if (!artifact) return notFound();
@@ -232,7 +213,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    */
   const at = await archivedVersionFor(request, artifact, { capture: exporting });
   if (at === 'not_found') return notFound();
-  const isDoc = artifact.format === 'markup';
+  const nativeHtml = artifact.format === 'html';
+  const isDoc = nativeHtml;
 
   // Browser source editing is no longer a document surface. Authoring APIs remain separate.
   if (search.get('part') === 'editor') return notFound();
@@ -248,14 +230,12 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     const etag = nodesEtag(artifact, role, at);
     const held = matchingTag(request.headers.get('if-none-match'), etag);
     if (held) return { status: 304, body: null, etag: held };
-    const { row, page } = await preparedPageFor(artifact, at, { nodes: true });
-    return { status: 200, etag, body: { editId: artifact.edit_id, version: row.version, nodes: page.data.nodes } };
+    return { status: 200, etag, body: { editId: artifact.edit_id, version: at?.version ?? artifact.version, nodes: [] } };
   }
 
   // Everything below reads THIS row: the artifact wearing that version's bytes
   // when one was asked for, the artifact itself otherwise. A document's comes
-  // with its prepared page (lib/publish/prepared/prepared-page.server) — a stored entry on
-  // a hit, a compile on a miss — while the reads that need neither run beside it.
+  // Source stays on the runner origin; independent shell reads run beside one another.
   const viewerId = actor.userId;
   // Independent reads begin only after ACL admission. These values belong to
   // this request; no identity or permission answer is retained across requests.
@@ -275,16 +255,11 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   ] as const);
   // Awaited below; a failure of the preparation first must not leave this one unobserved.
   void social.catch(() => {});
-  // The shell only: the tree is the nodes door's and the compiled page is the document origin's.
-  const prepared = isDoc ? await preparedPageFor(artifact, at, {}) : null;
-  const row = prepared?.row ?? await servedRow(artifact, at);
-  // A starter shows agent instructions until its first real version is published.
-  const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
-
-  const membershipAvailable = !at && prepared?.page.declared?.flow.mutations.some(m => 'import' in m.target) === true;
-  const pwaEnabled = !at && artifactPwaEnabled(row);
-  // Published documents, including archived versions, run in their own frame.
-  const framedDocument = !!prepared && !starterDoc;
+  // The shell reads only this version's metadata.
+  const row = servedRow(artifact, at);
+  const membershipAvailable = false;
+  const pwaEnabled = false;
+  const framedDocument = nativeHtml;
   // Only the HTML door draws the frame (and mints its ticket); both doors answer a framed document with its FramedRuntime.
   const framing = !!options.pages && framedDocument;
 
@@ -301,52 +276,35 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const design = resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
   // A document's sheet is its prepared page's; the data tiers keep their stored one.
   const compiledCss = isDoc ? null : meta.compiledCss ?? null;
-  // What only this request decides, over the stored version. On the compiled page without this
-  // reader's first results: its rows are the guest snapshot's, and this reader's arrive after paint.
-  const servedFor = (results: boolean) => (prepared ? servedPage(prepared.row, prepared.page, {
-    at, search: new URL(request.url).search,
-    // This version's stored diagram drawings, unless the engine was asked for by name (`?mermaid=engine`).
-    drawings: engineRequested(request.url) ? 'engine' : 'stored',
-    colorMode: capturedColor,
-    viewer: actor,
-    // The first results, as the page's own query door (POST, this session) would answer them.
-    ...(results ? { results: { admit: actor } } : {}),
-  }) : Promise.resolve(null));
   const ownerScope = role === 'owner' ? actor : null;
   // The reader was admitted above (or by the caller) unless an export key stood in for the check: only then is it asked.
   const readerAdmitted = !!admitted || !exporting || actor.tokenId === artifact.token_id;
   // Beside the served runtime and the social reads, not after them: none depends on another.
-  const [firstServed, [author, forkedFrom, liked, likeCount, following, followCount, openAnnotations, dataPreview], hasInvitedUsers, framedSrc, membership, cspRequest] = await Promise.all([
+  const [[author, forkedFrom, liked, likeCount, following, followCount, openAnnotations, dataPreview], hasInvitedUsers, framedSrc] = await Promise.all([
     // A framed document runs its own first results on its own origin: the app's answer, through either door, carries none.
-    servedFor(!framedDocument),
     social,
     ownerScope ? hasInvitedUsersFor(ownerScope, id) : Promise.resolve(false),
     // The ticket goes in the frame's first URL and is spent by the pages apex before the document loads.
-    framing && artifact.format === 'markup' && (readerAdmitted || await canReadArtifact(artifact, actor))
+    framing && isDoc && (readerAdmitted || await canReadArtifact(artifact, actor))
       ? admittedFrameSrc(request, artifact, actor, options.pages!, new URL(request.url).search, readerPick) : Promise.resolve(null),
-    membershipAvailable ? membershipOf(actor, artifact.id, readerAdmitted) : Promise.resolve(undefined),
-    // What the document asks of the network beyond the default policy, and where this reader stands on it:
-    // the consent bar (solid/document/CspConsentBar) draws from this. The served row is the version shown.
-    isDoc ? cspRequestFor({ artifact: row, viewer: actor, request }) : Promise.resolve(null),
   ] as const);
-  const served = firstServed;
   const authorUsername = author?.username ?? null;
-  const starter = starterDoc;
+  const starter = false;
   const authorMark = { username: authorUsername, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom };
   const follow = artifact.user_id && artifact.user_id !== viewerId ? { userId: artifact.user_id, following, count: followCount } : null;
 
   const framedOrigin = framedSrc?.origin ?? null;
-  const frame: DocumentFrame | null = framedSrc && prepared ? {
+  const frame: DocumentFrame | null = framedSrc && nativeHtml ? {
     src: framedSrc.src,
     contentUrl: `/a/${artifact.id}/raw${at ? `?version=${at.version}` : ''}`,
-    title: row.title || prepared.page.title || 'Document',
-    colorMode: readerPick ?? design.colorMode ?? prepared.page.data.colorMode,
+    title: nativeHtmlTitle(row),
+    colorMode: readerPick ?? design.colorMode ?? 'light',
     head: {
-      title: prepared.page.title,
+      title: nativeHtmlTitle(row),
       description: row.description,
       // `v`: a new card is a new URL. Chat apps cache an unfurl's image by its URL, so a card that changed (a new share
       // image, an edit) under the same URL kept showing the old one; the raw door's head already carried it.
-      image: `${baseUrl(request)}/a/${artifact.id}/export?mode=card&v=${at?.version ?? artifact.version}&r=${CARD_RENDER_GENERATION}${cardSelectionQuery(new URL(request.url).search, prepared.page.declared?.flow ?? null)}`,
+      image: `${baseUrl(request)}/a/${artifact.id}/export?mode=card&v=${at?.version ?? artifact.version}&r=${CARD_RENDER_GENERATION}`,
     },
   } : null;
   const surface = {
@@ -358,16 +316,16 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     format: artifact.format,
     visibility: artifact.visibility,
     ...(ownerScope ? { hasInvitedUsers } : {}),
-    title: row.title,
+    title: nativeHtml ? nativeHtmlTitle(row) : row.title,
     author: authorMark,
-    ...(served ? {
+    ...(nativeHtml ? {
       // The framed page's own sheet, script and reader data are the frame's, and the tree is the nodes door's: the
       // app keeps what it reads (FramedRuntime), whichever door it asked. The starter's read view, which is app UI
       // rather than a frame, keeps the whole served runtime, less the tree.
-      runtime: (framedDocument ? framedRuntime(served.runtime) : served.runtime) satisfies FramedRuntime,
+      runtime: ({ title: nativeHtmlTitle(row), data: {} }) satisfies FramedRuntime,
       // What the reader's chrome derived from the source: the document's own
       // name (lib/document/title) and whether it is still the starter placeholder.
-      heading: firstHeadingTitle(row.source), starter,
+      heading: row.title, starter,
     } : {
       // The data tiers: their source is their content (a dataset's only for those who may edit it).
       source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:row.source,
@@ -395,20 +353,14 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     // The document's own origin when the app page frames it there (solid/pages/Document posts to it).
     ...(framedOrigin ? { framedOrigin } : {}),
     // The rail's Join/Joined/Pending pill (solid/document/DocumentChrome).
-    ...(membership ? { membership } : {}),
-    version: artifact.version,
+    version: nativeHtml ? at?.version ?? artifact.version : artifact.version,
     // Anyone who may COMMENT has a comment badge to fill: computing this
     // for the owner alone left an editor's and a commenter's count at 0
     // forever, on a control they were being shown.
     openAnnotations,
   };
-  // Why the head runs without its script (prepared-page.server authorScriptErrors), for someone who can republish it
-  // (solid/document/ScriptFailureNotice). A reader has the framed document's own notice and never the builder's words.
-  const scriptErrors = isDoc && !at && canEdit(role) ? prepared?.page.authorScriptErrors : undefined;
   const body = {
     canonical: canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : authorUsername),
-    ...(cspRequest ? { cspRequest } : {}),
-    ...(scriptErrors?.length ? { scriptFailure: { errors: scriptErrors } } : {}),
     description: row.description,
     role,
     kind,
@@ -432,18 +384,9 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
 }
 
 /**
- * The reader's standing on a document that writes to datasets: the rail's Join/Joined/Pending pill. A reader this request
- * already admitted needs only their own join row; one an export key stood in for is admitted by the full check.
- */
-async function membershipOf(actor: AccessActor, id: string, admitted: boolean): Promise<'join' | 'pending' | 'joined'> {
-  const self = actor.userId ? (admitted ? await selfMembership(actor, id) : (await membershipState(actor, id)).self) : null;
-  return self?.status === 'accepted' && self.explicit_join ? 'joined' : self?.status === 'pending' ? 'pending' : 'join';
-}
-
-/**
  * The JSON door (app/api/page/artifact/[id]).
  *
- * Every role reads a markup document in the frame the HTML door draws (solid/pages/Document adopts it);
+ * Every role reads a native HTML document in the frame the HTML door draws (solid/pages/Document adopts it);
  * nothing renders a document from this answer. A client navigation to an address of unknown kind asks `?part=kind`
  * first and crosses to the server for a document without reading this answer (solid/pages/ArtifactAddress
  * `replaceDocument`), the framed document's selection controller reads
@@ -464,5 +407,5 @@ export async function artifactPageResponse(request: Request, id: string): Promis
  * admitted to it, and the code that prepares a page (a deploy that changes how nodes are made changes the tag).
  */
 function nodesEtag(artifact: ArtifactRow, role: string, at: { version: number } | null): string {
-  return etagOf({ part: 'nodes', id: artifact.id, version: artifact.version, edit: artifact.edit_id, updated: artifact.updated_at, stored: artifact.document?.kind ?? null, role, at: at?.version ?? null, code: codeFingerprint() });
+  return etagOf({ part: 'nodes', id: artifact.id, version: artifact.version, edit: artifact.edit_id, updated: artifact.updated_at, stored: artifact.document?.kind ?? null, role, at: at?.version ?? null });
 }

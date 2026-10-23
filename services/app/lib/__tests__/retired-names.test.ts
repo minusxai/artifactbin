@@ -82,17 +82,10 @@ const SCANS: Scan[] = [
     proof: { atLeast: 50, contains: `${APP}/lib` },
   },
   {
-    // There is ONE document format. `html` and `markdown` are not formats, not inputs and not wire
-    // fields. The retirement touched the input parser, the wire echo, the pages, the editor and
-    // five docs sections; `format: 'html'` survived in a colour map past all of them.
-    label: 'no source file treats html or markdown as a format',
+    // HTML is the native document source; markdown remains a retired input.
+    label: 'no source file treats markdown as a format',
     dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`],
-    pattern: new RegExp([
-      /format\s*(?::|===|==|!==)\s*'html'/, /ArtifactFormat\s*=\s*[^;]*'html'/, /body\.(html|markdown)\b/,
-      /format\s*\?\?\s*'html'/, /default:\s*"'html'"/, /format IN \([^)]*'html'/,
-      /FormatBadge format="(html|markdown)"/, /\bhtml:\s*(row|artifact)\.content/,
-      /^\s*html:\s*(content|row\.content|artifact\.content)/, /^\s*(html|markdown):\s*['"]/,
-    ].map((r) => r.source).join('|'), 'm'),
+    pattern: /format\s*(?::|===|==|!==)\s*'markdown'|body\.markdown\b|FormatBadge format="markdown"/,
     allow: [`${APP}/lib/publish/document/input.ts`],
     proof: { atLeast: 50, contains: `${APP}/lib/publish/document/input.ts` },
   },
@@ -177,7 +170,7 @@ describe('the surviving vocabulary', () => {
     // The VALUE, not a regex over the declaration: the runtime list and the type are one
     // declaration now, so asserting the list asserts both.
     const { ARTIFACT_FORMATS } = await import('@artifactbin/contracts');
-    expect([...ARTIFACT_FORMATS].sort()).toEqual(['dataset', 'file', 'folder', 'image', 'markup', 'pdf', 'program', 'viz']);
+    expect([...ARTIFACT_FORMATS].sort()).toEqual(['dataset', 'file', 'folder', 'html', 'image', 'markup', 'pdf', 'program', 'viz']);
   });
 
   it('points every human link at /docs-human', () => {

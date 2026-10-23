@@ -1,9 +1,3 @@
-import {artifactFileName} from '@artifactbin/utils/artifact-reference';
-import {readArtifactFileHtml} from './local-html-import';
-import {parseDocument} from './document';
-import {renderLocalHtml} from './local-html-runtime';
-import {renderLocalImage} from './local-image-runtime';
-import type {LocalImageRenderer} from './local-image-options';
 import {localIdentities} from './identities';
 import {basename,extname,join,relative,resolve} from 'node:path';
 import {stat} from 'node:fs/promises';
@@ -40,11 +34,11 @@ export function serverRenderer(server:string,client?:HttpClient):Renderer{
 
 const RENDERED=['png','jpg','html'] as const;
 const RENDERER_FIX='push the draft, or export csv/json/yaml/original';
-const EXTENSIONS:Record<string,string>={png:'png',jpg:'jpg',html:'jsx.html',csv:'csv',json:'json',yaml:'yaml'};
+const EXTENSIONS:Record<string,string>={png:'png',jpg:'jpg',html:'html',csv:'csv',json:'json',yaml:'yaml'};
 const rendered=(format:string):format is typeof RENDERED[number]=>RENDERED.includes(format as never);
 
 interface ExportOptions {
- localHtml?:typeof renderLocalHtml;localImage?:LocalImageRenderer;type?:string;format?:string;output?:string;name?:string;page?:number;og?:boolean;refresh?:boolean;force?:boolean;dryRun?:boolean;
+ type?:string;format?:string;output?:string;name?:string;page?:number;og?:boolean;refresh?:boolean;force?:boolean;dryRun?:boolean;
  server:string;/** Verified other addresses of `server`. */aliases?:readonly string[];client?:HttpClient;emit:(value:unknown)=>void;bytes?:(value:Uint8Array)=>void;
 }
 interface ExportTarget {ref:string;format:string;id?:string;path?:string;version?:number;render:boolean;htmlName?:string;defaultHtmlName?:boolean}
@@ -86,7 +80,7 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
    targets.push({ref:input,format,render:true,...(ref.version!==undefined?{version:ref.version}:{}),...(path!==undefined?{path}:{id:ref.kind==='id'?ref.id:undefined})});
   }else targets.push({ref:input,format,render:false,...(ref.kind==='id'?{id:ref.id,...(ref.version?{version:ref.version}:{})}:{path:ref.path,...(ref.version?{version:ref.version}:{})})});
  }
- let destinations=await plan(workspace,targets,options,true);
+ let destinations=await plan(workspace,targets,options);
  // A dry run reports destinations and the capability each target needs; it renders nothing,
  // writes nothing and never sets up credentials.
  if(options.dryRun){
@@ -98,9 +92,8 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
  const results:ExportResult[]=[];
  for(const target of targets){
   const bytes=target.render
-   ?await renderTarget(workspace,target,options)
+   ?await renderTarget(target,options)
    :target.path!==undefined?await convertLocal(workspace,target,options):await convertRemote(target,options);
-  if(target.defaultHtmlName){const file=readArtifactFileHtml(bytes.toString('utf8'));target.htmlName=artifactFileName(file.artifactId,file.metadata.title);}
   results.push({bytes,format:target.format});
  }
  if(targets.some(target=>target.defaultHtmlName))destinations=await plan(workspace,targets,options);
@@ -126,9 +119,9 @@ function selectFormat(refs:string[],options:ExportOptions):string{
  throw new CliError('invalid_format','The export representation is not determined.','Add --format png|jpg|html|csv|json|yaml|original, or name an --output file with a known extension.');
 }
 
-async function renderTarget(workspace:Workspace,target:ExportTarget,options:ExportOptions):Promise<Buffer>{
- if(target.path!==undefined&&target.format==='html')return(options.localHtml??renderLocalHtml)({cwd:workspace.root,home:workspace.home,path:target.path,server:options.server});
- if(target.path!==undefined&&(target.format==='png'||target.format==='jpg'))return (options.localImage??renderLocalImage)({cwd:workspace.root,home:workspace.home,path:target.path,server:options.server,format:target.format,page:options.page,og:options.og});
+async function renderTarget(target:ExportTarget,options:ExportOptions):Promise<Buffer>{
+ if(target.path!==undefined&&target.format==='html')throw new CliError('unsupported_format','Local HTML compiler exports have been retired.');
+ if(target.path!==undefined)throw new CliError('unsupported_format','Local compiler image exports have been retired.');
  const renderer=serverRenderer(options.server,options.client);
  const result=target.format==='html'
   ?await renderer.html(target.id!,target.version)
@@ -190,7 +183,7 @@ function serialize(rows:Record<string,unknown>[],format:string):Buffer{
 }
 
 /** Explicit destinations are checked before rendering; default HTML names use its captured identity before any output is written. */
-async function plan(workspace:Workspace,targets:ExportTarget[],options:ExportOptions,deferHtml=false):Promise<(string|undefined|null)[]>{
+async function plan(workspace:Workspace,targets:ExportTarget[],options:ExportOptions):Promise<(string|undefined|null)[]>{
  if(options.output==='-')return targets.map(()=>undefined);
  const outputPath=options.output?await confinedPath(workspace.root,resolve(workspace.cwd,options.output)).catch(error=>{
   // `--output /tmp/x.png` from a workspace elsewhere: an agent tried it in three tasks and got a generic failure.
@@ -203,14 +196,7 @@ async function plan(workspace:Workspace,targets:ExportTarget[],options:ExportOpt
  const taken=new Set<string>();const destinations:(string|undefined|null)[]=[];
  for(const target of targets){
   if(outputPath&&directory===undefined){destinations.push(relative(workspace.root,outputPath));taken.add(destinations.at(-1)!);continue;}
-  if(target.format==='html'){
-   target.defaultHtmlName=true;
-   if(deferHtml&&options.dryRun&&target.path!==undefined){
-    const bytes=await readOptional(await confinedPath(workspace.root,target.path));
-    if(bytes){const document=parseDocument(bytes.toString());if(document.metadata.id)target.htmlName=artifactFileName(document.metadata.id,document.metadata.title??target.path);}
-   }
-   if(!target.htmlName){destinations.push(null);continue;}
-  }
+  if(target.format==='html')target.htmlName=`${target.id??'page'}.html`;
   const base=target.path!==undefined?basename(target.path,extname(target.path)):target.id!;
   const extension=target.format==='original'?originalExtension(target)??'.bin':`.${EXTENSIONS[target.format]}`;
   const name=target.htmlName??`${base}${extension}`;

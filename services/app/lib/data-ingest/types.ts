@@ -17,7 +17,7 @@ export type DatasetSource =
   | { kind: 'sheetUrl'; url: string }
   | { kind: 'csvUrl'; url: string };
 
-/** Types the caller declared for columns — they win over the sniffer. */
+/** Types the caller declared for columns — they win over the sniffer. Numeric override explicitly accepts IEEE-754 conversion; automatic inference preserves unsafe integers and decimals over 15 significant digits as strings. */
 export interface DeclaredColumn { name: string; type: string }
 
 export interface IngestResult {

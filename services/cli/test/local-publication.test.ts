@@ -20,8 +20,6 @@ import {createDocumentGraph,graphSource,applyGraphPatch,parseJsx} from '../../ap
 import {encodeDocumentNodes} from '../../app/lib/document/document-node-codec';
 /** The tree an older server stored for a fork's create (no graph): what the CLI must still upgrade through a read. */
 const legacyTree=(source:string)=>{const parsed=parseJsx(source);if(!parsed.ok)throw new Error(parsed.error);return encodeDocumentNodes(parsed.nodes);};
-import {startPreview} from '../src/preview/session';
-import {localIdentities} from '../src/identities';
 import {localInputReferences} from '../src/preview/local-inputs';
 
 async function fixture(){
@@ -435,27 +433,6 @@ test('unbound local readers refuse an ambiguous published reference across origi
   await assert.rejects(localInputReferences(f.workspace),{code:'ambiguous_reference'});
   assert.equal((await localInputReferences(f.workspace,f.client.connection.server))[dataset.id],'rows.json');
  }finally{await f.cleanup();}
-});
-test('a local capture reads its offline dataset after the bound parent acquires published reference IDs',async()=>{
- const f=await fixture();let session:Awaited<ReturnType<typeof startPreview>>|undefined;
- try{
-  await writeFile(join(f.workspace.root,'rows.json'),'[{"cups":10},{"cups":20}]');
-  const head=await bindOriginal(f,'doc.jsx');
-  const proposed=writeDocument({...snapshotDocument(head),body:'<Helmet><Import name="coffee" src="ref:loc003" /><Query name="total">{`select sum(cups) as cups from coffee.rows`}</Query></Helmet><p id="text">Coffee report</p>'});
-  await writeFile(join(f.workspace.root,'doc.jsx'),proposed);
-  await publishLocalWorkspace(await loadWorkspace(f.workspace.root,f.workspace.home),['doc.jsx'],f.client,{});
-  const current=await loadWorkspace(f.workspace.root,f.workspace.home),bytes=await readFile(join(f.workspace.root,'doc.jsx'),'utf8');assert.match(bytes,/ref:r\d{5}/);
-  const dataset=[...f.heads.values()].find(value=>value.format==='dataset');assert.ok(dataset);
-  assert.equal((await localIdentities(current))[dataset.id],undefined,'discovery aliases must not become owned identities');
-  assert.equal((await localInputReferences(current,'https://other.example'))[dataset.id],undefined,'a different publication origin cannot supply the alias');
-  const before=f.calls.length;
-  session=await startPreview({root:current.root,home:current.home,files:['doc.jsx'],localFiles:await localIdentities(current),capture:true});
-  await session.document('doc.jsx');
-  const response=await fetch(session.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'doc.jsx',values:{}})});
-  assert.equal(response.status,200);const result=await response.json();assert.deepEqual(result.tables.total.rows,[{cups:30}]);
-  assert.equal(session.failure(),undefined);assert.equal(f.calls.length,before,'capture must use local rows without an authenticated remote fallback');
-  assert.equal(await readFile(join(f.workspace.root,'doc.jsx'),'utf8'),bytes);assert.equal(f.heads.size,2);
- }finally{await session?.close();await f.cleanup();}
 });
 
 test('a bound author can edit normalized repeated nodes without rematching obsolete un-IDed input',async()=>{

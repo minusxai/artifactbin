@@ -1,3 +1,8 @@
+import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
+import {htmlBackendNames,htmlPageDeclarations} from '@/lib/html-page';
+import {authorizeDatasetBinding} from '@/lib/dataset-graphql';
+import type {HtmlDatasetLink} from '@artifactbin/contracts';
+import type {PreparedHtmlBackend} from '@/lib/html-backends';
 /**
  * THE PUBLISH REQUESTS — create, replace and asset refresh, the use cases both
  * auth modes and the operations registry run over one pipeline. Story owns the
@@ -7,7 +12,7 @@
  * body parsers and the folder placement), so this module calls down into
  * artifacts and nothing in artifacts calls up into it.
  */
-import { parseArtifactDestination, newArtifactDestination, ownsArtifact, applyEditFor, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, committedOpenAnnotations, createArtifact, createdArtifactWire, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, refLoaderForActor, replaceArtifactFor, replacedArtifactWire, respondToEdit, rowToResolvedRef, setMetadataFor, sourceRepairsEcho, writerFor } from '@/lib/artifacts';
+import { type MutationReceipt, type MutationReply, parseArtifactDestination, newArtifactDestination, ownsArtifact, type ArtifactInput, artifactQuotaExceeded, type ArtifactRow, artifactState, byteQuotaFor, canReadArtifact, committedOpenAnnotations, createArtifact, createdArtifactWire, creationOperation, CreationReplay, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, isVersionConflict, lookupCreation, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, refLoaderForActor, replaceArtifactFor, replacedArtifactWire, rowToResolvedRef, setMetadataFor, sourceRepairsEcho, writerFor } from '@/lib/artifacts';
 import { CONTENT_FIELDS, type DatasetAccess, type Visibility } from '@artifactbin/contracts';
 import { identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import { parseAnnotationOperations, normalizeNodeIds, collectExternalAssetUrls } from '@/lib/document';
@@ -20,6 +25,33 @@ import { getDb } from '@/lib/platform/db';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
 import { lookupWebAssets, refreshWebAssets, type WebAssetImporter } from '../assets/web-assets';
 import { checkDocumentData } from '../data/data-checks';
+
+async function prepareHtmlDatasets(body:Record<string,unknown>,actor:AccessActor):Promise<readonly HtmlDatasetLink[]|undefined|Response>{
+ if(typeof body.html!=='string')return undefined;
+ try{
+  const {datasets}=htmlPageDeclarations(body.html);
+  await Promise.all(datasets.map(binding=>authorizeDatasetBinding(actor,binding)));
+  return datasets;
+ }catch{return json({error:'invalid_dataset_binding'},400);}
+}
+
+async function prepareHtmlBackends(body:Record<string,unknown>,creating=false):Promise<PreparedHtmlBackend[]|undefined|Response>{
+ if(body.backendSources===undefined){
+  if(creating&&typeof body.html==='string'&&htmlBackendNames(body.html).length)return json({error:'unresolved_backend_link'},400);
+  return undefined;
+ }
+ if(typeof body.html!=='string'||!body.backendSources||typeof body.backendSources!=='object'||Array.isArray(body.backendSources))return json({error:'invalid_backend_sources'},400);
+ const entries=Object.entries(body.backendSources as Record<string,unknown>);
+ if(entries.length>20||entries.some(([name,source])=>!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||typeof source!=='string'||Buffer.byteLength(source)>4_000_000))return json({error:'invalid_backend_sources'},400);
+ try{
+  const names=htmlBackendNames(body.html);
+  if(entries.some(([name])=>!names.includes(name))||creating&&names.some(name=>!entries.some(([key])=>key===name)))throw Error('Backend sources must match HTML links');
+  const prepared=await Promise.all(entries.map(async([name,source])=>({name,source:source as string,...await compilePageBackend(source as string)})));
+  if(prepared.length)composePageSchema(prepared.map(backend=>({name:backend.name,fileId:backend.name,version:'prepared',typeDefs:backend.typeDefs})));
+  return prepared;
+ }
+ catch(error){return json({error:'invalid_backend',details:[error instanceof Error?error.message:String(error)]},400);}
+}
 
 function parseAccessField(body: Record<string, unknown>, format: string | undefined): DatasetAccess | undefined | Response {
   return parseAccessValue(body.access, format);
@@ -53,11 +85,10 @@ export async function replaceArtifactWithBody(
   actor: AccessActor,
   id: string,
   base: string,
-  options: {dryRun?:boolean} = {},
+  options: {dryRun?:boolean;mutationReceipt?:MutationReceipt} = {},
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
-  if(Object.hasOwn(body,'document_update'))return respondToEdit(base,body,input=>applyEditFor(actor,id,input,options));
-  if(typeof body.markup==='string')return json({error:'jsonb_operations_required',hint:'Submit document_update using the current CLI or browser editor.'},400);
+  if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body,key)))return json({error:'native_html_required',hint:'Replace native pages with the complete html field and observed version and state.'},400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
   // the writer — an editor (artifact_shares.role) replacing a document that
   // carries its owner's <Mutation> or private image must not fail on assets
@@ -156,12 +187,16 @@ export async function replaceArtifactWithBody(
   }
   if (options.dryRun) return preflightReply(prepared);
 
+  const htmlDatasets=await prepareHtmlDatasets(body,actor);if(htmlDatasets instanceof Response)return htmlDatasets;
+  const htmlBackends=await prepareHtmlBackends(body);if(htmlBackends instanceof Response)return htmlBackends;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
-    ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : {}),
-    ...(body.description===null || typeof body.description === 'string' ? { description: body.description } : {}),
+    ...(htmlBackends?{htmlBackends}:{}),
+    ...(htmlDatasets?{htmlDatasets}:{}),
+    ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : parsed.format==='html'?{title:parsed.derivedTitle}:{}),
+    ...(body.description===null || typeof body.description === 'string' ? { description: body.description } : parsed.format==='html'?{description:parsed.derivedDescription??null}:{}),
     ...(visibility ? { visibility } : {}),
     ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     ...(access ? { access } : {}),
@@ -193,7 +228,7 @@ export async function replaceArtifactWithBody(
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, expected)
-    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares});
+    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares,...(input.format==='html'&&options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:await replacedArtifactWire(saved,base,undefined,{affected:null,warnings:[],openAnnotations:0})})}:{})});
   } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
@@ -277,14 +312,18 @@ export async function createArtifactFromBody(
 
   if (options.dryRun) return preflightReply(prepared);
 
+  const htmlDatasets=await prepareHtmlDatasets(body,actor);if(htmlDatasets instanceof Response)return htmlDatasets;
+  const htmlBackends=await prepareHtmlBackends(body,true);if(htmlBackends instanceof Response)return htmlBackends;
   const applied = await applyPreparedContent(prepared);
   parsed = applied;
   responseBody = row => ({...createdArtifactWire(row,base,sentMarkup),...sourceRepairsEcho(parsed.repairs)});
   let row;
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
+    ...(htmlBackends?{htmlBackends}:{}),
+    ...(htmlDatasets?{htmlDatasets}:{}),
     title: body.title===null || typeof body.title === 'string' ? body.title : parsed.derivedTitle,
-    description: body.description===null || typeof body.description === 'string' ? body.description : null,
+    description: body.description===null || typeof body.description === 'string' ? body.description : parsed.derivedDescription??null,
     ...(visibility ? { visibility } : {}),
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,

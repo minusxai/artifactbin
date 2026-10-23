@@ -4,8 +4,6 @@ import {tmpdir} from 'node:os';
 import {createTeamApplication} from '../server/team-host';
 import {AUTH_SECRET} from '@/lib/platform';
 import {useAppHarness} from './harness';
-import {drainPreparedPageWarmups} from '@/lib/publish/prepared/prepared-page.server';
-import {drainSnapshotRevalidations} from '@/lib/publish/prepared/snapshots.server';
 import {expect,it} from 'vitest';
 import {checkDirectHttp,checkGuestHttpIssuance} from '../../../scripts/gates/lib/http-conformance.mjs';
 useAppHarness();
@@ -83,5 +81,5 @@ it('acceptance runs against real composed email, artifact and download handlers'
   expect(notice.message.startsWith('afbin now installs through npm. Run once: npx --yes @afbin/cli@latest setup')).toBe(true);
   expect(notice.hint).toContain(`${origin}/chat/install-node.sh`);
   expect((await fetch(origin+'/api/my/tokens/'+token.id,{method:'DELETE',headers:{cookie:accountCookie,origin}})).status).toBe(204);
- }finally{await drainPreparedPageWarmups();await drainSnapshotRevalidations();await application.close();await rm(directory,{recursive:true,force:true});}
+ }finally{await application.close();await rm(directory,{recursive:true,force:true});}
 });

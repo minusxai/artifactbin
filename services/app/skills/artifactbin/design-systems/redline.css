@@ -1,0 +1,122 @@
+/* Generated from design-systems/specs/redline.json. */
+@font-face { font-family: "Barlow Condensed"; font-style: italic; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/barlowcondensed/v13/HTxyL3I-JCGChYJ8VI-L6OO_au7B6xTrY3TmtYkGQLhEx6A5.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Barlow Condensed"; font-style: italic; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/barlowcondensed/v13/HTxyL3I-JCGChYJ8VI-L6OO_au7B6xTrY3Tmu4kGQLhExw.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3jWuYMBYrp0xg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3bWuYMBYro.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3jWuYMBYrp0xg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3bWuYMBYro.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 800; font-display: swap; src: url(https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3jWuYMBYrp0xg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 800; font-display: swap; src: url(https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3bWuYMBYro.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHTWEBlwu8Q.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZOIHTWEBlw.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHTWEBlwu8Q.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZOIHTWEBlw.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZ2IHTWEBlwu8Q.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Sans"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/dmsans/v17/rP2Hp2ywxg089UriCZOIHTWEBlw.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthSQBK6PYK3EXw.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthqQBK6PYK0.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEY2tbYf-Vlh3uA.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEYOtbYf-Vlg.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+:root[data-af-design-system="redline"] {
+  --ds-paper: #EEEADE;
+  --ds-paper-raised: #F6F3EA;
+  --ds-paper-sunk: #E2DDCC;
+  --ds-line: #C9C3B0;
+  --ds-ink: #20201D;
+  --ds-ink-soft: #5C5A52;
+  --ds-on-ink: #EEEADE;
+  --ds-red: #EC402B;
+  --ds-on-red: #20201D;
+  --ds-red-ink: #C8321F;
+  --ds-red-soft: #F9D5CF;
+  --ds-positive: #2A9D5C;
+  --ds-positive-soft: #D7EFE0;
+  --ds-caution: #B8841A;
+  --ds-caution-soft: #FAECC9;
+  --ds-negative: #EC402B;
+  --ds-negative-soft: #F9D5CF;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-red);
+  --primary-foreground: var(--ds-on-red);
+  --secondary: var(--ds-ink);
+  --secondary-foreground: var(--ds-on-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-soft);
+  --accent: var(--ds-red-soft);
+  --accent-foreground: var(--ds-red-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-red);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-red);
+  --chart-1: var(--ds-red);
+  --chart-2: var(--ds-ink);
+  --chart-3: var(--ds-ink-soft);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --radius: 0px;
+  --font-display: "Barlow Condensed", Impact, "Arial Narrow", sans-serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, Menlo, monospace;
+  --ds-chip-radius: 0px;
+}
+:root[data-af-design-system="redline"][data-af-dark="true"] {
+  --ds-paper: #20201D;
+  --ds-paper-raised: #2A2A26;
+  --ds-paper-sunk: #171715;
+  --ds-line: #3D3D37;
+  --ds-ink: #EEEADE;
+  --ds-ink-soft: #B3B0A3;
+  --ds-on-ink: #20201D;
+  --ds-red: #EC402B;
+  --ds-on-red: #20201D;
+  --ds-red-ink: #FF6A55;
+  --ds-red-soft: #4A1D17;
+  --ds-positive: #5EC98A;
+  --ds-positive-soft: #143524;
+  --ds-caution: #F0BD57;
+  --ds-caution-soft: #42310A;
+  --ds-negative: #EC402B;
+  --ds-negative-soft: #4A1D17;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-red);
+  --primary-foreground: var(--ds-on-red);
+  --secondary: var(--ds-ink);
+  --secondary-foreground: var(--ds-on-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-soft);
+  --accent: var(--ds-red-soft);
+  --accent-foreground: var(--ds-red-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-red);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-red);
+  --chart-1: var(--ds-red);
+  --chart-2: var(--ds-ink);
+  --chart-3: var(--ds-ink-soft);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --ds-chip-radius: 0px;
+}
+:root[data-af-design-system="redline"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+:root[data-af-design-system="redline"] .t-display-xl { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: clamp(80px, 18vw, 240px); line-height: .82; font-weight: 700; letter-spacing: -0.025em; text-transform: uppercase; }
+:root[data-af-design-system="redline"] .t-display-l { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: clamp(48px, 7.5vw, 104px); line-height: .9; font-weight: 700; letter-spacing: -0.025em; text-transform: uppercase; }
+:root[data-af-design-system="redline"] .t-display-m { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: 44px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em; text-transform: uppercase; }
+:root[data-af-design-system="redline"] .t-title { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: 24px; line-height: 26px; font-weight: 700; letter-spacing: -0.01em; text-transform: uppercase; }
+:root[data-af-design-system="redline"] .t-body-l { font-family: "DM Sans", system-ui, sans-serif; font-size: 19px; line-height: 1.5; font-weight: 400; }
+:root[data-af-design-system="redline"] .t-body { font-family: "DM Sans", system-ui, sans-serif; font-size: 16px; line-height: 1.55; font-weight: 400; }
+:root[data-af-design-system="redline"] .t-body-s { font-family: "DM Sans", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
+:root[data-af-design-system="redline"] .t-label { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 16px; font-weight: 400; letter-spacing: 0.09em; text-transform: uppercase; }
+:root[data-af-design-system="redline"] .t-numeral { font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif; font-size: 64px; line-height: 56px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+:root[data-af-design-system="redline"] .t-mono { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }

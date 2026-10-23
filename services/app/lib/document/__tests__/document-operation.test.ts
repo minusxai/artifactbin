@@ -9,7 +9,6 @@ function applyDocumentOperations(source:string,operations:readonly DocumentOpera
  if(!parsed.ok)throw new DocumentOperationError(parsed.error,-1);
  return serializeJsx(applyOperationsToNodes(parsed.nodes,operations));
 }
-import {publishJsx} from '../../publish/document/jsx-tier';
 const source='<section id="root"><p id="a">Alpha</p><p id="b">Beta</p></section>';
 describe('document operation algebra',()=>{
  it('composes text, attributes, insertion, movement and deletion in order',()=>{
@@ -51,14 +50,6 @@ describe('document operation algebra',()=>{
   const result=applyDocumentOperations('<Question id="chart" />',[{kind:'setAttribute',path:[0],name:'viz',value}]);
   expect(result).toContain(JSON.stringify(value));
  });
- it('rejects invalid composites as a whole through publisher admission',async()=>{
-  const candidate=applyDocumentOperations(source,[{kind:'setText',path:[0,0,0],value:'Safe'},{kind:'setAttribute',path:[0,1],name:'onClick',value:'alert(1)'}]);
-  const result=await publishJsx({},candidate,{loadRef:async()=>null});
-  expect(result).toBeInstanceOf(Response);expect((result as Response).status).toBe(400);
- });
- it('treats script-looking text as escaped data, not executable input',async()=>{
-  const candidate=applyDocumentOperations(source,[{kind:'setText',path:[0,0,0],value:'<script>alert(1)</script>'}]);
-  expect(candidate).toContain('&lt;script&gt;');
-  expect(await publishJsx({},candidate,{loadRef:async()=>null})).not.toBeInstanceOf(Response);
- });
+
+
 });

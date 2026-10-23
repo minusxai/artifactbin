@@ -25,7 +25,7 @@ import { GET as readContent } from '@/app/api/artifacts/[id]/content/route';
 import {POST as prepareDocument} from '@/app/api/artifacts/[id]/prepare/route';
 import { POST as postEdit } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as postPreflight } from '@/app/api/artifacts/preflight/route';
-import { runCli, type CliContext } from '../../cli/src/dispatch';
+import { runCli } from '../../cli/src/dispatch';
 import { saveConnection, saveDefaultServer } from '../../cli/src/config';
 
 /** The server every fixture connects to. Nothing binds a socket: the transport calls handlers directly. */
@@ -43,9 +43,7 @@ export interface CliCall {
 }
 
 /** `['POST /api/artifacts', ...]` — the usual shape an assertion wants. */
-export const routesCalled = (calls: CliCall[]): string[] => calls.map((call) => `${call.method} ${call.path}`);
 /** Same, with the query string kept. */
-export const addressesCalled = (calls: CliCall[]): string[] => calls.map((call) => `${call.method} ${call.address}`);
 
 /**
  * A route this fixture does not own. Return a `Response` to answer, or nothing to fall through to
@@ -115,8 +113,6 @@ interface CliWorkspace {
 interface CliWorkspaceOptions {
   /** Default transport for `run`/`invoke`; each call may still override it. */
   fetch?: typeof fetch;
-  /** Explicit renderer boundary for dispatcher tests; compilation is covered by local HTML tests. */
-  localHtml?: CliContext['localHtml'];
   /** Put `.artifactbin` in a directory of its own, so a test can assert the workspace holds only the author's files. */
   separateHome?: boolean;
   /** Extra environment for the CLI process (`--secret-env` reads it). */
@@ -146,7 +142,6 @@ export async function cliWorkspace(prefix: string, options: CliWorkspaceOptions 
       interactive: false,
       ...(options.env ? { env: options.env } : {}),
       ...(fetchImpl ? { fetch: fetchImpl } : {}),
-      ...(options.localHtml ? { localHtml: options.localHtml } : {}),
       stdout: (value: string) => output.push(value),
       stderr: (value: string) => errors.push(value),
     });

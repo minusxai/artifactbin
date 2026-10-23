@@ -205,6 +205,8 @@ interface FramedStoryOptions {
   /** The head pointer drafts are previewed against, and the source the editor opened on (read live; sent on change). */
   editId: () => string;
   source: () => string | null;
+  /** Trusted saved HTML revision and archive policy from the platform bootstrap. */
+  htmlContext?: Parameters<typeof createFrameBridgeParent>[0]['htmlContext'];
   /**
    * The newest saved version the page's own stream delivered (createLiveArtifact's frame), and whether the page is
    * reading. The framed document draws that version itself, from its own stream; only its NODES — which comments,
@@ -245,7 +247,7 @@ export function createFramedStory(options: FramedStoryOptions): FramedStory {
     if (disposed || current()) return;
     const bridge = createFrameBridgeParent({
       win: window, frame, frameOrigin: origin, id: options.id, nodes,
-      editId: options.editId, source: options.source,
+      editId: options.editId, source: options.source, htmlContext: options.htmlContext,
       onReady: (next) => setNonce(next || null),
       onClosed: (reason) => { if (reason !== 'disposed') console.warn(`[frame-bridge] ${reason}`); },
       onUrlValues: (values) => followFramedValues(window, values),

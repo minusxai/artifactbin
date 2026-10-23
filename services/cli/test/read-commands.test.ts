@@ -1,15 +1,10 @@
-import {stateFor} from '../src/state-access';
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,writeFile,readFile,realpath,mkdir} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile,readFile,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join,resolve} from 'node:path';
-import {parseDocument} from '../src/document';
-import {registerLocalFiles} from '../src/local-workspace';
-import {readArtifactFileHtml} from '../src/local-html-import';
+import {join} from 'node:path';
 import {HttpClient} from '../src/http';
-import {serverRenderer,exportResources} from '../src/export';
-import {loadWorkspace} from '../src/workspace';
+import {serverRenderer} from '../src/export';
 import {runCli} from '../src/dispatch';
 import {saveTestConnection} from './connection';
 import {cliHarness} from './harness';
@@ -195,84 +190,6 @@ test('image exports select OG/refresh and follow only image grants without forwa
  await assert.rejects(refused.view('/a/abc123/export'),/redirect/i);
 });
 
-test('local images render unpublished bytes without authentication, publication or source changes',async()=>{
- const h=await cliHarness('local-image-export-',{token:null});
- try{
-  const source='<p>Unpublished local edit</p>';await writeFile(join(h.root,'draft.jsx'),source);
-  const workspace=await loadWorkspace(h.root,h.root);let renders=0;
-  const localImage=async(options:import('../src/local-image-options').LocalImageOptions)=>{
-   renders++;assert.equal(options.path,'draft.jsx');assert.equal(options.format,'png');assert.equal(options.page,2);
-   assert.equal(await readFile(join(options.cwd,options.path),'utf8'),source);return Buffer.from('local-image');
-  };
-  const options={format:'png',page:2,output:'draft.png',server:'https://example.com',emit:()=>{},localImage};
-  assert.equal(await exportResources(workspace,['draft.jsx'],{...options,dryRun:true,emit:value=>assert.equal((value as any).operations[0].requires,'local_rendering')}),true);
-  assert.equal(renders,0);
-  assert.equal(await exportResources(workspace,['draft.jsx'],options),true);
-  assert.equal(renders,1);assert.equal(await readFile(join(h.root,'draft.png'),'utf8'),'local-image');
-  assert.equal(await readFile(join(h.root,'draft.jsx'),'utf8'),source);assert.equal(h.network(),0);
-  const state=await stateFor(h.root);state.put(workspace.root,'draft-identity','draft.jsx',{id:'local1'});
-  assert.equal(await exportResources(workspace,['local1'],{...options,output:'by-id.png'}),true);assert.equal(renders,2);
-  await assert.rejects(exportResources(workspace,['draft.jsx'],{...options,output:'failure.png',localImage:async()=>{throw Error('Render failed');}}),/Render failed/);
-  await assert.rejects(readFile(join(h.root,'failure.png')),/ENOENT/);
-  await assert.rejects(exportResources(workspace,['draft.jsx'],{...options,output:'draft.jsx',force:true}),/source file/);
-  assert.equal(renders,2,'Refuse overwriting the source before starting a renderer');
-  assert.equal(await exportResources(workspace,['https://example.com/a/local1'],{...options,output:'remote.png'}),false,'An explicit URL always selects server rendering');
- }finally{await h.cleanup();}
-});
-
-test('refresh renders registered published IDs and versions on the server, never their local draft',async()=>{
- const h=await cliHarness('refresh-published-image-');
- try{
-  await writeFile(join(h.root,'draft.jsx'),'<p>Local draft</p>');
-  const workspace=await loadWorkspace(h.root,h.root);
-  const state=await stateFor(h.root);state.put(workspace.root,'draft-identity','draft.jsx',{id:'abc123'});
-  let renders=0;const paths:string[]=[];
-  const client=new HttpClient({connection:{server:'https://example.com',token:'test-only'},fetch:async(input,init)=>{
-   const url=new URL(String(input));paths.push(url.pathname+url.search);
-   assert.equal(new Headers(init?.headers).get('authorization'),'Bearer test-only');
-   return new Response('published pixels',{headers:{'content-type':'image/png'}});
-  }});
-  const options={format:'png',refresh:true,server:'https://example.com',client,emit:()=>{},localImage:async()=>{renders++;return Buffer.from('local pixels');}};
-  assert.equal(await exportResources(workspace,['abc123'],{...options,dryRun:true,output:'planned.png',emit:value=>assert.equal((value as {operations:{requires:string}[]}).operations[0]!.requires,'server_rendering')}),true);
-  assert.equal(paths.length,0);assert.equal(renders,0,'Planning a refresh does not render');
-  for(const [ref,output,path] of [
-   ['abc123','head.png','/a/abc123/export?format=png&refresh=1'],
-   ['abc123@2','version.png','/a/abc123/export?format=png&version=2&refresh=1'],
-   ['https://example.com/a/abc123','url.png','/a/abc123/export?format=png&refresh=1'],
-   ['https://example.com/a/abc123@2','url-version.png','/a/abc123/export?format=png&version=2&refresh=1'],
-  ]){
-   assert.equal(await exportResources(workspace,[ref],{...options,output}),true);
-   assert.equal(paths.at(-1),path);assert.equal(await readFile(join(h.root,output),'utf8'),'published pixels');
-  }
-  assert.equal(renders,0);assert.equal(paths.length,4);
-  assert.equal(await readFile(join(h.root,'draft.jsx'),'utf8'),'<p>Local draft</p>');
-  assert.equal(await exportResources(workspace,['abc123'],{...options,client:undefined,output:'unauthenticated.png'}),false,'Published refresh requires its authenticated renderer');
-  assert.equal(paths.length,4);assert.equal(renders,0);
-  const refused=new HttpClient({connection:{server:'https://example.com',token:'test-only'},fetch:async()=>Response.json({error:'forbidden',message:'Access refused.'},{status:403})});
-  await assert.rejects(exportResources(workspace,['abc123'],{...options,client:refused,output:'refused.png'}),/Access refused/);
-  assert.equal(renders,0,'Server access refusal must never fall back to local bytes');
-  await assert.rejects(readFile(join(h.root,'refused.png')),/ENOENT/);
- }finally{await h.cleanup();}
-});
-
-test('refresh on local image paths refuses before rendering and names published rendering',async()=>{
- const h=await cliHarness('refresh-local-image-',{token:null});
- try{
-  await writeFile(join(h.root,'draft.jsx'),'<p>Local draft</p>');
-  const workspace=await loadWorkspace(h.root,h.root);
-  let renders=0;
-  for(const registered of [false,true]){
-   if(registered){const state=await stateFor(h.root);state.put(workspace.root,'draft-identity','draft.jsx',{id:'abc123'});}
-   await assert.rejects(exportResources(workspace,['draft.jsx'],{format:'png',refresh:true,output:'draft.png',server:'https://example.com',emit:()=>{},localImage:async()=>{renders++;return Buffer.from('pixels');}}),error=>{
-    assert.ok(error instanceof Error);assert.equal((error as {code?:string}).code,'invalid_flags');
-    assert.match((error as Error&{fix?:string}).fix??'',/published.*URL|artifact URL/i);assert.match(error.message,/local file/i);return true;
-   });
-  }
-  assert.equal(renders,0);assert.equal(h.network(),0);
-  await assert.rejects(readFile(join(h.root,'draft.png')),/ENOENT/);
- }finally{await h.cleanup();}
-});
-
 test('downloads annotated comment images with authenticated transport and an explicit local receipt',async()=>{
  const h=await cliHarness('afbin-comment-image-',{account:null});
  try{
@@ -305,48 +222,6 @@ test('image download refuses ambiguous requests, escapes and failed responses wi
   assert.notEqual(await h.invoke([...base,'--output','bad.webp','--json'],()=>new Response('<html>login</html>',{headers:{'Content-Type':'text/html'}})),0);
   await assert.rejects(readFile(join(h.root,'bad.webp')),/ENOENT/);
   assert.equal(await readFile(join(h.root,'keep.webp'),'utf8'),'keep');
- }finally{await h.cleanup();}
-});
-
-test('local HTML default filename uses the identity captured by rendering without preregistration',async()=>{
- const h=await cliHarness('local-html-export-',{token:null});
- try{
-  const source='---\ntitle: "Artifact + run: a proposal"\n---\n<p>Unsynced</p>';
-  await writeFile(join(h.root,'draft.jsx'),source);
-  const workspace=await loadWorkspace(h.root,h.root);let calls=0;
-  const fixture=JSON.parse(await readFile(resolve(import.meta.dirname,'../../../scripts/fixtures/offline-file/artifact-file.json'),'utf8'));
-  const options={format:'html',server:'https://example.com',emit:()=>{},localHtml:async()=>{
-   calls++;await registerLocalFiles(workspace,['draft.jsx']);
-   const document=parseDocument(await readFile(join(h.root,'draft.jsx'),'utf8'));
-   return Buffer.from(`<script type="application/json" id="afbin-file">${JSON.stringify({...fixture,artifactId:document.metadata.id,metadata:{...fixture.metadata,title:document.metadata.title}}).replace(/</g,'\\u003c')}</script>`);
-  }};
-  assert.equal(await exportResources(workspace,['draft.jsx'],{...options,dryRun:true,emit:value=>{
-   assert.equal((value as any).operations[0].requires,'local_rendering');assert.equal((value as any).operations[0].filename_pending,true);
-  }}),true);
-  assert.equal(calls,0);assert.equal(await readFile(join(h.root,'draft.jsx'),'utf8'),source);
-  assert.equal(await exportResources(workspace,['draft.jsx'],options),true);
-  const id=parseDocument(await readFile(join(h.root,'draft.jsx'),'utf8')).metadata.id;
-  const output=await readFile(join(h.root,`${id}-artifact-run-a-proposal.jsx.html`),'utf8');
-  assert.equal(readArtifactFileHtml(output).artifactId,id);assert.equal(calls,1);assert.equal(h.network(),0);
-  await assert.rejects(exportResources(workspace,['draft.jsx'],options),/already exists/);
-  await mkdir(join(h.root,'copies'));
-  await exportResources(workspace,['draft.jsx'],{...options,output:'copies'});
-  assert.equal(readArtifactFileHtml(await readFile(join(h.root,'copies',`${id}-artifact-run-a-proposal.jsx.html`),'utf8')).artifactId,id);
-  assert.equal(await exportResources(workspace,['draft.jsx'],{...options,output:'chosen.html'}),true);
-  assert.equal(readArtifactFileHtml(await readFile(join(h.root,'chosen.html'),'utf8')).artifactId,id);
-  await exportResources(workspace,['draft.jsx'],{...options,dryRun:true,emit:value=>assert.equal((value as any).operations[0].path,`${id}-artifact-run-a-proposal.jsx.html`),force:true});
- }finally{await h.cleanup();}
-});
-
-test('published default HTML names use the downloaded carrier without another metadata request',async()=>{
- const h=await cliHarness('published-html-name-',{account:null});
- try{
-  const fixture=JSON.parse(await readFile(resolve(import.meta.dirname,'../../../scripts/fixtures/offline-file/artifact-file.json'),'utf8'));
-  const html=`<script type="application/json" id="afbin-file">${JSON.stringify({...fixture,artifactId:'abc123',metadata:{...fixture.metadata,title:'Regional sales'}}).replace(/</g,'\\u003c')}</script>`;
-  assert.equal(await h.invoke(['export','abc123','--format','html','--json'],()=>new Response(html,{headers:{'Content-Type':'text/html'}})),0,h.out.join(''));
-  assert.deepEqual(h.paths,['/a/abc123/download']);
-  assert.equal(h.last().operations[0].path,'abc123-regional-sales.jsx.html');
-  assert.equal(readArtifactFileHtml(await readFile(join(h.root,'abc123-regional-sales.jsx.html'),'utf8')).artifactId,'abc123');
  }finally{await h.cleanup();}
 });
 

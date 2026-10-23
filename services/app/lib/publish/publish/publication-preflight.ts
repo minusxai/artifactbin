@@ -1,6 +1,6 @@
 /** Read-only validation against real artifact identities and existing permissions. */
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
-import { applyEditFor, findDependentsFor, getArtifactFor, getOwnedArtifactFor, respondToEdit, updateMetadataFromBody } from '@/lib/artifacts';
+import { findDependentsFor, getArtifactFor, getOwnedArtifactFor, updateMetadataFromBody } from '@/lib/artifacts';
 import {createArtifactFromBody,replaceArtifactWithBody} from './requests';
 import type { TokenHoldingActor } from '@/lib/accounts';
 import {json,baseUrl} from '@/lib/http/http';
@@ -22,10 +22,6 @@ export async function preflightPublication(request:Request,actor:TokenHoldingAct
  if(body.mode==='metadata'){
   if(!current)return json({error:'invalid_preflight'},400);
   return updateMetadataFromBody(actor,current.id,input as Record<string,unknown>,baseUrl(request),true);
- }
- if(body.mode==='edit'){
-  if(!current||'meta' in input)return json({error:'invalid_preflight',hint:'Body edits require id and source/edit_id; use conditional metadata for metadata changes.'},400);
-  return respondToEdit(baseUrl(request),input as Record<string,unknown>,edit=>applyEditFor(actor,current.id,edit,{dryRun:true}));
  }
  if(body.mode!==undefined&&body.mode!=='replace')return json({error:'invalid_preflight_mode'},400);
  return current?replaceArtifactWithBody(input as Record<string,unknown>,actor,current.id,baseUrl(request),{dryRun:true})

@@ -10,7 +10,7 @@ const ISLAND_ENTRIES = [
   `${ISLANDS}/{rt,boot,deck,row-class,page,page-runtime,frame-editor,sqlite-engine,url-sync,chart-controller}.{ts,tsx}`,
   `${ISLANDS}/kit/{image,basic,tabs,accordion,dialog,disclosure,controls,upload,data,files,people,mermaid,isometric,isometric-server,embed,cells,static}.tsx`,
   `${ISLANDS}/kit/image-map.ts`, `${ISLANDS}/kit/templates.ts`, `${ISLANDS}/morph/engine.ts`, `${ISLANDS}/vendor/*.ts`,
-  'lib/offline/{compiled-boot,compiled-sqlite}.ts',
+
 ];
 
 /** @type {import('knip').KnipConfig} */
@@ -25,10 +25,9 @@ export default {
         'deploy/company/ci-smtp-fixture.mjs',
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name
         // guard (scripts/ci/check-local.mjs), the gate container, agent tooling (docs/agent-workflows.md),
-        // proofs spawned by their tests, the offline gate's preview build, the backfill and the author-script audit.
+        // proofs spawned by their tests and the preview gate's build.
         'scripts/gates/gate-*.mjs', 'scripts/ci/check-residual-names.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
         'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/__tests__/reserved-ids-{local,postgres}-proof.ts',
-        'scripts/build/build-preview-gate-inputs.mjs', 'scripts/compiled-backfill.ts', 'scripts/audit-author-scripts.ts',
         // Design-system tooling (generate:design-systems and its screenshot helpers).
         'design-systems/*.mjs',
         // Gate and page-speed fixtures, read by path.
@@ -50,22 +49,24 @@ export default {
       entry: [
         // Route modules: server/routes.generated.ts mounts each as a namespace.
         'app/**/route.ts',
-        // Island chunks (build-islands), offline extras (scripts/build-offline.mjs), library bundles
+        // Island chunks (build-islands), library bundles
         // (scripts/build-libraries.mjs over lib/libraries/registry.json), the SPA (vite.config.mts).
         ...ISLAND_ENTRIES,
-        'lib/offline/{extras-entry.ts,solid-entry.tsx}', 'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
+        // Native HTML core bundles this module by URL; its exports are the author ABI.
+        'lib/html-runtime/{browser-client,build.server,index}.ts',
+        'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
         // Server bundle workers (scripts/build/build-server.mjs).
-        'lib/publish/prepared/draft-compile-worker.ts', 'lib/runner/runtime.ts',
+        'lib/runner/runtime.ts',
         // Build and generator scripts run by path (scripts/lib/afbin-run.mjs, scripts/lib/dev-runner.mjs, CI).
-        'scripts/{build-libraries,build-offline,build-server-reader,generate-geo-boundaries}.mjs', 'scripts/generate-offline-fixture.ts',
+        'scripts/{build-libraries,build-server-reader,generate-geo-boundaries}.mjs',
         'skills/**/*.jsx',
+        // The HTTP author-skill ZIP loads these explicit text assets by path (lib/skills/assets).
+        'skills/artifactbin/{scripts/*.mjs,examples/*.{html,ts,csv},design-systems/*.css}',
         // The deployment's @artifactbin/app entry points (minusxai/artifactbin-server tsconfig paths).
         'server/host.ts', 'lib/platform/{config,db}.ts', 'lib/accounts/tokens.ts', 'lib/artifacts/{mutation-invocation,document-policy}.ts',
         // Reached in ways knip does not follow: `Promise.all([import(...)])` (lib/mermaid-images/reader-draw.ts)
         // and an `import('./managed-assets')` type in an interface method (lib/page-store/store.ts).
         'lib/mermaid-images/mermaid-render.ts', 'lib/page-store/managed-assets.ts',
-        // Bundled whole by scripts/gates/gate-offline-file.mjs for its writer and messages.
-        'lib/offline/{file-html,file-format}.ts',
         // Test fixtures run as their own tsx processes by the tests beside them.
         'lib/islands/__tests__/fixtures/*.{ts,tsx}',
       ],
@@ -86,13 +87,11 @@ export default {
     'services/cli': {
       // The package's `exports` names its built dist/index.mjs; the preview client and connect bundles
       // (scripts/build-preview.mjs) and the preview host entry (scripts/build-host.mjs).
-      entry: ['src/index.ts', 'src/preview/{client,connect}.tsx', 'src/preview-entry.ts'],
+      entry: ['src/index.ts'],
       ignoreDependencies: [
         // Left out of the CLI bundle and resolved from its installed dependencies at run time
         // (scripts/build/runtime-externals.mjs CLI_RUNTIME_EXTERNALS) with no import in the CLI's own source.
         'playwright-core', 'vega', 'vega-lite', 'vega-interpreter', 'nunjucks', 'harfbuzzjs', 'wawoff2',
-        // Tailwind's scanner, installed with @tailwindcss/node (scripts/build-preview.mjs).
-        '@tailwindcss/oxide',
       ],
     },
     // Generates ephemeral, single-day TLS certificates for the real SMTP fixture.

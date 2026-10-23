@@ -33,6 +33,8 @@ import { avatarUrl } from '@/lib/accounts';
 import { getDb, type Queryable } from '@/lib/platform/db';
 import { actorSubject } from '@/lib/platform/events';
 import { generateInternalId } from '@/lib/platform/ids';
+import { parseHtmlNodeAnchor, type HtmlNodeAnchor } from '@artifactbin/contracts';
+import { htmlCommentNodes, resolveHtmlCommentAnchor } from './html-anchor';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 
 
@@ -55,7 +57,7 @@ export interface AnnotationWire {
   id: string;
   status: 'open' | 'resolved';
   /** null exactly when `orphaned` — the anchor names nothing in the CURRENT version. */
-  anchor: AnnotationAnchor | null;
+  anchor: AnnotationAnchor | (HtmlNodeAnchor & { key?: never; path?: never; spanStart?: never; spanEnd?: never }) | null;
   orphaned: boolean;
   /** The document version the comment was made against. */
   anchor_version: number | null;
@@ -83,6 +85,7 @@ export interface AnnotationWire {
 }
 
 export interface CreateAnnotationInput {
+  anchor?: HtmlNodeAnchor;
   viewState?: CommentViewState;
   attachmentId?: string;
   /** Stable source identity. */
@@ -162,6 +165,7 @@ interface AnnotationRowDb {
   status: 'open' | 'resolved';
   resolved_at: string | null;
   anchor_key: string | null;
+  html_anchor: HtmlNodeAnchor | null;
   anchor_version: number | null;
   snippet: string;
   created_at: string;
@@ -330,34 +334,50 @@ export async function createAnnotationFor(
   const made = await db.transaction(async (tx): Promise<AnnotationWire | CreateAnnotationRefusal | null> => {
     const row = (await artifactQuery<ArtifactRow>(tx,`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [artifactId, scope.val])).rows[0];
     if (!row) return null;
-    if (row.format !== 'markup') return { refused: 'not_markup' };
+    if (row.format !== 'markup' && row.format !== 'html') return { refused: 'not_markup' };
     if (input.baseEditId && input.baseEditId !== row.edit_id) return stale({ editId: row.edit_id, version: row.version });
     const source = row.source ?? '';
-    const parsed = parseJsx(source);
-    if (!parsed.ok) return { refused: 'bad_path' };
-    let node: JsxNode | undefined;
-    if (input.nodeId) node = anchorIndex(source).get(input.nodeId)?.node;
-    else if (quote) {
-      const matches = [...anchorIndex(source).values()].filter(entry => canonicalTextOf(entry.node).includes(quote));
-      // Choose the smallest containing element, avoiding ambiguity from its ancestors.
-      const leaves = matches.filter(entry => !matches.some(other => other !== entry && other.path.startsWith(entry.path + '.')));
-      if (!leaves.length) return {refused: 'quote_not_found'};
-      if (leaves.length !== 1 || canonicalTextOf(leaves[0].node).split(quote).length !== 2) return {refused: 'ambiguous_quote'};
-      node = leaves[0].node;
+    let anchorKey: string | null = null;
+    let snippet: string;
+    if (row.format === 'html') {
+      const anchor = parseHtmlNodeAnchor(input.anchor);
+      if (!anchor) return { refused: 'bad_path' };
+      if (anchor.revision !== String(row.version)) return stale({ editId: row.edit_id, version: row.version });
+      const resolved = resolveHtmlCommentAnchor(htmlCommentNodes(source), anchor);
+      if (!anchor.nodeId || !resolved.node) return { refused: 'bad_path' };
+      // Text may be rendered by the page beneath this saved parent. Capture is
+      // viewer-supplied evidence, never a claim about authoritative source text.
+      if (input.range && (!isAreaRange(input.range) || anchor.quote || anchor.range)) return { refused: 'bad_path' };
+      anchorKey = anchor.nodeId;
+      snippet = (resolved.node?.text ?? anchor.quote).replace(/\s+/g, ' ').trim().slice(0, 240);
+    } else {
+      if (input.anchor) return { refused: 'bad_path' };
+      const parsed = parseJsx(source);
+      if (!parsed.ok) return { refused: 'bad_path' };
+      let node: JsxNode | undefined;
+      if (input.nodeId) node = anchorIndex(source).get(input.nodeId)?.node;
+      else if (quote) {
+        const matches = [...anchorIndex(source).values()].filter(entry => canonicalTextOf(entry.node).includes(quote));
+        const leaves = matches.filter(entry => !matches.some(other => other !== entry && other.path.startsWith(entry.path + '.')));
+        if (!leaves.length) return { refused: 'quote_not_found' };
+        if (leaves.length !== 1 || canonicalTextOf(leaves[0].node).split(quote).length !== 2) return { refused: 'ambiguous_quote' };
+        node = leaves[0].node;
+      }
+      if (!node || node.type !== 'element') return { refused: 'bad_path' };
+      anchorKey = anchorKeyOf(node);
+      if (!anchorKey) return { refused: 'bad_path' };
+      if (isTargetRange(input.range) && !targetBelongsTo(node, input.range.target)) return { refused: 'bad_path' };
+      snippet = snippetOf(source.slice(node.start, node.end));
     }
-    if (!node || node.type !== 'element') return { refused: 'bad_path' };
-    const anchorKey = anchorKeyOf(node);
-    if (!anchorKey) return { refused: 'bad_path' };
-    if (isTargetRange(input.range) && !targetBelongsTo(node, input.range.target)) return { refused: 'bad_path' };
     if (input.attachmentId && (!input.baseEditId || !await consumeCommentImage(tx,actor,artifactId,input.attachmentId,id,row.edit_id))) return {refused:'invalid_attachment'};
     await tx.query(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
-        status, anchor_key, anchor_version, snippet, quote, range, view_state)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14)`,
+        status, anchor_key, anchor_version, snippet, quote, range, view_state, html_anchor)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13, $14, $15)`,
     [id, artifactId, input.body, author.kind, actor.tokenId, actor.userId, author.label, author.transport,
-      anchorKey, row.version, snippetOf(source.slice(node.start, node.end)),
-      quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null],
+      anchorKey, row.version, snippet,
+      input.anchor?.quote ?? quote, input.range ? JSON.stringify(input.range) : null, viewState ? JSON.stringify(viewState) : null, input.anchor ? JSON.stringify(input.anchor) : null],
     );
     // Read back through the join, not RETURNING: the echo draws the author's face too.
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
@@ -411,12 +431,15 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
     byRoot.set(r.root_id!, list);
   }
 
-  const anchors = anchorIndex(source);
+  const anchors = roots.some(root => !root.html_anchor) ? anchorIndex(source) : new Map<string, AnchorEntry>();
+  const htmlNodes = roots.some(root => root.html_anchor) ? htmlCommentNodes(source) : null;
 
   return roots.map((root) => {
-    const found = root.anchor_key ? anchors.get(root.anchor_key) : undefined;
+    const htmlAnchor = parseHtmlNodeAnchor(root.html_anchor);
+    const htmlResolved = htmlAnchor && htmlNodes ? resolveHtmlCommentAnchor(htmlNodes, htmlAnchor) : null;
+    const found = !htmlAnchor && root.anchor_key ? anchors.get(root.anchor_key) : undefined;
     const bodyPath = found ? sourcePathToBodyPath(source, found.path) : null;
-    const anchored = !!found && bodyPath !== null;
+    const anchored = htmlAnchor ? !!htmlResolved?.node : !!found && bodyPath !== null;
     const range = storedRange(root.range);
     const viewState = parseCommentViewState(root.view_state);
     return {
@@ -425,17 +448,17 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
       ...(viewState ? { view_state: viewState } : {}),
       ...(images.has(root.id) ? {image:images.get(root.id)} : {}),
       status: root.status,
-      anchor: anchored
+      anchor: htmlAnchor ? htmlAnchor : anchored && found
         ? { key: root.anchor_key!, nodeId: root.anchor_key!, path: bodyPath!, spanStart: found.node.start, spanEnd: found.node.end }
         : null,
       orphaned: !anchored,
       anchor_version: root.anchor_version,
-      snippet: anchored ? snippetOf(source.slice(found.node.start, found.node.end)) : root.snippet,
+      snippet: htmlAnchor ? htmlResolved?.node?.text.replace(/\s+/g, ' ').trim().slice(0, 240) ?? root.snippet : anchored && found ? snippetOf(source.slice(found.node.start, found.node.end)) : root.snippet,
       // Verbatim, both of them: what was selected does not change because the
       // document did — only `quote_found` moves.
       quote: root.quote,
       range,
-      quote_found: quoteFound(anchored ? found : undefined, root.quote, range),
+      quote_found: htmlResolved ? htmlResolved.quoteFound : quoteFound(anchored ? found : undefined, root.quote, range),
       thread: [commentWire(root, images), ...(byRoot.get(root.id) ?? []).map((reply) => commentWire(reply, images))],
       created_at: root.created_at,
       resolved_at: root.resolved_at,

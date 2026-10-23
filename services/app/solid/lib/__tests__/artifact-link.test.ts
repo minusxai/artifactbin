@@ -4,12 +4,12 @@ import { artifactLink, isDocumentFormat, knownFormat } from '@/solid/lib/artifac
 
 /** The ONE rule for how an in-app link to an artifact is drawn: a document crosses to the server, everything else stays in the app. */
 describe('artifactLink', () => {
-  it('lets the server draw a document: the router must not intercept its link', () => {
-    expect(artifactLink('/a/doc001', 'markup')).toEqual({ href: '/a/doc001', rel: 'external' });
-    expect(artifactLink('/@bob/doc001-hello#edit', 'markup')).toEqual({ href: '/@bob/doc001-hello#edit', rel: 'external' });
+  it.each(['html'])('lets the server draw a %s document: the router must not intercept its link', (format) => {
+    expect(artifactLink('/a/doc001', format)).toEqual({ href: '/a/doc001', rel: 'external' });
+    expect(artifactLink('/@bob/doc001-hello#edit', format)).toEqual({ href: '/@bob/doc001-hello#edit', rel: 'external' });
   });
 
-  it.each(ARTIFACT_FORMATS.filter((format) => format !== 'markup'))('keeps a %s in the app and tells the address what it is, so it asks no kind question', (format) => {
+  it.each(ARTIFACT_FORMATS.filter((format) => !isDocumentFormat(format)))('keeps a %s in the app and tells the address what it is, so it asks no kind question', (format) => {
     const link = artifactLink('/a/x01', format);
     expect(link.rel).toBeUndefined();
     expect(link.href).toBe('/a/x01');
@@ -22,8 +22,8 @@ describe('artifactLink', () => {
     expect(artifactLink('/a/x01', 'hologram')).toEqual({ href: '/a/x01' });
   });
 
-  it('is a document only for markup', () => {
-    expect(ARTIFACT_FORMATS.filter(isDocumentFormat)).toEqual(['markup']);
+  it('recognizes native HTML as a framed document', () => {
+    expect(ARTIFACT_FORMATS.filter(isDocumentFormat)).toEqual(['html']);
     expect(isDocumentFormat(undefined)).toBe(false);
   });
 });

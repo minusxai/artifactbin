@@ -53,7 +53,7 @@ export async function listPublicArtifactsByUser(userId: string): Promise<Artifac
   const db = await getDb();
   const r = await db.query<ArtifactSummary>(
     `SELECT ${summaryColumns('$2')} FROM artifacts
-     WHERE group_id IS NULL AND user_id = $1 AND visibility = 'public' AND format IN ('markup', 'folder') AND ${LIVE_ARTIFACT_SQL}
+     WHERE group_id IS NULL AND user_id = $1 AND visibility = 'public' AND format IN ('html', 'folder') AND ${LIVE_ARTIFACT_SQL}
        AND cardinality(ancestor_ids) = 0
      ORDER BY updated_at DESC LIMIT 200`,
     [userId, META_ALLOWED],

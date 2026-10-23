@@ -3,6 +3,44 @@ name: artifactbin
 description: >-
   Create, edit, publish, comment on, query or export Artifactbin artifacts. Use for artifactbin.dev (or self-hosted) links, work on an Artifactbin document, dashboard, deck, dataset, plan, landing page or app. Use the author skill and authenticated HTTP API contracts.
 ---
+[% if transport == "http" %]
+## Read first
+
+A page is a normal HTML file. Use ordinary HTML, CSS, JavaScript, SVG and chosen browser libraries. Load the core once with `<script src="/af/v1/core.js" data-af="core"></script>`; it provides the `@afbin/apollo` import. No JSX, framework compilation, injected state globals or account credentials belong in a page.
+
+Server: [[ base ]]. Reuse this origin’s saved credentials; [authentication](references/http-auth.md) explains email sign-in and refresh. Missing credentials do not mean a new account. If sign-in is required, reuse an email already provided; otherwise ask for it, request the emailed code and wait. Never invent an identity.
+
+For an existing page, read its canonical `html`, `version` and `state`, preserve `data-af-id` identities, edit the HTML and publish to the same ID. For new work, choose the content and one design system, build a complete useful first version, publish and share its returned URL before extending it. A URL-only request gets the URL alone.
+
+## Author and publish
+
+1. Read [native HTML publication](references/html-authoring.md). Create with `POST /api/artifacts` and `{"html":"<complete HTML>","visibility":"unlisted"}`. Updates use `PUT /api/artifacts/ID` with `html`, the observed `expectedVersion` and `expectedState`. Send one durable `Idempotency-Key` per intended write; retry an uncertain request with the same body and key.
+2. Read [state and JavaScript](references/html-runtime.md). All page state goes through `client` from `@afbin/apollo`. Top-level local state is private to each viewer’s browser. Shared data lives behind declared dataset/backend namespaces. Never put a bearer, refresh token or session cookie in HTML, state, scripts, examples or downloaded files.
+3. Pick one [design system](references/html-design-systems.md). The installed `design-systems/NAME.css` is generated from the retained specifications. Inline its CSS in `<style data-af="design-system">`; preserve its fonts, colors and type roles, then compose the page for the actual subject. Use `class`, ordinary forms and CSS; no kit components or utility compiler is assumed.
+4. For a CSV/dashboard read [datasets](references/html-datasets.md). For a shared app read [backend files](references/html-backends.md) before modeling identity or writes. A readable page grants no dataset write access. Use authenticated account identity, never a name typed into a form, to authorize actions.
+5. Verify the actual published page at desktop and 390px. Exercise changed controls and inspect errors. Check values, comparisons and charts against returned data; label sample or assumed data. Share what passed and anything still unverified. Publication accepts source; it does not prove appearance.
+
+## Preserve the document
+
+Every saved page version remains available. Keep stable `data-af-id` attributes when moving or editing elements. Never reuse an ID removed in an earlier version. Newly authored elements may omit IDs and receive server-assigned identities; save the canonical returned HTML before the next edit. HTML `id` remains available for ordinary browser anchors and selectors.
+
+Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-system"` for platform blocks. Color mode/design selection belongs on `<html data-af-dark="false" data-af-design-system="NAME">`. Page scripts execute on the page’s runner origin, separately from account credentials.
+
+## Installed resources
+
+[Download the author skill]([[ base ]]/skills/artifactbin.zip) and extract its one `artifactbin/` folder into your harness’s skill directory, then reload skills. The archive is one `artifactbin/` skill folder. Read only the guide needed for the task:
+
+- [Authentication](references/http-auth.md): verified email, private credential storage and serialized refresh.
+- [HTML publication](references/html-authoring.md): create, conditional replacement, identity and retry recovery.
+- [Runtime](references/html-runtime.md): Apollo local state, remote namespaces and offline behavior.
+- [Datasets](references/html-datasets.md): CSV import, schema discovery and stable dataset IDs.
+- [Backend files](references/html-backends.md): TypeScript resolvers, shared stores and permissions.
+- [Design systems](references/html-design-systems.md): select one, then read its generated native guide.
+- [Examples and verification](references/html-examples.md): report, CSV dashboard and shared task app.
+
+Optional `scripts/publish.mjs` sends a saved JSON request with an origin-bound token supplied outside the page. It is a helper inside this skill, not an installed product command.
+[% else %]
+
 ## Read first
 
 Artifactbin is a store for publishing self-contained HTML + kit JSX apps. It provides essential infrastructure for agents to make collaborative, token efficient and beautiful tiny applications. It provides a surface for humans and agents to express ideas, and for teammates to provide specific, rich feedback.
@@ -183,3 +221,4 @@ Read a local reference or use HTTP: `<origin>/llms/<filename-without-.md>`.
   - [dataset-images.md](references/dataset-images.md) — Legacy image uploads
   - [lambdas.md](references/lambdas.md) — Server-side handlers
   - [review-state.md](references/review-state.md) — Wireframes and saved views
+[% endif %]

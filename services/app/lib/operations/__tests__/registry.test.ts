@@ -15,16 +15,12 @@ import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { services, setServices } from '@/lib/platform';
 
 describe('the registry is curated, not generated', () => {
-  it('teaches atomic batches and persistent ids in the model-facing descriptions',()=>{
-    const edit=OPERATIONS.find(op=>op.name==='edit_artifact')!.description;
-    expect(edit).toContain('document_update');
-    expect(edit).toMatch(/one SQL statement/);
-    expect(edit).not.toContain('old_string');
-    expect(edit).toMatch(/client.*validat/i);
-    expect(edit).toMatch(/preserve.*ids/i);
-    const read=OPERATIONS.find(op=>op.name==='get_artifact')!.description;
-    expect(read).toContain('anchor.nodeId');
-    expect(read).toMatch(/relations.*never.*source/i);
+  it('offers canonical HTML saves instead of prepared compiler edits',()=>{
+    const replace=OPERATIONS.find(op=>op.name==='update_artifact')!;
+    expect(replace.description).toContain('native HTML');
+    expect(replace.input).toHaveProperty('html');
+    expect(replace.input).not.toHaveProperty('document_update');
+    expect(OPERATIONS.some(op=>op.name==='edit_artifact')).toBe(false);
   });
   it('names are unique snake_case verbs', () => {
     const names = OPERATIONS.map((o) => o.name);
@@ -34,9 +30,9 @@ describe('the registry is curated, not generated', () => {
 
   it('carries the artifact and dataset operations of the protocol', () => {
     expect(OPERATIONS.map((o) => o.name).sort()).toEqual([
-      'annotate', 'browser_session', 'change_artifact_membership', 'create_artifact', 'create_dataset_secret', 'delete_artifact', 'discover_dataset_source', 'edit_artifact', 'edit_comment', 'export_artifact', 'fork_artifact', 'get_artifact', 'get_artifact_members',
-      'get_dataset_policy', 'get_notification_job', 'get_remote_session', 'get_version', 'list_artifacts', 'list_notification_jobs', 'list_remote_sessions', 'list_versions', 'mutate_dataset', 'preview_dataset_notebook', 'query_resource', 'refresh_asset', 'restore_artifact', 'retry_notification_job', 'revert_artifact',
-      'set_dataset_policy', 'terminate_remote_session', 'testuser_create', 'testuser_delete', 'testuser_list', 'transfer_artifact', 'update_artifact', 'update_metadata',
+      'annotate', 'browser_session', 'change_artifact_membership', 'create_artifact', 'create_dataset_secret', 'delete_artifact', 'discover_dataset_source', 'edit_comment', 'export_artifact', 'fork_artifact', 'get_artifact', 'get_artifact_members',
+      'get_dataset_policy', 'get_notification_job', 'get_version', 'list_artifacts', 'list_notification_jobs', 'list_versions', 'mutate_dataset', 'preview_dataset_notebook', 'query_resource', 'refresh_asset', 'restore_artifact', 'retry_notification_job', 'revert_artifact',
+      'set_dataset_policy', 'testuser_create', 'testuser_delete', 'testuser_list', 'transfer_artifact', 'update_artifact', 'update_metadata',
     ]);
   });
 
@@ -57,7 +53,7 @@ describe('the registry is curated, not generated', () => {
 
   it('read/write/destructive is annotated, and the reads are the reads', () => {
     const readOnly = OPERATIONS.filter((o) => o.annotations.readOnly).map((o) => o.name).sort();
-    expect(readOnly).toEqual(['discover_dataset_source', 'export_artifact', 'get_artifact', 'get_artifact_members', 'get_dataset_policy', 'get_notification_job', 'get_remote_session', 'get_version', 'list_artifacts', 'list_notification_jobs', 'list_remote_sessions', 'list_versions', 'preview_dataset_notebook', 'query_resource', 'testuser_list']);
+    expect(readOnly).toEqual(['discover_dataset_source', 'export_artifact', 'get_artifact', 'get_artifact_members', 'get_dataset_policy', 'get_notification_job', 'get_version', 'list_artifacts', 'list_notification_jobs', 'list_versions', 'preview_dataset_notebook', 'query_resource', 'testuser_list']);
     expect(OPERATIONS.find((o) => o.name === 'delete_artifact')!.annotations.destructive).toBe(true);
   });
 

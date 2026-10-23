@@ -12,16 +12,16 @@
  * stream self-syncing — a client that connects late, reconnects, or misses a
  * wakeup converges on the next event with no cursor bookkeeping.
  */
+import { getDb } from '@/lib/platform/db';
+import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
 import { trackEvent } from '@/lib/platform';
 import { canReadArtifact, getArtifactById, ownsArtifact, effectiveRole } from '@/lib/artifacts';
-import { datasetsForDocument } from '@/lib/document-data';
-import { isDocumentFormat } from '@/lib/publish/document/input';
 import { canAnnotate } from '@artifactbin/contracts';
 import { authorHandle, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
-import { changedSince, marksOf, marksOfToken, tokenOf } from '@/lib/publish/prepared/served-results.server';
+import { changedSince, marksOf, marksOfToken, tokenOf,liveDatasetIds } from '@/lib/publish/realtime/dataset-marks';
 import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
 
 /*
@@ -73,6 +73,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * The set follows the DOCUMENT: an edit can add or drop a `<Query>`, so it
    * is re-derived on every document frame and the subscriptions are adjusted.
    */
+  let sharedMarks = new Map<string,string>();
   const datasetUnsubs = new Map<string, () => Promise<void>>();
 
   const encoder = new TextEncoder();
@@ -102,6 +103,16 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   /** A DATA wakeup: this dataset changed, re-run what reads it. */
   const sendData = (event: ArtifactDataEvent) =>
     writer.write(encoder.encode(`${position()}event: ${STORY_DATA_EVENT}\ndata: ${JSON.stringify(event)}\n\n`)).catch(() => { /* client gone */ });
+
+  let sharedQueue = Promise.resolve();
+  const pushHtmlShared = (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => sharedQueue = sharedQueue.then(async () => {
+    if (row.format !== 'html' || closed) return;
+    const current = await htmlSharedRevisions(await getDb(), htmlLiveLinks(row.meta));
+    if (closed) return;
+    const changed = changedHtmlSharedRevisions(sharedMarks, current);
+    sharedMarks = new Map(current.map(mark => [mark.name, mark.revision]));
+    if (changed.length) await sendData({datasets:changed.map(mark=>mark.name),version:row.version,revisions:Object.fromEntries(changed.map(mark=>[mark.name,mark.revision]))});
+  }).catch(() => { void close(); });
 
   /**
    * ANNOTATIONS, FOR AN ANNOTATOR'S CONNECTION ONLY. The stream serves plain
@@ -165,6 +176,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     const row = await getArtifactById(id);
     if (!row) return void close();
     if (!(await canReadArtifact(row, actor))) return void close();
+    if (row.format === 'html') { await pushHtmlShared(row); return; }
     const [dataset, now] = await Promise.all([getArtifactById(datasetId), datasetUnsubs.has(datasetId) ? marksOf([datasetId]) : null]);
     const mark = now?.get(datasetId);
     if (mark) marks.set(datasetId, mark);
@@ -183,7 +195,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    */
   const followDatasets = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => {
     if (closed) return;
-    const wanted = new Set(row.format === 'folder' ? [row.id] : await datasetsForDocument(isDocumentFormat(row.format) ? row : null));
+    const wanted = new Set(row.format === 'html' ? liveDatasetIds(htmlLiveLinks(row.meta)) : row.format === 'folder' ? [row.id] : []);
     for (const [datasetId, drop] of datasetUnsubs) {
       if (wanted.has(datasetId)) continue;
       datasetUnsubs.delete(datasetId);
@@ -242,6 +254,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // child's publish reach an open folder page through the path a dataset
       // write already travels.
       await followDatasets(row);
+      await pushHtmlShared(row);
       await send(frame);
       // An edit shifts anchors; annotator connections' pins must follow the document
       // frame that moved them. Plain reader connections are no-ops.

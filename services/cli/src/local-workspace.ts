@@ -7,7 +7,7 @@ import {extname,join,relative,resolve,sep,posix,win32} from 'node:path';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {State,withLock} from './state';
 import {recordLocalHistory,assertLocalHistoryMove,moveLocalHistory,localHistoryHeadBody,localHistoryHead} from './local-history';
-import {parseJsx,stampNodeIds,stampNodeIdsInPlace} from '../../app/lib/cli-toolkit';
+import {parseJsx,stampNodeIdsInPlace} from '../../app/lib/cli-toolkit';
 import {stateFor,readState} from './state-access';
 import {workspaceStateEnv} from './config';
 import {atomicWrite,digest,readOptional,isMissing} from './files';
@@ -184,11 +184,6 @@ export function identifiedLocalBody(store:State,path:string,body:string,previous
  for(const kind of ['preview-thread','preview-comment'] as const)for(const row of store.list<{file?:string;node?:string}>(LOCAL_WORKSPACE_SCOPE,kind))if(row.value?.file===path&&typeof row.value.node==='string')reservedIds.add(row.value.node);
  const stamped=stampNodeIdsInPlace(body,{previousSource:previous!==null&&parseJsx(previous).ok?previous:null,reservedIds});
  return stamped.minted||stamped.carried||stamped.repairs.length?stamped.source:null;
-}
-/** True when some body element of a parseable `body` lacks a valid, unique id: the cheap check before taking the lock. */
-export function needsNodeIds(body:string):boolean{
- if(body.trimStart().startsWith('<Dataset')||!parseJsx(body).ok)return false;
- const stamped=stampNodeIds(body);return stamped.minted>0||stamped.repairs.length>0;
 }
 /**
  * Persist `identifiedLocalBody` through the guarded, history-keeping save. False when the file needed nothing.

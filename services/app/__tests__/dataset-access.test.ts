@@ -65,7 +65,7 @@ describe('access on the bearer API', () => {
     const bad = await create(t.token, { dataset: ROWS, access: 'write' });
     expect(bad.status).toBe(400);
     expect(((await bad.json()) as { error: string }).error).toBe('invalid_access');
-    const doc = await create(t.token, { markup: '<p>hi</p>', access: 'readwrite' });
+    const doc = await create(t.token, { html: '<!doctype html><html><head><title>Page</title></head><body><p>hi</p></body></html>', access: 'readwrite' });
     expect(doc.status).toBe(400);
     expect(((await doc.json()) as { error: string }).error).toBe('access_datasets_only');
   });
@@ -82,27 +82,21 @@ describe('access on the browser surfaces', () => {
     expect(row.access).toBe('readwrite');
     expect(row.version).toBe(1);
 
-    const doc = ((await (await create(t.token, { markup: '<p>hi</p>' })).json()) as { id: string }).id;
+    const doc = ((await (await create(t.token, { html: '<!doctype html><html><head><title>Page</title></head><body><p>hi</p></body></html>' })).json()) as { id: string }).id;
     const nope = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }), params({ id: doc }));
     expect(nope.status).toBe(400);
   });
 
-  it('the sharing surface carries access and the documents that write here, for an account owner', async () => {
+  it('the sharing surface carries dataset access for an account owner', async () => {
     const user = await createUser({ email: 'owner@x.com' });
     const t = await mintToken('t', user.id);
     await claimToken(user.id, t.token);
     const ds = ((await (await create(t.token, { dataset: ROWS, access: 'readwrite' })).json()) as { id: string }).id;
-    const doc = await create(t.token, {
-      title: 'Lunch poll',
-      markup: `<Helmet><Value name="c" /><Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice, who) values ($c, 'x')\`}</Mutation></Helmet><div><Button run="$vote">Vote</Button></div>`,
-    });
-    expect(doc.status).toBe(201);
-
+    // JSX-declared writer discovery retired with the compiler; retain the dataset sharing ACL contract.
     const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true } }), params({ id: ds }));
     expect(got.status).toBe(200);
     const state = (await got.json()) as { visibility: string; access: string; writtenBy: Array<{ id: string; title: string | null; mutations: string[] }> };
     expect(state.access).toBe('readwrite');
-    expect(state.writtenBy).toEqual([{ id: ((await doc.json()) as { id: string }).id, title: 'Lunch poll', mutations: ['vote'] }]);
 
     const put = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'read' } }), params({ id: ds }));
     expect(put.status).toBe(200);
@@ -116,7 +110,7 @@ describe('access on the browser surfaces', () => {
     // dropped the write and the caller got 200 for a change that never
     // happened, where create/PUT/PATCH answer 400. One rule, one answer.
     const t = await mintToken('t');
-    const doc = ((await (await create(t.token, { markup: '<p>not a dataset</p>' })).json()) as { id: string }).id;
+    const doc = ((await (await create(t.token, { html: '<!doctype html><html><head><title>Page</title></head><body><p>not a dataset</p></body></html>' })).json()) as { id: string }).id;
 
     const viaSharing = await sharingPut(
       request(`/api/my/artifacts/${doc}/sharing`, { method: 'PUT', actor: { credential: 'session', userId: t.userId!, email: t.email!, emailVerified: true }, json: { access: 'readwrite' } }),
@@ -128,7 +122,7 @@ describe('access on the browser surfaces', () => {
     );
     expect([viaSharing.status, viaPatch.status]).toEqual([400, 400]);
     expect(((await viaSharing.json()) as { error: string }).error).toBe('access_datasets_only');
-    expect(((await viaPatch.json()) as { error: string }).error).toBe('invalid_edit_body');
+    expect(((await viaPatch.json()) as { error: string }).error).toBe('access_datasets_only');
   });
 
   it('opens a dataset for writes through every browser door without a preview flag', async () => {

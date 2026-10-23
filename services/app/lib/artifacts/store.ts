@@ -1,3 +1,7 @@
+import { commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
+import type {HtmlBackendLink,HtmlDatasetLink} from '@artifactbin/contracts';
+import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
+import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
 import {assertOwnerPlacement,assertDestination,newArtifactDestination} from './ownership';
 import { identityForUser } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
@@ -53,6 +57,9 @@ export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'user_id
 
 /** The stored representation of one artifact state (built by parseContentInput). */
 export interface ArtifactInput {
+  /** Server-prepared only; never decoded from caller metadata. */
+  htmlBackends?:readonly PreparedHtmlBackend[];
+  htmlDatasets?:readonly HtmlDatasetLink[];
   destination?:ArtifactDestination;
   title?: string | null;
   description?: string | null;
@@ -165,12 +172,17 @@ export async function createArtifact(
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source).source };
   }
+  if(input.format==='html'&&input.source){
+    const page=canonicalizeHtmlPage(input.source);
+    input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger}};
+  }
   // A document is born in the current data syntax (lib/dataflow/data-syntax).
   input = { ...input, meta: { ...finalizeArtifactMetadata(input.format, input.source, input.meta), ...(input.format === 'markup' ? DATA_SYNTAX_META : {}) } };
   let sourceIds: string[] = [];
   if(input.format==='markup'&&input.source) {
     sourceIds=[...nodeIndex(input.source).keys()];
   }
+  if(input.format==='html'&&input.source)sourceIds=[...canonicalizeHtmlPage(input.source).nodeIds];
   // INSIDE THE CALLER'S TRANSACTION: no retry (a PK violation has already
   // poisoned it — the ids are reserved beforehand instead) and no post-commit
   // effects, which are the caller's to run once its own transaction commits.
@@ -244,6 +256,13 @@ async function insertArtifact(
         : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
   const datasetPolicy = atCreation.datasetPolicy?.policy ??
     (!atCreation.forkedFrom && input.access===undefined && input.format==='dataset' && catalog?.kind!=='postgres' ? defaultDatasetGrants() : null);
+  if(input.format==='html'&&input.htmlBackends){
+    const names=htmlBackendNames(input.source??'');
+    if(names.some(name=>!input.htmlBackends!.some(backend=>backend.name===name))||input.htmlBackends.some(backend=>!names.includes(backend.name)))throw new Error('Backend sources must match HTML links');
+    const links=await commitHtmlBackends(tx,id,userId??tokenId,input.htmlBackends,[]);
+    input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
+  }
+  if(input.format==='html'&&!input.htmlBackends&&input.htmlDatasets)input={...input,meta:{...input.meta,htmlLinks:input.htmlDatasets}};
   const created = await artifactQuery<ArtifactRow>(tx,
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
@@ -324,20 +343,6 @@ interface VersionSummary {
   created_at: string;
 }
 
-/** Retain an offline download's already read-admitted server snapshot. Never
- * accept an offered/client graph here: the assembler passes the exact row it
- * authorized and will export. Copying that captured graph (not rebuilding its
- * source) keeps node revisions intact even if an autosave advances the head
- * before this insert. Download checkpoints do not reset autosave coalescing. */
-export async function retainDownloadedVersion(row: ArtifactRow): Promise<void> {
-  if (row.format !== 'markup' || row.version < 1 || row.document?.kind !== 'graph') return;
-  await (await getDb()).query(
-    `INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta, actor_user_id, actor_token_id, document)
-     VALUES ($1,$2,$3,$4,$5,NULL,$6,$7,$8,$9::jsonb) ON CONFLICT DO NOTHING`,
-    [row.id,row.version,row.title,row.description,row.format,JSON.stringify(row.meta),row.actor_user_id,row.actor_token_id,JSON.stringify(row.document)],
-  );
-}
-
 /** Archive the head as it stands — its author rides along, so history can say who. */
 async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void> {
   await tx.query(
@@ -386,26 +391,6 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
   await tx.query('SELECT pg_notify($1, $2)', [artifactChannel(after.id), after.edit_id]);
 }
 
-/**
- * Commit an already-published markup source while the caller holds the
- * artifact row lock. Migration and ordinary whole-document paths share this
- * single reservation/history boundary; events are emitted by the caller only
- * after its surrounding transaction commits.
- */
-export interface PreparedMarkupWrite {
- source:string;meta:Record<string,unknown>;ids:string[];
- update:DocumentUpdate;
-}
-export async function commitNormalizedMarkup(
- tx:Queryable,actor:AccessActor|null,current:ArtifactRow,
- normalized:PreparedMarkupWrite & {title?:string|null;description?:string|null;format?:ArtifactFormat},
-):Promise<ArtifactRow>{
- const scope=actor?editorScope(actor):{val:current.id,where:(param:string)=>`id=${param}`};
- const committed=await commitDocumentUpdate(tx,actor,scope,current.id,normalized.update);
- if(!committed?.applied)throw new Error('artifact changed after identity preparation');
- return committed.row;
-}
-
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
   const db = await getDb();
   const owned = await db.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
@@ -446,7 +431,7 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
 /** One archived version on the wire: `markup` carries the source. */
 export function versionToWire(row: VersionContent): Record<string, unknown> {
   const { source, ...rest } = row;
-  return { ...rest, markup: source };
+  return { ...rest, ...(row.format==='html'?{html:source}:{markup:source}) };
 }
 
 /**
@@ -531,8 +516,8 @@ async function revertScoped(actor: AccessActor, id: string, version: number, opt
       [id, scope.val, target.title, target.description, target.format, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor),sourceStorage(target.format,target.source).document],
     );
     await logWholeDocumentWrite(tx, current, updated.rows[0]);
-    if (updated.rows[0].format === 'markup' && updated.rows[0].source) {
-      const ids = [...nodeIndex(updated.rows[0].source).keys()];
+    if (['markup','html'].includes(updated.rows[0].format) && updated.rows[0].source) {
+      const ids = updated.rows[0].format==='html'?[...canonicalizeHtmlPage(updated.rows[0].source).nodeIds]:[...nodeIndex(updated.rows[0].source).keys()];
       await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])', [id, ids]);
       await tx.query('UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id=ANY($3::text[]))', [id, updated.rows[0].version, ids]);
     }
@@ -558,6 +543,8 @@ export function isVersionConflict(r: ArtifactRow | null | VersionConflict | Resp
 }
 
 export interface ReplaceOpts {
+  mutationReceipt?:MutationReceipt;
+  mutationReply?:(row:ArtifactRow)=>Promise<MutationReply>;
   expectedPolicyRevision?:number;
   shares?:ShareEntry[];
   annotationOps?: AnnotationOperation[];
@@ -610,6 +597,23 @@ async function replaceScoped(
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true, reason:'state_conflict', currentVersion:current.version, currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
+    }
+    if(input.format==='html'){
+      if(opts.expectedVersion===undefined)return json({error:'expected_version_required'},400);
+      try{
+        const reserved=(await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id);
+        const old=current.meta.htmlIdentity as HtmlIdentityLedger|undefined;
+        const page=canonicalizeHtmlPage(input.source??'',{previousHtml:current.source??undefined,ledger:{allocatedIds:reserved,nextNodeId:old?.nextNodeId??1}});
+        input={...input,source:page.html,meta:{...input.meta,htmlIdentity:page.ledger}};
+      }catch(error){return json({error:'invalid_html',details:[error instanceof Error?error.message:String(error)]},400);}
+    }
+    if(input.format==='html'){
+      const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');
+      const names=htmlBackendNames(input.source??'');
+      if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
+      const changed=input.htmlBackends?await commitHtmlBackends(tx,id,current.user_id??current.token_id,input.htmlBackends,previous):[];
+      const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
+      input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
     }
     input=retainUserScope(input,current);
     /*
@@ -684,13 +688,14 @@ async function replaceScoped(
       for(const row of applied.rows)movedAnnotations.add(row.id);
     }
     if(effects.receipts.length)await tx.query('UPDATE artifact_edits SET annotation_changes=$3::jsonb WHERE artifact_id=$1 AND edit_id=$2',[id,updated.rows[0].edit_id,JSON.stringify(effects.receipts.filter(receipt=>!receipt.annotationId||movedAnnotations.has(receipt.annotationId)))]);
-    if (updated.rows[0].format === 'markup' && updated.rows[0].source) {
-      const ids = [...nodeIndex(updated.rows[0].source).keys()];
+    if (['markup','html'].includes(updated.rows[0].format) && updated.rows[0].source) {
+      const ids = updated.rows[0].format==='html'?[...canonicalizeHtmlPage(updated.rows[0].source).nodeIds]:[...nodeIndex(updated.rows[0].source).keys()];
       await tx.query(`INSERT INTO artifact_source_ids (artifact_id,source_id,provenance,first_version)
         SELECT $1,value #>> '{}','authored',$2 FROM jsonb_array_elements($3::jsonb) ON CONFLICT DO NOTHING`, [id, updated.rows[0].version, JSON.stringify(ids)]);
       await tx.query(`UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id = ANY($3::text[]))`, [id, updated.rows[0].version, ids]);
       await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])',[id,ids]);
     }
+    if(opts.mutationReceipt&&opts.mutationReply)await completeMutationReceipt(tx,opts.mutationReceipt,await opts.mutationReply(updated.rows[0]));
     moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
     return updated.rows[0];
   });

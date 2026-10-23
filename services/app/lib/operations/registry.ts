@@ -1,5 +1,5 @@
 import {notificationJobOperations} from './notification-jobs';
-import { applyEditFor, artifactSummaryToWire, canReadArtifact, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, parseExpectedVersion, parseParentField, parseVisibilityValue, resolveParent, respondToEdit, revertArtifactFor, updateMetadataFromBody, versionToWire } from '@/lib/artifacts';
+import { artifactSummaryToWire, canReadArtifact, capabilityGuard, createdArtifactWire, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, parseExpectedVersion, parseParentField, parseVisibilityValue, resolveParent, revertArtifactFor, updateMetadataFromBody, versionToWire } from '@/lib/artifacts';
 import { notificationJobStore, readDatasetPolicy, respondToMutate, writeDatasetPolicy } from '@/lib/document-data';
 import { MEMBERSHIP_OPERATIONS } from './membership';
 import {createHash} from 'node:crypto';
@@ -11,7 +11,7 @@ import {ACCOUNT_OPERATIONS} from './account';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
 import { identityForUser, resolveTestUser, withAccountToken } from '@/lib/accounts';
-import { CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, MARKUP_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
+import { CSV_URL_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, TESTUSER_ERRORS } from '@artifactbin/contracts';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
@@ -119,7 +119,8 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
  * guidance strings are also rendered in local help.
  */
 const CONTENT_FIELDS = {
-  markup: z.string().optional().describe(MARKUP_FIELD_GUIDANCE),
+  backendSources:z.record(z.string(),z.string()).optional().describe('Named backend TypeScript files, validated and published atomically with html.'),
+  html: z.string().optional().describe('A complete HTML document. The server saves canonical HTML with stable data-af-id identities.'),
   program: z.union([z.record(z.string(),z.unknown()),z.string()]).optional().describe('Native program definition JSON: {version:1,command:[executable,...args],compute?,env?}. Execution is owner-only. Store only nonsecret configuration; common credential environment names and runtime overrides are rejected. Credentials cannot be detected in arbitrary argument strings.'),
   dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
   sheetUrl: z.string().optional().describe(SHEET_URL_FIELD_GUIDANCE),
@@ -164,13 +165,12 @@ const OWNER_ONLY: OperationError = { status: 403, code: 'owner_only', fix: "fold
 
 const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id. A Postgres dataset must have a usable connection" };
 
-const INVALID_JSX: OperationError = { status: 400, code: 'invalid_jsx', fix: 'details names each problem with its span; a refused tag answer carries allowed_html_tags — pick from it' };
-const INVALID_REFS: OperationError = { status: 400, code: 'invalid_refs', fix: 'details names each ref: an id that does not resolve for YOU, a wrong kind, or a <Mutation> target that is not your own readwrite dataset — publish your own copy of it' };
-
 /** The shared write refusals, stated once and spread into each writer's table. */
 const CONTENT_ERRORS: OperationError[] = [
-  INVALID_JSX,
-  INVALID_REFS,
+  {status:400,code:'native_html_required',fix:'Use the html field with a complete HTML document; markup, JSX and document_update publication inputs are retired.'},
+  {status:400,code:'invalid_html',fix:'Fix the named HTML identities or declaration problem and resubmit the complete source.'},
+  {status:400,code:'invalid_backend',fix:'Fix the backend TypeScript exports or GraphQL schema; HTML and backend versions publish together.'},
+  {status:400,code:'invalid_dataset_binding',fix:'Use a valid dataset link that the authenticated publisher can read.'},
   { status: 400, code: 'unknown_theme', fix: 'the 400 carries allowed — the live theme and design-system names' },
   { status: 400, code: 'image_fetch_failed', fix: 'the named image URL could not be imported — check it serves image bytes publicly' },
   { status: 400, code: 'invalid_pdf', fix: 'pdf must be a base64 data:application/pdf URL whose BYTES are a PDF — to publish one already on the web send pdfUrl' },
@@ -198,11 +198,11 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf | file). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Import name="d" src="ref:<id>" />, <Value> page values, <Query name>{`select … from d.rows`}</Query> in SQLite and <Mutation> writes (connected PostgreSQL is read-only, via <Query source="ref:<id>">), bound in the body by name — <Chart data="$q">, <select value="$x" options="$q">, <Button run="$m">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
+  description: 'Create an artifact from exactly one native HTML document or retained dataset/media input. HTML pages use a complete html source, optional backendSources, stable server-assigned data-af-id identities and the original sharing and ownership controls.',
   input: { ...CONTENT_FIELDS, destination:z.union([z.object({type:z.literal('personal')}),z.object({type:z.literal('group'),id:z.string()})]).optional(), forked_from: z.string().optional().describe("the id of the artifact this one was copied from, when you built the copy yourself instead of calling fork_artifact — it must be an artifact you can READ, and it is recorded once here and never editable afterwards") },
   annotations: {},
   example: {
-    input: { title: 'Q3 report', markup: '<div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Q3</h1></div>', theme: 'industry' },
+    input: { html: '<!doctype html><html><head><title>Report</title></head><body><h1>Report</h1></body></html>' },
     note: 'the response carries id, url, edit_id — hand the url to your user',
   },
   errors: [
@@ -220,8 +220,8 @@ const updateArtifactOp: Operation = {
   name: 'update_artifact',
   title: 'Replace an artifact',
   http: { method: 'PUT', path: '/api/artifacts/{id}' },
-  description: 'Replace a non-document artifact using the same one-of content fields as create. Markup documents require a prepared document_update, including whole replacements; use afbin push or edit_artifact. Archives the current state as a version; the URL never changes. Both expectedVersion and expectedState from the observed head are required. A changed version or metadata state refuses the write; inspect the current head, merge and retry with its conditions. Dataset/recipe refreshes return warnings naming dependent artifacts whose bindings broke. On a FOLDER only title, visibility and parent_id apply, and they apply as METADATA — no new version, nothing archived — because a folder has no content to replace; renaming one is this call, and a content field answers not_editable.',
-  input: { id: z.string(), document_update:z.json().optional(),edit_id:z.string().optional(),expectedVersion: z.number().int().positive().optional(), expectedState: z.string().regex(/^[a-f0-9]{64}$/).optional(), ...CONTENT_FIELDS },
+  description: 'Replace native HTML or retained data/media content at its existing artifact ID. Send expectedVersion and expectedState from the observed head. Every accepted save retains the previous version; markup and document_update are retired publication inputs.',
+  input: { id: z.string(), expectedVersion: z.number().int().positive().optional(), expectedState: z.string().regex(/^[a-f0-9]{64}$/).optional(), ...CONTENT_FIELDS },
   annotations: { idempotent: true },
   example: {
     input: { id: 'aB3xK9', dataset:[{name:'Example',value:2}], expectedVersion: 1, expectedState: 'a'.repeat(64) },
@@ -240,22 +240,8 @@ const updateArtifactOp: Operation = {
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
-    return fromResponse(await replaceArtifactWithBody(input, ctx.actor, String(input.id), ctx.base));
+    return fromResponse(await replaceArtifactWithBody(input, ctx.actor, String(input.id), ctx.base,{mutationReceipt:ctx.mutationReceipt}));
   },
-};
-
-/** A metadata-only example keeps the prepared wire shape readable. Real clients
- * generate patches from their authoring graph; agents use afbin push. */
-const exampleDocumentUpdate={schema:1,patch:{baseVersion:1,reads:[],selections:[],inserted:{},removed:[],updated:{},touched:[],byteDelta:0,unitDeltas:{},claims:[]},effects:{css:false,references:false},metadata:{title:'Updated title'},expectedMetadata:{title:null}};
-const editArtifactOp: Operation = {
- name:'edit_artifact',title:'Edit an artifact in place',http:{method:'POST',path:'/api/artifacts/{id}/edits'},
- description:'Submit a client-prepared document_update generated from the JSONB document and version returned by get_artifact. The client validates the final composite and prepares dependencies before submission; afbin push and the browser editor do this automatically. Preserve persistent ids when moving nodes. Permissions, dependency guards, JSONB changes and history commit in one SQL statement. Independent edits from an older version can succeed; conflicting dependencies return doc_changed without partial changes. Text, attributes, styling, insertions, deletions, moves, metadata and whole-document replacement all use this protocol. The response contains the new authoring snapshot.',
- input:{id:z.string(),edit_id:z.string(),document_update:z.json().describe('Prepared DocumentUpdate schema 1: patch, effects, optional metadata/settings and whole replacement. Generated by the shared authoring compiler, not SQL supplied by the caller.')},
- annotations:{},example:{input:{id:'aB3xK9',edit_id:'<from your last read>',document_update:exampleDocumentUpdate}},
- errors:[NOT_FOUND,{status:409,code:'doc_changed',fix:'Read the current authoring snapshot, reconcile the affected nodes and prepare the operation again.'},
-  {status:400,code:'invalid_document_graph',fix:'The patch is current but would store a graph that does not decode: every node it writes needs one more part than children, children that exist, and a byteDelta equal to the change. Prepare it with the shared compiler (afbin push, the browser editor, or the HTTP source-authoring guide).'},
-  {status:400,code:'invalid_edit_body',fix:'Use the current CLI or browser editor to prepare document_update; raw source and string-diff bodies are no longer accepted.'}],
- async run(ctx,input){return fromResponse(await respondToEdit(ctx.base,input,i=>applyEditFor(ctx.actor,String(input.id),i)));},
 };
 
 const getArtifactOp: Operation = {
@@ -735,7 +721,7 @@ const queryResourceOp:Operation={
 
 export const OPERATIONS: Operation[] = [
   ...MEMBERSHIP_OPERATIONS,...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,...notificationJobOperations(notificationJobStore),queryResourceOp,
-  createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
+  createArtifactOp, updateArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, transferArtifactOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, editCommentOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,
 ];

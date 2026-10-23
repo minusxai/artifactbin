@@ -39,12 +39,6 @@ export interface StoryBaseCssRecipe {
 
 const STORY_ROOT_RULE = ':root { --mx-vh: 100vh; color: var(--foreground, CanvasText); background-color: var(--background, Canvas); } body { margin: 0; }';
 
-/**
- * The fixed sheets a base sheet is made of: what a prepared page's stored stylesheet version hashes
- * (lib/publish/prepared/css-version.server), so changing any of them re-prepares the stored pages that carry it.
- */
-export const STORY_BASE_SHEETS: readonly string[] = [STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_TASK_CHECKBOX_CSS, DOCUMENT_NAV_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS];
-
 export function storyBaseCss(recipe: StoryBaseCssRecipe): string {
   return [
     STORY_ROOT_RULE, STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS, STORY_TASK_CHECKBOX_CSS,

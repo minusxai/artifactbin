@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {agentDiscovery} from '@/lib/platform/agent-discovery';
-import {agentDiscoveryHead,agentDiscoveryTail} from '@/lib/compiled-page/agent-discovery';
+import {agentDiscoveryHead,agentDiscoveryTail} from '@/lib/serving/agent-discovery';
 import {gettingStarted} from '@/lib/serving/getting-started';
 import {existingPaste} from '@/lib/serving/agent-copy';
 import {skillTree} from '@/lib/skills';
@@ -22,7 +22,7 @@ describe('skill-first HTTP onboarding',()=>{
   expect(guide).toContain('unzip -n');
   const brief=llmsText(BASE);
   expect(brief).toContain('POST /api/artifacts');
-  expect(brief).toContain('/prepare');
+  expect(brief).toContain('expectedState');
   expect(brief).toContain('/llms/http-auth');
   expect(brief).not.toMatch(/afbin |@afbin\/cli|chat\/install|CLI was selected/);
  });

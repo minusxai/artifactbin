@@ -10,9 +10,9 @@ describe('one root for installed and direct HTTP agents',()=>{
   const origin='https://skills-contract.example';
   const http=llmsText(origin);
   const cli=withTeachingOrigin(teaching.files['SKILL.md'],origin);
-  for(const operation of ['POST /api/artifacts','GET /api/artifacts/<id>','POST /api/artifacts/<id>/prepare','POST /api/artifacts/<id>/edits'])expect(http).toContain(operation);
-  for(const field of ['expectedVersion','document_update','refresh_token','client_id','persistent secret store'])expect(http).toContain(field);
-  expect(http).toContain('If sign-in is required, reuse an email already provided; otherwise ask the user for their email. Do not invent an email.');
+  for(const operation of ['POST /api/artifacts','PUT /api/artifacts/ID'])expect(http).toContain(operation);
+  for(const field of ['expectedVersion','expectedState','Idempotency-Key','@afbin/apollo'])expect(http).toContain(field);
+  expect(http).toContain('If sign-in is required, reuse an email already provided');
   expect(http).not.toContain('afbin pull');expect(http).not.toContain('afbin push');
   expect(cli).toContain('afbin pull');expect(cli).toContain('afbin push');
   expect(cli).not.toContain('POST /api/artifacts/<id>/prepare');
@@ -60,8 +60,9 @@ describe('installable shared skill folder',()=>{
     expect(files[file.path.replace(/^artifactbin\//,'')],`${transport}: ${file.path}`).toBe(skillFileWithFrontmatter(file,text));
    }
   }
-  for(const files of [expected,cli])expect(Object.keys(files).some(name=>name.startsWith('scripts/'))).toBe(false);
-  expect(expected['references/publishing-datasets.md']).toContain('## HTTP dataset creation');
+  expect(expected['scripts/publish.mjs']).toContain('sendPublication');
+  expect(Object.keys(cli).some(name=>name.startsWith('scripts/'))).toBe(false);
+  expect(expected['references/html-datasets.md']).toContain('dataset');
   expect(cli['references/publishing-datasets.md']).not.toContain('## HTTP dataset creation');
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
   const response=await zipRoute(new Request(`${origin}/skills/artifactbin.zip`));
@@ -84,11 +85,11 @@ describe('installable shared skill folder',()=>{
  });
  it('leaves room in the packaged data guide for origin expansion',()=>{
   const files=skillPackageFiles(skillTree(),'https://app.artifactbin.dev');
-  expect(Buffer.byteLength(files['references/markup-data.md']!)).toBeLessThanOrEqual(7992);
-  expect(Buffer.byteLength(publicGuideText('markup-data','https://app.artifactbin.dev')!)).toBeLessThanOrEqual(7992);
+  expect(Buffer.byteLength(files['references/html-datasets.md']!)).toBeLessThanOrEqual(7992);
+  expect(Buffer.byteLength(publicGuideText('html-datasets','https://app.artifactbin.dev')!)).toBeLessThanOrEqual(7992);
  });
  it('rejects arbitrary archive members and traversal',()=>{
-  for(const name of ['../SKILL.md','scripts/other.mjs','/root/file','references/../secrets.md'])expect(()=>skillZip({[name]:'bad'})).toThrow('Unsupported skill member');
+  for(const name of ['../SKILL.md','scripts/../other.mjs','/root/file','references/../secrets.md'])expect(()=>skillZip({[name]:'bad'})).toThrow('Unsupported skill member');
  });
 });
 
@@ -96,9 +97,9 @@ describe('installable shared skill folder',()=>{
   const base='https://reuse.example';
   const tree=skillTree();
   const root=tree.get('artifactbin/SKILL.md')!;
-  for(const transport of ['http','cli'] as const){
+  for(const transport of ['cli'] as const){
    const text=renderSkill(root,{base,transport});
-   for(const [operation,reference] of [['authentication',transport==='http'?'http-auth':'publishing-auth'],['creation',transport==='http'?'http-authoring':'publishing'],['editing',transport==='http'?'http-authoring':'publishing']]){
+   for(const [operation,reference] of [['authentication','publishing-auth'],['creation','publishing'],['editing','publishing']]){
     const fragment=renderSkill({...root,body:`[% include "fragments/${transport}-${operation}.md" %]`},{base,transport}).trim();
     expect(text).toContain(fragment);
     const ref=tree.get(`artifactbin/references/${reference}.md`)!;
@@ -113,7 +114,7 @@ it.each(['https://docs.example','http://app.lvh.me:5001'])('projects the existin
  const expected=credentialPaths(origin,'~/.artifactbin').backingPath;
  const http=publicGuideText('http-auth',origin)!;
  const cli=withTeachingOrigin(teaching.files['references/http-auth.md'],origin);
- for(const text of [http,cli,llmsText(origin)]){
+ for(const text of [http,cli]){
   expect(text).toContain(expected);
   expect(text).not.toContain('__AFBIN_CREDENTIAL_PATH__');
   expect(text).not.toContain('credentials.mjs');
@@ -121,26 +122,17 @@ it.each(['https://docs.example','http://app.lvh.me:5001'])('projects the existin
  expect(expected).not.toBe(credentialPaths('https://other.example','~/.artifactbin').backingPath);
 });
 
-it('teaches direct HTTP monitoring with baseline, cursor progression and bounded waits',()=>{
- const text=publicGuideText('monitoring','https://monitor.example')!;
- expect(text).not.toContain('watch-comments.mjs');
- expect(text).toContain('after=now&wait=0');
- expect(text).toContain('after=CURSOR&wait=60');
- expect(text).toContain('next_cursor');
- expect(text).toContain('has_more');
- expect(text).toContain('immediately');
- expect(text).toContain('timeout longer');
-});
+it('refuses retired monitoring instructions in the public skill',()=>{ expect(publicGuideText('monitoring','https://monitor.example')).toBeNull(); });
 
 it('offers the complete Markdown skill archive from the HTTP root',()=>{
  const origin='https://guides.example';
  expect(llmsText(origin)).not.toContain('Optional [setup]');
  expect(llmsText(origin)).not.toContain('@afbin/cli');
- expect(llmsText(origin)).toContain(`[download the author skill](${origin}/skills/artifactbin.zip)`);
+ expect(llmsText(origin)).toContain(`[Download the author skill](${origin}/skills/artifactbin.zip)`);
 });
 it('keeps credential recovery references consistent with direct HTTP authentication',()=>{
  const origin='https://guides.example';
- for(const name of ['http-auth','groups','errors']){
+ for(const name of ['http-auth']){
   const text=publicGuideText(name,origin)!;
   for(const obsolete of ['same credentials and helper','common helper','helper returns the actual backing path','shared helper for every request','shared credential helper'])expect(text).not.toContain(obsolete);
   expect(text).toContain('/llms/http-auth');

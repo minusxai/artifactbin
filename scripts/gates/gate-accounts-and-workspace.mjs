@@ -271,19 +271,12 @@ async function doorLeg() {
       check(callbacks.length > before && !!cb2?.searchParams.get('code'), 'the signed-in form reaches the client callback');
       check(cspViolations.length === 0, 'still no CSP violation on the account-bound form');
 
-      // ── CONNECTING THE CLI from the signed-in browser ──
-      // The only way a credential exists, so this is how an agent's work lands in an account: the signed-in browser
-      // approves the device pairing, and everything that connection publishes belongs to the account from the
-      // start — there is nothing to paste and nothing to claim.
-      const pairing = await (await fetch(`${BASE}/oauth/device`, { method: 'POST' })).json();
-      await page.goto(`${BASE}/oauth/device?user_code=${encodeURIComponent(pairing.user_code)}`, { waitUntil: 'load' });
-      check((await page.locator('body').innerText()).includes(pairing.user_code), 'the approval page shows the code the terminal displayed');
-      await page.click('button[type=submit]');
-      await page.waitForTimeout(1500);
-      check((await page.locator('body').innerText()).includes('Connection approved'), 'a signed-in browser approves the connection');
-      const granted = await (await fetch(`${BASE}/oauth/device/token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_code: pairing.device_code }) })).json();
+      // The same signed-in browser grants its API credential through the supported email-session endpoint.
+      const grant = await page.request.post(`${BASE}/api/authentication/token`, { headers: { Origin: new URL(BASE).origin }, data: {} });
+      must(grant.status() === 201, `email-session API grant (${grant.status()})`);
+      const granted = await grant.json();
       const accountToken = granted.access_token;
-      must(typeof accountToken === 'string' && accountToken.length > 0, 'the terminal receives its credential');
+      must(typeof accountToken === 'string' && accountToken.length > 0, 'the email session receives its API credential');
       const published = await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ title: 'Connected artifact', markup: '<h1>connected</h1>' }) });
       must(published.status === 201, `the connection publishes its artifact (${published.status})`);
       await page.goto(`${BASE}/`, { waitUntil: 'load' });

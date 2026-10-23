@@ -1,0 +1,127 @@
+/* Generated from design-systems/specs/arcade.json. */
+@font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/pressstart2p/v16/e3t4euO8T-267oIAQAu6jDQyK3nbivNm4I81PZQ.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/pressstart2p/v16/e3t4euO8T-267oIAQAu6jDQyK3nVivNm4I81.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Pixelify Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/pixelifysans/v3/CHylV-3HFUT7aC4iv1TxGDR9JnMEi0tSaJ1f2A.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Pixelify Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/pixelifysans/v3/CHylV-3HFUT7aC4iv1TxGDR9Jn0Ei0tSaJ0.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Pixelify Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/pixelifysans/v3/CHylV-3HFUT7aC4iv1TxGDR9JnMEi0tSaJ1f2A.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Pixelify Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/pixelifysans/v3/CHylV-3HFUT7aC4iv1TxGDR9Jn0Ei0tSaJ0.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Pixelify Sans"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/pixelifysans/v3/CHylV-3HFUT7aC4iv1TxGDR9JnMEi0tSaJ1f2A.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Pixelify Sans"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/pixelifysans/v3/CHylV-3HFUT7aC4iv1TxGDR9Jn0Ei0tSaJ0.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "VT323"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/vt323/v18/pxiKyp0ihIEF2isRFJXUdVNFKPY.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "VT323"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/vt323/v18/pxiKyp0ihIEF2isfFJXUdVNF.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+:root[data-af-design-system="arcade"] {
+  --ds-ground: #f7f3e8;
+  --ds-raised: #ffffff;
+  --ds-sunk: #e9e3d3;
+  --ds-line: #c9c2b0;
+  --ds-ink: #0f0f1a;
+  --ds-ink-muted: #5b586b;
+  --ds-red: #ff3b3b;
+  --ds-on-red: #ffffff;
+  --ds-blue: #2e6bff;
+  --ds-on-blue: #ffffff;
+  --ds-blue-soft: #dce6ff;
+  --ds-yellow: #ffd60a;
+  --ds-on-yellow: #0f0f1a;
+  --ds-magenta: #ff4fd8;
+  --ds-cyan: #35e0ff;
+  --ds-positive: #13a03f;
+  --ds-positive-soft: #d4f5dd;
+  --ds-caution: #c98a00;
+  --ds-caution-soft: #fff1b8;
+  --ds-negative: #e02b2b;
+  --ds-negative-soft: #ffd9d9;
+  --background: var(--ds-ground);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-red);
+  --primary-foreground: var(--ds-on-red);
+  --secondary: var(--ds-blue-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-blue-soft);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-red);
+  --border: var(--ds-ink);
+  --input: var(--ds-line);
+  --ring: var(--ds-yellow);
+  --chart-1: var(--ds-blue);
+  --chart-2: var(--ds-red);
+  --chart-3: var(--ds-yellow);
+  --chart-4: var(--ds-magenta);
+  --chart-5: var(--ds-cyan);
+  --radius: 0px;
+  --font-display: "Press Start 2P", "Courier New", monospace;
+  --font-body: "Pixelify Sans", "Verdana", sans-serif;
+  --font-mono: "VT323", "Courier New", monospace;
+  --ds-chip-radius: 0px;
+  --ds-px: 4px;
+  --ds-pixel-edge: 0 -4px 0 0 var(--ds-ink), 0 4px 0 0 var(--ds-ink), -4px 0 0 0 var(--ds-ink), 4px 0 0 0 var(--ds-ink);
+  --ds-pixel-shadow: 0 -4px 0 0 var(--ds-ink), 0 4px 0 0 var(--ds-ink), -4px 0 0 0 var(--ds-ink), 4px 0 0 0 var(--ds-ink), 4px 8px 0 0 var(--ds-ink), 8px 4px 0 0 var(--ds-ink);
+}
+:root[data-af-design-system="arcade"][data-af-dark="true"] {
+  --ds-ground: #0a0a14;
+  --ds-raised: #141428;
+  --ds-sunk: #050509;
+  --ds-line: #26263d;
+  --ds-ink: #f2f0ff;
+  --ds-ink-muted: #9c98be;
+  --ds-red: #ff5c5c;
+  --ds-on-red: #0a0a14;
+  --ds-blue: #5c8bff;
+  --ds-on-blue: #0a0a14;
+  --ds-blue-soft: #15224d;
+  --ds-yellow: #ffe34d;
+  --ds-on-yellow: #0f0f1a;
+  --ds-magenta: #ff6ee0;
+  --ds-cyan: #5ce8ff;
+  --ds-positive: #2bd34a;
+  --ds-positive-soft: #0d3a1c;
+  --ds-caution: #ffd60a;
+  --ds-caution-soft: #3a2e05;
+  --ds-negative: #ff5c5c;
+  --ds-negative-soft: #3d0f14;
+  --background: var(--ds-ground);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-red);
+  --primary-foreground: var(--ds-on-red);
+  --secondary: var(--ds-blue-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-blue-soft);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-on-red);
+  --border: var(--ds-ink);
+  --input: var(--ds-line);
+  --ring: var(--ds-yellow);
+  --chart-1: var(--ds-blue);
+  --chart-2: var(--ds-red);
+  --chart-3: var(--ds-yellow);
+  --chart-4: var(--ds-magenta);
+  --chart-5: var(--ds-cyan);
+  --ds-chip-radius: 0px;
+  --ds-px: 4px;
+  --ds-pixel-edge: 0 -4px 0 0 var(--ds-ink), 0 4px 0 0 var(--ds-ink), -4px 0 0 0 var(--ds-ink), 4px 0 0 0 var(--ds-ink);
+  --ds-pixel-shadow: 0 -4px 0 0 var(--ds-ink), 0 4px 0 0 var(--ds-ink), -4px 0 0 0 var(--ds-ink), 4px 0 0 0 var(--ds-ink), 4px 8px 0 0 var(--ds-ink), 8px 4px 0 0 var(--ds-ink);
+}
+:root[data-af-design-system="arcade"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+:root[data-af-design-system="arcade"] .t-display-xl { font-family: "Press Start 2P", "Courier New", monospace; font-size: clamp(22px, 3.4vw, 44px); line-height: 1.4; font-weight: 400; text-transform: uppercase; }
+:root[data-af-design-system="arcade"] .t-display-l { font-family: "Press Start 2P", "Courier New", monospace; font-size: clamp(15px, 2vw, 26px); line-height: 1.5; font-weight: 400; text-transform: uppercase; }
+:root[data-af-design-system="arcade"] .t-title { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 26px; line-height: 30px; font-weight: 700; }
+:root[data-af-design-system="arcade"] .t-body { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 18px; line-height: 26px; font-weight: 400; }
+:root[data-af-design-system="arcade"] .t-body-s { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 15px; line-height: 20px; font-weight: 400; }
+:root[data-af-design-system="arcade"] .t-label { font-family: "Press Start 2P", "Courier New", monospace; font-size: 10px; line-height: 16px; font-weight: 400; letter-spacing: 0.04em; text-transform: uppercase; }
+:root[data-af-design-system="arcade"] .t-numeral { font-family: "VT323", "Courier New", monospace; font-size: 56px; line-height: 52px; font-weight: 400; font-variant-numeric: tabular-nums; }
+:root[data-af-design-system="arcade"] .t-combo { font-family: "Pixelify Sans", "Verdana", sans-serif; font-size: 48px; line-height: 48px; font-weight: 700; font-style: italic; }
+:root[data-af-design-system="arcade"] .t-mono { font-family: "VT323", "Courier New", monospace; font-size: 22px; line-height: 26px; font-weight: 400; }

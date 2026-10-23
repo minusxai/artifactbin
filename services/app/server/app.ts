@@ -18,18 +18,12 @@ import { loginRedirectTarget } from '@/lib/http';
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import {
-  agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, archiveSharedBuild, bindModule, createModuleStore,
-  createSpeculationRulesStore, createTemplateResourceStore, loadCompilerBuild, READER_MODE_HEADER,
-  retainedBuild, retainedIslandFile, SPECULATION_RULES_CONTENT_TYPE, SPECULATION_RULES_PATH,
-  STYLESHEET_PATH, stylesheetStore, TEMPLATE_RESOURCE_PATH, withAgentDiscoveryTail,
-} from '@/lib/compiled-page';
+import { agentDiscovery, agentDiscoveryBody, agentDiscoveryHead, withAgentDiscoveryTail } from '@/lib/serving/agent-discovery';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
-import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { ID_RE, verifyExportKey } from '@/lib/platform';
 import { measureQueries, runWithRequest } from '@/lib/platform';
@@ -50,11 +44,8 @@ import { GITHUB_EXTERNAL_URL } from '@/lib/serving';
 import { createListingPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
 import { DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
-import { enableSnapshotRevalidations, installStoryCommitHooks } from '@/lib/publish/prepared';
 import { appBuildId, mountBuildAssets } from './build-assets';
-import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
-import zlib from 'node:zlib';
-import { promisify } from 'node:util';
+import { compressDynamic, dynamicEncoding, precompressedStatic } from './content-encoding';
 import { customHostBoundary } from './custom-host';
 import { pagesHost } from './pages-host';
 import { pagesSite as deployedPagesSite, type PagesSite } from '@/lib/http/pages-origin';
@@ -63,7 +54,6 @@ import { THEME_BOOTSTRAP_HASH } from '@/lib/serving';
 import { canonicalDocumentUrl } from '@/lib/serving';
 import { APP_SHELL_FONT_PRELOADS } from '@/lib/serving';
 import { fontPreloadTags } from '@/lib/page-styles';
-import { DOCUMENT_MODULE_PATH, ISLANDS_PATH } from '@/lib/story-runtime/contract';
 
 /**
  * The `<link rel="help">` and agent metadata an agent that fetched any page reads, on the caller's
@@ -244,8 +234,6 @@ const APP_SECURITY_HEADERS = {
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
 const IMMUTABLE = 'public, max-age=31536000, immutable';
-const brotliCompress = promisify(zlib.brotliCompress);
-const gzipCompress = promisify(zlib.gzip);
 
 export interface AppServerOptions {
   /** Split deployment only: verify the transport header and attach its actor. */
@@ -302,17 +290,7 @@ const apiNotFound = (c: { req: { raw: Request } }) => {
 /** A document row this request already fetched and admitted (documentPreparation), and its canonical path when it was computed. */
 interface Admitted { row: ArtifactRow; canonicalPath?: string }
 /** The document page's reader header (docs/phase2-architecture.md §6): which renderer answered. */
-const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader ? { [READER_MODE_HEADER]: reader.mode } : {});
-
-let liveBuildArchived = false;
-function archiveLiveBuild(): void {
-  if (liveBuildArchived) return;
-  liveBuildArchived = true;
-  try {
-    const build = loadCompilerBuild();
-    void archiveSharedBuild(build).catch((error: unknown) => { liveBuildArchived = false; console.warn('[islands] archiving the live build failed', error); });
-  } catch { liveBuildArchived = false; /* no island build yet (a test or a fresh checkout) */ }
-}
+const readerHeaders = (reader: ArtifactPageAnswer['reader'] | undefined): Record<string, string> => (reader ? { ['x-mx-reader']: reader.mode } : {});
 
 /**
  * `Server-Timing` on every response: the whole chain's wall time (`total`) and what it waited on the database
@@ -361,14 +339,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     console.error(`[page] ${c.req.method} ${new URL(c.req.url).pathname} failed:`, error);
     return new Response('Internal Server Error', { status: 500 });
   });
-  // A serving process answers committed writes (lib/artifacts/after-commit): each new head is prepared for its readers,
-  // and a dataset write invalidates the guest snapshots it feeds (lib/publish/prepared/commit-hooks.server).
-  installStoryCommitHooks();
-  // …and revalidates the guest snapshots a write made stale (lib/publish/prepared/snapshots.server).
-  enableSnapshotRevalidations();
   // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page
   // assembled for this one (`/islands/d/<sha>.js?b=`, shared-builds.server retainedBuild).
-  archiveLiveBuild();
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
@@ -552,113 +524,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   };
 
   // Static: content-addressed trees are immutable; everything else is served plainly.
-  /*
-   * The compiled reader's code (docs/phase2-architecture.md §9), all content-addressed: the shared
-   * island chunks under public/islands/ (served by the public mount below), and the per-document
-   * modules and speculation-rule files the module store wrote (lib/compiled-page/modules.server).
-   * Immutable only when found — a miss must stay a plain, uncached 404. ACAO because a /raw copy has
-   * an opaque origin, so its module fetches are cross-origin.
-   */
-  app.use(`${ISLANDS_PATH}/*`, async (c, next) => {
-    await next();
-    if (c.res.status !== 200) return;
-    c.header('cache-control', IMMUTABLE);
-    c.header('access-control-allow-origin', '*');
-  });
-  const islandModules = createModuleStore();
-  const islandTemplates = createTemplateResourceStore();
-  const islandStylesheets = stylesheetStore();
-  const speculationRules = createSpeculationRulesStore();
-  /*
-   * Brotli like every other text response (the precompressed /islands chunks, the pages): these bytes
-   * are content-addressed and never change, so each is encoded ONCE, at the highest quality, and the
-   * encodings kept (bounded) — target 2 is measured in brotli bytes. Encoding runs on zlib's pool.
-   */
-  const ISLAND_ENCODINGS_KEPT = 512;
-  const islandEncodings = new Map<string, Promise<EncodedVariants>>();
-  const boundModules = new Map<string, Buffer>();
-  const encodedIsland = (key: string, bytes: Buffer): Promise<EncodedVariants> => {
-    let encoded = islandEncodings.get(key);
-    if (!encoded) {
-      encoded = Promise.all([
-        brotliCompress(bytes, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: zlib.constants.BROTLI_MAX_QUALITY, [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: bytes.byteLength } }),
-        gzipCompress(bytes, { level: zlib.constants.Z_BEST_COMPRESSION }),
-      ]).then(([br, gzip]) => ({ br, gzip }));
-      encoded.catch(() => islandEncodings.delete(key));
-      islandEncodings.set(key, encoded);
-      while (islandEncodings.size > ISLAND_ENCODINGS_KEPT) islandEncodings.delete(islandEncodings.keys().next().value!);
-    }
-    return encoded;
-  };
-  const islandFile = async (c: Context, key: string, bytes: Uint8Array, contentType: string): Promise<Response> => {
-    const body = Buffer.from(bytes);
-    return variantResponse(c, body, await encodedIsland(key, body), { 'content-type': contentType, 'x-content-type-options': 'nosniff' });
-  };
-  // Only a path the store could have written is looked up: 16 lowercase hex and the one extension.
-  app.on(['GET', 'HEAD'], `${DOCUMENT_MODULE_PATH}/:file`, async (c) => {
-    const sha = /^([0-9a-f]{16})\.js$/.exec(c.req.param('file'))?.[1];
-    const stored = sha ? await islandModules.get(sha) : null;
-    if (!stored) return c.notFound();
-    // The stored bytes name the shared runtime by specifier; `?b=` is the build the page was assembled
-    // for, and the bytes are bound to exactly that build's chunks (runtime-binding): the live build, or an
-    // older one's retained manifest (a tab open across a deploy, a prefetched page, a pinned page).
-    const live = loadCompilerBuild();
-    const asked = c.req.query('b');
-    const build = asked === undefined || asked === live.id ? live : await retainedBuild(asked);
-    if (!build) return c.notFound();
-    const key = `d/${sha}/${build.id}`;
-    let bound = boundModules.get(key);
-    if (!bound) {
-      const text = Buffer.from(stored).toString('utf8');
-      const binding = bindModule(text, build);
-      // A module naming a chunk this build lacks never runs against it.
-      if (binding.missing.length) return c.notFound();
-      bound = binding.code === text ? Buffer.from(stored) : Buffer.from(binding.code);
-      boundModules.set(key, bound);
-      while (boundModules.size > ISLAND_ENCODINGS_KEPT) boundModules.delete(boundModules.keys().next().value!);
-    }
-    // Unversioned, a module that names the runtime by specifier would be cached immutable against one
-    // build; every page names it with `?b=` (assembler bindModuleRef). A module whose bytes name chunk
-    // URLs themselves (compiled before specifiers were kept) is immutable as it is.
-    if (asked === undefined && !bound.equals(stored)) return c.notFound();
-    return islandFile(c, key, bound, 'text/javascript; charset=utf-8');
-  });
-  app.on(['GET', 'HEAD'], `${TEMPLATE_RESOURCE_PATH}/:file`, async (c) => {
-    const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
-    const bytes = sha ? await islandTemplates.get(sha) : null;
-    return bytes ? islandFile(c, `t/${sha}`, bytes, 'application/json; charset=utf-8') : c.notFound();
-  });
-  // The shared document stylesheets: one URL per text for every document (lib/page-styles/linked-sheets.server).
-  app.on(['GET', 'HEAD'], `${STYLESHEET_PATH}/:file`, async (c) => {
-    const sha = /^([0-9a-f]{16})\.css$/.exec(c.req.param('file'))?.[1];
-    const bytes = sha ? await islandStylesheets.get(sha) : null;
-    return bytes ? islandFile(c, `c/${sha}`, bytes, 'text/css; charset=utf-8') : c.notFound();
-  });
-  app.on(['GET', 'HEAD'], `${SPECULATION_RULES_PATH}/:file`, async (c) => {
-    const sha = /^([0-9a-f]{16})\.json$/.exec(c.req.param('file'))?.[1];
-    const bytes = sha ? await speculationRules.get(sha) : null;
-    return bytes ? islandFile(c, `s/${sha}`, bytes, SPECULATION_RULES_CONTENT_TYPE) : c.notFound();
-  });
-  app.on(['GET', 'HEAD'], '/islands/:file', async (c, next) => {
-    const name = c.req.param('file');
-    const local = path.join(publicDir, 'islands', name);
-    if (existsSync(local)) return next();
-    const bytes = await retainedIslandFile(name);
-    if (!bytes) return c.notFound();
-    return islandFile(c, `shared/${name}`, bytes, name.endsWith('.wasm') ? 'application/wasm' : 'text/javascript; charset=utf-8');
-  });
-  /*
-   * The offline file's code-view extras (lib/offline/extras): the source editor and prettier,
-   * content-addressed like /story/*, and loaded from a file:// page (a `null`
-   * origin) by an SRI-pinned script — which is a CORS request, hence the open ACAO.
-   */
-  app.on(['GET', 'HEAD'], '/offline/:name', async (c) => {
-    const code = await offlineExtrasAsset(c.req.param('name'));
-    if (!code) return c.notFound();
-    return variantResponse(c, code, await offlineExtrasEncoded(c.req.param('name')), {
-      'content-type': 'text/javascript; charset=utf-8', 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff',
-    });
-  });
   app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
   // Opaque-origin /raw frames import these modules and fetch the page engine's wasm.
   // Every file is content-addressed; both requests need CORS and immutable caching.

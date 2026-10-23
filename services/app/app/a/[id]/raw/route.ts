@@ -1,3 +1,4 @@
+import { archivedVersionFor, servedRow } from '@/lib/serving';
 /**
  * GET /a/:id/raw — the artifact's own bytes (the standalone document for
  * markup, JSON/image bytes for the data tiers), a SUB-PATH of the one
@@ -17,13 +18,9 @@
  *   opaque origin, so author JS cannot read the human UI's localStorage even
  *   though it is same-host. Verified live: reading localStorage throws.
  */
-import { agentDiscovery, READER_MODE_HEADER, VIEWER_OVERLAY_PATH } from '@/lib/compiled-page';
-import { archivedReadOnly, archivedVersionFor, servedRow } from '@/lib/serving';
-import { accessMoved, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, effectiveRole, VERSION_PARAM } from '@/lib/artifacts';
-import type { ArchivedRender } from '@/lib/artifacts';
-import { dataflowForRow } from '@/lib/document-data';
+import { accessMoved, type ArtifactHeader, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, VERSION_PARAM } from '@/lib/artifacts';
 import { trackEvent, verifyExportKey } from '@/lib/platform';
-import { requestOrSessionActor, type RequestIdentity } from '@/lib/accounts';
+import { requestOrSessionActor } from '@/lib/accounts';
 import { baseUrl, parseByteRange } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
@@ -32,28 +29,13 @@ import { Readable } from 'node:stream';
 import { loadImage } from '@/lib/object-store/image-store';
 import { serveStoredFile } from '@/lib/datasets/file-store';
 import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/object-store/pdf-store';
-import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
-import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { compileStoryCssWithExtras, currentStoryCss } from '@/lib/data/story/story-css.server';
-import { renderedRuntimeClasses, runtimeCssData } from '@/lib/serving/runtime-css.server';
-import { declaresMutations, displayTitle } from '@/lib/document';
-import { appendCspExtensions, assetsPath, buildDocumentCsp, documentStyleSheets, markupCsp, mutatePath, queryPath } from '@/lib/page-styles';
+import type { StorySurface } from '@/lib/story-runtime/story-fragment';
 import { pagesRequestOf } from '@/lib/http/pages-origin';
-import { cardSelectionQuery, readUrlValues } from '@/lib/dataflow';
-import { CARD_RENDER_GENERATION } from '@artifactbin/contracts';
-import type { StoryDesignName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
-import { ASSETS_ORIGIN, PUBLIC_BASE_URL } from '@/lib/platform';
-import { canonicalDocumentUrl, servesDocument } from '@/lib/serving';
-import { storyFragmentView, type StorySurface } from '@/lib/story-runtime/story-fragment';
-import { readerModeOf, STORY_NODES_ID } from '@/lib/story-runtime/contract';
-import { scriptJson } from '@artifactbin/utils/escape';
-import { compiledPageFor, documentEtag, domainFooter, linkedDocumentSheets } from '@/lib/publish/prepared';
-import type { CspExtensions } from '@/lib/document';
-import { stylesheetStore } from '@/lib/compiled-page';
+import { servesDocument } from '@/lib/serving';
 import { matchingTag, notModified, REVALIDATE } from '@/lib/http/revalidation';
-import { preparedHeadFor, preparedPageFor, type PreparedView, recompilePage, reprepareStoredPage } from '@/lib/publish/prepared/prepared-page.server';
-import { cspExtensionsFor } from '@/lib/trust/document-trust';
+import { nativeHtmlDocument, nativeHtmlPolicy, nativeHtmlRuntimeIdentity } from '@/lib/serving/native-html.server';
+import { etagOf } from '@/lib/http/revalidation';
 
 // The markup document's policy — per document, built in lib/page-styles/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -112,10 +94,11 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
    */
   const asked = request.headers.get('if-none-match');
   const conditional = !!pages && !key && !fragment && !!asked && !new URL(request.url).searchParams.has(VERSION_PARAM);
-  const loaded = conditional ? null : await getArtifactById(id);
-  const header: ArtifactHeader | null = loaded ?? (conditional ? await getArtifactHeaderById(id) : null);
+  const metadataOnly = conditional || (request.method === 'HEAD' && !key && !new URL(request.url).searchParams.has(VERSION_PARAM));
+  const loaded = metadataOnly ? null : await getArtifactById(id);
+  const header: ArtifactHeader | null = loaded ?? (metadataOnly ? await getArtifactHeaderById(id) : null);
   if (!header) return notFound();
-  if (fragment && header.format !== 'markup') return notFound();
+  if (fragment) return notFound();
   if (domain && !servesDocument(domain.ownerId, header)) return notFound();
   /*
    * The ACL decides before any bytes leave; a denied private doc is
@@ -143,29 +126,43 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
   const admits = async (row: ArtifactHeader) => actor.tokenId === row.token_id || (await canReadArtifact(row, actor)) || byExportKey;
   if (!(await admits(header))) return notFound();
 
-  // The revalidation is named from the header, its version's stored page head and the hosts that page recorded: the same
-  // decision and the same validator as below, without the source. A page that cannot be named so, or a tag that does not
-  // match, is answered below from the whole row.
-  const stored = conditional && header.format === 'markup' ? await preparedHeadFor(header) : null;
-  if (stored) {
-    const decided = await documentDecision({
-      request, artifact: header, meta: header.meta, at: null, domain, pages, fragment, key, byExportKey, actor, declares: { declared: stored.page.declaredCsp! },
-    });
-    const tag = decided.facts && await documentEtag({
-      row: header, artifact: header, at: null, page: stored.page, search: new URL(request.url).search, drawings: decided.drawings, holder: decided.holder, facts: decided.facts,
-    });
-    const held = tag ? matchingTag(asked, tag) : null;
-    if (held) {
-      if (request.method !== 'HEAD') void trackEvent('view', header.id, { userId: actor.userId });
-      return notModified(held);
-    }
+  const base = pages?.site.app ?? baseUrl(request);
+  const policy = nativeHtmlPolicy(id, base, pages ? { self: pages.self, app: pages.site.app } : undefined);
+  const revalidated = !!pages && !key && !new URL(request.url).searchParams.has(VERSION_PARAM);
+  const validator = async (row: ArtifactHeader) => etagOf({
+    id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at,
+    // Source is immutable within a published version; bindings are header metadata.
+    links: row.meta.htmlLinks ?? [], runtime: await nativeHtmlRuntimeIdentity(), policy, actor,
+  });
+  const responseHeaders = (etag: string | null) => ({
+    ...COMMON, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': policy,
+    ...(etag ? { ETag: etag, 'Cache-Control': REVALIDATE } : {}),
+  });
+  if (header.format === 'html' && metadataOnly) {
+    const etag = revalidated ? await validator(header) : null;
+    const held = etag && matchingTag(asked, etag);
+    if (held) return notModified(held);
+    if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
   }
+
   const artifact = loaded ?? await getArtifactById(id);
   if (!artifact) return notFound();
   // Admission is asked again of the row served when its access moved after the header was read.
   if (!loaded && accessMoved(header, artifact) && !(await admits(artifact))) return notFound();
 
   switch (artifact.format) {
+    case 'html': {
+      const at = domain ? null : await archivedVersionFor(request, artifact, { capture: byExportKey });
+      if (at === 'not_found') return notFound();
+      const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
+      const etag = revalidated && !at ? await validator(artifact) : null;
+      const held = etag && matchingTag(asked, etag);
+      if (held) return notModified(held);
+      if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
+      const rendered = await nativeHtmlDocument({ row, ...(pages ? { appOrigin: pages.site.app } : {}) });
+      if (!key && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: actor.userId });
+      return new Response(rendered.html, { headers: responseHeaders(etag) });
+    }
     case 'file': return serveStoredFile(request, artifact);
     case 'dataset':
     {
@@ -177,7 +174,6 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       });
     }
 
-    case 'program':
     case 'viz':
       return new Response(artifact.source ?? '', {
         status: 200,
@@ -287,183 +283,6 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
     }
 
     /*
-     * markup: the SSR'd standalone document — the ONE renderer. On the document's
-     * own origin it is what the app page frames (lib/serving/document-frame); on
-     * the app's origin, sandboxed by the headers above, it is an explicit request
-     * for the bytes and the export's own capture (lib/export shoots
-     * `raw?chrome=0&key=`). Source read-back is the API's `markup:`.
-     *
-     * A FOLDER IS NOT HERE. It has no content, so there is no document to
-     * serve: its listing is app data the page endpoint answers and the app
-     * server inlines. It falls to the `default` below and gets the SAME uniform
-     * 404 an unknown id gets.
-     */
-    case 'markup': {
-      /*
-       * `?version=N` — THIS document as it was, read-only, for whoever may
-       * read its history (lib/archived-version). Decided before anything is
-       * read or rendered: a reader without history access, an invalid number
-       * and a version that was never archived all get the SAME uniform 404 the
-       * rest of this route answers, so nobody learns the parameter exists.
-       */
-      const at = domain ? null : await archivedVersionFor(request, artifact, { capture: byExportKey });
-      if (at === 'not_found') return notFound();
-      // Everything below renders THIS row: the artifact wearing that version's
-      // bytes when one was asked for, the artifact itself otherwise. One
-      // substitution rather than a conditional at every read.
-      const row = await servedRow(artifact, at);
-      /*
-       * Explicit raw document reads still count here. Ordinary app readers
-       * render inline and report through /api/page/artifact/:id/view instead;
-       * they do not fetch this route. Both use the same daily visitor hash.
-       *
-       * Never for a capture: that is our own headless browser re-reading the
-       * document to photograph it, not a reader. `void`, because analytics may
-       * never delay or fail a render.
-       */
-      if (!key && !fragment && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: actor.userId });
-
-      const meta = row.meta as StoredMeta;
-      {
-        const { shownMode, design, chrome, reader, base, appStory, capture, canonical, drawings, holder, policy, revalidated, facts } = await documentDecision({
-          request, artifact, meta, at, domain, pages, fragment, key, byExportKey, actor, declares: row,
-        });
-        const etagFor = (entry: { row: ArtifactHeader; page: PreparedView<{ compiled: 'head' }>; stale?: true }) => documentEtag({
-          row: entry.row, artifact, at, page: entry.page, stale: !!entry.stale, search: new URL(request.url).search, drawings, holder, facts,
-        });
-        // A conditional request is named from the compile's head (documentEtag reads no more): a 304 never reads the
-        // compiled page's bulk, the multi-megabyte part of a large document. A miss reads the page whole below. Asked again
-        // after a header miss above, so any difference between the header and the whole row costs what it did before.
-        if (revalidated && asked) {
-          const tag = await etagFor(await preparedPageFor(artifact, at, { compiled: 'head' }));
-          const held = tag ? matchingTag(asked, tag) : null;
-          if (held) return notModified(held);
-        }
-        // The shell and the compiled page: the tree is read only for a fragment (below) or a recompile (which reads it itself).
-        let prepared = await preparedPageFor(artifact, at, { compiled: true });
-        if (byExportKey && request.headers.get('x-mx-compiled-backfill') === 'recompile') {
-          // A page prepared under an older stylesheet is prepared again whole (its compile with it); otherwise only recompiled.
-          if (prepared.stale) prepared = await reprepareStoredPage(artifact, at);
-          else {
-            const compiled = await recompilePage(prepared.row, at, prepared.page);
-            if (compiled) prepared.page.compiled = compiled;
-          }
-        }
-        /**
-         * A document on its own origin LINKS the sheets every document of a build shares, from the app's origin where
-         * one URL serves them all (lib/page-styles/linked-sheets.server); a sandboxed copy, a domain post and the
-         * exporter's capture carry the standalone sheets inline, as they always did.
-         */
-        const documentSheets = (standalone: ReturnType<typeof documentStyleSheets>) =>
-          pages && !capture ? linkedDocumentSheets(standalone, { origin: pages.site.app, store: stylesheetStore() }) : standalone;
-        const flow = prepared.page.declared?.flow ?? null;
-        // The exporter photographs this page: its run is settled, and carries whoever asked (see the
-        // capture's run below) — never the guest snapshot's rows, never cached.
-        const ran = capture && flow && !prepared.page.declared?.state
-          ? await dataflowForRow(row, { values: readUrlValues(new URL(request.url).search, flow), viewer: actor })
-          : null;
-        // Named again from the page as read: a compile that changed since the head was read is the one served, and tagged.
-        const etag = revalidated ? await etagFor(prepared) : null;
-        const held = etag ? matchingTag(asked, etag) : null;
-        if (etag && held) return notModified(held);
-        // Only an answer with a body uses the document's sheet (a stale one is compiled from the source here).
-        const compiledCss = await currentStoryCss(meta, row.source);
-        const standaloneSheets = (tailwind: string | null) => documentSheets(documentStyleSheets({
-          compiledCss: tailwind, chrome, bare: !!domain, theme: design.theme,
-          docFonts: prepared.page.base.fonts, systemCss: prepared.page.base.systemCss ?? '', authorCss: prepared.page.authorCss,
-        }));
-        // A version that fills classes at runtime: the door the page asks again at, and the rows the server draws styled
-        // in the first byte (lib/serving/runtime-css.server). The app page's story carries its one isolated sheet instead.
-        const servedVersion = { id: artifact.id, version: at?.version ?? artifact.version, source: row.source };
-        const runtimeData = appStory ? null : runtimeCssData(servedVersion, pages ? pages.self : '');
-        const runtimeCss = runtimeData ? {
-          data: runtimeData,
-          restyle: async (story: string) => {
-            const extras = renderedRuntimeClasses(row.source, story);
-            return extras.length ? { extras, sheets: await standaloneSheets(await compileStoryCssWithExtras(row.source, extras)) } : null;
-          },
-        } : null;
-        const answer = await compiledPageFor(prepared.row, prepared.page, {
-          at,
-          search: new URL(request.url).search,
-          // Only the live morph's fragment is drawn at the reader's view state: a page is served at its defaults, as it hydrates.
-          view: fragment ? storyFragmentView(new URL(request.url).search) : null,
-          drawings,
-          colorMode: shownMode,
-          // On its own origin the copy carries its reader's pages session, an account's or a guest owner's.
-          signedIn: pages ? actor.credential !== 'none' : actor.credential === 'session' && !!actor.userId,
-          // A sandboxed copy's doors carry no credential (its origin is opaque): it holds what anyone may, as /raw always has.
-          // On its own origin its doors answer for its pages session's reader, so the page holds what they may.
-          holder,
-          // A capture's rows are settled, but its managed iframe still needs the scoped asset door.
-          doors: capture ? { queryUrl: '', assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : pages ? {
-            // Its own origin's doors, absolute, called directly with the pages cookie (server/pages-host).
-            queryUrl: `${pages.self}${queryPath(artifact.id)}`,
-            ...(!at && declaresMutations(row.source) ? { mutateUrl: `${pages.self}${mutatePath(artifact.id)}` } : {}),
-            viewerUrl: `${pages.self}${VIEWER_OVERLAY_PATH(artifact.id)}`,
-            assetsUrl: `${pages.self}${assetsPath(artifact.id)}`,
-            direct: true,
-          } : {
-            queryUrl: queryPath(artifact.id),
-            ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
-            viewerUrl: VIEWER_OVERLAY_PATH(artifact.id),
-            assetsUrl: assetsPath(artifact.id),
-          },
-          ...(capture ? { assetsUrl: `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` } : {}),
-          ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
-          live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id, ...(pages ? { direct: true } : {}) } : null,
-          // The one app origin that frames this copy, for the frame side of the app bridge (brief B).
-          ...(pages ? { appOrigin: pages.site.app } : {}),
-          // The page's own behaviour (lib/islands/page): framing, the reader's colour override, the live
-          // stream of a page with no islands, the scroll a live reload keeps. Never on a capture.
-          behaviors: capture ? [] : ['page'],
-          // `chrome=0` draws the document without its own chrome (a deck's rail and present bar).
-          documentChrome: chrome,
-          capture: !chrome,
-          head: chrome
-            ? {
-              description: row.description,
-              canonical,
-              social: { title: displayTitle(row), description: row.description, image: `${domain ? PUBLIC_BASE_URL.replace(/\/+$/, '') : base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}${cardSelectionQuery(new URL(request.url).search, flow)}` },
-              help: reader ? agentDiscovery(base) : null,
-            }
-            : null,
-          ...(ran ? { results: { tables: ran.state.tables, errors: ran.state.errors, ...(ran.state.userOptions ? { userOptions: ran.state.userOptions, people: ran.state.people ?? {} } : {}) } } : {}),
-          // Its style rides in the sheets, where the standalone document has it.
-          footer: domain ? { html: domainFooter(`${PUBLIC_BASE_URL.replace(/\/+$/, '')}/a/${artifact.id}`).html, css: '' } : null,
-          // The standalone document's stylesheets, byte for byte (lib/page-styles/document-styles); the app
-          // page's story carries its one isolated sheet instead (the assembler's `css`).
-          sheets: appStory ? null : await standaloneSheets(compiledCss),
-          runtimeCss,
-        });
-        if (answer.mode === 'compiled') {
-          // A fragment carries its version's own source nodes: the morph hands them to the document's selections and
-          // comments in the task it draws the version, so neither is ever classified against another version.
-          const html = fragment ? withVersionNodes(answer.html, (await preparedPageFor(artifact, at, { nodes: true })).page.data.nodes) : answer.html;
-          return new Response(html, {
-            status: 200,
-            headers: {
-              'Content-Type': 'text/html; charset=utf-8',
-              // On its own origin the document needs no sandbox: the origin is its alone (lib/page-styles/document-csp).
-              'Content-Security-Policy': policy,
-              ...answer.headers,
-              [READER_MODE_HEADER]: 'compiled',
-              // The /raw copy asks from an opaque origin; an anonymous answer is what anyone with the link reads.
-              ...(fragment && !actor.userId && !actor.tokenId ? { 'Access-Control-Allow-Origin': '*' } : {}),
-              ...COMMON,
-              ...(etag ? { ETag: etag, 'Cache-Control': REVALIDATE } : {}),
-            },
-          });
-        }
-        // No renderer is left to answer: a reported 500.
-        return new Response('<!doctype html><meta charset="utf-8"><title>Unavailable</title><h1>This document could not be rendered</h1>', {
-          status: answer.status,
-          headers: { 'Content-Type': 'text/html; charset=utf-8', [READER_MODE_HEADER]: 'compiled', ...COMMON },
-        });
-      }
-    }
-
-    /*
      * Anything else is a row this deployment does not serve — a leftover from a
      * retired tier. It is not a case to support: it gets the SAME uniform 404
      * as an id that never existed, because that is what it is to us. The
@@ -473,92 +292,6 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
     default:
       return notFound();
   }
-}
-
-type StoredMeta = { theme?: StoryDesignName | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
-
-interface DocumentRequest {
-  request: Request;
-  /** The head row, read whole or as its header: nothing decided here reads its content. */
-  artifact: ArtifactHeader;
-  /** The served version's meta (the head's, or an archived version's). */
-  meta: StoredMeta;
-  at: ArchivedRender | null;
-  domain: DomainPost | null;
-  pages: ReturnType<typeof pagesRequestOf>;
-  fragment: StoryFragmentRequest | null;
-  key: string | null;
-  byExportKey: boolean;
-  actor: RequestIdentity;
-  /** What the served version declares to the network: its source, or the set its prepared page recorded from it. */
-  declares: Pick<ArtifactRow, 'source'> | { declared: CspExtensions };
-}
-
-/**
- * EVERYTHING A DOCUMENT ANSWER IS DECIDED BY BEFORE ITS BYTES — its design, surface, addresses, trust and policy, and
- * (on its own origin) the facts its validator names. The one decision for an answer with a body and for a 304 named
- * from the header alone: what either reads of the row is its header and what its version declares.
- */
-async function documentDecision({ request, artifact, meta, at, domain, pages, fragment, key, byExportKey, actor, declares }: DocumentRequest) {
-  // Stored rows may carry an unknown theme name (unthemed) and a sheet
-  // compiled under an older registry (recompiled) — both resolve at the
-  // door so the served document always speaks the live vocabulary.
-  // A CAPTURE may be drawn in either mode (lib/mermaid-images harvests both); a reader sees the author's — or, on
-  // the document's own origin, the pick the app page told its first URL (lib/serving/artifact-page readerPickOf):
-  // the page is served in it from its first byte, and its validator names it (`search` and `design` below).
-  const captured = byExportKey && !domain ? captureColor(request.url) : null;
-  const picked = pages && !key && !domain ? readerModeOf(new URL(request.url).search) : null;
-  const shownMode = captured ?? picked;
-  const design = resolveStoredStoryDesign(meta.theme, shownMode ?? meta.colorMode);
-  // ?chrome=0 — the capture path (lib/export screenshots this frame, so the
-  // document's own rail/present bar and attribution footer would land in
-  // every OG card).
-  const chrome = domain ? true : new URL(request.url).searchParams.get('chrome') !== '0';
-  // The app's agent pointers — never on a custom domain, and never on the document's own origin, where
-  // the app page that frames this copy carries them.
-  const reader = chrome && !domain && !pages;
-  // A signed capture is fetched over the exporter's internal transport.
-  // A cohost HTTPS proxy can otherwise stamp https onto an HTTP backend,
-  // breaking scoped asset imports and the capture's CSP before rendering.
-  // On the document's own origin the app's addresses (its card, its canonical) are the app origin's.
-  const base = pages ? pages.site.app : byExportKey && !chrome ? new URL(request.url).origin : baseUrl(request);
-  // Every admitted document read is compiled, including live story fragments.
-  /** The app page's story (lib/artifact-page) differs from this copy in its sheet and its drawings, never in its story. */
-  const appStory = fragment?.surface === 'app';
-  const capture = byExportKey && !chrome;
-  // What this reader trusts the document to reach beyond the default policy (its Helmet `csp-*` metas): the
-  // hosts they published, or every declared one once they allowed the rest; nothing for a capture. On its own
-  // origin the reader's "Allow once" grants arrive with the pages session (`pages.carried`).
-  const extensions = capture ? undefined : await cspExtensionsFor({
-    artifact: { id: artifact.id, version: artifact.version, ...declares }, viewer: actor,
-    // The app origin's session cookie never belongs to a document's own origin: there, only what was carried.
-    ...(pages ? { carried: pages.carried ?? null } : { request }),
-  });
-  const canonical = chrome ? (domain?.homepage ? `https://${domain.hostname}/` : domain?.path ? `https://${domain.hostname}${domain.path}` : await canonicalDocumentUrl(artifact)) : null;
-  const drawings = domain || engineRequested(request.url) ? null : appStory ? 'inline' as const : 'document' as const;
-  const holder = pages ? actor : null;
-  /*
-   * REVALIDATION. A document on its own origin is cached by its reader's browser alone (`private, no-cache`) under
-   * a strong ETag over everything that determines its bytes, and `If-None-Match` is answered 304 before anything is
-   * rendered. Not the sandboxed copy or a domain post (their own surfaces), not a signed capture (a one-use key and
-   * its own run), not an archived version (never cached), and not the live morph's fragment, which is asked for
-   * exactly when the version changed.
-   */
-  // The document's policy: a header of this answer, so it is one of the things its validator names (a 304 keeps the
-  // policy of the 200 it revalidates).
-  const policy = pages
-    ? buildDocumentCsp({ self: pages.self, app: pages.site.app, id: artifact.id, assetOrigin: ASSETS_ORIGIN, ...(extensions ? { extensions } : {}) })
-    : appendCspExtensions(markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined, { compiled: true }), extensions);
-  const revalidated = !!pages && !key && !fragment && !at;
-  const facts = revalidated ? {
-    // Who asks, in what role, and what they trust: another reader never matches this reader's tag.
-    reader: { userId: actor.userId, tokenId: actor.tokenId ?? null, email: actor.email, credential: actor.credential },
-    role: await effectiveRole(artifact, actor), trust: extensions ?? null,
-    // The surface and the addresses written into it.
-    surface: pages ? { self: pages.self, app: pages.site.app } : null,
-    chrome, canonical, design, policy,
-  } : null;
-  return { shownMode, design, chrome, reader, base, appStory, capture, canonical, drawings, holder, policy, revalidated, facts };
 }
 
 /**
@@ -576,11 +309,4 @@ export async function HEAD(request: Request, ctx: { params: Promise<{ id: string
   // Cancel rather than leak: an unread stream holds its file handle open.
   await res.body?.cancel().catch(() => {});
   return new Response(null, { status: res.status, headers: new Headers(res.headers) });
-}
-
-/** The fragment's version nodes (STORY_NODES_ID), as inert JSON at the end of its body. */
-function withVersionNodes(html: string, nodes: unknown): string {
-  const script = `<script type="application/json" id="${STORY_NODES_ID}">${scriptJson(nodes)}</script>`;
-  const end = html.lastIndexOf('</body>');
-  return end === -1 ? html + script : html.slice(0, end) + script + html.slice(end);
 }

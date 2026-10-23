@@ -3,7 +3,7 @@
  * global setup asks `serverReaderFresh()` in-process and skips the build process entirely on a hit.
  *
  * The marker records the build's tools, every repository input the last build read (the prepared-page
- * graph, the offline bundles' inputs and Tailwind-scanned files, the library
+ * graph, Tailwind-scanned files, the library
  * wrappers), the set of files under the Tailwind @source folders (a NEW file can add classes without
  * changing a recorded input), and the outputs. size+mtime short-circuits a content hash. Any error is
  * a miss.
@@ -18,7 +18,7 @@ const APP = path.resolve(import.meta.dirname, '..');
 const REPO = path.resolve(APP, '../..');
 const MARKER = path.join(APP, 'lib/build-assets/.server-reader-cache.json');
 const TOOLS = ['services/app/scripts/build-server-reader.mjs', 'services/app/scripts/server-reader-cache.mjs',
-  'services/app/scripts/preparation-fingerprint.mjs', 'services/app/scripts/build-offline.mjs', 'services/app/scripts/build-libraries.mjs',
+  'services/app/scripts/build-libraries.mjs',
   'services/app/scripts/lucide-icons.mjs', 'services/app/scripts/precompress.mjs',
   'package-lock.json', 'services/app/package.json', 'services/app/lib/libraries/registry.json'];
 // Mirrors app/globals.css: @source ../web ../solid ../lib, minus their __tests__ (solid's stay).

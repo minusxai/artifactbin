@@ -55,9 +55,9 @@ export interface ShelfRow extends ShelfItem {
 }
 
 export interface Shelf<T> {
-  /** Markup documents, newest first. */
+  /** HTML pages, newest first. */
   documents: T[];
-  /** Non-markup rows, newest first. */
+  /** Non-page rows, newest first. */
   assets: T[];
   /**
    * Folders — a THIRD partition, never in `assets` and never in `documents`.
@@ -114,8 +114,8 @@ export function groupShelfByRecency<T extends ShelfItem>(rows: readonly T[], now
   });
 }
 
-/** A document is markup; a folder is a place; everything else is material a document is built from. */
-const isDocument = (row: ShelfItem): boolean => row.format === 'markup';
+/** An HTML page is a deliverable; a folder is a place; everything else is material a page is built from. */
+const isDocument = (row: ShelfItem): boolean => row.format === 'html';
 const isFolder = (row: ShelfItem): boolean => row.format === 'folder';
 
 export function buildShelf<T extends ShelfItem>(rows: readonly T[]): Shelf<T> {

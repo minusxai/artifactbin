@@ -1,61 +1,18 @@
-/**
- * PRERENDERED MERMAID DRAWINGS — harvested after publish, served as stored SVG,
- * so a reader of a published diagram downloads no Mermaid code.
- *
- * THE FLOW. A write that leaves a head version drawing a `<Mermaid>` queues a
- * harvest for that version (after its transaction commits, never inside it;
- * a reader of a head with no harvest queues one too, which is the backstop for
- * every write path and the backfill for documents published before this).
- * The harvester — started by a composition root, never on import — claims a
- * job under a fenced lease (the export cache's pattern: claim token, lease,
- * retry-after, produced outside any transaction), and has the browser service
- * load the version on each reader SURFACE in each colour mode with the engine
- * forced (`mermaid=engine`, `color=` under the capture key) and hand back what
- * the engine drew (`harvestSvg`). Each drawing is kept when it is one this
- * version draws, of a kind that may be prerendered, inert (./sanitize) and
- * REPRODUCIBLE (a drawing never stored before is drawn a second time, in a
- * fresh page, and must come out the same). Kept drawings are stored
- * content-addressed — engine, mode, palette key, code — and shared by every
- * version and document that draws the same thing.
- *
- * THE READ. `mermaidImagesFor` answers a version's drawings for one surface,
- * both modes, keyed as the island wants them (StoryIslandData.mermaidImages);
- * the component shows one wherever it is offered.
- * That is sound because a stored drawing depends on nothing of the reader's:
- * its layout is fixed in SVG coordinates, measured by the harvest at unhinted
- * advances, and it CARRIES ITS OWN FONTS — the document's bundled web faces,
- * subset to its characters (./fonts) — so every platform renders its text in
- * the theme's face at the advances it was laid out with. A drawing in a face
- * the app does not bundle (a system font) could not carry it, and is never
- * stored: its readers keep the engine. Publishing never waits on any of this and never fails because
- * of it: the queue insert runs after the commit and swallows its own errors,
- * and a browser that is down only means readers draw with the engine.
- *
- * TWO SURFACES, because the same document is drawn in two contexts that give
- * the host element a different computed type: the served document
- * (`/a/<id>/raw`, `document`) and the app's inline reader (`/a/<id>`,
- * `inline`). Measured: 16px and 14px — so different palettes, so different
- * drawings, each harvested where it is read.
- */
+/** Durable Mermaid harvest jobs, content-addressed SVG records and asset reads.
+ * Drawing validation and harvest admission share this storage boundary. */
 import { createHash } from 'node:crypto';
-import type { JsxNode } from '@/lib/jsx';
-import type { StoredMermaidImage } from '@artifactbin/contracts';
-import { mermaidImageKey } from '@/lib/jsx/mermaid-source';
 import { getDb } from '@/lib/platform/db';
 import { objectStore } from '@/lib/object-store';
-import { MERMAID_RENDER_ENGINE, mermaidPrerenderable } from './engine';
-import { mermaidCodesOf } from './codes';
+import { MERMAID_RENDER_ENGINE } from './engine';
 import type { MermaidFaces } from './drawn';
 
 export type MermaidSurface = 'document' | 'inline';
 export const MERMAID_SURFACES: readonly MermaidSurface[] = ['document', 'inline'];
 export const MERMAID_MODES = ['light', 'dark'] as const;
 export type MermaidMode = (typeof MERMAID_MODES)[number];
-const MODES = MERMAID_MODES;
 type Mode = MermaidMode;
 
 /** Where a stored drawing is served (app/assets/mermaid/[file]/route.ts). */
-const mermaidImagePath = (key: string): string => `/assets/mermaid/${key}.svg`;
 export const MERMAID_IMAGE_FILE = /^([0-9a-f]{64})\.svg$/;
 export const mermaidObjectKey = (key: string): string => `mermaid/${key}.svg`;
 
@@ -64,10 +21,6 @@ export const MERMAID_ENGINE_PARAM = 'mermaid';
 /** The capture's colour override (`color=light|dark`), honoured only under a valid export key. */
 export const CAPTURE_COLOR_PARAM = 'color';
 
-/** Does this request ask for the engine (no stored drawings)? */
-export function engineRequested(url: string | URL): boolean {
-  return new URL(url).searchParams.get(MERMAID_ENGINE_PARAM) === 'engine';
-}
 /** The colour a CAPTURE asked to be rendered in; the caller has verified its export key. */
 export function captureColor(url: string | URL): Mode | null {
   const value = new URL(url).searchParams.get(CAPTURE_COLOR_PARAM);
@@ -141,70 +94,6 @@ export async function queueMermaidHarvest(row: { id: string; version: number; fo
 /** The running harvester's wake-up (lib/publish/assets/mermaid-harvester), when this process runs one. */
 let wake: (() => void) | null = null;
 export function onMermaidHarvestQueued(listener: (() => void) | null): void { wake = listener; }
-
-/**
- * The stored drawings one version of a document has on one surface, keyed by
- * `mermaidImageKey(code, mode)` for every code it draws and both modes. Empty
- * when it has none yet — and a HEAD with no harvest row queues one, so the next
- * reader is served drawings. Never throws: a reader always gets a document.
- */
-/** Which version, on which surface — and whether it is the head (only a head queues itself) and private (never served). */
-export interface MermaidImageLookup { artifactId: string; version: number; surface: MermaidSurface; head: boolean; visibility: string }
-export async function mermaidImagesFor(
-  lookup: MermaidImageLookup,
-  nodes: readonly JsxNode[],
-): Promise<Record<string, StoredMermaidImage>> {
-  return mermaidImagesForCodes(lookup, prerenderableCodes(nodes));
-}
-
-/** The codes of a tree whose drawings a harvest may store: what a prepared page records, so a reader looks drawings up without loading the tree. */
-export const prerenderableCodes = (nodes: readonly JsxNode[]): string[] => mermaidCodesOf(nodes).filter(mermaidPrerenderable);
-
-/** {@link mermaidImagesFor} for the codes {@link prerenderableCodes} named. */
-export async function mermaidImagesForCodes(
-  lookup: MermaidImageLookup,
-  codes: readonly string[],
-): Promise<Record<string, StoredMermaidImage>> {
-  if (lookup.visibility === 'private') return {};
-  if (!codes.length) return {};
-  try {
-    const db = await getDb();
-    const harvest = (await db.query<{ state: string; images: MermaidHarvestMap | null }>(
-      'SELECT state,images FROM mermaid_harvests WHERE artifact_id=$1 AND version=$2 AND engine=$3',
-      [lookup.artifactId, lookup.version, MERMAID_RENDER_ENGINE],
-    )).rows[0];
-    if (!harvest) {
-      if (lookup.head) void insertHarvest(lookup.artifactId, lookup.version).catch(() => {});
-      return {};
-    }
-    const map = harvest.state === 'done' ? harvest.images?.[lookup.surface] ?? {} : {};
-    const wanted = new Map<string, string>();
-    for (const code of codes) for (const mode of MODES) {
-      const imageKey = mermaidImageKey(code, mode);
-      const content = map[imageKey];
-      if (typeof content === 'string' && /^[0-9a-f]{64}$/.test(content)) wanted.set(content, imageKey);
-    }
-    if (!wanted.size) return {};
-    const rows = (await db.query<{ key: string; info: MermaidImageInfo }>(
-      'SELECT key,info FROM mermaid_images WHERE key=ANY($1::text[]) AND engine=$2', [[...wanted.keys()], MERMAID_RENDER_ENGINE],
-    )).rows;
-    const images: Record<string, StoredMermaidImage> = {};
-    for (const row of rows) {
-      const imageKey = wanted.get(row.key);
-      // Only a drawing that carries its fonts (./fonts): nothing of it is the reader's to resolve.
-      if (!imageKey || !row.info.faces) continue;
-      images[imageKey] = {
-        src: mermaidImagePath(row.key), type: row.info.type, palette: row.info.palette,
-        ...(typeof row.info.width === 'number' ? { width: row.info.width } : {}),
-        ...(typeof row.info.height === 'number' ? { height: row.info.height } : {}),
-      };
-    }
-    return images;
-  } catch (error) {
-    console.warn('[mermaid] stored drawings unavailable:', (error as Error).message);
-    return {};
-  }
-}
 
 /** A stored drawing's bytes, for app/assets/mermaid/[file]; null when there is none. */
 export async function mermaidImageBytes(key: string): Promise<Buffer | null> {

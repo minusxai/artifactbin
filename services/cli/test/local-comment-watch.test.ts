@@ -17,7 +17,6 @@ import {localCommentCommand,localDeleteComments} from '../src/local-comments-com
 import {localCommentFeed} from '../src/local-comment-watch';
 import {localIdentities} from '../src/identities';
 import {runCli} from '../src/dispatch';
-import {startPreview} from '../src/preview/session';
 import {previewAnnotations} from '../src/preview/annotations';
 import {localWorkspaceState,LOCAL_WORKSPACE_SCOPE} from '../src/local-workspace';
 import {readFile} from 'node:fs/promises';
@@ -128,18 +127,6 @@ test('afbin watch --output <file> appends each event to that file on purpose and
   assert.deepEqual(lines[0],{earlier:true},'the log is appended to, never truncated');
   assert.deepEqual(lines.slice(1).map(e=>[e.comment_id,e.body]),[[root.id,'Log me']]);
  }finally{await f.cleanup();}
-});
-
-test('a comment written through the preview server reaches a watcher reading the same workspace',async()=>{
- const f=await fixture();let session:Awaited<ReturnType<typeof startPreview>>|undefined;try{
-  const cursor=(await f.feed()).read('now',100).next_cursor;
-  session=await startPreview({root:f.root,home:f.home,files:['report.jsx'],port:7491});
-  const call=async(operation:string,args:object)=>(await fetch(session!.url+'/editor',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',operation,...args})})).json();
-  const thread=await call('annotations.create',{input:{node_id:'para',body:'From the browser'},key:'once'});
-  await call('annotations.edit',{id:thread.id,input:{body:'From the browser, edited'}});
-  const page=(await f.feed()).read(cursor,100);
-  assert.deepEqual(page.events.map(e=>[e.comment_id,e.change??'new',e.body]),[[thread.id,'new','From the browser, edited']]);
- }finally{await session?.close();await f.cleanup();}
 });
 
 test('a running preview names the watch that follows its comments, as a push names its own',async()=>{

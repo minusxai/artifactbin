@@ -16,7 +16,6 @@ const WorkspaceShell = lazy(() => import('./components/WorkspaceShell'));
 const TrashPage = lazy(() => import('./pages/Trash').then((m) => ({ default: m.TrashPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFoundPage })));
 const LoginPage = lazy(() => import('./pages/Login').then((m) => ({ default: m.LoginPage })));
-const ConnectPage = lazy(() => import('./pages/Connect').then((m) => ({ default: m.ConnectPage })));
 const StartPage = lazy(() => import('./pages/Start').then((m) => ({ default: m.StartPage })));
 const WelcomePage = lazy(() => import('./pages/Welcome').then((m) => ({ default: m.WelcomePage })));
 const NotificationsPage = lazy(() => import('./pages/Notifications').then((m) => ({ default: m.NotificationsPage })));
@@ -116,7 +115,6 @@ export function App(): JSX.Element {
       <Route path="/files/new" component={FileUploadPage} />
       <Route path="/a/:id/edit" component={ArtifactEditRoute} />
       <Route path="/login" component={LoginRoute} />
-      <Route path="/connect" component={ConnectPage} />
       <Route path="/start" component={StartPage} />
       <Route path="/welcome" component={WelcomePage} />
       <Route path="/notifications" component={NotificationsPage} />

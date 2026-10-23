@@ -1,5 +1,4 @@
 import { PUBLIC_BASE_URL } from '@/lib/platform/config';
-import {documentPublicationWithResources} from './prepared-document';
 import {patchMetadata} from './conditional-request';
 import {POST as documentMutation} from '@/app/a/[id]/mutate/route';
 import {describe, expect, it} from 'vitest';
@@ -8,9 +7,8 @@ import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/platform';
-import { getArtifactById, applyEditFor, commitNormalizedMarkup, changeMembership } from '@/lib/artifacts';
+import { getArtifactById, changeMembership } from '@/lib/artifacts';
 import { dataflowForRow, viewerIdentityFor } from '@/lib/document-data';
-import {publishMarkupForArtifact} from '@/lib/publish/publish';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, claimToken, createUser} from '@/lib/accounts';
@@ -75,20 +73,7 @@ describe('native user fields',()=>{
   await create(a.token,{markup});
   expect(((await getArtifactById(dataset.id))!.meta.columns as typeof column)[1].constraints?.memberOf).toEqual([`ref:${report.id}`]);
  });
- it.each(['normalized','atomic'])('binds current when %s markup edits first attach a dataset',async(kind)=>{
-  const a=await account('owner');
-  const dataset=await create(a.token,{dataset:[{id:1,assignee:null}],columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]});
-  const report=await create(a.token,{markup:'<h1>Project</h1>'});
-  const current=(await getArtifactById(report.id))!;
-  const prepared=await publishMarkupForArtifact(current,`<Helmet><Import name="tasks_data" src="ref:${dataset.id}" /><Query name="tasks">{\`select * from tasks_data.rows\`}</Query></Helmet><DataTable data="$tasks" />`);
-  if(prepared instanceof Response)throw new Error(await prepared.text());
-  if(kind==='normalized')await (await getDb()).transaction(tx=>commitNormalizedMarkup(tx,null,current,prepared));
-  else {
-   const result=await applyEditFor(identityForUser(a.user.id, a.tokenId),report.id,{baseEditId:current.edit_id,documentUpdate:(await documentPublicationWithResources(current,{source:prepared.source})).document_update});
-   expect(result).toMatchObject({applied:true});
-  }
-  expect((await getArtifactById(dataset.id))!.meta.columns).toContainEqual({name:'assignee',type:'user',constraints:{memberOf:[`ref:${report.id}`]}});
- });
+
  it('keeps historical self values but rejects explicit unchanged assignments by another writer',async()=>{
   const a=await account('owner'), b=await account('editor');
   const columns=[{name:'done_by',type:'user',constraints:{self:true}}];

@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/route';
 import { emitDatasetCommitted, emitHeadCommitted, onDatasetCommitted, onHeadCommitted } from '@/lib/artifacts/after-commit';
-import { getArtifactById } from '@/lib/artifacts';
 import { mintAccountToken as mintToken, request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -45,19 +44,7 @@ describe('after-commit hooks', () => {
     expect(seen).toEqual(['x']);
   });
 
-  it('a throwing head listener does not fail the publish it follows', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const heads: string[] = [];
-    disposers.push(onHeadCommitted(() => { throw new Error('warm-up exploded'); }));
-    disposers.push(onHeadCommitted((id) => { heads.push(id); }));
-    const t = await mintToken('after-commit-head');
-    const made = await create(t.token, { title: 'Hooked', markup: '<p>Hello</p>' });
-    expect(made.status, await made.clone().text()).toBe(201);
-    const { id } = (await made.json()) as { id: string };
-    expect(heads).toEqual([id]);
-    expect((await getArtifactById(id))?.title).toBe('Hooked');
-    expect(warn).toHaveBeenCalled();
-  });
+  // JSX publication warm-up hooks retired with prepared pages; direct hook isolation remains covered above.
 
   it('a throwing dataset listener does not fail the mutation it follows', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

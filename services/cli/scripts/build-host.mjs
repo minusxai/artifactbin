@@ -1,5 +1,4 @@
 /** CI build boundary: reuse the application build and ESM server bundler, then gather runtime files. */
-import {buildPreview} from './build-preview.mjs';
 import {execFileSync} from 'node:child_process';
 import {access,cp,mkdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {dirname,join,relative,resolve,sep} from 'node:path';
@@ -10,7 +9,7 @@ const runtime=join(cli,'dist/runtime'),app=join(repo,'services/app');
  * each fresh npm consumer. The app's immutable public assets remain untouched. */
 export async function copyRuntimePublic(source,destination){
  const manifest=JSON.parse(await readFile(join(source,'islands/manifest.json'),'utf8'));
- if(!manifest.manifest||!manifest.files||!manifest.ssr?.url||!manifest.offline||!manifest.sqliteWasm)throw Error('CLI reader package needs a complete current manifest');
+ if(!manifest.manifest||!manifest.files||!manifest.ssr?.url||!manifest.sqliteWasm)throw Error('CLI reader package needs a complete current manifest');
  const graph=new Set(Object.keys(manifest.files));
  if(!graph.size||!Object.keys(manifest.manifest).length)throw Error('CLI reader package needs a nonempty current graph');
  for(const url of Object.values(manifest.manifest)){
@@ -21,7 +20,7 @@ export async function copyRuntimePublic(source,destination){
    if(!graph.has(imported))throw Error(`CLI reader import is missing from the current graph: ${url} -> ${imported}`);
   }
  }
- const current=new Set([...graph,...Object.values(manifest.manifest),manifest.ssr.url,manifest.offline,manifest.sqliteWasm]);
+ const current=new Set([...graph,...Object.values(manifest.manifest),manifest.ssr.url,manifest.sqliteWasm]);
  const allowed=new Set(['islands','islands/manifest.json','islands/manifest.json.gz','islands/manifest.json.br']);
  for(const url of current){
   if(typeof url!=='string'||!/^\/islands\/[\w-]+\.(?:js|wasm|json\.gzip)$/.test(url))throw Error(`Invalid CLI reader asset path: ${url}`);
@@ -39,13 +38,11 @@ async function buildHost(){
  execFileSync(process.execPath,[process.env.npm_execpath??join(dirname(process.execPath),'node_modules/npm/bin/npm-cli.js'),'run','build','-w','services/app'],{cwd:repo,stdio:'inherit'});
  await rm(runtime,{recursive:true,force:true});await mkdir(runtime,{recursive:true});
  execFileSync(process.execPath,[join(repo,'scripts/build/build-server.mjs'),join(runtime,'host.mjs'),join(app,'server/team-host.ts'),'sharp','--remote-runner'],{cwd:repo,stdio:'inherit'});
- execFileSync(process.execPath,[join(repo,'scripts/build/build-server.mjs'),join(runtime,'preview.mjs'),join(cli,'src/preview-entry.ts'),'sharp','--remote-runner'],{cwd:repo,stdio:'inherit'});
- await buildPreview(join(runtime,'preview'));
  await copyRuntimePublic(join(app,'public'),join(runtime,'public'));
  for(const name of ['skills','lib/data/story/story-guidance.yaml','lib/build-assets','dist/web','package.json']){
   await mkdir(dirname(join(runtime,name)),{recursive:true});await cp(join(app,name),join(runtime,name),{recursive:true});
  }
- await writeFile(join(runtime,'bootstrap.cjs'),"exports.html=(options,assets)=>import('./preview.mjs').then(host=>host.exportLocalHtml(options,assets));\nexports.image=(options,assets)=>import('./preview.mjs').then(host=>host.exportPreviewImage(options,assets));\nexports.preview=(options,assets)=>import('./preview.mjs').then(host=>host.startPreviewHost(options,assets));\nexports.team=(config,assets,overrides)=>import('./host.mjs').then(host=>host.startTeamHost(config,assets,overrides));\n");
+ await writeFile(join(runtime,'bootstrap.cjs'),"exports.team=(config,assets,overrides)=>import('./host.mjs').then(host=>host.startTeamHost(config,assets,overrides));\n");
  // npm resolves platform-specific optional dependencies on the consumer machine.
  // Never embed build-machine node_modules in the universal npm tarball.
  console.log('Host runtime assets prepared; execution dependencies are owned by the npm package.');

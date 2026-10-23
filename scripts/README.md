@@ -103,10 +103,9 @@ Run one with `node scripts/gate-container.mjs <name>`.
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/build/build-server.mjs` | Bundle a server entry into one ESM file with native packages external. | `npm run build`, `ci.yml`, `build-preview-gate-inputs.mjs` |
+| `scripts/build/build-server.mjs` | Bundle a server entry into one ESM file with native packages external. | `npm run build`, `ci.yml` |
 | `scripts/build/build-islands.mjs` | The shared reader island build and its manifest. | `npm run build:islands -w services/app`, `ci.yml`, downstream |
 | `scripts/build/build-gate-inputs.mjs` | Build only what the browser gates run: app, server bundle, CLI bundle. | `ci.yml`, `gate-container.mjs` |
-| `scripts/build/build-preview-gate-inputs.mjs` | Build the packaged preview runtime from already-built app assets. | `gates/gate-offline-file.mjs` |
 | `scripts/lib/generate-teaching.mjs` | Generate the CLI's teaching once per input change (content-verified cache); also the library the dev tools import. | app `prebuild`, `services/cli/scripts/build.mjs` |
 
 ## Page speed
@@ -140,9 +139,3 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/ci/linux-acceptance-deps.mjs` | Cache the Linux acceptance job's downloaded deb archives. | `ci.yml` |
 | `scripts/ci/docker-containerd-store.sh` | Switch a CI runner's Docker Engine to the containerd image store, which can import and export BuildKit caches (the company container's Caddy build). | `ci.yml` (`company-container`, `warm-caches`) |
 
-## Operator scripts
-
-| File | Purpose | Run by |
-|---|---|---|
-| `scripts/compiled-backfill.ts` | Recompile selected stored document versions on a running server. | an operator, by hand |
-| `scripts/audit-author-scripts.ts` | Read-only: list live documents whose current Helmet script no longer builds (`id, visibility, version, error`, `--json`). | an operator, by hand |

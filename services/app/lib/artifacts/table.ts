@@ -15,7 +15,7 @@
 import { ACCOUNT_REACH_SQL, identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
 import type { StoredDocument } from '../document';
 
-export { artifactQuery, loadArtifactDocument } from './document';
+export { artifactQuery } from './document';
 import { shareRolesAtLeast, type ArtifactFormat, type ArtifactRole, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
 
 export interface ArtifactRow {

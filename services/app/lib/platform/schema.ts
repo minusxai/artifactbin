@@ -390,6 +390,7 @@ const ANNOTATIONS: Table = {
     // grow them by ADD COLUMN IF NOT EXISTS on the next boot.
     { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/document/annotation-range)
     { name: 'range', type: 'TEXT' }, // JSON AnnotationRange: parts addressed RELATIVE to the anchor
+    { name: 'html_anchor', type: 'JSONB' }, // Explicit HtmlNodeAnchor; never a compiler AST path
     { name: 'view_state', type: 'JSONB' }, // Optional bounded UI snapshot, independent of the comment target
     // The same soft-delete stamp `artifacts` carries, and the same gate: a row
     // with it set is nonexistent to every reader in lib/annotations.
@@ -1054,7 +1055,26 @@ const OWNERSHIP_TRANSFERS:Table={name:'ownership_transfers',columns:[
  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
 ],primaryKey:['id'],indexes:[{name:'idx_ownership_transfers_artifact',columns:['artifact_id','created_at']}]};
 
-export const TABLES: Table[] = [GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,...AGENT_TABLES,...SCHEDULE_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+/** Immutable backend modules referenced by exact versions from HTML artifact snapshots. */
+const HTML_BACKEND_VERSIONS:Table={name:'html_backend_versions',columns:[
+ {name:'backend_id',type:'TEXT',notNull:true},{name:'version',type:'TEXT',notNull:true},
+ {name:'page_id',type:'TEXT',notNull:true},{name:'name',type:'TEXT',notNull:true},
+ {name:'source',type:'TEXT',notNull:true},{name:'type_defs',type:'TEXT',notNull:true},
+ {name:'compiled',type:'TEXT',notNull:true},{name:'owner_id',type:'TEXT',notNull:true},
+ {name:'secret_bindings',type:'JSONB',notNull:true,default:"'[]'::jsonb"},
+],primaryKey:['backend_id','version'],indexes:[{name:'idx_html_backend_page_name',columns:['page_id','name']}]};
+/** Mutable platform-kept state belongs to the backend identity, never to a module version. */
+const HTML_BACKEND_STORES:Table={name:'html_backend_stores',columns:[
+ {name:'backend_id',type:'TEXT',notNull:true},{name:'value',type:'JSONB'},
+ {name:'version',type:'INTEGER',notNull:true,default:'0'},
+],primaryKey:['backend_id']};
+
+const HTML_BACKEND_SECRETS:Table={name:'html_backend_secrets',columns:[
+ {name:'owner_id',type:'TEXT',notNull:true},{name:'backend_id',type:'TEXT',notNull:true},
+ {name:'name',type:'TEXT',notNull:true},{name:'ciphertext',type:'TEXT',notNull:true},
+],primaryKey:['owner_id','backend_id','name']};
+
+export const TABLES: Table[] = [HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,HTML_BACKEND_STORES,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,...AGENT_TABLES,...SCHEDULE_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

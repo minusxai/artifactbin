@@ -11,7 +11,6 @@ import {writeFile,readFile,rename,copyFile,realpath} from 'node:fs/promises';
 import {join} from 'node:path';
 import {cliWorkspace,artifactTransport,CLI_SERVER,type CliCall} from './cli-harness';
 import {digest} from '../../cli/src/files';
-import {startPreview} from '../../cli/src/preview/session';
 import {createUser} from '@/lib/accounts';
 import * as identifiers from '@/lib/platform/ids';
 import {POST as reserve} from '@/app/api/artifacts/reservations/route';
@@ -76,24 +75,6 @@ it('real CLI recovers a lost create response preserving local identity and reser
   await writeFile(join(cli.root,'report.jsx'),(await readFile(join(cli.root,'report.jsx'),'utf8')).replace('Draft','Updated'));
   await cli.invoke(['push','report.jsx']);expect((await(await getDb()).query('SELECT id,version FROM artifacts')).rows).toEqual([{id:remoteId,version:2}]);expect((await publication(cli.root)).ids[id]).toBe(remoteId);expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toContain(`id: ${id}`);
  }finally{await cli.cleanup();}
-});
-it('previews unpublished document and dataset IDs locally with no server reads',async()=>{
- const cli=await cliWorkspace('reserved-preview');let session:Awaited<ReturnType<typeof startPreview>>|undefined;
- try{
-  const token=await cli.connect('mxmx_test_reserved_preview');const [report,data,appendix,picture]=await reserveIds(identityForUser(token.userId, token.id),'batch_000000000005');
-  await writeFile(join(cli.root,'sales.csv'),'amount\n42\n');await writeFile(join(cli.root,'picture.png'),Buffer.from([1,2,3]));
-  const source=`---\nid: ${report}\n---\n<Helmet><Import name="sales_data" src="ref:${data}" /><Query name="sales">{\`select sum(amount) as total from sales_data.rows\`}</Query></Helmet><a href="/a/${appendix}">Appendix</a><img src="ref:${picture}" alt="Picture" />`;
-  await writeFile(join(cli.root,'report.jsx'),source);await writeFile(join(cli.root,'appendix.jsx'),`---\nid: ${appendix}\n---\n<p>Appendix</p>`);
-  session=await startPreview({root:cli.root,home:cli.home,files:['report.jsx'],localFiles:{[report]:'report.jsx',[data]:'sales.csv',[appendix]:'appendix.jsx',[picture]:'picture.png'},dataset:async()=>{throw Error('Unexpected server read');}});
-  const result=await fetch(session.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',values:{}})});
-  expect((await result.json()).tables?.sales?.rows).toEqual([{total:42}]);
-  const link=await fetch(session.url+'/a/'+appendix,{redirect:'manual'});expect(link.status).toBe(302);expect(link.headers.get('location')).toBe('/workspace/appendix.jsx');
-  const pictureResponse=await fetch(session.url+'/remote/'+picture);expect(pictureResponse.status).toBe(200);expect(Buffer.from(await pictureResponse.arrayBuffer())).toEqual(Buffer.from([1,2,3]));
-  // Preview gives every element an id on disk (so it can take a comment) and changes nothing else.
-  const previewed=await readFile(join(cli.root,'report.jsx'),'utf8');
-  expect(previewed).toMatch(/<a href="\/a\/[^"]+" id="[A-Za-z][A-Za-z0-9]{3}">Appendix<\/a><img src="ref:[^"]+" alt="Picture" id="[A-Za-z][A-Za-z0-9]{3}" \/>$/);
-  expect(previewed.replace(/ id="[A-Za-z][A-Za-z0-9]{3}"/g,'')).toBe(source);
- }finally{await session?.close();await cli.cleanup();}
 });
 
 it('authenticated reservations survive account token rotation and isolate independent email account namespaces',async()=>{

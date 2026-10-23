@@ -31,6 +31,9 @@ interface WebResource {
 }
 
 interface FetchWebResourceOpts {
+  /** Trusted callers can enforce public-only access independently of development defaults. */
+  policy?: WebIngestPolicy;
+  signal?: AbortSignal;
   /** Hard cap; the stream is destroyed the moment it is crossed. */
   maxBytes: number;
   /** Accept header, when the caller knows what it wants. */
@@ -106,6 +109,7 @@ const oneHop = (
     const doRequest = url.protocol === 'https:' ? httpsRequest : httpRequest;
     const req = doRequest(url, {
       method: 'GET',
+      signal: opts.signal,
       lookup: guardedLookup(policy),
       headers: {
         Accept: opts.accept ?? '*/*',
@@ -163,7 +167,8 @@ const oneHop = (
 
 /** Fetch a caller-supplied URL under the full guard. Throws WebIngestError. */
 export async function fetchWebResource(raw: string, opts: FetchWebResourceOpts): Promise<WebResource> {
-  const policy = activePolicy();
+  const policy = opts.policy ?? activePolicy();
+  opts.signal?.throwIfAborted();
   const deadline = Date.now() + (opts.timeoutMs ?? WEB_INGEST_TIMEOUT_MS);
   let url = parseWebUrl(raw, policy);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {

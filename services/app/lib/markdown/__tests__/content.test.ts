@@ -2,10 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseJsx, serializeJsx } from '@/lib/jsx';
 import { validateMarkupStructure } from '@/lib/document/local-validation';
 import { markdownContent, markdownSource } from '../content';
-import { generate } from '@/lib/compiled-page/compiler';
-import { discoverOutline } from '@/lib/reader-chrome/outline';
 import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
-import { displayTitle } from '@/lib/document/title';
 
 describe('Markdown source contract', () => {
   it('accepts literal Markdown in JSX and preserves it across serialization', () => {
@@ -56,20 +53,6 @@ describe('Markdown source contract', () => {
     expect(result.html).toContain('<th');
     expect(result.html).toContain('text-align:right');
     expect(result.text).toBe('Open taskDone taskNameValueTotal42');
-  });
-
-  it('compiles themed static HTML, with outline headings and no reader-side editor', () => {
-    const parsed = parseJsx('<Markdown id="body" className="text-lg">{`# Title\n\n## Section\n\nHello **world**`}</Markdown>');
-    if (!parsed.ok) throw new Error('parse');
-    const result = generate({ nodes: parsed.nodes, colorMode: 'light', template: 'doc', chrome: true, refData: {}, flow: null });
-    const html = result.staticHtml.join('');
-    expect(html).toContain('data-mx-markdown');
-    expect(html).toContain('mx-markdown text-lg');
-    expect(html).toContain('<strong>world</strong>');
-    expect(html).not.toContain('**');
-    expect(result.browserIslands).not.toContain('lexical');
-    expect(discoverOutline(parsed.nodes, true)).toEqual([{ level: 1, title: 'Title', path: '0:md:0' }, { level: 2, title: 'Section', path: '0:md:1' }]);
-    expect(displayTitle({ source: serializeJsx(parsed.nodes) })).toBe('Title');
   });
 
   it('saves only the addressed Markdown body, preserves wrapper edits, and rejects stale or hostile replacements', () => {

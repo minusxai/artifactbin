@@ -18,7 +18,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { MiddlewareHandler } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { withEncoding } from '@/lib/http/revalidation';
 
@@ -80,24 +80,6 @@ export function negotiateEncoding(accept: string | null | undefined, offered: re
     if (weight > bestWeight) { best = encoding; bestWeight = weight; }
   }
   return best;
-}
-
-/** Precomputed variants of one in-memory immutable body (the offline extras). */
-export interface EncodedVariants { br?: Buffer; gzip?: Buffer }
-
-/**
- * An in-memory immutable body as the response the request accepts: a
- * precomputed variant when one is offered and accepted, identity otherwise.
- * HEAD carries the chosen variant's headers and no body.
- */
-export function variantResponse(c: Context, body: Buffer, variants: EncodedVariants, headers: Record<string, string>): Response {
-  const encoding = negotiateEncoding(c.req.header('accept-encoding'), (['br', 'gzip'] as const).filter(e => variants[e]));
-  const bytes = encoding ? variants[encoding as 'br' | 'gzip']! : body;
-  const out = new Headers(headers);
-  if (encoding) out.set('content-encoding', encoding);
-  varyOnEncoding(out);
-  out.set('content-length', String(bytes.byteLength));
-  return new Response(c.req.method === 'HEAD' ? null : new Uint8Array(bytes), { status: 200, headers: out });
 }
 
 const brotli = promisify(zlib.brotliCompress);

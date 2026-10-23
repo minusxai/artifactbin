@@ -3,8 +3,8 @@ import { executeCatalog } from '@/lib/datasets/execute';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { AccessActor } from '@/lib/accounts';
-import { type CompiledDataflow, importRef, selectQueries, type ImportTables, type Scalar } from '@/lib/dataflow';
-import { runDataflow, runDataflowMany, type RunDataflowOptions } from '../sql/run-dataflow';
+import { type CompiledDataflow, importRef, selectQueries, type ImportTables } from '@/lib/dataflow';
+import { runDataflow, type RunDataflowOptions } from '../sql/run-dataflow';
 export type DocumentQuerySource = { tables: ImportTables[string]; catalog?: DatasetCatalog };
 export type DocumentQuerySourceMode = 'import' | 'catalog' | 'verify';
 interface DocumentQueryOptions extends RunDataflowOptions {
@@ -18,16 +18,6 @@ interface DocumentQueryOptions extends RunDataflowOptions {
 export async function executeDocumentQueries(flow: CompiledDataflow, resolve: (ref: string, mode?: DocumentQuerySourceMode) => Promise<DocumentQuerySource | null>, options: DocumentQueryOptions = {}) {
   const opts = { ...options, ...(options.only ? { only: [...options.only] } : {}) };
   return withDocumentSources(flow, resolve, opts, [opts], (imports, sourceQuery) => runDataflow(flow, imports, { ...opts, sourceQuery }));
-}
-
-/**
- * The document once per entry of `runs` (each its own values and `only`), under ONE resolution of
- * its sources: every import any run reads is resolved and loaded once, and the engine runs them all
- * in one call (`runDataflowMany`). The authority checks are the single run's, once for the batch.
- */
-export async function executeDocumentQueriesMany(flow: CompiledDataflow, resolve: (ref: string, mode?: DocumentQuerySourceMode) => Promise<DocumentQuerySource | null>, options: Omit<DocumentQueryOptions, 'values' | 'only' | 'page' | 'completeResults'>, runs: ReadonlyArray<{ values?: Record<string, Scalar>; only?: Iterable<string> }>) {
-  const each = runs.map((run) => ({ ...(run.values ? { values: run.values } : {}), ...(run.only ? { only: [...run.only] } : {}) }));
-  return withDocumentSources(flow, resolve, options, each, (imports, sourceQuery) => runDataflowMany(flow, imports, { ...options, sourceQuery }, each));
 }
 
 /** Resolve what `runs` read, run them through `execute`, then recheck every source's authority once. */

@@ -28,7 +28,10 @@ import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { storyFragmentPath } from '@/lib/story-runtime/story-fragment';
 import { STORY_DATA_MESSAGE, STORY_FRAME_BRIDGE_MESSAGE, STORY_URL_VALUES_MESSAGE, isFrameBridgeEnvelope, type FrameBridgeFramePayload, type FrameBridgeParentPayload, type IslandStoryController, type StoryDocumentUpdate } from '@/lib/story-runtime/contract';
 
+interface HtmlRelayContext { revision: string; readOnly: boolean }
 interface FrameBridgeParentOptions {
+  /** Set by the trusted HTML shell, never by a page message. */
+  htmlContext?: () => HtmlRelayContext;
   win: Window;
   frame: HTMLIFrameElement;
   /** The framed document's origin: its pages origin, or `'null'` for the sandboxed `/raw` copy (development). */
@@ -89,21 +92,33 @@ const sameOriginFetch = (win: Window) => (path: string, init: RequestInit): Prom
   win.fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store' });
 
 /** The relayed request, checked: one of this document's three paths, on the page's own origin, or null. */
-export function relayedRequest(win: Window, id: string, request: { path: unknown; method: unknown; headers: unknown; body: unknown }): { path: string; init: RequestInit } | null {
+export function relayedRequest(win: Window, id: string, request: { path: unknown; method: unknown; headers: unknown; body: unknown }, htmlContext?: HtmlRelayContext): { path: string; init: RequestInit } | null {
   if (typeof request.path !== 'string' || (request.method !== 'GET' && request.method !== 'POST')) return null;
   let url: URL;
   try { url = new URL(request.path, win.location.origin); } catch { return null; }
   if (url.origin !== win.location.origin) return null;
   const draft = `/a/${encodeURIComponent(id)}/draft-preview`;
-  const allowed = url.pathname === draft || (url.pathname === storyFragmentPath(id) && request.method === 'GET');
+  const graphql = url.pathname === `/api/artifacts/${encodeURIComponent(id)}/graphql` && request.method === 'POST' && !url.search && !url.hash;
+  const allowed = graphql || url.pathname === draft || (url.pathname === storyFragmentPath(id) && request.method === 'GET');
   if (!allowed) return null;
+  let graphqlBody: string | undefined;
+  if (graphql) {
+    if (!htmlContext?.revision || typeof request.body !== 'string' || request.body.length > 1_000_000) return null;
+    try {
+      const input: unknown = JSON.parse(request.body);
+      if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+      const body = input as Record<string, unknown>;
+      if (typeof body.query !== 'string' || !['query', 'mutation'].includes(String(body.operation)) || htmlContext.readOnly && body.operation !== 'query') return null;
+      graphqlBody = JSON.stringify({ ...body, revision: htmlContext.revision });
+    } catch { return null; }
+  }
   const headers: Record<string, string> = {};
   if (request.headers && typeof request.headers === 'object') {
     for (const [name, value] of Object.entries(request.headers as Record<string, unknown>)) {
       if (SENT_HEADERS.includes(name.toLowerCase()) && typeof value === 'string') headers[name] = value;
     }
   }
-  const body = request.method === 'POST' && typeof request.body === 'string' ? request.body : undefined;
+  const body = graphqlBody ?? (request.method === 'POST' && typeof request.body === 'string' ? request.body : undefined);
   return { path: url.pathname + url.search, init: { method: request.method, headers, ...(body !== undefined ? { body } : {}) } };
 }
 
@@ -168,8 +183,12 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   };
 
   const relay = async (payload: Extract<FrameBridgeFramePayload, { kind: 'fetch' }>) => {
-    const request = relayedRequest(win, id, payload);
-    if (!request) { post({ kind: 'fetch-result', call: payload.call, error: 'refused' }); return; }
+    const request = relayedRequest(win, id, payload, options.htmlContext?.());
+    if (!request) {
+      if (payload.path === `/api/artifacts/${encodeURIComponent(id)}/graphql`) post({ kind: 'fetch-result', call: payload.call, status: 403, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data: null, errors: [{ message: 'This page request is not permitted' }] }) });
+      else post({ kind: 'fetch-result', call: payload.call, error: 'refused' });
+      return;
+    }
     try {
       const response = await appFetch(request.path, request.init);
       const headers: Record<string, string> = {};

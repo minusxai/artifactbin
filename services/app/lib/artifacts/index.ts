@@ -20,20 +20,20 @@ export { recordArtifactView } from './view-admission';
 export { artifactState } from './state';
 
 /** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; after-commit hooks; and the deployment's two seams. */
-export { createArtifact, afterCreated, applyEditFor, replaceArtifactFor, revertArtifactFor, commitNormalizedMarkup, retainDownloadedVersion, setMetadataFor, artifactQuotaExceeded, byteQuotaFor, isVersionConflict } from './store';
-export type { ArtifactInput, PreparedMarkupWrite } from './store';
+export { createArtifact, afterCreated, applyEditFor, replaceArtifactFor, revertArtifactFor, setMetadataFor, artifactQuotaExceeded, byteQuotaFor, isVersionConflict } from './store';
+export type { ArtifactInput } from './store';
 export { updateMetadataFromBody } from './metadata-wire';
 export { assetByteQuotaExceeded, assetByteQuotaLimit } from './asset-quota';
 export { CreationReplay, creationOperation, lookupCreation } from './creation-ledger';
 export { reserveArtifactIds, reserveIds } from './identities';
 export { completeMutationReceipt, durableMutation } from './mutation-receipt';
 export type { MutationReceipt } from './mutation-receipt';
-export { emitHeadCommitted, onDatasetCommitted, onHeadCommitted } from './after-commit';
+export { emitHeadCommitted } from './after-commit';
 export { setMutationInvocation } from './mutation-invocation';
 export type { MutationInvocationFactory } from './mutation-invocation';
 
 /** Wire (routes, publish, operations): body parsers and the response shapes. */
-export { SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire, respondToEdit, sourceRepairsEcho } from './wire';
+export { SUMMARY_META_FIELDS, artifactSummaryToWire, artifactToWire, committedOpenAnnotations, createdArtifactWire, parseAccessValue, parseExpectedVersion, parseLinkRoleValue, parseParentField, parseShareEntries, parseVisibilityValue, placementFor, replacedArtifactWire, sourceRepairsEcho } from './wire';
 
 /** A row compiled (publish, offline, runner, operations, routes), and what depends on a row. */
 export { compiledForRow, declarationsForRow, refLoaderForActor, rowToResolvedRef } from './row-compile';
@@ -41,15 +41,14 @@ export { findDependentsFor } from './dependents';
 
 /** Sharing, membership, placement and dataset grants. */
 export { getSharingFor, updateSharingFor } from './sharing';
-export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates, mentionedPeople, savedMentionStates, selfMembership } from './membership/membership';
+export { MembershipError, changeMembership, invitePeople, membershipState, mentionCandidates } from './membership/membership';
 export { accountProfile, updateAccountProfile } from './membership/account-profile';
 export { ancestorsForMove, isParentRefusal, notifyParent, parentOf, resolveParent, selectChildren } from './placement';
 export { grantsOf, grantsPermitRead, grantsPermitWrite } from './dataset-policy/grants';
 
 /** Serving: what may be served, and archived versions. */
-export { UnservableDocument, refusingUnservable, servableDocument, servableHeader, unservable } from './servable';
+export { UnservableDocument, refusingUnservable, servableDocument, unservable } from './servable';
 export { VERSION_PARAM, archivedReadOnly, archivedVersionFor, archivedVersionForActor, servedRow } from './archived-version';
-export type { ArchivedRender } from './archived-version';
 
 /** Route adapters (one route family each). */
 export { resolveImageReference } from './image-references';
