@@ -148,3 +148,9 @@ test("audited SQL type admissions partition conversion cache identity", async ()
     ),
   );
 });
+
+test("column alias admissions partition conversion cache identity",async()=>{
+ const identify=async()=>"same-compiler";
+ const admission={version:"column-alias-v1" as const,sourceSha256:"a".repeat(64),queryName:"rows",querySha256:"b".repeat(64),bindingName:"items",legacyRef:"ref:Abcd12",datasetVersion:1,tableSha256:"c".repeat(64),from:"label",to:"label_text"};
+ assert.notEqual(await migrationCompilerIdentity({},identify),await migrationCompilerIdentity({legacyColumnAliasAdmissions:[admission]},identify));
+});

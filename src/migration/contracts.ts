@@ -49,6 +49,7 @@ export interface ConversionInput {
   meta?: Record<string, unknown>;
 }
 export interface ConversionOutput {
+  sourceCompatibility?: readonly import("./conversion/column-alias-contracts.ts").LegacyColumnAliasReceipt[];
   /** Source-only normalization receipt; original source/document remain untouched. */
   sourceNormalization?: import("./conversion/compiled/legacy-script-contracts.ts").LegacyScriptNormalizationReceipt;
   historicalUnavailable?: import("./historical-unavailable-contracts.ts").HistoricalUnavailableReceipt;

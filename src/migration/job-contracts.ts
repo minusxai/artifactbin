@@ -40,6 +40,7 @@ export interface MigrationJobOptions {
   legacyOrigins: readonly string[];
   editorManageRestricted: boolean;
   conversionStrategy: MigrationConversionStrategy;
+  legacyColumnAliasAdmissions?: readonly import("./conversion/column-alias-contracts.ts").LegacyColumnAliasAdmission[];
   legacyDuckSqlAdmissions?: readonly import("./conversion/duck-sql-contracts.ts").LegacyDuckSqlAdmission[];
   sourceAdmission?: import("./conversion-strategy-contracts.ts").MigrationSourceAdmission;
   archivedRoot?: string;

@@ -1,3 +1,4 @@
+import {repairLegacyColumnAliases} from "./conversion/column-alias.ts";
 import {normalizeLegacySourceOperations} from "./conversion/source-operations.ts";
 import { rewriteLegacyRawMediaSource } from "./raw-media.ts";
 import { createHash } from "node:crypto";
@@ -114,7 +115,10 @@ export function createMigrationConverter(
         };
       }
     }
+    let sourceCompatibility: import("./contracts.ts").ConversionOutput["sourceCompatibility"];
     if(source!==null && options.sourceAdmission==='offline-prototype') {
+      const repaired=repairLegacyColumnAliases(source,input.datasetBindings??[],options.legacyColumnAliasAdmissions);
+      source=repaired.source;sourceCompatibility=repaired.receipts.length?repaired.receipts:undefined;
       try { source=normalizeLegacySourceOperations(source,(input.datasetBindings??[]).map(b=>b.legacyRef),options.legacyDuckSqlAdmissions).source; }
       catch { /* Unsupported source syntax remains an explicit converter refusal. */ }
     }
@@ -142,6 +146,7 @@ export function createMigrationConverter(
     ): import("./contracts.ts").ConversionOutput => ({
       ...output,
       ...(sourceNormalization ? { sourceNormalization } : {}),
+      ...(sourceCompatibility ? { sourceCompatibility } : {}),
       ...(sourceRecovery ? { sourceRecovery } : {}),
       ...(sourceRecovery?.kind === "retained-graph-missing-root-content" &&
       output.html
@@ -249,6 +254,7 @@ export function createMigrationConverter(
     return {
       ...local,
       ...(sourceNormalization ? { sourceNormalization } : {}),
+      ...(sourceCompatibility ? { sourceCompatibility } : {}),
       ...(sourceRecovery ? { sourceRecovery } : {}),
       strategy: options.strategy,
       issues: [

@@ -6,6 +6,7 @@ export type MigrationConversionStrategy =
 export type MigrationSourceAdmission = "strict" | "offline-prototype";
 export interface MigrationConversionOptions {
   /** Explicit offline migration opt-in; normal runtime isolation and binding checks still apply. */
+  legacyColumnAliasAdmissions?: readonly import("./conversion/column-alias-contracts.ts").LegacyColumnAliasAdmission[];
   legacyDuckSqlAdmissions?: readonly import("./conversion/duck-sql-contracts.ts").LegacyDuckSqlAdmission[];
   sourceAdmission?: MigrationSourceAdmission;
   strategy: MigrationConversionStrategy;

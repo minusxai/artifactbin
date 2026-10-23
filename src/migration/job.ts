@@ -99,6 +99,7 @@ export async function runMigrationJob(
       strategy: options.conversionStrategy,
       sourceAdmission,
       legacyDuckSqlAdmissions: options.legacyDuckSqlAdmissions,
+      legacyColumnAliasAdmissions: options.legacyColumnAliasAdmissions,
       legacyRoot: options.archivedRoot,
       fontBundle: options.fontBundle,
     });

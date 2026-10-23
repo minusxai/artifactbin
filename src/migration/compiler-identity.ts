@@ -11,6 +11,7 @@ export async function migrationCompilerIdentity(
     | "fontBundle"
     | "sourceAdmission"
     | "legacyDuckSqlAdmissions"
+    | "legacyColumnAliasAdmissions"
   >,
   identify?: () => Promise<string>,
 ): Promise<string> {
@@ -37,17 +38,20 @@ export async function migrationCompilerIdentity(
       : identity;
   };
   const baseIdentity = await identifyBase();
-  const identity = options.legacyDuckSqlAdmissions?.length
-    ? createHash("sha256")
-        .update(
-          JSON.stringify([
-            "migration-duckdb-admissions-v1",
-            baseIdentity,
-            options.legacyDuckSqlAdmissions,
-          ]),
-        )
-        .digest("hex")
-    : baseIdentity;
+  const identity =
+    options.legacyDuckSqlAdmissions?.length ||
+    options.legacyColumnAliasAdmissions?.length
+      ? createHash("sha256")
+          .update(
+            JSON.stringify([
+              "migration-duckdb-admissions-v1",
+              baseIdentity,
+              options.legacyDuckSqlAdmissions,
+              options.legacyColumnAliasAdmissions,
+            ]),
+          )
+          .digest("hex")
+      : baseIdentity;
   return options.sourceAdmission === "offline-prototype"
     ? createHash("sha256")
         .update(
