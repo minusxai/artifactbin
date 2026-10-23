@@ -12,6 +12,7 @@ import { startDocument, becomeOwner } from "../lib/start-doc.mjs";
 import { connectAgent, connectionBrowserCookie } from "./lib/cli-connection.mjs";
 import { datasetPageHtml } from "./lib/native-dataset-page.mjs";
 import { localStatePageHtml } from "./lib/native-local-state-page.mjs";
+import { isReaderPresenceRequest } from "./lib/local-state-requests.mjs";
 const BASE = process.argv[2] ?? "http://localhost:3030";
 const check = createChecker("data-journey");
 const browser = await launchChromium();
@@ -149,7 +150,7 @@ try {
   });
   await lane(check, "local drafts, dialog and booking").run(async () => {
     const owner = await startDocument(BASE);
-    await put(owner, localStatePageHtml());
+    const published = await put(owner, localStatePageHtml());
     const first = await open(owner.id);
     const frame = await framed(first.page);
     const second = await open(owner.id);
@@ -171,7 +172,10 @@ try {
     const reloaded = await framed(first.page);
     check(await reloaded.locator("#rows").textContent() === "2" && await reloaded.locator("#choice").inputValue() === "b", "viewer drafts and selection survive reload");
     const requests = [];
-    first.page.on("request", (request) => requests.push(request.url()));
+    first.page.on("request", (request) => {
+      let body;try{body=request.postDataJSON();}catch{/* Non-JSON requests are never presence. */}
+      requests.push({url:request.url(),method:request.method(),mainFrame:request.frame()===first.page.mainFrame(),body,type:request.resourceType()});
+    });
     await first.context.setOffline(true);
     const latencies = await reloaded.evaluate(async () => {
       const samples = [];
@@ -184,7 +188,13 @@ try {
       return samples;
     });
     check(Math.max(...latencies) < 50, `offline day clicks stay below 50ms (${latencies.map(Math.round).join(",")}ms)`);
-    check(requests.length === 0, "local booking interactions send no network requests");
+    // Reader presence starts independently and heartbeats every three seconds.
+    // Keep every authored-frame request and every parent GraphQL relay in this measurement.
+    const fixture={origin:new URL(BASE).origin,artifactId:owner.id,revision:String(published.version)};
+    const stateRequests=requests.filter(request=>!isReaderPresenceRequest(request,fixture));
+    const detail=stateRequests.map(({url,method,mainFrame,type})=>({path:new URL(url).pathname,method,source:mainFrame?'parent':'page',type}));
+    check(stateRequests.length === 0, `local booking interactions send no network requests${detail.length?": "+JSON.stringify(detail):""}`);
+    if(requests.length>stateRequests.length)check.note(`${requests.length-stateRequests.length} independent parent presence heartbeat(s) observed separately`);
     check(await reloaded.locator("#day").textContent() === "Day 9", "local booking remains interactive offline");
     await first.context.setOffline(false);
   });
