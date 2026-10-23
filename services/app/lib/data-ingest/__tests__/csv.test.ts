@@ -170,3 +170,28 @@ describe('coerceRows — a DECLARED type wins over the sniffer', () => {
     expect(rows[0]).toEqual({ a: 1 });
   });
 });
+
+describe('CSV numeric inference preserves precision by default',()=>{
+ const values=(...cells:string[])=>coerceRows(['value'],cells.map(cell=>[cell])).map(row=>row.value);
+ it('keeps unsafe integers and high precision decimals as strings',()=>{
+  expect(values('9007199254740993','9007199254740995')).toEqual(['9007199254740993','9007199254740995']);
+  expect(values('123456789012345.12','123456789012345.13')).toEqual(['123456789012345.12','123456789012345.13']);
+  expect(values('0.10000000000000001')).toEqual(['0.10000000000000001']);
+ });
+ it('keeps an entire mixed numeric precision column textual without losing nulls',()=>{
+  expect(values('1','9007199254740993','')).toEqual(['1','9007199254740993',null]);
+ });
+ it('retains safe integers, ordinary decimals and exact exponent values as numbers',()=>{
+  expect(values('9007199254740991','9007199254740990')).toEqual([9007199254740991,9007199254740990]);
+  expect(values('0.1','1.23456789012345','1.2500','1e-20','0.000')).toEqual([0.1,1.23456789012345,1.25,1e-20,0]);
+ });
+ it('preserves values that would underflow or change in a finite numeric round trip',()=>{
+  expect(values('1e-324')).toEqual(['1e-324']);
+  expect(values('1e20')).toEqual(['1e20']);
+  expect(values('1.234567890123456')).toEqual(['1.234567890123456']);
+ });
+ it('keeps explicit numeric override available while string override retains exact text',()=>{
+  expect(coerceRows(['value'],[['9007199254740993']],[{name:'value',type:'number'}])).toEqual([{value:Number('9007199254740993')}]);
+  expect(coerceRows(['value'],[['0.10000000000000001']],[{name:'value',type:'string'}])).toEqual([{value:'0.10000000000000001'}]);
+ });
+});

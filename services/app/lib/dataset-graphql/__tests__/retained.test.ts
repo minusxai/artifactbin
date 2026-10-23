@@ -11,7 +11,7 @@ import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '../retain
 import {datasetSchema} from '../index';
 useAppHarness();
 const signal=new AbortController().signal;
-async function fixture(dataset:Record<string,unknown>[]=[{amount:1,label:'same'},{amount:1,label:'same'},{amount:3,label:null}]){
+async function fixture(dataset:Record<string,unknown>[]|string=[{amount:1,label:'same'},{amount:1,label:'same'},{amount:3,label:null}]){
  const owner=await mintAccountToken('dataset_graphql_fixture');
  const req=request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset,access:'readwrite'}});
  const actor=await requestOrSessionActor(req),response=await create(req);expect(response.status,await response.clone().text()).toBe(201);
@@ -107,4 +107,18 @@ it('preserves COUNT zero and nullable aggregate values for an empty filtered sou
  const f=await fixture(),amount=f.table.columns.find(c=>c.label==='amount')!,label=f.table.columns.find(c=>c.label==='label')!;
  const result=await f.api.query(f.actor,f.binding,{tableId:f.table.id,first:1,filters:[{columnId:amount.id,operator:'GT',value:{type:'NUMBER',value:100}}],aggregates:[{id:'count',operation:'COUNT'},{id:'total',operation:'SUM',columnId:amount.id},{id:'firstLabel',operation:'MIN',columnId:label.id}]},signal);
  expect(result.rows[0]!.cells.map(c=>c.value)).toEqual([{type:'NUMBER',value:0},{type:'NUMBER',value:null},{type:'STRING',value:null}]);
+});
+
+it('keeps native CSV precision, BOM, duplicate headers, date strings and original missing-cell semantics',async()=>{
+ const f=await fixture('\uFEFFamount,amount,when,note,exact,precise,blank\r\n1.25,2,2026-10-23,"",9007199254740993,123456789012345.12,\r\n3.5,4,2026-10-24,x,9007199254740995,123456789012345.13,');
+ expect(f.table.columns.map(c=>c.label)).toEqual(['amount','amount_2','when','note','exact','precise','blank']);
+ expect(f.table.columns.find(c=>c.label==='exact')!.type).toBe('STRING');expect(f.table.columns.find(c=>c.label==='precise')!.type).toBe('STRING');
+ const read=await f.api.read(f.actor,f.binding,{tableId:f.table.id,first:100},signal),labels=new Map(f.table.columns.map(c=>[c.id,c.label]));
+ const rows=read.rows.map(row=>Object.fromEntries(row.cells.map(cell=>[labels.get(cell.columnId),cell.value.value]))).sort((a,b)=>Number(a.amount)-Number(b.amount));
+ expect(rows).toEqual([{amount:1.25,amount_2:2,when:'2026-10-23',note:null,exact:'9007199254740993',precise:'123456789012345.12',blank:null},{amount:3.5,amount_2:4,when:'2026-10-24',note:'x',exact:'9007199254740995',precise:'123456789012345.13',blank:null}]);
+});
+it('keeps the original header-only CSV rejection instead of inventing data rows',async()=>{
+ const owner=await mintAccountToken('empty_csv_fixture');
+ const response=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:'amount,label'}}));
+ expect(response.status).toBe(400);expect(await response.json()).toMatchObject({error:'invalid_dataset',code:'empty'});
 });

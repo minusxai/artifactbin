@@ -27,10 +27,34 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const isBlank = (v: string) => v.trim() === '';
 
+/** Canonical decimal value without converting its digits to binary floating point. */
+function decimalIdentity(text:string):{key:string;digits:number} {
+ const [mantissa,exponent='0']=text.toLowerCase().split('e');
+ const negative=mantissa!.startsWith('-'),unsigned=negative?mantissa!.slice(1):mantissa!;
+ const fraction=unsigned.includes('.')?unsigned.length-unsigned.indexOf('.')-1:0;
+ let digits=unsigned.replace('.','').replace(/^0+/,'');
+ if(!digits)return {key:'0',digits:1};
+ const significant=digits.replace(/0+$/,'');
+ const power=Number(exponent)-fraction+(digits.length-significant.length);
+ digits=significant;
+ return {key:`${negative?'-':''}${digits}e${power}`,digits:digits.length};
+}
+
+/** Preserve unsafe integers, underflow and more than 15 significant fractional digits as text.
+ * A declared number remains the caller's explicit opt-in to IEEE-754 conversion.
+ */
+function inferredNumber(text:string):boolean {
+ if(!SAFE_NUMBER.test(text))return false;
+ const value=Number(text);if(!Number.isFinite(value))return false;
+ const decimal=decimalIdentity(text);
+ if(decimal.key!==decimalIdentity(value.toString()).key)return false;
+ return Number.isInteger(value)?Number.isSafeInteger(value):decimal.digits<=15;
+}
+
 function columnType(values: string[]): ColumnType {
   const present = values.filter((v) => !isBlank(v)).map((v) => v.trim());
   if (present.length === 0) return 'string';
-  if (present.every((v) => SAFE_NUMBER.test(v) && Number.isFinite(Number(v)))) return 'number';
+  if (present.every(inferredNumber)) return 'number';
   if (present.every((v) => /^(true|false)$/i.test(v))) return 'boolean';
   if (present.every((v) => ISO_DATE.test(v))) return 'date';
   if (present.every((v) => /^[0-9]{4}-/.test(v) && isTimestamp(v))) return 'timestamp';
