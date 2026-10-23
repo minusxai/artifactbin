@@ -53,6 +53,8 @@ export default {
         // Island chunks (build-islands), offline extras (scripts/build-offline.mjs), library bundles
         // (scripts/build-libraries.mjs over lib/libraries/registry.json), the SPA (vite.config.mts).
         ...ISLAND_ENTRIES,
+        // Native HTML core bundles this module by URL; its exports are the author ABI.
+        'lib/html-runtime/{browser-client,build.server,index}.ts',
         'lib/offline/{extras-entry.ts,solid-entry.tsx}', 'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
         // Server bundle workers (scripts/build/build-server.mjs).
         'lib/publish/prepared/draft-compile-worker.ts', 'lib/runner/runtime.ts',

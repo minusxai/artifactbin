@@ -95,7 +95,8 @@ export function relayedRequest(win: Window, id: string, request: { path: unknown
   try { url = new URL(request.path, win.location.origin); } catch { return null; }
   if (url.origin !== win.location.origin) return null;
   const draft = `/a/${encodeURIComponent(id)}/draft-preview`;
-  const allowed = url.pathname === draft || (url.pathname === storyFragmentPath(id) && request.method === 'GET');
+  const graphql = url.pathname === `/api/pages/${encodeURIComponent(id)}/graphql` && request.method === 'POST' && !url.search && !url.hash;
+  const allowed = graphql || url.pathname === draft || (url.pathname === storyFragmentPath(id) && request.method === 'GET');
   if (!allowed) return null;
   const headers: Record<string, string> = {};
   if (request.headers && typeof request.headers === 'object') {
