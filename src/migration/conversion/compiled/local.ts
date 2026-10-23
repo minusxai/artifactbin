@@ -1,3 +1,4 @@
+import { archivedOutlineNavigation } from "./outline-navigation.ts";
 import{compiledPageMarkup,compiledStylesheetPendingMarkup}from"./page-payload.ts";
 import {compiledStylesheetMarkup} from "./css-payload.ts";
 import{viewerContentHtml}from"./viewer-gate.ts";
@@ -81,7 +82,7 @@ export async function compileArchivedLocal(
     ? '<p role="status" data-migration-author-status>Starting page components…</p>'
     : "";
   const packagedBody=input.viewerBinding||input.viewerUnavailable?viewerContentHtml(body,Boolean(input.viewerUnavailable)):body;
-  const pagePrefix=(stylesheet:string)=> `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}${context.head}<title>${esc(output.title)}</title>${stylesheet}</head><body>${status}${chartStatus}${authorStatus}${packagedBody}`;
+  const pagePrefix=(stylesheet:string)=> `<!doctype html><html${attrs}><head><meta charset="utf-8"><script data-af="core" src="${esc(input.coreUrl)}"></script><script type="application/json" data-af="state">${json({ compiledPage: state, ...(author ? { authorSignals: {} } : {}) })}</script>${links}${context.head}<title>${esc(output.title)}</title>${stylesheet}</head><body>${status}${chartStatus}${authorStatus}${packagedBody}${archivedOutlineNavigation}`;
   const prefix=pagePrefix(compiledStylesheetMarkup(output.css));
   let html:string;
   try{html=prefix+compiledJavascriptMarkup(output.javascript,plan.sourceAdmission==="offline-prototype")+"</body></html>";}catch{return blocked("compiled-page-limit");}

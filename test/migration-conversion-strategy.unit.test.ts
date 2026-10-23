@@ -195,3 +195,15 @@ test("archived strategy preserves explicit structural corruption instead of prod
   }
   assert.equal(compilations, 0);
 });
+
+test("archived conversion preserves theme mode defaults and explicit overrides", async () => {
+  for (const mode of [undefined, "dark", "light"] as const) {
+    let received: unknown;
+    const convert = createMigrationConverter({ strategy: "archived-static", compiler: { compile: async (input) => {
+      received = input.colorMode;
+      return { html: '<p id="copy">Saved</p>', css: '', title: 'Fixture', build: 'fixture', rootAttributes: {}, capabilities: [] };
+    } } });
+    await convert({ source: '<p id="copy">Saved</p>', coreUrl: '/af/v1/core.js', meta: { theme: 'terminal', ...(mode ? { colorMode: mode } : {}) } });
+    assert.equal(received, mode ?? null);
+  }
+});

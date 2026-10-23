@@ -47,7 +47,8 @@ export interface CompiledMigrationInput {
   resourceMap?: Readonly<Record<string, string>>;
   theme?: string | null;
   template?: string | null;
-  colorMode?: "light" | "dark";
+  /** Null preserves the archived theme default; only an explicit mode overrides it. */
+  colorMode?: "light" | "dark" | null;
 }
 export interface ArchivedStaticOutput {
   /** Offline verified font bytes only; no provider URLs. */

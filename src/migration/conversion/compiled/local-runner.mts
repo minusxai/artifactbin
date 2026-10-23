@@ -80,16 +80,17 @@ const [
   archived("lib/page-styles/document-styles.ts"),
   archived("lib/compiled-page/story-element.ts"),
 ]);
+const { discoverOutline, hasOutline, renderOutlineRail } = await archived("lib/reader-chrome/index.ts");
 const compiledCss = await compileStoryCss(input.source);
 const parts = await prepareStoryParts({
   source: input.source,
   compiledCss,
   theme: input.theme ?? null,
   template: input.template ?? null,
-  colorMode: input.colorMode ?? "light",
+  colorMode: input.colorMode ?? null,
   title: null,
   refData: {},
-  chrome: Boolean(input.slideDeck),
+  chrome: true,
 });
 if (parts.runtime.authorScript || parts.runtime.authorScriptErrors?.length)
   throw Error("Author code is not supported");
@@ -228,7 +229,7 @@ const generated = generate({
   nodes: presentationNodes,
   colorMode: parts.mode,
   template: input.template ?? null,
-  chrome: Boolean(input.slideDeck),
+  chrome: true,
   glyphs: parts.runtime.data.glyphs,
   refData: {},
   flow,
@@ -260,7 +261,7 @@ const rendered = (
 });
 const sheets = documentStyleSheets({
   compiledCss,
-  chrome: Boolean(input.slideDeck),
+  chrome: true,
   bare: false,
   theme: input.theme ?? null,
   docFonts: parts.docFonts,
@@ -304,7 +305,15 @@ for (const replacement of replacements.sort((a, b) => b.start - a.start))
     css.slice(replacement.end);
 if (!prototype && /@import\s/i.test(css))
   throw Error("External stylesheet imports are not self-contained");
-const html = inlineStoryElement(rendered, parts.mode, input.theme ?? null);
+const outlineDoc = input.template === "doc";
+const outlinePlan = input.template === "plan";
+const outline = outlineDoc ? discoverOutline(parts.runtime.data.nodes, true)
+  : (input.template === "editorial" || outlinePlan) && hasOutline(parts.runtime.data.nodes)
+    ? discoverOutline(parts.runtime.data.nodes) : [];
+const storyWithOutline = outline.length || outlineDoc
+  ? `<div class="${outlinePlan ? "mx-reading mx-reading--plan" : "mx-reading"}">${renderOutlineRail(outline)}${rendered}</div>`
+  : rendered;
+const html = inlineStoryElement(storyWithOutline, parts.mode, input.theme ?? null);
 
 const preparedMermaids=await prepareArchivedMermaid(root,prototype?prototypeMermaidContext({html,css,plans:input.mermaids??[]}):{html,css,plans:input.mermaids??[]}).catch(error=>{if(!prototype)throw error;return [];});
 const { MODULE_DATA_READ_CODE } = await archived(

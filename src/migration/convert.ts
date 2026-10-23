@@ -222,7 +222,7 @@ export function createMigrationConverter(
       theme: typeof meta.theme === "string" ? meta.theme : null,
       template: typeof meta.template === "string" ? meta.template : null,
       colorMode:
-        meta.colorMode === "dark" ? ("dark" as const) : ("light" as const),
+        meta.colorMode === "dark" ? ("dark" as const) : meta.colorMode === "light" ? ("light" as const) : null,
     };
     const compilerOptions = {
       legacyRoot: options.legacyRoot,

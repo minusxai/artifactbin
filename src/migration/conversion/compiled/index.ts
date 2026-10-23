@@ -1,3 +1,4 @@
+import { archivedOutlineNavigation } from "./outline-navigation.ts";
 /** Explicit migration-only archived static compiler. Never used as a runtime fallback. */
 import { MAX_PAGE_SOURCE } from "../../../af-contracts.ts";
 import { canonicalMediaUrl, mappedSrcset } from "./media.ts";
@@ -228,6 +229,7 @@ export async function compileArchivedStatic(
     if (node.tagName) {
       if (["script", "object", "embed", "iframe"].includes(node.tagName))
         invalid = true;
+      for (const attr of node.attrs) if (attr.name === "data-mx-ast") attr.name = "data-af-outline-path";
       node.attrs = node.attrs.filter(
         (a: any) =>
           !["data-mx-ast", "data-hk", "data-mx-source-node-id"].includes(
@@ -273,6 +275,8 @@ export async function compileArchivedStatic(
               "data-mx-story",
               "data-mx-story-root",
               "data-mx-styled",
+              "data-mx-target",
+              "data-mx-markdown-heading",
             ].includes(a.name))
         )
           invalid = true;
@@ -297,7 +301,7 @@ export async function compileArchivedStatic(
     .filter(([k]) => k === "class" || k === "data-theme")
     .map(([k, v]) => ` ${k}="${esc(v)}"`)
     .join("");
-  const html = `<!doctype html><html${attrs}><head><script src="${esc(input.coreUrl)}" data-af="core"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(compiled.title)}</title><style>${compiled.css}</style></head><body>${serialize(fragment)}</body></html>`;
+  const html = `<!doctype html><html${attrs}><head><script src="${esc(input.coreUrl)}" data-af="core"></script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(compiled.title)}</title><style>${compiled.css}</style></head><body>${serialize(fragment)}${archivedOutlineNavigation}</body></html>`;
   if (Buffer.byteLength(html) > MAX_PAGE_SOURCE)
     return refused(
       "compiled-page-limit",

@@ -1,3 +1,4 @@
+import {isolateArchivedThemeVariables} from "./legacy-theme.ts";
 import {inlinePinnedFontImports} from "./fonts/inline.ts";
 import {prepareArchivedFontResources} from "./fonts/captured.ts";
 /** Migration subprocess only: archived compiler dependencies never enter the product package graph. */
@@ -43,16 +44,17 @@ const [
   archived("lib/page-styles/document-styles.ts"),
   archived("lib/compiled-page/story-element.ts"),
 ]);
+const { discoverOutline, hasOutline, renderOutlineRail } = await archived("lib/reader-chrome/index.ts");
 const compiledCss = await compileStoryCss(input.source);
 const parts = await prepareStoryParts({
   source: input.source,
   compiledCss,
   theme: input.theme ?? null,
   template: input.template ?? null,
-  colorMode: input.colorMode ?? "light",
+  colorMode: input.colorMode ?? null,
   title: null,
   refData: {},
-  chrome: false,
+  chrome: true,
 });
 if (parts.runtime.authorScript || parts.runtime.authorScriptErrors?.length)
   throw Error("Author code is not supported");
@@ -61,7 +63,7 @@ const generated = generate({
   nodes: parts.runtime.data.nodes,
   colorMode: parts.mode,
   template: input.template ?? null,
-  chrome: false,
+  chrome: true,
   glyphs: parts.runtime.data.glyphs,
   refData: {},
   flow: null,
@@ -84,7 +86,7 @@ if (built.module || built.ssr)
   throw Error("Static compilation unexpectedly needs browser code");
 const sheets = documentStyleSheets({
   compiledCss,
-  chrome: false,
+  chrome: true,
   bare: false,
   theme: input.theme ?? null,
   docFonts: parts.docFonts,
@@ -92,6 +94,7 @@ const sheets = documentStyleSheets({
   authorCss: parts.runtime.authorCss,
 });
 let css = sheets.map((sheet: { css: string }) => sheet.css).join("\n");
+css = isolateArchivedThemeVariables(css);
 const archivedFonts = await prepareArchivedFontResources(root, process.argv[3] ? JSON.parse(process.argv[3]) : undefined);
 const fontResources = await inlinePinnedFontImports(css, archivedFonts.resolve);
 css = fontResources.css;
@@ -125,7 +128,15 @@ for (const replacement of replacements.sort((a, b) => b.start - a.start))
     css.slice(replacement.end);
 if (/@import\s/i.test(css))
   throw Error("External stylesheet imports are not self-contained");
-const html = inlineStoryElement(built.html, parts.mode, input.theme ?? null);
+const outlineDoc = input.template === "doc";
+const outlinePlan = input.template === "plan";
+const outline = outlineDoc ? discoverOutline(parts.runtime.data.nodes, true)
+  : (input.template === "editorial" || outlinePlan) && hasOutline(parts.runtime.data.nodes)
+    ? discoverOutline(parts.runtime.data.nodes) : [];
+const storyWithOutline = outline.length || outlineDoc
+  ? `<div class="${outlinePlan ? "mx-reading mx-reading--plan" : "mx-reading"}">${renderOutlineRail(outline)}${built.html}</div>`
+  : built.html;
+const html = inlineStoryElement(storyWithOutline, parts.mode, input.theme ?? null);
 process.stdout.write(
   JSON.stringify({
     html,

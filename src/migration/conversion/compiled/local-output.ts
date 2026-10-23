@@ -182,7 +182,8 @@ export const admitLocalOutput: AdmitLocalOutput = (plan, raw) => {
         node.attrs=node.attrs.filter((a:any)=>a.name!=='data-af-deck-path');
         if(path)node.attrs.push({name:'data-af-deck-path',value:path.value});
       }
-      node.attrs = node.attrs.filter(
+      for (const attr of node.attrs) if (attr.name === "data-mx-ast") attr.name = "data-af-outline-path";
+    node.attrs = node.attrs.filter(
         (a: any) => !["data-af-id", "data-mx-ast", "data-mx-source-node-id"].includes(a.name),
       );
       const id = node.attrs.find((a: any) => a.name === "id");
