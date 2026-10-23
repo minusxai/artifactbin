@@ -1,5 +1,6 @@
+import {nativeHtml} from './native-html-fixture';
 import {afterEach,expect,it,vi} from 'vitest';
-import {documentPublicationBody} from './prepared-document';
+import {observedRequest} from './conditional-request';
 import {useAppHarness,request,mintAccountToken} from './harness';
 import { ANONYMOUS_ACTOR, identityForUser, createUser} from '@/lib/accounts';
 import {overrideConfig,resetConfigOverrides} from '@/lib/platform/config';
@@ -30,9 +31,9 @@ async function fixture(){
 }
 it('lists group viewer documents as shared without granting ownership and revokes discovery on removal',async()=>{
  const f=await fixture();
- const first=await f.make({markup:'<p>Company review one</p>',title:'Company review one',visibility:'private',destination:{type:'group',id:'grp_ownership'}});
- const second=await f.make({markup:'<p>Company review two</p>',title:'Company review two',visibility:'private',destination:{type:'group',id:'grp_ownership'}});
- await f.make({markup:'<p>Unrelated personal</p>',visibility:'public',destination:{type:'personal'}});
+ const first=await f.make({html:nativeHtml('<p>Company review one</p>'),title:'Company review one',visibility:'private',destination:{type:'group',id:'grp_ownership'}});
+ const second=await f.make({html:nativeHtml('<p>Company review two</p>'),title:'Company review two',visibility:'private',destination:{type:'group',id:'grp_ownership'}});
+ await f.make({html:nativeHtml('<p>Unrelated personal</p>'),visibility:'public',destination:{type:'personal'}});
  const page=async(query:string,token=f.c.token)=>{
   const response=await list(request(`/api/artifacts${query}`,{token}));expect(response.status).toBe(200);return response.json();
  };
@@ -42,14 +43,14 @@ it('lists group viewer documents as shared without granting ownership and revoke
  const next=await page(`?relationship=shared&search=review&limit=1&cursor=${encodeURIComponent(filtered.next_cursor)}`);
  expect([...filtered.artifacts,...next.artifacts].map((r:{id:string})=>r.id).sort()).toEqual([first,second].sort());
  expect((await page('?relationship=owned',f.b.token)).artifacts).toHaveLength(2);
- expect((await replace(request(`/api/artifacts/${first}`,{method:'PUT',token:f.c.token,json:documentPublicationBody((await getArtifactById(first))!,{markup:'<p>Denied viewer edit</p>'},true)}),{params:Promise.resolve({id:first})})).status).toBe(404);
+ expect((await replace(await observedRequest(`/api/artifacts/${first}`,{method:'PUT',token:f.c.token,json:{html:nativeHtml('<p>Denied viewer edit</p>')}}),{params:Promise.resolve({id:first})})).status).toBe(404);
  await f.db.query('DELETE FROM group_members WHERE user_id=$1',[f.viewer.id]);
  expect((await page('')).artifacts).toEqual([]);
 });
 it('echoes canonical ownership and immutable creator metadata from personal and group publication',async()=>{
  const f=await fixture();
  for(const destination of [{type:'personal'},{type:'group',id:'grp_ownership'}]){
-  const response=await create(request('/api/artifacts',{method:'POST',token:f.b.token,json:{markup:'<p>Ownership echo</p>',destination}}));
+  const response=await create(request('/api/artifacts',{method:'POST',token:f.b.token,json:{html:nativeHtml('<p>Ownership echo</p>'),destination}}));
   expect(response.status,await response.clone().text()).toBe(201);
   const wire=await response.json();
   expect(wire).toMatchObject({owner:destination,group_id:destination.type==='group'?'grp_ownership':null,creator_user_id:f.editor.id});
@@ -57,7 +58,7 @@ it('echoes canonical ownership and immutable creator metadata from personal and 
  }
 });
 it('transfers ownership, revokes creator and token fallback, and reflects live membership roles',async()=>{
- const f=await fixture();const id=await f.make({markup:'<p id="hello">Hello</p>',visibility:'private'});
+ const f=await fixture();const id=await f.make({html:nativeHtml('<p id="hello">Hello</p>'),visibility:'private'});
  const moved=await f.move(id,{type:'group',id:'grp_ownership'});expect(moved.status,await moved.clone().text()).toBe(200);
  await f.db.query('DELETE FROM group_members WHERE user_id=$1',[f.creator.id]);
  const row=(await getArtifactById(id))!;expect(row).toMatchObject({user_id:null,group_id:'grp_ownership',creator_user_id:f.creator.id});
@@ -80,13 +81,13 @@ it('transfers ownership, revokes creator and token fallback, and reflects live m
  expect(ownsArtifact((await getArtifactById(id))!,identityForUser(null, f.a.id))).toBe(false);
 });
 it('moves entire folders including trash and rejects unsafe dependencies without changing any row',async()=>{
- const f=await fixture();const folder=await f.make({format:'folder',title:'Reports'}),child=await f.make({markup:'<p>Child</p>',parent_id:folder});
+ const f=await fixture();const folder=await f.make({format:'folder',title:'Reports'}),child=await f.make({html:nativeHtml('<p>Child</p>'),parent_id:folder});
  await trashArtifactFor(identityForUser(f.creator.id, f.a.id),child);
  expect((await f.move(folder,{type:'group',id:'grp_ownership'})).status).toBe(200);
  const state=(await f.db.query<{group_id:string;deleted_at:string|null}>('SELECT group_id,deleted_at FROM artifacts WHERE id=$1',[child])).rows[0];expect(state.group_id).toBe('grp_ownership');expect(state.deleted_at).not.toBeNull();
  expect(await restoreArtifactFor(identityForUser(f.editor.id, f.b.id),child)).not.toBeNull();
  const shelf=await selectChildren((await getArtifactById(folder))!,identityForUser(f.viewer.id, f.c.id, f.viewer.email!));expect(shelf.children.map(r=>r.id)).toContain(child);expect(shelf.numbers).toBe(false);
- const dataset=await f.make({dataset:[{n:1}]});const report=await f.make({markup:`<Helmet><Import name="data" src="ref:${dataset}" /></Helmet><p>Report</p>`});
+ const dataset=await f.make({dataset:[{n:1}]});const report=await f.make({html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${dataset}" data-af-mode="live"></head><body><p>Report</p></body></html>`});
  expect((await f.move(dataset,{type:'group',id:'grp_ownership'})).status).toBe(409);
  expect((await getArtifactById(dataset))?.user_id).toBe(f.creator.id);expect((await getArtifactById(report))?.user_id).toBe(f.creator.id);
 });
@@ -107,7 +108,7 @@ it('consults unavailable deployment defaults only after explicit, parent and pre
  const f=await fixture();overrideConfig({}, {APP__DEPLOYMENT_MODE:'company',APP__DEPLOYMENT_OWNER_EMAIL:f.creator.email!});
  // Admission is a separate fence: this existing account was already admitted.
  await f.db.query('INSERT INTO deployment_members(user_id) VALUES($1)',[f.creator.id]);
- const make=(destination?:object)=>create(request('/api/artifacts',{method:'POST',token:f.a.token,json:{markup:'<p>Default</p>',...(destination?{destination}:{})}}));
+ const make=(destination?:object)=>create(request('/api/artifacts',{method:'POST',token:f.a.token,json:{html:nativeHtml('<p>Default</p>'),...(destination?{destination}:{})}}));
  expect((await make()).status).toBe(409);
  expect((await make({type:'personal'})).status).toBe(201);
  await f.db.query('INSERT INTO account_preferences(user_id,default_destination) VALUES($1,$2::jsonb)',[f.creator.id,JSON.stringify({type:'group',id:'grp_ownership'})]);
@@ -121,15 +122,15 @@ it('preserves unlisted link reading while refusing former owner data writes and 
  await f.db.query('DELETE FROM group_members WHERE user_id=$1',[f.creator.id]);
  const row=(await getArtifactById(id))!;expect(await canReadArtifact(row,ANONYMOUS_ACTOR)).toBe(true);
  expect(await canWriteDataset(row,identityForUser(f.creator.id, f.a.id))).toBe('dataset_read_only');
- expect((await create(request('/api/artifacts',{method:'POST',token:f.c.token,json:{markup:'<p>Refused</p>',destination:{type:'group',id:'grp_ownership'}}}))).status).toBe(403);
+ expect((await create(request('/api/artifacts',{method:'POST',token:f.c.token,json:{html:nativeHtml('<p>Refused</p>'),destination:{type:'group',id:'grp_ownership'}}}))).status).toBe(403);
 });
 
 it('resolves group publication refs as the saved group owner and refuses creator private dependencies',async()=>{
  const f=await fixture();const make=async(body:object)=>create(request('/api/artifacts',{method:'POST',token:f.b.token,json:{...body,destination:{type:'group',id:'grp_ownership'}}}));
  const dataset=await make({dataset:[{n:1}],visibility:'private'});expect(dataset.status).toBe(201);const {id}=await dataset.json();
- const doc=await make({markup:`<Helmet><Import name="data" src="ref:${id}" /><Query name="rows">{\`select * from data.rows\`}</Query></Helmet><p>Group data</p>`});expect(doc.status,await doc.clone().text()).toBe(201);
+ const doc=await make({html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${id}" data-af-mode="live"></head><body><p>Group data</p></body></html>`});expect(doc.status,await doc.clone().text()).toBe(201);
  const personal=await create(request('/api/artifacts',{method:'POST',token:f.b.token,json:{dataset:[{n:2}],visibility:'private',destination:{type:'personal'}}}));expect(personal.status).toBe(201);const own=(await personal.json()).id;
- const broken=await make({markup:`<Helmet><Import name="data" src="ref:${own}" /></Helmet><p>Personal data</p>`});expect(broken.status).toBe(400);
+ const broken=await make({html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${own}" data-af-mode="live"></head><body><p>Personal data</p></body></html>`});expect(broken.status).toBe(400);
 });
 
 it('compares dataset and published artifact group principals without treating a group as a user',()=>{
@@ -140,7 +141,7 @@ it('compares dataset and published artifact group principals without treating a 
 });
 
 it('wakes existing artifact ACL subscribers only after transferred ownership is committed',async()=>{
- const f=await fixture(),id=await f.make({markup:'<p>Private</p>',visibility:'private'});
+ const f=await fixture(),id=await f.make({html:nativeHtml('<p>Private</p>'),visibility:'private'});
  expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(200);
  let observed:string|null|undefined;
  const stop=await subscribeToArtifact(id,()=>{void getArtifactById(id).then(row=>{observed=row?.user_id;});});
@@ -149,7 +150,7 @@ it('wakes existing artifact ACL subscribers only after transferred ownership is 
 });
 
 it('supports a verified browser account transfer without a bearer or token ID and preserves CSRF',async()=>{
- const f=await fixture(),id=await f.make({markup:'<p>Browser</p>'});
+ const f=await fixture(),id=await f.make({html:nativeHtml('<p>Browser</p>')});
  const actor={credential:'session' as const,userId:f.creator.id,email:f.creator.email!,emailVerified:true};
  const body={destination:{type:'group',id:'grp_ownership'}};
  const response=await transfer(request(`/api/artifacts/${id}/transfer`,{method:'POST',actor,origin:'same',json:body}),{params:Promise.resolve({id})});expect(response.status,await response.clone().text()).toBe(200);
@@ -158,7 +159,7 @@ it('supports a verified browser account transfer without a bearer or token ID an
 });
 
 it('uses nonblocking transfer locks and rolls back busy artifact or group ownership changes',async()=>{
- const f=await fixture(),id=await f.make({markup:'<p>Busy ownership</p>'});
+ const f=await fixture(),id=await f.make({html:nativeHtml('<p>Busy ownership</p>')});
  const original=f.db.transaction.bind(f.db);const statements:string[][]=[];
  for(const busy of ['artifacts','groups']){
   const spy=vi.spyOn(f.db,'transaction').mockImplementation(fn=>original(tx=>{
@@ -189,7 +190,7 @@ it('uses nonblocking transfer locks and rolls back busy artifact or group owners
 
 it('refuses inbound dependency representations without materializing unrelated artifact content',async()=>{
  const f=await fixture(),id=await f.make({format:'folder',title:'Transfer target'});
- const foreign=await f.make({markup:'<p>Unrelated</p>'});
+ const foreign=await f.make({html:nativeHtml('<p>Unrelated</p>')});
  await f.db.query("UPDATE artifacts SET meta='{\"refs\":{}}' WHERE id=$1",[foreign]);
  const original=f.db.transaction.bind(f.db),queries:string[]=[];
  const spy=vi.spyOn(f.db,'transaction').mockImplementation(fn=>original(tx=>fn({query:async(sql,values)=>{queries.push(sql);return tx.query(sql,values);}})));
@@ -198,6 +199,7 @@ it('refuses inbound dependency representations without materializing unrelated a
  expect((await f.move(id,{type:'personal'})).status).toBe(200);
  const cases=[
   {meta:{refs:[{id}]}},
+  {meta:{htmlLinks:[{kind:'dataset',name:'records',datasetId:id,mode:'live'}]}},
   {meta:{userScopeDocument:id}},
   {source:`legacy ref:${id}`},
   {document:{nested:[{value:`ref:${id}`}]}},
@@ -219,7 +221,7 @@ it('refuses inbound dependency representations without materializing unrelated a
 it('preserves the twelve-character truncation of legacy ref tokens',async()=>{
  const f=await fixture(),generated=await f.make({format:'folder',title:'Twelve character target'}),id='Abcdef123456';
  await f.db.query('UPDATE artifacts SET id=$2 WHERE id=$1',[generated,id]);
- const foreign=await f.make({markup:'<p>Legacy reference</p>'});
+ const foreign=await f.make({html:nativeHtml('<p>Legacy reference</p>')});
  await f.db.query('UPDATE artifacts SET source=$2,document=NULL WHERE id=$1',[foreign,`ref:${id}Z`]);
  expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(409);
  expect((await getArtifactById(id))?.user_id).toBe(f.creator.id);
