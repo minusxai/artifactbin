@@ -36,7 +36,7 @@ export async function localInputReferences(workspace:Workspace,server=workspace.
 }
 
 /** The workspace-relative file holding a reference's content, or undefined when only the host has it. */
-export async function localInputPath(root:string,path:string):Promise<string|undefined>{
+async function localInputPath(root:string,path:string):Promise<string|undefined>{
  if(!isResourceFile(path))return path;
  const bytes=await readOptional(await confinedPath(root,join(root,path)));
  if(!bytes)throw new CliError('missing_local_input',`Local resource ${path} is missing.`);

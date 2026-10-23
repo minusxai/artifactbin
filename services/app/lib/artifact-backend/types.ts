@@ -21,7 +21,7 @@
 import type { AnnotationCommentWire, DocumentGraph, DocumentResourcePreparation, DocumentUpdate, GraphPatch, MembershipStatus } from '@artifactbin/contracts';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { DataflowState } from '@/lib/dataflow';
-import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing, StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story-runtime/contract';
 import type { QueryTransport } from '@/lib/page-store';
 
 /** Features a backend may not offer. Online, every one is available. */
@@ -55,18 +55,6 @@ export interface ArtifactHead {
   sharing_revision?: number;
   ancestor_ids?: string[];
   refs?: Array<{ id: string; kind: string; title?: string | null }>;
-}
-
-/** The editor's view of the head (ArtifactEditor), seeded or loaded. */
-export interface LoadedArtifact extends ArtifactHead {
-  /**
-   * Present when the editor was SEEDED from the page (which holds it); the read
-   * API does not return it, so on the background-load path this is undefined and
-   * the draft compile supplies the sheet instead.
-   */
-  compiledCss?: string | null;
-  /** Present when SEEDED from the page: the document's server-run dataflow (InPlaceEditor's EditorArtifact). */
-  dataflow?: StoryIslandDataflow | null;
 }
 
 /** The body of an /edits (or /revert) answer, as use-live-edits reads it. */

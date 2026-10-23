@@ -20,7 +20,7 @@ export function reconcileDocument(base:LocalDocument,local:LocalDocument,remote:
 }
 
 /** Both sides' changes to one base source, or null when they touch the same part. */
-export function mergeSource(base:string,local:string,remote:string):string|null{
+function mergeSource(base:string,local:string,remote:string):string|null{
  if(local===base||remote===base||local===remote)return local===base?remote:local;
  // Descending base-coordinate changes are an executable intervening edit log.
  // Earlier replacements to the right do not move the remaining left-hand spans.
