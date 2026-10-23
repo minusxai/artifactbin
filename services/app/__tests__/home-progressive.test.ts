@@ -10,11 +10,11 @@ import { EVENTS_SCHEMA } from '@/lib/platform';
 import { ensureEventsSchema } from '@artifactbin/events/local';
 const harness = useAppHarness();
 
-it('workspace view totals exclude non-markup artifacts', async () => {
+it('workspace view totals exclude non-page artifacts', async () => {
   const db = await harness.db();
   const user = await createUser({ email: 'mxmx_test_views@example.com' });
   const token = await mintToken('views');
-  await db.query("INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version) VALUES ('doc123', $1, $2, 'markup', 'Document', '{}', 1), ('data12', $1, $2, 'dataset', 'Data', '{}', 1)", [user.id, token.id]);
+  await db.query("INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version) VALUES ('doc123', $1, $2, 'html', 'Document', '{}', 1), ('data12', $1, $2, 'dataset', 'Data', '{}', 1)", [user.id, token.id]);
   await ensureEventsSchema(db, EVENTS_SCHEMA);
   await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id, at, source, verb, object_kind, object_id, subject_kind, subject_id, payload) VALUES ('view_doc', now(), 'app', 'viewed', 'artifact', 'doc123', 'visitor', 'a', '{}'), ('view_data', now(), 'app', 'viewed', 'artifact', 'data12', 'visitor', 'b', '{}')`);
   const insights = await accountWorkspaceInsightsFor(user.id);
@@ -43,7 +43,7 @@ it('anonymous insights requests do not expose account activity and are never cac
 it('keeps source metadata and analytics queries out of core while retaining shared search fields', async () => {
   const db = await harness.db(), user = await createUser({ email: 'mxmx_test_slim@example.com' }), other = await createUser({ email: 'mxmx_test_other@example.com' });
   const token = await mintToken('slim');
-  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,description,meta,version) VALUES ('own123',$1,$3,'markup','Owned','owned description', $4,1),('shr123',$2,$3,'markup','Shared','searchable description',$4,1)", [user.id, other.id, token.id, JSON.stringify({ unnecessary: 'large source metadata'.repeat(1000) })]);
+  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,description,meta,version) VALUES ('own123',$1,$3,'html','Owned','owned description', $4,1),('shr123',$2,$3,'html','Shared','searchable description',$4,1)", [user.id, other.id, token.id, JSON.stringify({ unnecessary: 'large source metadata'.repeat(1000) })]);
   await db.query("INSERT INTO artifact_shares (artifact_id,email,role) VALUES ('shr123',$1,'viewer')", [user.email]);
   const query = vi.spyOn(db, 'query');
   try {
@@ -62,7 +62,7 @@ it('keeps source metadata and analytics queries out of core while retaining shar
 it('deferred lifetime counts preserve distinct visitors, exclude trash and remain in full workspaces', async () => {
   const db = await harness.db(), user = await createUser({ email: 'mxmx_test_counts@example.com' });
   const token = await mintToken('counts');
-  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,meta,version) VALUES ('cnt123',$1,$2,'markup','Counted','{}',1),('trash1',$1,$2,'markup','Trash','{}',1)", [user.id, token.id]);
+  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,meta,version) VALUES ('cnt123',$1,$2,'html','Counted','{}',1),('trash1',$1,$2,'html','Trash','{}',1)", [user.id, token.id]);
   await db.query("UPDATE artifacts SET deleted_at=now() WHERE id='trash1'");
   await db.query("INSERT INTO analytics_events (event,artifact_id,visitor) VALUES ('view','cnt123','same'),('view','cnt123','same'),('view','cnt123','different'),('view','cnt123',NULL),('edit','cnt123','ignored'),('view','trash1','hidden')");
   const insights = await accountWorkspaceInsightsFor(user.id);
@@ -79,7 +79,7 @@ it('separates the 1000-document shelf, aggregate totals and paginated assets', a
   const other = await createUser({ email: 'mxmx_test_other_inventory@example.com' });
   const token = await mintToken('inventory');
   await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version, updated_at)
-    SELECT 'doc' || n, $1, $2, 'markup', 'Document ' || n, '{}', 1, '2020-01-01'::timestamptz FROM generate_series(1, 1005) n`, [user.id, token.id]);
+    SELECT 'doc' || n, $1, $2, 'html', 'Document ' || n, '{}', 1, '2020-01-01'::timestamptz FROM generate_series(1, 1005) n`, [user.id, token.id]);
   await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version, updated_at)
     SELECT 'asset' || lpad(n::text, 4, '0'), $1, $2, 'image', 'Image ' || n, '{}', 1, now() FROM generate_series(1, 205) n`, [user.id, token.id]);
   await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version)
@@ -89,7 +89,7 @@ it('separates the 1000-document shelf, aggregate totals and paginated assets', a
   const actor = { credential: 'session' as const, userId: user.id, email: user.email!, emailVerified: true };
   const core = await (await GET(request('/api/page/home?part=core', { actor }))).json();
   expect(core.artifacts).toHaveLength(1000);
-  expect(core.artifacts.every((a: { format: string }) => a.format === 'markup')).toBe(true);
+  expect(core.artifacts.every((a: { format: string }) => a.format === 'html')).toBe(true);
   expect(core).not.toHaveProperty('stats');
   const insights = await (await GET(request('/api/page/home?part=insights', { actor }))).json();
   expect(insights.stats).toEqual({ artifacts: 1004, assets: 204, views: 2 });

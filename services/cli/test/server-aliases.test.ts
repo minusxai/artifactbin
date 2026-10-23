@@ -272,27 +272,7 @@ test('browser approval on a plain-http development app at app.lvh.me pairs; plai
  assert.deepEqual(seen,[]);
 });
 
-test('local preview uses the chosen link origin without server discovery or registration',async()=>{
- await withHome(async home=>{
-  await saveConnection({server:CANONICAL,token:'test-token'},home,{});
-  await trackWorkspace(home,home,ALIAS);
-  await writeFile(join(home,'doc.jsx'),'<p>Draft</p>');
-  const net=world({
-   [`${CANONICAL}/api/server`]:{origin:CANONICAL,aliases:[ALIAS]},
-   [`${CANONICAL}/api/artifacts`]:()=>Response.json({artifacts:[]},{headers:{'X-Artifactbin-Account':'usr_seed'}}),
-   [`${CANONICAL}/api/artifacts/reservations`]:()=>Response.json({ids:Array.from({length:100},(_,index)=>'S'+String(index).padStart(5,'0'))},{headers:{'X-Artifactbin-Account':'usr_seed'}}),
-  });
-  let served:{server?:string}|undefined;
-  const out:string[]=[];
-  const code=await runCli(['preview','doc.jsx','--server',CANONICAL,'--json'],{cwd:home,home,env:{},interactive:false,color:false,
-   stdout:(value:string)=>out.push(value),stderr:()=>{},fetch:net.fetch,
-   preview:async(options:{server?:string})=>{served=options;return 0;},
-   auth:{open:async()=>{throw new Error('a test must not open a browser');}}} as never);
-  assert.equal(code,0,out.join(''));
-  assert.equal(served?.server,CANONICAL);
-  assert.deepEqual(net.seen,[],'local preview does not discover or register with either origin');
- });
-});
+
 
 // Found with the released binary against production: the pre-flight took the alias list, the two
 // functions that DO the pull did not, so a link pasted from the other hostname was still wrong_server.

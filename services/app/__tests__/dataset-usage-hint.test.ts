@@ -1,5 +1,7 @@
 /** Create responses teach the Import of the dataset and a query over it, with real columns; the ref field names what to import. */
 import { describe, it, expect, beforeEach } from 'vitest';
+import {POST as graphql} from '@/app/api/artifacts/[id]/graphql/route';
+import {request} from './harness';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -29,33 +31,14 @@ describe('creating a dataset returns how to USE it', () => {
     expect(body.ref).toBe(`ref:${body.id}`);
   });
 
-  it('includes a ready-to-paste Question using the real column names', async () => {
-    const { body } = await create({ title: 'sales', dataset: 'month,revenue\n2026-01,120\n2026-02,150' });
-    const usage = body.usage as string;
-    // The exact prop names the agent got wrong, bound to this dataset's columns —
-    // through a <Query> over the dataset's SQL table, which is how a document reads one.
-    expect(usage).toContain(`<Import name="data" src="ref:${body.id}" /><Query name="rows">`);
-    expect(usage).toContain('FROM data."rows"');
-    expect(usage).not.toMatch(/source=|public\.rows/);
-    expect(usage).not.toContain(`ref_${body.id}`);
-    expect(usage).toContain('data="$rows"');
-    expect(usage).toContain('viz=');
-    expect(usage).toContain('vega-lite');
-    expect(usage).toContain('month');   // a real field, not a placeholder
-    expect(usage).toContain('revenue');
-    // What it teaches publishes as it stands: the read example, and the write example of a readwrite dataset.
-    const readDoc = await create({ markup: usage });
-    expect(readDoc.status, JSON.stringify(readDoc.body)).toBe(201);
-    const writable = await create({ title: 'writes', dataset: 'month,revenue\n2026-01,120', access: 'readwrite' });
-    const writeExample = (writable.body.usage as string).slice((writable.body.usage as string).lastIndexOf('<Helmet>'));
-    const writeDoc = await create({ markup: writeExample });
-    expect(writeDoc.status, JSON.stringify(writeDoc.body)).toBe(201);
-  });
-
-  it('picks a quantitative field for y and a non-numeric one for x', async () => {
-    const { body } = await create({ title: 'x', dataset: 'region,total\nNA,5\nEU,9' });
-    expect(body.usage).toContain('"field":"region"');
-    expect(body.usage).toContain('"field":"total"');
+  it('returns a native HTML usage page that publishes with its dataset binding',async()=>{
+    const {body}=await create({title:'sales',dataset:'month,revenue\n2026-01,120\n2026-02,150'});
+    expect(body.usage).toContain('<!doctype html>');expect(body.usage).toContain(`href="ref:${body.id}"`);
+    const published=await create({html:body.usage});expect(published.status,JSON.stringify(published.body)).toBe(201);
+    const queries=[...body.usage.matchAll(/gql`([^`]+)`/g)].map(match=>match[1]);expect(queries).toHaveLength(2);
+    const execute=async(query:string,variables={})=>await(await graphql(request(`/api/artifacts/${published.body.id}/graphql`,{method:'POST',token,json:{revision:'1',query,variables}}),{params:Promise.resolve({id:published.body.id})})).json();
+    const schema=await execute(queries[0]);expect(schema.errors).toBeUndefined();
+    const rows=await execute(queries[1],{table:schema.data.data.schema.tables[0].id});expect(rows.errors).toBeUndefined();expect(rows.data.data.rows.rows).toHaveLength(2);
   });
 
   it('still returns something useful when there is no numeric column', async () => {
@@ -66,7 +49,7 @@ describe('creating a dataset returns how to USE it', () => {
   });
 
   it('does not attach dataset usage to other tiers', async () => {
-    const { body } = await create({ title: 'doc', markup: '<div data-design="tw" className="p-4"><h1 className="text-xl">Hi</h1></div>' });
+    const { body } = await create({ title: 'doc', html: '<html><body><h1>Hi</h1></body></html>' });
     expect(body.ref).toBeUndefined();
     expect(body.usage).toBeUndefined();
   });

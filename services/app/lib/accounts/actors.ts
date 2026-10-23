@@ -36,7 +36,7 @@ export interface AccessActor {
   email: string | null;
   /**
    * The host's document-editor grant (production: ADMIN__EMAILS), decided ONCE by the resolver from
-   * verified claims. It reaches only markup documents that are not private (lib/artifacts access).
+   * verified claims. It reaches only page documents that are not private (lib/artifacts access).
    */
   documentEditor: boolean;
   /** Server-only saved artifact owner, for author reference resolution. Never request input. */

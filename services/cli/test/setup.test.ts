@@ -125,7 +125,7 @@ test('setup --server records a self-hosted origin as the default, once, and neve
   out.length=0;
   assert.equal(await runCli(['help','--json'],context),0,'no --server: the recorded origin is the one afbin names');
   assert.match(out.join(''),/use `--server https:\/\/self\.example`/);
-  assert.match(out.join(''),/Runnable afbin CLI installed\?/);
+  assert.match(out.join(''),/Use the authenticated HTTP API/);
   assert.match(out.join(''),/references\/http-api\.md/);
   out.length=0;
   assert.equal(await runCli(['help','npm-local','--json'],context),0,'installation help uses the recorded server without network');

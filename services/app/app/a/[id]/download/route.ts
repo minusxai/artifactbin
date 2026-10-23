@@ -4,6 +4,8 @@
  * (the same read rule as viewing); this door only answers in HTTP. A refusal
  * the caller may not learn about is the uniform 404 every read door gives.
  */
+import {packOfflineHtmlImages,OfflineHtmlMediaError} from '@/lib/export';
+import {loadImage} from '@/lib/object-store/image-store';
 import { requestOrSessionActor } from '@/lib/accounts';
 import { json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
@@ -29,7 +31,19 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     const at = await archivedVersionFor(request, artifact);
     if (at === 'not_found') return json({ error: 'not_found' }, 404);
     const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
-    const { html } = await nativeHtmlDocument({ row, offline: true });
+    let packed:string;
+    try{
+      packed=await packOfflineHtmlImages({html:row.source??'',admittedIds:((row.meta as {refs?:Array<{id:string}>}).refs??[]).map(ref=>ref.id),maxBytes:OFFLINE_FILE_MAX_BYTES,
+        loadImage:async id=>{
+          const image=await getArtifactById(id);
+          if(image?.format!=='image'||!await canReadArtifact(image,actor))return null;
+          const stored=await loadImage(image);return stored?{bytes:stored.body,mime:stored.contentType}:null;
+        }});
+    }catch(error){
+      if(!(error instanceof OfflineHtmlMediaError))throw error;
+      return error.reason==='too_large'?json({error:'too_large'},413):error.reason==='unsupported_type'?json({error:'unsupported_image'},415):json({error:'not_found'},404);
+    }
+    const { html } = await nativeHtmlDocument({ row:{...row,source:packed}, offline: true });
     if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({ error: 'too_large' }, 413);
     const name = fileName(nativeHtmlTitle(row));
     return new Response(html, { headers: {

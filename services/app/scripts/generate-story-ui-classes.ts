@@ -69,11 +69,13 @@ function walk(dir: string): string[] {
 }
 
 /** Every class source: the kit's files, then the files named beside it. */
-function recipeSourceFiles(dir: string, extraFiles: string[] = []): string[] {
-  return [...walk(dir), ...extraFiles.filter((f) => existsSync(f))];
+function recipeSourceFiles(dir: string, extraFiles: readonly string[] = []): string[] {
+  for (const file of extraFiles) if (!existsSync(file)) throw new Error(`Missing recipe class source: ${file}`);
+  return [...walk(dir), ...extraFiles];
 }
 
-export function extractRecipeClasses(dir: string, extraFiles: string[] = []): string[] {
+/** Named extra sources are required: fail rather than silently losing their styles. */
+export function extractRecipeClasses(dir: string, extraFiles: readonly string[] = []): string[] {
   const tokens = new Set<string>();
   for (const file of recipeSourceFiles(dir, extraFiles)) for (const tok of extractFileClasses(file)) tokens.add(tok);
   return [...tokens].sort();

@@ -1,4 +1,5 @@
 /** Declarations contain names only. Credential values are never versioned with source. */
+export interface PinnedBackendSecretScope {ownerId:string;backendId:string;pageId:string;secretBindings?:readonly string[]}
 export interface BackendSecretScope {ownerId:string;backendId:string}
 export interface BackendSecretCipher {seal(value:string,scope:BackendSecretScope,name:string):string;open(ciphertext:string,scope:BackendSecretScope,name:string):string}
 export interface BackendSecretRepository {

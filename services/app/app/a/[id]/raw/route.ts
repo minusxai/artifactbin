@@ -1,3 +1,4 @@
+import {nativeHtmlPresentation} from '@/lib/serving/native-html-presentation.server';
 import { archivedVersionFor, servedRow } from '@/lib/serving';
 /**
  * GET /a/:id/raw — the artifact's own bytes (the standalone document for
@@ -18,8 +19,10 @@ import { archivedVersionFor, servedRow } from '@/lib/serving';
  *   opaque origin, so author JS cannot read the human UI's localStorage even
  *   though it is same-host. Verified live: reading localStorage throws.
  */
-import { accessMoved, type ArtifactHeader, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, VERSION_PARAM } from '@/lib/artifacts';
+import { accessMoved, type ArtifactHeader, type ArtifactRow, canReadArtifact, getArtifactById, getArtifactHeaderById, refusingUnservable, VERSION_PARAM } from '@/lib/artifacts';
 import { trackEvent, verifyExportKey } from '@/lib/platform';
+import {storedCspExtensions} from '@/lib/document';
+import {cspExtensionsFor} from '@/lib/trust/document-trust';
 import { requestOrSessionActor } from '@/lib/accounts';
 import { baseUrl, parseByteRange } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
@@ -127,7 +130,9 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
   if (!(await admits(header))) return notFound();
 
   const base = pages?.site.app ?? baseUrl(request);
-  const policy = nativeHtmlPolicy(id, base, pages ? { self: pages.self, app: pages.site.app } : undefined);
+  // Declarations belong to each immutable version; current viewer grants remain dynamic.
+  const policyFor=async(row:Pick<ArtifactRow,'id'|'version'|'meta'>)=>nativeHtmlPolicy(id,base,pages?{self:pages.self,app:pages.site.app}:undefined,await cspExtensionsFor({artifact:{id:row.id,version:row.version,declared:storedCspExtensions(row.meta.htmlCsp)},viewer:actor,request,carried:pages?.carried}));
+  let policy=await policyFor(header);
   const revalidated = !!pages && !key && !new URL(request.url).searchParams.has(VERSION_PARAM);
   const validator = async (row: ArtifactHeader) => etagOf({
     id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at,
@@ -155,13 +160,14 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       const at = domain ? null : await archivedVersionFor(request, artifact, { capture: byExportKey });
       if (at === 'not_found') return notFound();
       const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
+      if(at)policy=await policyFor(row);
       const etag = revalidated && !at ? await validator(artifact) : null;
       const held = etag && matchingTag(asked, etag);
       if (held) return notModified(held);
       if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
       const rendered = await nativeHtmlDocument({ row, ...(pages ? { appOrigin: pages.site.app } : {}) });
       if (!key && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: actor.userId });
-      return new Response(rendered.html, { headers: responseHeaders(etag) });
+      return new Response(await nativeHtmlPresentation(rendered.html,row,domain), { headers: responseHeaders(etag) });
     }
     case 'file': return serveStoredFile(request, artifact);
     case 'dataset':

@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 /**
  * A ROUTE'S HEADER OBJECT IS NOT A CONSTANT — the server writes into it.
  *
@@ -43,7 +44,7 @@ describe('what the server promises is what it sends', () => {
     const create = async (markup: string) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` },
-      body: JSON.stringify({ title: 'x', markup, visibility: 'public' }),
+      body: JSON.stringify({ title: 'x', html:nativeHtml(markup), visibility: 'public' }),
     }))).json()) as { id: string };
 
     const small = await create('<div><p>small</p></div>');

@@ -7,8 +7,23 @@ import {skillTree,renderSkill,SKILL_FILE_MAX_BYTES} from '@/lib/skills';
 import {isPublicSkillTopic} from '@/lib/skills/public-surface';
 import {skillPackageFiles,skillZip} from '@/lib/skills/package';
 import {publicGuideText,llmsText} from '@/lib/serving/agent-references.server';
+import {htmlPwaSettings} from '@/lib/html-page';
+import {packOfflineHtmlImages} from '@/lib/export/native-html-media';
 const BASE='https://example.test';
 describe('one installable native HTML author skill',()=>{
+ it('runs the installed PWA and portable-image snippets against native contracts',async()=>{
+  const files=skillPackageFiles(skillTree(),BASE);
+  const snippets=(name:string)=>Array.from(files['references/'+name+'.md']!.matchAll(/```html\n([\s\S]*?)```/g),match=>match[1]!);
+  const head=snippets('html-authoring').find(html=>html.includes('artifactbin:pwa-enabled'))!;
+  expect(head).toBeTruthy();
+  expect(htmlPwaSettings('<html><head>'+head+'</head><body></body></html>')).toEqual({enabled:true,name:'Garden tasks',shortName:'Garden',themeColor:'#234b35',backgroundColor:'#ffffff',icon:'Ab1234'});
+  const image=snippets('html-runtime').find(html=>html.includes('ref:abc123'))!;
+  expect(image).toBeTruthy();
+  const html='<html><head></head><body>'+image+'</body></html>';
+  const packed=await packOfflineHtmlImages({html,admittedIds:['abc123'],loadImage:async()=>({bytes:new Uint8Array([1,2,3]),mime:'image/png'}),maxBytes:10000});
+  expect(packed).toContain('src="data:image/png;base64,AQID"');
+  expect(packed).toContain('alt="Garden beds after the harvest"');
+ });
  it('teaches native API and viewer/private versus shared state without a legacy transport',()=>{
   const root=llmsText(BASE);
   for(const value of ['normal HTML','@afbin/apollo','POST /api/artifacts','PUT /api/artifacts/ID','expectedVersion','expectedState','Idempotency-Key','data-af-id'])expect(root).toContain(value);

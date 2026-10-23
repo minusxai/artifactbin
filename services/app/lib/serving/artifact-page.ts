@@ -1,3 +1,4 @@
+import {artifactPwaEnabled} from './artifact-pwa.server';
 import { nativeHtmlTitle } from './native-html.server';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
 /**
@@ -41,7 +42,8 @@ import { captureColor } from '@/lib/mermaid-images/store';
 import type { ArtifactHeader, ArtifactRow } from '@/lib/artifacts';
 import { type StoryIslandData, THEME_KEY, withReaderMode } from '@/lib/story-runtime/contract';
 import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http/pages-origin';
-import { carriedTrust } from '@/lib/trust/document-trust';
+import {storedCspExtensions} from '@/lib/document';
+import { carriedTrust,cspRequestFor } from '@/lib/trust/document-trust';
 import type { DocumentFrame } from './document-frame';
 
 export interface ArtifactPageAnswer {
@@ -258,7 +260,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // The shell reads only this version's metadata.
   const row = servedRow(artifact, at);
   const membershipAvailable = false;
-  const pwaEnabled = false;
+  const pwaEnabled = artifactPwaEnabled(row);
   const framedDocument = nativeHtml;
   // Only the HTML door draws the frame (and mints its ticket); both doors answer a framed document with its FramedRuntime.
   const framing = !!options.pages && framedDocument;
@@ -289,12 +291,12 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
       ? admittedFrameSrc(request, artifact, actor, options.pages!, new URL(request.url).search, readerPick) : Promise.resolve(null),
   ] as const);
   const authorUsername = author?.username ?? null;
-  const starter = false;
+  const starter = nativeHtml && !at && row.version === 1 && row.meta.startPlaceholder === true;
   const authorMark = { username: authorUsername, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom };
   const follow = artifact.user_id && artifact.user_id !== viewerId ? { userId: artifact.user_id, following, count: followCount } : null;
 
   const framedOrigin = framedSrc?.origin ?? null;
-  const frame: DocumentFrame | null = framedSrc && nativeHtml ? {
+  const frame: DocumentFrame | null = framedSrc && nativeHtml && !starter ? {
     src: framedSrc.src,
     contentUrl: `/a/${artifact.id}/raw${at ? `?version=${at.version}` : ''}`,
     title: nativeHtmlTitle(row),
@@ -362,6 +364,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   const body = {
     canonical: canonicalArtifactPath(artifact, groupId ? ownerGroup?.handle ?? null : authorUsername),
     description: row.description,
+    ...(nativeHtml?{cspRequest:await cspRequestFor({artifact:{id:row.id,version:at?.version??artifact.version,declared:storedCspExtensions(row.meta.htmlCsp)},viewer:actor,request})}:{}),
     role,
     kind,
     /*

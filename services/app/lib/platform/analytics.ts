@@ -34,7 +34,7 @@ import type { EventVerb } from '@artifactbin/contracts';
 import { forwardedFor, identifyClient } from './client-identity';
 import { ANALYTICS_SECRET, TRUSTED_PROXY_HOPS } from './config';
 import { getDb } from './db';
-import { emit, envelope, type EventSubject } from './events';
+import { emit, type EventSubject } from './events';
 
 type AnalyticsEvent =
   | 'view'
@@ -144,29 +144,4 @@ async function analyticsIdentity(userId?:string|null):Promise<{client:string|nul
     // Outside a request scope (tests, detached work) — no UA to read.
   }
   return {client,visitor};
-}
-
-/** Document commits include their counter and durable event in the same SQL
- * statement. Other telemetry retains trackEvent's best-effort boundary. */
-export async function documentEditEventSql(id:string,actor:{userId:string|null;tokenId:string|null}|null,param:(value:unknown)=>string,hasParent:string):Promise<string>{
- const {client,visitor}=await analyticsIdentity(actor?.userId);
- const event=envelope(visitor?{kind:'visitor',id:visitor}:null,'edited',{kind:'artifact',id},{client,user_id:null});
- const input=param(JSON.stringify(event)),clientValue=param(client),visitorValue=param(visitor);
- const moved=param(JSON.stringify(envelope(actor?.userId?{kind:'user',id:actor.userId}:actor?.tokenId?{kind:'token',id:actor.tokenId}:null,'moved',{kind:'artifact',id},{from_parent_id:null,to_parent_id:null})));
- return `analytics_written AS (
-  INSERT INTO analytics_events(event,artifact_id,user_id,client,visitor)
-  SELECT 'edit',id,user_id,${clientValue}::text,${visitorValue}::text FROM updated
- ), edit_event_written AS (
-  INSERT INTO event_outbox(id,envelope)
-  SELECT ${input}::jsonb->>'id',${input}::jsonb||jsonb_build_object(
-   'subject_kind',CASE WHEN u.user_id IS NULL THEN ${input}::jsonb->>'subject_kind' ELSE 'user' END,
-   'subject_id',COALESCE(u.user_id,${input}::jsonb->>'subject_id'),
-   'payload',(${input}::jsonb->'payload')||jsonb_build_object('user_id',u.user_id)) FROM updated u
- ), move_event_written AS (
-  INSERT INTO event_outbox(id,envelope)
-  SELECT ${moved}::jsonb->>'id',${moved}::jsonb||jsonb_build_object('payload',jsonb_build_object(
-   'from_parent_id',u.previous#>>ARRAY['ancestor_ids',(jsonb_array_length(u.previous->'ancestor_ids')-1)::text],
-   'to_parent_id',u.ancestor_ids[cardinality(u.ancestor_ids)])) FROM updated u
-  WHERE ${hasParent}::boolean AND to_jsonb(u.ancestor_ids) IS DISTINCT FROM u.previous->'ancestor_ids'
- ),`;
 }

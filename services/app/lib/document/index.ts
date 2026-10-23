@@ -10,10 +10,8 @@
 
 // ---- Model: the stored node graph, node ids, the source form and its checks.
 export type { DocumentGraph } from './document-graph';
-export { createDocumentGraph, GRAPH_POLICY, GRAPH_ROOT, graphIntegrity, graphNodes, graphSource } from './document-graph';
-export type { GraphPatch } from './document-graph-patch';
+export { createDocumentGraph, graphSource } from './document-graph';
 export { applyGraphPatch } from './document-graph-patch';
-export { documentPatchStepSql } from './document-patch';
 export type { ProseOperation } from './document-prose';
 export type { StoredDocument } from './document-codec';
 export { decodeDocument } from './document-codec';
@@ -45,13 +43,11 @@ export { collectExternalAssetUrls } from './external-images';
 export type { HelmetContent } from './helmet';
 export { dataflowOf, declarationsOf, splitHelmet, validateHelmet } from './helmet';
 export { displayTitle, firstHeadingTitle } from './title';
-export type { PwaSettings } from './pwa-settings';
-export { readPwaSettings } from './pwa-settings';
 export type { SocialPreviewCrop } from './social-preview';
-export { parseSocialPreviewCrop, SOCIAL_PREVIEW_OVERVIEW_GENERATION } from './social-preview';
+export { parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage, socialPreviewImageValue, clampImageCrop, savedSocialPreviewImageCrop, SOCIAL_PREVIEW_OVERVIEW_GENERATION } from './social-preview';
 export type { CspDirective, CspExtensions, CspRequest } from './csp-extensions';
 export {
-  coversCspExtensions, CSP_DIRECTIVES, cspExtensionsOf, cspOriginMatches, EMPTY_CSP_EXTENSIONS, emptyCspExtensions, hasCspExtensions,
+  coversCspExtensions, CSP_DIRECTIVES, cspOriginMatches, EMPTY_CSP_EXTENSIONS, emptyCspExtensions, hasCspExtensions,
   mergeCspExtensions, parseCspOrigin, storedCspExtensions, subtractCspExtensions,
 } from './csp-extensions';
 

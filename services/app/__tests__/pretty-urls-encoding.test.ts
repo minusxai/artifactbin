@@ -44,7 +44,7 @@ async function fixtures() {
     new Request(`${BASE}/api/artifacts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.token}` },
-      body: JSON.stringify({ title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public' }),
+      body: JSON.stringify({ title: 'Eating Healthy', html: '<h1>x</h1>', visibility: 'public' }),
     }),
   );
   expect(res.status).toBe(201);

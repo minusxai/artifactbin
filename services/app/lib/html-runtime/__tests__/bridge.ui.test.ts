@@ -10,7 +10,8 @@ it('uses original frame RPC with explicit HTML anchors and never exposes credent
   bridge.receive({ kind: 'send', command: { type: 'mx:selection-actions', edit: false, annotate: true } });
   const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
   document.querySelector('p')!.dispatchEvent(menu);
-  const action = events.find((item) => item.kind === 'event')?.event as { selection: { anchor: unknown }; nonce: string };
+  const action = events.find((item) => item.kind === 'event')?.event as { action: string; selection: { anchor: unknown }; nonce: string };
+  expect(action.action).toBe('annotate');
   expect(action.selection.anchor).toEqual({ kind: 'html-node', v: 1, revision: '3', nodeId: 'n1', quote: '' });
   expect(action.nonce).toBe((events[0] as { nonce?: string }).nonce);
   expect(menu.defaultPrevented).toBe(true);
@@ -70,7 +71,7 @@ it('opens on HTTP runner and offline origins without the secure-context randomUU
   expect(events[0]?.nonce).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   bridge.dispose();
 });
-it('captures dynamic IDs through the actual core bridge and clicks only the scoped thread',async()=>{
+it('captures scoped dynamic IDs without hijacking ordinary clicks on annotated text',async()=>{
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'p1',revision:'1',backends:[],savedNodeIds:['tasks','other']});
  const {startFrameBridge}=await import('../browser-client');
  document.body.innerHTML='<ul data-af-id="tasks"><li data-af-id="task:123">Finish review</li></ul><ul data-af-id="other"><li data-af-id="task:123">Other task</li></ul>';
@@ -84,6 +85,68 @@ it('captures dynamic IDs through the actual core bridge and clicks only the scop
  document.querySelectorAll('li')[1]!.dispatchEvent(new MouseEvent('click',{bubbles:true}));
  expect(events.map(item=>item.event).filter(event=>(event as {type?:string})?.type==='mx:annotation-pin')).toHaveLength(0);
  document.querySelector('li')!.dispatchEvent(new MouseEvent('click',{bubbles:true}));
- expect(events.map(item=>item.event).filter(event=>(event as {type?:string})?.type==='mx:annotation-pin')).toHaveLength(1);
+ document.querySelector('li')!.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));
+ expect(events.map(item=>item.event).filter(event=>(event as {type?:string})?.type==='mx:annotation-pin')).toHaveLength(0);
  bridge.dispose();
+});
+it('batches authored DOM changes, ignores its own overlay and detaches observation',async()=>{
+ vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'p1',revision:'1',backends:[],savedNodeIds:['tasks']});
+ document.body.innerHTML='<ul data-af-id="tasks"><li data-af-id="task:123">Task</li></ul>';
+ const frames=new Map<number,FrameRequestCallback>();let next=0;
+ vi.spyOn(window,'requestAnimationFrame').mockImplementation(callback=>{frames.set(++next,callback);return next;});
+ vi.spyOn(window,'cancelAnimationFrame').mockImplementation(id=>{frames.delete(id);});
+ const {startFrameBridge}=await import('../browser-client');const events:Array<{kind:string;[key:string]:unknown}>=[];
+ const bridge=startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'p1',nodes:[],editId:'1',source:null}});
+ bridge.receive({kind:'send',command:{type:'mx:annotations',mode:'on',pins:[{id:'c1',path:'task:123',anchor:{kind:'html-node',v:1,revision:'1',nodeId:'task:123',ancestorId:'tasks',quote:''}}],openId:null,hoverId:null}});
+ await Promise.resolve();expect(frames.size).toBe(0);
+ document.querySelector('li')!.remove();document.querySelector('ul')!.append(document.createElement('li'));
+ await Promise.resolve();expect(frames.size).toBe(1);
+ const flush=()=>{const pending=[...frames.values()];frames.clear();for(const callback of pending)callback(0);};flush();await Promise.resolve();
+ const layout=events.map(item=>item.event as {type?:string;positions?:{status:string}[]}).filter(event=>event?.type==='mx:annotation-layout').at(-1);
+ expect(layout?.positions?.[0]?.status).toBe('missing');expect(frames.size).toBe(0);
+ document.querySelector('ul')!.innerHTML='<li data-af-id="task:123">Task</li>';await Promise.resolve();expect(frames.size).toBe(1);
+ bridge.dispose();expect(frames.size).toBe(0);document.querySelector('ul')!.append(document.createElement('li'));await Promise.resolve();expect(frames.size).toBe(0);
+ vi.restoreAllMocks();
+});
+
+it('installs app link navigation in the native bridge without hijacking handled links or downloads',async()=>{
+ vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'p1',revision:'1',backends:[],appOrigin:'https://platform.example'});
+ const runtime=await import('../browser-client');const posted:unknown[]=[];
+ const reader=document.createElement('iframe');document.body.append(reader);const doc=reader.contentDocument!;const readerWindow=reader.contentWindow!;
+ const parent={postMessage:(data:unknown)=>posted.push(data)};
+ const win=new Proxy(readerWindow,{get:(target,key)=>key==='parent'?parent:key==='top'?{location:{href:''}}:key==='location'?window.location:typeof Reflect.get(target,key,target)==='function'?Reflect.get(target,key,target).bind(target):Reflect.get(target,key,target)});
+ const bridge=runtime.startFrameBridge({win,post:()=>{},attach:{kind:'attach',id:'p1',nodes:[],editId:'1',source:null}});
+ doc.body.innerHTML='<a href="https://platform.example/a/other">Other</a><a href="#section">Local</a><a download href="https://platform.example/file">Download</a><a href="https://platform.example/handled">Handled</a>';
+ const event=new MouseEvent('click',{bubbles:true,cancelable:true,composed:true});doc.querySelector('a')!.dispatchEvent(event);
+ expect(event.defaultPrevented).toBe(true);expect(posted).toContainEqual({type:'mx:navigate',href:'/a/other'});
+ const handled=doc.querySelectorAll('a')[3]!;handled.addEventListener('click',e=>e.preventDefault());handled.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,composed:true}));
+ expect(posted).toHaveLength(1);bridge.dispose();
+});
+
+it('keeps area drags separate from native text selection and restores normal selection afterward', async () => {
+  vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '3', backends: [] });
+  const { startFrameBridge } = await import('../browser-client');
+  document.body.innerHTML = '<p data-af-id="n1">Words across the screenshot</p>';
+  const paragraph = document.querySelector('p')!;
+  vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, width: 200, height: 100, top: 0, left: 0, right: 200, bottom: 100, toJSON() {} });
+  const events: Array<{ kind: string; [key: string]: unknown }> = [];
+  const bridge = startFrameBridge({ win: window, post: event => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '3', source: null } });
+  bridge.receive({ kind: 'send', command: { type: 'mx:annotations', canComment: true, pick: 'area' } });
+  const selectText = () => { const range = document.createRange(); range.selectNodeContents(paragraph); window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range); document.dispatchEvent(new Event('selectionchange')); };
+  const selections = () => events.map(item => item.event as {type?: string; selection?: {kind: string; anchor: {quote: string; range?: unknown}; range?: unknown}}).filter(event => event?.type === 'mx:selection');
+  selectText(); expect(selections()).toHaveLength(0);
+  const down = new MouseEvent('pointerdown', {bubbles: true, cancelable: true, clientX: 4, clientY: 4});
+  paragraph.dispatchEvent(down); expect(down.defaultPrevented).toBe(true);
+  selectText(); expect(selections()).toHaveLength(0);
+  paragraph.dispatchEvent(new MouseEvent('pointerup', {bubbles: true, clientX: 100, clientY: 50}));
+  expect(selections()).toHaveLength(1);
+  expect(selections()[0]?.selection).toMatchObject({kind: 'element', anchor: {quote: ''}, range: {v: 1, kind: 'area', box: {x: .02, y: .04, w: .48, h: .46}}});
+  expect(selections()[0]?.selection?.anchor.range).toBeUndefined();
+  bridge.receive({kind: 'send', command: {type: 'mx:annotations', canComment: true, pick: null}});
+  selectText(); expect(selections().at(-1)?.selection).toMatchObject({kind: 'text', anchor: {quote: 'Words across the screenshot'}});
+  const beforeCollapse = selections().length;
+  window.getSelection()!.removeAllRanges(); document.dispatchEvent(new Event('selectionchange')); window.dispatchEvent(new Event('scroll'));
+  expect(selections()).toHaveLength(beforeCollapse);
+  document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+  bridge.dispose(); vi.restoreAllMocks();
 });

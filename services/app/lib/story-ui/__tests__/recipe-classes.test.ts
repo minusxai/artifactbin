@@ -16,6 +16,14 @@ describe('recipe-classes.ts freshness', () => {
     expect([...STORY_UI_RECIPE_CLASSES]).toEqual(fresh);
   });
 
+  it('refuses a missing declared chrome source instead of generating a smaller stylesheet', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'recipe-classes-'));
+    try {
+      writeFileSync(join(dir, 'fixture.tsx'), 'const classes="bg-card";');
+      expect(() => extractRecipeClasses(dir, [join(dir, 'removed-chrome.tsx')])).toThrow('Missing recipe class source');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it("an apostrophe in a comment does not desync the quote pairing and swallow class literals", () => {
     // The naive scanner pairs quotes across the whole source: a comment like
     // "the realm's document" opened a phantom literal that ran to the next

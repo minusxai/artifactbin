@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 /**
  * The app server's own decisions: every viewer of a readable document gets the
  * app page at the canonical address, under the app CSP, with the document's own
@@ -33,12 +34,12 @@ async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o'); await claimToken(owner.id, t.token);
   const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
-  return { owner, t, pub: await mk({ title: 'Pub', markup: '<div><p>public words</p></div>', visibility: 'public' }), priv: await mk({ title: 'Priv', markup: '<div><p>secret words</p></div>', visibility: 'private' }) };
+  return { owner, t, pub: await mk({ title: 'Pub', html:nativeHtml('<div><p>public words</p></div>'), visibility: 'public' }), priv: await mk({ title: 'Priv', html:nativeHtml('<div><p>secret words</p></div>'), visibility: 'private' }) };
 }
 
-/** The document's node tree, as the page fetches it for its frame (`?part=nodes`): the document's words are in it, not in the page's data. */
-async function nodesOf(id: string, headers: Record<string, string>): Promise<string> {
-  const res = await app.request(`/api/page/artifact/${id}?part=nodes`, { headers });
+/** Native page content is served through the isolated frame's raw door. */
+async function contentOf(id: string, headers: Record<string, string>): Promise<string> {
+  const res = await app.request(`/a/${id}/raw`, { headers });
   expect(res.status).toBe(200);
   return res.text();
 }
@@ -53,7 +54,7 @@ describe('a document address', () => {
       expect(res.headers.get('content-security-policy'), path).toBe(appPagePolicy(pagesSite()));
       expect(await res.text()).toContain('data-mx-document-frame');
     }
-    expect(await nodesOf(w.pub.id, as({ credential: 'none' }))).toContain('public words');
+    expect(await contentOf(w.pub.id, as({ credential: 'none' }))).toContain('public words');
   });
   it('serves the owner the same app page under the same CSP (at the canonical address)', async () => {
     const w = await world();
@@ -61,7 +62,7 @@ describe('a document address', () => {
     expect(res.headers.get('content-security-policy')).toBe(appPagePolicy(pagesSite()));
     const html = await res.text();
     expect(html).toContain('data-mx-document-frame');
-    expect(await nodesOf(w.pub.id, as({ credential: 'session', userId: w.owner.id, email: w.owner.email }))).toContain('public words');
+    expect(await contentOf(w.pub.id, as({ credential: 'session', userId: w.owner.id, email: w.owner.email }))).toContain('public words');
   });
   /**
    * The exporter's key is the ONE credential that opens a private document to
@@ -116,7 +117,7 @@ describe('the address heals after checking read access', () => {
     expect(res.headers.get('location')).toBeNull();
     const html = await res.text();
     expect(html).toContain('data-mx-document-frame');
-    expect(await nodesOf(w.pub.id, as({ credential: 'session', userId: w.owner.id, email: w.owner.email }))).toContain('public words');
+    expect(await contentOf(w.pub.id, as({ credential: 'session', userId: w.owner.id, email: w.owner.email }))).toContain('public words');
     expect(html).toMatch(new RegExp(`<link rel="canonical" href="https?://[^"/]+/@${w.owner.username}/${w.pub.id}-pub">`));
     const payload = payloadOf(html);
     expect(payload.address).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
@@ -139,7 +140,7 @@ describe('the address heals after checking read access', () => {
     expect(res.headers.get('location')).toBeNull();
     const html = await res.text();
     expect(html).toContain('data-mx-document-frame');
-    expect(await nodesOf(w.pub.id, as({ credential: 'none' }))).toContain('public words');
+    expect(await contentOf(w.pub.id, as({ credential: 'none' }))).toContain('public words');
     expect(payloadOf(html).address).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
   });
   it('serves the owner their PRIVATE document at /a/<id> as themselves, and normalizes retired /edit', async () => {
@@ -149,7 +150,7 @@ describe('the address heals after checking read access', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain('data-mx-document-frame');
-    expect(await nodesOf(w.priv.id, owner.headers)).toContain('secret words');
+    expect(await contentOf(w.priv.id, owner.headers)).toContain('secret words');
     expect(payloadOf(html).address).toBe(`/@${w.owner.username}/${w.priv.id}-priv`);
     const edit = await app.request(`/a/${w.priv.id}/edit`, owner);
     expect(edit.status).toBe(200);
@@ -275,7 +276,7 @@ describe('readable startup discovery', () => {
 
   it.each(['Untitled', '<Project & "status">'])('keeps the real unlisted title %s and a readable link', async title => {
     const w = await world();
-    const created = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` }, body: JSON.stringify({ title, visibility: 'unlisted', markup: '<h1 id="heading">Project status</h1><p id="status">The launch is scheduled for Monday.</p>' }) }));
+    const created = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` }, body: JSON.stringify({ title, visibility: 'unlisted', html:nativeHtml('<h1 id="heading">Project status</h1><p id="status">The launch is scheduled for Monday.</p>') }) }));
     const { id } = await created.json() as { id: string };
     const res = await app.request(`${BASE}/a/${id}`, { headers: as({ credential: 'none' }) });
     expect(res.status).toBe(200);

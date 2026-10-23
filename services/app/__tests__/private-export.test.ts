@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * "Readable = exportable" — including for a PRIVATE document.
  *
@@ -27,7 +28,7 @@ beforeEach(async () => {
   const user = await createUser({ email: 'owner@example.com' });
   const token = await mintToken('t', user.id);
   const row = await createArtifact(token.id, user.id, {
-    format: 'markup', source: '<h1>secret body</h1>', meta: {},
+    format: 'html', source: nativeHtml('<h1>secret body</h1>'), meta: {},
     title: 'Secret', description: null, visibility: 'private',
   });
   privateId = row.id;
@@ -48,7 +49,7 @@ describe('GET /a/<id>/raw with an export key', () => {
 
   it('refuses a missing, malformed, or foreign key with the uniform 404', async () => {
     const other = await createArtifact((await mintToken('u')).id, null, {
-      format: 'markup', source: '<h1>other</h1>', meta: {}, title: 'Other', description: null,
+      format: 'html', source: nativeHtml('<h1>other</h1>'), meta: {}, title: 'Other', description: null,
     });
     for (const key of ['', 'not-a-key', mintExportKey(other.id)]) {
       const res = await rawResponse(`/a/${privateId}/raw${key ? `?key=${key}` : ''}`);

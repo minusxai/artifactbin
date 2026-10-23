@@ -32,7 +32,7 @@ beforeEach(() => {
   vi.stubGlobal('EventSource', FakeEventSource);
   vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
     const url = String(input);
-    if (url.endsWith('/events/frame')) return Response.json({ editId: 'e2', version: 2, by: null, format: 'markup', title: null, source: frameSource, dataPreview: null });
+    if (url.endsWith('/events/frame')) return Response.json({ editId: 'e2', version: 2, by: null, format: 'html', title: null, source: frameSource, dataPreview: null });
     if (url.includes('/members')) return Response.json({ members: [], pending: [], self: null, canManage: false, canInvite: false });
     return Response.json({});
   }));
@@ -41,7 +41,7 @@ afterEach(() => { cleanup(); document.body.replaceChildren(); window.history.rep
 
 const answer = (role: StarterAnswer['role'] = 'owner'): StarterAnswer => ({
   role, kind: role === 'viewer' ? 'none' : 'anon', like: { liked: false, count: 0 }, follow: null,
-  surface: { id: 'sta001', editId: 'e1', format: 'markup', title: null, heading: 'Untitled', visibility: 'public', version: 1, starter: true, author: { username: null }, openAnnotations: 0, theme: null, colorMode: null },
+  surface: { id: 'sta001', editId: 'e1', format: 'html', title: null, heading: 'Untitled', visibility: 'public', version: 1, starter: true, author: { username: null }, openAnnotations: 0, theme: null, colorMode: null },
 });
 const open = (data = answer(), path = '/a/sta001') => {
   window.history.replaceState(null, '', path);
@@ -120,9 +120,9 @@ it('reports the open once', async () => {
 });
 
 
-it('offers a blank report transition only to writers', () => {
+it('keeps the native agent handoff free of the retired document editor', () => {
   open();
-  expect(screen.getByRole('button', { name: 'Continue with blank report' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Continue with blank report' })).toBeNull();
   cleanup(); document.body.replaceChildren();
   open(answer('viewer'));
   expect(screen.queryByRole('button', { name: 'Continue with blank report' })).toBeNull();

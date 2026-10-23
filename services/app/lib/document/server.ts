@@ -4,4 +4,4 @@
  * checks the record). Recompiling a stale record needs the composition's SQL extensions, which the
  * caller passes (`readCompiledDataflow(..., { extensions })`). Browser code never imports this file.
  */
-export { COMPILED_DATAFLOW, finalizeArtifactMetadata, parseCompiledDataflow, readCompiledDataflow, storedCompiledDataflow } from './parsed-artifact-metadata';
+export { finalizeArtifactMetadata, parseCompiledDataflow, readCompiledDataflow } from './parsed-artifact-metadata';

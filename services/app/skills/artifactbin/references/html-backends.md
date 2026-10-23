@@ -79,3 +79,15 @@ or write them into shared state. Platform receipts and events redact literal
 values read during that run; this does not prevent owner-authored network leaks.
 
 Forking an HTML page copies its immutable backend code and schema into new backend identities owned by the copy. Each copied backend starts with an empty store (`value: null`, revision `0`); source store contents and credential values are not copied. Declared secret names are preserved, but each fork requires newly configured credentials for its new backend ID. Initialize defaults when reading an empty store. Dataset links keep their live or pinned mode and require the copy owner's current dataset access; forking does not grant dataset access.
+
+Credential-bearing backend source changes require approval by the page's current
+personal owner. Editors may edit page HTML, but cannot replace code that declares
+secrets or a backend namespace that has ever declared or configured credentials.
+Removing a declaration or link does not remove this approval requirement.
+
+After ownership changes, the current personal owner can explicitly republish the
+backend sources to approve them under a new backend identity. The new identity
+starts from a snapshot of the existing store, preserving shared app data; later
+writes are independent of older versions. Credential values are never copied.
+Configure fresh bindings for the returned backend identity. Archived versions
+retain their original code and identity; they do not gain the new credentials.

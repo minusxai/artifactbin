@@ -6,6 +6,7 @@ const SAFE_EXTERNALS = new Set(['vitest', 'typescript', 'node:crypto', 'node:pat
 export function classifyFastGraph(graph) {
   const reasons = [];
   for (const [file, input] of Object.entries(graph.inputs)) {
+    if (/\.ui\.test\.[cm]?[jt]sx?$/.test(file)) reasons.push(`${file}: DOM project requires a browser environment`);
     for (const edge of input.imports) {
       if (edge.external && !SAFE_EXTERNALS.has(edge.path)) reasons.push(`${file}: ${edge.path}`);
     }
@@ -28,7 +29,18 @@ export function auditFastSource(source, file) {
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
       const expression = node.expression;
       const name = ts.isIdentifier(expression) ? expression.text : ts.isPropertyAccessExpression(expression) ? expression.name.text : '';
-      if (forbidden.has(name)) reasons.push(`${file}: ambient ${name}`);
+      // These two pure models receive all scheduling through their explicit
+      // ReaderPresencePorts/PresenceRoomPorts contract. Their transitive test
+      // graph is still audited; ambient timers and every other receiver fail.
+      const injectedPresenceClock = ts.isCallExpression(node)
+        && ['services/app/lib/html-presence/reader-session.ts', 'services/app/lib/html-presence/room.ts'].includes(file.replaceAll('\\', '/'))
+        && ['setTimeout', 'setInterval'].includes(name)
+        && ts.isPropertyAccessExpression(expression)
+        && ts.isPropertyAccessExpression(expression.expression)
+        && ts.isIdentifier(expression.expression.expression)
+        && expression.expression.expression.text === 'ports'
+        && expression.expression.name.text === 'clock';
+      if (forbidden.has(name) && !injectedPresenceClock) reasons.push(`${file}: ambient ${name}`);
       if ((expression.kind === ts.SyntaxKind.ImportKeyword || name === 'require') && (!node.arguments?.[0] || !ts.isStringLiteral(node.arguments[0]))) reasons.push(`${file}: computed module load`);
       // graphql-js's default field resolver calls a field supplied by the caller.
       // Keep the exception to this exact reviewed dispatcher, not arbitrary package calls.

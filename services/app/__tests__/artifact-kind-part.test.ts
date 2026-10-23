@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { describe, expect, it } from 'vitest';
 import { request, setSession, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
@@ -31,8 +32,8 @@ async function world() {
   };
   return {
     user,
-    doc: await create({ markup: '<h1>Plan</h1><p>' + 'Body. '.repeat(400) + '</p>', visibility: 'public' }),
-    privateDoc: await create({ markup: '<h1>Secret</h1>', visibility: 'private' }),
+    doc: await create({ html:nativeHtml('<h1>Plan</h1><p>' + 'Body. '.repeat(400) + '</p>'), visibility: 'public' }),
+    privateDoc: await create({ html:nativeHtml('<h1>Secret</h1>'), visibility: 'private' }),
     folder: await create({ format: 'folder', title: 'Reports', visibility: 'public' }),
   };
 }
@@ -40,7 +41,7 @@ async function world() {
 describe('the kind door', () => {
   it('names the format of a readable artifact and nothing else', async () => {
     const w = await world();
-    expect(await door(w.doc)).toEqual({ status: 200, cache: 'no-store', body: { format: 'markup' } });
+    expect(await door(w.doc)).toEqual({ status: 200, cache: 'no-store', body: { format: 'html' } });
     expect(await door(w.folder)).toEqual({ status: 200, cache: 'no-store', body: { format: 'folder' } });
   });
 
@@ -56,7 +57,7 @@ describe('the kind door', () => {
   it('admits its owner to a private artifact', async () => {
     const w = await world();
     setSession({ user: { id: w.user.id, email: w.user.email, emailVerified: true } } as never);
-    expect(await door(w.privateDoc)).toEqual({ status: 200, cache: 'no-store', body: { format: 'markup' } });
+    expect(await door(w.privateDoc)).toEqual({ status: 200, cache: 'no-store', body: { format: 'html' } });
   });
 
   it('reads no document: fewer statements than the full door, and not more for a page of any size', async () => {

@@ -1,3 +1,5 @@
+import {nativeHtml} from './native-html-fixture';
+import {nativeAnchor} from './native-annotation-fixture';
 import type {EventEnvelope} from '@artifactbin/contracts';
 import {getDb} from '@/lib/platform';
 /** Annotation facts are committed with their notification projections.
@@ -21,14 +23,11 @@ let fake: FakeEvents;
 const listen = async () => { fake = fakeEvents(); setServices({ events: fake }); await (await getDb()).query('DELETE FROM event_outbox'); };
 beforeEach(listen);
 
-//   source index:      0 = Helmet, 1 = intro <p>, 2 = findings <div>
-//   BODY path:                     0 = intro,     1 = findings
 const DOC =
-  '<Helmet><title>Report</title></Helmet>'
-  + '<p id="intro">An introduction paragraph.</p>'
-  + '<div id="findings">Revenue grew 40% in Q3.</div>';
+  '<p data-af-id="intro">An introduction paragraph.</p>'
+  + '<div data-af-id="findings">Revenue grew 40% in Q3.</div>';
 
-const doc = { format: 'markup' as const, content: '', source: DOC, meta: {}, title: 'Report', description: null };
+const doc = { format: 'html' as const, content: '', source: nativeHtml(DOC), meta: {}, title: 'Report', description: null };
 const author: AnnotationAuthor = { kind: 'human', label: null, transport: 'browser' };
 
 /**
@@ -58,7 +57,7 @@ async function publishLegacy() {
 }
 
 const open = async (actor: AccessActor, artifactId: string, baseEditId: string, body: string) => {
-  const wire = await createAnnotationFor(actor, artifactId, { nodeId: 'findings', baseEditId, body }, author);
+  const wire = await createAnnotationFor(actor, artifactId, { anchor:nativeAnchor('findings'), baseEditId, body }, author);
   expect(wire, 'the fixture must actually annotate').toMatchObject({ id: expect.any(String) });
   return wire as { id: string };
 };
@@ -81,8 +80,8 @@ describe('a thread opened', () => {
   });
   it('a refused create (a stranger, a path that is not there) says nothing', async () => {
     const { row, actor } = await publish('mxmx_test_ann_refused@example.com');
-    expect(await createAnnotationFor(identityForUser('usr_stranger', 'tok_stranger'), row.id, { nodeId: 'findings', baseEditId: row.edit_id, body: 'nope' }, author)).toBeNull();
-    expect(await createAnnotationFor(actor, row.id, { nodeId: 'nowhere', baseEditId: row.edit_id, body: 'nope' }, author)).toMatchObject({ refused: 'bad_path' });
+    expect(await createAnnotationFor(identityForUser('usr_stranger', 'tok_stranger'), row.id, { anchor:nativeAnchor('findings'), baseEditId: row.edit_id, body: 'nope' }, author)).toBeNull();
+    expect(await createAnnotationFor(actor, row.id, { anchor:nativeAnchor('nowhere'), baseEditId: row.edit_id, body: 'nope' }, author)).toMatchObject({ refused: 'bad_path' });
     expect((await said('annotated'))).toEqual([]);
   });
 });

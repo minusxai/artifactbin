@@ -167,7 +167,7 @@ export default function Shelf(props: Props): JSX.Element {
       </div>
     </Panel>
     <Show when={shelf().folders.length}><section aria-label="Folders" class="relative z-20 mb-6"><div class="mb-2"><MicroLabel>folders</MicroLabel></div><ul class={view() === 'grid' ? 'grid grid-cols-2 gap-3 lg:grid-cols-4' : 'grid grid-cols-1 gap-3 sm:grid-cols-2'}><For each={shelf().folders}>{row => {
-      const papers = () => all().filter(item => parentOfRow(item) === row.id && item.format === 'markup').slice(0, 5);
+      const papers = () => all().filter(item => parentOfRow(item) === row.id && item.format === 'html').slice(0, 5);
       return <li class={view() === 'grid' ? 'group relative rounded-md p-3 hover:bg-raised/60' : 'group relative min-w-0'}>
         <Show when={view() === 'grid'} fallback={<Panel padding="none" class="flex items-center gap-2 p-3"><FolderIcon size={15} class="shrink-0 text-accent" /><a {...artifactLink(row.url, row.format)} aria-label={`Open folder ${nameOf(row)}`} class="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-fg after:absolute after:inset-0">{nameOf(row)}</a><Show when={childCount(row.id)}><span class="font-mono text-micro text-faint">{childCount(row.id)}</span></Show><Show when={props.showVisibility !== false}><Visibility row={row} /></Show><RowActions groupId={props.groupId} row={row} level={props.actions ?? 'none'} folders={folders()} childCount={childCount(row.id)} onRemoved={remove} onChanged={() => setRevision(value => value + 1)} /></Panel>}>
           <div aria-label={`Preview of folder ${nameOf(row)}`} class="folder-cover">

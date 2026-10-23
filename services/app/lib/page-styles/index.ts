@@ -2,4 +2,4 @@
 export { buildDocumentCsp } from './document-csp';
 export { splitStoryCss, storyCssBase } from './story-css-split';
 export { fontPreloadTags } from './first-screen-fonts';
-export { markupCsp } from './markup-csp';
+export { markupCsp,appendCspExtensions } from './markup-csp';

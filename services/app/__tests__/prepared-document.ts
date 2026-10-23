@@ -7,7 +7,7 @@ import { getArtifactById } from '@/lib/artifacts/rows';
 import { type EditInput } from '@/lib/artifacts/store';
 import { type ArtifactRow } from '@/lib/artifacts/table';
 import {prepareClientDocumentUpdate,type ClientDocumentChange} from '@/lib/document/document-update-client';
-export function documentEdit(row:ArtifactRow,change:ClientDocumentChange):EditInput {
+function documentEdit(row:ArtifactRow,change:ClientDocumentChange):EditInput {
  if(row.document?.kind!=='graph')throw new Error('Read the authoring snapshot before editing');
  return {baseEditId:row.edit_id,documentUpdate:prepareClientDocumentUpdate({...row,document:row.document},change)};
 }

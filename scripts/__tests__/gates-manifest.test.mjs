@@ -27,7 +27,7 @@ const ALLOWED_FIELDS = new Set(['seconds', 'name', 'needsMail', 'serialGroup', '
 
 describe('the manifest and the disk are one set', () => {
   it('1. every gate file has a row and every row has a file', () => {
-    expect(onDisk.length).toBeGreaterThanOrEqual(20);
+    expect(onDisk).toEqual(expect.arrayContaining(['reader-shell','comments','collab-roles','exports','offline-file','own-origin-script','media']));
     expect([...GATE_SPECS].map((s) => s.name).sort()).toEqual(onDisk);
   });
 

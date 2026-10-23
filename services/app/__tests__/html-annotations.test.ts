@@ -13,11 +13,10 @@ async function page() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_html_comments@example.com' }));
   account = { id: owner.id, email: owner.email! };
   const token = await mintAccountToken('html-comments', owner.id); await claimToken(owner.id, token.token);
-  const made = await createArtifact(request('/api/artifacts', { method: 'POST', token: token.token, json: { html: '<!doctype html><html><body><p>seed</p></body></html>', visibility: 'public' } }));
+  const made = await createArtifact(request('/api/artifacts', { method: 'POST', token: token.token, json: { html, visibility: 'public' } }));
   expect(made.status).toBe(201);
   const { id } = await made.json() as { id: string };
   const db = await harness.db();
-  await db.query("UPDATE artifacts SET format='html', document=NULL,source=$2 WHERE id=$1", [id, html]);
   return { id, db, token: token.token, params: { params: Promise.resolve({ id }) } };
 }
 const anchor = { kind: 'html-node', v: 1, revision: '1', nodeId: 'n1', quote: 'same words', range: { start: 0, end: 10, length: 10, fingerprint: htmlTextFingerprint('same words') } };

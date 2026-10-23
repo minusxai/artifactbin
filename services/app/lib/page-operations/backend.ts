@@ -9,7 +9,7 @@ export interface CompiledPageBackend {typeDefs:string;compiled:string;secretBind
 export interface PageBackendRecord extends CompiledPageBackend {backendId:string;version:string;source:string;ownerId:string;pageId:string}
 export interface PageBackendFetchResult {status:number;url:string;contentType:string;body:string}
 export type PageBackendFetcher=(url:string)=>Promise<PageBackendFetchResult>;
-export interface PageBackendStore {get(backendId:string):Promise<{value:HtmlJson;version:number}>;set(backendId:string,value:HtmlJson,expected:number):Promise<{ok:boolean;version:number}>}
+export interface PageBackendStore {get(backendId:string):Promise<{value:HtmlJson;version:number}>;set(backendId:string,value:HtmlJson,expected:number,scope?:{pageId:string;version:string;ownerId:string}):Promise<{ok:boolean;version:number}>}
 const limits={timeoutMs:5000,cpuMs:200,memoryMiB:64,maxRequests:32,maxOutputBytes:1048576};
 /** The runner compiler's fixed import allowlist is authoritative. No host evaluation. */
 async function backendProgram(source:string):Promise<string>{
@@ -67,5 +67,5 @@ export async function pageBackendCapability(store:PageBackendStore,request:RunSt
  if(operation==='artifactbin.pageBackend.store.get')return store.get(request.artifactId);
  if(request.pageBackendOperation!=='mutation'||operation!=='artifactbin.pageBackend.store.set'||!args||typeof args!=='object'||Array.isArray(args)||!Number.isSafeInteger(args.expected)||Number(args.expected)<0||!('value'in args))throw Error('backend_capability_forbidden');
  if(Buffer.byteLength(JSON.stringify(args.value))>60*1024)throw Error('store_limit');
- return store.set(request.artifactId,args.value,Number(args.expected));
+ return store.set(request.artifactId,args.value,Number(args.expected),{pageId:backend.pageId,version:backend.version,ownerId:backend.ownerId});
 }

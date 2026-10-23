@@ -36,7 +36,7 @@ export async function ingestDataset(source: DatasetSource, declared: DeclaredCol
   // callers surface totalRows so nobody charts a sample believing it is the set.
   const kept = rows.length > MAX_ROWS_LIMIT ? rows.slice(0, MAX_ROWS_LIMIT) : rows;
   return {
-    rows: coerceRows(headers, kept, declared, quotedEmptyCells),
+    rows: coerceRows(headers, kept, declared, quotedEmptyCells?.slice(0, kept.length)),
     rowCount: kept.length,
     totalRows: rows.length,
     truncated: rows.length > MAX_ROWS_LIMIT,

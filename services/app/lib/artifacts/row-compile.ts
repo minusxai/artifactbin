@@ -110,7 +110,7 @@ export async function declarationsForRow(row: CompilableRow): Promise<StoryIslan
   return isEmptyCompiled(result.compiled) ? null : { flow: result.compiled };
 }
 
-export const isEmptyCompiled = (flow: CompiledDataflow): boolean =>
+const isEmptyCompiled = (flow: CompiledDataflow): boolean =>
   !flow.imports.length && !flow.values.length && !flow.queries.length && !flow.mutations.length;
 
 /** Resolve a `ref:<id>`: the caller's own artifacts, then anything link-readable. */

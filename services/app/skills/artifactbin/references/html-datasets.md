@@ -4,7 +4,7 @@ description: CSV import, dataset schema discovery, stable IDs and permission-awa
 ---
 ## Read first
 
-Create a dataset through the retained artifact API, then link it from the page. Use an origin-bound bearer outside HTML:
+Create a dataset through the retained artifact API, then link it from the page. The native dataset namespace supports stored CSV/JSON rows with platform row identities. Connected PostgreSQL catalogs and SQL-backed tables are not supported by this namespace: discovery, reads and writes reject them with `dataset_stable_identity_unavailable`. Import stored rows for native pages. The separate retained PostgreSQL dataset query API remains read-only under its original permissions. Use an origin-bound bearer outside HTML:
 
 ```json
 {"dataset":"week,completed,waiting\n2026-W01,18,7\n2026-W02,24,4\n2026-W03,21,3\n","title":"Repair bench sample","visibility":"unlisted","access":"readwrite"}
@@ -69,3 +69,9 @@ INSERT supplies cells; DELETE supplies rowId. Send the observed dataset revision
 See the installed CSV dashboard example for discovery, pagination, revision consistency and a chart computed from typed cells.
 
 CSV empty-cell rules: an unquoted empty field (or a missing trailing field) becomes null. A quoted empty field (`""`) is an empty string and keeps its column textual by default, including when other rows look numeric. Literal `null`/`NULL` remain text. An explicit non-string column type overrides inference and converts empty text to null; declare `type:"string"` to preserve it.
+
+## Files attached to a dataset
+
+The retained media HTTP doors accept files for a stored dataset declared by a live native page binding. A page link or accepted page membership never grants upload permission: the caller needs explicit dataset insert authority (a caller or group insert grant, or dataset editor authority on a writable dataset). Private dataset reads still require current dataset and page readership. Pinned bindings cannot upload.
+
+For signed-in browser image uploads use `POST /a/PAGE_ID/datasets/DATASET_ID/images` with the image bytes and image Content-Type. HTTP agents can upload images through the generic file door using an image filename. For generic files use `POST /api/artifacts/PAGE_ID/datasets/DATASET_ID/files`, the file bytes and Content-Type, plus an `X-Filename` containing the percent-encoded filename. Both require `X-Edit-Id` from the observed page head and a unique `Idempotency-Key`; replay the identical bytes and key after an uncertain response. Requests use supported HTTP account authentication, never a token embedded in page HTML. The response returns the stored ref and read URL; read that URL under the same current permissions. Revoked upload permission refuses even a cached replay. File and image size, type, count and stored-byte limits still apply. These are HTTP media uploads, not GraphQL mutations.

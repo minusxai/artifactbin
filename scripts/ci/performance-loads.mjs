@@ -36,8 +36,9 @@ import { createServer, request as httpRequest } from 'node:http';
 import { chromium } from 'playwright';
 import { startMailSink } from '../lib/mail-login.mjs';
 import { becomeAccountOwner, publishAs } from '../lib/start-doc.mjs';
+import { pageHtml } from '../fixtures/page-speed/native.mjs';
 import { publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
-import { documentMeasurementMode, measureDocumentViews, summarizeDocumentViews, waitForStoredDiagrams } from '../lib/document-views.mjs';
+import { documentMeasurementMode, measureDocumentViews, summarizeDocumentViews } from '../lib/document-views.mjs';
 
 assert.equal(process.env.CI, 'true', 'Production builds and browser benchmarks run in CI only');
 const sizeOnly = process.argv.includes('--size-only');
@@ -94,16 +95,16 @@ try {
   await becomeAccountOwner(page, base, { sink: await startMailSink(), email });
   const result = { revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(), conditions: { runtime: process.version, browser: browser.version(), gateway: 'HTTP/1.1 with gzip', database: 'in-process PGLite', mode: sizeOnly ? 'size-only' : 'timing' }, loads: [] };
   if (!sizeOnly) {
-  const markup = '<h1 id="performance-heading">Performance fixture</h1>' + Array.from({ length: 35 }, (_, i) => `<p id="paragraph-${i}">Section ${i}: A repeatable document for measuring useful content and application loading.</p>`).join('');
-  const doc = await publishAs(page, { title: 'Performance fixture', markup, visibility: 'public' });
-  for (let i = 0; i < 39; i++) await publishAs(page, { title: `Workspace sample ${String(i).padStart(2, '0')}`, markup, visibility: 'public' });
+  const html = pageHtml('Performance fixture', '<h1 id="performance-heading">Performance fixture</h1>' + Array.from({ length: 35 }, (_, i) => `<p id="paragraph-${i}">Section ${i}: A repeatable document for measuring useful content and application loading.</p>`).join(''));
+  const doc = await publishAs(page, { title: 'Performance fixture', html, visibility: 'public' });
+  for (let i = 0; i < 39; i++) await publishAs(page, { title: `Workspace sample ${String(i).padStart(2, '0')}`, html, visibility: 'public' });
   // A second synthetic account owns shared documents. This exercises metadata
   // trimming with real generated metadata, not arbitrary inflated JSON.
   const ownerContext = await browser.newContext();
   const other = await ownerContext.newPage();
   await becomeAccountOwner(other, base, { sink: await startMailSink(), email: 'mxmx_test_performance_sharer@example.com' });
   for (let i = 0; i < 20; i++) {
-    const shared = await publishAs(other, { title: `Shared sample ${i}`, markup, visibility: 'private' });
+    const shared = await publishAs(other, { title: `Shared sample ${i}`, html, visibility: 'private' });
     assert.equal(await other.evaluate(async ({ id, email }) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: [{ email, role: 'viewer' }] }) })).status, { id: shared.id, email }), 200);
   }
   await ownerContext.close();
@@ -147,12 +148,14 @@ try {
   // timing. Two animation frames represent a paint opportunity after the commit.
   await page.addInitScript(() => {
     window.__performanceUseful = null;
+    const mark = () => { if(window.__performanceUseful===null) requestAnimationFrame(() => requestAnimationFrame(() => { window.__performanceUseful=performance.now(); })); };
+    window.addEventListener('message',event=>{const frame=document.querySelector('iframe[data-mx-document-frame]');if(frame && event.source===frame.contentWindow && event.data?.type==='page-speed-useful')mark();});
     const observer = new MutationObserver(() => {
       const home = location.pathname === '/' && [...document.querySelectorAll('a')].some(a => a.textContent?.includes('Workspace sample'));
-      const prose = location.pathname !== '/' && [...document.querySelectorAll('h1')].some(h => h.textContent === 'Performance fixture');
+      const prose = [...document.querySelectorAll('h1')].some(h => h.textContent === 'Performance fixture');
       if (!home && !prose) return;
       observer.disconnect();
-      requestAnimationFrame(() => requestAnimationFrame(() => { window.__performanceUseful = performance.now(); }));
+      if(window.parent!==window)window.parent.postMessage({type:'page-speed-useful'},'*');else mark();
     });
     observer.observe(document, { subtree: true, childList: true });
   });
@@ -196,7 +199,7 @@ try {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   const documentFixtures = await publishPageSpeedFixtures(body => publishAs(page, body));
   // The steady state a reader meets: a build that prerenders diagrams has stored them by now (bounded; a no-op wait otherwise).
-  const storedDiagrams = sizeOnly ? [] : await waitForStoredDiagrams(base, documentFixtures);
+  const storedDiagrams = []; // Native diagrams are author-supplied SVG, not a server compiler cache.
   console.log(`Stored diagram drawings before timing: ${storedDiagrams.join(', ') || 'none'}`);
   const samples = await measureDocumentViews({ browser, base, fixtures: documentFixtures, ...mode, log: line => console.log(line) });
   if (sizeOnly) assert(samples.every(sample => sample.ready && sample.jsBeforeReady !== null), 'size pass needs a ready marker and JS byte count for every view');

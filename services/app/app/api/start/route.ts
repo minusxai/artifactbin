@@ -35,6 +35,7 @@ export async function POST(request: Request) {
   let row: Awaited<ReturnType<typeof createArtifact>>;
   try { row = await createArtifact(creator.tokenId, creator.userId, {
     ...parsed,
+    meta: { ...parsed.meta, ...(new URL(request.url).searchParams.get('mode') !== 'blank' ? {startPlaceholder: true} : {}) },
     destination: parseArtifactDestination(body.destination),
     title: parsed.derivedTitle,
     description: parsed.derivedDescription??null,

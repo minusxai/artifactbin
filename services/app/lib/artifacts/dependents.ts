@@ -3,6 +3,7 @@
  * that reference it, and the documents that declare writes to a dataset. The share menu and delete
  * ask this before changing what others rely on.
  */
+import type {HtmlPageLink} from '@artifactbin/contracts';
 import type { AccessActor } from '@/lib/accounts';
 import { mutationTargetRef } from '@/lib/dataflow';
 import { storedMediaReferences } from '../datasets/media-references';
@@ -38,7 +39,7 @@ async function findDependentsScoped(scope: Scope, refId: string): Promise<Artifa
   const db = await getDb();
   const image=(await getArtifactById(refId))?.format==='image';
   const res = await artifactQuery<ArtifactRow>(db,
-    `SELECT * FROM artifacts WHERE ${scope.where('$1')} AND ${image ? "format IN ('markup','dataset')" : "format = 'markup' AND meta::text LIKE $2"}`,
+    `SELECT * FROM artifacts WHERE ${scope.where('$1')} AND ${image ? "format IN ('markup','html','dataset')" : "format IN ('markup','html') AND meta::text LIKE $2"}`,
     image ? [scope.val] : [scope.val,`%"${refId}"%`],
   );
   const rows=res.rows as unknown as ArtifactRow[];
@@ -49,7 +50,13 @@ async function findDependentsScoped(scope: Scope, refId: string): Promise<Artifa
     if((await storedMediaReferences(row)).has(refId)){targets.add(row.id);found.set(row.id,row);}
   }
   for(const row of rows){
-    if(row.format!=='markup'||row.id===refId)continue;
+    if(row.id===refId)continue;
+    if(row.format==='html'){
+      const links=(row.meta.htmlLinks??[]) as readonly HtmlPageLink[];
+      if(links.some(link=>link.kind==='dataset'&&targets.has(link.datasetId)))found.set(row.id,row);
+      continue;
+    }
+    if(row.format!=='markup')continue;
     const refs=(row.meta as {refs?:Array<{id:string}>}).refs??[];
     if(refs.some(ref=>targets.has(ref.id)))found.set(row.id,row);
   }

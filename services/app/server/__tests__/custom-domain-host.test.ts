@@ -83,15 +83,15 @@ const pollDoc = (ds: string) => `<Helmet><Value name="choice" type="string" defa
 async function world() {
   const vivek = await owner('vivek');
   const other = await owner('stranger');
-  const post = await create(vivek.token, { markup: '<h1>Hello from my blog</h1><p>First words.</p>', title: 'Hello World', description: 'A first post', visibility: 'public' });
+  const post = await create(vivek.token, { html: '<h1>Hello from my blog</h1><p>First words.</p>', title: 'Hello World', description: 'A first post', visibility: 'public' });
   const folder = await create(vivek.token, { format: 'folder', title: 'Notes', visibility: 'public' });
-  const filed = await create(vivek.token, { markup: '<h1>Filed away</h1>', title: 'Filed post', visibility: 'public', parent_id: folder.id });
-  const quiet = await create(vivek.token, { markup: '<h1>Quiet</h1>', title: 'Unlisted draft', visibility: 'unlisted' });
-  const secret = await create(vivek.token, { markup: '<h1>Secret</h1>', title: 'Private plan', visibility: 'private' });
-  const local = await create(vivek.token, { markup: LOCAL_DOC, title: 'Counter', visibility: 'public' });
+  const filed = await create(vivek.token, { html: '<h1>Filed away</h1>', title: 'Filed post', visibility: 'public', parent_id: folder.id });
+  const quiet = await create(vivek.token, { html: '<h1>Quiet</h1>', title: 'Unlisted draft', visibility: 'unlisted' });
+  const secret = await create(vivek.token, { html: '<h1>Secret</h1>', title: 'Private plan', visibility: 'private' });
+  const local = await create(vivek.token, { html: LOCAL_DOC, title: 'Counter', visibility: 'public' });
   const ds = await create(vivek.token, { dataset: [{ choice: 'tacos' }], access: 'readwrite', visibility: 'public' });
-  const poll = await create(vivek.token, { markup: pollDoc(ds.id), title: 'Poll', visibility: 'public' });
-  const theirs = await create(other.token, { markup: '<h1>Not Vivek</h1>', title: 'Stranger post', visibility: 'public' });
+  const poll = await create(vivek.token, { html: pollDoc(ds.id), title: 'Poll', visibility: 'public' });
+  const theirs = await create(other.token, { html: '<h1>Not Vivek</h1>', title: 'Stranger post', visibility: 'public' });
   await verified(vivek.userId);
   return { vivek, other, post, folder, filed, quiet, secret, local, ds, poll, theirs };
 }
@@ -269,6 +269,7 @@ describe('a post on a verified host', () => {
     const markup = html.slice(html.indexOf('<body'));
     expect(markup).not.toMatch(/mx-reader-|data-mx-login|data-mx-reader/);
     expect(html).toContain('data-mx-domain-footer');
+    const saved=(await getArtifactById(w.post.id))!.source!;expect(saved).not.toContain('data-mx-domain-footer');expect(saved).not.toContain('<link rel="canonical"');
     expect(html).toContain(`<link rel="canonical" href="https://blog.example.org/${w.post.id}-hello-world">`);
     expect(html).toMatch(new RegExp(`Made with <a href="https://app\\.example\\.test/a/${w.post.id}"[^>]*>artifactbin</a>`));
     expect(html).toContain('<meta property="og:title" content="Hello World">');
@@ -339,8 +340,7 @@ describe('everything else on a verified host is 404', () => {
     expect(frame.status).toBe(200);
     // The compiled reader's viewer door, answered as it answers any guest; scoped like the rest.
     const viewer = await app().request(`${HOST}/a/${w.post.id}/viewer`, { headers: { cookie: 'authjs.session-token=forged' } });
-    expect(viewer.status, await viewer.clone().text()).toBe(200);
-    expect(((await viewer.json()) as { viewer: unknown }).viewer, 'a domain post\'s reader is a guest').toBeNull();
+    expect(viewer.status).toBe(404);
     noCookie(viewer);
     for (const id of [w.quiet.id, w.theirs.id, w.secret.id]) expect((await app().request(`${HOST}/a/${id}/viewer`)).status, id).toBe(404);
     // The script runs in the document itself: there is no author-script wrapper to serve.
@@ -348,11 +348,10 @@ describe('everything else on a verified host is 404', () => {
     expect((await app().request(`${HOST}/story/author-frame?artifact=${w.post.id}`)).status).toBe(404);
   });
 
-  it('serves the live story fragment for the owner\'s public post as a guest', async () => {
+  it('does not expose retired story fragments for native posts', async () => {
     const w = shared();
     const fragment = await app().request(`${HOST}/a/${w.post.id}/story`, { headers: { cookie: 'authjs.session-token=forged' } });
-    expect(fragment.status, await fragment.clone().text()).toBe(200);
-    expect(await fragment.text()).toContain('Hello from my blog');
+    expect(fragment.status).toBe(404);
     noCookie(fragment);
     for (const id of [w.quiet.id, w.theirs.id, w.secret.id]) {
       expect((await app().request(`${HOST}/a/${id}/story`)).status, id).toBe(404);
@@ -360,26 +359,24 @@ describe('everything else on a verified host is 404', () => {
     expect((await app().request(`${HOST}/a/${w.post.id}/story`, { method: 'POST' })).status).toBe(404);
   });
 
-  it('admits a query POST only with the reader\'s local tables', async () => {
+  it('cannot execute retired SQL declarations or caller local tables from native HTML', async () => {
     const w = shared();
     const post = (body: unknown) => app().request(`${HOST}/a/${w.local.id}/query`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) });
     const withLocal = await post({ only: ['current'], values: { count: 3 }, localTables: { drafts: [{ id: 7 }] } });
     expect(withLocal.status, await withLocal.clone().text()).toBe(200);
-    expect(await withLocal.json()).toMatchObject({ tables: { current: { rows: [{ id: 7, count: 3 }] } } });
+    expect(await withLocal.json()).toEqual({tables:{},errors:{}});
     expect((await post({ only: ['current'] })).status).toBe(404);
     expect((await post('not json')).status).toBe(404);
   });
 
-  it('runs a local mutation, and refuses every dataset-writing one without touching the dataset', async () => {
+  it('refuses retired local and dataset SQL mutation names without touching the dataset', async () => {
     const w = shared();
     const mutate = (id: string, body: unknown) => app().request(`${HOST}/a/${id}/mutate`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(body) });
     const local = await mutate(w.local.id, { mutation: 'inc', args: {} });
-    expect(local.status, await local.clone().text()).toBe(200);
-    expect(await local.json()).toMatchObject({ ok: true, local: { target: 'drafts' } });
+    expect(local.status).toBe(400);expect(await local.json()).toMatchObject({error:'unknown_mutation'});
     const before = (await getArtifactById(w.ds.id))!.version;
     const write = await mutate(w.poll.id, { mutation: 'vote', args: { choice: 'ramen' } });
-    expect(write.status).toBe(403);
-    expect(await write.json()).toMatchObject({ error: 'dataset_read_only' });
+    expect(write.status).toBe(400);expect(await write.json()).toMatchObject({error:'unknown_mutation'});
     expect((await getArtifactById(w.ds.id))!.version).toBe(before);
     expect((await mutate(w.theirs.id, { mutation: 'inc', args: {} })).status).toBe(404);
     const preflight = await app().request(`${HOST}/a/${w.local.id}/mutate`, { method: 'OPTIONS' });
@@ -413,9 +410,9 @@ describe('images in posts on a verified host', () => {
     const webHash = await heldWebImage('https://cdn.example.test/cover.png');
     const strayHash = await heldWebImage('https://cdn.example.test/stray.png');
     const post = await create(w.vivek.token, { title: 'Pictures', visibility: 'public',
-      markup: `<h1>Pictures</h1><img src="ref:${pic.id}" alt="uploaded" /><img src="https://cdn.example.test/cover.png" alt="from the web" />` });
-    await create(w.vivek.token, { title: 'Quiet pictures', visibility: 'unlisted', markup: `<img src="ref:${quietPic.id}" alt="quiet" />` });
-    await create(w.other.token, { title: 'Their pictures', visibility: 'public', markup: `<img src="ref:${theirPic.id}" alt="theirs" />` });
+      html: `<h1>Pictures</h1><img src="ref:${pic.id}" alt="uploaded" /><img src="https://cdn.example.test/cover.png" alt="from the web" />` });
+    await create(w.vivek.token, { title: 'Quiet pictures', visibility: 'unlisted', html: `<img src="ref:${quietPic.id}" alt="quiet" />` });
+    await create(w.other.token, { title: 'Their pictures', visibility: 'public', html: `<img src="ref:${theirPic.id}" alt="theirs" />` });
 
     const html = await (await app().request(`${HOST}/${post.id}-pictures`)).text();
     const src = new RegExp(`/a/${pic.id}/raw\\?v=\\d+`).exec(html)?.[0];

@@ -584,15 +584,7 @@ test('unknown write outcomes recover the original command and arguments', async 
  assert.ok(!fix.includes('rerun afbin push'));
 });
 
-test('offline HTML import is a local command with safe JSX output',()=>{
- assert.equal(parseCommand(['import','review.jsx.html']).command,'import');
- assert.deepEqual(parseCommand(['import','review.jsx.html','--output','report.jsx']).flags,{output:'report.jsx'});
- assert.throws(()=>parseCommand(['import','review.jsx.html','--output','-']),/JSX file/);
- assert.throws(()=>parseCommand(['import','review.jsx.html','--output','report.txt']),/JSX file/);
- assert.throws(()=>parseCommand(['import','one.jsx.html','two.jsx.html']),/Usage/);
- assert.match(commandHelp('import'),/without publishing/);
- assert.match(commandHelp('export'),/\.jsx\.html/);
-});
+
 
 test('workspace recovery teaching names explicit rebind, credential selection and last-observed pins',async()=>{
  const {diagnosticCatalog}=await import('../src/diagnostics');

@@ -55,3 +55,29 @@ describe('reviewed GraphQL resolver dispatch', () => {
     expect(auditFastSource('globalThis[capability]()', 'node_modules/graphql/execution/execute.js')).not.toEqual([]);
   });
 });
+
+
+describe('reviewed presence clock ports', () => {
+  const reader = 'services/app/lib/html-presence/reader-session.ts';
+  const room = 'services/app/lib/html-presence/room.ts';
+  it('admits only the injected clock receiver in the two pure presence models', () => {
+    for (const file of [reader, room, reader.replaceAll('/', '\\')]) {
+      expect(auditFastSource('ports.clock.setTimeout(flush, 75); ports.clock.setInterval(tick, 3000);', file)).toEqual([]);
+    }
+  });
+  it('does not admit ambient timers or other receivers, even inside reviewed models', () => {
+    for (const source of ['setTimeout(work,75)', 'globalThis.setTimeout(work,75)', 'ports.other.setTimeout(work,75)', 'ports.clock.fetch(url)', 'ports.clock[method](work,75)', 'new ports.clock.setTimeout(work,75)']) {
+      expect(auditFastSource(source, reader)).not.toEqual([]);
+    }
+    expect(auditFastSource('ports.clock.setTimeout(work,75)', 'services/app/unreviewed.ts')).not.toEqual([]);
+    expect(classifyFastGraph(graph('node:timers')).eligible).toBe(false);
+  });
+});
+
+
+describe('fast project environment boundary', () => {
+  it('rejects DOM project files even when their globals hide from the import graph', () => {
+    expect(classifyFastGraph({inputs:{'services/app/view.ui.test.ts':{imports:[]}}}).eligible).toBe(false);
+    expect(classifyFastGraph({inputs:{'services/app/model.test.ts':{imports:[]}}}).eligible).toBe(true);
+  });
+});

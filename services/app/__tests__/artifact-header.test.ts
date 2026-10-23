@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import { expect, it } from 'vitest';
 import { useAppHarness, request, mintAccountToken } from './harness';
 import { POST as publish } from '@/app/api/artifacts/route';
@@ -16,7 +17,7 @@ it('names every column of the artifacts table but the two that carry the content
 
 it('reads the same row as the whole-row read, less its document and source, and not a trashed one', async () => {
   const token = await mintAccountToken('header');
-  const created = await publish(request('/api/artifacts', { method: 'POST', token: token.token, json: { visibility: 'unlisted', markup: '<h1 id="t">Header</h1>' } }));
+  const created = await publish(request('/api/artifacts', { method: 'POST', token: token.token, json: { visibility: 'unlisted', html: nativeHtml('<h1 id="t">Header</h1>') } }));
   const { id } = await created.json() as { id: string };
   const whole = await getArtifactById(id);
   const header = await getArtifactHeaderById(id);

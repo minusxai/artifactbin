@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 /**
  * EVERY DOCUMENT ON ITS OWN ORIGIN, through the real app server (server/pages-host): the app page frames
  * `<hex(id)>.<pages host>`, whose own origin spends the one-time ticket in the response that serves the document and sets its host-only cookie, the
@@ -19,11 +20,10 @@ import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
 import { framedDocumentSrc } from '@/lib/serving/artifact-page';
 import { POST as internalMint } from '@/app/api/internal/tokens/route';
 import { ARTIFACT_SCOPE } from '@artifactbin/contracts';
-import { buildDocumentCsp } from '@/lib/page-styles/document-csp';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { POST as grantRoute } from '@/app/api/trust/route';
 import { createAppServer } from '../server/app';
-import { ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
+import {nativeHtmlPolicy} from '@/lib/serving/native-html.server';
 
 useAppHarness();
 
@@ -35,14 +35,14 @@ const BUDGET = { exchange: 10 };
 const SHELL = '<!doctype html><html><head><title>artifactbin</title></head><body><div id="root"></div></body></html>';
 const framing = () => createAppServer({ indexHtml: async () => SHELL, pagesSite: site });
 
-const DOC = '<Helmet><Value name="rows" type="table" value={[{id: 1}, {id: 2}]} /><Query name="counted">{`select count(*) as n from rows`}</Query></Helmet><h1 id="top">Private plan</h1><DataTable data="$counted" />';
+const DOC = '<h1 data-af-id="plan" id="top">Private plan</h1><script type="application/json" data-af="state">{"rows":[{"id":1},{"id":2}]}</script>';
 
 async function world() {
   const user = await createUser({ email: 'pages-owner@example.com' });
   const t = await mintToken('pages-owner', user.id);
     await claimToken(user.id, t.token);
-  const publish = async (markup: string, visibility: string) => {
-    const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup, visibility } }));
+  const publish = async (markup: string, visibility: string,head='') => {
+    const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:`<!doctype html><html><head>${head}</head><body>${markup}</body></html>`, visibility } }));
     expect(res.status, await res.clone().text()).toBe(201);
     return ((await res.json()) as { id: string }).id;
   };
@@ -56,10 +56,7 @@ const as = (url: string, actor: Actor | null, init: RequestInit = {}) => {
   const built = new Request(url, init);
   return actor ? attachActor(built, actor) : built;
 };
-const island = (html: string): Record<string, unknown> | null => {
-  const match = new RegExp(`<script type="application/json" id="${ISLAND_DATA_ID}">([^<]*)<\\/script>`).exec(html);
-  return match ? JSON.parse(match[1]!) as Record<string, unknown> : null;
-};
+const runtime = (html:string):Record<string,unknown>|null=>{const match=/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/.exec(html);return match?JSON.parse(match[1]!):null;};
 /** Sign in on the document's own origin the way the frame does: the app page's ticket, spent by the document's response. */
 async function pagesCookie(app: ReturnType<typeof framing>, actor: Actor, id: string): Promise<string> {
   const res = await app.request((await frameSrc(app, actor, id)).href);
@@ -92,7 +89,7 @@ describe('the app page frames the document on its own origin', () => {
     expect(frame![0]).toContain('sandbox="allow-scripts allow-same-origin');
     // The document runs in the frame: none of its story, data or code is in the app page.
     expect(html).not.toContain('Private plan</h1>');
-    expect(html).not.toContain(`id="${ISLAND_DATA_ID}"`);
+    expect(html).not.toContain('data-af="runtime"');
     expect(html).not.toMatch(/\/islands\/d\/[0-9a-f]{16}\.js/);
     // The bar around it is the app's own (solid/document/DocumentChrome), drawn by the app, not the server.
     expect(html).not.toContain('data-mx-reader-chrome');
@@ -105,7 +102,7 @@ describe('the app page frames the document on its own origin', () => {
 
   it('frames a guest\'s page with the explicit guest marker, so the document origin clears whatever the browser held', async () => {
     const t = await mintToken('public-owner');
-    const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>Open</h1>', visibility: 'unlisted' } }));
+    const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml('<h1>Open</h1>'), visibility: 'unlisted' } }));
     const { id } = (await res.json()) as { id: string };
     const html = await (await framing().request(`${APP}/a/${id}`, { headers: { accept: 'text/html' } })).text();
     const src = new URL(/<iframe data-mx-document-frame="" src="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&'));
@@ -130,7 +127,7 @@ describe('the reader\'s selection in the app page\'s address reaches the frame',
     const served = await app.request(src.href);
     expect(served.status).toBe(200);
     expect(cookieOf(served)).not.toBeNull();
-    expect(island(await served.text())).toMatchObject({ values: { region: 'west', zoom: 5 } });
+    expect(runtime(await served.text())).toMatchObject({pageId:id,revision:'1'});
     // A fresh frame URL (a consent grant's reload) carries the page's address the same way.
     const fresh = await framedDocumentSrc(as(`${APP}/api/page/frame/${id}?$region=east`, w.actor), id, site, '?$region=east');
     expect(new URL(fresh!.src).origin).toBe(self);
@@ -183,7 +180,7 @@ describe('the pages session', () => {
     expect(res.headers.get('cache-control')).toBe('private, no-cache');
     const html = await res.text();
     expect(html).toContain('Private plan');
-    expect(island(html)).toMatchObject({ direct: true, signedIn: true });
+    expect(runtime(html)).toMatchObject({pageId:w.secret,revision:'1',appOrigin:APP});expect(runtime(html)).not.toHaveProperty('signedIn');
     expect(html).not.toContain(ticket);
     // The replay (a back navigation to the frame's first URL) mints nothing, and reads as nobody: the uniform 404.
     const replay = await app.request(url);
@@ -218,7 +215,7 @@ describe('the pages session', () => {
     const self = pagesOriginFor(w.secret, site);
     const read = await app.request(as(`${self}/a/${w.secret}/query`, owner, { method: 'POST', headers: { [BROWSER_SESSION_HEADER]: '1', 'x-forwarded-host': new URL(self).host, cookie: `${COOKIE}=${cookie}`, 'content-type': 'text/plain' }, body: query(w.secret) }));
     expect(read.status, await read.clone().text()).toBe(200);
-    expect(((await read.json()) as { tables: Record<string, { rows: Array<Record<string, unknown>> }> }).tables.counted!.rows[0]).toMatchObject({ n: 2 });
+    expect(await read.json()).toEqual({tables:{},errors:{}});
     // The session mark with no transport behind it is nobody's session: a guest page, the guest marker.
     const open = await w.publish('<h1>Open</h1>', 'unlisted');
     const unmarked = await (await app.request(`${APP}/a/${open}`, { headers: { accept: 'text/html', [BROWSER_SESSION_HEADER]: '1', authorization: `Bearer ${w.token.token}` } })).text();
@@ -285,7 +282,7 @@ describe('the pages session', () => {
     const reader = await pagesCookie(app, w.actor, open);
     const asGuest = await app.request(`${pagesOriginFor(open, site)}/?_pt=-`, { headers: { cookie: `${COOKIE}=${reader}` } });
     expect(asGuest.status).toBe(200);
-    expect(island(await asGuest.text())).toMatchObject({ signedIn: false });
+    expect(runtime(await asGuest.text())).toMatchObject({pageId:open,appOrigin:APP});
   });
 
   it('keeps today\'s behaviour for a visit with no parameter: the browser\'s own cookie for this host decides', async () => {
@@ -313,7 +310,7 @@ describe('the pages session', () => {
     expect((await app.request(`${self}/?_pt=${ticket}`)).status).toBe(200);
     const id = await w.publish('<Helmet><Value name="region" type="string" default="north" /></Helmet><p>{$region}</p>', 'public');
     const html = await (await app.request(`${pagesOriginFor(id, site)}/?$region=west&_pt=-&x=1`)).text();
-    expect(island(html)).toMatchObject({ values: { region: 'west' } });
+    expect(runtime(html)).toMatchObject({pageId:id});
     expect(html).not.toContain('_pt');
   });
 
@@ -548,15 +545,13 @@ describe('a document\'s own origin', () => {
     const self = pagesOriginFor(w.secret, site);
     const res = await app.request(`${self}/`, { headers: { cookie: `${COOKIE}=${cookie}` } });
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-security-policy')).toBe(buildDocumentCsp({ self, app: APP, id: w.secret }));
+    expect(res.headers.get('content-security-policy')).toBe(nativeHtmlPolicy(w.secret,APP,{self,app:APP}));
     expect(res.headers.get('content-security-policy')).not.toMatch(/(^|; )sandbox/);
     const html = await res.text();
     expect(html).toContain('Private plan');
     expect(html).not.toContain('data-mx-reader-chrome=""');
-    expect(html).toContain('data-mx-live-direct=""');
-    expect(html).toMatch(new RegExp(`<html [^>]*data-mx-app-origin="${APP.replaceAll('.', '\\.')}"`));
-    const data = island(html)!;
-    expect(data).toMatchObject({ direct: true, signedIn: true, queryUrl: `${self}/a/${w.secret}/query` });
+    expect(html).toContain('data-af="core"');
+    expect(runtime(html)).toMatchObject({pageId:w.secret,appOrigin:APP});
     // Nobody's cookie, or no cookie: the uniform 404 a private document answers.
     expect((await app.request(`${self}/`)).status).toBe(404);
     expect((await app.request(`${self}/`, { headers: { cookie: `${COOKIE}=not-a-session-0123456789abcdef` } })).status).toBe(404);
@@ -573,7 +568,7 @@ describe('a document\'s own origin', () => {
     expect(res.headers.get('access-control-allow-credentials')).toBe('true');
     expect(res.headers.get('vary')).toMatch(/Origin/);
     const body = (await res.json()) as { tables: Record<string, { rows: Array<Record<string, unknown>> }> };
-    expect(body.tables.counted!.rows[0]).toMatchObject({ n: 2 });
+    expect(body).toEqual({tables:{},errors:{}});
     // The same door with no cookie is a stranger's.
     const stranger = await app.request(`${self}/a/${w.secret}/query`, { method: 'POST', headers: { origin: self, 'content-type': 'text/plain' }, body: query(w.secret) });
     expect(stranger.status).toBe(404);
@@ -603,7 +598,7 @@ describe('a document\'s own origin', () => {
     const cookie = `${COOKIE}=${await pagesCookie(app, w.actor, w.secret)}`;
     const self = pagesOriginFor(w.secret, site);
     const t = await mintToken('embedded-owner');
-    const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>Open</h1>', visibility: 'unlisted' } }));
+    const res = await createRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml('<h1>Open</h1>'), visibility: 'unlisted' } }));
     const { id: open } = (await res.json()) as { id: string };
     expect((await app.request(`${self}/a/${open}/raw`, { headers: { cookie } })).status).toBe(200);
     // The reader may read `other`, but its document's origin asks as nobody.
@@ -671,9 +666,9 @@ describe('the document\'s /fetch door: a script reaches the hosts its document d
     await fixture?.close();
     fixture = null;
   });
-  /** A private document of the owner's whose Helmet declares `connect` (its publish is the owner's consent). */
+  /** A private document of the owner's whose native head declares `connect` (its publish is the owner's consent). */
   const declaring = async (w: Awaited<ReturnType<typeof world>>, connect: string[], visibility = 'private') => {
-    const id = await w.publish(`<Helmet><meta name="csp-connect" content="${connect.join(' ')}" /></Helmet><h1>Rates</h1>`, visibility);
+    const id = await w.publish('<h1>Rates</h1>', visibility,`<meta name="csp-connect" content="${connect.join(' ')}">`);
     return id;
   };
 
@@ -741,7 +736,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const port = fixture.port;
     setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
     const PLOTLY = 'https://cdn.plot.ly';
-    const id = await w.publish(`<Helmet><meta name="csp-connect" content="https://127.0.0.1:${port}" /><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Weather</h1>`, 'public');
+    const id = await w.publish('<h1>Weather</h1>','public',`<meta name="csp-connect" content="https://127.0.0.1:${port}"><meta name="csp-script" content="${PLOTLY}">`);
     const user = await createUser({ email: 'mxmx_test_pages_reader@example.com' });
     const t = await mintToken('pages-reader', user.id);
     await claimToken(user.id, t.token);
@@ -757,7 +752,10 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
       expect(doc.status).toBe(200);
       const script = (doc.headers.get('content-security-policy') ?? '').split('; ').find((d) => d.startsWith('script-src ')) ?? '';
       const fetched = await app.request(`${self}/a/${id}/fetch?url=${encodeURIComponent(`http://127.0.0.1:${port}/now`)}`, { headers: { origin: self, cookie } });
-      return { script, fetched };
+      const etag=doc.headers.get('etag');expect(etag).toBeTruthy();
+      const cached=await app.request(`${self}/`,{headers:{cookie,'if-none-match':etag!}});expect(cached.status).toBe(304);
+      const head=await app.request(`${self}/`,{method:'HEAD',headers:{cookie}});expect(head.headers.get('etag')).toBe(etag);expect(head.headers.get('content-security-policy')).toBe(doc.headers.get('content-security-policy'));
+      return { script, fetched,etag };
     };
 
     const before = await framedAs(null);
@@ -769,6 +767,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     expect(granted.status, await granted.clone().text()).toBe(200);
     const trust = /((?:__Host-)?afbin_trust=[^;]+)/.exec(granted.headers.get('set-cookie') ?? '')![1]!;
     const after = await framedAs(trust);
+    expect(after.etag).not.toBe(before.etag);
     expect(after.script.split(' ')).toContain(PLOTLY);
     expect(after.fetched.status, await after.fetched.clone().text()).toBe(200);
     expect(await after.fetched.json()).toEqual({ ok: true });
@@ -782,7 +781,7 @@ describe('a reader\'s consent reaches the document\'s own origin with the pages 
     const w = await world();
     const app = framing();
     const PLOTLY = 'https://cdn.plot.ly';
-    const id = await w.publish(`<Helmet><meta name="csp-script" content="${PLOTLY}" /></Helmet><h1>Chart</h1>`, 'public');
+    const id = await w.publish('<h1>Chart</h1>','public',`<meta name="csp-script" content="${PLOTLY}">`);
     const self = pagesOriginFor(id, site);
     /** A signed-out reader opens the app page (with whatever app-origin cookie they hold) and loads its frame. */
     const framedAsGuest = async (appCookie: string | null) => {

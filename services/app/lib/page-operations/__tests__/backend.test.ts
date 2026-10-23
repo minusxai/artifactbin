@@ -9,7 +9,7 @@ it('refuses forged admitted code before accessing a backend store',async()=>{
 });
 it('uses the admitted immutable backend identity and preserves CAS conflicts',async()=>{
  const calls:unknown[]=[];const store={get:async()=>({value:null,version:0}),set:async(...args:unknown[])=>{calls.push(args);return {ok:false,version:4};}};
- expect(await pageBackendCapability(store,request,'artifactbin.pageBackend.store.set',{value:{n:1},expected:2,backendId:'other'},async()=>record)).toEqual({ok:false,version:4});expect(calls).toEqual([['backend1',{n:1},2]]);
+ expect(await pageBackendCapability(store,request,'artifactbin.pageBackend.store.set',{value:{n:1},expected:2,backendId:'other'},async()=>record)).toEqual({ok:false,version:4});expect(calls).toEqual([['backend1',{n:1},2,{pageId:record.pageId,version:record.version,ownerId:record.ownerId}]]);
 });
 it('admits only the pinned backend declaration before reading owner credentials',async()=>{
  const calls:unknown[]=[];const store={get:async()=>({value:null,version:0}),set:async()=>({ok:true,version:1})},backend={...record,secretBindings:['TOKEN']};

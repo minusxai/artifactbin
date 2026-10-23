@@ -30,6 +30,7 @@ import { replaceDocument } from '../lib/document-navigation';
 import { PAGE_COLUMN } from '../ui/ui';
 import { usePageData } from '../lib/use-page-data';
 import { NotFoundPage } from './NotFound';
+const StarterPage = lazy(() => import('./Starter').then(m => ({default: m.StarterPage})));
 import type { DataAnswer } from './ArtifactData';
 
 const FolderPage = lazy(() => import('./Folder').then((m) => ({ default: m.FolderPage })));
@@ -73,7 +74,7 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
   const page = usePageData<ArtifactAnswer>(() => `/api/page/artifact/${id()}`, { seed: () => served, enabled: () => serverAddress() || (format() !== null && !crossing()) });
   const compiledDocument = () => {
     const answer = page.data();
-    return !!answer?.surface && !answer.folder && !isData(answer) && answer.surface.format === 'html';
+    return !!answer?.surface && !answer.folder && !isData(answer) && answer.surface.format === 'html' && !answer.surface.starter;
   };
   createEffect(() => {
     // A document found by a client navigation: the server's page for it is the compiled one.
@@ -87,6 +88,7 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
     <Match when={failure()?.status === 404}><NotFoundPage /></Match>
     <Match when={page.data()?.folder}>{(folder) => <FolderPage folder={folder()} role={page.data()!.role} workspace={page.data()?.workspace} ownerUsername={page.data()?.ownerUsername} />}</Match>
 
+    <Match when={page.data()?.surface?.starter}><StarterPage answer={page.data() as unknown as import('./Starter').StarterAnswer} /></Match>
     <Match when={isData(page.data())}><ArtifactDataPage answer={page.data() as unknown as DataAnswer} /></Match>
     <Match when={compiledDocument() && serverAddress()}><NotFoundPage /></Match>
   </Switch>;

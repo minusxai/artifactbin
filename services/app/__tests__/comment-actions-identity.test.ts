@@ -1,3 +1,5 @@
+import {nativeHtml} from './native-html-fixture';
+import {nativeAnchor} from './native-annotation-fixture';
 /**
  * A COMMENT IS A RELATION, AND NEVER AN EDIT — through every action there is.
  *
@@ -37,7 +39,7 @@ describe('annotation actions are relations, not edits', () => {
     const made = await createRoute(request('/api/artifacts', {
       method: 'POST',
       token: token.token,
-      json: { markup: '<main id="root"><Card id="card">Hello</Card><p id="other">Old</p></main>' },
+      json: { html:nativeHtml('<main data-af-id="root"><section data-af-id="card">Hello</section><p data-af-id="other">Old</p></main>') },
     }));
     expect(made.status, await made.clone().text()).toBe(201);
     const doc = await made.json();
@@ -45,7 +47,7 @@ describe('annotation actions are relations, not edits', () => {
 
     const actor = { credential: 'session' as const, userId: token.userId!, email: token.email!, emailVerified: true };
     const commented = await commentRoute(request(`/api/my/artifacts/${doc.id}/annotations`, {
-      method: 'POST', actor, json: { node_id: 'card', body: 'Keep this card' },
+      method: 'POST', actor, json: { anchor:nativeAnchor('card'), body: 'Keep this card' },
     }), params(doc.id));
     expect(commented.status, await commented.clone().text()).toBe(201);
     const annotation = await commented.json();
@@ -60,7 +62,7 @@ describe('annotation actions are relations, not edits', () => {
       expect(response.status, `${Object.keys(action)[0]}: ${await response.clone().text()}`).toBeLessThan(300);
       const head = await read();
       expect(head.edit_id, `${Object.keys(action)[0]} moved the head`).toBe(base.edit_id);
-      expect(head.markup).toBe(base.markup);
+      expect(head.html).toBe(base.html);
       expect(await history(doc.id)).toEqual(before);
     }
   });

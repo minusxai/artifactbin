@@ -1,5 +1,6 @@
 import sharp from 'sharp';
-import { graphNodes, readPwaSettings, type PwaSettings } from '../document';
+import {htmlPwaSettings} from '@/lib/html-page';
+import type {HtmlPwaSettings} from '@/lib/html-page';
 import { loadImage } from '@/lib/object-store/image-store';
 import { canReadArtifact, type ArtifactRow } from '@/lib/artifacts';
 import { getArtifactById } from '@/lib/artifacts';
@@ -11,20 +12,8 @@ import { ID_RE } from '../platform/ids-shape';
 import { artifactAppPath, type ArtifactManifest } from './artifact-pwa';
 
 type PwaRow = Pick<ArtifactRow, 'format' | 'version' | 'meta' | 'source' | 'document'>;
-const graphSettings = new WeakMap<object, PwaSettings>();
-
-/** Published rows already carry the parsed graph. Reuse it for every PWA
- * consumer; source-only legacy rows retain the editor's parsing fallback. */
-function settingsForRow(row: PwaRow): PwaSettings {
-  // A stored document the current code does not serve (lib/artifacts/servable) declares no app: its graph is never walked.
-  if (unservable(row)) return {};
-  if (row.document?.kind !== 'graph') return readPwaSettings(row.source ?? '');
-  const cached = graphSettings.get(row.document);
-  if (cached) return cached;
-  const settings = readPwaSettings(graphNodes(row.document));
-  graphSettings.set(row.document, settings);
-  return settings;
-}
+/** Native source is the only install declaration; retired graphs cannot opt in. */
+function settingsForRow(row:PwaRow):HtmlPwaSettings {return row.format==='html'&&!unservable(row)?htmlPwaSettings(row.source??''):{};}
 
 /** Metadata uses the same ACL as content, without export-key admission. */
 export async function readableApp(request: Request, id: string) {

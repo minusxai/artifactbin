@@ -47,10 +47,11 @@ const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
  * an exact file; a leaf is a path under lib/islands without its extension.
  */
 export const ISLANDS_BROWSER_IMPORTERS = [
+  'services/app/lib/html-runtime/browser-client.ts',
   'services/app/solid/',
 ];
 const ISLANDS_BROWSER_LEAVES = [
-  'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
+  'frame-links', 'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
   'live-update', 'person-face', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
 ];
 /*
@@ -134,13 +135,14 @@ const DATAFLOW_BROWSER_LEAVES = [
   'mutation-request', 'mutation-request-builder', 'number-aggregation', 'number-format', 'placement', 'ref-data', 'scalar-input', 'url-values',
 ];
 /*
- * lib/document: server code enters through its index or `server` (node-only); browser-bundled code
+ * lib/document: server code enters through its index, `server` (node-only), or
+ * the pure `csp-extensions` entry used by native policy parsing without compiler dependencies; browser-bundled code
  * imports values from a listed leaf instead, never the index (browserLeavesOnly), because the island and
  * app bundlers cannot drop the rest of a barrel. Its types come from the index (erased), except
  * annotation-edits: re-pointing editor-engine/annotation-map's type import renames esbuild's minified
  * identifiers in the frame-editor chunks (same raw sizes, different bytes and hashes), so it stays a leaf.
  */
-const DOCUMENT_ENTRIES = ['', 'server'];
+const DOCUMENT_ENTRIES = ['', 'server', 'csp-extensions'];
 const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/solid/',
   'services/app/lib/editor-engine/',

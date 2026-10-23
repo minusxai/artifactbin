@@ -33,6 +33,8 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 - [Authentication](references/http-auth.md): verified email, private credential storage and serialized refresh.
 - [HTML publication](references/html-authoring.md): create, conditional replacement, identity and retry recovery.
 - [Runtime](references/html-runtime.md): Apollo local state, remote namespaces and offline behavior.
+- [Installable pages and slides](references/html-authoring.md#installable-page-presentation): static head metadata and explicit capture boundaries.
+- [Offline images](references/html-runtime.md#portable-images) and [reader presence](references/html-sharing.md#reader-presence): download limits and platform-owned preferences.
 - [Datasets](references/html-datasets.md): CSV import, schema discovery and stable dataset IDs.
 - [Backend files](references/html-backends.md): TypeScript resolvers, shared stores and permissions.
 - [Design systems](references/html-design-systems.md): select one, then read its generated native guide.

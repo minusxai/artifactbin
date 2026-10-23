@@ -17,10 +17,10 @@ const PAGE = `<html><head><style>
 <img src="http://127.0.0.1:1/cross-origin.png" alt="">
 <div class="density"></div>
 <!-- Bare decks retain hidden rail miniature slides for hydration. -->
-<nav hidden style="display:none"><div data-mx-slide>cover miniature</div><div data-mx-slide>second miniature</div></nav>
-<div data-mx-slide style="height:100px;background:#c33">one</div>
-<div data-mx-slide style="height:100px;background:#3c3">two</div>
-<div data-mx-slide style="height:100px;background:#33c">three</div></main></body></html>`;
+<nav hidden style="display:none"><div data-af-slide>cover miniature</div><div data-af-slide>second miniature</div></nav>
+<div data-af-slide style="height:100px;background:#c33">one</div>
+<div data-af-slide style="height:100px;background:#3c3">two</div>
+<div data-af-slide style="height:100px;background:#33c">three</div></main></body></html>`;
 const READY_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><div data-mx-managed-frame><iframe></iframe></div></main><script>setTimeout(()=>{document.querySelector('iframe').setAttribute('data-mx-author-ready','');document.querySelector('main').style.background='#3c3'},300)</script></body></html>`;
 /* A script component's mount: the server fallback (red) until the page's script replaces it (green), as the page runtime does. */
 const MOUNT_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px"><div data-mx-mount="Spark" style="width:100px;height:100px;background:#c33"><p style="margin:0">Loading</p></div></main><script>setTimeout(()=>{const m=document.querySelector('[data-mx-mount]');m.replaceChildren();const d=document.createElement('div');d.style.cssText='width:100px;height:100px;background:#3c3';m.append(d)},400)</script></body></html>`;

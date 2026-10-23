@@ -116,12 +116,12 @@ async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: Access
 /**
  * THE HOST'S DOCUMENT-EDITOR GRANT (production: ADMIN__EMAILS), decided once per request by the resolver
  * (`actor.documentEditor`) and applied HERE and in the SQL scopes (lib/artifacts/table `scopeAtLeast`) by
- * one rule: it reaches exactly what a link could reach — a MARKUP document that is not private — and makes
+ * one rule: it reaches exactly what a link could reach — a page document that is not private — and makes
  * the holder its editor. Never a private artifact of any kind, never a dataset, never ownership (delete,
  * sharing). Like the link, it lists nothing: a listing reads `roleWithoutLink`, which this is not part of.
  */
 export function documentEditorReaches(row: Partial<Pick<ArtifactRow, 'format' | 'visibility'>>, actor: Pick<AccessActor, 'documentEditor'>): boolean {
-  return actor.documentEditor && row.format === 'markup' && row.visibility !== undefined && row.visibility !== 'private';
+  return actor.documentEditor && (row.format === 'markup' || row.format === 'html') && row.visibility !== undefined && row.visibility !== 'private';
 }
 
 /**

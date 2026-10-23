@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { createServer } from 'node:http';
 import { request } from 'playwright';
-import { verifiedAccountSession } from '../lib/start-doc.mjs';
+import { verifiedAccountSession, readDocumentHead } from '../lib/start-doc.mjs';
 import { isSignedInAs } from '../lib/mail-login.mjs';
 
 async function withSessionServer(handler, verify) {
@@ -71,4 +71,18 @@ it.each([[503, 'account', accountEmail], [200, 'anon', accountEmail], [200, 'acc
     await expect(isSignedInAs(accountPage(client, base), accountEmail)).resolves.toBe(false);
     expect(calls()).toBe(1);
   });
+});
+
+it('reads native publication guards with the API credential only in the HTTP header', async () => {
+  let received;
+  const head = await readDocumentHead('https://example.test', 'page12', 'api-credential', async (url, init) => {
+    received = {url, init}; return Response.json({format: 'html', version: 4, state: 'observed', source: '<html></html>'});
+  });
+  expect(head.version).toBe(4); expect(head.state).toBe('observed');
+  expect(received.url).toBe('https://example.test/api/artifacts/page12');
+  expect(received.init.headers.Authorization).toBe('Bearer api-credential');
+  expect(received.init.redirect).toBe('error');
+});
+it.each([Response.json({error:'not_found'},{status:404}), Response.json({format:'markup',version:1,state:'old'})])('refuses unavailable or retired fixture heads', async response => {
+  await expect(readDocumentHead('https://example.test','page12','credential',async()=>response)).rejects.toThrow(/cannot read|native HTML/);
 });

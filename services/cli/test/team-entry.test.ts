@@ -60,23 +60,16 @@ test('foreground team process serves real login and excludes another database ow
   assert.ok(first.output().includes(`npx --yes @afbin/cli@latest setup --server http://app.lvh.me:${port}`));
   assert.match(first.output(),/\[dev-mail\] otp/);
   const response=await fetch(`http://app.lvh.me:${port}/api/auth/get-session`);assert.equal(response.status,200);assert.equal(await response.json(),null);
-  // The shipped host authenticates and submits a published lambda to a real signed HTTP runner.
+  // The retained host serves normal account authentication and native HTML publication.
   const origin=`http://app.lvh.me:${port}`,email='mxmx_test_team_lambda@example.test';
   const post=async(path:string,body:unknown,cookie='')=>fetch(origin+path,{method:'POST',headers:{origin,cookie,'content-type':'application/json'},body:JSON.stringify(body)});
   assert.equal((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status,200);
   const mail=(await readFile(join(directory,'outbox.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));
   const login=await post('/api/auth/sign-in/email-otp',{email,otp:mail.find(message=>message.to===email).otp});assert.equal(login.status,200);
   const cookie=login.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
-  const published=await post('/api/my/artifacts',{markup:'<Helmet><Value name="items" type="table" value={[{n:42}]} /><Query name="answer">{`select n from items`}</Query><script type="server">{`import {query} from "page"; const answer=query("$answer"); export default async input => ({message: "Hello " + input.name, rows: await answer.ready})`}</script></Helmet><p>Hello lambda</p>',visibility:'private'},cookie);
+  const published=await post('/api/my/artifacts',{html:'<!doctype html><html><head><title>Host proof</title></head><body><p>Native host proof</p></body></html>',visibility:'private'},cookie);
   assert.equal(published.status,201,await published.clone().text());const artifact=await published.json();
-  const admitted=await post(`/api/artifacts/${artifact.id}/runs`,{requestId:'hello-1',input:{name:'OSS'}},cookie);
-  assert.equal(admitted.status,202,await admitted.clone().text());const {runId}=await admitted.json();
-  const deadline=Date.now()+15000;let result;
-  do{const status=await fetch(origin+'/api/runs/'+runId,{headers:{cookie}});assert.equal(status.status,200);result=await status.json();if(result.receipt)break;await sleep(20);}while(Date.now()<deadline);
-  assert.equal(result.status,'completed',JSON.stringify(result));assert.deepEqual(result.output,{message:'Hello OSS',rows:[{n:42}]});
-  const schedule=await post(`/api/artifacts/${artifact.id}/schedules`,{cron:'*/5 * * * *',timezone:'UTC',input:{name:'scheduled OSS'}},cookie);
-  assert.equal(schedule.status,201,await schedule.clone().text());const {id:scheduleId}=await schedule.json();
-  assert.equal((await fetch(origin+'/api/schedules/'+scheduleId,{method:'DELETE',headers:{origin,cookie}})).status,200);
+  assert.equal(artifact.format,'html');assert.match(artifact.html,/Native host proof/);
   const second=launch();assert.notEqual(await exited(second.child),0);
   const owned=await realpath(directory);
   assert.match(second.output(),new RegExp(`Another afbin serve is already using ${owned.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\.`));

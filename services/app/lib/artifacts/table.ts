@@ -154,11 +154,11 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
   `(artifacts.visibility <> 'private' AND COALESCE(artifacts.link_role, 'viewer') IN (${shareRolesAtLeast(min).map((r) => `'${r}'`).join(', ')}))`;
 
 /**
- * The host's document-editor grant, in SQL: what a link could reach, for markup only — the mirror of
+ * The host's document-editor grant, in SQL: what a link could reach, for page documents only — the mirror of
  * lib/artifacts/access `documentEditorReaches`. It grants `editor`, which reaches every `min` it is asked
  * for, and only ever inside ACCOUNT_REACH_SQL (scopeAtLeast below).
  */
-const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format = 'markup' AND artifacts.visibility <> 'private')";
+const DOCUMENT_EDITOR_PREDICATE = "(artifacts.format IN ('markup','html') AND artifacts.visibility <> 'private')";
 
 /**
  * The SQL MIRROR of the lattice: the owner, an account holding any share role

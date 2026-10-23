@@ -1,3 +1,4 @@
+import {htmlAssetLinks} from '@/lib/html-page';
 import { type ArtifactRow, canReadArtifact } from '@/lib/artifacts';
 import { artifactQuery, LIVE_ARTIFACT_SQL } from '@/lib/artifacts/table';
 /**
@@ -26,7 +27,7 @@ import { createHmac } from 'node:crypto';
 import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { ALIAS_ORIGINS, ASSETS_ORIGIN, AUTH_SECRET, CUSTOM_DOMAINS_TARGET, PUBLIC_BASE_URL } from '@/lib/platform/config';
-import { urlHash, collectExternalAssetUrls } from '@/lib/document';
+import { urlHash } from '@/lib/document';
 import { getDb } from '@/lib/platform/db';
 import { canonicalArtifactPath, domainPostPath } from '@/lib/http/urls';
 import { ANONYMOUS_ACTOR, ownerUsername } from '@/lib/accounts';
@@ -465,7 +466,7 @@ export async function servesEmbeddedArtifact(ownerId: string, row: ArtifactRow):
 export async function servesWebAsset(ownerId: string, hash: string): Promise<boolean> {
   const db = await getDb();
   const posts = await artifactQuery<{ source: string | null }>(db,`SELECT source,document FROM artifacts WHERE ${OWNER_POSTS_SQL} AND (source IS NOT NULL OR document IS NOT NULL)`, [ownerId]);
-  return posts.rows.some((post) => collectExternalAssetUrls(post.source!).all.some((url) => urlHash(url) === hash));
+  return posts.rows.some((post) => htmlAssetLinks(post.source??'').imageUrls.some((url) => urlHash(url) === hash));
 }
 
 /** The canonical address of a post: on the custom host, over HTTPS (the edge serves nothing else). */

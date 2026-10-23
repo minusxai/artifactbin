@@ -1,3 +1,5 @@
+import {nativeHtml} from './native-html-fixture';
+import {nativeAnchor} from './native-annotation-fixture';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { identityForUser } from '@/lib/accounts';
 import { expect, it } from 'vitest';
@@ -13,19 +15,19 @@ import { getDb, measureQueries } from '@/lib/platform';
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-const DOC = '<Helmet><title>Report</title></Helmet><p id="intro">An introduction paragraph.</p><div id="findings">Revenue grew 40% in Q3.</div>';
+const DOC = '<p data-af-id="intro">An introduction paragraph.</p><div data-af-id="findings">Revenue grew 40% in Q3.</div>';
 
 /** A document with `threads` open roots; every third has a reply, with replies. */
 async function seed(threads: number) {
   const t = await mintToken('agent');
-  const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: DOC } }));
+  const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html: nativeHtml(DOC) } }));
   const doc = (await made.json()) as { id: string; edit_id: string };
   const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
   const tokenActor = identityForUser(t.userId!, t.id, t.email!);
   const db = await getDb();
   const ids: string[] = [];
   for (let i = 0; i < threads; i++) {
-    const res = await myCreateAnnotationRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor, json: { node_id: i % 2 ? 'findings' : 'intro', edit_id: doc.edit_id, body: `thread ${i}` } }), params({ id: doc.id }));
+    const res = await myCreateAnnotationRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor, json: { anchor: nativeAnchor(i % 2 ? 'findings' : 'intro'), edit_id: doc.edit_id, body: `thread ${i}` } }), params({ id: doc.id }));
     expect(res.status, await res.clone().text()).toBe(201);
     ids.push(((await res.json()) as { id: string }).id);
   }
@@ -73,30 +75,32 @@ it('loads replies only for the roots a page selects', async () => {
 });
 
 
-it('answers the artifact GET with the open count and the inline threads, in a number of statements that does not grow with them', async () => {
+it('keeps native source GET independent of comment volume and exposes threads on the dedicated endpoint', async () => {
   const read = async (f: Awaited<ReturnType<typeof seed>>) => measureQueries(async () => {
     const res = await getArtifactRoute(request(`/api/artifacts/${f.doc.id}`, { token: f.t.token }), params({ id: f.doc.id }));
     return await res.json() as {annotations:Array<{id:string}>;open_annotations:number};
   });
   const one = await seed(1), ten = await seed(10);
   const small = await read(one), large = await read(ten);
-  expect(large.value.open_annotations).toBe(10);
-  expect(large.value.annotations.map(a => a.id)).toEqual(ten.ids);
+  expect(large.value).not.toHaveProperty('annotations');
+  expect(large.value).not.toHaveProperty('open_annotations');
+  const listed=await listAnnotationsRoute(request(`/api/artifacts/${ten.doc.id}/annotations`,{token:ten.t.token}),params({id:ten.doc.id}));
+  expect((await listed.json()).annotations.map((a:{id:string})=>a.id)).toEqual(ten.ids);
   expect(large.stats.count).toBe(small.stats.count);
 });
 
 /** A ~2.5 MB page: the access decision for its comments must not read it. */
-const BIG_DOC = `<Helmet><title>Big report</title></Helmet><p id="intro">An introduction paragraph.</p><div id="findings">Revenue grew 40% in Q3.</div>${Array.from({ length: 12000 }, (_, i) => `<p>Filler paragraph number ${i} with enough words to weigh about two hundred bytes of markup, repeated until the page is large.</p>`).join('')}`;
+const BIG_DOC = `<p data-af-id="intro">An introduction paragraph.</p><div data-af-id="findings">Revenue grew 40% in Q3.</div>${Array.from({ length: 12000 }, (_, i) => `<p>Filler paragraph number ${i} with enough words to weigh about two hundred bytes of markup, repeated until the page is large.</p>`).join('')}`;
 
 async function seedBig(threads: number) {
   const t = await mintToken('agent');
-  const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: BIG_DOC } }));
+  const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { html: nativeHtml(BIG_DOC) } }));
   const doc = (await made.json()) as { id: string; edit_id: string };
   expect(made.status).toBe(201);
   const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
   const tokenActor = identityForUser(t.userId!, t.id, t.email!);
   for (let i = 0; i < threads; i++) {
-    const res = await myCreateAnnotationRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor, json: { node_id: i % 2 ? 'findings' : 'intro', edit_id: doc.edit_id, body: `thread ${i}` } }), params({ id: doc.id }));
+    const res = await myCreateAnnotationRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor, json: { anchor: nativeAnchor(i % 2 ? 'findings' : 'intro'), edit_id: doc.edit_id, body: `thread ${i}` } }), params({ id: doc.id }));
     expect(res.status, await res.clone().text()).toBe(201);
   }
   return { t, doc, actor, tokenActor };
@@ -131,7 +135,7 @@ it('reads the document of a large page once, only to anchor the threads it lists
   const paged = await readingDocument(() => listAnnotationPageFor(f.tokenActor, f.doc.id, { status: 'open', limit: 10 }));
   expect(paged.documentRows).toBe(1);
   // The artifact GET inlines the open threads from the row it already holds: the unchanged reference.
-  const inline = await getArtifactRoute(request(`/api/artifacts/${f.doc.id}`, { token: f.t.token }), params({ id: f.doc.id }));
+  const inline = await listAnnotationsRoute(request(`/api/artifacts/${f.doc.id}/annotations`, { token: f.t.token }), params({ id: f.doc.id }));
   const expected = ((await inline.json()) as { annotations: unknown[] }).annotations;
   expect(expected).toHaveLength(4);
   expect(JSON.parse(JSON.stringify(paged.value!.annotations))).toEqual(expected);

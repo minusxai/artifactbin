@@ -1,20 +1,11 @@
 /**
- * The story `<Grid>`/`<GridItem>` positioning classes MUST survive the per-story Tailwind
- * compile. They live as literal class strings in lib/story-ui/recipe-classes.ts, reach every
- * story's stylesheet through the recipe-class union (STORY_UI_RECIPE_CLASSES), and are the
- * ONLY thing positioning grid items in view mode and in captures — if the compiler ever
- * stops emitting one of these calc()/container-query utilities, grids silently collapse to
- * a stack of unpositioned divs. This pins actual CSS emission, not candidate extraction.
+ * Explicit HTML layout utilities still compile after the Grid/GridItem renderer's
+ * removal. Retained component chrome still enters through the generated union.
+ * Check emitted CSS as well as candidate extraction so styling cannot vanish silently.
  */
 import { compileStoryCss, STORY_RECIPE_UNION } from '../story-css.server';
 import { STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
 
-const GRID_STORY =
-  '<div class="mx-story" data-design="tw">' +
-  '<Grid><GridItem x={0} y={0} w={8} h={5}><p>alpha</p></GridItem></Grid>' +
-  '</div>';
-
-/** The load-bearing grid classes, exactly as written in lib/story-ui/recipe-classes.ts. */
 const GRID_CLASSES = [
   'h-[calc(var(--g-rows)*var(--g-rh))]',
   'left-[calc(var(--gi-x)/var(--g-cols)*100%)]',
@@ -27,14 +18,23 @@ const GRID_CLASSES = [
   'p-[3px]',
 ];
 
+// Geometry is authored HTML now; no deleted JSX renderer injects these classes.
+const GRID_STORY = `<section class="mx-story @container" data-design="tw" style="--g-cols:12;--g-rh:86px;--g-rows:5">
+  <div class="relative w-full ${GRID_CLASSES[0]} @max-2xl:h-auto">
+    <div class="absolute ${GRID_CLASSES.slice(1).join(' ')}" style="--gi-x:0;--gi-y:0;--gi-w:8;--gi-h:5">alpha</div>
+  </div>
+</section>`;
+
 describe('story grid CSS compilation', () => {
-  it('every grid positioning class is in the recipe union (extractor coverage)', () => {
-    for (const cls of GRID_CLASSES) {
+  it('retained card and data chrome stays in the recipe union and emitted stylesheet', async () => {
+    const css = await compileStoryCss('<section><p>Content without chrome classes</p></section>');
+    for (const cls of ['bg-card', 'border-border', 'tabular-nums']) {
       expect(STORY_UI_RECIPE_CLASSES).toContain(cls);
+      expect(css).toContain(`.${cls} {`);
     }
   });
 
-  it('the story compile EMITS a rule for every grid positioning class', async () => {
+  it('explicit HTML grid classes emit their geometry, responsive fallback and gutter rules', async () => {
     const css = await compileStoryCss(GRID_STORY);
     expect(css).toBeTruthy();
     // Distinctive value fragments that only appear if the utility actually compiled
@@ -58,15 +58,9 @@ describe('story grid CSS compilation', () => {
   });
 });
 
-/*
- * Moved here from story-css-question-title.test.ts: the same union-membership →
- * emission pair for the other set of classes that reaches the sheet only through
- * a recipe union. The `<Question>` title strip is chart chrome in the mono face,
- * and its classes never appear in story markup, so a candidate the compiler drops
- * fails silently as "the title just looks sans".
- */
-describe('the Question title chrome CSS', () => {
-  const TITLE_STORY = '<div className="p-4"><Question title="t" data="ref:dsOne01" /></div>';
+/** Chart title chrome reaches the sheet through the recipe union, not authored classes. */
+describe('retained chart title chrome CSS', () => {
+  const TITLE_STORY = '<section class="p-4"><h2>Chart title</h2></section>';
 
   it('font-mono is in the recipe union (extractor coverage)', () => {
     expect(STORY_RECIPE_UNION).toContain('font-mono');

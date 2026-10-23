@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 /**
  * THE FIRST PAINT IS THE FINAL ONE. A page whose data the SPA would fetch
  * immediately is served WITH that data inlined, so nothing settles a beat
@@ -35,7 +36,7 @@ async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o'); await claimToken(owner.id, t.token);
   const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
-  return { owner, pub: await mk({ title: 'Pub', markup: '<div><p>hi</p></div>', visibility: 'public' }), priv: await mk({ title: 'Priv', markup: '<div><p>secret</p></div>', visibility: 'private' }) };
+  return { owner, pub: await mk({ title: 'Pub', html:nativeHtml('<div><p>hi</p></div>'), visibility: 'public' }), priv: await mk({ title: 'Priv', html:nativeHtml('<div><p>secret</p></div>'), visibility: 'private' }) };
 }
 
 /** A bundled family's latin upright — what a first-screen preload names. */

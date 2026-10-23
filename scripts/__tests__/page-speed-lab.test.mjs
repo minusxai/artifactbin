@@ -118,30 +118,31 @@ describe('size-only determinism', () => {
 });
 
 describe('page-speed fixtures', () => {
-  it('publishes the dataset first and points the dashboard at it', async () => {
+  it('publishes native workloads with the sales snapshot and retained asset links', async () => {
     const bodies = [];
     const published = await publishPageSpeedFixtures(async body => { bodies.push(body); return { id: `id${bodies.length}` }; });
     expect(bodies[0]).toMatchObject({ title: 'Perf sales', visibility: 'unlisted' });
     expect(bodies[0].dataset.split('\n')[0]).toBe('month,region,product,revenue,units');
     expect(published.map(f => f.key)).toEqual(['prose', 'kit', 'dashboard', 'deck', 'mermaid', 'mermaid-industry', 'kitchen']);
-    // The same diagram in a theme's web fonts: the drawing a stored copy is made of (the plain one draws in system fonts).
-    const themed = bodies.find(body => body.title === 'Perf F mermaid, industry theme');
-    expect(themed.theme).toBe('industry');
-    expect(themed.markup).toBe(bodies.find(body => body.title === 'Perf E mermaid').markup);
-    expect(bodies.find(body => body.title === 'Perf E mermaid').theme).toBeUndefined();
-    const dashboard = bodies.find(body => body.title === 'Perf C dashboard');
-    expect(dashboard.template).toBe('dashboard');
-    expect(dashboard.markup).toContain('src="ref:id1"');
-    expect(dashboard.markup).not.toContain('{{sales}}');
-    expect(bodies.find(body => body.title === 'Perf D deck').template).toBe('deck');
-    expect(PAGE_SPEED_FIXTURES.find(f => f.key === 'mermaid').painted).toEqual({ diagrams: 1 });
-    const kitchen = bodies.find(body => body.title === 'Perf G kitchen sink');
-    const beforeKitchen = bodies.slice(0, bodies.indexOf(kitchen));
-    for (const field of ['dataset', 'viz', 'image', 'pdf']) {
-      const index = beforeKitchen.findIndex(body => body.title.startsWith('kit ') && body[field]);
-      expect(index, `${field} is published before the kitchen sink`).toBeGreaterThanOrEqual(0);
-      expect(kitchen.markup).toContain(`ref:id${index + 1}`);
+    for(const body of bodies.filter(body=>body.html)){
+      expect(body.html).toMatch(/^<!doctype html>/i);
+      expect(body).not.toHaveProperty('markup');
+      expect(body.html).toContain('/af/v1/core.js');
+      expect(body.html).not.toContain('{{sales}}');
     }
+    const dashboard=bodies.find(body=>body.title==='Perf C dashboard');
+    expect(dashboard.html).toContain('data-af="state"');
+    expect(dashboard.html).toContain('await client.query');
+    expect(dashboard.html).toContain('Revenue by product');
+    expect(PAGE_SPEED_FIXTURES.find(f=>f.key==='mermaid').painted).toEqual({diagrams:1});
+    const kitchen=bodies.find(body=>body.title==='Perf G kitchen sink');
+    const beforeKitchen=bodies.slice(0,bodies.indexOf(kitchen));
+    for(const field of ['image','pdf']){
+      const index=beforeKitchen.findIndex(body=>body[field]);
+      expect(index, `${field} is published before the kitchen sink`).toBeGreaterThanOrEqual(0);
+      expect(kitchen.html).toContain(`/a/id${index+1}`);
+    }
+
   });
 });
 

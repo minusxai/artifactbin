@@ -1,6 +1,6 @@
 import {artifactState} from './state';
-import {PREPARED_METADATA_HINT,respondToEdit,artifactToWire,committedOpenAnnotations,parseShareEntries,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './wire';
-import { applyEditFor, isVersionConflict, setMetadataFor, type MetadataPatch } from './store';
+import {artifactToWire,committedOpenAnnotations,parseShareEntries,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './wire';
+import { isVersionConflict, setMetadataFor, type MetadataPatch } from './store';
 import { getArtifactFor, getOwnedArtifactFor } from './rows';
 import { writerFor } from './table';
 import type { AccessActor } from '@/lib/accounts';
@@ -9,9 +9,8 @@ import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schem
 import {json} from '../http/http';
 import {validateDatasetPolicyForRow} from '../datasets/policy/validation';
 export async function updateMetadataFromBody(actor:AccessActor,id:string,body:Record<string,unknown>,base:string,dryRun=false):Promise<Response>{
- if(Object.hasOwn(body,'document_update'))return respondToEdit(base,body,input=>applyEditFor(actor,id,input,{dryRun}));
+ if(['document_update','markup','jsx','markdown','source','operations','annotation_ops','edit_id','old_string','new_string'].some(key=>Object.hasOwn(body,key)))return json({error:'native_html_required',hint:'Replace page content with the complete html field and observed expectedVersion/expectedState through PUT. Metadata PATCH accepts metadata fields only.'},400);
  const current=await getArtifactFor(actor,id);if(!current)return json({error:'not_found'},404);
- if(current.format==='markup')return json({error:'jsonb_operations_required',hint:PREPARED_METADATA_HINT},400);
  const expected=parseExpectedVersion(body,false);if(expected instanceof Response)return expected;
  if(!expected.expectedState)return json({error:'state_required',hint:'Read the artifact and send its state as expectedState.'},400);
  const allowed=new Set(['expectedState','expectedVersion','expectedPolicyRevision','policy','title','description','theme','template','colorMode','visibility','linkRole','parent_id','access','shares']);

@@ -1,3 +1,5 @@
+import {nativeHtml} from './native-html-fixture';
+import {nativeAnchor} from './native-annotation-fixture';
 import {afterEach, expect, it, vi} from 'vitest';
 import { identityForUser } from '@/lib/accounts';
 import { getDb } from '@/lib/platform/db';
@@ -16,9 +18,9 @@ const params=<T extends Record<string,string>>(p:T)=>({params:Promise.resolve(p)
 it('resumes from a checkpoint and delivers a human reply on an older thread exactly once per page',async()=>{
  const t=await mintAccountToken('agent');
  const actor={credential:'session' as const,userId:t.userId!,email:t.email!,emailVerified:true};
- const made=await createArtifact(request('/api/artifacts',{method:'POST',token:t.token,json:{markup:'<p id="intro">Read this</p>'}}));expect(made.status).toBe(201);
+ const made=await createArtifact(request('/api/artifacts',{method:'POST',token:t.token,json:{html:nativeHtml('<p data-af-id="intro">Read this</p>')}}));expect(made.status).toBe(201);
  const doc=await made.json();
- const old=await createComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor,json:{node_id:'intro',edit_id:doc.edit_id,body:'Older root'}}),params({id:doc.id}));expect(old.status).toBe(201);const thread=await old.json();
+ const old=await createComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor,json:{anchor:nativeAnchor('intro'),edit_id:doc.edit_id,body:'Older root'}}),params({id:doc.id}));expect(old.status).toBe(201);const thread=await old.json();
  const read=(after:string)=>changes(request(`/api/artifacts/${doc.id}/annotations/changes?after=${encodeURIComponent(after)}&wait=0`,{token:t.token}),params({id:doc.id}));
  const baseline=await read('now');expect(baseline.status).toBe(200);const start=await baseline.json();expect(start.events).toEqual([]);expect(start.next_cursor).toEqual(expect.any(String));
  const posted=await reply(request(`/api/my/artifacts/${doc.id}/annotations/${thread.id}`,{method:'POST',actor,json:{reply:'New human reply'}}),params({id:doc.id,annId:thread.id}));expect(posted.status).toBe(200);
@@ -33,12 +35,12 @@ const human: AnnotationAuthor = {kind: 'human', label: 'Reviewer', transport: 'b
 afterEach(async () => { vi.restoreAllMocks(); await live.resetLiveSubscriptions(); });
 async function fixture() {
  const token = await mintAccountToken('monitor');
- const made = await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p id="intro">Read this</p>'}}));
+ const made = await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml('<p data-af-id="intro">Read this</p>')}}));
  expect(made.status).toBe(201);
  const doc = await made.json();
  const actor = identityForUser(token.userId, token.id);
  const open = async (body:string, author=human) => {
-  const comment = await createAnnotationFor(actor,doc.id,{nodeId:'intro',body},author);
+  const comment = await createAnnotationFor(actor,doc.id,{anchor:nativeAnchor('intro'),body},author);
   expect(comment).toMatchObject({id:expect.any(String)});
   return comment as {id:string};
  };
@@ -159,7 +161,7 @@ it('resolve and reopen changes never appear as comment events',async()=>{
 });
 it('caps four account waits across credentials/artifacts and releases aborted slots',async()=>{
  const f=await fixture();const extra=await mintAccountToken('another agent',f.token.userId);
- const made=await createArtifact(request('/api/artifacts',{method:'POST',token:extra.token,json:{markup:'<p>Other document</p>'}}));expect(made.status).toBe(201);const second=await made.json();
+ const made=await createArtifact(request('/api/artifacts',{method:'POST',token:extra.token,json:{html:nativeHtml('<p>Other document</p>')}}));expect(made.status).toBe(201);const second=await made.json();
  const secondCursor=(await (await f.read('now','',undefined,second.id,extra.token)).json()).next_cursor;
  const controls=Array.from({length:4},()=>new AbortController());
  const waiting=controls.map((control,index)=>f.read(index===3?secondCursor:f.cursor,'wait=60',control.signal,index===3?second.id:f.doc.id,index%2?extra.token:f.token.token));

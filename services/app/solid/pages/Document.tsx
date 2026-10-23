@@ -1,3 +1,5 @@
+import {ReaderPresenceControls} from '../document/ReaderPresenceControls';
+import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
 import { InstallArtifact } from '../document/InstallArtifact';
@@ -128,7 +130,7 @@ export function DocumentPage(): JSX.Element {
     try {
       const head = await backend.load();
       if (!head) throw new Error('Social preview is unavailable. Refresh and try again.');
-      setPreviewHead({ source: head.markup ?? '', editId: head.edit_id, version: head.version });
+      setPreviewHead({ source: head.html ?? '', editId: head.edit_id, version: head.version });
       setSocialPreviewOpen(true); setSharingOpen(false);
     } catch (cause) { setMetadataError(cause instanceof Error ? cause.message : 'Could not load social preview.'); }
   };
@@ -136,6 +138,7 @@ export function DocumentPage(): JSX.Element {
   const [nonce, setNonce] = createSignal<string | null>(null);
   const phone = createIsPhoneViewport();
   const runtimeRef: DocumentRuntimeRef = { current: null };
+  const readerPresence = createReaderPresence({id: id!, revision: String(page?.archived?.version ?? page?.surface?.version ?? 1), runtimeRef, nonce, enabled: () => ready() && page?.surface?.format === 'html' && !archivedNow()});
   let story: FramedStory | null = null;
   /** The document's frame (create-framed-story), once this page has adopted the one the server drew. */
   const [documentFrame, setDocumentFrame] = createSignal<HTMLIFrameElement | null>(null);
@@ -324,7 +327,7 @@ export function DocumentPage(): JSX.Element {
       membership={page!.surface?.membership}
       panel={panel} setPanel={setPanel} mode={appAppearance} onMode={chooseMode}
       onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onMembership={() => act('membership')}
-      controls={(close) => <DocumentActions groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
+      controls={(close) => <><ReaderPresenceControls preferences={readerPresence.preferences()} onChange={readerPresence.setPreference} viewers={readerPresence.viewers()} /><DocumentActions groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
         onSettings={() => { close(); setSettingsOpen(true); }}
         onSocialPreview={() => { close(); void openSocialPreview(); }}
         onRenamed={(title) => setRenamed({ title, version: currentVersion() })}
@@ -333,7 +336,7 @@ export function DocumentPage(): JSX.Element {
         openAnnotations={openAnnotationCount()} forkedFrom={page?.surface?.author?.forkedFrom ?? null} hideFork={!phone()}
         membershipRevision={membershipRevision()} onMembershipChange={() => setMembershipRevision((n) => n + 1)}
         onShare={() => { close(); setSharingOpen(true); }}
-        onDeleted={isOwner() ? () => window.location.assign('/') : undefined} />} />
+        onDeleted={isOwner() ? () => window.location.assign('/') : undefined} /></>} />
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
       <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc'}>

@@ -1,26 +1,23 @@
+import {nativeAnchor} from './native-annotation-fixture';
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness, mintAccountToken as mintToken, setSession, request } from '@/__tests__/harness';
-import { applyEditFor, type ArtifactRow, canReadArtifact, changeMembership, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, getVersionFor, invitePeople, membershipState, mentionCandidates, parseShareEntries, updateSharingFor } from '@/lib/artifacts';
+import { replaceArtifactFor, artifactState, type ArtifactRow, canReadArtifact, changeMembership, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, invitePeople, membershipState, mentionCandidates, parseShareEntries, updateSharingFor } from '@/lib/artifacts';
 import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 import { artifactQuery } from '@/lib/artifacts/table';
-import { committedHeadsSettled } from '@/lib/artifacts/store';
 import { linkRoleOf } from '@/lib/artifacts/access';
 import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, NO_IDENTITY, identityForUser, type RequestIdentity, claimToken, createUser, setUserEmail, ensureUsername, setRelationState, has, count, linked, link } from '@/lib/accounts';
-import { documentEdit, documentEditBody, documentPublicationBody } from '@/__tests__/prepared-document';
 import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor } from '@/lib/annotations';
 import { PUT as putArtifactRoute, GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
-import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as createArtifactRoute, POST as create, GET as listArtifactsRoute } from '@/app/api/artifacts/route';
 import { GET as getSharingRoute, PUT as putSharingRoute, GET as read, PUT as write } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { observedRequest } from '@/__tests__/conditional-request';
 import { DELETE as remove, PATCH as metadata, DELETE as deleteMineRoute, GET as getMineRoute, PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { POST as restore } from '@/app/api/my/artifacts/[id]/restore/route';
-import { advanceGraph } from '@/lib/document/document-graph-patch';
-import { graphSource } from '@/lib/document/document-graph';
 import { attachActor } from '@artifactbin/utils';
 import { POST as annotateBearerRoute } from '@/app/api/artifacts/[id]/annotations/route';
-import { POST as editsMineRoute, POST as patchMineRoute, POST as revertMineRoute } from '@/app/api/my/artifacts/[id]/edits/route';
+import { POST as revertMineRoute } from '@/app/api/my/artifacts/[id]/revert/route';
 import { GET as versionsMineRoute } from '@/app/api/my/artifacts/[id]/versions/route';
 import { POST as createAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { DELETE as deleteAnnotationRoute, POST as actOnAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
@@ -28,7 +25,6 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as versionMineRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { getDb } from '@/lib/platform';
-import { storedCompiledDataflow } from '@/lib/document/parsed-artifact-metadata';
 import { hasExplicitNotificationMembership } from '@/lib/notifications';
 import { POST } from '@/app/api/my/artifacts/[id]/members/route';
 
@@ -47,7 +43,7 @@ import { POST } from '@/app/api/my/artifacts/[id]/members/route';
  */
 const harness = useAppHarness();
 
-const SOURCE = '<div id="root"><p>hello</p></div>';
+const SOURCE = '<div id="root" data-af-id="root"><p>hello</p></div>';
 
 /** An account plus one of its claimed tokens — the ordinary signed-in owner. */
 async function account(email: string) {
@@ -66,7 +62,7 @@ async function head(id: string): Promise<ArtifactRow | null> {
 
 /** A document of `owner` at `visibility`, its link carrying `linkRole` when one is given. */
 async function docOf(owner: Account, visibility: Visibility, linkRole?: ShareRole): Promise<ArtifactRow> {
-  const row = await createArtifact(owner.token.id, owner.user.id, { format: 'markup', source: SOURCE, meta: {}, visibility, title: 't' });
+  const row = await createArtifact(owner.token.id, owner.user.id, { format: 'html', source: nativeHtml(SOURCE), meta: {}, visibility, title: 't' });
   if (!linkRole) return row;
   await updateSharingFor(identityForUser(owner.user.id, ''), row.id, { linkRole });
   return (await head(row.id))!;
@@ -172,7 +168,7 @@ type Asked = Parameters<typeof effectiveRole>[1];
 const ROLE_CASES: Array<[string, () => Promise<Array<[string, ArtifactRow, Asked, ArtifactRole]>>]> = [
   ['a bare token owns what it created — an anonymous owner is still an owner', async () => {
     const token = await mintToken('anon', null);
-    const row = await createArtifact(token.id, token.userId, { format: 'markup', source: SOURCE, meta: {}, visibility: 'unlisted', title: 't' });
+    const row = await createArtifact(token.id, token.userId, { format: 'html', source: nativeHtml(SOURCE), meta: {}, visibility: 'unlisted', title: 't' });
     return [['its token', row, identityForUser(null, token.id), 'owner'], ['another token', row, identityForUser(null, 'tok_someone_else'), 'viewer']];
   }],
   ['claimed account ownership requires resolved identity, never the creating token alone', async () => {
@@ -349,7 +345,7 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const made = await createAnnotationFor(
       identityForUser(stranger.user.id, stranger.token.id),
       row.id,
-      { nodeId: 'root', baseEditId: row.edit_id, body: 'a stranger with the link says something' },
+      { anchor:nativeAnchor('root'), baseEditId: row.edit_id, body: 'a stranger with the link says something' },
       { kind: 'human', label: 'stranger', transport: 'browser' },
     );
     expect(made, JSON.stringify(made)).toMatchObject({ status: 'open' });
@@ -366,7 +362,7 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const made = await createAnnotationFor(
       identityForUser(stranger.user.id, stranger.token.id),
       row.id,
-      { nodeId: 'root', baseEditId: row.edit_id, body: 'nope' },
+      { anchor:nativeAnchor('root'), baseEditId: row.edit_id, body: 'nope' },
       { kind: 'human', label: 'stranger', transport: 'browser' },
     );
     expect(made, 'the uniform miss').toBeNull();
@@ -377,13 +373,13 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const stranger = await account('mxmx_test_stranger@example.com');
     const asStranger = identityForUser(stranger.user.id, stranger.token.id);
 
-    const editable = await docOf(owner, 'public', 'editor');
-    const ok = await applyEditFor(asStranger, editable.id, documentEdit(editable, { source: editable.source!.replace('hello', 'edited') }));
-    expect(ok, JSON.stringify(ok)).toMatchObject({ applied: true });
+    const editable = await createArtifact(owner.token.id,owner.user.id,{format:'html',source:'<html><body><p>hello</p></body></html>',meta:{},title:null,description:null,visibility:'public'},{linkRole:'editor'});
+    const ok = await replaceArtifactFor(asStranger,editable.id,{...editable,link_role:editable.link_role??undefined,source:editable.source!.replace('hello','edited')},{expectedVersion:editable.version,expectedState:artifactState(editable)});
+    expect(ok,JSON.stringify(ok)).toMatchObject({format:'html',version:editable.version+1});
     expect((await head(editable.id))?.source).toContain('edited');
 
-    const commentable = await docOf(owner, 'public', 'commenter');
-    const refused = await applyEditFor(asStranger, commentable.id, documentEdit(commentable, { source: commentable.source!.replace('hello', 'nope') }));
+    const commentable = await createArtifact(owner.token.id,owner.user.id,{format:'html',source:'<html><body><p>hello</p></body></html>',meta:{},title:null,description:null,visibility:'public'},{linkRole:'commenter'});
+    const refused=await replaceArtifactFor(asStranger,commentable.id,{...commentable,link_role:commentable.link_role??undefined,source:commentable.source!.replace('hello','nope')},{expectedVersion:commentable.version,expectedState:artifactState(commentable)});
     expect(refused, 'a commenter link is not an edit link').toBeNull();
   });
 
@@ -430,7 +426,7 @@ describe('the commenter role, through the routes', () => {
     const tv = await mintToken('viewer', viewer.id); await claimToken(viewer.id, tv.token);
     const editor = await createUser({ email: 'mxmx_test_editor@example.com' });
     const te = await mintToken('editor', editor.id); await claimToken(editor.id, te.token);
-    const res = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: '<div id="root"><p>hello</p></div>', visibility: 'private' }, to.token));
+    const res = await createArtifactRoute(jreq('/api/artifacts', 'POST', { html:nativeHtml('<div id="root" data-af-id="root"><p>hello</p></div>'), visibility: 'private' }, to.token));
     const doc = await res.json();
     asSession(owner);
     const put = await putSharingRoute(jreq(`/api/my/artifacts/${doc.id}/sharing`, 'PUT', { shares: [
@@ -459,7 +455,7 @@ describe('the commenter role, through the routes', () => {
 
     it('may open a thread, reply, and resolve — and so may an editor; a viewer may not', async () => {
       const w = await world();
-      const input = { nodeId: 'root', baseEditId: w.row.edit_id, body: 'is this right?' };
+      const input = { anchor:nativeAnchor('root'), baseEditId: w.row.edit_id, body: 'is this right?' };
       const opened = await createAnnotationFor(identityForUser(w.commenter.id, w.tc.id), w.doc.id, input, human);
       expect(opened && 'id' in opened, JSON.stringify(opened)).toBe(true);
       const id = (opened as { id: string }).id;
@@ -478,9 +474,9 @@ describe('the commenter role, through the routes', () => {
 
     it('may NOT edit, replace, or delete — every write door is the uniform 404', async () => {
       const w = await world();
-      const edit = await editsRoute(jreq(`/api/artifacts/${w.doc.id}/edits`, 'POST', documentEditBody(w.row,{source:'<div><p>changed</p></div>'}), w.tc.token), params({ id: w.doc.id }));
+      const edit = await putArtifactRoute(jreq(`/api/artifacts/${w.doc.id}`, 'PUT', {html:nativeHtml('<div><p>changed</p></div>')}, w.tc.token), params({ id: w.doc.id }));
       expect(edit.status).toBe(404);
-      const put = await putArtifactRoute(jreq(`/api/artifacts/${w.doc.id}`, 'PUT', documentEditBody(w.row,{source:'<div><p>changed</p></div>',whole:true}), w.tc.token), params({ id: w.doc.id }));
+      const put = await putArtifactRoute(jreq(`/api/artifacts/${w.doc.id}`, 'PUT', {html:nativeHtml('<div><p>changed</p></div>')}, w.tc.token), params({ id: w.doc.id }));
       expect(put.status).toBe(404);
       expect((await getArtifactById(w.doc.id))!.version).toBe(1);
     });
@@ -496,7 +492,7 @@ describe('what an editor may do with sharing', () => {
   }
   async function fixture(role:'viewer'|'commenter'|'editor',dataset=false){
    const owner=await person('sharing_owner'),editor=await person('sharing_editor');
-   const r=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{...(dataset?{dataset:[{n:1}]}:{markup:'<p>shared</p>'}),visibility:'private'}}));
+   const r=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{...(dataset?{dataset:[{n:1}]}:{html:nativeHtml('<p>shared</p>')}),visibility:'private'}}));
    expect(r.status).toBe(201);const {id}=await r.json();
    await updateSharingFor(owner.actor,id,{shares:[{email:editor.user.email,role}]});
    const save=(json:object)=>write(request(`/api/my/artifacts/${id}/sharing`,{method:'PUT',actor:editor.session,json}),params(id));
@@ -575,21 +571,7 @@ describe('editors through every door', () => {
   const sessionUser = { id: '', email: '' };
 
   const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
-  const jreq = async(path:string,method:string,body?:unknown,token?:string)=>{
-   const match=path.match(/^\/api\/(?:my\/)?artifacts\/([^/]+)(?:\/(edits|revert))?$/);
-   if(match&&body&&typeof body==='object'&&!Array.isArray(body)){
-    const row=await getArtifactById(match[1]);
-    if(row?.format==='markup'&&(match[2]||method==='PATCH')){
-     let input=body as Record<string,unknown>;
-     if(match[2]==='revert'){
-      const archived=await getVersionFor(identityForUser(row.user_id, row.token_id),row.id,Number(input.version));
-      if(!archived)throw new Error('Fixture archive missing');input={source:archived.source};
-     }
-     return request(path,{method:'POST',token,json:documentPublicationBody(row,input,match[2]==='revert')});
-    }
-   }
-   return observedRequest(path,{method,json:body,token});
-  };
+  const jreq = (path:string,method:string,body?:unknown,token?:string)=>observedRequest(path,{method,json:body,token});
   const create = async (token: string, body: Record<string, unknown>) => {
     const res = await createArtifactRoute(await jreq('/api/artifacts', 'POST', body, token));
     expect(res.status, await res.clone().text()).toBe(201);
@@ -598,13 +580,10 @@ describe('editors through every door', () => {
   const asSession = (u: { id: string; email: string }) => { sessionUser.id = u.id; sessionUser.email = u.email; };
   const noSession = () => { sessionUser.id = ''; sessionUser.email = ''; };
 
-  const PROSE = '<div id="root"><p>hello</p></div>';
-  const PROSE2 = '<div id="root"><p>hello again</p></div>';
+  const PROSE = '<div id="root" data-af-id="root"><p>hello</p></div>';
+  const PROSE2 = '<div id="root" data-af-id="root"><p>hello again</p></div>';
   const ROWS = [{ choice: 'ramen' }];
-  const MUTATING = (ds: string) =>
-    '<Helmet><Value name="choice" type="string" default="ramen" />'
-    + `<Import name="vote_data" src="ref:${ds}" /><Mutation name="vote">{\`insert into vote_data.rows (choice) values ($choice)\`}</Mutation></Helmet>`
-    + '<div><Button run="$vote">Vote</Button></div>';
+  const BOUND_DATASET = (ds:string) => `<link rel="af-dataset" data-af-name="vote_data" href="ref:${ds}"><p>Dataset page</p>`;
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
   beforeEach(async () => {
@@ -612,7 +591,7 @@ describe('editors through every door', () => {
   });
 
   /** Owner A with a public prose document; B and C are accounts with claimed tokens. */
-  async function world(markup = PROSE, visibility: 'public' | 'private' = 'public') {
+  async function world(body = PROSE, visibility: 'public' | 'private' = 'public') {
     const owner = await createUser({ email: 'owner@x.com' });
     const ta = await mintToken('a', owner.id);
       await claimToken(owner.id, ta.token);
@@ -624,7 +603,7 @@ describe('editors through every door', () => {
     const tc = await mintToken('c', carol.id);
       await claimToken(carol.id, tc.token);
     const anon = await mintToken('anon', null);
-    const doc = await create(ta.token, { markup, visibility });
+    const doc = await create(ta.token, { html:nativeHtml(body), visibility });
     return { ta, tb, tc, anon, owner, bob: bobNamed, carol, doc };
   }
 
@@ -648,8 +627,8 @@ describe('editors through every door', () => {
       asSession({ id: w.bob.id, email: w.bob.email });
       const id = w.doc.id;
       expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(404);
-      expect((await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(404);
-      expect((await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
+      expect((await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', {html:nativeHtml(PROSE2)}), params({ id }))).status).toBe(404);
+      expect((await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE2) }), params({ id }))).status).toBe(404);
       expect((await versionsMineRoute(await jreq(`/api/my/artifacts/${id}/versions`, 'GET'), params({ id }))).status).toBe(404);
       // …and the same through B's claimed bearer token.
       expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }))).status).toBe(200);
@@ -665,11 +644,11 @@ describe('editors through every door', () => {
 
       expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(200);
 
-      const edited = await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }));
+      const edited = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', {html:nativeHtml(PROSE2)}), params({ id }));
       expect(edited.status, await edited.clone().text()).toBe(200);
       expect((await head(id)).source).toContain('hello again');
 
-      const put = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE }), params({ id }));
+      const put = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE) }), params({ id }));
       expect(put.status, await put.clone().text()).toBe(200);
 
       const versions = await versionsMineRoute(await jreq(`/api/my/artifacts/${id}/versions`, 'GET'), params({ id }));
@@ -685,7 +664,7 @@ describe('editors through every door', () => {
       expect((await getSharingRoute(await jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }))).status).toBe(200);
       expect((await share(id, [{email:w.bob.email,role:'editor'}, { email: 'carol@x.com', role: 'editor' }])).status).toBe(200);
       // An editor can patch content metadata, but receives owner_only for placement.
-      expect((await patchMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PATCH', { parent_id: null }), params({ id }))).status).toBe(403);
+      expect((await metadata(await jreq(`/api/my/artifacts/${id}`, 'PATCH', { parent_id: null }), params({ id }))).status).toBe(403);
       expect(await head(id)).toBeTruthy();
 
       /*
@@ -704,9 +683,9 @@ describe('editors through every door', () => {
       asSession({ id: w.bob.id, email: w.bob.email });
       const before = (await head(id)).version;
       for (const parent_id of [box.id, null]) {
-        const moved = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, parent_id }), params({ id }));
-        expect(moved.status, await moved.clone().text()).toBe(403);
-        expect(await moved.json()).toMatchObject({ error: 'owner_only' });
+        const moved = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE2), parent_id }), params({ id }));
+        expect(moved.status, await moved.clone().text()).toBe(400);
+        expect(await moved.json()).toMatchObject({ error: 'invalid_parent' });
       }
       expect((await head(id)).ancestor_ids).toEqual([]);
       expect((await head(id)).version).toBe(before);
@@ -717,10 +696,10 @@ describe('editors through every door', () => {
       await inviteEditor(w);
       const id = w.doc.id;
       asSession({id:w.bob.id,email:w.bob.email});
-      const browser = await putMineRoute(await jreq(`/api/my/artifacts/${id}`,'PUT',{markup:PROSE2,visibility:'unlisted'}),params({id}));
+      const browser = await putMineRoute(await jreq(`/api/my/artifacts/${id}`,'PUT',{html:nativeHtml(PROSE2),visibility:'unlisted'}),params({id}));
       expect(browser.status,await browser.clone().text()).toBe(200);
       noSession();
-      const bearer = await putArtifactRoute(await jreq(`/api/artifacts/${id}`,'PUT',{markup:PROSE2,visibility:'public'},w.tb.token),params({id}));
+      const bearer = await putArtifactRoute(await jreq(`/api/artifacts/${id}`,'PUT',{html:nativeHtml(PROSE2),visibility:'public'},w.tb.token),params({id}));
       expect(bearer.status,await bearer.clone().text()).toBe(200);
       expect((await getArtifactById(id))!.visibility).toBe('public');
     });
@@ -731,18 +710,17 @@ describe('editors through every door', () => {
       const id = w.doc.id;
       const read = await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }));
       expect(read.status).toBe(200);
-      const edited = await editsRoute(await jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }, w.tb.token), params({ id }));
+      const edited = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', {html:nativeHtml(PROSE2)}, w.tb.token), params({ id }));
       expect(edited.status, await edited.clone().text()).toBe(200);
-      const put = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', { markup: PROSE }, w.tb.token), params({ id }));
+      const put = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE) }, w.tb.token), params({ id }));
       expect(put.status, await put.clone().text()).toBe(200);
 
       expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(401);
       expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tc.token), params({ id }))).status).toBe(200);
-      const h = await head(id);
-      expect((await editsRoute(await jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: h.edit_id, source: PROSE2 }, w.tc.token), params({ id }))).status).toBe(404);
+      expect((await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', {html:nativeHtml(PROSE2)}, w.tc.token), params({ id }))).status).toBe(404);
     });
 
-    it('an editor\'s write resolves refs as the DOCUMENT\'s owner: a <Mutation> on the owner\'s dataset and a private image both publish', async () => {
+    it('an editor\'s write resolves refs as the DOCUMENT\'s owner: a binding to the owner\'s dataset and a private image both publish', async () => {
       const w = await world();
       const ds = (await create(w.ta.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
       const img = (await create(w.ta.token, { image: PNG, visibility: 'private' })).id;
@@ -750,14 +728,14 @@ describe('editors through every door', () => {
       asSession({ id: w.bob.id, email: w.bob.email });
       const id = w.doc.id;
 
-      const withMutation = await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: MUTATING(ds) }), params({ id }));
-      expect(withMutation.status, await withMutation.clone().text()).toBe(200);
+      const withDataset = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', {html:nativeHtml(BOUND_DATASET(ds))}), params({ id }));
+      expect(withDataset.status, await withDataset.clone().text()).toBe(200);
 
-      const withImage = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: `<div><img src="ref:${img}" alt="x" /></div>` }), params({ id }));
+      const withImage = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { html:nativeHtml(`<div><img src="ref:${img}" alt="x" /></div>`) }), params({ id }));
       expect(withImage.status, await withImage.clone().text()).toBe(200);
 
       // The bearer door too — it parses before it loads the row.
-      const bearerPut = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', { markup: MUTATING(ds) }, w.tb.token), params({ id }));
+      const bearerPut = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', { html:nativeHtml(BOUND_DATASET(ds)) }, w.tb.token), params({ id }));
       expect(bearerPut.status, await bearerPut.clone().text()).toBe(200);
     });
 
@@ -767,7 +745,7 @@ describe('editors through every door', () => {
       asSession({ id: w.bob.id, email: w.bob.email });
       const id = w.doc.id;
       const img = await create(w.tb.token, { image: PNG }); // B's own upload (born unlisted) …
-      const put = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: `<div><img src="ref:${img.id}" alt="x" /></div>` }), params({ id }));
+      const put = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { html:nativeHtml(`<div><img src="ref:${img.id}" alt="x" /></div>`) }), params({ id }));
       expect(put.status, await put.clone().text()).toBe(200); // … is link-readable to the owner's loader.
     });
   });
@@ -779,7 +757,7 @@ describe('editors through every door', () => {
       const id = w.doc.id;
       asSession({ id: w.bob.id, email: w.bob.email });
       expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(200);
-      expect((await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(200);
+      expect((await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', {html:nativeHtml(PROSE2)}), params({ id }))).status).toBe(200);
       const one = await versionMineRoute(await jreq(`/api/my/artifacts/${id}/versions/1`, 'GET'), params({ id, version: '1' }));
       expect(one.status).toBe(200);
       expect(await one.json()).toMatchObject({ version: 1 });
@@ -823,7 +801,7 @@ describe('editors through every door', () => {
       await inviteEditor(w);
       asSession({ id: w.bob.id, email: w.bob.email });
       const id = w.doc.id;
-      const edited = await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }));
+      const edited = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', {html:nativeHtml(PROSE2)}), params({ id }));
       expect(edited.status).toBe(200);
       const db = await harness.db();
       const log = await db.query<{ actor_user_id: string | null }>('SELECT actor_user_id FROM artifact_edits WHERE artifact_id = $1 ORDER BY seq DESC LIMIT 1', [id]);
@@ -844,7 +822,7 @@ describe('editors through every door', () => {
       await inviteEditor(w);
       asSession({ id: w.bob.id, email: w.bob.email });
       const id = w.doc.id;
-      expect((await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(200);
+      expect((await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', {html:nativeHtml(PROSE2)}), params({ id }))).status).toBe(200);
       noSession();
       const res = await eventsRoute(await jreq(`/a/${id}/events`, 'GET'), params({ id }));
       expect(res.status).toBe(200);
@@ -885,7 +863,7 @@ describe('editors through every door', () => {
       asSession({ id: w.owner.id, email: w.owner.email });
       expect((await share(id, [{ email: 'bob@x.com', role: 'viewer' }])).status).toBe(200);
       asSession({ id: w.bob.id, email: w.bob.email });
-      expect((await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(404);
+      expect((await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', {html:nativeHtml(PROSE2)}), params({ id }))).status).toBe(404);
       asSession({ id: w.owner.id, email: w.owner.email });
       expect((await share(id, [])).status).toBe(200);
       asSession({ id: w.bob.id, email: w.bob.email });
@@ -894,7 +872,7 @@ describe('editors through every door', () => {
 
     it('an email account owner may name an editor through the owner scope', async () => {
       const anon = await mintToken('solo');
-      const doc = await create(anon.token, { markup: PROSE });
+      const doc = await create(anon.token, { html:nativeHtml(PROSE) });
       const bob = await createUser({ email: 'bob@x.com' });
       const tb = await mintToken('b', bob.id);
       await claimToken(bob.id, tb.token);
@@ -903,7 +881,7 @@ describe('editors through every door', () => {
       const state = await updateSharingFor(identityForUser(anon.userId, anon.id), doc.id, { shares: [{ email: 'bob@x.com', role: 'editor' }] });
       expect(state?.shares).toEqual([{ email: 'bob@x.com', role: 'editor' }]);
       const id = doc.id;
-      expect((await editsRoute(await jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: doc.edit_id, source: PROSE2 }, tb.token), params({ id }))).status).toBe(200);
+      expect((await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', {html:nativeHtml(PROSE2)}, tb.token), params({ id }))).status).toBe(200);
     });
   });
 
@@ -924,7 +902,7 @@ describe('editors through every door', () => {
 
       // The editor comments on the document's only paragraph.
       asSession({ id: w.bob.id, email: w.bob.email });
-      const made = await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'is this the right number?' });
+      const made = await annotate(id, { anchor:nativeAnchor('root'), edit_id: (await head(id)).edit_id, body: 'is this the right number?' });
       expect(made.status, await made.clone().text()).toBe(201);
       const ann = (await made.json()) as { id: string; thread: Array<{ author: { label: string | null } }> };
       // The author snapshot is the EDITOR, not the document's owner.
@@ -941,11 +919,11 @@ describe('editors through every door', () => {
       asSession({ id: w.owner.id, email: w.owner.email });
       expect((await share(id, [{ email: 'bob@x.com', role: 'editor' }, { email: 'carol@x.com', role: 'viewer' }])).status).toBe(200);
       asSession({ id: w.carol.id, email: w.carol.email });
-      expect((await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'nope' })).status).toBe(404);
+      expect((await annotate(id, { anchor:nativeAnchor('root'), edit_id: (await head(id)).edit_id, body: 'nope' })).status).toBe(404);
 
       // A stranger with no share at all.
       noSession();
-      expect((await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'nope' })).status).toBe(401);
+      expect((await annotate(id, { anchor:nativeAnchor('root'), edit_id: (await head(id)).edit_id, body: 'nope' })).status).toBe(401);
     });
 
     it('the owner erases any thread; an editor erases only their own', async () => {
@@ -954,7 +932,7 @@ describe('editors through every door', () => {
       const id = w.doc.id;
 
       asSession({ id: w.owner.id, email: w.owner.email });
-      const byOwner = (await (await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'owner note' })).json()) as { id: string };
+      const byOwner = (await (await annotate(id, { anchor:nativeAnchor('root'), edit_id: (await head(id)).edit_id, body: 'owner note' })).json()) as { id: string };
       const ownerReplyResponse = await actOnAnnotationRoute(
         await jreq(`/api/my/artifacts/${id}/annotations/${byOwner.id}`, 'POST', { reply: 'owner reply' }),
         params({ id, annId: byOwner.id }),
@@ -962,7 +940,7 @@ describe('editors through every door', () => {
       const ownerReply = (await ownerReplyResponse.json() as { thread: Array<{ id: string }> }).thread[1]!;
 
       asSession({ id: w.bob.id, email: w.bob.email });
-      const byEditor = (await (await annotate(id, { node_id: 'root', edit_id: (await head(id)).edit_id, body: 'editor note' })).json()) as { id: string };
+      const byEditor = (await (await annotate(id, { anchor:nativeAnchor('root'), edit_id: (await head(id)).edit_id, body: 'editor note' })).json()) as { id: string };
       const editorReplyResponse = await actOnAnnotationRoute(
         await jreq(`/api/my/artifacts/${id}/annotations/${byOwner.id}`, 'POST', { reply: 'editor reply' }),
         params({ id, annId: byOwner.id }),
@@ -1079,7 +1057,7 @@ describe('editors through every door', () => {
       expect(listed.status).toBe(200);
       expect(await listedIds(listed)).toEqual([id]);
 
-      const put = await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }));
+      const put = await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE2) }), params({ id }));
       expect(put.status, await put.clone().text()).toBe(200);
       expect((await head(id)).source).toContain('hello again');
 
@@ -1090,10 +1068,10 @@ describe('editors through every door', () => {
     it('a COMMENTER comments, and still may not rewrite the document', async () => {
       const { call, id } = await invitedTo('commenter');
 
-      const made = await annotateBearerRoute(await call(`/api/artifacts/${id}/annotations`, 'POST', { quote: 'hello', body: 'looks right to me' }), params({ id }));
+      const made = await annotateBearerRoute(await call(`/api/artifacts/${id}/annotations`, 'POST', { anchor:nativeAnchor('root',1,'hello'), body: 'looks right to me' }), params({ id }));
       expect(made.status, await made.clone().text()).toBe(201);
 
-      expect((await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
+      expect((await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE2) }), params({ id }))).status).toBe(404);
     });
 
     it('a VIEWER reads and lists, but neither writes nor comments', async () => {
@@ -1101,7 +1079,7 @@ describe('editors through every door', () => {
 
       expect(await listedIds(await listArtifactsRoute(await call('/api/artifacts')))).toEqual([id]);
       expect((await getArtifactRoute(await call(`/api/artifacts/${id}`), params({ id }))).status).toBe(200);
-      expect((await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
+      expect((await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE2) }), params({ id }))).status).toBe(404);
       expect((await annotateBearerRoute(await call(`/api/artifacts/${id}/annotations`, 'POST', { quote: 'hello', body: 'nope' }), params({ id }))).status).toBe(404);
     });
 
@@ -1111,123 +1089,12 @@ describe('editors through every door', () => {
 
       expect(await listedIds(await listArtifactsRoute(await stranger('/api/artifacts')))).toEqual([]);
       expect((await getArtifactRoute(await stranger(`/api/artifacts/${id}`), params({ id }))).status).toBe(404);
-      expect((await putArtifactRoute(await stranger(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
+      expect((await putArtifactRoute(await stranger(`/api/artifacts/${id}`, 'PUT', { html:nativeHtml(PROSE2) }), params({ id }))).status).toBe(404);
       expect((await annotateBearerRoute(await stranger(`/api/artifacts/${id}/annotations`, 'POST', { quote: 'hello', body: 'no' }), params({ id }))).status).toBe(404);
     });
   });
 
-  describe('the browser edit answer', () => {
-    it('is the patch when it landed where it was prepared: advancing the editor graph by it gives exactly the stored document', async () => {
-      const w = await world('<div id="d"><p id="a">one</p><p id="b">two</p></div>');
-      asSession({ id: w.owner.id, email: w.owner.email });
-      const id = w.doc.id;
-      const base = await head(id);
-      const sent = documentEditBody(base, { source: '<div id="d"><p id="a">one, typed</p><p id="b">two</p></div>' });
-      const res = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: sent }), params({ id }));
-      expect(res.status, await res.clone().text()).toBe(200);
-      const answer = await res.json();
-      expect(answer.document).toBeUndefined();
-      expect(answer.markup).toBeUndefined();
-      expect(answer).toMatchObject({ version: base.version + 1, patch: sent.document_update.patch });
-      const read = await (await getMineRoute(await request(`/api/my/artifacts/${id}`, {}), params({ id }))).json();
-      const advanced = advanceGraph(base.document as never, base.version, answer.patch)!;
-      expect(advanced).toEqual(read.document);
-      expect(graphSource(advanced)).toBe(read.markup);
-      expect(answer.edit_id).toBe(read.edit_id);
-
-      // ?echo=full keeps the bearer route's answer for any caller that wants the document.
-      const now = await head(id);
-      const echoed = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits?echo=full`, { method: 'POST', json: documentEditBody(now, { source: (now.source as string).replace('one, typed', 'one') }) }), params({ id }));
-      expect(echoed.status).toBe(200);
-      expect((await echoed.json()).document.kind).toBe('graph');
-    });
-
-    it('a patch on a newer head answers without the document: replaying the patches between and its own gives exactly the stored head', async () => {
-      const w = await world('<div id="d"><p id="a">one</p><p id="b">two</p><p id="c">three</p></div>');
-      asSession({ id: w.owner.id, email: w.owner.email });
-      const id = w.doc.id;
-      const base = await head(id);
-      // Two collaborators commit to other nodes first; the editor's save was prepared on `base`.
-      for (const [from, to] of [['one', 'one, remote'], ['three', 'three, remote']]) {
-        const now = await head(id);
-        const res = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: documentEditBody(now, { source: (now.source as string).replace(from, to) }) }), params({ id }));
-        expect(res.status, await res.clone().text()).toBe(200);
-      }
-      const sent = documentEditBody(base, { source: '<div id="d"><p id="a">one</p><p id="b">two, typed</p><p id="c">three</p></div>' });
-      const res = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: sent }), params({ id }));
-      expect(res.status, await res.clone().text()).toBe(200);
-      const text = await res.text();
-      const answer = JSON.parse(text);
-      for (const key of ['document', 'markup', 'state', 'mutations']) expect(answer, key).not.toHaveProperty(key);
-      expect(answer).toMatchObject({ version: base.version + 3, patch: sent.document_update.patch });
-      expect(answer.remote_patches.map((step: { version: number }) => step.version)).toEqual([base.version + 1, base.version + 2]);
-      let graph = base.document as never;
-      for (const step of [...answer.remote_patches, { version: answer.version, patch: answer.patch }]) graph = advanceGraph(graph, step.version - 1, step.patch)! as never;
-      const read = await (await getMineRoute(await request(`/api/my/artifacts/${id}`, {}), params({ id }))).json();
-      expect(graph).toEqual(read.document);
-      expect(graphSource(graph)).toBe(read.markup);
-      expect(read.markup).toContain('one, remote');
-      expect(read.markup).toContain('three, remote');
-      expect(read.markup).toContain('two, typed');
-      expect(answer.edit_id).toBe(read.edit_id);
-
-      // A version between with no logged patch (a replacement, a conversion) leaves nothing to replay: the answer still
-      // withholds the document, and says nothing about the versions between, so the editor reads the head itself.
-      const from = await head(id);
-      const remote = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: documentEditBody(from, { source: (from.source as string).replace('three, remote', 'three, again') }) }), params({ id }));
-      expect(remote.status, await remote.clone().text()).toBe(200);
-      await (await getDb()).query(`DELETE FROM artifact_edits WHERE artifact_id=$1 AND (document_state->>'version')::int=$2`, [id, from.version + 1]);
-      const late = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits`, { method: 'POST', json: documentEditBody(from, { source: (from.source as string).replace('two, typed', 'two, typed again') }) }), params({ id }));
-      expect(late.status, await late.clone().text()).toBe(200);
-      const lateAnswer = await late.json();
-      expect(lateAnswer.document).toBeUndefined();
-      expect(lateAnswer.remote_patches).toBeUndefined();
-      expect(lateAnswer.version).toBe(from.version + 2);
-    });
-
-    it('withholds the new document: no markup, state or mutations, and the head is settled after the answer exactly as an answered commit settles it', async () => {
-      const DATA = (n: number) => `<Helmet><Value name="n" type="number" default={${n}} /><Query name="q">{\`select $n * 21 as n\`}</Query></Helmet><div><p id="a">Answer <Number data="$q" col="n" /></p><Mermaid title="D0" code={${JSON.stringify('flowchart LR\n  a[Request] --> b[Read]')}} /></div>`;
-      const w = await world(DATA(2));
-      asSession({ id: w.owner.id, email: w.owner.email });
-      const twin = await create(w.ta.token, { markup: DATA(2), visibility: 'public' });
-      const edit = async (id: string, echo: string) => {
-        const base = await head(id);
-        const res = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits${echo}`, { method: 'POST', json: documentEditBody(base, { source: (base.source as string).replace('default={2}', 'default={3}') }) }), params({ id }));
-        expect(res.status, await res.clone().text()).toBe(200);
-        return { base, text: await res.text() };
-      };
-      const { base, text } = await edit(w.doc.id, '');
-      const answer = JSON.parse(text);
-      for (const key of ['document', 'markup', 'state', 'mutations']) expect(answer, key).not.toHaveProperty(key);
-      expect(answer).toMatchObject({ id: w.doc.id, version: base.version + 1, edit_id: expect.any(String) });
-      expect(answer).toHaveProperty('theme');
-      expect(answer.patch).toBeDefined();
-      expect(text.length).toBeLessThan(JSON.stringify(base.document).length);
-
-      // The twin takes the same edit on the answered path, which settles inline; both heads end the same.
-      // The withheld answer is the full answer's head, every other key included (a new column rides along).
-      const full = JSON.parse((await edit(twin.id, '?echo=full')).text);
-      const without = (keys: string[], drop: string[]) => keys.filter((k) => !drop.includes(k)).sort();
-      expect(without(Object.keys(answer), ['patch'])).toEqual(without(Object.keys(full), ['document', 'markup', 'state', 'mutations']));
-      await committedHeadsSettled();
-      const [settled, answered] = [await getArtifactById(w.doc.id), await getArtifactById(twin.id)];
-      // The two documents differ only in their stamped node ids (same length), so the stored records are the same
-      // compiled dataflow, each certified against its own head's source.
-      const record = (row: typeof settled) => storedCompiledDataflow(row!.meta, row!.source!);
-      expect(record(settled)).not.toBeNull();
-      expect(record(settled)).toEqual(record(answered));
-      const db = await getDb();
-      const harvests = async (id: string) => (await db.query<{ version: number }>('SELECT version FROM mermaid_harvests WHERE artifact_id=$1 ORDER BY version', [id])).rows.map((r) => r.version);
-      expect(await harvests(w.doc.id)).toContain(settled!.version);
-      expect(await harvests(twin.id)).toContain(answered!.version);
-
-      // The first edit after a quiet spell archives the version it replaced, copied as stored: the archive is exactly
-      // the pre-edit head, document and all.
-      const archived = await getVersionFor(identityForUser(base.user_id, base.token_id), w.doc.id, base.version);
-      expect(archived?.source).toBe(base.source);
-      expect((await db.query<{ document: unknown }>('SELECT document FROM artifact_versions WHERE artifact_id=$1 AND version=$2', [w.doc.id, base.version])).rows[0]?.document).toEqual(base.document);
-    });
-  });
+  // Browser graph patch echoes/replays were retired; native CAS/history has its own behavioral suite.
 });
 
 describe('artifact membership', () => {
@@ -1237,7 +1104,7 @@ describe('artifact membership', () => {
     const eve = await createUser({ email: 'mxmx_test_members_eve@example.com' });
     const db = await getDb();
     for (const [user, username] of [[owner,'member_owner'],[bob,'member_bob'],[eve,'member_eve']] as const) await db.query('UPDATE users SET username=$2 WHERE id=$1',[user.id,username]);
-    await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,link_role) VALUES('a1B2c3','owner-token',$1,'markup','public','commenter')",[owner.id]);
+    await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,link_role) VALUES('a1B2c3','owner-token',$1,'html','public','commenter')",[owner.id]);
     return { db, owner, bob, eve, actor: (user: {id:string}) => (identityForUser(user.id, null)) };
   }
   it('joins an owner immediately; readers request and only an editor can approve', async () => {
@@ -1287,7 +1154,7 @@ describe('artifact membership', () => {
     const w=await world();
     for(let i=0;i<30;i++) {
       const id=`cap${String(i).padStart(3,'0')}`;
-      await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES($1,'owner-token',$2,'markup','public')",[id,w.owner.id]);
+      await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES($1,'owner-token',$2,'html','public')",[id,w.owner.id]);
       await changeMembership(w.actor(w.bob),id,{action:'join'});
     }
     await expect(changeMembership(w.actor(w.bob),'a1B2c3',{action:'join'})).rejects.toThrow(/30/);
@@ -1323,9 +1190,9 @@ describe('artifact membership', () => {
 
   it('posts resolved comment mentions atomically for agents and ignores examples in code',async()=>{
    const w=await world();await link(w.bob.id,'follow',w.owner.id);
-   await w.db.query(`UPDATE artifacts SET source='<p id="mark">Hello</p>' WHERE id='a1B2c3'`);
+   await w.db.query(`UPDATE artifacts SET source='<html><body><p data-af-id="mark">Hello</p></body></html>' WHERE id='a1B2c3'`);
    const actor=identityForUser(w.owner.id, 'owner-token');
-   const post=(body:string)=>createAnnotationFor(actor,'a1B2c3',{nodeId:'mark',body},{kind:'agent',label:'test',transport:'http'});
+   const post=(body:string)=>createAnnotationFor(actor,'a1B2c3',{anchor:nativeAnchor('mark'),body},{kind:'agent',label:'test',transport:'http'});
    expect(await post('`[@member_bob](/people/'+w.bob.id+')`')).not.toBeNull();
    expect((await membershipInbox(w.actor(w.bob))).notifications).toHaveLength(0);
    const result=await post('[@member_bob](/people/'+w.bob.id+')');expect(result).not.toBeInstanceOf(Response);
@@ -1374,7 +1241,7 @@ describe('artifact membership', () => {
    const w=await world();
    await changeMembership(w.actor(w.owner),'a1B2c3',{action:'invite',usernames:['@member_bob']});
    await changeMembership(w.actor(w.bob),'a1B2c3',{action:'dismiss'});
-   await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,link_role) VALUES('d4E5f6','owner-token',$1,'markup','public','commenter')",[w.owner.id]);
+   await w.db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,link_role) VALUES('d4E5f6','owner-token',$1,'html','public','commenter')",[w.owner.id]);
    await expect(changeMembership(w.actor(w.owner),'d4E5f6',{action:'invite',usernames:['@member_bob']})).rejects.toThrow(/declined/);
   });
 

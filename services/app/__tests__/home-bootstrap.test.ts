@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * THE HOME BOOTSTRAP — GET /api/page/home?part=bootstrap through the REAL handler.
  *
@@ -33,7 +34,7 @@ async function world() {
   const memberToken = await mintAccountToken('member', member.id);
   const group = await createGroup(member.id, { handle: 'home-team', name: 'Home Team' });
   const publish = async (title: string, destination: object) => {
-    const response = await createArtifact(request('/api/artifacts', { method: 'POST', token: memberToken.token, json: { markup: `<h1>${title}</h1>`, title, destination } }));
+    const response = await createArtifact(request('/api/artifacts', { method: 'POST', token: memberToken.token, json: { html: nativeHtml(`<h1>${title}</h1>`), title, destination } }));
     expect(response.status, await response.clone().text()).toBe(201);
     return (await response.json()).id as string;
   };
