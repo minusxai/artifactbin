@@ -1,5 +1,6 @@
 /** Native pages bind dataset namespaces; typed requests validate at execution, never at JSX compile time. */
 import { expect, it } from "vitest";
+import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { request, useAppHarness, mintAccountToken } from "./harness";
 import { nativeHtml } from "./native-html-fixture";
 import { POST as create } from "@/app/api/artifacts/route";
@@ -12,6 +13,32 @@ import {
 import { GET as get, PUT as replace } from "@/app/api/artifacts/[id]/route";
 import { getDb } from "@/lib/platform";
 useAppHarness();
+const SOURCE_ONLY_SENTINEL =
+  "dataset-source-only-7e34d9a1-not-authored-page-state";
+function pagePayloads(content: string) {
+  const payloads: Record<string, unknown> = {};
+  const visit = (node: DefaultTreeAdapterMap["node"]) => {
+    if (
+      "attrs" in node &&
+      node.nodeName === "script" &&
+      node.attrs.some(
+        (attr) => attr.name === "type" && attr.value === "application/json",
+      )
+    ) {
+      const name = node.attrs.find((attr) => attr.name === "data-af")?.value;
+      if (name)
+        payloads[name] = JSON.parse(
+          node.childNodes
+            .filter((child) => child.nodeName === "#text")
+            .map((child) => (child as DefaultTreeAdapterMap["textNode"]).value)
+            .join(""),
+        );
+    }
+    if ("childNodes" in node) node.childNodes.forEach(visit);
+  };
+  visit(parse(content));
+  return payloads;
+}
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 async function fixture() {
   const owner = await mintAccountToken("native dataflow");
@@ -27,7 +54,7 @@ async function fixture() {
   };
   const dataset = await publish({
     dataset: [
-      { region: "EU", revenue: 837 },
+      { region: "EU", revenue: 837, sourceOnly: SOURCE_ONLY_SENTINEL },
       { region: "NA", revenue: 1200 },
     ],
     visibility: "public",
@@ -77,10 +104,14 @@ it("publishes namespace bindings and exposes typed schema without inlining sourc
   const content = await (
     await raw(request(`/a/${f.id}/raw`), ctx(f.id))
   ).text();
-  expect(content).toContain('data-af="state"');
-  expect(content).toContain('"region":"EU"');
-  expect(content).not.toContain("837");
-  expect(content).not.toContain("1200");
+  const payloads = pagePayloads(content);
+  expect(payloads.state).toEqual({ region: "EU" });
+  expect(payloads.runtime).toMatchObject({ initialState: { region: "EU" } });
+  expect((payloads.runtime as { initialState: unknown }).initialState).toEqual({
+    region: "EU",
+  });
+  // Runtime code and hashes may contain any digits; this value exists only in source rows.
+  expect(content).not.toContain(SOURCE_ONLY_SENTINEL);
   const read = await f.run(
     "query($table:ID!){sales{rows(tableId:$table,first:2){rows{cells{value{string number}}}}}}",
     { table: f.table.id },
@@ -88,6 +119,22 @@ it("publishes namespace bindings and exposes typed schema without inlining sourc
   );
   expect(read.errors).toBeUndefined();
   expect(read.data.sales.rows.rows).toHaveLength(2);
+  const cells = read.data.sales.rows.rows.flatMap(
+    (row: {
+      cells: { value: { string: string | null; number: number | null } }[];
+    }) => row.cells,
+  );
+  expect(
+    cells.map(
+      (cell: { value: { string: string | null } }) => cell.value.string,
+    ),
+  ).toContain(SOURCE_ONLY_SENTINEL);
+  expect(
+    cells
+      .map((cell: { value: { number: number | null } }) => cell.value.number)
+      .filter((value: unknown) => typeof value === "number")
+      .sort((a: number, b: number) => a - b),
+  ).toEqual([837, 1200]);
 });
 it("validates typed queries and named parameters against discovered columns", async () => {
   const f = await fixture(),
