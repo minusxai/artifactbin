@@ -1,3 +1,7 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { etagOf } from '@/lib/http/revalidation';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { HtmlRuntimeConfig } from '@/lib/html-runtime';
 import { assembleHtmlPage, downloadableHtml } from '@/lib/html-runtime';
@@ -38,4 +42,17 @@ export function nativeHtmlTitle(row:Pick<ArtifactRow,'title'|'source'>):string {
   const text=(node:DefaultTreeAdapterMap['node']):string=>node.nodeName==='#text'?(node as DefaultTreeAdapterMap['textNode']).value:'childNodes' in node?node.childNodes.map(text).join(''):'';
   const title=(node:DefaultTreeAdapterMap['node']):string=>node.nodeName==='title'?text(node):'childNodes' in node?node.childNodes.map(title).find(Boolean)??'':'';
   return title(document).trim()||'Document';
+}
+
+/** Immutable core bytes identify the runtime without assembling or reading a page. */
+let coreIdentity: Promise<string> | undefined;
+export function nativeHtmlRuntimeIdentity(): Promise<string> {
+  return coreIdentity ??= htmlCore().then(core => {
+    // Production is one emitted server bundle: its digest also names the assembler
+    // and route code. Unbundled module reloads get a new cache identity.
+    const file = fileURLToPath(import.meta.url);
+    const implementation = /\.[cm]?js$/.test(file)
+      ? createHash('sha256').update(readFileSync(file)).digest('hex') : `unbundled:${randomUUID()}`;
+    return etagOf({ core, implementation });
+  }).catch(error => { coreIdentity = undefined; throw error; });
 }

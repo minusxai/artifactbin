@@ -34,7 +34,7 @@ import { pagesRequestOf } from '@/lib/http/pages-origin';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 import { servesDocument } from '@/lib/serving';
 import { matchingTag, notModified, REVALIDATE } from '@/lib/http/revalidation';
-import { nativeHtmlDocument, nativeHtmlPolicy } from '@/lib/serving/native-html.server';
+import { nativeHtmlDocument, nativeHtmlPolicy, nativeHtmlRuntimeIdentity } from '@/lib/serving/native-html.server';
 import { etagOf } from '@/lib/http/revalidation';
 
 // The markup document's policy — per document, built in lib/page-styles/markup-csp:
@@ -94,8 +94,9 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
    */
   const asked = request.headers.get('if-none-match');
   const conditional = !!pages && !key && !fragment && !!asked && !new URL(request.url).searchParams.has(VERSION_PARAM);
-  const loaded = conditional ? null : await getArtifactById(id);
-  const header: ArtifactHeader | null = loaded ?? (conditional ? await getArtifactHeaderById(id) : null);
+  const metadataOnly = conditional || (request.method === 'HEAD' && !key && !new URL(request.url).searchParams.has(VERSION_PARAM));
+  const loaded = metadataOnly ? null : await getArtifactById(id);
+  const header: ArtifactHeader | null = loaded ?? (metadataOnly ? await getArtifactHeaderById(id) : null);
   if (!header) return notFound();
   if (fragment) return notFound();
   if (domain && !servesDocument(domain.ownerId, header)) return notFound();
@@ -125,6 +126,25 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
   const admits = async (row: ArtifactHeader) => actor.tokenId === row.token_id || (await canReadArtifact(row, actor)) || byExportKey;
   if (!(await admits(header))) return notFound();
 
+  const base = pages?.site.app ?? baseUrl(request);
+  const policy = nativeHtmlPolicy(id, base, pages ? { self: pages.self, app: pages.site.app } : undefined);
+  const revalidated = !!pages && !key && !new URL(request.url).searchParams.has(VERSION_PARAM);
+  const validator = async (row: ArtifactHeader) => etagOf({
+    id: row.id, version: row.version, edit: row.edit_id, updated: row.updated_at,
+    // Source is immutable within a published version; bindings are header metadata.
+    links: row.meta.htmlLinks ?? [], runtime: await nativeHtmlRuntimeIdentity(), policy, actor,
+  });
+  const responseHeaders = (etag: string | null) => ({
+    ...COMMON, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': policy,
+    ...(etag ? { ETag: etag, 'Cache-Control': REVALIDATE } : {}),
+  });
+  if (header.format === 'html' && metadataOnly) {
+    const etag = revalidated ? await validator(header) : null;
+    const held = etag && matchingTag(asked, etag);
+    if (held) return notModified(held);
+    if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
+  }
+
   const artifact = loaded ?? await getArtifactById(id);
   if (!artifact) return notFound();
   // Admission is asked again of the row served when its access moved after the header was read.
@@ -135,17 +155,13 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       const at = domain ? null : await archivedVersionFor(request, artifact, { capture: byExportKey });
       if (at === 'not_found') return notFound();
       const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
-      const base = pages?.site.app ?? baseUrl(request);
-      const policy = nativeHtmlPolicy(id, base, pages ? { self: pages.self, app: pages.site.app } : undefined);
-      const rendered = await nativeHtmlDocument({ row, ...(pages ? { appOrigin: pages.site.app } : {}) });
-      const etag = pages && !key && !at ? etagOf({ html: rendered.html, policy, actor }) : null;
+      const etag = revalidated && !at ? await validator(artifact) : null;
       const held = etag && matchingTag(asked, etag);
       if (held) return notModified(held);
+      if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
+      const rendered = await nativeHtmlDocument({ row, ...(pages ? { appOrigin: pages.site.app } : {}) });
       if (!key && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: actor.userId });
-      return new Response(rendered.html, { headers: {
-        ...COMMON, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': policy,
-        ...(etag ? { ETag: etag, 'Cache-Control': REVALIDATE } : {}),
-      } });
+      return new Response(rendered.html, { headers: responseHeaders(etag) });
     }
     case 'file': return serveStoredFile(request, artifact);
     case 'dataset':

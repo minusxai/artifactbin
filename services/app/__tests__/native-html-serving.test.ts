@@ -1,6 +1,9 @@
+import * as nativeHtml from '@/lib/serving/native-html.server';
+import * as artifacts from '@/lib/artifacts';
+import { HEAD as rawHead } from '@/app/a/[id]/raw/route';
 import { servesDocument } from '@/lib/serving/custom-domains';
 import { getDb } from '@/lib/platform/db';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { mintAccountToken, request, useAppHarness } from './harness';
 import { POST } from '@/app/api/artifacts/route';
@@ -87,4 +90,27 @@ it('admits only native public posts owned by the custom-domain account', () => {
  expect(servesDocument('owner',{...post,visibility:'private'})).toBe(false);
  expect(servesDocument('owner',{...post,deleted_at:new Date()})).toBe(false);
  expect(servesDocument('owner',{...post,format:'markup'})).toBe(false);
+});
+
+
+it('answers admitted native validators and HEAD without reading or assembling source',async()=>{
+ const {actor,id}=await publish();
+ const req=(method='GET',tag?:string,token=actor.token)=>markPagesRequest(request(`/a/${id}/raw`,{method,token,headers:tag?{'if-none-match':tag}:{}}),{id,self:`https://${id}.pages.example.test`,site});
+ const first=await raw(req(),params(id));const tag=first.headers.get('etag')!;expect(tag).toBeTruthy();
+ const assemble=vi.spyOn(nativeHtml,'nativeHtmlDocument');
+ const fullRow=vi.spyOn(artifacts,'getArtifactById');
+ try{
+  expect((await raw(req('GET',tag),params(id))).status).toBe(304);
+  const head=await rawHead(req('HEAD'),params(id));expect(head.status).toBe(200);expect(head.headers.get('etag')).toBe(tag);expect(await head.text()).toBe('');
+  expect(assemble).not.toHaveBeenCalled();expect(fullRow).not.toHaveBeenCalled();
+  const stranger=await mintAccountToken('conditional-stranger');
+  expect((await raw(req('GET',tag,stranger.token),params(id))).status).toBe(404);
+  expect(assemble).not.toHaveBeenCalled();expect(fullRow).not.toHaveBeenCalled();
+ }finally{assemble.mockRestore();fullRow.mockRestore();}
+ const runtime=vi.spyOn(nativeHtml,'nativeHtmlRuntimeIdentity').mockResolvedValue('next-runtime');
+ try{const changed=await raw(req('GET',tag),params(id));expect(changed.status).toBe(200);expect(changed.headers.get('etag')).not.toBe(tag);}finally{runtime.mockRestore();}
+ const before=await (await read(request(`/api/artifacts/${id}`,{token:actor.token}),params(id))).json();
+ const edited=await PUT(request(`/api/artifacts/${id}`,{method:'PUT',token:actor.token,json:{html:before.html.replace('Native content','Changed native content'),expectedVersion:before.version,expectedState:before.state}}),params(id));expect(edited.status).toBe(200);
+ const changed=await raw(req('GET',tag),params(id));expect(changed.status).toBe(200);expect(changed.headers.get('etag')).not.toBe(tag);expect(await changed.text()).toContain('Changed native content');
+
 });
