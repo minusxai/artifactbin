@@ -93,3 +93,13 @@ test("external history allocation preserves the head ID and retries globally res
   assert.deepEqual(first.receipts.map(r=>r.backendId),retry.receipts.map(r=>r.backendId));
   assert.equal(first.receipts.find(r=>r.pageVersion===2)!.backendId,head.backendId);
 });
+
+test("historical query persistence rejects a different namespace before querying storage", async () => {
+  const {registerSourceQueries,verifySourceQueries}=await import("../src/persistence/source-queries.ts");
+  const {source,options}=await externalHistoryFixture();
+  const prepared=await prepareStandaloneDatasetJob(source,options,{host:standaloneDatasetHost});
+  const group=prepared.sourceQueryRegistrations!.find(g=>g.receipt.historicalSourceQueries)!;
+  const database={query:async()=>{throw Error("storage must not be queried");}};
+  await assert.rejects(registerSourceQueries(database,group.receipt,"different-source",group.queries),/historical source query authority/);
+  await assert.rejects(verifySourceQueries(database,group.receipt,"different-source",group.queries),/historical source query authority/);
+});

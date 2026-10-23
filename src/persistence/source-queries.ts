@@ -1,3 +1,4 @@
+import { assertHistoricalSourceQueryAuthority } from "../datasets/source-query/historical-authority.ts";
 import { loadHistoricalSourceQueryViewer } from "./source-query-history.ts";
 import type { SqlClient, SqlDatabase } from "./sql-contracts.ts";
 import type {
@@ -23,6 +24,7 @@ export async function registerSourceQueries(
   sourceNamespace: string,
   queries: readonly MigrationSourceQueryRegistration[],
 ): Promise<void> {
+  if (receipt.historicalSourceQueries) assertHistoricalSourceQueryAuthority(receipt.historicalSourceQueries,{...receipt,sourceNamespace});
   for (const query of queries) {
     validateSourceRegistration(query);
     if (
@@ -75,6 +77,7 @@ export async function verifySourceQueries(
   sourceNamespace: string,
   queries: readonly MigrationSourceQueryRegistration[],
 ): Promise<void> {
+  if (receipt.historicalSourceQueries) assertHistoricalSourceQueryAuthority(receipt.historicalSourceQueries,{...receipt,sourceNamespace});
   const names = new Set(queries.map((q) => q.name));
   if (names.size !== queries.length)
     throw Error("Source query registration conflict");
