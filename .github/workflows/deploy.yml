@@ -131,7 +131,8 @@ jobs:
     if: github.ref == 'refs/heads/artefactv2' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !(github.event_name == 'workflow_dispatch' && inputs['codeql-proof-only']) && needs.fast.result == 'success' && needs.security.result == 'success' && needs.node.result == 'success'
     needs: [fast, node, security]
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # Allow the bounded 30-minute backup plus image builds and health checks.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Deploy the checked commit
