@@ -4,7 +4,7 @@ import {planHtmlClone} from '../clone';
 it('copies an explicit immutable code allowlist without credentials, owner authority or state',async()=>{
  const record={backendId:'b',version:'v',pageId:'p',name:'db',source:'code',compiled:'compiled',typeDefs:'type Query { ok: Boolean }',ownerId:'original',secretBindings:['API_KEY'],value:{private:'hidden'}};
  const result=await planHtmlClone(ANONYMOUS_ACTOR,'p',[{kind:'backend',name:'db',backendId:'b',version:'v'}],{backend:async()=>record,authorizeDataset:vi.fn()});
- expect(result).toEqual({htmlBackends:[{name:'db',source:'code',compiled:'compiled',typeDefs:'type Query { ok: Boolean }'}],htmlDatasets:[]});
+ expect(result).toEqual({htmlBackends:[{name:'db',source:'code',compiled:'compiled',typeDefs:'type Query { ok: Boolean }',secretBindings:['API_KEY']}],htmlDatasets:[]});
 });
 it('retains dataset bindings only after checking the receiving principal and preserves pinning',async()=>{
  const binding={kind:'dataset' as const,name:'data',datasetId:'dataset',mode:'pinned' as const,revision:'2'};

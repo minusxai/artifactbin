@@ -13,8 +13,9 @@ export async function planHtmlClone(actor:AccessActor,pageId:string,links:readon
   if(link.kind==='dataset'){await ports.authorizeDataset(actor,link);htmlDatasets.push({...link});continue;}
   const backend=await ports.backend(link.backendId,link.version);
   if(!backend||backend.pageId!==pageId||backend.name!==link.name)throw Error('backend_link_mismatch');
-  // Explicit allowlist: never spread owner bindings, secret values, or store state.
-  htmlBackends.push({name:link.name,source:backend.source,typeDefs:backend.typeDefs,compiled:backend.compiled});
+  // Declaration names are immutable code metadata; secret rows are scoped to the fresh backend ID.
+  // Never spread owner authority, credential values, or store state.
+  htmlBackends.push({name:link.name,source:backend.source,typeDefs:backend.typeDefs,compiled:backend.compiled,...(backend.secretBindings?{secretBindings:[...backend.secretBindings]}:{})});
  }
  return {htmlBackends,htmlDatasets};
 }
