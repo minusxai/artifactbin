@@ -14,7 +14,7 @@ Use the original artifact API with an email-authenticated bearer; [sign in and s
 {"html":"<!doctype html><html><head><title>Field notes</title></head><body><h1>Field notes</h1><p>A useful first version.</p></body></html>","title":"Field notes","visibility":"unlisted"}
 ```
 
-Send an `Idempotency-Key` header containing 16–128 letters, digits, underscores or hyphens. Generate it once and keep it with the complete request body outside the page. A successful create returns the original artifact identity, `url` and canonical `html`. Share the returned URL; do not invent a host or path.
+Send an `Idempotency-Key` header containing 16–128 letters, digits, underscores or hyphens. Generate it once and keep it with the complete request body outside the page. Custom request-generation scripts must create the saved file exclusively (`writeFile` with `flag:"wx"` or Python `open(path,"x")`). If it exists, reuse it; never rerun a recipe that overwrites its body or generates a replacement key after an uncertain send. A successful create returns the original artifact identity, `url` and canonical `html`. Share the returned URL; do not invent a host or path.
 
 The server inserts the core first, assigns stable `data-af-id` identities to elements and preserves the rest of the HTML source. Forms, styles, module scripts and SVG are ordinary browser content. There is no JSX/Helmet conversion step.
 
