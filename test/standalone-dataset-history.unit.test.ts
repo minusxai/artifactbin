@@ -181,6 +181,7 @@ test("expanded preparation and HTML planning retain every version's catalog and 
     JSON.stringify([artifact.id, 3]),
   )!;
   assert.equal(prior.kind, "stored");
+  if (prior.kind === "stored") assert.equal(prior.binding.mode, "pinned");
   if (prior.kind === "stored")
     assert.equal(prior.binding.tables[0]!.table, "old_rows");
   const plan = await createMigrationJobPlanner(source, options, async () => {
@@ -281,4 +282,48 @@ test("derived saved identity is explicit, raw-source-bound and never replaces an
     standaloneDatasetEditIdentity({ ...row, edit_id: "original" }, true),
     { editId: "original" },
   );
+});
+
+test("expanded dataset preparation rejects forged, foreign and duplicate archived head overlaps", async () => {
+  const { collectStandaloneDatasetHistory } = await import(
+    "../src/migration/dataset-pages/history.ts"
+  );
+  const { artifact, source, options } = standaloneDatasetFixture();
+  const admission = options.standaloneDatasetPages!;
+  admission.history = { kind: "standalone-dataset-history-v1", revisions: [] };
+  let archives = [{ ...artifact, artifact_id: artifact.id }];
+  source.readArtifact = async () => ({
+    ...source.base,
+    artifacts: [artifact],
+    tables: { artifact_versions: archives },
+  });
+  assert.equal(
+    (await collectStandaloneDatasetHistory(source, admission.heads)).revisions
+      .length,
+    0,
+  );
+  for (const invalid of [
+    [{ ...archives[0]!, title: "forged" }],
+    [{ ...archives[0]!, artifact_id: "foreign" }],
+    [archives[0]!, archives[0]!],
+  ]) {
+    archives = invalid;
+    assert.throws(
+      () =>
+        admitStandaloneDatasetHistory(
+          {
+            ...source.base,
+            artifacts: [artifact],
+            tables: { artifact_versions: archives },
+          },
+          admission,
+          artifact.id,
+        ),
+      /Conflicting|Duplicate|owner/,
+    );
+    await assert.rejects(
+      () => collectStandaloneDatasetHistory(source, admission.heads),
+      /Conflicting|Duplicate/,
+    );
+  }
 });

@@ -4,6 +4,26 @@ import type { LegacyRow, MigrationManifest } from "../contracts.ts";
 import type { StandaloneDatasetJobAdmission } from "./admission-contracts.ts";
 const sha = (row: LegacyRow) =>
   createHash("sha256").update(canonical(row)).digest("hex");
+function assertHeadOverlap(head: LegacyRow, row: LegacyRow): void {
+  const fields = [
+    "format",
+    "source",
+    "document",
+    "title",
+    "description",
+    "meta",
+    "actor_user_id",
+    "actor_token_id",
+  ];
+  if (
+    row.artifact_id !== head.id ||
+    fields.some(
+      (field) =>
+        canonical(row[field] ?? null) !== canonical(head[field] ?? null),
+    )
+  )
+    throw Error("Conflicting archived and current dataset source revision");
+}
 /** Returns original rows, never head-overlaid archives or invented missing originals. */
 export function admitStandaloneDatasetHistory(
   manifest: MigrationManifest,
@@ -31,6 +51,7 @@ export function admitStandaloneDatasetHistory(
     expected.set(entry.version, entry.artifactSha256);
   }
   const originals = new Map<number, LegacyRow>();
+  let headOverlap = false;
   for (const row of manifest.tables.artifact_versions ?? []) {
     if (row.artifact_id !== legacyId)
       throw Error("Invalid standalone dataset history owner");
@@ -42,7 +63,12 @@ export function admitStandaloneDatasetHistory(
     )
       throw Error("Invalid standalone dataset history version");
     // The head may also have a saved archive record; the normal page planner checks content equivalence.
-    if (version === head.version) continue;
+    if (version === head.version) {
+      if (headOverlap) throw Error("Duplicate archived dataset head");
+      headOverlap = true;
+      assertHeadOverlap(head, row);
+      continue;
+    }
     if (originals.has(version))
       throw Error("Invalid duplicate standalone dataset history version");
     originals.set(version, row);
@@ -88,8 +114,14 @@ export async function collectStandaloneDatasetHistory(
     )
       throw Error("Standalone dataset history head changed");
     const versions = new Set<number>();
+    let headOverlap = false;
     for (const row of manifest.tables.artifact_versions ?? []) {
-      if (row.version === head.version) continue;
+      if (row.version === head.version) {
+        if (headOverlap) throw Error("Duplicate archived dataset head");
+        headOverlap = true;
+        assertHeadOverlap(head, row);
+        continue;
+      }
       if (
         row.artifact_id !== head.id ||
         row.format !== "dataset" ||

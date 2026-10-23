@@ -249,7 +249,10 @@ export async function scanStandaloneDatasetPages(
                 legacyRef: "ref:" + head.id,
                 datasetLegacyId: head.id,
                 datasetVersion: head.version,
-                mode: "live",
+                mode:
+                  original.version === artifact.artifacts[0]!.version
+                    ? "live"
+                    : "pinned",
               },
             ],
           },
