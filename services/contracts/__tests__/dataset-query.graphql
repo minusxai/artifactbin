@@ -1,0 +1,1 @@
+query Read($table: ID!) { records { rows(tableId: $table, columnIds: ["col-title"], first: 20, filters: [{columnId: "col-score", operator: GTE, value: {type: NUMBER, number: 5}}], order: [{columnId: "col-score", direction: DESC}]) { revision rows { id cells { columnId value { type string number boolean json } } } pageInfo { hasNextPage endCursor } } } }

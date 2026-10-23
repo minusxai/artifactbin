@@ -72,3 +72,8 @@ export * from './deny';
 export * from "./groups";
 
 export { assetFormatOf, FILE_EXTENSIONS, fileContentType } from './file-types';
+
+export * from './html-page';
+export * from './html-annotation';
+export * from './page-operation';
+export * from './dataset-graphql';

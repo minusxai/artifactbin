@@ -1,12 +1,12 @@
 /**
  * THE format vocabulary — the wire, the DB and the pages all speak the same
- * values; `markup` is THE document format and the rest are data tiers.
+ * values; `html` is authored HTML; existing internal tiers remain explicit.
  *
  * The runtime list and the type are ONE declaration, so a reader that has to
  * ask "is this a format we serve?" (the page, the raw route) cannot drift from
  * the type the wire is checked against.
  */
-export const ARTIFACT_FORMATS = ['markup', 'dataset', 'viz', 'image', 'pdf', 'file', 'folder', 'program'] as const;
+export const ARTIFACT_FORMATS = ['html', 'markup', 'dataset', 'viz', 'image', 'pdf', 'file', 'folder', 'program'] as const;
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
 
 /**
@@ -17,6 +17,6 @@ export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
  * first time a tier is added and let that tier through the one door that must
  * not take it.
  */
-export const TEXT_CONTENT_FIELDS = ['markup'] as const;
+export const TEXT_CONTENT_FIELDS = ['html', 'markup'] as const;
 export const DATA_CONTENT_FIELDS = ['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image', 'pdf', 'pdfUrl', 'file', 'program'] as const;
 export const CONTENT_FIELDS = [...TEXT_CONTENT_FIELDS, ...DATA_CONTENT_FIELDS] as const;
