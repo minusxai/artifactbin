@@ -31,7 +31,7 @@ if(name==='docker'){
  if(op==='create'){const token=args[args.indexOf('--label',args.indexOf('--label')+1)+1].split('=')[1];state[key]={Labels:{'pagegi.backup-proof-job':token}};save();process.stdout.write(key);process.exit(0);}
  if(op==='inspect'){if(!state[key]){process.stderr.write('No such '+(volume?'volume':'container'));process.exit(1);}process.stdout.write(JSON.stringify([state[key]]));process.exit(0);}
  if(op==='rm'){delete state[key];save();process.exit(0);}
- if(op==='run'){const container=args[args.indexOf('--name')+1],token=args[args.indexOf('--label',args.indexOf('--label')+1)+1].split('=')[1];state[container]={Config:{Labels:{'pagegi.backup-proof-job':token}}};save();if(container.endsWith('-probe'))process.stdout.write('1073741824');else if('${failure}'==='restore'){process.stderr.write('private-host-and-password');process.exit(1);}process.exit(0);}
+ if(op==='run'){const container=args[args.indexOf('--name')+1],token=args[args.indexOf('--label',args.indexOf('--label')+1)+1].split('=')[1];state[container]={Config:{Labels:{'pagegi.backup-proof-job':token}}};save();if(container.endsWith('-probe'))process.stdout.write(args.at(-1).startsWith('du ')?'1024':'1073741824');else if('${failure}'==='restore'){process.stderr.write('private-host-and-password');process.exit(1);}process.exit(0);}
 }
 `;
       for (const name of ["pg_dump", "psql", "docker"])

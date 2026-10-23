@@ -40,12 +40,16 @@ with `--exit-on-error` into a disposable offline PostgreSQL verifier: no network
 ports, production mounts or credentials, read-only root filesystem and a private
 Docker-managed disk volume. Source relation sizes determine archive and restore
 budgets (at most32GiB and64GiB), with an8GiB untouched free-space reserve.
-Host and Docker filesystem capacity are checked before dumping; the dump has an
-OS file-size limit. During restore, disk usage and free space are measured every
+The archive limit also respects current host free space. After dumping, actual
+archive bytes and remaining host/Docker filesystem space determine the restore
+budget: up to three source sizes plus the archive copy and1GiB, bounded by64GiB
+and free space minus the reserve. Admission requires room for one source size,
+the archive copy and1GiB; expansion beyond the admitted budget aborts safely.
+The dump has an OS file-size limit and a free-space monitor. During restore, disk usage and free space are measured every
 2seconds, with a30minute deadline. These are monitored budgets, not filesystem
 quotas. Restore failure prevents rollout. Container and volume ownership labels
 and inspected absence are required before publishing a verified recovery point;
-cleanup failure leaves no verified marker. SIGTERM/SIGINT clean up owned work;
+cleanup failure leaves no verified marker. Receipts record actual archive and restored volume bytes. SIGTERM/SIGINT clean up owned work;
 a host crash or SIGKILL requires review of `pagegi.backup-proof=1` leftovers. The receiver requires the PostgreSQL18 client and a fixed
 `postgres:18-bookworm` verifier, matching the remote server major version.
 

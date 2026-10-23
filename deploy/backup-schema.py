@@ -51,9 +51,27 @@ def capacity(source_bytes):
         raise RuntimeError("Invalid measured schema size")
     archive = max(GIB, source_bytes * 2 + GIB)
     volume = max(4 * GIB, source_bytes * 3 + archive + GIB)
-    if archive > MAX_ARCHIVE_BYTES or volume > MAX_VOLUME_BYTES:
+    if archive > MAX_ARCHIVE_BYTES:
         raise RuntimeError("Measured backup exceeds the reviewed disk budget")
-    return archive, volume
+    return archive, min(volume, MAX_VOLUME_BYTES)
+
+def restore_capacity(source_bytes, archive_bytes, free_bytes):
+    """Bound the verifier by measured remaining capacity, including its archive copy.
+
+    The desired expansion allowance is three source sizes plus archive and 1GiB.
+    A smaller available budget is safe because the existing live monitor fails
+    closed before publishing a verified recovery point. Admission still requires
+    source size, the measured archive copy and 1GiB of database/WAL headroom.
+    """
+    if any(not isinstance(value, int) or value < 0
+           for value in (source_bytes, archive_bytes, free_bytes)):
+        raise RuntimeError("Invalid measured backup capacity")
+    minimum = source_bytes + archive_bytes + GIB
+    desired = max(4 * GIB, source_bytes * 3 + archive_bytes + GIB)
+    budget = min(desired, MAX_VOLUME_BYTES, free_bytes - RESERVE_BYTES)
+    if budget < minimum:
+        raise RuntimeError("Insufficient measured disk space for restore proof")
+    return budget
 
 def command(args, *, timeout=30, **options):
     try:
@@ -107,6 +125,17 @@ class VolumeProof:
         self.remove_container(self.probe)
         self.containers.remove(self.probe)
         return free
+
+    def measure_bytes(self, usage=False):
+        self.containers.append(self.probe)
+        output = capture(["docker", "run", "--name", self.probe, *self.labels(),
+                          "--network=none", "--read-only", "--cap-drop=ALL", "--user=postgres",
+                          *self.mount(readonly=True), "--entrypoint", "sh",
+                          "postgres:18-bookworm", "-c",
+                          ("du -sk /proof | awk '{print $1}'" if usage else "df -Pk /proof | awk 'NR==2{print $4}'")])
+        self.remove_container(self.probe)
+        self.containers.remove(self.probe)
+        return integer(output) * 1024
 
     def remove_container(self, name):
         if absent([], name):
@@ -188,6 +217,37 @@ case "$used:$free" in *[!0-9:]*|:*) exit 1;; esac
                     process.kill()
                 process.wait(timeout=15)
 
+def dump_archive(environment, output, archive_limit, directory, deadline):
+    def file_limit():
+        resource.setrlimit(resource.RLIMIT_FSIZE, (archive_limit, archive_limit))
+    args = ["pg_dump", "--format=custom", "--schema=" + SCHEMA,
+            "--schema=artefactv2_migration", "--strict-names", "--no-owner", "--no-privileges"]
+    try:
+        process = subprocess.Popen(args, env=environment, stdout=output,
+                                   stderr=subprocess.DEVNULL, preexec_fn=file_limit)
+    except OSError:
+        raise RuntimeError("Backup archive could not start") from None
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("Backup archive deadline exceeded")
+            if shutil.disk_usage(directory).free < RESERVE_BYTES:
+                raise RuntimeError("Backup free-space reserve reached")
+            try:
+                code = process.wait(timeout=min(POLL_SECONDS, remaining))
+                if code != 0:
+                    raise RuntimeError("Schema archive failed")
+                if shutil.disk_usage(directory).free < RESERVE_BYTES:
+                    raise RuntimeError("Backup free-space reserve reached")
+                return
+            except subprocess.TimeoutExpired:
+                continue
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait(timeout=15)
+
 def integer(value):
     if not re.fullmatch(rb"[0-9]+", value.strip()):
         raise RuntimeError("Invalid measured backup capacity")
@@ -200,30 +260,36 @@ def backup(config, destination):
         raise RuntimeError("PostgreSQL 18 backup client is required")
     size_sql = "SELECT coalesce(sum(pg_total_relation_size(c.oid)),0)::bigint FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('artefactv2','artefactv2_migration') AND c.relkind IN ('r','m');"
     source_bytes = integer(capture(["psql", "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", size_sql], env=environment, timeout=30))
-    archive_limit, volume_limit = capacity(source_bytes)
+    archive_limit, _ = capacity(source_bytes)
     partial = destination.with_name(destination.name + ".tmp")
     marker = destination.with_name(destination.name + ".verified")
     if destination.exists() or marker.exists():
         raise RuntimeError("Backup destination already exists")
-    if shutil.disk_usage(destination.parent).free < archive_limit + volume_limit + RESERVE_BYTES:
-        raise RuntimeError("Insufficient measured disk space for archive and restore proof")
+    archive_limit = min(archive_limit, shutil.disk_usage(destination.parent).free - RESERVE_BYTES)
+    if archive_limit < GIB:
+        raise RuntimeError("Insufficient measured disk space for archive")
     proof = VolumeProof()
     deadline = time.monotonic() + JOB_SECONDS
     try:
-        if proof.create() < archive_limit + volume_limit + RESERVE_BYTES:
+        if proof.create() < RESERVE_BYTES:
             raise RuntimeError("Insufficient Docker volume filesystem capacity")
         with partial.open("xb") as output:
             partial.chmod(0o600)
-            def file_limit():
-                resource.setrlimit(resource.RLIMIT_FSIZE, (archive_limit, archive_limit))
-            command(["pg_dump", "--format=custom", "--schema=" + SCHEMA, "--schema=artefactv2_migration", "--strict-names", "--no-owner", "--no-privileges"], env=environment, stdout=output, timeout=max(1, deadline-time.monotonic()), preexec_fn=file_limit)
+            dump_archive(environment, output, archive_limit, destination.parent, deadline)
         if partial.stat().st_size > archive_limit:
             raise RuntimeError("Backup archive disk budget exceeded")
+        archive_bytes = partial.stat().st_size
+        free_bytes = min(shutil.disk_usage(destination.parent).free,
+                         proof.measure_bytes())
+        volume_limit = restore_capacity(source_bytes, archive_bytes, free_bytes)
         proof.restore(partial, volume_limit, destination.parent, deadline)
+        restored_bytes = proof.measure_bytes(usage=True)
+        if restored_bytes > volume_limit:
+            raise RuntimeError("Backup restore disk budget exceeded")
         proof.close()
         partial.rename(destination)
         with marker.open("x") as verified:
-            verified.write(json.dumps({"verification":"offline restore completed", "sourceBytes":source_bytes, "archiveBytes":destination.stat().st_size, "archiveLimit":archive_limit, "restoreVolumeLimit":volume_limit, "reserveBytes":RESERVE_BYTES}) + "\n")
+            verified.write(json.dumps({"verification":"offline restore completed", "sourceBytes":source_bytes, "archiveBytes":destination.stat().st_size, "restoredBytes":restored_bytes, "archiveLimit":archive_limit, "restoreVolumeLimit":volume_limit, "reserveBytes":RESERVE_BYTES}) + "\n")
         marker.chmod(0o600)
     finally:
         partial.unlink(missing_ok=True)
