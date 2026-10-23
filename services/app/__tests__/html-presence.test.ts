@@ -1,3 +1,5 @@
+import {artifactChannel} from '@artifactbin/contracts';
+import {sseStream} from './sse';
 import {beforeEach,expect,it} from 'vitest';
 import {POST} from '@/app/api/artifacts/[id]/presence/route';
 import {GET} from '@/app/a/[id]/events/route';
@@ -33,4 +35,24 @@ it('fans a native cursor out to simultaneous mixed-case page readers on their ex
   const received=await Promise.race([Promise.all(connections.map(({reader})=>readPresence(reader))),new Promise<never>((_resolve,reject)=>setTimeout(()=>reject(new Error('Presence fanout timed out')),2000))]);
   for(const text of received){expect(text).toContain('"nodeId":"p"');expect(text).not.toContain(session);}
  }finally{for(const {abort} of connections)abort.abort();await Promise.all(connections.map(({reader})=>reader.cancel()));}
+});
+
+it('rebinds presence to a published source revision without closing document updates, then closes on lost access',async()=>{
+ const abort=new AbortController(),req=new Request(request('/a/presMixed/events'),{signal:abort.signal});
+ const response=await runWithRequest(req,()=>GET(req,params('presMixed'))),stream=sseStream(response.body!);
+ const db=await harness.db();
+ try{
+  expect((await stream.named('message'))[0]?.data.version).toBe(1);
+  await db.query("UPDATE artifacts SET version=2 WHERE id='presMixed'");
+  await db.query("SELECT pg_notify($1,'')",[artifactChannel('presMixed')]);
+  expect((await stream.named('message'))[0]?.data.version).toBe(2);
+  await stream.named('presence');
+  expect((await publish('presMixed',{session,revision:'2',cursor:{nodeId:'p',x:.4,y:.5},visible:true})).status).toBe(200);
+  const deadline=Date.now()+2000;let present=false;
+  while(Date.now()<deadline&&!present)present=JSON.stringify(await stream.named('presence',1,deadline-Date.now())).includes('"nodeId":"p"');
+  expect(present).toBe(true);
+  await db.query("UPDATE artifacts SET visibility='private' WHERE id='presMixed'");
+  await db.query("SELECT pg_notify($1,'')",[artifactChannel('presMixed')]);
+  expect(await stream.named('message',1,200)).toEqual([]);
+ }finally{abort.abort();stream.close();}
 });

@@ -61,7 +61,7 @@ it('refreshes membership and action permissions without publishing a version', a
   const doc = await made.json();
   const stream = await connect(doc.id);
   try {
-    await stream.next(1);
+    await stream.named('message');
     await changeMembership(identityForUser(owner.id, token.id), doc.id, {
       action: 'leave',
     });
@@ -83,7 +83,7 @@ it('names the native alias after committed dataset mutation, retaining one subsc
       datasets: ['choices'],
       revisions: { choices: expect.stringContaining(`dataset:${ds.id}:1:`) },
     });
-    expect(liveChannelCount()).toBe(2);
+    expect(liveChannelCount()).toBe(3);
     const written = await mutate(
       request(`/api/artifacts/${ds.id}/mutate`, {
         method: 'POST',
@@ -93,7 +93,7 @@ it('names the native alias after committed dataset mutation, retaining one subsc
       params(ds.id),
     );
     expect(written.status).toBe(200);
-    expect((await stream.next(1))[0]?.data).toMatchObject({
+    expect((await stream.named('data'))[0]?.data).toMatchObject({
       datasets: ['choices'],
       revisions: { choices: expect.stringContaining(`dataset:${ds.id}:2:`) },
     });
@@ -106,7 +106,7 @@ it('a folder hears its own child without adding a second channel', async () => {
     folder = await create({ format: 'folder', title: 'Folder' }),
     stream = await connect(folder.id);
   try {
-    await stream.next(1);
+    await stream.named('message');
     expect(liveChannelCount()).toBe(1);
     await create({ html: nativeHtml('<p>Filed</p>'), parent_id: folder.id });
     expect(
@@ -158,8 +158,8 @@ it('whole-dataset replacement invalidates aliases while unrelated pages hear not
     a = await connect(reader.id),
     b = await connect(other.id);
   try {
-    await a.next(2);
-    await b.next(1);
+    await a.named('data');
+    await b.named('message');
     expect(
       (
         await PUT(
@@ -172,7 +172,7 @@ it('whole-dataset replacement invalidates aliases while unrelated pages hear not
         )
       ).status,
     ).toBe(200);
-    expect((await a.next(1))[0]?.data.datasets).toEqual(['choices']);
+    expect((await a.named('data'))[0]?.data.datasets).toEqual(['choices']);
     expect((await b.next(1, 300)).filter((e) => e.event === 'data')).toEqual(
       [],
     );
@@ -186,8 +186,8 @@ it('a newly published native link is subscribed before its version is announced'
     doc = await create({ html: nativeHtml('<p>Prose</p>') }),
     stream = await connect(doc.id);
   try {
-    await stream.next(1);
-    expect(liveChannelCount()).toBe(1);
+    await stream.named('message');
+    expect(liveChannelCount()).toBe(2);
     expect(
       (
         await PUT(
@@ -200,12 +200,12 @@ it('a newly published native link is subscribed before its version is announced'
         )
       ).status,
     ).toBe(200);
-    const events = await stream.next(2);
+    const events = [...await stream.named('data'),...await stream.named('message')];
     expect(events.find((e) => e.event === 'data')?.data.datasets).toEqual([
       'choices',
     ]);
     expect(events.find((e) => e.event === 'message')?.data.version).toBe(2);
-    expect(liveChannelCount()).toBe(2);
+    expect(liveChannelCount()).toBe(3);
   } finally {
     stream.close();
   }

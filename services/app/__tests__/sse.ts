@@ -24,6 +24,8 @@ interface SseEvent {
 interface SseStream {
   /** The next `count` events, or fewer if the budget runs out. Never rejects on a slow stream. */
   next(count: number, budgetMs?: number): Promise<SseEvent[]>;
+  /** Wait for named frames while other event types share the connection. */
+  named(event:string,count?:number,budgetMs?:number):Promise<SseEvent[]>;
   /** The next `count` payloads, for the tests that only care what the frames said. */
   frames(count: number, budgetMs?: number): Promise<Record<string, unknown>[]>;
   /** Release the reader. Idempotent; safe to skip, since each call stops at its budget. */
@@ -37,6 +39,7 @@ export function sseStream(body: ReadableStream<Uint8Array>): SseStream {
   const decoder = new TextDecoder();
   let buffer = '';
   let closed = false;
+  let namedPending:SseEvent[]=[];
 
   const next = async (count: number, budgetMs = DEFAULT_BUDGET_MS): Promise<SseEvent[]> => {
     const out: SseEvent[] = [];
@@ -75,6 +78,16 @@ export function sseStream(body: ReadableStream<Uint8Array>): SseStream {
 
   return {
     next,
+    named:async(event,count=1,budgetMs=DEFAULT_BUDGET_MS)=>{
+      const out=namedPending.filter(frame=>frame.event===event),deadline=Date.now()+budgetMs;
+      namedPending=namedPending.filter(frame=>frame.event!==event);
+      while(out.length<count&&Date.now()<deadline&&!closed){
+        for(const frame of await next(1,deadline-Date.now())){
+          if(frame.event===event)out.push(frame);else namedPending.push(frame);
+        }
+      }
+      return out;
+    },
     frames: async (count, budgetMs) => (await next(count, budgetMs)).map((event) => event.data),
     close: () => { closed = true; void reader.cancel().catch(() => {}); },
   };
@@ -84,6 +97,5 @@ export function sseStream(body: ReadableStream<Uint8Array>): SseStream {
 export const readFrames = (body: ReadableStream<Uint8Array>, count: number, budgetMs?: number) =>
   sseStream(body).frames(count, budgetMs);
 
-/** Same, keeping each block's `event:` name. */
-export const readEvents = (body: ReadableStream<Uint8Array>, count: number, budgetMs?: number) =>
-  sseStream(body).next(count, budgetMs);
+/** Read one kind of frame without relying on interleaved event order. */
+export const readNamed=(body:ReadableStream<Uint8Array>,event:string,count=1,budgetMs?:number)=>sseStream(body).named(event,count,budgetMs);

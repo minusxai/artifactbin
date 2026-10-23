@@ -248,6 +248,22 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     by: await authorHandle(row),
   });
 
+  let presenceRevision:string|undefined,replacingPresence=false;
+  const followPresence=async(row:NonNullable<Awaited<ReturnType<typeof getArtifactById>>>)=>{
+    if(closed||row.format!=='html'||presenceRevision===String(row.version))return;
+    // A new source revision replaces only its presence room, never the document stream.
+    replacingPresence=true;presenceRoom?.dispose();replacingPresence=false;
+    latestPresence=null;presenceRevision=String(row.version);
+    const room=await createPresenceRoom({revision:String(row.version),
+      authorize:async()=>{const current=await getArtifactById(id);return !!current&&await canReadArtifact(current,actor);},
+      subscribe:(receive,lost)=>subscribeChannel(presenceChannel(id),receive,lost),
+      subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),
+      send:viewers=>{latestPresence=viewers;writePresence();},close:()=>{if(!replacingPresence)void close();},
+      clock:{now:Date.now,setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>),setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>)}
+    });
+    presenceRoom=room;if(closed)room.dispose();
+  };
+
   const queueRow = (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => {
     frameQueue = frameQueue.then(async () => {
       if (closed || row.version < lastVersionSent) return;
@@ -261,6 +277,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // A FOLDER's one data dependency is ITSELF, which is what makes a
       // child's publish reach an open folder page through the path a dataset
       // write already travels.
+      await followPresence(row);
       await followDatasets(row);
       await pushHtmlShared(row);
       await send(frame);
@@ -293,13 +310,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     // window in which a write to this document's dataset reached nobody.
     // Later frames adjust the set when an edit changes what the document reads.
     await followDatasets(initial);
-    if(initial.format==='html')presenceRoom=await createPresenceRoom({revision:String(initial.version),
-      authorize:async()=>{const current=await getArtifactById(id);return !!current&&String(current.version)===String(initial.version)&&await canReadArtifact(current,actor);},
-      subscribe:(receive,lost)=>subscribeChannel(presenceChannel(id),receive,lost),
-      subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),
-      send:viewers=>{latestPresence=viewers;writePresence();},close:()=>void close(),
-      clock:{now:Date.now,setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>),setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>)}
-    });
     if (annotatorConnection) {
       try {
         annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations(), listenerLost);

@@ -44,7 +44,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { useAppHarness, request, mintAccountToken } from '@/__tests__/harness';
-import { readFrames } from '@/__tests__/sse';
+import { readNamed } from '@/__tests__/sse';
 
 useAppHarness();
 
@@ -78,12 +78,12 @@ describe('a write that commits while the stream is opening', () => {
 
     const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
     expect(res.status).toBe(200);
-    const frames = await readFrames(res.body!, 1);
+    const frames = await readNamed(res.body!, 'message');
 
     expect(frames.length, 'the stream sent no frame at all').toBeGreaterThan(0);
     expect(
-      frames[0].editId,
-      `the opening frame is stale — the reader never learns about the write (got ${JSON.stringify(frames.map((f) => f.editId))}, current is ${newEditId})`,
+      frames[0].data.editId,
+      `the opening frame is stale — the reader never learns about the write (got ${JSON.stringify(frames.map((f) => f.data.editId))}, current is ${newEditId})`,
     ).toBe(newEditId);
     // …and the frame that ping points at is the state after the write.
     const frame = await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }));

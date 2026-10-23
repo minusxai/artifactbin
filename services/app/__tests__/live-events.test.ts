@@ -7,7 +7,7 @@ import {
   request,
   mintAccountToken as mintToken,
 } from './harness';
-import { readFrames, sseStream } from './sse';
+import { readNamed, sseStream } from './sse';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { POST as actOnAnnotationRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import {
@@ -84,7 +84,7 @@ it('every committed native whole-source replacement wakes readers with the new h
       request(`/a/${doc.id}/events`),
       params({ id: doc.id }),
     ),
-    pending = readFrames(response.body!, 2);
+    pending = readNamed(response.body!, 'message', 2);
   const changed = await replace(
     token,
     doc.id,
@@ -93,8 +93,8 @@ it('every committed native whole-source replacement wakes readers with the new h
   expect(changed.status).toBe(200);
   const frames = await pending;
   expect(frames).toHaveLength(2);
-  expect(frames[1]).toMatchObject({ version: 2 });
-  expect(frames[1]!.editId).not.toBe(doc.edit_id);
+  expect(frames[1].data).toMatchObject({ version: 2 });
+  expect(frames[1]!.data.editId).not.toBe(doc.edit_id);
   expect(
     await (
       await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }))
@@ -287,7 +287,7 @@ describe('GET /a/<id>/events — the annotations frame', () => {
     // Frame 1 is the version ping (the stream is self-syncing); an annotations
     // PING follows. The list itself is fetched — the stream carries nothing a
     // blind relay would have to understand.
-    const opening = await reader.next(2);
+    const opening = await reader.named(STORY_ANNOTATIONS_EVENT);
     const connectFrame = opening.find(
       (e) => e.event === STORY_ANNOTATIONS_EVENT,
     );
@@ -317,7 +317,7 @@ describe('GET /a/<id>/events — the annotations frame', () => {
       }),
       params({ id: doc.id, annId: first.id }),
     );
-    const next = await reader.next(1);
+    const next = await reader.named(STORY_ANNOTATIONS_EVENT);
     expect(next[0].event).toBe(STORY_ANNOTATIONS_EVENT);
     expect((await list()).filter((a) => a.status === 'open')).toEqual([]);
     reader.close();

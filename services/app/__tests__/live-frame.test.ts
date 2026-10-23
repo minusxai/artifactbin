@@ -13,7 +13,7 @@ import { resetFrameCache, frameBuilds } from '@/lib/publish/data/frame';
 import { request, useAppHarness, mintAccountToken } from './harness';
 import { observedRequest } from './conditional-request';
 import { nativeHtml } from './native-html-fixture';
-import { readEvents } from './sse';
+import { readNamed } from './sse';
 useAppHarness();
 beforeEach(async () => {
   resetFrameCache();
@@ -154,7 +154,7 @@ it('native source publication streams only a head ping, not HTML or compiler nod
   expect(response.status).toBe(200);
   expect(response.headers.get('Content-Type')).toContain('text/event-stream');
   expect(response.headers.get('Cache-Control')).toContain('no-store');
-  const [ping] = await readEvents(response.body!, 1);
+  const [ping] = await readNamed(response.body!, 'message');
   expect(ping?.event).toBe('message');
   expect(ping?.data).toEqual({ editId: doc.edit_id, version: 1, by: null });
 });
