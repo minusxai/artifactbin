@@ -87,6 +87,11 @@ function ArtifactRoute(): JSX.Element {
   return servedDocumentFrame() ? <DocumentPage /> : <ArtifactAddressRoute />;
 }
 
+/** A server-admitted frame already identifies the document; other aliases retain their original resolver. */
+function FramedAliasRoute(): JSX.Element {
+  return servedDocumentFrame() ? <DocumentPage /> : <ProfileAliasRoute />;
+}
+
 /** `/a/<id>/edit`: a served document opens in edit mode; a dataset's address is its editor. */
 function ArtifactEditRoute(): JSX.Element {
   return servedDocumentFrame() ? <DocumentPage /> : <ArtifactAddressRoute editing />;
@@ -127,7 +132,7 @@ export function App(): JSX.Element {
       {/* Every pretty alias — a document, a folder, a dataset's /edit — is ONE route (solid/pages/ProfileAlias.tsx
         * ProfileAliasRoute); a sibling `/:user/:alias` route here would overlap it and win first for
         * every one-segment alias regardless of what it actually names. */}
-      <Route path="/:user/*rest" component={ProfileAliasRoute} />
+      <Route path="/:user/*rest" component={FramedAliasRoute} />
       <Route path="*404" component={NotFoundPage} />
     </Router>
   );

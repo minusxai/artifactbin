@@ -111,7 +111,7 @@ it('places the doc agent handoff in trusted document navigation, outside the pag
   mockRole = 'owner'; mockTemplate = 'doc';
   mount();
   expect(screen.queryByRole('button', { name: 'Copy for agent' })).toBeNull();
-  fireEvent.click(trusted().getByRole('button', { name: 'Copy for agent' }));
+  fireEvent.click(await trusted().findByRole('button', { name: 'Copy for agent' }));
   await waitFor(() => expect(copyText).toHaveBeenCalledWith(expect.stringContaining('/a/doc12345 in place.')));
 });
 
@@ -434,11 +434,12 @@ it('leaving the document takes its frame off the page', () => {
   expect(host.isConnected).toBe(false);
 });
 
-it('a page served without a frame is the 404 page, never a reload', () => {
+it('a page served without a frame is the 404 page, never a reload', async () => {
   const replace = vi.fn();
   vi.stubGlobal('location', { ...window.location, replace });
   window.history.replaceState(null, '', '/a/doc');
   render(() => <Router><Route path="/a/:id" component={DocumentPage} /></Router>);
+  await vi.dynamicImportSettled();
   expect(screen.queryByLabelText('Artifact viewport')?.querySelector('iframe') ?? null).toBeNull();
   expect(replace).not.toHaveBeenCalled();
 });

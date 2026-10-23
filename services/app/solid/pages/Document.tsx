@@ -2,7 +2,6 @@ import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
 import { InstallArtifact } from '../document/InstallArtifact';
-import { CopyAgentButton } from '../components/CopyAgentButton';
 import { createEffect, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import { Portal } from 'solid-js/web';
@@ -19,7 +18,6 @@ import { takeBootstrap } from '@/solid/lib/bootstrap';
 import { adoptServedFrame } from '@/solid/lib/served-frame';
 import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
-import { NotFoundPage } from './NotFound';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import { ARTIFACT_ID_PATTERN, type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
 import { CspConsentBar } from '../document/CspConsentBar';
@@ -35,6 +33,7 @@ import { createIsPhoneViewport } from '../ui/MobileSheet';
 import { TrustedUi } from '../components/TrustedUi';
 import type { Panel } from '../components/PageChrome';
 import { DocumentChrome } from '../document/DocumentChrome';
+import {PendingReaderAction} from '../document/PendingReaderAction';
 import {PendingReaderDialog} from '../document/PendingReaderDialog';
 
 /** The document's own ground around its frame (a starter shows the app's dotted page instead). These hexes are the document's colors, not the app theme: they match the served reader's ground in each mode. */
@@ -42,6 +41,8 @@ const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 /** Dialogs and controls load on first use. Annotation tools load as soon as an authorized commenter is ready.
  * SelectionActions stays eager so the first native selection/right-click retains its capability bridge. */
+const CopyAgentButton = lazy(() => import('../components/CopyAgentButton').then(m => ({default:m.CopyAgentButton})));
+const NotFoundPage = lazy(() => import('./NotFound').then(m => ({default:m.NotFoundPage})));
 const ReaderPresenceControls = lazy(() => import('../document/ReaderPresenceControls').then(m => ({ default: m.ReaderPresenceControls })));
 const DocumentActions = lazy(() => import('../document/DocumentActions').then(m => ({ default: m.DocumentActions })));
 const AnnotationLayer = lazy(() => import('../document/AnnotationLayer').then(m => ({ default: m.AnnotationLayer })));
@@ -322,7 +323,7 @@ export function DocumentPage(): JSX.Element {
     const local = renamed();
     return local && currentVersion() <= local.version ? rowTitle({ title: local.title, heading: live()?.heading ?? page?.surface?.heading }) : rowTitle(live() ?? page?.surface ?? {});
   };
-  return <Show when={id && page && page.surface?.framedOrigin} fallback={<NotFoundPage />}>
+  return <Show when={id && page && page.surface?.framedOrigin} fallback={<Suspense fallback={<main role="status" aria-busy="true">Loading page…</main>}><NotFoundPage /></Suspense>}>
     <DocumentChrome id={id!} title={shownTitle} author={page!.surface?.author ?? null} follow={page!.follow ?? null}
       like={page!.like ?? { liked: false, count: 0 }} signedIn={accountSession} comments={openAnnotationCount}
       archived={page!.archived ?? null} canFork={!archivedNow()} owner={isOwner()}
@@ -343,7 +344,7 @@ export function DocumentPage(): JSX.Element {
     {/* First in document order: lib/islands/trusted-portal hands its portal to every popover, tooltip and dialog. */}
     <TrustedUi overlay layer="navigation">
       <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc'}>
-        <div class="fixed left-6" style={{ top: `${APP_BAR_H + 12}px` }}><CopyAgentButton id={id!} template="doc" /></div>
+        <div class="fixed left-6" style={{ top: `${APP_BAR_H + 12}px` }}><Suspense fallback={<PendingReaderAction label="Loading agent handoff" readyLabel="Copy for agent" />}><CopyAgentButton id={id!} template="doc" /></Suspense></div>
       </Show>
       <Show when={page?.surface?.pwaEnabled}><InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} /></Show>
       <Show when={fork() && id}><Suspense fallback={<PendingReaderDialog title="Fork artifact" onClose={() => setFork(false)} />}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>
