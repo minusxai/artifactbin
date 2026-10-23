@@ -18,18 +18,26 @@
  * (solid/ui/theme).
  */
 import { children as resolveChildren, createEffect, createSignal, createUniqueId, onCleanup, Show, type JSX } from 'solid-js';
-import { Portal } from 'solid-js/web';
-import { placePopper, type Placed, type Side } from '@/lib/islands/kit/popper';
+import { Dynamic, Portal } from 'solid-js/web';
+import type { Placed, Side } from '@/lib/islands/kit/popper';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
-import { ARROW_ORIGIN, ARROW_TRANSFORM, createTooltipTiming } from '@/lib/islands/kit/tooltip-core';
-import { LAYER } from './layers';
-import { appearanceOf } from './theme';
+import { createTooltipTiming } from '@/lib/islands/kit/tooltip-core';
+
+/** Trigger timing/ARIA stay eager; the floating positioning engine is interaction-only. */
+type Popup = typeof import('./TooltipPopper');
+let popupModule: Promise<Popup> | undefined;
+const loadPopup = () => popupModule ??= import('./TooltipPopper').catch(error => { popupModule = undefined; throw error; });
 
 export function Tooltip(props: { content: JSX.Element; children: JSX.Element; side?: Side; disabled?: boolean }): JSX.Element {
   const child = resolveChildren(() => props.children);
   const [open, setOpen] = createSignal(false);
   const [placed, setPlaced] = createSignal<Placed>();
   const id = createUniqueId();
+  const [popup,setPopup] = createSignal<Popup>();
+  let alive = true;
+  onCleanup(() => { alive = false; });
+  // A local module signal never holds the router's navigation transition.
+  createEffect(() => { if (open() && !popup()) void loadPopup().then(module => { if(alive) setPopup(module); }, () => {}); });
   const { state, enter, openNow, close } = createTooltipTiming({ open, setOpen });
 
   const trigger = (): HTMLElement | undefined => child.toArray().find((node): node is HTMLElement => node instanceof HTMLElement);
@@ -38,7 +46,7 @@ export function Tooltip(props: { content: JSX.Element; children: JSX.Element; si
     if (!el || props.disabled) return;
     let pointerDown = false; let moved = false;
     const handlers: Array<[string, EventListener]> = [
-      ['pointermove', (e) => { if ((e as PointerEvent).pointerType !== 'touch' && !moved) { enter(); moved = true; } }],
+      ['pointermove', (e) => { if ((e as PointerEvent).pointerType !== 'touch' && !moved) { void loadPopup().catch(() => {}); enter(); moved = true; } }],
       ['pointerleave', () => { close(); moved = false; }],
       ['pointerdown', () => { close(); pointerDown = true; document.addEventListener('pointerup', () => { pointerDown = false; }, { once: true }); }],
       ['focus', () => { if (!pointerDown) openNow(); }],
@@ -58,29 +66,8 @@ export function Tooltip(props: { content: JSX.Element; children: JSX.Element; si
     {child()}
     <Show when={open() && !props.disabled}>
       <Portal mount={trustedPortalOf(document) ?? document.body}>
-        <TooltipPopper anchor={trigger()} id={id} side={props.side ?? 'top'} placed={placed} setPlaced={setPlaced}>{props.content}</TooltipPopper>
+        <Show when={popup()} fallback={<span role="tooltip" id={id} class="sr-only">{props.content}</span>}>{loaded => <Dynamic component={loaded().default} anchor={trigger()} id={id} side={props.side ?? 'top'} placed={placed} setPlaced={setPlaced}>{props.content}</Dynamic>}</Show>
       </Portal>
     </Show>
   </>;
-}
-
-function TooltipPopper(p: { anchor: HTMLElement | undefined; id: string; side: Side; placed: () => Placed | undefined; setPlaced: (placed: Placed | undefined) => void; children: JSX.Element }): JSX.Element {
-  let wrapper!: HTMLDivElement; let arrow!: HTMLSpanElement;
-  createEffect(() => {
-    if (!p.anchor) return;
-    const stop = placePopper(p.anchor, wrapper, arrow, { side: p.side, align: 'center', sideOffset: 6, collisionPadding: 8, arrowWidth: 10, arrowHeight: 5, onPlaced: p.setPlaced });
-    onCleanup(() => { stop(); p.setPlaced(undefined); });
-  });
-  const side = () => p.placed()?.side ?? p.side;
-  return <div data-mx-theme-host="" data-app-appearance={appearanceOf(p.anchor)}>
-    <div ref={wrapper} data-radix-popper-content-wrapper="" style={{ position: 'fixed', left: '0px', top: '0px', transform: 'translate(0, -200%)', 'min-width': 'max-content', 'z-index': String(LAYER.tooltip) }}>
-      <div role="tooltip" id={p.id} data-side={p.placed()?.side} data-slot="tooltip-content" data-story-floating=""
-        class="pointer-events-none w-max max-w-[min(28rem,calc(100vw-1rem))] whitespace-normal rounded-control border border-edge-bright bg-surface px-2.5 py-1.5 text-left text-xs leading-normal text-fg shadow-md">
-        {p.children}
-        <span ref={arrow} style={{ position: 'absolute', left: side() === 'right' ? '0px' : p.placed()?.arrowX !== undefined ? `${p.placed()!.arrowX}px` : undefined, top: side() === 'bottom' ? '0px' : p.placed()?.arrowY !== undefined ? `${p.placed()!.arrowY}px` : undefined, right: side() === 'left' ? '0px' : undefined, bottom: side() === 'top' ? '0px' : undefined, 'transform-origin': ARROW_ORIGIN[side()] || undefined, transform: ARROW_TRANSFORM[side()], visibility: p.placed()?.hideArrow ? 'hidden' : undefined }}>
-          <svg stroke="var(--color-edge-bright)" stroke-width="1" stroke-linejoin="round" class="fill-surface" width="10" height="5" viewBox="0 0 30 10" preserveAspectRatio="none" style={{ display: 'block' }}><polygon points="0,0 30,0 15,10" /></svg>
-        </span>
-      </div>
-    </div>
-  </div>;
 }

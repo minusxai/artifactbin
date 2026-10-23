@@ -5,7 +5,7 @@
  */
 import { afterEach, expect, it, vi } from 'vitest';
 import { createSignal, Show } from 'solid-js';
-import { screen } from '@testing-library/dom';
+import { screen, waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '@/solid/__tests__/helpers';
 import { Select } from '../Select';
 import { Menu } from '../Menu';
@@ -23,7 +23,7 @@ const layer = (el: Element | null): number => {
   return 0;
 };
 
-it('opens a Select listbox, a Menu and a Tooltip in the dark appearance of an editor wrapper', () => {
+it('opens a Select listbox, a Menu and a Tooltip in the dark appearance of an editor wrapper', async () => {
   render(() => <div data-app-appearance="dark">
     <Select ariaLabel="Role" value="a" options={[{ value: 'a', label: 'A' }]} onChange={vi.fn()} />
     <Menu label="Actions" items={[{ label: 'Rename', text: 'rename', onSelect: vi.fn() }]} trigger={(attrs) => <button {...attrs}>Actions</button>} />
@@ -37,7 +37,7 @@ it('opens a Select listbox, a Menu and a Tooltip in the dark appearance of an ed
   fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
   expect(screen.getByRole('menu').closest('[data-mx-theme-host]')).toHaveAttribute('data-app-appearance', 'dark');
   fireEvent.focus(screen.getByRole('button', { name: 'Hover me' }));
-  expect(screen.getByRole('tooltip').closest('[data-mx-theme-host]')).toHaveAttribute('data-app-appearance', 'dark');
+  await waitFor(() => expect(screen.getByRole('tooltip').closest('[data-mx-theme-host]')).toHaveAttribute('data-app-appearance', 'dark'));
 });
 
 it('keeps the light appearance of a light editor inside a dark document', () => {

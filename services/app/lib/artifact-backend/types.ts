@@ -233,3 +233,6 @@ export interface ArtifactBackend {
   /** `query` omitted reads the saved mentions' statuses; a string (even '') searches people. Null when refused. */
   members(query?: string, options?: RequestOptions): Promise<MembersAnswer | null>;
 }
+
+/** Initial reader transport; authoring and comment operations load with their own surfaces. */
+export type ReaderArtifactBackend = Pick<ArtifactBackend,'load'|'unavailable'|'live'|'liveFrame'|'publishPresence'|'listAnnotations'>;

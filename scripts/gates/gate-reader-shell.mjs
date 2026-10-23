@@ -171,6 +171,25 @@ await section('reader', async () => {
   check(await framedOnItsOrigin(reader, doc.id), 'reader page frames the document on its own origin (no artifact iframe)');
   await documentLocator(reader).locator('#sec-probe').filter({hasText:'native-runtime-ready'}).waitFor({timeout:20000});
   check(await documentLocator(reader).locator('#sec-probe').innerText() === 'native-runtime-ready', 'the native core runs its Apollo client inside the isolated frame');
+  // Tooltip trigger semantics stay immediate, but the positioning engine belongs
+  // to the first actual use, never the initial document-reader payload.
+  const popupLoads = () => reader.evaluate(() => performance.getEntriesByType('resource').filter(entry => /\/assets\/TooltipPopper-[^/]+\.js(?:\?|$)/.test(entry.name)).length);
+  check(await popupLoads() === 0, 'reading does not fetch the unused tooltip positioning engine');
+  const tooltipTrigger = reader.getByRole('button', {name:'Open artifact controls',exact:true});
+  await tooltipTrigger.focus();
+  const paintedTooltip = reader.locator('[data-radix-popper-content-wrapper] [role="tooltip"]');
+  await paintedTooltip.waitFor({state:'visible'});
+  check(await tooltipTrigger.getAttribute('aria-describedby') === await paintedTooltip.getAttribute('id'), 'first keyboard focus loads and describes the actual positioned tooltip');
+  const loaded = await popupLoads();
+  await reader.keyboard.press('Escape');
+  await paintedTooltip.waitFor({state:'hidden'});
+  await tooltipTrigger.evaluate(element => element.blur());
+  await tooltipTrigger.hover();
+  await paintedTooltip.waitFor({state:'visible'});
+  check(await paintedTooltip.count() === 1 && await popupLoads() === loaded && loaded === 1, 'hover reuses one loaded positioning engine and one tooltip portal');
+  await reader.mouse.move(0, 0);
+  await paintedTooltip.waitFor({state:'hidden'});
+
   // Native pages use the scoped GraphQL read surface, rather than the retired markup query door.
   const scopedRead = await reader.request.post(`${BASE}/api/artifacts/${doc.id}/graphql`, { data: {revision:String(doc.version),query:'{__typename}'} });
   check(scopedRead.status() === 200 && !(await scopedRead.json()).errors, `the public page exposes its scoped GraphQL read (${scopedRead.status()})`);
