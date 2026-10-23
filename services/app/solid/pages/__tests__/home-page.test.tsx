@@ -145,7 +145,7 @@ it('names first creation and shows the setup panel on an empty account', async (
   const heading = await screen.findByRole('heading', { name: /create your first artifact/i });
   expect(heading).toHaveTextContent('hi one, let’s create your first artifact!');
   const panel = screen.getByLabelText('Get started');
-  expect(screen.getByLabelText('Copy the CLI install command')).toBeInTheDocument();
+  expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
   expect(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.queryByLabelText('What you can use it for')).toBeNull();
 });
@@ -184,9 +184,11 @@ it('puts creation and all workspace destinations in the left navigation, separat
   homeFetch({ ...core }); open();
   const nav = await screen.findByRole('navigation', { name: 'Workspace' });
   expect(within(nav).getByRole('button', { name: 'Create' })).toBeInTheDocument();
-  for (const [name, href] of Object.entries({ Artifacts: '/', Assets: '/assets', Trash: '/trash', Schedules: '/schedules', 'Connected Agents': '/chat', Notifications: '/notifications' })) {
+  for (const [name, href] of Object.entries({ Artifacts: '/', Groups: '/groups', Personal: '/?personal=1', Assets: '/assets', Trash: '/trash', Notifications: '/notifications' })) {
     expect(within(nav).getByRole('link', { name })).toHaveAttribute('href', href);
   }
+  expect(within(nav).queryByRole('link', { name: 'Schedules' })).toBeNull();
+  expect(within(nav).queryByRole('link', { name: 'Connected Agents' })).toBeNull();
   expect(within(nav).getByRole('link', { name: 'Artifacts' })).toHaveAttribute('aria-current', 'page');
   expect(screen.getByLabelText('Dashboard rail')).not.toContainElement(nav);
   expect(screen.getByLabelText('Dashboard rail')).not.toContainElement(screen.getByRole('button', { name: 'Create' }));
