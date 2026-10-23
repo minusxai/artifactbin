@@ -62,6 +62,7 @@ import { hostedDesignSystem } from "./af-hosting.ts";
 const MAX_SOURCE = MAX_PAGE_SOURCE;
 
 export interface PageServiceOptions {
+  historicalDatasetReplay?: import("../datasets/history-contracts.ts").HistoricalDatasetReplay;
   database: SqlDatabase;
   authority: Pick<IdentityAuthority, "account" | "issue">;
   pageModel(): Promise<PageModelModule>;
@@ -125,6 +126,7 @@ export function createPageService({
   now = Date.now,
   token,
   writes: providedWrites,
+  historicalDatasetReplay,
 }: PageServiceOptions) {
   const writes =
     providedWrites ??
@@ -580,7 +582,7 @@ export function createPageService({
      * A viewer holding a page grant for this page (a connected downloaded
      * file) opens it as their account.
      */
-    host(
+    async host(
       credential: string,
       id: string,
       origin: string,
@@ -588,7 +590,7 @@ export function createPageService({
       selection: PageRevisionSelection = { kind: "head" },
     ) {
       if (!isFileId(id)) fail(404, "Document not found");
-      return database.transaction(async (client) => {
+      const hosted = await database.transaction(async (client) => {
         const session = await loadSession(client, hash(credential));
         const document = await lockDocumentHeader(client, id);
         if (!document) fail(404, "Document not found");
@@ -711,6 +713,20 @@ export function createPageService({
           },
         };
       });
+      if (selection.kind !== "saved" || !issueSession || !historicalDatasetReplay)
+        return hosted;
+      const rendered = await historicalDatasetReplay.render(
+        id, hosted.version, hosted.boot.username,
+      );
+      if (!rendered) return hosted;
+      return {
+        ...hosted,
+        state: {
+          ...hosted.state,
+          app: {schema: 0, sourceRevision: hosted.state.sourceRevision,
+            state: {}, view: {x: 0, y: 0}, rendered},
+        },
+      };
     },
   };
 }

@@ -147,6 +147,7 @@ export function createService({
   const trash = createTrashService(repository.sql, authority.account);
   const pages = createPageService({
     database: repository.sql,
+    historicalDatasetReplay: {render:(id,version,subject)=>datasetRuntime.historicalReplay?.render(id,version,subject) ?? Promise.resolve(null)},
     authority,
     pageModel: () => pageModelModule.required(),
     backendFiles: async () => {

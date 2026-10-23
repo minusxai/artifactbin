@@ -21,16 +21,18 @@ async function bound(
   context: DatasetCallContext,
   name: string,
   locked = false,
+  historicalVersion?: number,
 ) {
   return (
     (
       await client.query(
         `SELECT b.*,v.catalog FROM dataset_bindings b
      JOIN dataset_versions v ON v.source_namespace=b.source_namespace AND v.legacy_id=b.dataset_id AND v.version=b.dataset_version
-     JOIN files f ON f.id=b.page_id AND f.head=b.page_version::text
+     JOIN files f ON f.id=b.page_id AND (($5::int IS NULL AND f.head=b.page_version::text) OR b.page_version=$5)
      WHERE b.backend_id=$1 AND b.backend_version=$2 AND b.page_id=$3 AND b.name=$4
+     AND ($5::int IS NULL OR (b.name='data' AND b.dataset_version=b.page_version AND b.descriptor->>'mode'='pinned' AND EXISTS(SELECT 1 FROM dataset_pages h WHERE h.page_id=b.page_id AND h.page_version=b.page_version AND h.source_namespace=b.source_namespace AND h.snapshot->>'format'='dataset' AND h.snapshot->>'id'=b.dataset_id AND h.snapshot->'standaloneDataset'->>'kind'='dataset-self-read-v1' AND h.snapshot->'standaloneDataset'->>'datasetId'=b.dataset_id AND h.snapshot->'standaloneDataset'->>'version'=b.page_version::text)))
      AND EXISTS(SELECT 1 FROM af_page_backends p WHERE p.page_id=b.page_id AND p.page_version=b.page_version AND p.file_id=b.backend_id AND p.version=b.backend_version)${locked ? " FOR SHARE OF f" : ""}`,
-        [context.backendId, context.backendVersion, context.pageId, name],
+        [context.backendId, context.backendVersion, context.pageId, name, historicalVersion ?? null],
       )
     ).rows[0] ?? null
   );
@@ -41,12 +43,13 @@ async function bound(
 export function createDatasetReadRepository(
   database: SqlDatabase,
   now = Date.now,
+  historicalVersion?: number,
 ): DatasetReadRepository {
   return {
     binding: (context, name, signal) =>
       database.transaction(
         async (client) => {
-          const row = await bound(client, context, name);
+          const row = await bound(client, context, name, false, historicalVersion);
           const saved = row ? decodeDatasetBinding(row, context, name) : null;
           if (!saved || !row) return null;
           const resolution = (
@@ -80,7 +83,7 @@ export function createDatasetReadRepository(
       ),
     authority: (context, binding, signal) =>
       database.transaction(
-        (client) => loadDatasetAuthority(client, context, binding, now()),
+        (client) => loadDatasetAuthority(client, context, binding, now(), false, historicalVersion),
         signal ? { signal, timeoutMs: 1000 } : undefined,
       ),
   };
@@ -93,12 +96,13 @@ export async function loadDatasetAuthority(
   binding: DatasetBinding,
   now: number,
   locked = false,
+  historicalVersion?: number,
 ) {
   const timestamp = now;
   const groupAuthority = context.subject
     ? await loadGroupAuthority(client, context.subject)
     : undefined;
-  const row = await bound(client, context, binding.name, locked);
+  const row = await bound(client, context, binding.name, locked, historicalVersion);
   const saved = row ? decodeDatasetBinding(row, context, binding.name) : null;
   if (
     !row ||
@@ -252,7 +256,7 @@ export async function loadDatasetAuthority(
       visibility: pageAccess.visibility,
       acceptedJoinUserIds: joins.map((j) => String(j.legacy_user_id)),
     },
-    pageVersion: Number(page.head),
+    pageVersion: historicalVersion ?? Number(page.head),
     dataset: {
       ...dataset,
       visibility: access.visibility,

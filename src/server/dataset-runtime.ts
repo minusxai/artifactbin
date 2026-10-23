@@ -1,3 +1,4 @@
+import { createHistoricalDatasetReplayRepository } from "../persistence/dataset-history.ts";
 import { createDatasetUserChoiceService } from "../datasets/user-choices/service.ts";
 import { createDatasetUserChoiceRepository } from "../persistence/dataset-user-choices.ts";
 import { createStoredModelResolver } from "../persistence/dataset-stored-models.ts";
@@ -100,6 +101,7 @@ export function createDatasetRuntime(
   let closing: Promise<void> | undefined;
   return {
     reads,
+    ...(source ? { historicalReplay: createHistoricalDatasetReplayRepository(database,source,now) } : {}),
     userChoices: createDatasetUserChoiceService(createDatasetUserChoiceRepository(database,reads,now)),
     ...(options.sourceQueryResources?{sourceQueries:createSourceQueryService(createSourceQueryRepository(database,options.sourceQueryResources.pool,now))}:{}),
     ...(attachments ? { attachments } : {}),

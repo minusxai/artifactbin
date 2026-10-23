@@ -13,6 +13,7 @@ export interface DatasetRuntimeOptions {
   now?: () => number;
 }
 export interface DatasetRuntime {
+  historicalReplay?: import("../datasets/history-contracts.ts").HistoricalDatasetReplay;
   userChoices?: import("../datasets/user-choices/contracts.ts").DatasetUserChoiceService;
   sourceQueries?: import("../datasets/source-query/contracts.ts").SourceQueryService;
   reads: DatasetReadService;
