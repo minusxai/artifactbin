@@ -24,3 +24,17 @@ it('preflights the actual bounded operation rather than trusting a page label',a
  expect(pageOperationKind('query A { tasks { value } } mutation B { tasks { save(n:2) } }','B')).toBe('mutation');
  expect(pageOperationKind('query A { tasks { value } } mutation B { tasks { save(n:2) } }')).toBeNull();
 });
+
+it('preserves authoritative adapter receipt outcomes without interpreting arbitrary backend JSON',async()=>{
+ let calls=0;
+ const schema=composePageSchema([{name:'data',fileId:'dataset1',version:'live',typeDefs:'type Receipt { outcome:String! } type Query { x:Int } type Mutation { write:Receipt! }'}]);
+ const result=await executePageOperation({schema,request:{query:'mutation { data { rejected:write {outcome} unknown:write {outcome} author:write {outcome} } }'},caller:{pageId:'page1',subject:'u1',role:'OWNER'},signal,invoke:async call=>{
+  if(call.field!=='write')return null;
+  calls++;
+  if(calls===1)call.reportOutcome?.('rejected');
+  if(calls===2)call.reportOutcome?.('unknown');
+  return {outcome:calls===2?'unknown':'rejected'};
+ }});
+ expect(result.extensions?.outcomes).toEqual({'data.rejected':'rejected','data.unknown':'unknown','data.author':'committed'});
+ expect(result.data).toEqual({data:{rejected:{outcome:'rejected'},unknown:{outcome:'unknown'},author:{outcome:'rejected'}}});
+});

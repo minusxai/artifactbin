@@ -20,6 +20,8 @@ export interface PageResolverPrincipal { readonly tenant:string; readonly subjec
 export interface PageResolverFieldCall {
   namespace:string; fileId:string; version:string; operation:'query'|'mutation';
   field:string; args:HtmlJsonObject; principal:PageResolverPrincipal; signal:AbortSignal;
+  /** Trusted adapter receipt outcome; never serialized to author code or inferred from arbitrary result JSON. */
+  reportOutcome?(outcome:Exclude<PageMutationOutcome,'offline'>):void;
 }
 export interface PageResolverInvoker { invoke(call:PageResolverFieldCall):Promise<HtmlJson> }
 /** Schemas are composed with names private to each link, so duplicate backend type names are safe. */

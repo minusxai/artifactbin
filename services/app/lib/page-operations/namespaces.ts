@@ -364,6 +364,7 @@ export async function executePageOperation(
             throw new GraphQLError("Cancelled before execution");
           }
           let value: AfJson;
+          let reported: Outcome | undefined;
           try {
             value = await invoke({
               namespace: mounted.namespace,
@@ -374,6 +375,7 @@ export async function executePageOperation(
               args: json<AfJsonObject>(args),
               principal: { ...principal },
               signal,
+              reportOutcome: outcome => { reported=outcome; },
             });
           } catch (error) {
             const extensions = extensionsOf(error, owner);
@@ -390,7 +392,7 @@ export async function executePageOperation(
             settle("unknown");
             throw new GraphQLError("Backend execution failed", { extensions });
           }
-          settle("committed");
+          settle(reported ?? "committed");
           // Results are data only: no getters, functions or prototypes reach graphql-js.
           return json<AfJson>(value);
         };
