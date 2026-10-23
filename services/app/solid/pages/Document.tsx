@@ -35,11 +35,12 @@ import { createIsPhoneViewport } from '../ui/MobileSheet';
 import { TrustedUi } from '../components/TrustedUi';
 import type { Panel } from '../components/PageChrome';
 import { DocumentChrome } from '../document/DocumentChrome';
+import {PendingReaderDialog} from '../document/PendingReaderDialog';
 
 /** The document's own ground around its frame (a starter shows the app's dotted page instead). These hexes are the document's colors, not the app theme: they match the served reader's ground in each mode. */
 const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
-/** Reader tools are separate chunks: opening their real controls loads them; reading does not.
+/** Dialogs and controls load on first use. Annotation tools load as soon as an authorized commenter is ready.
  * SelectionActions stays eager so the first native selection/right-click retains its capability bridge. */
 const ReaderPresenceControls = lazy(() => import('../document/ReaderPresenceControls').then(m => ({ default: m.ReaderPresenceControls })));
 const DocumentActions = lazy(() => import('../document/DocumentActions').then(m => ({ default: m.DocumentActions })));
@@ -329,7 +330,7 @@ export function DocumentPage(): JSX.Element {
       membership={page!.surface?.membership}
       panel={panel} setPanel={setPanel} mode={appAppearance} onMode={chooseMode}
       onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onMembership={() => act('membership')}
-      controls={(close) => <Suspense fallback={null}><><ReaderPresenceControls preferences={readerPresence.preferences()} onChange={readerPresence.setPreference} viewers={readerPresence.viewers()} /><DocumentActions groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
+      controls={(close) => <Suspense fallback={<p role="status" aria-busy="true">Loading artifact controls…</p>}><><ReaderPresenceControls preferences={readerPresence.preferences()} onChange={readerPresence.setPreference} viewers={readerPresence.viewers()} /><DocumentActions groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
         onSettings={() => { close(); setSettingsOpen(true); }}
         onSocialPreview={() => { close(); void openSocialPreview(); }}
         onRenamed={(title) => setRenamed({ title, version: currentVersion() })}
@@ -345,7 +346,7 @@ export function DocumentPage(): JSX.Element {
         <div class="fixed left-6" style={{ top: `${APP_BAR_H + 12}px` }}><CopyAgentButton id={id!} template="doc" /></div>
       </Show>
       <Show when={page?.surface?.pwaEnabled}><InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} /></Show>
-      <Show when={fork() && id}><Suspense fallback={null}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>
+      <Show when={fork() && id}><Suspense fallback={<PendingReaderDialog title="Fork artifact" onClose={() => setFork(false)} />}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>
     </TrustedUi>
     {/* The document's notice takes its own row above the frame (the frame shrinks), never over it. */}
     <Show when={!!commentNotice() && frameSlot()}>{(slot) => (
@@ -378,7 +379,7 @@ export function DocumentPage(): JSX.Element {
         pickOnOpen onAnnotationsChange={setAnnotationItems} topOffset={APP_BAR_H} /></Suspense>
     </Show>
     <Show when={sharingOpen() && id}>
-      <Suspense fallback={null}><DocumentSharing refs={page?.surface?.refs} id={id!} title={shownTitle()} owner={isOwner()} editable={editable()} variant="dialog" version={currentVersion()}
+      <Suspense fallback={<PendingReaderDialog title="Share artifact" onClose={() => setSharingOpen(false)} />}><DocumentSharing refs={page?.surface?.refs} id={id!} title={shownTitle()} owner={isOwner()} editable={editable()} variant="dialog" version={currentVersion()}
         onClose={() => setSharingOpen(false)} onSocialPreview={editable() ? () => void openSocialPreview() : undefined} /></Suspense>
     </Show>
     <Show when={metadataError()}><p role="alert">{metadataError()}</p></Show>
