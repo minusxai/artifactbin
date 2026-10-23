@@ -62,6 +62,7 @@ export async function applyDeletedArtifactPlan(
       );
     }
   }
+  await input.importMetadata();
   const verification = await input.verifyDeletedState(plan);
   if (
     verification.pages !== plan.pages.length ||

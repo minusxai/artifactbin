@@ -77,6 +77,7 @@ function fixture() {
     async verifyProtectedState() {
       calls.push("protected");
     },
+    async importMetadata() { calls.push("metadata"); },
     async verifyDeletedState() {
       calls.push("verify");
       return {
@@ -102,6 +103,7 @@ test("writes only after full preflight and reports completion only after both ve
     "protected",
     "write:test:first",
     "write:test:second",
+    "metadata",
     "verify",
     "protected",
   ]);
@@ -193,4 +195,11 @@ test("verification count mismatch and final protected mismatch fail completion",
     };
     await assert.rejects(applyDeletedArtifactPlan(input));
   }
+});
+
+test("metadata failure cannot produce verified completion after page commits", async () => {
+ const {input,calls}=fixture(); input.importMetadata=async()=>{calls.push("metadata");throw Error("metadata failed");};
+ await assert.rejects(applyDeletedArtifactPlan(input),/metadata failed/);
+ assert.equal(calls.filter(c=>c.startsWith("write:")).length,2);
+ assert.equal(calls.includes("verify"),false);
 });

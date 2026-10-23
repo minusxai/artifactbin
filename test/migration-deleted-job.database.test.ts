@@ -1,0 +1,54 @@
+// @requires migration-database
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {testDatabase} from './postgres.js';
+import {planMigration} from '../src/migration/import.ts';
+import {PostgresMigrationDestination,buildAccountMaps} from '../src/migration/postgres.ts';
+import {PostgresDatasetMetadataDestination} from '../src/migration/dataset-destination.ts';
+import {captureAdditiveDatasetFacts} from '../src/migration/dataset-pages/additive-authority.ts';
+import {deletedDatasetBatchFingerprint} from '../src/migration/deleted-dataset-authority.ts';
+import {prepareDeletedArtifactPlan} from '../src/migration/deleted-artifact-plan.ts';
+import {canonicalMigrationValue} from '../src/migration/verification-values.ts';
+import {runDeletedArtifactJob} from '../src/migration/deleted-artifact-job.ts';
+import type {MigrationManifest} from '../src/migration/contracts.ts';
+import type {DatasetMigrationBatch} from '../src/migration/dataset-destination-contracts.ts';
+const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
+test('fixed deleted job imports pages and exact metadata before verified completion and retry',async()=>{
+ const db=await testDatabase(),client=await db.pool.connect(),dir=await mkdtemp(join(tmpdir(),'deleted-job-'));
+ try{
+ const original={id:'Abc123',edit_id:'edit1',version:1,format:'markup',source:'retained',document:null,user_id:'owner',group_id:null,token_id:null,visibility:'private',link_role:'viewer',deleted_at:'2020-01-02T03:04:05Z'};
+ const manifest:MigrationManifest={schemaVersion:1,sourceNamespace:'deleted-job',exportedAt:'2020-01-01T00:00:00Z',tokenOwners:[],tables:{users:[{id:'owner',email:'owner@example.test'}]},artifacts:[original]};
+ const maps=buildAccountMaps(manifest),destination={schema:db.schema,sourceNamespace:manifest.sourceNamespace,origin:'http://localhost:8787',isolated:true,editorManageRestricted:true};
+ maps.pages[original.id]=original.id;
+ await new PostgresMigrationDestination(client,destination).prepare({manifest,maps});
+ const empty:DatasetMigrationBatch={baseManifestSha256:'a'.repeat(64),relationManifestSha256:'b'.repeat(64),relationExportedAt:manifest.exportedAt,metadata:{sourceNamespace:manifest.sourceNamespace,resources:[],versions:[],pages:[],bindings:[],principals:[],groups:[],acceptedJoins:[],profiles:[]}};
+ await new PostgresDatasetMetadataDestination(client,db.schema).import(empty);
+ const inventory=await captureAdditiveDatasetFacts(client,db.schema,empty,'test');
+ const report=JSON.stringify({complete:true,readOnly:true,compilerIdentity:'test',runtime:{pages:0},archives:[{manifestSha256:empty.baseManifestSha256},{manifestSha256:empty.relationManifestSha256}]});
+ const path=join(dir,'base.json');await writeFile(path,report,{mode:0o600});
+ const planned=await planMigration(manifest,{maps,coreUrl:'/af/v1/core.js',convert:()=>({classification:'functional',html:'<html><body><p>retained</p></body></html>',issues:[],identities:{}})});
+ const rawHash=sha(canonicalMigrationValue(original));
+ const admission={kind:'deleted-artifact-admission-v1' as const,sourceNamespace:manifest.sourceNamespace,archiveDigest:sha(JSON.stringify(manifest)),entries:[{legacyId:original.id,pageId:maps.pages[original.id]!,headVersion:1,deletedAt:original.deleted_at,artifactSha256:rawHash,revisions:[{version:1,artifactSha256:rawHash}]}]};
+ const plan=prepareDeletedArtifactPlan({admission,pages:planned.pages,protectedPageIds:new Set()});
+ const metadata:DatasetMigrationBatch={...empty,metadata:{...empty.metadata,pages:[{pageId:maps.pages[original.id]!,pageVersion:1,snapshot:{id:original.id,editId:'edit1',owner:{userId:'owner',tokenId:null},visibility:'private',format:'markup',deleted:true,ownerIsTestUser:false,acceptedJoinUserIds:[]}}]}};
+ metadata.deletedAdditive={kind:'deleted-dataset-additive-v1',sourceNamespace:manifest.sourceNamespace,batchSha256:deletedDatasetBatchFingerprint(metadata),admitted:[{legacyId:original.id,pageId:maps.pages[original.id]!,version:1,artifactSha256:rawHash}],base:{verificationReport:{path,sha256:sha(report)},inventory}};
+ let checks=0;
+ const input={db:client,destination,admission,plan,maps,metadata,verifyProtectedPages:async()=>{checks++;assert.equal((await client.query('SELECT count(*) FROM files WHERE deleted_at IS NULL')).rows[0].count,'0');}};
+ await client.query(`CREATE FUNCTION reject_deleted_link() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test metadata failure'; END $$; CREATE TRIGGER reject_deleted_link BEFORE INSERT ON dataset_deleted_page_lifecycle_links FOR EACH ROW EXECUTE FUNCTION reject_deleted_link()`);
+ await assert.rejects(runDeletedArtifactJob(input),/test metadata failure/);
+ assert.equal((await client.query('SELECT count(*) FROM files')).rows[0].count,'1');
+ assert.equal((await client.query('SELECT count(*) FROM dataset_pages')).rows[0].count,'0');
+ await client.query('DROP TRIGGER reject_deleted_link ON dataset_deleted_page_lifecycle_links');
+ assert.equal((await runDeletedArtifactJob(input)).complete,true);
+ assert.equal(checks,3);
+ assert.equal((await runDeletedArtifactJob(input)).unchanged,1);
+ assert.equal((await client.query('SELECT count(*) FROM dataset_deleted_page_lifecycle_links')).rows[0].count,'1');
+ const bad={...input,plan:{...plan,archiveDigest:'f'.repeat(64)}};
+ await assert.rejects(runDeletedArtifactJob(bad),/binding/);
+ assert.equal((await client.query('SELECT count(*) FROM files')).rows[0].count,'1');
+ }finally{await client.query(`DROP SCHEMA IF EXISTS ${db.schema}_migration CASCADE`);client.release();await db.cleanup();await rm(dir,{recursive:true,force:true});}
+});

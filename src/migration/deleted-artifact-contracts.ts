@@ -56,6 +56,8 @@ export interface DeletedArtifactApplyInput {
   destination: DeletedArtifactDestination;
   /** Both calls compare independently sealed existing active/addon state. */
   verifyProtectedState(): Promise<void>;
+  /** Required metadata phase; an explicit verified empty phase is valid for pages without metadata. */
+  importMetadata(): Promise<void>;
   /** Fresh database comparison, not receipt-only acknowledgement. */
   verifyDeletedState(plan: DeletedArtifactPlan): Promise<MigrationRuntimeVerification>;
 }
