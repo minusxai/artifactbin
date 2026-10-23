@@ -202,7 +202,17 @@ test("job prepares exact live head bindings and real compiled receipts without i
     },
   };
   const bound = await prepareMigrationJobDatasets(boundSource, options, {
-    host: { compile: async () => deployment, invoke: async () => null },
+    host: {
+      compile: async (source: string) => {
+        const info = await readBackendModule(source);
+        const schema = boundedBackendSchema(info.typeDefs);
+        return sealDeployment(source, "compiled viewer fixture", {
+          typeDefs: info.typeDefs,
+          fields: [...Object.keys(schema.getQueryType()!.getFields()), ...Object.keys(schema.getMutationType()!.getFields())],
+        });
+      },
+      invoke: async () => null,
+    },
   });
   assert.deepEqual(
     bound!.boundValueColumns.get(JSON.stringify(["abc123", 2])),
@@ -249,7 +259,17 @@ test("job prepares exact live head bindings and real compiled receipts without i
     },
   };
   const uploads = await prepareMigrationJobDatasets(uploadSource, options, {
-    host: { compile: async () => deployment, invoke: async () => null },
+    host: {
+      compile: async (source: string) => {
+        const info = await readBackendModule(source);
+        const schema = boundedBackendSchema(info.typeDefs);
+        return sealDeployment(source, "compiled viewer fixture", {
+          typeDefs: info.typeDefs,
+          fields: [...Object.keys(schema.getQueryType()!.getFields()), ...Object.keys(schema.getMutationType()!.getFields())],
+        });
+      },
+      invoke: async () => null,
+    },
   });
   assert.deepEqual([...uploads!.issues], []);
   assert.equal(uploads!.metadata.operations?.length, 1);
@@ -314,7 +334,17 @@ test("job prepares exact live head bindings and real compiled receipts without i
     },
   };
   const member = await prepareMigrationJobDatasets(memberSource, options, {
-    host: { compile: async () => deployment, invoke: async () => null },
+    host: {
+      compile: async (source: string) => {
+        const info = await readBackendModule(source);
+        const schema = boundedBackendSchema(info.typeDefs);
+        return sealDeployment(source, "compiled viewer fixture", {
+          typeDefs: info.typeDefs,
+          fields: [...Object.keys(schema.getQueryType()!.getFields()), ...Object.keys(schema.getMutationType()!.getFields())],
+        });
+      },
+      invoke: async () => null,
+    },
   });
   assert.ok(member);
   assert.equal(member.issues.size, 0);
@@ -356,7 +386,17 @@ test("job prepares exact live head bindings and real compiled receipts without i
     },
   };
   const viewer = await prepareMigrationJobDatasets(viewerSource, options, {
-    host: { compile: async () => deployment, invoke: async () => null },
+    host: {
+      compile: async (source: string) => {
+        const info = await readBackendModule(source);
+        const schema = boundedBackendSchema(info.typeDefs);
+        return sealDeployment(source, "compiled viewer fixture", {
+          typeDefs: info.typeDefs,
+          fields: [...Object.keys(schema.getQueryType()!.getFields()), ...Object.keys(schema.getMutationType()!.getFields())],
+        });
+      },
+      invoke: async () => null,
+    },
   });
   assert.ok(viewer);
   assert.equal(viewer.issues.size, 0);

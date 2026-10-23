@@ -52,6 +52,8 @@ export interface MigrationBackendReceipt {
   /** Present only when this revision declared the trusted membership relation. */
   members?: { sourceNamespace: string };
   viewer?: { sourceNamespace: string };
+  /** Exact generated backend exposes the trusted viewer query; absent on legacy receipts. */
+  viewerCapability?: "viewer-v1";
   /** Saved external query capability, separate from current-head viewer exposure. */
   historicalSourceQueries?: import("../datasets/source-query/contracts.ts").HistoricalSourceQueryAuthority;
   program?: true;

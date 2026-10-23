@@ -1,3 +1,4 @@
+import { generatedViewerBackendSource } from "./viewer-backend.ts";
 import { assertHistoricalSourceQueryAuthority } from "../datasets/source-query/historical-authority.ts";
 import { standaloneDatasetBackendSource } from "./dataset-pages/backend.ts";
 import { generatedSourceQueryBackendSource } from "./source-query-backend.ts";
@@ -68,10 +69,12 @@ async function checkedDeployment(
   deployment: CompiledBackend,
   sourceQueries = false,
   standaloneDataset = false,
+  viewerCapability = false,
 ) {
-  const expectedSource = standaloneDataset ? standaloneDatasetBackendSource : sourceQueries
+  const baseSource = standaloneDataset ? standaloneDatasetBackendSource : sourceQueries
     ? generatedSourceQueryBackendSource
     : generatedDatasetBackendSource;
+  const expectedSource = viewerCapability ? generatedViewerBackendSource(baseSource) : baseSource;
   try {
     verifyDeployment(deployment);
     if (
@@ -248,17 +251,22 @@ export async function prepareMigrationBackends(
   try {
     for (const sourceKind of new Set(
       required.flatMap((page) =>
-        page.revisions.map((r) => r.standaloneDataset ? "standalone" : r.sourceQueries?.length ? "source-query" : "dataset"),
+        page.revisions.map((r) => {
+          const kind = r.standaloneDataset ? "standalone" : r.sourceQueries?.length ? "source-query" : "dataset";
+          const head = Math.max(...page.revisions.map(v => v.version));
+          const viewer = r.readsViewer || (r.sourceQueries?.length && !(r.standaloneExternalDataset && r.version < head));
+          return kind + (viewer ? "-viewer" : "");
+        }),
       ),
     )) {
-      const sourceQueries = sourceKind === "source-query";
-      const standaloneDataset = sourceKind === "standalone";
-      const deployment = await host.compile(
-        standaloneDataset ? standaloneDatasetBackendSource : sourceQueries
+      const viewerCapability = sourceKind.endsWith("-viewer");
+      const sourceQueries = sourceKind.startsWith("source-query");
+      const standaloneDataset = sourceKind.startsWith("standalone");
+      const baseSource = standaloneDataset ? standaloneDatasetBackendSource : sourceQueries
           ? generatedSourceQueryBackendSource
-          : generatedDatasetBackendSource,
-      );
-      await checkedDeployment(deployment, sourceQueries, standaloneDataset);
+          : generatedDatasetBackendSource;
+      const deployment = await host.compile(viewerCapability ? generatedViewerBackendSource(baseSource) : baseSource);
+      await checkedDeployment(deployment, sourceQueries, standaloneDataset, viewerCapability);
       deployments.set(sourceKind, deployment);
     }
   } finally {
@@ -307,8 +315,8 @@ export async function prepareMigrationBackends(
         artifactSha256: revision.standaloneExternalDataset!.artifactSha256,
         editId: revision.standaloneExternalDataset!.editId,
       } : undefined;
-      const deployment = deployments.get(revision.standaloneDataset ? "standalone" : hasSourceQueries ? "source-query" : "dataset")!;
       const readsViewer = revision.readsViewer === true || (hasSourceQueries && !historicalExternal);
+      const deployment = deployments.get((revision.standaloneDataset ? "standalone" : hasSourceQueries ? "source-query" : "dataset") + (readsViewer ? "-viewer" : ""))!;
       const readsMembers =
         revision.readsMembers ||
         revision.mutations?.some((m) => m.readsMembers);
@@ -327,7 +335,7 @@ export async function prepareMigrationBackends(
         ...(hasSourceQueries ? { sourceQueries: true as const } : {}),
         ...(historicalSourceQueries ? { historicalSourceQueries } : {}),
         ...(readsViewer
-          ? { viewer: { sourceNamespace: input.sourceNamespace } }
+          ? { viewer: { sourceNamespace: input.sourceNamespace }, viewerCapability: "viewer-v1" as const }
           : {}),
         ...(readsMembers
           ? { members: { sourceNamespace: input.sourceNamespace } }
@@ -445,7 +453,8 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
 ) => {
   const keys = new Set<string>();
   for (const receipt of receipts) {
-    await checkedDeployment(receipt.deployment, receipt.sourceQueries === true, Boolean(receipt.standaloneDataset));
+    await checkedDeployment(receipt.deployment, receipt.sourceQueries === true, Boolean(receipt.standaloneDataset), receipt.viewerCapability === "viewer-v1");
+    if (receipt.viewerCapability !== undefined && (receipt.viewerCapability !== "viewer-v1" || !receipt.viewer)) invalid();
     if (receipt.historicalSourceQueries) {
       const h = receipt.historicalSourceQueries, p = receipt.standaloneExternalDataset;
       assertHistoricalSourceQueryAuthority(h, {...receipt, sourceNamespace:h.sourceNamespace});

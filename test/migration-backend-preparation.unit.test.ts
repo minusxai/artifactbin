@@ -1,3 +1,4 @@
+import { generatedViewerBackendSource } from "../src/migration/viewer-backend.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -444,7 +445,20 @@ test("viewer-only current revisions receive a compiled capability receipt withou
     ],
   };
   const prepared = await prepareMigrationBackends(current, {
-    host: { compile: async () => deployment, invoke: async () => null },
+    host: {
+      compile: async (source: string) => {
+        const info = await readBackendModule(source);
+        const schema = boundedBackendSchema(info.typeDefs);
+        return sealDeployment(source, "viewer variant", {
+          typeDefs: info.typeDefs,
+          fields: [
+            ...Object.keys(schema.getQueryType()!.getFields()),
+            ...Object.keys(schema.getMutationType()!.getFields()),
+          ],
+        });
+      },
+      invoke: async () => null,
+    },
   });
   assert.deepEqual(
     prepared.receipts.map((r) => ({ linked: r.linked, viewer: r.viewer })),
@@ -452,6 +466,27 @@ test("viewer-only current revisions receive a compiled capability receipt withou
       { linked: false, viewer: undefined },
       { linked: true, viewer: { sourceNamespace: "fixture" } },
     ],
+  );
+  assert.equal(prepared.receipts[1]!.viewerCapability, "viewer-v1");
+  for (const change of [
+    { viewerCapability: undefined },
+    { viewer: undefined },
+  ]) {
+    await assert.rejects(
+      registerMigrationBackends(
+        {
+          query: async () => {
+            throw Error("SQL must not run");
+          },
+        },
+        [{ ...prepared.receipts[1]!, ...change }],
+      ),
+      /Invalid migration backend (receipt|preparation)/,
+    );
+  }
+  assert.equal(
+    prepared.receipts[1]!.deployment.source,
+    generatedViewerBackendSource(generatedDatasetBackendSource),
   );
   assert.deepEqual(prepared.bindings, []);
   await assert.rejects(
@@ -468,7 +503,22 @@ test("viewer-only current revisions receive a compiled capability receipt withou
           },
         ],
       },
-      { host: { compile: async () => deployment, invoke: async () => null } },
+      {
+        host: {
+          compile: async (source: string) => {
+            const info = await readBackendModule(source);
+            const schema = boundedBackendSchema(info.typeDefs);
+            return sealDeployment(source, "viewer variant", {
+              typeDefs: info.typeDefs,
+              fields: [
+                ...Object.keys(schema.getQueryType()!.getFields()),
+                ...Object.keys(schema.getMutationType()!.getFields()),
+              ],
+            });
+          },
+          invoke: async () => null,
+        },
+      },
     ),
     /Invalid migration backend preparation/,
   );
@@ -618,7 +668,11 @@ test("source-query pages get their own fixed backend variant and viewer authorit
   const receipt = prepared.receipts.find(
     (r) => r.pageLegacyId === "source-page",
   )!;
-  assert.equal(receipt.deployment.source, generatedSourceQueryBackendSource);
+  assert.equal(
+    receipt.deployment.source,
+    generatedViewerBackendSource(generatedSourceQueryBackendSource),
+  );
+  assert.equal(receipt.viewerCapability, "viewer-v1");
   assert.equal(receipt.sourceQueries, true);
   assert.equal(receipt.linked, true);
   assert.equal(receipt.viewer?.sourceNamespace, "fixture");
