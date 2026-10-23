@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+import {retainedRuntimeAssets} from '@/lib/html-runtime/asset-retention.server';
 import {buildHtmlAssets} from '@/lib/html-runtime/build.server';
 import {GET as apollo} from '@/app/af/v1/apollo/[digest]/route';
 import {expect,it} from 'vitest';
@@ -27,4 +29,15 @@ it('serves only the content-addressed public author module, cacheable without pa
  const site=pagesSiteFor('pages.example.test','https://app.example.test')!,origin=pagesOriginFor('ABC123',site),app=new Hono();app.use('*',pagesHost(site));app.get('/af/v1/apollo/:digest',c=>apollo(c.req.raw,{params:Promise.resolve({digest:c.req.param('digest')})}));
  expect((await app.request(origin+assets.apolloPath)).status).toBe(200);
  expect((await app.request(origin+'/af/v1/apollo/private')).status).toBe(404);
+});
+
+it('serves retained prior-release author bytes and refuses a corrupt stored content address',async()=>{
+ const previous='export const priorRelease=true;',digest=createHash('sha256').update(previous).digest('hex');
+ await retainedRuntimeAssets.put(digest,previous);
+ const req=new Request(`https://app.example.test/af/v1/apollo/${digest}`);
+ const response=await apollo(req,{params:Promise.resolve({digest})});
+ expect(response.status).toBe(200);expect(await response.text()).toBe(previous);expect(response.headers.get('cache-control')).toContain('immutable');
+ const corrupt=createHash('sha256').update('expected immutable bytes').digest('hex');
+ await retainedRuntimeAssets.put(corrupt,'different bytes');
+ expect((await apollo(req,{params:Promise.resolve({digest:corrupt})})).status).toBe(404);
 });

@@ -70,7 +70,7 @@ beforeEach(() => {
   }));
 });
 
-afterEach(() => { cleanup(); localStorage.clear(); document.cookie = 'mx_theme=; path=/; max-age=0'; document.body.replaceChildren(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(async () => { cleanup(); await vi.dynamicImportSettled(); localStorage.clear(); document.cookie = 'mx_theme=; path=/; max-age=0'; document.body.replaceChildren(); window.history.replaceState(null, '', '/'); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 function mount(path = '/a/doc') {
   window.history.replaceState(null, '', path);
@@ -99,7 +99,12 @@ const panelRoot = (): HTMLElement => {
   return hosts.find((root) => root.querySelector('[aria-label="Close panel"]')) ?? document.body;
 };
 // The bar's panels load on first open (components/PageChromePanels), so they are awaited.
-const controls = () => waitFor(() => within(panelRoot()).getByRole('region', { name: 'Artifact controls' }));
+const controls = async () => {
+  const panel = await waitFor(() => within(panelRoot()).getByRole('region', { name: 'Artifact controls' }));
+  // The drawer is available before the separately loaded document actions.
+  await within(panel).findByRole('heading', {name:'Artifact'});
+  return panel;
+};
 const menuPanel = () => waitFor(() => within(panelRoot()).getByRole('navigation', { name: 'Menu' }));
 
 it('places the doc agent handoff in trusted document navigation, outside the page bar', async () => {
@@ -353,12 +358,12 @@ it('opens the current comments in the document rail', async () => {
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
   expect(await trusted(1).findByText('Please add the source.')).toBeInTheDocument();
-  expect(trusted(1).getByRole('complementary', { name: 'Annotation sidebar' })).toHaveTextContent('Please add the source.');
+  expect(await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' })).toHaveTextContent('Please add the source.');
 });
 
-it('opens a carried fork intent after login and consumes the query parameter', () => {
+it('opens a carried fork intent after login and consumes the query parameter', async () => {
   mount('/a/doc?intent=fork');
-  expect(trusted().getByRole('dialog', { name: 'Fork this artifact?' })).toBeInTheDocument();
+  expect(await trusted().findByRole('dialog', { name: 'Fork this artifact?' })).toBeInTheDocument();
   expect(window.location.search).toBe('');
 });
 
@@ -384,11 +389,11 @@ it('does not send a signed-in owner of an archived version back to login', () =>
   expect(notice).toHaveTextContent('Comments are unavailable on archived versions.');
 });
 
-it('opens a carried comment intent for an authorized commenter without login', () => {
+it('opens a carried comment intent for an authorized commenter without login', async () => {
   mount('/a/doc?intent=comment');
   expect(window.location.search).toBe('');
   expect(loginHref).not.toHaveBeenCalled();
-  expect(trusted(1).getByRole('complementary', { name: 'Annotation sidebar' })).toBeInTheDocument();
+  expect(await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' })).toBeInTheDocument();
 });
 
 it('still offers login to a guest asking to comment', () => {

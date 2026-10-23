@@ -1,3 +1,6 @@
+import {createRuntimeAssetRetention} from '@/lib/html-runtime/asset-retention';
+import {retainedRuntimeAssets} from '@/lib/html-runtime/asset-retention.server';
+import type {RuntimeAssetRetention} from '@/lib/html-runtime/asset-retention-contract';
 import {nativeHtmlAssets} from './native-html-assets.server';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -23,8 +26,11 @@ export interface NativeHtmlRender {
 export interface NativeHtmlDocument { html: string; config: HtmlRuntimeConfig }
 
 // Only code is cached. ACL, source, bindings and viewer state are never retained here.
-let assets:ReturnType<typeof buildHtmlAssets>|undefined;
-const htmlAssets=()=>assets??=buildHtmlAssets().catch(error=>{assets=undefined;throw error;});
+let assets:ReturnType<typeof buildHtmlAssets>|undefined,retention:RuntimeAssetRetention|undefined;
+const htmlAssets=()=>assets??=buildHtmlAssets().then(current=>{
+ retention=createRuntimeAssetRetention(current,retainedRuntimeAssets,source=>createHash('sha256').update(source).digest('hex'));
+ return retention.expose();
+}).catch(error=>{assets=undefined;retention=undefined;throw error;});
 function htmlCore(): Promise<string> {
   return htmlAssets().then(assets=>assets.core);
 }
@@ -72,9 +78,10 @@ export async function nativeHtmlCoreResponse(request:Request):Promise<Response>{
 
 /** A content-addressed author engine, fetched only when authored code imports it. */
 export async function nativeHtmlApolloResponse(request:Request,digest:string):Promise<Response>{
- const assets=await htmlAssets();
- if(assets.apolloPath!==`/af/v1/apollo/${digest}`)return new Response('Not found',{status:404});
+ await htmlAssets();
+ const source=await retention!.read(digest);
+ if(source===null)return new Response('Not found',{status:404});
  const headers={'content-type':'application/javascript; charset=utf-8','cache-control':'public, max-age=31536000, immutable','access-control-allow-origin':'*','x-content-type-options':'nosniff','etag':`"${digest}"`};
  if(matchingTag(request.headers.get('if-none-match'),headers.etag))return new Response(null,{status:304,headers});
- return new Response(request.method==='HEAD'?null:assets.apollo,{headers});
+ return new Response(request.method==='HEAD'?null:source,{headers});
 }
