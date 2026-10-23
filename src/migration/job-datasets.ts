@@ -1,3 +1,4 @@
+import {validateDeletedArtifactPreparation} from "./deleted-artifact-admission.ts";
 import { prepareStandaloneDatasetJob } from "./dataset-pages/job.ts";
 import { prepareMigrationOwnershipDatasetGrants } from "./ownership-dataset-grants.ts";
 import { projectMigrationDatasetOwnership } from "./job-dataset-ownership.ts";
@@ -30,9 +31,11 @@ export async function prepareMigrationJobDatasets(
   source: MigrationJobSource,
   options: MigrationJobOptions,
   ports: MigrationBackendPreparationPorts = {},
+  deletedAdmission?: import("./deleted-artifact-contracts.ts").DeletedArtifactAdmission,
 ): Promise<MigrationJobDatasets | undefined> {
+  if(deletedAdmission)await validateDeletedArtifactPreparation(source,deletedAdmission);
   if (options.standaloneVizPages) return undefined;
-  if (options.standaloneDatasetPages) return prepareStandaloneDatasetJob(source, options, ports);
+  if (options.standaloneDatasetPages) return prepareStandaloneDatasetJob(source, options, ports, deletedAdmission);
   if (!source.datasets) {
     if (options.sourceQueryRegistrations?.length)
       throw Error("Source query registrations require dataset preparation");
@@ -205,6 +208,7 @@ export async function prepareMigrationJobDatasets(
         ],
       };
       const plan = planDatasetMetadata({
+        deletedAdmission,
         manifest: {
           ...source.base,
           tokenOwners: source.base.tokenOwners,

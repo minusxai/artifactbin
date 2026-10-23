@@ -52,6 +52,8 @@ export interface DatasetMetadataPlan {
   }[];
 }
 export interface DatasetMetadataInput {
+  /** Explicit additive deleted-page seal; original lifecycle fields remain intact. */
+  deletedAdmission?: import("../deleted-artifact-contracts.ts").DeletedArtifactAdmission;
   relationProvenance: { exportedAt: string; manifestSha256: string };
   manifest: MigrationManifest;
   maps: MigrationMaps;

@@ -1,3 +1,4 @@
+import {createDeletedArtifactAdmissionValidator} from "../deleted-artifact-admission.ts";
 import { attestStandaloneDatasetModels } from "../dataset-pages/models.ts";
 import { datasetPageArtifactSha256 } from "../dataset-pages/scan.ts";
 import type { AccessPolicy, ShareRole } from "../../contracts.ts";
@@ -91,6 +92,9 @@ export function planDatasetMetadata(
   input: DatasetMetadataInput,
 ): DatasetMetadataPlan {
   const { manifest, maps } = input;
+  const assertDeletedRow = input.deletedAdmission
+    ? createDeletedArtifactAdmissionValidator(input.deletedAdmission, manifest.sourceNamespace, maps)
+    : undefined;
   if (
     !manifest.sourceNamespace ||
     manifest.schemaVersion !== 1 ||
@@ -266,6 +270,9 @@ export function planDatasetMetadata(
     page: LegacyArtifact,
     b: { pageId: string; pageVersion: number; standaloneExternalDataset?: import("../dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance; standaloneDataset?: import("../dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance },
   ) => {
+    const originalHead = artifacts.get(page.id) ?? page;
+    if (assertDeletedRow && (originalHead.deleted_at || page.deleted_at))
+      assertDeletedRow(originalHead);
     if (typeof page.edit_id !== "string" || !page.edit_id)
       throw Error("Missing exact member page edit identity");
     const pageKey = JSON.stringify([b.pageId, b.pageVersion]);
@@ -330,8 +337,12 @@ export function planDatasetMetadata(
     ...(input.programPages ?? []),
     ...(input.sourceQueryPages ?? []),
   ]) {
-    const page = artifacts.get(member.pageLegacyId);
+    const headPage = artifacts.get(member.pageLegacyId);
     const external = input.sourceQueryPages?.find(entry=>entry===member)?.standaloneExternalDataset;
+    const archivedPages = external ? (manifest.tables.artifact_versions ?? []).filter(r => r.artifact_id === member.pageLegacyId && r.version === member.pageVersion && r.format === "dataset") : [];
+    if(archivedPages.some(r=>canonical(r)!==canonical(archivedPages[0])))throw Error("Ambiguous historical external dataset page");
+    const original = headPage?.version === member.pageVersion ? headPage : archivedPages[0];
+    const page = headPage?.version === member.pageVersion ? headPage : headPage && original && external ? {...headPage,...original,id:headPage.id,edit_id:original.edit_id} : undefined;
     if (
       !page ||
       (page.format !== "markup" &&
@@ -346,12 +357,12 @@ export function planDatasetMetadata(
       page.version !== member.pageVersion ||
       maps.pages[member.pageLegacyId] !== member.pageId ||
       !/^[A-Za-z0-9]{6}$/.test(member.pageId) ||
-      page.deleted_at
+      (page.deleted_at && !input.deletedAdmission)
     )
       throw Error("Invalid member page provenance");
     if (external) {
       const p=external;
-      if (p.sourceFormat!=="dataset" || p.legacyId!==page.id || p.pageId!==member.pageId || p.pageVersion!==member.pageVersion || p.editId!==page.edit_id || p.artifactSha256!==datasetPageArtifactSha256(page)) throw Error("Invalid standalone external provenance");
+      if (p.sourceFormat!=="dataset" || p.legacyId!==page.id || p.pageId!==member.pageId || p.pageVersion!==member.pageVersion || p.editId!==page.edit_id || p.artifactSha256!==datasetPageArtifactSha256(original!)) throw Error("Invalid standalone external provenance");
     }
     addPage(page, {...member, ...(external ? {standaloneExternalDataset:external} : {})});
   }
@@ -361,7 +372,7 @@ export function planDatasetMetadata(
       (r) =>
         r.artifact_id === b.pageLegacyId &&
         r.version === b.pageVersion &&
-        r.format === "markup",
+        (r.format === "markup" || (b.standaloneDataset && r.format === "dataset")),
     );
     if (archivedPages.some((r) => canonical(r) !== canonical(archivedPages[0])))
       throw Error("Ambiguous historical page binding");
@@ -407,7 +418,7 @@ export function planDatasetMetadata(
     if (b.standaloneDataset) {
       const p = b.standaloneDataset;
       if(p.models)attestStandaloneDatasetModels(page,version,p.models);
-      if (page.format !== "dataset" || p.sourceFormat !== "dataset" || b.pageLegacyId !== b.datasetLegacyId || p.legacyId !== page.id || p.pageId !== b.pageId || p.pageVersion !== b.pageVersion || p.editId !== page.edit_id || b.datasetVersion !== page.version || p.artifactSha256 !== datasetPageArtifactSha256(page)) throw Error("Invalid standalone dataset provenance");
+      if (page.format !== "dataset" || p.sourceFormat !== "dataset" || b.pageLegacyId !== b.datasetLegacyId || p.legacyId !== page.id || p.pageId !== b.pageId || p.pageVersion !== b.pageVersion || p.editId !== page.edit_id || b.datasetVersion !== page.version || p.artifactSha256 !== datasetPageArtifactSha256(b.pageVersion === headPage?.version ? headPage : archivedPages[0]!)) throw Error("Invalid standalone dataset provenance");
     }
     const key = JSON.stringify([
       b.pageId,
