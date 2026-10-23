@@ -71,7 +71,6 @@ const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/web/',
   'services/app/lib/frame-edit/',
   'services/app/lib/islands/',
-  'services/app/lib/page-styles/document-root.ts',
 ];
 const STORY_RUNTIME_BROWSER_LEAVES = [
   'anchor', 'anchor-restore', 'comment-state', 'comment-state-io', 'document-endpoint', 'document-update', 'frame-bridge/parent', 'reader-mode',
@@ -155,7 +154,7 @@ const DOCUMENT_BROWSER_LEAVES = [
   'document-update-client', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'person-mentions', 'pwa-settings',
   'query-notebook', 'social-preview', 'source-changes', 'table-catalog', 'update-parts',
 ];
-/** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
+/** lib/page-styles: retained server consumers use its public index. */
 const PAGE_STYLES_BROWSER_IMPORTERS = [];
 const PAGE_STYLES_BROWSER_LEAVES = [];
 /** lib/accounts: its index, and tokens, which a downstream deployment imports by path (__tests__/downstream-exports.test.ts). */
