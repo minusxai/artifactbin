@@ -4,7 +4,7 @@ import {request,useAppHarness} from './harness';
 import {createUser} from '@/lib/accounts';
 import {runWithRequest} from '@/lib/platform';
 const harness=useAppHarness();let owner:Awaited<ReturnType<typeof createUser>>;
-beforeEach(async()=>{owner=await createUser({email:'mxmx_test_presence@example.com'});await(await harness.db()).query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,version) VALUES ('prespublic','tok_presence',$1,'html','public',1),('presprivate','tok_presence',$1,'html','private',1)",[owner.id]);});
+beforeEach(async()=>{owner=await createUser({email:'mxmx_test_presence@example.com'});await(await harness.db()).query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,version) VALUES ('prespublic','tok_presence',$1,'html','public',1),('presprivate','tok_presence',$1,'html','private',1),('presMixed','tok_presence',$1,'html','public',1)",[owner.id]);});
 const params=(id:string)=>({params:Promise.resolve({id})});
 const session='00000000-0000-4000-8000-000000000001';
 const actor=()=>({credential:'session' as const,userId:owner.id,email:owner.email,emailVerified:true});
@@ -22,4 +22,13 @@ it('assigns distinct public identities per window without broadcasting session s
  const again=await(await publish('prespublic',{session,revision:'1'},{actor:actor()})).json();
  expect(a.id).toMatch(/^[a-f0-9]{64}$/);expect(a.id).not.toBe(b.id);expect(again.id).toBe(a.id);expect(JSON.stringify(a)).not.toContain(session);
  const guest=await(await publish('prespublic',{session,revision:'1'})).json();expect(guest.id).not.toBe(a.id);
+});
+it('fans a native cursor out to simultaneous live readers through the existing notification channel',async()=>{
+ const readers=await Promise.all([0,1,2].map(async()=>{const req=request('/api/artifacts/presMixed/presence');const response=await runWithRequest(req,()=>GET(req,params('presMixed')));expect(response.status).toBe(200);return response.body!.getReader();}));
+ try{
+  await Promise.all(readers.map(reader=>reader.read()));
+  await publish('presMixed',{session,revision:'1',cursor:{nodeId:'p',x:.4,y:.5},visible:true});
+  const received=await Promise.race([Promise.all(readers.map(reader=>reader.read())),new Promise<never>((_resolve,reject)=>setTimeout(()=>reject(new Error('Presence fanout timed out')),2000))]);
+  for(const chunk of received){const text=new TextDecoder().decode(chunk.value);expect(text).toContain('"nodeId":"p"');expect(text).not.toContain(session);}
+ }finally{await Promise.all(readers.map(reader=>reader.cancel()));}
 });

@@ -2,10 +2,12 @@ import {createHash} from 'node:crypto';
 import {getArtifactById,canReadArtifact} from '@/lib/artifacts';
 import {sessionActor,authorHandle} from '@/lib/accounts';
 import {getDb} from '@/lib/platform/db';
-import {subscribeChannel} from '@/lib/publish/realtime/live';
-import {presenceGeometry,presenceRoster} from '@/lib/html-presence/model';
+import {subscribeToArtifact,subscribeChannel} from '@/lib/publish/realtime/live';
+import {presenceGeometry} from '@/lib/html-presence/model';
+import {createPresenceRoom} from '@/lib/html-presence/room';
 import type {PresenceViewer} from '@/lib/html-presence/contract';
-const channel=(id:string)=>`af_presence_${id}`;
+// Hash the case-sensitive ID: lower-case SQL-safe channels without merging distinct page rooms.
+const channel=(id:string)=>`af_presence_${createHash('sha256').update(id).digest('hex').slice(0,40)}`;
 async function access(request:Request,id:string){const row=await getArtifactById(id);const actor=await sessionActor(request);return row?.format==='html'&&await canReadArtifact(row,actor)?{row,actor}:null;}
 /** Account authority stays on the platform. A per-tab random secret becomes a public, non-reversible roster ID. */
 export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){
@@ -22,14 +24,19 @@ export async function POST(request:Request,ctx:{params:Promise<{id:string}>}){
 /** Same ACL and existing Postgres LISTEN/NOTIFY as document live updates; no durable presence table. */
 export async function GET(request:Request,ctx:{params:Promise<{id:string}>}){
  const {id}=await ctx.params;const allowed=await access(request,id);if(!allowed)return new Response('not found',{status:404});
- const revision=String(allowed.row.version),entries=new Map<string,PresenceViewer>(),encoder=new TextEncoder();
- let closed=false,drop:(()=>Promise<void>)|undefined,timer:ReturnType<typeof setInterval>|undefined;
+ const revision=String(allowed.row.version),encoder=new TextEncoder();
+ let room:Awaited<ReturnType<typeof createPresenceRoom>>|undefined,closed=false;
  let controller:ReadableStreamDefaultController<Uint8Array>;
- const close=()=>{if(closed)return;closed=true;if(timer)clearInterval(timer);void drop?.();try{controller.close();}catch{}};
- const send=async()=>{if(closed)return;const current=await access(request,id);if(closed)return;if(!current||String(current.row.version)!==revision)return close();const roster=presenceRoster([...entries.values()],revision,Date.now());entries.clear();for(const entry of roster)entries.set(entry.id,entry);controller.enqueue(encoder.encode(`data: ${JSON.stringify(roster)}\n\n`));};
+ const close=()=>{if(closed)return;closed=true;room?.dispose();try{controller.close();}catch{}};
  const stream=new ReadableStream<Uint8Array>({start(c){controller=c;},cancel:close});
- try{drop=await subscribeChannel(channel(id),payload=>{try{const entry=JSON.parse(payload) as PresenceViewer&{gone?:boolean};if(!/^[a-f0-9]{64}$/.test(entry.id))return;if(entry.gone)entries.delete(entry.id);else if(entry.revision===revision&&typeof entry.label==='string'&&entry.label.length<=100&&Number.isFinite(entry.seen)){entries.set(entry.id,{id:entry.id,label:entry.label,revision,seen:entry.seen,...presenceGeometry(entry)});if(entries.size>100)entries.delete(entries.keys().next().value!);}void send().catch(close);}catch{}},close);}catch{close();return new Response('unavailable',{status:503});}
- if(closed||request.signal.aborted){await drop?.();close();return new Response(null,{status:204});}
- timer=setInterval(()=>void send().catch(close),3000);request.signal.addEventListener('abort',close,{once:true});void send().catch(close);
+ try{room=await createPresenceRoom({revision,
+  authorize:async()=>{const current=await access(request,id);return !!current&&String(current.row.version)===revision;},
+  subscribe:(receive,lost)=>subscribeChannel(channel(id),receive,lost),
+  subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),
+  send:viewers=>{if(!closed&&controller.desiredSize!==null&&controller.desiredSize>0)controller.enqueue(encoder.encode(`data: ${JSON.stringify(viewers)}\n\n`));},
+  close,clock:{now:Date.now,setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>),setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>)}
+ });}catch{close();return new Response('unavailable',{status:503});}
+ if(closed||request.signal.aborted){room.dispose();close();return new Response(null,{status:204});}
+ request.signal.addEventListener('abort',close,{once:true});
  return new Response(stream,{headers:{'content-type':'text/event-stream','cache-control':'no-store','x-accel-buffering':'no'}});
 }
