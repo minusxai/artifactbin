@@ -80,6 +80,7 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/gates/gate-exports.mjs` | What the exporter photographs, checked as pixels. | `gates.mjs` |
 | `scripts/gates/gate-kit-and-fonts.mjs` | The component kit and its type; the compiled reader handover. | `gates.mjs` |
 | `scripts/gates/gate-live.mjs` | Someone else writes and the open page follows without a reload. | `gates.mjs` |
+| `scripts/gates/gate-presence.mjs` | Reader cursors, selections and preferences stay isolated across accounts and tabs on the shared document stream. | `gates.mjs` |
 | `scripts/gates/gate-media.mjs` | Files, images and web URLs from the author to a stranger's browser. | `gates.mjs` |
 | `scripts/gates/gate-offline-file.mjs` | The offline file and the screenshot comment in Chromium, Firefox and WebKit. | `gates.mjs` |
 | `scripts/gates/gate-own-origin-script.mjs` | A script document on its own origin: framed, queried, edited, exported. | `gates.mjs` |
