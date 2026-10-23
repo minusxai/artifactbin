@@ -1,3 +1,4 @@
+import {extendLegacyParamsCodemod} from "./legacy-params-codemod.ts";
 /** Runs the exact retired source-only codemod, never any authored JavaScript. */
 import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -28,6 +29,7 @@ if (
   LEGACY_SCRIPT_CODEMOD_SHA256
 )
   throw Error("Codemod integrity mismatch");
+source=extendLegacyParamsCodemod(source);
 const imports: Record<string, string> = {
   "@babel/core": "node_modules/@babel/core/lib/index.js",
   "@artifactbin/utils/escape": "services/utils/src/escape.ts",

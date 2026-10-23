@@ -1,3 +1,4 @@
+import {LEGACY_PARAMS_BRIDGE_VERSION} from "./legacy-params-codemod.ts";
 import { createHash } from "node:crypto";
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
@@ -68,6 +69,7 @@ export async function normalizeLegacyManagedFrames(
       source: result.source,
       receipt: {
         kind: "original-managed-frame-codemod",
+        paramsBridgeVersion: LEGACY_PARAMS_BRIDGE_VERSION,
         codemodCommit: LEGACY_SCRIPT_CODEMOD_COMMIT,
         codemodSha256: LEGACY_SCRIPT_CODEMOD_SHA256,
         originalSourceSha256: hash(source),

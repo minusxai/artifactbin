@@ -35,8 +35,11 @@ export async function prepareAuthorBundle(
     !prototype && options.lifecycle === "owned"
       ? prepareOwnedAuthorComponents(source)
       : undefined;
-  const effects =
-    !prototype && options.mode === "effects" ? prepareAuthorEffects(source) : undefined;
+  let paramsSuffix=0;
+  while(source.includes("_afParamsLifetime"+paramsSuffix)||source.includes("_afParamsWindow"+paramsSuffix))paramsSuffix++;
+  const paramsEffects=prototype&&options.mode==="effects"&&source.includes("/* scalar-params-v1 */")?{source,lifetimeIdentifier:"_afParamsLifetime"+paramsSuffix,windowIdentifier:"_afParamsWindow"+paramsSuffix,capabilities:["effects" as const]}:undefined;
+  const effects = paramsEffects ??
+    (!prototype && options.mode === "effects" ? prepareAuthorEffects(source) : undefined);
   if (!prototype && !effects && !owned) admitAuthorSource(source);
   const root = path.resolve(options.archivedRoot);
   const solidRoot = path.join(root, "node_modules/solid-js");

@@ -7,6 +7,7 @@ export interface LegacyScriptMigration {
 }
 export interface LegacyScriptNormalizationReceipt {
   kind: "original-managed-frame-codemod";
+  paramsBridgeVersion?: "scalar-params-v1";
   codemodCommit: string;
   codemodSha256: string;
   originalSourceSha256: string;

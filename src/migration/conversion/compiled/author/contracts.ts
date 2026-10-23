@@ -11,3 +11,8 @@ export interface AuthorMutationOptions {
     subscribe(listener: () => void): () => void;
   };
 }
+/** Viewer-owned operations only; never contains a remote adapter or access grant. */
+export interface AuthorLocalMutationOptions {
+  names: readonly string[];
+  mutate(name:string,args:Readonly<import("../../../../author/contracts.ts").Row>,row?:Readonly<import("../../../../author/contracts.ts").Row>):Promise<unknown>;
+}

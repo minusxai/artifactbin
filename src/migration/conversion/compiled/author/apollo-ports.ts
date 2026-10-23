@@ -4,6 +4,7 @@ import type {
   QueryPort,
   AuthorState,
   AuthorMutationOptions,
+  AuthorLocalMutationOptions,
 } from "./contracts.ts";
 import type { AfClient } from "../../../../apollo/apollo-contracts.ts";
 import type { DocumentNode } from "graphql";
@@ -17,6 +18,7 @@ export function authorApolloPorts(
   query: DocumentNode,
   queries: (name: string) => QueryPort,
   mutations?: AuthorMutationOptions,
+  localMutations?: AuthorLocalMutationOptions,
 ): AuthorPorts {
   return {
     state: {
@@ -51,7 +53,7 @@ export function authorApolloPorts(
       },
     },
     query: queries,
-    ...(mutations
+    ...(mutations || localMutations
       ? {
           mutation: async (
             name: string,
@@ -59,7 +61,14 @@ export function authorApolloPorts(
             row?: Readonly<import("./contracts.ts").Row>,
             signal?: AbortSignal,
           ) => {
-            if (!mutations.names.includes(name))
+            if(localMutations?.names.includes(name)){
+              if(mutations?.names.includes(name))throw Error("Ambiguous author mutation");
+              if(signal?.aborted)throw Error("Author mount disposed");
+              const answer=await localMutations.mutate(name,args,row);
+              if(signal?.aborted)throw Error("Author mount disposed");
+              return answer;
+            }
+            if (!mutations || !mutations.names.includes(name))
               throw Error("Unregistered author mutation");
             const { context, epoch } = await awaitAuthorAccess(
               mutations,
