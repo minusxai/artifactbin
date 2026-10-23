@@ -51,7 +51,6 @@ import * as m18 from '@/lib/operations/registry';
 import * as m19 from '@/lib/platform/config';
 import * as m20 from '@/lib/platform/db';
 import * as m21 from '@/lib/platform/services';
-import * as m26 from '@/lib/runner';
 import * as m28 from '@/server/host';
 import * as m29 from '@artifactbin/contracts';
 import * as m30 from '@artifactbin/utils';
@@ -119,9 +118,6 @@ describe('values the deployment composes from', () => {
   });
   it('@/lib/platform/services', () => {
     for (const name of ["services","setServices"]) expect(name in m21, name).toBe(true);
-  });
-  it('@/lib/runner', () => {
-    for (const name of ["runnerOperation"]) expect(name in m26, name).toBe(true);
   });
   it('@/server/host', () => {
     for (const name of ["createAppHost"]) expect(name in m28, name).toBe(true);

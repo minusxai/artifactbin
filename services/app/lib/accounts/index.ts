@@ -21,7 +21,7 @@ export { DEFAULT_TOKEN_TTL_MS, LIVE_TOKEN_SQL, MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_M
 export { ACCOUNT_REACH_SQL, canAuthenticateUser, userKindOf } from './user-kinds';
 export { USERNAME_RE, authorHandle, claimToken, claimTokenById, claimableTokensById, createUser, ensureUsername, getUserByEmail, getUserById, getUserByUsername, hasCreatedDocument, isAccountRow, ownerUsername, revokeUserToken, setUserEmail, setUsername, usernameFromEmail } from './users';
 export type { UserRow } from './users';
-export { browserSessionKind, isBrowserSessionRequest, isCookieCredential, requestOrSessionActor, sessionActor } from './request-identity';
+export { browserSessionKind, isBrowserSessionRequest, requestOrSessionActor, sessionActor } from './request-identity';
 export { endPagesSession, endPagesSessionsFor, exchangePagesTicket, issuePagesTicket, pagesSessionActor, pagesSessionOf } from './pages-sessions';
 export type { PagesSession } from './pages-sessions';
 export { setDocumentEditorPolicy, type DocumentEditorPolicy } from './document-editor';
