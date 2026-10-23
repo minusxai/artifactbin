@@ -41,6 +41,8 @@
   "services/app/lib/html-presence/__tests__/room.test.ts",
   "services/app/lib/html-runtime/__tests__/apollo.test.ts",
   "services/app/lib/html-runtime/__tests__/assembly.test.ts",
+  "services/app/lib/html-runtime/__tests__/asset-retention.test.ts",
+  "services/app/lib/html-runtime/__tests__/viewer-state.test.ts",
   "services/app/lib/jsx/__tests__/deck-spec.test.ts",
   "services/app/lib/jsx/__tests__/template.test.ts",
   "services/app/lib/mermaid-images/__tests__/drawn.test.ts",
