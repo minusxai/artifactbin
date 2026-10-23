@@ -1,4 +1,4 @@
-import {RUN_TABLES,AGENT_TABLES,SCHEDULE_TABLES} from '@artifactbin/runner/schema';
+import {RUN_TABLES} from '@artifactbin/runner/schema';
 /**
  * Schema as data → idempotent DDL. (Distilled from minusx
  * lib/database/schema/tables.ts + render.ts.)
@@ -768,25 +768,8 @@ const MERMAID_HARVESTS: Table = {
 };
 
 /** At-most-once mutation admission, before the content transaction. */
-/** Managed identity and request receipts outlive the ephemeral terminal relay. */
-const REMOTE_AGENTS: Table = {
- name:'remote_agents',columns:[
-  {name:'id',type:'TEXT',notNull:true},{name:'owner',type:'TEXT',notNull:true},
-  {name:'name',type:'TEXT',notNull:true},{name:'active',type:'BOOLEAN',notNull:true,default:'true'},
-  {name:'proof_hash',type:'TEXT',notNull:true},{name:'info',type:'JSONB',notNull:true},
-  {name:'seen_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
- ],primaryKey:['id'],indexes:[{name:'idx_remote_agent_name',columns:['owner','name'],unique:true,where:'active'}],
-};
-const REMOTE_WORK: Table = {
- name:'remote_work',columns:[
-  {name:'id',type:'TEXT',notNull:true},{name:'seq',type:'BIGSERIAL',notNull:true},
-  {name:'owner',type:'TEXT',notNull:true},{name:'session_id',type:'TEXT',notNull:true},
-  {name:'artifact_id',type:'TEXT',notNull:true},{name:'thread_id',type:'TEXT',notNull:true},
-  {name:'comment_id',type:'TEXT',notNull:true},{name:'phase',type:'TEXT',notNull:true},
-  {name:'data',type:'JSONB',notNull:true},{name:'updated_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
- ],primaryKey:['id'],indexes:[{name:'idx_remote_work_comment',columns:['session_id','comment_id'],unique:true},{name:'idx_remote_work_thread',columns:['artifact_id','thread_id']}],
-};
-
+// Retired hosted-agent, schedule and terminal-relay tables are not created for a fresh app.
+// RUN_TABLES remain internal: the native backend controller performs boot recovery against them.
 const MUTATION_RECEIPTS: Table = {
  name:'mutation_receipts',
  columns:[
@@ -1074,7 +1057,7 @@ const HTML_BACKEND_SECRETS:Table={name:'html_backend_secrets',columns:[
  {name:'name',type:'TEXT',notNull:true},{name:'ciphertext',type:'TEXT',notNull:true},
 ],primaryKey:['owner_id','backend_id','name']};
 
-export const TABLES: Table[] = [HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,HTML_BACKEND_STORES,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,...AGENT_TABLES,...SCHEDULE_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [HTML_BACKEND_SECRETS,HTML_BACKEND_VERSIONS,HTML_BACKEND_STORES,GROUPS,GROUP_MEMBERS,GROUP_INVITATIONS,GROUP_LINKS,ACCOUNT_PREFERENCES,HANDLE_RESERVATIONS,DEPLOYMENT_STATE,DEPLOYMENT_MEMBERS,OWNERSHIP_TRANSFERS,...RUN_TABLES,PAGES_SESSIONS, DOCUMENT_TRUST, NOTIFICATION_JOBS, MUTATION_NOTIFICATIONS, EVENT_OUTBOX, MEMBER_NOTIFICATIONS, USER_BLOCKS, COMMENT_IMAGES, DATASET_IMAGES, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MERMAID_IMAGES, MERMAID_HARVESTS, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, CUSTOM_DOMAINS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, ARTIFACT_VIEW_TOTALS, RELATIONS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, PREPARED_PAGES, DATA_SNAPSHOTS, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

@@ -1,3 +1,4 @@
+import {nativeSource} from './native-publication-fixture';
 import {restoreDocument} from './prepared-document';
 import {observedRequest} from './conditional-request';
 /**
@@ -15,9 +16,6 @@ import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { POST as create } from '@/app/api/artifacts/route';
 import { PUT as replace, GET as read } from '@/app/api/artifacts/[id]/route';
 import { GET as exportImage } from '@/app/api/artifacts/[id]/export/route';
-import { CLI_PROTOCOL_VERSION } from '@artifactbin/contracts';
-import { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
-import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { GET } from '@/app/api/capabilities/route';
 
 useAppHarness();
@@ -25,9 +23,9 @@ useAppHarness();
 describe('cli-advanced-http', () => {
   afterEach(()=>setServices({}));
   it('revert returns the complete canonical head so the next write needs no read-back',async()=>{
-   const token=await mintToken('cli-revert');const original=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Original</p>',title:'Doc'}}))).json();
+   const token=await mintToken('cli-revert');const original=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<p>Original</p>'),title:'Doc'}}))).json();
    const params={params:Promise.resolve({id:original.id})},path=`/api/artifacts/${original.id}`;
-   const updated=await(await replace(await observedRequest(path,{method:'PUT',token:token.token,json:{markup:'<p>Changed</p>',expectedVersion:original.version,expectedState:original.state}}),params)).json();
+   const updated=await(await replace(await observedRequest(path,{method:'PUT',token:token.token,json:{html:nativeSource('<p>Changed</p>'),expectedVersion:original.version,expectedState:original.state}}),params)).json();
    expect(updated.version).toBe(original.version+1);
    const restored=await restoreDocument(token.token,original.id,original.version);
    expect(restored.status).toBe(200);const body=await restored.json();
@@ -37,7 +35,7 @@ describe('cli-advanced-http', () => {
   });
   it('authenticated export forwards card mode and refuses an unknown mode',async()=>{
    await resetExportRenderer();const browser=fakeBrowser();setServices({browser});
-   const token=await mintToken('cli-export');const doc=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<h1>Card</h1>'}}))).json();
+   const token=await mintToken('cli-export');const doc=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeSource('<h1>Card</h1>')}}))).json();
    const params={params:Promise.resolve({id:doc.id})};
    const invalid=await exportImage(request(`/api/artifacts/${doc.id}/export?mode=wrong`,{token:token.token}),params);expect(invalid.status).toBe(400);
    const result=await exportImage(request(`/api/artifacts/${doc.id}/export?mode=card`,{token:token.token}),params);expect(result.status).toBe(200);
@@ -46,10 +44,13 @@ describe('cli-advanced-http', () => {
 });
 
 describe('cli-capabilities', () => {
-  it('advertises versioned authoring names and the write contract without authentication or database access',async()=>{
+  it('advertises factual native publication, GraphQL and one author skill without authentication',async()=>{
    const response=await GET(request('/api/capabilities'));expect(response.status).toBe(200);
-   const body=await response.json();expect(body.protocol).toBe(CLI_PROTOCOL_VERSION);expect(body.allowlists.version).toBe(CLI_PROTOCOL_VERSION);
-   expect(body.allowlists.themes).toEqual(STORY_DESIGN_NAMES);expect(body.allowlists.templates).toEqual(STORY_TEMPLATE_NAMES);expect(body.allowlists.components).toEqual(JSX_STORY_COMPONENT_NAMES);
-   expect(body.reference).toBe('ref:<id>');
+   const body=await response.json();expect(body.version).toBe(1);
+   expect(body.page).toEqual({format:'html',create:{method:'POST',path:'/api/artifacts'},update:{method:'PUT',path:'/api/artifacts/{id}',required:['html','expectedVersion','expectedState']}});
+   expect(body.graphql).toEqual({method:'POST',path:'/api/artifacts/{id}/graphql',schema:{method:'GET',path:'/api/artifacts/{id}/graphql'}});
+   expect(body.dataset).toEqual({createField:'dataset',linkRel:'af-dataset',namespaceAttribute:'data-af-name',modes:['live','pinned']});
+   expect(body.skill).toEqual({name:'artifactbin',archive:'/skills/artifactbin.zip',guide:'/llms.txt'});
+   expect(body.reference).toBe('ref:<id>');expect(body).not.toHaveProperty('allowlists');expect(body).not.toHaveProperty('protocol');
   });
 });

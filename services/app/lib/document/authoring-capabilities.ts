@@ -1,10 +1,18 @@
-/** Pure, bundled authoring knowledge. Reading it never initializes services. */
-import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
-import {STORY_DESIGN_NAMES,STORY_TEMPLATE_NAMES} from '../validation/atlas-schemas';
-import {JSX_STORY_COMPONENT_NAMES} from '../jsx/components';
-import {STORY_HTML_TAGS} from '@/lib/jsx/component-names';
-export const authoringCapabilities={
- protocol:CLI_PROTOCOL_VERSION,
+/** Versioned native discovery. Reading this document does not initialize services. */
+export interface AuthoringCapabilities {
+ /** Discovery document schema version; not an installed skill release number. */
+ version:1;
+ reference:'ref:<id>';
+ page:{format:'html';create:{method:'POST';path:'/api/artifacts'};update:{method:'PUT';path:'/api/artifacts/{id}';required:readonly ['html','expectedVersion','expectedState']}};
+ graphql:{method:'POST';path:'/api/artifacts/{id}/graphql';schema:{method:'GET';path:'/api/artifacts/{id}/graphql'}};
+ dataset:{createField:'dataset';linkRel:'af-dataset';namespaceAttribute:'data-af-name';modes:readonly ['live','pinned']};
+ skill:{name:'artifactbin';archive:'/skills/artifactbin.zip';guide:'/llms.txt'};
+}
+export const authoringCapabilities:AuthoringCapabilities={
+ version:1,
  reference:'ref:<id>',
- allowlists:{version:CLI_PROTOCOL_VERSION,themes:STORY_DESIGN_NAMES,templates:STORY_TEMPLATE_NAMES,components:JSX_STORY_COMPONENT_NAMES,html_tags:STORY_HTML_TAGS},
-} as const;
+ page:{format:'html',create:{method:'POST',path:'/api/artifacts'},update:{method:'PUT',path:'/api/artifacts/{id}',required:['html','expectedVersion','expectedState']}},
+ graphql:{method:'POST',path:'/api/artifacts/{id}/graphql',schema:{method:'GET',path:'/api/artifacts/{id}/graphql'}},
+ dataset:{createField:'dataset',linkRel:'af-dataset',namespaceAttribute:'data-af-name',modes:['live','pinned']},
+ skill:{name:'artifactbin',archive:'/skills/artifactbin.zip',guide:'/llms.txt'},
+};

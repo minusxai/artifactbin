@@ -13,6 +13,12 @@ const read = (f: string) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const rendered = renderedSchema;
 
 describe('the rendered schema', () => {
+  it('fresh app initialization omits retired agents, schedules and terminal relay while retaining the native controller store',()=>{
+    const schema=rendered().schema;
+    for(const table of ['hosted_conversations','hosted_branches','runner_schedules','runner_schedule_occurrences','runner_schedule_attempts','remote_agents','remote_work'])expect(schema).not.toContain('CREATE TABLE IF NOT EXISTS app.'+table+' (');
+    expect(schema).toContain('CREATE TABLE IF NOT EXISTS app.runner_runs (');
+    expect(schema).toContain('CREATE TABLE IF NOT EXISTS app.runner_events (');
+  });
   it('records queryable compile versions for filtered backfills', () => {
     const schema = read('SCHEMA.sql');
     const prepared = schema.slice(schema.indexOf('CREATE TABLE IF NOT EXISTS app.prepared_pages'), schema.indexOf('CREATE TABLE IF NOT EXISTS app.data_snapshots'));
@@ -48,7 +54,7 @@ describe('the rendered schema', () => {
   });
   it('every table has exactly one owning package, and the declared set is the literal below', () => {
     const owners = rendered().tables;
-    expect(Object.keys(owners).sort()).toEqual(['app.html_backend_secrets','app.html_backend_versions','app.html_backend_stores','app.groups','app.group_members','app.group_invitations','app.group_links','app.account_preferences','app.handle_reservations','app.deployment_state','app.deployment_members','app.ownership_transfers','app.runner_runs','app.runner_events','app.runner_schedules','app.runner_schedule_attempts','app.runner_schedule_occurrences','app.hosted_conversations','app.hosted_branches','app.notification_jobs','app.mutation_notifications','app.event_outbox','events.deliveries','app.member_notifications', 'app.user_blocks', 'app.remote_agents', 'app.remote_work', 'app.export_image_cache', 'app.export_images', 'app.mermaid_images', 'app.mermaid_harvests', 'app.annotations', 'app.mutation_receipts', 'app.artifact_creation_operations', 'app.artifact_edits','app.artifact_id_registry','app.id_reservation_batches', 'app.artifact_shares', 'app.artifact_source_ids', 'app.artifact_versions', 'app.artifacts', 'app.analytics_events', 'app.artifact_view_totals', 'app.browser_test_users', 'app.codes', 'app.comment_images', 'app.dataset_images', 'app.custom_domains', 'app.dataset_secrets', 'app.dataset_result_cache', 'app.dataset_policy_audit', 'app.dataset_usage',
+    expect(Object.keys(owners).sort()).toEqual(['app.html_backend_secrets','app.html_backend_versions','app.html_backend_stores','app.groups','app.group_members','app.group_invitations','app.group_links','app.account_preferences','app.handle_reservations','app.deployment_state','app.deployment_members','app.ownership_transfers','app.runner_runs','app.runner_events','app.notification_jobs','app.mutation_notifications','app.event_outbox','events.deliveries','app.member_notifications', 'app.user_blocks', 'app.export_image_cache', 'app.export_images', 'app.mermaid_images', 'app.mermaid_harvests', 'app.annotations', 'app.mutation_receipts', 'app.artifact_creation_operations', 'app.artifact_edits','app.artifact_id_registry','app.id_reservation_batches', 'app.artifact_shares', 'app.artifact_source_ids', 'app.artifact_versions', 'app.artifacts', 'app.analytics_events', 'app.artifact_view_totals', 'app.browser_test_users', 'app.codes', 'app.comment_images', 'app.dataset_images', 'app.custom_domains', 'app.dataset_secrets', 'app.dataset_result_cache', 'app.dataset_policy_audit', 'app.dataset_usage',
       'app.document_trust', 'app.pages_sessions', 'app.prepared_pages', 'app.data_snapshots', 'app.relations', 'app.tokens', 'app.users', 'app.web_assets', 'auth.clients', 'auth.credentials', 'events.events'].sort());
     expect(new Set(Object.values(owners))).toEqual(new Set(['app', 'auth', 'events']));
   });
