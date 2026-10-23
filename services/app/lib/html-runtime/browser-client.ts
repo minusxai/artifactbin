@@ -1,3 +1,4 @@
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { createClient, gql, readStateFragment } from './apollo/client';
 import { createViewerState } from './viewer-state';
 import type { HtmlRuntimeConfig } from './contract';
@@ -42,7 +43,7 @@ remote.execute = async (request) => {
 
 /** Original trusted frame door owns source/origin/key checks; this adapter supplies native HTML geometry. */
 export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameBridgeSession {
-  const nonce = crypto.randomUUID();
+  const nonce = runtimeId();
   let call = 0;
   let canAnnotate = false;
   let annotations: HtmlAnnotationPaint = { pins: [], mode: 'off', openId: null, hoverId: null };

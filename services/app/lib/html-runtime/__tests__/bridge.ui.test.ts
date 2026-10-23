@@ -60,3 +60,12 @@ it('uses original select controls for block picks, breadcrumbs and escape', asyn
   expect(selections().at(-1)?.selection).toBeNull();
   bridge.dispose();
 });
+it('opens on HTTP runner and offline origins without the secure-context randomUUID API', async () => {
+  vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '1', backends: [] });
+  vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+  const { startFrameBridge } = await import('../browser-client');
+  const events: Array<{ kind: string; [key: string]: unknown }> = [];
+  const bridge = startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '1', source: null } });
+  expect(events[0]?.nonce).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  bridge.dispose();
+});
