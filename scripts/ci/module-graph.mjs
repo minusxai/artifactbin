@@ -47,10 +47,11 @@ const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
  * an exact file; a leaf is a path under lib/islands without its extension.
  */
 export const ISLANDS_BROWSER_IMPORTERS = [
+  'services/app/lib/html-runtime/browser-client.ts',
   'services/app/solid/',
 ];
 const ISLANDS_BROWSER_LEAVES = [
-  'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
+  'frame-links', 'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
   'live-update', 'person-face', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
 ];
 /*

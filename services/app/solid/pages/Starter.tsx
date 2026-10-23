@@ -94,7 +94,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
   let reloading = false;
   createEffect(() => {
     const frame = live();
-    if (converting() || !frame || reloading || frame.format !== 'markup' || isStartPlaceholder(frame.source, frame.version)) return;
+    if (converting() || !frame || reloading || frame.format !== 'html' || frame.version <= surface.version || isStartPlaceholder(frame.source, frame.version)) return;
     reloading = true;
     reloadKeepingPlace(window);
   });
@@ -124,7 +124,7 @@ export function StarterPage(props: { answer: StarterAnswer }): JSX.Element {
     </TrustedUi>
     {/* The starter sits on the app's own dotted page, under the bar. */}
     <div aria-label="Artifact viewport" class="relative min-h-screen">
-      <StarterInstructions id={id} template={surface.template} onContinueBlank={editable && !surface.template ? continueBlank : undefined} converting={converting()} conversionError={conversionError()} />
+      <StarterInstructions id={id} template={surface.template} onContinueBlank={surface.format !== 'html' && editable && !surface.template ? continueBlank : undefined} converting={converting()} conversionError={conversionError()} />
     </div>
   </>;
 }

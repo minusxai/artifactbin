@@ -114,3 +114,16 @@ it('answers admitted native validators and HEAD without reading or assembling so
  const changed=await raw(req('GET',tag),params(id));expect(changed.status).toBe(200);expect(changed.headers.get('etag')).not.toBe(tag);expect(await changed.text()).toContain('Changed native content');
 
 });
+
+it('keeps agent instructions in the native start shell until the first content replacement',async()=>{
+ const actor=await mintAccountToken('native-start');
+ const {POST:start}=await import('@/app/api/start/route');
+ const created=await start(request('/api/start',{method:'POST',token:actor.token}));expect(created.status).toBe(201);
+ const {id}=await created.json();
+ const view=()=>request(`/a/${id}`,{actor:{credential:'session',userId:actor.userId!,email:actor.email??undefined}});
+ const first=await artifactPageAnswer(view(),id,{pages:site});
+ expect(first.body).toMatchObject({surface:{format:'html',starter:true}});expect(first.frame).toBeUndefined();
+ const head=await(await read(request(`/api/artifacts/${id}`,{token:actor.token}),params(id))).json();
+ const saved=await PUT(request(`/api/artifacts/${id}`,{method:'PUT',token:actor.token,json:{html:source,expectedVersion:head.version,expectedState:head.state}}),params(id));expect(saved.status).toBe(200);
+ const next=await artifactPageAnswer(view(),id,{pages:site});expect(next.body).toMatchObject({surface:{starter:false}});expect(next.frame).toBeDefined();
+});

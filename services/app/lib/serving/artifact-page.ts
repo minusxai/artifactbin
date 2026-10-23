@@ -289,12 +289,12 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
       ? admittedFrameSrc(request, artifact, actor, options.pages!, new URL(request.url).search, readerPick) : Promise.resolve(null),
   ] as const);
   const authorUsername = author?.username ?? null;
-  const starter = false;
+  const starter = nativeHtml && !at && row.version === 1 && row.meta.startPlaceholder === true;
   const authorMark = { username: authorUsername, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom };
   const follow = artifact.user_id && artifact.user_id !== viewerId ? { userId: artifact.user_id, following, count: followCount } : null;
 
   const framedOrigin = framedSrc?.origin ?? null;
-  const frame: DocumentFrame | null = framedSrc && nativeHtml ? {
+  const frame: DocumentFrame | null = framedSrc && nativeHtml && !starter ? {
     src: framedSrc.src,
     contentUrl: `/a/${artifact.id}/raw${at ? `?version=${at.version}` : ''}`,
     title: nativeHtmlTitle(row),

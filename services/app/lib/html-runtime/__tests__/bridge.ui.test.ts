@@ -106,3 +106,17 @@ it('batches authored DOM changes, ignores its own overlay and detaches observati
  bridge.dispose();expect(frames.size).toBe(0);document.querySelector('ul')!.append(document.createElement('li'));await Promise.resolve();expect(frames.size).toBe(0);
  vi.restoreAllMocks();
 });
+
+it('installs app link navigation in the native bridge without hijacking handled links or downloads',async()=>{
+ vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'p1',revision:'1',backends:[],appOrigin:'https://platform.example'});
+ const runtime=await import('../browser-client');const posted:unknown[]=[];
+ const reader=document.createElement('iframe');document.body.append(reader);const doc=reader.contentDocument!;const readerWindow=reader.contentWindow!;
+ const parent={postMessage:(data:unknown)=>posted.push(data)};
+ const win=new Proxy(readerWindow,{get:(target,key)=>key==='parent'?parent:key==='top'?{location:{href:''}}:key==='location'?window.location:typeof Reflect.get(target,key,target)==='function'?Reflect.get(target,key,target).bind(target):Reflect.get(target,key,target)});
+ const bridge=runtime.startFrameBridge({win,post:()=>{},attach:{kind:'attach',id:'p1',nodes:[],editId:'1',source:null}});
+ doc.body.innerHTML='<a href="https://platform.example/a/other">Other</a><a href="#section">Local</a><a download href="https://platform.example/file">Download</a><a href="https://platform.example/handled">Handled</a>';
+ const event=new MouseEvent('click',{bubbles:true,cancelable:true,composed:true});doc.querySelector('a')!.dispatchEvent(event);
+ expect(event.defaultPrevented).toBe(true);expect(posted).toContainEqual({type:'mx:navigate',href:'/a/other'});
+ const handled=doc.querySelectorAll('a')[3]!;handled.addEventListener('click',e=>e.preventDefault());handled.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,composed:true}));
+ expect(posted).toHaveLength(1);bridge.dispose();
+});

@@ -1,3 +1,4 @@
+import { followAppLinks } from '@/lib/islands/frame-links';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { createClient, gql, readStateFragment } from './apollo/client';
 import { createViewerState } from './viewer-state';
@@ -44,6 +45,7 @@ remote.execute = async (request) => {
 
 /** Original trusted frame door owns source/origin/key checks; this adapter supplies native HTML geometry. */
 export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameBridgeSession {
+  const stopLinks = config.appOrigin ? followAppLinks(win, config.appOrigin) : () => {};
   const nonce = runtimeId();
   let call = 0;
   let canAnnotate = false;
@@ -121,6 +123,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
       }
     },
     dispose() {
+      stopLinks();
       relay = null;
       observation.dispose();
       painter.dispose();
