@@ -22,10 +22,13 @@ export interface DeletedArtifactPlan {
   archiveDigest: string;
   admissionSha256: string;
   pages: readonly { page: PlannedPage; digest: string }[];
+  metadataBinding?: {batchSha256:string;pageVersions:readonly {pageId:string;version:number}[]};
 }
 export interface DeletedArtifactPlanningInput {
   admission: DeletedArtifactAdmission;
   pages: readonly PlannedPage[];
+  /** Exact already-prepared metadata, bound before authority/approval materialization. */
+  preparedMetadata?: import("./dataset-destination-contracts.ts").DatasetMigrationBatch;
   /** Existing active pages and retained folder IDs are never candidates. */
   protectedPageIds: ReadonlySet<string>;
 }

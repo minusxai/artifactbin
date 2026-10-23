@@ -1,3 +1,4 @@
+import {deletedDatasetBatchFingerprint} from "./deleted-dataset-authority.ts";
 import { createHash } from "node:crypto";
 import type {
   DeletedArtifactPlan,
@@ -149,5 +150,6 @@ export function prepareDeletedArtifactPlan(
     archiveDigest: admission.archiveDigest,
     admissionSha256: sha(admission),
     pages,
+    ...(input.preparedMetadata ? {metadataBinding:{batchSha256:deletedDatasetBatchFingerprint(input.preparedMetadata),pageVersions:input.preparedMetadata.metadata.pages.map(p=>({pageId:p.pageId,version:p.pageVersion})).sort((a,b)=>a.pageId.localeCompare(b.pageId)||a.version-b.version)}} : {}),
   };
 }

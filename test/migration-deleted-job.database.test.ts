@@ -20,8 +20,8 @@ const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
 test('fixed deleted job imports pages and exact metadata before verified completion and retry',async()=>{
  const db=await testDatabase(),client=await db.pool.connect(),dir=await mkdtemp(join(tmpdir(),'deleted-job-'));
  try{
- const original={id:'Abc123',edit_id:'edit1',version:1,format:'markup',source:'retained',document:null,user_id:'owner',group_id:null,token_id:null,visibility:'private',link_role:'viewer',deleted_at:'2020-01-02T03:04:05Z'};
- const manifest:MigrationManifest={schemaVersion:1,sourceNamespace:'deleted-job',exportedAt:'2020-01-01T00:00:00Z',tokenOwners:[],tables:{users:[{id:'owner',email:'owner@example.test'}]},artifacts:[original]};
+ const original={id:'Abc123',edit_id:'edit1',version:2,format:'markup',source:'retained',document:null,user_id:'owner',group_id:null,token_id:null,visibility:'private',link_role:'viewer',deleted_at:'2020-01-02T03:04:05Z'};
+ const manifest:MigrationManifest={schemaVersion:1,sourceNamespace:'deleted-job',exportedAt:'2020-01-01T00:00:00Z',tokenOwners:[],tables:{users:[{id:'owner',email:'owner@example.test'}],artifact_versions:[{artifact_id:'Abc123',version:1,format:'markup',source:'old',edit_id:'edit0'}]},artifacts:[original]};
  const maps=buildAccountMaps(manifest),destination={schema:db.schema,sourceNamespace:manifest.sourceNamespace,origin:'http://localhost:8787',isolated:true,editorManageRestricted:true};
  maps.pages[original.id]=original.id;
  await new PostgresMigrationDestination(client,destination).prepare({manifest,maps});
@@ -32,10 +32,16 @@ test('fixed deleted job imports pages and exact metadata before verified complet
  const path=join(dir,'base.json');await writeFile(path,report,{mode:0o600});
  const planned=await planMigration(manifest,{maps,coreUrl:'/af/v1/core.js',convert:()=>({classification:'functional',html:'<html><body><p>retained</p></body></html>',issues:[],identities:{}})});
  const rawHash=sha(canonicalMigrationValue(original));
- const admission={kind:'deleted-artifact-admission-v1' as const,sourceNamespace:manifest.sourceNamespace,archiveDigest:sha(JSON.stringify(manifest)),entries:[{legacyId:original.id,pageId:maps.pages[original.id]!,headVersion:1,deletedAt:original.deleted_at,artifactSha256:rawHash,revisions:[{version:1,artifactSha256:rawHash}]}]};
- const plan=prepareDeletedArtifactPlan({admission,pages:planned.pages,protectedPageIds:new Set()});
- const metadata:DatasetMigrationBatch={...empty,metadata:{...empty.metadata,pages:[{pageId:maps.pages[original.id]!,pageVersion:1,snapshot:{id:original.id,editId:'edit1',owner:{userId:'owner',tokenId:null},visibility:'private',format:'markup',deleted:true,ownerIsTestUser:false,acceptedJoinUserIds:[]}}]}};
- metadata.deletedAdditive={kind:'deleted-dataset-additive-v1',sourceNamespace:manifest.sourceNamespace,batchSha256:deletedDatasetBatchFingerprint(metadata),admitted:[{legacyId:original.id,pageId:maps.pages[original.id]!,version:1,artifactSha256:rawHash}],base:{verificationReport:{path,sha256:sha(report)},inventory}};
+ const admission={kind:'deleted-artifact-admission-v1' as const,sourceNamespace:manifest.sourceNamespace,archiveDigest:sha(JSON.stringify(manifest)),entries:[{legacyId:original.id,pageId:maps.pages[original.id]!,headVersion:2,deletedAt:original.deleted_at,artifactSha256:rawHash,revisions:planned.pages[0]!.revisions.map(r=>({version:r.version,artifactSha256:sha(canonicalMigrationValue(r.original))}))}]};
+ let plan=prepareDeletedArtifactPlan({admission,pages:planned.pages,protectedPageIds:new Set()});
+ const metadata:DatasetMigrationBatch={...empty,metadata:{...empty.metadata,pages:planned.pages[0]!.revisions.map(r=>({pageId:maps.pages[original.id]!,pageVersion:r.version,snapshot:{id:original.id,editId:r.version===2?'edit1':'edit0',owner:{userId:'owner',tokenId:null},visibility:'private',format:'markup',deleted:true,ownerIsTestUser:false,acceptedJoinUserIds:[]}}))}};
+ metadata.deletedAdditive={kind:'deleted-dataset-additive-v1',sourceNamespace:manifest.sourceNamespace,batchSha256:deletedDatasetBatchFingerprint(metadata),admitted:planned.pages[0]!.revisions.map(r=>({legacyId:original.id,pageId:maps.pages[original.id]!,version:r.version,artifactSha256:sha(canonicalMigrationValue(r.original))})),base:{verificationReport:{path,sha256:sha(report)},inventory}};
+ plan=prepareDeletedArtifactPlan({admission,pages:planned.pages,protectedPageIds:new Set(),preparedMetadata:metadata});
+ const subset=structuredClone(metadata);
+ subset.metadata.pages=subset.metadata.pages.filter(p=>p.pageVersion===2);
+ subset.deletedAdditive!.admitted=subset.deletedAdditive!.admitted.filter(p=>p.version===2);
+ subset.deletedAdditive!.batchSha256=deletedDatasetBatchFingerprint(subset);
+ await assert.rejects(runDeletedArtifactJob({db:client,destination,admission,plan,maps,metadata:subset,verifyProtectedPages:async()=>{throw Error('must reject before database phases');}}),/coverage/);
  let checks=0;
  const input={db:client,destination,admission,plan,maps,metadata,verifyProtectedPages:async()=>{checks++;assert.equal((await client.query('SELECT count(*) FROM files WHERE deleted_at IS NULL')).rows[0].count,'0');}};
  await client.query(`CREATE FUNCTION reject_deleted_link() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test metadata failure'; END $$; CREATE TRIGGER reject_deleted_link BEFORE INSERT ON dataset_deleted_page_lifecycle_links FOR EACH ROW EXECUTE FUNCTION reject_deleted_link()`);
