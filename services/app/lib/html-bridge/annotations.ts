@@ -1,7 +1,7 @@
 import type { AnnotationRange } from '../document';
 import type { HtmlNodeAnchor } from '@artifactbin/contracts';
 import { resolveHtmlRange } from './range';
-interface HtmlAnnotationPin { id: string; nodeId?: string | null; path: string; anchor?: HtmlNodeAnchor; range?: AnnotationRange | null }
+interface HtmlAnnotationPin { id: string; nodeId?: string | null; path: string; anchor?: HtmlNodeAnchor; layoutOnly?: boolean; range?: AnnotationRange | null }
 export interface HtmlAnnotationPaint { pins: readonly HtmlAnnotationPin[]; mode: 'off' | 'on'; openId: string | null; hoverId: string | null }
 export interface HtmlAnnotationPosition { id: string; status: 'exact' | 'missing' | 'ambiguous'; rect: { x: number; y: number; width: number; height: number } }
 const box = (rect: { x: number; y: number; width: number; height: number }) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
@@ -34,7 +34,7 @@ export function createHtmlAnnotationPainter(doc: Document) {
         const areaRect = area ? { x: nodeRect.x + area.x * nodeRect.width, y: nodeRect.y + area.y * nodeRect.height, width: area.w * nodeRect.width, height: area.h * nodeRect.height } : null;
         const rects = areaRect ? [areaRect] : resolved?.range && typeof resolved.range.getClientRects === 'function' ? [...resolved.range.getClientRects()] : [node.getBoundingClientRect()];
         const active = input.openId === pin.id || input.hoverId === pin.id;
-        if (input.mode === 'on' || active) for (const rect of rects) {
+        if (!pin.layoutOnly && (input.mode === 'on' || active)) for (const rect of rects) {
           const mark = doc.createElement('div');
           Object.assign(mark.style, { position: 'fixed', left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.width}px`, height: `${rect.height}px`, background: active ? 'rgba(59,130,246,.20)' : 'rgba(250,204,21,.20)', outline: active ? '1px solid rgba(59,130,246,.6)' : 'none', pointerEvents: 'none' });
           overlay.append(mark);

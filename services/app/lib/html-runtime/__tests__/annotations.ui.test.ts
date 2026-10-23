@@ -42,3 +42,10 @@ it('resolves a dynamic ID only inside its persisted ancestor and never follows i
  expect(painter.paint(input)[0]?.status).toBe('ambiguous');
  painter.dispose();
 });
+it('keeps resolved history geometry without painting until explicitly inspected',()=>{
+ document.body.innerHTML='<p data-af-id="n1">Resolved words</p>';
+ const painter=createHtmlAnnotationPainter(document),pin={id:'resolved',path:'n1',anchor:{kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'n1',quote:''},layoutOnly:true};
+ const input={pins:[pin],mode:'on' as const,openId:pin.id,hoverId:pin.id};
+ expect(painter.paint(input)[0]?.status).toBe('exact');expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(0);
+ painter.paint({...input,pins:[{...pin,layoutOnly:false}]});expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(1);painter.dispose();
+});

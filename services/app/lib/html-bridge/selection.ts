@@ -6,9 +6,22 @@ const htmlNode = (node: Node | null): Element | null => elementOf(node)?.closest
 /** Stable authored identity is the path adapter the existing comments rail consumes. */
 export function htmlSelection(win: Window, target?: Node | null, revision = '', savedNodeIds?: readonly string[]): (StoryEditSelection & { anchor: HtmlNodeAnchor }) | null {
   const selected = win.getSelection();
-  const range = selected?.rangeCount ? selected.getRangeAt(0) : null;
+  let range = selected?.rangeCount ? selected.getRangeAt(0) : null;
   let node = htmlNode(target ?? range?.commonAncestorContainer ?? null);
   if (!node) return null;
+  const quoteText=selected?.toString().replace(/\s+/g,' ').trim() ?? '';
+  if(range && !range.collapsed && quoteText && range.intersectsNode(node)){
+    // A native block selection may end at its parent's child boundary even
+    // when every selected word is inside the clicked block. Intersect a clone
+    // with that block; never alter the viewer's native selection.
+    const contents=win.document.createRange();contents.selectNodeContents(node);
+    const inside=range.cloneRange();
+    if(inside.compareBoundaryPoints(0,contents)<0)inside.setStart(contents.startContainer,contents.startOffset);
+    if(inside.compareBoundaryPoints(2,contents)>0)inside.setEnd(contents.endContainer,contents.endOffset);
+    if(inside.toString().replace(/\s+/g,' ').trim()===quoteText)range=inside;
+    else node=htmlNode(range.commonAncestorContainer);
+    if(!node)return null;
+  }
   const id = node.getAttribute('data-af-id');
   if (!id) return null;
   const saved = savedNodeIds ? new Set(savedNodeIds) : null;
