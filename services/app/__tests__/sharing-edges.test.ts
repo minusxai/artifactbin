@@ -78,7 +78,7 @@ describe('share rows survive their artifact\'s delete, and the id is never recyc
 
   it('the bearer DELETE keeps the share list', async () => {
     const { owner, token } = await ownerFixture();
-    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    const doc = await create(token, { title: 'x', html: '<h1>x</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'a@b.com',role:'viewer'}] } }), params({ id: doc.id }));
@@ -95,7 +95,7 @@ describe('share rows survive their artifact\'s delete, and the id is never recyc
 
   it('the session DELETE does too', async () => {
     const { owner, token } = await ownerFixture();
-    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    const doc = await create(token, { title: 'x', html: '<h1>x</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'a@b.com',role:'viewer'}] } }), params({ id: doc.id }));
@@ -108,7 +108,7 @@ describe('share rows survive their artifact\'s delete, and the id is never recyc
 describe('share-list bounds', () => {
   it('refuses an unbounded list rather than storing it', async () => {
     const { owner, token } = await ownerFixture();
-    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    const doc = await create(token, { title: 'x', html: '<h1>x</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const tooMany = Array.from({ length: 101 }, (_, i) => ({email:`u${i}@example.com`,role:'viewer'}));
@@ -119,7 +119,7 @@ describe('share-list bounds', () => {
 
   it('takes a list right at the bound, deduped case-insensitively', async () => {
     const { owner, token } = await ownerFixture();
-    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    const doc = await create(token, { title: 'x', html: '<h1>x</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const hundred = Array.from({ length: 100 }, (_, i) => ({email:`U${i}@Example.com`,role:'viewer'}));
@@ -163,7 +163,7 @@ describe('a trailing segment that looks like a file id', () => {
 
   it('a real file of that id resolves, and heals to its canonical address', async () => {
     const { owner, token } = await ownerFixture();
-    const doc = await create(token, { title: 'the file', markup: '<h1>x</h1>', visibility: 'public' });
+    const doc = await create(token, { title: 'the file', html: '<h1>x</h1>', visibility: 'public' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     // Resolving by id means the canonical redirect, not a listing render.
@@ -174,7 +174,7 @@ describe('a trailing segment that looks like a file id', () => {
 describe('what the surfaces disclose', () => {
   it('a private doc unfurls as nothing — no title for a stranger', async () => {
     const { token } = await ownerFixture();
-    const doc = await create(token, { title: 'Secret Title', markup: '<h1>x</h1>' });
+    const doc = await create(token, { title: 'Secret Title', html: '<h1>x</h1>' });
     const meta = await artifactMetadata(doc.id);
     expect(meta).toEqual({});
   });
@@ -182,7 +182,7 @@ describe('what the surfaces disclose', () => {
   it('both list surfaces carry visibility and placement', async () => {
     const { owner, token } = await ownerFixture();
     const box = await create(token, { format: 'folder', title: 'Q3' });
-    await create(token, { title: 'x', markup: '<h1>x</h1>', parent_id: box.id });
+    await create(token, { title: 'x', html: '<h1>x</h1>', parent_id: box.id });
     const byToken = await (await listArtifactsRoute(request('/api/artifacts', { token: token }))).json();
     expect(byToken.artifacts.find((a: { id: string }) => a.id !== box.id)).toMatchObject({ visibility: 'private', parent_id: box.id, ancestor_ids: [box.id] });
 
@@ -194,16 +194,16 @@ describe('what the surfaces disclose', () => {
 
   it('an invalid visibility or parent on PUT is a 400, not a silent ignore', async () => {
     const { token } = await ownerFixture();
-    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
-    const notAFolder = await create(token, { title: 'plain', markup: '<h1>z</h1>' });
+    const doc = await create(token, { title: 'x', html: '<h1>x</h1>' });
+    const notAFolder = await create(token, { title: 'plain', html: '<h1>z</h1>' });
     for (const [body, error] of [
-      [{ markup: '<h1>y</h1>', visibility: 'hidden' }, 'invalid_edit_body'],
+      [{ html: '<h1>y</h1>', visibility: 'hidden' }, 'invalid_visibility'],
       // Unknown, and not-a-folder: ONE refusal, because the parent must be
       // yours and telling them apart says whether an id exists.
-      [{ markup: '<h1>y</h1>', parent_id: 'zzzzzz' }, 'invalid_parent'],
-      [{ markup: '<h1>y</h1>', parent_id: notAFolder.id }, 'invalid_parent'],
+      [{ html: '<h1>y</h1>', parent_id: 'zzzzzz' }, 'invalid_parent'],
+      [{ html: '<h1>y</h1>', parent_id: notAFolder.id }, 'invalid_parent'],
       // The retired PATH field is answered by name, never as "invalid".
-      [{ markup: '<h1>y</h1>', folder: 'reports/q3' }, 'invalid_edit_body'],
+      [{ html: '<h1>y</h1>', folder: 'reports/q3' }, 'folder_retired'],
     ] as const) {
       const res = await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: body }), params({ id: doc.id }));
       expect(res.status, JSON.stringify(body)).toBe(400);
@@ -215,13 +215,13 @@ describe('what the surfaces disclose', () => {
 describe('the advanced HTTP surface preserves sharing policy', () => {
   it('an anonymous token cannot publish private; an account-owned one defaults to it', async () => {
     const anon = await mintToken('anon', null);
-    const refused = await operationHttp(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', visibility: 'private' });
+    const refused = await operationHttp(anon.token, 'create_artifact', { title: 'x', html: '<h1>x</h1>', visibility: 'private' });
     expect(refused.isError).toBe(true);
     expect(refused.data.error).toBe('unauthorized');
 
 
     const { token } = await ownerFixture();
-    const owned = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    const owned = await operationHttp(token, 'create_artifact', { title: 'x', html: '<h1>x</h1>' });
     expect(owned.data.visibility).toBe('private');
   });
 
@@ -229,12 +229,12 @@ describe('the advanced HTTP surface preserves sharing policy', () => {
     const { token } = await ownerFixture();
     const box = await operationHttp(token, 'create_artifact', { format: 'folder', title: 'Shared' });
     expect(box.isError).toBe(false);
-    const made = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    const made = await operationHttp(token, 'create_artifact', { title: 'x', html: '<h1>x</h1>' });
     expect(made.data.visibility).toBe('private');
 
     // "make it shareable" — the agent's only lever, and it must actually pull.
     const updated = await operationHttp(token, 'update_artifact', {
-      id: made.data.id as string, markup: '<h1>y</h1>', visibility: 'public', parent_id: box.data.id as string,
+      id: made.data.id as string, html: '<h1>y</h1>', visibility: 'public', parent_id: box.data.id as string,
     });
     expect(updated.isError).toBe(false);
     expect(updated.data.visibility).toBe('public');
@@ -248,9 +248,9 @@ describe('the advanced HTTP surface preserves sharing policy', () => {
   it('update_artifact refuses private on an anonymous token, like the REST route', async () => {
     const anon = await mintToken('anon2', null);
     const { token } = await ownerFixture();
-    const made = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', visibility: 'public' });
+    const made = await operationHttp(token, 'create_artifact', { title: 'x', html: '<h1>x</h1>', visibility: 'public' });
     const refused = await operationHttp(anon.token, 'update_artifact', {
-      id: made.data.id as string, markup: '<h1>y</h1>', visibility: 'private',
+      id: made.data.id as string, html: '<h1>y</h1>', visibility: 'private',
     });
     expect(refused.isError).toBe(true);
     expect(refused.data.error).toBe('unauthorized');
@@ -258,16 +258,16 @@ describe('the advanced HTTP surface preserves sharing policy', () => {
 
   it('rejects an unreachable parent instead of storing it, and names the retired field', async () => {
     const { token } = await ownerFixture();
-    const bad = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', parent_id: 'zzzzzz' });
+    const bad = await operationHttp(token, 'create_artifact', { title: 'x', html: '<h1>x</h1>', parent_id: 'zzzzzz' });
     expect(bad.isError).toBe(true);
     expect(bad.data.error).toBe('invalid_parent');
 
-    const retired = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', folder: 'reports/q3' });
+    const retired = await operationHttp(token, 'create_artifact', { title: 'x', html: '<h1>x</h1>', folder: 'reports/q3' });
     expect(retired.isError).toBe(true);
     expect(retired.data.error).toBe('folder_retired');
 
     const box = await operationHttp(token, 'create_artifact', { format: 'folder', title: 'Reports' });
-    const good = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', parent_id: box.data.id as string });
+    const good = await operationHttp(token, 'create_artifact', { title: 'x', html: '<h1>x</h1>', parent_id: box.data.id as string });
     expect(good.isError).toBe(false);
   });
 });

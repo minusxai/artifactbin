@@ -41,7 +41,7 @@ async function ownerFixture() {
 
 const create = async (token: string, title: string) => {
   const res = await createArtifactRoute(
-    request('/api/artifacts', { method: 'POST', token: token, json: { title, markup: `<h1>${title}</h1>` } }),
+    request('/api/artifacts', { method: 'POST', token: token, json: { title, html: `<h1>${title}</h1>` } }),
   );
   expect(res.status).toBe(201);
   return (await res.json()) as { id: string; visibility: string };
