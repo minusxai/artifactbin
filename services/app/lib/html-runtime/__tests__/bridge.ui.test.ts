@@ -1,3 +1,4 @@
+import type {HtmlNodeAnchor} from '@artifactbin/contracts';
 import { afterEach, expect, it, vi } from 'vitest';
 afterEach(() => { document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.resetModules(); });
 it('uses original frame RPC with explicit HTML anchors and never exposes credentials', async () => {
@@ -68,4 +69,21 @@ it('opens on HTTP runner and offline origins without the secure-context randomUU
   const bridge = startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '1', source: null } });
   expect(events[0]?.nonce).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   bridge.dispose();
+});
+it('captures dynamic IDs through the actual core bridge and clicks only the scoped thread',async()=>{
+ vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'p1',revision:'1',backends:[],savedNodeIds:['tasks','other']});
+ const {startFrameBridge}=await import('../browser-client');
+ document.body.innerHTML='<ul data-af-id="tasks"><li data-af-id="task:123">Finish review</li></ul><ul data-af-id="other"><li data-af-id="task:123">Other task</li></ul>';
+ const events:Array<{kind:string;[key:string]:unknown}>=[];
+ const bridge=startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'p1',nodes:[],editId:'1',source:null}});
+ bridge.receive({kind:'send',command:{type:'mx:selection-actions',edit:false,annotate:true}});
+ document.querySelector('li')!.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}));
+ const captured=events.map(item=>item.event as {selection?:{anchor:unknown}}).find(event=>event?.selection)?.selection?.anchor;
+ expect(captured).toMatchObject({nodeId:'task:123',ancestorId:'tasks',revision:'1'});
+ bridge.receive({kind:'send',command:{type:'mx:annotations',mode:'on',pins:[{id:'c1',path:'task:123',anchor:captured as HtmlNodeAnchor}],openId:null,hoverId:null,canComment:true}});
+ document.querySelectorAll('li')[1]!.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+ expect(events.map(item=>item.event).filter(event=>(event as {type?:string})?.type==='mx:annotation-pin')).toHaveLength(0);
+ document.querySelector('li')!.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+ expect(events.map(item=>item.event).filter(event=>(event as {type?:string})?.type==='mx:annotation-pin')).toHaveLength(1);
+ bridge.dispose();
 });

@@ -28,7 +28,7 @@ import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPaylo
 interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }
 import { htmlSelection } from '../html-bridge/selection';
-import { createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
+import { createHtmlAnnotationPainter, htmlAnchorElements, type HtmlAnnotationPaint } from '../html-bridge/annotations';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
 const relayWaiters = new Set<() => void>();
 remote.execute = async (request) => {
@@ -56,8 +56,8 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
   const click = (event: MouseEvent) => {
     if (suppressClick) { suppressClick = false; event.preventDefault(); return; }
     const target = (event.target as Element)?.closest?.('[data-af-id]');
-    if (pick && canAnnotate) { event.preventDefault(); const selected = htmlSelection(win, target, config.revision); if (selected) post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: selected } }); return; }
-    const pin = annotations.pins.find((item) => (item.nodeId ?? item.path) === target?.getAttribute('data-af-id'));
+    if (pick && canAnnotate) { event.preventDefault(); const selected = htmlSelection(win, target, config.revision, config.savedNodeIds); if (selected) post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: selected } }); return; }
+    const pin = annotations.pins.find((item) => { const matches=htmlAnchorElements(win.document,item.anchor?.nodeId ?? item.nodeId ?? item.path,item.anchor?.ancestorId); return matches.length===1 && matches[0]===target; });
     if (pin && target) { const rect = target.getBoundingClientRect(); post({ kind: 'event', event: { type: 'mx:annotation-pin', nonce, id: pin.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } } }); }
   };
   const pending = new Map<number, { resolve: (value: Awaited<ReturnType<RemotePort['execute']>>) => void; reject: (error: Error) => void }>();
@@ -67,10 +67,10 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
     post({ kind: 'fetch', call: id, path: `/api/artifacts/${encodeURIComponent(config.pageId)}/graphql`, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) });
   });
   for (const ready of [...relayWaiters]) ready();
-  const selection = () => post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: htmlSelection(win, undefined, config.revision) } });
+  const selection = () => post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: htmlSelection(win, undefined, config.revision, config.savedNodeIds) } });
   const context = (event: MouseEvent) => {
     if (!canAnnotate) return;
-    const selected = htmlSelection(win, event.target as Node, config.revision);
+    const selected = htmlSelection(win, event.target as Node, config.revision, config.savedNodeIds);
     if (selected) { event.preventDefault(); post({ kind: 'event', event: { type: 'mx:selection-action', nonce, action: 'select', selection: selected } }); }
   };
   const scroll = () => { post({ kind: 'scroll', scrollX: win.scrollX, scrollY: win.scrollY }); selection(); if (annotations.pins.length) layout(); };
@@ -82,7 +82,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
     if (win.getSelection()?.toString().trim()) { selection(); return; }
     let node = start.target.nodeType === 1 ? start.target as Element : start.target.parentElement;
     while (node && !node.contains(event.target as Node)) node = node.parentElement;
-    const selected = htmlSelection(win, node, config.revision);
+    const selected = htmlSelection(win, node, config.revision, config.savedNodeIds);
     if (!selected) return;
     const rect = selected.rect;
     const x = Math.max(rect.x, Math.min(start.x, event.clientX)), y = Math.max(rect.y, Math.min(start.y, event.clientY));
@@ -114,7 +114,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
         if (command?.type === 'mx:data' && Array.isArray(command.datasets)) { const ids = new Set(command.datasets); const names = config.backends.filter((name) => ids.has(name) || ids.has(config.bindings?.[name] ?? '')); if (names.length) for (const listener of invalidationListeners) try { listener(names); } catch { /* One subscriber cannot stop the others. */ } }
         if (command?.type === 'mx:selection-actions') canAnnotate = command.annotate === true;
         if (command?.type === 'mx:annotations') { annotations = { pins: command.pins ?? [], mode: command.mode ?? 'off', openId: command.openId ?? null, hoverId: command.hoverId ?? null }; canAnnotate = command.canComment ?? canAnnotate; pick = command.pick ?? null; win.document.documentElement.style.cursor = pick ? 'crosshair' : cursor; }
-        if (command?.type === 'mx:select') { const target = [...win.document.querySelectorAll('[data-af-id]')].find((node) => node.getAttribute('data-af-id') === command.path); const selected = target ? htmlSelection(win, target, config.revision) : null; if (command.reveal) target?.scrollIntoView?.(); post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: selected } }); }
+        if (command?.type === 'mx:select') { const matches = [...win.document.querySelectorAll('[data-af-id]')].filter((node) => node.getAttribute('data-af-id') === command.path); const target = matches.length===1 ? matches[0] : null; const selected = target ? htmlSelection(win, target, config.revision, config.savedNodeIds) : null; if (command.reveal) target?.scrollIntoView?.(); post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: selected } }); }
         if (command?.type === 'mx:annotations') layout();
       }
     },

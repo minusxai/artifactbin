@@ -19,3 +19,9 @@ it('requires a captured range to describe the exact text and fingerprint', () =>
   expect(validHtmlCommentRange({ ...node, text: 'ab same words' }, picked)).toBe(false);
   expect(validHtmlCommentRange(node, { ...picked, range: { ...picked.range!, start: 0 } })).toBe(false);
 });
+it('validates a dynamic scope without interpreting runtime words as source or accepting a static ID elsewhere',()=>{
+ const dynamic=anchor({nodeId:'task:123',ancestorId:'tasks',quote:'Runtime words'});
+ expect(resolveHtmlCommentAnchor(htmlCommentNodes('<ul data-af-id="tasks"></ul>'),dynamic)).toEqual({node:{nodeId:'tasks',text:''},quoteFound:false});
+ expect(resolveHtmlCommentAnchor(htmlCommentNodes('<ul data-af-id="other"></ul>'),dynamic).node).toBeNull();
+ expect(resolveHtmlCommentAnchor(htmlCommentNodes('<ul data-af-id="tasks"></ul><p data-af-id="task:123">Runtime words</p>'),dynamic).node).toBeNull();
+});

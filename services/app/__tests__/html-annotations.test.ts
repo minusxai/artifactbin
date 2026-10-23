@@ -71,3 +71,16 @@ it('accepts bounded rendered text under a saved stable parent without claiming s
  const withoutParent=await browserComment(request(`/api/my/artifacts/${id}/annotations`,{method:'POST',json:{anchor:{...captured,nodeId:null,range:undefined},body:'No stable parent'}}),params);
  expect(withoutParent.status).toBe(400);
 });
+it('stores dynamic targets only beneath a persisted ancestor, without claiming the target exists in source',async()=>{
+ const {id,db,params}=await page();
+ await db.query("UPDATE artifacts SET source='<ul data-af-id=\"tasks\"></ul>' WHERE id=$1",[id]);
+ const dynamic={kind:'html-node',v:1,revision:'1',nodeId:'task:123',ancestorId:'tasks',quote:'Finish review'};
+ const post=(anchor:unknown)=>browserComment(request(`/api/my/artifacts/${id}/annotations`,{method:'POST',json:{anchor,body:'Dynamic task'}}),params);
+ const made=await post(dynamic);expect(made.status).toBe(201);
+ expect(await made.json()).toMatchObject({anchor:dynamic,orphaned:false,quote_found:false});
+ expect((await post({...dynamic,ancestorId:'missing'})).status).toBe(400);
+ expect((await post({...dynamic,ancestorId:undefined})).status).toBe(400);
+ await db.query("UPDATE artifacts SET source='<ul data-af-id=\"other\"></ul>',version=2 WHERE id=$1",[id]);
+ const listing=await listAnnotations(request(`/api/my/artifacts/${id}/annotations`),params);
+ expect(await listing.json()).toMatchObject({annotations:[{anchor:dynamic,orphaned:true}]});
+});

@@ -5,6 +5,13 @@ interface HtmlAnnotationPin { id: string; nodeId?: string | null; path: string; 
 export interface HtmlAnnotationPaint { pins: readonly HtmlAnnotationPin[]; mode: 'off' | 'on'; openId: string | null; hoverId: string | null }
 export interface HtmlAnnotationPosition { id: string; status: 'exact' | 'missing' | 'ambiguous'; rect: { x: number; y: number; width: number; height: number } }
 const box = (rect: { x: number; y: number; width: number; height: number }) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+/** Resolve identities only in their declared scope; missing/duplicate scopes never fall back globally. */
+export function htmlAnchorElements(doc:Document,nodeId:string,ancestorId?:string):Element[]{
+ const nodes=[...doc.querySelectorAll('[data-af-id]')];
+ const ancestors=ancestorId ? nodes.filter(node=>node.getAttribute('data-af-id')===ancestorId) : null;
+ const scope=ancestors ? ancestors.length===1 ? [...ancestors[0]!.querySelectorAll('[data-af-id]')] : [] : nodes;
+ return scope.filter(node=>node.getAttribute('data-af-id')===nodeId);
+}
 /** Paint in an inert overlay: authored DOM/text and the viewer's native selection stay intact. */
 export function createHtmlAnnotationPainter(doc: Document) {
   const overlay = doc.createElement('div');
@@ -14,9 +21,8 @@ export function createHtmlAnnotationPainter(doc: Document) {
   return {
     paint(input: HtmlAnnotationPaint): HtmlAnnotationPosition[] {
       overlay.replaceChildren();
-      const nodes = [...doc.querySelectorAll('[data-af-id]')];
       return input.pins.map((pin) => {
-        const matches = nodes.filter((node) => node.getAttribute('data-af-id') === (pin.anchor?.nodeId ?? pin.nodeId ?? pin.path));
+        const matches = htmlAnchorElements(doc,pin.anchor?.nodeId ?? pin.nodeId ?? pin.path,pin.anchor?.ancestorId);
         const node = matches.length === 1 ? matches[0]! : null;
         if (!node) return { id: pin.id, status: matches.length ? 'ambiguous' : 'missing', rect: { x: 0, y: 0, width: 0, height: 0 } };
         const resolved = pin.anchor?.quote ? resolveHtmlRange(node, pin.anchor) : null;

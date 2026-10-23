@@ -2,6 +2,8 @@ import type { HtmlJsonObject } from '@artifactbin/contracts';
 export interface HtmlRuntimeConfig {
   pageId: string;
   revision: string;
+  /** Source-owned identities, supplied by assembly before author code runs. */
+  savedNodeIds?: readonly string[];
   backends: readonly string[];
   /** Namespace -> immutable linked resource ID, for backend invalidation notifications. */
   bindings?: Readonly<Record<string, string>>;

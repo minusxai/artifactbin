@@ -30,3 +30,8 @@ it('round-trips HTML and line-separator characters in viewer state without execu
   expect(config).not.toContain('</script>');
   expect(JSON.parse(config).initialState).toEqual(initialState);
 });
+it('provides source identities independently of runtime-created DOM or caller configuration',()=>{
+ const output=assembleHtmlPage({html:'<!doctype html><html><body><ul data-af-id="tasks"></ul><script>document.querySelector("ul").innerHTML="dynamic"</script></body></html>',core:'core()',config:{pageId:'p',revision:'1',backends:[],savedNodeIds:['forged']}});
+ const match=output.match(/<script type="application\/json" data-af="runtime">([^<]*)<\/script>/);
+ expect(JSON.parse(match![1]!).savedNodeIds).toEqual(['tasks']);
+});
