@@ -42,6 +42,3 @@ export function storySystemSheetCss(name: string | null | undefined): string {
   const sheet = name && (STORY_SYSTEM_NAMES as readonly string[]).includes(name) ? STORY_SYSTEM_SHEETS[name as StorySystemName] : undefined;
   return sheet ? `${sheet.fontFaces}\n${sheet.css}` : '';
 }
-
-/** Every system's base-sheet contribution, for the prepared pages' stylesheet version (lib/publish/prepared/css-version.server): a changed face or class re-prepares the stored pages that carry it. */
-export const STORY_SYSTEMS_SHEET: string = STORY_SYSTEM_NAMES.map((name) => storySystemSheetCss(name)).join('\n');
