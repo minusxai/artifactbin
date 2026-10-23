@@ -23,8 +23,10 @@ it('relays remote queries and emits explicit invalidation names without overwrit
   vi.stubGlobal('window', { parent: {} });
   const runtime = await import('../browser-client');
   const events: Array<{ kind: string; [key: string]: unknown }> = [];
-  const bridge = runtime.startFrameBridge({ win: actualWindow, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '3', source: null } });
   const query = runtime.client.query({ query: runtime.gql`{ orders { total } }` });
+  expect(events).toHaveLength(0);
+  const bridge = runtime.startFrameBridge({ win: actualWindow, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '3', source: null } });
+  await Promise.resolve();
   const fetch = events.find((event) => event.kind === 'fetch')!;
   expect(fetch.path).toBe('/api/artifacts/p1/graphql');
   expect(JSON.parse(fetch.body as string)).toMatchObject({ operation: 'query', variables: {} });

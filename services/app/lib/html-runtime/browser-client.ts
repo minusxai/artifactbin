@@ -1,23 +1,19 @@
-import { createClient, createLocalStore, gql, readStateFragment } from './apollo/client';
-import type { HtmlJsonObject } from '@artifactbin/contracts';
+import { createClient, gql, readStateFragment } from './apollo/client';
+import { createViewerState } from './viewer-state';
 import type { HtmlRuntimeConfig } from './contract';
-import { RemoteUnreachable, type RemotePort, type StoreWrite } from './apollo/apollo-contracts';
+import { RemoteUnreachable, type RemotePort, type StoreReceipt } from './apollo/apollo-contracts';
 export { gql };
 
 declare const __AF_RUNTIME_CONFIG__: HtmlRuntimeConfig & { offline?: boolean };
 const config = __AF_RUNTIME_CONFIG__;
 const key = `af:viewer:${config.pageId}`;
-let initial = config.initialState ?? {};
-try { const saved = localStorage.getItem(key); if (saved) { const value = JSON.parse(saved) as HtmlJsonObject; createLocalStore(value); initial = value; } } catch { /* storage denied */ }
 const carried = readStateFragment(location.hash);
-if (carried.state) initial = carried.state;
-const state = createLocalStore(initial);
-const write = state.write;
-state.write = async (change: StoreWrite) => {
-  const result = await write(change);
-  if (result.status === 'committed') try { localStorage.setItem(key, JSON.stringify(result.document)); } catch { /* storage denied */ }
-  return result;
-};
+const state = createViewerState({
+  initial: carried.state ?? config.initialState ?? {}, replaceInitial: !!carried.state,
+  storage: { read: () => localStorage.getItem(key), write: (json) => localStorage.setItem(key, json) },
+  observe(listener) { const changed = (event: StorageEvent) => { if (event.key === key) listener(); }; addEventListener('storage', changed); return () => removeEventListener('storage', changed); },
+  ...(navigator.locks ? { lock: (work: () => Promise<StoreReceipt>) => navigator.locks.request(key, work) } : {}),
+});
 const remote: RemotePort = {
   online: () => !config.offline && !!config.appOrigin && window.parent !== window,
   execute: async () => { throw new RemoteUnreachable('Remote relay has not attached'); },
@@ -33,7 +29,16 @@ interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void;
 import { htmlSelection } from '../html-bridge/selection';
 import { createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
-remote.execute = (request) => relay ? relay(request) : Promise.reject(new RemoteUnreachable());
+const relayWaiters = new Set<() => void>();
+remote.execute = async (request) => {
+  if (!relay) await new Promise<void>((resolve, reject) => {
+    const ready = () => { clearTimeout(timer); relayWaiters.delete(ready); resolve(); };
+    const timer = setTimeout(() => { relayWaiters.delete(ready); reject(new RemoteUnreachable('Page connection did not attach')); }, 3000);
+    relayWaiters.add(ready);
+  });
+  if (!relay) throw new RemoteUnreachable();
+  return relay(request);
+};
 
 /** Original trusted frame door owns source/origin/key checks; this adapter supplies native HTML geometry. */
 export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameBridgeSession {
@@ -60,6 +65,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
     pending.set(id, { resolve, reject });
     post({ kind: 'fetch', call: id, path: `/api/artifacts/${encodeURIComponent(config.pageId)}/graphql`, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request) });
   });
+  for (const ready of [...relayWaiters]) ready();
   const selection = () => post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: htmlSelection(win, undefined, config.revision) } });
   const context = (event: MouseEvent) => {
     if (!canAnnotate) return;
