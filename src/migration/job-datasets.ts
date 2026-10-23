@@ -49,6 +49,7 @@ export async function prepareMigrationJobDatasets(
     deletedAdmission,
     options.sourceAdmission,
     options.legacyDuckSqlAdmissions,
+    options.archivedInactiveServerDocuments,
   );
   const issues = new Map(
     [...scan.issues].map(([id, reasons]) => [id, [...reasons]]),

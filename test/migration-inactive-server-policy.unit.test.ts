@@ -94,3 +94,86 @@ test("hash mismatches, absent conversion receipt or removed limitation cannot by
   );
   assert.equal(mismatch.disposition, "blocked");
 });
+
+test("exact inactive declaration removes sole handler candidate before backend allocation while preserving unrelated viewer capability", async () => {
+  const { scanMigrationDatasetImports } = await import(
+    "../src/migration/dataset-scan.ts"
+  );
+  const row = {
+    id: "old-example",
+    version: 1,
+    format: "markup",
+    source,
+    user_id: "owner",
+    group_id: null,
+    token_id: null,
+    visibility: "private",
+    link_role: "viewer",
+    edit_id: "edit",
+  };
+  const base = {
+    schemaVersion: 1,
+    sourceNamespace: "fixture",
+    exportedAt: "epoch",
+    tables: { users: [{ id: "owner", kind: "user" }] },
+    artifacts: [row],
+    tokenOwners: [],
+  };
+  const input = {
+    ids: ["old-example"],
+    maps: {
+      pages: { "old-example": "Page01" },
+      users: { owner: "owner@example.test" },
+      tokens: {},
+      groups: {},
+    },
+    manifest: { sourceNamespace: "fixture" },
+    base,
+    readArtifact: async () => base,
+  } as unknown as import("../src/migration/job-contracts.ts").MigrationJobSource;
+  const active = await scanMigrationDatasetImports(input);
+  assert.equal(active.pages[0]?.revisions[0]?.runsProgram, true);
+  const inactive = await scanMigrationDatasetImports(
+    input,
+    undefined,
+    [],
+    undefined,
+    "strict",
+    [],
+    [admission],
+  );
+  assert.deepEqual(inactive.pages, []);
+  const viewerSource = source + "{$_me.id ? <p>Reader</p>:<p>Guest</p>}";
+  const viewerView = prepareInactiveServerDocument(viewerSource, {
+    mode: "archived-inactive",
+  });
+  const viewerAdmission = {
+    ...admission,
+    originalSourceSha256: hash(viewerSource),
+    renderSourceSha256: hash(viewerView.renderSource),
+  };
+  row.source = viewerSource;
+  const viewer = await scanMigrationDatasetImports(
+    input,
+    undefined,
+    [],
+    undefined,
+    "strict",
+    [],
+    [viewerAdmission],
+  );
+  assert.equal(viewer.pages[0]?.revisions[0]?.runsProgram, undefined);
+  assert.equal(viewer.pages[0]?.revisions[0]?.readsViewer, true);
+  await assert.rejects(
+    scanMigrationDatasetImports(
+      input,
+      undefined,
+      [],
+      undefined,
+      "strict",
+      [],
+      [admission],
+    ),
+    /mismatch/,
+  );
+});

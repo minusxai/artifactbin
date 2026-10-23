@@ -1,3 +1,4 @@
+import {admitInactiveServerDocument} from "./server-document-policy.ts";
 import {createDeletedArtifactAdmissionValidator} from "./deleted-artifact-admission.ts";
 import {legacySourceOperationRefs,normalizeLegacySourceOperations} from "./conversion/source-operations.ts";
 import {catalogVersion,receiptMap} from "./datasets/catalog.ts";
@@ -27,6 +28,7 @@ export async function scanMigrationDatasetImports(
   deletedAdmission?: import("./deleted-artifact-contracts.ts").DeletedArtifactAdmission,
   sourceAdmission: import("./conversion-strategy-contracts.ts").MigrationSourceAdmission = "strict",
   legacyDuckSqlAdmissions: readonly import("./conversion/duck-sql-contracts.ts").LegacyDuckSqlAdmission[] = [],
+  inactiveServerDocuments: readonly import("./server-document-contracts.ts").ArchivedInactiveServerPageAdmission[] = [],
 ): Promise<MigrationDatasetImportScan> {
   const assertDeleted = deletedAdmission ? createDeletedArtifactAdmissionValidator(deletedAdmission,source.manifest.sourceNamespace,source.maps) : undefined;
   const pendingSourceQueryPages = new Set(
@@ -120,6 +122,10 @@ export async function scanMigrationDatasetImports(
         text = null;
       }
       if (text === null) continue;
+      const inactivePolicies=inactiveServerDocuments.filter(p=>p.legacyId===id&&p.version===Number(row.version));
+      if(inactivePolicies.length>1)throw Error('inactive_server_document_policy_ambiguous');
+      const inactive=inactivePolicies.length===1?admitInactiveServerDocument(text,inactivePolicies[0]!):null;
+
       // Only independently verified stored dataset catalogs can replace legacy source routing.
       if(source.datasets && sourceAdmission === "offline-prototype") {
         const eligible:string[]=[];
@@ -190,7 +196,7 @@ export async function scanMigrationDatasetImports(
           statistics.headImports += extracted.imports.length;
         else statistics.historicalImports += extracted.imports.length;
       }
-      const runsProgram = hasLegacyServerModule(text);
+      const runsProgram = !inactive && hasLegacyServerModule(text);
       if (runsProgram) hasProgram = true;
       const sourceQueries = attestMigrationSourceQueries(
         text,
