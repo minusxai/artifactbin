@@ -11,6 +11,7 @@ export function datasetSchema(snapshot:DatasetSnapshot){return {revision:snapsho
 /** Pure request orchestration. Every continuation first resolves current dataset ACL again. */
 export function createDatasetGraphql(port:DatasetGraphqlPort):DatasetGraphql<AccessActor> {
  return {
+  async schema(actor,binding,signal){signal.throwIfAborted();return datasetSchema(await port.snapshot(actor,binding,signal));},
   async read(actor:AccessActor,binding:HtmlDatasetLink,input:DatasetReadRequest,signal:AbortSignal):Promise<DatasetReadResult>{
    signal.throwIfAborted();
    const snapshot=await port.snapshot(actor,binding,signal),table=tableFor(snapshot,input.tableId),plan=compileRead(table,input);
@@ -38,3 +39,5 @@ export function createDatasetGraphql(port:DatasetGraphqlPort):DatasetGraphql<Acc
  };
 }
 export {datasetNamespaceSources,createDatasetNamespaceInvoker} from './namespace';
+
+export {authorizeDatasetBinding} from './authority';

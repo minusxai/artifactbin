@@ -3,7 +3,9 @@ import type { PageMutationOutcome } from './page-operation';
 export type DatasetCellType = 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON';
 /** Stable IDs, never display labels, address rows and columns. Exactly one typed value (or null) per cell. */
 export type DatasetCellValue = {type:'STRING';value:string|null}|{type:'NUMBER';value:number|null}|{type:'BOOLEAN';value:boolean|null}|{type:'JSON';value:import('./html-page').HtmlJson};
-export interface DatasetColumnDescriptor { id:string; label:string; type:DatasetCellType; nullable:boolean }
+export interface DatasetColumnDescriptor { id:string; label:string; type:DatasetCellType; nullable:boolean; /** Original source type; dates and timestamps keep their string encoding. */ sourceType?:string }
+export interface DatasetTableDescriptor {id:string;label:string;columns:readonly DatasetColumnDescriptor[]}
+export interface DatasetSchemaResult {revision:string;tables:readonly DatasetTableDescriptor[]}
 export interface DatasetCell { columnId:string; value:DatasetCellValue }
 export interface DatasetGraphqlRow { id:string; cells:readonly DatasetCell[] }
 export type DatasetFilterOperator='EQ'|'NE'|'LT'|'LTE'|'GT'|'GTE'|'IS_NULL';
@@ -21,6 +23,7 @@ export interface DatasetWriteRequest { tableId:string; expectedRevision:string; 
 export interface DatasetWriteReceipt { requestId:string; revision:string|null; outcome:Exclude<PageMutationOutcome,'offline'>; rowIds:readonly string[] }
 /** Implement with original dataset policies/grants; page readability is insufficient authorization. */
 export interface DatasetGraphql<A> {
+  schema(actor:A,binding:HtmlDatasetLink,signal:AbortSignal):Promise<DatasetSchemaResult>;
   read(actor:A,binding:HtmlDatasetLink,request:DatasetReadRequest,signal:AbortSignal):Promise<DatasetReadResult>;
   write(actor:A,binding:HtmlDatasetLink,request:DatasetWriteRequest,signal:AbortSignal):Promise<DatasetWriteReceipt>;
 }
@@ -35,7 +38,7 @@ enum FilterOperator { EQ NE LT LTE GT GTE IS_NULL }
 enum SortDirection { ASC DESC }
 enum RowChangeKind { INSERT UPDATE DELETE }
 enum WriteOutcome { committed rejected unknown }
-type Column { id: ID! label: String! type: CellType! nullable: Boolean! }
+type Column { id: ID! label: String! type: CellType! nullable: Boolean! sourceType: String }
 type CellValue { type: CellType! string: String number: FiniteNumber boolean: Boolean json: JSON }
 input CellValueInput { type: CellType! string: String number: FiniteNumber boolean: Boolean json: JSON }
 type Cell { columnId: ID! value: CellValue! }
@@ -47,7 +50,9 @@ type PageInfo { hasNextPage: Boolean! endCursor: String }
 type Rows { revision: String! columns: [Column!]! rows: [Row!]! pageInfo: PageInfo! }
 input RowChange { kind: RowChangeKind! rowId: ID cells: [CellInput!] }
 type WriteReceipt { requestId: ID! revision: String outcome: WriteOutcome! rowIds: [ID!]! }
-type Query { rows(tableId: ID!, columnIds: [ID!], filters: [Filter!], order: [Order!], first: Int! = 20, after: String): Rows! }
+type DatasetTable { id: ID! label: String! columns: [Column!]! }
+type DatasetSchema { revision: String! tables: [DatasetTable!]! }
+type Query { schema: DatasetSchema! rows(tableId: ID!, columnIds: [ID!], filters: [Filter!], order: [Order!], first: Int! = 20, after: String): Rows! }
 type Mutation { writeRows(tableId: ID!, expectedRevision: String!, requestId: ID!, changes: [RowChange!]!): WriteReceipt! }
 `;
 /** Pure preflight only. Runtime must still validate schema/IDs/cells and repeat policy inside its transaction. */

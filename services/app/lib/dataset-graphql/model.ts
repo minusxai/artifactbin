@@ -10,7 +10,7 @@ export const initialRowIds=(datasetId:string,tableId:string,objectKey:string,cou
 const quote=(name:string)=>`"${name.replaceAll('"','""')}"`;
 const cellType=(column:DatasetColumn):DatasetCellValue['type']=>column.type==='number'?'NUMBER':column.type==='boolean'?'BOOLEAN':'STRING';
 export function descriptors(table:DatasetTable):DatasetColumnDescriptor[]{
- return table.columns.map(c=>({id:columnIdentity(tableIdentity(table),c.name),label:c.name,type:cellType(c),nullable:true}));
+ return table.columns.map(c=>({id:columnIdentity(tableIdentity(table),c.name),label:c.name,type:cellType(c),nullable:true,sourceType:c.type}));
 }
 export function typedCell(column:DatasetColumn,value:unknown):DatasetCellValue {
  const type=cellType(column);
@@ -40,7 +40,7 @@ export function compileRead(table:DatasetTable,input:DatasetReadRequest):{statem
   if(filter.operator==='IS_NULL')return `${q} IS NULL`;
   const operators={EQ:'=',NE:'<>',LT:'<',LTE:'<=',GT:'>',GTE:'>='} as const;
   const op=operators[filter.operator];if(!op||!filter.value)throw new Error('invalid_filter');
-  const value=scalar(col,filter.value);if(value===null)return `${q} IS ${filter.operator==='NE'?'NOT ':''}NULL`;
+  const value=scalar(col,filter.value);if(value===null){if(filter.operator!=='EQ'&&filter.operator!=='NE')throw new Error('invalid_null_filter');return `${q} IS ${filter.operator==='NE'?'NOT ':''}NULL`;}
   const key=`filter${i}`;params[key]=value;return `${q} ${op} $${key}`;
  });
  const order=(input.order??[]).map(o=>{if(o.direction!=='ASC'&&o.direction!=='DESC')throw new Error('invalid_order');return `${quote(requireColumn(columns,o.columnId).name)} ${o.direction}`;});

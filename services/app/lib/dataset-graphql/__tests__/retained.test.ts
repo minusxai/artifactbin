@@ -60,3 +60,18 @@ it('requires dataset permission separately from page readability and enforces vi
  await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);
  await expect(f.api.read(viewer,f.binding,{tableId:f.table.id,first:100},signal)).rejects.toThrow('dataset_not_found');
 });
+it('executes constant GraphQL schema discovery, typed reads and writes over retained storage',async()=>{
+ const {buildSchema,graphql}=await import('graphql');
+ const {DATASET_GRAPHQL_SDL}=await import('@artifactbin/contracts');
+ const {createDatasetNamespaceInvoker}=await import('../index');
+ const f=await fixture(),invoke=createDatasetNamespaceInvoker(f.actor,[f.binding],f.api),schema=buildSchema(DATASET_GRAPHQL_SDL);
+ const field=(name:string,operation:'query'|'mutation')=>(args:Record<string,unknown>)=>invoke({namespace:'data',fileId:f.id,version:'live',operation,field:name,args:args as never,principal:{tenant:'page',subject:'viewer'},signal});
+ const rootValue={schema:field('schema','query'),rows:field('rows','query'),writeRows:field('writeRows','mutation')};
+ const discovery=await graphql({schema,rootValue,source:'{ schema { revision tables { id label columns { id type sourceType } } } }'});
+ expect(discovery.errors).toBeUndefined();expect(discovery.data).toHaveProperty('schema');
+ const read=await graphql({schema,rootValue,source:'query($table:ID!){ rows(tableId:$table,first:1) { revision rows { id cells { columnId value { type number string } } } pageInfo { hasNextPage endCursor } } }',variableValues:{table:f.table.id}});
+ expect(read.errors).toBeUndefined();expect(read.data).toMatchObject({rows:{revision:'1',pageInfo:{hasNextPage:true}}});
+ const column=f.table.columns.find(c=>c.label==='amount')!;
+ const mutation=await graphql({schema,rootValue,source:'mutation($table:ID!,$column:ID!){ writeRows(tableId:$table,expectedRevision:"1",requestId:"graphql-insert",changes:[{kind:INSERT,cells:[{columnId:$column,value:{type:NUMBER,number:4.25}}]}]) { outcome revision rowIds } }',variableValues:{table:f.table.id,column:column.id}});
+ expect(mutation.errors).toBeUndefined();expect(mutation.data).toMatchObject({writeRows:{outcome:'committed',revision:'2'}});
+});

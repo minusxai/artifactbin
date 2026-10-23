@@ -13,6 +13,7 @@ export function createDatasetNamespaceInvoker(actor:AccessActor,bindings:readonl
   const binding=bindings.find(b=>b.name===call.namespace);
   if(!binding||binding.datasetId!==call.fileId||(binding.mode==='pinned'?binding.revision:'live')!==call.version)throw new Error('dataset_binding_changed');
   const args=object(call.args);
+  if(call.operation==='query'&&call.field==='schema')return await service.schema(actor,binding,call.signal) as unknown as HtmlJson;
   if(call.operation==='query'&&call.field==='rows'){
    const input:DatasetReadRequest={tableId:string(args.tableId),first:args.first===undefined?20:Number(args.first),
     ...(args.columnIds==null?{}:{columnIds:array(args.columnIds).map(string)}),...(args.after==null?{}:{after:string(args.after)}),

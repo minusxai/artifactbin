@@ -1,6 +1,5 @@
 import {createHash} from 'node:crypto';
-import type {AccessActor} from '@/lib/accounts';
-import {artifactState,canReadArtifact,durableMutation,getArtifactById,getVersionFor,type ArtifactRow} from '@/lib/artifacts';
+import {artifactState,durableMutation} from '@/lib/artifacts';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {executeCatalog} from '@/lib/datasets/execute';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
@@ -9,22 +8,13 @@ import {canWriteDataset,canUseDataPolicy,isMutationRefused,mutateDataset} from '
 import type {DatasetGraphqlPort} from './types';
 import {createDatasetGraphql} from './index';
 import {ID_COLUMN,initialRowIds,tableIdentity} from './model';
-import type {HtmlDatasetLink} from '@artifactbin/contracts';
+import {authorizedDataset,resolveDatasetBinding} from './authority';
 const unavailable=()=>new Error('dataset_not_found');
-async function authorized(actor:AccessActor,id:string){const row=await getArtifactById(id);if(!row||row.format!=='dataset'||!await canReadArtifact(row,actor))throw unavailable();return row;}
-async function resolved(actor:AccessActor,binding:HtmlDatasetLink){
- const live=await authorized(actor,binding.datasetId);
- if(binding.mode==='live'||binding.revision===String(live.version))return live;
- if(!/^[1-9]\d*$/.test(binding.revision))throw unavailable();
- const version=await getVersionFor(actor,binding.datasetId,Number(binding.revision));
- if(!version||version.format!=='dataset')throw unavailable();
- return {...live,...version,version:Number(binding.revision)} as ArtifactRow;
-}
 /** Original dataset object store, executor, grants, version CAS and durable receipt ledger. */
 export function retainedDatasetGraphqlPort():DatasetGraphqlPort {
  return {
   async snapshot(actor,binding,signal){
-   signal.throwIfAborted();const row=await resolved(actor,binding),catalog=catalogOf(row);if(!catalog)throw unavailable();
+   signal.throwIfAborted();const row=await resolveDatasetBinding(actor,binding),catalog=catalogOf(row);if(!catalog)throw unavailable();
    if(catalog.kind!=='stored')throw new Error('dataset_stable_identity_unavailable');
    const rowIds:Record<string,string[]>={};
    const saved=(row.meta as {graphqlRowIds?:Record<string,{objectKey:string;ids:string[]}>}).graphqlRowIds;
@@ -40,7 +30,7 @@ export function retainedDatasetGraphqlPort():DatasetGraphqlPort {
    if(table.columns.some(c=>c.name===ID_COLUMN))throw new Error('dataset_reserved_column');
    const source=objectStore();
    const catalog={...snapshot.catalog,tables:snapshot.catalog.tables.map(t=>t===table?{...t,columns:[...t.columns,{name:ID_COLUMN,type:'string' as const}]}:t)};
-   const authorize=async()=>{const row=await authorized(actor,snapshot.id);if(snapshot.policyIdentity!==JSON.stringify([row.edit_id,row.policy_revision,row.sharing_revision]))throw new Error('dataset_changed');};
+   const authorize=async()=>{const row=await authorizedDataset(actor,snapshot.id);if(snapshot.policyIdentity!==JSON.stringify([row.edit_id,row.policy_revision,row.sharing_revision]))throw new Error('dataset_changed');};
    const result=await executeCatalog(catalog,statement.sql,statement.params,{...window,actor,datasetId:snapshot.id,signal,authorize,
     objects:{get:async key=>{
      const bytes=await source.get(key);if(key!==table.objectKey)return bytes;
@@ -50,7 +40,7 @@ export function retainedDatasetGraphqlPort():DatasetGraphqlPort {
    return result.rows;
   },
   async commit(actor,binding,snapshot,input,statements,signal){
-   const current=await authorized(actor,binding.datasetId);
+   const current=await authorizedDataset(actor,binding.datasetId);
    // A page link never supplies edit permission. Repeat before ledger lookup and in mutateDataset's CAS.
    const nativePolicy=await canUseDataPolicy(current,actor);
    if(await canWriteDataset(current,actor,nativePolicy))return {requestId:input.requestId,revision:null,outcome:'rejected',rowIds:[]};
