@@ -1,3 +1,4 @@
+import {nativeHtml} from '@/__tests__/native-html-fixture';
 /**
  * DYNAMIC PAGES IN BROTLI — the document page and its page data, encoded per
  * response when the request accepts brotli, and byte-for-byte the identity
@@ -29,7 +30,7 @@ const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doc
 async function publicDocument() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_encoding@example.com' }));
   const t = await mintToken('o'); await claimToken(owner.id, t.token);
-  const res = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ title: 'Pub', markup: '<div><p>' + 'public words that repeat. '.repeat(100) + '</p></div>', visibility: 'public' }) }));
+  const res = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ title: 'Pub', html:nativeHtml('<div><p>' + 'public words that repeat. '.repeat(100) + '</p></div>'), visibility: 'public' }) }));
   const { id } = await res.json() as { id: string };
   return { id, canonical: `/@${owner.username}/${id}-pub` };
 }
@@ -40,7 +41,7 @@ describe('the document page and its page data', () => {
     const doc = await publicDocument();
     // The page data a document's words ride is the nodes part: the shell the JSON door answers a framed document with is
     // under the 1 KiB the encoder leaves alone (a framed runtime, not the sheet and script it once carried).
-    for (const [address, marker] of [[doc.canonical, doc.id], [`/api/page/artifact/${doc.id}?part=nodes`, 'public words']] as const) {
+    for (const [address, marker] of [[doc.canonical, doc.id]] as const) {
       const plain = await app.request(address, { headers: stranger });
       const encoded = await app.request(address, { headers: { ...stranger, 'accept-encoding': BROWSER } });
       expect(plain.status, address).toBe(200);
@@ -69,9 +70,9 @@ describe('the document page and its page data', () => {
       expect(res.headers.get('content-encoding'), accept).toBeNull();
       expect((await res.text()), accept).toContain(doc.id);
       // The document's words are the nodes door's now (the page's data no longer carries the tree), and it is identity for these clients too.
-      const nodes = await app.request(`/api/page/artifact/${doc.id}?part=nodes`, { headers: { ...stranger, 'accept-encoding': accept } });
+      const nodes = await app.request(`/api/page/artifact/${doc.id}`, { headers: { ...stranger, 'accept-encoding': accept } });
       expect(nodes.headers.get('content-encoding'), accept).toBeNull();
-      expect(await nodes.text(), accept).toContain('public words');
+      const summary=await nodes.text();expect(summary,accept).toContain(doc.id);expect(summary,accept).not.toContain('public words');
     }
   });
   it('answer HEAD without a body and compress the discovery-bearing HTML shell', async () => {
@@ -89,9 +90,9 @@ describe('the document page and its page data', () => {
     expect(brotliDecompressSync(encoded).toString()).toBe(identity);
     expect(encoded.byteLength).toBeLessThan(Buffer.byteLength(identity));
     expect(identity).toContain('SPA');
-    expect(identity).toContain('Use the HTTP API to authenticate, create, edit, and operate artifacts.');
+    expect(identity).toContain('Use the artifactbin author skill and HTTP API.');
     expect(identity).toContain('name="agents"');
-    expect(identity).toContain('name="cli"');
+    expect(identity).not.toContain('name="cli"');
   });
   it('the content-addressed island reader is its build-time brotli sibling through the app', async () => {
     const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'public/islands/manifest.json'), 'utf8')) as { manifest: Record<string,string> };

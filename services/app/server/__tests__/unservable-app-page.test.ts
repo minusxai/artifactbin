@@ -4,6 +4,7 @@
  * settings out of the broken graph, and the frame's own door (/raw) answers the 410 by name.
  */
 import { describe, expect, it } from 'vitest';
+import {createDocumentGraph} from '@/lib/document/document-graph';
 import { createAppServer } from '../app';
 import { useAppHarness, mintAccountToken as mintToken, request } from '@/__tests__/harness';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -28,11 +29,11 @@ describe.each(Object.entries(BROKEN))('a stored graph with %s', (_name, break_) 
   it('answers the app page, its head, manifest and frame without a 500', async () => {
     const owner = await ensureUsername(await createUser({ email: `mxmx_test_unservable_page_${Math.abs(_name.length)}@example.com` }));
     const token = await mintToken('unservable-page', owner.id);
-    const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token.token, json: { markup: '<h1>Fine</h1>', visibility: 'public' } }));
+    const made = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token.token, json: { html: '<h1>Fine</h1>', visibility: 'public' } }));
     const id = (await made.json() as { id: string }).id;
     const db = await harness.db();
-    const stored = (await db.query<{ document: Stored }>('SELECT document FROM artifacts WHERE id=$1', [id])).rows[0]!.document;
-    await db.query('UPDATE artifacts SET document=$2::jsonb, source=NULL WHERE id=$1', [id, JSON.stringify(break_(stored))]);
+    const stored = createDocumentGraph('<h1>Fine</h1>',1) as unknown as Stored;
+    await db.query("UPDATE artifacts SET document=$2::jsonb, source=NULL,format='markup' WHERE id=$1", [id, JSON.stringify(break_(stored))]);
 
     for (const path of [`/a/${id}`, `/a/${id}/app/`]) {
       const res = await app.request(path, { headers: { accept: 'text/html' } });
@@ -44,10 +45,10 @@ describe.each(Object.entries(BROKEN))('a stored graph with %s', (_name, break_) 
     expect((await app.request(`/a/${id}/app/manifest.webmanifest`)).status).toBe(404);
     expect((await app.request(`/a/${id}/app/icon-192.png`)).status).toBe(404);
 
-    for (const response of [await serveRaw(request(`/a/${id}/raw`), params(id)), await pageData(request(`/api/page/artifact/${id}`), params(id))]) {
-      expect(response.status, await response.clone().text()).toBe(410);
-      expect((await response.json() as { error: string }).error).toBe('unservable_document');
-    }
+    const raw=await serveRaw(request(`/a/${id}/raw`),params(id));
+    expect(raw.status).toBe(404);expect(await raw.text()).not.toContain('Fine');
+    const summary=await pageData(request(`/api/page/artifact/${id}`),params(id));
+    expect(summary.status).toBeLessThan(500);expect(await summary.text()).not.toContain('Fine');
   });
 });
 

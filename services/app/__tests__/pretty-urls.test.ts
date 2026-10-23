@@ -79,7 +79,7 @@ describe('canonical redirects', () => {
   it('/a/<id> of an owned public doc redirects to /@username/<id>-<title-slug>', async () => {
     const { ownedToken } = await fixtures();
     const box = await create(ownedToken, { format: 'folder', title: 'August' });
-    const doc = await create(ownedToken, { title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public', parent_id: box.id });
+    const doc = await create(ownedToken, { title: 'Eating Healthy', html: '<h1>x</h1>', visibility: 'public', parent_id: box.id });
     // NESTING IS NEVER IN THE ADDRESS: the canonical path is one segment, and
     // being filed under a folder does not lengthen it.
     const r = await outcome(ArtifactPage(doc.id));
@@ -88,13 +88,13 @@ describe('canonical redirects', () => {
 
   it('/a/<id> of an account document without a username renders in place', async () => {
     const { anonToken } = await fixtures();
-    const doc = await create(anonToken, { title: 'Loose Note', markup: '<h1>x</h1>', visibility:'public' });
+    const doc = await create(anonToken, { title: 'Loose Note', html: '<h1>x</h1>', visibility:'public' });
     expect((await outcome(ArtifactPage(doc.id))).kind).toBe('render');
   });
 
   it('wrong username, stale title, an old folder path — all heal to canonical by id', async () => {
     const { ownedToken } = await fixtures();
-    const doc = await create(ownedToken, { title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public' });
+    const doc = await create(ownedToken, { title: 'Eating Healthy', html: '<h1>x</h1>', visibility: 'public' });
     const canonical = `/@mxmx_owner/${doc.id}-eating-healthy`;
     for (const [user, path] of [
       ['@wronguser', [`${doc.id}-eating-healthy`]],
@@ -108,7 +108,7 @@ describe('canonical redirects', () => {
 
   it('the canonical URL itself renders, no redirect loop', async () => {
     const { ownedToken } = await fixtures();
-    const doc = await create(ownedToken, { title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public' });
+    const doc = await create(ownedToken, { title: 'Eating Healthy', html: '<h1>x</h1>', visibility: 'public' });
     expect((await outcome(UserPage(userPageProps('@mxmx_owner', [`${doc.id}-eating-healthy`])))).kind).toBe('render');
   });
 
@@ -120,7 +120,7 @@ describe('canonical redirects', () => {
 describe('privacy through the resolver', () => {
   it('a private doc 404s (never redirects) for strangers — the redirect would leak the owner', async () => {
     const { ownedToken, owner } = await fixtures();
-    const doc = await create(ownedToken, { title: 'Secret Plan', markup: '<h1>x</h1>' }); // default private
+    const doc = await create(ownedToken, { title: 'Secret Plan', html: '<h1>x</h1>' }); // default private
     expect((await outcome(ArtifactPage(doc.id))).kind).toBe('notFound');
     expect((await outcome(UserPage(userPageProps('@mxmx_owner', [doc.id])))).kind).toBe('notFound');
 
@@ -133,7 +133,7 @@ describe('privacy through the resolver', () => {
 
   it('the exporter\'s signed key opens the page in place (no session, no redirect)', async () => {
     const { ownedToken } = await fixtures();
-    const doc = await create(ownedToken, { title: 'Secret Plan', markup: '<section><p>hello</p></section>' });
+    const doc = await create(ownedToken, { title: 'Secret Plan', html: '<section><p>hello</p></section>' });
     // A minted key renders WITHOUT canonicalizing: the exporter is a machine
     // fetch, and the key must never reach a human-facing location bar.
     expect((await outcome(ArtifactPage(doc.id, { key: mintExportKey(doc.id) }))).kind).toBe('render');
@@ -155,7 +155,7 @@ describe('there is no listing below the handle', () => {
   it('any trailing segment that carries no id is the uniform 404 — owner and stranger alike', async () => {
     const { ownedToken, owner } = await fixtures();
     const box = await create(ownedToken, { format: 'folder', title: 'August' });
-    await create(ownedToken, { title: 'One', markup: '<h1>1</h1>', parent_id: box.id });
+    await create(ownedToken, { title: 'One', html: '<h1>1</h1>', parent_id: box.id });
 
     expect((await outcome(UserPage(userPageProps('@mxmx_owner', ['2026', '08'])))).kind).toBe('notFound');
     // The profile ROOT is the listing (possibly empty), never a 404.
@@ -185,11 +185,11 @@ describe('public profile listing', () => {
 
   it('strangers see root public artifacts — filed and private ones never appear', async () => {
     const { ownedToken } = await fixtures();
-    const open = await create(ownedToken, { title: 'Open Doc', markup: '<h1>x</h1>', visibility: 'public' });
+    const open = await create(ownedToken, { title: 'Open Doc', html: '<h1>x</h1>', visibility: 'public' });
     const box = await create(ownedToken, { format: 'folder', title: 'August' });
-    const foldered = await create(ownedToken, { title: 'Foldered Doc', markup: '<h1>x</h1>', visibility: 'public', parent_id: box.id });
-    await create(ownedToken, { title: 'Secret Doc', markup: '<h1>x</h1>' }); // default private
-    await create(ownedToken, { title: 'Quiet Doc', markup: '<h1>x</h1>', visibility: 'unlisted' });
+    const foldered = await create(ownedToken, { title: 'Foldered Doc', html: '<h1>x</h1>', visibility: 'public', parent_id: box.id });
+    await create(ownedToken, { title: 'Secret Doc', html: '<h1>x</h1>' }); // default private
+    await create(ownedToken, { title: 'Quiet Doc', html: '<h1>x</h1>', visibility: 'unlisted' });
 
     const markup = await markupOf('@mxmx_owner');
     expect(markup).toContain('Open Doc');
@@ -228,7 +228,7 @@ describe('public profile listing', () => {
     // ref:<id>); public visibility keeps them link-reachable for the documents
     // that embed them, but a profile that lists them reads as a junk drawer.
     const { ownedToken } = await fixtures();
-    await create(ownedToken, { title: 'The Report', markup: '<h1>x</h1>', visibility: 'public' });
+    await create(ownedToken, { title: 'The Report', html: '<h1>x</h1>', visibility: 'public' });
     await create(ownedToken, { title: 'Raw Numbers', dataset: [{ region: 'EU', revenue: 10 }], visibility: 'public' });
     await create(ownedToken, {
       title: 'Chart Png',
@@ -244,8 +244,8 @@ describe('public profile listing', () => {
 
   it('a signed-in non-owner gets the same public view as a stranger', async () => {
     const { ownedToken } = await fixtures();
-    await create(ownedToken, { title: 'Open Doc', markup: '<h1>x</h1>', visibility: 'public' });
-    await create(ownedToken, { title: 'Secret Doc', markup: '<h1>x</h1>' });
+    await create(ownedToken, { title: 'Open Doc', html: '<h1>x</h1>', visibility: 'public' });
+    await create(ownedToken, { title: 'Secret Doc', html: '<h1>x</h1>' });
     const other = await ensureUsername(await createUser({ email: 'other@minusx.ai' }));
     sessionUser.id = other.id;
     sessionUser.email = other.email;
@@ -257,7 +257,7 @@ describe('public profile listing', () => {
 
   it('an all-private profile renders empty rather than 404 (the root is not an oracle)', async () => {
     const { ownedToken } = await fixtures();
-    await create(ownedToken, { title: 'Secret Doc', markup: '<h1>x</h1>' });
+    await create(ownedToken, { title: 'Secret Doc', html: '<h1>x</h1>' });
     const markup = await markupOf('@mxmx_owner');
     expect(markup).not.toContain('Secret Doc');
   });
@@ -269,10 +269,10 @@ describe('public profile listing', () => {
 
   it('the owner gets the same public thumbnail cards as everyone else', async () => {
     const { ownedToken, owner } = await fixtures();
-    const publicDoc = await create(ownedToken, { title: 'Open Doc', markup: '<h1>x</h1>', visibility: 'public' });
-    const privateDoc = await create(ownedToken, { title: 'My Doc', markup: '<h1>x</h1>' });
+    const publicDoc = await create(ownedToken, { title: 'Open Doc', html: '<h1>x</h1>', visibility: 'public' });
+    const privateDoc = await create(ownedToken, { title: 'My Doc', html: '<h1>x</h1>' });
     const ds = await create(ownedToken, { title: 'My Numbers', dataset: [{ a: 1 }] });
-    await create(ownedToken, { title: 'Quiet Doc', markup: '<h1>x</h1>', visibility: 'unlisted' });
+    await create(ownedToken, { title: 'Quiet Doc', html: '<h1>x</h1>', visibility: 'unlisted' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
 
@@ -292,7 +292,7 @@ describe('PATCH /api/my/artifacts/:id — the metadata-only move', () => {
   it('files the row without touching content or version; the canonical URL never moves', async () => {
     const { ownedToken, owner } = await fixtures();
     const box = await create(ownedToken, { format: 'folder', title: 'August' });
-    const doc = await create(ownedToken, { title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public' });
+    const doc = await create(ownedToken, { title: 'Eating Healthy', html: '<h1>x</h1>', visibility: 'public' });
 
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
@@ -311,7 +311,7 @@ describe('PATCH /api/my/artifacts/:id — the metadata-only move', () => {
     // The retired path field is answered BY NAME, and an unreachable parent is
     // the one refusal.
     for (const [body, error] of [
-      [{ folder: '2026/08' }, 'invalid_edit_body'],
+      [{ folder: '2026/08' }, 'invalid_metadata'],
       [{ parent_id: 'zzzzzz' }, 'invalid_parent'],
       [{ parent_id: doc.id }, 'invalid_parent'],
     ] as const) {
