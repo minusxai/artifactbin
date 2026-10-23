@@ -56,6 +56,7 @@ export const applyCompiledLocalMutation: ApplyCompiledLocalMutation = (
   result,
 ) => {
   if(result.scalarValues){
+    if(result.target!==""||result.rows!==null||result.reset?.length||Object.keys(result.scalarValues).length!==1)throw Error("Mixed local mutation result");
     for(const [name,value] of Object.entries(result.scalarValues)){
       const d=declarations.find(d=>d.name===name&&d.type!=="table");
       if(!d||!validLocalValue(d,value))throw Error("Invalid scalar mutation result");

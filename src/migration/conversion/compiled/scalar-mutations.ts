@@ -2,7 +2,7 @@ import type {LocalDeclaration} from './local-contracts.ts';
 import type {LegacyScalarOperation} from './scalar-mutation-contracts.ts';
 /** Recognize only the complete arithmetic statement; SQLite separately proves rewritten SQL. */
 export function readLegacyScalarOperation(sql:string,declarations:readonly LocalDeclaration[]):LegacyScalarOperation|null {
- if(!/\b_signals\b/i.test(sql))return null;
+ if(!/^\s*update\s+(?:_signals\b|"_signals"|`_signals`|\[_signals\])/i.test(sql))return null;
  const match=/^\s*update\s+_signals\s+set\s+([A-Za-z][A-Za-z0-9_]*)\s*=\s*([A-Za-z][A-Za-z0-9_]*)\s*([+-])\s*(\d+(?:\.\d+)?)\s*;?\s*$/i.exec(sql);
  if(!match)throw Error('Unsupported legacy scalar mutation');
  const target=declarations.find(d=>d.name.toLowerCase()===match[1]!.toLowerCase());

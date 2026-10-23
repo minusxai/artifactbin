@@ -29,3 +29,22 @@ test('scalar commits refuse state races and invalid result types atomically',()=
  assert.throws(()=>applyCompiledLocalMutation(snapshot,{count:3,drafts:[]},values,{target:'',rows:null,scalarValues:{count:1}}),/changed/);
  assert.throws(()=>applyCompiledLocalMutation(snapshot,{count:0,drafts:[]},values,{target:'',rows:null,scalarValues:{count:'bad'}}),/Invalid scalar/);
 });
+test('scalar arithmetic resolves SQL names, subtracts from a distinct source and preserves null',()=>{
+ const declarations=[...values,{name:'other',type:'number' as const,default:7}];
+ const operation=readLegacyScalarOperation('uPdAtE _SIGNALS sEt COUNT=OtHeR-2;',declarations)!;
+ assert.deepEqual(operation,{target:'count',source:'other',operator:'-',operand:2});
+ assert.deepEqual(applyLegacyScalarOperation(operation,{count:99,other:7}),{count:5});
+ assert.deepEqual(applyLegacyScalarOperation(operation,{other:null}),{count:null});
+ assert.throws(()=>applyLegacyScalarOperation(operation,{}),/Invalid scalar mutation state/);
+ assert.equal(readLegacyScalarOperation("insert into drafts(label) values('_signals')",declarations),null);
+});
+test('unsafe or fractional operands and results are refused before state changes',()=>{
+ for(const sql of ['update _signals set count=count+9007199254740992','update _signals set count=count+0.5'])assert.throws(()=>readLegacyScalarOperation(sql,values),/Unsupported legacy scalar mutation/);
+ const op=readLegacyScalarOperation('update _signals set count=count+1',values)!;
+ for(const value of [Number.MAX_SAFE_INTEGER,Number.MAX_SAFE_INTEGER+1,0.5,Infinity])assert.throws(()=>applyLegacyScalarOperation(op,{count:value}),/Invalid scalar mutation/);
+ assert.throws(()=>readLegacyScalarOperation('update _signals set count=missing+1',values),/Unsupported legacy scalar mutation/);
+});
+test('scalar result cannot smuggle a table result or reset alongside its value',()=>{
+ const snapshot={values:{count:0},tables:{drafts:[]}};
+ for(const result of [{target:'drafts',rows:[{}],scalarValues:{count:1}},{target:'',rows:null,scalarValues:{count:1},reset:['count']},{target:'',rows:null,scalarValues:{count:1,extra:2}}])assert.throws(()=>applyCompiledLocalMutation(snapshot,{count:0,drafts:[]},values,result),/Mixed local mutation result/);
+});
