@@ -73,7 +73,7 @@ export function documentPatchSql(column:string,patches:DocumentPatch[],initial:u
 
 /** One dynamic step, used by the bounded per-node SQL fold. No stored function,
  * full-array expansion, or second database statement is needed. */
-export function documentPatchStepSql(value:string,patch:string):string {
+function documentPatchStepSql(value:string,patch:string):string {
  const path=`ARRAY(SELECT jsonb_array_elements_text(${patch}->'path'))`;
  const old=`(${value}#>>${path})`,text=`to_jsonb(left(${old},(${patch}->>'start')::int)||(${patch}->>'value')||substring(${old} FROM (${patch}->>'start')::int+(${patch}->>'deleteCount')::int+1))`;
  return `(CASE ${patch}->>'kind'

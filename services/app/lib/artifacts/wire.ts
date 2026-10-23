@@ -1,6 +1,4 @@
 import {monitoringGuidance} from './monitoring-guidance';
-import {parseDocumentUpdate} from '@artifactbin/contracts';
-import {GRAPH_POLICY, graphIntegrity, graphNodes, graphSource, parseAnnotationOperations} from '../document';
 import {parseSharingEntries} from '@artifactbin/utils';
 import {artifactState} from './state';
 import {catalogOf} from '@/lib/datasets/catalog';
@@ -18,7 +16,7 @@ import {catalogOf} from '@/lib/datasets/catalog';
 import { type ArtifactRow } from './table';
 import type { AccessActor } from '@/lib/accounts';
 import { DATASET_ACCESS, SHARE_ROLES, type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
-import { type ArtifactSummary, type EditInput, type EditOutcome, type ReplaceOpts } from './store';
+import { type ArtifactSummary, type ReplaceOpts } from './store';
 import { declarationsForRow } from './row-compile';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import { mutationTargetRef, rowField, rawUrl } from '@/lib/dataflow';
@@ -132,7 +130,7 @@ export const sourceRepairsEcho = (repairs: SourceRepair[] | undefined): Record<s
 
 /**
  * The open-thread count a COMMITTED row carries: the commit counts it in the statement that writes the row
- * (write/document-update-write, store setMetadataFor). A row with no count is a data tier, which has no threads.
+ * (store setMetadataFor). A row with no count is a data tier, which has no threads.
  */
 export const committedOpenAnnotations = (row: ArtifactRow): number => row.open_annotations ?? 0;
 
@@ -145,18 +143,11 @@ function artifactOwnershipWire(row: ArtifactRow) {
   };
 }
 
-/** A committed head without its content: the wire shape less `markup`, `state` and the declared `mutations`. */
-async function artifactHeadToWire(row: ArtifactRow, base: string, openAnnotations: number) {
-  const { document: _document, markup: _markup, state: _state, mutations: _mutations, ...head } = await artifactToWire(row, base, openAnnotations, false) as Awaited<ReturnType<typeof artifactToWire>> & { document?: unknown; mutations?: unknown };
-  return head;
-}
-
 /**
  * Full wire shape for a single-artifact read. `content: false`: the row carries no source, so derive nothing from it.
  *
  * `openAnnotations` is the document's open-thread count, which the CALLER supplies: annotations are lib/annotations'
- * sidecar state, above this module. A commit counts it in its own statement (write/document-update-write, store
- * setMetadataFor) and the row carries it; a read door above counts it (lib/annotations/wire).
+ * sidecar state, above this module. A commit counts it in its own statement (store setMetadataFor) and the row carries it; a read door above counts it (lib/annotations/wire).
  */
 export async function artifactToWire(row: ArtifactRow, base: string, openAnnotations: number, content = true) {
   // `deleted_at` is dropped with the ownership columns: the trash gate means a
@@ -420,99 +411,6 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     ...(row.format === 'file' ? { rawUrl: rawUrl(row.id, row.version), filename: meta.filename, contentType: meta.contentType, bytes: meta.bytes } : {}),
     ...(row.format === 'pdf' ? { rawUrl: rawUrl(row.id, row.version), bytes: meta.bytes ?? 0, ...(meta.pages ? { pages: meta.pages } : {}) } : {}),
   };
-}
-
-/** Body → EditInput; null = malformed (both content forms, neither change nor meta, wrong types). */
-function parseEditBody(body: Record<string, unknown>): EditInput | null {
-  const annotationOps=body.annotation_ops===undefined?[]:parseAnnotationOperations(body.annotation_ops);
-  if(!annotationOps)return null;
-  const editId = body.edit_id;
-  if (typeof editId !== 'string' || editId.length === 0) return null;
-
-  if(Object.hasOwn(body,'document_update')){
-    let documentUpdate=parseDocumentUpdate(body.document_update);
-    if(!documentUpdate||!parseAnnotationOperations(documentUpdate.annotationOps??[])||annotationOps.length||['operations','text','source','edits','old_string','new_string'].some(k=>Object.hasOwn(body,k)))return null;
-    // A replacement has no locked graph to supply its structure. Check the
-    // existing graph invariants before SQL, so malformed clients cannot store
-    // a head that throws during hydration. Incremental commits keep their
-    // atomic dependency guards and do not traverse the whole document.
-    if(documentUpdate.replacement){
-      try{
-        if(documentUpdate.replacement.policy!==GRAPH_POLICY||graphIntegrity(documentUpdate.replacement).length)return null;
-        graphNodes(documentUpdate.replacement);
-        graphSource(documentUpdate.replacement);
-      }catch{return null;}
-    }
-    if(documentUpdate.settings?.shares!==undefined){
-      const shares=parseShareEntries(documentUpdate.settings.shares);if(shares instanceof Response)return null;
-      documentUpdate={...documentUpdate,settings:{...documentUpdate.settings,shares}};
-    }
-    return {baseEditId:editId,documentUpdate};
-  }
-
-  return null;
-}
-
-/** Recovery shared by markup metadata rejections on both write endpoints. */
-export const PREPARED_METADATA_HINT = 'For markup title, description, theme, template or colorMode: GET /api/artifacts/:id. POST /api/artifacts/:id/prepare with source from markup, edit_id from edit_id, expectedVersion from version of that read, and changes nested under metadata. Then POST /api/artifacts/:id/edits with the returned edit_id and document_update unchanged.';
-
-/**
- * One edit against a claimed base (the concurrent-edit protocol on the wire).
- * Shared by the bearer route and the session-authed twin under /api/my — same
- * protocol, different ownership scope, which is what `apply` carries in.
- */
-export async function respondToEdit(
-  base: string,
-  body: Record<string, unknown> | null,
-  apply: (input: EditInput) => Promise<EditOutcome | Response | null>,
-  /**
-   * 'patch': the browser editor's answer. It already holds the graph it prepared the patch against, so when the
-   * patch landed on exactly that version the answer is the patch itself, not the whole document graph (megabytes
-   * of JSON on a table-heavy document, parsed and cloned on the page thread at every save). A patch that landed
-   * on a newer head (a concurrent edit to other nodes) answers with the patches between as well; a whole
-   * replacement still answers in full.
-   */
-  echo: 'full' | 'patch' = 'full',
-): Promise<Response> {
-  if (!body) return json({ error: 'invalid_json' }, 400);
-  if (['meta','title','theme','colorMode','template','description','visibility','linkRole','parent_id','access'].some(key=>Object.hasOwn(body,key))) return json({error:'metadata_requires_patch',hint:PREPARED_METADATA_HINT},400);
-  const input = parseEditBody(body);
-  if (!input) return json({ error: 'invalid_edit_body' }, 400);
-
-  const outcome = await apply(echo === 'patch' ? { ...input, patchEcho: true } : input);
-  if (outcome instanceof Response) return outcome; // publish-pipeline 400 (invalid_jsx, …)
-  if (!outcome) return json({ error: 'not_found' }, 404);
-  if (outcome.applied) {
-    // The commit withheld the new document: it landed on exactly the version the patch was prepared against, so the
-    // patch IS the answer. Nothing here may need the new source (`markup`, `state`, the declared `mutations`): the
-    // editor reads none of them, and deriving any would decode the whole document on the save's path.
-    // On a newer head (a concurrent edit to other nodes) the answer carries the patches of the versions between too,
-    // and the editor replays them; without them (the log could not yield every one) it reads the head itself.
-    if (outcome.withheld && input.documentUpdate) {
-      return json({ ...(await artifactHeadToWire(outcome.row, base, committedOpenAnnotations(outcome.row))), patch: input.documentUpdate.patch, ...(outcome.remotePatches ? { remote_patches: outcome.remotePatches } : {}) });
-    }
-    const wire = await artifactToWire(outcome.row, base, committedOpenAnnotations(outcome.row));
-    const update = input.documentUpdate;
-    if (echo === 'patch' && update && !update.whole && outcome.row.version === update.patch.baseVersion + 1) {
-      const { document: _document, markup: _markup, ...head } = wire as typeof wire & { document?: unknown };
-      return json({ ...head, patch: update.patch });
-    }
-    return json({ ...wire });
-  }
-  switch (outcome.reason) {
-    case 'stale_edit_id':
-    case 'doc_changed':
-      return json({ error: outcome.reason, edit_id: outcome.head.editId, source: outcome.head.source, version: outcome.head.version }, 409);
-    case 'bad_diff':
-      return json({
-        error: 'bad_diff', detail: outcome.detail,
-        ...(outcome.detail === 'no_match' ? { recovery: 'Read the artifact again and copy old_string from its current stored markup. A rejected write changed nothing; do not match against the rejected proposal.' } : {}),
-        ...(outcome.detail === 'multiple_matches' ? { recovery: 'Include surrounding stored text so old_string matches exactly once.' } : {}),
-        ...(outcome.editIndex === undefined ? {} : { edit_index: outcome.editIndex }),
-      }, 400);
-    case 'not_editable':
-      return json({ error: 'not_editable' }, 400);
-  }
 }
 
 /**

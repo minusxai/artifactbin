@@ -368,7 +368,7 @@ const getVersionOp: Operation = {
 
 const updateMetadataOp: Operation = {
  name:'update_metadata', title:'Update metadata without a content version', http:{method:'PATCH',path:'/api/artifacts/{id}'},
- description:'For markup, use a client-prepared document_update through edit_artifact; it records a new version. For other formats, change only the supplied metadata fields, conditional on expectedState from the observed head. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
+ description:'Change only the supplied metadata fields, conditional on expectedState from the observed head. Replace native HTML content through PUT with the complete html field. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
  input:{id:z.string(),expectedState:z.string().regex(/^[a-f0-9]{64}$/),expectedVersion:z.number().int().positive().optional(),
   title:z.string().nullable().optional(),description:z.string().nullable().optional(),theme:z.string().nullable().optional(),template:z.string().nullable().optional(),colorMode:z.enum(['light','dark']).nullable().optional(),
   visibility:z.enum(['public','unlisted','private']).optional(),linkRole:z.enum(['viewer','commenter','editor']).optional(),parent_id:z.string().nullable().optional(),access:z.enum(['read','readwrite']).optional(),
@@ -396,7 +396,7 @@ const revertArtifactOp: Operation = {
   name: 'revert_artifact',
   title: 'Revert to an archived version',
   http: { method: 'POST', path: '/api/artifacts/{id}/revert' },
-  description: 'For markup, read the archived version and use the client compiler to submit a whole document_update through edit_artifact. This endpoint restores non-document artifacts as a NEW head version (the current state is archived first, so reverts are undoable). Answers the complete canonical head, including restored markup, metadata, edit_id and state for the next conditional write.',
+  description: 'Restore a saved native HTML or retained data/media version as a NEW head version (the current state is archived first, so reverts are undoable). Answers the complete canonical head, including restored HTML or data, metadata, edit_id and state for the next conditional write.',
   input: { id: z.string(), version: z.number(), expectedVersion: z.number().int().positive(), expectedState: z.string().regex(/^[a-f0-9]{64}$/) },
   annotations: {},
   example: { input: { id: 'aB3xK9', version: 1, expectedVersion: 2, expectedState: 'a'.repeat(64) } },

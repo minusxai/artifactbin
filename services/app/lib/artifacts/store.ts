@@ -7,10 +7,8 @@ import { identityForUser } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from './table';
 import type { AccessActor } from '@/lib/accounts';
-import { compiledForRow, isEmptyCompiled } from './row-compile';
-import type { DocumentGraph, DocumentUpdate, GraphPatch } from '@artifactbin/contracts';
+import type { DocumentGraph, DocumentUpdate } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
-import { commitDocumentUpdate, openAnnotationsSql } from './write/document-update-write';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import {
   type ProseOperation, sourceChanges, annotationEffects, type AnnotationRecord, type AnnotationReceipt, newEditId, type StringEdit,
@@ -42,13 +40,15 @@ import { generateFileId } from '../platform/ids';
 import { type ArtifactFormat } from '@artifactbin/contracts';
 import { json } from '../http/http';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import { COMPILED_DATAFLOW, finalizeArtifactMetadata, storedCompiledDataflow } from '@/lib/document/server';
+import { finalizeArtifactMetadata } from '@/lib/document/server';
 import { emitHeadCommitted } from './after-commit';
 import { DATA_SYNTAX_META } from '@/lib/dataflow/server';
 import { servableDocument } from './servable';
 import { ancestorsForMove, notifyParent, parentOf } from './placement';
 import type { DatasetColumn } from '@/lib/dataflow';
 import { type DatasetAccess, type ShareEntry, type ShareRole, type Visibility } from '@artifactbin/contracts';
+
+const openAnnotationsSql=(artifactId:string)=>`(SELECT count(*)::int FROM annotations a WHERE a.artifact_id=${artifactId} AND a.root_id IS NULL AND a.deleted_at IS NULL AND a.status='open')`;
 
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
 // listing is an index rather than a bulk read. The general-access role is read
@@ -759,137 +759,6 @@ export interface EditInput {
   meta?: { title?: string | null; theme?: string | null; colorMode?: 'light' | 'dark' | null };
 }
 
-/**
- * The resolution outcomes. `null` keeps the
- * uniform-404 contract: unknown and foreign ids are indistinguishable.
- * Candidate markup that fails validation returns the publish pipeline's 400
- * Response unchanged (same shape as parseContentInput).
- */
-export type EditOutcome =
-  /**
-   * `withheld`: the row carries no document or source. `remotePatches`: the patch landed on a newer head than its
-   * base; these are the logged patches of the versions between, in order (absent when the log cannot yield them all).
-   */
-  | { applied: true; row: ArtifactRow; withheld?: true; remotePatches?: RemotePatch[] }
-  | { applied: false; reason: 'stale_edit_id' | 'doc_changed'; head: { editId: string; source: string; version: number } }
-  | { applied: false; reason: 'bad_diff'; detail: 'no_match' | 'multiple_matches' | 'identical' | 'empty_batch' | 'too_many_edits' | 'too_large'; editIndex?: number }
-  | { applied: false; reason: 'not_editable' }; // data tiers are values, not documents
-
-/**
- * After a patch commit, whose final source only exists once the database has
- * applied it: compile that source under its owner's reach and store the
- * record beside it — unless the row has moved on, in which case the next read
- * recompiles. A source that no longer compiles (an import changed shape)
- * stores nothing, and its reads report it.
- */
-async function storeCompiledRecord(db: Queryable, row: ArtifactRow): Promise<ArtifactRow> {
-  if (row.format !== 'markup' || !row.source || storedCompiledDataflow(row.meta, row.source)) return row;
-  const compiled = await compiledForRow(row).catch(() => null);
-  if (!compiled || isEmptyCompiled(compiled)) return row;
-  const meta = finalizeArtifactMetadata('markup', row.source, { ...row.meta, [COMPILED_DATAFLOW]: compiled } as Record<string, unknown>);
-  if (!meta.parsedArtifact) return row;
-  const stored = await db.query("UPDATE artifacts SET meta = jsonb_set(meta, '{parsedArtifact}', $3::jsonb) WHERE id = $1 AND version = $2 AND deleted_at IS NULL", [row.id, row.version, JSON.stringify(meta.parsedArtifact)]);
-  return stored.rowCount ? { ...row, meta } : row;
-}
-
-/**
- * What a commit that WITHHELD its document still owes, done after the reply: the new head's source exists only in the
- * database, and decoding it (megabytes on a table-heavy document) is what the save must not wait for. So the head is
- * read once here, off the write's path, and gets exactly what an answered commit gets inline: its dataflow record
- * (storeCompiledRecord, guarded on the version), its diagram harvest, then the warm prepared page. A head that has
- * moved on is skipped: the newer commit settles its own head, and readers compile and queue on a miss anyway.
- * Serial, in commit order, and never inside a transaction (one PGLite connection).
- */
-let settling: Promise<void> = Promise.resolve();
-function settleCommittedHead(id: string, version: number): void {
-  // Chained on a microtask, not a timer: a test's fake clock must never strand it. Its first step is a query, so the
-  // reply is written while the document is read.
-  settling = settling.then(async () => {
-    try {
-      const db = await getDb();
-      const head = (await artifactQuery<ArtifactRow>(db, `SELECT * FROM artifacts WHERE id=$1 AND version=$2 AND ${LIVE_ARTIFACT_SQL}`, [id, version])).rows[0];
-      if (!head) return;
-      const row = await storeCompiledRecord(db, head);
-      await queueMermaidHarvest(row);
-      if (row.format === 'markup') emitHeadCommitted(row.id, row);
-    } catch (error) {
-      console.warn('[edits] could not settle the committed head', id, version, (error as Error).message);
-    }
-  });
-}
-
-/** Resolves once every withheld commit so far has been settled (tests, and a graceful shutdown). */
-export function committedHeadsSettled(): Promise<void> {
-  return settling;
-}
-
-const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source ?? '', version: row.version });
-
-/** One logged commit's patch, admitted at `version - 1` (lib/document/document-graph-patch advanceGraph replays it). */
-interface RemotePatch { version: number; patch: GraphPatch }
-/** Beyond this many versions between, the editor reads the head instead. */
-const MAX_REMOTE_PATCHES = 50;
-
-/**
- * The patches every commit between `baseVersion` and `headVersion` (both exclusive) applied, read from the edit log
- * (`document_state.forward`, logged by the commit that admitted it). Replayed in order on the graph at `baseVersion`
- * they give the graph the newer head was built on, without sending or decoding the document. Null when any version
- * between has no logged patch (a replacement, a conversion), or there are too many: the caller then reads the head.
- */
-async function patchesSince(db: Queryable, id: string, baseVersion: number, headVersion: number): Promise<RemotePatch[] | null> {
-  const count = headVersion - baseVersion - 1;
-  if (count <= 0) return count === 0 ? [] : null;
-  if (count > MAX_REMOTE_PATCHES) return null;
-  const rows = (await db.query<{ version: number | null; kind: string | null; forward: GraphPatch | null; replaced: boolean }>(
-    `SELECT (document_state->>'version')::int AS version,document_state->>'kind' AS kind,document_state->'forward' AS forward,
-      COALESCE(document_state->'replacement','null'::jsonb)<>'null'::jsonb AS replaced
-     FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq DESC LIMIT $2`, [id, count + 8])).rows;
-  const byVersion = new Map(rows.filter((r) => r.version !== null && r.version > baseVersion && r.version < headVersion).map((r) => [r.version!, r]));
-  const patches: RemotePatch[] = [];
-  for (let version = baseVersion + 1; version < headVersion; version++) {
-    const row = byVersion.get(version);
-    if (!row || row.kind !== 'operations' || row.replaced || !row.forward) return null;
-    patches.push({ version, patch: row.forward });
-  }
-  return patches;
-}
-
-/** Clients own semantic validation and patch preparation. This boundary owns
- * authorization and the atomic operation/dependency/history commit. */
-async function applyEditScoped(actor: AccessActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
-  const db = await getDb();
-  const scope = opts.scope ?? editorScope(actor);
-  if(input.documentUpdate){
-    const update=input.documentUpdate;
-    if(!update.whole&&!Object.keys(update.patch.updated).length&&!Object.keys(update.patch.inserted).length&&!update.patch.removed.length&&!Object.keys(update.metadata??{}).length&&!Object.keys(update.settings??{}).length&&!update.annotationOps?.length&&!update.datasetBindings?.length)return json({error:'bad_diff',detail:'identical'},400);
-    if(input.documentUpdate.settings?.visibility==='public'&&!ALLOW_PUBLIC_VISIBILITY)return json({error:'public_not_enabled'},400);
-    const withholdDocument=!!input.patchEcho&&!opts.dryRun;
-    const committed=await commitDocumentUpdate(db,actor,scope,id,input.documentUpdate,{dryRun:opts.dryRun,withholdDocument});
-    if(!committed)return null;
-    if(!committed.applied&&committed.head.dataset_policy&&update.whole)return policyLocked('a dataset with a write policy cannot be replaced by a document');
-    if(!committed.applied&&committed.head.format!=='markup')return {applied:false,reason:'not_editable'};
-    if(!committed.applied&&committed.ownerOnly)return json({error:'owner_only'},403);
-    if(!committed.applied&&committed.invalidParent)return json({error:'invalid_parent'},400);
-    if(!committed.applied&&committed.invalidGraph)return json({error:'invalid_document_graph',hint:'The patch would store nodes whose children, parts or byte counts disagree. Prepare document_update from the current authoring graph with the shared compiler.'},400);
-    if(!committed.applied&&committed.refusal)return json({error:'mention_refused',detail:committed.refusal},403);
-    if(!committed.applied&&input.documentUpdate.settings?.visibility==='private'&&!committed.head.user_id&&!committed.head.group_id)return json({error:'private_requires_account'},400);
-    if(opts.dryRun)return committed.applied?json({valid:true,dry_run:true,commit_checks:['authorization','dependency_revisions','metadata','sharing','size']}):json({error:'doc_changed'},409);
-    if(!committed.applied)return {applied:false,reason:'doc_changed',head:headOf(committed.head)};
-    if(committed.withheld){
-      settleCommittedHead(committed.row.id,committed.row.version);
-      const remotePatches=committed.row.version===update.patch.baseVersion+1?null:await patchesSince(db,id,update.patch.baseVersion,committed.row.version);
-      return {applied:true,row:committed.row,withheld:true,...(remotePatches?{remotePatches}:{})};
-    }
-    const row=await storeCompiledRecord(db,committed.row);
-    // After the commit, off the write's path: the new head is prepared for its readers, and its diagrams harvested.
-    if(row.format==='markup')emitHeadCommitted(row.id);
-    void queueMermaidHarvest(row);
-    return {applied:true,row};
-  }
-
-  return json({error:'jsonb_operations_required',hint:'Prepare document_update from the graph returned by the last read. Use the current CLI or browser editor.'},400);
-}
-
 // ── The reference graph ──────────────────────────────────────────────────────
 
 /**
@@ -936,10 +805,6 @@ export function listArtifactsFor(actor: AccessActor): Promise<ArtifactSummary[]>
 
 export function replaceArtifactFor(actor: AccessActor, id: string, input: ArtifactInput, opts: ReplaceOpts = {}): Promise<ArtifactRow | VersionConflict | Response | null> {
   return replaceScoped(actor, id, input, opts);
-}
-
-export function applyEditFor(actor: AccessActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean } = {}): Promise<EditOutcome | Response | null> {
-  return applyEditScoped(actor, id, input, opts);
 }
 
 export async function listVersionPageFor(actor: AccessActor, id: string, limit: number, before?: number, through?:number, filters:{author?:string;since?:string;until?:string}={}): Promise<{rows: VersionSummary[]; next?: number} | null> {

@@ -4,7 +4,7 @@ description: CSV import, dataset schema discovery, stable IDs and permission-awa
 ---
 ## Read first
 
-Create a dataset through the retained artifact API, then link it from the page. Use an origin-bound bearer outside HTML:
+Create a dataset through the retained artifact API, then link it from the page. The native dataset namespace supports stored CSV/JSON rows with platform row identities. Connected PostgreSQL catalogs and SQL-backed tables are not supported by this namespace: discovery, reads and writes reject them with `dataset_stable_identity_unavailable`. Import stored rows for native pages. The separate retained PostgreSQL dataset query API remains read-only under its original permissions. Use an origin-bound bearer outside HTML:
 
 ```json
 {"dataset":"week,completed,waiting\n2026-W01,18,7\n2026-W02,24,4\n2026-W03,21,3\n","title":"Repair bench sample","visibility":"unlisted","access":"readwrite"}

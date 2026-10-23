@@ -3,7 +3,6 @@
  * out-of-transaction query: callers always supply their own Queryable.
  */
 import { createDocumentGraph, type DocumentGraph, decodeDocument } from '../document';
-import {currentStoryCss,storyCssCompileVersion} from '../data/story/story-css.server';
 import {finalizeArtifactMetadata} from '@/lib/document/server';
 import type {Queryable} from '@artifactbin/contracts';
 interface SourceRow {source?:string|null;document?:DocumentGraph|null}
@@ -28,15 +27,6 @@ function decodeArtifactDocument<T>(value:T):T {
  try{source=decodeDocument(document);}catch{return {...rest,document,source:null} as T;}
  const meta=(rest as {meta?:Record<string,unknown>}).meta;
  return {...rest,document,source,...(meta&&!meta.parsedArtifact?{meta:finalizeArtifactMetadata('markup',source,meta)}:{})} as T;
-}
-/** Derived rendering data is computed from the committed graph, never a stale
- * admission snapshot. Compilation has no database write or transaction callback. */
-export async function hydrateArtifactDocument<T>(value:T):Promise<T> {
- const graph=(value as T&SourceRow).document?.kind==='graph',decoded=decodeArtifactDocument(value);
- const row=decoded as T&{source?:string|null;meta?:Record<string,unknown>};
- if(!graph||!row.meta||row.source==null)return decoded;
- const compiledCss=await currentStoryCss(row.meta,row.source);
- return {...row,meta:{...row.meta,compiledCss,cssCompileVersion:storyCssCompileVersion()}} as T;
 }
 export async function artifactQuery<T=Record<string,unknown>>(db:Queryable,sql:string,params:unknown[]=[]):Promise<{rows:T[]}> {
  const result=await db.query<T>(sql,params);

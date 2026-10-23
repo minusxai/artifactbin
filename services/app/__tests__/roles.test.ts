@@ -1,13 +1,12 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness, mintAccountToken as mintToken, setSession, request } from '@/__tests__/harness';
-import { applyEditFor, type ArtifactRow, canReadArtifact, changeMembership, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, getVersionFor, invitePeople, membershipState, mentionCandidates, parseShareEntries, updateSharingFor } from '@/lib/artifacts';
+import { replaceArtifactFor, artifactState, type ArtifactRow, canReadArtifact, changeMembership, createArtifact, effectiveRole, effectiveRole as roleFor, getArtifactById, getSharingFor, getVersionFor, invitePeople, membershipState, mentionCandidates, parseShareEntries, updateSharingFor } from '@/lib/artifacts';
 import { membershipInbox, updateMembershipInbox } from '@/lib/document-data';
 import { artifactQuery } from '@/lib/artifacts/table';
-import { committedHeadsSettled } from '@/lib/artifacts/store';
 import { linkRoleOf } from '@/lib/artifacts/access';
 import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, NO_IDENTITY, identityForUser, type RequestIdentity, claimToken, createUser, setUserEmail, ensureUsername, setRelationState, has, count, linked, link } from '@/lib/accounts';
-import { documentEdit, documentEditBody, documentPublicationBody } from '@/__tests__/prepared-document';
+import {  documentEditBody, documentPublicationBody } from '@/__tests__/prepared-document';
 import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor } from '@/lib/annotations';
 import { PUT as putArtifactRoute, GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
@@ -28,7 +27,6 @@ import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as versionMineRoute } from '@/app/api/my/artifacts/[id]/versions/[version]/route';
 import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { getDb } from '@/lib/platform';
-import { storedCompiledDataflow } from '@/lib/document/parsed-artifact-metadata';
 import { hasExplicitNotificationMembership } from '@/lib/notifications';
 import { POST } from '@/app/api/my/artifacts/[id]/members/route';
 
@@ -377,13 +375,13 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     const stranger = await account('mxmx_test_stranger@example.com');
     const asStranger = identityForUser(stranger.user.id, stranger.token.id);
 
-    const editable = await docOf(owner, 'public', 'editor');
-    const ok = await applyEditFor(asStranger, editable.id, documentEdit(editable, { source: editable.source!.replace('hello', 'edited') }));
-    expect(ok, JSON.stringify(ok)).toMatchObject({ applied: true });
+    const editable = await createArtifact(owner.token.id,owner.user.id,{format:'html',source:'<html><body><p>hello</p></body></html>',meta:{},title:null,description:null,visibility:'public'},{linkRole:'editor'});
+    const ok = await replaceArtifactFor(asStranger,editable.id,{...editable,link_role:editable.link_role??undefined,source:editable.source!.replace('hello','edited')},{expectedVersion:editable.version,expectedState:artifactState(editable)});
+    expect(ok,JSON.stringify(ok)).toMatchObject({format:'html',version:editable.version+1});
     expect((await head(editable.id))?.source).toContain('edited');
 
-    const commentable = await docOf(owner, 'public', 'commenter');
-    const refused = await applyEditFor(asStranger, commentable.id, documentEdit(commentable, { source: commentable.source!.replace('hello', 'nope') }));
+    const commentable = await createArtifact(owner.token.id,owner.user.id,{format:'html',source:'<html><body><p>hello</p></body></html>',meta:{},title:null,description:null,visibility:'public'},{linkRole:'commenter'});
+    const refused=await replaceArtifactFor(asStranger,commentable.id,{...commentable,link_role:commentable.link_role??undefined,source:commentable.source!.replace('hello','nope')},{expectedVersion:commentable.version,expectedState:artifactState(commentable)});
     expect(refused, 'a commenter link is not an edit link').toBeNull();
   });
 
@@ -1185,48 +1183,7 @@ describe('editors through every door', () => {
       expect(lateAnswer.version).toBe(from.version + 2);
     });
 
-    it('withholds the new document: no markup, state or mutations, and the head is settled after the answer exactly as an answered commit settles it', async () => {
-      const DATA = (n: number) => `<Helmet><Value name="n" type="number" default={${n}} /><Query name="q">{\`select $n * 21 as n\`}</Query></Helmet><div><p id="a">Answer <Number data="$q" col="n" /></p><Mermaid title="D0" code={${JSON.stringify('flowchart LR\n  a[Request] --> b[Read]')}} /></div>`;
-      const w = await world(DATA(2));
-      asSession({ id: w.owner.id, email: w.owner.email });
-      const twin = await create(w.ta.token, { markup: DATA(2), visibility: 'public' });
-      const edit = async (id: string, echo: string) => {
-        const base = await head(id);
-        const res = await editsMineRoute(await request(`/api/my/artifacts/${id}/edits${echo}`, { method: 'POST', json: documentEditBody(base, { source: (base.source as string).replace('default={2}', 'default={3}') }) }), params({ id }));
-        expect(res.status, await res.clone().text()).toBe(200);
-        return { base, text: await res.text() };
-      };
-      const { base, text } = await edit(w.doc.id, '');
-      const answer = JSON.parse(text);
-      for (const key of ['document', 'markup', 'state', 'mutations']) expect(answer, key).not.toHaveProperty(key);
-      expect(answer).toMatchObject({ id: w.doc.id, version: base.version + 1, edit_id: expect.any(String) });
-      expect(answer).toHaveProperty('theme');
-      expect(answer.patch).toBeDefined();
-      expect(text.length).toBeLessThan(JSON.stringify(base.document).length);
 
-      // The twin takes the same edit on the answered path, which settles inline; both heads end the same.
-      // The withheld answer is the full answer's head, every other key included (a new column rides along).
-      const full = JSON.parse((await edit(twin.id, '?echo=full')).text);
-      const without = (keys: string[], drop: string[]) => keys.filter((k) => !drop.includes(k)).sort();
-      expect(without(Object.keys(answer), ['patch'])).toEqual(without(Object.keys(full), ['document', 'markup', 'state', 'mutations']));
-      await committedHeadsSettled();
-      const [settled, answered] = [await getArtifactById(w.doc.id), await getArtifactById(twin.id)];
-      // The two documents differ only in their stamped node ids (same length), so the stored records are the same
-      // compiled dataflow, each certified against its own head's source.
-      const record = (row: typeof settled) => storedCompiledDataflow(row!.meta, row!.source!);
-      expect(record(settled)).not.toBeNull();
-      expect(record(settled)).toEqual(record(answered));
-      const db = await getDb();
-      const harvests = async (id: string) => (await db.query<{ version: number }>('SELECT version FROM mermaid_harvests WHERE artifact_id=$1 ORDER BY version', [id])).rows.map((r) => r.version);
-      expect(await harvests(w.doc.id)).toContain(settled!.version);
-      expect(await harvests(twin.id)).toContain(answered!.version);
-
-      // The first edit after a quiet spell archives the version it replaced, copied as stored: the archive is exactly
-      // the pre-edit head, document and all.
-      const archived = await getVersionFor(identityForUser(base.user_id, base.token_id), w.doc.id, base.version);
-      expect(archived?.source).toBe(base.source);
-      expect((await db.query<{ document: unknown }>('SELECT document FROM artifact_versions WHERE artifact_id=$1 AND version=$2', [w.doc.id, base.version])).rows[0]?.document).toEqual(base.document);
-    });
   });
 });
 

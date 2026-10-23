@@ -17,7 +17,7 @@ import {inertProse,PROSE_HTML_PARENTS} from './document-prose';
 import {encodeDocumentNodes,decodeDocumentNodes} from './document-node-codec';
 
 export const GRAPH_ROOT='$root';
-export const GRAPH_POLICY='validated-graph-v3';
+const GRAPH_POLICY='validated-graph-v3';
 export type GraphAstNode=JsxNode & {graphKey?:string};
 
 function ownParts(node:JsxNode):string[] {

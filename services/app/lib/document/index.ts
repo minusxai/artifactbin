@@ -10,10 +10,8 @@
 
 // ---- Model: the stored node graph, node ids, the source form and its checks.
 export type { DocumentGraph } from './document-graph';
-export { createDocumentGraph, GRAPH_POLICY, GRAPH_ROOT, graphIntegrity, graphNodes, graphSource } from './document-graph';
-export type { GraphPatch } from './document-graph-patch';
+export { createDocumentGraph, graphNodes, graphSource } from './document-graph';
 export { applyGraphPatch } from './document-graph-patch';
-export { documentPatchStepSql } from './document-patch';
 export type { ProseOperation } from './document-prose';
 export type { StoredDocument } from './document-codec';
 export { decodeDocument } from './document-codec';

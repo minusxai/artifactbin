@@ -1,4 +1,4 @@
-import {restoreDocument,documentEdit} from './prepared-document';
+import {restoreDocument} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Document-tier lifecycle over the story engine: format switching, versioning
@@ -12,10 +12,9 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as previewRoute } from '@/app/api/preview/route';
-import { applyEditFor,getArtifactById } from '@/lib/artifacts';
+import { replaceArtifactFor,artifactState,getArtifactById } from '@/lib/artifacts';
 
 
-import { parseContentInput } from '@/lib/publish/document/input';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, createUser } from '@/lib/accounts';
 import { useAppHarness, request } from '@/__tests__/harness';
@@ -112,27 +111,14 @@ describe('document editing', () => {
     expect(read.format).toBe('markup');
   });
 
-  it('an account-scope replace edits any of the user’s artifacts', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
-    const t = await mintToken('laptop', user.id);
-    const created = await (
-      await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<h1>Mine</h1>' } }),
-      )
-    ).json();
-
-    const parsed = await parseContentInput({ markup: '<h1>Edited</h1>', theme: 'organic' });
-    if (parsed instanceof Response) throw new Error('parse failed');
-    const prepared=documentEdit((await getArtifactById(created.id))!,{source:parsed.source!,metadata:{theme:'organic'},whole:true});
-    const result=await applyEditFor(identityForUser(user.id, ''),created.id,prepared);
-    if(!result||result instanceof Response||!result.applied)throw new Error('replace failed');
-    const row=result.row;
-    expect(row?.version).toBe(2);
-    expect(row?.source).toContain('Edited');
-    expect(row?.source).toMatch(/<h1\s[^>]*id="[^"]+"[^>]*>/);
-
-    const other = await createUser({ email: 'other@x.com' });
-    expect(await applyEditFor(identityForUser(other.id, ''),created.id,prepared)).toBeNull();
+  it('an account-scope native replacement edits only artifacts that user may edit',async()=>{
+    const user=await createUser({email:'native-scope@example.com'}),t=await mintToken('laptop',user.id);
+    const response=await createArtifactRoute(request('/api/artifacts',{method:'POST',token:t.token,json:{html:'<html><body><h1>Mine</h1></body></html>'}}));expect(response.status).toBe(201);const created=await response.json();
+    const head=(await getArtifactById(created.id))!;
+    const input={...head,link_role:head.link_role??undefined,source:head.source!.replace('Mine','Edited')};
+    const opts={expectedVersion:head.version,expectedState:artifactState(head)};
+    const result=await replaceArtifactFor(identityForUser(user.id,''),head.id,input,opts);expect(result).toMatchObject({version:2,format:'html',source:expect.stringContaining('Edited')});
+    const other=await createUser({email:'native-other@example.com'});expect(await replaceArtifactFor(identityForUser(other.id,''),head.id,input,opts)).toBeNull();
   });
 
   it('preview compiles the document tier without persisting (bearer auth)', async () => {

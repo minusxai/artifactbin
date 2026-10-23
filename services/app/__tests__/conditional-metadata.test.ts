@@ -1,44 +1,28 @@
-import {documentEdit} from './prepared-document';
-import { identityForUser } from '@/lib/accounts';
+import {identityForUser} from '@/lib/accounts';
 import {expect,it} from 'vitest';
-import {request,useAppHarness} from './harness';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
+import {request,useAppHarness,mintAccountToken} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
-import {getArtifactFor,setMetadataFor,applyEditFor} from '@/lib/artifacts';
+import {PUT as replace} from '@/app/api/artifacts/[id]/route';
+import {artifactState,getArtifactFor,setMetadataFor,isVersionConflict} from '@/lib/artifacts';
 const harness=useAppHarness();
-async function document() {
- const token=await mintToken('conditional');const actor=identityForUser(token.userId, token.id);
- const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Original</p>',title:'Original'}}));
- expect(response.status).toBe(201);
- const id=(await response.json()).id;const row=(await getArtifactFor(actor,id))!;
- return {actor,row};
+async function fixture(){
+ const token=await mintAccountToken('conditional'),actor=identityForUser(token.userId,token.id);
+ const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:'<html><body><p>Original</p></body></html>',title:'Original'}}));expect(response.status).toBe(201);const page=await response.json();
+ const row=(await getArtifactFor(actor,page.id))!;return {token,actor,row};
 }
-it('serializes conflicting metadata operations and records an accepted document version',async()=>{
- const {actor,row}=await document();
- const results=await Promise.all(['One','Two'].map(title=>applyEditFor(actor,row.id,documentEdit(row,{metadata:{title}}))));
- expect(results.filter(r=>r&&!(r instanceof Response)&&!r.applied)).toHaveLength(1);
- const current=(await getArtifactFor(actor,row.id))!;expect(['One','Two']).toContain(current.title);
- expect(current.version).toBe(row.version+1);expect(current.edit_id).not.toBe(row.edit_id);
- const db=await harness.db();expect((await db.query<{count:number}>('SELECT count(*)::int AS count FROM artifact_versions WHERE artifact_id=$1',[row.id])).rows[0].count).toBe(1);
+it('serializes native metadata writes against the same observed state without changing content history',async()=>{
+ const {actor,row}=await fixture();
+ const results=await Promise.all(['One','Two'].map(title=>setMetadataFor(actor,row.id,{title},{expectedState:artifactState(row)})));
+ expect(results.filter(result=>result&&isVersionConflict(result))).toHaveLength(1);
+ const current=(await getArtifactFor(actor,row.id))!;expect(['One','Two']).toContain(current.title);expect(current.version).toBe(row.version);expect(current.source).toBe(row.source);
+ const db=await harness.db();expect((await db.query<{count:number}>('SELECT count(*)::int count FROM artifact_versions WHERE artifact_id=$1',[row.id])).rows[0]!.count).toBe(0);
 });
-it('refuses a whole replacement prepared before a metadata change',async()=>{
- const {actor,row}=await document();
- const stale=documentEdit(row,{source:'<p>Changed</p>',metadata:{title:'Stale title'},whole:true});
- await applyEditFor(actor,row.id,documentEdit(row,{metadata:{title:'Concurrent title'}}));
- expect(await applyEditFor(actor,row.id,stale)).toMatchObject({applied:false,reason:'doc_changed'});
- const current=(await getArtifactFor(actor,row.id))!;expect(current.title).toBe('Concurrent title');expect(current.source).toBe(row.source);
+it('rejects an HTML replacement prepared before a metadata change and preserves the accepted title',async()=>{
+ const {actor,row,token}=await fixture();
+ await setMetadataFor(actor,row.id,{title:'Concurrent title'},{expectedState:artifactState(row)});
+ const response=await replace(request(`/api/artifacts/${row.id}`,{method:'PUT',token:token.token,json:{html:row.source!.replace('Original','Changed'),title:'Stale title',expectedVersion:row.version,expectedState:artifactState(row)}}),{params:Promise.resolve({id:row.id})});
+ expect(response.status).toBe(409);expect(await getArtifactFor(actor,row.id)).toMatchObject({title:'Concurrent title',source:row.source,version:row.version});
 });
 it('does not partially rename when another metadata field is refused',async()=>{
- const {actor,row}=await document();
- expect(await setMetadataFor(actor,row.id,{title:'Must not land',access:'readwrite'})).toBeNull();
- expect((await getArtifactFor(actor,row.id))!.title).toBe('Original');
-});
-
-it.each(['Changed <em>structure</em>','Changed'])('body edit %s preserves independently changed metadata',async content=>{
- const {actor,row}=await document();
- const prepared=documentEdit(row,{source:row.source!.replace('Original',content)});
- await applyEditFor(actor,row.id,documentEdit(row,{metadata:{title:'Concurrent title',colorMode:'dark'}}));
- expect(await applyEditFor(actor,row.id,prepared)).toMatchObject({applied:true});
- const current=(await getArtifactFor(actor,row.id))!;
- expect(current.source).toContain('Changed');expect(current.title).toBe('Concurrent title');expect(current.meta.colorMode).toBe('dark');
+ const {actor,row}=await fixture();expect(await setMetadataFor(actor,row.id,{title:'Must not land',access:'readwrite'},{expectedState:artifactState(row)})).toBeNull();expect((await getArtifactFor(actor,row.id))!.title).toBe('Original');
 });
