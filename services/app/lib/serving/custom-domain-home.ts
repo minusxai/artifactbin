@@ -128,7 +128,7 @@ function documentCardHtml(row: ProfileFile, url: string, index: number): string 
 function shelfHtml(files: ProfileFile[]): string {
   // `assets={false}`: non-markup rows (images, datasets) are excluded from the
   // shelf itself, even though they kept ProfileListing from drawing NothingHere.
-  const markup = files.filter((f) => f.format === 'markup') as unknown as ShelfRow[];
+  const markup = files.filter((f) => f.format === 'html') as unknown as ShelfRow[];
   const documents = buildShelf(markup).documents;
   const groups = groupShelfByRecency(documents);
   const sections = groups.map((group) => {
@@ -150,7 +150,7 @@ function shelfHtml(files: ProfileFile[]): string {
 /** The app's profile listing, `surface="domain"`: folders are dropped (a folder's page is not served on the domain, so its tile would be a dead link). */
 function profileListingHtml(data: ProfileListingData): string {
   const files = data.files.filter((f) => f.format !== 'folder');
-  const count = files.filter((f) => f.format === 'markup').length;
+  const count = files.filter((f) => f.format === 'html').length;
   const hero = listingHeroHtml(data.handle, count, data.owner);
   return hero + (files.length === 0 ? NOTHING_HERE_HTML : shelfHtml(files));
 }

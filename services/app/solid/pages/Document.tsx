@@ -92,7 +92,7 @@ export function DocumentPage(): JSX.Element {
   const role = () => page?.role ?? 'viewer';
   const archivedNow = () => !!page?.archived;
   const isOwner = () => canGovern(role()) && !archivedNow();
-  const editable = () => canEditRole(role()) && !archivedNow() && ['markup', 'html'].includes(page?.surface?.format ?? '');
+  const editable = () => canEditRole(role()) && !archivedNow() && page?.surface?.format === 'html';
   const annotatable = () => canAnnotateRole(role()) && !archivedNow();
   const backend = id ? createHttpBackend(id) : null;
   const [pwaEnabled, setPwaEnabled] = createSignal(page?.surface?.pwaEnabled === true);
@@ -167,7 +167,10 @@ export function DocumentPage(): JSX.Element {
   const live = backend && page?.surface ? createLiveArtifact({
     backend, id: id!, initialEditId: page.surface.editId ?? '', initialVersion: page.surface.version,
     get enabled() { return ready() && !archivedNow() && typeof EventSource === 'function'; },
-    onData: (event) => { if (event.datasets.includes('_members')) setMembershipRevision((n) => n + 1); },
+    onData: (event) => {
+      if (event.datasets.includes('_members')) setMembershipRevision((n) => n + 1);
+      if (page.surface?.format === 'html') runtimeRef.current?.invalidate?.(event.datasets);
+    },
     onAnnotations: setLiveAnnotations,
     since: page.surface.runtime?.data.dataflow?.results?.since,
   }) : () => null;

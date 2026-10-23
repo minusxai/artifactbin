@@ -1,4 +1,6 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { servesDocument } from '@/lib/serving/custom-domains';
+import { getDb } from '@/lib/platform/db';
+import { afterEach, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { mintAccountToken, request, useAppHarness } from './harness';
 import { POST } from '@/app/api/artifacts/route';
@@ -7,7 +9,6 @@ import { GET as raw } from '@/app/a/[id]/raw/route';
 import { GET as download } from '@/app/a/[id]/download/route';
 import { artifactPageAnswer, framedDocumentSrc } from '@/lib/serving/artifact-page';
 import { markPagesRequest, pagesSiteFor } from '@/lib/http/pages-origin';
-import * as prepared from '@/lib/publish/prepared/prepared-page.server';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 const site=pagesSiteFor('pages.example.test','https://app.example.test');
@@ -20,8 +21,7 @@ async function publish(visibility:'private'|'public'='private'){
 }
 it('serves native HTML after original ACL without calling JSX preparation',async()=>{
  const {actor,id}=await publish();
- const compiler=vi.spyOn(prepared,'preparedPageFor').mockRejectedValue(new Error('JSX must not render HTML'));
- try{
+
   expect((await raw(request(`/a/${id}/raw`),params(id))).status).toBe(404);
   const stranger=await mintAccountToken('stranger');expect((await raw(request(`/a/${id}/raw`,{token:stranger.token}),params(id))).status).toBe(404);
   const response=await raw(request(`/a/${id}/raw`,{token:actor.token}),params(id));expect(response.status).toBe(200);
@@ -29,8 +29,7 @@ it('serves native HTML after original ACL without calling JSX preparation',async
   const document=new JSDOM(await response.text()).window.document;
   expect(document.querySelector('h1')?.textContent).toBe('Native content');
   const runtime=JSON.parse(document.querySelector('[data-af="runtime"]')!.textContent!);
-  expect(runtime).toMatchObject({pageId:id,revision:'1',initialState:{count:3},backends:[]});expect(runtime.appOrigin).toBeUndefined();expect(compiler).not.toHaveBeenCalled();
- }finally{compiler.mockRestore();}
+  expect(runtime).toMatchObject({pageId:id,revision:'1',initialState:{count:3},backends:[]});expect(runtime.appOrigin).toBeUndefined();
 });
 it('uses original framed chrome without duplicating source in the bootstrap',async()=>{
  const {actor,id}=await publish();const req=()=>request(`/a/${id}`,{actor:{credential:'session',userId:actor.userId!,email:actor.email??undefined}});
@@ -68,4 +67,24 @@ it('captures native HTML body through its signed raw URL and keeps private previ
  const response=await exportImage(request(`/a/${id}/export?mode=preview`,{token:actor.token}),params(id));expect(response.status).toBe(200);
  const capture=browser.calls.at(-1) as RenderRequest;expect(capture.selector).toBe('body');const shot=new URL(capture.url);expect(shot.pathname).toBe(`/a/${id}/raw`);expect(shot.searchParams.get('key')).toBeTruthy();
  const captured=await raw(request(shot.pathname+shot.search),params(id));expect(captured.status).toBe(200);expect(await captured.text()).toContain('Native content');
+});
+
+
+it('does not render or package retired JSX rows through a document door', async () => {
+ const {actor,id}=await publish();
+ await (await getDb()).query("UPDATE artifacts SET format = 'markup' WHERE id = $1", [id]);
+ expect((await raw(request(`/a/${id}/raw`,{token:actor.token}),params(id))).status).toBe(404);
+ expect((await download(request(`/a/${id}/download`,{token:actor.token}),params(id))).status).toBe(404);
+ const answer=await artifactPageAnswer(request(`/a/${id}`,{actor:{credential:'session',userId:actor.userId!,email:actor.email??undefined}}),id,{pages:site});
+ expect(answer.status).toBe(404);
+});
+
+
+it('admits only native public posts owned by the custom-domain account', () => {
+ const post={user_id:'owner',visibility:'public' as const,format:'html' as const};
+ expect(servesDocument('owner',post)).toBe(true);
+ expect(servesDocument('stranger',post)).toBe(false);
+ expect(servesDocument('owner',{...post,visibility:'private'})).toBe(false);
+ expect(servesDocument('owner',{...post,deleted_at:new Date()})).toBe(false);
+ expect(servesDocument('owner',{...post,format:'markup'})).toBe(false);
 });

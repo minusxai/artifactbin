@@ -31,11 +31,9 @@ import { PAGE_COLUMN } from '../ui/ui';
 import { usePageData } from '../lib/use-page-data';
 import { NotFoundPage } from './NotFound';
 import type { DataAnswer } from './ArtifactData';
-import type { StarterAnswer } from './Starter';
 
 const FolderPage = lazy(() => import('./Folder').then((m) => ({ default: m.FolderPage })));
 const ArtifactDataPage = lazy(() => import('./ArtifactData').then((m) => ({ default: m.ArtifactDataPage })));
-const StarterPage = lazy(() => import('./Starter').then((m) => ({ default: m.StarterPage })));
 const DatasetEditorPage = lazy(() => import('./DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
 
 /** The data tiers: every format the app page draws as a value rather than a document. */
@@ -48,7 +46,6 @@ interface ArtifactAnswer {
 }
 
 const isData = (answer: ArtifactAnswer | null | undefined) => !!answer?.surface && (DATA_FORMATS as readonly string[]).includes(answer.surface.format);
-const isStarter = (answer: ArtifactAnswer | null | undefined) => answer?.surface?.format === 'markup' && answer.surface.starter === true;
 
 export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }): JSX.Element {
   const params = useParams<{ id: string }>();
@@ -60,7 +57,6 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
   if (editing()) {
     // `/edit`: a dataset's address is its editor; every other artifact keeps its one page.
     if (served?.folder) return <FolderPage folder={served.folder} role={served.role} workspace={served.workspace} ownerUsername={served.ownerUsername} />;
-    if (isStarter(served)) return <StarterPage answer={served as unknown as StarterAnswer} />;
     if (isData(served) && served!.surface!.format !== 'dataset') return <ArtifactDataPage answer={served as unknown as DataAnswer} />;
     return <DatasetEditorPage artifactId={id()} />;
   }
@@ -77,7 +73,7 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
   const page = usePageData<ArtifactAnswer>(() => `/api/page/artifact/${id()}`, { seed: () => served, enabled: () => serverAddress() || (format() !== null && !crossing()) });
   const compiledDocument = () => {
     const answer = page.data();
-    return !!answer?.surface && !answer.folder && !isData(answer) && !isStarter(answer);
+    return !!answer?.surface && !answer.folder && !isData(answer) && answer.surface.format === 'html';
   };
   createEffect(() => {
     // A document found by a client navigation: the server's page for it is the compiled one.
@@ -90,7 +86,7 @@ export function ArtifactAddressRoute(props: { id?: string; editing?: boolean }):
         is the not-found page, not a load failure to retry. */}
     <Match when={failure()?.status === 404}><NotFoundPage /></Match>
     <Match when={page.data()?.folder}>{(folder) => <FolderPage folder={folder()} role={page.data()!.role} workspace={page.data()?.workspace} ownerUsername={page.data()?.ownerUsername} />}</Match>
-    <Match when={isStarter(page.data())}><StarterPage answer={page.data() as unknown as StarterAnswer} /></Match>
+
     <Match when={isData(page.data())}><ArtifactDataPage answer={page.data() as unknown as DataAnswer} /></Match>
     <Match when={compiledDocument() && serverAddress()}><NotFoundPage /></Match>
   </Switch>;

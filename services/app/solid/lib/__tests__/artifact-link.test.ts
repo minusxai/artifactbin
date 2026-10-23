@@ -4,7 +4,7 @@ import { artifactLink, isDocumentFormat, knownFormat } from '@/solid/lib/artifac
 
 /** The ONE rule for how an in-app link to an artifact is drawn: a document crosses to the server, everything else stays in the app. */
 describe('artifactLink', () => {
-  it.each(['html','markup'])('lets the server draw a %s document: the router must not intercept its link', (format) => {
+  it.each(['html'])('lets the server draw a %s document: the router must not intercept its link', (format) => {
     expect(artifactLink('/a/doc001', format)).toEqual({ href: '/a/doc001', rel: 'external' });
     expect(artifactLink('/@bob/doc001-hello#edit', format)).toEqual({ href: '/@bob/doc001-hello#edit', rel: 'external' });
   });
@@ -22,8 +22,8 @@ describe('artifactLink', () => {
     expect(artifactLink('/a/x01', 'hologram')).toEqual({ href: '/a/x01' });
   });
 
-  it('recognizes native HTML and markup as framed documents', () => {
-    expect(ARTIFACT_FORMATS.filter(isDocumentFormat)).toEqual(['html','markup']);
+  it('recognizes native HTML as a framed document', () => {
+    expect(ARTIFACT_FORMATS.filter(isDocumentFormat)).toEqual(['html']);
     expect(isDocumentFormat(undefined)).toBe(false);
   });
 });
