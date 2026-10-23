@@ -267,6 +267,9 @@ if (mode === 'plan') {
     testedRun,
     testedPatch,
   });
+  // v3 retains the source/compiler suite and package producer, while the retired
+  // public installer assets have no native/bootstrap/distribution proof to run.
+  if (v3Push) for (const job of ['cli', 'cli-bootstrap', 'reference-compatibility']) plan.jobs[job] = false;
   // The refusal belongs on the PR, where the branch can still bump. Main never reds for it: by then
   // the only honest fix would be another commit on main, which is what the rule exists to prevent.
   const cliBump = env.CI__EVENT === 'pull_request' && cliBumpRequired(paths ?? [], { cliRelease: plan.cliRelease });

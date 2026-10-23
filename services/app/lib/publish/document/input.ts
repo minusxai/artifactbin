@@ -41,7 +41,7 @@ import { publishFile } from '@/lib/datasets/file-store';
  */
 export const isDocumentFormat = (format: string): boolean => format === 'markup';
 
-import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, parseProgramDefinition, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
+import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
 
 import type { SourceRepair } from '@/lib/jsx/repair';
 
@@ -133,14 +133,10 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   if (ctx.creating && body.format === 'folder' && present.length === 0) {
     return { format: 'folder', source: '', meta: {}, derivedTitle: null };
   }
+  if (body.program !== undefined || body.format === 'program') return json({error:'unsupported_format'},400);
   if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image_pdf' }, 400);
   const kind = present[0];
-  if(kind==='program'){
-    try{
-      const definition=parseProgramDefinition(typeof body.program==='string'?body.program:JSON.stringify(body.program));
-      return {format:'program',source:JSON.stringify(definition),meta:{},derivedTitle:null};
-    }catch{return json({error:'invalid_program'},400);}
-  }
+
   if (kind === 'file') {
     if (!ctx.overByteQuota) return json({ error: 'file_not_previewable', details: ['Upload the file with POST /api/artifacts.'] }, 400);
     if (await ctx.overByteQuota()) return json({ error: 'quota_exceeded' }, 403);

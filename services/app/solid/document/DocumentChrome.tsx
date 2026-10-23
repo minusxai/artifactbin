@@ -3,10 +3,10 @@
  * THE DOCUMENT PAGE'S BAR — the app's one bar (solid/components/PageChrome) with what a document adds to it:
  *
  *  - the BYLINE in place of the crumbs: the author's face and `@handle` (their profile), the follow pill, the
- *    document's title (the title editor's slot while editing, `titleHost`), the Join/Joined/Pending pill, and an
+ *    document's title, the Join/Joined/Pending pill, and an
  *    archived version's one fixed line;
- *  - the RAIL beside the star: like and comment (with their counts), fork, install, edit and share — the reader's
- *    own actions only while reading the head (an archived version and an edit session act on nothing here);
+ *  - the RAIL beside the star: like and comment (with their counts), fork, install and share — the reader's
+ *    own actions only while reading the head (archived versions act on nothing here);
  *  - the controls panel ("Artifact controls"), whose rows the page supplies.
  *
  * The document itself is not here: it is the frame under this bar, on its own origin (lib/serving/document-frame).
@@ -24,7 +24,7 @@ import { PageChrome, type Panel } from '../components/PageChrome';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
 import { DocumentTitle } from '../components/PageBar';
-import { DocumentCommentAction, DocumentEditAction } from './DocumentBarActions';
+import { DocumentCommentAction } from './DocumentBarActions';
 import { Avatar } from '../ui/Avatar';
 import { sendReaction } from './reactions';
 
@@ -41,17 +41,12 @@ interface DocumentChromeProps {
   signedIn: Accessor<boolean>;
   comments: Accessor<number>;
   archived?: { version: number; head: number } | null;
-  editing?: Accessor<boolean>;
-  canEdit: boolean;
   canFork: boolean;
   owner: boolean;
   install?: boolean;
   visibility?: Visibility;
   hasInvitedUsers?: boolean;
   membership?: 'join' | 'pending' | 'joined';
-  /** While true, the title is the editor's slot (`titleHost`) rather than text. */
-  titleSlot?: Accessor<boolean>;
-  titleHost?: (element: HTMLElement | null) => void;
   panel: Accessor<Panel>;
   setPanel: (next: Panel) => void;
   mode: Accessor<'light' | 'dark'>;
@@ -59,9 +54,6 @@ interface DocumentChromeProps {
   onComment: () => void;
   onFork: () => void;
   onShare: () => void;
-  onEdit: () => void;
-  /** The Edit control was approached (hover, focus, press): start what editing needs. */
-  onEditIntent?: () => void;
   onMembership: () => void;
   controls: (close: () => void) => JSX.Element;
 }
@@ -76,8 +68,7 @@ function SharingGlyph(props: { visibility: Visibility; invited: boolean }): JSX.
 export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const [like, setLike] = createSignal(props.like);
   const [follow, setFollow] = createSignal(props.follow ?? null);
-  const editing = () => props.editing?.() ?? false;
-  const reading = () => !props.archived && !editing();
+  const reading = () => !props.archived;
   const toLogin = (intent: 'like' | 'follow') => window.location.assign(loginHref(window.location, intent));
 
   const toggleLike = async () => {
@@ -108,10 +99,8 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
       )}</Show>
     </>}</Show>
     <ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" />
-    <Show when={props.titleSlot?.()} fallback={<DocumentTitle title={props.title()} />}>
-      <span class="min-w-0 flex-1" ref={(element) => props.titleHost?.(element)} />
-    </Show>
-    <Show when={!props.archived && !editing() && props.membership}>
+    <DocumentTitle title={props.title()} />
+    <Show when={!props.archived && props.membership}>
       <Button variant="secondary" size="sm" aria-label={membershipLabel()} onClick={() => props.onMembership()}>
         {props.membership === 'joined' ? 'Joined' : props.membership === 'pending' ? 'Pending' : 'Join'}
       </Button>
@@ -137,9 +126,6 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
         <span class="hidden sm:contents"><Tooltip content="Install app"><Button variant="ghost" size="sm" icon href={`${artifactAppPath(props.id)}?install=1`} aria-label="Install app"><Download size={18} stroke-width={1.5} /></Button></Tooltip></span>
       </Show>
     </Show>
-    <Show when={props.canEdit && !props.archived}>
-      <DocumentEditAction editing={editing()} onClick={props.onEdit} onIntent={props.onEditIntent} />
-    </Show>
     <Show when={props.owner && !props.archived}>
       <Tooltip content="Share">
         <Button variant="secondary" size="sm" aria-label="Share" onClick={() => props.onShare()}>
@@ -150,5 +136,5 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   </>;
 
   return <PageChrome label="Artifact controls" title={props.title()} byline={byline} actions={actions} controls={props.controls}
-    panel={props.panel} setPanel={props.setPanel} mode={props.mode} onMode={props.onMode} star={!editing()} />;
+    panel={props.panel} setPanel={props.setPanel} mode={props.mode} onMode={props.onMode} star />;
 }

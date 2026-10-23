@@ -23,7 +23,7 @@ export function partitionFastTests(full, enrolled) {
 export function auditFastSource(source, file) {
   const reasons = [];
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
-  const forbidden = new Set(['fetch', 'WebSocket', 'Worker', 'SharedWorker', 'setTimeout', 'setInterval', 'eval', 'Function']);
+  const forbidden = new Set(['fetch', 'WebSocket', 'Worker', 'SharedWorker', 'setTimeout', 'setInterval', 'eval', 'Function', 'importActual', 'importMock']);
   function visit(node) {
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
       const expression = node.expression;

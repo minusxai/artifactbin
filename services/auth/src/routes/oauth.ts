@@ -1,29 +1,25 @@
 import { renderConnectionPage } from '@artifactbin/utils';
 import { escapeHtml } from '@artifactbin/utils/escape';
-import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, INTERNAL_ARTIFACT_APPROVAL_PATH, ARTIFACT_APPROVAL_PATH} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, INTERNAL_MINT_PATH} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
  * token minting remains app-owned and runs as the consenting session actor.
  */
-import { ANONYMOUS, type Actor, type Upstream } from '@artifactbin/contracts';
+import { ANONYMOUS, type Upstream } from '@artifactbin/contracts';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   authServerMetadata,
   consumeAuthCode,
   createAuthCode,
   isAllowedRedirectUri,
-  isLoopbackRedirectUri,
   isValidCodeChallenge,
-  LOOPBACK_CLIENT_ID,
-  LOOPBACK_CODE_TTL_MS,
   isValidCodeVerifier,
   ARTIFACT_SCOPE,
   type OAuthStore,
   protectedResourceMetadata,
   sameRedirectTarget,
 } from '../identity/oauth';
-import type { DevicePairing } from '../identity/device-pairing';
 import type { AuthApp, SessionStore } from '../parts';
 
 type App = AuthApp;
@@ -48,12 +44,6 @@ function formActionOrigin(redirectUri: string): string {
   try { return new URL(redirectUri).origin; } catch { return ''; }
 }
 
-/** The 400 page for a pairing that can no longer be approved, worded for why. */
-function unavailable(outcome: 'pending' | 'approved' | 'denied' | 'expired'): Response {
-  if (outcome === 'approved') return page('Already approved', '<h1>Already approved</h1><p>This connection was already approved. Return to your agent.</p>', 400);
-  if (outcome === 'denied') return page('Connection denied', '<h1>Connection denied</h1><p>This connection was denied. Ask your agent for a new link if that was a mistake.</p>', 400);
-  return page('Connection expired', '<h1>Connection expired</h1><p>This link is no longer valid. Ask your agent for a fresh link.</p>', 400);
-}
 function page(title: string, body: string, status = 200, redirectUri = ''): Response {
   const formAction = ["'self'", formActionOrigin(redirectUri)].filter(Boolean).join(' ');
   return new Response(
@@ -66,7 +56,6 @@ interface OAuthRoutesOptions {
   sessions: SessionStore;
   admitIdentity?:(identity:{userId:string;email?:string;emailVerified?:boolean})=>Promise<boolean>;
   oauth: OAuthStore;
-  pairing: DevicePairing;
   upstream: Upstream;
   trustedHops: number;
   publicBaseUrl?: string;
@@ -94,41 +83,9 @@ async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId:
   return { id: body.id, token: body.token, expiresIn, has_created_document: body.has_created_document };
 }
 
-/**
- * The CLI connection both CLI doors issue (device approval and the loopback sign-in): its own
- * public client, an API-scoped access token minted for the account, and a rotating refresh grant.
- */
-async function issueCliConnection(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string }): Promise<Record<string, unknown>> {
-  const client = await o.oauth.register({ client_name: 'artifactbin CLI', redirect_uris: ['http://127.0.0.1/callback'] });
-  const clientId = String(client.client_id);
-  const scoped = { ...grant, scope: ARTIFACT_SCOPE };
-  const minted = await mintFor(o, request, scoped);
-  const refreshToken = await o.oauth.issueRefresh({ ...scoped, clientId, accessTokenId: minted.id });
-  return { has_created_document: minted.has_created_document, access_token: minted.token, refresh_token: refreshToken, client_id: clientId, token_type: 'Bearer', expires_in: minted.expiresIn, scope: ARTIFACT_SCOPE };
-}
-
-/** The app remains the sole authority for ownership and per-artifact grants. */
-async function artifactPermission(o: OAuthRoutesOptions, request: Request, actor: Actor, artifactId: string): Promise<{ canApprove?: boolean; canEdit?: boolean; title?: string; approved?: boolean }> {
-  const response = await o.upstream(new Request(new URL(INTERNAL_ARTIFACT_APPROVAL_PATH, request.url), {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ artifactId }),
-  }), actor);
-  return response.ok ? await response.json() : {};
-}
-
-/** Browser approval selects an email account; legacy adoption remains app-owned. */
-async function browserOwner(o: OAuthRoutesOptions, request: Request, actor: Actor): Promise<{ actor: Actor; cookie?: string }> {
-  const response = await o.upstream(new Request(new URL(INTERNAL_ARTIFACT_APPROVAL_PATH, request.url), {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'connect' }),
-  }), actor);
-  if (!response.ok) throw new Error('Could not establish browser ownership');
-  if (actor.credential !== 'session' || !actor.userId) throw new Error('Email account required');
-  const body = await response.json() as { userId?: string };
-  if (body.userId !== actor.userId) throw new Error('Account ownership mismatch');
-  return { actor };
-}
-
 export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
+  // These first-party connection grants are retired; never forward them to an upstream SPA.
+  for(const path of ['/oauth/device','/oauth/device/approve','/oauth/device/token','/api/agent-approvals','/api/agent-approvals/token','/oauth/loopback','/oauth/loopback/token'])app.all(path,c=>c.notFound());
   const base = (request: Request) => baseUrlOf(request, o.trustedHops, o.publicBaseUrl);
   const resource = (request: Request) => `${base(request)}${API_RESOURCE_PATH}`;
   // Direct integrations obtain a bearer from an email-verified session, without device/browser grants.
@@ -151,130 +108,6 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw))));
   app.get('/.well-known/oauth-protected-resource', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
   app.get('/.well-known/oauth-protected-resource/api', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
-
-  app.on('POST', ['/oauth/device', ARTIFACT_APPROVAL_PATH], async (c) => {
-    const artifactRequest = c.req.path === ARTIFACT_APPROVAL_PATH;
-    const body = artifactRequest ? await c.req.json().catch(() => null) : null;
-    const actor = c.get('actor') ?? ANONYMOUS;
-    if (artifactRequest && (!body || typeof body.artifactId !== 'string' || !/^[A-Za-z0-9]{6,12}$/.test(body.artifactId))) return c.json({ error: 'invalid_artifact' }, 400);
-    if (artifactRequest && c.req.header('authorization') && actor.credential !== 'bearer') return c.json({ error: 'unauthorized' }, 401);
-    if (artifactRequest && actor.credential === 'bearer' && (await artifactPermission(o, c.req.raw, actor, body.artifactId)).canEdit) return c.json({ authorized: true });
-    const target = artifactRequest ? { artifactId: body.artifactId as string } : undefined;
-    const pair = await o.pairing.begin(base(c.req.raw), target);
-    const verificationUri = `${base(c.req.raw)}/oauth/device`;
-    return new Response(JSON.stringify({ device_code: pair.deviceCode, user_code: pair.userCode,
-      verification_uri: verificationUri, verification_uri_complete: `${verificationUri}?user_code=${pair.userCode}`,
-      expires_in: pair.expiresIn, interval: pair.interval }), { headers: { 'Content-Type': 'application/json', ...NO_STORE } });
-  });
-  app.get('/oauth/device', async (c) => {
-    const userCode = c.req.query('user_code') ?? '';
-    const pending = await o.pairing.inspect(userCode, base(c.req.raw));
-    if (!pending) return unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
-    const actor = c.get('actor') ?? ANONYMOUS;
-    if (pending.target) {
-      const permission = await artifactPermission(o, c.req.raw, actor, pending.target.artifactId);
-      const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
-      const login = `<form method="GET" action="/login" class="alt"><input type="hidden" name="callbackUrl" value="${escapeHtml(callback)}"><button type="submit">Log in and continue</button></form>`;
-      if (!permission.canApprove) return page('Use the owning browser', `<h1>Open this approval in the browser that created the artifact</h1><p>The artifact link does not grant edit access. Use its owning browser, or log in to the owning account.</p>${login}`, 403);
-      return page('Approve artifact access', `<h1>Connect your agent</h1><p><strong>${escapeHtml(permission.title ?? 'Untitled')}</strong> · ${escapeHtml(pending.target.artifactId)}</p><p>Approve only if your agent displays <strong>${escapeHtml(userCode)}</strong>. This connects the CLI to this browser’s identity, including its existing and future artifacts. It replaces any saved CLI connection to this server.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${escapeHtml(userCode)}"><button type="submit" name="decision" value="approve">Approve access</button><button type="submit" name="decision" value="deny">Deny</button></form>`);
-    }
-    if (actor.credential !== 'session' || !actor.userId) {
-      const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
-      return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${escapeHtml(userCode)}</strong>. Log in with your email account to connect this agent.</p><form method="GET" action="/login"><input type="hidden" name="callbackUrl" value="${escapeHtml(callback)}"><button type="submit">Log in to connect</button></form>`);
-    }
-    return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${escapeHtml(userCode)}</strong>. This gives the CLI access to your artifacts as <strong>${escapeHtml(actor.email ?? 'your account')}</strong>.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${escapeHtml(userCode)}"><button type="submit">Approve connection</button><button type="submit" name="decision" value="deny">Deny connection</button></form>`);
-  });
-  app.post('/oauth/device/approve', async (c) => {
-    if (c.req.header('origin') !== base(c.req.raw)) return c.json({ error: 'invalid_origin' }, 403);
-    const form = await c.req.formData();
-    const userCode = String(form.get('user_code') ?? '');
-    const decision = form.get('decision');
-    const pending = await o.pairing.inspect(userCode, base(c.req.raw));
-    if (!pending) return unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
-    const actor = c.get('actor') ?? ANONYMOUS;
-    if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'email_auth_required' }, 401);
-    if (pending.target) {
-      const owner = c.get('actor') ?? ANONYMOUS;
-      if (!(await artifactPermission(o, c.req.raw, owner, pending.target.artifactId)).canApprove) return page('Approval refused', '<h1>Use the browser that owns this artifact</h1>', 403);
-      if (decision === 'deny') {
-        if (!await o.pairing.deny(userCode, base(c.req.raw))) return unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
-        return page('Access denied', '<h1>No access was granted</h1>');
-      }
-      if (decision !== 'approve') return c.json({ error: 'invalid_decision' }, 400);
-      const connection = await browserOwner(o, c.req.raw, owner);
-      const approved = await o.pairing.approve(userCode, base(c.req.raw), actor.userId, connection.actor);
-      const response = approved ? page('Connection approved', '<h1>Access approved</h1><p>Return to your agent. It can now continue with your artifacts.</p>') : unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
-      if (approved && connection.cookie) response.headers.append('set-cookie', connection.cookie);
-      return response;
-    }
-    if (decision === 'deny') {
-      if (!await o.pairing.deny(userCode, base(c.req.raw))) return unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
-      return page('Connection denied','<h1>Connection denied</h1><p>No access was granted.</p>');
-    }
-    if (decision !== null && decision !== 'approve') return c.json({ error: 'invalid_decision' }, 400);
-    const connection = await browserOwner(o, c.req.raw, actor);
-    if (!await o.pairing.approve(userCode, base(c.req.raw), actor.userId, connection.actor)) return unavailable(await o.pairing.outcome(userCode, base(c.req.raw)));
-    return page('Connection approved', '<h1>Connection approved</h1><p>Return to your terminal. You can close this page.</p>');
-  });
-  app.on('POST', ['/oauth/device/token', `${ARTIFACT_APPROVAL_PATH}/token`], async (c) => {
-    const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...NO_STORE } });
-    const body = await c.req.json().catch(() => null);
-    if (!body || typeof body.device_code !== 'string') return reply({ error: 'invalid_request' }, 400);
-    const result = await o.pairing.consume(body.device_code, base(c.req.raw));
-    if (result.status !== 'approved') return reply({ error: result.status === 'pending' ? 'authorization_pending' : result.status === 'denied' ? 'access_denied' : 'expired_token' }, 400);
-    if (result.target && !result.approvedBy) return reply({ error: 'access_denied' }, 400);
-    try {
-      if (result.target && !(await artifactPermission(o, c.req.raw, result.approvedBy!, result.target.artifactId)).canApprove) return reply({ error: 'access_denied' }, 400);
-      const currentOwner = result.approvedBy ? await browserOwner(o, c.req.raw, result.approvedBy) : null;
-      return reply(await issueCliConnection(o, c.req.raw, { userId: currentOwner?.actor.userId ?? result.userId, resource: resource(c.req.raw) }));
-    } catch {
-      return reply({ error: 'temporarily_unavailable', error_description: 'Run afbin auth to start a new approval.' }, 503);
-    }
-  });
-
-  /*
-   * THE CLI LOOPBACK SIGN-IN (RFC 8252 + PKCE). `afbin auth` on this machine listens on 127.0.0.1 or
-   * [::1] and opens this page; a browser already signed in here is sent straight back to that listener
-   * with a one-minute, single-use code bound to the account, the PKCE challenge and the exact redirect.
-   * No approval click: only a process on the browser's own machine receives the redirect, and only the
-   * holder of the PKCE verifier redeems it. Anything but an IP-literal loopback redirect is refused.
-   * Artifact-scoped consent (`afbin auth <artifact>`) and remote machines keep the device page.
-   */
-  app.get('/oauth/loopback', async (c) => {
-    const q = new URL(c.req.url).searchParams;
-    const redirectUri = q.get('redirect_uri') ?? '';
-    const codeChallenge = q.get('code_challenge') ?? '';
-    const state = q.get('state') ?? '';
-    const problem =
-      !isLoopbackRedirectUri(redirectUri) ? 'This sign-in must return to the afbin command on this computer.'
-      : q.get('code_challenge_method') !== 'S256' || !isValidCodeChallenge(codeChallenge) ? 'Invalid PKCE code challenge.'
-      : !/^[A-Za-z0-9_-]{1,128}$/.test(state) ? 'Invalid state.'
-      : null;
-    if (problem) return page('artifactbin — error', `<h1>Can’t sign in</h1><p class="err">${escapeHtml(problem)}</p><p>Run afbin auth again.</p>`, 400);
-    const actor = c.get('actor') ?? ANONYMOUS;
-    if (actor.credential !== 'session' || !actor.userId) {
-      return new Response(null, { status: 302, headers: { Location: `/login/cli?callbackUrl=${encodeURIComponent(`/oauth/loopback?${q.toString()}`)}`, ...NO_STORE } });
-    }
-    let owner: Actor;
-    try { owner = (await browserOwner(o, c.req.raw, actor)).actor; }
-    catch { return page('artifactbin — error', '<h1>Can’t sign in</h1><p class="err">This browser’s account could not be connected.</p>', 403); }
-    const code = await createAuthCode(o.oauth, { userId: owner.userId!, clientId: LOOPBACK_CLIENT_ID, redirectUri, resource: resource(c.req.raw), scope: ARTIFACT_SCOPE }, codeChallenge, Date.now(), LOOPBACK_CODE_TTL_MS);
-    const target = new URL(redirectUri);
-    target.searchParams.set('code', code);
-    target.searchParams.set('state', state);
-    return new Response(null, { status: 302, headers: { Location: target.href, 'Referrer-Policy': 'no-referrer', ...NO_STORE } });
-  });
-  app.post('/oauth/loopback/token', async (c) => {
-    const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...NO_STORE } });
-    const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
-    if (!body || typeof body.code !== 'string' || typeof body.code_verifier !== 'string' || typeof body.redirect_uri !== 'string'
-      || !isValidCodeVerifier(body.code_verifier) || !isLoopbackRedirectUri(body.redirect_uri)) return reply({ error: 'invalid_request' }, 400);
-    const grant = await consumeAuthCode(o.oauth, { code: body.code, clientId: LOOPBACK_CLIENT_ID, redirectUri: body.redirect_uri, resource: resource(c.req.raw), codeVerifier: body.code_verifier });
-    // consumeAuthCode spends the code first; the redirect must then match exactly, port included.
-    if (!grant?.userId || grant.redirectUri !== body.redirect_uri) return reply({ error: 'invalid_grant', error_description: 'Invalid, expired, or already-used code.' }, 400);
-    try { return reply(await issueCliConnection(o, c.req.raw, { userId: grant.userId, resource: grant.resource })); }
-    catch { return reply({ error: 'temporarily_unavailable', error_description: 'Run afbin auth again.' }, 503); }
-  });
 
   app.options('/oauth/register', () => new Response(null, { status: 204, headers: { ...CORS } }));
   app.post('/oauth/register', async (c) => {

@@ -15,8 +15,7 @@ import { publicCatalogOf } from '@/lib/datasets/catalog';
  *
  * A DOCUMENT is served from its prepared page (lib/publish/prepared/prepared-page.server):
  * the reader payload carries no source, no document graph and no raw
- * stylesheet. An owner or editor fetches the source and the graph on the EDITOR door (`?part=editor`): on idle when
- * the document is small (`surface.sourceLength`), otherwise when edit mode opens.
+ * stylesheet. Authorized API source readback remains separate from the reader.
  *
  * NOR DOES IT CARRY THE DOCUMENT'S NODE TREE: the app page only relays it to the framed document's edit
  * controller (solid/document/create-framed-story), which classifies comments and selections against it. On a large
@@ -52,7 +51,7 @@ import { preparedPageFor, servedPage, type TreelessServedRuntime } from '@/lib/p
 import { codeFingerprint } from '@/lib/publish/prepared/revalidation.server';
 import { etagOf, matchingTag, notModified, revalidationHeaders } from '@/lib/http/revalidation';
 import { captureColor, engineRequested } from '@/lib/mermaid-images/store';
-import { firstHeadingTitle, packDocumentGraph } from '@/lib/document';
+import { firstHeadingTitle } from '@/lib/document';
 import type { ArtifactHeader, ArtifactRow } from '@/lib/artifacts';
 import { type StoryIslandData, THEME_KEY, withReaderMode } from '@/lib/story-runtime/contract';
 import { pagesFrameUrl, pagesOriginFor, type PagesSite } from '../http/pages-origin';
@@ -66,7 +65,7 @@ export interface ArtifactPageAnswer {
   frame?: DocumentFrame;
   /** Which renderer answered a document's page (the page's `x-mx-reader` header): the compiled page, in its frame. */
   reader?: { mode: 'compiled' };
-  /** The validator of a node or editor answer (lib/http/revalidation); with status 304 the body is the reader's own copy. */
+  /** The validator of a node answer (lib/http/revalidation); with status 304 the body is the reader's own copy. */
   etag?: string;
 }
 
@@ -235,31 +234,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   if (at === 'not_found') return notFound();
   const isDoc = artifact.format === 'markup';
 
-  /*
-   * THE EDITOR'S DOOR: what only writing needs — the source, and the document graph the editor addresses its edits
-   * against. Nothing else: the reader payload carries neither, and the editor reads no stylesheet from here (its
-   * compiled sheet is the frame's, its author sheet the source's). The graph travels in its wire form
-   * (lib/document/document-graph-wire): the node keys, not the 20 fields per node the source already says. A graph
-   * that form cannot reproduce exactly, and an explicit `?graph=full`, get the stored graph whole.
-   */
-  if (search.get('part') === 'editor') {
-    if (!isDoc || at || exporting || !canEdit(role)) return notFound();
-    const row = await servedRow(artifact, null);
-    // `?probe=1`: only the admission above (and the 410 servedRow throws for a retired shape), for an editor that was
-    // seeded earlier (solid/editor/ArtifactEditor asks again before it trusts a seed that may have outlived the access).
-    if (search.get('probe') === '1') return { status: 200, body: { editId: artifact.edit_id, version: artifact.version } };
-    // Revalidated like the document itself (lib/http/revalidation), after the access decision above: a tag is never an admission.
-    const etag = partEtag('editor', artifact, role, at, search.get('graph'));
-    const held = matchingTag(request.headers.get('if-none-match'), etag);
-    if (held) return { status: 304, body: null, etag: held };
-    const source = row.source ?? '';
-    const stored = artifact.document?.kind === 'graph' ? artifact.document : null;
-    const packed = stored && search.get('graph') !== 'full' ? packDocumentGraph(stored, source) : null;
-    return { status: 200, etag, body: {
-      editId: artifact.edit_id, version: artifact.version, source,
-      ...(packed ? { graph: packed } : stored ? { document: stored } : {}),
-    } };
-  }
+  // Browser source editing is no longer a document surface. Authoring APIs remain separate.
+  if (search.get('part') === 'editor') return notFound();
 
   /*
    * THE NODES' DOOR: the version's node tree, which the app page relays to the framed document's edit controller to
@@ -269,7 +245,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
    */
   if (search.get('part') === 'nodes') {
     if (!isDoc || exporting) return notFound();
-    const etag = partEtag('nodes', artifact, role, at, null);
+    const etag = nodesEtag(artifact, role, at);
     const held = matchingTag(request.headers.get('if-none-match'), etag);
     if (held) return { status: 304, body: null, etag: held };
     const { row, page } = await preparedPageFor(artifact, at, { nodes: true });
@@ -302,19 +278,13 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // The shell only: the tree is the nodes door's and the compiled page is the document origin's.
   const prepared = isDoc ? await preparedPageFor(artifact, at, {}) : null;
   const row = prepared?.row ?? await servedRow(artifact, at);
-  // Every document the app page serves is the prepared compiled page (§10) — a capture's and the
-  // editor's address included — except the starter placeholder's READ view, whose agent instructions
-  // are app UI (solid/pages/Starter). Its `/edit` opens the editor on the compiled placeholder
-  // (solid/pages/Document), and a capture photographs the placeholder as the document it is.
+  // A starter shows agent instructions until its first real version is published.
   const starterDoc = isDoc && isStartPlaceholder(row.source ?? null, artifact.version);
-  const editAddress = /\/edit\/?$/.test(new URL(request.url).pathname);
 
   const membershipAvailable = !at && prepared?.page.declared?.flow.mutations.some(m => 'import' in m.target) === true;
   const pwaEnabled = !at && artifactPwaEnabled(row);
-  // The app page frames every document it serves — an archived version (`?version=N`, carried in the frame's
-  // first URL) and the writer's `/edit` included — except the starter placeholder's READ view, whose agent
-  // instructions are app UI (solid/pages/Starter). A capture photographs `/raw` itself (lib/export).
-  const framedDocument = !!prepared && !(starterDoc && !editAddress);
+  // Published documents, including archived versions, run in their own frame.
+  const framedDocument = !!prepared && !starterDoc;
   // Only the HTML door draws the frame (and mints its ticket); both doors answer a framed document with its FramedRuntime.
   const framing = !!options.pages && framedDocument;
 
@@ -326,9 +296,8 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   };
   // A CAPTURE may be drawn in either mode (lib/mermaid-images harvests both); a reader sees the author's.
   const capturedColor = exporting ? captureColor(request.url) : null;
-  // The reader's own pick draws the frame (its ground, and the mode its first URL asks for) — never at the writer's
-  // `/edit`, whose preview is the document's own Mode setting, and never for a capture.
-  const readerPick = framing && !exporting && !editAddress ? readerPickOf(request) : null;
+  // Captures use their requested mode; readers keep their own preference.
+  const readerPick = framing && !exporting ? readerPickOf(request) : null;
   const design = resolveStoredStoryDesign(meta.theme, capturedColor ?? meta.colorMode);
   // A document's sheet is its prepared page's; the data tiers keep their stored one.
   const compiledCss = isDoc ? null : meta.compiledCss ?? null;
@@ -432,8 +401,6 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     // for the owner alone left an editor's and a commenter's count at 0
     // forever, on a control they were being shown.
     openAnnotations,
-    // What the editor's door will cost, so the page prefetches it on idle only when it is cheap (solid/pages/Document).
-    ...(isDoc && !at && canEdit(role) ? { sourceLength: (row.source ?? '').length } : {}),
   };
   // Why the head runs without its script (prepared-page.server authorScriptErrors), for someone who can republish it
   // (solid/document/ScriptFailureNotice). A reader has the framed document's own notice and never the builder's words.
@@ -479,7 +446,7 @@ async function membershipOf(actor: AccessActor, id: string, admitted: boolean): 
  * Every role reads a markup document in the frame the HTML door draws (solid/pages/Document adopts it);
  * nothing renders a document from this answer. A client navigation to an address of unknown kind asks `?part=kind`
  * first and crosses to the server for a document without reading this answer (solid/pages/ArtifactAddress
- * `replaceDocument`), the writer's editor reads `?part=editor`, the framed document's edit controller reads
+ * `replaceDocument`), the framed document's selection controller reads
  * `?part=nodes`, and a dataset reader re-reads its catalog. So a framed document's answer carries the same
  * `FramedRuntime` as the HTML door's (the title and declared dataflow, nothing the frame draws from): measured at
  * 211 KB on a large document, of which the sheet, system sheet and author script were 209 KB that nothing here
@@ -493,9 +460,9 @@ export async function artifactPageResponse(request: Request, id: string): Promis
 }
 
 /**
- * The validator of a node or editor answer: what determines the bytes is the version and edit it reads, the role that was
+ * The validator of a node answer: what determines the bytes is the version and edit it reads, the role that was
  * admitted to it, and the code that prepares a page (a deploy that changes how nodes are made changes the tag).
  */
-function partEtag(part: 'nodes' | 'editor', artifact: ArtifactRow, role: string, at: { version: number } | null, graph: string | null): string {
-  return etagOf({ part, id: artifact.id, version: artifact.version, edit: artifact.edit_id, updated: artifact.updated_at, stored: artifact.document?.kind ?? null, graph, role, at: at?.version ?? null, code: codeFingerprint() });
+function nodesEtag(artifact: ArtifactRow, role: string, at: { version: number } | null): string {
+  return etagOf({ part: 'nodes', id: artifact.id, version: artifact.version, edit: artifact.edit_id, updated: artifact.updated_at, stored: artifact.document?.kind ?? null, role, at: at?.version ?? null, code: codeFingerprint() });
 }

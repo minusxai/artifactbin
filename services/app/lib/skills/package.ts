@@ -1,10 +1,11 @@
 /** Public HTTP skill folder. References are shared with CLI teaching;
  * templates select HTTP procedures while the CLI compiler selects CLI procedures.
  * Assets are explicit: request input never selects a path or ZIP member. */
+import {isPublicSkillTopic} from './public-surface';
 import {renderTree,skillFileWithFrontmatter} from './serve';
 import type {SkillTree} from './tree';
 export function skillPackageFiles(tree:SkillTree,base:string):Record<string,string>{
- return Object.fromEntries(renderTree(tree,base,'http').map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]));
+ return Object.fromEntries(renderTree(tree,base,'http').filter(({file})=>!file.ref||isPublicSkillTopic(file.file.replace(/\.md$/,''))).map(({file,text})=>[file.path.replace(/^artifactbin\//,''),skillFileWithFrontmatter(file,text)]));
 }
 /** Minimal stored ZIP: standard UTF-8 members, deterministic timestamps and CRC32.
  * The skill is small text; compression and filesystem traversal are unnecessary. */

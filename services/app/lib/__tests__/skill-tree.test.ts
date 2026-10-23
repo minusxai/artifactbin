@@ -261,12 +261,10 @@ describe('the real tree (skills/) keeps its shape and its reading budget', () =>
     for (const t of STORY_THEMES) expect(tree.get(`artifactbin/references/themes-${t.name}.md`)).toBeUndefined();
     for (const t of STORY_TEMPLATES) expect(tree.get(`artifactbin/references/templates-${t.name}.md`)?.name).toBe(`templates-${t.name}`);
   });
-  it('selects installed CLI or HTTP without prompting an unnecessary installation, and preserves the returned fence',()=>{
+  it('uses HTTP without an installation decision and preserves the returned identity',()=>{
     const brief=buildQuickSheet(BASE);
-    expect(brief).toContain('Runnable afbin CLI installed?');
-    expect(brief).toContain('No / uncertain: use HTTP');
-    expect(brief).toContain('try setup once if agreed');
-    expect(brief).not.toContain('CLI chosen and');
+    expect(brief).toContain('Use the authenticated HTTP API');
+    expect(brief).not.toContain('@afbin/cli');
     for(const text of [brief,render(tree.get('artifactbin/references/publishing.md')!)]){
       expect(text).toContain('exactly the identity fields returned');
       expect(text).toContain('never add `version`');

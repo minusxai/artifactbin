@@ -4,23 +4,19 @@
  * Loaded on demand (see LazyCommentField) so readers who never compose a comment
  * never download ProseMirror; CommentMarkdown.tsx keeps the read-only rendering.
  */
-import { children as resolveChildren, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { children as resolveChildren, createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import Bold from 'lucide-solid/icons/bold';
-import ArrowUpRight from 'lucide-solid/icons/arrow-up-right';
 import Code from 'lucide-solid/icons/code';
 import Italic from 'lucide-solid/icons/italic';
 import Link2 from 'lucide-solid/icons/link-2';
 import List from 'lucide-solid/icons/list';
 import type { MdMarker } from '@/lib/annotations/markdown-lite';
-import { commentDocument, mountCommentEditor, type MentionQuery } from './comment-editor';
+import { mountCommentEditor, type MentionQuery } from './comment-editor';
 import type { ArtifactBackend } from '@/lib/artifact-backend/types';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
 import { Tooltip } from '../ui/Tooltip';
-import { remoteMention } from '@/lib/annotations/remote-reply';
-import { agentNameColor } from '../lib/agent-identity';
-import type { RemoteSessionInfo } from '../../../contracts/src/remote';
-import { canTagAgent, CommentMentionPicker, type MentionKeyboard } from './CommentMentionPicker';
+import { CommentMentionPicker, type MentionKeyboard } from './CommentMentionPicker';
 import { AttachImageButton, CommentImageDraftView, createImageDropTarget, ImageDropTarget, type CommentImageDraft } from './CommentImageAttach';
 
 /** ⌘B / ⌘I / ⌘E — the three every editor binds, and nothing beyond them. */
@@ -43,10 +39,9 @@ export interface CommentMarkdownFieldProps {
   rows?: number;
   autoFocus?: boolean;
   class?: string;
-  /** Mentions look people and agents up here; without it `@` is just a character. */
+  /** Mentions look people up here; without it `@` is just a character. */
   backend?: ArtifactBackend;
   artifactId?: string;
-  quickAgents?: boolean;
   /** Overrides the empty field's hint. */
   placeholder?: string;
   /** Anything ABOVE the toolbar — the composer's breadcrumb, which says what is being commented on. */
@@ -62,45 +57,18 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
   let mount!: HTMLDivElement;
   let editor: ReturnType<typeof mountCommentEditor> | undefined;
   let keyboard: MentionKeyboard | null = null;
-  const [agents,setAgents] = createSignal<RemoteSessionInfo[]>([]);
-  const [agentsLoad,setAgentsLoad] = createSignal<'loading'|'ready'|'error'>('loading');
-  let agentsAbort: AbortController | undefined;
-  const loadAgents = () => {
-    if (!props.backend) return;
-    agentsAbort?.abort();
-    const abort = agentsAbort = new AbortController();
-    setAgentsLoad('loading');
-    void props.backend.remoteSessions({signal:abort.signal}).then(answer=>{
-      if(abort.signal.aborted)return;
-      setAgents((answer.sessions??[]).filter(canTagAgent));
-      setAgentsLoad('ready');
-    }).catch(()=>{if(!abort.signal.aborted)setAgentsLoad('error');});
-  };
-  const untaggedAgents = createMemo(() => {
-    const tagged = new Set<string>();
-    commentDocument(props.value).descendants(node => {
-      if (node.type.name === 'mention') tagged.add(String(node.attrs.href));
-    });
-    return agents().filter(agent => !tagged.has(`/chat?session=${agent.id}`));
-  });
   const insertMention = (text: string) => {
     if (!editor) return;
     const range = mention() ?? {...editor.view.state.selection, from: editor.view.state.selection.from, to: editor.view.state.selection.to, query: ''};
     setMention(null);
     editor.mention(range, text);
   };
-  const showAgents = () => {
-    if (!editor) return;
-    const {from,to} = editor.view.state.selection;
-    editor.view.focus();
-    setMention({from,to,query:''});
-  };
   const [mention,setMention] = createSignal<MentionQuery|null>(null);
   const [linkOpen,setLinkOpen] = createSignal(false), [href,setHref] = createSignal('https://');
-  const canMention = () => !props.backend || !(props.backend.unavailable('remoteSessions') && props.backend.unavailable('mentions'));
+  const canMention = () => !!props.backend && !!props.artifactId && !props.backend.unavailable('mentions');
   const apply = (marker:MdMarker) => { if(marker==='link'){setLinkOpen(value=>!value);return;} editor?.format(marker); };
   onMount(() => {
-    const placeholder = props.placeholder ?? (canMention() ? 'Protip: Use @ to tag friends or agents' : 'Write a comment ...');
+    const placeholder = props.placeholder ?? (canMention() ? 'Protip: Use @ to mention people' : 'Write a comment ...');
     editor=mountCommentEditor(mount,{value:()=>props.value,label:props.label,placeholder,onChange:props.onChange,
       onMention:query=>setMention(canMention()&&props.backend?query:null),
       onKey:event=>{
@@ -115,10 +83,6 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
         event.preventDefault();apply(marker);return true;
       }});
     if(props.autoFocus)editor.view.focus();
-    if (props.quickAgents && props.backend && !props.backend.unavailable('remoteSessions')) {
-      loadAgents();
-      onCleanup(()=>agentsAbort?.abort());
-    }
   });
   createEffect(()=>{const value=props.value;editor?.sync(value);});
   onCleanup(()=>editor?.destroy());
@@ -137,19 +101,5 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
     <Show when={linkOpen()}><div class="mb-2 flex gap-2"><Input size="sm" aria-label="Link URL" value={href()} onInput={event=>setHref(event.currentTarget.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();if(editor?.link(href()))setLinkOpen(false);}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setLinkOpen(false);editor?.view.focus();}}} class="flex-1"/><Button type="button" variant="secondary" size="sm" onClick={()=>{if(editor?.link(href()))setLinkOpen(false);}}>Apply link</Button></div></Show>
     <div ref={mount} style={{'--comment-min-height':`${Math.max(props.rows??3,2)*1.5+1.5}rem`}} />
     <Show when={mention()&&props.backend}><CommentMentionPicker backend={props.backend!} artifactId={props.artifactId} query={mention()!.query} onSelect={insertMention} onReady={handle=>{keyboard=handle;}}/></Show>
-    <Show when={props.quickAgents && canMention()}>
-      <div class="comment-agents" role="group" aria-label="Tag agent">
-        <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-        <Show when={untaggedAgents().length}><span>Tag agent</span></Show>
-        <For each={untaggedAgents().slice(0,2)}>{agent=><Button type="button" variant="ghost" size="sm" aria-label={`Tag ${agent.name}`} onMouseDown={event=>event.preventDefault()} onClick={()=>insertMention(remoteMention(agent))}><span aria-hidden="true" class="text-micro" style={{color:agentNameColor(agent.name)}}>●</span> {agent.name}</Button>}</For>
-        <Show when={untaggedAgents().length>2}><Button type="button" variant="link" aria-expanded={!!mention()} onMouseDown={event=>event.preventDefault()} onClick={showAgents}>+{untaggedAgents().length-2} {untaggedAgents().length===3?'other':'others'}</Button></Show>
-        <Show when={agentsLoad()==='loading'}><span role="status">Loading agents…</span></Show>
-        <Show when={agentsLoad()==='error'}><span role="alert">Could not load agents.</span><Button type="button" variant="link" aria-label="Retry loading agents" onClick={loadAgents}>Retry</Button></Show>
-        <Show when={agentsLoad()==='ready' && !agents().length}><span>No agents available</span></Show>
-        <Show when={agents().length && !untaggedAgents().length}><span>All agents tagged</span></Show>
-        </div>
-        <a class="comment-agents-manage" aria-label={agents().length ? 'Manage agents' : 'Add agent'} href="/chat" target="_blank" rel="noopener noreferrer">{agents().length ? 'Manage' : 'Add agent'}<ArrowUpRight size={12} aria-hidden="true" /></a>
-      </div>
-    </Show>
   </div>;
 }

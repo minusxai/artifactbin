@@ -4,7 +4,7 @@ import { escapeHtml } from '@artifactbin/utils/escape';
 import { AGENT_HELP_TITLE, type AgentDiscovery } from '../platform/agent-discovery';
 export { AGENT_HELP_TITLE, agentDiscovery, type AgentDiscovery } from '../platform/agent-discovery';
 export function agentDiscoveryHead(help:AgentDiscovery):string{
- return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="agents" content="${escapeHtml(help.instruction)}"><meta name="cli" content="${escapeHtml(help.cliInstruction)}">`;
+ return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="agents" content="${escapeHtml(help.instruction)}">`;
 }
 /** Readable startup help, replaced when the app mounts. Padding keeps it below
  * the app bar and behind a server-drawn document frame during startup. */
@@ -13,7 +13,7 @@ export function agentDiscoveryBody(help:AgentDiscovery):string{
 }
 /** The pointer again, as the page's last line: what a tail-keeping reader sees. */
 export function agentDiscoveryTail(help:AgentDiscovery):string{
- return `<!-- ${AGENT_HELP_TITLE}: ${escapeHtml(help.url)}. ${escapeHtml(help.instruction)} ${escapeHtml(help.cliInstruction)} -->`;
+ return `<!-- ${AGENT_HELP_TITLE}: ${escapeHtml(help.url)}. ${escapeHtml(help.instruction)} -->`;
 }
 /** Inserted before the FINAL `</body>`; an author's own `</body>` text never wins. */
 export function withAgentDiscoveryTail(html:string,help:AgentDiscovery):string{

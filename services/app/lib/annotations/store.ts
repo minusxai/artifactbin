@@ -6,7 +6,6 @@ import {commentMentions} from './saved-mentions';
 import {MembershipError} from '@/lib/artifacts';
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '../../../contracts/src/comment-image';
-import {remoteAgents,type ReviewReceipt} from '../remote/agents';
 import type {RemoteWork,RemoteColor} from '../../../contracts/src/remote';
 import { type AnnotationAuthor, type AnnotationCommentWire, annotationsChannel, canGovern } from '@artifactbin/contracts';
 import {completeMutationReceipt,type MutationReceipt} from '@/lib/artifacts';
@@ -364,7 +363,6 @@ export async function createAnnotationFor(
     const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
     await recordEvent(tx,actorSubject(actor),'annotated',{kind:'artifact',id:artifactId},{annotation_id:id,agent:author.kind==='agent'});
     await commentMentions(tx,row,actor,input.body,id);
-    await remoteAgents.enqueue(tx,actor.userId,artifactId,id,{id,body:input.body,author});
     await notify(tx, artifactId, id);
     const [wire] = await wireFor(tx, row, inserted.rows);
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:201,body:wire as unknown as Record<string,unknown>});
@@ -400,12 +398,11 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
   if (roots.length === 0) return [];
   const source = head.source !== undefined ? head.source ?? '' : await sourceOf(db, head.id);
   const rootIds = roots.map((root) => root.id);
-  // Three statements however many threads: the selected roots' replies, their remote work, the artifact's images.
+  // Batch replies and images across the selected roots.
   const replies = await db.query<AnnotationRowDb>(
     `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id = $1 AND root_id = ANY($2::text[]) AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
     [head.id, rootIds],
   );
-  const work = await remoteAgents.workFor(db, head.id, rootIds);
   const images = await commentImagesFor(db, head.id);
   const byRoot = new Map<string, AnnotationRowDb[]>();
   for (const r of replies.rows) {
@@ -439,7 +436,6 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
       quote: root.quote,
       range,
       quote_found: quoteFound(anchored ? found : undefined, root.quote, range),
-      remote_work: work.get(root.id) ?? [],
       thread: [commentWire(root, images), ...(byRoot.get(root.id) ?? []).map((reply) => commentWire(reply, images))],
       created_at: root.created_at,
       resolved_at: root.resolved_at,
@@ -463,7 +459,6 @@ export async function listAnnotationPageFor(actor: AccessActor, artifactId: stri
       AND ($2::text='all' OR status=$2) AND ($3::bigint IS NULL OR seq>$3)
       AND ($5::text IS NULL OR author_user_id=$5 OR author_token_id=$5)
       ORDER BY seq LIMIT $4`, [artifactId, opts.status, opts.after ?? null, opts.limit + 1,opts.author??null]);
-  await remoteAgents.refreshWorkStatus(artifactId);
   const selected = roots.rows.slice(0, opts.limit);
   return {annotations: await wireFor(db, row, selected),
     ...(roots.rows.length > opts.limit ? {next: String(selected.at(-1)!.seq)} : {})};
@@ -497,7 +492,6 @@ export async function annotationsWireForRow(
     `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id = $1 AND root_id IS NULL ${filter} AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
     [row.id],
   );
-  await remoteAgents.refreshWorkStatus(row.id);
   return wireFor(db, row, roots.rows);
 }
 
@@ -513,7 +507,6 @@ export async function actOnAnnotationFor(
   action: AnnotationAction,
   author: AnnotationAuthor,
   receipt?:MutationReceipt,
-  review?:ReviewReceipt,
 ): Promise<AnnotationWire | null> {
   const db = await getDb();
   const scope = annotationScope(actor);
@@ -539,7 +532,6 @@ export async function actOnAnnotationFor(
     if (!root) return null;
     if(action.expectedRevision!==undefined&&root.revision!==action.expectedRevision)throw new AnnotationRevisionError(root.revision);
 
-    const remote=review?await remoteAgents.receipt(tx,actor.userId,artifactId,annotationId,review,!!action.resolve):undefined;
     const replyId='ann_'+generateInternalId();
     const replied = typeof action.reply === 'string' && action.reply.length > 0;
     if (replied) {
@@ -553,11 +545,10 @@ export async function actOnAnnotationFor(
         `INSERT INTO annotations
            (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet, author_remote)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'open', '', $10)`,
-        [replyId, artifactId, root.id, action.reply, remote?'agent':author.kind, actor.tokenId, actor.userId, remote?.label??author.label, author.transport,remote?JSON.stringify({sessionId:remote.sessionId,color:remote.color,harness:remote.harness}):null],
+        [replyId, artifactId, root.id, action.reply, author.kind, actor.tokenId, actor.userId, author.label, author.transport,null],
       );
     }
     if(replied)await commentMentions(tx,row,actor,action.reply!,replyId);
-    if(replied)await remoteAgents.enqueue(tx,actor.userId,artifactId,root.id,{id:replyId,body:action.reply!,author});
     let resolved = false;
     if (action.reopen && root.status === 'resolved') {
       await tx.query("UPDATE annotations SET status = 'open', resolved_at = NULL WHERE id = $1", [root.id]);
@@ -567,7 +558,7 @@ export async function actOnAnnotationFor(
     }
     if(replied || resolved || (action.reopen && root.status==='resolved')){
       await tx.query('UPDATE annotations SET revision=revision+1 WHERE id=$1',[root.id]);
-      await recordEvent(tx,actorSubject(actor),replied?'annotated':resolved?'annotation_resolved':'annotation_reopened',{kind:'artifact',id:artifactId},{annotation_id:root.id,...(replied?{reply_id:replyId,resolved}:{}),agent:!!remote||author.kind==='agent'});
+      await recordEvent(tx,actorSubject(actor),replied?'annotated':resolved?'annotation_resolved':'annotation_reopened',{kind:'artifact',id:artifactId},{annotation_id:root.id,...(replied?{reply_id:replyId,resolved}:{}),agent:author.kind==='agent'});
     }
     const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);
     // A vanished row stays the null: wrapping it in the result object would
@@ -647,8 +638,6 @@ export async function editAnnotationCommentFor(
         annotation_id: root.id, ...(comment.id !== root.id ? { reply_id: comment.id } : {}), agent: comment.author_kind === 'agent',
       });
       await commentMentions(tx, row, actor, edit.body, comment.id, comment.body);
-      await remoteAgents.enqueue(tx, actor.userId, artifactId, root.id,
-        { id: comment.id, body: edit.body, author: { kind: comment.author_kind, label: comment.author_label } }, comment.body);
       await notify(tx, artifactId, root.id);
     }
     const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);

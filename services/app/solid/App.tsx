@@ -2,7 +2,7 @@
 /** The Solid app: every route below, every artifact address included. */
 import { createEffect, createSignal, ErrorBoundary, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Navigate, Route, Router, type RouteSectionProps } from '@solidjs/router';
-import { useParams, useLocation } from '@solidjs/router';
+import { useLocation } from '@solidjs/router';
 import { SessionProvider } from './lib/session';
 import { usePageIntentPreload } from './lib/use-page-data';
 import { ChromeVisibilityContext, PageChrome } from './components/PageChrome';
@@ -31,10 +31,6 @@ const ArtifactAddressRoute = lazy(() => import('./pages/ArtifactAddress').then((
 const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
 const DatasetEditorPage = lazy(() => import('./pages/DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
 const FileUploadPage = lazy(() => import('./pages/FileUpload').then((m) => ({ default: m.FileUploadPage })));
-const SchedulesPage = lazy(() => import('./pages/Schedules').then(m => ({default:m.SchedulesRoute})));
-const ProgramPage = lazy(() => import('./pages/Program').then(m => ({default:m.ProgramPage})));
-const ProgramEditPage = () => { const params=useParams<{id:string}>(); return <ProgramPage artifactId={params.id}/>; };
-const ChatPage = lazy(() => import('./pages/Chat').then((m) => ({ default: m.ChatPage })));
 const DocumentPage = lazy(() => import('./pages/Document').then((m) => ({ default: m.DocumentPage })));
 /**
  * The component gallery (`/dev/ui`), development builds only. The DEV test must sit HERE, around the dynamic
@@ -55,7 +51,7 @@ function IntentPreload(): JSX.Element {
 
 function Root(props: RouteSectionProps): JSX.Element {
   const location = useLocation();
-  const workspaceRoute = () => ['/groups', '/assets', '/trash', '/schedules', '/chat', '/notifications', '/account', '/docs-human', '/getting-started', '/datasets/new', '/files/new', '/programs/new'].includes(location.pathname);
+  const workspaceRoute = () => ['/groups', '/assets', '/trash', '/notifications', '/account', '/docs-human', '/getting-started', '/datasets/new', '/files/new'].includes(location.pathname);
   const servedDocument = !!servedDocumentFrame();
   const documentRoute = () => servedDocument && (/^\/a\/[^/]+(?:\/(?:edit|app))?\/?$/.test(location.pathname) || /^\/@[^/]+\/[^/]+(?:\/edit)?\/?$/.test(location.pathname));
   const [showChrome, setShowChrome] = createSignal(true);
@@ -102,7 +98,7 @@ function LoginRoute(): JSX.Element {
  const location = useLocation();
  return <Show when={location.pathname + location.search} keyed>{address => {
   const url = new URL(address, window.location.origin);
-  return <LoginPage callbackUrl={url.searchParams.get('callbackUrl')} cliLogin={url.pathname === '/login/cli'}/>;
+  return <LoginPage callbackUrl={url.searchParams.get('callbackUrl')}/>;
  }}</Show>;
 }
 
@@ -119,12 +115,7 @@ export function App(): JSX.Element {
       <Route path="/datasets/new" component={DatasetEditorPage} />
       <Route path="/files/new" component={FileUploadPage} />
       <Route path="/a/:id/edit" component={ArtifactEditRoute} />
-      <Route path="/schedules" component={SchedulesPage} />
-      <Route path="/programs/new" component={ProgramPage} />
-      <Route path="/programs/:id/edit" component={ProgramEditPage} />
-      <Route path="/chat" component={ChatPage} />
       <Route path="/login" component={LoginRoute} />
-      <Route path="/login/cli" component={LoginRoute} />
       <Route path="/connect" component={ConnectPage} />
       <Route path="/start" component={StartPage} />
       <Route path="/welcome" component={WelcomePage} />

@@ -961,7 +961,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
               </div>
             </Show>
             <CommentMarkdownField backend={backend} artifactId={props.id}
-              label="Annotation comment" quickAgents image={composerImage} busy={busy()}
+              label="Annotation comment" image={composerImage} busy={busy()}
               value={draft()} onChange={setDraft} onSubmit={submitDraft}
 
               rows={2} autoFocus={!capture.busy()}>

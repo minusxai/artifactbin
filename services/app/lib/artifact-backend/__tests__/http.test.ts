@@ -28,7 +28,7 @@ describe('createHttpBackend', () => {
 
   it('is online and offers every feature', () => {
     expect(backend.mode).toBe('online');
-    for (const feature of ['runQueries', 'webAssets', 'versions', 'mentions', 'commentImages', 'remoteSessions', 'live'] as const)
+    for (const feature of ['runQueries', 'webAssets', 'versions', 'mentions', 'commentImages', 'live'] as const)
       expect(backend.unavailable(feature)).toBeNull();
   });
 
@@ -270,22 +270,6 @@ describe('createHttpBackend', () => {
     expect(calls[0]!.init).toEqual({ signal });
     stubFetch(json({}, 401));
     await expect(backend.members('x')).resolves.toBeNull();
-  });
-
-  it('lists and removes agent sessions', async () => {
-    const signal = new AbortController().signal;
-    const calls = stubFetch(json({ sessions: [{ id: 's1' }] }));
-    await expect(backend.remoteSessions({ signal })).resolves.toEqual({ sessions: [{ id: 's1' }] });
-    expect(calls[0]).toEqual({ url: '/api/remote/sessions', init: { credentials: 'same-origin', signal } });
-    stubFetch(json({}, 401));
-    await expect(backend.remoteSessions()).rejects.toThrow('Could not load agents (401)');
-    const del = stubFetch(new Response(null, { status: 204 }));
-    await backend.deleteRemoteSession('s1');
-    expect(del[0]).toEqual({ url: '/api/remote/sessions/s1', init: { method: 'DELETE', credentials: 'same-origin' } });
-    stubFetch(json({ error: 'not yours' }, 403));
-    await expect(backend.deleteRemoteSession('s1')).rejects.toThrow('not yours');
-    stubFetch(() => new Response('x', { status: 500 }));
-    await expect(backend.deleteRemoteSession('s1')).rejects.toThrow('Could not remove agent. Try again.');
   });
 
   it('hands the runtime the authenticated transport', async () => {

@@ -6,9 +6,6 @@
  * down, so artifacts never reaches the annotation store or the remote agents.
  */
 import { MembershipError } from '@/lib/artifacts';
-import { RemoteError } from '../remote/registry';
-import type { ReviewReceipt } from '../remote/agents';
-import { notifyRemoteComment } from '../remote/mentions';
 import type { MutationReceipt } from '@/lib/artifacts';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '../accounts';
@@ -76,16 +73,14 @@ export async function respondToAnnotationAction(
   id: string,
   annId: string,
   receipt?:MutationReceipt,
-  review?:ReviewReceipt,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
   const action = parseAnnotationAction(body);
   if (!action) return json({ error: 'invalid_annotation_action' }, 400);
   let wire;
-  try{wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt,review);}
-  catch(error){if(error instanceof AnnotationAttachmentError)return error.reason==='stale'?json({error:'stale',message:error.message,edit_id:error.head},409):json({error:'invalid_attachment',message:error.message},400);if(error instanceof AnnotationRevisionError)return json({error:'annotation_conflict',current_revision:error.revision,hint:'Read the current conversation before retrying; no reply or state change was applied.'},409);if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
+  try{wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt);}
+  catch(error){if(error instanceof AnnotationAttachmentError)return error.reason==='stale'?json({error:'stale',message:error.message,edit_id:error.head},409):json({error:'invalid_attachment',message:error.message},400);if(error instanceof AnnotationRevisionError)return json({error:'annotation_conflict',current_revision:error.revision,hint:'Read the current conversation before retrying; no reply or state change was applied.'},409);if(error instanceof MembershipError)return json({error:'mention_refused',detail:error.message},error.status);throw error;}
   if (!wire) return json({ error: 'not_found' }, 404);
-  if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);
 }
 
@@ -124,6 +119,5 @@ export async function respondToAnnotationEdit(
   }
   if (!result) return json({ error: 'not_found' }, 404);
   // Sessions the edit newly mentions hear about it once it has committed; an unchanged text tells no one.
-  if (result.previous !== null) notifyRemoteComment(actor.userId, id, result.wire.id, result.comment, undefined, result.previous);
   return json(result.wire);
 }

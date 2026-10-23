@@ -18,8 +18,8 @@ const SOLID_TESTS = 'services/app/solid/**/__tests__/**/*.test.{ts,tsx}';
 // scripts and eval harnesses; UI uses jsdom; Islands is the Solid half of the reader (jsdom,
 // vite-plugin-solid). The CLI has its own Node test runner.
 /**
- * Tests that spawn a real server or installer process (`tsx server.ts`, the dev runner, the shell
- * installer under a pty): 35s, 28s, 16s and 13s in CI, more than every other file in their shards.
+ * Tests that spawn a real server process (`tsx server.ts` or the dev runner) keep
+ * their service setup and process lifetime out of the module-local projects.
  * They run in `integration` — once, in CI's `integration` job — instead of in every affected
  * `npm test` and in the api/node shards. Excluded from api and node so each runs exactly once.
  */
@@ -27,7 +27,6 @@ const SERVER_BOOT_TESTS = [
   'services/app/__tests__/dev-app.test.ts',
   'services/app/__tests__/boot-env.test.ts',
   'scripts/__tests__/app-only-auth.test.mjs',
-  'scripts/__tests__/cli-install.test.mjs',
 ];
 
 const API_INCLUDE = ['services/app/__tests__/**/*.test.{ts,tsx}', 'services/app/server/**/__tests__/**/*.test.ts'];

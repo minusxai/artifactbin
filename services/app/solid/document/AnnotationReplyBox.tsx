@@ -72,7 +72,7 @@ export function AnnotationReplyBox(props: AnnotationReplyBoxProps): JSX.Element 
   };
   return <>
     <CommentMarkdownField backend={props.backend} artifactId={props.artifactId}
-      label="Reply to annotation" quickAgents placeholder={props.placeholder} image={image} busy={props.busy || sending()}
+      label="Reply to annotation" placeholder={props.placeholder} image={image} busy={props.busy || sending()}
       value={props.value} onChange={props.onChange} onSubmit={() => void send()}
       rows={props.rows ?? 3} autoFocus={props.autoFocus} />
     <Show when={error()}><p role="alert" class="text-xs text-danger">{error()}</p></Show>

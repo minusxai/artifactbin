@@ -20,7 +20,7 @@ describe('fast test capability boundary', () => {
 });
 
 describe('ambient capability audit', () => {
-  it.each(['fetch("https://example.test")', 'globalThis.fetch("https://example.test")', 'new Worker("worker.js")', 'setTimeout(() => {}, 5000)', 'import(moduleName)', 'require(moduleName)', 'globalThis[capability]()'])('rejects %s', source => {
+  it.each(['fetch("https://example.test")', 'globalThis.fetch("https://example.test")', 'new Worker("worker.js")', 'setTimeout(() => {}, 5000)', 'import(moduleName)', 'require(moduleName)', 'globalThis[capability]()', 'vi.importActual("service")', 'vi.importMock("service")'])('rejects %s', source => {
     expect(auditFastSource(source, 'transitive.ts')).not.toEqual([]);
   });
   it('allows comments, string fixtures and literal module imports', () => {

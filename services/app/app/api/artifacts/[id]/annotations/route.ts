@@ -18,7 +18,6 @@ import {decodePage, encodeCursor} from '@/lib/http';
 import { type AccessActor, withTokenAuth } from '@/lib/accounts';
 import { capabilityGuard } from '@/lib/artifacts';
 import { annotationAuthorForRequest } from '@/lib/annotations';
-import { notifyRemoteComment } from '@/lib/remote/mentions';
 import { json, readJson } from '@/lib/http';
 
 const STATUSES = new Set(['open', 'resolved', 'all']);
@@ -69,7 +68,6 @@ export const POST = withTokenAuth(async (request, { actor, params, clientHarness
   if (made instanceof Response) return made;
   if (!made) return json({error: 'not_found'}, 404);
   if ('refused' in made) return json({error: made.refused, hint: 'Read the current document again, then anchor with a --quote that appears exactly once, or with the node id from its stored markup as --node.'}, made.refused === 'stale' ? 409 : 400);
-  notifyRemoteComment(actor.userId, params.id, made.id, made.thread[0]);
   return json(made, 201);
   };
   if(!key)return work();
