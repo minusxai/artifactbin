@@ -1,4 +1,5 @@
 import {htmlAssetLinks} from '@/lib/html-page';
+import {trackEvent} from '@/lib/platform/analytics';
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
 import {htmlBackendNames,htmlPageDeclarations} from '@/lib/html-page';
 import {authorizeDatasetBinding} from '@/lib/dataset-graphql';
@@ -237,6 +238,8 @@ export async function replaceArtifactWithBody(
   if (row instanceof Response) return row;
   if (isVersionConflict(row)) return json({ error: row.reason ?? 'version_conflict', currentVersion: row.currentVersion, ...(row.currentState ? {currentState:row.currentState} : {}) }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
+
+  if(row.format==='html')void trackEvent('edit',row.id,{userId:actor.userId??null});
 
   // Dataset/viz refresh: warn about dependents whose bindings no longer
   // resolve (warnings, never blocks).

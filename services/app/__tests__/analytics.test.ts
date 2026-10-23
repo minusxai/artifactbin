@@ -1,5 +1,6 @@
+import {nativeHtml} from './native-html-fixture';
+import {artifactState} from '@/lib/artifacts/state';
 import {getArtifactById,getVersionFor} from '@/lib/artifacts';
-import {documentEditBody} from './prepared-document';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Fire-and-forget analytics (lib/analytics.ts + the analytics_events table).
@@ -21,8 +22,6 @@ import {
   DELETE as deleteArtifactRoute,
   PUT as putArtifact,
 } from '@/app/api/artifacts/[id]/route';
-import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { POST as revertRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
@@ -121,21 +120,21 @@ describe('trackEvent', () => {
 
 describe('write events', () => {
   it('create logs a create row stamped with the token’s user', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
+    const user = await createUser({ email: 'mxmx_test_viewer@example.com' });
     const t = await mintToken('laptop', user.id);
-    const doc = await create(t.token, { markup: '<p>x</p>' });
+    const doc = await create(t.token, { html: nativeHtml('<p>x</p>') });
     expect(await expectEvent(doc.id, 'create')).toMatchObject({ user_id: user.id });
   });
 
-  it('prepared replacement and restore log edits; DELETE logs delete (and does not deadlock)', async () => {
+  it('HTML replacement and restore log edits; DELETE logs delete (and does not deadlock)', async () => {
     const t = await mintToken('t');
-    const doc = await create(t.token, { markup: '<h1>v1</h1>' });
+    const doc = await create(t.token, { html: nativeHtml('<h1>v1</h1>') });
 
-    expect((await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1>v2</h1>' } }), params({ id: doc.id }))).status).toBe(200);
+    expect((await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { html:(await getArtifactById(doc.id))!.source!.replace('v1','v2') } }), params({ id: doc.id }))).status).toBe(200);
     await expectEvent(doc.id, 'edit');
 
-    const head=(await getArtifactById(doc.id))!;const archived=await getVersionFor(identityForUser(t.userId, t.id),doc.id,1);
-    expect((await revertRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:t.token,json:documentEditBody(head,{source:archived!.source!,whole:true})}),params({id:doc.id}))).status).toBe(200);
+    const archived=await getVersionFor(identityForUser(t.userId, t.id),doc.id,1);
+    expect((await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`,{method:'PUT',token:t.token,json:{html:archived!.source!}}),params({id:doc.id}))).status).toBe(200);
     expect((await eventRows(doc.id)).filter(row=>row.event==='edit')).toHaveLength(2);
 
     // The delete path is transactional: this completing at all proves the
@@ -146,20 +145,17 @@ describe('write events', () => {
 
   it('an applied edit logs edit; a refused edit logs nothing', async () => {
     const t = await mintToken('t');
-    const doc = await create(t.token, { markup: '<section><p>alpha text</p><p>beta text</p></section>' });
+    const doc = await create(t.token, { html: nativeHtml('<section><p>alpha text</p><p>beta text</p></section>') });
 
-    const row=(await getArtifactById(doc.id))!;const prepared=documentEditBody(row,{source:row.source!.replace('alpha','gamma')});
-    const stale=structuredClone(prepared);stale.document_update.patch.baseVersion=999;
-    const bad = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: t.token, json: stale }),
-      params({ id: doc.id }),
-    );
+    const row=(await getArtifactById(doc.id))!;
+    const prepared={html:row.source!.replace('alpha','gamma'),expectedVersion:row.version,expectedState:artifactState(row)};
+    const bad=await putArtifact(request(`/api/artifacts/${doc.id}`,{method:'PUT',token:t.token,json:{...prepared,expectedVersion:999}}),params({id:doc.id}));
     expect(bad.status).toBe(409);
     await settle();
     expect((await eventRows(doc.id)).filter((r) => r.event === 'edit')).toHaveLength(0);
 
-    const good = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: t.token, json: prepared }),
+    const good = await putArtifact(
+      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: prepared }),
       params({ id: doc.id }),
     );
     expect(good.status).toBe(200);
@@ -167,9 +163,9 @@ describe('write events', () => {
   });
 
   it('the session (dashboard) delete logs delete with the user', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
+    const user = await createUser({ email: 'mxmx_test_viewer@example.com' });
     const t = await mintToken('laptop', user.id);
-    const doc = await create(t.token, { markup: '<p>x</p>' });
+    const doc = await create(t.token, { html: nativeHtml('<p>x</p>') });
     sessionUser.id = user.id;
     sessionUser.email = user.email;
     expect((await deleteMyArtifactRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE' }), params({ id: doc.id }))).status).toBe(200);
@@ -188,7 +184,7 @@ describe('read events', () => {
 
   it('an explicit raw read logs one view; fetching page data or metadata logs none', async () => {
     const t = await mintToken('public-reader-owner');
-    const doc = await create(t.token, { markup: '<p>x</p>', visibility: 'public' });
+    const doc = await create(t.token, { html: nativeHtml('<p>x</p>'), visibility: 'public' });
     await settle(); // let the create event land so counts below are stable
 
     await artifactPageMetadata(doc.id);
@@ -203,7 +199,7 @@ describe('read events', () => {
 
   it('the exporter’s keyed self-fetch is NOT a view, on either surface', async () => {
     const t = await mintToken('anon');
-    const doc = await create(t.token, { markup: '<p>x</p>' });
+    const doc = await create(t.token, { html: nativeHtml('<p>x</p>') });
     expect(await outcome(ArtifactPage(doc.id, { key: mintExportKey(doc.id) }))).toBe('render');
     await serveDocument(doc.id, `?chrome=0&key=${mintExportKey(doc.id)}`);
     await settle();
@@ -214,7 +210,7 @@ describe('read events', () => {
     const owner = await createUser({ email: 'owner@example.com' });
     const t = await mintToken('owned', owner.id);
     await claimToken(owner.id, t.token);
-    const doc = await create(t.token, { markup: '<p>x</p>', visibility: 'private', title: 'secret' });
+    const doc = await create(t.token, { html: nativeHtml('<p>x</p>'), visibility: 'private', title: 'secret' });
 
     expect(await outcome(ArtifactPage(doc.id))).toBe('notFound');
     await settle();
@@ -234,7 +230,7 @@ describe('read events', () => {
 
   it('the export route logs export; the SSE connect logs sse_connect once', async () => {
     const t = await mintToken('public-reader-owner');
-    const doc = await create(t.token, { markup: '<p>x</p>', visibility: 'public' });
+    const doc = await create(t.token, { html: nativeHtml('<p>x</p>'), visibility: 'public' });
 
     await exportRoute(request(`/a/${doc.id}/export`), params({ id: doc.id }));
     await expectEvent(doc.id, 'export');
@@ -256,9 +252,9 @@ describe('unique daily visitors', () => {
   };
 
   it('a refresh is not a new view: same ip+ua on the same day counts once, a new visitor counts', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
+    const user = await createUser({ email: 'mxmx_test_viewer@example.com' });
     const t = await mintToken('laptop', user.id);
-    const doc = await create(t.token, { markup: '<p>x</p>' });
+    const doc = await create(t.token, { html: nativeHtml('<p>x</p>') });
     asVisitor('9.9.9.9');
     await trackEvent('view', doc.id);
     await trackEvent('view', doc.id); // the refresh
@@ -270,9 +266,9 @@ describe('unique daily visitors', () => {
   });
 
   it('a signed-in account disambiguates: two users behind one NAT + browser are two visitors', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
+    const user = await createUser({ email: 'mxmx_test_viewer@example.com' });
     const t = await mintToken('laptop', user.id);
-    const doc = await create(t.token, { markup: '<p>x</p>' });
+    const doc = await create(t.token, { html: nativeHtml('<p>x</p>') });
     asVisitor('9.9.9.9');
     await trackEvent('view', doc.id, { userId: 'usr_a' });
     await trackEvent('view', doc.id, { userId: 'usr_a' }); // refresh, still one
@@ -282,9 +278,9 @@ describe('unique daily visitors', () => {
   });
 
   it('legacy rows without a visitor each count — there is nothing to dedupe them on', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
+    const user = await createUser({ email: 'mxmx_test_viewer@example.com' });
     const t = await mintToken('laptop', user.id);
-    const doc = await create(t.token, { markup: '<p>x</p>' });
+    const doc = await create(t.token, { html: nativeHtml('<p>x</p>') });
     const db = await harness.db();
     await db.query(`INSERT INTO analytics_events (event, artifact_id) VALUES ('view', $1), ('view', $1)`, [doc.id]);
     asVisitor('9.9.9.9');
@@ -309,10 +305,10 @@ describe('unique daily visitors', () => {
 
 describe('per-artifact totals', () => {
   it('listArtifactsByUser carries each artifact\'s view total, and the list route reports it', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
+    const user = await createUser({ email: 'mxmx_test_viewer@example.com' });
     const t = await mintToken('laptop', user.id);
-    const a = await create(t.token, { markup: '<p>a</p>', title: 'a' });
-    const b = await create(t.token, { markup: '<p>b</p>', title: 'b' });
+    const a = await create(t.token, { html: nativeHtml('<p>a</p>'), title: 'a' });
+    const b = await create(t.token, { html: nativeHtml('<p>b</p>'), title: 'b' });
     const db = await harness.db();
     await db.query(
       `INSERT INTO analytics_events (event, artifact_id, created_at) VALUES
@@ -336,8 +332,8 @@ describe('per-artifact totals', () => {
   it('likeSummaryByUser counts and buckets live likes on markup documents only', async () => {
     const user = await createUser({ email: 'likes@minusx.ai' });
     const t = await mintToken('laptop', user.id);
-    const document = await create(t.token, { markup: '<p>a</p>', title: 'a' });
-    const dataFile = await create(t.token, { markup: '<p>b</p>', title: 'b' });
+    const document = await create(t.token, { html: nativeHtml('<p>a</p>'), title: 'a' });
+    const dataFile = await create(t.token, { html: nativeHtml('<p>b</p>'), title: 'b' });
     const db = await harness.db();
     await db.query(`UPDATE artifacts SET format = 'dataset' WHERE id = $1`, [dataFile.id]);
     await db.query(
@@ -359,8 +355,8 @@ describe('per-artifact totals', () => {
   it('forkCountByUser reads canonical fork events for live markup documents only', async () => {
     const user = await createUser({ email: 'forks@minusx.ai' });
     const t = await mintToken('laptop', user.id);
-    const document = await create(t.token, { markup: '<p>a</p>', title: 'a' });
-    const dataFile = await create(t.token, { markup: '<p>b</p>', title: 'b' });
+    const document = await create(t.token, { html: nativeHtml('<p>a</p>'), title: 'a' });
+    const dataFile = await create(t.token, { html: nativeHtml('<p>b</p>'), title: 'b' });
     const db = await harness.db();
     await db.query(`UPDATE artifacts SET format = 'dataset' WHERE id = $1`, [dataFile.id]);
     await trackEvent('fork', document.id, { forkId: 'copy-1' });
