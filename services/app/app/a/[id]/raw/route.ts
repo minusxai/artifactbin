@@ -1,3 +1,4 @@
+import {nativeHtmlPresentation} from '@/lib/serving/native-html-presentation.server';
 import { archivedVersionFor, servedRow } from '@/lib/serving';
 /**
  * GET /a/:id/raw — the artifact's own bytes (the standalone document for
@@ -161,7 +162,7 @@ async function serveRaw(request: Request, ctx: { params: Promise<{ id: string }>
       if (request.method === 'HEAD') return new Response(null, { headers: responseHeaders(etag) });
       const rendered = await nativeHtmlDocument({ row, ...(pages ? { appOrigin: pages.site.app } : {}) });
       if (!key && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: actor.userId });
-      return new Response(rendered.html, { headers: responseHeaders(etag) });
+      return new Response(await nativeHtmlPresentation(rendered.html,row,domain), { headers: responseHeaders(etag) });
     }
     case 'file': return serveStoredFile(request, artifact);
     case 'dataset':

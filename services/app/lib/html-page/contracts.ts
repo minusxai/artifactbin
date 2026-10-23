@@ -6,3 +6,4 @@ export interface CanonicalHtmlOptions { previousHtml?: string; ledger?: HtmlIden
 export interface HtmlPageMetadata {title:string|null;description:string|null}
 /** Install presentation is authored in native head meta; app identity and scope remain platform-owned. */
 export interface HtmlPwaSettings {enabled?:boolean;name?:string;shortName?:string;icon?:string;themeColor?:string;backgroundColor?:string}
+export interface HtmlAssetLinks {refs:string[];imageUrls:string[]}

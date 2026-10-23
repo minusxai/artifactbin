@@ -4,8 +4,8 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
  * transaction. Data and byte tiers retain their original inputs and authority.
  */
 import { json } from '../../http/http';
-import {socialPreviewImage, socialPreviewImageValue} from '@/lib/document';
-import { canonicalizeHtmlPage,htmlPageMetadata,htmlPwaSettings } from '@/lib/html-page';
+import {socialPreviewImage,socialPreviewImageValue} from '@/lib/document';
+import {canonicalizeHtmlPage,htmlPageMetadata,htmlPwaSettings,htmlAssetLinks} from '@/lib/html-page';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/publish/ingest/image';
 import { ingestPdfFromUrl } from '@/lib/publish/ingest/pdf';
@@ -112,6 +112,8 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
         refs.push({id:imageId,kind:'image'});
       }
       if(pwa.icon&&ctx.loadRef){const icon=await ctx.loadRef(pwa.icon);if(icon?.format!=='image')return json({error:'invalid_refs'},400);if(!refs.some(ref=>ref.id===pwa.icon))refs.push({id:pwa.icon,kind:'image'});}
+      const assets=htmlAssetLinks(source);if(assets.refs.length>128)return json({error:'invalid_refs'},400);
+      for(const id of assets.refs){if(refs.some(ref=>ref.id===id))continue;const asset=await ctx.loadRef?.(id);if(ctx.loadRef&&(!asset||!['image','file','pdf'].includes(asset.format)))return json({error:'invalid_refs'},400);if(asset)refs.push({id,kind:asset.format});}
       return {format:'html',source,meta:{refs},derivedTitle:metadata.title,derivedDescription:metadata.description};
     }
     catch(error){return json({error:'invalid_html',details:[error instanceof Error?error.message:String(error)]},400);}
