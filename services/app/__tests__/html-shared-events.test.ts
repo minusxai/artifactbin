@@ -9,7 +9,8 @@ const harness=useAppHarness();
 beforeEach(resetLiveSubscriptions);
 it('two connected viewers hear committed stores; reconnect refetches writes missed while disconnected',async()=>{
  const token=await mintAccountToken('shared-events');
- const made=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Shared</p>',visibility:'public'}}));
+ const made=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{html:'<!doctype html><html><body><p>Shared</p></body></html>',visibility:'public'}}));
+ expect(made.status,await made.clone().text()).toBe(201);
  const {id}=await made.json() as {id:string};
  const db=await harness.db();
  const backendId='backendtest';
@@ -34,7 +35,7 @@ it('native live dataset links hear mutations and pinned aliases stay out of inva
  const token=await mintAccountToken('dataset-events');
  const create=async(json:Record<string,unknown>)=>{const res=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',...json}}));expect(res.status).toBe(201);return (await res.json()).id as string;};
  const dataset=await create({dataset:[{item:'one'}],access:'readwrite'});
- const id=await create({markup:'<p>Rows</p>'});
+ const id=await create({html:'<!doctype html><html><body><p>Rows</p></body></html>'});
  const db=await harness.db();
  await db.query("UPDATE artifacts SET format='html',document=NULL,source='<p>Rows</p>',meta=$2::jsonb WHERE id=$1",[id,JSON.stringify({htmlLinks:[{kind:'dataset',name:'live',datasetId:dataset,mode:'live'},{kind:'dataset',name:'archive',datasetId:dataset,mode:'pinned',revision:'1'}]})]);
  const response=await eventsRoute(request(`/a/${id}/events`),{params:Promise.resolve({id})});
