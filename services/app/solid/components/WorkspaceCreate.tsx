@@ -21,10 +21,12 @@ import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Field, Input } from '../ui/Field';
 import { Menu, type MenuEntry } from '../ui/Menu';
+import HtmlUpload from './HtmlUpload';
 import { apiFetch } from '../lib/api';
 
 const TYPE_ICONS = { doc: FileText, editorial: Newspaper, deck: Presentation, dashboard: LayoutDashboard, plan: ListChecks, landing: PanelTop, scrolly: ScrollText, app: AppWindow } satisfies Record<ArtifactStarterTemplate, typeof FileText>;
 export default function WorkspaceCreate(props: { onCreated: () => void; parentId?: string | null; groupId?: string; personal?: boolean }): JSX.Element {
+  const [uploadHtml, setUploadHtml] = createSignal(false);
   const [dialog, setDialog] = createSignal(false);
   const [name, setName] = createSignal('');
   const [busy, setBusy] = createSignal(false);
@@ -57,6 +59,7 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
   const starterItem = (starter: (typeof ARTIFACT_STARTERS)[number]) => { const Icon = TYPE_ICONS[starter.template]; return { label: starter.label, text: starter.label, icon: () => <Icon size={14} class="shrink-0 text-muted" aria-hidden="true" />, disabled: busy(), onSelect: () => void createArtifact(starter.template) }; };
   const entries = (): MenuEntry[] => [
     { label: 'Artifact', text: 'Artifact', icon: () => <FilePlus2 size={14} />, items: [starterItem(ARTIFACT_STARTERS[0]!), { section: 'Templates', items: ARTIFACT_STARTERS.slice(1).map(starterItem) }] },
+    { label: 'Upload HTML', text: 'Upload HTML', icon: () => <FileUp size={14} />, onSelect: () => setUploadHtml(true) },
     { label: 'Folder', text: 'Folder', icon: () => <FolderPlus size={14} />, onSelect: choose },
     { section: 'assets', items: [
       { label: 'File', text: 'File', icon: () => <FileUp size={14} />, href: creationHref('/files/new') },
@@ -68,6 +71,7 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
       <Button {...attrs} aria-label="Create" class="w-full" onClick={() => { setError(''); attrs.onClick(); }}><Plus size={15} /><span>Create</span><ChevronDown size={14} class="ml-auto" /></Button>} />
     <Show when={!dialog() && busy()}><p role="status" class="mt-2 text-xs text-muted">Creating artifact…</p></Show>
     <Show when={!dialog() && error()}><p role="alert" class="mt-2 text-xs text-danger">{error()}</p></Show>
+    <Show when={uploadHtml()}><HtmlUpload parentId={props.parentId} destination={props.groupId ? {type:'group',id:props.groupId} : props.personal ? {type:'personal'} : undefined} onClose={() => setUploadHtml(false)} /></Show>
     <Show when={dialog()}><Dialog title="Create new folder" busy={busy()} onClose={() => setDialog(false)} initialFocus="[autofocus]"
       footer={<><Button variant="secondary" onClick={() => setDialog(false)}>cancel</Button><Button type="submit" form="workspace-folder-form" disabled={!name().trim() || busy()}>{busy() ? 'creating…' : 'create folder'}</Button></>}>
       <form id="workspace-folder-form" onSubmit={event => void createFolder(event)} class="grid gap-3">

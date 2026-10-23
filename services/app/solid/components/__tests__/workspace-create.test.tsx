@@ -110,6 +110,16 @@ it('shows a failed folder creation inside the dialog and keeps the name for anot
 it('offers retained artifact, folder and asset creation without retired programs', () => {
  render(() => <WorkspaceCreate onCreated={() => {}} />);
  fireEvent.click(screen.getByRole('button', {name:'Create'}));
- for (const name of ['Artifact', 'Folder', 'File', 'Dataset']) expect(screen.getByRole('menuitem', {name})).toBeInTheDocument();
+ for (const name of ['Artifact', 'Upload HTML', 'Folder', 'File', 'Dataset']) expect(screen.getByRole('menuitem', {name})).toBeInTheDocument();
  expect(screen.queryByRole('menuitem', {name:'Program'})).not.toBeInTheDocument();
+});
+
+it('opens HTML intake in the selected folder and group without creating until a file is published', () => {
+ vi.stubGlobal('fetch', vi.fn());
+ render(() => <WorkspaceCreate parentId="folder1" groupId="g1" onCreated={() => {}} />);
+ fireEvent.click(screen.getByRole('button', {name:'Create'}));
+ fireEvent.click(screen.getByRole('menuitem', {name:'Upload HTML'}));
+ expect(screen.getByRole('dialog', {name:'Upload HTML'})).toBeInTheDocument();
+ expect(screen.getByRole('button', {name:'Upload HTML'})).toBeDisabled();
+ expect(fetch).not.toHaveBeenCalled();
 });
