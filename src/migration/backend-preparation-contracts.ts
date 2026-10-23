@@ -82,5 +82,5 @@ export interface MigrationBackendPreparationPorts {
   host?: BackendHost;
 }
 export interface MigrationBackendRegistrar {
-  (db: SqlReader, receipts: readonly MigrationBackendReceipt[]): Promise<void>;
+  (db: SqlReader, receipts: readonly MigrationBackendReceipt[], publication?: import("./inactive-publication-contracts.ts").DeletedMigrationPublicationContext): Promise<void>;
 }

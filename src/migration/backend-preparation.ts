@@ -2,7 +2,7 @@ import { assertHistoricalSourceQueryAuthority } from "../datasets/source-query/h
 import { standaloneDatasetBackendSource } from "./dataset-pages/backend.ts";
 import { generatedSourceQueryBackendSource } from "./source-query-backend.ts";
 import { validateSourceRegistration } from "../datasets/source-query/sql.ts";
-import { registerMigrationViewerBinding } from "./viewer-registration.ts";
+import { registerMigrationViewerBinding, registerInactiveMigrationViewerBinding } from "./viewer-registration.ts";
 import { registerDatasetMemberBinding } from "../persistence/dataset-members.ts";
 import {
   validDatasetMutationParameterMap,
@@ -441,6 +441,7 @@ export async function prepareMigrationBackends(
 export const registerMigrationBackends: MigrationBackendRegistrar = async (
   db,
   receipts,
+  publication,
 ) => {
   const keys = new Set<string>();
   for (const receipt of receipts) {
@@ -579,14 +580,17 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
         ? { [receipt.backendId]: receipt.deployment }
         : {},
     });
-    if (receipt.viewer)
-      await registerMigrationViewerBinding(db, {
+    if (receipt.viewer) {
+      const binding = {
         backendId: receipt.backendId,
         backendVersion: receipt.deployment.version,
         pageId: receipt.pageId,
         pageVersion: receipt.pageVersion,
         sourceNamespace: receipt.viewer.sourceNamespace,
-      });
+      };
+      if (publication) await registerInactiveMigrationViewerBinding(db,binding,publication);
+      else await registerMigrationViewerBinding(db,binding);
+    }
     if (receipt.members)
       await registerDatasetMemberBinding(client, {
         backendId: receipt.backendId,
