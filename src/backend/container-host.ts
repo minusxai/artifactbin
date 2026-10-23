@@ -1,3 +1,4 @@
+import { observeBackendCreate } from "./create-diagnostics.ts";
 import { createSandboxNetwork } from "./sandbox-network.ts";
 import { removeBackendContainer } from "./container-cleanup.ts";
 import { dockerCommand } from "./reaper.ts";
@@ -265,9 +266,13 @@ export function createBackendHost(
       const imageId = await currentImage();
       if (failure) throw failure;
       createAttempted = true;
-      await exec("docker", containerArguments(name, imageId, "none", identity.label), {
-        timeout: 5000,
-      });
+      await observeBackendCreate(
+        "compile",
+        () => exec("docker", containerArguments(name, imageId, "none", identity.label), {
+          timeout: 5000,
+        }),
+        log,
+      );
       createAcknowledged = true;
       if (failure) throw failure;
       child = spawn("docker", ["start", "-ai", name], {
@@ -369,9 +374,13 @@ export function createBackendHost(
     let name = identity.namePrefix + randomUUID();
     let acknowledged = false;
     try {
-      await exec("docker", containerArguments(name, imageId, network, identity.label), {
-        timeout: 5000,
-      });
+      await observeBackendCreate(
+        "warm",
+        () => exec("docker", containerArguments(name, imageId, network, identity.label), {
+          timeout: 5000,
+        }),
+        log,
+      );
       acknowledged = true;
     } catch (e: any) {
       // The network was removed under the host (docker network prune): once proven that
@@ -385,9 +394,13 @@ export function createBackendHost(
         await ensureNetwork();
         name = identity.namePrefix + randomUUID();
         try {
-          await exec("docker", containerArguments(name, imageId, network, identity.label), {
-            timeout: 5000,
-          });
+          await observeBackendCreate(
+            "warm_network_retry",
+            () => exec("docker", containerArguments(name, imageId, network, identity.label), {
+              timeout: 5000,
+            }),
+            log,
+          );
           acknowledged = true;
         } catch {}
       }

@@ -179,7 +179,7 @@ test("host close preserves ambiguous creation cleanup failure", async () => {
 test("after an unclean cleanup the host recovers by itself once its container is proven gone", async () => {
   const calls = await fixture(
     "uncertain-once",
-    `${APP}const lines=[];const host=createBackendHost({log:(line)=>lines.push(line)});await assert.rejects(host.invoke({ deployment: app, principal: {tenant:'t',subject:'u'}, input: {field:'value',args:null}, env: {}, reuse: { kind: "file", scope: scope } }),/cleanup_failed/);assert.equal(await host.invoke({ deployment: app, principal: {tenant:'t',subject:'u'}, input: {field:'value',args:null}, env: {}, reuse: { kind: "file", scope: scope } }),'🌍');await host.close();assert.equal(lines.length,2);assert.match(lines[0],/^backend host closed: container pagegi-backend-[0-9a-f-]{36} /);assert.match(lines[1],/^backend host reopened: /);`,
+    `${APP}const lines=[];const host=createBackendHost({log:(line)=>lines.push(line)});await assert.rejects(host.invoke({ deployment: app, principal: {tenant:'t',subject:'u'}, input: {field:'value',args:null}, env: {}, reuse: { kind: "file", scope: scope } }),/cleanup_failed/);assert.equal(await host.invoke({ deployment: app, principal: {tenant:'t',subject:'u'}, input: {field:'value',args:null}, env: {}, reuse: { kind: "file", scope: scope } }),'🌍');await host.close();assert.equal(lines.length,3);assert.deepEqual(JSON.parse(lines[0]),{event:"backend_create_failed",stage:"warm",category:"exit",exitCode:1});assert.match(lines[1],/^backend host closed: container pagegi-backend-[0-9a-f-]{36} /);assert.match(lines[2],/^backend host reopened: /);`,
   );
   assert.equal(calls, "image\ncreate\nrm\ninspect\nrm\ninspect\nps\ncreate\nstart\ninvoke\nrm\ninspect\n");
 });
