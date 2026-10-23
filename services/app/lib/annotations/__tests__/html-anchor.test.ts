@@ -1,0 +1,21 @@
+import { expect, it } from 'vitest';
+import { htmlTextFingerprint, type HtmlNodeAnchor } from '@artifactbin/contracts';
+import { htmlCommentNodes, resolveHtmlCommentAnchor, validHtmlCommentRange } from '../html-anchor';
+const anchor = (over: Partial<HtmlNodeAnchor> = {}): HtmlNodeAnchor => ({ kind: 'html-node', v: 1, revision: '2', nodeId: 'n1', quote: 'same words', ...over });
+it('uses persistent HTML IDs and decoded text without compiler paths', () => {
+  const nodes = htmlCommentNodes('<!doctype html><p data-af-id="n1">same <strong>words</strong> &amp; more</p>');
+  expect(resolveHtmlCommentAnchor(nodes, anchor())).toEqual({ node: { nodeId: 'n1', text: 'same words & more' }, quoteFound: true });
+});
+it('does not retarget a removed node to an equal quote at another identity', () => {
+  expect(resolveHtmlCommentAnchor(htmlCommentNodes('<p data-af-id="n2">same words</p>'), anchor())).toEqual({ node: null, quoteFound: false });
+});
+it('refuses duplicate IDs rather than choosing one occurrence', () => {
+  expect(resolveHtmlCommentAnchor(htmlCommentNodes('<p data-af-id="n1">same words</p><p data-af-id="n1">same words</p>'), anchor()).node).toBeNull();
+});
+it('requires a captured range to describe the exact text and fingerprint', () => {
+  const node = { nodeId: 'n1', text: '😀 same words' };
+  const picked = anchor({ range: { start: 3, end: 13, length: 13, fingerprint: htmlTextFingerprint(node.text) } });
+  expect(validHtmlCommentRange(node, picked)).toBe(true);
+  expect(validHtmlCommentRange({ ...node, text: 'ab same words' }, picked)).toBe(false);
+  expect(validHtmlCommentRange(node, { ...picked, range: { ...picked.range!, start: 0 } })).toBe(false);
+});
