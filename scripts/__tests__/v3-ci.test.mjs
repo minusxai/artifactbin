@@ -53,5 +53,14 @@ describe('v3 validation isolation', () => {
     expect(v3.full).toBe(true);expect(v3.testedRun).toBeNull();
     for (const job of ['checks','node','api','ui','integration','gates','build','cli-tests']) expect(v3.jobs[job]).toBe(true);
     expect(run('refs/heads/main').full).toBe(false);
+    mkdirSync(path.join(directory,'services/utils/src'),{recursive:true});
+    writeFileSync(path.join(directory,'services/utils/src/change.ts'),'export const changed = true;');
+    git('add','.');git('commit','-qm','runtime change');
+    const v3Runtime = run('refs/heads/artifactbinv3');
+    for (const proof of ['cli','cli-bootstrap','reference-compatibility']) expect(v3Runtime.jobs[proof]).toBe(false);
+    expect(v3Runtime.jobs['cli-tests']).toBe(true);
+    expect(v3Runtime.jobs.build).toBe(true);
+    expect(run('refs/heads/main').jobs.cli).toBe(true);
+
   });
 });
