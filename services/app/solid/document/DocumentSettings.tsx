@@ -1,5 +1,6 @@
 /* @jsxImportSource solid-js */
 import { createResource, createSignal, Show, type JSX } from 'solid-js';
+import {createHttpBackend} from '@/lib/artifact-backend/http';
 import type { ArtifactBackend, ArtifactHead } from '@/lib/artifact-backend/types';
 import { writeBrowserArtifact } from '@/lib/artifact-backend/browser-artifact-write';
 import { contextRefOf } from '@/lib/document/helmet';
@@ -15,13 +16,14 @@ import { StatusMessage } from '../ui/StatusMessage';
 export interface DocumentSettingsProps {
   id: string;
   title: string;
-  backend: ArtifactBackend;
+  backend?: ArtifactBackend;
   onPwaEnabledChange: (enabled: boolean) => void;
   onClose: () => void;
 }
 /** Reader settings own metadata changes; source and document editing are not exposed. */
 export default function DocumentSettings(props: DocumentSettingsProps): JSX.Element {
-  const [head, { mutate }] = createResource(() => props.backend.load());
+  const backend=props.backend??createHttpBackend(props.id);
+  const [head, { mutate }] = createResource(() => backend.load());
   const [tab, setTab] = createSignal('app');
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
@@ -32,7 +34,7 @@ export default function DocumentSettings(props: DocumentSettingsProps): JSX.Elem
     try {
       const response = await writeBrowserArtifact(props.id, { source }, base.edit_id);
       if (!response.ok) throw new Error('Could not save settings. Refresh and try again.');
-      const next = await props.backend.load();
+      const next = await backend.load();
       if (!next) throw new Error('Settings were saved. Refresh to load the current version.');
       mutate(next);
       props.onPwaEnabledChange(readPwaSettings(next.markup ?? '').enabled === true);
@@ -42,8 +44,8 @@ export default function DocumentSettings(props: DocumentSettingsProps): JSX.Elem
   const content = (current: ArtifactHead) => <>
     <Tabs label="Artifact settings" value={tab()} onChange={setTab} items={[{ value: 'app', label: 'App' }, { value: 'context', label: 'Context' }, { value: 'files', label: 'Files' }]} />
     <div class="mt-5" aria-busy={busy()} inert={busy()}>
-      <Show when={tab() === 'app'}><PwaSharingSetting source={current.markup ?? ''} onChange={(source) => void save(source)} /><PwaSettingsPanel id={props.id} title={props.title} source={current.markup ?? ''} onChange={(source) => void save(source)} onUpload={(file) => props.backend.importImage({ file, name: file.name })} beforeInstall={async () => !busy()} /></Show>
-      <Show when={tab() === 'context'}><ContextPanel id={contextRefOf(current.markup ?? '')} backend={props.backend} onChange={(id) => void save(writeContextRef(current.markup ?? '', id))} /></Show>
+      <Show when={tab() === 'app'}><PwaSharingSetting source={current.markup ?? ''} onChange={(source) => void save(source)} /><PwaSettingsPanel id={props.id} title={props.title} source={current.markup ?? ''} onChange={(source) => void save(source)} onUpload={(file) => backend.importImage({ file, name: file.name })} beforeInstall={async () => !busy()} /></Show>
+      <Show when={tab() === 'context'}><ContextPanel id={contextRefOf(current.markup ?? '')} backend={backend} onChange={(id) => void save(writeContextRef(current.markup ?? '', id))} /></Show>
       <Show when={tab() === 'files'}><ReferenceFilesPanel refs={current.refs ?? []} /></Show>
     </div>
   </>;

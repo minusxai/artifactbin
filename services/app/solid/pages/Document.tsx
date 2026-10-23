@@ -13,7 +13,7 @@ import { STORY_FRAME_HASH_MESSAGE, STORY_READER_MODE_MESSAGE } from '@/lib/story
 import type { StoryEditSelection } from '@/lib/edit-protocol';
 import type { DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import type { FramedRuntime } from '@/lib/serving';
-import { createHttpBackend } from '@/lib/artifact-backend/http';
+import {createReaderHttpBackend} from '@/lib/artifact-backend/reader-http';
 import { loginHref } from '@/lib/http/login-href';
 import { takeBootstrap } from '@/solid/lib/bootstrap';
 import { adoptServedFrame } from '@/solid/lib/served-frame';
@@ -99,7 +99,7 @@ export function DocumentPage(): JSX.Element {
   const isOwner = () => canGovern(role()) && !archivedNow();
   const editable = () => canEditRole(role()) && !archivedNow() && page?.surface?.format === 'html';
   const annotatable = () => canAnnotateRole(role()) && !archivedNow();
-  const backend = id ? createHttpBackend(id) : null;
+  const backend = id ? createReaderHttpBackend(id) : null;
   const [pwaEnabled, setPwaEnabled] = createSignal(page?.surface?.pwaEnabled === true);
   const [ready, setReady] = createSignal(false);
   const [railOpen, setRailOpen] = createSignal(false);
@@ -373,7 +373,7 @@ export function DocumentPage(): JSX.Element {
         }} />
     </Show>
     <Show when={ready() && annotatable() && id}>
-      <Suspense fallback={null}><AnnotationLayer id={id!} backend={backend ?? undefined} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
+      <Suspense fallback={null}><AnnotationLayer id={id!} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
         railOpen={railOpen()} onRailOpenChange={setRailOpen} membershipRevision={membershipRevision()} showViewComments={annotatable()} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
         pickOnOpen onAnnotationsChange={setAnnotationItems} topOffset={APP_BAR_H} /></Suspense>
@@ -383,7 +383,7 @@ export function DocumentPage(): JSX.Element {
         onClose={() => setSharingOpen(false)} onSocialPreview={editable() ? () => void openSocialPreview() : undefined} /></Suspense>
     </Show>
     <Show when={metadataError()}><p role="alert">{metadataError()}</p></Show>
-    <Show when={settingsOpen() && backend}><Suspense fallback={null}><DocumentSettings id={id!} title={shownTitle()} backend={backend!} onPwaEnabledChange={setPwaEnabled} onClose={() => setSettingsOpen(false)} /></Suspense></Show>
+    <Show when={settingsOpen() && backend}><Suspense fallback={null}><DocumentSettings id={id!} title={shownTitle()} onPwaEnabledChange={setPwaEnabled} onClose={() => setSettingsOpen(false)} /></Suspense></Show>
     <Show when={socialPreviewOpen() && previewHead()}>{(head) => <Suspense fallback={null}><SocialPreviewEditor id={id!} source={head().source} editId={head().editId} version={head().version} onClose={() => setSocialPreviewOpen(false)} /></Suspense>}</Show>
     </TrustedUi>
   </Show>;
