@@ -7,14 +7,13 @@ import { identityForUser } from '@/lib/accounts';
 import type {ArtifactDestination} from '@artifactbin/contracts';
 import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, ownerPredicate, ownerScope, writerFor, type ArtifactRow, type Scope } from './table';
 import type { AccessActor } from '@/lib/accounts';
-import type { DocumentGraph, DocumentUpdate } from '@artifactbin/contracts';
+import type { DocumentGraph } from '@artifactbin/contracts';
 import { artifactChannel } from '@artifactbin/contracts';
 import { queueMermaidHarvest } from '../mermaid-images/store';
 import {
-  type ProseOperation, sourceChanges, annotationEffects, type AnnotationRecord, type AnnotationReceipt, newEditId, type StringEdit,
+  sourceChanges, annotationEffects, type AnnotationRecord, type AnnotationReceipt, newEditId,
   nodeIndex, stampNodeIds,
 } from '../document';
-import type { DocumentOperation } from '@artifactbin/contracts';
 import { artifactQuery, loadArtifactDocument, sourceStorage } from './document';
 import { seedOwnerJoin } from '@/lib/accounts';
 import { documentMentions } from './membership/document-mentions';
@@ -730,35 +729,6 @@ async function wakeParents({ from, to }: { from: string | null; to: string | nul
 function sayMoved(actor: AccessActor, id: string, moved: { from: string | null; to: string | null } | null): void {
   if (!moved || moved.from === moved.to) return;
   void emit(actorSubject(actor), 'moved', { kind: 'artifact', id }, { from_parent_id: moved.from, to_parent_id: moved.to });
-}
-
-// ── The concurrent-edit protocol ─────────────────────────────────────────────
-
-/**
- * One edit against a claimed base version. Agents send the Edit-tool diff;
- * the WYSIWYG sends its whole re-serialized source (the splice is derived by
- * prefix/suffix diff — sound because stored source is canonical).
- */
-export interface EditInput {
-  documentUpdate?:DocumentUpdate;
-  /**
-   * The caller answers with the patch, not the document, when the patch lands where it was prepared (the browser
-   * editor's save): the commit then never returns or decodes the new document, and the outcome says `withheld`.
-   */
-  patchEcho?: true;
-  operations?:DocumentOperation[];
-  text?: ProseOperation;
-  annotationOps?: AnnotationOperation[];
-  baseEditId: string;
-  /** The content change, if this edit has one. */
-  change?: { oldString: string; newString: string } | { newSource: string } | { edits: StringEdit[] };
-  /**
-   * Document-level attributes. Deliberately NOT node-scoped: a title or theme
-   * belongs to the whole document, has no span to conflict on, and (for theme)
-   * recompiles the stylesheet — so these apply to head and never reject, which
-   * is what lets the editor persist a theme flip while an agent is writing.
-   */
-  meta?: { title?: string | null; theme?: string | null; colorMode?: 'light' | 'dark' | null };
 }
 
 // ── The reference graph ──────────────────────────────────────────────────────
