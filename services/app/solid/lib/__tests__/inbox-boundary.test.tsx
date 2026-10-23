@@ -27,3 +27,18 @@ it('does not create live subscriptions after the provider was disposed while its
  page.unmount();finish({createInboxController:create});await Promise.resolve();
  expect(create).not.toHaveBeenCalled();
 });
+it('shows account chunk loading, exposes failure, retries, and clears loading on logout while pending',async()=>{
+ let finish!:(module:Awaited<ReturnType<InboxControllerLoader>>)=>void;
+ let reject!:(error:Error)=>void;let inbox!:InboxContext;
+ const create=vi.fn<(owner:()=>string|null)=>InboxContext>(()=>value);
+ const load=vi.fn(()=>new Promise<Awaited<ReturnType<InboxControllerLoader>>>((resolve,fail)=>{finish=resolve;reject=fail;}));
+ function Child(){inbox=useInbox();return <p>{inbox.loading()?'Loading':inbox.error()||'Idle'}</p>;}
+ setSession({kind:'account',user:{id:'owner'}});
+ render(()=><InboxProvider loadController={load}><Child/></InboxProvider>);
+ expect(screen.getByText('Loading')).toBeTruthy();reject(new Error('chunk unavailable'));
+ await screen.findByText('Could not load notifications. Try again.');expect(inbox.loading()).toBe(false);
+ const retry=inbox.load();expect(load).toHaveBeenCalledTimes(2);expect(inbox.loading()).toBe(true);
+ setSession({kind:'none',user:null});expect(inbox.loading()).toBe(false);
+ finish({createInboxController:create});await retry;
+ expect(create.mock.calls[0][0]()).toBeNull();expect(inbox.state()).toBeNull();expect(inbox.loading()).toBe(false);
+});

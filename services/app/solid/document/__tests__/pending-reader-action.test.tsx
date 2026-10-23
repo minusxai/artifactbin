@@ -20,3 +20,13 @@ it('does not take focus away when the reader moved to another control',async()=>
  render(()=><><button>Another action</button><Suspense fallback={<PendingReaderAction label="Loading agent handoff" readyLabel="Copy for agent"/>}><Ready/></Suspense></>);
  const other=screen.getByRole('button',{name:'Another action'});other.focus();resolve();await screen.findByRole('button',{name:'Copy for agent'});expect(other).toHaveFocus();
 });
+it('does not override a newer focus choice queued during the loading handoff',async()=>{
+ let resolve!:()=>void;
+ const Ready=lazy(()=>new Promise<{default:Component}>(done=>{resolve=()=>done({default:()=> <button aria-label="Copy for agent">Copy</button>});}));
+ render(()=><><button>Another action</button><Suspense fallback={<PendingReaderAction label="Loading agent handoff" readyLabel="Copy for agent"/>}><Ready/></Suspense></>);
+ const pending=screen.getByRole('button',{name:'Loading agent handoff'});pending.focus();
+ const other=screen.getByRole('button',{name:'Another action'});
+ // Resolving the chunk queues its render; the reader's subsequent focus must win over cleanup handoff.
+ resolve();queueMicrotask(()=>other.focus());await screen.findByRole('button',{name:'Copy for agent'});
+ await waitFor(()=>expect(other).toHaveFocus());
+});

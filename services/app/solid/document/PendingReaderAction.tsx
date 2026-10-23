@@ -9,6 +9,7 @@ export function PendingReaderAction(props:PendingReaderActionProps){
   const root=button.getRootNode() as Document|ShadowRoot;
   if(root.activeElement!==button)return;
   queueMicrotask(()=>{
+   if(root.activeElement && root.activeElement!==button && root.activeElement!==document.body)return;
    const next=[...root.querySelectorAll<HTMLButtonElement>('button[aria-label]')].find(node=>node.getAttribute('aria-label')===props.readyLabel);
    if(next?.isConnected)next.focus();
   });

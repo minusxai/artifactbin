@@ -30,19 +30,22 @@ export function InboxProvider(props: { children: JSX.Element; loadController?: I
   let pending: Promise<InboxContext | null> | undefined;
   let disposed = false;
   onCleanup(() => { disposed = true; });
-  const ensure = () => pending ??= (props.loadController ?? loadInbox)().then(module => {
+  const ensure = () => {
+    if (!pending) setLoadError('');
+    return pending ??= (props.loadController ?? loadInbox)().then(module => {
     if (disposed) return null;
     const next = runWithOwner(owner, () => module.createInboxController(ownerId))!;
     setLoadError('');
     setController(next);
     return next;
   }).catch(() => { pending = undefined; if(!disposed) setLoadError('Could not load notifications. Try again.'); return null; });
+  };
   createEffect(() => { if(ownerId()) void ensure(); });
   const value: InboxContext = {
     state: () => controller()?.state() ?? null,
     error: () => controller()?.error() ?? loadError(),
     failedAt: () => controller()?.failedAt() ?? null,
-    loading: () => controller()?.loading() ?? false,
+    loading: () => controller()?.loading() ?? (!!ownerId() && !loadError()),
     reconnecting: () => controller()?.reconnecting() ?? false,
     load: input => { if(!ownerId())return Promise.resolve(); const current=controller(); return current ? current.load(input) : ensure().then(next=>next?.load(input)); },
     loadMore: () => { if(!ownerId())return Promise.resolve(); const current=controller(); return current ? current.loadMore() : ensure().then(next=>next?.loadMore()); },
