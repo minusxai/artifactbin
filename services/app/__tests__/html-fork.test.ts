@@ -1,0 +1,33 @@
+import {expect,it,vi} from 'vitest';
+import {request,useAppHarness,mintAccountToken} from './harness';
+import {POST} from '@/app/api/artifacts/route';
+import {readHtmlPage} from '@/lib/html-publication';
+import {getHtmlBackendVersion,getHtmlBackendStore,setHtmlBackendStore} from '@/lib/html-backends';
+import {identityForUser} from '@/lib/accounts';
+import {getArtifactById} from '@/lib/artifacts';
+import {forkArtifact} from '@/lib/publish/publish';
+vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>({typeDefs:'type Query { count: Int } type Mutation { increment: Int }',compiled:source})}));
+const harness=useAppHarness();
+it('forks immutable backend code with independent empty stores and page ownership',async()=>{
+ const owner=await mintAccountToken('source');const viewer=await mintAccountToken('forker');
+ const created=await (await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:'<html><head><link rel="af-backend" data-af-name="db" href="./db.ts"></head><body>Counter</body></html>',backendSources:{db:'counter-code'},visibility:'public'}}))).json();
+ const source=await readHtmlPage(identityForUser(owner.userId,owner.id),created.id);const original=source.links[0];if(original?.kind!=='backend')throw Error('missing backend');
+ await setHtmlBackendStore(original.backendId,{count:9,secret:'private-value'},0);
+ const actor={...identityForUser(viewer.userId,viewer.id),tokenId:viewer.id};
+ const fork=await forkArtifact(actor,(await getArtifactById(created.id))!);expect(fork).not.toBeInstanceOf(Response);if(fork instanceof Response)throw Error(await fork.text());
+ const page=await readHtmlPage(actor,fork.artifact.id);const link=page.links[0];if(link?.kind!=='backend')throw Error('missing fork backend');
+ expect(link.backendId).not.toBe(original.backendId);
+ const backend=await getHtmlBackendVersion(link.backendId,link.version);expect(backend).toMatchObject({pageId:page.pageId,ownerId:viewer.userId,source:'counter-code'});
+ expect(await getHtmlBackendStore(link.backendId)).toEqual({value:null,version:0});
+ await setHtmlBackendStore(link.backendId,{count:1},0);expect(await getHtmlBackendStore(original.backendId)).toEqual({value:{count:9,secret:'private-value'},version:1});
+ expect(fork.artifact.forked_from).toBe(created.id);
+});
+it('does not grant a fork owner access to a private linked dataset or commit a partial copy',async()=>{
+ const owner=await mintAccountToken('dataset-source');const viewer=await mintAccountToken('dataset-forker');
+ const dataset=await (await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{value:1}],visibility:'private'}}))).json();
+ const created=await (await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'public',html:`<html><head><link rel="af-dataset" data-af-name="data" href="ref:${dataset.id}"></head><body>Data</body></html>`}}))).json();
+ const actor={...identityForUser(viewer.userId,viewer.id),tokenId:viewer.id};
+ const db=await harness.db();const before=(await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]!.n;
+ const denied=await forkArtifact(actor,(await getArtifactById(created.id))!);expect(denied).toBeInstanceOf(Response);if(!(denied instanceof Response))throw Error('expected refusal');expect(denied.status).toBe(400);
+ expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]!.n).toBe(before);
+});

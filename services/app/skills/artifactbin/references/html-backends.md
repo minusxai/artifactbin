@@ -77,3 +77,5 @@ or revoked bindings fail. Rotation and revocation take effect on the next read,
 including for older published versions. Never return credentials from resolvers
 or write them into shared state. Platform receipts and events redact literal
 values read during that run; this does not prevent owner-authored network leaks.
+
+Forking an HTML page copies its immutable backend code and schema into new backend identities owned by the copy. Each copied backend starts with an empty store (`value: null`, revision `0`); source store contents and owner credential bindings are not copied. Initialize defaults when reading an empty store. Dataset links keep their live or pinned mode and require the copy owner's current dataset access; forking does not grant dataset access.

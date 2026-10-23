@@ -16,3 +16,5 @@ export async function readHtmlPage(actor:AccessActor,pageId:string,revision?:str
  }
  return {pageId,version:row.version,revision:String(row.version),html:row.source??'',nextNodeId:(row.meta.htmlIdentity as HtmlIdentityLedger|undefined)?.nextNodeId??1,links:(row.meta.htmlLinks??[]) as HtmlPageLink[]};
 }
+
+export {planHtmlClone,type HtmlClonePlan,type HtmlClonePorts} from './clone';
