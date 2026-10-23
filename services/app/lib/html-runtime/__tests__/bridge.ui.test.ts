@@ -71,7 +71,7 @@ it('opens on HTTP runner and offline origins without the secure-context randomUU
   expect(events[0]?.nonce).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   bridge.dispose();
 });
-it('captures dynamic IDs through the actual core bridge and clicks only the scoped thread',async()=>{
+it('captures scoped dynamic IDs without hijacking ordinary clicks on annotated text',async()=>{
  vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'p1',revision:'1',backends:[],savedNodeIds:['tasks','other']});
  const {startFrameBridge}=await import('../browser-client');
  document.body.innerHTML='<ul data-af-id="tasks"><li data-af-id="task:123">Finish review</li></ul><ul data-af-id="other"><li data-af-id="task:123">Other task</li></ul>';
@@ -85,7 +85,8 @@ it('captures dynamic IDs through the actual core bridge and clicks only the scop
  document.querySelectorAll('li')[1]!.dispatchEvent(new MouseEvent('click',{bubbles:true}));
  expect(events.map(item=>item.event).filter(event=>(event as {type?:string})?.type==='mx:annotation-pin')).toHaveLength(0);
  document.querySelector('li')!.dispatchEvent(new MouseEvent('click',{bubbles:true}));
- expect(events.map(item=>item.event).filter(event=>(event as {type?:string})?.type==='mx:annotation-pin')).toHaveLength(1);
+ document.querySelector('li')!.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));
+ expect(events.map(item=>item.event).filter(event=>(event as {type?:string})?.type==='mx:annotation-pin')).toHaveLength(0);
  bridge.dispose();
 });
 it('batches authored DOM changes, ignores its own overlay and detaches observation',async()=>{

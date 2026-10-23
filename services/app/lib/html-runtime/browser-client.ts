@@ -32,7 +32,7 @@ interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFram
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }
 import {observeHtmlDom} from '../html-bridge/observe';
 import { htmlSelection } from '../html-bridge/selection';
-import { createHtmlAnnotationPainter, htmlAnchorElements, type HtmlAnnotationPaint } from '../html-bridge/annotations';
+import { createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
 const relayWaiters = new Set<() => void>();
 remote.execute = async (request) => {
@@ -64,8 +64,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
     if (suppressClick) { suppressClick = false; event.preventDefault(); return; }
     const target = (event.target as Element)?.closest?.('[data-af-id]');
     if (pick && canAnnotate) { event.preventDefault(); const selected = htmlSelection(win, target, config.revision, config.savedNodeIds); if (selected) post({ kind: 'event', event: { type: 'mx:selection', nonce, selection: selected } }); return; }
-    const pin = annotations.pins.find((item) => { const matches=htmlAnchorElements(win.document,item.anchor?.nodeId ?? item.nodeId ?? item.path,item.anchor?.ancestorId); return matches.length===1 && matches[0]===target; });
-    if (pin && target) { const rect = target.getBoundingClientRect(); post({ kind: 'event', event: { type: 'mx:annotation-pin', nonce, id: pin.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } } }); }
+
   };
   const pending = new Map<number, { resolve: (value: Awaited<ReturnType<RemotePort['execute']>>) => void; reject: (error: Error) => void }>();
   relay = (request) => new Promise((resolve, reject) => {
