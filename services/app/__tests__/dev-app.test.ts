@@ -45,13 +45,11 @@ describe('server.ts --app-only', () => {
 
   /** Publish the document each local-service assertion consumes, so shuffled tests remain independent. */
   async function publishDocument(): Promise<string> {
-    const markup = '<Helmet><Value name="tiny" type="table" value={[{"a":1},{"a":2}]} />'
-      + '<Query name="q">{`select sum(a) total from tiny`}</Query></Helmet>'
-      + '<Number data="$q" col="total" />';
+    const html = '<!doctype html><html><head><title>Local browser</title></head><body><h1>Native page</h1></body></html>';
     const created = await fetchChecked(`${base}/api/artifacts`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title: 'dev-app boot walk', markup, visibility: 'public' }),
+      body: JSON.stringify({ html, visibility: 'public' }),
     });
     expect(created.status).toBe(201);
     return ((await created.json()) as { id: string }).id;
@@ -154,15 +152,19 @@ describe('server.ts --app-only', () => {
     expect(await publishDocument()).toBeTruthy();
   });
 
-  it('answers the document\'s query on the LOCAL sql service — no URL names one', async () => {
-    const docId = await publishDocument();
-    const q = encodeURIComponent(JSON.stringify({ only: ['q'] }));
-    const res = await fetchChecked(`${base}/a/${docId}/query?q=${q}`);
+  it('queries a stored dataset on the LOCAL sql service — no URL names one', async () => {
+    const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` };
+    const made = await fetchChecked(`${base}/api/artifacts`, {
+      method: 'POST', headers, body: JSON.stringify({ dataset: [{ a: 1 }, { a: 2 }] }),
+    });
+    expect(made.status).toBe(201);
+    const { id } = await made.json() as { id: string };
+    const res = await fetchChecked(`${base}/api/artifacts/${id}/query`, {
+      method: 'POST', headers, body: JSON.stringify({ sql: 'select sum(a) as total from rows' }),
+    });
     expect(res.status).toBe(200);
-    const body = await res.json() as { tables: Record<string, { rows: Array<Record<string, unknown>> }>; errors: Record<string, string> };
-    expect(Object.keys(body.errors)).toEqual([]);
-    expect(Number(body.tables.q!.rows[0]!.total)).toBe(3); // sum(1,2) — DuckDB in THIS process
-    expect((await fetchChecked(`${base}/a/${docId}`)).status).toBe(200);
+    const body = await res.json() as { results: Array<{ rows: Array<{ total: number }> }> };
+    expect(Number(body.results[0]!.rows[0]!.total)).toBe(3); // DuckDB in THIS process
   }, 60_000);
 
   it('exports through the LOCAL browser service — no URL names one', async () => {
