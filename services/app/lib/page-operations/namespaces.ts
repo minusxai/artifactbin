@@ -470,3 +470,8 @@ export async function executePageOperation(
   if (mutating) response.extensions = { outcomes };
   return response;
 }
+
+/** Bounded preflight used by the HTTP archive guard; execution repeats validation. */
+export function pageOperationKind(query:string,operationName?:string):'query'|'mutation'|null {
+ try{const operation=getOperationAST(boundedDocument(query),operationName);return operation?.operation==='query'?'query':operation?.operation==='mutation'?'mutation':null;}catch{return null;}
+}

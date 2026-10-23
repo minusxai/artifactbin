@@ -3,6 +3,7 @@ import {createRunner} from '@artifactbin/runner/local';
 import {setServices} from '@/lib/platform';
 import {localPageBackendCapability} from '@/lib/page-operations';
 import {POST as publish} from '@/app/api/artifacts/route';
+import {GET as artifactGet,PUT as artifactPut} from '@/app/api/artifacts/[id]/route';
 import {GET,POST} from '@/app/api/artifacts/[id]/graphql/route';
 import {request,useAppHarness,mintAccountToken} from './harness';
 const harness=useAppHarness();
@@ -17,6 +18,11 @@ it('publishes, discovers and executes immutable GraphQL with file-scoped shared 
   const discovery=await GET(request(path,{token:owner.token}),context);expect(discovery.status).toBe(200);expect((await discovery.json()).sdl).toContain('tasks__Query');
   const mutation=await POST(request(path,{method:'POST',token:owner.token,json:{revision:'1',query:'mutation { tasks { add } }'}}),context);expect(mutation.status).toBe(200);expect(await mutation.json()).toMatchObject({data:{tasks:{add:1}},extensions:{outcomes:{'tasks.add':'committed'}}});
   const query=await POST(request(path,{method:'POST',token:owner.token,json:{revision:'1',query:'{ tasks { count } }'}}),context);expect(await query.json()).toEqual({data:{tasks:{count:1}}});
+  const head=await (await artifactGet(request(`/api/artifacts/${created.id}`,{token:owner.token}),context)).json();
+  const updated=await artifactPut(request(`/api/artifacts/${created.id}`,{method:'PUT',token:owner.token,json:{html:head.html,backendSources:{tasks:source},expectedVersion:head.version,expectedState:head.state}}),context);expect(updated.status).toBe(200);
+  const archive=await POST(request(path,{method:'POST',token:owner.token,json:{revision:'1',operation:'query',query:'mutation { tasks { add } }'}}),context);expect(archive.status).toBe(400);
+  const archiveMutation=await POST(request(path,{method:'POST',token:owner.token,json:{revision:'1',query:'mutation { tasks { add } }'}}),context);expect(archiveMutation.status).toBe(403);
+
  }finally{await runner.close();}
 },20000);
 it('does not accept a page bearer as runner authority for file stores',async()=>{

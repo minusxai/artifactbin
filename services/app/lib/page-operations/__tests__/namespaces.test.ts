@@ -18,3 +18,9 @@ describe('page resolver isolation and authority',()=>{
   expect(schema.sdl).toContain('tasks__Thing');expect(schema.sdl).toContain('other__Thing');
  });
 });
+it('preflights the actual bounded operation rather than trusting a page label',async()=>{
+ const {pageOperationKind}=await import('../index');
+ expect(pageOperationKind('mutation { tasks { save(n:2) } }')).toBe('mutation');
+ expect(pageOperationKind('query A { tasks { value } } mutation B { tasks { save(n:2) } }','B')).toBe('mutation');
+ expect(pageOperationKind('query A { tasks { value } } mutation B { tasks { save(n:2) } }')).toBeNull();
+});
