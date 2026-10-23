@@ -1,0 +1,28 @@
+import {it,expect,vi} from 'vitest';
+import {request,useAppHarness,mintAccountToken} from './harness';
+import {POST} from '@/app/api/artifacts/route';
+import {readHtmlPage} from '@/lib/html-publication';
+import {getHtmlBackendVersion} from '@/lib/html-backends';
+import {identityForUser} from '@/lib/accounts';
+import {backendSecrets,readPinnedBackendSecret} from '@/lib/html-backend-secrets';
+import {transferArtifact} from '@/lib/artifacts/transfer';
+import {localPageBackendCapability} from '@/lib/page-operations/transport';
+vi.mock('@/lib/page-operations',async original=>({...await original<typeof import('@/lib/page-operations')>(),compilePageBackend:async(source:string)=>({typeDefs:'type Query { ready: Boolean }',compiled:source,secretBindings:['TOKEN']})}));
+const harness=useAppHarness();
+it('revokes immutable former-owner secret access on transfer while preserving code and ordinary store reads',async()=>{
+ const owner=await mintAccountToken('credential-owner'),next=await mintAccountToken('new-owner');const db=await harness.db();
+ const created=await(await POST(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:'<html><head><link rel="af-backend" data-af-name="db" href="./db.ts"></head><body>Ready</body></html>',backendSources:{db:'immutable-code'}}}))).json();
+ const actor=identityForUser(owner.userId,owner.id),page=await readHtmlPage(actor,created.id),link=page.links[0];if(link.kind!=='backend')throw Error('missing backend');
+ const backend=(await getHtmlBackendVersion(link.backendId,link.version))!;
+ await backendSecrets.put({ownerId:owner.userId!,backendId:backend.backendId},'TOKEN','former-owner-secret');
+ const admitted={requestId:'r',userId:backend.ownerId,pageBackendOperation:'query' as const,artifactId:backend.backendId,artifactVersion:backend.version,program:{source:backend.compiled,language:'javascript' as const},input:{kind:'invoke',principal:{tenant:page.pageId,subject:null}}};
+ expect(await localPageBackendCapability(admitted,'artifactbin.pageBackend.secrets.get',{name:'TOKEN'})).toBe('former-owner-secret');
+ await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES('secret_transfer','secret-transfer','Transfer',$1)",[owner.userId]);
+ for(const user of [owner,next])await db.query("INSERT INTO group_members(group_id,user_id,role) VALUES('secret_transfer',$1,'editor')",[user.userId]);
+ expect(await transferArtifact(actor,page.pageId,{type:'group',id:'secret_transfer'})).not.toBeNull();
+ await expect(localPageBackendCapability(admitted,'artifactbin.pageBackend.secrets.get',{name:'TOKEN'})).rejects.toThrow('unavailable');
+ expect(await localPageBackendCapability(admitted,'artifactbin.pageBackend.store.get',{})).toEqual({value:null,version:0});
+ expect(await transferArtifact(identityForUser(next.userId,next.id),page.pageId,{type:'personal'})).not.toBeNull();
+ await expect(readPinnedBackendSecret(backend,'TOKEN')).rejects.toThrow('unavailable');
+ expect((await getHtmlBackendVersion(link.backendId,link.version))?.ownerId).toBe(owner.userId);
+});

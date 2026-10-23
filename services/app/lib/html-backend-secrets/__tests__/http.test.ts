@@ -19,3 +19,10 @@ it('refuses other owners, lost ownership and undeclared names before writing',as
  state.owner='owner';state.owned=false;expect((await PUT(request(),context)).status).toBe(404);
  state.owned=true;expect((await PUT(new Request('https://example.com/api',{method:'PUT',body:JSON.stringify({name:'OTHER',value:'private-value'})}),context)).status).toBe(400);expect(state.writes).toEqual([]);
 });
+
+it('allows the original credential owner to list and revoke after page ownership is lost',async()=>{
+ state.owned=false;state.names=['TOKEN'];
+ expect((await GET(new Request('https://example.com/api'),context)).status).toBe(200);
+ const revoked=await DELETE(new Request('https://example.com/api',{method:'DELETE',body:JSON.stringify({name:'TOKEN'})}),context);expect(revoked.status).toBe(200);expect(state.names).toEqual([]);
+ state.owner='other';expect((await DELETE(new Request('https://example.com/api',{method:'DELETE',body:JSON.stringify({name:'TOKEN'})}),context)).status).toBe(404);
+});
