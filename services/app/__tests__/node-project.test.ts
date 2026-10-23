@@ -1,162 +1,77 @@
-import {documentEditBody,restoreDocument} from './prepared-document';
-import { artifactQuery } from '@/lib/artifacts/table';
-import {patchMetadata} from '@/__tests__/conditional-request';
-import {observedRequest} from '@/__tests__/conditional-request';
-/** Integrated acceptance for identity, atomic batches and relation-only comments. */
-import { describe, expect, it } from 'vitest';
-import { useAppHarness, request } from './harness';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { getDb } from '@/lib/platform';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
-import { POST as createRoute } from '@/app/api/artifacts/route';
-import { GET as getRoute } from '@/app/api/artifacts/[id]/route';
-import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { POST as commentRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
-import { DELETE as deleteCommentRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
-import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
-import { createArtifact,getArtifactById,type ArtifactRow } from '@/lib/artifacts';
-import { createDocumentGraph } from '@/lib/document/document-graph';
-useAppHarness();
-const params=(id:string)=>({params:Promise.resolve({id})});
-async function setup(markup:string) {
-  const t=await mintToken('node-project');
-  const made=await createRoute(request('/api/artifacts',{method:'POST',token:t.token,json:{markup}}));
-  expect(made.status,await made.clone().text()).toBe(201);
-  const doc=await made.json();
-  const snapshots=new Map<string,ArtifactRow>();
-  const remember=async()=>{const row=(await getArtifactById(doc.id))!;snapshots.set(row.edit_id,row);return row;};
-  await remember();
-  const read=async()=>{await remember();return (await getRoute(request(`/api/artifacts/${doc.id}`,{token:t.token}),params(doc.id))).json();};
-  const edit=async(body:Record<string,unknown>)=>{
-   let prepared=body;
-   if(!(Object.hasOwn(body,'edits')&&Object.hasOwn(body,'old_string'))){
-    const base=snapshots.get(String(body.edit_id));if(!base)throw new Error('Missing observed snapshot');
-    let source=base.source!;
-    const changes=(body.edits??[{old_string:body.old_string,new_string:body.new_string}]) as Array<{old_string:string;new_string:string}>;
-    for(const [index,change] of changes.entries()){
-     if(source.split(change.old_string).length!==2)throw new Error(`No unique match at edit ${index}`);
-     source=source.replace(change.old_string,change.new_string);
-    }
-    prepared=documentEditBody(base,{source});
-   }
-   const response=await editRoute(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:t.token,json:prepared}),params(doc.id));
-   await remember();return response;
-  };
-  return {t,doc,read,edit};
+/** Native identities, atomic replacement and comments through retained artifact routes.
+ * The removed JSX splice/batch/rebase protocol is replaced by whole-file CAS.
+ */
+import {expect,it} from 'vitest';
+import {request,useAppHarness,mintAccountToken} from './harness';
+import {nativeHtml} from './native-html-fixture';
+import {nativeAnchor} from './native-annotation-fixture';
+import {observedRequest,patchMetadata} from './conditional-request';
+import {POST as create} from '@/app/api/artifacts/route';
+import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
+import {POST as revert} from '@/app/api/artifacts/[id]/revert/route';
+import {POST as comment} from '@/app/api/my/artifacts/[id]/annotations/route';
+import {DELETE as deleteComment} from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
+import {createArtifact} from '@/lib/artifacts';
+const harness=useAppHarness();
+const ctx=(id:string)=>({params:Promise.resolve({id})});
+async function setup(body='<main><p data-af-id="text">Hello</p></main>'){
+ const token=await mintAccountToken('node-project');
+ const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{html:nativeHtml(body)}}));
+ expect(response.status).toBe(201);const first=await response.json(),id=first.id as string;
+ const head=async()=>await(await read(request(`/api/artifacts/${id}`,{token:token.token}),ctx(id))).json();
+ const save=(html:string,base=first)=>replace(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{html,expectedVersion:base.version,expectedState:base.state}}),ctx(id));
+ return {token,id,first,head,save};
 }
-const bodyIds=(source:string)=>{
-  const parsed=parseJsx(source); if(!parsed.ok)throw new Error(parsed.error);
-  const ids:unknown[]=[];
-  const walk=(nodes:JsxNode[])=>nodes.forEach(n=>{if(n.type!=='element'||n.tag==='Helmet')return;const a=n.attributes.find(a=>a.name==='id');ids.push(a?.value.static?a.value.json:null);walk(n.children);});
-  walk(parsed.nodes);return ids;
-};
-async function history(id:string) {
-  const db=await getDb();
-  return {edits:(await artifactQuery(db,'SELECT * FROM artifact_edits WHERE artifact_id=$1 ORDER BY seq',[id])).rows,versions:(await artifactQuery(db,'SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version',[id])).rows};
-}
-describe('node project through real routes',()=>{
-  it('refuses malformed markup at direct storage instead of bypassing identity validation',async()=>{
-    const t=await mintToken('invalid-direct-create');
-    await expect(createArtifact(t.id, t.userId,{format:'markup',source:'<main>',meta:{}})).rejects.toThrow('node-ids: invalid JSX');
-    const db=await getDb();
-    expect((await artifactQuery(db,'SELECT id FROM artifacts WHERE token_id=$1',[t.id])).rows).toHaveLength(0);
-  });
-  it('echoes generated ids on replacement and rejects malformed JSX without throwing',async()=>{
-    const s=await setup('<p id="para">Before</p>');
-    const changed=await replaceRoute(await observedRequest(`/api/artifacts/${s.doc.id}`,{method:'PUT',token:s.t.token,json:{markup:'<section>New</section>'}}),params(s.doc.id));
-    expect(changed.status).toBe(200);
-    const body=await changed.json();expect(body.document.kind).toBe('graph');expect(body.markup).toMatch(/<section id="[A-Za-z][A-Za-z0-9]{3}">New/);
-    const rejected=await createRoute(request('/api/artifacts',{method:'POST',token:s.t.token,json:{markup:'<p>'}}));
-    expect(rejected.status).toBe(400);
-  });
-  it('create persists a unique id on every authored body element',async()=>{
-    const {read}=await setup('<Helmet><title>T</title></Helmet><main><p>A</p><p>B</p></main>');
-    const head=await read(); const ids=bodyIds(head.markup);
-    expect(ids).toHaveLength(3);expect(ids.every(id=>typeof id==='string'&&id.length>0)).toBe(true);expect(new Set(ids).size).toBe(3);
-  });
-  it('batch moves with one version while preserving an unrelated stale sibling edit',async()=>{
-    const s=await setup('<main id="root"><Card id="card">Hello</Card><p id="other">Old</p><section id="dest"></section></main>');
-    const base=await s.read();
-    expect((await s.edit({edit_id:base.edit_id,old_string:'Old',new_string:'Current'})).status).toBe(200);
-    const moved=await s.edit({edit_id:base.edit_id,edits:[{old_string:'<Card id="card">Hello</Card>',new_string:''},{old_string:'<section id="dest">',new_string:'<section id="dest"><Card id="card">Hello</Card>'}]});
-    expect(moved.status,await moved.clone().text()).toBe(200);
-    const head=await s.read();expect(head.version).toBe(base.version+2);expect(head.markup).toContain('Current');expect(head.markup).toContain('<section id="dest"><Card id="card">Hello</Card></section>');
-    const logged=(await history(s.doc.id)).edits;expect(logged).toHaveLength(3);
-    expect(logged[2].document_state).toMatchObject({kind:'operations'});
-  });
-  it('validates only final JSX for dependent batch steps',async()=>{
-    const s=await setup('<p id="para">Hi</p>');const base=await s.read();
-    const result=await s.edit({edit_id:base.edit_id,edits:[{old_string:'<p id="para">',new_string:'<section id="wrap"><p id="para">'},{old_string:'Hi',new_string:'Done'},{old_string:'</p>',new_string:'</p></section>'}]});
-    expect(result.status,await result.clone().text()).toBe(200);const head=await s.read();expect(head.version).toBe(base.version+1);expect(head.markup).toBe('<section id="wrap"><p id="para">Done</p></section>');
-  });
-  it('failure in a later batch step leaves source, head and history untouched',async()=>{
-    const s=await setup('<p id="para">Hi</p>');const base=await s.read();const before=await history(s.doc.id);
-    await expect(s.edit({edit_id:base.edit_id,edits:[{old_string:'Hi',new_string:'Done'},{old_string:'missing',new_string:'x'}]})).rejects.toThrow('edit 1');
-    const head=await s.read();expect(head.edit_id).toBe(base.edit_id);expect(head.markup).toBe(base.markup);expect(await history(s.doc.id)).toEqual(before);
-  });
-  it('creating and deleting a comment does not edit or clean identity from source',async()=>{
-    const s=await setup('<p id="para">Hi</p>');const base=await s.read();const before=await history(s.doc.id);const actor={ credential: 'session' as const, userId: s.t.userId!, email: s.t.email!, emailVerified: true };
-    const made=await commentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',actor,json:{node_id:'para',body:'Check'}}),params(s.doc.id));
-    expect(made.status,await made.clone().text()).toBe(201);const ann=await made.json();
-    const commented=await s.read();expect(commented.edit_id).toBe(base.edit_id);expect(commented.markup).toBe(base.markup);expect(await history(s.doc.id)).toEqual(before);
-    const deleted=await deleteCommentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations/${ann.id}`,{method:'DELETE',actor}),{params:Promise.resolve({id:s.doc.id,annId:ann.id})});
-    expect(deleted.status).toBeLessThan(300);expect((await s.read()).markup).toBe(base.markup);expect(await history(s.doc.id)).toEqual(before);
-  });
-  it('rejects mixed edit forms by presence without touching history',async()=>{
-    const s=await setup('<p id="para">Hi</p>');const before=await history(s.doc.id);
-    for(const body of [
-      {edit_id:s.doc.edit_id,old_string:'Hi',new_string:'Bye',edits:null},
-      {edit_id:s.doc.edit_id,old_string:'Hi',edits:[{old_string:'Hi',new_string:'Bye'}]},
-    ]) expect((await s.edit(body)).status).toBe(400);
-    expect(await history(s.doc.id)).toEqual(before);
-  });
-  it('retires removed source ids and never assigns them to generated replacements',async()=>{
-    const s=await setup('<main><p>A</p><p>B</p></main>');const base=await s.read();
-    const ids=bodyIds(base.markup) as string[];const removed=ids[1];
-    const changed=await s.edit({edit_id:base.edit_id,old_string:`<p id="${removed}">A</p>`,new_string:'<section>New</section>'});
-    expect(changed.status,await changed.clone().text()).toBe(200);
-    const head=await s.read();const nextIds=bodyIds(head.markup) as string[];
-    expect(nextIds).not.toContain(removed);
-    const db=await getDb();const ledger=await artifactQuery<{source_id:string;retired_version:number|null}>(db,'SELECT source_id,retired_version FROM artifact_source_ids WHERE artifact_id=$1',[s.doc.id]);
-    expect(ledger.rows.find(row=>row.source_id===removed)?.retired_version).toBe(head.version);
-  });
-  it('stamps direct storage creation rather than relying on an HTTP wire',async()=>{
-    const t=await mintToken('direct-create');
-    const row=await createArtifact(t.id, t.userId,{format:'markup',source:'<main><p>Direct</p></main>',meta:{}});
-    const ids=bodyIds(row.source!);expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
-  });
-  it('normalizes and reserves identities when reverting a pre-identity archive',async()=>{
-    const s=await setup('<main id="root"><p id="current">Current</p></main>');const db=await getDb();
-    await artifactQuery(db,'UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
-    await artifactQuery(db,`INSERT INTO artifact_versions(artifact_id,version,title,description,format,document,meta)
-      VALUES($1,1,'old',NULL,'markup',$2::jsonb,$3)`,[s.doc.id,JSON.stringify(createDocumentGraph('<main><p>Archived</p></main>',1)),JSON.stringify({theme:'modernist',template:null,colorMode:'light',dataSyntax:2})]);
-    const response=await restoreDocument(s.t.token,s.doc.id,1);
-    expect(response.status,await response.clone().text()).toBe(200);
-    const head=await s.read();const ids=bodyIds(head.markup) as string[];expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
-    const reserved=await artifactQuery<{source_id:string}>(db,'SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[s.doc.id]);
-    expect(ids.every(id=>reserved.rows.some(row=>row.source_id===id))).toBe(true);
-    const stored=(await artifactQuery<{format:string;meta:Record<string,unknown>}>(db,'SELECT format,meta FROM artifacts WHERE id=$1',[s.doc.id])).rows[0];
-    expect(stored.format).toBe('markup');expect(stored.meta.colorMode).toBe('light');expect(stored.meta.theme).toBe('modernist');
-  });
-  it('a refused archived publish leaves head and history unchanged',async()=>{
-    const s=await setup('<p id="safe">Safe</p>');const db=await getDb();await artifactQuery(db,'UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
-    await artifactQuery(db,`INSERT INTO artifact_versions(artifact_id,version,title,format,document,meta) VALUES($1,1,'bad','markup',$2::jsonb,'{"dataSyntax":2}')`,[s.doc.id,JSON.stringify(createDocumentGraph('<p id="bad" onClick="run()">Bad</p>',1))]);
-    const before=await history(s.doc.id);const head=await s.read();
-    await expect(restoreDocument(s.t.token,s.doc.id,1)).rejects.toThrow();
-    expect((await s.read()).markup).toBe(head.markup);expect(await history(s.doc.id)).toEqual(before);
-  });
-  it('metadata-only edits preserve source bytes',async()=>{
-    const s=await setup('<main id="root"><p id="para">Same</p></main>');const before=(await s.read()).markup;
-    const response=await patchMetadata(s.t.token,s.doc.id,{title:'Renamed'});expect(response.status).toBe(200);
-    expect((await s.read()).markup).toBe(before);
-  });
-  it('reactivates a retired id when an archived source is restored',async()=>{
-    const s=await setup('<main id="root"><p id="returning">Back</p></main>');const base=await s.read();
-    expect((await s.edit({edit_id:base.edit_id,old_string:'<p id="returning">Back</p>',new_string:''})).status).toBe(200);
-    const db=await getDb();expect((await artifactQuery<{retired_version:number|null}>(db,'SELECT retired_version FROM artifact_source_ids WHERE artifact_id=$1 AND source_id=$2',[s.doc.id,'returning'])).rows[0].retired_version).not.toBeNull();
-    const restored=await restoreDocument(s.t.token,s.doc.id,base.version);
-    expect(restored.status,await restored.clone().text()).toBe(200);
-    expect((await artifactQuery<{retired_version:number|null}>(db,'SELECT retired_version FROM artifact_source_ids WHERE artifact_id=$1 AND source_id=$2',[s.doc.id,'returning'])).rows[0].retired_version).toBeNull();
-  });
-
+const ids=(html:string)=>[...html.matchAll(/data-af-id="([^"]+)"/g)].map(match=>match[1]);
+it('allocates a unique identity on every saved element and echoes canonical source',async()=>{
+ const s=await setup();const all=ids(s.first.html);
+ expect(all.length).toBe((s.first.html.match(/<[A-Za-z][^>]*>/g)??[]).length);
+ expect(new Set(all).size).toBe(all.length);expect(all).toContain('text');
+ expect((await s.head()).html).toBe(s.first.html);
+});
+it('refuses duplicate identities at direct storage without inserting an artifact',async()=>{
+ const token=await mintAccountToken('invalid-direct');
+ await expect(createArtifact(token.id,token.userId,{format:'html',source:nativeHtml('<p data-af-id="same">A</p><p data-af-id="same">B</p>'),meta:{}})).rejects.toThrow();
+ expect((await(await harness.db()).query('SELECT id FROM artifacts WHERE token_id=$1',[token.id])).rows).toEqual([]);
+});
+it('commits a move in one replacement while keeping stable identities; a stale sibling save cannot overwrite it',async()=>{
+ const s=await setup('<main><p data-af-id="moving">Move</p><section data-af-id="destination"></section></main>');
+ const moving=s.first.html.match(/<p[^>]*>Move<\/p>/)![0];
+ const source=s.first.html.replace(moving,'').replace('</section>',moving+'</section>');
+ const changed=await s.save(source);expect(changed.status).toBe(200);const current=await changed.json();
+ expect(current.version).toBe(2);expect(current.html).toContain(moving+'</section>');expect(ids(current.html)).toContain('moving');
+ const stale=await s.save(s.first.html.replace('Move','Clobber'));expect(stale.status).toBe(409);
+ expect(await s.head()).toMatchObject({html:current.html,version:2});
+});
+it('an invalid replacement leaves source, head and archived history untouched',async()=>{
+ const s=await setup();const before=await s.head();
+ const refused=await s.save(nativeHtml('<p data-af-id="same">A</p><p data-af-id="same">B</p>'));expect(refused.status).toBe(400);
+ expect(await s.head()).toEqual(before);
+ expect((await(await harness.db()).query('SELECT version FROM artifact_versions WHERE artifact_id=$1',[s.id])).rows).toEqual([]);
+});
+it('creating and deleting a comment does not change source identities or version',async()=>{
+ const s=await setup();const actor={credential:'session' as const,userId:s.token.userId!,email:s.token.email!,emailVerified:true};
+ const made=await comment(request(`/api/my/artifacts/${s.id}/annotations`,{method:'POST',actor,json:{anchor:nativeAnchor('text'),body:'Review'}}),ctx(s.id));
+ expect(made.status).toBe(201);const annotation=await made.json();
+ const removed=await deleteComment(request(`/api/my/artifacts/${s.id}/annotations/${annotation.id}`,{method:'DELETE',actor}),{params:Promise.resolve({id:s.id,annId:annotation.id})});
+ expect(removed.status).toBe(200);expect(await s.head()).toMatchObject({html:s.first.html,version:s.first.version});
+});
+it('never reuses a removed identity for a new element',async()=>{
+ const s=await setup();const source=s.first.html.replace(/<p[^>]*>Hello<\/p>/,'<section>New</section>');
+ const updated=await s.save(source);expect(updated.status).toBe(200);const head=await updated.json();
+ expect(ids(head.html)).not.toContain('text');
+ const reuse=await s.save(head.html.replace('</body>','<p data-af-id="text">Reuse</p></body>'),head);
+ expect(reuse.status).toBe(400);expect((await s.head()).html).toBe(head.html);
+});
+it('direct creation stamps identities and archived restore preserves the original identity',async()=>{
+ const token=await mintAccountToken('direct');
+ const row=await createArtifact(token.id,token.userId,{format:'html',source:nativeHtml('<p data-af-id="returning">Back</p>'),meta:{}});
+ expect(ids(row.source!)).toContain('returning');expect(ids(row.source!).length).toBeGreaterThan(1);
+ const s=await setup();expect((await s.save(s.first.html.replace(/<p[^>]*>Hello<\/p>/,'<p>Changed</p>'))).status).toBe(200);
+ const restored=await revert(await observedRequest(`/api/artifacts/${s.id}/revert`,{method:'POST',token:s.token.token,json:{version:1}}),ctx(s.id));
+ expect(restored.status).toBe(200);expect(await restored.json()).toMatchObject({html:s.first.html,version:3});
+});
+it('metadata-only writes preserve canonical source bytes',async()=>{
+ const s=await setup();const response=await patchMetadata(s.token.token,s.id,{title:'Named'});
+ expect(response.status).toBe(200);expect((await s.head()).html).toBe(s.first.html);
 });
