@@ -41,7 +41,8 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const config = { ...publicConfig, savedNodeIds, ...(!input.offline && appOrigin ? { appOrigin } : {}), offline: input.offline === true };
   const json = JSON.stringify(config).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   const safeCore = input.core.replace(/<\/script/gi, '<\\/script');
-  const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script><script data-af="core">${safeCore}</script>`);
+  const portable=input.offline&&input.apollo?`<script type="application/json" data-af="apollo">${JSON.stringify(input.apollo).replace(/</g,'\\u003c')}</script>`:'';
+  const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${portable}<script data-af="core">${safeCore}</script>`);
   for (const node of boot.childNodes) {
     node.parentNode = head;
     if (coreId && 'attrs' in node && node.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core')) node.attrs.push({ name: 'data-af-id', value: coreId });
