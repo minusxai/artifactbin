@@ -179,3 +179,20 @@ CREATE TABLE IF NOT EXISTS dataset_source_queries (
 );
 DROP TRIGGER IF EXISTS dataset_source_queries_immutable ON dataset_source_queries;
 CREATE TRIGGER dataset_source_queries_immutable BEFORE UPDATE OR DELETE ON dataset_source_queries FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+
+-- Immutable proof of explicitly admitted deleted page/resource lifecycle associations.
+CREATE TABLE IF NOT EXISTS dataset_deleted_page_lifecycle_links (
+ source_namespace text NOT NULL, legacy_id text NOT NULL, page_id text NOT NULL UNIQUE REFERENCES files(id),
+ authority_sha256 text NOT NULL CHECK(authority_sha256 ~ '^[a-f0-9]{64}$'), PRIMARY KEY(source_namespace,legacy_id),
+ UNIQUE(source_namespace,legacy_id,page_id,authority_sha256)
+);
+DROP TRIGGER IF EXISTS dataset_deleted_page_lifecycle_links_immutable ON dataset_deleted_page_lifecycle_links;
+CREATE TRIGGER dataset_deleted_page_lifecycle_links_immutable BEFORE UPDATE OR DELETE ON dataset_deleted_page_lifecycle_links FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+CREATE TABLE IF NOT EXISTS dataset_deleted_lifecycle_links (
+ source_namespace text NOT NULL, legacy_id text NOT NULL, page_id text NOT NULL UNIQUE REFERENCES dataset_deleted_page_lifecycle_links(page_id),
+ authority_sha256 text NOT NULL CHECK(authority_sha256 ~ '^[a-f0-9]{64}$'), PRIMARY KEY(source_namespace,legacy_id),
+ FOREIGN KEY(source_namespace,legacy_id) REFERENCES dataset_resources(source_namespace,legacy_id),
+ FOREIGN KEY(source_namespace,legacy_id,page_id,authority_sha256) REFERENCES dataset_deleted_page_lifecycle_links(source_namespace,legacy_id,page_id,authority_sha256)
+);
+DROP TRIGGER IF EXISTS dataset_deleted_lifecycle_links_immutable ON dataset_deleted_lifecycle_links;
+CREATE TRIGGER dataset_deleted_lifecycle_links_immutable BEFORE UPDATE OR DELETE ON dataset_deleted_lifecycle_links FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();

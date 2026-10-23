@@ -1,4 +1,15 @@
-import {verifyAdditiveDatasetBase,additiveAuthoritySha256,additiveDatasetBatchFingerprint} from "./dataset-pages/additive-authority.ts";
+import {
+  persistDeletedDatasetLifecycleLinks,
+  validateDeletedDatasetBatch,
+  verifyDeletedDatasetAuthority,
+  deletedDatasetBatchFingerprint,
+  deletedDatasetAuthoritySha256,
+} from "./deleted-dataset-authority.ts";
+import {
+  verifyAdditiveDatasetBase,
+  additiveAuthoritySha256,
+  additiveDatasetBatchFingerprint,
+} from "./dataset-pages/additive-authority.ts";
 import {
   registerSourceQueries,
   verifySourceQueries,
@@ -66,10 +77,13 @@ export class PostgresDatasetMetadataDestination
       !batch.metadata.sourceNamespace
     )
       throw new Error("Invalid dataset export provenance");
+    if (batch.deletedAdditive) validateDeletedDatasetBatch(batch);
     validateMigrationOwnershipDatasetGrantBatch(
       batch.metadata,
       batch.ownershipDatasetGrants,
-      batch.additive ? undefined : this.ownershipOverride,
+      batch.additive || batch.deletedAdditive
+        ? undefined
+        : this.ownershipOverride,
     );
     validateMigrationPersonBindings(batch.metadata);
     validateMigrationSourceQueryBatch(
@@ -95,16 +109,27 @@ export class PostgresDatasetMetadataDestination
         if (users.has(p.actor)) throw new Error("Ambiguous dataset user actor");
         users.add(p.actor);
       }
-    const digest = batch.additive ? additiveDatasetBatchFingerprint(batch) : createHash("sha256").update(canonical(batch)).digest("hex");
+    const digest = batch.deletedAdditive
+      ? deletedDatasetBatchFingerprint(batch)
+      : batch.additive
+        ? additiveDatasetBatchFingerprint(batch)
+        : createHash("sha256").update(canonical(batch)).digest("hex");
     const result = { created: 0, unchanged: 0 };
     await this.db.query("BEGIN");
     try {
       await this.db.query(`SET LOCAL search_path TO ${this.names.runtime}`);
       // Locks serialize migration reruns against live revocations while comparing current authority.
       await this.db.query(
-        `LOCK TABLE ${[...plans.map((p) => this.names.runtime + "." + p.table), this.names.runtime + ".dataset_mutation_operations", this.names.runtime + ".dataset_source_queries", this.names.runtime + ".dataset_viewer_bindings"].join(",")} IN SHARE ROW EXCLUSIVE MODE`,
+        `LOCK TABLE ${[...plans.map((p) => this.names.runtime + "." + p.table), this.names.runtime + ".dataset_mutation_operations", this.names.runtime + ".dataset_source_queries", this.names.runtime + ".dataset_viewer_bindings", ...(batch.deletedAdditive ? [this.names.runtime + ".dataset_member_bindings", this.names.runtime + ".dataset_deleted_page_lifecycle_links", this.names.runtime + ".dataset_deleted_lifecycle_links"] : [])].join(",")} IN SHARE ROW EXCLUSIVE MODE`,
       );
-      if (batch.additive) await verifyAdditiveDatasetBase(this.db, this.additiveSchema, batch);
+      if (batch.deletedAdditive)
+        await verifyDeletedDatasetAuthority(
+          this.db,
+          this.additiveSchema,
+          batch,
+        );
+      if (batch.additive)
+        await verifyAdditiveDatasetBase(this.db, this.additiveSchema, batch);
       for (const { receipt: r } of batch.sourceQueryRegistrations ?? []) {
         const authority = await this.db.query(
           `SELECT 1 FROM ${this.names.runtime}.af_backend_versions v JOIN ${this.names.runtime}.af_page_backends p ON p.file_id=v.file_id AND p.version=v.version JOIN ${this.names.runtime}.dataset_viewer_bindings b ON b.backend_id=v.file_id AND b.backend_version=v.version AND b.page_id=p.page_id AND b.page_version=p.page_version WHERE v.file_id=$1 AND v.version=$2 AND p.page_id=$3 AND p.page_version=$4 AND b.source_namespace=$5`,
@@ -196,10 +221,40 @@ export class PostgresDatasetMetadataDestination
       await this.db.query(
         `CREATE TABLE IF NOT EXISTS ${this.names.archive}.dataset_receipts (source_namespace text PRIMARY KEY, fingerprint text NOT NULL, base_manifest_sha256 text NOT NULL, relation_manifest_sha256 text NOT NULL, relation_exported_at text NOT NULL)`,
       );
-      if(batch.additive) await this.db.query(`CREATE TABLE IF NOT EXISTS ${this.names.archive}.dataset_additive_receipts (source_namespace text NOT NULL,authority_sha256 text NOT NULL,fingerprint text NOT NULL,base_fingerprint text NOT NULL,PRIMARY KEY(source_namespace,authority_sha256))`);
-      const receipt = batch.additive ? (await this.db.query(`SELECT fingerprint FROM ${this.names.archive}.dataset_additive_receipts WHERE source_namespace=$1 AND authority_sha256=$2`,[batch.metadata.sourceNamespace,additiveAuthoritySha256(batch.additive)])).rows[0] : (
-        await this.db.query(`SELECT fingerprint FROM ${this.names.archive}.dataset_receipts WHERE source_namespace=$1`,[batch.metadata.sourceNamespace])
-      ).rows[0];
+      if (batch.additive)
+        await this.db.query(
+          `CREATE TABLE IF NOT EXISTS ${this.names.archive}.dataset_additive_receipts (source_namespace text NOT NULL,authority_sha256 text NOT NULL,fingerprint text NOT NULL,base_fingerprint text NOT NULL,PRIMARY KEY(source_namespace,authority_sha256))`,
+        );
+      if (batch.deletedAdditive)
+        await this.db.query(
+          `CREATE TABLE IF NOT EXISTS ${this.names.archive}.dataset_deleted_additive_receipts (source_namespace text NOT NULL,authority_sha256 text NOT NULL,fingerprint text NOT NULL,base_fingerprint text NOT NULL,PRIMARY KEY(source_namespace,authority_sha256))`,
+        );
+      const receipt = batch.deletedAdditive
+        ? (
+            await this.db.query(
+              `SELECT fingerprint FROM ${this.names.archive}.dataset_deleted_additive_receipts WHERE source_namespace=$1 AND authority_sha256=$2`,
+              [
+                batch.metadata.sourceNamespace,
+                deletedDatasetAuthoritySha256(batch.deletedAdditive),
+              ],
+            )
+          ).rows[0]
+        : batch.additive
+          ? (
+              await this.db.query(
+                `SELECT fingerprint FROM ${this.names.archive}.dataset_additive_receipts WHERE source_namespace=$1 AND authority_sha256=$2`,
+                [
+                  batch.metadata.sourceNamespace,
+                  additiveAuthoritySha256(batch.additive),
+                ],
+              )
+            ).rows[0]
+          : (
+              await this.db.query(
+                `SELECT fingerprint FROM ${this.names.archive}.dataset_receipts WHERE source_namespace=$1`,
+                [batch.metadata.sourceNamespace],
+              )
+            ).rows[0];
       if (receipt && receipt.fingerprint !== digest)
         throw new Error("Dataset migration receipt differs");
       if (receipt && missing.length)
@@ -220,27 +275,6 @@ export class PostgresDatasetMetadataDestination
           ),
         );
         result.created++;
-      }
-      const sourceQueryClient = {
-        query: async (text: string, values?: readonly unknown[]) => ({
-          ...(await this.db.query(text, values ? [...values] : undefined)),
-          rowCount: null,
-        }),
-      };
-      for (const group of batch.sourceQueryRegistrations ?? []) {
-        if (receipt)
-          await verifySourceQueries(
-            sourceQueryClient,
-            group.receipt,
-            batch.metadata.sourceNamespace,
-            group.queries,
-          );
-        await registerSourceQueries(
-          sourceQueryClient,
-          group.receipt,
-          batch.metadata.sourceNamespace,
-          group.queries,
-        );
       }
       const operations = batch.metadata.operations ?? [];
       if (receipt)
@@ -267,6 +301,27 @@ export class PostgresDatasetMetadataDestination
         },
         operations,
       );
+      const sourceQueryClient = {
+        query: async (text: string, values?: readonly unknown[]) => ({
+          ...(await this.db.query(text, values ? [...values] : undefined)),
+          rowCount: null,
+        }),
+      };
+      for (const group of batch.sourceQueryRegistrations ?? []) {
+        if (receipt)
+          await verifySourceQueries(
+            sourceQueryClient,
+            group.receipt,
+            batch.metadata.sourceNamespace,
+            group.queries,
+          );
+        await registerSourceQueries(
+          sourceQueryClient,
+          group.receipt,
+          batch.metadata.sourceNamespace,
+          group.queries,
+        );
+      }
       for (const registration of batch.queryRegistrations ?? [])
         await registerSavedQueries(
           {
@@ -288,8 +343,42 @@ export class PostgresDatasetMetadataDestination
         },
         registrations: batch.metadata.attachments ?? [],
       });
-      if (!receipt && batch.additive) await this.db.query(`INSERT INTO ${this.names.archive}.dataset_additive_receipts VALUES ($1,$2,$3,$4)`,[batch.metadata.sourceNamespace,additiveAuthoritySha256(batch.additive),digest,batch.additive.base.inventory.datasetFingerprint]);
-      if (!receipt && !batch.additive)
+      if (batch.deletedAdditive) {
+        const authority = deletedDatasetAuthoritySha256(batch.deletedAdditive);
+        await persistDeletedDatasetLifecycleLinks(
+          this.db,
+          this.additiveSchema,
+          batch,
+          Boolean(receipt),
+        );
+        await verifyDeletedDatasetAuthority(
+          this.db,
+          this.additiveSchema,
+          batch,
+          true,
+        );
+        if (!receipt)
+          await this.db.query(
+            `INSERT INTO ${this.names.archive}.dataset_deleted_additive_receipts VALUES ($1,$2,$3,$4)`,
+            [
+              batch.metadata.sourceNamespace,
+              authority,
+              digest,
+              batch.deletedAdditive.base.inventory.datasetFingerprint,
+            ],
+          );
+      }
+      if (!receipt && batch.additive)
+        await this.db.query(
+          `INSERT INTO ${this.names.archive}.dataset_additive_receipts VALUES ($1,$2,$3,$4)`,
+          [
+            batch.metadata.sourceNamespace,
+            additiveAuthoritySha256(batch.additive),
+            digest,
+            batch.additive.base.inventory.datasetFingerprint,
+          ],
+        );
+      if (!receipt && !batch.additive && !batch.deletedAdditive)
         await this.db.query(
           `INSERT INTO ${this.names.archive}.dataset_receipts VALUES ($1,$2,$3,$4,$5)`,
           [

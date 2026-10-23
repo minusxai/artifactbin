@@ -1,6 +1,7 @@
 import type { DatasetImportMetadata } from "../datasets/import-contracts.ts";
 /** Pins both independently consistent exports; never implies one shared snapshot. */
 export interface DatasetMigrationBatch {
+  deletedAdditive?: import("./deleted-dataset-authority-contracts.ts").DeletedDatasetAuthority;
   additive?: import("./dataset-pages/admission-contracts.ts").StandaloneDatasetJobAdmission;
   metadata: DatasetImportMetadata;
   sourceQueryRegistrations?: readonly import("./source-query-contracts.ts").MigrationSourceQueryBatch[];
