@@ -17,7 +17,8 @@ it('rejects mixed wire slots before mutation and preserves unknown outcomes',asy
  const write=vi.fn().mockResolvedValue({requestId:'req',outcome:'unknown',revision:null,rowIds:[]});
  const invoke=createDatasetNamespaceInvoker(actor,[binding],{schema:vi.fn(),query:vi.fn(),read:vi.fn(),write});
  const mutation={...call,operation:'mutation' as const,field:'writeRows',args:{tableId:'table',expectedRevision:'1',requestId:'req',changes:[{kind:'INSERT',cells:[{columnId:'column',value:{type:'NUMBER',number:3}}]}]}};
- expect(await invoke(mutation)).toMatchObject({outcome:'unknown'});
+ const reportOutcome=vi.fn(),reportedMutation={...mutation,reportOutcome};
+ expect(await invoke(reportedMutation)).toMatchObject({outcome:'unknown'});expect(reportOutcome).toHaveBeenCalledWith('unknown');
  await expect(invoke({...mutation,args:{...mutation.args,changes:[{kind:'INSERT',cells:[{columnId:'column',value:{type:'NUMBER',number:3,string:'bad'}}]}]}})).rejects.toThrow('invalid_dataset_cell');
  expect(write).toHaveBeenCalledTimes(1);
 });

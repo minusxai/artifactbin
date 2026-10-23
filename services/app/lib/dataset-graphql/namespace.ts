@@ -30,7 +30,9 @@ export function createDatasetNamespaceInvoker(actor:AccessActor,bindings:readonl
   if(call.operation==='mutation'&&call.field==='writeRows'){
    const changes:DatasetRowChange[]=array(args.changes).map(v=>{const change=object(v);if(change.kind==='INSERT')return {kind:'INSERT',cells:cells(change.cells)};if(change.kind==='UPDATE')return {kind:'UPDATE',rowId:string(change.rowId),cells:cells(change.cells)};if(change.kind==='DELETE')return {kind:'DELETE',rowId:string(change.rowId)};throw new Error('invalid_dataset_change');});
    const input:DatasetWriteRequest={tableId:string(args.tableId),expectedRevision:string(args.expectedRevision),requestId:string(args.requestId),changes};
-   return await service.write(actor,binding,input,call.signal) as unknown as HtmlJson;
+   const receipt=await service.write(actor,binding,input,call.signal);
+   call.reportOutcome?.(receipt.outcome);
+   return receipt as unknown as HtmlJson;
   }
   throw new Error('dataset_field_not_found');
  };
