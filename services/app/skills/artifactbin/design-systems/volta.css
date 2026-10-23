@@ -1,0 +1,140 @@
+/* Generated from design-systems/specs/volta.json. */
+@font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 700; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGGInHWVyNJtvI.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 700; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGIInHWVyNJ.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 800; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGGInHWVyNJtvI.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 800; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGIInHWVyNJ.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Instrument Sans"; font-style: italic; font-weight: 400; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentsans/v4/pxigypc9vsFDm051Uf6KVwgkfoSbSnNPooZAN0lInHGpCWNE27lgU-XJojENuu-2oyAH28zdQwQzNOgX.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Instrument Sans"; font-style: italic; font-weight: 400; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentsans/v4/pxigypc9vsFDm051Uf6KVwgkfoSbSnNPooZAN0lInHGpCWNE27lgU-XJojENuu-2oy4H28zdQwQzNA.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 400; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentsans/v4/pxiTypc9vsFDm051Uf6KVwgkfoSxQ0GsQv8ToedPibnr0She1ZuWi3hKpA.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 400; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentsans/v4/pxiTypc9vsFDm051Uf6KVwgkfoSxQ0GsQv8ToedPibnr0SZe1ZuWi3g.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 500; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentsans/v4/pxiTypc9vsFDm051Uf6KVwgkfoSxQ0GsQv8ToedPibnr0She1ZuWi3hKpA.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 500; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentsans/v4/pxiTypc9vsFDm051Uf6KVwgkfoSxQ0GsQv8ToedPibnr0SZe1ZuWi3g.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 600; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentsans/v4/pxiTypc9vsFDm051Uf6KVwgkfoSxQ0GsQv8ToedPibnr0She1ZuWi3hKpA.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 600; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/instrumentsans/v4/pxiTypc9vsFDm051Uf6KVwgkfoSxQ0GsQv8ToedPibnr0SZe1ZuWi3g.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+:root[data-af-design-system="volta"] {
+  --ds-paper: #f3eee4;
+  --ds-paper-raised: #fbf8f2;
+  --ds-paper-sunk: #e7dfcf;
+  --ds-line: #d3c9b5;
+  --ds-edge: #14110f;
+  --ds-ink: #14110f;
+  --ds-ink-muted: #5a5348;
+  --ds-volt: #ff4d1a;
+  --ds-on-volt: #14110f;
+  --ds-volt-ink: #b5300a;
+  --ds-volt-soft: #ffd9cb;
+  --ds-acid: #d6f43a;
+  --ds-on-acid: #14110f;
+  --ds-cobalt: #2236d1;
+  --ds-on-cobalt: #ffffff;
+  --ds-cobalt-soft: #dde1ff;
+  --ds-positive: #16683f;
+  --ds-positive-soft: #d5efdf;
+  --ds-caution: #7d5900;
+  --ds-caution-soft: #fbedc4;
+  --ds-negative: #b5300a;
+  --ds-negative-soft: #ffd9cb;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-volt);
+  --primary-foreground: var(--ds-on-volt);
+  --secondary: var(--ds-volt-soft);
+  --secondary-foreground: var(--ds-volt-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-paper-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-paper);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-cobalt);
+  --chart-1: var(--ds-cobalt);
+  --chart-2: var(--ds-volt);
+  --chart-3: var(--ds-ink-muted);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --radius: 4px;
+  --font-display: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif;
+  --font-body: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --ds-shadow-hard: 4px 4px 0 0 #14110f;
+  --ds-shadow-hard-lg: 8px 8px 0 0 #14110f;
+  --ds-focus-ring: 0 0 0 2px #f3eee4, 0 0 0 4px #2236d1;
+  --ds-chip-radius: 4px;
+}
+:root[data-af-design-system="volta"][data-af-dark="true"] {
+  --ds-paper: #121110;
+  --ds-paper-raised: #1c1a18;
+  --ds-paper-sunk: #0a0908;
+  --ds-line: #34302a;
+  --ds-edge: #f3eee4;
+  --ds-ink: #f3eee4;
+  --ds-ink-muted: #a69e90;
+  --ds-volt: #ff5f2e;
+  --ds-on-volt: #14110f;
+  --ds-volt-ink: #ff8a63;
+  --ds-volt-soft: #3d1a0f;
+  --ds-acid: #d6f43a;
+  --ds-on-acid: #14110f;
+  --ds-cobalt: #7484ff;
+  --ds-on-cobalt: #0a0908;
+  --ds-cobalt-soft: #161c45;
+  --ds-positive: #5fd394;
+  --ds-positive-soft: #0f2a1c;
+  --ds-caution: #f2c14e;
+  --ds-caution-soft: #2e2405;
+  --ds-negative: #ff8a63;
+  --ds-negative-soft: #3d1a0f;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-volt);
+  --primary-foreground: var(--ds-on-volt);
+  --secondary: var(--ds-volt-soft);
+  --secondary-foreground: var(--ds-volt-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-paper-sunk);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-paper);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-cobalt);
+  --chart-1: var(--ds-cobalt);
+  --chart-2: var(--ds-volt);
+  --chart-3: var(--ds-ink-muted);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-caution);
+  --ds-shadow-hard: 4px 4px 0 0 #ff5f2e;
+  --ds-shadow-hard-lg: 8px 8px 0 0 #ff5f2e;
+  --ds-focus-ring: 0 0 0 2px #121110, 0 0 0 4px #7484ff;
+  --ds-chip-radius: 4px;
+}
+:root[data-af-design-system="volta"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+:root[data-af-design-system="volta"] .t-display-xl { font-family: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif; font-size: clamp(56px, 9vw, 112px); line-height: .9; font-weight: 800; letter-spacing: -0.035em; }
+:root[data-af-design-system="volta"] .t-display-l { font-family: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif; font-size: clamp(36px, 5vw, 60px); line-height: .95; font-weight: 800; letter-spacing: -0.03em; }
+:root[data-af-design-system="volta"] .t-display-m { font-family: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif; font-size: 40px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em; }
+:root[data-af-design-system="volta"] .t-title { font-family: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: -0.01em; }
+:root[data-af-design-system="volta"] .t-body-l { font-family: "Instrument Sans", system-ui, sans-serif; font-size: 18px; line-height: 28px; font-weight: 400; }
+:root[data-af-design-system="volta"] .t-body { font-family: "Instrument Sans", system-ui, sans-serif; font-size: 15px; line-height: 22px; font-weight: 400; }
+:root[data-af-design-system="volta"] .t-body-s { font-family: "Instrument Sans", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
+:root[data-af-design-system="volta"] .t-label { font-family: "Instrument Sans", system-ui, sans-serif; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+:root[data-af-design-system="volta"] .t-numeral { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+:root[data-af-design-system="volta"] .t-mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }

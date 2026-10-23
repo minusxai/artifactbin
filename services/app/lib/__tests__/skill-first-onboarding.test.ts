@@ -22,7 +22,7 @@ describe('skill-first HTTP onboarding',()=>{
   expect(guide).toContain('unzip -n');
   const brief=llmsText(BASE);
   expect(brief).toContain('POST /api/artifacts');
-  expect(brief).toContain('/prepare');
+  expect(brief).toContain('expectedState');
   expect(brief).toContain('/llms/http-auth');
   expect(brief).not.toMatch(/afbin |@afbin\/cli|chat\/install|CLI was selected/);
  });

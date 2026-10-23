@@ -1,5 +1,5 @@
 /** Build-only projection: authoring references + executable command/operation registries. */
-import {readFileSync,mkdirSync,writeFileSync,existsSync,renameSync,rmSync,rmdirSync} from 'node:fs';
+import {readFileSync,readdirSync,mkdirSync,writeFileSync,existsSync,renameSync,rmSync,rmdirSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {manPage} from '../src/man';
@@ -19,7 +19,7 @@ const example=skillExample();
 // Retire generated executables from existing checkouts before checking the source tree.
 const retiredScripts=join(root,'../app/skills/artifactbin/scripts');
 for(const name of ['credentials.mjs','watch-comments.mjs'])rmSync(join(retiredScripts,name),{force:true});
-if(existsSync(retiredScripts))rmdirSync(retiredScripts);
+if(existsSync(retiredScripts)&&readdirSync(retiredScripts).length===0)rmdirSync(retiredScripts);
 const tree=buildSkillTree(loadSkillSources());
 const brief=tree.get('artifactbin/SKILL.md');
 if(!brief)throw new Error('skills/artifactbin/SKILL.md is missing');

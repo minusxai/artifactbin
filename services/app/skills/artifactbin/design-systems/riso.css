@@ -1,0 +1,131 @@
+/* Generated from design-systems/specs/riso.json. */
+@font-face { font-family: "Fraunces"; font-style: italic; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/fraunces/v38/6NUs8FyLNQOQZAnv9ZwNjucMHVn85Ni7emDWtFKqZTnbB-gzTK0KVBdJdt9hFwpX9W37lm1_mvMiQublWIIkfg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Fraunces"; font-style: italic; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/fraunces/v38/6NUs8FyLNQOQZAnv9ZwNjucMHVn85Ni7emDWtFKqZTnbB-gzTK0KVBdJdt9hFwpX9W37lm1_mv0iQublWII.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/fraunces/v38/6NU78FyLNQOQZAnv9bYEvDiIdE9Ea92usiIk_WBq8U_9v0c2WS01xCFTeP2Xz5fU8w.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/fraunces/v38/6NU78FyLNQOQZAnv9bYEvDiIdE9Ea92usiIk_WBq8U_9v0c2WS01xC9TeP2Xz5c.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 900; font-display: swap; src: url(https://fonts.gstatic.com/s/fraunces/v38/6NU78FyLNQOQZAnv9bYEvDiIdE9Ea92usiIk_WBq8U_9v0c2WS01xCFTeP2Xz5fU8w.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Fraunces"; font-style: normal; font-weight: 900; font-display: swap; src: url(https://fonts.gstatic.com/s/fraunces/v38/6NU78FyLNQOQZAnv9bYEvDiIdE9Ea92usiIk_WBq8U_9v0c2WS01xC9TeP2Xz5c.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Space Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/spacemono/v17/i7dNIFZifjKcF5UAWdDRYERMSXK_MQacb0yG.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Space Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/spacemono/v17/i7dNIFZifjKcF5UAWdDRYERMR3K_MQacbw.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/spacemono/v17/i7dPIFZifjKcF5UAWdDRYE98RXi4EwSsbg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/spacemono/v17/i7dPIFZifjKcF5UAWdDRYEF8RXi4EwQ.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/spacemono/v17/i7dMIFZifjKcF5UAWdDRaPpZUFuaHi6WZ3S_Yg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Space Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/spacemono/v17/i7dMIFZifjKcF5UAWdDRaPpZUFWaHi6WZ3Q.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+:root[data-af-design-system="riso"] {
+  --ds-paper: #F3ECDC;
+  --ds-sheet: #FBF6EA;
+  --ds-paper-sunk: #E8DFC6;
+  --ds-manila: #F1DFA6;
+  --ds-line: #CFC5AD;
+  --ds-key: #1C2340;
+  --ds-key-2: #3A3F5C;
+  --ds-blue: #0078BF;
+  --ds-on-blue: #FBF6EA;
+  --ds-blue-soft: #CFE6F5;
+  --ds-pink: #FF48B0;
+  --ds-on-pink: #1C2340;
+  --ds-pink-soft: #FFD3EA;
+  --ds-yellow: #FFE800;
+  --ds-on-yellow: #1C2340;
+  --ds-positive: #00875A;
+  --ds-positive-soft: #CDEEDD;
+  --ds-caution: #8A6D00;
+  --ds-caution-soft: #FFF3A0;
+  --ds-negative: #E8322B;
+  --ds-negative-soft: #FFD6D3;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-key);
+  --card: var(--ds-sheet);
+  --card-foreground: var(--ds-key);
+  --popover: var(--ds-sheet);
+  --popover-foreground: var(--ds-key);
+  --primary: var(--ds-blue);
+  --primary-foreground: var(--ds-on-blue);
+  --secondary: var(--ds-yellow);
+  --secondary-foreground: var(--ds-on-yellow);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-key-2);
+  --accent: var(--ds-pink-soft);
+  --accent-foreground: var(--ds-key);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-paper);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-pink);
+  --chart-1: var(--ds-blue);
+  --chart-2: var(--ds-pink);
+  --chart-3: var(--ds-yellow);
+  --chart-4: var(--ds-key-2);
+  --chart-5: var(--ds-positive);
+  --radius: 0px;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Fraunces", Georgia, serif;
+  --font-mono: "Space Mono", ui-monospace, Menlo, monospace;
+  --ds-shadow-hard: 6px 6px 0 0 #1C2340;
+  --ds-shadow-hard-lg: 9px 9px 0 0 #1C2340;
+  --ds-chip-radius: 0;
+  --ds-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+:root[data-af-design-system="riso"][data-af-dark="true"] {
+  --ds-paper: #1C2340;
+  --ds-sheet: #263054;
+  --ds-paper-sunk: #151b33;
+  --ds-manila: #F1DFA6;
+  --ds-line: #3A4470;
+  --ds-key: #F3ECDC;
+  --ds-key-2: #B9BED6;
+  --ds-blue: #2E9BE8;
+  --ds-on-blue: #1C2340;
+  --ds-blue-soft: #173555;
+  --ds-pink: #FF48B0;
+  --ds-on-pink: #1C2340;
+  --ds-pink-soft: #4A1E3A;
+  --ds-yellow: #FFE800;
+  --ds-on-yellow: #1C2340;
+  --ds-positive: #2FD27E;
+  --ds-positive-soft: #0F3A26;
+  --ds-caution: #FFE800;
+  --ds-caution-soft: #3A3400;
+  --ds-negative: #FF6B61;
+  --ds-negative-soft: #4A1512;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-key);
+  --card: var(--ds-sheet);
+  --card-foreground: var(--ds-key);
+  --popover: var(--ds-sheet);
+  --popover-foreground: var(--ds-key);
+  --primary: var(--ds-blue);
+  --primary-foreground: var(--ds-on-blue);
+  --secondary: var(--ds-yellow);
+  --secondary-foreground: var(--ds-on-yellow);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-key-2);
+  --accent: var(--ds-pink-soft);
+  --accent-foreground: var(--ds-key);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-paper);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-pink);
+  --chart-1: var(--ds-blue);
+  --chart-2: var(--ds-pink);
+  --chart-3: var(--ds-yellow);
+  --chart-4: var(--ds-key-2);
+  --chart-5: var(--ds-positive);
+  --ds-shadow-hard: 6px 6px 0 0 #FF48B0;
+  --ds-shadow-hard-lg: 9px 9px 0 0 #FF48B0;
+  --ds-chip-radius: 0;
+  --ds-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+:root[data-af-design-system="riso"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+:root[data-af-design-system="riso"] .t-display-xl { font-family: "Fraunces", Georgia, serif; font-size: clamp(64px, 12vw, 160px); line-height: .82; font-weight: 900; letter-spacing: -0.045em; }
+:root[data-af-design-system="riso"] .t-display-l { font-family: "Fraunces", Georgia, serif; font-size: clamp(40px, 6.4vw, 84px); line-height: .9; font-weight: 900; letter-spacing: -0.03em; }
+:root[data-af-design-system="riso"] .t-display-m { font-family: "Fraunces", Georgia, serif; font-size: 40px; line-height: 40px; font-weight: 900; letter-spacing: -0.02em; }
+:root[data-af-design-system="riso"] .t-title { font-family: "Fraunces", Georgia, serif; font-size: 24px; line-height: 28px; font-weight: 900; letter-spacing: -0.01em; }
+:root[data-af-design-system="riso"] .t-deck { font-family: "Fraunces", Georgia, serif; font-size: clamp(20px, 2vw, 26px); line-height: 1.25; font-weight: 500; font-style: italic; }
+:root[data-af-design-system="riso"] .t-body-l { font-family: "Fraunces", Georgia, serif; font-size: 20px; line-height: 1.5; font-weight: 500; }
+:root[data-af-design-system="riso"] .t-body { font-family: "Fraunces", Georgia, serif; font-size: 17px; line-height: 1.55; font-weight: 500; }
+:root[data-af-design-system="riso"] .t-body-s { font-family: "Fraunces", Georgia, serif; font-size: 14px; line-height: 1.45; font-weight: 500; }
+:root[data-af-design-system="riso"] .t-label { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 16px; font-weight: 400; letter-spacing: 0.09em; text-transform: uppercase; }
+:root[data-af-design-system="riso"] .t-numeral { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+:root[data-af-design-system="riso"] .t-mono { font-family: "Space Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }

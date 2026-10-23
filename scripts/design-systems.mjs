@@ -15,6 +15,7 @@
  * No mode runs `runtime` and `skill`, the two committed outputs. Run it, review the diff, commit the output.
  */
 import { writeRuntime } from '../design-systems/lib/runtime.mjs';
+import {writeNativeSkill} from '../design-systems/lib/html-skill.mjs';
 import { writeSkill } from '../design-systems/lib/skill.mjs';
 import { writePages, ROSTER, loadSpec, REPO } from '../design-systems/lib/pages.mjs';
 import { writeIndex } from '../design-systems/lib/index-page.mjs';
@@ -28,7 +29,7 @@ const report = (written) => { for (const { path: p, bytes } of written) console.
 
 switch (mode) {
   case 'runtime': { const { files, entries } = writeRuntime(); report(files); for (const e of entries) console.log(`  ${e.name.padEnd(11)} vars ${String(Object.keys(e.cssVars).length).padStart(3)} fonts ${String(e.fontFaces.length).padStart(6)} css ${String(e.css.length).padStart(6)}`); break; }
-  case 'skill': report(writeSkill(slugs)); break;
+  case 'skill': report(writeSkill(slugs)); report(writeNativeSkill(slugs)); break;
   case 'pages': report(writePages(slugs)); report([writeIndex()]); break;
   case 'index': report([writeIndex()]); break;
   case 'fonts': {
@@ -38,7 +39,7 @@ switch (mode) {
     }
     break;
   }
-  case 'all': report(writeRuntime().files); report(writeSkill(slugs)); break;
+  case 'all': report(writeRuntime().files); report(writeSkill(slugs)); report(writeNativeSkill(slugs)); break;
   default:
     console.error(`unknown mode ${mode}; use runtime, skill, pages, index, fonts or all`);
     process.exit(2);

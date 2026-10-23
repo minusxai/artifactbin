@@ -1,0 +1,141 @@
+/* Generated from design-systems/specs/dossier.json. */
+@font-face { font-family: "Archivo"; font-style: italic; font-weight: 400; font-stretch: 62% 125%; font-display: swap; src: url(https://fonts.gstatic.com/s/archivo/v25/k3kBo8UDI-1M0wlSfdzyIEk1-T829hr-8mTZCx6muKZlYPTr_Q.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: italic; font-weight: 400; font-stretch: 62% 125%; font-display: swap; src: url(https://fonts.gstatic.com/s/archivo/v25/k3kBo8UDI-1M0wlSfdzyIEk1-T829hr-8mTZCxCmuKZlYPQ.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 400; font-stretch: 62% 125%; font-display: swap; src: url(https://fonts.gstatic.com/s/archivo/v25/k3kQo8UDI-1M0wlSfdfoLmvDIaK18A.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 400; font-stretch: 62% 125%; font-display: swap; src: url(https://fonts.gstatic.com/s/archivo/v25/k3kQo8UDI-1M0wlSfdnoLmvDIaI.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 500; font-stretch: 62% 125%; font-display: swap; src: url(https://fonts.gstatic.com/s/archivo/v25/k3kQo8UDI-1M0wlSfdfoLmvDIaK18A.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 500; font-stretch: 62% 125%; font-display: swap; src: url(https://fonts.gstatic.com/s/archivo/v25/k3kQo8UDI-1M0wlSfdnoLmvDIaI.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 700; font-stretch: 62% 125%; font-display: swap; src: url(https://fonts.gstatic.com/s/archivo/v25/k3kQo8UDI-1M0wlSfdfoLmvDIaK18A.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 700; font-stretch: 62% 125%; font-display: swap; src: url(https://fonts.gstatic.com/s/archivo/v25/k3kQo8UDI-1M0wlSfdnoLmvDIaI.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 900; font-stretch: 62% 125%; font-display: swap; src: url(https://fonts.gstatic.com/s/archivo/v25/k3kQo8UDI-1M0wlSfdfoLmvDIaK18A.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 900; font-stretch: 62% 125%; font-display: swap; src: url(https://fonts.gstatic.com/s/archivo/v25/k3kQo8UDI-1M0wlSfdnoLmvDIaI.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Newsreader"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9CfjOCX1hbuyalUrK439vCgIhCBJWxZCPp.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9CfjOCX1hbuyalUrK439vCjohCBJWxZA.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Newsreader"; font-style: italic; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9CfjOCX1hbuyalUrK439vCgIhCBJWxZCPp.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: italic; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9CfjOCX1hbuyalUrK439vCjohCBJWxZA.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 300; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK439DyjIJFJpeBZQ.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 300; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK439DyjIJFJpeBZQ.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK439DyjIJFJpeBZQ.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Newsreader"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/newsreader/v26/cY9AfjOCX1hbuyalUrK4397yjIJFJpc.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/ibmplexmono/v20/-F6pfjptAgt5VM-kVkqdyU8n1ioa23dgregdFOFh.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/ibmplexmono/v20/-F6pfjptAgt5VM-kVkqdyU8n1ioa1XdgregdFA.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/ibmplexmono/v20/-F63fjptAgt5VM-kVkqdyU8n1iEq131nj-otFQ.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/ibmplexmono/v20/-F63fjptAgt5VM-kVkqdyU8n1i8q131nj-o.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3twJwl5FgsAXHNlYzg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3twJwlBFgsAXHNk.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3pQPwl5FgsAXHNlYzg.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3pQPwlBFgsAXHNk.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+:root[data-af-design-system="dossier"] {
+  --ds-paper: #F3EEE1;
+  --ds-paper-raised: #FBF8F0;
+  --ds-paper-sunk: #E9E2D0;
+  --ds-line: #D6CEBB;
+  --ds-ink: #12101C;
+  --ds-ink-soft: #4A4658;
+  --ds-night: #0D0B19;
+  --ds-on-night: #ECE6D6;
+  --ds-night-muted: #A9A3B8;
+  --ds-violet: #3A1CF0;
+  --ds-on-violet: #FFFFFF;
+  --ds-violet-soft: #DCD6FB;
+  --ds-lime: #D6FF3C;
+  --ds-on-lime: #12101C;
+  --ds-positive: #1E7B4F;
+  --ds-positive-soft: #D8EEE0;
+  --ds-caution: #B7791F;
+  --ds-caution-soft: #FBEBC9;
+  --ds-negative: #C62828;
+  --ds-negative-soft: #FAD9D5;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-violet);
+  --primary-foreground: var(--ds-on-violet);
+  --secondary: var(--ds-violet-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-soft);
+  --accent: var(--ds-lime);
+  --accent-foreground: var(--ds-on-lime);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-paper);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-violet);
+  --chart-1: var(--ds-violet);
+  --chart-2: var(--ds-ink);
+  --chart-3: var(--ds-caution);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-ink-soft);
+  --radius: 2px;
+  --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Newsreader", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --ds-shadow-file: 10px 10px 0 0 #3A1CF0;
+  --ds-chip-radius: 2px;
+}
+:root[data-af-design-system="dossier"][data-af-dark="true"] {
+  --ds-paper: #0D0B19;
+  --ds-paper-raised: #16141F;
+  --ds-paper-sunk: #07060C;
+  --ds-line: #2B2838;
+  --ds-ink: #ECE6D6;
+  --ds-ink-soft: #A9A3B8;
+  --ds-night: #F3EEE1;
+  --ds-on-night: #12101C;
+  --ds-night-muted: #4A4658;
+  --ds-violet: #8F7BFF;
+  --ds-on-violet: #0D0B19;
+  --ds-violet-soft: #231B55;
+  --ds-lime: #D6FF3C;
+  --ds-on-lime: #12101C;
+  --ds-positive: #5FCF93;
+  --ds-positive-soft: #0F3022;
+  --ds-caution: #F0B64A;
+  --ds-caution-soft: #3A2A08;
+  --ds-negative: #FF7A6E;
+  --ds-negative-soft: #431512;
+  --background: var(--ds-paper);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-paper-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-paper-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-violet);
+  --primary-foreground: var(--ds-on-violet);
+  --secondary: var(--ds-violet-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-paper-sunk);
+  --muted-foreground: var(--ds-ink-soft);
+  --accent: var(--ds-lime);
+  --accent-foreground: var(--ds-on-lime);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-paper);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-violet);
+  --chart-1: var(--ds-violet);
+  --chart-2: var(--ds-ink);
+  --chart-3: var(--ds-caution);
+  --chart-4: var(--ds-positive);
+  --chart-5: var(--ds-ink-soft);
+  --ds-shadow-file: 10px 10px 0 0 #8F7BFF;
+  --ds-chip-radius: 2px;
+}
+:root[data-af-design-system="dossier"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+:root[data-af-design-system="dossier"] .t-display-xl { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: clamp(64px, 12vw, 160px); line-height: .8; font-weight: 900; letter-spacing: -0.01em; text-transform: uppercase; font-stretch: 62%; }
+:root[data-af-design-system="dossier"] .t-display-l { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: clamp(40px, 6.5vw, 88px); line-height: .84; font-weight: 900; letter-spacing: -0.01em; text-transform: uppercase; font-stretch: 62%; }
+:root[data-af-design-system="dossier"] .t-display-m { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: 36px; line-height: 36px; font-weight: 800; letter-spacing: -0.005em; text-transform: uppercase; font-stretch: 75%; }
+:root[data-af-design-system="dossier"] .t-title { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: 20px; line-height: 24px; font-weight: 800; letter-spacing: 0.005em; text-transform: uppercase; font-stretch: 80%; }
+:root[data-af-design-system="dossier"] .t-body-l { font-family: "Newsreader", Georgia, serif; font-size: 21px; line-height: 1.4; font-weight: 400; }
+:root[data-af-design-system="dossier"] .t-body { font-family: "Newsreader", Georgia, serif; font-size: 18px; line-height: 1.56; font-weight: 400; }
+:root[data-af-design-system="dossier"] .t-body-ui { font-family: "Archivo", system-ui, sans-serif; font-size: 15px; line-height: 22px; font-weight: 400; }
+:root[data-af-design-system="dossier"] .t-body-s { font-family: "Archivo", system-ui, sans-serif; font-size: 13px; line-height: 18px; font-weight: 400; }
+:root[data-af-design-system="dossier"] .t-label { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+:root[data-af-design-system="dossier"] .t-numeral { font-family: "Archivo", "Arial Narrow", system-ui, sans-serif; font-size: 48px; line-height: 48px; font-weight: 800; letter-spacing: -0.01em; font-stretch: 75%; font-variant-numeric: tabular-nums; }
+:root[data-af-design-system="dossier"] .t-mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }

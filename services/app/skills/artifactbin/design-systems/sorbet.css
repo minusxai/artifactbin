@@ -1,0 +1,136 @@
+/* Generated from design-systems/specs/sorbet.json. */
+@font-face { font-family: "Fredoka"; font-style: normal; font-weight: 500; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/fredoka/v17/X7n64b87HvSqjb_WIi2yDCRwoQ_k7367_DWg89XgHPyhRMw.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Fredoka"; font-style: normal; font-weight: 500; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/fredoka/v17/X7n64b87HvSqjb_WIi2yDCRwoQ_k7367_DWu89XgHPyh.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Fredoka"; font-style: normal; font-weight: 600; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/fredoka/v17/X7n64b87HvSqjb_WIi2yDCRwoQ_k7367_DWg89XgHPyhRMw.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Fredoka"; font-style: normal; font-weight: 600; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/fredoka/v17/X7n64b87HvSqjb_WIi2yDCRwoQ_k7367_DWu89XgHPyh.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Fredoka"; font-style: normal; font-weight: 700; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/fredoka/v17/X7n64b87HvSqjb_WIi2yDCRwoQ_k7367_DWg89XgHPyhRMw.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Fredoka"; font-style: normal; font-weight: 700; font-stretch: 100%; font-display: swap; src: url(https://fonts.gstatic.com/s/fredoka/v17/X7n64b87HvSqjb_WIi2yDCRwoQ_k7367_DWu89XgHPyh.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Nunito"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/nunito/v32/XRXK3I6Li01BKofIMPyPbj8d7IEAGXNirXAHg6baf2z4e9z5MV0.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Nunito"; font-style: italic; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/nunito/v32/XRXK3I6Li01BKofIMPyPbj8d7IEAGXNirXAHjabaf2z4e9z5.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/nunito/v32/XRXV3I6Li01BKofIO-aBTMnFcQIG.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/nunito/v32/XRXV3I6Li01BKofINeaBTMnFcQ.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 600; font-display: swap; src: url(https://fonts.gstatic.com/s/nunito/v32/XRXV3I6Li01BKofIO-aBTMnFcQIG.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 600; font-display: swap; src: url(https://fonts.gstatic.com/s/nunito/v32/XRXV3I6Li01BKofINeaBTMnFcQ.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/nunito/v32/XRXV3I6Li01BKofIO-aBTMnFcQIG.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Nunito"; font-style: normal; font-weight: 700; font-display: swap; src: url(https://fonts.gstatic.com/s/nunito/v32/XRXV3I6Li01BKofINeaBTMnFcQ.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthSQBK6PYK3EXw.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthqQBK6PYK0.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEY2tbYf-Vlh3uA.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEYOtbYf-Vlg.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+:root[data-af-design-system="sorbet"] {
+  --ds-cream: #fff9f2;
+  --ds-cream-raised: #ffffff;
+  --ds-cream-sunk: #ffefe3;
+  --ds-line: #f0d9d0;
+  --ds-ink: #2b1b3d;
+  --ds-ink-muted: #6e5a80;
+  --ds-rim: #ffffff;
+  --ds-strawberry: #ff5c8a;
+  --ds-on-strawberry: #2b1b3d;
+  --ds-strawberry-soft: #ffe1ea;
+  --ds-mango: #ffb01f;
+  --ds-lime: #8be04d;
+  --ds-blueberry: #5b7cff;
+  --ds-on-blueberry: #ffffff;
+  --ds-grape: #b96cff;
+  --ds-lilac: #eadff5;
+  --ds-positive: #3e8a14;
+  --ds-positive-soft: #e6f8d6;
+  --ds-caution: #9a5e00;
+  --ds-caution-soft: #fff0cc;
+  --ds-negative: #c2185b;
+  --ds-negative-soft: #ffe1ea;
+  --background: var(--ds-cream);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-cream-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-cream-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-strawberry);
+  --primary-foreground: var(--ds-on-strawberry);
+  --secondary: var(--ds-strawberry-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-cream-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-lilac);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-cream);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-blueberry);
+  --chart-1: var(--ds-strawberry);
+  --chart-2: var(--ds-blueberry);
+  --chart-3: var(--ds-mango);
+  --chart-4: var(--ds-lime);
+  --chart-5: var(--ds-grape);
+  --radius: 20px;
+  --font-display: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif;
+  --font-body: "Nunito", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, Menlo, monospace;
+  --ds-chip-radius: 999px;
+  --ds-drop: 6px 6px 0 0 #2b1b3d;
+  --ds-sticker: 0 0 0 3px #ffffff, 7px 7px 0 0 #2b1b3d;
+  --ds-spring: cubic-bezier(.34,1.56,.64,1);
+}
+:root[data-af-design-system="sorbet"][data-af-dark="true"] {
+  --ds-cream: #221433;
+  --ds-cream-raised: #2e1c45;
+  --ds-cream-sunk: #1a0f29;
+  --ds-line: #45306a;
+  --ds-ink: #fff4f8;
+  --ds-ink-muted: #c9b6d9;
+  --ds-rim: #2e1c45;
+  --ds-strawberry: #ff6e98;
+  --ds-on-strawberry: #2b1b3d;
+  --ds-strawberry-soft: #4a2340;
+  --ds-mango: #ffbb3d;
+  --ds-lime: #9beb5e;
+  --ds-blueberry: #7a95ff;
+  --ds-on-blueberry: #120a1f;
+  --ds-grape: #c78aff;
+  --ds-lilac: #3b2a55;
+  --ds-positive: #9beb5e;
+  --ds-positive-soft: #213a14;
+  --ds-caution: #ffbb3d;
+  --ds-caution-soft: #3d2b08;
+  --ds-negative: #ff6e98;
+  --ds-negative-soft: #4a2340;
+  --background: var(--ds-cream);
+  --foreground: var(--ds-ink);
+  --card: var(--ds-cream-raised);
+  --card-foreground: var(--ds-ink);
+  --popover: var(--ds-cream-raised);
+  --popover-foreground: var(--ds-ink);
+  --primary: var(--ds-strawberry);
+  --primary-foreground: var(--ds-on-strawberry);
+  --secondary: var(--ds-strawberry-soft);
+  --secondary-foreground: var(--ds-ink);
+  --muted: var(--ds-cream-sunk);
+  --muted-foreground: var(--ds-ink-muted);
+  --accent: var(--ds-lilac);
+  --accent-foreground: var(--ds-ink);
+  --destructive: var(--ds-negative);
+  --destructive-foreground: var(--ds-cream);
+  --border: var(--ds-line);
+  --input: var(--ds-line);
+  --ring: var(--ds-blueberry);
+  --chart-1: var(--ds-strawberry);
+  --chart-2: var(--ds-blueberry);
+  --chart-3: var(--ds-mango);
+  --chart-4: var(--ds-lime);
+  --chart-5: var(--ds-grape);
+  --ds-chip-radius: 999px;
+  --ds-drop: 6px 6px 0 0 #fff4f8;
+  --ds-sticker: 0 0 0 3px #2e1c45, 7px 7px 0 0 #fff4f8;
+  --ds-spring: cubic-bezier(.34,1.56,.64,1);
+}
+:root[data-af-design-system="sorbet"] body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-body); }
+:root[data-af-design-system="sorbet"] .t-display-xl { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: clamp(48px, 8vw, 104px); line-height: .95; font-weight: 700; letter-spacing: -0.02em; }
+:root[data-af-design-system="sorbet"] .t-display-l { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: clamp(32px, 4.5vw, 56px); line-height: 1.02; font-weight: 700; letter-spacing: -0.01em; }
+:root[data-af-design-system="sorbet"] .t-title { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: 24px; line-height: 28px; font-weight: 600; }
+:root[data-af-design-system="sorbet"] .t-body { font-family: "Nunito", system-ui, sans-serif; font-size: 17px; line-height: 27px; font-weight: 400; }
+:root[data-af-design-system="sorbet"] .t-body-s { font-family: "Nunito", system-ui, sans-serif; font-size: 14px; line-height: 20px; font-weight: 400; }
+:root[data-af-design-system="sorbet"] .t-label { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+:root[data-af-design-system="sorbet"] .t-numeral { font-family: "Fredoka", "Arial Rounded MT Bold", system-ui, sans-serif; font-size: 52px; line-height: 52px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+:root[data-af-design-system="sorbet"] .t-mono { font-family: "DM Mono", ui-monospace, Menlo, monospace; font-size: 13px; line-height: 20px; font-weight: 400; }
