@@ -19,6 +19,7 @@ let mockTitle: string | null = 'A copy';
 let mockArchived: { version: number; head: number } | null = null;
 let served: HTMLElement | null = null;
 let mockCsp: Record<string, unknown> | undefined;
+let mockScriptFailure: {errors:string[]} | undefined;
 let mockTemplate: string | null = null;
 let mockSourceLength: number | undefined;
 let mockLive = () => null as ArtifactLiveEvent | null;
@@ -38,7 +39,7 @@ vi.mock('../document/create-framed-story', async (importOriginal) => {
   } };
 });
 vi.mock('../editor/create-live-artifact', () => ({ createLiveArtifact: () => () => mockLive() }));
-vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'html', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, scriptFailure: mockScriptFailure, surface: { id: 'doc12345', template: mockTemplate, title: mockTitle, format: 'html', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/lib/http/login-href', () => ({ loginHref: vi.fn(() => '/login') }));
 import { loginHref } from '@/lib/http/login-href';
 vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));
@@ -56,6 +57,7 @@ beforeEach(() => {
   mockTitle = 'A copy';
   mockArchived = null;
   mockCsp = undefined;
+  mockScriptFailure = undefined;
   mockTemplate = null;
   mockSourceLength = undefined;
   mockLive = () => null;
@@ -315,6 +317,7 @@ it('opens the bar\'s panels in the navigation layer while the consent bar holds 
   const hosts = { connect: ['https://api.open-meteo.com'], script: [], style: [], img: [], frame: [], media: [] };
   mockCsp = { status: 'blocked', denied: false, extensions: hosts, asking: hosts };
   mount();
+  await trusted().findByRole('button', {name: 'Allow once'});
   const roots = [...document.querySelectorAll('[data-trusted-ui]')];
   const bar = roots.findIndex((root) => root.shadowRoot!.querySelector('[aria-label="Document network access"]'));
   const navigation = roots.findIndex((root) => root.getAttribute('data-trusted-layer') === 'navigation');
@@ -628,4 +631,11 @@ it('opens independent PWA, context and file settings without entering a document
   fireEvent.click(within(settings).getByRole('tab', { name: 'Files' }));
   expect(within(settings).getByRole('link', { name: 'Reference image' })).toHaveAttribute('href', '/a/file1234');
   expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+});
+
+it('loads stored script diagnostics in the trusted frame slot without changing the document',async()=>{
+ mockScriptFailure={errors:['Stored script diagnostic']};mount();
+ expect(await trusted().findByText('Stored script diagnostic')).toBeTruthy();
+ expect(document.querySelector('[data-mx-document-frame]')).not.toBeNull();
+ expect(window.location.pathname).toBe('/a/doc');
 });

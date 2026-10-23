@@ -20,8 +20,7 @@ import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import { ARTIFACT_ID_PATTERN, type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
-import { CspConsentBar } from '../document/CspConsentBar';
-import { ScriptFailureNotice } from '../document/ScriptFailureNotice';
+import {ReaderNotice} from '../document/ReaderNotice';
 import type { CspRequest } from '@/lib/document';
 import { SelectionActions } from '../document/SelectionActions';
 import { createFramedStory, fetchFrameNodes, framedDocumentFor, onFirstPressInto, type FramedStory } from '../document/create-framed-story';
@@ -359,11 +358,11 @@ export function DocumentPage(): JSX.Element {
       </TrustedUi></Portal>
     )}</Show>
     <Show when={page?.cspRequest?.status === 'blocked' && frameSlot()}>{(slot) => (
-      <Portal mount={slot()}><TrustedUi><CspConsentBar id={id!} request={page!.cspRequest!} accountSession={accountSession()} /></TrustedUi></Portal>
+      <Portal mount={slot()}><TrustedUi><ReaderNotice label="Document network access" load={() => import('../document/CspConsentBar')}>{module => <module.CspConsentBar id={id!} request={page!.cspRequest!} accountSession={accountSession()} />}</ReaderNotice></TrustedUi></Portal>
     )}</Show>
     {/* Gone once a newer version is shown: publish refuses a script that does not build, so any newer head built its own. */}
     <Show when={!!page?.scriptFailure?.errors.length && currentVersion() <= (page?.surface?.version ?? 0) && frameSlot()}>{(slot) => (
-      <Portal mount={slot()}><TrustedUi><ScriptFailureNotice errors={page!.scriptFailure!.errors} /></TrustedUi></Portal>
+      <Portal mount={slot()}><TrustedUi><ReaderNotice label="Page script error" load={() => import('../document/ScriptFailureNotice')}>{module => <module.ScriptFailureNotice errors={page!.scriptFailure!.errors} />}</ReaderNotice></TrustedUi></Portal>
     )}</Show>
     <TrustedUi overlay layer="discussion">
     <Show when={ready() && nonce()}>
