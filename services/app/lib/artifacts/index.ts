@@ -21,7 +21,7 @@ export { artifactState } from './state';
 
 /** Write path (publish, operations, offline): create, edit, replace and revert; metadata; quotas; version conflicts; the creation ledger; id reservation; mutation receipts; after-commit hooks; and the deployment's two seams. */
 export { createArtifact, afterCreated, applyEditFor, replaceArtifactFor, revertArtifactFor, commitNormalizedMarkup, retainDownloadedVersion, setMetadataFor, artifactQuotaExceeded, byteQuotaFor, isVersionConflict } from './store';
-export type { ArtifactInput, PreparedMarkupWrite } from './store';
+export type { ArtifactInput } from './store';
 export { updateMetadataFromBody } from './metadata-wire';
 export { assetByteQuotaExceeded, assetByteQuotaLimit } from './asset-quota';
 export { CreationReplay, creationOperation, lookupCreation } from './creation-ledger';

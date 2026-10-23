@@ -50,7 +50,6 @@ import { GITHUB_EXTERNAL_URL } from '@/lib/serving';
 import { createListingPreloader, listingPage } from './reader-preloads';
 import { artifactPageAnswer, type ArtifactPageAnswer } from '@/lib/serving';
 import { DOCUMENT_FRAME_CSS, documentFrameFallback, documentFrameHtml, documentHeadTags, type DocumentFrame } from '@/lib/serving/document-frame';
-import { enableSnapshotRevalidations, installStoryCommitHooks } from '@/lib/publish/prepared';
 import { appBuildId, mountBuildAssets } from './build-assets';
 import { compressDynamic, dynamicEncoding, precompressedStatic, variantResponse, type EncodedVariants } from './content-encoding';
 import zlib from 'node:zlib';
@@ -361,11 +360,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     console.error(`[page] ${c.req.method} ${new URL(c.req.url).pathname} failed:`, error);
     return new Response('Internal Server Error', { status: 500 });
   });
-  // A serving process answers committed writes (lib/artifacts/after-commit): each new head is prepared for its readers,
-  // and a dataset write invalidates the guest snapshots it feeds (lib/publish/prepared/commit-hooks.server).
-  installStoryCommitHooks();
-  // …and revalidates the guest snapshots a write made stale (lib/publish/prepared/snapshots.server).
-  enableSnapshotRevalidations();
   // A deploy compiles nothing, so its build is made durable here: a later deploy can still bind a page
   // assembled for this one (`/islands/d/<sha>.js?b=`, shared-builds.server retainedBuild).
   archiveLiveBuild();

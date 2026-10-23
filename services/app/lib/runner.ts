@@ -7,7 +7,6 @@ import {getArtifactById} from './artifacts';
 import {OPERATIONS} from './operations/registry';
 import {runOperation} from './operations/http';
 import {json,isCrossSiteRequest} from './http';
-import {editHostedDocument} from './operations/hosted-tools';
 /** Trusted host uses the same operation registry and ACLs as the CLI. No caller-controlled identity. */
 export async function runnerOperation(request: Request, operation: string, input: Record<string, unknown>, documentSource?:string) {
     if(operation.startsWith('lambda_'))return lambdaOperation(request,operation,input,documentSource);
@@ -31,7 +30,6 @@ export async function runnerOperation(request: Request, operation: string, input
     headers.set('x-forwarded-host', publicUrl.host);
     headers.set('x-forwarded-proto', publicUrl.protocol.slice(0,-1));
     request = attachActor(new Request(new URL('/api/runner/operations', publicUrl), {method:request.method,headers}),identity);
-    if(operation==='edit_document')return editHostedDocument(request,actor,input);
     const allowed = new Set(['create_artifact', 'get_artifact', 'query_resource', 'mutate_dataset', 'annotate', 'list_artifacts', 'update_artifact']);
     if (!allowed.has(operation))
         return json({ error: 'operation_not_allowed' }, 403);

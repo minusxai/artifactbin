@@ -43,9 +43,7 @@ export interface CliCall {
 }
 
 /** `['POST /api/artifacts', ...]` — the usual shape an assertion wants. */
-export const routesCalled = (calls: CliCall[]): string[] => calls.map((call) => `${call.method} ${call.path}`);
 /** Same, with the query string kept. */
-export const addressesCalled = (calls: CliCall[]): string[] => calls.map((call) => `${call.method} ${call.address}`);
 
 /**
  * A route this fixture does not own. Return a `Response` to answer, or nothing to fall through to

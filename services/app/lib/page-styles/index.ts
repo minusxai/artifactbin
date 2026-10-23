@@ -6,7 +6,7 @@
  * rest of a barrel.
  */
 export { buildDocumentCsp } from './document-csp';
-export { documentFonts, invalidFontFamilies } from './document-fonts';
+export { documentFonts } from './document-fonts';
 export { documentRootAttributes } from './document-root';
 export { DOCUMENT_ROOT_CSS, DOMAIN_FOOTER_CSS, documentStyleSheets } from './document-styles';
 export type { DocumentSheet } from './document-styles';

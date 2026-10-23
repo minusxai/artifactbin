@@ -16,14 +16,12 @@ import { getDb } from '@/lib/platform/db';
 import { htmlLiveLinks, htmlSharedRevisions, changedHtmlSharedRevisions } from '@/lib/html-backends';
 import { trackEvent } from '@/lib/platform';
 import { canReadArtifact, getArtifactById, ownsArtifact, effectiveRole } from '@/lib/artifacts';
-import { datasetsForDocument } from '@/lib/document-data';
-import { isDocumentFormat } from '@/lib/publish/document/input';
 import { canAnnotate } from '@artifactbin/contracts';
 import { authorHandle, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
 import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
-import { changedSince, marksOf, marksOfToken, tokenOf } from '@/lib/publish/prepared/served-results.server';
+import { changedSince, marksOf, marksOfToken, tokenOf,liveDatasetIds } from '@/lib/publish/realtime/dataset-marks';
 import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
 
 /*
@@ -197,7 +195,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    */
   const followDatasets = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => {
     if (closed) return;
-    const wanted = new Set(row.format === 'html' ? htmlLiveLinks(row.meta).flatMap(link=>link.kind==='dataset'?[link.datasetId]:[]) : row.format === 'folder' ? [row.id] : await datasetsForDocument(isDocumentFormat(row.format) ? row : null));
+    const wanted = new Set(row.format === 'html' ? htmlLiveLinks(row.meta).flatMap(link=>link.kind==='dataset'?[link.datasetId]:[]) : row.format === 'folder' ? [row.id] : row.format==='html'?liveDatasetIds((row.meta.htmlLinks??[]) as import('@artifactbin/contracts').HtmlPageLink[]):[]);
     for (const [datasetId, drop] of datasetUnsubs) {
       if (wanted.has(datasetId)) continue;
       datasetUnsubs.delete(datasetId);

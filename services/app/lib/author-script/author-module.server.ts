@@ -39,7 +39,7 @@ const SOLID_SHIM = 'page-solid';
 
 /** The declared names by kind: `values` are scalar Values; `tables` are table Values (rows, like a Query). */
 export interface AuthorModuleNames { values: string[]; tables?: string[]; queries: string[]; mutations: string[] }
-export interface AuthorModule { code: string; exports: string[] }
+interface AuthorModule { code: string; exports: string[] }
 export type AuthorModuleResult = { ok: true; module: AuthorModule } | { ok: false; errors: string[] };
 
 /** The names a Helmet declares, as the publish checks need them. */
