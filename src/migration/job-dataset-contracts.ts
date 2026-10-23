@@ -17,6 +17,7 @@ export interface MigrationJobDatasets {
     string,
     readonly { backendNamespace: string; bindingName: string }[]
   >;
+  cellUserChoiceBindings?: ReadonlyMap<string, readonly { queryName: string; column: string; backendNamespace: string }[]>;
   personBindings: ReadonlyMap<
     string,
     readonly { valueName: string; backendNamespace: string }[]

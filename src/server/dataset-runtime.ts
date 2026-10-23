@@ -1,3 +1,5 @@
+import { createDatasetUserChoiceService } from "../datasets/user-choices/service.ts";
+import { createDatasetUserChoiceRepository } from "../persistence/dataset-user-choices.ts";
 import { createStoredModelResolver } from "../persistence/dataset-stored-models.ts";
 import{createSourceQueryService}from"../datasets/source-query/service.ts";
 import{createSourceQueryRepository}from"../persistence/source-queries.ts";
@@ -98,6 +100,7 @@ export function createDatasetRuntime(
   let closing: Promise<void> | undefined;
   return {
     reads,
+    userChoices: createDatasetUserChoiceService(createDatasetUserChoiceRepository(database,reads,now)),
     ...(options.sourceQueryResources?{sourceQueries:createSourceQueryService(createSourceQueryRepository(database,options.sourceQueryResources.pool,now))}:{}),
     ...(attachments ? { attachments } : {}),
     availability: createDatasetMutationAvailabilityService(

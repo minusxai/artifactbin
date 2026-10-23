@@ -106,6 +106,7 @@ for (const native of [false, true])
           "members",
           "person",
           "mutationAvailability",
+          "userChoices",
           "mutate",
           "run",
         ],

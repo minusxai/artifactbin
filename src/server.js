@@ -207,6 +207,7 @@ export function createService({
             sourceQueries: datasetRuntime.sourceQueries,
             datasetAvailability: datasetRuntime.availability,
             datasetPerson: datasetRuntime.person,
+            datasetUserChoices: datasetRuntime.userChoices,
             secrets: secretsStore && ((client, owner) => secretsStore.env(client, owner)),
           })
         : null,

@@ -23,6 +23,7 @@ export function datasetCapabilityHandler(
   viewer?: import("./viewer-contracts.ts").DatasetViewerService,
   availability?: import("./mutation/availability-contracts.ts").DatasetMutationAvailabilityService,
   sourceQueries?: import("./source-query/contracts.ts").SourceQueryService,
+  userChoices?: import("./user-choices/contracts.ts").DatasetUserChoiceService,
 ): BackendCapabilityHandler {
   const bound = Object.freeze({ ...context });
   return async (principal, request, signal) => {
@@ -34,7 +35,9 @@ export function datasetCapabilityHandler(
       throw new DatasetReadError("denied");
     let result;
     try {
-      if(request.operation === "sourceQueryAvailability" && sourceQueries)
+      if(request.operation === "userChoices" && userChoices)
+        result=await userChoices.userChoices(bound,request.input,signal);
+      else if(request.operation === "sourceQueryAvailability" && sourceQueries)
         result=await sourceQueries.availability(bound,request.input,signal);
       else if (request.operation === "sourceQuery" && sourceQueries)
         result = await sourceQueries.query(bound, request.input, signal);

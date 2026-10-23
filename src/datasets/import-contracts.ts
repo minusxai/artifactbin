@@ -57,6 +57,7 @@ export interface DatasetImportMetadata {
     image: string | null;
   }[];
   /** Exact server-only registered bound Value column descriptors. */
+  userChoiceBindings?: readonly import("./user-choices/contracts.ts").RegisteredDatasetUserChoiceBinding[];
   personBindings?: readonly import("./person-contracts.ts").DatasetPersonBinding[];
   acceptedJoins: readonly {
     pageId: string;

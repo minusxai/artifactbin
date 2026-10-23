@@ -22,6 +22,7 @@ export function createDatasetMetadataAccumulator(namespace: string): {
     operations: [],
     profiles: [],
     personBindings: [],
+    userChoiceBindings: [],
     attachments: [],
     pages: [],
     resources: [],
@@ -43,6 +44,7 @@ export function createDatasetMetadataAccumulator(namespace: string): {
     profiles: (r: NonNullable<DatasetImportMetadata["profiles"]>[number]) => [
       r.legacyUserId,
     ],
+    userChoiceBindings: (r: NonNullable<DatasetImportMetadata["userChoiceBindings"]>[number]) => [r.backendId,r.backendVersion,r.pageId,r.pageVersion,r.name,r.column],
     personBindings: (
       r: NonNullable<DatasetImportMetadata["personBindings"]>[number],
     ) => [r.backendId, r.backendVersion, r.pageId, r.pageVersion, r.valueName],

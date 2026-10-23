@@ -97,6 +97,7 @@ export async function planMigration(
       legacyId: string,
       version: number,
     ) => readonly { backendNamespace: string; bindingName: string }[];
+    cellUserChoiceBindings?: (legacyId:string,version:number)=>readonly { queryName: string; column: string; backendNamespace: string }[];
     personBindings?: (
       legacyId: string,
       version: number,
@@ -263,6 +264,7 @@ export async function planMigration(
                   Number(original.version),
                 )
               : undefined,
+          cellUserChoiceBindings: Number(original.version)===artifact.version?options.cellUserChoiceBindings?.(artifact.id,Number(original.version)):undefined,
           personBindings:
             Number(original.version) === artifact.version
               ? options.personBindings?.(artifact.id, Number(original.version))

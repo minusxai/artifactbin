@@ -95,6 +95,7 @@ export type BackendCapabilityRequest =
   | BackendStoreRequest
   | { kind: "dataset"; operation: "sourceQueryAvailability"; input:{name:string} }
   | { kind: "dataset"; operation: "sourceQuery"; input: import("../datasets/source-query/contracts.ts").SourceQueryRequest }
+  | { kind: "dataset"; operation: "userChoices"; input: import("../datasets/user-choices/contracts.ts").DatasetUserChoiceRequest }
   | { kind: "dataset"; operation: "members" }
   | { kind: "dataset"; operation: "viewer" }
   | { kind: "dataset"; operation: "mutationAvailability"; input: {operation:string} }

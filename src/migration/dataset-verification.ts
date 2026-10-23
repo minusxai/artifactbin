@@ -1,3 +1,4 @@
+import {validateMigrationUserChoiceBindings} from "./user-choice-bindings.ts";
 import { verifyMigrationSourceQueryAuthority } from "./source-query-authority.ts";
 import {
   verifyDeletedDatasetAuthority,
@@ -35,6 +36,7 @@ export async function verifyMigrationDatasetMetadata(
   ownershipOverride?: MigrationOwnershipOverride,
   sourceQueryRegistrations?: readonly MigrationSourceQueryRegistration[],
 ): Promise<number> {
+  validateMigrationUserChoiceBindings(batch.metadata);
   validateMigrationOwnershipDatasetGrantBatch(
     batch.metadata,
     batch.ownershipDatasetGrants,

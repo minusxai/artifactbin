@@ -345,6 +345,7 @@ export function createBackendRoutes(options: {
   secrets?: SecretsEnvPort;
   datasets?: import("../datasets/contracts.ts").DatasetReadService;
   programs?: import("../server/saved-program-host-contracts.ts").SavedProgramHost;
+  datasetUserChoices?: import("../datasets/user-choices/contracts.ts").DatasetUserChoiceService;
   datasetPerson?: import("../datasets/person-contracts.ts").DatasetPersonService;
   datasetAvailability?: import("../datasets/mutation/availability-contracts.ts").DatasetMutationAvailabilityService;
   sourceQueries?: import("../datasets/source-query/contracts.ts").SourceQueryService;
@@ -495,6 +496,7 @@ export function createBackendRoutes(options: {
               options.datasetViewer,
               options.datasetAvailability,
               options.sourceQueries,
+              options.datasetUserChoices,
             )
           : storeCapabilities;
         try {

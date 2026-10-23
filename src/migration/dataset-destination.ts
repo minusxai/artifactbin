@@ -1,3 +1,4 @@
+import {validateMigrationUserChoiceBindings} from "./user-choice-bindings.ts";
 import { verifyMigrationSourceQueryAuthority } from "./source-query-authority.ts";
 import {
   persistDeletedDatasetLifecycleLinks,
@@ -87,6 +88,7 @@ export class PostgresDatasetMetadataDestination
         : this.ownershipOverride,
     );
     validateMigrationPersonBindings(batch.metadata);
+    validateMigrationUserChoiceBindings(batch.metadata);
     validateMigrationSourceQueryBatch(
       batch.metadata,
       batch.sourceQueryRegistrations,

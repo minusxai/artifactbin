@@ -25,9 +25,9 @@ export const generatedDatasetBackendSource = `export const typeDefs = \`
  type MutationAvailability { canAttempt: Boolean! }
  type DatasetMutationResult { affected: Int! rowCount: Int! version: Int! generation: Int! }
  type Mutation { run(inputJson: String!): String! @auth(role: VIEWER) mutate(operation: String!, requestId: String!, params: DatasetParams!): DatasetMutationResult! @auth(role: VIEWER) }
- type Query { mutationAvailability(operation: String!): MutationAvailability! person(valueName: String!, userId: String!): DatasetPersonCard members: DatasetMembers! read(binding: String!, schema: String!, table: String!, offset: Int!, limit: Int!, expectedVersion: Int, expectedGeneration: Int): DatasetWindow! }
+ type Query { userChoices(name: String!, column: String!): String! mutationAvailability(operation: String!): MutationAvailability! person(valueName: String!, userId: String!): DatasetPersonCard members: DatasetMembers! read(binding: String!, schema: String!, table: String!, offset: Int!, limit: Int!, expectedVersion: Int, expectedGeneration: Int): DatasetWindow! }
 \`;
-export default { Query: { mutationAvailability: (args, _principal, caps) => caps.dataset.mutationAvailability(args), person: (args, _principal, caps) => caps.dataset.person(args), members: (_args, _principal, caps) => caps.dataset.members(), read: (args, _principal, caps) => caps.dataset.read(args) }, Mutation: { run: () => { throw Error("Program registration unavailable"); }, mutate: (args, _principal, caps) => caps.dataset.mutate(args) } };
+export default { Query: { userChoices: async (args, _principal, caps) => JSON.stringify(await caps.dataset.userChoices(args)), mutationAvailability: (args, _principal, caps) => caps.dataset.mutationAvailability(args), person: (args, _principal, caps) => caps.dataset.person(args), members: (_args, _principal, caps) => caps.dataset.members(), read: (args, _principal, caps) => caps.dataset.read(args) }, Mutation: { run: () => { throw Error("Program registration unavailable"); }, mutate: (args, _principal, caps) => caps.dataset.mutate(args) } };
 `;
 function principal(row: LegacyRow): Principal {
   return row.group_id

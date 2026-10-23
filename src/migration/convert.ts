@@ -208,6 +208,7 @@ export function createMigrationConverter(
       membersBinding: input.membersBinding,
       viewerBinding: input.viewerBinding,
       personBindings: input.personBindings,
+      cellUserChoiceBindings: input.cellUserChoiceBindings,
       datasetAttachments: input.datasetAttachments,
       datasetUnavailable: input.datasetUnavailable,
       theme: typeof meta.theme === "string" ? meta.theme : null,

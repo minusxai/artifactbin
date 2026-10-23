@@ -89,6 +89,10 @@ function checkedCapabilityFrame(
       return { id, request: { kind: "dataset", operation: req.operation } };
     }
     const input = req.input;
+    if(req.operation === "userChoices"){
+      if(Object.keys(req).sort().join()!=="input,kind,operation"||!record(input)||Object.keys(input).sort().join()!=="column,name"||typeof input.name!=="string"||typeof input.column!=="string")throw Error();
+      return{id,request:{kind:"dataset",operation:"userChoices",input:{name:input.name,column:input.column}}};
+    }
     if(req.operation === "sourceQueryAvailability"){
       if(Object.keys(req).sort().join()!=="input,kind,operation"||!record(input)||Object.keys(input).join()!=="name"||typeof input.name!=="string")throw Error();
       return{id,request:{kind:"dataset",operation:"sourceQueryAvailability",input:{name:input.name}}};

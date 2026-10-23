@@ -53,6 +53,7 @@ export function migrationDatasetTablePlans(
         image: r.image,
       })),
     ),
+    plan("dataset_user_choice_bindings",["backend_id","backend_version","page_id","page_version","name","column_name"],(m.userChoiceBindings??[]).map(r=>({backend_id:r.backendId,backend_version:r.backendVersion,page_id:r.pageId,page_version:r.pageVersion,name:r.name,column_name:r.column,descriptor:{name:r.name,column:r.column,bindingName:r.bindingName,schema:r.schema,table:r.table,sourceColumn:r.sourceColumn}})),["descriptor"]),
     plan(
       "dataset_person_bindings",
       [

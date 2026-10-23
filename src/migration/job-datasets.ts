@@ -1,3 +1,4 @@
+import {projectMigrationUserChoiceBindings} from "./user-choice-bindings.ts";
 import {validateDeletedArtifactPreparation} from "./deleted-artifact-admission.ts";
 import { prepareStandaloneDatasetJob } from "./dataset-pages/job.ts";
 import { prepareMigrationOwnershipDatasetGrants } from "./ownership-dataset-grants.ts";
@@ -102,6 +103,7 @@ export async function prepareMigrationJobDatasets(
     string,
     readonly { backendNamespace: string; bindingName: string }[]
   >();
+  const cellUserChoiceBindings=new Map<string,readonly {queryName:string;column:string;backendNamespace:string}[]>();
   const personBindings = new Map<
     string,
     { valueName: string; backendNamespace: string }[]
@@ -244,6 +246,8 @@ export async function prepareMigrationJobDatasets(
         ) ?? [],
         plan.metadata.bindings,
       );
+      const registeredUserChoices=projectMigrationUserChoiceBindings(source.manifest.sourceNamespace,page.revisions,plan.metadata.bindings);
+      cellUserChoiceBindings.set(migrationDatasetVersionKey(page.legacyId,scan.heads.get(page.legacyId)!),registeredUserChoices.filter(p=>p.pageVersion===scan.heads.get(page.legacyId)).map(p=>({queryName:p.name,column:p.column,backendNamespace:'legacyData'})));
       const headSource = artifact.artifacts[0]!;
       const registeredAttachments =
         headSource.format === "program"
@@ -298,6 +302,7 @@ export async function prepareMigrationJobDatasets(
         principals: [],
         groups: [],
         personBindings: registeredPersons,
+        userChoiceBindings: registeredUserChoices,
         attachments: registeredAttachments,
         operations: prepared.operations.filter(
           (r) => r.operation.page.id === page.pageId,
@@ -384,6 +389,7 @@ export async function prepareMigrationJobDatasets(
     membersBindings,
     viewerBindings,
     personBindings,
+    cellUserChoiceBindings,
     datasetAttachments,
     scan,
     bindings,

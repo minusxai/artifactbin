@@ -198,6 +198,7 @@ export default {
               capability({ kind: "transaction", resource, operations }),
             // Only saved server bindings are readable; pages cannot send keys or SQL.
             dataset: Object.freeze({
+              userChoices: async (input) => capability({kind:"dataset",operation:"userChoices",input}),
               sourceQueryAvailability: async (input) => capability({kind:"dataset",operation:"sourceQueryAvailability",input}),
               sourceQuery: async (input) => capability({kind:"dataset",operation:"sourceQuery",input}),
               person: async (input) =>

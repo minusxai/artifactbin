@@ -196,3 +196,12 @@ CREATE TABLE IF NOT EXISTS dataset_deleted_lifecycle_links (
 );
 DROP TRIGGER IF EXISTS dataset_deleted_lifecycle_links_immutable ON dataset_deleted_lifecycle_links;
 CREATE TRIGGER dataset_deleted_lifecycle_links_immutable BEFORE UPDATE OR DELETE ON dataset_deleted_lifecycle_links FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();
+
+CREATE TABLE IF NOT EXISTS dataset_user_choice_bindings (
+ backend_id text NOT NULL, backend_version text NOT NULL, page_id text NOT NULL,
+ page_version integer NOT NULL, source_namespace text NOT NULL,
+ name text NOT NULL, column_name text NOT NULL, descriptor jsonb NOT NULL,
+ PRIMARY KEY(backend_id,backend_version,page_id,page_version,name,column_name)
+);
+DROP TRIGGER IF EXISTS dataset_user_choice_bindings_immutable ON dataset_user_choice_bindings;
+CREATE TRIGGER dataset_user_choice_bindings_immutable BEFORE UPDATE ON dataset_user_choice_bindings FOR EACH ROW EXECUTE FUNCTION immutable_dataset_version();

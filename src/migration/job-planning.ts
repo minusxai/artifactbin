@@ -56,6 +56,7 @@ export function createMigrationJobPlanner(
         source.preparedDatasets?.datasetAttachments?.get(
           migrationDatasetVersionKey(id, version),
         ) ?? [],
+      cellUserChoiceBindings:(id,version)=>source.preparedDatasets?.cellUserChoiceBindings?.get(migrationDatasetVersionKey(id,version))??[],
       personBindings: (id, version) =>
         source.preparedDatasets?.personBindings.get(
           migrationDatasetVersionKey(id, version),

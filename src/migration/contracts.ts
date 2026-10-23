@@ -31,6 +31,7 @@ export interface SqlReader {
 export interface ConversionInput {
   /** Trusted offline catalog facts; included in cache provenance, never browser data. */
   boundValueColumns?: readonly BoundValueColumnProof[];
+  cellUserChoiceBindings?: readonly { queryName: string; column: string; backendNamespace: string }[];
   personBindings?: readonly { valueName: string; backendNamespace: string }[];
   datasetAttachments?: readonly {
     backendNamespace: string;
