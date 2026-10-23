@@ -1,6 +1,7 @@
 name: runner design validation
 on:
   pull_request:
+    branches-ignore: [ artifactbinv3 ]
     paths:
       - 'docs/proposals/runner-validation/**'
       - 'services/runner/**'
@@ -12,6 +13,8 @@ on:
       - 'services/app/__tests__/runner-design.test.ts'
       - 'services/app/__tests__/runner-page-boundary.test.ts'
       - '.github/workflows/runner-design.yml'
+  push:
+    branches: [ artifactbinv3 ]
   workflow_dispatch:
 permissions:
   contents: read

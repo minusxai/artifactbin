@@ -3,7 +3,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [ main, artifactbinv3 ]
   # The release-only CLI matrix runs on NO ordinary pull request, so between releases nothing would
   # notice broken native npm acceptance — and its caches, unused, expire. Nightly on main it proves the
   # five consumer platforms: drift shows up the next morning instead of inside a release, and the macOS/Linux
@@ -34,7 +34,7 @@ jobs:
   # `test` roll-up needs it, so the new run starts at once while the old one winds down beside it
   # (scripts/lib/ci-supersede.mjs, builtin-only: no install).
   supersede:
-    if: github.event_name == 'pull_request'
+    if: (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3') && github.event_name == 'pull_request'
     name: supersede earlier runs
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -54,6 +54,7 @@ jobs:
         run: node scripts/lib/ci-supersede.mjs
 
   plan:
+    if: (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3')
     name: affected modules
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -93,6 +94,7 @@ jobs:
       - id: select
         env:
           CI__EVENT: ${{ github.event_name }}
+          CI__REF: ${{ github.ref }}
           CI__BASE_SHA: ${{ github.event.pull_request.base.sha }}
           CI__BEFORE_SHA: ${{ github.event.before }}
           CI__HEAD_SHA: ${{ github.sha }}
@@ -154,6 +156,9 @@ jobs:
       - name: Lint the workflows
         run: docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color
       - run: npm run validate
+      - name: v3 fast-lane coverage and syntax
+        if: github.ref == 'refs/heads/artifactbinv3'
+        run: node scripts/ci/fast-check.mjs
 
   # THE NODE PROJECT SHARDS, like api and ui: four, packed by measured file time
   # (scripts/lib/timed-sequencer.mjs over scripts/ci/test-timings.json), and NOTHING ELSE. The integration
@@ -868,7 +873,7 @@ jobs:
         cli-bootstrap,
         reference-compatibility
       ]
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || github.base_ref != 'artifactbinv3')
     steps:
       # PR checkout is the synthetic merge: depth two includes its base parent for the
       # three-dot patch diff below. Main records only the current tree; neither needs full history.
@@ -1584,7 +1589,7 @@ jobs:
       ]
     if: >-
       !cancelled() && !contains(needs.*.result, 'failure') &&
-      github.event_name == 'push' && vars.CONSUMER_REPOSITORY != ''
+      github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CONSUMER_REPOSITORY != ''
     runs-on: ubuntu-latest
     permissions: {}
     steps:

@@ -1,0 +1,10 @@
+[
+  "scripts/__tests__/fast-test-policy.test.mjs",
+  "services/utils/__tests__/artifact-reference.test.ts",
+  "services/utils/__tests__/assets-origin.test.ts",
+  "services/utils/__tests__/dataset-grants.test.ts",
+  "services/utils/__tests__/timestamp.test.ts",
+  "services/contracts/__tests__/loopback-names.test.ts",
+  "services/app/lib/dataflow/__tests__/number-format.test.ts",
+  "services/app/lib/object-store/__tests__/url.test.ts"
+]
