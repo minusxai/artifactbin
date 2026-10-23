@@ -315,6 +315,18 @@ async function dynamicLeg(browser,seed){
   await page.reload();await frame.locator('[data-af-id="task:123"]').waitFor();await expect(painted()).not.toHaveCount(0);check(true,'dynamic comment reconnects after a fresh runtime launch');
  }finally{await ctx.close();}
 }
+async function liveQuoteLeg(browser,seed){
+ const ctx=await browser.newContext(),page=await ctx.newPage();try{
+  await becomeOwner(page,BASE,seed.token);await page.goto(`${BASE}/a/${seed.id}`);const frame=documentLocator(page);await frame.locator('#figure').waitFor();
+  await comment(page,frame,'#figure','Keep the originally selected words');const original=(await api(seed,'/annotations')).annotations[0];
+  await api(seed,'',{html:DOC.replace('Revenue grew 40% in Q3.','Revenue grew 34% in Q3.')},'PUT');
+  await expect(frame.locator('#figure')).toHaveText('Revenue grew 34% in Q3.');check(true,'whole-source publication reaches the open native reader without refresh');
+  const updated=await api(seed,'/annotations');check(updated.annotations[0].anchor.nodeId==='figure'&&!updated.annotations[0].orphaned&&updated.annotations[0].quote===original.quote&&!updated.annotations[0].quote_found,'rewriting source keeps stable identity and the original quote, reporting missing words honestly');
+  await comment(page,frame,'#figure','Comment after a live publication');
+  const after=await until(()=>api(seed,'/annotations'),wire=>wire.annotations?.length===2);check(after.annotations.some(row=>row.anchor.revision==='2'),'right-click selection uses the freshly served native revision');
+ }finally{await ctx.close();}
+}
+
 async function selectionLeg(browser,seed){
  const ctx=await browser.newContext({viewport:{width:1280,height:900}}),page=await ctx.newPage();try{
   await page.addInitScript(()=>{if(navigator.mediaDevices)Object.defineProperty(navigator.mediaDevices,'setCaptureHandleConfig',{value:undefined});});
@@ -334,14 +346,16 @@ async function selectionLeg(browser,seed){
   await frame.locator('#figure').click({button:'right'});const field=page.getByLabel('Annotation comment',{exact:true});await field.waitFor();
   const png=(await sharp({create:{width:80,height:40,channels:3,background:{r:20,g:100,b:200}}}).png().toBuffer()).toString('base64');
   await field.evaluate((element,png)=>{const data=new DataTransfer();data.items.add(new File([Uint8Array.from(atob(png),c=>c.charCodeAt(0))],'evidence.png',{type:'image/png'}));element.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true,composed:true}));},png);
-  await page.getByLabel('Comment image attachment',{exact:true}).waitFor();await field.fill('Pasted evidence');await page.getByLabel('Save annotation',{exact:true}).click();
+  await page.getByLabel('Screenshot editor',{exact:true}).waitFor();await field.fill('Pasted evidence');await page.getByLabel('Save annotation',{exact:true}).click();
   const withImage=await until(()=>api(seed,'/annotations'),w=>w.annotations?.some(row=>row.image));check(withImage.annotations.some(row=>row.image),'pasted image uploads through the retained comment attachment path');
   await page.reload();await frame.locator('#figure').waitFor();await openRail(page);await expect(page.getByLabel('Annotation sidebar',{exact:true}).locator('img')).not.toHaveCount(0);check(true,'comment images reconnect after reload');
  }finally{await ctx.close();}
 }
 
 async function run(){const browser=await launchChromium();try{
- const fixtures=await Promise.all([publish(DOC),publish(CAP_DOC),publish(CAP_DOC),publish(DYNAMIC),publish(DOC)]);
- for(const [leg,fixture] of [[ownerLeg,fixtures[0]],[markdownLeg,fixtures[1]],[dynamicLeg,fixtures[3]],[foldLeg,fixtures[2]],[selectionLeg,fixtures[4]]])try{await leg(browser,fixture);}catch(error){check(false,`${leg.name}: ${error.stack??error}`);}
+ const fixtures=await Promise.all([publish(DOC),publish(CAP_DOC),publish(CAP_DOC),publish(DYNAMIC),publish(DOC),publish(DOC)]);
+ const runLeg=async(leg,fixture)=>{try{await leg(browser,fixture);}catch(error){check(false,`${leg.name}: ${error.stack??error}`);}};
+ await Promise.all([[ownerLeg,fixtures[0]],[markdownLeg,fixtures[1]],[dynamicLeg,fixtures[3]],[selectionLeg,fixtures[4]],[liveQuoteLeg,fixtures[5]]].map(([leg,fixture])=>runLeg(leg,fixture)));
+ await runLeg(foldLeg,fixtures[2]);
 }finally{await browser.close();}}
 run().then(()=>check.done()).catch(error=>{console.error(error);process.exit(1)});
