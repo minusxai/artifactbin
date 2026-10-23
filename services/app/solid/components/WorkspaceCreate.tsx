@@ -15,8 +15,7 @@ import PanelTop from 'lucide-solid/icons/panel-top';
 import ScrollText from 'lucide-solid/icons/scroll-text';
 import AppWindow from 'lucide-solid/icons/app-window';
 import { pageDataChanged } from '@/solid/lib/page-data-events';
-import { ARTIFACT_STARTERS, artifactStarter } from '@/lib/workspace/artifact-starters';
-import type { StoryTemplateName } from '@/lib/validation/atlas-schemas';
+import { ARTIFACT_STARTERS, artifactStarter,type ArtifactStarterTemplate } from '@/lib/workspace/artifact-starters';
 import { openDocument } from '../lib/document-navigation';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
@@ -24,7 +23,7 @@ import { Field, Input } from '../ui/Field';
 import { Menu, type MenuEntry } from '../ui/Menu';
 import { apiFetch } from '../lib/api';
 
-const TYPE_ICONS = { doc: FileText, editorial: Newspaper, deck: Presentation, dashboard: LayoutDashboard, plan: ListChecks, landing: PanelTop, scrolly: ScrollText, app: AppWindow } satisfies Record<StoryTemplateName, typeof FileText>;
+const TYPE_ICONS = { doc: FileText, editorial: Newspaper, deck: Presentation, dashboard: LayoutDashboard, plan: ListChecks, landing: PanelTop, scrolly: ScrollText, app: AppWindow } satisfies Record<ArtifactStarterTemplate, typeof FileText>;
 export default function WorkspaceCreate(props: { onCreated: () => void; parentId?: string | null; groupId?: string; personal?: boolean }): JSX.Element {
   const [dialog, setDialog] = createSignal(false);
   const [name, setName] = createSignal('');
@@ -32,7 +31,7 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
   const [error, setError] = createSignal('');
   const choose = () => { setError(''); setDialog(true); };
   const creationHref = (path:string) => { const params=new URLSearchParams();if(props.parentId)params.set('parent_id',props.parentId);if(props.groupId)params.set('group_id',props.groupId);else if(props.personal)params.set('personal','1');return `${path}${params.size?'?'+params.toString():''}`;};
-  const createArtifact = async (template: StoryTemplateName) => {
+  const createArtifact = async (template: ArtifactStarterTemplate) => {
     if (busy()) return;
     setBusy(true); setError('');
     try {
@@ -43,7 +42,7 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
       pageDataChanged();
       // Browser Back can restore this exact component from the page cache.
       setBusy(false);
-      openDocument(`/a/${encodeURIComponent(body.id)}${template === 'doc' ? '/edit' : ''}`);
+      openDocument(`/a/${encodeURIComponent(body.id)}`);
     } catch { setError('Could not create the artifact. Try again.'); setBusy(false); }
   };
   const createFolder = async (event: SubmitEvent) => {

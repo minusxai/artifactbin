@@ -12,6 +12,8 @@ export interface StoredContent {
   meta: Record<string, unknown>;
   /** Title derived from the source's first heading — used only when the body has no title. */
   derivedTitle: string | null;
+  /** Native HTML head description, when the format supplies one. */
+  derivedDescription?:string|null;
   /**
    * Changes the door made to the source on the way in (lib/jsx/repair) — today
    * only the shell-escaped backtick. Present ONLY when something was changed,

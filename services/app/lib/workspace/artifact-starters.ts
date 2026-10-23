@@ -1,5 +1,3 @@
-import type { StoryTemplateName } from '@/lib/validation/atlas-schemas';
-import { EMPTY_ARTIFACT_MARKUP } from '@artifactbin/contracts';
 
 /** The creation menu's vocabulary and initial content; every write uses the normal artifact API. */
 export const ARTIFACT_STARTERS = [
@@ -11,11 +9,13 @@ export const ARTIFACT_STARTERS = [
   { template: 'landing', label: 'Landing page' },
   { template: 'scrolly', label: 'Scrollytelling' },
   { template: 'app', label: 'App' },
-] as const satisfies ReadonlyArray<{ template: StoryTemplateName; label: string }>;
+] as const;
+export type ArtifactStarterTemplate=(typeof ARTIFACT_STARTERS)[number]['template'];
 
-/** One Markdown region: the heading and body hints are placeholders the editor draws while it is empty, never content. */
-const BLANK_DOCUMENT_MARKUP = '<article id="document" data-design="tw"><Markdown id="body" data-placeholder-heading="Headline" data-placeholder="Start writing…" className="text-base leading-relaxed">{``}</Markdown></article>';
-
-export function artifactStarter(template: StoryTemplateName, parentId?: string | null) {
-  return { markup: template === 'doc' ? BLANK_DOCUMENT_MARKUP : EMPTY_ARTIFACT_MARKUP, template, title: null, visibility: 'private' as const, parent_id: parentId ?? null };
+/** Each menu choice starts as a normal HTML file with the same publication contract. */
+export function artifactStarter(template: ArtifactStarterTemplate, parentId?: string | null) {
+  const label=ARTIFACT_STARTERS.find(starter=>starter.template===template)?.label??'Document';
+  const title=template==='doc'?'Untitled document':`Untitled ${label.toLowerCase()}`;
+  const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><script src="/af/v1/core.js"></script></head><body><main><h1>${title}</h1></main></body></html>`;
+  return {html,visibility:'private' as const,parent_id:parentId??null};
 }

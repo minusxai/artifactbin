@@ -1,8 +1,7 @@
 /**
  * POST /api/start — the zero-to-live-document button.
  *
- * Creates a markup artifact (a blank report with ?mode=blank, otherwise the
- * existing agent placeholder) and hands back the ONE agent starter
+ * Creates a native HTML document and hands back the ONE agent starter
  * (lib/agent-copy `existingPaste`), so the home page can give the user a paste
  * for a real, watchable document: they paste it to an agent, and the page they
  * are looking at fills in over the live stream.
@@ -13,7 +12,7 @@
 import { createArtifact } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/serving';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
-import { BLANK_REPORT_MARKUP, START_PLACEHOLDER_MARKUP } from '@artifactbin/contracts';
+import {artifactStarter} from '@/lib/workspace/artifact-starters';
 import {canUseDeploymentIdentity} from '@/lib/deployment';
 import { canAuthenticateUser } from '@/lib/accounts';
 import { requestOrSessionActor, sessionActor, withAccountToken } from '@/lib/accounts';
@@ -22,13 +21,13 @@ import {parseArtifactDestination} from '@/lib/artifacts';
 import {DatasetError} from '@/lib/datasets/errors';
 
 export async function POST(request: Request) {
-  // A browser session takes precedence over an approved CLI bearer; both are the one request identity
+  // A browser session takes precedence over a bearer; both are the original request identity
   // (lib/accounts request-identity). A session creates through the account's own token, as every browser create does.
   const session = await sessionActor(request);
   const actor = session.credential === 'session' ? session : await requestOrSessionActor(request);
   const creator = actor.userId ? await withAccountToken(actor) : null;
   if (!creator || !await canUseDeploymentIdentity(creator.userId) || !await canAuthenticateUser(creator.userId)) return unauthorized(request);
-  const parsed = await parseContentInput({ markup: new URL(request.url).searchParams.get('mode') === 'blank' ? BLANK_REPORT_MARKUP : START_PLACEHOLDER_MARKUP }, {});
+  const parsed = await parseContentInput(artifactStarter('doc'), {});
   if (parsed instanceof Response) return parsed; // unreachable: both starting documents are fixed and valid
 
   const body = await readJson(request, {allowEmpty:true});
@@ -37,11 +36,8 @@ export async function POST(request: Request) {
   try { row = await createArtifact(creator.tokenId, creator.userId, {
     ...parsed,
     destination: parseArtifactDestination(body.destination),
-    // NULL, not 'Untitled': unnamed must stay distinguishable from named-that,
-    // because an unnamed document follows its own heading (lib/document/title.ts)
-    // and an explicit title never does.
-    title: null,
-    description: null,
+    title: parsed.derivedTitle,
+    description: parsed.derivedDescription??null,
   }); } catch(error) {
     if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);
     throw error;

@@ -2,7 +2,7 @@ import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source';
-import type { CanonicalHtmlOptions, CanonicalHtmlPage } from './contracts';
+import type { CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPageMetadata } from './contracts';
 export type { HtmlIdentityLedger, CanonicalHtmlOptions, CanonicalHtmlPage } from './contracts';
 const CORE='/af/v1/core.js';
 const allElements=(html:string)=>{const document=parseSource(html);return {...document,all:[...document.elements,...document.templateElements]};};
@@ -71,3 +71,17 @@ export function htmlPageDeclarations(html:string):HtmlPageDeclarations{
  return {backends,datasets};
 }
 export function htmlBackendNames(html:string):string[]{return [...htmlPageDeclarations(html).backends];}
+
+/** The native head supplies listing and share metadata; body content is never executed. */
+export function htmlPageMetadata(html:string):HtmlPageMetadata{
+ const document=parseSource(html);let title:string|null=null,description:string|null=null;
+ for(const element of document.elements){
+  let inHead=false;for(let parent=element.parentNode;parent;parent='parentNode' in parent?parent.parentNode:null)if(parent===document.head){inHead=true;break;}
+  if(!inHead)continue;
+  if(element.tagName==='title'&&title===null){
+   const text=element.childNodes.filter(node=>node.nodeName==='#text').map(node=>'value' in node?node.value:'').join('').replace(/\s+/g,' ').trim();title=text||null;
+  }
+  if(element.tagName==='meta'&&(attribute(element,'name')??'').toLowerCase()==='description'&&description===null)description=attribute(element,'content')?.trim()||null;
+ }
+ return {title,description};
+}

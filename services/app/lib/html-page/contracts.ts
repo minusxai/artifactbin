@@ -2,3 +2,5 @@
 export interface HtmlIdentityLedger { readonly allocatedIds: readonly string[]; readonly nextNodeId: number }
 export interface CanonicalHtmlPage { html: string; ledger: HtmlIdentityLedger; nodeIds: readonly string[] }
 export interface CanonicalHtmlOptions { previousHtml?: string; ledger?: HtmlIdentityLedger }
+/** Metadata authored in the document head, overridden only by explicit API fields. */
+export interface HtmlPageMetadata {title:string|null;description:string|null}

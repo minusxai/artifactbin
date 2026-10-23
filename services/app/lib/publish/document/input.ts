@@ -4,8 +4,7 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
  * transaction. Data and byte tiers retain their original inputs and authority.
  */
 import { json } from '../../http/http';
-import { canonicalizeHtmlPage } from '@/lib/html-page';
-import { publishJsx } from './jsx-tier';
+import { canonicalizeHtmlPage,htmlPageMetadata } from '@/lib/html-page';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/publish/ingest/image';
 import { ingestPdfFromUrl } from '@/lib/publish/ingest/pdf';
@@ -92,16 +91,7 @@ export interface ContentInputCtx {
 }
 
 export async function parseContentInput(body: Record<string, unknown>, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
-  // Retired inputs, answered by name.
-  const RETIRED: Record<string, string> = {
-    markdown: 'send markup containing <Markdown> for continuous prose, or ordinary HTML tags for individually designed text; the top-level markdown field is not supported',
-    jsx: 'the jsx field is retired — send markup',
-  };
-  for (const [key, hint] of Object.entries(RETIRED)) {
-    if (typeof body[key] === 'string' && (body[key] as string).length > 0) {
-      return json({ error: 'markup_only', hint }, 400);
-    }
-  }
+  if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body,key)))return json({error:'native_html_required',hint:'Publish a complete HTML document in the html field.'},400);
 
   const textPresent = TEXT_CONTENT_FIELDS.filter(
     (k) => typeof body[k] === 'string' && (body[k] as string).length > 0,
@@ -124,7 +114,7 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   if(kind==='html'){
     const source=String(body.html);
     const size=tooLarge(source);if(size)return size;
-    try{canonicalizeHtmlPage(source);return {format:'html',source,meta:{},derivedTitle:null};}
+    try{canonicalizeHtmlPage(source);const metadata=htmlPageMetadata(source);return {format:'html',source,meta:{},derivedTitle:metadata.title,derivedDescription:metadata.description};}
     catch(error){return json({error:'invalid_html',details:[error instanceof Error?error.message:String(error)]},400);}
   }
 
@@ -221,11 +211,5 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
     return await publishPdf(body, body.pdf as string, ctx.objects);
   }
   if (kind === 'viz') return publishVizRecipe(body, body.viz);
-  const value = body[kind] as string;
-  const sizeError = tooLarge(value);
-  if (sizeError) return sizeError;
-
-  // The document — `markup` (story JSX). publishJsx owns
-  // theme/template/colorMode validation.
-  return publishJsx(body, value, ctx);
+  return json({error:'unsupported_content'},400);
 }
