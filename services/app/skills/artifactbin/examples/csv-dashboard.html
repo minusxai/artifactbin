@@ -154,14 +154,14 @@ function render(metric){
  const max=Math.max(1,...rows.map(row=>row[metric]));
  rows.forEach((row,index)=>{
   const y=24+index*76,width=430*row[metric]/max;
-  const make=(tag,attrs,text)=>{const el=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,String(v));if(text!==undefined)el.textContent=text;chart.append(el);};
-  make('text',{x:0,y:y+24,fill:'currentColor','font-size':17},row.week);
-  make('rect',{x:120,y,width,height:36,fill:'var(--primary)'});
-  make('text',{x:130+width,y:y+24,fill:'currentColor','font-size':17},String(row[metric]));
+  const make=(role,tag,attrs,text)=>{const el=document.createElementNS('http://www.w3.org/2000/svg',tag);el.dataset.afId='repair-chart-'+row.id+'-'+role;for(const [k,v] of Object.entries(attrs))el.setAttribute(k,String(v));if(text!==undefined)el.textContent=text;chart.append(el);};
+  make('week','text',{x:0,y:y+24,fill:'currentColor','font-size':17},row.week);
+  make('bar','rect',{x:120,y,width,height:36,fill:'var(--primary)'});
+  make('value','text',{x:130+width,y:y+24,fill:'currentColor','font-size':17},String(row[metric]));
  });
  document.querySelector('#summary').textContent=metric==='completed'?`${rows.reduce((n,row)=>n+row.completed,0)} repairs completed across ${rows.length} weeks.`:`${rows.at(-1)?.waiting??0} repairs waiting in the latest loaded week.`;
  if(sourceNote)document.querySelector('#summary').textContent+=' '+sourceNote;
- const body=document.querySelector('#rows');body.replaceChildren();for(const row of rows){const tr=document.createElement('tr');for(const key of ['week','completed','waiting']){const td=document.createElement('td');td.textContent=String(row[key]);tr.append(td);}body.append(tr);}
+ const body=document.querySelector('#rows');body.replaceChildren();for(const row of rows){const tr=document.createElement('tr');tr.dataset.afId='repair-row-'+row.id;for(const key of ['week','completed','waiting']){const td=document.createElement('td');td.dataset.afId='repair-cell-'+row.id+'-'+key;td.textContent=String(row[key]);tr.append(td);}body.append(tr);}
 }
 async function refresh(){
  const button=document.querySelector('#refresh');button.disabled=true;status.textContent='Reading dataset schema and rows…';
@@ -175,7 +175,7 @@ async function refresh(){
   do{
    const result=await client.query({query:rowsQuery,variables:{table:table.id,after}});if(result.errors?.length)throw Error(result.errors[0].message);
    const page=result.data.repairs.rows;if(revision!==null&&revision!==page.revision)throw Error('Dataset changed during reading. Refresh to try again.');revision=page.revision;
-   for(const row of page.rows){const cells=Object.fromEntries(row.cells.map(cell=>[cell.columnId,cell.value]));const week=cells[ids.week]?.string,completed=cells[ids.completed]?.number,waiting=cells[ids.waiting]?.number;if(typeof week!=='string'||!Number.isFinite(completed)||!Number.isFinite(waiting))throw Error('A row has missing or nonnumeric repair values.');loaded.push({week,completed,waiting});}
+   for(const row of page.rows){const cells=Object.fromEntries(row.cells.map(cell=>[cell.columnId,cell.value]));const week=cells[ids.week]?.string,completed=cells[ids.completed]?.number,waiting=cells[ids.waiting]?.number;if(typeof week!=='string'||!Number.isFinite(completed)||!Number.isFinite(waiting))throw Error('A row has missing or nonnumeric repair values.');loaded.push({id:row.id,week,completed,waiting});}
    after=page.pageInfo.hasNextPage?page.pageInfo.endCursor:null;if(page.pageInfo.hasNextPage&&!after)throw Error('Dataset returned no continuation cursor.');
   }while(after);
   sourceNote=table.source.truncated?`Stored sample: ${table.source.storedRows??'unknown'} of ${table.source.totalRows??'unknown'} source rows. Totals cover stored rows only.`:'';

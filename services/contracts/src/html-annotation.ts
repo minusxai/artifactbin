@@ -1,6 +1,8 @@
 /** Explicit extension: never encode data-af-id as a compiler AST path. */
 export interface HtmlNodeAnchor {
   kind: 'html-node'; v: 1; revision: string; nodeId: string | null; quote: string;
+  /** Runtime-created identity scoped to this persisted source ancestor. */
+  ancestorId?: string;
   range?: { start: number; end: number; length: number; fingerprint: string };
 }
 export interface HtmlSelection {
@@ -12,8 +14,12 @@ export function parseHtmlNodeAnchor(value: unknown): HtmlNodeAnchor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
   const text = (s: unknown, max: number): s is string => typeof s === 'string' && s.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(s);
-  if (Object.keys(v).some(k => !['kind','v','revision','nodeId','quote','range'].includes(k)) || v.kind !== 'html-node' || v.v !== 1 || !text(v.revision,256) || !v.revision || !(v.nodeId === null || text(v.nodeId,256) && !!v.nodeId) || !text(v.quote,32768)) return null;
+  if (Object.keys(v).some(k => !['kind','v','revision','nodeId','quote','range','ancestorId'].includes(k)) || v.kind !== 'html-node' || v.v !== 1 || !text(v.revision,256) || !v.revision || !(v.nodeId === null || text(v.nodeId,256) && !!v.nodeId) || !text(v.quote,32768)) return null;
   const anchor: HtmlNodeAnchor = { kind:'html-node',v:1,revision:v.revision,nodeId:v.nodeId,quote:v.quote };
+  if (v.ancestorId !== undefined) {
+    if (!text(v.ancestorId,256) || !v.ancestorId || v.nodeId === null || v.ancestorId === v.nodeId) return null;
+    anchor.ancestorId=v.ancestorId;
+  }
   if (v.range !== undefined) {
     if (!v.range || typeof v.range !== 'object' || Array.isArray(v.range) || v.nodeId === null) return null;
     const r=v.range as Record<string,unknown>;

@@ -21,6 +21,12 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
     });
   };
   removeCore(document);
+  const savedNodeIds: string[] = [];
+  const collect = (node: DefaultTreeAdapterMap['node']) => {
+    if ('attrs' in node) { const id = node.attrs.find(attr=>attr.name==='data-af-id')?.value; if(id) savedNodeIds.push(id); }
+    if ('childNodes' in node) for(const child of node.childNodes) collect(child);
+  };
+  collect(document);
   const { appOrigin, ...publicConfig } = input.config;
   if (!publicConfig.initialState) {
     const visit = (node: DefaultTreeAdapterMap['node']): HtmlJsonObject | undefined => {
@@ -32,7 +38,7 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
     };
     publicConfig.initialState = visit(document);
   }
-  const config = { ...publicConfig, ...(!input.offline && appOrigin ? { appOrigin } : {}), offline: input.offline === true };
+  const config = { ...publicConfig, savedNodeIds, ...(!input.offline && appOrigin ? { appOrigin } : {}), offline: input.offline === true };
   const json = JSON.stringify(config).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   const safeCore = input.core.replace(/<\/script/gi, '<\\/script');
   const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script><script data-af="core">${safeCore}</script>`);

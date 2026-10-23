@@ -89,7 +89,7 @@ it('never persists credentials read by a backend in nested results, emitted even
  const db=new PGlite();cleanup.push(()=>db.close());
  const secret='test-only-credential';
  const runner=await createRunner({db,dockerImage:process.env.RUNNER_TEST_IMAGE,capabilities:async(_ctx,operation)=>{if(operation==='artifactbin.pageBackend.secrets.get')return secret;throw Error('forbidden');}});cleanup.push(()=>runner.close());
- const code=`export default async(input,c){const value=await c.artifactbin.call('pageBackend.secrets.get',{name:'TOKEN'});await c.emit({nested:[value]});if(input.fail)throw Error('failure: '+value);return {nested:[value]};}`;
+ const code=`export default async function(input,c){const value=await c.artifactbin.call('pageBackend.secrets.get',{name:'TOKEN'});await c.emit({nested:[value]});if(input.fail)throw Error('failure: '+value);return {nested:[value]};}`;
  for(const fail of [false,true]){
   const {runId}=await runner.start({...request(code),requestId:'secret-'+fail,input:{fail}});const snapshot=await terminal(runner,runId);
   expect(JSON.stringify(snapshot)).not.toContain(secret);expect(JSON.stringify(await runner.events({userId:'alice',runId,afterSequence:0}))).not.toContain(secret);

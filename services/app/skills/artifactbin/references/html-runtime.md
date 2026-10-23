@@ -25,6 +25,24 @@ document.querySelector('#increment').onclick=()=>{
 
 State in `data-af="state"` initializes each viewer’s private browser state. Keep all page state through `client`; never rely on platform-injected globals, use localStorage as a parallel store or assume local state is shared. `client.query({query})` reads it; `client.updateQuery` changes it; `watchQuery(...).subscribe` observes changes. Unsubscribe listeners when removing their UI.
 
+## Dynamic elements and comments
+
+The server numbers elements present in saved HTML; preserve those returned `data-af-id` values. It cannot number elements your script creates later. Give each such element a stable identity derived from an immutable record ID and its role, not an array index, display text, sort order or a fresh random value on every render:
+
+```js
+const item=document.createElement('li');
+item.dataset.afId='garden-job-'+job.id;
+const title=document.createElement('span');
+title.dataset.afId='garden-job-'+job.id+'-title';
+title.textContent=job.title;
+item.append(title);
+document.querySelector('#jobs').append(item);
+```
+
+Keep the `#jobs` container in saved HTML so publication gives it a persistent source identity. Re-rendering the same logical job keeps its IDs, including after sorting or filtering. Use distinct prefixes for different lists and roles; avoid duplicate IDs. Never reuse a deleted job’s IDs for a new job, or borrow an existing source element’s identity.
+
+When someone comments on a runtime-created element, the platform captures its identity and scopes it to the nearest persisted source ancestor automatically. The comment contract may include `ancestorId`; page authors do not construct anchors or call an anchor-registration API. Keep dynamic content under its intended saved container. Missing targets or missing/duplicate scopes do not fall back to matching text elsewhere; a comment must not silently move to another record.
+
 ## Local mutations
 
 A local mutation changes only this viewer’s state:

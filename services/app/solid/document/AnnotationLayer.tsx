@@ -500,7 +500,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
         batch(() => {
           setSelection((previous) => {
             if (JSON.stringify(previous) === JSON.stringify(reported)) return previous;
-            const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId;
+            const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId && reported.anchor?.ancestorId === previous.anchor?.ancestorId;
             if (!sameIdentity || reported?.range || reported?.anchor?.range || reported?.anchor?.quote) return reported;
             const merged = { ...reported, ...(previous.anchor ? { anchor: previous.anchor } : {}), ...(previous.quote ? { quote: previous.quote } : {}), ...(previous.range ? { range: previous.range } : {}), ...(previous.viewState ? {viewState: previous.viewState} : {}), ...(previous.viewStateError ? {viewStateError: previous.viewStateError} : {}) };
             return JSON.stringify(previous) === JSON.stringify(merged) ? previous : merged;

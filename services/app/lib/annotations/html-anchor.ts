@@ -39,7 +39,10 @@ export function htmlCommentNodes(html: string): Map<string, HtmlCommentNode> {
 }
 /** A missing identity never falls back to the same words elsewhere. */
 export function resolveHtmlCommentAnchor(nodes: ReadonlyMap<string, HtmlCommentNode>, anchor: HtmlNodeAnchor): HtmlAnchorResolution {
-  const node = anchor.nodeId ? nodes.get(anchor.nodeId) ?? null : null;
+  // A dynamic target is evidence captured in the viewer DOM, scoped to a
+  // persisted ancestor. The server verifies that ancestor, never invents text.
+  const node = anchor.ancestorId ? nodes.has(anchor.nodeId ?? '') ? null : nodes.get(anchor.ancestorId) ?? null : anchor.nodeId ? nodes.get(anchor.nodeId) ?? null : null;
+  if (anchor.ancestorId) return {node,quoteFound:anchor.quote ? false : null};
   return { node, quoteFound: anchor.quote ? !!node && validHtmlCommentRange(node, anchor) && canonical(node.text).includes(canonical(anchor.quote)) : null };
 }
 

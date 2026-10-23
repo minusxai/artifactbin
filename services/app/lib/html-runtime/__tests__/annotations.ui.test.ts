@@ -30,3 +30,15 @@ it('keeps area comments relative to their stable node after layout changes', () 
   expect((document.querySelector('[data-af="annotation-overlay"]')!.firstElementChild as HTMLElement).style.width).toBe('100px');
   painter.dispose();
 });
+it('resolves a dynamic ID only inside its persisted ancestor and never follows it elsewhere',()=>{
+ document.body.innerHTML='<ul data-af-id="tasks"><li data-af-id="task:123">Finish review</li></ul><aside><p data-af-id="task:123">Finish review</p></aside>';
+ const painter=createHtmlAnnotationPainter(document);
+ const input={pins:[{id:'dynamic',path:'task:123',anchor:{kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'task:123',ancestorId:'tasks',quote:''}}],mode:'on' as const,openId:null,hoverId:null};
+ expect(painter.paint(input)[0]?.status).toBe('exact');
+ document.querySelector('li')!.remove();
+ expect(painter.paint(input)[0]?.status).toBe('missing');
+ expect(document.querySelector('[data-af="annotation-overlay"]')?.children.length).toBe(0);
+ document.querySelector('ul')!.innerHTML='<li data-af-id="task:123"></li><li data-af-id="task:123"></li>';
+ expect(painter.paint(input)[0]?.status).toBe('ambiguous');
+ painter.dispose();
+});
