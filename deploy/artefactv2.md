@@ -121,7 +121,12 @@ its SHA256 and verified-marker SHA256, the database host/port/name identity dige
 and the complete production environment file SHA256. The identity digest is
 SHA256 of compact JSON `[PGHOST, integer PGPORT (default5432), PGDATABASE]`;
 backup and application destinations must also match. `verifiedAt` is the marker
-mtime as integer Unix seconds, and `expiresAt` must be within one hour of it.
+mtime as integer Unix seconds, and `expiresAt` must be within one hour of it by default. A root-approved
+code-only rollout may explicitly set `maximumBackupAgeSeconds` to an integer
+between 1 and 14400 (four hours); `expiresAt` must then remain within that
+approved age of the actual marker mtime. Omitting this field retains the one-hour
+limit. Extending the age requires accepting the actual older recovery point,
+never changing the marker timestamp or claiming intervening writes are covered.
 Both `reviewedCodeOnlyChange` and `acknowledgeRecoveryPointAtBackupTime` must be
 true. No connection values or approval contents are printed.
 

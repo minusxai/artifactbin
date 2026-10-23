@@ -27,6 +27,18 @@ with tempfile.TemporaryDirectory() as directory:
   except (ValueError,KeyError,FileNotFoundError):return
   raise AssertionError('unsafe approval accepted')
  assert check()==archive
+ # An extended window requires an explicit bounded approval and keeps real proof time.
+ historical=now-7200
+ os.utime(marker,(historical,historical))
+ extended={'verifiedAt':historical,'expiresAt':now+600,'maximumBackupAgeSeconds':14400}
+ assert check(extended)==archive
+ for maximum in [True,0,-1,14401,3600,14400.0,'14400']:
+  refused(extended | {'maximumBackupAgeSeconds':maximum})
+ refused({'verifiedAt':historical,'expiresAt':now+600})
+ refused(extended | {'expiresAt':historical+14401})
+ refused(extended | {'verifiedAt':now})
+ assert int(marker.stat().st_mtime)==historical
+ os.utime(marker,(now,now))
  for patch in [{'currentRevision':'c'*40},{'targetRevision':'c'*40},{'archiveSha256':'0'*64},{'markerSha256':'0'*64},{'destinationSha256':'0'*64},{'productionConfigurationSha256':'0'*64},{'verifiedAt':now-7200,'expiresAt':now+1},{'expiresAt':now-1},{'expiresAt':now+3601},{'reviewedCodeOnlyChange':False},{'acknowledgeRecoveryPointAtBackupTime':False},{'backupName':'../elsewhere'},{'extra':True}]:refused(patch)
  write(root/'releases'/new/'src/schema.sql','changed');refused();write(root/'releases'/new/'src/schema.sql','same')
  write(root/'.env.production','PAGEGI_DATABASE_URL=postgresql://app:secret@other.invalid/app\n');refused();write(root/'.env.production','PAGEGI_DATABASE_URL=postgresql://app:secret@db.invalid/app\n')

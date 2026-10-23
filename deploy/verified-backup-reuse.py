@@ -2,7 +2,7 @@
 """Root-approved, one-rollout reuse of an existing offline-restored backup."""
 from __future__ import annotations
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 import hashlib
 import json
 import os
@@ -32,6 +32,7 @@ class ReuseApproval(TypedDict):
     productionConfigurationSha256: str
     verifiedAt: int
     expiresAt: int
+    maximumBackupAgeSeconds: NotRequired[int]
     acknowledgeRecoveryPointAtBackupTime: bool
     reviewedCodeOnlyChange: bool
 
@@ -83,7 +84,9 @@ def validate_reuse(root: Path, target: str, current: str, *, now: int, uid: int 
     control = root / 'reuse-backup.json'
     private_file(control, uid)
     approval: ReuseApproval = json.loads(control.read_text())
-    if set(approval) != set(ReuseApproval.__annotations__):
+    fields = set(ReuseApproval.__annotations__)
+    required = fields - {'maximumBackupAgeSeconds'}
+    if not required <= set(approval) <= fields:
         raise ValueError('Unexpected backup reuse fields')
     if (type(approval['schemaVersion']) is not int or approval['schemaVersion'] != 1 or not re.fullmatch('[0-9a-f]{40}', target)
             or not re.fullmatch('[0-9a-f]{40}', current)
@@ -93,9 +96,11 @@ def validate_reuse(root: Path, target: str, current: str, *, now: int, uid: int 
         raise ValueError('Backup reuse revision or review mismatch')
     verified = approval['verifiedAt']
     expires = approval['expiresAt']
+    maximum_age = approval.get('maximumBackupAgeSeconds', 3600)
     if (type(verified) is not int or type(expires) is not int
-            or not verified <= now <= expires or expires - verified > 3600):
-        raise ValueError('Backup reuse approval expired or exceeds one hour')
+            or type(maximum_age) is not int or not 1 <= maximum_age <= 14400
+            or not verified <= now <= expires or expires - verified > maximum_age):
+        raise ValueError('Backup reuse approval expired or exceeds approved age')
     for field in ('archiveSha256', 'markerSha256', 'destinationSha256', 'productionConfigurationSha256'):
         if not isinstance(approval[field], str) or not re.fullmatch('[0-9a-f]{64}', approval[field]):
             raise ValueError('Invalid backup reuse digest')
