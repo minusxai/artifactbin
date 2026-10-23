@@ -158,3 +158,36 @@ test("normal standalone preparation publishes only attested model metadata and s
     /dependencies changed/,
   );
 });
+
+test("saved model admission uses original archive identity and raw version source digest", async () => {
+  const f = await fixture();
+  const row = {
+    ...f.row,
+    id: "archive-row",
+    artifact_id: f.row.id,
+    version: 3,
+    edit_id: undefined,
+  };
+  const version = { ...f.version, version: 3 };
+  const approved = f.approved.map((a) => ({
+    ...a,
+    sourceArtifactSha256: datasetPageArtifactSha256(row),
+  }));
+  assert.deepEqual(
+    attestStandaloneDatasetModels(row, version, approved),
+    approved,
+  );
+  assert.throws(
+    () => attestStandaloneDatasetModels(row, version, f.approved),
+    /changed/,
+  );
+  assert.throws(
+    () =>
+      attestStandaloneDatasetModels(
+        { ...row, artifact_id: "another" },
+        version,
+        approved,
+      ),
+    /identity/,
+  );
+});
