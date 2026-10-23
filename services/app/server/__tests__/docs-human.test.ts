@@ -14,6 +14,14 @@ const app = createAppServer({ actorSecret: 'test-secret', indexHtml: async () =>
 const BROWSER = { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' };
 
 describe('docs addresses', () => {
+  it('points guessed dataset query routes to the live native guide', async()=>{
+    const response=await app.request('/api/artifacts/abc123/query');
+    expect(response.status).toBe(404);
+    const refusal=await response.json();
+    expect(refusal.help).toBe('/llms/html-datasets');
+    expect(refusal.details.join(' ')).toContain('/graphql');
+    expect((await app.request(refusal.help)).status).toBe(200);
+  });
   useAppHarness();
 
   it('retired remote skill paths return 404 to machines and browsers', async () => {
@@ -37,7 +45,7 @@ describe('docs addresses', () => {
     for (const accept of ['*/*', 'application/json']) {
       const agent = await app.request('/docs', { headers: { accept } });
       expect(agent.status).toBe(404);
-      expect(await agent.json()).toEqual({ error: 'not_found', help: 'afbin help' });
+      expect(await agent.json()).toEqual({ error: 'not_found', help: '/llms.txt' });
     }
   });
 
@@ -47,7 +55,7 @@ describe('docs addresses', () => {
     // A REAL document, so the 404 is the door's absence and not a missing artifact's.
     expect((await app.request('/api/start', { method: 'POST' })).status).toBe(401);
     const owner = await mintAccountToken('retired-start');
-    const started = await app.request('/api/artifacts', { method: 'POST', headers: { authorization: `Bearer ${owner.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ markup: '<h1>Real document</h1>', visibility: 'public' }) });
+    const started = await app.request('/api/artifacts', { method: 'POST', headers: { authorization: `Bearer ${owner.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ html: '<!doctype html><html><head></head><body><h1>Real document</h1></body></html>', visibility: 'public' }) });
     expect(started.status).toBe(201);
     const { id } = await started.json() as { id: string };
     expect((await app.request(`/a/${id}`)).status, 'the document itself is served').toBe(200);
@@ -84,7 +92,7 @@ describe('docs addresses', () => {
       const res = await app.request(p);
       expect(res.status, p).toBe(404);
       expect(res.headers.get('content-type'), p).toContain('application/json');
-      expect((await res.json()).help, p).toContain('afbin help');
+      expect((await res.json()).help, p).toContain('/llms.txt');
     }
   });
 
@@ -99,7 +107,7 @@ describe('docs addresses', () => {
       const machine = await app.request(p, { headers: { accept: '*/*' } });
       expect(machine.status, p).toBe(404);
       expect(machine.headers.get('content-type'), p).toContain('application/json');
-      expect((await machine.json()).help, p).toContain('afbin help');
+      expect((await machine.json()).help, p).toContain('/llms.txt');
       const browser = await app.request(p, { headers: BROWSER });
       expect(browser.status, p).toBe(404);
       expect(browser.headers.get('content-type'), p).toContain('text/html');
@@ -128,7 +136,8 @@ describe('docs addresses', () => {
     const html = await (await app.request('/login')).text();
     expect(html).toMatch(/<link rel="help" href="[^"]+\/llms.txt" title="[^"]+"/);
     expect(html).toMatch(/<meta name="agents" content="[^"]*HTTP API[^"]*"/);
-    expect(html).toContain('Use the HTTP API');
-    expect(html).toMatch(/<meta name="cli" content="[^"]*npx --yes @afbin\/cli@latest setup/);
+    expect(html).toContain('author skill and HTTP API');
+    expect(html).toContain('/skills/artifactbin.zip');
+    expect(html).not.toContain('<meta name="cli"');
   });
 });

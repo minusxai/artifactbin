@@ -8,7 +8,7 @@ import DesignSystemSpecimen from './DesignSystemSpecimen';
 
 
 /**
- * The human-readable tour. Agent guidance is installed locally by the CLI.
+ * The human-readable tour. Agent guidance lives in the single native HTML author skill.
  *
  * Everything here that names part of the API is DERIVED, never retyped: the
  * design systems come from the registry with their live specimens, the formats from
@@ -35,9 +35,9 @@ const anchor = (id: SectionId) => ({ id, class: 'mt-8 scroll-mt-8' });
 /** The document genres, in the order an agent meets them. */
 const TEMPLATES = [
   { name: 'editorial', blurb: 'A long read. Chaptered argument, page breakers, takeaways on every section.' },
-  { name: 'deck', blurb: 'A presentation that scrolls. Full-viewport slides in acts, with solid-accent act dividers, arrow-key paging and a present mode.' },
+  { name: 'deck', blurb: 'A presentation made from ordinary HTML sections. Explicit slide markers define individual image captures; the page authors its own navigation.' },
   { name: 'scrolly', blurb: 'Scrollytelling. A data story with a conceit, ticker bands and chapter breaks.' },
-  { name: 'dashboard', blurb: 'An operating view. KPI and chart tiles on a 12-column canvas you can drag and resize in the editor, written back to the source.' },
+  { name: 'dashboard', blurb: 'An operating view. KPI and chart tiles backed by linked datasets, with private viewer filters and an authored responsive layout.' },
   { name: 'plan', blurb: 'A visual working plan. Screen wireframes and user flows, or process diagrams, alongside decisions and milestones tracked through completion.' },
   { name: 'app', blurb: 'A small working tool. Inputs, actions and a live result, operated by several people rather than read.' },
   { name: 'landing', blurb: 'A page that makes one case. A hero, the proof, one call to action.' },
@@ -53,8 +53,8 @@ export default function DocsHuman() {
 
       <p class={`mt-4 ${PROSE}`}>
         artifactbin is Google Docs for agents. A coding agent publishes a self-contained page over
-        the CLI (a report, a deck, a dashboard, a data story) and hands you back a share link.
-        The link is unguessable, permanent, and safe to forward.
+        the authenticated HTTP API (a report, a deck, a dashboard, a data story) and hands you back a share link.
+        The page keeps its address through edits. Its sharing permissions decide who can read it.
       </p>
 
       <nav aria-label="Contents" class="mt-6 rounded-panel border border-edge bg-surface px-4 py-3">
@@ -74,25 +74,25 @@ export default function DocsHuman() {
       <section {...anchor('get-started')}>
         <h2 class={SECTION}>get started</h2>
         <p class={PROSE}>
-          Install afbin, connect your agent, and make your first edit with the{' '}
+          Add the artifactbin author skill, sign in over HTTP, and publish your first page with the{' '}
           <a href="/getting-started" class={LINK}>Getting started guide</a>.
         </p>
       </section>
 
       <section {...anchor('publish')}>
         <h2 class={SECTION}>what an agent can publish</h2>
-        <p class={PROSE}>Every request carries exactly one of four content fields.</p>
+        <p class={PROSE}>Publish normal HTML pages, datasets, or media using the documented API.</p>
         <ul class="mt-3 flex flex-col gap-2.5 font-sans text-sm leading-relaxed text-muted">
           <li>
-            <FormatBadge format="markup" /> the document tier, and the only one: slide decks,
+            <FormatBadge format="html" /> the page format: slide decks,
             dashboards, stat tiles, real interactive charts, or plain prose written as ordinary
-            tags. It carries its own CSS and JavaScript, and stays editable visually, by you or by
-            the agent, in the same document.
+            HTML. It carries its own CSS and JavaScript; an agent updates its canonical source
+            through the same page identity.
           </li>
           <li>
-            <FormatBadge format="dataset" /> <FormatBadge format="viz" />{' '}
-            <FormatBadge format="image" /> the building blocks: a table of rows, a reusable chart
-            recipe, an image. Published on their own, then referenced by a markup document, so every
+            <FormatBadge format="dataset" />{' '}
+            <FormatBadge format="image" /> the building blocks: a table of rows or an image.
+            Published on their own, then referenced by an HTML page, so every
             number on a page can be traced to the data behind it.
           </li>
         </ul>
@@ -101,27 +101,23 @@ export default function DocsHuman() {
       <section {...anchor('keep-your-work')}>
         <h2 class={SECTION}>keep your work</h2>
         <p class={PROSE}>
-          Log in before you approve the agent&apos;s connection, and everything it publishes belongs
-          to your account from the start. Every connection you have approved is listed on your{' '}
-          <a href="/account" class={LINK}>
-            account
-          </a>{' '}
-          page, where revoking one stops that agent.
+          Sign in with your email and keep account credentials outside page files. Artifacts published
+          with that account belong to it or the selected group. Manage API tokens on your{' '}
+          <a href="/account" class={LINK}>account</a> page; revoking a token stops clients using it.
         </p>
       </section>
 
       <section {...anchor('editing')}>
         <h2 class={SECTION}>edit anything, safely</h2>
         <p class={PROSE}>
-          Every artifact you own opens in a visual editor. Click into text to rewrite it, restyle any
-          element, drag dashboard tiles, switch themes. There is no save button: changes persist on
-          their own, and an agent editing the same document at the same time is fine, because the
-          two of you only collide if you touch the same paragraph.
+          Ask your agent to read the page's canonical HTML and observed version, preserve stable node
+          identities, and publish a conditional replacement to the same page. A conflicting edit is
+          refused so the agent can reconcile against the new head. Comment on the published page to
+          discuss specific content.
         </p>
         <p class={PROSE}>
-          Every version is kept. Open the version list from the editor to look at any earlier one and
-          restore it in a click. Restoring makes a new version rather than erasing anything, so it is
-          undoable too, and the share link never changes through any of it.
+          Every saved version is kept. Restoring earlier source creates a new conditional version,
+          preserving history and the share address. There is no in-app source editor.
         </p>
       </section>
 
@@ -130,10 +126,9 @@ export default function DocsHuman() {
       <section {...anchor('themes')}>
         <h2 class={SECTION}>design systems</h2>
         <p class={PROSE}>
-          One <code class="text-accent">theme</code> field selects a design system: its palette,
-          typography, components and drawing style. Every system carries a light and a dark palette.
-          Choose a system in the editor; readers can flip the color mode as they read.
-          Older documents can keep their legacy themes.
+          Your agent chooses one design system from the author skill and includes its generated CSS
+          in the HTML. The systems below provide palettes, typography and drawing guidance. The page
+          authors its own layout and can use the platform color-mode attributes.
         </p>
         <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {STORY_SYSTEMS.map(system => (
@@ -147,12 +142,11 @@ export default function DocsHuman() {
 
       <section {...anchor('templates')}>
         <h2 class={SECTION}>
-          templates <span class="normal-case">· mx-markup</span>
+          page types
         </h2>
         <p class={PROSE}>
-          A <code class="text-accent">template</code> names the document&apos;s genre. It sets
-          the beats and the layout grammar the agent writes to, and all are built from the same
-          components.
+          Choose a genre for the task. Your agent composes ordinary HTML, CSS and JavaScript;
+          these examples describe useful structures rather than a component compiler.
         </p>
         <ul class="mt-3 flex flex-col gap-2.5 font-sans text-sm leading-relaxed text-muted">
           {TEMPLATES.map((t) => (
