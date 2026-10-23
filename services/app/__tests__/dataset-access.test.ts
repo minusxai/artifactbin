@@ -1,8 +1,8 @@
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * `access` — the WRITE ACL on a dataset, the sibling of `visibility`:
- * `'read'` (the default, every existing dataset) or `'readwrite'` (documents
- * the owner publishes may write rows through a `<Mutation>`). Set where
+ * `'read'` (the default, every existing dataset) or `'readwrite'` (authorized
+ * readers may write rows through the native dataset GraphQL namespace). Set where
  * visibility is set — create, PUT, the session PATCH, the sharing surface —
  * and echoed wherever a dataset is read back, so an agent knows before it
  * writes a mutation. Datasets only: nothing else is writable.
@@ -39,13 +39,16 @@ describe('access on the bearer API', () => {
     expect(list.artifacts.find((a) => a.id === body.id)?.access).toBe('read');
   });
 
-  it('access: readwrite on create is stored and echoed, with a Mutation in the usage hint', async () => {
+  it('access: readwrite on create is stored and echoed, with native GraphQL instructions in the usage hint', async () => {
     const t = await mintToken('t');
     const res = await create(t.token, { dataset: ROWS, access: 'readwrite' });
     expect(res.status).toBe(201);
     const body = (await res.json()) as { id: string; access: string; usage: string };
     expect(body.access).toBe('readwrite');
-    expect(body.usage).toContain('<Mutation');
+    expect(body.usage).toContain('schema');
+    expect(body.usage).toContain('rows(tableId:');
+    expect(body.usage).toContain('af-dataset');
+    expect(body.usage).not.toContain('<Mutation');
     expect((await getArtifactById(body.id))!.access).toBe('readwrite');
   });
 

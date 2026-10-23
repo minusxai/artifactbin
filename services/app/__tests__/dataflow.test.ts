@@ -1,378 +1,224 @@
-import {observedRequest} from '@/__tests__/conditional-request';
-/**
- * The dataflow at the publish door: `<Value>`/`<Query>` in <Helmet> and
- * `$name` references in the body are validated on EVERY markup write —
- * create, PUT, preview — with the same rules (a draft that previews must
- * publish). SQL `ref_<id>` tables are real dataset refs: they must resolve to
- * the caller's datasets, and they land in `meta.refs` so dependents warnings
- * and ownership checks keep working.
- *
- * And at render (merged from dataflow-render.test.ts): dataflowForRow resolves
- * the datasets a document's SQL names by ownership, runs the queries, and the
- * served document's JSON island carries the first query result and URL values,
- * while the datasets themselves are NOT inlined.
- */
-import { storedMarkup } from '@/test/helpers/echo';
-import { describe, expect, it } from 'vitest';
-import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
-import { GET as rawRoute } from '@/app/a/[id]/raw/route';
-import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as previewRoute } from '@/app/api/preview/route';
-import { getArtifactById } from '@/lib/artifacts';
-import { dataflowForRow } from '@/lib/document-data';
-import type { IslandPageData } from '@/lib/islands/contract';
-import { ISLAND_DATA_ID } from '@/lib/story-runtime/contract';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
-
-const harness = useAppHarness();
-const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
-
-const create = async (token: string, body: Record<string, unknown>) =>
-  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
-const preview = async (token: string, markup: string) =>
-  previewRoute(request('/api/preview', { method: 'POST', token: token, json: { markup } }));
-
-const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }];
-
-async function dataset(token: string, extra: Record<string, unknown> = {}): Promise<string> {
-  const res = await create(token, { dataset: ROWS, ...extra });
-  expect(res.status).toBe(201);
-  return ((await res.json()) as { id: string }).id;
+/** Native pages bind dataset namespaces; typed requests validate at execution, never at JSX compile time. */
+import { expect, it } from "vitest";
+import { request, useAppHarness, mintAccountToken } from "./harness";
+import { nativeHtml } from "./native-html-fixture";
+import { POST as create } from "@/app/api/artifacts/route";
+import { POST as preview } from "@/app/api/preview/route";
+import { GET as raw } from "@/app/a/[id]/raw/route";
+import {
+  GET as discover,
+  POST as graphql,
+} from "@/app/api/artifacts/[id]/graphql/route";
+import { GET as get, PUT as replace } from "@/app/api/artifacts/[id]/route";
+import { getDb } from "@/lib/platform";
+useAppHarness();
+const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+async function fixture() {
+  const owner = await mintAccountToken("native dataflow");
+  const publish = async (
+    json: Record<string, unknown>,
+    token = owner.token,
+  ) => {
+    const response = await create(
+      request("/api/artifacts", { method: "POST", token, json }),
+    );
+    expect(response.status, await response.clone().text()).toBe(201);
+    return (await response.json()).id as string;
+  };
+  const dataset = await publish({
+    dataset: [
+      { region: "EU", revenue: 837 },
+      { region: "NA", revenue: 1200 },
+    ],
+    visibility: "public",
+  });
+  const html = nativeHtml(
+    `<link rel="af-dataset" data-af-name="sales" href="ref:${dataset}"><h1>Sales</h1><script type="application/json" data-af="state">{"region":"EU"}</script><script src="/af/v1/core.js" data-af="core"></script>`,
+  );
+  const id = await publish({ html, visibility: "public" });
+  const run = async (
+    query: string,
+    variables: Record<string, unknown> = {},
+    token: string | undefined = owner.token,
+  ) => {
+    const response = await graphql(
+      request(`/api/artifacts/${id}/graphql`, {
+        method: "POST",
+        token,
+        json: { revision: "1", query, variables },
+      }),
+      ctx(id),
+    );
+    expect(response.status, await response.clone().text()).toBe(200);
+    return response.json();
+  };
+  const schema = await run("{sales{schema{tables{id columns{id label}}}}}");
+  const table = schema.data.sales.schema.tables[0] as {
+    id: string;
+    columns: { id: string; label: string }[];
+  };
+  return { id, dataset, html, owner, publish, run, table };
 }
-
-const helmet = (ds: string, extra = '') =>
-  '<Helmet><title>Sales</title>' +
-  '<Value name="region" type="string" />' +
-  `<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1\`}</Query>` +
-  extra + '</Helmet>';
-const BODY = '<div><select value="$region" options="$sales" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
-
-const details = async (res: Response): Promise<string> => {
-  const body = (await res.json()) as { error: string; details: Array<{ message: string } | string> };
-  return body.error + ': ' + body.details.map((d) => (typeof d === 'string' ? d : d.message)).join(' | ');
-};
-
-describe('dataflow at the publish door', () => {
-  it('publishes a document with Value/Query declarations and $name references; SQL refs land in meta.refs', async () => {
-    const t = await mintToken('t');
-    const ds = await dataset(t.token);
-    const res = await create(t.token, { markup: helmet(ds) + BODY });
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as { id: string; markup?: string; markup_changed?: boolean };
-    expect(storedMarkup(body, helmet(ds) + BODY)).toContain(`ref:${ds}`);
-    const row = await getArtifactById(body.id);
-    expect((row!.meta as { refs: Array<{ id: string; kind: string }> }).refs).toEqual([{ id: ds, kind: 'dataset' }]);
-  });
-
-  it('rejects an undeclared $name with the token named, on create AND preview', async () => {
-    const t = await mintToken('t');
-    const ds = await dataset(t.token);
-    const src = helmet(ds) + '<Question data="$sale" />';
-    const res = await create(t.token, { markup: src });
-    expect(res.status).toBe(400);
-    expect(await details(res)).toMatch(/invalid_jsx.*\$sale/);
-    const pre = await preview(t.token, src);
-    expect(pre.status).toBe(400);
-    expect(await details(pre)).toMatch(/\$sale/);
-  });
-
-  it('rejects a Query whose SQL binds an undeclared $param', async () => {
-    const t = await mintToken('t');
-    const ds = await dataset(t.token);
-    const res = await create(t.token, {
-      markup: '<Helmet>' + `<Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select * from q_data.rows where region = $nowhere\`}</Query>` + '</Helmet><Question data="$q" />',
-    });
-    expect(res.status).toBe(400);
-    expect(await details(res)).toMatch(/\$nowhere/);
-  });
-
-  it('rejects a dependency cycle between queries', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, {
-      markup: '<Helmet><Query name="a">{`select * from b`}</Query><Query name="b">{`select * from a`}</Query></Helmet><Question data="$a" />',
-    });
-    expect(res.status).toBe(400);
-    expect(await details(res)).toMatch(/cycle/i);
-  });
-
-  it('rejects a duplicate name across Value and Query', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, {
-      markup: '<Helmet><Value name="x" /><Query name="x">{`select 1`}</Query></Helmet><Question data="$x" />',
-    });
-    expect(res.status).toBe(400);
-    expect(await details(res)).toMatch(/"x".*twice/);
-  });
-
-  it('rejects a malformed <Value> inside Helmet with a precise message', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, { markup: '<Helmet><Value name="n" type="number" default="lots" /></Helmet><p>x</p>' });
-    expect(res.status).toBe(400);
-    expect(await details(res)).toMatch(/default.*number/);
-  });
-
-  it('rejects <Value>/<Query> in the body, pointing at Helmet', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, { markup: '<div><Value name="x" /><Query name="q">{`select 1`}</Query></div>' });
-    expect(res.status).toBe(400);
-    const msg = await details(res);
-    expect(msg).toMatch(/<Value>.*Helmet/);
-    expect(msg).toMatch(/<Query>.*Helmet/);
-  });
-
-  it('rejects SQL that reads a PRIVATE foreign dataset, and a ref that is not a dataset', async () => {
-    // Public/unlisted foreign refs RESOLVE (refs-readable.test.ts); the line
-    // that holds is private — uniform "does not resolve", never an oracle.
-    const mine = await mintToken('mine');
-    const owner = await createUser({ email: 'dataflow-owner@example.com' });
-    const theirs = await mintToken('theirs', owner.id);
-    await claimToken(owner.id, theirs.token);
-    const foreign = await dataset(theirs.token, { visibility: 'private' });
-    const res = await create(mine.token, { markup: `<Helmet><Import name="q_data" src="ref:${foreign}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><Question data="$q" />` });
-    expect(res.status).toBe(400);
-    expect(await details(res)).toMatch(new RegExp(`invalid_refs.*ref:${foreign}`));
-
-    const doc = await create(mine.token, { markup: '<p>not data</p>' });
-    const docId = ((await doc.json()) as { id: string }).id;
-    const res2 = await create(mine.token, { markup: `<Helmet><Import name="q_data" src="ref:${docId}" /><Query name="q">{\`select * from q_data.rows\`}</Query></Helmet><Question data="$q" />` });
-    expect(res2.status).toBe(400);
-    expect(await details(res2)).toMatch(/is a markup artifact.*needs a dataset/);
-  });
-
-  it('runs the same rules on PUT', async () => {
-    const t = await mintToken('t');
-    const ds = await dataset(t.token);
-    const created = await create(t.token, { markup: helmet(ds) + BODY });
-    const id = ((await created.json()) as { id: string }).id;
-    await expect(observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { markup: helmet(ds) + '<Question data="$nope" />' } })).rejects.toThrow(/\$nope/);
-    // The document is untouched.
-    const got = await getArtifactRoute(request(`/api/artifacts/${id}`, { token: t.token }), params({ id }));
-    expect(((await got.json()) as { markup: string }).markup).toContain('data="$sales"');
-  });
-
-  /*
-   * `url={false}` and `reset="…"` are DECLARATIONS, so the publish door is
-   * where an author learns they got one wrong. The accepted case is the form
-   * the state reference teaches (references/markup-state.md): scalars kept out
-   * of the link, one of them cleared by the local write it feeds.
-   */
-  it('accepts url={false} scalars and a local Mutation that resets one', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, {
-      markup: '<Helmet><Value name="editing" type="boolean" default={false} url={false} />'
-        + '<Value name="title" type="string" default="Untitled" url={false} />'
-        + '<Value name="drafts" type="table" value={[{"title":"First"}]} />'
-        + '<Query name="summary">{`select count(*) count from drafts`}</Query>'
-        + '<Mutation name="add" reset="title">{`insert into drafts (title) values ($title)`}</Mutation></Helmet>'
-        + '<div><input aria-label="Title" value="$title" /><Button run="$add">Add draft</Button>'
-        + '<Number data="$summary" col="count" /></div>',
-    });
-    expect(res.status).toBe(201);
-  });
-
-  /**
-   * The skill's own Dialog example declares a temporary table that starts EMPTY and is
-   * filled by a local Mutation. With declared columns there is nothing to infer, so the
-   * door takes it; with no columns an empty table still has no shape and is refused.
-   */
-  it('accepts an empty table Value that declares its columns, exactly as the skill teaches it', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, {
-      markup: '<Helmet><Value name="title" type="string" default="Untitled" />'
-        + '<Value name="drafts" type="table" value={[]} columns={[{"name":"title","type":"string"}]} />'
-        + '<Query name="summary">{`select count(*) count from drafts`}</Query>'
-        + '<Mutation name="add">{`insert into drafts (title) values ($title)`}</Mutation></Helmet>'
-        + '<div><input aria-label="Title" value="$title" /><Button run="$add">Add draft</Button>'
-        + '<Number data="$summary" col="count" /></div>',
-    });
-    expect(res.status, await res.clone().text()).toBe(201);
-    const bare = await create(t.token, { markup: '<Helmet><Value name="drafts" type="table" value={[]} /></Helmet><p>x</p>' });
-    expect(bare.status).toBe(400);
-    expect(await details(bare)).toMatch(/columns/);
-  });
-
-  it('refuses url= on a table Value, and a url= that is not a boolean', async () => {
-    const t = await mintToken('t');
-    const table = await create(t.token, { markup: '<Helmet><Value name="tiny" type="table" value={[{"a":1}]} url={false} /></Helmet><p>x</p>' });
-    expect(table.status).toBe(400);
-    expect(await details(table)).toMatch(/url.*scalar/);
-    const text = await create(t.token, { markup: '<Helmet><Value name="draft" type="string" url="no" /></Helmet><p>x</p>' });
-    expect(text.status).toBe(400);
-    expect(await details(text)).toMatch(/url must be true or false/);
-  });
-
-  it('refuses a reset name that is not a declared scalar, naming the mutation and the name', async () => {
-    const t = await mintToken('t');
-    const ds = await dataset(t.token);
-    const res = await create(t.token, {
-      markup: '<Helmet><Value name="title" type="string" />'
-        + `<Import name="add_data" src="ref:${ds}" /><Mutation name="add" reset="title nope">{\`insert into add_data.rows (region) values ($title)\`}</Mutation></Helmet>`
-        + '<Button run="$add">Add</Button>',
-    });
-    expect(res.status).toBe(400);
-    const message = await details(res);
-    expect(message).toMatch(/<Mutation> "add"/);
-    expect(message).toMatch(/nope/);
-  });
-
-  it('accepts a table Value and a query over it, with no dataset at all', async () => {
-    const t = await mintToken('t');
-    const res = await create(t.token, {
-      markup: '<Helmet><Value name="tiny" type="table" value={[{"a":1},{"a":2}]} /><Query name="q">{`select sum(a) total from tiny`}</Query></Helmet><Number data="$q" col="total" />',
-    });
-    expect(res.status).toBe(201);
-    const row = await getArtifactById(((await res.json()) as { id: string }).id);
-    expect((row!.meta as { refs: unknown[] }).refs).toEqual([]);
-  });
+it("publishes namespace bindings and exposes typed schema without inlining source rows", async () => {
+  const f = await fixture();
+  const response = await discover(
+    request(`/api/artifacts/${f.id}/graphql`),
+    ctx(f.id),
+  );
+  expect(response.status).toBe(200);
+  expect((await response.json()).sdl).toContain("sales__Query");
+  const saved = await (
+    await get(
+      request(`/api/artifacts/${f.id}`, { token: f.owner.token }),
+      ctx(f.id),
+    )
+  ).json();
+  expect(saved.html).toContain(`href="ref:${f.dataset}"`);
+  const content = await (
+    await raw(request(`/a/${f.id}/raw`), ctx(f.id))
+  ).text();
+  expect(content).toContain('data-af="state"');
+  expect(content).toContain('"region":"EU"');
+  expect(content).not.toContain("837");
+  expect(content).not.toContain("1200");
+  const read = await f.run(
+    "query($table:ID!){sales{rows(tableId:$table,first:2){rows{cells{value{string number}}}}}}",
+    { table: f.table.id },
+    undefined,
+  );
+  expect(read.errors).toBeUndefined();
+  expect(read.data.sales.rows.rows).toHaveLength(2);
 });
-
-describe('dataflow at publish: the SQL dry run', () => {
-  it('rejects SQL that cannot bind against the real dataset columns, naming the query and the column', async () => {
-    const t = await mintToken('t');
-    const ds = await dataset(t.token);
-    const res = await create(t.token, {
-      markup: `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`select revenu from q_data.rows\`}</Query></Helmet><Question data="$q" />`,
-    });
-    expect(res.status).toBe(400);
-    const msg = await details(res);
-    expect(msg).toMatch(/invalid_sql/);
-    expect(msg).toMatch(/"q"/);
-    expect(msg).toMatch(/revenu/);
-    expect(msg).toMatch(/revenue/); // the engine's candidate
-  });
-
-  it('rejects a non-SELECT statement', async () => {
-    const t = await mintToken('t');
-    const ds = await dataset(t.token);
-    const res = await create(t.token, {
-      markup: `<Helmet><Import name="q_data" src="ref:${ds}" /><Query name="q">{\`drop table q_data.rows\`}</Query></Helmet><Question data="$q" />`,
-    });
-    expect(res.status).toBe(400);
-    expect(await details(res)).toMatch(/only read statements/);
-  });
-
-  it('checks a vega-lite encoding against the QUERY result columns', async () => {
-    const t = await mintToken('t');
-    const ds = await dataset(t.token);
-    const bad = await create(t.token, {
-      markup: helmet(ds) + '<Question data="$sales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region"},"y":{"field":"total","type":"quantitative"}}}}} />',
-    });
-    expect(bad.status).toBe(400);
-    expect(await details(bad)).toMatch(/"total".*sales/);
-    const good = await create(t.token, {
-      markup: helmet(ds) + '<Question data="$sales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region"},"y":{"field":"revenue","type":"quantitative"}}}}} />',
-    });
-    expect(good.status).toBe(201);
-  });
+it("validates typed queries and named parameters against discovered columns", async () => {
+  const f = await fixture(),
+    amount = f.table.columns.find((column) => column.label === "revenue")!;
+  const query =
+    'query($table:ID!,$column:ID!){sales{query(tableId:$table,first:2,filters:[{columnId:$column,operator:GT,parameter:"minimum"}],parameters:[{name:"minimum",value:{type:NUMBER,number:1000}}]){rows{cells{value{number}}}}}}';
+  const result = await f.run(query, { table: f.table.id, column: amount.id });
+  expect(result.errors).toBeUndefined();
+  expect(result.data.sales.query.rows).toHaveLength(1);
+  const invalid = await f.run(query, { table: f.table.id, column: "missing" });
+  expect(invalid.errors).toHaveLength(1);
+  const missing = await f.run(
+    'query($table:ID!,$column:ID!){sales{query(tableId:$table,filters:[{columnId:$column,operator:GT,parameter:"missing"}]){rows{id}}}}',
+    { table: f.table.id, column: amount.id },
+  );
+  expect(missing.errors).toHaveLength(1);
+  const cycle = await f.run('{sales{query(sql:"delete from rows"){rows{id}}}}');
+  expect(cycle.errors.length).toBeGreaterThan(0);
+  expect(cycle.data ?? null).toBeNull();
 });
-
-/** Render cases read the page as a guest, so their documents are public. */
-const publicCreate = (token: string, body: Record<string, unknown>) => create(token, { visibility: 'public', ...body });
-const RENDER_ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }];
-
-const island = (html: string): IslandPageData => {
-  const open = html.indexOf(`id="${ISLAND_DATA_ID}"`);
-  const start = html.indexOf('>', open) + 1;
-  const end = html.indexOf('</script>', start);
-  return JSON.parse(html.slice(start, end)) as IslandPageData;
-};
-
-const DOC = (ds: string) =>
-  '<Helmet><Value name="region" type="string" />' +
-  `<Import name="sales_data" src="ref:${ds}" /><Query name="sales">{\`select region, sum(revenue) revenue from sales_data.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
-  '</Helmet><div><select value="$region" options="$sales" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
-
-describe('dataflowForRow', () => {
-  it('runs the document over its own datasets with defaults', async () => {
-    const t = await mintToken('t');
-    const ds = ((await (await publicCreate(t.token, { dataset: RENDER_ROWS })).json()) as { id: string }).id;
-    const doc = ((await (await publicCreate(t.token, { markup: DOC(ds) })).json()) as { id: string }).id;
-    const flow = await dataflowForRow((await getArtifactById(doc))!);
-    expect(flow).not.toBeNull();
-    expect(flow!.flow.queries.map((q) => q.name)).toEqual(['sales']);
-    expect(flow!.state.values).toEqual({ region: null });
-    expect(flow!.state.tables.sales.rows).toEqual([{ region: 'EU', revenue: 840 }, { region: 'NA', revenue: 1200 }]);
-  });
-
-  it('applies value overrides and can run a subset', async () => {
-    const t = await mintToken('t');
-    const ds = ((await (await publicCreate(t.token, { dataset: RENDER_ROWS })).json()) as { id: string }).id;
-    const doc = ((await (await publicCreate(t.token, { markup: DOC(ds) })).json()) as { id: string }).id;
-    const flow = await dataflowForRow((await getArtifactById(doc))!, { values: { region: 'NA' }, only: ['sales'] });
-    expect(flow!.state.tables.sales.rows).toEqual([{ region: 'NA', revenue: 1200 }]);
-  });
-
-  it('is null for a document with no declarations', async () => {
-    const t = await mintToken('t');
-    const doc = ((await (await publicCreate(t.token, { markup: '<p>plain</p>' })).json()) as { id: string }).id;
-    expect(await dataflowForRow((await getArtifactById(doc))!)).toBeNull();
-  });
-
-  it('a dataset deleted after publish reads as a query error, not a crash', async () => {
-    const t = await mintToken('t');
-    const ds = ((await (await publicCreate(t.token, { dataset: RENDER_ROWS })).json()) as { id: string }).id;
-    const doc = ((await (await publicCreate(t.token, { markup: DOC(ds) })).json()) as { id: string }).id;
-    const db = await harness.db();
-    await db.query('DELETE FROM artifacts WHERE id = $1', [ds]);
-    const flow = await dataflowForRow((await getArtifactById(doc))!);
-    expect(flow!.state.errors.sales).toMatch(new RegExp(`ref:${ds}`));
-    expect(flow!.state.tables.sales).toBeUndefined();
-  });
+it("enforces revoked dataset ACL independently of the public page", async () => {
+  const f = await fixture();
+  const db = await getDb();
+  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1", [
+    f.dataset,
+  ]);
+  const outsider = await mintAccountToken("reader");
+  const response = await f.run(
+    "query($table:ID!){sales{rows(tableId:$table){rows{id}}}}",
+    { table: f.table.id },
+    outsider.token,
+  );
+  expect(response.errors).toHaveLength(1);
+  expect(response.data?.sales?.rows ?? null).toBeNull();
+  await db.query("UPDATE artifacts SET deleted_at=now() WHERE id=$1", [
+    f.dataset,
+  ]);
+  const deleted = await f.run(
+    "query($table:ID!){sales{rows(tableId:$table){rows{id}}}}",
+    { table: f.table.id },
+  );
+  expect(deleted.errors).toHaveLength(1);
 });
-
-describe('the served document', () => {
-  it('carries its first query result but not the source dataset', async () => {
-    const t = await mintToken('t');
-    const ds = ((await (await publicCreate(t.token, { dataset: RENDER_ROWS })).json()) as { id: string }).id;
-    const doc = ((await (await publicCreate(t.token, { markup: DOC(ds) })).json()) as { id: string }).id;
-    const res = await rawRoute(request(`/a/${doc}/raw`), params({ id: doc }));
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    const data = island(html);
-    expect(data.values).toEqual({});
-    expect(data.results?.tables.sales?.rows).toEqual([{ region: 'EU', revenue: 840 }, { region: 'NA', revenue: 1200 }]);
-    // The raw dataset (three rows, one of them revenue 3) never reaches the page.
-    expect(html).not.toContain('"revenue":3}');
-    expect(JSON.stringify(data)).not.toContain(`ref:${ds}`);
-  });
-
-  it('carries no dataflow for a document without declarations', async () => {
-    const t = await mintToken('t');
-    const doc = ((await (await publicCreate(t.token, { markup: '<div><Badge>plain</Badge></div>' })).json()) as { id: string }).id;
-    const html = await (await rawRoute(request(`/a/${doc}/raw`), params({ id: doc }))).text();
-    expect(html).not.toContain(`id="${ISLAND_DATA_ID}"`);
-  });
-
-  /*
-   * WHO IS READING, on the island — the wiring the runtime's own tests cannot
-   * see, because they inject `viewer` as a prop.
-   *
-   * The third case is the one that keeps /export's cache honest: a CAPTURE is
-   * photographed by a session-less browser, so it is a guest render by
-   * construction, and the route pins it to nobody on purpose. A cached export
-   * is therefore never one reader's view of a document (lib/export
-   * exportCacheKey carries no viewer, and `$_me` can never reach the selection
-   * token because only DECLARED scalars do).
-   */
-  it('tells the document who is reading, and tells a capture nobody', async () => {
-    const user = await createUser({ email: 'mxmx_test_island_reader@example.com', name: 'Ada' });
-    const t = await mintToken('reader-identity', user.id);
-    await claimToken(user.id, t.token);
-    const cookie = await agentCookie([t.id]);
-    const doc = ((await (await publicCreate(t.token, { markup: '<p>Reading as <User userId="$_me.id" /></p>', visibility: 'public' })).json()) as { id: string }).id;
-
-    const signedIn = island(await (await rawRoute(request(`/a/${doc}/raw`, { cookie }), params({ id: doc }))).text());
-    // A claimed agent token is not an app session; no viewer identity rides in the island.
-    expect(signedIn.signedIn).toBe(false);
-    expect(JSON.stringify(signedIn)).not.toContain(user.id);
-    expect(JSON.stringify(signedIn)).not.toContain('@');
-
-    const guest = island(await (await rawRoute(request(`/a/${doc}/raw`), params({ id: doc }))).text());
-    expect(guest.signedIn).toBe(false);
-
-    const capture = island(await (await rawRoute(request(`/a/${doc}/raw?chrome=0`, { cookie }), params({ id: doc }))).text());
-    expect(JSON.stringify(capture)).not.toContain(user.id);
-  });
+it("refuses inaccessible and non-dataset bindings before publication", async () => {
+  const f = await fixture();
+  const stranger = await mintAccountToken("other");
+  await (
+    await getDb()
+  ).query("UPDATE artifacts SET visibility='private' WHERE id=$1", [f.dataset]);
+  for (const ref of [f.dataset, f.id]) {
+    const response = await create(
+      request("/api/artifacts", {
+        method: "POST",
+        token: stranger.token,
+        json: {
+          html: nativeHtml(
+            `<link rel="af-dataset" data-af-name="sales" href="ref:${ref}"><p>Data</p>`,
+          ),
+        },
+      }),
+    );
+    expect(response.status).toBe(400);
+  }
+});
+it("applies the same binding validation to full HTML replacements", async () => {
+  const f = await fixture();
+  const head = await (
+    await get(
+      request(`/api/artifacts/${f.id}`, { token: f.owner.token }),
+      ctx(f.id),
+    )
+  ).json();
+  const response = await replace(
+    request(`/api/artifacts/${f.id}`, {
+      method: "PUT",
+      token: f.owner.token,
+      json: {
+        expectedVersion: head.version,
+        expectedState: head.state,
+        html: nativeHtml(
+          '<link rel="af-dataset" data-af-name="sales" href="ref:missing"><p>Invalid</p>',
+        ),
+      },
+    }),
+    ctx(f.id),
+  );
+  expect(response.status).toBe(400);
+  const unchanged = await (
+    await get(
+      request(`/api/artifacts/${f.id}`, { token: f.owner.token }),
+      ctx(f.id),
+    )
+  ).json();
+  expect(unchanged.version).toBe(head.version);
+  expect(unchanged.html).toBe(head.html);
+});
+it("accepts ordinary author state and prose without executable declarations or SQL", async () => {
+  const owner = await mintAccountToken("plain page"),
+    html = nativeHtml(
+      '<h1>Words</h1><script type="application/json" data-af="state">{"rows":[],"filter":""}</script>',
+    );
+  const response = await create(
+    request("/api/artifacts", {
+      method: "POST",
+      token: owner.token,
+      json: { html, visibility: "public" },
+    }),
+  );
+  expect(response.status).toBe(201);
+  const id = (await response.json()).id;
+  const served = await (await raw(request(`/a/${id}/raw`), ctx(id))).text();
+  expect(served).toContain("<h1");
+  expect(served).toContain("Words");
+  expect(served).not.toContain("data-mx-island-data");
+});
+it("refuses retired JSX dataflow on both create and preview", async () => {
+  const owner = await mintAccountToken("retired syntax");
+  for (const route of [create, preview]) {
+    const response = await route(
+      request("/api/artifacts", {
+        method: "POST",
+        token: owner.token,
+        json: {
+          markup:
+            '<Helmet><Value name="v" default="x" /><Query name="q">{`select 1`}</Query></Helmet><DataTable data="$q" />',
+        },
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: "native_html_required",
+    });
+  }
 });

@@ -159,7 +159,10 @@ export async function mutateDataset(
     try{
       if(!catalog||catalog.kind!=='stored')throw new Error('only stored datasets are writable');
       const target=guard.target??await writtenTable(catalog,sql);
-      const table=(guard.target?importedTables(catalog):catalog.tables.filter(t=>t.schema===target.schema)).find(t=>t.name===target.table);
+      // Native IDs select an exact catalog table, including non-default schemas.
+      // Legacy document imports still resolve through their default-schema aliases.
+      const candidates=guard.rowIdentity?catalog.tables.filter(t=>t.schema===target.schema):guard.target?importedTables(catalog):catalog.tables.filter(t=>t.schema===target.schema);
+      const table=candidates.find(t=>t.name===target.table);
       if(!table||table.sql!==undefined||!table.objectKey)throw new Error(`${target.schema}.${target.table} is not a stored table of this dataset`);
       selected=table;schema=target.schema;
     }catch(error){return {reason:'invalid_sql',detail:`Stored mutation: ${error instanceof Error?error.message:'invalid target'}`};}
