@@ -8,13 +8,16 @@ import { destinationAccess, publicationPath } from "./postgres.ts";
 import { prepareMigrationPageSources } from "./page-source-preparation.ts";
 import { projectMigrationCommentContext } from "./comment-projection.ts";
 import { requireMigrationEquality as equal } from "./verification-values.ts";
-import type { VerifyMigrationRuntime } from "./verification-contracts.ts";
+import type { VerifyMigrationRuntime, VerifyDeletedMigrationRuntime } from "./verification-contracts.ts";
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 /** Compare actual content and authority to source-derived expectations, not import receipts. */
-export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
-  db,
-  schema,
-  input,
+export const verifyMigrationRuntime: VerifyMigrationRuntime = (db,schema,input) => verifyRuntime(db,schema,input,false);
+export const verifyDeletedMigrationRuntime: VerifyDeletedMigrationRuntime = (db,schema,input) => verifyRuntime(db,schema,input,true);
+const verifyRuntime = async (
+  db: Parameters<VerifyMigrationRuntime>[0],
+  schema: string,
+  input: Parameters<VerifyMigrationRuntime>[2],
+  deleted: boolean,
 ) => {
   const { runtime, archive } = destinationSchemas(schema);
   const totals = {
@@ -28,6 +31,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
   };
   const ready = new Set<string>();
   for await (const page of input.pages) {
+    if(deleted&&(typeof page.original.deleted_at!=='string'||!page.original.deleted_at.trim()||!Number.isFinite(Date.parse(page.original.deleted_at))))throw Error('Deleted verification requires original deleted timestamp');
     ready.add(page.pageId);
     if (page.revisions.some(r => r.conversion.historicalUnavailable || "sourceNormalization" in r.conversion)) {
       equal(
@@ -56,14 +60,14 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
           head: String(page.original.version),
           path: publicationPath(page),
           access: destinationAccess(page, input.maps),
-          deleted_at: null,
+          deleted_at: deleted ? String(Date.parse(String(page.original.deleted_at))) : null,
           seed: preparedHead.state,
           sequence: String(liveComments.length),
           source_digest: normalized.find(r=>r.version===page.original.version)!.sourceRevision,
           next_node_id: Number(preparedHead.meta.nextNodeId ?? 1),
           generation: 1,
           share: null,
-          trash_path: null,
+          trash_path: deleted ? publicationPath(page) : null,
           trash_batch: null,
         },
       ],
@@ -99,7 +103,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
       "active page ID must not be retired",
     );
     const path = publicationPath(page).split("/").slice(1, -1);
-    for (let i = 1; i <= path.length; i++)
+    for (let i = 1; !deleted && i <= path.length; i++)
       equal(
         (
           await db.query(
@@ -375,7 +379,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
     }
     totals.pages++;
   }
-  const allocated = Object.values(input.maps.pages);
+  const allocated = deleted ? [...ready] : Object.values(input.maps.pages);
   for (let offset = 0; offset < allocated.length; offset += 100) {
     const ids = allocated.slice(offset, offset + 100);
     const actual = (

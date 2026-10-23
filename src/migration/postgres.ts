@@ -19,6 +19,8 @@ import type {ImportDestination,MigrationManifest,MigrationMaps,PlannedPage,SqlRe
 import type {DestinationOptions,DestinationPreparation} from './postgres-contracts.ts';
 import {destinationSchemas} from './destination-schema.ts';
 import type {DestinationSchemas} from './destination-schema.ts';
+import type {DeletedArtifactDestination,DeletedDestinationPreparation} from "./deleted-artifact-contracts.ts";
+import {canonicalMigrationValue} from "./verification-values.ts";
 const digest=(s:string)=>createHash('sha256').update(s).digest('hex');
 export function buildAccountMaps(manifest:MigrationManifest):MigrationMaps {
  return planMigrationIdentities(manifest).maps;
@@ -35,10 +37,11 @@ export function destinationAccess(page:PlannedPage,maps?:MigrationMaps):Record<s
  for(const row of page.access.shares){const resolved=row.user_id!==null&&row.user_id!==undefined;const email=resolved?maps?.users[String(row.user_id)]:String(row.email??'').trim().toLowerCase();if(!email)throw new Error('Unmapped resolved share identity');if(!roles.includes(String(row.role)))throw new Error('Unsupported named role');const role=String(row.role);if(!shares[email]||roles.indexOf(role)>roles.indexOf(shares[email]!))shares[email]=role;}
  return {visibility:page.access.visibility,linkRole:page.access.linkRole,shares,version:0};
 }
-export class PostgresMigrationDestination implements ImportDestination {
+export class PostgresMigrationDestination implements ImportDestination, DeletedArtifactDestination {
  accountProfileSummary?:MigrationAccountProfileSummary;
  private maps:MigrationMaps={users:{},tokens:{},groups:{},pages:{}};
  private namespace='';
+ private deletedPrepared=false;
  private readonly db:SqlReader;
  private readonly options:DestinationOptions;
  private readonly names:DestinationSchemas;
@@ -50,6 +53,7 @@ export class PostgresMigrationDestination implements ImportDestination {
   await this.db.query('BEGIN');try{await this.db.query(`SET LOCAL search_path TO ${this.schema}`);const value=await operation();await this.db.query('COMMIT');return value;}catch(error){await this.db.query('ROLLBACK');throw error;}
  }
  async prepare(input:DestinationPreparation):Promise<void>{
+  this.deletedPrepared=false;
   if(!this.options.isolated)throw new Error('An explicitly isolated destination is required');
   if(this.options.sourceNamespace!==undefined&&this.options.sourceNamespace!==input.manifest.sourceNamespace)throw Error("Destination source namespace differs");
   this.maps=input.maps;this.namespace=input.manifest.sourceNamespace;
@@ -109,7 +113,20 @@ export class PostgresMigrationDestination implements ImportDestination {
    }
   });
  }
- supportsExactAccess(page:PlannedPage):boolean {
+ async prepareDeleted(input:DeletedDestinationPreparation):Promise<void>{
+  this.deletedPrepared=false;
+  if(!this.options.isolated)throw new Error('An explicitly isolated destination is required');
+  if(this.options.sourceNamespace!==undefined&&this.options.sourceNamespace!==input.sourceNamespace)throw Error('Destination source namespace differs');
+  const rows=(await this.db.query(`SELECT digest,maps FROM ${this.archive}.archives WHERE namespace=$1`,[input.sourceNamespace])).rows;
+  if(rows.length!==1||rows[0]!.digest!==input.archiveDigest)throw Error('Deleted destination archive mismatch');
+  if(canonicalMigrationValue(rows[0]!.maps)!==canonicalMigrationValue(input.maps))throw Error('Deleted destination maps mismatch');
+  this.namespace=input.sourceNamespace;this.maps=structuredClone(input.maps);this.deletedPrepared=true;
+ }
+ supportsExactAccess(page:PlannedPage):boolean {return !page.original.deleted_at&&this.supportsExactPageAccess(page);}
+ supportsExactDeletedAccess(page:PlannedPage):boolean {
+  return typeof page.original.deleted_at==='string'&&page.original.deleted_at.trim()!==''&&Number.isFinite(Date.parse(page.original.deleted_at))&&this.supportsExactPageAccess(page);
+ }
+ private supportsExactPageAccess(page:PlannedPage):boolean {
   if(page.owner?.kind==='orphan'&&(page.original.user_id!==null||page.original.group_id!==null||(page.original.token_id!==null&&page.original.token_id!=='')||this.maps.orphans?.[page.legacyId]!==page.owner.id||(this.namespace&&preservedOrphanActor(this.namespace,page.original)!==page.owner.id)))return false;
   try{
    if(this.options.ownershipOverride||page.ownershipAssignment){
@@ -118,13 +135,19 @@ export class PostgresMigrationDestination implements ImportDestination {
    }
    destinationAccess(page,this.maps);normalizePath(publicationPath(page));}catch{return false;}
   if(page.owner?.kind!=='user'&&page.owner?.kind!=='token'&&page.owner?.kind!=='group'&&page.owner?.kind!=='orphan')return false;
-  if(page.original.deleted_at)return false;
   if(!this.options.editorManageRestricted&&(page.access.linkRole==='editor'||page.access.shares.some(s=>s.role==='editor')))return false;
   return true;
  }
  async importPage(key:string,checksum:string,page:PlannedPage):Promise<'created'|'unchanged'>{
+  return this.importLifecyclePage(key,checksum,page,false);
+ }
+ async importDeletedPage(key:string,checksum:string,page:PlannedPage):Promise<'created'|'unchanged'>{
+  if(!this.deletedPrepared)throw Error('Deleted destination preparation is required');
+  return this.importLifecyclePage(key,checksum,page,true);
+ }
+ private async importLifecyclePage(key:string,checksum:string,page:PlannedPage,deleted:boolean):Promise<'created'|'unchanged'>{
   if(!this.namespace||key!==this.namespace+':'+page.legacyId)throw new Error('Destination preparation/key mismatch');
-  if(page.disposition!=='ready'||!this.supportsExactAccess(page)||!page.owner)throw new Error('Page cannot preserve source access/content');
+  if(page.disposition!=='ready'||!(deleted?this.supportsExactDeletedAccess(page):this.supportsExactAccess(page))||!page.owner)throw new Error('Page cannot preserve source access/content');
   return this.transaction(async()=>{
    await this.db.query('SELECT pg_advisory_xact_lock(hashtext($1))',[key]);
    const old=(await this.db.query(`SELECT digest,page_id FROM ${this.archive}.receipts WHERE key=$1`,[key])).rows[0];
@@ -139,12 +162,12 @@ export class PostgresMigrationDestination implements ImportDestination {
    if(normalized.some(r=>Buffer.byteLength(r.prepared.source)>MAX_PAGE_SOURCE))throw new Error('Normalized HTML exceeds destination source limit');
    const preparedHead=normalized.find(r=>String(r.version)===head)!.prepared;
    const nextNodeId=Number(preparedHead.meta.nextNodeId??1);
-   await this.db.query('INSERT INTO files(id,owner,share_hash,generation,head,sequence,path,access,next_node_id,source_digest) VALUES($1,$2,$3,1,$4,0,$5,$6::jsonb,$7,$8)',[page.pageId,owner,digest(randomBytes(32).toString('hex')),head,path,JSON.stringify(destinationAccess(page,this.maps)),nextNodeId,normalized.find(r=>String(r.version)===head)!.sourceRevision]);
+   await this.db.query('INSERT INTO files(id,owner,share_hash,generation,head,sequence,path,access,next_node_id,source_digest,deleted_at,trash_path,trash_batch) VALUES($1,$2,$3,1,$4,0,$5,$6::jsonb,$7,$8,$9,$10,NULL)',[page.pageId,owner,digest(randomBytes(32).toString('hex')),head,path,JSON.stringify(destinationAccess(page,this.maps)),nextNodeId,normalized.find(r=>String(r.version)===head)!.sourceRevision,deleted?Date.parse(String(page.original.deleted_at)):null,deleted?path:null]);
    await this.db.query('UPDATE files SET seed=$2::jsonb WHERE id=$1',[page.pageId,JSON.stringify(preparedHead.state)]);
    for(const r of normalized)await this.db.query('INSERT INTO sources(file_id,revision,content,node_ids,digest) VALUES($1,$2,$3,$4::jsonb,$5)',[page.pageId,String(r.version),r.prepared.source,JSON.stringify(r.prepared.nodeIds),r.sourceRevision]);
    for(const asset of page.assets??[])await this.db.query('INSERT INTO page_assets(page_id,revision,variant,sha256,content_type,filename,byte_length,storage_key) VALUES($1,$2,$3,$4,$5,$6,$7,$4)',[page.pageId,asset.revision,asset.variant,asset.sha256,asset.contentType,asset.filename,asset.bytes]);
    if(page.backends?.length)await registerMigrationBackends(this.db,page.backends);
-   const parts=path.split('/').slice(1,-1);for(let i=1;i<=parts.length;i++)await this.db.query('INSERT INTO folders(owner,path) VALUES($1,$2) ON CONFLICT DO NOTHING',[owner,'/'+parts.slice(0,i).join('/')]);
+   if(!deleted){const parts=path.split('/').slice(1,-1);for(let i=1;i<=parts.length;i++)await this.db.query('INSERT INTO folders(owner,path) VALUES($1,$2) ON CONFLICT DO NOTHING',[owner,'/'+parts.slice(0,i).join('/')]);}
    const comments=page.comments.filter(c=>!c.deleted_at);let sequence=0;
    for(const c of comments){
     const author=this.maps.users[String(c.author_user_id)]??this.maps.tokens[String(c.author_token_id)];if(!author)throw new Error('Unmapped comment author');

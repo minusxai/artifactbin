@@ -18,3 +18,6 @@ export type VerifyMigrationRuntime = (
   schema: string,
   input: MigrationRuntimeVerificationInput,
 ) => Promise<MigrationRuntimeVerification>;
+
+/** Exact source verification for admitted deleted pages in an existing runtime. */
+export type VerifyDeletedMigrationRuntime = VerifyMigrationRuntime;
