@@ -38,8 +38,24 @@ await client.mutate({mutation:gql`mutation {increment(by:1)}`});
 
 An HTML link declares one unique `data-af-name`. The published page version binds it to an immutable backend version or authorized dataset. Query through that namespace with `client.query`, for example the GraphQL query `{garden{jobs{id title done}}}` for the backend in the shared-app example. A backend’s source filename is an authoring file, not a URL the browser fetches.
 
+Remote queries wait up to three seconds for the trusted hosted parent to attach. If it never attaches, they return offline errors without sending a request. Do not depend on platform-internal bridge functions.
+
+Subscribe to shared-data invalidation with the named export `onBackendChange`:
+
+```js
+import {onBackendChange} from '@afbin/apollo';
+const changes=onBackendChange(names=>{
+ if(names.includes('garden'))void refresh(); // your function re-queries shared facts
+});
+// When removing this UI: changes.unsubscribe();
+```
+
+Names identify changed linked namespaces. Re-query them; the notification is not a result or permission grant. `watchQuery` observes viewer-local state, not shared-data updates. The platform never retries a mutation automatically.
+
 Remote data is never silently copied into persisted local state. Keep temporary selections or filters local; read shared facts through their namespace. Query/mutation errors must reach the UI. An unknown write outcome requires recovery; never turn it into a success message or a second new mutation.
 
 ## Offline and downloaded pages
 
-Local state keeps working without a network. Shared mutations cannot commit offline; report the offline outcome and retain the user’s intent. A downloaded file never carries account tokens. Do not claim a shared action succeeded until the remote receipt confirms it. Test downloads independently from the live page.
+Local state keeps working without a network. Shared mutations cannot commit offline; report the offline outcome and retain the user’s intent. A downloaded file never carries account tokens. The current downloaded core has no reconnect protocol: backend query fields are null with offline errors, and mutations have an offline outcome. Do not teach sign-in or reconnect from a downloaded file. Do not claim a shared action succeeded until the remote receipt confirms it. Test downloads independently from the live page.
+
+A URL hash `#af-state=<base64url JSON>` initializes private viewer state and persists it only in that browser; it does not update shared backend data.

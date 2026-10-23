@@ -37,7 +37,9 @@ export default {
 
 `caps.store.get()` returns `{value,version}`. `caps.store.set(value,{expected:version})` writes by compare-and-swap and returns the new integer version. A stale write throws a conflict; read current state and reconcile the intended action. Do not blindly replay an increment after an uncertain result. Use request IDs in application state when an action needs durable deduplication.
 
-The runtime accepts a fixed import allowlist; arbitrary npm imports and network fetch are unavailable. Do not claim general network or secret access. Use only documented capabilities supplied to that resolver.
+The runtime accepts a fixed, server-bundled import allowlist; arbitrary npm packages and Node built-ins are unavailable. Prefer import-free resolvers. Do not claim general network or secret access.
+
+For public external data, `await caps.fetch("https://public.example/data.json")` performs a public HTTPS GET. It accepts only a URL: no custom headers, authentication, request body or method. DNS is pinned to the connection; private and metadata addresses are refused, including after each redirect (at most three). Requests have a three-second deadline and a 256 KiB response limit; currently only HTTP 200 is accepted. The frozen response exposes `ok`, `status`, `url`, `headers["content-type"]`, `text()` and `json()`. Handle refusal or timeout in the resolver; it is not a general-purpose authenticated HTTP client.
 
 ## Account identity and roles
 

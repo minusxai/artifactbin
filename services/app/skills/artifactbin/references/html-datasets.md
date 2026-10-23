@@ -42,7 +42,15 @@ query Rows($table:ID!,$after:String){
 }
 ```
 
-`first` is 1–100. Follow `endCursor` until `hasNextPage:false`. Calculate totals or chart series only after collecting every page at the same revision; restart if the revision changes. Otherwise label the result as a partial page. Do not invent a raw-SQL or aggregate endpoint.
+`first` is 1–100. Follow `endCursor` until `hasNextPage:false`. Calculate totals or chart series only after collecting every page at the same revision; restart if the revision changes. Otherwise label the result as a partial page.
+
+## Server queries and aggregates
+
+For grouped charts or totals, use the namespace’s `query` field. It filters and aggregates the whole stored dataset before paginating the resulting rows. It accepts `tableId`, `columnIds`, `filters`, `parameters`, `groupBy`, `aggregates`, `order`, `first` and `after`. Use discovered column IDs. An aggregate is `{id:"total",operation:SUM,columnId:"<amount column ID>"}`; operations are COUNT, SUM, AVG, MIN and MAX. COUNT without a column counts all filtered rows; with a column it counts non-null cells. SUM requires a numeric column. Its `id` becomes the output column ID; grouped source columns retain their IDs. Order by the resulting metric, for example `{columnId:"total",direction:DESC}`. Read the same typed Rows result and follow its output cursor as needed.
+
+Filters may reference a named parameter: `{columnId:"<amount ID>",operator:GTE,parameter:"minimum"}`, paired with `parameters:[{name:"minimum",value:{type:NUMBER,number:0}}]`. Parameter values are typed cells, never SQL strings. No arbitrary SQL endpoint exists. Use schema discovery to inspect available input enums before constructing a new operation.
+
+CSV import infers ordinary numeric values. To preserve exact lexical values such as identifiers or high-precision quantities, supply top-level `columns:[{name:"amount",type:"string"}]` with the dataset create request; an explicit `type:"number"` requests numeric conversion and can round.
 
 ## Typed cells and writes
 

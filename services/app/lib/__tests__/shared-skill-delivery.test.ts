@@ -99,7 +99,7 @@ describe('installable shared skill folder',()=>{
   const root=tree.get('artifactbin/SKILL.md')!;
   for(const transport of ['cli'] as const){
    const text=renderSkill(root,{base,transport});
-   for(const [operation,reference] of [['authentication',transport==='http'?'http-auth':'publishing-auth'],['creation',transport==='http'?'http-authoring':'publishing'],['editing',transport==='http'?'http-authoring':'publishing']]){
+   for(const [operation,reference] of [['authentication','publishing-auth'],['creation','publishing'],['editing','publishing']]){
     const fragment=renderSkill({...root,body:`[% include "fragments/${transport}-${operation}.md" %]`},{base,transport}).trim();
     expect(text).toContain(fragment);
     const ref=tree.get(`artifactbin/references/${reference}.md`)!;
