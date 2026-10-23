@@ -1,48 +1,26 @@
-import {nativeSource} from './native-publication-fixture';
-import cliRelease from '../public/chat/release.json';
-import {readFileSync} from 'node:fs';
-import {runInNewContext} from 'node:vm';
-import {CliError} from '../../cli/src/errors';
-import {nativePublicationBody as documentPublicationBody} from './native-publication-fixture';
-import {restoreDocument,documentEditBody} from './prepared-document';
+import { nativePublicationBody as documentPublicationBody,nativeSource } from './native-publication-fixture';
+import { restoreDocument } from './prepared-document';
 /**
  * Document lifecycle through the REAL handlers: restore from trash, preconditions on a stale edit,
  * atomic replacement beside a concurrent edit, and paged listing.
  */
 
-import { expect, it } from 'vitest';
-import { useAppHarness, request } from './harness';
-import { cliWorkspace } from './cli-harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, createUser, claimToken } from '@/lib/accounts';
-import { getArtifactById, updateSharingFor, createArtifact } from '@/lib/artifacts';
-import { ownedArtifactState } from '@/lib/workspace';
-import { POST as create, GET as list } from '@/app/api/artifacts/route';
-import { GET as read, DELETE as remove, PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { POST as restore } from '@/app/api/artifacts/[id]/restore/route';
-import { POST as refresh } from '@/app/api/artifacts/assets/refresh/route';
-import { readRecord } from '../../cli/test/tracking';
-import { POST as edit } from '@/app/api/artifacts/[id]/edits/route';
+import { GET as read,DELETE as remove,PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { GET as versions } from '@/app/api/artifacts/[id]/versions/route';
+import { POST as refresh } from '@/app/api/artifacts/assets/refresh/route';
+import { POST as create,GET as list } from '@/app/api/artifacts/route';
+import { claimToken,createUser,identityForUser } from '@/lib/accounts';
+import { createArtifact,getArtifactById,updateSharingFor } from '@/lib/artifacts';
+import { ownedArtifactState } from '@/lib/workspace';
+import { expect,it } from 'vitest';
+import { request,useAppHarness } from './harness';
 
 useAppHarness();
 
 describe('cli-restore', () => {
   const params=(id:string)=>({params:Promise.resolve({id})});
-
-  /** The real delete, restore and refresh routes behind the real CLI. */
-  function transport(calls:string[]):typeof fetch{
-   return async(input,init)=>{
-    const message=new Request(input,init);const path=new URL(message.url).pathname;calls.push(`${message.method} ${path}`);
-    if(path==='/api/artifacts')return create(message);
-    if(path==='/api/artifacts/assets/refresh')return refresh(message);
-    const restoring=path.match(/^\/api\/artifacts\/([^/]+)\/restore$/);
-    if(restoring)return restore(message,params(restoring[1]));
-    const match=path.match(/^\/api\/artifacts\/([^/]+)$/);
-    if(!match)throw new Error(`Unexpected route ${message.method} ${path}`);
-    return message.method==='DELETE'?remove(message,params(match[1])):read(message,params(match[1]));
-   };
-  }
 
   it('a retried restore or delete under the same operation identity commits once and replays its receipt',async()=>{
    const token=await mintToken('mxmx_test_restore_retry');const actor=identityForUser(token.userId, token.id);

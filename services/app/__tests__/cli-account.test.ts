@@ -1,26 +1,19 @@
-import {nativeSource} from './native-publication-fixture';
-import {nativePublicationBody as documentPublicationBody} from './native-publication-fixture';
+import { nativePublicationBody as documentPublicationBody,nativeSource } from './native-publication-fixture';
 /**
  * Account-scoped resources through the REAL handlers: the profile, typed deletes over a mixed
  * workspace, remote sessions, dataset governance and what a reader may address.
  */
 
-import { it, expect } from 'vitest';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { useAppHarness, request } from './harness';
-import { cliWorkspace } from './cli-harness';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { identityForUser, createUser, claimToken } from '@/lib/accounts';
-import { createArtifact, getArtifactById, getSharingFor, updateSharingFor } from '@/lib/artifacts';
-import { ownedArtifactState } from '@/lib/workspace';
-import { has } from '@/lib/accounts';
-import { GET, PATCH } from '@/app/api/account/profile/route';
-import { POST as createArtifactRoute, POST as create, GET as list } from '@/app/api/artifacts/route';
-import { GET as readArtifact, DELETE as removeArtifact, GET as read, PUT as replace } from '@/app/api/artifacts/[id]/route';
-import { tracking } from '../../cli/test/tracking';
-import { getDb } from '@/lib/platform';
+import { GET,PATCH } from '@/app/api/account/profile/route';
 import { GET as content } from '@/app/api/artifacts/[id]/content/route';
+import { GET as read,PUT as replace } from '@/app/api/artifacts/[id]/route';
+import { POST as create,GET as list } from '@/app/api/artifacts/route';
+import { claimToken,createUser,has,identityForUser } from '@/lib/accounts';
+import { createArtifact,getArtifactById,getSharingFor,updateSharingFor } from '@/lib/artifacts';
+import { getDb } from '@/lib/platform';
+import { expect,it } from 'vitest';
+import { request,useAppHarness } from './harness';
 
 useAppHarness();
 
@@ -35,19 +28,6 @@ describe('cli-account-resources', () => {
    const stale=await PATCH(request('/api/account/profile',{method:'PATCH',token:token.token,json:{...body,following:[]}}));expect(stale.status).toBe(409);expect(await has(user.id,'follow',other.id)).toBe(true);
    const invalid=await PATCH(request('/api/account/profile',{method:'PATCH',token:token.token,json:{...await updated.json(),username:'@invalid',following:[]}}));expect(invalid.status).toBe(400);expect(await has(user.id,'follow',other.id)).toBe(true);
   });
-
-  /** The real typed delete and the real mixed workspace, through the real CLI. */
-  function resourceTransport(calls:string[]):typeof fetch{
-   return async(input,init)=>{
-    const message=new Request(input,init);const path=new URL(message.url).pathname;calls.push(`${message.method} ${path}`);
-    if(path==='/api/artifacts')return createArtifactRoute(message);
-    if(path==='/api/account/profile')return message.method==='PATCH'?PATCH(message):GET(message);
-    const match=path.match(/^\/api\/artifacts\/([^/]+)$/);
-    if(!match)throw new Error(`Unexpected route ${message.method} ${path}`);
-    const context={params:Promise.resolve({id:match[1]})};
-    return message.method==='DELETE'?removeArtifact(message,context):readArtifact(message,context);
-   };
-  }
 });
 
 
