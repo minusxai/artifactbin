@@ -164,7 +164,7 @@ const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/lib/offline/snapshot-current.ts',
 ];
 const DOCUMENT_BROWSER_LEAVES = [
-  'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'display-title', 'document-authoring-client', 'document-graph', 'document-graph-patch',
+  'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'context', 'display-title', 'document-authoring-client', 'document-graph', 'document-graph-patch',
   'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'node-ids', 'person-mentions', 'pwa-settings',
   'query-notebook', 'social-preview', 'source-changes', 'table-catalog', 'update-parts',
 ];
