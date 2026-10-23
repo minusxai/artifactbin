@@ -153,7 +153,7 @@ jobs:
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/pagegi
           chmod 600 ~/.ssh/pagegi
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          git archive --format=tar.gz "$GITHUB_SHA" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/pagegi "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA"
+          git archive --format=tar.gz "$GITHUB_SHA" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -i ~/.ssh/pagegi "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA"
           node --input-type=module <<'HEALTH'
           const response = await fetch(`${process.env.PUBLIC_ORIGIN}/health`, {
             redirect: "error", signal: AbortSignal.timeout(10000),
