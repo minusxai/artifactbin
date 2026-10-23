@@ -11,7 +11,7 @@ import type {MutationNotificationJobInput,MutationNotificationPlan} from '@artif
 useAppHarness();
 async function setup(){
  const db=await getDb(),owner=await createUser({email:'mxmx_test_authority_owner@example.com'}),other=await createUser({email:'mxmx_test_authority_other@example.com'}),token=await mintToken('notify',owner.id);
- await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES('document',$1,$2,'markup','public')",[token.id,owner.id]);
+ await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility) VALUES('document',$1,$2,'html','public')",[token.id,owner.id]);
  await db.query("INSERT INTO artifacts(id,token_id,user_id,format,visibility,meta) VALUES('dataset',$1,$2,'dataset','private',$3::jsonb)",[token.id,owner.id,JSON.stringify({catalog:{kind:'postgres',defaultSchema:'public',refreshSeconds:60,connection:{host:'example.test',port:5432,database:'db',username:'read',passwordSecretId:'secret',ssl:true},tables:[{schema:'public',name:'tasks',source:{schema:'app',table:'tasks'},columns:[{name:'id',type:'string'}]}]}})]);
  const secret=await createDatasetSecret(identityForUser(owner.id, token.id),'password',{host:'example.test',port:5432,database:'db',username:'read',ssl:true},'dataset');
  await db.query("UPDATE artifacts SET meta=jsonb_set(meta,'{catalog,connection,passwordSecretId}',to_jsonb($1::text)) WHERE id='dataset'",[secret.id]);
