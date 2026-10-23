@@ -19,7 +19,7 @@ export function datasetBootSetup(
 export const datasetBootStatus = `const status=document.querySelector('[data-migration-dataset-status]');
  const setDatasetStatus=(message)=>{if(status){status.textContent=message;status.hidden=!message;}};
  const refreshDatasets=()=>{datasetBudget={bytes:0,rows:0};datasetReadFailed=false;setTables({});setQueryErrors({});setDatasetStatus('Loading protected data…');engine.invalidate(flow.imports.map(i=>i.ref));void run();};
- const retry=document.createElement('button');retry.type='button';retry.textContent='Refresh data';retry.addEventListener('click',refreshDatasets);status?.after(retry);
+ const retry=document.createElement('button');retry.type='button';retry.hidden=true;retry.setAttribute('data-migration-dataset-retry','');retry.textContent='Refresh data';retry.addEventListener('click',refreshDatasets);status?.after(retry);
  const datasetWatches=[];
  for(const binding of datasetBindings)for(const table of binding.tables){let received=false;
   const subscription=client.watchQuery({query:datasetDocuments[binding.backendNamespace],variables:{binding:binding.name,schema:table.schema,table:table.table,offset:0,limit:1}}).subscribe(result=>{

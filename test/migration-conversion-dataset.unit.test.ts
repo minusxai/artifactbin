@@ -190,7 +190,7 @@ test("dataset notification observers refresh complete snapshots and release subs
   runInNewContext(datasetBootStatus, {
     document: {
       querySelector: () => ({ textContent: "", hidden: false, after: noop }),
-      createElement: () => ({ addEventListener: noop }),
+      createElement: () => ({ addEventListener: noop, setAttribute: noop }),
     },
     window: {
       addEventListener: (name: string, fn: Function) => (events[name] = fn),

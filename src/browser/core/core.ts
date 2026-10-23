@@ -1,3 +1,4 @@
+import { installMigrationRecovery } from "./migration-recovery.ts";
 /**
  * The core script, /af/v1/core.js. Loaded first in <head> as a classic
  * script; see core-contracts.ts for the order of what it does. It runs in the
@@ -290,6 +291,7 @@ function start(): void {
   // again with the current state, and offer that as one control. When the
   // file names its server, that server's platform runtime (the bar, comments,
   // presence, Connect) is loaded too; offline it simply fails to arrive.
+  installMigrationRecovery(document);
   if (!downloaded) return;
   let runtime: HTMLScriptElement | null = null;
   if (server) {
