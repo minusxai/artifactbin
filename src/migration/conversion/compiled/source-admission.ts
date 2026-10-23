@@ -1,3 +1,4 @@
+import {validCellUserChoiceBindings} from "./cell-user-choice-runtime.ts";
 import{validCompiledSourceQueries}from"./source-query-admission.ts";
 import {prepareCompiledFileUploads} from "./file-upload-admission.ts";
 import {readLegacyCellWriteSites} from "./cell-write-source.ts";
@@ -178,6 +179,14 @@ export const admitLocalSource: AdmitLocalSource = (input, mode="strict") => {
       readLegacyCellWriteSites(input.source,(node,site)=>cellSites.set((node as any).start,site),mode);
       if(historical || [...cellSites.values()].some(site=>!registeredMutations.find(binding=>binding.name===site.mutationName)?.valueParam) || registeredMutations.some(binding=>binding.valueParam&&![...cellSites.values()].some(site=>site.mutationName===binding.name)))return blocked("compiled-cell-binding");
     }
+    const choices=input.cellUserChoiceBindings??[];
+    if(!validCellUserChoiceBindings(choices))throw Error();
+    for(const site of cellSites.values())if(site.implicitUserOptions){
+      const mutation=registeredMutations.find(m=>m.name===site.mutationName);
+      const routes=choices.filter(c=>c.queryName===site.dataName&&c.column===site.column);
+      if(mutation?.valueParam?.type!=="user"||routes.length!==1||routes[0]!.backendNamespace!==mutation.backendNamespace)throw Error();
+    }
+    if(choices.some(c=>![...cellSites.values()].some(site=>site.implicitUserOptions&&site.dataName===c.queryName&&site.column===c.column)))throw Error();
   } catch {return blocked("compiled-cell-binding");}
   if(prototype){try{return {ok:true,plan:readPrototypeSource(input,backendLinks,historical)};}catch{return blocked("compiled-source");}}
   const mutations = new Set<string>();

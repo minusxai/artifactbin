@@ -71,3 +71,10 @@ test("cell source gate refuses standalone, mismatched, implicit options and Butt
     false,
   );
 });
+test("implicit person choices require exact registered routes and user-valued mutation",()=>{
+ const source=input.source.replace('<input id="edit" aria-label="Title" type="text" value="$_row.title" run="$save"/>','<Select value="$_row.title" run="$save"/>');
+ const selected={...input,source,datasetBindings:input.datasetBindings.map(b=>({...b,tables:b.tables.map(t=>({...t,columns:t.columns.map(c=>c.name==="title"?{...c,type:"user"}:c)}))})),datasetMutations:input.datasetMutations.map(m=>({...m,valueParam:{param:"cell__value",type:"user" as const}})),cellUserChoiceBindings:[{queryName:"rows",column:"title",backendNamespace:"legacyData"}]};
+ assert.equal(admitLocalSource(selected).ok,true);
+ for(const routes of [[],[{queryName:"rows",column:"other",backendNamespace:"legacyData"}],[{queryName:"rows",column:"title",backendNamespace:"other"}],selected.cellUserChoiceBindings.concat(selected.cellUserChoiceBindings)])assert.equal(admitLocalSource({...selected,cellUserChoiceBindings:routes}).ok,false);
+ assert.equal(admitLocalSource({...selected,datasetMutations:input.datasetMutations}).ok,false);
+});

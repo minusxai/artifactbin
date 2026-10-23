@@ -15,7 +15,8 @@ test(
       type: "string",
     }));
     columns.push({name:"amount",type:"number"});
-    const source = `<Helmet><Import name="items" src="ref:Abcd12"/><Value name="optionRows" type="table" value={${JSON.stringify(Array.from({ length: 350 }, (_, i) => ({ label: "Choice " + i })))}}/><Query name="choices">{\`select label from optionRows order by label\`}</Query><Query name="rows">{\`select id,title,note,tags,amount from items.rows\`}</Query>${["title", "note", "tags", "amount"].map((field) => `<Mutation name="save_${field}" expectedAffected={1}>{\`update items.rows set ${field} = $_value where id = $_row.id\`}</Mutation>`).join("")}</Helmet><DataTable id="table" data="$rows" rowKey="id"><Column col="title"><input id="title" aria-label="Title" type="text" value="$_row.title" run="$save_title"/></Column><Column col="note"><textarea id="note" aria-label="Note" value="$_row.note" run="$save_note"/></Column><Column col="tags"><Select id="tags" label="Tags" value="$_row.tags" run="$save_tags" options="$choices" multiple={true} valueFormat="json" allowCreate={true}/></Column><Column col="amount"><input id="amount" aria-label="Amount" type="number" min={0} max={100} step={1} value="$_row.amount" run="$save_amount"/></Column></DataTable>`;
+    columns.push({name:"owner",type:"user"});
+    const source = `<Helmet><Import name="items" src="ref:Abcd12"/><Value name="optionRows" type="table" value={${JSON.stringify(Array.from({ length: 350 }, (_, i) => ({ label: "Choice " + i })))}}/><Query name="choices">{\`select label from optionRows order by label\`}</Query><Query name="rows">{\`select id,title,note,tags,amount,owner from items.rows\`}</Query>${["title", "note", "tags", "amount", "owner"].map((field) => `<Mutation name="save_${field}" expectedAffected={1}>{\`update items.rows set ${field} = $_value where id = $_row.id\`}</Mutation>`).join("")}</Helmet><DataTable id="table" data="$rows" rowKey="id"><Column col="title"><input id="title" aria-label="Title" type="text" value="$_row.title" run="$save_title"/></Column><Column col="note"><textarea id="note" aria-label="Note" value="$_row.note" run="$save_note"/></Column><Column col="tags"><Select id="tags" label="Tags" value="$_row.tags" run="$save_tags" options="$choices" multiple={true} valueFormat="json" allowCreate={true}/></Column><Column col="amount"><input id="amount" aria-label="Amount" type="number" min={0} max={100} step={1} value="$_row.amount" run="$save_amount"/></Column><Column col="owner"><Select id="owner" label="Owner" value="$_row.owner" run="$save_owner"/></Column></DataTable>`;
     const result = await compileArchivedLocal(
       {
         source,
@@ -31,13 +32,14 @@ test(
             tables: [{ schema: "main", table: "rows", columns }],
           },
         ],
-        datasetMutations: ["title", "note", "tags", "amount"].map((field) => ({
+        cellUserChoiceBindings:[{queryName:"rows",column:"owner",backendNamespace:"legacyData"}],
+        datasetMutations: ["title", "note", "tags", "amount", "owner"].map((field) => ({
           name: "save_" + field,
           backendNamespace: "legacyData",
           recoveryScope: "a".repeat(64),
           paramTypes: {},
           rowParams: { id: { param: "row__id", type: "string" } },
-          valueParam: { param: "cell__value", type: field==="amount"?"number":"string" },
+          valueParam: { param: "cell__value", type: field==="amount"?"number":field==="owner"?"user":"string" },
         })),
       },
       { legacyRoot: archivedRoot! },
@@ -63,6 +65,7 @@ test(
     ).outputFiles[0]!.text;
     const row: Record<string, string | number | null> = {
       id: "row-a",
+      owner:null,
       amount: 1,
       title: "Initial",
       note: "Initial note",
@@ -70,6 +73,7 @@ test(
     };
     let generation = 1;
     let canAttempt = true;
+    let choicesAllowed=true;
     const writes: any[] = [];
     const server = createServer(async (req, res) => {
       if (req.url === "/proof") {
@@ -98,7 +102,8 @@ test(
             },
             extensions: { outcomes: { "legacyData.mutate": "committed" } },
           };
-        } else if (request.query.includes("mutationAvailability"))
+        } else if(request.query.includes("CellUserChoices")) answer=choicesAllowed?{data:{legacyData:{userChoices:JSON.stringify([{value:"User12",label:"Person one"},{value:"User34",label:"Person two"}])}}}:{errors:[{message:"Choices unavailable"}]};
+        else if (request.query.includes("mutationAvailability"))
           answer = {
             data: {
               legacyData: { mutationAvailability: { canAttempt } },
@@ -312,6 +317,16 @@ test(
       await amount.fill("6");await amount.press("Enter");
       await page.waitForFunction(()=>!(document.querySelector('input[aria-label="Amount"]') as HTMLInputElement)?.disabled);
       assert.equal(writes.length,4);assert.equal(writes[3].params.cell__value,6);
+      await page.getByRole("button",{name:"Owner",exact:true}).click();
+      await page.getByRole("option",{name:"Person two",exact:true}).click();
+      await page.waitForFunction(()=>document.querySelector('button[aria-label="Owner"]')?.textContent?.includes("Person two"));
+      assert.equal(writes.at(-1).operation,"save_owner");
+      assert.deepEqual(writes.at(-1).params,{row__id:"row-a",cell__value:"User34"});
+      choicesAllowed=false;
+      await page.evaluate(()=>window.dispatchEvent(new Event("fixture-invalidate")));
+      await page.getByRole("button",{name:"Owner",exact:true}).click();
+      await page.waitForFunction(()=>!Array.from(document.querySelectorAll('[role="option"]')).some(node=>node.textContent?.includes("Person two")));
+      assert.equal(await page.getByRole("option",{name:"Person one",exact:true}).count(),0);
       assert.deepEqual(errors, []);
       assert.deepEqual(external, []);
     } finally {

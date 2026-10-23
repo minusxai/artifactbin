@@ -14,3 +14,10 @@ test("implicit person edits publish exact source-column authority through aliase
  const computed=await extractLegacyMutations(source.replace("owner as assignee","cast(owner as text) as assignee"),catalog("user"),[],"offline-prototype");
  assert.equal(computed.mutations.length,0);assert.equal(computed.issues.length,1);
 });
+
+test("implicit choices refuse ambiguous reuse and missing field/table origins",async()=>{
+ const ambiguous=source.replace('id,owner as assignee','id,owner as assignee,owner as second').replace('select id,assignee from base','select id,assignee,second from base').replace('</DataTable>','<Column col="second"><Select value="$_row.second" run="$assign"/></Column></DataTable>');
+ for(const text of [ambiguous,source.replace('col="assignee"','col="missing"').replace('value="$_row.assignee"','value="$_row.missing"'),source.replace('from data.rows','from data.missing')]){
+  const result=await extractLegacyMutations(text,catalog("user"));assert.equal(result.mutations.length,0);assert.equal(result.issues.length,1);
+ }
+});

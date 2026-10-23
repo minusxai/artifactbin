@@ -1,3 +1,4 @@
+import {cellUserChoiceBoot} from "./cell-user-choice-boot.ts";
 import {localMutationBootSource} from "./local-mutation-boot.ts";
 import {fileUploadBootSource} from "./file-upload-boot.ts";
 import type {CompiledFileUploadSite} from "./file-upload-runtime-contracts.ts";
@@ -44,6 +45,7 @@ export function localBootSource(
   cellOptionQueries: readonly string[] = [],
   attachmentSites: readonly CompiledFileUploadSite[] = [],
   localMutationNames: readonly string[] = [],
+  cellUserChoiceBindings:readonly import("./cell-user-choice-contracts.ts").CompiledCellUserChoiceBinding[]=[],
 ): string {
   const imports = sql?.bindings?.length ?? 0;
   const members=Boolean(sql?.membersBinding);
@@ -58,6 +60,7 @@ import {createSignal,createRoot,createEffect,untrack} from 'solid-js';
 ${author ? "import {mount as mountAuthor} from 'migration-author-entry';import {authorApolloPorts} from 'migration-author-ports';" : ""}
 ${mutations.length ? "import {createCompiledMutationAvailability} from 'migration-mutation-availability';import {createCompiledDatasetMutations,compiledMutationIntentStore} from 'migration-mutations';" : ""}
 ${charts ? "import {charts} from 'migration-charts';" : ""}
+${cellUserChoiceBindings.length ? "import {createCompiledCellUserChoices} from 'migration-cell-user-choices';" : ""}
 ${personBindings.length ? "import {createCompiledPeople} from 'migration-people';" : ""}
 ${viewerBinding ? "import {createCompiledViewer} from 'migration-viewer';" : ""}
 ${members ? "import {createCompiledMembers} from 'migration-members';" : ""}
@@ -107,7 +110,8 @@ export function boot({TREE}) {
  ${localMutationNames.length ? localMutationBootSource(localMutationNames) : ""}
  ${fileUploadBootSource(attachmentSites)}
  ${personBindings.length ? personBootSource(personBindings) : ""}
- const context={values, value:name=>values()[name],table,tableSnapshot:table,pending:()=>pending(),error:name=>queryErrors()[name],people:${personBindings.length ? "people" : "()=>({})"},setValue:store.setValue,mutate:${localMutationNames.length ? "store.mutate" : "unavailable"},writesUnavailable:()=>null,mutationUnavailable:name=>{${unavailableQueries ? "return 'Historical shared data writes are unavailable.';" : mutations.length ? "mutationTick();return mutationAdapter.status(name)?.state==='unknown'?'Reconcile the previous save before saving again.':mutationBindings.some(binding=>binding.name===name&&binding.valueParam)?cellAvailability.unavailable(name):null;" : "return null;"}},mutating:name=>{${localMutationNames.length ? "return localMutationPending();" : mutations.length ? "mutationTick();return mutationAdapter.pending(name);" : "return false;"}},assetsUrl:()=>null,viewer:${viewerBinding ? "viewer" : "()=>null"},drawings:()=>({}),valueType:name=>declarations.find(d=>d.name===name)?.type,nullable:name=>declarations.find(d=>d.name===name)?.default===null,declaresQueries:()=>${Boolean(sql)},writes:{current:()=>[],subscribe:()=>()=>{},dismiss:()=>{}},store:()=>store,trustedPortal:()=>null,loadChart:${charts ? "async()=>charts" : "unavailable"}};
+ ${cellUserChoiceBindings.length ? cellUserChoiceBoot(cellUserChoiceBindings):""}
+ const context={cellUserOptions:${cellUserChoiceBindings.length?"cellUserOptions":"()=>({})"},values, value:name=>values()[name],table,tableSnapshot:table,pending:()=>pending(),error:name=>queryErrors()[name],people:${personBindings.length ? "people" : "()=>({})"},setValue:store.setValue,mutate:${localMutationNames.length ? "store.mutate" : "unavailable"},writesUnavailable:()=>null,mutationUnavailable:name=>{${unavailableQueries ? "return 'Historical shared data writes are unavailable.';" : mutations.length ? "mutationTick();return mutationAdapter.status(name)?.state==='unknown'?'Reconcile the previous save before saving again.':mutationBindings.some(binding=>binding.name===name&&binding.valueParam)?cellAvailability.unavailable(name):null;" : "return null;"}},mutating:name=>{${localMutationNames.length ? "return localMutationPending();" : mutations.length ? "mutationTick();return mutationAdapter.pending(name);" : "return false;"}},assetsUrl:()=>null,viewer:${viewerBinding ? "viewer" : "()=>null"},drawings:()=>({}),valueType:name=>declarations.find(d=>d.name===name)?.type,nullable:name=>declarations.find(d=>d.name===name)?.default===null,declaresQueries:()=>${Boolean(sql)},writes:{current:()=>[],subscribe:()=>()=>{},dismiss:()=>{}},store:()=>store,trustedPortal:()=>null,loadChart:${charts ? "async()=>charts" : "unavailable"}};
  let ready=false;
  ${deck ? "let stopDeck=()=>{};window.addEventListener('pagehide',()=>stopDeck(),{once:true});" : ""}
  ${identities ? "pageSubscription=" : ""}client.watchQuery({query}).subscribe(({data})=>{${identities ? "if(identityFailed)return;" : ""}if(!ready){ready=true;${identities ? "stopIsland=" : ""}hydrateIsland('d-',TREE,context);${deck ? `stopDeck=startDeck(${JSON.stringify(deck)});` : ''}${identities ? "flushIdentities();if(identityFailed){stopIsland?.();return;}" : ""}}setState(checked(data.compiledPage));${personBindings.length ? "peopleAdapter.update(values());" : ""}${identities ? "flushIdentities();if(identityFailed)return;" : ""}markCompiledReady();void run();});

@@ -184,7 +184,7 @@ if (input.datasetUnavailable) {
   declaredMutationNames: split.content.mutations.map((m:any)=>m.name),
   registeredMutationNames: (input.datasetMutations ?? []).map(m=>m.name),
 })) throw Error("Import requires a query or registered mutation");
-if(!input.datasetUnavailable&&input.datasetMutations?.some(binding=>binding.valueParam))validateCompiledCellWriteContexts(input.source,flow,input.datasetMutations??[],input.sourceAdmission);
+if(!input.datasetUnavailable&&input.datasetMutations?.some(binding=>binding.valueParam))validateCompiledCellWriteContexts(input.source,flow,input.datasetMutations??[],input.sourceAdmission,input.cellUserChoiceBindings??[]);
 const hasCharts = (nodes: readonly any[]): boolean =>
   nodes.some(
     (n) =>
@@ -429,7 +429,7 @@ const bundled = await bundle({
           if(args.path===path.join(root,"services/app/lib/islands/kit/controls.tsx"))source=archivedScalarChoiceSource(source);
           if(attachmentSites.length && args.path===path.join(root,"services/app/lib/islands/kit/upload/control.tsx"))source=archivedFileUploadControlSource(source);
           if (input.personBindings?.length && args.path === path.join(root,"services/app/lib/islands/kit/people.tsx")) source = archivedPersonProfileSource({source,coreUrl:input.coreUrl});
-          if(input.datasetMutations?.some(binding=>binding.valueParam)&&args.path===path.join(root,"services/app/lib/islands/kit/cells.tsx"))source=archivedExplicitCellOptionsSource(source);
+          if(input.datasetMutations?.some(binding=>binding.valueParam)&&args.path===path.join(root,"services/app/lib/islands/kit/cells.tsx"))source=archivedExplicitCellOptionsSource(source,Boolean(input.cellUserChoiceBindings?.length));
           if (args.path === path.join(root,"services/app/lib/islands/kit/dialog.tsx")) source = archivedDialogMutationFormSource(archivedDialogFocusSource(source,path.join(import.meta.dirname,"dialog-focus.ts")),path.join(import.meta.dirname,"dialog-form.ts"));
           const stripped = await stripTypes(source, {
             loader: "tsx",
@@ -467,6 +467,7 @@ const bundled = await bundle({
             input.datasetMutations?.some(binding=>binding.valueParam)?readLegacyCellWriteSites(input.source,undefined,input.sourceAdmission).flatMap(site=>site.optionsQuery?[site.optionsQuery]:[]):[],
             attachmentSites,
             input.localMutationNames ?? [],
+            input.cellUserChoiceBindings ?? [],
           ),
           loader: "js",
         }));
@@ -534,6 +535,7 @@ const bundled = await bundle({
           path: path.join(import.meta.dirname, "dataset-reader.ts"),
         }));
         if(input.membersBinding)b.onLoad({filter:/[\\/]lib[\\/]page-store[\\/]page-engine\.ts$/},async(args:any)=>({contents:forwardArchivedMembersContext(await readFile(args.path,"utf8")),loader:"ts",resolveDir:path.dirname(args.path)}));
+        b.onResolve({filter:/^migration-cell-user-choices$/},()=>({path:path.join(import.meta.dirname,"cell-user-choice-runtime.ts")}));
         b.onResolve({ filter: /^migration-people$/ },()=>({path:path.join(import.meta.dirname,"person-runtime.ts")}));
         b.onResolve({filter:/^migration-viewer$/},()=>({path:path.join(import.meta.dirname,"viewer-runtime.ts")}));
         b.onResolve({ filter: /^migration-members$/ },()=>({path:path.join(import.meta.dirname,"members-runtime.ts")}));
