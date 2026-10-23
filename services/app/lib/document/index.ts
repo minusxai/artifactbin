@@ -10,7 +10,7 @@
 
 // ---- Model: the stored node graph, node ids, the source form and its checks.
 export type { DocumentGraph } from './document-graph';
-export { createDocumentGraph, graphNodes, graphSource } from './document-graph';
+export { createDocumentGraph, graphSource } from './document-graph';
 export { applyGraphPatch } from './document-graph-patch';
 export type { ProseOperation } from './document-prose';
 export type { StoredDocument } from './document-codec';
