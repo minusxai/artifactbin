@@ -55,6 +55,14 @@ export const applyCompiledLocalMutation: ApplyCompiledLocalMutation = (
   declarations,
   result,
 ) => {
+  if(result.scalarValues){
+    for(const [name,value] of Object.entries(result.scalarValues)){
+      const d=declarations.find(d=>d.name===name&&d.type!=="table");
+      if(!d||!validLocalValue(d,value))throw Error("Invalid scalar mutation result");
+    }
+    if(Object.entries({...snapshot.values,...snapshot.tables}).some(([name,value])=>JSON.stringify(current[name])!==JSON.stringify(value)))throw Error("Local state changed before save completed");
+    return {...current,...result.scalarValues};
+  }
   const tables = Object.fromEntries(
     declarations
       .filter((d) => d.type === "table")

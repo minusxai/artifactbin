@@ -4,6 +4,7 @@ export interface CompiledLocalMutationSnapshot {
   tables: Record<string, unknown>;
 }
 export interface CompiledLocalMutationResult {
+  scalarValues?: Record<string, unknown>;
   target: string;
   rows: unknown;
   reset?: readonly string[];

@@ -48,7 +48,7 @@ export function localBootSource(
   const imports = sql?.bindings?.length ?? 0;
   const members=Boolean(sql?.membersBinding);
   return `import {client,gql} from '@afbin/apollo';
-${localMutationNames.length ? "import {createCompiledLocalMutations,applyCompiledLocalMutation} from 'migration-local-mutations';import {mutationRequestFor} from '@/lib/dataflow/mutation-request-builder';" : ""}
+${localMutationNames.length ? "import {createCompiledLocalMutations,applyCompiledLocalMutation} from 'migration-local-mutations';import {applyLegacyScalarOperation} from 'migration-scalar-mutations';import {mutationRequestFor} from '@/lib/dataflow/mutation-request-builder';" : ""}
 ${attachmentSites.length ? "import {createCompiledFileUploads} from 'migration-file-uploads';" : ""}
 import {hydrateIsland} from '@mx/rt';
 import {markCompiledReady} from 'migration-readiness';

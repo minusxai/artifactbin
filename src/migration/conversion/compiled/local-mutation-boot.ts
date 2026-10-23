@@ -8,6 +8,7 @@ export function localMutationBootSource(names: readonly string[]): string {
    changed: setLocalMutationPending,
    execute: async (name, args, row, snapshot) => {
      const mutation = flow.mutations.find(m => m.name === name);
+     if (mutation?.scalarOperation) return {target: '',rows: null, scalarValues: applyLegacyScalarOperation(mutation.scalarOperation,snapshot.values)};
      if (!mutation || !mutation.target.local) throw Error('Local mutation unavailable');
      const request = mutationRequestFor(mutation, {
        values: snapshot.values, args, row, localTables: snapshot.tables, tz: 'UTC'

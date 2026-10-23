@@ -531,6 +531,7 @@ const bundled = await bundle({
         b.onResolve({ filter: /^migration-people$/ },()=>({path:path.join(import.meta.dirname,"person-runtime.ts")}));
         b.onResolve({filter:/^migration-viewer$/},()=>({path:path.join(import.meta.dirname,"viewer-runtime.ts")}));
         b.onResolve({ filter: /^migration-members$/ },()=>({path:path.join(import.meta.dirname,"members-runtime.ts")}));
+        b.onResolve({filter:/^migration-scalar-mutations$/},()=>({path:path.join(import.meta.dirname,"scalar-mutations.ts")}));
         b.onResolve({filter:/^migration-local-mutations$/},()=>({path:path.join(import.meta.dirname,"local-mutations.ts")}));
         b.onResolve({ filter: /^migration-sqlite$/ }, () => {
           if (!sqlitePath) throw Error("No archived SQLite engine");

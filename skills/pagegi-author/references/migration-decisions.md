@@ -37,3 +37,9 @@ The agent-facing skill name is `artifactbin-author`, declared in the skill's fro
 The signed-in library offers personal and imported group namespaces derived from current active memberships. Selecting a group changes its listing and folder navigation, never the signed-in identity. Group viewers browse; group editors also manage folders and paths. Every operation rechecks membership. New HTML publication and examples remain personal: group backend publication, membership administration and account secrets are not exposed through this selector.
 
 Original group handles are a separate metadata preservation step. A namespace may have no handle; its owner-scoped library remains usable. Restoring handles must validate original source mappings, current global collisions and existing migration verification rules before applying an idempotent metadata update. Navigation does not create group login credentials or silently assign a new handle.
+
+## Bounded legacy scalar mutation conversion
+
+Offline prototype migration preserves named local mutations of the form `UPDATE _signals SET count=count+1` as typed viewer state operations. The target and source must be declared number Values; addition and subtraction accept nonnegative safe integer literals. Null remains null. The archived SQLite compiler validates the rewritten statement and every original control binding before conversion. Named Button actions and managed frame mutation callbacks use the same serialized local mutation adapter as table mutations.
+
+The adapter rejects unsafe integers, concurrent viewer edits and invalid result types before committing. Other `_signals` expressions, clauses, multi-statement SQL, reset directives, affected-row guards and composition with shared bindings are refused. This compatibility path grants no backend or account authority and is not an authoring API.

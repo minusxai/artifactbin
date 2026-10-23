@@ -1,3 +1,4 @@
+import {readLegacyScalarOperation} from "./scalar-mutations.ts";
 import{createHash}from"node:crypto";
 import{validCompiledSourceQueries}from"./source-query-admission.ts";
 import type{CompiledSourceQueryBinding}from"./source-query-contracts.ts";
@@ -22,6 +23,20 @@ export async function prepareLocalFlow(
   sourceAdmission?:import("./local-contracts.ts").CompiledSourceAdmission,
   sourceQueries:readonly CompiledSourceQueryBinding[]=[],
 ): Promise<{ flow: any; results: any }> {
+  const scalarPlans = new Map<string, import("./scalar-mutation-contracts.ts").LegacyScalarOperation>();
+  const scalarDeclarations = rawFlow.values.filter((v:any)=>v.kind==="scalar").map((v:any)=>({name:v.name,type:v.type,default:v.default}));
+  for(const m of rawFlow.mutations??[]){
+    const operation=readLegacyScalarOperation(m.sql,scalarDeclarations);
+    if(operation){
+      if(sourceAdmission!=="offline-prototype"||bindings.length||rawFlow.imports.length||m.expectedAffected!==undefined||m.reset?.length)throw Error("Unsupported legacy scalar mutation composition");
+      scalarPlans.set(m.name,operation);
+    }
+  }
+  const scalarTable="migrationScalarSnapshot";
+  if(scalarPlans.size){
+    if(rawFlow.values.some((v:any)=>v.name.toLowerCase()===scalarTable.toLowerCase()))throw Error("Reserved scalar conversion name");
+    rawFlow={...rawFlow,values:[...rawFlow.values,{kind:"table",name:scalarTable,rows:[Object.fromEntries(scalarDeclarations.map((v:any)=>[v.name,v.default]))],columns:scalarDeclarations.map((v:any)=>({name:v.name,type:v.type}))}],mutations:rawFlow.mutations.map((m:any)=>scalarPlans.has(m.name)?{...m,sql:m.sql.replace(/_signals/i,scalarTable)}:m)};
+  }
   validateBoundFlow(rawFlow, bindings, boundProofs);
   if(!validCompiledSourceQueries(sourceQueries))throw Error("Invalid source query proof");
   const remote=rawFlow.queries.filter((q:any)=>q.source);
@@ -79,12 +94,16 @@ export async function prepareLocalFlow(
   const compiled = compileDataflow(rawFlow, ctx, body);
   if (!compiled.ok) throw Error("Local query compilation refused");
   const flow = publicBoundFlow(compiled.compiled, boundProofs);
+  if(scalarPlans.size){
+    flow.values=flow.values.filter((v:any)=>v.name!==scalarTable);
+    flow.mutations=flow.mutations.map((m:any)=>scalarPlans.has(m.name)?{...m,scalarOperation:scalarPlans.get(m.name)}:m);
+  }
   if(sourceQueries.length){
    if(flow.queries.some((q:any)=>!q.source||q.engine!=="postgres"||q.reads.queries.length||q.reads.imports.length))throw Error("Unsupported source query dependencies");
    return{flow,results:{tables:{},errors:{}}};
   }
   if (
-    (flow.mutations.length && !(sourceAdmission==="offline-prototype" && !flow.imports.length && flow.mutations.every((m:any)=>m.target && typeof m.target.local==="string" && flow.values.some((v:any)=>v.kind==="table"&&v.name===m.target.local) && !m.reads.imports.length && !m.reads.queries?.length && !m.reads.builtins.some((b:string)=>!["_now","_tz","_row","_value"].includes(b)&&!b.startsWith("_row."))))) ||
+    (flow.mutations.length && !(sourceAdmission==="offline-prototype" && !flow.imports.length && flow.mutations.every((m:any)=>m.scalarOperation || m.target && typeof m.target.local==="string" && flow.values.some((v:any)=>v.kind==="table"&&v.name===m.target.local) && !m.reads.imports.length && !m.reads.queries?.length && !m.reads.builtins.some((b:string)=>!["_now","_tz","_row","_value"].includes(b)&&!b.startsWith("_row."))))) ||
     flow.imports.length !== bindings.length ||
     flow.queries.some(
       (q: any) =>

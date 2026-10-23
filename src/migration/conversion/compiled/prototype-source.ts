@@ -41,7 +41,7 @@ export function readPrototypeSource(input:CompiledMigrationInput,backendLinks:Re
   for(const [k,v]of Object.entries(node)){if(k==='start'||k==='end')continue;if(Array.isArray(v))v.forEach(walk);else if(v&&typeof v==='object')walk(v);}
  }
  walk(tree);
- if(localMutations.size && (historical||imports.size||(input.datasetBindings??[]).length||(input.datasetMutations??[]).length||!declarations.some(d=>d.type==="table")))throw Error("Unbound mutation");
+ if(localMutations.size && (historical||imports.size||(input.datasetBindings??[]).length||(input.datasetMutations??[]).length||!declarations.length))throw Error("Unbound mutation");
  if((!historical&&imports.size!==(input.datasetBindings??[]).length)||(!historical&&mutations.size-localMutations.size!==(input.datasetMutations??[]).length)||[...queries].some(n=>names.has(n))||[...imports].some(n=>names.has(n)||queries.has(n))||[...mutations].some(n=>names.has(n)||queries.has(n)||imports.has(n)))throw Error('Runtime names differ');
  if((input.boundValueColumns??[]).some(p=>!names.has(p.valueName))||(input.personBindings??[]).some(p=>declarations.find(d=>d.name===p.valueName)?.type!=='user'))throw Error('Bound value differs');
  let contexts:CompiledMigrationInput['contexts']=[],mermaids:CompiledMigrationInput['mermaids']=[],slideDeck:CompiledMigrationInput['slideDeck'];
