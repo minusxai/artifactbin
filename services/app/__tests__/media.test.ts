@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import { samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { pagesOriginFor, pagesSiteFor } from '@/lib/http/pages-origin';
-import { drainPreparedPageWarmups } from '@/lib/publish/prepared/prepared-page.server';
 import { mintAccountToken as mintToken, request, useAppHarness } from '@/__tests__/harness';
 import { createAppServer } from '../server/app';
 
@@ -25,10 +24,9 @@ describe('a stored file linked from a document', () => {
       expect(res.status, await res.clone().text()).toBe(201);
       return ((await res.json()) as { id: string }).id;
     };
-    const plain = await publish({ title: 'Plain CSP control', markup: '<p>Plain document</p>' });
+    const plain = await publish({ title: 'Plain CSP control', html: '<!doctype html><html><head></head><body><p>Plain document</p></body></html>' });
     const file = await publish({ title: 'Quarterly review', pdf: samplePdfDataUrl(3) });
-    const carded = await publish({ title: 'The review', markup: `<div className="p-10"><h1>The review</h1><File src="ref:${file}" /></div>` });
-    await drainPreparedPageWarmups();
+    const carded = await publish({ title: 'The review', html: `<!doctype html><html><head></head><body><h1>The review</h1><a href="/a/${file}/raw?v=1">Download review</a></body></html>` });
 
     const served = async (id: string) => {
       const res = await app.request(`${pagesOriginFor(id, site)}/`, { headers: { accept: 'text/html' } });
