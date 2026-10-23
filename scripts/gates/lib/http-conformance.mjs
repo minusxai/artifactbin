@@ -47,8 +47,8 @@ export async function checkDirectHttp({base,fetch,accountCookie,artifactId,stamp
   // reader download door. Do not broaden the credential to make this test pass.
   const downloaded=await fetch(`${base}/a/${artifactId}/download`,{headers:{cookie:accountCookie}});
   assert.equal(downloaded.status,200);assert.match(downloaded.headers.get('content-type')??'',/^text\/html/);
-  assert.match(downloaded.headers.get('content-disposition')??'',/^attachment; filename="[^"\r\n]+\.jsx\.html"/);
-  const html=await downloaded.text();assert.ok(html.includes('id="afbin-file"'),'Download carries the offline file payload');assert.ok(!html.includes(credential.access_token),'Download must not contain the bearer');
+  assert.match(downloaded.headers.get('content-disposition')??'',/^attachment; filename="[^"\r\n]+\.html"/);
+  const html=await downloaded.text();assert.ok(html.includes('data-af="core"'),'Download carries the inline native core');assert.ok(!html.includes(credential.access_token),'Download must not contain the bearer');
  }finally{
   for(const id of await tokenIds())if(!beforeTokens.has(id)){
    const revoked=await fetch(`${base}/api/my/tokens/${encodeURIComponent(id)}`,{method:'DELETE',headers:{cookie:accountCookie,origin:base}});
