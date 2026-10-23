@@ -21,5 +21,3 @@ export function createWideEditViewport(): Accessor<boolean> {
   });
   return wide;
 }
-
-export { readEditPanelCollapsed, writeEditPanelCollapsed, editPanelWidth } from '@/solid/lib/use-edit-panel';

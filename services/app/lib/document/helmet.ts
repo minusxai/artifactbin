@@ -121,12 +121,6 @@ function contextRef(el: JsxElement): string | null {
   return ARTIFACT_REFERENCE_PATTERN.exec(src.value.json)?.[1] ?? null;
 }
 
-/** The companion document declared by source; malformed drafts declare nothing. */
-export function contextRefOf(source: string): string | null {
-  const parsed = parseJsx(source);
-  return parsed.ok ? splitHelmet(parsed.nodes).content.context ?? null : null;
-}
-
 /**
  * The single text payload of a Helmet child. `<title>` may hold a plain text
  * child; `<style>`/`<script>` must hold a static-string EXPRESSION (the
