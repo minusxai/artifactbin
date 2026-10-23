@@ -49,9 +49,9 @@ const pageAs = async (id: string, actor?: { userId: string; email: string; email
 async function world() {
   const o = await owner('folderowner');
   const f = await create(o.token, { format: 'folder', title: 'Reports', visibility: 'public' });
-  const pub = await create(o.token, { markup: '<h1>Board update</h1>', title: 'Board update', visibility: 'public', parent_id: f.id });
-  const priv = await create(o.token, { markup: '<h1>Hiring plan</h1>', title: 'Hiring plan', visibility: 'private', parent_id: f.id });
-  const quiet = await create(o.token, { markup: '<h1>Quiet</h1>', title: 'Quiet', visibility: 'unlisted', parent_id: f.id });
+  const pub = await create(o.token, { html: '<h1>Board update</h1>', title: 'Board update', visibility: 'public', parent_id: f.id });
+  const priv = await create(o.token, { html: '<h1>Hiring plan</h1>', title: 'Hiring plan', visibility: 'private', parent_id: f.id });
+  const quiet = await create(o.token, { html: '<h1>Quiet</h1>', title: 'Quiet', visibility: 'unlisted', parent_id: f.id });
   const sub = await create(o.token, { format: 'folder', title: 'Q3', visibility: 'public', parent_id: f.id });
   return { o, f, pub, priv, quiet, sub };
 }
@@ -94,12 +94,12 @@ describe('a folder has no content', () => {
    */
   it('never turns a document INTO a folder — format is the row\'s, whatever the body says', async () => {
     const o = await owner('nodemote');
-    const doc = await create(o.token, { markup: '<h1>Real work</h1>', title: 'Doc' });
+    const doc = await create(o.token, { html: '<h1>Real work</h1>', title: 'Doc' });
     const r = await j(await putRoute(await observedRequest(`/api/artifacts/${doc.id}`, {
       method: 'PUT', token: o.token, json: { format: 'folder' },
     }), params(doc.id)));
     const row = (await getArtifactById(doc.id))!;
-    expect(row.format, JSON.stringify(r.body)).toBe('markup');
+    expect(row.format, JSON.stringify(r.body)).toBe('html');
     expect(row.source).toContain('Real work');
   });
 
@@ -117,7 +117,7 @@ describe('a folder has no content', () => {
     expect((await rawRoute(request(`/a/${f.id}/raw`), params(f.id))).status, 'raw').toBe(404);
     expect((await frameRoute(request(`/a/${f.id}/events/frame`), params(f.id))).status, 'events/frame').toBe(404);
     // …and a real document still has both.
-    const doc = await create(o.token, { markup: '<h1>doc</h1>', title: 'Doc', visibility: 'public' });
+    const doc = await create(o.token, { html: '<h1>doc</h1>', title: 'Doc', visibility: 'public' });
     expect((await rawRoute(request(`/a/${doc.id}/raw`), params(doc.id))).status, 'raw of a document').toBe(200);
     expect((await frameRoute(request(`/a/${doc.id}/events/frame`), params(doc.id))).status, 'frame of a document').toBe(200);
   });
@@ -137,7 +137,7 @@ describe('the folder page bootstrap', () => {
     expect(folder.count).toEqual({ documents: 3, folders: 1 });
     // The shelf's own row shape — this is what Shelf takes.
     const doc = folder.rows.find((x: any) => x.id === pub.id);
-    expect(doc).toMatchObject({ id: pub.id, title: 'Board update', format: 'markup', visibility: 'public', url: `/a/${pub.id}`, parent_id: f.id });
+    expect(doc).toMatchObject({ id: pub.id, title: 'Board update', format: 'html', visibility: 'public', url: `/a/${pub.id}`, parent_id: f.id });
     expect(typeof doc.version).toBe('number');
     expect(typeof doc.updated_at).toBe('string');
     expect(typeof doc.views).toBe('number');

@@ -22,7 +22,6 @@
 import { describe, expect, it } from 'vitest';
 import { agentCookie, request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
-import { GET as queryGet } from '@/app/a/[id]/query/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { getArtifactById } from '@/lib/artifacts';
@@ -50,11 +49,11 @@ const create = async (token: string, body: Record<string, unknown>) => {
 async function world() {
   const o = await owner();
   const f = await create(o.token, { format: 'folder', title: 'Reports', visibility: 'public' });
-  const pub = await create(o.token, { markup: '<h1>Board update</h1>', title: 'Board update', visibility: 'public', parent_id: f.id });
-  const priv = await create(o.token, { markup: '<h1>Hiring plan</h1>', title: 'Hiring plan', visibility: 'private', parent_id: f.id });
+  const pub = await create(o.token, { html: '<h1>Board update</h1>', title: 'Board update', visibility: 'public', parent_id: f.id });
+  const priv = await create(o.token, { html: '<h1>Hiring plan</h1>', title: 'Hiring plan', visibility: 'private', parent_id: f.id });
   const sub = await create(o.token, { format: 'folder', title: 'Q3', visibility: 'public', parent_id: f.id });
   // UNLISTED means listed nowhere: readable by link, absent from every listing a stranger sees.
-  const quiet = await create(o.token, { markup: '<h1>Quiet</h1>', title: 'Quiet', visibility: 'unlisted', parent_id: f.id });
+  const quiet = await create(o.token, { html: '<h1>Quiet</h1>', title: 'Quiet', visibility: 'unlisted', parent_id: f.id });
   return { o, f, pub, priv, sub, quiet };
 }
 
@@ -71,7 +70,7 @@ describe('the children table', () => {
     const rows = (await tableFor(f.id, STRANGER)).rows as any[];
     expect(rows.map((x) => x.id).sort()).toEqual([pub.id, sub.id].sort());
     const doc = rows.find((x) => x.id === pub.id);
-    expect(doc).toMatchObject({ title: 'Board update', format: 'markup', level: 1, visibility: 'public', url: `/a/${pub.id}` });
+    expect(doc).toMatchObject({ title: 'Board update', format: 'html', level: 1, visibility: 'public', url: `/a/${pub.id}` });
     expect(doc.thumbnail).toContain(`/a/${pub.id}/export`);
     expect(doc.views).toBeNull();
     expect(doc.sparkline).toBeNull();
@@ -107,8 +106,8 @@ describe('the children table', () => {
     // that differs is the numbers — which is what this test is about — and one
     // UNLISTED beside it, because an anonymous owner's shelf obeys the listing
     // rule like everyone else's.
-    const child = await create(t.token, { markup: '<p>open</p>', title: 'Open', visibility: 'public', parent_id: f.id });
-    const quiet = await create(t.token, { markup: '<p>quiet</p>', title: 'Quiet', visibility: 'unlisted', parent_id: f.id });
+    const child = await create(t.token, { html: '<p>open</p>', title: 'Open', visibility: 'public', parent_id: f.id });
+    const quiet = await create(t.token, { html: '<p>quiet</p>', title: 'Quiet', visibility: 'unlisted', parent_id: f.id });
 
     const mine = (await tableFor(f.id, identityForUser(t.userId, t.id, t.email))).rows as any[];
     expect(mine.map((x) => x.id).sort()).toEqual([child.id, quiet.id].sort());
@@ -141,28 +140,12 @@ describe('the children table', () => {
     expect(await seen(bystander)).toEqual([pub.id, sub.id].sort());
   });
 
-  /**
-   * THE WIRING, ONCE, END TO END: a real document declaring a real `<Query>`
-   * over a real folder, read through the real endpoint. Everything above is
-   * about WHO sees what; this is about the table existing at all — that
-   * `validateRefs` admits a folder in a read position, that `data-checks` knows
-   * its fixed columns, and that the resolver registers the rows.
-   */
-  it('a DOCUMENT may list a folder it can read, through its own query endpoint', async () => {
-    const { o, f, pub, sub } = await world();
-    const doc = await create(o.token, {
-      title: 'Index',
-      visibility: 'public',
-      markup: `<Helmet><Import name="kids_data" src="ref:${f.id}" /><Query name="kids">{\`select id, title from kids_data.rows order by title\`}</Query></Helmet>
-<Files data="$kids" />`,
-    });
-    const q = JSON.stringify({ values: {}, only: ['kids'] });
-    const r = await j(await queryGet(request(`/a/${doc.id}/query?q=${encodeURIComponent(q)}`), params(doc.id)));
-    expect(r.status, JSON.stringify(r.body)).toBe(200);
-    // The anonymous transport, so the STRANGER's view of the folder: its public
-    // children only. The document's own visibility opens the endpoint; the
-    // folder's ACL decides the rows, and the two are separate questions.
-    expect((r.body.tables.kids.rows as any[]).map((x) => x.id).sort()).toEqual([pub.id, sub.id].sort());
+  // Native pages declare datasets explicitly; folder listings remain the original
+  // ACL-filtered app surface tested above, not an implicit SQL/JSX namespace.
+  it('does not grant a native page dataset authority over a folder',async()=>{
+    const {o,f}=await world();
+    const response=await createRoute(request('/api/artifacts',{method:'POST',token:o.token,json:{html:`<html><head><link rel="af-dataset" data-af-name="kids" href="ref:${f.id}"></head><body>Index</body></html>`}}));
+    expect(response.status).toBe(400);expect((await response.json()).error).toBe('invalid_dataset_binding');
   });
 
   /**
@@ -190,7 +173,7 @@ describe('the children table', () => {
     // Drain the opening frame before writing, so what is read after the create
     // cannot be the connect frame arriving late.
     await reader.read();
-    await create(o.token, { markup: '<p>new</p>', title: 'New', parent_id: f.id });
+    await create(o.token, { html: '<p>new</p>', title: 'New', parent_id: f.id });
     let seen = '';
     const until = Date.now() + 5000;
     while (!seen.includes(`event: ${STORY_DATA_EVENT}`) && Date.now() < until) {
@@ -209,7 +192,7 @@ describe('the children table', () => {
     let woke = 0;
     const unsubscribe = await subscribeToArtifact(f.id, () => { woke += 1; });
     try {
-      await create(o.token, { markup: '<p>new</p>', parent_id: f.id });
+      await create(o.token, { html: '<p>new</p>', parent_id: f.id });
       const until = Date.now() + 5000;
       while (woke === 0 && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
       expect(woke).toBeGreaterThan(0);
