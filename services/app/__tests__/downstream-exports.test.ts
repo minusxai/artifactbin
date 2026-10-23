@@ -124,7 +124,7 @@ describe('values the deployment composes from', () => {
     for (const name of ["runnerOperation"]) expect(name in m26, name).toBe(true);
   });
   it('@/server/host', () => {
-    for (const name of ["externalHostedAgent"]) expect(name in m28, name).toBe(true);
+    for (const name of ["createAppHost"]) expect(name in m28, name).toBe(true);
   });
   it('@artifactbin/contracts', () => {
     for (const name of ["ACTOR_HEADER","ANONYMOUS","FORWARDED_FOR","FORWARDED_HOST","FORWARDED_PROTO","SERVICE_AUTH_HEADER","denyResponse","eventName","isInternalApiPath"]) expect(name in m29, name).toBe(true);

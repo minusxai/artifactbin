@@ -48,7 +48,7 @@ async function mount(){const {Toolbar}=await import('../../../cli/src/preview/cl
 
 it('grants the selection bubble and opens the composer on the words its comment action picked',async()=>{
  await mount();
- await waitFor(()=>expect(grants().at(-1)).toMatchObject({edit:true,annotate:true}));
+ await waitFor(()=>expect(grants().at(-1)).toMatchObject({edit:false,annotate:true}));
  emit({type:'mx:selection-action',action:'annotate',selection:SELECTION});
  expect(layer.props!.initialSelection).toEqual(SELECTION);
  layer.props!.onSelectionConsumed!();
@@ -58,12 +58,12 @@ it('grants the selection bubble and opens the composer on the words its comment 
  await waitFor(()=>expect(grants().at(-1)).toMatchObject({edit:false,annotate:false}));
 });
 
-it('opens the editor on the block the bubble\'s edit action names',async()=>{
+it('does not grant or execute retired selection-bubble source editing',async()=>{
  await mount();
- await waitFor(()=>expect(grants().at(-1)).toMatchObject({edit:true}));
+ await waitFor(()=>expect(grants().at(-1)).toMatchObject({edit:false}));
  emit({type:'mx:selection-action',action:'edit',selection:SELECTION});
- await waitFor(()=>expect(edit.select).toHaveBeenCalledWith('0'));
- expect(screen.getByRole('button',{name:'Done editing'})).toBeTruthy();
+ expect(edit.select).not.toHaveBeenCalled();
+ expect(screen.queryByRole('button',{name:'Done editing'})).toBeNull();
 });
 
 it('follows a changed file only once no comment draft is open',async()=>{

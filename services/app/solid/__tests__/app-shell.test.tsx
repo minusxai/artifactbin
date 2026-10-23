@@ -52,7 +52,7 @@ describe('Solid shell', () => {
     await waitFor(() => expect(table).toHaveTextContent('After creation'));
   });
 
-  it('shows live agent and unread notification counts in the sidebar', async () => {
+  it('shows unread notification counts without retired agent polling', async () => {
     let online = true;
     let unread = 3;
     const existing = vi.mocked(fetch).getMockImplementation()!;
@@ -70,12 +70,13 @@ describe('Solid shell', () => {
     render(() => <App />);
     await vi.dynamicImportSettled();
     const nav = await screen.findByRole('navigation', { name: 'Workspace' });
-    expect(await within(nav).findByLabelText('2 active agents')).toHaveTextContent('2');
+    expect(within(nav).queryByRole('link',{name:/agents/i})).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input])=>String(input)==='/api/remote/sessions')).toBe(false);
     expect(await within(nav).findByLabelText('3 unread notifications')).toHaveTextContent('3');
     online = false;
     unread = 0;
     fireEvent(window, new Event(REFRESH_EVENT));
-    expect(await within(nav).findByLabelText('1 active agent')).toHaveTextContent('1');
+
     await waitFor(() => expect(within(nav).queryByLabelText('3 unread notifications')).not.toBeInTheDocument());
     expect(within(nav).queryByLabelText('0 unread notifications')).not.toBeInTheDocument();
   });

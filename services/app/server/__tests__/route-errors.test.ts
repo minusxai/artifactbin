@@ -38,13 +38,12 @@ describe('a route that throws', () => {
   });
 });
 
-describe('the CLI installer', () => {
-  it('serves the CLI installer as shell text ahead of profile routing', async () => {
+describe('the retired CLI installer', () => {
+  it('does not serve an executable installer at the retired address', async () => {
     const app = createAppServer({ indexHtml: async () => '<main>app shell</main>' });
     const res = await app.request('/chat/install.sh');
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/x-shellscript');
-    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
-    expect(await res.text()).toContain('npx --yes @afbin/cli@latest setup');
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).not.toContain('text/x-shellscript');
+    expect(await res.text()).not.toContain('npx --yes @afbin/cli@latest setup');
   });
 });
