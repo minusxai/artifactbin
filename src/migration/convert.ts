@@ -1,3 +1,4 @@
+import {admitInactiveServerDocument} from "./server-document-policy.ts";
 import {repairLegacyColumnAliases} from "./conversion/column-alias.ts";
 import {normalizeLegacySourceOperations} from "./conversion/source-operations.ts";
 import { rewriteLegacyRawMediaSource } from "./raw-media.ts";
@@ -122,6 +123,12 @@ export function createMigrationConverter(
       try { source=normalizeLegacySourceOperations(source,(input.datasetBindings??[]).map(b=>b.legacyRef),options.legacyDuckSqlAdmissions).source; }
       catch { /* Unsupported source syntax remains an explicit converter refusal. */ }
     }
+    let archivedInactiveServerDocument:import('./contracts.ts').ConversionOutput['archivedInactiveServerDocument'];
+    if(input.archivedInactiveServerDocument){
+      if(source===null)throw Error('inactive_server_document_original_unavailable');
+      const admitted=admitInactiveServerDocument(source,input.archivedInactiveServerDocument);
+      source=admitted.source;archivedInactiveServerDocument=admitted.receipt;
+    }
     let sourceNormalization: import("./contracts.ts").ConversionOutput["sourceNormalization"];
     if (
       source !== null &&
@@ -146,6 +153,7 @@ export function createMigrationConverter(
     ): import("./contracts.ts").ConversionOutput => ({
       ...output,
       ...(sourceNormalization ? { sourceNormalization } : {}),
+      ...(archivedInactiveServerDocument?{archivedInactiveServerDocument}:{}),
       ...(sourceCompatibility ? { sourceCompatibility } : {}),
       ...(sourceRecovery ? { sourceRecovery } : {}),
       ...(sourceRecovery?.kind === "retained-graph-missing-root-content" &&
@@ -255,6 +263,7 @@ export function createMigrationConverter(
     return {
       ...local,
       ...(sourceNormalization ? { sourceNormalization } : {}),
+      ...(archivedInactiveServerDocument?{archivedInactiveServerDocument}:{}),
       ...(sourceCompatibility ? { sourceCompatibility } : {}),
       ...(sourceRecovery ? { sourceRecovery } : {}),
       strategy: options.strategy,

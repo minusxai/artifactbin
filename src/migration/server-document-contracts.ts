@@ -23,3 +23,15 @@ export type PrepareInactiveServerDocument = (
   source: string,
   options: { readonly mode: "archived-inactive" },
 ) => InactiveServerDocument;
+/** Explicit exact-source declaration; never inferred from failed server registration. */
+export interface ArchivedInactiveServerAdmission {
+  readonly mode: "archived-inactive";
+  readonly originalSourceSha256: string;
+  readonly handlerSourceSha256: string;
+  readonly renderSourceSha256: string;
+}
+export interface ArchivedInactiveServerPageAdmission
+  extends ArchivedInactiveServerAdmission {
+  readonly legacyId: string;
+  readonly version: number;
+}

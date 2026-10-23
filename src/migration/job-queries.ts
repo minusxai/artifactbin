@@ -1,3 +1,4 @@
+import {admitInactiveServerDocument} from "./server-document-policy.ts";
 import {createDeletedArtifactAdmissionValidator} from "./deleted-artifact-admission.ts";
 import { hasLegacyServerModule } from "./query-source.ts";
 import { legacyDocumentSource } from "./conversion/index.ts";
@@ -12,6 +13,7 @@ export async function prepareMigrationPageQueries(
   datasets: MigrationJobDatasets | undefined,
   queries?: { compiler: MigrationQueryCompiler; compilerIdentity: string },
   deletedAuthority?: import("./deleted-artifact-contracts.ts").DeletedArtifactSourceAuthority,
+  inactiveServerDocuments: readonly import("./server-document-contracts.ts").ArchivedInactiveServerPageAdmission[] = [],
 ): Promise<void> {
   const assertDeleted = deletedAuthority ? createDeletedArtifactAdmissionValidator(deletedAuthority.admission,deletedAuthority.sourceNamespace,deletedAuthority.maps) : undefined;
   for (const page of pages) {
@@ -79,6 +81,14 @@ export async function prepareMigrationPageQueries(
       }
     if (!text || !hasLegacyServerModule(text)) continue;
     try {
+      const policies=inactiveServerDocuments.filter(p=>p.legacyId===page.legacyId&&p.version===raw.version);
+      if(policies.length){
+        if(policies.length!==1)throw Error('inactive_server_document_policy_ambiguous');
+        const expected=admitInactiveServerDocument(text,policies[0]!);
+        const conversion=page.revisions.find(r=>r.version===raw.version)?.conversion;
+        if(!conversion?.html||conversion.classification==='manual-blocked'||JSON.stringify(conversion.archivedInactiveServerDocument)!==JSON.stringify(expected.receipt)||!conversion.html.includes('data-migration-inactive-server')||!conversion.html.includes(expected.receipt.limitation)||page.serverQueries?.length)throw Error('inactive_server_document_receipt_unavailable');
+        continue;
+      }
       if (
         !queries ||
         !page.backends?.some(

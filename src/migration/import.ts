@@ -87,6 +87,7 @@ export async function planMigration(
   manifest: MigrationManifest,
   options: {
     deletedAdmission?: import("./deleted-artifact-contracts.ts").DeletedArtifactAdmission;
+    archivedInactiveServerDocuments?: readonly import("./server-document-contracts.ts").ArchivedInactiveServerPageAdmission[];
     historicalUnavailable?: import("./historical-unavailable-contracts.ts").HistoricalUnavailablePolicy;
     ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride;
     maps: MigrationMaps;
@@ -252,6 +253,7 @@ export async function planMigration(
       let conversion: ConversionOutput;
       if (format === "markup")
         conversion = await options.convert({
+          archivedInactiveServerDocument: options.archivedInactiveServerDocuments?.find(p=>p.legacyId===artifact.id&&p.version===Number(original.version)),
           datasetUnavailable:
             Number(original.version) !== artifact.version &&
             options.datasetUnavailable?.(artifact.id, Number(original.version))

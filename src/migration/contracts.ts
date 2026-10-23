@@ -29,6 +29,7 @@ export interface SqlReader {
   query(sql: string, values?: unknown[]): Promise<{ rows: LegacyRow[] }>;
 }
 export interface ConversionInput {
+  archivedInactiveServerDocument?: import("./server-document-contracts.ts").ArchivedInactiveServerAdmission;
   /** Trusted offline catalog facts; included in cache provenance, never browser data. */
   boundValueColumns?: readonly BoundValueColumnProof[];
   cellUserChoiceBindings?: readonly { queryName: string; column: string; backendNamespace: string }[];
@@ -50,6 +51,7 @@ export interface ConversionInput {
   meta?: Record<string, unknown>;
 }
 export interface ConversionOutput {
+  archivedInactiveServerDocument?: import("./server-document-contracts.ts").ArchivedInactiveServerAdmission & {readonly limitation:string};
   sourceCompatibility?: readonly import("./conversion/column-alias-contracts.ts").LegacyColumnAliasReceipt[];
   /** Source-only normalization receipt; original source/document remain untouched. */
   sourceNormalization?: import("./conversion/compiled/legacy-script-contracts.ts").LegacyScriptNormalizationReceipt;

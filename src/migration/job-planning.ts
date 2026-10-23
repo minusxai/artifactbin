@@ -38,6 +38,7 @@ export function createMigrationJobPlanner(
       deletedAdmission,
       standaloneVizRecipes: Boolean(options.standaloneVizPages),
       historicalUnavailable: options.historicalUnavailable,
+      archivedInactiveServerDocuments: options.archivedInactiveServerDocuments,
       ownershipOverride: options.ownershipOverride,
       convert,
       excludedNativeProgramSources: options.excludedNativeProgramSources,
@@ -120,6 +121,7 @@ export function createMigrationJobPlanner(
       source.preparedDatasets,
       queries,
       deletedAdmission ? {admission:deletedAdmission,maps,sourceNamespace:source.manifest.sourceNamespace} : undefined,
+      options.archivedInactiveServerDocuments,
     );
     for (const page of plan.pages) {
       const comments = new Set(
