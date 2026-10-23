@@ -12,20 +12,6 @@ import { publishDataset, publishVizRecipe, publishImage, publishPdf } from '@/li
 import { publishFile } from '@/lib/datasets/file-store';
 
 
-/**
- * A DOCUMENT IS MARKUP, AND A FOLDER IS NOT ONE.
- *
- * A folder was briefly a document — created with a two-line scaffold whose
- * `<Files>` drew its own children — and this predicate is where that decision
- * was spelled. It is markup alone again: a folder has no content, no source to
- * serve, nothing to edit and nothing to render, and its listing is app chrome
- * built from the row rather than from anything stored on it. Every caller that
- * asks "is there a document here?" therefore gets `false` for a folder, which
- * is what makes `raw`, the edit protocol and the frame refuse one by rule
- * rather than by a branch each.
- */
-export const isDocumentFormat = (format: string): boolean => format === 'markup';
-
 import { DATA_CONTENT_FIELDS, MAX_DOCUMENT_BYTES, TEXT_CONTENT_FIELDS } from '@artifactbin/contracts';
 
 import type { SourceRepair } from '@/lib/jsx/repair';
