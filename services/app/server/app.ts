@@ -541,12 +541,13 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const key = url.searchParams.get('key');
     if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200, admitted: { row } };
     const actor = await sessionActor(request).catch(() => null);
-    if (url.pathname.endsWith('/edit') && (!actor || !canEdit(await effectiveRole(row, actor)))) return { status: 404 };
+    const editingDataset = row.format === 'dataset' && url.pathname.endsWith('/edit');
+    if (editingDataset && (!actor || !canEdit(await effectiveRole(row, actor)))) return { status: 404 };
     if (!(await canReadArtifact(row, actor ?? ANONYMOUS_ACTOR))) return { status: 404 };
     // Admitted, by this request's own actor: the page's answer reuses the row and this decision.
     if (url.searchParams.has('key')) return { status: 200, admitted: { row } };
     const canonicalPath = canonicalArtifactPath(row, await ownerUsername(row.user_id));
-    const canonical = canonicalPath + (url.pathname.endsWith('/edit') ? '/edit' : '');
+    const canonical = canonicalPath + (editingDataset ? '/edit' : '');
     return { status: 200, admitted: { row, canonicalPath }, canonical: await canonicalDocumentUrl(row), ...(canonical !== url.pathname ? { address: canonical } : {}) };
   };
 
@@ -668,7 +669,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // In development Vite owns /assets and dist/web does not exist yet. Avoid
   // registering a static root that can only warn; production builds it first.
   if (existsSync(webDir)) app.use('/assets/*', precompressedStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
-  app.use('/chat/*', async c => c.notFound());
+  app.all('/chat/*', async c => c.notFound());
+  app.all('/install.sh', async c => c.notFound());
+  app.all('/login/cli', async c => c.notFound());
   // Content-addressed islands and the compatibility libraries carry build-time brotli/gzip siblings.
   app.use('/*', precompressedStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
@@ -689,7 +692,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const actor = await runWithRequest(c.req.raw, () => sessionActor(c.req.raw));
     if (actor.credential === 'session' && actor.userId) {
       const url = new URL(c.req.url);
-      return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw), false), 302);
+      return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw)), 302);
     }
     return page(c);
   });

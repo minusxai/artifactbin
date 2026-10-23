@@ -118,16 +118,16 @@ describe('inlined page data', () => {
 it('serves shared artifact edit addresses with authorized bootstrap data and removes the dataset-specific route', async () => {
   const w=await world();
   const headers=as({credential:'session',userId:w.owner.id,email:w.owner.email});
-  // Served in place: the same authorized data, and the canonical /edit address the page heals to.
+  // Served in place: the same authorized data, and the canonical reader address the page heals to.
   const first=await app.request(`/a/${w.pub.id}/edit`,{headers});
   expect(first.status).toBe(200);
   expect(first.headers.get('location')).toBeNull();
   const shared=inlined(await first.text());
-  expect(shared.address).toMatch(new RegExp(`^/@[^/]+/${w.pub.id}[^/]*/edit$`));
+  expect(shared.address).toMatch(new RegExp(`^/@[^/]+/${w.pub.id}[^/]*$`));
   expect(shared.artifact.surface.id).toBe(w.pub.id);
   const page=await app.request(shared.address,{headers});
   expect(page.status).toBe(200);
   expect(inlined(await page.text()).artifact.surface.id).toBe(w.pub.id);
   expect((await app.request(`/datasets/${w.pub.id}/edit`,{headers})).status).toBe(404);
-  expect((await app.request(`/a/${w.pub.id}/edit`,{headers:as({credential:'none'})})).status).toBe(404);
+  expect((await app.request(`/a/${w.pub.id}/edit`,{headers:as({credential:'none'})})).status).toBe(200);
 });
