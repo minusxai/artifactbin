@@ -5,6 +5,7 @@ import type {
   AuthorState,
   AuthorMutationOptions,
   AuthorLocalMutationOptions,
+  AuthorUnavailableMutationNames,
 } from "./contracts.ts";
 import type { AfClient } from "../../../../apollo/apollo-contracts.ts";
 import type { DocumentNode } from "graphql";
@@ -19,6 +20,7 @@ export function authorApolloPorts(
   queries: (name: string) => QueryPort,
   mutations?: AuthorMutationOptions,
   localMutations?: AuthorLocalMutationOptions,
+  unavailableMutations: AuthorUnavailableMutationNames = [],
 ): AuthorPorts {
   return {
     state: {
@@ -53,7 +55,7 @@ export function authorApolloPorts(
       },
     },
     query: queries,
-    ...(mutations || localMutations
+    ...(mutations || localMutations || unavailableMutations.length
       ? {
           mutation: async (
             name: string,
@@ -61,6 +63,8 @@ export function authorApolloPorts(
             row?: Readonly<import("./contracts.ts").Row>,
             signal?: AbortSignal,
           ) => {
+            if (unavailableMutations.includes(name))
+              throw Error("Historical shared data writes are unavailable.");
             if(localMutations?.names.includes(name)){
               if(mutations?.names.includes(name))throw Error("Ambiguous author mutation");
               if(signal?.aborted)throw Error("Author mount disposed");

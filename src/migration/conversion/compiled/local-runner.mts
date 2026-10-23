@@ -109,7 +109,9 @@ const author = input.authorPlan
           .filter((v: any) => v.kind === "table")
           .map((v: any) => v.name),
         queries: split.content.queries.map((q: any) => q.name),
-        mutations: [...(input.datasetMutations?.map(binding => binding.name) ?? []),...(prototype?input.localMutationNames??[]:[])],
+        mutations: input.datasetUnavailable
+          ? split.content.mutations.map((mutation: any) => mutation.name)
+          : [...(input.datasetMutations?.map(binding => binding.name) ?? []),...(prototype?input.localMutationNames??[]:[])],
       },
       {
         archivedRoot: root,
@@ -468,6 +470,9 @@ const bundled = await bundle({
             attachmentSites,
             input.localMutationNames ?? [],
             input.cellUserChoiceBindings ?? [],
+            input.datasetUnavailable
+              ? split.content.mutations.map((mutation: any) => mutation.name)
+              : [],
           ),
           loader: "js",
         }));

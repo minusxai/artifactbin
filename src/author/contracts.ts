@@ -40,6 +40,7 @@ export interface AuthorNames {
   values: string[];
   tables?: string[];
   queries: string[];
+  /** Compile-time declared names; availability and authority remain runtime port decisions. */
   mutations: string[];
 }
 export interface QueryAccessor extends Accessor<Row[]> {

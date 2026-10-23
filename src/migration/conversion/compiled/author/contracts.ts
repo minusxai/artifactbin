@@ -16,3 +16,6 @@ export interface AuthorLocalMutationOptions {
   names: readonly string[];
   mutate(name:string,args:Readonly<import("../../../../author/contracts.ts").Row>,row?:Readonly<import("../../../../author/contracts.ts").Row>):Promise<unknown>;
 }
+
+/** Declaration names retained for readable historical mounts, never write authority. */
+export type AuthorUnavailableMutationNames = readonly string[];

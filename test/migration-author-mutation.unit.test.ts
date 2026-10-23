@@ -256,3 +256,17 @@ test("argument snapshots bound payloads and preserve ordinary prototype-named sc
     await assert.rejects(save(args));
   b.dispose();
 });
+
+
+test("historical declared mutations mount successfully but always reject without a write transport", async () => {
+  const ports = authorApolloPorts(
+    {} as never, {} as never,
+    () => { throw Error("Unexpected query"); },
+    undefined, undefined, ["save"],
+  );
+  const bindings = fixture(ports.mutation);
+  const save = bindings.mutation("$save");
+  await assert.rejects(save({ value: 1 }), /Historical shared data writes are unavailable/);
+  assert.throws(() => bindings.mutation("$other"));
+  bindings.dispose();
+});

@@ -46,6 +46,7 @@ export function localBootSource(
   attachmentSites: readonly CompiledFileUploadSite[] = [],
   localMutationNames: readonly string[] = [],
   cellUserChoiceBindings:readonly import("./cell-user-choice-contracts.ts").CompiledCellUserChoiceBinding[]=[],
+  historicalUnavailableMutations: readonly string[] = [],
 ): string {
   const imports = sql?.bindings?.length ?? 0;
   const members=Boolean(sql?.membersBinding);
@@ -116,7 +117,7 @@ export function boot({TREE}) {
  ${deck ? "let stopDeck=()=>{};window.addEventListener('pagehide',()=>stopDeck(),{once:true});" : ""}
  ${identities ? "pageSubscription=" : ""}client.watchQuery({query}).subscribe(({data})=>{${identities ? "if(identityFailed)return;" : ""}if(!ready){ready=true;${identities ? "stopIsland=" : ""}hydrateIsland('d-',TREE,context);${deck ? `stopDeck=startDeck(${JSON.stringify(deck)});` : ''}${identities ? "flushIdentities();if(identityFailed){stopIsland?.();return;}" : ""}}setState(checked(data.compiledPage));${personBindings.length ? "peopleAdapter.update(values());" : ""}${identities ? "flushIdentities();if(identityFailed)return;" : ""}markCompiledReady();void run();});
  ${identities ? "if(identityFailed)pageSubscription.unsubscribe();if(store.mutate){const mutate=store.mutate;store.mutate=(...args)=>identityFailed?Promise.reject(Error('Page identities unavailable')):mutate(...args);}" : ""}
- ${author ? authorDocumentBoot(author,localMutationNames) : ""}
+ ${author ? authorDocumentBoot(author,localMutationNames,historicalUnavailableMutations) : ""}
  ${viewerBinding ? viewerBootSource(viewerBinding) : ""}
  ${sql?.sourceQueries?.length?`const sourceAccessDocument=gql\`query SourceQueryAvailability($name:String!){legacyData{sourceQueryAvailability(name:$name)}}\`;
  const sourceAccessWatches=${JSON.stringify(sql.sourceQueries.map(b=>b.name))}.map(name=>client.watchQuery({query:sourceAccessDocument,variables:{name},clearOnRefresh:true}).subscribe(result=>{queryController.invalidate();setTables({});setQueryErrors({});if(!result.errors?.length&&result.data?.legacyData?.sourceQueryAvailability===true){sourceAccessReady.add(name);setControlError('');if(sourceAccessReady.size===${sql.sourceQueries.length})queueMicrotask(()=>void run());}else{sourceAccessReady.delete(name);setControlError(result.errors?.length||result.data?.legacyData?.sourceQueryAvailability===false?'Source queries are unavailable. Check access.':'Loading source query access…');}}));
