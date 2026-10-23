@@ -37,7 +37,7 @@ function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
   if (body.anchor !== undefined && !anchor) return invalid;
   const hasNode = typeof body.node_id === 'string' && body.node_id.length > 0;
   if (!hasNode && !anchor) return invalid;
-  if (anchor && (body.node_id !== undefined || body.quote !== undefined || body.range !== undefined)) return invalid;
+  if (anchor && (body.node_id !== undefined || body.quote !== undefined)) return invalid;
   if (typeof body.body !== 'string' || body.body.trim().length === 0) return invalid;
   if (body.quote !== undefined && typeof body.quote !== 'string') return invalid;
   const input: CreateAnnotationInput = { body: body.body };
@@ -48,7 +48,7 @@ function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
   if (typeof body.quote === 'string') input.quote = body.quote;
   if (body.range !== undefined && body.range !== null) {
     const range = parseAnnotationRange(body.range);
-    if (!range) return { error: 'bad_range' };
+    if (!range || anchor && (!isAreaRange(range) || anchor.quote || anchor.range)) return { error: 'bad_range' };
     // An area has no words: a quote beside one is a contradiction, refused
     // rather than silently dropped — the page never sends it, so a body that
     // does was not made by the page.

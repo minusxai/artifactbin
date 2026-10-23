@@ -34,7 +34,7 @@ import { getDb, type Queryable } from '@/lib/platform/db';
 import { actorSubject } from '@/lib/platform/events';
 import { generateInternalId } from '@/lib/platform/ids';
 import { parseHtmlNodeAnchor, type HtmlNodeAnchor } from '@artifactbin/contracts';
-import { htmlCommentNodes, resolveHtmlCommentAnchor, validHtmlCommentRange } from './html-anchor';
+import { htmlCommentNodes, resolveHtmlCommentAnchor } from './html-anchor';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 
 
@@ -344,9 +344,10 @@ export async function createAnnotationFor(
       if (!anchor) return { refused: 'bad_path' };
       if (anchor.revision !== String(row.version)) return stale({ editId: row.edit_id, version: row.version });
       const resolved = resolveHtmlCommentAnchor(htmlCommentNodes(source), anchor);
-      if (anchor.nodeId && !resolved.node) return { refused: 'bad_path' };
-      if (resolved.node && !validHtmlCommentRange(resolved.node, anchor)) return { refused: 'bad_path' };
-      if (resolved.quoteFound === false) return { refused: 'quote_not_found' };
+      if (!anchor.nodeId || !resolved.node) return { refused: 'bad_path' };
+      // Text may be rendered by the page beneath this saved parent. Capture is
+      // viewer-supplied evidence, never a claim about authoritative source text.
+      if (input.range && (!isAreaRange(input.range) || anchor.quote || anchor.range)) return { refused: 'bad_path' };
       anchorKey = anchor.nodeId;
       snippet = (resolved.node?.text ?? anchor.quote).replace(/\s+/g, ' ').trim().slice(0, 240);
     } else {

@@ -19,6 +19,7 @@
  *
  * Mounted for anyone who may comment (the owner, a named editor, or a commenter).
  */
+import { isAreaRange } from '@/lib/document/annotation-range';
 import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { useLocation } from '@solidjs/router';
 import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from 'solid-js';
@@ -636,7 +637,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           ...(subject.anchor ? { anchor: subject.anchor } : { node_id: subject.nodeId }), body,
           ...(attachment ?? {}),
           ...(!subject.anchor && subject.quote ? { quote: subject.quote } : {}),
-          ...(!subject.anchor && subject.range ? { range: subject.range } : {}),
+          ...(subject.range && (!subject.anchor || isAreaRange(subject.range)) ? { range: subject.range } : {}),
           ...(subject.viewState ? { view_state: subject.viewState, edit_id: attachment?.edit_id ?? props.editId } : {}),
         }, mutation.key);
       };

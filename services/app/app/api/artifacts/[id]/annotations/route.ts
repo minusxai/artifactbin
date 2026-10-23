@@ -46,7 +46,7 @@ export const POST = withTokenAuth(async (request, { actor, params, clientHarness
   const body = await readJson(request);
   if (!body) return json({error: 'invalid_json'}, 400);
   const anchor = body.anchor === undefined ? undefined : parseHtmlNodeAnchor(body.anchor);
-  if (body.anchor !== undefined && (!anchor || body.node_id !== undefined || body.quote !== undefined || body.range !== undefined)) return json({error:'invalid_annotation_body'},400);
+  if (body.anchor !== undefined && (!anchor || body.node_id !== undefined || body.quote !== undefined)) return json({error:'invalid_annotation_body'},400);
   if (Object.keys(body).some(key => !['node_id', 'quote', 'range', 'body', 'anchor'].includes(key)) ||
     typeof body.body !== 'string' || !body.body.trim() || body.body.length > 100000 ||
     (body.node_id !== undefined && (typeof body.node_id !== 'string' || !body.node_id.trim())) ||
@@ -55,6 +55,7 @@ export const POST = withTokenAuth(async (request, { actor, params, clientHarness
     return json({error: 'invalid_annotation_body', hint: 'Supply body and an HTML anchor object, or a legacy node_id or quote anchor.'}, 400);
   const range=body.range==null?undefined:parseAnnotationRange(body.range);
   if(body.range!=null&&(!range||(isAreaRange(refinementRange(range))&&body.quote!==undefined)))return json({error:'bad_range'},400);
+  if(anchor && range && (!isAreaRange(range) || anchor.quote || anchor.range))return json({error:'bad_range'},400);
   const viewState=body.view_state===undefined?undefined:parseCommentViewState(body.view_state);
   if(body.view_state!==undefined&&!viewState)return json({error:'bad_view_state'},400);
   // Commenting is an act attributed to a PERSON: a guest is sent to sign in and
