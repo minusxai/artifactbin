@@ -59,12 +59,3 @@ export const horizontalOverflow = (page) => page.evaluate(
   () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
 );
 
-/**
- * Wait for the inline story runtime to mount and hand back its element.
- * @param {import('playwright').Page} page
- * @param {{ timeout?: number, state?: 'attached' | 'visible' }} [options]
- */
-export const inlineStory = async (page, options = {}) => (await documentFrame(page, options)).waitForSelector(
-  INLINE_STORY,
-  { timeout: options.timeout ?? 30_000, ...(options.state ? { state: options.state } : {}) },
-);
