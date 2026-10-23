@@ -1,3 +1,4 @@
+import type { SqlReader } from "../src/migration/contracts.ts";
 // @requires migration-database
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -10,7 +11,7 @@ import { sealDeployment, digest } from "../src/backend/deployment.ts";
 import type { MigrationBackendReceipt } from "../src/migration/backend-preparation-contracts.ts";
 test("concurrent page transactions share an owner without lock upgrades and keep principal authority stable", async () => {
   const { env } = await fixture();
-  const clients = await Promise.all([
+  const clients: (SqlReader & { release(): void })[] = await Promise.all([
     env.pool.connect(),
     env.pool.connect(),
     env.pool.connect(),
@@ -82,7 +83,7 @@ test("concurrent page transactions share an owner without lock upgrades and keep
           "SELECT count(*)::int n FROM af_backend_files WHERE file_id=ANY($1::text[])",
           [receipts.map((r) => r.backendId)],
         )
-      ).rows[0].n,
+      ).rows[0]!.n,
       2,
     );
     await observer.query(
