@@ -20,10 +20,10 @@ it('toggles comments without changing document mode', () => {
   expect(view.getByRole('button', { name: 'Toggle comments' })).toHaveAttribute('aria-pressed', 'true');
 });
 
-it('omits app membership controls from read-only artifacts', () => {
+it('keeps people accessible independently of app mutations', () => {
   const view = render(() => <DocumentActions id="abc123" title="Report" version={1} owner canEdit canAnnotate
     like={{ liked: false, count: 0 }} accountSession onCommentsChange={() => {}} />);
-  expect(view.queryByRole('button', { name: 'People' })).toBeNull();
+  expect(view.getByRole('button', { name: 'People' })).toBeTruthy();
 });
 
 it('draws every row of the controls panel alike: a ghost row with one icon and a lower-case label', () => {

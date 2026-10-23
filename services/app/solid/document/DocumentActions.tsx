@@ -2,6 +2,9 @@
 import { createSignal, lazy, Show, Suspense, type JSX } from 'solid-js';
 import { Button } from '../ui/Button';
 import { MicroLabel } from '../ui/ui';
+import Settings from 'lucide-solid/icons/settings';
+import Users from 'lucide-solid/icons/users';
+import Image from 'lucide-solid/icons/image';
 import FolderInput from 'lucide-solid/icons/folder-input';
 import MessageSquare from 'lucide-solid/icons/message-square';
 import { RenameDocument } from './RenameDocument';
@@ -30,6 +33,8 @@ interface DocumentActionsProps {
   owner: boolean; canEdit: boolean; canAnnotate: boolean; accountSession: boolean;
   like: { liked: boolean; count: number }; onCommentsChange: (open: boolean) => void;
   commentsOpen?: boolean; openAnnotations?: number;
+  onSettings?: () => void;
+  onSocialPreview?: () => void;
   onRenamed?: (title: string) => void;
   onDeleted?: () => void;
   membershipRevision?: number; onMembershipChange?: () => void;
@@ -41,6 +46,7 @@ interface DocumentActionsProps {
 }
 /** Controls own only panel state; the document page owns editing and annotation lifetimes. */
 export function DocumentActions(props: DocumentActionsProps): JSX.Element {
+  const [peopleOpen, setPeopleOpen] = createSignal(false);
   const [transferring,setTransferring]=createSignal(false);
   const [commentsOpen, setCommentsOpen] = createSignal(props.commentsOpen ?? false);
   const activeOwner = () => props.owner && !props.archived;
@@ -48,10 +54,13 @@ export function DocumentActions(props: DocumentActionsProps): JSX.Element {
   const activeCommenter = () => props.canAnnotate && !props.archived;
   const toggleComments = () => { const open = !commentsOpen(); setCommentsOpen(open); props.onCommentsChange(open); };
   return <div class="space-y-4" aria-label="Document actions">
-    <Show when={props.membershipAvailable}><Suspense fallback={null}><DocumentPeople id={props.id} revision={props.membershipRevision} onChange={props.onMembershipChange} hideJoin /></Suspense></Show>
+    <Show when={props.membershipAvailable || peopleOpen()}><Suspense fallback={null}><DocumentPeople id={props.id} revision={props.membershipRevision} onChange={props.onMembershipChange} initialOpen={peopleOpen()} hideJoin /></Suspense></Show>
     <section aria-label="Document actions" class="space-y-1">
       <h2 class="px-2"><MicroLabel>Artifact</MicroLabel></h2>
       <Show when={props.forkedFrom}>{source => <p data-mx-forked-from class="px-2 py-2 font-mono text-xs text-muted">forked from <Show when={source().href} fallback={source().label}>{href => <a href={href()} aria-label="Open the artifact this was forked from" class="underline">{source().label}</a>}</Show></p>}</Show>
+      <Show when={!props.archived && props.accountSession}><Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label="People" onClick={() => setPeopleOpen((open) => !open)}><Users size={14} />people</Button></Show>
+      <Show when={activeEditor() && props.onSettings}><Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label="Artifact settings" onClick={props.onSettings}><Settings size={14} />artifact settings</Button></Show>
+      <Show when={activeEditor() && props.onSocialPreview}><Button variant="ghost" size="sm" class={ROW_BUTTON} aria-label="Edit social preview" onClick={props.onSocialPreview}><Image size={14} />social preview</Button></Show>
       <Show when={activeEditor() && props.onRenamed}><RenameDocument id={props.id} title={props.title} onRenamed={props.onRenamed!} /></Show>
       <Show when={activeCommenter()}><Button variant="ghost" size="sm" aria-label="Toggle comments" aria-pressed={commentsOpen()} onClick={toggleComments} class={ROW_BUTTON}><MessageSquare size={14} /><span class="flex-1 text-left">{commentsOpen() ? 'close comments' : 'comments'}</span><Show when={props.openAnnotations}><span>{props.openAnnotations}</span></Show></Button></Show>
       <Show when={props.pwaEnabled && !props.archived}><InstallArtifactLink id={props.id} look="row" /></Show>

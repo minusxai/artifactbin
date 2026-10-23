@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { InstallArtifact } from '../document/InstallArtifact';
 import { CopyAgentButton } from '../components/CopyAgentButton';
-import { createEffect, createSignal, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import { Portal } from 'solid-js/web';
 import { useLocation, useNavigate } from '@solidjs/router';
@@ -40,6 +40,10 @@ import { DocumentChrome } from '../document/DocumentChrome';
 
 /** The document's own ground around its frame (a starter shows the app's dotted page instead). These hexes are the document's colors, not the app theme: they match the served reader's ground in each mode. */
 const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
+
+/** Settings and social preview load only when requested by an authorized reader. */
+const DocumentSettings = lazy(() => import('../document/DocumentSettings'));
+const SocialPreviewEditor = lazy(() => import('../document/SocialPreviewEditor').then((m) => ({ default: m.SocialPreviewEditor })));
 
 interface DocumentAnswer {
   role: ArtifactRole; kind: string;
@@ -88,10 +92,10 @@ export function DocumentPage(): JSX.Element {
   const role = () => page?.role ?? 'viewer';
   const archivedNow = () => !!page?.archived;
   const isOwner = () => canGovern(role()) && !archivedNow();
-  const editable = () => canEditRole(role()) && !archivedNow() && page?.surface?.format === 'markup';
+  const editable = () => canEditRole(role()) && !archivedNow() && ['markup', 'html'].includes(page?.surface?.format ?? '');
   const annotatable = () => canAnnotateRole(role()) && !archivedNow();
   const backend = id ? createHttpBackend(id) : null;
-  const [pwaEnabled] = createSignal(page?.surface?.pwaEnabled === true);
+  const [pwaEnabled, setPwaEnabled] = createSignal(page?.surface?.pwaEnabled === true);
   const [ready, setReady] = createSignal(false);
   const [railOpen, setRailOpen] = createSignal(false);
   const [commentNotice, setCommentNotice] = createSignal<string | null>(null);
@@ -113,6 +117,20 @@ export function DocumentPage(): JSX.Element {
   const appAppearance = createAppAppearance();
   const [initialAnnotationSelection, setInitialAnnotationSelection] = createSignal<StoryEditSelection | null>(null);
   const [sharingOpen, setSharingOpen] = createSignal(false);
+  const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [socialPreviewOpen, setSocialPreviewOpen] = createSignal(false);
+  const [previewHead, setPreviewHead] = createSignal<{ source: string; editId: string; version: number } | null>(null);
+  const [metadataError, setMetadataError] = createSignal<string | null>(null);
+  const openSocialPreview = async () => {
+    if (!backend || !editable()) return;
+    setMetadataError(null);
+    try {
+      const head = await backend.load();
+      if (!head) throw new Error('Social preview is unavailable. Refresh and try again.');
+      setPreviewHead({ source: head.markup ?? '', editId: head.edit_id, version: head.version });
+      setSocialPreviewOpen(true); setSharingOpen(false);
+    } catch (cause) { setMetadataError(cause instanceof Error ? cause.message : 'Could not load social preview.'); }
+  };
   const [membershipRevision, setMembershipRevision] = createSignal(0);
   const [nonce, setNonce] = createSignal<string | null>(null);
   const phone = createIsPhoneViewport();
@@ -296,6 +314,8 @@ export function DocumentPage(): JSX.Element {
       panel={panel} setPanel={setPanel} mode={appAppearance} onMode={chooseMode}
       onComment={() => act('comment')} onFork={() => act('fork')} onShare={() => act('share')} onMembership={() => act('membership')}
       controls={(close) => <DocumentActions groupId={page?.surface?.group_id} pwaEnabled={page?.surface?.pwaEnabled} membershipAvailable={page?.surface?.membershipAvailable} id={id!} title={shownTitle()} version={currentVersion()} archived={archivedNow()}
+        onSettings={() => { close(); setSettingsOpen(true); }}
+        onSocialPreview={() => { close(); void openSocialPreview(); }}
         onRenamed={(title) => setRenamed({ title, version: currentVersion() })}
         owner={isOwner()} canEdit={editable()} canAnnotate={annotatable()} accountSession={accountSession()}
         like={page?.like ?? { liked: false, count: 0 }} commentsOpen={railOpen()} onCommentsChange={(open) => { close(); setRailOpen(open); }}
@@ -343,8 +363,11 @@ export function DocumentPage(): JSX.Element {
     </Show>
     <Show when={sharingOpen() && id}>
       <DocumentSharing refs={page?.surface?.refs} id={id!} title={shownTitle()} owner={isOwner()} editable={editable()} variant="dialog" version={currentVersion()}
-        onClose={() => setSharingOpen(false)} />
+        onClose={() => setSharingOpen(false)} onSocialPreview={editable() ? () => void openSocialPreview() : undefined} />
     </Show>
+    <Show when={metadataError()}><p role="alert">{metadataError()}</p></Show>
+    <Show when={settingsOpen() && backend}><Suspense fallback={null}><DocumentSettings id={id!} title={shownTitle()} backend={backend!} onPwaEnabledChange={setPwaEnabled} onClose={() => setSettingsOpen(false)} /></Suspense></Show>
+    <Show when={socialPreviewOpen() && previewHead()}>{(head) => <Suspense fallback={null}><SocialPreviewEditor id={id!} source={head().source} editId={head().editId} version={head().version} onClose={() => setSocialPreviewOpen(false)} /></Suspense>}</Show>
     </TrustedUi>
   </Show>;
 }

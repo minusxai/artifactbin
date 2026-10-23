@@ -332,7 +332,7 @@ it('an editor keeps metadata and sharing controls without document editing', asy
   expect(panel.getByRole('button', { name: 'Rename artifact' })).toBeInTheDocument();
   expect(panel.queryByLabelText('Owner actions')).toBeNull();
   fireEvent.click(within(panel.getAllByLabelText('Document actions')[0]!).getByRole('button', { name: 'Share' }));
-  expect(trusted().queryByRole('button', { name: 'Edit social preview' })).toBeNull();
+  expect(await trusted().findByRole('button', { name: 'Edit social preview' })).toBeInTheDocument();
   expect(await trusted().findByRole('button', { name: 'Make public' })).toBeInTheDocument();
   expect(trusted().getByRole('textbox', { name: 'Invite email' })).toBeInTheDocument();
 });
@@ -341,7 +341,7 @@ it('an owner opens sharing without document source editing', async () => {
   mockRole = 'owner';
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Share' }));
-  expect(trusted().queryByRole('button', { name: 'Edit social preview' })).toBeNull();
+  expect(await trusted().findByRole('button', { name: 'Edit social preview' })).toBeInTheDocument();
 });
 
 it('opens the current comments in the document rail', async () => {
@@ -603,4 +603,23 @@ it.each(['owner', 'editor'])('a %s visiting a legacy edit hash reads and comment
   expect(selectionSend).toHaveBeenCalledWith({ type: 'mx:selection-actions', edit: false, annotate: true });
   fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
   expect(await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' })).toBeInTheDocument();
+});
+
+it('opens independent PWA, context and file settings without entering a document editor', async () => {
+  mockRole = 'owner';
+  const existing = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input) === '/api/my/artifacts/doc12345') return Response.json({ id: 'doc12345', edit_id: 'e3', version: 3, title: 'A copy', markup: '<p id="body">Hello</p>', refs: [{ id: 'file1234', kind: 'image', title: 'Reference image' }] });
+    return existing(input, init);
+  });
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  fireEvent.click(within(await controls()).getByRole('button', { name: 'Artifact settings' }));
+  const settings = await trusted().findByRole('dialog', { name: 'Artifact settings' });
+  await within(settings).findByLabelText('Allow installation as a PWA');
+  fireEvent.click(within(settings).getByRole('tab', { name: 'Context' }));
+  expect(await within(settings).findByRole('button', { name: 'Add context' })).toBeInTheDocument();
+  fireEvent.click(within(settings).getByRole('tab', { name: 'Files' }));
+  expect(within(settings).getByRole('link', { name: 'Reference image' })).toHaveAttribute('href', '/a/file1234');
+  expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
 });
