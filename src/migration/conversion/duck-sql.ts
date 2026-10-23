@@ -1,3 +1,4 @@
+import {lowerDistinctStringAggregate} from "./distinct-string-aggregate.ts";
 import { createHash } from "node:crypto";
 import type {
   LegacyDuckSqlAdmission,
@@ -179,7 +180,7 @@ export function normalizeLegacyDuckSql(
   const isNumber = (expression: string) =>
     numbers.has(key(expression)) ||
     /^(?:null|[-+]?\d+(?:\.\d+)?)$/i.test(expression.trim());
-  const sql = lowerUnnest(original, isList),
+  const sql = lowerUnnest(lowerDistinctStringAggregate(original,tokens(original),admissions.some(a=>a.version==="duckdb-distinct-string-v1"&&a.sqlSha256===digest)), isList),
     ts = tokens(sql);
   function render(start: number, end: number): string {
     if (start >= end) return "";

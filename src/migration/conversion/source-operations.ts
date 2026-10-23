@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import { normalizeLegacyDuckSql } from "./duck-sql.ts";
 import { Parser } from "acorn";
 import jsx from "acorn-jsx";
@@ -71,7 +72,7 @@ export function normalizeLegacySourceOperations(
     imports: [],
     operations: [],
   } satisfies LegacySourceOperationNormalization;
-  if (!source.includes("source") || !eligibleRefs.length) return empty;
+  if ((!source.includes("source") || !eligibleRefs.length) && !admissions.some(a=>a.version==="duckdb-distinct-string-v1")) return empty;
   const text = "<>" + source + "</>",
     tree = Parser.extend(jsx()).parseExpressionAt(text, 0, {
       ecmaVersion: "latest",
@@ -151,7 +152,15 @@ export function normalizeLegacySourceOperations(
     }
   }
   walk(tree);
-  if (!sites.length) return empty;
+  if (!sites.length) {
+    let rewritten=text;
+    for(const site of [...sqlSites].reverse()){
+      if(!admissions.some(a=>a.version==="duckdb-distinct-string-v1"&&a.sqlSha256===createHash("sha256").update(site.sql).digest("hex")))continue;
+      const sql=normalizeLegacyDuckSql(site.sql,admissions).sql;
+      if(sql!==site.sql)rewritten=rewritten.slice(0,site.expr.start)+("`"+sql.replace(/\\/g,"\\\\").replace(/`/g,"\\`").replace(/\$\{/g,"\\${")+"`")+rewritten.slice(site.expr.end);
+    }
+    return {...empty,source:rewritten.slice(2,-3)};
+  }
   const selectedHelmet = sites[0].helmet;
   if (sites.some((s) => s.helmet !== selectedHelmet) || helmets.length !== 1)
     throw Error("Ambiguous source operations");
