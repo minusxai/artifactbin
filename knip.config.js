@@ -28,7 +28,6 @@ export default {
         // proofs spawned by their tests and the preview gate's build.
         'scripts/gates/gate-*.mjs', 'scripts/ci/check-residual-names.mjs', 'scripts/ci/check-ui-primitives.mjs', 'scripts/gate-container.mjs',
         'scripts/{agent-dev-flow,agent-worktree,port-block}.mjs', 'scripts/__tests__/reserved-ids-{local,postgres}-proof.ts',
-        'scripts/build/build-preview-gate-inputs.mjs',
         // Design-system tooling (generate:design-systems and its screenshot helpers).
         'design-systems/*.mjs',
         // Gate and page-speed fixtures, read by path.
@@ -93,8 +92,6 @@ export default {
         // Left out of the CLI bundle and resolved from its installed dependencies at run time
         // (scripts/build/runtime-externals.mjs CLI_RUNTIME_EXTERNALS) with no import in the CLI's own source.
         'playwright-core', 'vega', 'vega-lite', 'vega-interpreter', 'nunjucks', 'harfbuzzjs', 'wawoff2',
-        // Tailwind's scanner, installed with @tailwindcss/node (scripts/build-preview.mjs).
-        '@tailwindcss/oxide',
       ],
     },
     // Generates ephemeral, single-day TLS certificates for the real SMTP fixture.

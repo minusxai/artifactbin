@@ -103,10 +103,9 @@ Run one with `node scripts/gate-container.mjs <name>`.
 
 | File | Purpose | Run by |
 |---|---|---|
-| `scripts/build/build-server.mjs` | Bundle a server entry into one ESM file with native packages external. | `npm run build`, `ci.yml`, `build-preview-gate-inputs.mjs` |
+| `scripts/build/build-server.mjs` | Bundle a server entry into one ESM file with native packages external. | `npm run build`, `ci.yml` |
 | `scripts/build/build-islands.mjs` | The shared reader island build and its manifest. | `npm run build:islands -w services/app`, `ci.yml`, downstream |
 | `scripts/build/build-gate-inputs.mjs` | Build only what the browser gates run: app, server bundle, CLI bundle. | `ci.yml`, `gate-container.mjs` |
-| `scripts/build/build-preview-gate-inputs.mjs` | Build the packaged preview runtime from already-built app assets. | `gates/gate-offline-file.mjs` |
 | `scripts/lib/generate-teaching.mjs` | Generate the CLI's teaching once per input change (content-verified cache); also the library the dev tools import. | app `prebuild`, `services/cli/scripts/build.mjs` |
 
 ## Page speed
