@@ -61,13 +61,13 @@ it('refuses a shared editor fork and copying the dataset-bound secret into a new
  * for that reason: there is no door that builds the page the plan must skip.
  * What IS reachable is a page that READS one, and it forks with its ref intact.
  */
-it('a POSTGRES dataset is never a fork copy: a written one is skipped by the plan, a read one keeps its ref',async()=>{
+it('a native page fork retains the Postgres ref without copying its secret-bound dataset',async()=>{
  const owner=await user('pg-writer'),forker=await user('pg-forker'),{id}=await postgresDataset(owner),db=await harness.db();
  const actor=identityForUser(forker.account.id, forker.token.id);
- const writes=`<Helmet><Import name="add_data" src="ref:${id}" /><Mutation name="add">{\`insert into add_data.rows (id) select 2\`}</Mutation></Helmet><div><Button run="$add">Add</Button></div>`;
- expect(await forkDatasetPreview(actor,{format:'markup',source:writes} as ArtifactRow)).toEqual([]);
+ const html=`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${id}"></head><body>Live rows</body></html>`;
+ expect(await forkDatasetPreview(actor,{format:'html',source:html} as ArtifactRow)).toEqual([]);
  const page=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{visibility:'public',title:'Live rows',
-  markup:`<Helmet><Query name="rows" source="ref:${id}">{\`select * from public.rows\`}</Query></Helmet><div><DataTable data="$rows" /></div>`}}));
+  html}}));
  expect(page.status,await page.clone().text()).toBe(201);
  const before=Number((await artifactQuery<{n:string}>(db,'SELECT count(*) n FROM artifacts')).rows[0].n);
  current.id=forker.account.id;current.email=forker.account.email??'';

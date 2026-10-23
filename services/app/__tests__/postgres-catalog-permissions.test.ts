@@ -11,14 +11,13 @@ import {PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {POST as revert} from '@/app/api/artifacts/[id]/revert/route';
 import {POST as browserRevert} from '@/app/api/my/artifacts/[id]/revert/route';
 import {POST as tables} from '@/app/a/[id]/tables/route';
-import {POST as mutate} from '@/app/a/[id]/mutate/route';
+import {POST as mutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {prepareCatalog} from '@/lib/datasets/catalog';
 import {overridePostgres,type PostgresDriver} from '@/lib/datasets/postgres';
 import {overrideCatalogExecutor} from '@/lib/datasets/execute';
 import {DatasetError} from '@/lib/datasets/errors';
 import {POST as query} from '@/app/api/artifacts/[id]/query/route';
 import { getArtifactById } from '@/lib/artifacts';
-import { dataflowForRow } from '@/lib/document-data';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, claimToken,createUser} from '@/lib/accounts';
@@ -54,19 +53,16 @@ it('rechecks private dataset access before serving a previously cached Postgres 
  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND email=$2',[f.id,f.friend.email]);
  const revoked=await tables(request(`/a/${f.id}/tables`,{method:'POST',actor:session(f.friend),json:{sql:'select * from people'}}),ctx(f.id));expect(revoked.status).toBe(404);expect(executor).toHaveBeenCalledTimes(1);
 });
-it('reports Postgres mutations as inactive and refuses execution after a writable source changes kind',async()=>{
+it('refuses retained SQL writes after a writable source changes to Postgres',async()=>{
  const f=await pgFixture();
  const made=await create(request('/api/artifacts',{method:'POST',token:f.ownerToken.token,json:{dataset:[{id:1}],visibility:'public',access:'readwrite'}}));expect(made.status).toBe(201);const id=(await made.json()).id as string;
- const doc=await create(request('/api/artifacts',{method:'POST',token:f.ownerToken.token,json:{markup:`<Helmet><Import name="edit_data" src="ref:${id}" /><Mutation name="edit">{\`update edit_data.rows set id=2\`}</Mutation></Helmet><Button run="$edit">Edit</Button>`}}));expect(doc.status,await doc.clone().text()).toBe(201);const documentId=(await doc.json()).id as string;
- const document=(await getArtifactById(documentId))!;
- expect((await dataflowForRow(document,{viewer:identityForUser(f.owner.id, f.ownerToken.id)}))?.state.mutationAccess).toEqual({edit:null});
+ const before=await mutate(request(`/api/artifacts/${id}/mutate`,{method:'POST',token:f.ownerToken.token,json:{sql:'update public.rows set id=2'}}),ctx(id));expect(before.status).toBe(200);
  // Simulate an already-published source changing kind; stale access=readwrite
  // must never override the Postgres runtime's read-only policy.
  const secret=await createDatasetSecret(identityForUser(f.owner.id, f.ownerToken.id),'mutation-test-password',target,id);
  const catalog={...(f.previous.meta.catalog as Record<string,unknown>),connection:{...target,passwordSecretId:secret.id}};
  await f.db.query('UPDATE artifacts SET meta=jsonb_set(meta,\'{catalog}\',$2::jsonb) WHERE id=$1',[id,JSON.stringify(catalog)]);
- expect((await dataflowForRow(document,{viewer:identityForUser(f.owner.id, f.ownerToken.id)}))?.state.mutationAccess).toEqual({edit:expect.any(String)});
- const response=await mutate(request(`/a/${documentId}/mutate`,{method:'POST',token:f.ownerToken.token,json:{mutation:'edit'}}),ctx(documentId));expect(response.status).toBe(403);expect(await response.json()).toMatchObject({error:'dataset_read_only'});
+ const response=await mutate(request(`/api/artifacts/${id}/mutate`,{method:'POST',token:f.ownerToken.token,json:{sql:'update public.rows set id=3'}}),ctx(id));expect(response.status).toBe(403);expect(await response.json()).toMatchObject({error:'dataset_read_only'});
 });
 it.each(['bearer','browser'] as const)('returns a controlled unavailable-secret revert response through %s without changing the head',async transport=>{
  const f=await pgFixture();
