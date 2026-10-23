@@ -7,9 +7,9 @@ import {
   validateDeletedDatasetBatch,
   deletedDatasetAuthoritySha256,
 } from "./deleted-dataset-authority.ts";
-import { destinationSchemas } from "./destination-schema.ts";
+import { readMigrationArchivedArtifact } from "./archived-artifact.ts";
 import type { DatasetMigrationBatch } from "./dataset-destination-contracts.ts";
-import type { SqlReader, LegacyRow } from "./contracts.ts";
+import type { SqlReader } from "./contracts.ts";
 /** Publication-only wrapper; normal app registration and invocation retain their live-head guards. */
 export async function registerMigrationDatasetAttachments(
   db: SqlReader,
@@ -26,8 +26,7 @@ export async function registerMigrationDatasetAttachments(
   const registrations = batch.metadata.attachments ?? [];
   if (!batch.deletedAdditive)
     return registerDatasetAttachments({ client, registrations });
-  const admitted = validateDeletedDatasetBatch(batch),
-    { archive } = destinationSchemas(schema);
+  const admitted = validateDeletedDatasetBatch(batch);
   for (const registration of registrations) {
     const b = registration.binding,
       entry = admitted.admitted.find(
@@ -35,15 +34,14 @@ export async function registerMigrationDatasetAttachments(
       );
     if (!entry)
       throw Error("Inactive attachment outside deleted admitted scope");
-    const rows = (
-      await db.query(
-        `SELECT digest,(SELECT value FROM jsonb_array_elements(manifest->'artifacts') WHERE value->>'id'=$2) AS original FROM ${archive}.archives WHERE namespace=$1`,
-        [admitted.sourceNamespace, entry.legacyId],
-      )
-    ).rows;
-    const raw = rows[0]?.original as LegacyRow | undefined;
+    const archived = await readMigrationArchivedArtifact(
+      db,
+      schema,
+      admitted.sourceNamespace,
+      entry.legacyId,
+    );
+    const raw = archived.original;
     if (
-      rows.length !== 1 ||
       !raw ||
       raw.id !== entry.legacyId ||
       raw.version !== entry.version ||
@@ -56,7 +54,7 @@ export async function registerMigrationDatasetAttachments(
         kind: "deleted-migration-publication-v1",
         schema,
         sourceNamespace: admitted.sourceNamespace,
-        archiveDigest: String(rows[0]!.digest),
+        archiveDigest: archived.digest,
         admissionSha256: deletedDatasetAuthoritySha256(admitted),
         legacyId: entry.legacyId,
         pageId: entry.pageId,

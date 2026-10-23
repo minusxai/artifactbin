@@ -1,3 +1,4 @@
+import { readMigrationArchivedArtifact } from "./archived-artifact.ts";
 import { createHash } from "node:crypto";
 import { FILE_ID_PATTERN } from "../af-contracts.ts";
 import { destinationSchemas } from "./destination-schema.ts";
@@ -36,18 +37,17 @@ export async function assertDeletedMigrationPublication(
     !Number.isFinite(Date.parse(context.deletedAt))
   )
     throw Error("Invalid inactive migration publication");
-  const { archive, runtime } = destinationSchemas(context.schema);
-  const saved = (
-    await db.query(
-      `SELECT digest,maps,(SELECT value FROM jsonb_array_elements(manifest->'artifacts') WHERE value->>'id'=$2) AS original FROM ${archive}.archives WHERE namespace=$1`,
-      [context.sourceNamespace, context.legacyId],
-    )
-  ).rows;
-  const row = saved[0]?.original as Record<string, unknown> | undefined,
-    maps = saved[0]?.maps as { pages?: Record<string, string> } | undefined;
+  const { runtime } = destinationSchemas(context.schema);
+  const saved = await readMigrationArchivedArtifact(
+    db,
+    context.schema,
+    context.sourceNamespace,
+    context.legacyId,
+  );
+  const row = saved.original,
+    maps = saved.maps as { pages?: Record<string, string> } | undefined;
   if (
-    saved.length !== 1 ||
-    saved[0]!.digest !== context.archiveDigest ||
+    saved.digest !== context.archiveDigest ||
     maps?.pages?.[context.legacyId] !== context.pageId ||
     !row ||
     row.id !== context.legacyId ||

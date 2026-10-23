@@ -105,8 +105,51 @@ test("inactive publication preserves deletion, requires exact raw/head evidence,
         viewer,
       ),
     );
+    // The planning projection may omit this page; its authentic original remains in raw archive parts.
+    const part = {
+      table: "artifacts",
+      path: "artifacts/part.ndjson",
+      rows: 2,
+      bytes: 512,
+      sha256: "d".repeat(64),
+    };
+    await client.query(`CREATE TABLE ${env.schema}_migration.stream_manifests(namespace text PRIMARY KEY,kind text,digest text,manifest jsonb);
+      CREATE TABLE ${env.schema}_migration.stream_parts(namespace text,path text,source_table text,digest text,rows bigint,bytes bigint,PRIMARY KEY(namespace,path));
+      CREATE TABLE ${env.schema}_migration.stream_rows(namespace text,path text,ordinal bigint,record jsonb,PRIMARY KEY(namespace,path,ordinal))`);
+    await client.query(
+      `INSERT INTO ${env.schema}_migration.stream_manifests VALUES($1,'base',$2,$3)`,
+      [
+        "legacy",
+        "e".repeat(64),
+        { schemaVersion: 2, sourceNamespace: "legacy", parts: [part] },
+      ],
+    );
+    await client.query(
+      `INSERT INTO ${env.schema}_migration.stream_parts VALUES($1,$2,$3,$4,$5,$6)`,
+      ["legacy", part.path, part.table, part.sha256, part.rows, part.bytes],
+    );
+    await client.query(
+      `INSERT INTO ${env.schema}_migration.stream_rows VALUES($1,$2,0,$3)`,
+      ["legacy", part.path, original],
+    );
+    await client.query(
+      `UPDATE ${env.schema}_migration.archives SET manifest=$1`,
+      [{ artifacts: [{ id: "unrelated" }] }],
+    );
+    for (const wrong of [
+      { ...p, artifactSha256: "f".repeat(64) },
+      { ...p, archiveDigest: "f".repeat(64) },
+      { ...p, deletedAt: "2026-01-02T00:00:00Z" },
+    ])
+      await assert.rejects(
+        assertDeletedMigrationPublication(client, wrong, viewer),
+      );
     await registerInactiveMigrationViewerBinding(client, viewer, p);
-    const publication = await assertDeletedMigrationPublication(client, p, viewer);
+    const publication = await assertDeletedMigrationPublication(
+      client,
+      p,
+      viewer,
+    );
     await registerInactiveDatasetAttachments({
       client,
       registrations: [reg],
@@ -259,7 +302,12 @@ test("inactive publication preserves deletion, requires exact raw/head evidence,
     let replayPublication: Record<string, unknown> | undefined;
     const replayResult = await applyDeletedArtifactReplay({
       validated,
-      maps: { pages: { "old-page": "Pg0001" }, users: {}, groups: {}, tokens: {} },
+      maps: {
+        pages: { "old-page": "Pg0001" },
+        users: {},
+        groups: {},
+        tokens: {},
+      },
       destination: {
         prepareDeleted: async ({ publications }) => {
           assert.equal(publications?.length, 1);
@@ -269,7 +317,10 @@ test("inactive publication preserves deletion, requires exact raw/head evidence,
         importDeletedPage: async () => {
           const replayProof = await assertDeletedMigrationPublication(
             client,
-            { ...p, ...replayPublication } as DeletedMigrationPublicationContext,
+            {
+              ...p,
+              ...replayPublication,
+            } as DeletedMigrationPublicationContext,
             viewer,
           );
           await registerInactiveMigrationViewerBinding(client, viewer, {
@@ -320,6 +371,40 @@ test("inactive publication preserves deletion, requires exact raw/head evidence,
         )
       ).rows[0].n,
       1,
+    );
+    await client.query(
+      `INSERT INTO ${env.schema}_migration.stream_rows VALUES($1,$2,1,$3)`,
+      ["legacy", part.path, original],
+    );
+    await assert.rejects(assertDeletedMigrationPublication(client, p, viewer));
+    await client.query(
+      `DELETE FROM ${env.schema}_migration.stream_rows WHERE ordinal=1`,
+    );
+    await client.query(
+      `UPDATE ${env.schema}_migration.stream_rows SET record=$1`,
+      [{ ...original, source: "forged" }],
+    );
+    await assert.rejects(assertDeletedMigrationPublication(client, p, viewer));
+    await client.query(
+      `UPDATE ${env.schema}_migration.stream_rows SET record=$1`,
+      [original],
+    );
+    await client.query(
+      `UPDATE ${env.schema}_migration.stream_parts SET digest=$1`,
+      ["f".repeat(64)],
+    );
+    await assert.rejects(assertDeletedMigrationPublication(client, p, viewer));
+    await client.query(
+      `UPDATE ${env.schema}_migration.stream_parts SET digest=$1`,
+      [part.sha256],
+    );
+    assert.deepEqual(
+      (
+        await client.query(
+          `SELECT manifest FROM ${env.schema}_migration.archives`,
+        )
+      ).rows[0].manifest,
+      { artifacts: [{ id: "unrelated" }] },
     );
     assert.equal(await loadDatasetViewer(client, context, 100), null);
     const db = createSqlDatabase({
