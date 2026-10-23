@@ -5,6 +5,7 @@
  * access at all — plus deleted comments, deleted artifacts, blocked senders and unreadable sources.
  * Ids and timestamps are deterministic, so two runs over the same range produce identical inboxes.
  */
+import {nativeHtml} from './native-html-fixture';
 import { POST as create } from '@/app/api/artifacts/route';
 import { mintAccountToken, request } from './harness';
 import { notificationArtifactAuthority, notificationSourceSchema } from '@/lib/document-data/notifications/authority';
@@ -27,7 +28,7 @@ export async function inboxVolumeBase(db: Queryable): Promise<InboxVolume> {
   const token = await mintAccountToken('volume', SENDERS[0]);
   const publish = async (body: object) => (await (await create(request('/api/artifacts', { method: 'POST', token: token.token, json: body }))).json()) as { id: string };
   const markup = Array.from({ length: 150 }, (_, i) => `<h2>Section ${i}</h2><p>Paragraph ${i} of a production-sized document, with <strong>inline</strong> markup and a <a href="https://example.com/${i}">link</a>.</p>`).join('');
-  const template = await publish({ markup, visibility: 'unlisted' });
+  const template = await publish({ html:nativeHtml(markup), visibility: 'unlisted' });
   const source = await publish({ dataset: [{ n: 1 }], visibility: 'unlisted' });
   const privateSource = await publish({ dataset: [{ n: 2 }], visibility: 'unlisted' });
   return { template: template.id, source: source.id, privateSource: privateSource.id };
@@ -53,7 +54,7 @@ export async function seedInboxVolume(db: Queryable, base: InboxVolume, from: nu
   await db.query(`INSERT INTO artifacts(id,token_id,user_id,group_id,visibility,link_role,format,document,meta,title,created_at,updated_at,deleted_at)
     SELECT 'vol-a'||i,t.token_id,CASE WHEN i%6=2 THEN NULL ELSE ${owner} END,CASE WHEN i%6=2 THEN $6::text END,
      CASE i%6 WHEN 0 THEN 'unlisted' WHEN 4 THEN 'public' ELSE 'private' END,CASE WHEN i%6=4 THEN 'commenter' END,
-     'markup',t.document,t.meta,'Volume '||i,timestamptz '2026-01-01'+i*interval '1 minute',timestamptz '2026-01-01'+i*interval '1 minute',
+     'html',t.document,t.meta,'Volume '||i,timestamptz '2026-01-01'+i*interval '1 minute',timestamptz '2026-01-01'+i*interval '1 minute',
      CASE WHEN i%17=0 THEN timestamptz '2026-06-01' END
     FROM artifacts t,${series} WHERE t.id=$3`, params);
   await db.query(`INSERT INTO artifact_shares(artifact_id,email,role) SELECT 'vol-a'||i,$3,'commenter' FROM ${series} WHERE i%6=1`, [from, to, RECIPIENT.email]);
