@@ -34,6 +34,19 @@ const protectedTables = {
   ],
   dataset_source_queries: ["backend_id", "backend_version", "name"],
 } as const;
+/** ACL revisions have independent source/runtime clocks; preserve each clock in its own record. */
+function semanticAccess(value: unknown) {
+  const access = value as {
+    visibility?: unknown;
+    linkRole?: unknown;
+    shares?: unknown;
+  } | null;
+  return {
+    visibility: access?.visibility,
+    linkRole: access?.linkRole,
+    shares: access?.shares,
+  };
+}
 export function deletedDatasetBatchFingerprint(
   batch: DatasetMigrationBatch,
 ): string {
@@ -381,7 +394,8 @@ export async function persistDeletedDatasetLifecycleLinks(
         resource.snapshot.id !== entry.legacyId ||
         resource.owner !== file[0]!.owner ||
         !resource.deleted ||
-        canonical(resource.access) !== canonical(file[0]!.access)
+        canonical(semanticAccess(resource.access)) !==
+          canonical(semanticAccess(file[0]!.access))
       )
         throw Error("Deleted dataset resource association differs");
       await link("dataset_deleted_lifecycle_links");

@@ -1,3 +1,12 @@
+import { testDatabase } from "./postgres.js";
+import { standaloneDatasetFixture } from "./support/standalone-dataset.ts";
+import { PostgresMigrationDestination } from "../src/migration/postgres.ts";
+import { migrationPageDigest } from "../src/migration/import.ts";
+import { planDatasetMetadata } from "../src/migration/datasets/import-metadata.ts";
+import { datasetPageArtifactSha256 } from "../src/migration/dataset-pages/scan.ts";
+import { additiveRowSha256 } from "../src/migration/dataset-pages/additive-authority.ts";
+import { persistDeletedDatasetLifecycleLinks } from "../src/migration/deleted-dataset-authority.ts";
+import type { PlannedPage } from "../src/migration/contracts.ts";
 // @requires migration-database
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -236,3 +245,205 @@ test(
     }
   },
 );
+
+test("actual deleted page ACL revision differs from preserved legacy resource revision without changing ACL semantics", async () => {
+  const db = await testDatabase();
+  const client = await db.pool.connect();
+  const f = standaloneDatasetFixture();
+  f.artifact.deleted_at = "2020-01-02T03:04:05.000Z";
+  f.artifact.sharing_revision = 7;
+  const manifest = {
+    ...f.source.base,
+    artifacts: [f.artifact],
+    tables: { ...f.source.base.tables, relations: [] },
+  };
+  const originalSha = additiveRowSha256(f.artifact);
+  const admission = {
+    kind: "deleted-artifact-admission-v1" as const,
+    sourceNamespace: "fixture",
+    archiveDigest: "a".repeat(64),
+    entries: [
+      {
+        legacyId: f.artifact.id,
+        pageId: "Data01",
+        headVersion: 1,
+        deletedAt: String(f.artifact.deleted_at),
+        artifactSha256: originalSha,
+        revisions: [{ version: 1, artifactSha256: originalSha }],
+      },
+    ],
+  };
+  const page: PlannedPage = {
+    legacyId: f.artifact.id,
+    pageId: "Data01",
+    owner: { kind: "user", id: f.source.maps.users.owner! },
+    disposition: "ready",
+    issues: [],
+    original: f.artifact,
+    access: { visibility: "private", linkRole: "viewer", shares: [] },
+    comments: [],
+    identities: [],
+    revisions: [
+      {
+        version: 1,
+        original: f.artifact,
+        conversion: {
+          classification: "renderable",
+          html: '<!doctype html><html><body><p data-af-id="retained">Retained</p></body></html>',
+          issues: [],
+          identities: {},
+        },
+      },
+    ],
+  };
+  try {
+    const writer = new PostgresMigrationDestination(client, {
+      schema: db.schema,
+      sourceNamespace: "fixture",
+      origin: "http://localhost:8787",
+      isolated: true,
+      editorManageRestricted: true,
+    });
+    await writer.prepare({ manifest, maps: f.source.maps });
+    await writer.prepareDeleted({
+      sourceNamespace: "fixture",
+      archiveDigest: createHash("sha256")
+        .update(JSON.stringify(manifest))
+        .digest("hex"),
+      maps: f.source.maps,
+    });
+    await writer.importDeletedPage(
+      "fixture:" + page.legacyId,
+      migrationPageDigest(page),
+      page,
+    );
+    const planned = planDatasetMetadata({
+      manifest,
+      maps: f.source.maps,
+      receipts: f.source.datasets!.receipts,
+      deletedAdmission: admission,
+      relationProvenance: {
+        exportedAt: f.source.base.exportedAt,
+        manifestSha256: "b".repeat(64),
+      },
+      bindings: [
+        {
+          pageLegacyId: f.artifact.id,
+          pageId: "Data01",
+          pageVersion: 1,
+          backendId: "Back01",
+          backendVersion: "c".repeat(64),
+          backendNamespace: "legacyData",
+          name: "data",
+          legacyRef: "ref:" + f.artifact.id,
+          datasetLegacyId: f.artifact.id,
+          datasetVersion: 1,
+          standaloneDataset: {
+            sourceFormat: "dataset",
+            legacyId: f.artifact.id,
+            pageId: "Data01",
+            pageVersion: 1,
+            editId: String(f.artifact.edit_id),
+            artifactSha256: datasetPageArtifactSha256(f.artifact),
+          },
+        },
+      ],
+    });
+    assert.equal(planned.metadata.pages.length, 1);
+    const batch: DatasetMigrationBatch = {
+      baseManifestSha256: "a".repeat(64),
+      relationManifestSha256: "b".repeat(64),
+      relationExportedAt: f.source.base.exportedAt,
+      metadata: planned.metadata,
+    };
+    batch.deletedAdditive = {
+      kind: "deleted-dataset-additive-v1",
+      sourceNamespace: "fixture",
+      batchSha256: deletedDatasetBatchFingerprint(batch),
+      admitted: [
+        {
+          legacyId: f.artifact.id,
+          pageId: "Data01",
+          version: 1,
+          artifactSha256: originalSha,
+        },
+      ],
+      base: {
+        verificationReport: { path: "offline", sha256: "a".repeat(64) },
+        inventory: {
+          sourceNamespace: "fixture",
+          datasetFingerprint: "a".repeat(64),
+          resources: [],
+          baseManifestSha256: batch.baseManifestSha256,
+          relationManifestSha256: batch.relationManifestSha256,
+          relationExportedAt: batch.relationExportedAt,
+          compilerIdentity: "test",
+          reservedFileIds: [],
+          protectedRows: [],
+          backendRows: [],
+          pageReceipts: [],
+          sources: [],
+          tables: [],
+        },
+      },
+    };
+    const resource = planned.metadata.resources[0]!;
+    const actual = (
+      await client.query(
+        `SELECT access FROM ${db.schema}.files WHERE id='Data01'`,
+      )
+    ).rows[0].access;
+    assert.equal(actual.version, 0);
+    assert.equal(resource.access.version, 7);
+    const plan = migrationDatasetTablePlans(batch).find(
+      (p) => p.table === "dataset_resources",
+    )!;
+    for (const row of plan.rows) {
+      const columns = Object.keys(row);
+      await client.query(
+        `INSERT INTO ${db.schema}.dataset_resources (${columns.join(",")}) VALUES (${columns.map((_, i) => "$" + (i + 1)).join(",")})`,
+        columns.map((c) =>
+          plan.json.includes(c) ? JSON.stringify(row[c]) : row[c],
+        ),
+      );
+    }
+    await client.query("BEGIN");
+    await persistDeletedDatasetLifecycleLinks(client, db.schema, batch, false);
+    await client.query("COMMIT");
+    assert.equal(
+      (
+        await client.query(
+          `SELECT count(*)::int AS count FROM ${db.schema}.dataset_deleted_lifecycle_links`,
+        )
+      ).rows[0].count,
+      1,
+    );
+    assert.equal(resource.access.version, 7);
+    assert.equal(
+      (
+        await client.query(
+          `SELECT access FROM ${db.schema}.dataset_resources WHERE legacy_id=$1`,
+          [f.artifact.id],
+        )
+      ).rows[0].access.version,
+      7,
+    );
+    for (const changed of [
+      { ...actual, linkRole: "editor" },
+      { ...actual, visibility: "public" },
+      { ...actual, shares: { "reader@example.test": "viewer" } },
+    ]) {
+      await client.query(
+        `UPDATE ${db.schema}.files SET access=$1::jsonb WHERE id='Data01'`,
+        [JSON.stringify(changed)],
+      );
+      await assert.rejects(
+        persistDeletedDatasetLifecycleLinks(client, db.schema, batch, true),
+        /authority differs|association differs/,
+      );
+    }
+  } finally {
+    client.release();
+    await db.cleanup();
+  }
+});
