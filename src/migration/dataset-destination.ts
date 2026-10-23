@@ -20,7 +20,7 @@ import type { MigrationSourceQueryRegistration } from "../datasets/source-query/
 import { validateMigrationOwnershipDatasetGrantBatch } from "./ownership-dataset-grants.ts";
 import { persistMigrationOwnershipDatasetGrantAudit } from "./ownership-dataset-grant-audit.ts";
 import type { MigrationOwnershipOverride } from "./ownership-override-contracts.ts";
-import { registerDatasetAttachments } from "../persistence/dataset-attachments.ts";
+import { registerMigrationDatasetAttachments } from "./attachment-registration.ts";
 import { registerSavedQueries } from "../persistence/dataset-queries.ts";
 import { validateMigrationPersonBindings } from "./person-binding-validation.ts";
 import { migrationDatasetTablePlans as tablePlans } from "./dataset-table-plans.ts";
@@ -320,16 +320,11 @@ export class PostgresDatasetMetadataDestination
           },
           registration,
         );
-      await registerDatasetAttachments({
-        client: {
-          query: async (text, values) => ({
-            ...(await this.db.query(text, values ? [...values] : undefined)),
-            rowCount: null,
-          }),
-          release: () => {},
-        },
-        registrations: batch.metadata.attachments ?? [],
-      });
+      await registerMigrationDatasetAttachments(
+        this.db,
+        this.additiveSchema,
+        batch,
+      );
       if (batch.deletedAdditive) {
         const authority = deletedDatasetAuthoritySha256(batch.deletedAdditive);
         await persistDeletedDatasetLifecycleLinks(
