@@ -1,6 +1,4 @@
 import {PUBLIC_BASE_URL} from './platform/config';
-import type {CapabilityContext} from '@artifactbin/runner/local';
-import {runnerIdentity} from '@artifactbin/runner/capabilities';
 import {lambdaOperation} from './runner/operations';
 import {z} from 'zod';
 import {actorOf,attachActor} from '@artifactbin/utils';
@@ -42,7 +40,4 @@ export async function runnerOperation(request: Request, operation: string, input
     if (!parsed.success)
         return json({ error: 'invalid_operation_input' }, 400);
     return runOperation(operation, request, actor, parsed.data);
-}
-export function localRunnerOperation(userId: string, operation: string, input: Record<string, unknown>, context?:CapabilityContext) {
-    return runnerOperation(attachActor(new Request('http://artifactbin.internal/internal/runner/operations', { method: 'POST' }), context?runnerIdentity(context):{ userId, credential: 'session' }), operation, input, context?.request.document?.source);
 }
