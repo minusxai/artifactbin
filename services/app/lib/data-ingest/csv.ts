@@ -16,12 +16,15 @@ export function parseCsv(text: string): ParsedCsv {
 
   const records: string[][] = [];
   let field = '';
+  let fieldQuoted = false;
+  let quotedEmptyRecord: boolean[] = [];
+  const quotedEmptyRecords: boolean[][] = [];
   let record: string[] = [];
   let inQuotes = false;
   let sawAnyChar = false;
 
-  const endField = () => { record.push(field); field = ''; };
-  const endRecord = () => { endField(); records.push(record); record = []; };
+  const endField = () => { record.push(field); quotedEmptyRecord.push(fieldQuoted && field === ''); field = ''; fieldQuoted = false; };
+  const endRecord = () => { endField(); records.push(record); quotedEmptyRecords.push(quotedEmptyRecord); record = []; quotedEmptyRecord = []; };
 
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
@@ -39,7 +42,7 @@ export function parseCsv(text: string): ParsedCsv {
       }
       continue;
     }
-    if (ch === '"') { inQuotes = true; sawAnyChar = true; continue; }
+    if (ch === '"') { inQuotes = true; fieldQuoted = true; sawAnyChar = true; continue; }
     if (ch === ',') { endField(); sawAnyChar = true; continue; }
     if (ch === '\r') continue;               // CRLF → LF
     if (ch === '\n') { endRecord(); sawAnyChar = true; continue; }
@@ -48,7 +51,7 @@ export function parseCsv(text: string): ParsedCsv {
   }
   // A trailing newline must not invent an empty record; anything else must not
   // lose the last field.
-  if (field !== '' || record.length > 0) endRecord();
+  if (field !== '' || record.length > 0 || fieldQuoted) endRecord();
 
   if (!sawAnyChar || records.length === 0) return { headers: [], rows: [] };
 
@@ -60,7 +63,8 @@ export function parseCsv(text: string): ParsedCsv {
     // silently is worse than carrying a cell nobody names.
     r.length < width ? [...r, ...Array(width - r.length).fill('')] : r,
   );
-  return { headers, rows };
+  const quotedEmptyCells = quotedEmptyRecords.slice(1);
+  return { headers, rows, ...(quotedEmptyCells.some(row => row.some(Boolean)) ? {quotedEmptyCells} : {}) };
 }
 
 /**

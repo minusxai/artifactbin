@@ -156,3 +156,8 @@ describe('ingestDataset', () => {
     expect((err as IngestError).message).toMatch(/\d/); // the user must learn the limit
   });
 });
+
+it('retains explicit CSV empty strings through ingestion while unquoted and short cells are null',async()=>{
+ const result=await ingestDataset({kind:'csv',text:'value,other\n"",\n12\n'});
+ expect(result.rows).toEqual([{value:'',other:null},{value:'12',other:null}]);
+});

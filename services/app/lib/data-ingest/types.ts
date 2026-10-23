@@ -62,4 +62,6 @@ export const MAX_DATASET_BYTES = 50 * 1024 * 1024;
 export interface ParsedCsv {
   headers: string[];
   rows: string[][];
+  /** True for explicitly quoted empty strings; omitted when none occur. Unquoted missing fields remain null on ingest. */
+  quotedEmptyCells?: boolean[][];
 }

@@ -67,3 +67,5 @@ Cell values carry one matching slot: `{type:"STRING",string:"oak"}`, `{type:"NUM
 INSERT supplies cells; DELETE supplies rowId. Send the observed dataset revision as `expectedRevision` and keep one nonempty `requestId` for that intended mutation. Receipts return `outcome` (`committed`, `rejected` or `unknown`), `revision` and `rowIds`. Only committed is success. Reconcile conflicts or unknown results before another write. Dataset permission is checked for every write; a page link does not bypass it.
 
 See the installed CSV dashboard example for discovery, pagination, revision consistency and a chart computed from typed cells.
+
+CSV empty-cell rules: an unquoted empty field (or a missing trailing field) becomes null. A quoted empty field (`""`) is an empty string and keeps its column textual by default, including when other rows look numeric. Literal `null`/`NULL` remain text. An explicit non-string column type overrides inference and converts empty text to null; declare `type:"string"` to preserve it.

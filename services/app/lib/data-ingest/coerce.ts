@@ -61,10 +61,9 @@ function columnType(values: string[]): ColumnType {
   return 'string';
 }
 
-function convert(value: string, type: ColumnType): unknown {
-  // A blank cell is MISSING, not the empty string — otherwise every chart and
-  // aggregate has to special-case `""`.
-  if (isBlank(value)) return null;
+function convert(value: string, type: ColumnType, quotedEmpty: boolean): unknown {
+  // An explicit quoted empty text cell is data, while an unquoted blank is missing.
+  if (isBlank(value)) return quotedEmpty && type === 'string' ? '' : null;
   const v = value.trim();
   switch (type) {
     // A declared type can be wrong for a given cell. Null is honest and keeps
@@ -94,17 +93,19 @@ export function coerceRows(
   headers: string[],
   rows: string[][],
   declared: DeclaredColumn[] = [],
+  quotedEmptyCells: readonly (readonly boolean[])[] = [],
 ): Record<string, unknown>[] {
   const byName = new Map(declared.map((c) => [c.name, c.type]));
   const types = headers.map((header, col) => {
     const chosen = byName.get(header);
     if (chosen === 'number' || chosen === 'boolean' || chosen === 'date' || chosen === 'timestamp' || chosen === 'string') return chosen;
+    if (quotedEmptyCells.some(row => row[col])) return 'string';
     return columnType(rows.map((r) => r[col] ?? ''));
   });
-  return rows.map((row) => {
+  return rows.map((row, rowIndex) => {
     const out: Record<string, unknown> = {};
     // Header order, so the column order in the file survives into the artifact.
-    headers.forEach((header, col) => { out[header] = convert(row[col] ?? '', types[col]); });
+    headers.forEach((header, col) => { out[header] = convert(row[col] ?? '', types[col], quotedEmptyCells[rowIndex]?.[col] === true); });
     return out;
   });
 }

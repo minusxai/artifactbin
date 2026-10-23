@@ -195,3 +195,25 @@ describe('CSV numeric inference preserves precision by default',()=>{
   expect(coerceRows(['value'],[['0.10000000000000001']],[{name:'value',type:'string'}])).toEqual([{value:'0.10000000000000001'}]);
  });
 });
+
+ describe('CSV explicit empty strings',()=>{
+ const ingest=(text:string)=>{const p=parseCsv(text);return coerceRows(p.headers,p.rows,[],p.quotedEmptyCells);};
+ it('distinguishes quoted empty text from unquoted missing cells and padded fields',()=>{
+  expect(ingest('a,b,c\n"",,\nx')).toEqual([{a:'',b:null,c:null},{a:'x',b:null,c:null}]);
+ });
+ it('retains a final quoted empty single-column row without a newline',()=>{
+  expect(ingest('value\n""')).toEqual([{value:''}]);
+ });
+ it('keeps empty text as a column value instead of coercing it away beside numbers',()=>{
+  expect(ingest('value\n12\n""\n')).toEqual([{value:'12'},{value:''}]);
+ });
+ it('does not interpret literal null or NULL strings as missing cells',()=>{
+  expect(ingest('value\nnull\nNULL\n""\n')).toEqual([{value:'null'},{value:'NULL'},{value:''}]);
+ });
+});
+
+it('preserves quoted empties with explicit string type and keeps explicit numeric null semantics',()=>{
+ const parsed=parseCsv('value\n""\n12');
+ expect(coerceRows(parsed.headers,parsed.rows,[{name:'value',type:'string'}],parsed.quotedEmptyCells)).toEqual([{value:''},{value:'12'}]);
+ expect(coerceRows(parsed.headers,parsed.rows,[{name:'value',type:'number'}],parsed.quotedEmptyCells)).toEqual([{value:null},{value:12}]);
+});
