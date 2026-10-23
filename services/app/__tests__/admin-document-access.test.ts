@@ -1,15 +1,12 @@
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import {Hono} from 'hono';
-import {resolve} from 'node:path';
-import {readFile,writeFile} from 'node:fs/promises';
 import {createAuthHost} from '@artifactbin/auth';
 import {createTokenReader,inProcess} from '@artifactbin/utils';
-import {createDocumentGraph} from '@/lib/document/document-graph';
 import {getArtifactById} from '@/lib/artifacts';
+import {artifactState} from '@/lib/artifacts/state';
 import {createUser,claimToken,setDocumentEditorPolicy} from '@/lib/accounts';
 import {mintAccountToken as mintToken} from '@/__tests__/harness';
-import {cliHarness,type RecordedCall} from '../../cli/test/harness';
-import {GET,PUT} from '@/app/api/artifacts/[id]/route';
+import {GET,PUT,PATCH} from '@/app/api/artifacts/[id]/route';
 import {POST as prepare} from '@/app/api/artifacts/[id]/prepare/route';
 import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';
 import {GET as content} from '@/app/api/artifacts/[id]/content/route';
@@ -34,7 +31,6 @@ import {stageCommentImage} from '@/lib/annotations';
 import sharp from 'sharp';
 import type {Actor} from '@artifactbin/contracts';
 import {request,useAppHarness} from './harness';
-import {documentEditBody} from './prepared-document';
 
 /**
  * The host's document editor grant (ADMIN__EMAILS in production) through the REAL production shape:
@@ -43,9 +39,7 @@ import {documentEditBody} from './prepared-document';
  * owner uses (the CLI's /prepare included); an admin reaches NO private artifact, by any door.
  */
 const harness=useAppHarness();
-// A <Query> makes the CLI prepare the authoring context (lib/document/document-update-client.ts),
-// which is the door production refused. The CLI prepares only the CHANGED scope, so the edit must touch the Helmet.
-const SOURCE='<Helmet><Value name="rows" type="table" value={[{"n":1}]} /><Query name="total">{`select sum(n) as n from rows`}</Query></Helmet><p id="intro">Before</p>';
+const SOURCE='<html><head></head><body><p data-af-id="intro">Before</p></body></html>';
 type Doc={id:string;visibility:'public'|'unlisted'|'private'};
 const UNLISTED:Doc={id:'unl123',visibility:'unlisted'},PRIVATE:Doc={id:'prv123',visibility:'private'};
 let token:{id:string;token:string};let userId:string;let identity:{userId:string;email:string;emailVerified:boolean};let proxy:ReturnType<typeof createAuthHost>;
@@ -59,13 +53,14 @@ beforeEach(async()=>{
  setDocumentEditorPolicy(actor=>actor.userId===user.id && actor.emailVerified===true);
  const db=await harness.db();
  await db.query("INSERT INTO users(id,email,kind) VALUES ('usr_owner','owner@example.com','account') ON CONFLICT DO NOTHING");
- for(const doc of [UNLISTED,PRIVATE])await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,document,meta,format,visibility,edit_id) VALUES ($1,'tok_owner','usr_owner',$2,$3::jsonb,'{"dataSyntax":2}','markup',$4,'base-edit')`,[doc.id,`${doc.visibility} document`,JSON.stringify(createDocumentGraph(SOURCE,1)),doc.visibility]);
+ for(const doc of [UNLISTED,PRIVATE])await db.query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ($1,'tok_owner','usr_owner',$2,$3,'{}','html',$4,'base-edit')`,[doc.id,`${doc.visibility} document`,SOURCE,doc.visibility]);
  identity={userId:user.id,email:user.email!,emailVerified:true};
  const app=new Hono();
  app.get('/api/capabilities',c=>capabilities(c.req.raw));
  app.post('/api/artifacts/preflight',c=>preflight(c.req.raw));
  app.get('/api/artifacts/:id',routed(GET));
  app.put('/api/artifacts/:id',routed(PUT));
+ app.patch('/api/artifacts/:id',routed(PATCH));
  app.post('/api/artifacts/:id/prepare',routed(prepare));
  app.post('/api/artifacts/:id/edits',routed(edit));
  app.get('/api/artifacts/:id/content',routed(content));
@@ -85,28 +80,28 @@ afterEach(()=>setDocumentEditorPolicy());
 
 const bearer=(path:string,init:{method?:string;json?:unknown}={})=>proxy.fetch(request(path,{token:token.token,...init}));
 
-it('lets an admin pull and push a non-private document whose save prepares an authoring context',async()=>{
- const cli=await cliHarness('admin-access-',{token:token.token,account:null,flags:['--server','https://example.com','--json']});
- const respond=(call:RecordedCall)=>proxy.fetch(request(call.path,{method:call.method,headers:call.headers,...(call.body===undefined?{}:{json:call.body})}));
- try{
-  expect(await cli.invoke(['pull',UNLISTED.id,'--output','doc.jsx'],respond),JSON.stringify(cli.out)).toBe(0);
-  const path=resolve(cli.root,'doc.jsx');await writeFile(path,(await readFile(path,'utf8')).replace('Before','After admin repair').replace('sum(n) as n','sum(n) + 0 as n'));
-  expect(await cli.invoke(['push','doc.jsx'],respond),JSON.stringify(cli.out)).toBe(0);
-  expect(cli.calls.some(call=>call.path.endsWith(`/api/artifacts/${UNLISTED.id}/prepare`)),'the push must exercise /prepare').toBe(true);
-  expect(await getArtifactById(UNLISTED.id)).toMatchObject({user_id:'usr_owner',actor_user_id:userId,visibility:'unlisted',version:2});
-  expect((await getArtifactById(UNLISTED.id))?.source).toContain('After admin repair');
- }finally{await cli.cleanup();}
+it('lets an admin read and conditionally replace a non-private native HTML page',async()=>{
+ const read=await bearer(`/api/artifacts/${UNLISTED.id}`);expect(read.status).toBe(200);
+ const row=(await getArtifactById(UNLISTED.id))!;
+ const updated=await bearer(`/api/artifacts/${UNLISTED.id}`,{method:'PUT',json:{html:SOURCE.replace('Before','After admin repair'),expectedVersion:row.version,expectedState:artifactState(row)}});
+ expect(updated.status,await updated.clone().text()).toBe(200);
+ expect(await getArtifactById(UNLISTED.id)).toMatchObject({user_id:'usr_owner',actor_user_id:userId,visibility:'unlisted',version:2});
+ expect((await getArtifactById(UNLISTED.id))?.source).toContain('After admin repair');
+ const head=(await getArtifactById(UNLISTED.id))!;
+ const renamed=await bearer(`/api/artifacts/${UNLISTED.id}`,{method:'PATCH',json:{title:'Admin title',expectedState:artifactState(head)}});expect(renamed.status,await renamed.clone().text()).toBe(200);
+ expect((await getArtifactById(UNLISTED.id))?.title).toBe('Admin title');
+ const current=(await getArtifactById(UNLISTED.id))!;
+ expect((await bearer(`/api/artifacts/${UNLISTED.id}`,{method:'PATCH',json:{parent_id:null,expectedState:artifactState(current)}})).status).toBe(403);
 });
 
 it('refuses an admin every door to a private document with the uniform not-found, leaking nothing',async()=>{
- const row=(await getArtifactById(PRIVATE.id))!;
  const doors:Array<[string,Response|Promise<Response>]>=[
   ['read',bearer(`/api/artifacts/${PRIVATE.id}`)],
   ['content',bearer(`/api/artifacts/${PRIVATE.id}/content`)],
   ['versions',bearer(`/api/artifacts/${PRIVATE.id}/versions`)],
   ['prepare',bearer(`/api/artifacts/${PRIVATE.id}/prepare`,{method:'POST',json:{source:SOURCE}})],
   // A well-formed edit (prepared-document's protocol body), so the refusal is the access decision and not the body check.
-  ['edits',bearer(`/api/artifacts/${PRIVATE.id}/edits`,{method:'POST',json:documentEditBody(row,{source:'<p id="intro">Admin</p>',whole:true})})],
+  ['edits',bearer(`/api/artifacts/${PRIVATE.id}/edits`,{method:'POST',json:{html:SOURCE,expectedVersion:1,expectedState:'0'.repeat(64)}})],
   ['annotations',bearer(`/api/artifacts/${PRIVATE.id}/annotations`)],
   ['annotate',bearer(`/api/artifacts/${PRIVATE.id}/annotations`,{method:'POST',json:{node_id:'intro',body:'hello'}})],
  ];
@@ -134,7 +129,7 @@ async function ownerImage(doc:Doc):Promise<string>{
  const stage=await stageCommentImage(owner,doc.id,png,png,{v:1,capturedEditId:row.edit_id,capturedAt:new Date().toISOString(),method:'region',width:20,height:10,rect:{x:0,y:0,width:20,height:10},viewport:{width:1000,height:800},strokes:[]});
  if(stage instanceof Response)throw new Error(await stage.text());
  const session:Actor={credential:'session',userId:'usr_owner',email:'owner@example.com',emailVerified:true};
- const made=await myComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor:session,json:{node_id:'intro',edit_id:row.edit_id,body:'See',attachment_id:stage.id}}),params(doc.id));
+ const made=await myComment(request(`/api/my/artifacts/${doc.id}/annotations`,{method:'POST',actor:session,json:{anchor:{kind:'html-node',v:1,revision:String(row.version),nodeId:'intro',quote:''},edit_id:row.edit_id,body:'See',attachment_id:stage.id}}),params(doc.id));
  if(made.status!==201)throw new Error(await made.text());
  return stage.id;
 }
@@ -143,7 +138,6 @@ it('refuses an admin a private document at every other bearer door, and lists it
  const images={[UNLISTED.id]:await ownerImage(UNLISTED),[PRIVATE.id]:await ownerImage(PRIVATE)};
  const doors=(doc:Doc):Array<[string,()=>Promise<Response>]>=>[
   ['raw',async()=>bearer(`/a/${doc.id}/raw`)],
-  ['mutate',async()=>bearer(`/a/${doc.id}/mutate`,{method:'POST',json:{mutation:'missing',args:{}}})],
   ['export',async()=>bearer(`/api/artifacts/${doc.id}/export`)],
   ['annotation changes',async()=>bearer(`/api/artifacts/${doc.id}/annotations/changes`)],
   ['comment image',async()=>bearer(`/api/artifacts/${doc.id}/comment-images/${images[doc.id]}`)],
@@ -186,4 +180,22 @@ it('refuses an admin a private document at every browser door, its live stream a
  expect(await readThrough(db,(await getArtifactById(PRIVATE.id))!,admin)).toBe(false);
  const shelf=await selectChildren((await getArtifactById('fld123'))!,admin);
  expect(shelf.children.map(child=>child.id)).toEqual([]);
+});
+
+it('does not turn an ordinary verified account into an editor of native HTML',async()=>{
+ setDocumentEditorPolicy(()=>false);
+ const row=(await getArtifactById(UNLISTED.id))!;
+ const read=await bearer(`/api/artifacts/${UNLISTED.id}`);expect(read.status).toBe(200);expect((await read.json()).capabilities.edit).toBe(false);
+ expect((await bearer(`/api/artifacts/${UNLISTED.id}`,{method:'PUT',json:{html:SOURCE,expectedVersion:row.version,expectedState:artifactState(row)}})).status).toBe(404);
+ expect((await bearer(`/api/artifacts/${UNLISTED.id}`,{method:'PATCH',json:{title:'Denied',expectedState:artifactState(row)}})).status).toBe(404);
+});
+it('applies the same link-bounded grant to group HTML without granting group ownership or private access',async()=>{
+ const db=await harness.db();await db.query("INSERT INTO groups(id,handle,name,created_by) VALUES('admin_group','admin-group','Group','usr_owner')");
+ await db.query("UPDATE artifacts SET group_id='admin_group',user_id=NULL WHERE id=ANY($1::text[])",[[UNLISTED.id,PRIVATE.id]]);
+ const page=(await getArtifactById(UNLISTED.id))!;
+ const write=await bearer(`/api/artifacts/${UNLISTED.id}`,{method:'PUT',json:{html:SOURCE.replace('Before','Group repair'),expectedVersion:page.version,expectedState:artifactState(page)}});expect(write.status,await write.clone().text()).toBe(200);
+ expect((await getArtifactById(UNLISTED.id))?.group_id).toBe('admin_group');
+ const privatePage=(await getArtifactById(PRIVATE.id))!;
+ expect((await bearer(`/api/artifacts/${PRIVATE.id}`,{method:'PUT',json:{html:SOURCE,expectedVersion:privatePage.version,expectedState:artifactState(privatePage)}})).status).toBe(404);
+ expect((await bearer(`/api/artifacts/${PRIVATE.id}`)).status).toBe(404);
 });

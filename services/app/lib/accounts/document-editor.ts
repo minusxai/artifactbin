@@ -1,7 +1,7 @@
 import type { VerifiedAccount } from './actors';
 
 /**
- * The host's optional grant for editing markup documents (production: ADMIN__EMAILS), read from VERIFIED
+ * The host's optional grant for editing page documents (production: ADMIN__EMAILS), read from VERIFIED
  * account claims. Never ownership, never dataset writes, never a private artifact (lib/artifacts access).
  */
 export type DocumentEditorPolicy = (account: VerifiedAccount) => boolean;
