@@ -1,3 +1,5 @@
+import { createSourceQueryService } from "../src/datasets/source-query/service.ts";
+import { loadDatasetViewer } from "../src/persistence/dataset-viewer.ts";
 import { planDatasetMetadata } from "../src/migration/datasets/import-metadata.ts";
 import { additiveRowSha256 } from "../src/migration/dataset-pages/additive-authority.ts";
 import { createStoredModelResolver } from "../src/persistence/dataset-stored-models.ts";
@@ -37,6 +39,7 @@ for (const [existingResource, external, model, history] of [
   [true, true],
   [true, false, true],
   [true, false, false, true],
+  [true, true, false, true],
 ])
   test(`additive normal publication ${history ? "with saved history " : ""}${existingResource ? "reuses" : "introduces an approved original"} ${external ? "external " : model ? "stored model " : "stored "}resource, preserves base, replays and refuses changed authority`, async () => {
     const db = await testDatabase();
@@ -54,7 +57,7 @@ for (const [existingResource, external, model, history] of [
         version: 3,
         edit_id: undefined,
         title: "Prior table",
-        meta: {
+        meta: external ? artifact.meta : {
           catalog: {
             kind: "stored",
             tables: [
@@ -143,29 +146,13 @@ for (const [existingResource, external, model, history] of [
     }
     if (external) {
       const artifact = (await source.readArtifact("data01")).artifacts[0]!;
-      const sql = "SELECT 1 AS n";
-      const query = {
-        pageLegacyId: artifact.id,
-        pageVersion: artifact.version,
-        name: "table0",
-        sourceRef: "ref:" + artifact.id,
-        resource: "source-" + artifact.id,
-        sql,
-        sqlSha256: createHash("sha256").update(sql).digest("hex"),
-        params: {},
-        columns: [{ name: "n", type: "number" as const }],
-      };
-      options.standaloneDatasetPages!.external = [
-        {
-          legacyId: artifact.id,
-          version: artifact.version,
-          artifactSha256:
-            options.standaloneDatasetPages!.heads[0]!.artifactSha256,
-          declarations: `<Helmet><Query name="table0" source="ref:${artifact.id}">{${JSON.stringify(sql)}}</Query></Helmet>`,
-          queries: [query],
-        },
-      ];
-      options.sourceQueryRegistrations = [query];
+      const originals = [artifact, ...((await source.readArtifact("data01")).tables?.artifact_versions ?? [])];
+      const queries = originals.map(row => {
+        const sql = `SELECT ${row.version} AS n`;
+        return { pageLegacyId: artifact.id, pageVersion: row.version as number, name: "table0", sourceRef: "ref:" + artifact.id, resource: "source-" + artifact.id, sql, sqlSha256: createHash("sha256").update(sql).digest("hex"), params: {}, columns: [{ name: "n", type: "number" as const }] };
+      });
+      options.standaloneDatasetPages!.external = queries.map((query,i) => ({ legacyId: artifact.id, version: query.pageVersion, artifactSha256: datasetPageArtifactSha256(originals[i]!), declarations: `<Helmet><Query name="table0" source="ref:${artifact.id}">{${JSON.stringify(query.sql)}}</Query></Helmet>`, queries: [query] }));
+      options.sourceQueryRegistrations = queries;
     }
     options.schema = db.schema;
     const destination = new PostgresMigrationDestination(client, {
@@ -291,11 +278,11 @@ for (const [existingResource, external, model, history] of [
           [3, 5],
         );
         assert.ok(plan.pages[0]!.revisions.every((r) => r.conversion.html));
-        assert.deepEqual(
+        if (!external) assert.deepEqual(
           prepared.metadata.bindings.map((b) => b.page.version).sort(),
           [3, 5],
         );
-        assert.equal(
+        if (!external) assert.equal(
           prepared.metadata.versions.find((v) => v.version === 3)!.tables[0]!
             .name,
           "prior_rows",
@@ -309,6 +296,13 @@ for (const [existingResource, external, model, history] of [
         additive: options.standaloneDatasetPages,
         sourceQueryRegistrations: prepared.sourceQueryRegistrations,
       };
+      if (external && history) {
+        const receipts = prepared.backends.get("data01")!;
+        assert.equal(new Set(receipts.map(r => r.backendId)).size, 2);
+        const historical = receipts.find(r => r.pageVersion === 3)!;
+        assert.equal(historical.viewer, undefined);
+        assert.equal(historical.historicalSourceQueries!.pageVersion, 3);
+      }
       const added = await metadata.import(batch);
       assert.ok(added.created > 0);
       assert.equal((await metadata.import(batch)).created, 0);
@@ -422,7 +416,7 @@ for (const [existingResource, external, model, history] of [
         const receipt = prepared.sourceQueryRegistrations![0]!.receipt;
         const repository = createSourceQueryRepository(
           { transaction: async (work) => work(client) },
-          () => undefined,
+          () => db.pool,
         );
         const context = {
           backendId: receipt.backendId,
@@ -431,6 +425,60 @@ for (const [existingResource, external, model, history] of [
           subject: "owner@example.test",
         };
         assert.ok(await repository.authority(context));
+        if (history) {
+          const service = createSourceQueryService(repository);
+          for (const group of prepared.sourceQueryRegistrations!) {
+            const savedContext = { ...context, backendId:group.receipt.backendId, backendVersion:group.receipt.deployment.version };
+            assert.equal((await repository.registry(savedContext,"table0"))!.sql, `SELECT ${group.receipt.pageVersion} AS n`);
+            assert.ok(await repository.authority(savedContext), "saved external query uses fresh current-page access");
+            const table = await service.query(savedContext,{name:"table0",valuesJson:"{}",offset:0,limit:10});
+            assert.deepEqual(table.rows,[{n:group.receipt.pageVersion}]);
+            if(group.receipt.historicalSourceQueries)assert.equal(await loadDatasetViewer(client,savedContext,Date.now()),null,"saved query does not expose generic viewer identity");
+          }
+        }
+        if(history){
+          const saved=prepared.sourceQueryRegistrations!.find(g=>g.receipt.historicalSourceQueries)!;
+          const savedContext={...context,backendId:saved.receipt.backendId,backendVersion:saved.receipt.deployment.version};
+          const file=(await client.query(`SELECT owner,access FROM "${db.schema}".files WHERE id='Data01'`)).rows[0]!;
+          const publicAccess={...file.access,visibility:"public"};
+          await client.query(`UPDATE "${db.schema}".files SET access=$1 WHERE id='Data01'`,[publicAccess]);
+          const guest={...savedContext,subject:null};
+          assert.ok(await repository.authority(guest));
+          await client.query(`UPDATE "${db.schema}".files SET access=$1 WHERE id='Data01'`,[file.access]);
+          assert.equal(await repository.authority(guest),null,"fresh access revocation denies saved query");
+          await client.query(`INSERT INTO "${db.schema}".accounts(actor) VALUES('new-owner@example.test')`);
+          await client.query(`UPDATE "${db.schema}".files SET owner='new-owner@example.test' WHERE id='Data01'`);
+          assert.equal(await repository.authority(savedContext),null,"owner transfer does not retain old query authority");
+          await client.query(`UPDATE "${db.schema}".files SET owner=$1 WHERE id='Data01'`,[file.owner]);
+          await client.query(`DELETE FROM "${db.schema}".accounts WHERE actor='new-owner@example.test'`);
+          await client.query(`UPDATE "${db.schema}".files SET deleted_at=1 WHERE id='Data01'`);
+          assert.equal(await repository.authority(savedContext),null,"deleted current page denies saved query");
+          await client.query(`UPDATE "${db.schema}".files SET deleted_at=NULL WHERE id='Data01'`);
+          assert.equal(await repository.authority({...savedContext,backendVersion:"wrong"}),null);
+          await assert.rejects(metadata.import({...batch,sourceQueryRegistrations:batch.sourceQueryRegistrations!.map(g=>g===saved?{...g,receipt:{...g.receipt,historicalSourceQueries:{...g.receipt.historicalSourceQueries!,pageVersion:5}}}:g)}),/historical|source query/i);
+          const link=(await client.query(`DELETE FROM "${db.schema}".af_page_backends WHERE page_id='Data01' AND page_version=3 RETURNING *`)).rows[0]!;
+          assert.equal(await repository.registry(savedContext,"table0"),null);
+          assert.equal(await repository.authority(savedContext),null);
+          await client.query(`INSERT INTO "${db.schema}".af_page_backends(page_id,page_version,position,name,file_id,version) VALUES($1,$2,$3,$4,$5,$6)`,[link.page_id,link.page_version,link.position,link.name,link.file_id,link.version]);
+          assert.ok(await repository.authority(savedContext));
+          await client.query(`UPDATE "${db.schema}".dataset_principals SET expires_at='2000-01-01' WHERE kind='user'`);
+          assert.equal(await repository.authority(savedContext),null,"expired original identity denies saved query");
+          await client.query(`UPDATE "${db.schema}".dataset_principals SET expires_at=NULL WHERE kind='user'`);
+          await client.query(`UPDATE "${db.schema}".files SET access=$1 WHERE id='Data01'`,[publicAccess]);
+          const revokePool = { end:async()=>{}, connect:async()=>{
+            const connection=await db.pool.connect();
+            return { release:()=>connection.release(), query:async(text:string,values?:unknown[])=>{
+              const result=await connection.query(text,values);
+              if(text.includes("source_payload AS MATERIALIZED"))await client.query(`UPDATE "${db.schema}".files SET access=$1 WHERE id='Data01'`,[file.access]);
+              return result;
+            }};
+          }};
+          const revoked=createSourceQueryService(createSourceQueryRepository({transaction:async(work)=>work(client)},()=>revokePool));
+          await assert.rejects(revoked.query(guest,{name:"table0",valuesJson:"{}",offset:0,limit:10}),error=>(error as {code?:string}).code==="dataset_changed");
+          await client.query(`UPDATE "${db.schema}".files SET access=$1 WHERE id='Data01'`,[file.access]);
+          await assert.rejects(client.query(`UPDATE "${db.schema}".dataset_source_queries SET registration=jsonb_set(registration,'{historicalAuthority,pageVersion}','99') WHERE page_version=3`),/immutable/);
+          assert.equal((await metadata.import(batch)).created,0,"exact retry after ACL restoration is unchanged");
+        }
         await assert.rejects(
           () =>
             client.query(`DELETE FROM "${db.schema}".dataset_source_queries`),

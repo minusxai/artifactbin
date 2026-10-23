@@ -52,6 +52,8 @@ export interface MigrationBackendReceipt {
   /** Present only when this revision declared the trusted membership relation. */
   members?: { sourceNamespace: string };
   viewer?: { sourceNamespace: string };
+  /** Saved external query capability, separate from current-head viewer exposure. */
+  historicalSourceQueries?: import("../datasets/source-query/contracts.ts").HistoricalSourceQueryAuthority;
   program?: true;
   standaloneExternalDataset?: import("./dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance;
   standaloneDataset?: import("./dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance;

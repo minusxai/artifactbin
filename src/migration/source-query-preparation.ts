@@ -1,3 +1,4 @@
+import { assertHistoricalSourceQueryAuthority } from "../datasets/source-query/historical-authority.ts";
 import type { MigrationSourceQueryRegistration } from "../datasets/source-query/contracts.ts";
 import { validateSourceRegistration } from "../datasets/source-query/sql.ts";
 import { readLegacySourceQuerySites } from "./conversion/compiled/source-query-source.ts";
@@ -62,6 +63,11 @@ export function validateMigrationSourceQueryBatch(
       !group.queries.length
     )
       throw Error("Invalid source query saved page authority");
+    if (r.historicalSourceQueries) {
+      assertHistoricalSourceQueryAuthority(r.historicalSourceQueries, {...r, sourceNamespace:metadata.sourceNamespace});
+      const page=metadata.pages.find(p=>p.pageId===r.pageId && p.pageVersion===r.pageVersion)!;
+      if (page.snapshot.format!=="dataset" || page.snapshot.editId!==r.historicalSourceQueries.editId) throw Error("Invalid historical source query page provenance");
+    }
     for (const query of group.queries) {
       validateSourceRegistration(query);
       if (

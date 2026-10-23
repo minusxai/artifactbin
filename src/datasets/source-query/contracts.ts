@@ -21,12 +21,24 @@ export interface MigrationSourceQueryRegistration {
   params: Record<string, ColumnType>;
   columns: DatasetColumn[];
 }
+/** Immutable original saved external query authority; never grants the generic viewer capability. */
+export interface HistoricalSourceQueryAuthority {
+  kind: "standalone-external-history-v1";
+  sourceNamespace: string;
+  pageLegacyId: string;
+  pageId: string;
+  pageVersion: number;
+  headVersion: number;
+  artifactSha256: string;
+  editId: string;
+}
 export interface SourceQueryRegistration
   extends MigrationSourceQueryRegistration {
   backendId: string;
   backendVersion: string;
   pageId: string;
   sourceNamespace: string;
+  historicalAuthority?: HistoricalSourceQueryAuthority;
 }
 export interface SourceQueryRequest {
   name: string;

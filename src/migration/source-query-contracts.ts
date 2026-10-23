@@ -3,7 +3,7 @@ import type { MigrationSourceQueryRegistration } from "../datasets/source-query/
 export interface MigrationSourceQueryBatch {
   receipt: Pick<
     MigrationBackendReceipt,
-    "pageLegacyId" | "pageId" | "pageVersion" | "backendId"
+    "pageLegacyId" | "pageId" | "pageVersion" | "backendId" | "historicalSourceQueries"
   > & { deployment: { version: string } };
   queries: readonly MigrationSourceQueryRegistration[];
 }

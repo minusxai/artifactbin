@@ -1,3 +1,4 @@
+import { verifyMigrationSourceQueryAuthority } from "./source-query-authority.ts";
 import {
   persistDeletedDatasetLifecycleLinks,
   validateDeletedDatasetBatch,
@@ -130,22 +131,8 @@ export class PostgresDatasetMetadataDestination
         );
       if (batch.additive)
         await verifyAdditiveDatasetBase(this.db, this.additiveSchema, batch);
-      for (const { receipt: r } of batch.sourceQueryRegistrations ?? []) {
-        const authority = await this.db.query(
-          `SELECT 1 FROM ${this.names.runtime}.af_backend_versions v JOIN ${this.names.runtime}.af_page_backends p ON p.file_id=v.file_id AND p.version=v.version JOIN ${this.names.runtime}.dataset_viewer_bindings b ON b.backend_id=v.file_id AND b.backend_version=v.version AND b.page_id=p.page_id AND b.page_version=p.page_version WHERE v.file_id=$1 AND v.version=$2 AND p.page_id=$3 AND p.page_version=$4 AND b.source_namespace=$5`,
-          [
-            r.backendId,
-            r.deployment.version,
-            r.pageId,
-            r.pageVersion,
-            batch.metadata.sourceNamespace,
-          ],
-        );
-        if (authority.rows.length !== 1)
-          throw Error(
-            "Source query requires exact compiled backend/page/viewer authority",
-          );
-      }
+      for (const group of batch.sourceQueryRegistrations ?? [])
+        await verifyMigrationSourceQueryAuthority(this.db, this.additiveSchema, batch, group);
       for (const binding of batch.metadata.bindings) {
         const compiled = await this.db.query(
           `SELECT 1 FROM ${this.names.runtime}.af_backend_versions v JOIN ${this.names.runtime}.af_page_backends p ON p.file_id=v.file_id AND p.version=v.version WHERE v.file_id=$1 AND v.version=$2 AND p.page_id=$3 AND p.page_version=$4`,

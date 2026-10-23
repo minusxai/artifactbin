@@ -45,7 +45,8 @@ test("external saved queries preserve per-version authority while only head decl
   assert.deepEqual(receipts.map(r => r.pageVersion).sort(), [1, 2]);
   for (const receipt of receipts) {
     assert.equal(receipt.owner, scan.pages[0]!.owner.id);
-    assert.deepEqual(receipt.viewer, { sourceNamespace: "fixture" });
+    assert.deepEqual(receipt.viewer, receipt.pageVersion === 2 ? { sourceNamespace: "fixture" } : undefined);
+    assert.equal(receipt.historicalSourceQueries?.pageVersion, receipt.pageVersion === 1 ? 1 : undefined);
     assert.equal(receipt.sourceQueries, true);
     assert.equal(receipt.standaloneExternalDataset!.pageVersion, receipt.pageVersion);
   }
@@ -74,4 +75,21 @@ test("historical query exception requires exact standalone provenance and versio
     const pages = scan.pages.map(p => ({ ...p, revisions: p.revisions.map(r => r.version === 1 ? mutate(r) : r) }));
     await assert.rejects(prepareMigrationBackends({ ...input, pages }, { host: standaloneDatasetHost }), /Invalid migration backend preparation/);
   }
+});
+
+test("external history allocation preserves the head ID and retries globally reserved saved IDs deterministically", async () => {
+  const { source, options } = await externalHistoryFixture();
+  const scan = await scanStandaloneDatasetPages(source, options);
+  const input = { sourceNamespace:"fixture", origin:"https://example.test", allocatedIds:options.standaloneDatasetPages!.reservedFileIds, pages:scan.pages };
+  const prepared = await prepareMigrationBackends(input,{host:standaloneDatasetHost});
+  const head = prepared.receipts.find(r=>r.pageVersion===2)!, saved=prepared.receipts.find(r=>r.pageVersion===1)!;
+  assert.notEqual(head.backendId,saved.backendId);
+  const alone = await prepareMigrationBackends({...input,pages:scan.pages.map(p=>({...p,revisions:p.revisions.filter(r=>r.version===2)}))},{host:standaloneDatasetHost});
+  assert.equal(alone.receipts[0]!.backendId,head.backendId);
+  const reserved={...input,allocatedIds:[...input.allocatedIds,saved.backendId]};
+  const first=await prepareMigrationBackends(reserved,{host:standaloneDatasetHost});
+  const retry=await prepareMigrationBackends(reserved,{host:standaloneDatasetHost});
+  assert.notEqual(first.receipts.find(r=>r.pageVersion===1)!.backendId,saved.backendId);
+  assert.deepEqual(first.receipts.map(r=>r.backendId),retry.receipts.map(r=>r.backendId));
+  assert.equal(first.receipts.find(r=>r.pageVersion===2)!.backendId,head.backendId);
 });

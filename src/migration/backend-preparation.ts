@@ -1,3 +1,4 @@
+import { assertHistoricalSourceQueryAuthority } from "../datasets/source-query/historical-authority.ts";
 import { standaloneDatasetBackendSource } from "./dataset-pages/backend.ts";
 import { generatedSourceQueryBackendSource } from "./source-query-backend.ts";
 import { validateSourceRegistration } from "../datasets/source-query/sql.ts";
@@ -268,6 +269,8 @@ export async function prepareMigrationBackends(
     operations: MigrationBackendPreparation["operations"][number][] = [],
     browserMutations: MigrationBackendPreparation["browserMutations"][number][] =
       [];
+  const headBackendIds = new Map<string, string>();
+  // Reserve every existing head identity before adding saved-only backend IDs.
   for (const page of required) {
     let backendId = "";
     for (let attempt = 0; attempt < 10000; attempt++) {
@@ -280,12 +283,32 @@ export async function prepareMigrationBackends(
     }
     if (!backendId)
       throw new Error("Migration backend ID allocation exhausted");
+    headBackendIds.set(page.legacyId, backendId);
+  }
+  for (const page of required) {
+    const backendId = headBackendIds.get(page.legacyId)!;
     for (const revision of [...page.revisions].sort(
       (a, b) => a.version - b.version,
     )) {
+      const historicalExternal = revision.standaloneExternalDataset && revision.version < Math.max(...page.revisions.map(r => r.version));
+      const revisionBackendId = historicalExternal ? (() => {
+        for (let attempt = 0; attempt < 10000; attempt++) {
+          const id = candidate(input.sourceNamespace, JSON.stringify(["standalone-external-history-v1", page.legacyId, revision.version]), attempt);
+          if (!allocated.has(id)) { allocated.add(id); return id; }
+        }
+        throw Error("Migration backend ID allocation exhausted");
+      })() : backendId;
       const hasSourceQueries = Boolean(revision.sourceQueries?.length);
+      const historicalSourceQueries = historicalExternal ? {
+        kind: "standalone-external-history-v1" as const,
+        sourceNamespace: input.sourceNamespace,
+        pageLegacyId: page.legacyId, pageId: page.pageId,
+        pageVersion: revision.version, headVersion: Math.max(...page.revisions.map(r => r.version)),
+        artifactSha256: revision.standaloneExternalDataset!.artifactSha256,
+        editId: revision.standaloneExternalDataset!.editId,
+      } : undefined;
       const deployment = deployments.get(revision.standaloneDataset ? "standalone" : hasSourceQueries ? "source-query" : "dataset")!;
-      const readsViewer = revision.readsViewer === true || hasSourceQueries;
+      const readsViewer = revision.readsViewer === true || (hasSourceQueries && !historicalExternal);
       const readsMembers =
         revision.readsMembers ||
         revision.mutations?.some((m) => m.readsMembers);
@@ -296,12 +319,13 @@ export async function prepareMigrationBackends(
         linked:
           revision.imports.length > 0 ||
           readsMembers === true ||
-          readsViewer ||
+          readsViewer || hasSourceQueries ||
           revision.runsProgram === true,
         ...(revision.runsProgram ? { program: true as const } : {}),
         ...(revision.standaloneExternalDataset ? { standaloneExternalDataset: revision.standaloneExternalDataset } : {}),
         ...(revision.standaloneDataset ? { standaloneDataset: revision.standaloneDataset } : {}),
         ...(hasSourceQueries ? { sourceQueries: true as const } : {}),
+        ...(historicalSourceQueries ? { historicalSourceQueries } : {}),
         ...(readsViewer
           ? { viewer: { sourceNamespace: input.sourceNamespace } }
           : {}),
@@ -309,9 +333,9 @@ export async function prepareMigrationBackends(
           ? { members: { sourceNamespace: input.sourceNamespace } }
           : {}),
         owner: page.owner.id,
-        backendId,
+        backendId: revisionBackendId,
         backendNamespace: "legacyData",
-        backendHref: origin!.origin + "/af/v1/ids/" + backendId,
+        backendHref: origin!.origin + "/af/v1/ids/" + revisionBackendId,
         sourceSha256: digest(deployment.source),
         bundleSha256: digest(deployment.bundle),
         deployment,
@@ -398,6 +422,7 @@ export async function prepareMigrationBackends(
             pageVersion: receipt.pageVersion,
             backendId: receipt.backendId,
             deployment: { version: receipt.deployment.version },
+            ...(receipt.historicalSourceQueries ? {historicalSourceQueries:receipt.historicalSourceQueries} : {}),
           },
           queries: revision.sourceQueries,
         },
@@ -420,6 +445,11 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
   const keys = new Set<string>();
   for (const receipt of receipts) {
     await checkedDeployment(receipt.deployment, receipt.sourceQueries === true, Boolean(receipt.standaloneDataset));
+    if (receipt.historicalSourceQueries) {
+      const h = receipt.historicalSourceQueries, p = receipt.standaloneExternalDataset;
+      assertHistoricalSourceQueryAuthority(h, {...receipt, sourceNamespace:h.sourceNamespace});
+      if (receipt.viewer || !p || h.artifactSha256 !== p.artifactSha256 || h.editId !== p.editId || !receipt.sourceQueries || !receipt.linked) invalid();
+    }
     if (
       !FILE_ID_PATTERN.test(receipt.pageId) ||
       !FILE_ID_PATTERN.test(receipt.backendId) ||
@@ -429,7 +459,7 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
       (receipt.sourceQueries !== undefined &&
         (receipt.sourceQueries !== true ||
           !receipt.linked ||
-          !receipt.viewer)) ||
+          (!receipt.viewer && !receipt.historicalSourceQueries))) ||
       (receipt.program !== undefined &&
         (receipt.program !== true || !receipt.linked)) ||
       (receipt.viewer !== undefined &&
@@ -437,7 +467,7 @@ export const registerMigrationBackends: MigrationBackendRegistrar = async (
       (receipt.members !== undefined &&
         (!receipt.linked || !nonempty(receipt.members.sourceNamespace))) ||
       (receipt.standaloneExternalDataset !== undefined &&
-        (!receipt.linked || !receipt.sourceQueries || !receipt.viewer || receipt.standaloneDataset || receipt.program || receipt.members || receipt.standaloneExternalDataset.sourceFormat!=="dataset" || receipt.standaloneExternalDataset.legacyId!==receipt.pageLegacyId || receipt.standaloneExternalDataset.pageId!==receipt.pageId || receipt.standaloneExternalDataset.pageVersion!==receipt.pageVersion || !nonempty(receipt.standaloneExternalDataset.editId) || !/^[a-f0-9]{64}$/.test(receipt.standaloneExternalDataset.artifactSha256))) ||
+        (!receipt.linked || !receipt.sourceQueries || (!receipt.viewer && !receipt.historicalSourceQueries) || receipt.standaloneDataset || receipt.program || receipt.members || receipt.standaloneExternalDataset.sourceFormat!=="dataset" || receipt.standaloneExternalDataset.legacyId!==receipt.pageLegacyId || receipt.standaloneExternalDataset.pageId!==receipt.pageId || receipt.standaloneExternalDataset.pageVersion!==receipt.pageVersion || !nonempty(receipt.standaloneExternalDataset.editId) || !/^[a-f0-9]{64}$/.test(receipt.standaloneExternalDataset.artifactSha256))) ||
       (receipt.standaloneDataset !== undefined &&
         (!receipt.linked || receipt.sourceQueries || receipt.program || receipt.viewer || receipt.members || receipt.standaloneDataset.sourceFormat !== "dataset" || receipt.standaloneDataset.legacyId !== receipt.pageLegacyId || receipt.standaloneDataset.pageId !== receipt.pageId || receipt.standaloneDataset.pageVersion !== receipt.pageVersion || !nonempty(receipt.standaloneDataset.editId) || !/^[a-f0-9]{64}$/.test(receipt.standaloneDataset.artifactSha256))) ||
       !nonempty(receipt.owner) ||

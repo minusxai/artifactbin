@@ -1,3 +1,4 @@
+import { loadHistoricalSourceQueryViewer } from "./source-query-history.ts";
 import type { SqlClient, SqlDatabase } from "./sql-contracts.ts";
 import type {
   SourceQueryPorts,
@@ -13,6 +14,7 @@ export interface SourceQueryBackendReceipt {
   pageVersion: number;
   backendId: string;
   deployment: { version: string };
+  historicalSourceQueries?: import("../datasets/source-query/contracts.ts").HistoricalSourceQueryAuthority;
 }
 /** Called in the migration registration transaction, only after canonical backend receipt registration. */
 export async function registerSourceQueries(
@@ -30,6 +32,7 @@ export async function registerSourceQueries(
       throw Error("Source query receipt mismatch");
     const registration: SourceQueryRegistration = {
       ...query,
+      ...(receipt.historicalSourceQueries ? {historicalAuthority:receipt.historicalSourceQueries} : {}),
       backendId: receipt.backendId,
       backendVersion: receipt.deployment.version,
       pageId: receipt.pageId,
@@ -92,6 +95,7 @@ export async function verifySourceQueries(
       throw Error("Source query receipt mismatch");
     const registration: SourceQueryRegistration = {
       ...query,
+      ...(receipt.historicalSourceQueries ? {historicalAuthority:receipt.historicalSourceQueries} : {}),
       backendId: receipt.backendId,
       backendVersion: receipt.deployment.version,
       pageId: receipt.pageId,
@@ -137,7 +141,7 @@ export function createSourceQueryRepository(
     authority: (context, signal) =>
       database.transaction(
         async (client) => {
-          const value = await loadDatasetViewer(client, context, now());
+          const value = await loadDatasetViewer(client, context, now()) ?? await loadHistoricalSourceQueryViewer(client, context, now());
           return value
             ? {
                 generation: value.generation,
