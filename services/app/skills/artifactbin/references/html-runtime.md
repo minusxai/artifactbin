@@ -77,3 +77,15 @@ Remote data is never silently copied into persisted local state. Keep temporary 
 Local state keeps working without a network. Shared mutations cannot commit offline; report the offline outcome and retain the user’s intent. A downloaded file never carries account tokens. The current downloaded core has no reconnect protocol: backend query fields are null with offline errors, and mutations have an offline outcome. Do not teach sign-in or reconnect from a downloaded file. Do not claim a shared action succeeded until the remote receipt confirms it. Test downloads independently from the live page.
 
 A URL hash `#af-state=<base64url JSON>` initializes private viewer state and persists it only in that browser; it does not update shared backend data.
+
+## Portable images
+
+An authorized reader can download `/a/ID/download` as one offline HTML file. For portable raster images, use a published image reference:
+
+```html
+<img src="ref:abc123" alt="Garden beds after the harvest">
+```
+
+Replace the example ID with a real admitted image artifact. Download packs readable PNG, JPEG, GIF, WebP and AVIF references in `img/src`, `source/src` and `video/poster` into data URLs. Both the page version's original admission and the downloading reader's current image access are required. Unavailable images refuse the download; unsupported referenced image types return `unsupported_image` (415), and files over 25 MiB return `too_large` (413).
+
+Existing data images and inline SVG stay intact. External URLs, CSS images and `srcset` are not automatically packed; do not promise those assets work offline. Image packing does not snapshot remote backend data or add credentials or reconnection. Test the downloaded file without a network.
