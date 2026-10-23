@@ -68,5 +68,9 @@ export interface SourceQueryService {
 export type SourceQueryValues = Record<string, Scalar>;
 /** Private operator JSON. Values refer only to process environment keys, never URLs. */
 export interface SourceQueryResourceConfiguration {
-  resources: Record<string, { connectionStringEnv: string; caEnv: string }>;
+  resources: Record<
+    string,
+    | { connectionStringEnv: string; caEnv: string }
+    | { connectionStringEnv: string; ca: "system-default-roots" }
+  >;
 }

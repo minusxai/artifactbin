@@ -32,16 +32,19 @@ export function createSourceQueryResources(
       throw Error();
     for (const [name, raw] of Object.entries(value.resources)) {
       const r = raw as any;
+      const keys = r && Object.keys(r).sort().join(",");
+      const systemRoots =
+        keys === "ca,connectionStringEnv" && r.ca === "system-default-roots";
+      const privateEnv = (key: unknown) =>
+        typeof key === "string" &&
+        /^PAGEGI_SOURCE_QUERY_[A-Z0-9_]+$/.test(key) &&
+        !!env[key];
       if (
         !/^source-[A-Za-z0-9]{6,128}$/.test(name) ||
         !r ||
-        Object.keys(r).sort().join(",") !== "caEnv,connectionStringEnv" ||
-        ![r.caEnv, r.connectionStringEnv].every(
-          (k) =>
-            typeof k === "string" &&
-            /^PAGEGI_SOURCE_QUERY_[A-Z0-9_]+$/.test(k) &&
-            env[k],
-        )
+        !privateEnv(r.connectionStringEnv) ||
+        (!systemRoots &&
+          (keys !== "caEnv,connectionStringEnv" || !privateEnv(r.caEnv)))
       )
         throw Error();
       const url = new URL(env[r.connectionStringEnv]!);
@@ -70,7 +73,9 @@ export function createSourceQueryResources(
       };
       const pool = poolFactory({
         connectionString: url.href,
-        ssl: { ca: env[r.caEnv], rejectUnauthorized: true },
+        ssl: systemRoots
+          ? { rejectUnauthorized: true }
+          : { ca: env[r.caEnv], rejectUnauthorized: true },
         max: 4,
         connectionTimeoutMillis: 5000,
         idleTimeoutMillis: 10000,

@@ -88,6 +88,74 @@ test("source query derives named SQL server-side, brackets access, refuses injec
     await assert.rejects(service.query(context, input));
 });
 import { createSourceQueryResources } from "../src/datasets/source-query/resources.ts";
+test("explicit system default roots retain certificate verification and reject mixed trust settings", async () => {
+  const env = {
+    PAGEGI_SOURCE_QUERY_TEST_URL:
+      "postgres://reader:private@db.invalid/source?sslmode=disable&sslcert=bad",
+  };
+  let options: any;
+  const pool = {
+    connect: async () => {
+      throw Error("unused");
+    },
+    end: async () => {},
+    on() {},
+  };
+  const resources = createSourceQueryResources(
+    JSON.stringify({
+      resources: {
+        "source-ABC123": {
+          connectionStringEnv: "PAGEGI_SOURCE_QUERY_TEST_URL",
+          ca: "system-default-roots",
+        },
+      },
+    }),
+    env,
+    (o) => {
+      options = o;
+      return pool;
+    },
+  );
+  assert.deepEqual(options.ssl, { rejectUnauthorized: true });
+  assert.equal(Object.hasOwn(options.ssl, "ca"), false);
+  assert.equal(
+    [...new URL(options.connectionString).searchParams.keys()].some((k) =>
+      k.toLowerCase().startsWith("ssl"),
+    ),
+    false,
+  );
+  assert.equal(options.options, "-c default_transaction_read_only=on");
+  await resources.close();
+  for (const trust of [
+    {},
+    { ca: "arbitrary" },
+    { ca: false },
+    { ca: "system-default-roots", caEnv: "PAGEGI_SOURCE_QUERY_TEST_CA" },
+    { ca: "system-default-roots", rejectUnauthorized: false },
+  ]) {
+    let created = 0;
+    assert.throws(
+      () =>
+        createSourceQueryResources(
+          JSON.stringify({
+            resources: {
+              "source-ABC123": {
+                connectionStringEnv: "PAGEGI_SOURCE_QUERY_TEST_URL",
+                ...trust,
+              },
+            },
+          }),
+          { ...env, PAGEGI_SOURCE_QUERY_TEST_CA: "ca" },
+          () => {
+            created++;
+            return pool;
+          },
+        ),
+      /Invalid source query resources/,
+    );
+    assert.equal(created, 0);
+  }
+});
 test("operator source resources enforce CA verification and read-only defaults despite URL SSL overrides", async () => {
   let options: any;
   let ended = 0;
