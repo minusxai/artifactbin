@@ -49,13 +49,10 @@ const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
 export const ISLANDS_BROWSER_IMPORTERS = [
   'services/app/solid/',
   'services/app/lib/cli-toolkit/browser.ts',
-  'services/app/lib/offline/compiled-boot.ts',
-  'services/app/lib/offline/compiled-sqlite.ts',
-  'services/app/lib/offline/solid-entry.tsx',
 ];
 const ISLANDS_BROWSER_LEAVES = [
-  'chart', 'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
-  'live-update', 'module', 'morph/engine', 'person-face', 'rt', 'sqlite-engine', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
+  'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
+  'live-update', 'morph/engine', 'person-face', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
 ];
 /*
  * Rule 4's seed for the hub modules: every path outside non-test code imported on 2026-10-10, measured
@@ -88,7 +85,6 @@ const STORY_RUNTIME_BROWSER_LEAVES = [
 const PAGE_STORE_BROWSER_IMPORTERS = [
   'services/app/lib/islands/',
   'services/app/lib/artifact-backend/http.ts',
-  'services/app/lib/offline/compiled-boot.ts',
 ];
 const PAGE_STORE_BROWSER_LEAVES = ['authenticated-transport', 'fetch-transport', 'page-bindings', 'page-engine', 'store'];
 /**
@@ -123,9 +119,6 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/lib/islands/morph/engine.ts',
   'services/app/lib/islands/url-sync.ts',
   'services/app/lib/islands/viewer.ts',
-  'services/app/lib/offline/file-backend.ts',
-  'services/app/lib/offline/snapshot-current.ts',
-  'services/app/lib/offline/snapshot-transport.ts',
   'services/app/lib/page-store/authenticated-transport.ts',
   'services/app/lib/page-store/dataflow-core.ts',
   'services/app/lib/page-store/fetch-transport.ts',
@@ -140,7 +133,7 @@ const DATAFLOW_BROWSER_IMPORTERS = [
   'services/app/solid/lib/format.ts',
 ];
 const DATAFLOW_BROWSER_LEAVES = [
-  'builtins', 'compiled-dataflow', 'compiled-flow', 'dataflow', 'dataset-shape', 'evaluate', 'image-source', 'local-state', 'local-tables',
+  'builtins', 'compiled-flow', 'dataflow', 'dataset-shape', 'evaluate', 'image-source', 'local-state', 'local-tables',
   'mutation-request', 'mutation-request-builder', 'number-aggregation', 'number-format', 'placement', 'ref-data', 'scalar-input', 'url-values',
 ];
 /*
@@ -159,13 +152,10 @@ const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/lib/annotations/markdown-lite.ts',
   'services/app/lib/artifact-backend/browser-artifact-write.ts',
   'services/app/lib/cli-toolkit/browser.ts',
-  'services/app/lib/offline/file-backend.ts',
-  'services/app/lib/offline/project-document.ts',
-  'services/app/lib/offline/snapshot-current.ts',
 ];
 const DOCUMENT_BROWSER_LEAVES = [
-  'anchors', 'annotation-edits', 'annotation-range', 'asset-url', 'body', 'context', 'display-title', 'document-authoring-client', 'document-graph', 'document-graph-patch',
-  'document-update-client', 'document-update-history', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'node-ids', 'person-mentions', 'pwa-settings',
+  'annotation-edits', 'annotation-range', 'asset-url', 'context', 'display-title', 'document-authoring-client', 'document-graph',
+  'document-update-client', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'person-mentions', 'pwa-settings',
   'query-notebook', 'social-preview', 'source-changes', 'table-catalog', 'update-parts',
 ];
 /**
@@ -174,11 +164,11 @@ const DOCUMENT_BROWSER_LEAVES = [
  * three leaves.
  */
 const COMPILED_PAGE_ENTRIES = ['', 'backfill.server', 'bundle.server', 'compiler'];
-const COMPILED_PAGE_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts'];
-const COMPILED_PAGE_BROWSER_LEAVES = ['agent-discovery', 'carriers', 'story-element'];
+const COMPILED_PAGE_BROWSER_IMPORTERS = [];
+const COMPILED_PAGE_BROWSER_LEAVES = [];
 /** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
-const PAGE_STYLES_BROWSER_IMPORTERS = ['services/app/lib/offline/file-html.ts', 'services/app/lib/offline/solid-entry.tsx'];
-const PAGE_STYLES_BROWSER_LEAVES = ['document-root'];
+const PAGE_STYLES_BROWSER_IMPORTERS = [];
+const PAGE_STYLES_BROWSER_LEAVES = [];
 /** lib/accounts: its index, and tokens, which a downstream deployment imports by path (__tests__/downstream-exports.test.ts). */
 const ACCOUNTS_ENTRIES = ['', 'tokens'];
 /**

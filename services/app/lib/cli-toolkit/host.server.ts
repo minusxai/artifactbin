@@ -24,13 +24,9 @@ export type { PreparedStoryRuntime } from '../publish/prepared/prepared-runtime'
 export { ISLANDS_PATH } from '../story-runtime/contract';
 export type { ServedResults, StoryIslandData } from '../story-runtime/contract';
 export { compileStoryCss, compileStoryCssWithExtras } from '../data/story/story-css.server';
-export { fileRuntimeClasses } from '../offline/runtime-classes';
 export { askedRuntimeClasses, renderedRuntimeClasses, runtimeCssPageData } from '../serving/runtime-css.server';
 
 // ---- Offline file: the self-contained `.html` artifact file's parts, HTML and fonts.
-export { offlineFileParts } from '../offline/bundle.server';
-export { renderArtifactFileHtml } from '../offline/file-html';
-export { withoutUnusedFaces } from '../offline/font-faces';
 
 // ---- Serving and export: fonts, social cards and the script render allowance.
 export { DOCUMENT_UI_FONT_CSS } from '../serving/app-fonts';

@@ -1,113 +1,55 @@
-/**
- * GET /a/<id>/download — the offline file as an attachment: the reader's
- * credential decides (uniform 404 otherwise), the body is one self-contained
- * HTML file carrying a valid ArtifactFile and the offline bundle.
- */
+/** The retained download door emits native HTML with the original read policy. */
 import { describe, expect, it } from 'vitest';
-import { gunzipSync } from 'node:zlib';
-import { useAppHarness, request } from '@/__tests__/harness';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { JSDOM } from 'jsdom';
+import { useAppHarness, request, mintAccountToken } from '@/__tests__/harness';
+import { POST } from '@/app/api/artifacts/route';
 import { GET as download } from '@/app/a/[id]/download/route';
-import { offlineBundle, offlineExtrasRef } from '@/lib/offline/bundle.server';
-import { parseArtifactFile, sourceDigest } from '@/lib/offline/file-format';
-import { mintAccountToken as mintToken } from '@/__tests__/harness';
-import { claimToken, createUser } from '@/lib/accounts';
-
 useAppHarness();
-
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
-
-async function owner(name: string) {
-  const user = await createUser({ email: `mxmx_test_dl_${name}@example.com` });
-  const token = await mintToken(`mxmx_test_dl_${name}`, user.id);
-  await claimToken(user.id, token.token);
-  return token.token;
+const source = '<!doctype html><html><head><title>Trip plan</title><style>.status{color:rgb(20,90,40)}</style><script type="application/json" data-af="state">{"count":3,"label":"&lt;route&gt;"}</script><script src="/af/v1/core.js"></script><script type="module">import {client,gql} from "@afbin/apollo";</script></head><body><h1 class="status">Trip plan</h1><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"></circle></svg><img alt="Portable pixel" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></body></html>';
+async function publish(visibility: 'private' | 'unlisted') {
+  const actor = await mintAccountToken(`native-download-${visibility}`);
+  const response = await POST(request('/api/artifacts', { method: 'POST', token: actor.token, json: { html: source, visibility } }));
+  expect(response.status, await response.clone().text()).toBe(201);
+  return { actor, id: (await response.json()).id as string };
 }
-
-async function publish(token: string, visibility: 'private' | 'unlisted', source = '<h1>Trip plan</h1><p>Day one.</p>') {
-  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { markup: `---\ntitle: Trip plan\n---\n${source}`, visibility } }));
-  expect(res.status, await res.clone().text()).toBe(201);
-  return ((await res.json()) as { id: string }).id;
-}
-
-const fileOf = (html: string) => {
-  const m = html.match(/<script type="application\/json" id="afbin-file">([\s\S]*?)<\/script>/);
-  if (!m) throw new Error('no file block');
-  return parseArtifactFile(JSON.parse(m[1]!));
-};
-
 describe('GET /a/<id>/download', () => {
-  it('gives the owner one self-contained HTML attachment named after the document', async () => {
-    const token = await owner('a');
-    const id = await publish(token, 'private');
-    const res = await download(request(`/a/${id}/download`, { token }), params(id));
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toMatch(/^text\/html/);
-    expect(res.headers.get('content-disposition')).toBe(`attachment; filename="${id}-trip-plan.jsx.html"; filename*=UTF-8''${id}-trip-plan.jsx.html`);
-    const html = await res.text();
-    expect(html).toContain('id="afbin-code"');
-    const file = fileOf(html);
-    expect(file.artifactId).toBe(id);
-    expect(file.source).toContain('Trip plan');
-    expect(file.bundle).toBe('solid');
-    expect(html).not.toContain('id="afbin-wasm"');
+  it('gives an authorized reader one native HTML attachment without account credentials', async () => {
+    const { actor, id } = await publish('private');
+    const response = await download(request(`/a/${id}/download`, { token: actor.token }), params(id));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toMatch(/^text\/html/);
+    expect(response.headers.get('content-disposition')).toBe('attachment; filename="Trip plan.html"; filename*=UTF-8\'\'Trip%20plan.html');
+    const html = await response.text();
+    expect(html).not.toContain(actor.token);
+    expect(html).not.toContain('afbin-file');
+    expect(html).not.toContain('afbin-compiled-code');
+    const doc = new JSDOM(html).window.document;
+    const runtime = JSON.parse(doc.querySelector('[data-af="runtime"]')!.textContent!);
+    expect(runtime).toMatchObject({ pageId: id, revision: '1', offline: true, initialState: { count: 3 } });
+    expect(runtime.appOrigin).toBeUndefined();
+    expect(doc.querySelectorAll('script[data-af="core"]')).toHaveLength(1);
+    expect(doc.querySelector('script[src="/af/v1/core.js"]')).toBeNull();
   });
-
-  it('lets anyone with the link download an unlisted document', async () => {
-    const token = await owner('b');
-    const id = await publish(token, 'unlisted');
-    const res = await download(request(`/a/${id}/download`), params(id));
-    expect(res.status).toBe(200);
+  it('lets anyone with an unlisted link download the native document', async () => {
+    const { id } = await publish('unlisted');
+    expect((await download(request(`/a/${id}/download`), params(id))).status).toBe(200);
   });
-
-  it('answers 404 for a private document the caller cannot read, and for an unknown id', async () => {
-    const token = await owner('c');
-    const id = await publish(token, 'private');
+  it('keeps private and missing documents behind the same read refusal', async () => {
+    const { id } = await publish('private');
+    const stranger = await mintAccountToken('native-download-stranger');
     expect((await download(request(`/a/${id}/download`), params(id))).status).toBe(404);
+    expect((await download(request(`/a/${id}/download`, { token: stranger.token }), params(id))).status).toBe(404);
     expect((await download(request('/a/Zz99Zz/download'), params('Zz99Zz'))).status).toBe(404);
   });
-
-  it('carries the Mermaid engine only for a document that draws a diagram', async () => {
-    const token = await owner('d');
-    const id = await publish(token, 'private', '<h1>Flow</h1><Mermaid code="graph TD; A-->B" />');
-    const html = await (await download(request(`/a/${id}/download`, { token }), params(id))).text();
-    expect(fileOf(html).bundle).toBe('solid');
-    const plain = await publish(token, 'private');
-    const plainHtml = await (await download(request(`/a/${plain}/download`, { token }), params(plain))).text();
-    const code = (h: string) => h.match(/id="afbin-code">([^<]*)</)![1]!;
-    const compiled = (h: string) => gunzipSync(Buffer.from(h.match(/id="afbin-compiled-code">([^<]*)</)![1]!, 'base64')).toString('utf8');
-    expect(code(html)).toBe(await offlineBundle('solid'));
-    expect(code(plainHtml)).toBe(code(html));
-    expect(compiled(html).includes('mermaidAPI')).toBe(true);
-    expect(plainHtml).not.toContain('id="afbin-compiled-code"');
-  });
-
-  it('names its code-view extras and the source its render was built from, and tells an agent how to edit it', async () => {
-    const token = await owner('e');
-    const id = await publish(token, 'private');
-    const html = await (await download(request(`/a/${id}/download`, { token }), params(id))).text();
-    const file = fileOf(html);
-    expect(file.extras).toEqual(await offlineExtrasRef());
-    expect(file.derivedFrom).toBe(sourceDigest(file.source));
-    expect(html).toMatch(new RegExp(`^<!doctype html>\\n<!-- artifactbin offline file for "Trip plan" \\(${file.liveUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\.`));
-    expect(html).toContain(`<link rel="help" href="${file.origin}/llms.txt"`);
-    expect(html).toContain(`script-src 'unsafe-inline' ${new URL(file.origin).origin};`);
-    expect(html).not.toContain("'wasm-unsafe-eval'");
-    expect(html.indexOf('id="afbin-file"')).toBeLessThan(html.indexOf('id="afbin-code"'));
-  });
-});
-
-describe('the offline file has no server to ask for a class its rows bring', () => {
-  it('compiles the classes of every row it carries into its sheet at export', async () => {
-    const token = await owner('runtime-classes');
-    const source = '<Helmet><Value name="items" type="table" value={[{id: 1, status: "ok"}, {id: 2, status: "late"}]} />'
-      + '<Query name="rows">{`select id, case when status = \'ok\' then \'bg-lime-500 hover:bg-sky-600\' else \'md:w-64 w-[37%]\' end as cls from items`}</Query></Helmet>'
-      + '<For each={$rows} keyBy="id"><span className="px-2 {$_row.cls}">x</span></For>';
-    const id = await publish(token, 'private', source);
-    const file = fileOf(await (await download(request(`/a/${id}/download`, { token }), params(id))).text());
-    for (const selector of ['.bg-lime-500', '.hover\\:bg-sky-600', '.md\\:w-64', '.w-\\[37\\%\\]']) expect(file.css.compiled).toContain(selector);
-    // A document whose classes are all literal carries its stored sheet, words of its rows never compiled in.
-    const plainId = await publish(token, 'private', '<Helmet><Value name="items" type="table" value={[{id: 1, cls: "bg-lime-500"}]} /></Helmet><For each={$items} keyBy="id"><span className="px-2">x</span></For>');
-    expect(fileOf(await (await download(request(`/a/${plainId}/download`, { token }), params(plainId))).text()).css.compiled).not.toContain('.bg-lime-500');
+  it('preserves portable authored styles, media and viewer defaults as ordinary HTML', async () => {
+    const { actor, id } = await publish('private');
+    const response = await download(request(`/a/${id}/download`, { token: actor.token }), params(id));
+    const doc = new JSDOM(await response.text()).window.document;
+    expect(doc.querySelector('style')!.textContent).toContain('.status{color:rgb(20,90,40)}');
+    expect(doc.querySelector('h1')!.getAttribute('class')).toBe('status');
+    expect(doc.querySelector('svg circle')!.getAttribute('r')).toBe('4');
+    expect(doc.querySelector('img')!.getAttribute('src')).toMatch(/^data:image\/gif;base64,/);
+    expect(doc.querySelector('[data-af="state"]')!.textContent).toContain('"count":3');
   });
 });

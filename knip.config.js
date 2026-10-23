@@ -10,7 +10,7 @@ const ISLAND_ENTRIES = [
   `${ISLANDS}/{rt,boot,deck,row-class,page,page-runtime,frame-editor,sqlite-engine,url-sync,chart-controller}.{ts,tsx}`,
   `${ISLANDS}/kit/{image,basic,tabs,accordion,dialog,disclosure,controls,upload,data,files,people,mermaid,isometric,isometric-server,embed,cells,static}.tsx`,
   `${ISLANDS}/kit/image-map.ts`, `${ISLANDS}/kit/templates.ts`, `${ISLANDS}/morph/engine.ts`, `${ISLANDS}/vendor/*.ts`,
-  'lib/offline/{compiled-boot,compiled-sqlite}.ts',
+
 ];
 
 /** @type {import('knip').KnipConfig} */
@@ -50,16 +50,16 @@ export default {
       entry: [
         // Route modules: server/routes.generated.ts mounts each as a namespace.
         'app/**/route.ts',
-        // Island chunks (build-islands), offline extras (scripts/build-offline.mjs), library bundles
+        // Island chunks (build-islands), library bundles
         // (scripts/build-libraries.mjs over lib/libraries/registry.json), the SPA (vite.config.mts).
         ...ISLAND_ENTRIES,
         // Native HTML core bundles this module by URL; its exports are the author ABI.
         'lib/html-runtime/{browser-client,build.server,index}.ts',
-        'lib/offline/{extras-entry.ts,solid-entry.tsx}', 'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
+        'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
         // Server bundle workers (scripts/build/build-server.mjs).
         'lib/publish/prepared/draft-compile-worker.ts', 'lib/runner/runtime.ts',
         // Build and generator scripts run by path (scripts/lib/afbin-run.mjs, scripts/lib/dev-runner.mjs, CI).
-        'scripts/{build-libraries,build-offline,build-server-reader,generate-geo-boundaries}.mjs', 'scripts/generate-offline-fixture.ts',
+        'scripts/{build-libraries,build-server-reader,generate-geo-boundaries}.mjs',
         'skills/**/*.jsx',
         // The HTTP author-skill ZIP loads these explicit text assets by path (lib/skills/assets).
         'skills/artifactbin/{scripts/*.mjs,examples/*.{html,ts,csv},design-systems/*.css}',
@@ -68,8 +68,6 @@ export default {
         // Reached in ways knip does not follow: `Promise.all([import(...)])` (lib/mermaid-images/reader-draw.ts)
         // and an `import('./managed-assets')` type in an interface method (lib/page-store/store.ts).
         'lib/mermaid-images/mermaid-render.ts', 'lib/page-store/managed-assets.ts',
-        // Bundled whole by scripts/gates/gate-offline-file.mjs for its writer and messages.
-        'lib/offline/{file-html,file-format}.ts',
         // Test fixtures run as their own tsx processes by the tests beside them.
         'lib/islands/__tests__/fixtures/*.{ts,tsx}',
       ],

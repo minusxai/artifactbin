@@ -133,16 +133,14 @@ import * as r129 from '@/app/assets/[hash]/route';
 import * as r130 from '@/app/assets/export/[id]/route';
 import * as r131 from '@/app/assets/mermaid/[file]/route';
 import * as r132 from '@/app/basemap/[...path]/route';
-import * as r133 from '@/app/connect/import/route';
-import * as r134 from '@/app/connect/inspect/route';
-import * as r135 from '@/app/email/[id]/route';
-import * as r136 from '@/app/health/route';
-import * as r137 from '@/app/llms.txt/route';
-import * as r138 from '@/app/llms/[topic]/route';
-import * as r139 from '@/app/people/[id]/route';
-import * as r140 from '@/app/skills/artifactbin.zip/route';
-import * as r141 from '@/app/tiles/[...tile]/route';
-import * as r142 from '@/app/workspace/[id]/route';
+import * as r133 from '@/app/email/[id]/route';
+import * as r134 from '@/app/health/route';
+import * as r135 from '@/app/llms.txt/route';
+import * as r136 from '@/app/llms/[topic]/route';
+import * as r137 from '@/app/people/[id]/route';
+import * as r138 from '@/app/skills/artifactbin.zip/route';
+import * as r139 from '@/app/tiles/[...tile]/route';
+import * as r140 from '@/app/workspace/[id]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -279,14 +277,12 @@ export const ROUTES: RouteEntry[] = [
   { path: "/assets/export/:id", dir: "/assets/export/[id]", methods: ["GET","HEAD"], module: r130 },
   { path: "/assets/mermaid/:file", dir: "/assets/mermaid/[file]", methods: ["GET","HEAD"], module: r131 },
   { path: "/basemap/:path{.+}", dir: "/basemap/[...path]", methods: ["GET"], module: r132 },
-  { path: "/connect/import", dir: "/connect/import", methods: ["POST"], module: r133 },
-  { path: "/connect/inspect", dir: "/connect/inspect", methods: ["POST"], module: r134 },
-  { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r135 },
-  { path: "/health", dir: "/health", methods: ["GET"], module: r136 },
-  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r137 },
-  { path: "/llms/:topic", dir: "/llms/[topic]", methods: ["GET"], module: r138 },
-  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r139 },
-  { path: "/skills/artifactbin.zip", dir: "/skills/artifactbin.zip", methods: ["GET"], module: r140 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r141 },
-  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r142 },
+  { path: "/email/:id", dir: "/email/[id]", methods: ["GET"], module: r133 },
+  { path: "/health", dir: "/health", methods: ["GET"], module: r134 },
+  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r135 },
+  { path: "/llms/:topic", dir: "/llms/[topic]", methods: ["GET"], module: r136 },
+  { path: "/people/:id", dir: "/people/[id]", methods: ["GET"], module: r137 },
+  { path: "/skills/artifactbin.zip", dir: "/skills/artifactbin.zip", methods: ["GET"], module: r138 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r139 },
+  { path: "/workspace/:id", dir: "/workspace/[id]", methods: ["GET"], module: r140 },
 ];

@@ -1,4 +1,4 @@
-/** Build assets used by server rendering, editing, and offline files. No reader browser runtime. */
+/** Build assets used by server rendering and editing. No reader browser runtime. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -22,7 +22,6 @@ const libraryFiles = fs.readdirSync(path.join(root, 'lib/libraries'), { recursiv
 const stamped = stampInputs([...prepared, ...libraryFiles.map(repoRelative)]);
 fs.writeFileSync(path.join(output, 'prepared-sources.sha256'), `${fingerprintInputs(path.resolve(root, '../..'), prepared)}\n`);
 
-await import('./build-offline.mjs');
 await import('./build-libraries.mjs');
 
 // Older checkouts also wrote mermaid-modules.json here; nothing reads it.
@@ -42,12 +41,8 @@ fs.writeFileSync(path.join(output, 'maplibre-gl-worker.mjs'), worker.replace(/\n
 // Older checkouts copied MapLibre v5's CSP worker here.
 fs.rmSync(path.join(output, 'maplibre-gl-csp-worker.js'), { force: true });
 
-// The offline bundles' own marker lists what they read (their inputs and the Tailwind-scanned files).
-const offline = JSON.parse(fs.readFileSync(path.join(output, 'offline/.build-cache.json'), 'utf8'));
-const offlineInputs = stampInputs(Object.keys(offline.inputs).map((file) => repoRelative(path.join(root, file)))).inputs;
 const registry = JSON.parse(fs.readFileSync(path.join(root, 'lib/libraries/registry.json'), 'utf8'));
-recordServerReader({ ...stamped, inputs: { ...offlineInputs, ...stamped.inputs } }, [
-  ...['prepared-sources.sha256', 'lucide-icons.json', 'maplibre-gl-worker.mjs', 'offline/manifest.json'].map((file) => repoRelative(path.join(output, file))),
-  ...offline.outputs.map((file) => repoRelative(path.join(root, file))),
+recordServerReader(stamped, [
+  ...['prepared-sources.sha256', 'lucide-icons.json', 'maplibre-gl-worker.mjs'].map((file) => repoRelative(path.join(output, file))),
   ...Object.entries(registry).map(([name, spec]) => repoRelative(path.join(root, 'public/libraries', `${name}-${spec.version}`, 'index.js'))),
 ]);

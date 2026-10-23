@@ -60,7 +60,6 @@ const runtimeOutputs = (root) => [
   'preview/chrome.css',
   'preview/fonts.css',
   'public/islands/manifest.json',
-  'lib/build-assets/offline/manifest.json',
   'dist/web/solid-app.html',
   'package.json',
 ].map((file) => path.join(runtimePath(root), file));
@@ -72,7 +71,7 @@ const runtimeSourceRoots = (root) => [
     .map((dir) => path.join(root, 'services', ...dir)),
   ...['services/cli/scripts/build.mjs', 'services/cli/scripts/build-host.mjs', 'services/cli/scripts/build-preview.mjs',
     'services/cli/scripts/bundle-options.mjs', 'services/app/scripts/build-prep.mjs', 'services/app/scripts/build-server-reader.mjs',
-    'services/app/scripts/build-offline.mjs', 'services/app/scripts/build-libraries.mjs', 'services/app/scripts/copy-assets.mjs',
+    'services/app/scripts/build-libraries.mjs', 'services/app/scripts/copy-assets.mjs',
     'services/app/package.json', 'services/cli/package.json', 'services/cli/npm-shrinkwrap.json', 'package.json', 'package-lock.json',
     'services/contracts/package.json', 'services/utils/package.json', 'services/sql/package.json', 'services/auth/package.json',
     'services/browser/package.json', 'services/events/package.json', 'scripts/build/build-server.mjs',

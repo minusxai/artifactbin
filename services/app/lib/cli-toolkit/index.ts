@@ -37,7 +37,6 @@ export type { AnnotationRange } from '../document';
 export { annotationAuthorForAgent } from '../annotations/author';
 export type { AnnotationWire } from '../annotations/store';
 export type { AnnotationAuthor, AnnotationCommentWire } from '@artifactbin/contracts';
-export { validateFileComments } from '../offline/comment-validation';
 
 // ---- Dataflow: compile and evaluate a document's queries locally.
 export { compileWithLoader, validateVizAgainstColumns } from '../dataflow/server';
@@ -54,10 +53,6 @@ export { resolveStoredStoryDesign } from '../data/story/story-themes';
 export { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '../validation/atlas-schemas';
 export type { StoryDesignName } from '../validation/atlas-schemas';
 
-// ---- Local artifact file format (the offline `.html` file).
-export { sourceDigest } from '../offline/file-format';
-export type { ArtifactFile } from '../offline/file-format';
-export { readArtifactFileHtml } from '../offline/offer';
 
 // ---- Backend contract: the artifact backend's errors and answers, dataset definitions.
 export { BackendRequestError } from '../artifact-backend/errors';

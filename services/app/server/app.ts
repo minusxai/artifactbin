@@ -29,7 +29,6 @@ import path from 'node:path';
 import { createGithubResponse } from './external/github';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { Hono, type Context } from 'hono';
-import { offlineExtrasAsset, offlineExtrasEncoded } from '@/lib/offline/bundle.server';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { ID_RE, verifyExportKey } from '@/lib/platform';
 import { measureQueries, runWithRequest } from '@/lib/platform';
@@ -640,18 +639,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const bytes = await retainedIslandFile(name);
     if (!bytes) return c.notFound();
     return islandFile(c, `shared/${name}`, bytes, name.endsWith('.wasm') ? 'application/wasm' : 'text/javascript; charset=utf-8');
-  });
-  /*
-   * The offline file's code-view extras (lib/offline/extras): the source editor and prettier,
-   * content-addressed like /story/*, and loaded from a file:// page (a `null`
-   * origin) by an SRI-pinned script — which is a CORS request, hence the open ACAO.
-   */
-  app.on(['GET', 'HEAD'], '/offline/:name', async (c) => {
-    const code = await offlineExtrasAsset(c.req.param('name'));
-    if (!code) return c.notFound();
-    return variantResponse(c, code, await offlineExtrasEncoded(c.req.param('name')), {
-      'content-type': 'text/javascript; charset=utf-8', 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*', 'x-content-type-options': 'nosniff',
-    });
   });
   app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
   // Opaque-origin /raw frames import these modules and fetch the page engine's wasm.
