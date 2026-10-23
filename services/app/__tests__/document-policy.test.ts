@@ -1,5 +1,5 @@
-import {documentEditBody} from './prepared-document';
-import {createDocumentGraph} from '@/lib/document/document-graph';
+import {nativeHtml} from './native-html-fixture';
+import {artifactState} from '@/lib/artifacts/state';
 import {afterEach,beforeEach,expect,it} from 'vitest';
 import {setDocumentEditorPolicy} from '@/lib/accounts';
 import type {Actor} from '@artifactbin/contracts';
@@ -13,7 +13,7 @@ import {observedRequest} from './conditional-request';
 
 /**
  * The host's document-editor grant at the BROWSER doors (the session the proxy attaches): an admin edits any
- * markup document that is not private, exactly as a link could reach it, and reaches no private artifact.
+ * native HTML document that is not private, exactly as a link could reach it, and reaches no private artifact.
  */
 const harness=useAppHarness();
 const admin:Actor={credential:'session',userId:'usr_admin',email:'Admin@Example.com',emailVerified:true};
@@ -25,9 +25,9 @@ beforeEach(async()=>{
  await (await harness.db()).query("INSERT INTO users(id,email,kind) VALUES ('usr_admin','admin@example.com','account'),('usr_other','other@example.com','account'),('usr_owner','owner@example.com','account')");
  setDocumentEditorPolicy(actor=>actor.userId==='usr_admin' && actor.emailVerified===true);
  for(const [id,title,visibility] of [['abc123','Unlisted document','unlisted'],['prv123','Private document','private']])
-  await (await harness.db()).query(`INSERT INTO artifacts(id,token_id,user_id,title,document,meta,format,visibility,edit_id) VALUES ($1,'tok_owner','usr_owner',$2,$3::jsonb,'{"dataSyntax":2}','markup',$4,'base-edit')`,[id,title,JSON.stringify(createDocumentGraph('<p id="intro">Before</p>',1)),visibility]);
+  await (await harness.db()).query(`INSERT INTO artifacts(id,token_id,user_id,title,source,meta,format,visibility,edit_id) VALUES ($1,'tok_owner','usr_owner',$2,$3,'{}','html',$4,'base-edit')`,[id,title,nativeHtml('<p data-af-id="intro">Before</p>'),visibility]);
 });
-it('opens non-private documents in the ordinary editor with server-provided editor permission',async()=>{
+it('opens non-private documents with native publication authority with server-provided editor permission',async()=>{
  const req=request(path,options),actor=await sessionActor(req),row=(await getArtifactById('abc123'))!;
  expect(actor.documentEditor).toBe(true);
  expect(await canReadArtifact(row,actor)).toBe(true);
@@ -44,8 +44,8 @@ it('refuses an admin every browser door to a private document, leaking nothing a
  const doors:Array<[string,Response]>=[
   ['read',await GET(request(privatePath,options),privateContext)],
   ['page',await page(request('/api/page/artifact/prv123',options),privateContext)],
-  ['edit',await edit(request(privatePath+'/edits',{...options,method:'POST',json:documentEditBody(row,{source:'<p id="intro">Admin</p>',whole:true})}),privateContext)],
-  ['replace',await PUT(await observedRequest(privatePath,{...options,method:'PUT',json:{markup:'<p id="intro">Admin</p>'}}),privateContext)],
+  ['edit',await edit(request(privatePath+'/edits',{...options,method:'POST',json:{source:'retired editor request'}}),privateContext)],
+  ['replace',await PUT(await observedRequest(privatePath,{...options,method:'PUT',json:{html:nativeHtml('<p data-af-id="intro">Admin</p>')}}),privateContext)],
   ['delete',await DELETE(request(privatePath,{...options,method:'DELETE'}),privateContext)],
  ];
  for(const [door,response] of doors){
@@ -55,16 +55,17 @@ it('refuses an admin every browser door to a private document, leaking nothing a
  }
  expect(await getArtifactById('prv123')).toMatchObject({version:1,actor_user_id:null,visibility:'private'});
 });
-it('saves through the normal edit and replacement routes with real actor attribution and history',async()=>{
- const response=await edit(request(path+'/edits',{...options,method:'POST',json:documentEditBody((await getArtifactById('abc123'))!,{source:'<p id="intro">Edited</p>',whole:true})}),context);
- expect(response.status,await response.clone().text()).toBe(200);
- const replaced=await PUT(await observedRequest(path,{...options,method:'PUT',json:{markup:'<p id="intro">Replaced</p>'}}),context);
+it('conditionally saves native HTML with real actor attribution, archived history and stale-write refusal',async()=>{
+ const initial=(await getArtifactById('abc123'))!;
+ const first=await PUT(await observedRequest(path,{...options,method:'PUT',json:{html:nativeHtml('<p data-af-id="intro">Edited</p>')}}),context);
+ expect(first.status,await first.clone().text()).toBe(200);
+ const replaced=await PUT(await observedRequest(path,{...options,method:'PUT',json:{html:nativeHtml('<p data-af-id="intro">Replaced</p>')}}),context);
  expect(replaced.status,await replaced.clone().text()).toBe(200);
- const outdated=documentEditBody((await getArtifactById('abc123'))!,{source:'<p>Stale</p>',whole:true});outdated.document_update.patch.baseVersion=1;
- const stale=await PUT(request(path,{...options,method:'PUT',json:outdated}),context);
+ const stale=await PUT(request(path,{...options,method:'PUT',json:{html:nativeHtml('<p data-af-id="intro">Stale</p>'),expectedVersion:initial.version,expectedState:artifactState(initial)}}),context);
  expect(stale.status).toBe(409);
  const row=(await getArtifactById('abc123'))!;
  expect(row).toMatchObject({user_id:'usr_owner',actor_user_id:'usr_admin',visibility:'unlisted',version:3});
+ expect(row.source).toContain('Replaced');
  expect((await (await harness.db()).query('SELECT 1 FROM artifact_versions WHERE artifact_id=$1',['abc123'])).rows).toHaveLength(2);
 });
 it('does not elevate other users, unverified identities, agent cookies or forged headers',async()=>{
@@ -77,7 +78,7 @@ it('does not elevate other users, unverified identities, agent cookies or forged
  expect((await GET(request(path,options),context)).status).toBe(404);
 });
 it('keeps cross-site writes and private datasets outside the grant',async()=>{
- expect((await edit(request(path+'/edits',{actor:admin,origin:'https://evil.test',method:'POST',json:{edit_id:'base-edit',source:'<p>Attack</p>'}}),context)).status).toBe(403);
+ expect((await PUT(await observedRequest(path,{actor:admin,origin:'https://evil.test',method:'PUT',json:{html:nativeHtml('<p>Attack</p>')}}),context)).status).toBe(403);
  await (await harness.db()).query("UPDATE artifacts SET format='dataset' WHERE id='prv123'");
  expect((await GET(request(privatePath,options),privateContext)).status).toBe(404);
  const actor=await sessionActor(request(privatePath,options));
