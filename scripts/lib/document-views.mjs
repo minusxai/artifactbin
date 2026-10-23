@@ -31,7 +31,7 @@
  */
 
 /** Installed before any page script; records paint entries and DOM milestones. */
-function documentViewProbe() {
+export function documentViewProbe() {
   const state = (window.__documentView = { fcp: null, lcp: null, takeover: null, painted: null, ready: null, want: null, view: false });
   /*
    * READY — when the page is interactive (docs/phase2-architecture.md §11): on the
@@ -41,12 +41,12 @@ function documentViewProbe() {
    * prose page: nothing to hydrate). `jsBeforeReady` counts the script bytes that
    * finished before this moment.
    */
-  const ready = () => { if (state.ready === null) state.ready = performance.now(); };
+  const ready = () => { if (state.ready === null) { state.ready = performance.now(); if(window.parent!==window)window.parent.postMessage({type:'page-speed-native',ready:true},'*'); } };
   document.addEventListener('mx:ready', ready);
   // The idle SPA and standalone behavior scripts are modules too. A page with
   // no island data has no hydration boot to signal ready; modules have loaded
   // by DOMContentLoaded, so this is the static page's byte boundary.
-  document.addEventListener('DOMContentLoaded', () => { if (!document.getElementById('mx-story-data')) ready(); });
+  document.addEventListener('DOMContentLoaded', () => { if (!document.getElementById('mx-story-data') && !document.querySelector('script[type="module"]')) ready(); });
   try {
     new PerformanceObserver(list => { for (const entry of list.getEntries()) if (entry.name === 'first-contentful-paint') state.fcp = entry.startTime; }).observe({ type: 'paint', buffered: true });
     new PerformanceObserver(list => { for (const entry of list.getEntries()) state.lcp = entry.startTime; }).observe({ type: 'largest-contentful-paint', buffered: true });
@@ -55,22 +55,28 @@ function documentViewProbe() {
   const stamp = key => requestAnimationFrame(() => requestAnimationFrame(() => { state[key] = performance.now(); }));
   const check = () => {
     // Set by a per-tab init script (measureDocumentView), which runs before any page script.
-    if (!state.configured && window.__documentViewConfig) { Object.assign(state, window.__documentViewConfig, { configured: true }); }
-    if (document.documentElement.hasAttribute('data-mx-ready')) ready();
+    if (!state.configured && window.__documentViewConfig) { Object.assign(state, window.__documentViewConfig, { configured: true }); state.view = state.view && window.parent === window; }
+    if (document.documentElement.hasAttribute('data-mx-ready') || document.documentElement.dataset.afReady === 'yes') ready();
     if (state.view && !takeoverSeen) {
       const owned = document.querySelector('body > #root [data-mx-inline-story] > :not(style)');
       if (owned && !document.querySelector('[data-mx-initial-story]')) { takeoverSeen = true; stamp('takeover'); requestAnimationFrame(() => requestAnimationFrame(ready)); }
     }
     const want = state.want;
     if (want && !paintedSeen && (!state.view || takeoverSeen)) {
-      const charts = document.querySelectorAll('[data-mx-chart-state="ready"]').length;
+      const charts = document.querySelectorAll('[data-mx-chart-state="ready"], [data-af-chart="ready"]').length;
       const pending = document.querySelectorAll('[data-mx-chart-state="pending"]').length;
-      const diagrams = document.querySelectorAll('[data-mx-mermaid-state="ready"]').length;
-      if ((!want.charts || (charts >= want.charts && pending === 0)) && (!want.diagrams || diagrams >= want.diagrams)) { paintedSeen = true; stamp('painted'); }
+      const diagrams = document.querySelectorAll('[data-mx-mermaid-state="ready"], [data-af-diagram="ready"]').length;
+      if ((!want.charts || (charts >= want.charts && pending === 0)) && (!want.diagrams || diagrams >= want.diagrams)) { paintedSeen = true; stamp('painted'); if(window.parent!==window)window.parent.postMessage({type:'page-speed-native',painted:true},'*'); }
     }
   };
+  window.addEventListener('message', event => {
+    const frame=document.querySelector('iframe[data-mx-document-frame]');
+    if(!frame || event.source!==frame.contentWindow || event.data?.type!=='page-speed-native')return;
+    if(event.data.ready && !takeoverSeen){takeoverSeen=true;stamp('takeover');ready();}
+    if(event.data.painted && !paintedSeen){paintedSeen=true;stamp('painted');}
+  });
   state.check = check;
-  new MutationObserver(check).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-mx-chart-state', 'data-mx-mermaid-state', 'data-mx-ready'] });
+  new MutationObserver(check).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-mx-chart-state', 'data-mx-mermaid-state', 'data-mx-ready', 'data-af-ready', 'data-af-chart', 'data-af-diagram'] });
 }
 
 /** The lab's throttling (scripts/ci/performance-loads.mjs `conditions`). */
