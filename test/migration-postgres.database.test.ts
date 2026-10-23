@@ -12,6 +12,7 @@ import {
 import { PostgresStreamArchive } from "../src/migration/stream-postgres.ts";
 import { planMigration, applyMigration } from "../src/migration/import.ts";
 import type { MigrationManifest } from "../src/migration/contracts.ts";
+import type { MigrationBackendReceipt } from "../src/migration/backend-preparation-contracts.ts";
 const require = createRequire(import.meta.url);
 const { Client } = require("pg");
 test(
@@ -110,6 +111,19 @@ test(
         anchor_version: null,
         created_at: "2026-01-02T00:00:00Z",
       });
+      for (let i = 1; i <= 12; i++)
+        manifest.tables.annotations!.push({
+          id: `ordered-${i}`,
+          artifact_id: "source",
+          body: `Ordered comment ${i}`,
+          quote: `Quote ${i}`,
+          author_user_id: "u2",
+          anchor_version: i % 2 === 0 ? 2 : 1,
+          anchor_key: "node",
+          created_at: `2026-02-${String(i).padStart(2, "0")}T00:00:00Z`,
+          status: i % 3 === 0 ? "resolved" : "open",
+          view_state: { scroll: i },
+        });
       const plan = await planMigration(manifest, {
         maps: buildAccountMaps(manifest),
         coreUrl: "/af/v1/core.js",
@@ -220,8 +234,30 @@ test(
         assert.equal(await collaboration.authorize(plan.pages[0]!.pageId,"",async loaded=>loaded.sourceExists(browserRevision)),true);
       }
       assert.equal((await db.query(`SELECT source_digest FROM "${schema}".files WHERE id=$1`,[plan.pages[0]!.pageId])).rows[0].source_digest, sourceDigest(String(storedSources[1].content)));
+      const orderedBackendReceipts = [2, 10, 11].map(
+        (pageVersion) =>
+          ({
+            pageLegacyId: "source",
+            pageId: plan.pages[0]!.pageId,
+            pageVersion,
+            linked: false,
+            owner: plan.pages[0]!.owner!.id,
+            members: { sourceNamespace: "fixture" },
+            viewer: { sourceNamespace: "fixture" },
+            backendId: `Ordered${pageVersion}`,
+            backendNamespace: "legacyData",
+            backendHref: `/af/v1/ids/Ordered${pageVersion}`,
+            sourceSha256: "a".repeat(64),
+            bundleSha256: "b".repeat(64),
+            deployment: { version: `v${pageVersion}` },
+          }) as MigrationBackendReceipt,
+      );
+      const verificationPage = {
+        ...plan.pages[0]!,
+        backends: orderedBackendReceipts,
+      };
       async function* expectedPages() {
-        yield plan.pages[0]!;
+        yield verificationPage;
       }
       const verify = () =>
         verifyMigrationRuntime(db, schema, {
@@ -229,7 +265,33 @@ test(
           maps: plan.maps,
           origin: "http://localhost:8787",
         });
-      assert.equal((await verify()).comments, 3);
+      await db.query(
+        `INSERT INTO "${schema}".af_backend_pages VALUES ($1,11)`,
+        [plan.pages[0]!.pageId],
+      );
+      for (const receipt of orderedBackendReceipts) {
+        await db.query(
+          `INSERT INTO "${schema}".dataset_member_bindings VALUES ($1,$2,$3,$4,$5)`,
+          [
+            receipt.backendId,
+            receipt.deployment.version,
+            receipt.pageId,
+            receipt.pageVersion,
+            "fixture",
+          ],
+        );
+        await db.query(
+          `INSERT INTO "${schema}".dataset_viewer_bindings VALUES ($1,$2,$3,$4,$5)`,
+          [
+            receipt.backendId,
+            receipt.deployment.version,
+            receipt.pageId,
+            receipt.pageVersion,
+            "fixture",
+          ],
+        );
+      }
+      assert.equal((await verify()).comments, 15);
       await db.query(
         `UPDATE "${schema}".comment_attachment_assets SET width=11`,
       );
@@ -243,7 +305,9 @@ test(
         [plan.pages[0]!.pageId],
       );
       await assert.rejects(verify(), /viewer backend registry/);
-      await db.query(`DELETE FROM "${schema}".dataset_viewer_bindings`);
+      await db.query(
+        `DELETE FROM "${schema}".dataset_viewer_bindings WHERE backend_id='Back12'`,
+      );
       await verify();
       const baseline = (
         await db.query(`SELECT * FROM "${schema}".files WHERE id=$1`, [
@@ -280,12 +344,12 @@ test(
         );
       }
       await db.query(
-        `INSERT INTO "${schema}".af_backend_pages VALUES ($1,999)`,
+        `UPDATE "${schema}".af_backend_pages SET page_version=999 WHERE page_id=$1`,
         [plan.pages[0]!.pageId],
       );
       await assert.rejects(verify(), /current backend page pointer/);
       await db.query(
-        `DELETE FROM "${schema}".af_backend_pages WHERE page_id=$1`,
+        `UPDATE "${schema}".af_backend_pages SET page_version=11 WHERE page_id=$1`,
         [plan.pages[0]!.pageId],
       );
 
@@ -295,8 +359,7 @@ test(
       );
       await assert.rejects(verify(), /member backend registry/);
       await db.query(
-        `DELETE FROM "${schema}".dataset_member_bindings WHERE page_id=$1`,
-        [plan.pages[0]!.pageId],
+        `DELETE FROM "${schema}".dataset_member_bindings WHERE backend_id='fakeid'`,
       );
       await db.query(
         `UPDATE "${schema}".files SET access=jsonb_set(access,'{visibility}','"public"') WHERE id=$1`,
@@ -412,7 +475,7 @@ test(
       );
       assert.equal(
         (await q(`count(*)::int AS n FROM "${schema}".comments`)).rows[0].n,
-        3,
+        15,
       );
       assert.equal(
         (await q(`count(*)::int AS n FROM "${schema}".snapshots`)).rows[0].n,

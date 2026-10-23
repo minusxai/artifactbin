@@ -173,7 +173,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
     });
     const actualComments = (
       await db.query(
-        `SELECT id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence::text,context_status,state_replay,changed::text FROM ${runtime}.comments WHERE file_id=$1 ORDER BY sequence`,
+        `SELECT id,node_id,quote,body,source_revision,parent_id,app_state_id,published_by,created_at,revision,resolved,fingerprint,sequence::text,context_status,state_replay,changed::text FROM ${runtime}.comments WHERE file_id=$1 ORDER BY comments.sequence`,
         [page.pageId],
       )
     ).rows;
@@ -258,7 +258,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
     equal(
       (
         await db.query(
-          `SELECT backend_id,backend_version,page_version::text,source_namespace FROM ${runtime}.dataset_member_bindings WHERE page_id=$1 ORDER BY page_version,backend_id,backend_version`,
+          `SELECT backend_id,backend_version,page_version::text,source_namespace FROM ${runtime}.dataset_member_bindings WHERE page_id=$1 ORDER BY dataset_member_bindings.page_version,backend_id,backend_version`,
           [page.pageId],
         )
       ).rows,
@@ -282,7 +282,7 @@ export const verifyMigrationRuntime: VerifyMigrationRuntime = async (
     equal(
       (
         await db.query(
-          `SELECT backend_id,backend_version,page_version::text,source_namespace FROM ${runtime}.dataset_viewer_bindings WHERE page_id=$1 ORDER BY page_version,backend_id,backend_version`,
+          `SELECT backend_id,backend_version,page_version::text,source_namespace FROM ${runtime}.dataset_viewer_bindings WHERE page_id=$1 ORDER BY dataset_viewer_bindings.page_version,backend_id,backend_version`,
           [page.pageId],
         )
       ).rows,
