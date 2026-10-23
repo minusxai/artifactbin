@@ -123,10 +123,13 @@ export async function validateDeletedArtifactPreparation(
     const head = artifact.artifacts[0]!;
     assertRow(entries, head);
     const entry = entries.get(id)!;
+    const archived = artifact.tables.artifact_versions ?? [];
+    if (archived.some((row) => row.artifact_id !== id)) refuse();
+    const overlap = archived.filter((row) => Number(row.version) === head.version);
+    const contentFields = ["format", "source", "document", "title", "description", "meta", "actor_user_id", "actor_token_id"];
+    if (overlap.length > 1 || overlap.some((row) => contentFields.some((field) => canonicalMigrationValue(row[field] ?? null) !== canonicalMigrationValue(head[field] ?? null)))) refuse();
     const originals = [
-      ...(artifact.tables.artifact_versions ?? []).filter(
-        (r) => Number(r.version) !== head.version,
-      ),
+      ...archived.filter((row) => !overlap.includes(row)),
       head,
     ];
     if (

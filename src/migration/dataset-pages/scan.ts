@@ -20,6 +20,7 @@ export const datasetPageArtifactSha256 = (row: LegacyRow): string =>
 export async function scanStandaloneDatasetPages(
   source: MigrationJobSource,
   options: MigrationJobOptions,
+  deletedAdmission?: import("../deleted-artifact-contracts.ts").DeletedArtifactAdmission,
 ) {
   const admission = options.standaloneDatasetPages;
   if (

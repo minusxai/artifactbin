@@ -20,6 +20,7 @@ export async function prepareStandaloneDatasetJob(
   source: MigrationJobSource,
   options: MigrationJobOptions,
   ports: MigrationBackendPreparationPorts,
+  deletedAdmission?: import("../deleted-artifact-contracts.ts").DeletedArtifactAdmission,
 ): Promise<MigrationJobDatasets> {
   if (!source.datasets || !options.standaloneDatasetPages)
     throw Error("Standalone dataset source unavailable");
