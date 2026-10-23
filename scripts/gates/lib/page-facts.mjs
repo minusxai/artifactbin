@@ -10,9 +10,6 @@
 /** The artifact iframe a wrapped document would sit in; a top-level delivery has none. */
 const ARTIFACT_FRAME = 'iframe[title="artifact"]';
 
-/** The normal HTML document body, inside its isolated frame on the app page. */
-export const INLINE_STORY = 'body';
-
 /** The frame the app page serves the document in, on the document's own origin. */
 export const DOCUMENT_FRAME = 'iframe[data-mx-document-frame]';
 
