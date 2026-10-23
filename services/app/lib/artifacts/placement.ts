@@ -64,7 +64,7 @@ type ParentRefusal = { error: 'invalid_parent'; hint: string };
  */
 export const PARENT_REFUSED: ParentRefusal = {
   error: 'invalid_parent',
-  hint: 'folder: must name a folder artifact you own, never one inside the document being placed, and no deeper than 6 levels. Create a folder by pushing a YAML file with `type: folder`, then set folder: <id> in the fence of the file you push.',
+  hint: 'parent_id must name a folder artifact you own, never one inside the document being placed, and no deeper than 6 levels. Create a folder with POST /api/artifacts and format: folder, then use its id as parent_id.',
 };
 
 /** Narrow `resolveParent`'s answer: the refusal, or a placement. */

@@ -29,7 +29,7 @@ async function queryResource(actor:AccessActor,id:string,body:Record<string,unkn
    const cursor=JSON.parse(Buffer.from(body.cursor,'base64url').toString());
    if(cursor.fingerprint!==fingerprint||!Number.isSafeInteger(cursor.offset)||cursor.offset<0)throw Error();
    offset=cursor.offset;
-  }catch{return json({error:'invalid_cursor',hint:'Restart this query without --cursor; the resource or query inputs changed.'},400);}
+  }catch{return json({error:'invalid_cursor',hint:'Restart this query without cursor; the resource or query inputs changed.'},400);}
  }
  const authorize=async()=>{
   signal?.throwIfAborted();await checkActor?.();const current=await readableArtifact(actor,id);

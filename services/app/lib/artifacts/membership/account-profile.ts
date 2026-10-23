@@ -26,7 +26,7 @@ export async function updateAccountProfile(actor:AccessActor,input:unknown,recei
  try{result=await (await getDb()).transaction(async query=>{
   if(!await getUserById(actor.userId!,query,true))return {status:404,body:{error:'not_found'}};
   const current=await accountProfile(actor.userId!,query);
-  if(!current||current.state!==resource.state)return {status:409,body:{error:'state_conflict',hint:'Run afbin pull --type profile and reconcile your changes before pushing again.'}};
+  if(!current||current.state!==resource.state)return {status:409,body:{error:'state_conflict',hint:'Read GET /api/account/profile and reconcile your changes against its current state before retrying.'}};
   if(resource.email!==undefined&&resource.email!==current.email||resource.name!==undefined&&resource.name!==current.name)return {status:400,body:{error:'readonly_field',hint:'email and name are observed account identity fields.'}};
   if(resource.username!==undefined&&resource.username!==current.username){
    if(resource.username===null)return {status:400,body:{error:'invalid_username'}};

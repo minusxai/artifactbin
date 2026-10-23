@@ -134,7 +134,7 @@ export async function refusalFor(actor: AccessActor, artifactId?: string): Promi
       status: 403,
       body: {
         error: SANDBOX_ONLY_ERROR,
-        hint: `a test user acts only inside its sandbox. Bring this artifact in first: afbin fork ${target} --as <testuser>, then act on the copy`,
+        hint: `a test user acts only inside its sandbox. Create a sandbox-owned copy of ${target} first, then act on the copy`,
       },
     };
   }

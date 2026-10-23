@@ -70,7 +70,7 @@ export const POST = withTokenAuth(async (request, { actor, params, clientHarness
   }, annotationAuthorForRequest(request, clientHarness),receipt);
   if (made instanceof Response) return made;
   if (!made) return json({error: 'not_found'}, 404);
-  if ('refused' in made) return json({error: made.refused, hint: 'Read the current document again, then anchor with a --quote that appears exactly once, or with the node id from its stored markup as --node.'}, made.refused === 'stale' ? 409 : 400);
+  if ('refused' in made) return json({error: made.refused, hint: 'Read the current page again, then supply an HTML anchor with its revision, stable nodeId and quote.'}, made.refused === 'stale' ? 409 : 400);
   return json(made, 201);
   };
   if(!key)return work();
