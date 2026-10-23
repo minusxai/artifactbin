@@ -135,8 +135,6 @@ async function main(): Promise<void> {
    * keeps is one table with one connection behind it, and `source` is all
    * that says whether the app or authentication spoke.
    */
-  const {startLambdaSchedules}=await import('@/lib/runner');
-  const stopSchedules=await startLambdaSchedules(db);
   const events = services().events;
 
   // The SPA: Vite in middleware mode for dev (modules, HMR, index transform); the built tree in production.
@@ -280,7 +278,6 @@ async function main(): Promise<void> {
   });
   const { installShutdown } = await import('@/lib/runtime/shutdown');
   installShutdown({ steps: [
-    stopSchedules,
     closeRunner,
     stopBackgroundTasks,
     stopHarvester,

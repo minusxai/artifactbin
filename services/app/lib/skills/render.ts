@@ -18,6 +18,7 @@
  * — inside `themes/<n>.md` / `templates/<n>.md` — that file's own registry
  * entry as `theme` / `template`.
  */
+import {publicSkillLinks} from './public-surface';
 import { credentialPaths } from '@artifactbin/utils/node/credentials';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -153,7 +154,7 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
       ...own,
     });
     const marked = (opts.bundle ? condenseForBundle(rendered) : stripBundleMarkers(rendered)).replace(/\n{3,}/g, '\n\n');
-    return assertMarkersResolved(marked, `skills/${file.path}`);
+    return assertMarkersResolved(opts.transport==='http'?publicSkillLinks(marked):marked, `skills/${file.path}`);
   } catch (error) {
     throw new Error(`skills/${file.path}: ${(error as Error).message}`);
   }

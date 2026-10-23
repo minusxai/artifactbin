@@ -142,7 +142,7 @@ describe('the address heals after checking read access', () => {
     expect(await nodesOf(w.pub.id, as({ credential: 'none' }))).toContain('public words');
     expect(payloadOf(html).address).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
   });
-  it('serves the owner their PRIVATE document at /a/<id> as themselves, and keeps /edit', async () => {
+  it('serves the owner their PRIVATE document at /a/<id> as themselves, and normalizes retired /edit', async () => {
     const w = await world();
     const owner = { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) };
     const res = await app.request(`/a/${w.priv.id}`, owner);
@@ -153,7 +153,23 @@ describe('the address heals after checking read access', () => {
     expect(payloadOf(html).address).toBe(`/@${w.owner.username}/${w.priv.id}-priv`);
     const edit = await app.request(`/a/${w.priv.id}/edit`, owner);
     expect(edit.status).toBe(200);
-    expect(payloadOf(await edit.text()).address).toBe(`/@${w.owner.username}/${w.priv.id}-priv/edit`);
+    expect(payloadOf(await edit.text()).address).toBe(`/@${w.owner.username}/${w.priv.id}-priv`);
+  });
+  it('lets document viewers read a retired edit address without editor authority',async()=>{
+    const w=await world();
+    const response=await app.request(`/a/${w.pub.id}/edit`,{headers:as({credential:'none'})});
+    expect(response.status).toBe(200);
+    expect(payloadOf(await response.text()).address).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
+  });
+  it('keeps dataset edit addresses restricted to editors',async()=>{
+    const w=await world();
+    const token=await mintToken('dataset-editor');await claimToken(w.owner.id,token.token);
+    const made=await createArtifactRoute(new Request(`${BASE}/api/artifacts`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token.token}`},body:JSON.stringify({title:'Data',dataset:[{value:1}],visibility:'public'})}));
+    expect(made.status).toBe(201);const {id}=await made.json();
+    expect((await app.request(`/a/${id}/edit`,{headers:as({credential:'none'})})).status).toBe(404);
+    const response=await app.request(`/a/${id}/edit`,{headers:as({credential:'session',userId:w.owner.id,email:w.owner.email})});
+    expect(response.status).toBe(200);
+    expect(payloadOf(await response.text()).address).toMatch(/\/edit$/);
   });
   it('carries no address at the canonical address, or where an export key holds the page', async () => {
     const w = await world();
@@ -185,7 +201,7 @@ describe('the app\'s paths', () => {
   // but a crawler and a `curl` read the status, and a caller that never asked
   // for HTML gets the JSON refusal instead of the page.
   it('serve the SPA under the app CSP, and anything else is a 404', async () => {
-    for (const p of ['/login', '/account', '/notifications', '/welcome', '/chat', '/assets', '/trash', '/tokens', '/docs-human', '/datasets/new', '/files/new']) {
+    for (const p of ['/login', '/account', '/notifications', '/welcome', '/assets', '/trash', '/tokens', '/docs-human', '/datasets/new', '/files/new']) {
       const res = await app.request(p);
       expect(res.status, p).toBe(200);
       expect(res.headers.get('content-security-policy'), p).toContain('frame-ancestors');

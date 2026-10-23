@@ -3,13 +3,9 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import type { JsxNode } from '@/lib/jsx';
-import { replaceProseRegion } from '@/lib/editor-engine/source-edit';
 import { ISLANDS_READY_EVENT } from '@/lib/islands/contract';
-import { mountCompiledEditRegions, type CompiledEditMount } from '@/lib/frame-edit/dom-mounter';
-import { createLiveEditsCore, type LiveEditsCore } from '@/solid/lib/live-edits-core';
 import { createFileBackend, rebuildArtifactFile, sourceChangedOutside } from './file-backend';
-import { createExtrasLoader, extrasScriptUrl, FORMATTING_OFFLINE, RICH_EDITOR_OFFLINE } from './extras';
-import { OFFLINE_ASSET_REASON, OFFLINE_QUERY_REASON, sourceDigest } from './file-format';
+import { OFFLINE_QUERY_REASON, sourceDigest } from './file-format';
 import { ARTIFACT_FILE_IDS, readArtifactFileParts, renderArtifactFileHtml, type ArtifactFileParts } from './file-html';
 import { clearDraft, readDraft, readName, writeDraft, writeName } from './local-state';
 import { saveArtifactFile, suggestedFileName, type SaveHandle } from './save-file';
@@ -22,28 +18,18 @@ import { TrustedUi } from '@/solid/components/TrustedUi';
 import { trustedPortalOf } from '@/lib/islands/trusted-portal';
 import { createDocumentViewport } from '@/solid/document/create-document-viewport';
 import { PageBar, DocumentTitle, PageControlsBody } from '@/solid/components/PageBar';
-import { DocumentAction, DocumentCommentAction, DocumentEditAction } from '@/solid/document/DocumentBarActions';
+import { DocumentAction, DocumentCommentAction } from '@/solid/document/DocumentBarActions';
 import { AnnotationLayer } from '@/solid/document/AnnotationLayer';
-import SourceEditorPane from '@/solid/editor/SourceEditorPane';
-import { SourceEditorToolsProvider, type SourceEditorTools } from '@/solid/editor/source-editor-tools';
-import { EditorToolbar, EditorViewTabs, EditorSourcePanel } from '@/solid/editor/EditorChrome';
 import { createFileAnnotationController } from './annotation-controller';
 import { STORY_DOCUMENT_MESSAGE, type StoryController, READER_READY_ATTR } from '@/lib/story-runtime/contract';
 import type { StoryEditSelection } from '@/lib/edit-protocol';
-import Code from 'lucide-solid/icons/code';
-import Paintbrush from 'lucide-solid/icons/paintbrush';
-import Database from 'lucide-solid/icons/database';
 import Save from 'lucide-solid/icons/save';
 import Plug from 'lucide-solid/icons/plug';
-import History from 'lucide-solid/icons/rotate-ccw-clock';
 import Settings from 'lucide-solid/icons/settings';
 import { Button } from '@/solid/ui/Button';
 import { Drawer } from '@/solid/ui/Drawer';
-import { Input } from '@/solid/ui/Field';
 import { Panel } from '@/solid/ui/Panel';
-import { Popover } from '@/solid/ui/Popover';
 import { StatusMessage } from '@/solid/ui/StatusMessage';
-import { Tooltip } from '@/solid/ui/Tooltip';
 import { LINK } from '@/solid/ui/ui';
 import { ConnectDialog, NameDialog, RestoreDialog } from './chrome-dialogs';
 
@@ -51,8 +37,6 @@ declare const __AFBIN_APP_CSS__: string;
 declare global { interface Window { __afbinOfflineReady?: Promise<void>; } }
 
 const NOTHING_TO_SAVE = 'No changes to save';
-const EDIT_REFUSED = 'This text could not be applied to the current document.';
-const INVALID_SOURCE_EDIT = 'Editing needs a valid source. Fix the markup in the file, then open it again.';
 const CHROME_CSS = 'body{margin:0;padding-top:44px}';
 
 function textOf(node: JsxNode): string { return node.type === 'text' ? node.value : node.type === 'element' ? node.children.map(textOf).join('') : ''; }
@@ -126,22 +110,16 @@ function OfflineShell(props: Opened) {
   const [name, setName] = createSignal(readName());
   const [asking, setAsking] = createSignal(false);
   const [renaming, setRenaming] = createSignal(false);
-  const [editing, setEditing] = createSignal(props.sourceDraft !== undefined);
   const [changes, setChanges] = createSignal(false);
   const [comments, setComments] = createSignal(false);
   const [threads, setThreads] = createSignal(file().threads);
   const [selected, setSelected] = createSignal<StoryEditSelection | null>(null);
-  const [sourceMode, setSourceMode] = createSignal(props.sourceDraft !== undefined);
-  const [source, setSource] = createSignal(props.sourceDraft ?? file().source);
-  const [sourceRevision, setSourceRevision] = createSignal(0);
-  const [insertMenu, setInsertMenu] = createSignal(false);
-  const [imageMenu, setImageMenu] = createSignal(false);
+  const [source, setSource] = createSignal(file().source);
   const [controls, setControls] = createSignal(false);
   const [chromeHeight, setChromeHeight] = createSignal(44);
   const [runtimeNonce, setRuntimeNonce] = createSignal<string | null>(null);
   const runtimeRef: { current: StoryController | null } = { current: null };
   let chromeRoot: HTMLDivElement | undefined;
-  const [dataMenu, setDataMenu] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [saveError, setSaveError] = createSignal('');
   const [saveReceipt, setSaveReceipt] = createSignal('');
@@ -152,12 +130,6 @@ function OfflineShell(props: Opened) {
   const [connectError, setConnectError] = createSignal('');
   const [connectedUrl, setConnectedUrl] = createSignal('');
   let cancelConnect: (() => void) | null = null;
-  const [editStatus, setEditStatus] = createSignal('');
-  const [extrasState, setExtrasState] = createSignal<'idle' | 'loading' | 'ready' | 'failed'>('idle');
-  const extras = createExtrasLoader(extrasScriptUrl(file().origin, file().extras), file().extras?.integrity ?? null);
-  extras.subscribe(() => setExtrasState(extras.state()));
-  let editMount: CompiledEditMount | null = null;
-  let live: LiveEditsCore | null = null;
   let saveHandle: SaveHandle | null = null;
   let editGeneration = 0;
   let draftTimer = 0;
@@ -174,10 +146,8 @@ function OfflineShell(props: Opened) {
       setThreads(next.threads); setDirty(true);
       runtimeRef.current?.update({ type: STORY_DOCUMENT_MESSAGE, nodes: next.island.nodes });
       afterReady(() => {
-        if (editing() && !sourceMode()) return; // The live prose editor already shows its own structural draft.
-        if (sourceMode()) { editMount?.dispose(); editMount = null; }
         projectDocument(story, next.island.nodes, projectedSource);
-        if (sourceMode() || !editing()) projectText(story, next.island.nodes);
+        projectText(story, next.island.nodes);
         showStaleQueries(story, next);
         projectedSource = next.source;
         style.textContent = [next.css.base, next.css.compiled, next.css.author, CHROME_CSS].filter(Boolean).join('\n');
@@ -186,18 +156,7 @@ function OfflineShell(props: Opened) {
       draftTimer = window.setTimeout(() => writeDraft(file(), new Date(), source() !== file().source ? source() : undefined), 800);
     },
   });
-  void backend.load().then((head) => {
-    if (!head) throw new Error('offline: document is unavailable');
-    live = createLiveEditsCore(() => ({
-      backend, initialEditId: head.edit_id, initialVersion: head.version,
-      initialDocument: head.document, initialSource: head.markup ?? file().source,
-      initialMetadata: { title: head.title, theme: head.theme, template: head.template, colorMode: head.colorMode },
-      onRemoteDocument: (next) => { setSource(next); setSourceRevision((n) => n + 1); },
-    }));
-    live.subscribe((state) => setEditStatus(state.status));
-    if (props.sourceDraft !== undefined) live.queue({ source: props.sourceDraft });
-  });
-  onCleanup(() => { editMount?.dispose(); live?.dispose(); window.clearTimeout(draftTimer); });
+  onCleanup(() => window.clearTimeout(draftTimer));
   const warnOnLeave = (event: BeforeUnloadEvent) => {
     if (!dirty()) return;
     event.preventDefault();
@@ -227,42 +186,8 @@ function OfflineShell(props: Opened) {
       return backend.actOnAnnotation(...args);
     },
   };
-  const queueSource = (next: string) => { editGeneration++; setSource(next); setDirty(true); live?.queue({ source: next });
-    window.clearTimeout(draftTimer);
-    draftTimer = window.setTimeout(() => writeDraft(file(), new Date(), source() !== file().source ? source() : undefined), 800);
-  };
-  // Blur can publish held typing and move the toolbar between mousedown and click.
-  // Keep prose focus until the action itself flushes the editor, so the intended button receives its click.
-  const keepEditorFocus = (event: MouseEvent) => { if (editing() && event.button === 0) event.preventDefault(); };
-  const edit = async () => {
-    if (editing()) {
-      editMount?.flush();
-      await live?.flushNow();
-      if (live && !live.isIdle()) return;
-      editMount?.dispose(); editMount = null;
-      projectDocument(story, file().island.nodes, projectedSource);
-      projectText(story, file().island.nodes); showStaleQueries(story, file()); projectedSource = file().source;
-      setEditing(false); setSourceMode(false); return;
-    }
-    await ensureName();
-    if (props.invalid || !name()) return;
-    setEditing(true);
-    editMount = mountCompiledEditRegions(story, file().island.nodes, {
-      // The app's own flow-edit kernel: the region at `path`, checked against what the editor last saw, prose only.
-      onFlow: (path, expected, replacement) => {
-        const before = source();
-        const next = replaceProseRegion(before, path, expected, replacement);
-        if (next !== before) queueSource(next);
-        else if (expected !== replacement) setEditStatus(EDIT_REFUSED);
-      },
-      onError: setEditStatus,
-    });
-  };
   const flushFile = async () => {
     if (props.invalid) throw new Error('Fix the invalid markup in the original file before saving or connecting.');
-    editMount?.flush();
-    await live?.flushNow();
-    if (live && !live.isIdle()) throw new Error('Fix the source before saving or connecting. Your unsaved changes are still in the editor.');
     return file();
   };
   const save = async () => {
@@ -280,7 +205,7 @@ function OfflineShell(props: Opened) {
         setSaveReceipt(result.outcome === 'written'
           ? `Saved to “${target}”. This tab stays on the file you opened. If you chose another location, open that saved file to continue. Later saves in this tab update the selected file.`
           : `Downloaded updated “${target}”. Open the downloaded file to continue. This tab stays on the file you opened.`);
-        if (generation === editGeneration && file() === current && (!live || live.isIdle())) {
+        if (generation === editGeneration && file() === current) {
           window.clearTimeout(draftTimer); clearDraft(current); setDirty(false);
         } else {
           setDirty(true); writeDraft(file(), new Date(), source() !== file().source ? source() : undefined);
@@ -310,25 +235,14 @@ function OfflineShell(props: Opened) {
         },
         onStatus: setConnectStatus,
         onError: (message) => { setConnecting(false); setConnectStatus(''); setConnectError(message); },
-        onOpened: (url) => { setConnecting(false); setConnectedUrl(url); setConnectStatus('Connected. Continue editing in the server tab. Your original HTML file is unchanged.'); },
+        onOpened: (url) => { setConnecting(false); setConnectedUrl(url); setConnectStatus('Connected. Open the server tab to read and comment.'); },
       });
     } catch (error) { setConnecting(false); setConnectError(error instanceof Error ? error.message : 'Could not open the server.'); }
   };
-  const openSource = () => { setSourceMode(true); setDataMenu(false); void extras.load().catch(() => {}); };
   // The Drawer owns Escape and the focus trap and hands focus back to its opener; this also covers a browser that does not focus a button on click.
   const closeControls = () => { setControls(false); chromeRoot?.querySelector<HTMLButtonElement>('[aria-label="Open artifact controls"]')?.focus(); };
   const closeConnect = () => { cancelConnect?.(); cancelConnect = null; setConnecting(false); setConnectStatus(''); setConnectDialog(false); };
-  const sourceTools: SourceEditorTools = {
-    editor: () => new Promise((resolve) => {
-      const ready = () => { if (extras.state() === 'ready') void import('@/solid/editor/SourceEditor').then(resolve); };
-      const unsubscribe = extras.subscribe(ready); onCleanup(unsubscribe); ready();
-      void extras.load().catch(() => {});
-    }),
-    formatter: () => import('@/lib/workspace/format-jsx-preview'),
-    get formatterUnavailable() { return extrasState() === 'ready' ? null : FORMATTING_OFFLINE; },
-    get editorUnavailable() { return extrasState() === 'failed' ? RICH_EDITOR_OFFLINE : null; },
-  };
-  createDocumentViewport({ barHeight: chromeHeight, editing, commentsOpen: comments });
+  createDocumentViewport({ barHeight: chromeHeight, editing: () => false, commentsOpen: comments });
   const style = document.createElement('style');
   style.textContent = [file().css.base, file().css.compiled, file().css.author, CHROME_CSS].filter(Boolean).join('\n');
   document.head.append(style);
@@ -342,13 +256,13 @@ function OfflineShell(props: Opened) {
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     observer?.observe(chrome);
     window.addEventListener('resize', measure);
-    createEffect(() => { saveReceipt(); dirty(); saveError(); editStatus(); editing(); queueMicrotask(measure); });
+    createEffect(() => { saveReceipt(); dirty(); saveError(); queueMicrotask(measure); });
     measure();
     afterReady(() => {
       if (disposed) return;
       const portal = trustedPortalOf(document);
       if (!portal) return;
-      const controller = createFileAnnotationController({ root: story, nodes: file().island.nodes, portal, editing,
+      const controller = createFileAnnotationController({ root: story, nodes: file().island.nodes, portal, editing: () => false,
         onComment: (picked) => { void ensureName().then(() => { if (name()) setSelected(picked); }); } });
       runtimeRef.current = controller; setRuntimeNonce(controller.nonce);
     });
@@ -365,14 +279,12 @@ function OfflineShell(props: Opened) {
     <TrustedUi overlay layer="navigation"><div ref={chromeRoot} id="afbin-chrome" class="fixed inset-x-0 top-0 text-fg">
       <PageBar home={file().liveUrl || null} mobileTitle={file().metadata.title} navigation={<><span class="shrink-0 text-muted">artifactbin</span><DocumentTitle title={file().metadata.title} /><span class="shrink-0 text-xs text-muted">Offline</span></>} actions={<>
         <DocumentCommentAction count={threads().filter(thread => thread.status === 'open').length} active={comments()} onClick={() => setComments(!comments())} />
-        <DocumentEditAction editing={editing()} disabled={!!props.invalid} description={props.invalid ? INVALID_SOURCE_EDIT : undefined} onMouseDown={keepEditorFocus} onClick={() => void edit()} />
-        <DocumentAction label={saving() ? 'Saving…' : 'Save'} disabled={!dirty() || saving()} description={!dirty() ? NOTHING_TO_SAVE : 'Save current edits and comments'} onMouseDown={keepEditorFocus} onClick={() => void save()}><Save size={18} stroke-width={1.5} /></DocumentAction>
+        <DocumentAction label={saving() ? 'Saving…' : 'Save'} disabled={!dirty() || saving()} description={!dirty() ? NOTHING_TO_SAVE : 'Save comments'} onClick={() => void save()}><Save size={18} stroke-width={1.5} /></DocumentAction>
         <DocumentAction label="Connect to server" onClick={() => setConnectDialog(true)}><Plug size={18} stroke-width={1.5} /></DocumentAction>
         <DocumentAction label="Open artifact controls" active={controls()} onClick={() => setControls(!controls())}><Settings size={18} stroke-width={1.5} /></DocumentAction>
       </>} />
-      <Show when={dirty() || editStatus() || saveError() || saveReceipt()}><div class="flex flex-wrap items-center gap-3 border-b border-edge bg-surface px-3 py-1 font-mono text-xs">
+      <Show when={dirty() || saveError() || saveReceipt()}><div class="flex flex-wrap items-center gap-3 border-b border-edge bg-surface px-3 py-1 font-mono text-xs">
         <Show when={dirty()}><span role="status">Unsaved changes</span></Show>
-        <Show when={editStatus()}><span role="status">{editStatus()}</span></Show>
         <Show when={saveError()}><span role="alert">{saveError()}</span></Show>
         <Show when={saveReceipt()}><span role="status">{saveReceipt()}</span></Show>
       </div></Show>
@@ -388,33 +300,9 @@ function OfflineShell(props: Opened) {
     </PageControlsBody></div></Drawer></Show>
     <Show when={connectDialog()}><ConnectDialog address={serverAddress()} onAddress={setServerAddress} connecting={connecting()} status={connectStatus()} error={connectError()} openedUrl={connectedUrl()} onConnect={connect} onClose={closeConnect} /></Show>
     <Show when={props.invalid}><StatusMessage kind="error" class="m-2">The source was changed outside this file and is not valid, so this is the last version that worked. {props.invalid}</StatusMessage></Show>
-    <Show when={editing()}>
-      <EditorToolbar top={chromeHeight()}>
-        <div class="flex min-w-0 items-center overflow-x-auto"><EditorViewTabs tabs={[
-          { key: 'design', label: 'App', aria: 'Edit on the page', tip: 'edit on the page', icon: <Paintbrush size={12} />, active: !sourceMode() && !dataMenu(), choose: () => { setSourceMode(false); setDataMenu(false); } },
-          { key: 'code', label: 'Code', aria: 'Edit the source', tip: 'edit the source', icon: <Code size={12} />, active: sourceMode(), choose: openSource },
-          { key: 'data', label: 'Data', aria: 'Show data', tip: 'the document’s snapshots', icon: <Database size={12} />, active: dataMenu(), choose: () => { setSourceMode(false); setDataMenu(true); } },
-        ]} /></div>
-        <div class="flex items-center gap-2">
-          <Tooltip content="Version history lives on artifactbin. Open the live version."><Button variant="secondary" size="sm" icon disabled aria-label="History" aria-description="Version history lives on artifactbin. Open the live version."><History size={14} /></Button></Tooltip>
-          <Popover open={insertMenu()} onOpenChange={(open) => { setInsertMenu(open); if (!open) setImageMenu(false); }} label="Insert"
-            trigger={(attrs) => <Button {...attrs} variant="secondary" size="sm" onClick={() => setInsertMenu(!insertMenu())}>Insert</Button>}>
-            <div class="grid gap-2 p-3">
-              <Show when={imageMenu()} fallback={<Button variant="secondary" size="sm" onClick={() => setImageMenu(true)}>Image…</Button>}>
-                <Input size="sm" aria-label="Image URL" disabled aria-description={OFFLINE_ASSET_REASON} />
-                <Button size="sm" disabled>Import image from URL</Button>
-                <Button variant="secondary" size="sm" onClick={() => { setImageMenu(false); setInsertMenu(false); }}>Close</Button>
-              </Show>
-            </div>
-          </Popover>
-        </div>
-      </EditorToolbar>
-      <Show when={dataMenu()}><aside aria-label="Data" class="fixed inset-x-0 bottom-0 z-20 overflow-auto bg-surface p-4" style={{ top: `${chromeHeight() + 44}px` }}>shape unavailable — {OFFLINE_QUERY_REASON}</aside></Show>
-      <Show when={sourceMode()}><EditorSourcePanel top={chromeHeight() + 44} commentsOpen={comments()}><SourceEditorToolsProvider value={sourceTools}><SourceEditorPane value={source()} revision={sourceRevision()} onChange={queueSource} /></SourceEditorToolsProvider></EditorSourcePanel></Show>
-    </Show>
     <Show when={asking() || renaming()}><NameDialog onAnswer={answerName} /></Show>
     </TrustedUi>
-    <TrustedUi overlay layer="discussion"><AnnotationLayer id={file().artifactId ?? 'offline-file'} backend={annotationBackend} railOpen={comments()} onRailOpenChange={setComments} liveAnnotations={threads().filter(thread => thread.status === 'open')} runtimeRef={runtimeRef} sessionNonce={runtimeNonce()} initialSelection={selected()} onSelectionConsumed={() => setSelected(null)} pickOnOpen={!editing()} showViewComments topOffset={chromeHeight() + (editing() ? 44 : 0)} /></TrustedUi>
+    <TrustedUi overlay layer="discussion"><AnnotationLayer id={file().artifactId ?? 'offline-file'} backend={annotationBackend} railOpen={comments()} onRailOpenChange={setComments} liveAnnotations={threads().filter(thread => thread.status === 'open')} runtimeRef={runtimeRef} sessionNonce={runtimeNonce()} initialSelection={selected()} onSelectionConsumed={() => setSelected(null)} pickOnOpen showViewComments topOffset={chromeHeight()} /></TrustedUi>
   </>;
 }
 

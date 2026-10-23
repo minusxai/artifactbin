@@ -16,7 +16,6 @@ import {GET as list} from '@/app/api/artifacts/route';
 import {POST as preflight} from '@/app/api/artifacts/preflight/route';
 import {GET as read} from '@/app/api/artifacts/[id]/route';
 import {GET as raw} from '@/app/a/[id]/raw/route';
-import {GET as remote} from '@/app/api/remote/sessions/route';
 import {GET as pageSession} from '@/app/api/page/session/route';
 import {createGuestOwner,mintAccountToken,request,setSession,useAppHarness} from './harness';
 import {sessionActor} from '@/lib/accounts';
@@ -45,7 +44,6 @@ describe('an explicit bearer',()=>{
   expect((await list(both('/api/artifacts',INVALID,session))).status).toBe(401);
   expect((await raw(request('/a/door01/raw',{actor:session}),ctx({id:'door01'}))).status).toBe(200);
   expect((await raw(both('/a/door01/raw',INVALID,session),ctx({id:'door01'}))).status).toBe(404);
-  expect((await remote(both('/api/remote/sessions',INVALID,session))).status).toBe(401);
   // A direct-mode session (no proxy) is a cookie too: an invalid bearer still does not fall back to it.
   setSession({user:{id:a.userId!,email:a.email}});
   expect((await list(request('/api/artifacts',{token:INVALID}))).status).toBe(401);
@@ -63,7 +61,6 @@ describe('a session cookie alone',()=>{
  it('is 401 on the token door and accepted on the request and session doors',async()=>{
   const actor=verified(a.userId!,a.email!);
   expect((await list(request('/api/artifacts',{actor}))).status).toBe(401);
-  expect((await remote(request('/api/remote/sessions',{actor}))).status).toBe(200);
   expect((await raw(request('/a/door01/raw',{actor}),ctx({id:'door01'}))).status).toBe(200);
   expect(await (await pageSession(request('/api/page/session',{actor}))).json()).toMatchObject({user:{id:a.userId},kind:'account'});
  });

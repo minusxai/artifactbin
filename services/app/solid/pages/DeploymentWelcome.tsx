@@ -2,7 +2,7 @@
 import { Show, type JSX } from 'solid-js';
 import { agentDiscovery, AGENT_HELP_TITLE } from '@/lib/platform/agent-discovery';
 import type { DeploymentState } from '@artifactbin/contracts';
-import { buildNpmSetupCommand, buildSetupInstructions } from '@/lib/platform/setup-instructions';
+import { buildSetupInstructions } from '@/lib/platform/setup-instructions';
 import { deploymentSetupOptions } from '@/lib/serving/setup-installers';
 import { HOME_WORKSPACE_COLUMN } from '../components/WorkspaceLayout';
 import { PageHeader } from '../ui/PageHeader';
@@ -14,16 +14,15 @@ import { Disclosure } from '../ui/Disclosure';
 export function DeploymentWelcome(props: { deployment: DeploymentState }): JSX.Element {
  const options=()=>({serverOrigin:window.location.origin,...deploymentSetupOptions(props.deployment)});
  const discovery=()=>agentDiscovery(window.location.origin);
- const command=()=>buildNpmSetupCommand(options());
  return <main class={HOME_WORKSPACE_COLUMN}><div class="workspace-page space-y-6">
-  <PageHeader title="Set up this workspace" description="Connect your terminal or coding agent to this deployment, then sign in with your own email." actions={<a href="/login" class="text-accent">Sign in</a>}/>
+  <PageHeader title="Set up this workspace" description="Connect your coding agent to this deployment, then sign in with your own email." actions={<a href="/login" class="text-accent">Sign in</a>}/>
   <Panel title="AI agents">
    <a href={discovery().url} class="text-accent">{AGENT_HELP_TITLE}</a>
   </Panel>
-  <Panel title="Connect your CLI">
-   <p class="text-sm leading-relaxed text-muted">Run this command to install the CLI, authenticate, and make this deployment your default server<Show when={options().groupHandle}> and its company group your default destination</Show>.</p>
-   <CopyBlock text={command()} label="Copy deployment setup command" size="lg"/>
-   <p class="mt-3 text-sm text-muted">Requires Node.js. In Windows PowerShell, use <code>npx.cmd</code> instead of <code>npx</code>. <a href="/getting-started" class="text-accent">Installation options and documentation</a></p>
+  <Panel title="Add the author skill">
+   <p class="text-sm leading-relaxed text-muted">Download the author skill, add it to your coding agent, then sign in with your own email through the HTTP guide.</p>
+   <a href="/skills/artifactbin.zip" class="text-accent">Download author skill</a>
+   <p class="mt-3 text-sm text-muted"><a href="/getting-started" class="text-accent">Skill installation and documentation</a></p>
    <Show when={!options().groupHandle}><p class="mt-3 text-sm text-muted">The deployment owner must sign in and confirm the company group before a group can be included here.</p></Show>
   </Panel>
   <Panel title="Set up your coding agent">

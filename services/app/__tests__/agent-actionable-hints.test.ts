@@ -23,8 +23,6 @@ import { POST as preflightRoute } from '@/app/api/artifacts/preflight/route';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { GET as listAnnotations, POST as createAnnotation } from '@/app/api/artifacts/[id]/annotations/route';
 import { DELETE as deleteAnnotation } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
-import { runOperation } from '@/lib/operations/http';
-import { remoteRoute } from '@/lib/remote/route';
 import { accountProfile, updateAccountProfile } from '@/lib/artifacts';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { identityForUser, claimToken, createUser } from '@/lib/accounts';
@@ -79,22 +77,6 @@ describe('refusals an afbin command reaches name the afbin action', () => {
     const refusal = await body(res);
     expect(refusal.error).toBe('unauthorized');
     expect(refusal.help).toContain('afbin auth');
-  });
-
-  it('a session listing on an unclaimed token names afbin auth (afbin list --type session)', async () => {
-    const t = await mintToken('anon',null);
-    const res = await runOperation('list_remote_sessions', request('/api/sessions', { token: t.token }), identityForUser(t.userId, t.id), {});
-    expect(res.status).toBe(403);
-    const refusal = await body(res);
-    expect(refusal.error).toBe('account_required');
-    expect(refusal.hint).toContain('afbin auth');
-  });
-
-  it('the remote relay refuses an anonymous credential by naming afbin auth (afbin remote)', async () => {
-    const t = await mintToken('anon',null);
-    const res = await remoteRoute(request('/api/remote/sessions', { method: 'POST', token: t.token, json: { name: 'Shell', harness: 'claude', cwd: '/p', machine: 'laptop', cols: 80, rows: 24 } }));
-    expect(res.status).toBe(401);
-    expect(String((await body(res)).error)).toContain('afbin auth');
   });
 
   it('a malformed comment names the flags that carry it (afbin comment --body/--node/--quote)', async () => {

@@ -142,17 +142,3 @@ it('uses the router-provided website destination instead of stale browser histor
  fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
  await waitFor(()=>expect(replaceDocument).toHaveBeenCalledWith('/'));
 });
-it('labels explicit CLI sign-in and keeps the original continuation through OTP entry',async()=>{
- const target='/oauth/loopback?state=current';
- window.history.replaceState(null,'','/login/cli?callbackUrl='+encodeURIComponent(target));
- vi.stubGlobal('fetch',vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({success:true})));
- render(()=> <LoginPage cliLogin callbackUrl={target}/>);
- expect(screen.getByText(/Sign in to connect the CLI/)).toBeTruthy();
- expect(screen.getByRole('link',{name:'Use the website instead'}).getAttribute('href')).toBe('/login');
- fireEvent.input(screen.getByRole('textbox',{name:'Email'}),{target:{value:'mxmx_test_cli@example.com'}});
- fireEvent.click(screen.getByRole('button',{name:'Log in with email'}));
- fireEvent.input(await screen.findByRole('textbox',{name:'Login code'}),{target:{value:'123456'}});
- window.history.replaceState(null,'','/login/cli?callbackUrl='+encodeURIComponent('/oauth/loopback?state=other'));
- fireEvent.click(screen.getByRole('button',{name:'Verify code'}));
- await waitFor(()=>expect(replaceDocument).toHaveBeenCalledWith(target));
-});

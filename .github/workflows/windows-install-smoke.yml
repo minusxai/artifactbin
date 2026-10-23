@@ -10,6 +10,7 @@ permissions:
   contents: read
 jobs:
   install:
+    if: github.ref != 'refs/heads/artifactbinv3'
     name: Published standard-user Windows install
     runs-on: windows-2022
     timeout-minutes: 7

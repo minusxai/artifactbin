@@ -29,7 +29,6 @@ import type {
   FlushResponse,
   ImageChoice,
   MembersAnswer,
-  RemoteSessionsAnswer,
 } from './types';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -252,18 +251,6 @@ export function createHttpBackend(id: string): ArtifactBackend {
     async members(query, options = {}) {
       const r = await fetch(`/api/my/artifacts/${encodeURIComponent(id)}/members${query === undefined ? '' : `?query=${encodeURIComponent(query)}`}`, { signal: options.signal });
       return r.ok ? ((await r.json()) as MembersAnswer) : null;
-    },
-    async remoteSessions(options = {}) {
-      const r = await fetch('/api/remote/sessions', { credentials: 'same-origin', signal: options.signal });
-      if (!r.ok) throw new BackendRequestError(`Could not load agents (${r.status})`, r.status);
-      return (await r.json()) as RemoteSessionsAnswer;
-    },
-    async deleteRemoteSession(sessionId) {
-      const response = await fetch(`/api/remote/sessions/${sessionId}`, { method: 'DELETE', credentials: 'same-origin' });
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.error ?? 'Could not remove agent. Try again.');
-      }
     },
   };
 }

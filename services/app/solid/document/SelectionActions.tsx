@@ -4,12 +4,12 @@ import { sendDocument, subscribeDocument, type DocumentRuntimeRef } from '@/lib/
 import { isEditFrameMessage, type StoryEditSelection, type StorySelectionActionsMessage } from '@/lib/edit-protocol';
 
 interface SelectionActionsProps {
-  runtimeRef: DocumentRuntimeRef; nonce: string | null; canEdit: boolean; canAnnotate: boolean; editing: boolean;
-  onEdit: (path: string) => void; onAnnotate: (selection: StoryEditSelection) => void;
+  runtimeRef: DocumentRuntimeRef; nonce: string | null; canAnnotate: boolean;
+  onAnnotate: (selection: StoryEditSelection) => void;
 }
 /** The page grants and rechecks selection actions; the document runtime is never an authority. */
 export function SelectionActions(props: SelectionActionsProps): JSX.Element {
-  const capabilities = () => ({ edit: !!props.nonce && props.canEdit && !props.editing, annotate: !!props.nonce && props.canAnnotate && !props.editing });
+  const capabilities = () => ({ edit: false, annotate: !!props.nonce && props.canAnnotate });
   createEffect(() => {
     if (!props.nonce) return;
     sendDocument({ runtimeRef: props.runtimeRef }, { type: 'mx:selection-actions', ...capabilities() } satisfies StorySelectionActionsMessage);
@@ -17,7 +17,6 @@ export function SelectionActions(props: SelectionActionsProps): JSX.Element {
   onMount(() => {
     const unsubscribe = subscribeDocument({ runtimeRef: props.runtimeRef }, event => {
       if (!props.nonce || !isEditFrameMessage(event.data, props.nonce) || event.data.type !== 'mx:selection-action') return;
-      if (event.data.action === 'edit' && capabilities().edit) props.onEdit(event.data.selection.path);
       if (event.data.action === 'annotate' && capabilities().annotate) props.onAnnotate(event.data.selection);
     });
     onCleanup(unsubscribe);

@@ -13,7 +13,7 @@ export { profileSocial, type ProfileSocial } from './profile-social';
 export { confirmWelcome, profileWrites, syncProfile, welcomePending } from './profiles';
 export { JOIN_RELATIONS, dismissPendingRelations, seedOwnerJoin, setRelationState } from './relation-state';
 export { count, has, link, linked, replaceLinked, unlink } from './relations';
-export { hostedAuthorization, hostedOperationCompleted, hostedRefusal, setHostedRequestAuthority } from './request-authority';
+export { hostedAuthorization, hostedOperationCompleted, hostedRefusal } from './request-authority';
 export { auth, overrideSession, type Session } from './session';
 export { closeTestUserSessions, forgetTestUserSession, noteTestUserSession, testUserSessionCount } from './testuser-sessions';
 export { createTestUser, getTestUserRow, listTestUsers, resolveTestUser } from './testusers';

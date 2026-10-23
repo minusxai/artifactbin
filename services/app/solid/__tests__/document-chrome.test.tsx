@@ -12,7 +12,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { STORY_FRAME_HASH_MESSAGE, type ArtifactLiveEvent } from '@/lib/story-runtime/contract';
 import type { FramedStory } from '../document/create-framed-story';
-import * as liveEdits from '../editor/create-live-edits';
 
 let mockRole = 'commenter';
 let mockKind = 'account';
@@ -109,24 +108,6 @@ it('places the doc agent handoff in trusted document navigation, outside the pag
   expect(screen.queryByRole('button', { name: 'Copy for agent' })).toBeNull();
   fireEvent.click(trusted().getByRole('button', { name: 'Copy for agent' }));
   await waitFor(() => expect(copyText).toHaveBeenCalledWith(expect.stringContaining('/a/doc12345 in place.')));
-});
-
-it('hides the agent handoff in Code and restores it in Artifact', async () => {
-  mockRole = 'owner'; mockTemplate = 'doc';
-  const existing = vi.mocked(fetch).getMockImplementation()!;
-  vi.mocked(fetch).mockImplementation(async (input, init) => {
-    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>' });
-    return existing(input, init);
-  });
-  mount('/a/doc#edit');
-  // Wait for the real lazy editor module before querying its tabs, including a cold CI import.
-  await vi.dynamicImportSettled();
-  const code = trusted(1).getByRole('tab', { name: 'Edit the source' });
-  expect(trusted().getByRole('button', { name: 'Copy for agent' })).toBeInTheDocument();
-  fireEvent.click(code);
-  await waitFor(() => expect(trusted().queryByRole('button', { name: 'Copy for agent' })).toBeNull());
-  fireEvent.click(trusted(1).getByRole('tab', { name: 'Edit on the page' }));
-  expect(trusted().getByRole('button', { name: 'Copy for agent' })).toBeInTheDocument();
 });
 
 it.each([['owner', 'app'], ['commenter', 'doc']])('omits the small agent button for %s viewing %s', (role, template) => {
@@ -270,14 +251,15 @@ it('a commenter sees comments in the controls panel but no duplicate fork, edit 
   expect(panel.queryByRole('button', { name: /^Delete/ })).toBeNull();
 });
 
-it('an owner sees edit and delete in the controls panel, and Edit and Share on the rail', async () => {
+it('an owner can rename, share and delete without a document editor', async () => {
   mockRole = 'owner';
   mount();
-  expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   const panel = within(await controls());
-  expect(panel.getByRole('button', { name: 'Edit artifact' })).toBeInTheDocument();
+  expect(panel.queryByRole('button', { name: 'Edit artifact' })).toBeNull();
+  expect(panel.getByRole('button', { name: 'Rename artifact' })).toBeInTheDocument();
   expect(panel.getByRole('button', { name: 'Delete A copy' })).toBeInTheDocument();
 });
 
@@ -303,8 +285,8 @@ it('the controls panel opened beside the open rail paints above it', async () =>
     fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
     const rail = await waitFor(() => find('[aria-label="Annotation sidebar"]') ?? Promise.reject(new Error('no rail')));
     fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-    const edit = await waitFor(() => find('[aria-label="Edit artifact"]') ?? Promise.reject(new Error('no controls panel')));
-    expect(edit, 'the controls panel offers Edit artifact').not.toBeNull();
+    const edit = await waitFor(() => find('[aria-label="Rename artifact"]') ?? Promise.reject(new Error('no controls panel')));
+    expect(edit, 'the controls panel offers Rename artifact').not.toBeNull();
     const paintOrder = (el: Element) => {
       const root = el.getRootNode();
       const trustedRoot = root instanceof ShadowRoot ? root.querySelector<HTMLElement>('[data-trusted-ui-root]') : null;
@@ -341,12 +323,13 @@ it('opens the bar\'s panels in the navigation layer while the consent bar holds 
 
 // A named EDITOR (the collab-roles gate's step 7, moved here): edit in the controls panel and the whole sharing dialog —
 // access controls and social preview — but none of the owner's own actions.
-it('an editor sees edit in the controls panel and a sharing dialog with access controls and social preview', async () => {
+it('an editor keeps metadata and sharing controls without document editing', async () => {
   mockRole = 'editor';
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
   const panel = within(await controls());
-  expect(panel.getByRole('button', { name: 'Edit artifact' })).toBeInTheDocument();
+  expect(panel.queryByRole('button', { name: 'Edit artifact' })).toBeNull();
+  expect(panel.getByRole('button', { name: 'Rename artifact' })).toBeInTheDocument();
   expect(panel.queryByLabelText('Owner actions')).toBeNull();
   fireEvent.click(within(panel.getAllByLabelText('Document actions')[0]!).getByRole('button', { name: 'Share' }));
   expect(await trusted().findByRole('button', { name: 'Edit social preview' })).toBeInTheDocument();
@@ -354,67 +337,11 @@ it('an editor sees edit in the controls panel and a sharing dialog with access c
   expect(trusted().getByRole('textbox', { name: 'Invite email' })).toBeInTheDocument();
 });
 
-it('an owner reaches the social preview from the sharing dialog the rail opens', async () => {
+it('an owner opens sharing without document source editing', async () => {
   mockRole = 'owner';
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Share' }));
   expect(await trusted().findByRole('button', { name: 'Edit social preview' })).toBeInTheDocument();
-});
-
-it('shares the current editor title without requiring a page reload', async () => {
-  mockRole = 'owner'; mockTitle = 'Untitled';
-  const existing = vi.mocked(fetch).getMockImplementation()!;
-  vi.mocked(fetch).mockImplementation(async (input, init) => {
-    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>' });
-    return existing(input, init);
-  });
-  mount('/a/doc#edit');
-  await vi.dynamicImportSettled();
-  const title = await screen.findByRole('textbox', { name: 'Title' });
-  fireEvent.input(title, { target: { value: 'Renamed without reload' } });
-  fireEvent.blur(title);
-  fireEvent.click(screen.getByRole('button', { name: 'Share' }));
-  await waitFor(() => expect(trusted().getByRole('heading', { name: 'Share “Renamed without reload”' })).toBeInTheDocument());
-  fireEvent.input(title, { target: { value: 'Second current title' } });
-  expect(trusted().getByRole('heading', { name: 'Share “Second current title”' })).toBeInTheDocument();
-  fireEvent.input(title, { target: { value: '' } });
-  expect(trusted().getByRole('heading', { name: 'Share “Untitled”' })).toBeInTheDocument();
-});
-
-it.each(['', '   '])('uses the heading fallback for a blank explicit title (%j) in embedded sharing and adopts later reader metadata', async (blankTitle) => {
-  const queued: liveEdits.PendingChange[] = [];
-  const createLiveEdits = liveEdits.createLiveEdits;
-  vi.spyOn(liveEdits, 'createLiveEdits').mockImplementation((options) => {
-    const live = createLiveEdits(options);
-    const queue = live.queue;
-    live.queue = (change) => { queued.push(change); queue(change); };
-    return live;
-  });
-  mockRole = 'owner'; mockTitle = 'Old explicit name';
-  const [frame, setFrame] = createSignal<ArtifactLiveEvent | null>(null);
-  mockLive = frame;
-  const existing = vi.mocked(fetch).getMockImplementation()!;
-  vi.mocked(fetch).mockImplementation(async (input, init) => {
-    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<h2 id="heading">Heading fallback</h2><p id="body">Hello</p>' });
-    return existing(input, init);
-  });
-  mount('/a/doc#edit');
-  await vi.dynamicImportSettled();
-  const title = await screen.findByRole('textbox', { name: 'Title' });
-  fireEvent.input(title, { target: { value: blankTitle } });
-  expect(queued.at(-1)?.title).toBe(blankTitle);
-  fireEvent.click(trusted(1).getByRole('tab', { name: 'Show sharing' }));
-  expect(trusted(1).getByRole('heading', { name: 'Share “Heading fallback”' })).toBeInTheDocument();
-  fireEvent.input(title, { target: { value: 'Session name' } });
-  expect(trusted(1).getByRole('heading', { name: 'Share “Session name”' })).toBeInTheDocument();
-  setFrame({ version: 5, title: 'Remote name', heading: 'Remote heading', source: '<h2 id="heading">Remote heading</h2>' } as ArtifactLiveEvent);
-  expect(trusted(1).getByRole('heading', { name: 'Share “Session name”' })).toBeInTheDocument();
-  fireEvent.click(trusted(1).getByRole('button', { name: 'Exit edit mode' }));
-  await waitFor(() => expect(screen.getByText('Remote name', { selector: '[data-mx-document-title]' })).toBeInTheDocument(), { timeout: 5000 });
-  fireEvent.click(screen.getByRole('button', { name: 'Share' }));
-  expect(trusted().getByRole('heading', { name: 'Share “Remote name”' })).toBeInTheDocument();
-  setFrame({ version: 6, title: null, heading: 'Later remote heading', source: '<h2 id="heading">Later remote heading</h2>' } as ArtifactLiveEvent);
-  expect(trusted().getByRole('heading', { name: 'Share “Later remote heading”' })).toBeInTheDocument();
 });
 
 it('opens the current comments in the document rail', async () => {
@@ -511,70 +438,6 @@ it('a page served without a frame is the 404 page, never a reload', () => {
   expect(replace).not.toHaveBeenCalled();
 });
 
-/** What the editor's door costs is the document's size: a writer who only reads a large one never pays it. */
-const editorDoorFetches = () => vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes('?part=editor')).length;
-const answerEditorDoor = () => {
-  const existing = vi.mocked(fetch).getMockImplementation()!;
-  vi.mocked(fetch).mockImplementation(async (input, init) => (String(input).includes('?part=editor')
-    ? Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>' }) : existing(input, init)));
-};
-const idleNow = () => vi.stubGlobal('requestIdleCallback', (task: () => void) => { queueMicrotask(task); return 1; });
-
-it('does not fetch the editor part on idle for a writer reading a large document, only when edit mode opens', async () => {
-  mockRole = 'owner'; mockSourceLength = 450_000;
-  answerEditorDoor(); idleNow();
-  mount();
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  expect(editorDoorFetches()).toBe(0);
-  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
-  fireEvent.click(within(await controls()).getByRole('button', { name: 'Edit artifact' }));
-  await waitFor(() => expect(editorDoorFetches()).toBe(1));
-});
-
-it('prefetches the editor part on idle for a writer reading a small document, so edit mode opens at once', async () => {
-  mockRole = 'owner'; mockSourceLength = 2_000;
-  answerEditorDoor(); idleNow();
-  mount();
-  await waitFor(() => expect(editorDoorFetches()).toBe(1));
-});
-
-it('prefetches nothing for a page that does not say how large the document is', async () => {
-  mockRole = 'owner';
-  answerEditorDoor(); idleNow();
-  mount();
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  expect(editorDoorFetches()).toBe(0);
-});
-
-it.each([['hover', (el: Element) => fireEvent.pointerEnter(el)], ['focus', (el: Element) => fireEvent.focus(el)], ['press', (el: Element) => fireEvent.pointerDown(el)]])(
-  'starts the editor part when the Edit control is approached (%s), and the click that follows shares that one request', async (_name, approach) => {
-    mockRole = 'owner'; mockSourceLength = 450_000;
-    answerEditorDoor(); idleNow();
-    mount();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(editorDoorFetches()).toBe(0);
-    const edit = screen.getByRole('button', { name: 'Edit' });
-    approach(edit);
-    await waitFor(() => expect(editorDoorFetches()).toBe(1));
-    fireEvent.click(edit);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(editorDoorFetches()).toBe(1);
-  });
-
-it('keeps the intent request running when the pointer moves on, and the later click still issues no second one', async () => {
-  mockRole = 'owner'; mockSourceLength = 450_000;
-  answerEditorDoor(); idleNow();
-  mount();
-  const edit = screen.getByRole('button', { name: 'Edit' });
-  fireEvent.pointerEnter(edit); fireEvent.pointerLeave(edit);
-  await waitFor(() => expect(editorDoorFetches()).toBe(1));
-  const signal = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes('?part=editor'))![1]!.signal!;
-  expect(signal.aborted).toBe(false);
-  fireEvent.click(edit);
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  expect(editorDoorFetches()).toBe(1);
-});
-
 /**
  * THE READER'S PICK ON THE DOCUMENT PAGE. A stored pick (lib/story-runtime/reader-mode chooseTheme) is the document's
  * mode from the first paint: the ground around the frame and what the frame is told, on this document and every other.
@@ -616,28 +479,6 @@ it('a pick made on one document applies to the next document opened', async () =
   mount('/a/another');
   expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('dark'));
   await waitFor(() => expect(toldModes()).toEqual(['dark']));
-});
-
-it('while editing, the preview shows the document\'s own Mode setting, and the pick returns with reading', async () => {
-  localStorage.setItem('mx_theme', 'dark'); document.documentElement.dataset.theme = 'dark';
-  mockRole = 'owner'; mockSelectionBridge = true;
-  const existing = vi.mocked(fetch).getMockImplementation()!;
-  vi.mocked(fetch).mockImplementation(async (input, init) => {
-    if (String(input).includes('?part=editor')) return Response.json({ editId: 'edit-3', version: 3, source: '<p id="body">Hello</p>' });
-    return existing(input, init);
-  });
-  try {
-    mount('/a/doc#edit');
-    await vi.dynamicImportSettled();
-    await waitFor(() => expect(toldModes().at(-1)).toBe('light'));
-    expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('light'));
-    // Leaving edit mode (the address drops `#edit`): reading shows the pick again.
-    window.history.replaceState(null, '', '/a/doc');
-    window.dispatchEvent(new HashChangeEvent('hashchange'));
-    // (Done flushes the editor first, bounded: create-edit-lifecycle FLUSH_BOUND_MS.)
-    await waitFor(() => expect(toldModes().at(-1)).toBe('dark'), { timeout: 5000 });
-    expect(screen.getByLabelText('Artifact viewport').style.background).toBe(groundOf('dark'));
-  } finally { delete document.documentElement.dataset.theme; }
 });
 
 /**
@@ -750,4 +591,35 @@ it.each(['commenter', 'owner'])('a %s gets the tree on load, and the bridge atta
   await waitFor(() => expect(attaches(posted)).toHaveLength(1));
   expect(nodeFetches()).toBe(1);
   expect(attaches(posted)[0]!.payload?.nodes).toEqual(TREE);
+});
+
+it.each(['owner', 'editor'])('a %s visiting a legacy edit hash reads and comments without downloading editor source', async (role) => {
+  mockRole = role; mockSelectionBridge = true; mockSourceLength = 100;
+  mount('/a/doc#edit');
+  await vi.dynamicImportSettled();
+  expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+  expect(trusted(1).queryByRole('textbox', { name: 'Markup source' })).toBeNull();
+  expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes('part=editor'))).toBe(false);
+  expect(selectionSend).toHaveBeenCalledWith({ type: 'mx:selection-actions', edit: false, annotate: true });
+  fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+  expect(await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' })).toBeInTheDocument();
+});
+
+it('opens independent PWA, context and file settings without entering a document editor', async () => {
+  mockRole = 'owner';
+  const existing = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input) === '/api/my/artifacts/doc12345') return Response.json({ id: 'doc12345', edit_id: 'e3', version: 3, title: 'A copy', markup: '<p id="body">Hello</p>', refs: [{ id: 'file1234', kind: 'image', title: 'Reference image' }] });
+    return existing(input, init);
+  });
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Open artifact controls' }));
+  fireEvent.click(within(await controls()).getByRole('button', { name: 'Artifact settings' }));
+  const settings = await trusted().findByRole('dialog', { name: 'Artifact settings' });
+  await within(settings).findByLabelText('Allow installation as a PWA');
+  fireEvent.click(within(settings).getByRole('tab', { name: 'Context' }));
+  expect(await within(settings).findByRole('button', { name: 'Add context' })).toBeInTheDocument();
+  fireEvent.click(within(settings).getByRole('tab', { name: 'Files' }));
+  expect(within(settings).getByRole('link', { name: 'Reference image' })).toHaveAttribute('href', '/a/file1234');
+  expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
 });

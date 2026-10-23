@@ -117,18 +117,11 @@ describe('server.ts --app-only', () => {
     expect(login.status).toBe(200);
     const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
     expect(cookie).toBeTruthy();
-    const pairResponse = await fetchChecked(`${base}/oauth/device`, { method: 'POST' });
-    const pair = await pairResponse.json() as { device_code: string; user_code: string };
-    expect(pair.device_code).toBeTruthy();
-    const approved = await fetchChecked(`${base}/oauth/device/approve`, {
-      method: 'POST', headers: { cookie, origin: base }, body: new URLSearchParams({ user_code: pair.user_code }),
+    const exchanged=await fetchChecked(`${base}/api/authentication/token`,{
+      method:'POST',headers:{cookie,origin:base,'content-type':'application/json'},body:'{}',
     });
-    expect(approved.status).toBe(200);
-    const exchanged = await fetchChecked(`${base}/oauth/device/token`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device_code: pair.device_code }),
-    });
-    expect(exchanged.status).toBe(200);
-    token = (await exchanged.json() as { access_token: string }).access_token;
+    expect(exchanged.status).toBe(201);
+    token=(await exchanged.json() as {access_token:string}).access_token;
     expect(token).toBeTruthy();
     await stopChild();
     launch(true);

@@ -8,14 +8,11 @@
  */
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {fireEvent,waitFor} from '@testing-library/dom';
-import {Route,Router} from '@solidjs/router';
 import {render} from 'solid-js/web';
 import {screen} from './trusted-screen';
-import type {DocumentRuntimeRef} from '@/lib/story-runtime/document-endpoint';
 import type {PendingChange} from '@/solid/editor/create-live-edits';
 import type {PreviewDocument} from '../../../cli/src/preview/types';
 import {STORY_ROOT_ID} from '@/lib/story-runtime/contract';
-import {fakeBackend} from '@/test/helpers/artifact-backend';
 
 /** A dashboard: a kit table with a typed cell and a cell from data. */
 const BODY='<Table id="t"><TableBody id="tb"><TableRow id="r"><TableCell id="eVAF" className="font-medium">Wed</TableCell><TableCell id="tot">{$q.rows[0].total}</TableCell></TableRow></TableBody></Table>';
@@ -49,21 +46,6 @@ afterEach(()=>{dispose?.();dispose=undefined;vi.unstubAllGlobals();document.body
 
 interface Page {emit(data:Record<string,unknown>):void; saved():Promise<string>}
 
-/** The hosted editor page over BODY, its document runtime faked. */
-async function hosted(body=BODY):Promise<Page>{
- const NONCE='n'.repeat(24);
- let onEvent:((data:unknown)=>void)|null=null;
- const runtimeRef:DocumentRuntimeRef={current:{send:(msg:{type?:string})=>{if(msg.type==='mx:commit')queueMicrotask(()=>onEvent?.({type:'mx:committed',nonce:NONCE}));},subscribe:(fn:(data:unknown)=>void)=>{onEvent=fn;return()=>{onEvent=null;};},getViewportRect:()=>new DOMRect()} as never};
- const {default:InPlaceEditor}=await import('@/solid/editor/InPlaceEditor');
- const art={id:'doc12345',version:3,edit_id:'edit-3',title:'Dashboard',theme:null,template:null,colorMode:null,markup:body,
-  document:{schema:3 as const,kind:'graph' as const,policy:'',nodes:{},claimedIds:{},bytes:0}};
- const host=document.createElement('div');document.body.append(host);
- dispose=render(()=> <Router><Route path="/" component={()=> <InPlaceEditor art={art} backend={fakeBackend()} runtimeRef={runtimeRef} sessionNonce={NONCE} />} /></Router>,host);
- const emit=(data:Record<string,unknown>)=>onEvent?.({...data,nonce:NONCE});
- emit({type:'mx:edit-ready'});
- return {emit,saved:async()=>{await waitFor(()=>expect(queued.length).toBeGreaterThan(0));return queued.at(-1)!.source!;}};
-}
-
 /** The local preview over BODY (`afbin preview`), its document controller faked. */
 async function preview(body=BODY):Promise<Page>{
  document.body.innerHTML=`<div id="${STORY_ROOT_ID}"></div>`;
@@ -85,7 +67,7 @@ async function preview(body=BODY):Promise<Page>{
  }};
 }
 
-describe.each([['the hosted editor',hosted],['the local preview',preview]] as const)('a kit table cell in %s',(_name,open)=>{
+describe.each([['the local preview',preview]] as const)('a kit table cell in %s',(_name,open)=>{
  it('offers the marks its text takes, types into its children only, and says why a data cell takes no caret',async()=>{
   const page=await open();
   page.emit({type:'mx:selection',selection:TYPING});
@@ -113,7 +95,7 @@ const PLAIN='<div id="m"><p id="tot">Total: {$x} items</p><p id="pl">Plain <stro
 const BOUND='0.0',TEXT='0.1';
 const BOUND_SELECTION={kind:'element',mode:'block',path:BOUND,tag:'p',nodeId:'tot',rect:RECT,className:'',style:'',ancestors:[],textLock:'Text comes from data'};
 
-describe.each([['the hosted editor',hosted],['the local preview',preview]] as const)('a paragraph bound to data in %s',(_name,open)=>{
+describe.each([['the local preview',preview]] as const)('a paragraph bound to data in %s',(_name,open)=>{
  it('says why it takes no caret, refuses its rendered value, and saves the text beside it with the binding intact',async()=>{
   const page=await open(PLAIN);
   page.emit({type:'mx:selection',selection:BOUND_SELECTION});

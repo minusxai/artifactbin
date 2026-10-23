@@ -241,9 +241,6 @@ export const authServerMetadata = (base: string): Record<string, unknown> => ({
   scopes_supported: [ARTIFACT_SCOPE],
   code_challenge_methods_supported: ['S256'],
   token_endpoint_auth_methods_supported: ['none'],
-  // The afbin CLI's no-click sign-in (RFC 8252 loopback + PKCE). A CLI finding these absent keeps the device flow.
-  cli_loopback_authorization_endpoint: `${base}/oauth/loopback`,
-  cli_loopback_token_endpoint: `${base}/oauth/loopback/token`,
 });
 export const protectedResourceMetadata = (base: string): Record<string, unknown> => ({
   resource: `${base}${API_RESOURCE_PATH}`,

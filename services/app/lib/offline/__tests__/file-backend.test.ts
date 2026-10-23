@@ -65,7 +65,6 @@ describe('what the file cannot do', () => {
       versions: 'Version history lives on artifactbin. Open the live version.',
       mentions: 'Mentions need a connection.',
       commentImages: 'Screenshots need a connection.',
-      remoteSessions: 'Agents need a connection.',
       live: OFFLINE_REASONS.live,
     };
     for (const [feature, reason] of Object.entries(expected)) expect(backend.unavailable(feature as BackendFeature)).toBe(reason);
@@ -79,8 +78,6 @@ describe('what the file cannot do', () => {
     await expect(backend.versions()).rejects.toThrow(/Version history lives on artifactbin/);
     await expect(backend.version(1)).rejects.toThrow(/Version history lives on artifactbin/);
     await expect(backend.revert({ version: 1, expectedVersion: 1, expectedState: 's' })).rejects.toThrow(/Version history lives on artifactbin/);
-    await expect(backend.remoteSessions()).rejects.toThrow('Agents need a connection.');
-    await expect(backend.deleteRemoteSession('s1')).rejects.toThrow('Agents need a connection.');
     await expect(backend.uploadCommentImage(new FormData())).rejects.toThrow('Screenshots need a connection.');
   });
 

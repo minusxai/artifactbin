@@ -200,8 +200,8 @@ export function Toolbar(props: {initial: PreviewDocument}) {
   </TrustedUi>
   <TrustedUi overlay layer="discussion">
    <Show when={nonce()}>
-    <SelectionActions runtimeRef={runtimeRef} nonce={nonce()} canEdit canAnnotate editing={editing()}
-     onEdit={path => {setEditTarget(path); setEditing(true);}} onAnnotate={setCommentSelection} />
+    <SelectionActions runtimeRef={runtimeRef} nonce={nonce()} canAnnotate={!editing()}
+     onAnnotate={setCommentSelection} />
    </Show>
    <AnnotationLayer id={document_().metadata.id ?? 'local-preview'} backend={backend} railOpen={railOpen()} onRailOpenChange={setRailOpen}
     runtimeRef={runtimeRef} sessionNonce={nonce()} showViewComments topOffset={TOP_OFFSET+(editing()?44:0)} pickOnOpen

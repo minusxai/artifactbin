@@ -20,7 +20,7 @@ export default {
       entry: [
         'server.ts',
         // The v3 fast workflow and its independent Vitest configuration.
-        'scripts/ci/{fast-check,fast-tests}.mjs', 'vitest.fast.config.ts',
+        'scripts/ci/{fast-check,fast-tests,fast-budget}.mjs', 'vitest.fast.config.ts',
         // CI.smtp.Dockerfile starts this private SMTP sink by path.
         'deploy/company/ci-smtp-fixture.mjs',
         // Run by path where knip does not see a command: gates (scripts/gates.manifest.mjs), validate's name

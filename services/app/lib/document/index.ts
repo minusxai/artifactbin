@@ -11,7 +11,6 @@
 // ---- Model: the stored node graph, node ids, the source form and its checks.
 export type { DocumentGraph } from './document-graph';
 export { createDocumentGraph, GRAPH_POLICY, GRAPH_ROOT, graphIntegrity, graphNodes, graphSource } from './document-graph';
-export { packDocumentGraph } from './document-graph-wire';
 export type { GraphPatch } from './document-graph-patch';
 export { applyGraphPatch } from './document-graph-patch';
 export { documentPatchStepSql } from './document-patch';

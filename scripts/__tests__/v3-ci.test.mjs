@@ -12,8 +12,8 @@ const directory = mkdtempSync(path.join(tmpdir(), 'v3-ci-policy-'));
 afterAll(() => rmSync(directory, {recursive:true,force:true}));
 const git = (...args) => execFileSync('git', args, {cwd:directory,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
 
-function admitted(expression, event, base) {
-  const source = expression.replaceAll('github.event_name', JSON.stringify(event)).replaceAll('github.base_ref', JSON.stringify(base)).replaceAll('always()', 'true');
+function admitted(expression, event, base, ref = 'refs/heads/main') {
+  const source = expression.replaceAll('github.event_name', JSON.stringify(event)).replaceAll('github.base_ref', JSON.stringify(base)).replaceAll('always()', 'true').replaceAll('github.ref', JSON.stringify(ref));
   return Function(`return (${source})`)();
 }
 
@@ -32,6 +32,14 @@ describe('v3 validation isolation', () => {
     expect(workflow('codeql.yml').on.push.branches).toEqual(['main']);
     expect(ci.jobs['notify-consumer'].if).toContain("github.ref == 'refs/heads/main'");
   });
+  it('blocks CLI release/install dispatches from v3 while preserving main', () => {
+    for (const [file, job] of [['release-afbin.yml','release'],['release-cli.yml','release'],['windows-install-smoke.yml','install']]) {
+      const expression = workflow(file).jobs[job].if;
+      expect(admitted(expression, 'workflow_dispatch', '', 'refs/heads/artifactbinv3')).toBe(false);
+      expect(admitted(expression, 'workflow_dispatch', '', 'refs/heads/main')).toBe(true);
+    }
+    expect(workflow('v3-fast.yml').jobs.fast['timeout-minutes']).toBe(2);
+  });
   it('runs all retained service suites on every v3 SHA, including a prose-only merge', () => {
     git('init','-q'); git('config','user.name','CI fixture');git('config','user.email','ci@example.test');
     mkdirSync(path.join(directory,'services/cli'),{recursive:true});
@@ -45,5 +53,14 @@ describe('v3 validation isolation', () => {
     expect(v3.full).toBe(true);expect(v3.testedRun).toBeNull();
     for (const job of ['checks','node','api','ui','integration','gates','build','cli-tests']) expect(v3.jobs[job]).toBe(true);
     expect(run('refs/heads/main').full).toBe(false);
+    mkdirSync(path.join(directory,'services/utils/src'),{recursive:true});
+    writeFileSync(path.join(directory,'services/utils/src/change.ts'),'export const changed = true;');
+    git('add','.');git('commit','-qm','runtime change');
+    const v3Runtime = run('refs/heads/artifactbinv3');
+    for (const proof of ['cli','cli-bootstrap','reference-compatibility']) expect(v3Runtime.jobs[proof]).toBe(false);
+    expect(v3Runtime.jobs['cli-tests']).toBe(true);
+    expect(v3Runtime.jobs.build).toBe(true);
+    expect(run('refs/heads/main').jobs.cli).toBe(true);
+
   });
 });

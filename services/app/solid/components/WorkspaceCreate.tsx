@@ -59,7 +59,6 @@ export default function WorkspaceCreate(props: { onCreated: () => void; parentId
   const entries = (): MenuEntry[] => [
     { label: 'Artifact', text: 'Artifact', icon: () => <FilePlus2 size={14} />, items: [starterItem(ARTIFACT_STARTERS[0]!), { section: 'Templates', items: ARTIFACT_STARTERS.slice(1).map(starterItem) }] },
     { label: 'Folder', text: 'Folder', icon: () => <FolderPlus size={14} />, onSelect: choose },
-    { label: 'Program', text: 'Program', icon: () => <FilePlus2 size={14} />, href: creationHref('/programs/new') },
     { section: 'assets', items: [
       { label: 'File', text: 'File', icon: () => <FileUp size={14} />, href: creationHref('/files/new') },
       { label: 'Dataset', text: 'Dataset', icon: () => <DatabasePlus size={14} />, href: creationHref('/datasets/new') },

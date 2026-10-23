@@ -40,7 +40,7 @@ export function unauthorized(request: Request): Response {
   return json(
     {
       error: 'unauthorized',
-      help: `Use saved credentials for ${base}; refresh an expired access token before signing in again. HTTP authentication: ${base}/llms/http-auth (no CLI installation required). Already using afbin? Run afbin auth --server ${base}.`,
+      help: `Use saved credentials for ${base}; refresh an expired access token before signing in again. HTTP authentication: ${base}/llms/http-auth Read ${base}/llms.txt for the author skill and HTTP API.`,
       guide: `${base}/llms.txt`,
     },
     401,

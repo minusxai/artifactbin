@@ -1,6 +1,5 @@
 import { parseCommentViewState } from '../../../../../../../contracts/src/comment-view-state';
 import {durableMutation,type MutationReceipt} from '@/lib/artifacts';
-import { notifyRemoteComment } from '@/lib/remote/mentions';
 /**
  * The BROWSER's annotation door — where a person's selection becomes a thread
  * (the bearer twin creates from a node id or a quote instead).
@@ -93,7 +92,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     if (made.refused === 'stale') return json({ error: 'stale', edit_id: made.head.editId, version: made.head.version }, 409);
     return json({ error: made.refused }, 400);
   }
-  notifyRemoteComment(actor.userId, id, made.id, made.thread[0]);
   return json(made, 201);
   };
   const key=request.headers.get('Idempotency-Key');

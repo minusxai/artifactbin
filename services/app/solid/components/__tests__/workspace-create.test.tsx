@@ -101,3 +101,11 @@ it('shows a failed folder creation inside the dialog and keeps the name for anot
   expect(within(dialog).getByRole('textbox', { name: 'Folder name' })).toHaveValue('Plans');
   expect(within(dialog).getByRole('button', { name: 'create folder' })).toBeEnabled();
 });
+
+
+it('offers retained artifact, folder and asset creation without retired programs', () => {
+ render(() => <WorkspaceCreate onCreated={() => {}} />);
+ fireEvent.click(screen.getByRole('button', {name:'Create'}));
+ for (const name of ['Artifact', 'Folder', 'File', 'Dataset']) expect(screen.getByRole('menuitem', {name})).toBeInTheDocument();
+ expect(screen.queryByRole('menuitem', {name:'Program'})).not.toBeInTheDocument();
+});

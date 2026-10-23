@@ -11,15 +11,13 @@ import { gettingStarted } from '@/lib/serving/getting-started';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use afbin CLI if installed, or HTTP: https://x.test/llms.txt. If sign-in is required, reuse an email already provided; otherwise ask the user for their email.\n\nIf the user hasn't specified a task, ask what artifact they'd like to build.";
+const STARTER = "Edit my artifact at https://x.test/a/ab3cd9 in place. Use the artifactbin author skill and HTTP: https://x.test/llms.txt. If sign-in is required, reuse an email already provided; otherwise ask the user for their email.\n\nIf the user hasn't specified a task, ask what artifact they'd like to build.";
 
 describe('the tokenless paste', () => {
-  it('offers one full installer command per platform on the selected host', () => {
-    const guide = JSON.stringify(gettingStarted(B));
-    expect(guide).toContain("curl -fsSL 'https://x.test/chat/install.sh' | sh");
-    expect(guide).toContain("Invoke-RestMethod 'https://x.test/chat/install.ps1' | Invoke-Expression");
-    expect(guide).not.toContain('mktemp');
-    expect(guide).toContain('Open a new terminal');
+  it('offers the author skill and HTTP guide without an executable installer',()=>{
+    const guide=JSON.stringify(gettingStarted(B));
+    expect(guide).toContain(`${B}/skills/artifactbin.zip`);
+    expect(guide).not.toMatch(/afbin |install\.sh|@afbin\/cli/);
   });
   it('existing: the link plus how to reach afbin, and never a token', () => {
     expect(existingPaste(B, ID)).toBe(STARTER);
@@ -31,20 +29,10 @@ describe('the tokenless paste', () => {
     expect(existingPaste(B, ID)).toContain('https://x.test/llms.txt');
     expect(existingPaste(B, ID)).not.toMatch(/ensure-node|npx|@afbin\/cli|afbin help|--server|Approve access/);
     const guide = JSON.stringify(gettingStarted(B));
-    expect(guide).toContain('If afbin is absent, use HTTP');
-    expect(guide).not.toContain('If afbin is not installed, install and set it up first');
-    expect(guide).toContain('Run afbin help to discover everything you can do');
     expect(guide).toContain('Authenticate as the recipient');
-    expect(guide).toContain("afbin auth 'ARTIFACT_URL' --server 'https://x.test'");
   });
-  it.each(['https://x.test', 'http://127.0.0.1:45407/'])('selects the handed-over server for every remote command: %s', (base) => {
-    expect(JSON.stringify(gettingStarted(base))).toContain(`Pass --server ${base.replace(/\/$/, '')} to every afbin server command`);
-    expect(existingPaste(base, ID)).toContain(`${base.replace(/\/$/, '')}/llms.txt`);
-  });
-  it.each([DEFAULT_SERVER, `${DEFAULT_SERVER}/`])('keeps the handoff short on the host a fresh CLI already defaults to: %s', (base) => {
-    expect(existingPaste(base, ID)).not.toContain('--server');
-    expect(existingPaste(base, ID)).toContain(`${DEFAULT_SERVER}/a/${ID}`);
-    expect(JSON.stringify(gettingStarted(base))).toContain('no --server flag is needed');
+  it.each([DEFAULT_SERVER,`${DEFAULT_SERVER}/`,B])('uses the handed-over origin: %s',base=>{
+    expect(existingPaste(base,ID)).toContain(`${base.replace(/\/$/,'')}/llms.txt`);
   });
   it('asks what to build only when the user has not supplied a task', () => {
     const prompt = existingPaste('http://127.0.0.1:45407', ID);

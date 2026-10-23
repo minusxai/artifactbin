@@ -40,20 +40,17 @@ it('team host composes real public auth and preserves separate owners and anonym
  expect(cookie).not.toBe('');
  const loggedIn=await host.fetch(new Request(origin+'/api/auth/get-session',{headers:{cookie}}));
  expect((await loggedIn.json()).user.email).toBe(email);
- // Existing device OAuth is assembled locally, including the protected mint boundary.
+ // Direct HTTP issuance remains assembled locally, including the protected mint boundary.
  expect((await host.fetch(new Request(origin+'/api/internal/tokens',{method:'POST'}))).status).toBe(404);
- const started=await host.fetch(new Request(origin+'/oauth/device',{method:'POST'}));expect(started.status).toBe(200);
- const pair=await started.json();
- const approved=await host.fetch(new Request(origin+'/oauth/device/approve',{method:'POST',headers:{cookie,origin},body:new URLSearchParams({user_code:pair.user_code})}));
- expect(approved.status).toBe(200);
- const poll=await host.fetch(new Request(origin+'/oauth/device/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({device_code:pair.device_code})}));
- expect(poll.status).toBe(200);const deviceToken=(await poll.json()).access_token;expect(deviceToken).toBeTruthy();
+ expect((await host.fetch(new Request(origin+'/oauth/device',{method:'POST'}))).status).toBe(404);
+ const issued=await host.fetch(new Request(origin+'/api/authentication/token',{method:'POST',headers:{cookie,origin,'content-type':'application/json'},body:'{}'}));
+ expect(issued.status).toBe(201);const httpToken=(await issued.json()).access_token;expect(httpToken).toBeTruthy();
 
  // A real authenticated browser acquires its own app identity and can publish private documents.
  const browserCreate=await host.fetch(new Request(origin+'/api/my/artifacts',{method:'POST',headers:{cookie,origin,'content-type':'application/json'},body:JSON.stringify({markup:'<p>Browser owner</p>',visibility:'private'})}));
  expect(browserCreate.status).toBe(201);
  const browserArtifact=await browserCreate.json();
- expect((await host.fetch(new Request(origin+'/api/artifacts/'+browserArtifact.id,{headers:{authorization:'Bearer '+deviceToken}}))).status).toBe(200);
+ expect((await host.fetch(new Request(origin+'/api/artifacts/'+browserArtifact.id,{headers:{authorization:'Bearer '+httpToken}}))).status).toBe(200);
  expect((await host.fetch(new Request(origin+'/api/my/artifacts/'+browserArtifact.id,{headers:{cookie}}))).status).toBe(200);
  expect([401,404]).toContain((await host.fetch(new Request(origin+'/api/artifacts/'+browserArtifact.id,{headers:{authorization:'Bearer '+first}}))).status);
  }finally{await rm(directory,{recursive:true,force:true});}

@@ -63,11 +63,8 @@ it('acceptance runs against real composed email, artifact and download handlers'
  const fetch=(input:string,init:RequestInit={})=>application.fetch(new Request(input,init));
  const post=(path:string,body:unknown,headers:Record<string,string>={})=>fetch(origin+path,{method:'POST',headers:{origin,'content-type':'application/json',...headers},body:JSON.stringify(body)});
  try{
-  const pairing=await(await post('/oauth/device',{})).json();
-  const approved=await fetch(origin+'/oauth/device/approve',{method:'POST',headers:{origin,'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({user_code:pairing.user_code,decision:'anonymous'})});
-  expect(approved.status).toBe(401);
-  const guestCookie=approved.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ');
-  await checkGuestHttpIssuance({base:origin,fetch,guestCookie});
+  expect((await post('/oauth/device',{})).status).toBe(404);
+  await checkGuestHttpIssuance({base:origin,fetch,guestCookie:''});
   const email='mxmx_test_http_conformance@example.test';
   expect((await post('/api/auth/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
   const mail=(await readFile(join(directory,'outbox.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));

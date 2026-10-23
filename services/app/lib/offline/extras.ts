@@ -16,9 +16,8 @@
  * A later attempt (the plain editor's Retry) tries again.
  */
 import type { ArtifactFileExtras } from './file-format';
+const RICH_EDITOR_OFFLINE = 'The rich code editor needs a connection the first time. Using the plain editor.';
 
-export const RICH_EDITOR_OFFLINE = 'The rich code editor needs a connection the first time. Using the plain editor.';
-export const FORMATTING_OFFLINE = 'Formatting needs a connection.';
 
 /** What the extras bundle leaves on `globalThis.__afbinExtras`: each module the file's bundle stubs, by name. */
 export interface OfflineExtras {
