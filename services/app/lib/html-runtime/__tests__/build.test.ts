@@ -1,3 +1,4 @@
+import {gzipSync} from 'node:zlib';
 import { expect, it } from 'vitest';
 import { buildHtmlCore } from '../build.server';
 import { downloadableHtml } from '../index';
@@ -8,4 +9,8 @@ it('builds a classic bootstrap and a self-contained downloadable page', async ()
   expect(html).toContain('@afbin/apollo');
   expect(html).toContain('"offline":true');
   expect(html).not.toContain('src="');
+});
+
+it('keeps the portable core compressed payload below its minified portable payload ceiling',async()=>{
+ expect(gzipSync(await buildHtmlCore()).byteLength).toBeLessThan(25*1024);
 });
