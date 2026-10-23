@@ -137,8 +137,14 @@ systemctl daemon-reload && systemctl enable --now artefactv2-sandbox-egress.serv
 "$egress_script"
 # The shared remote database is provisioned separately; never start or alter a local database.
 # The backup role reads only this deployment's runtime and archive schemas.
-backup="$root/backups/$(date +%s%N).dump"
-python3 "$release/deploy/backup-schema.py" "$root/.env.backup" "$backup"
+if [[ -e "$root/reuse-backup.json" || -L "$root/reuse-backup.json" ]]; then
+  # Only an administrator can authorize this exact rollout. The helper is
+  # root-installed alongside this receiver, never loaded from an uploaded release.
+  python3 /usr/local/lib/artefactv2/verified-backup-reuse.py "$root" "$revision" "${previous#artefactv2:}"
+else
+  backup="$root/backups/$(date +%s%N).dump"
+  python3 "$release/deploy/backup-schema.py" "$root/.env.backup" "$backup"
+fi
 export PAGEGI_IMAGE="$image" PAGEGI_BACKEND_IMAGE="$backend_image" PAGEGI_IMAGE_PROCESSOR_IMAGE="$image_processor_image" PAGEGI_DATASET_SQL_IMAGE="$dataset_sql_image"
 # Both execution and application healthchecks must pass inside this rollback boundary.
 "${compose[@]}" up -d --no-build --wait --wait-timeout 120

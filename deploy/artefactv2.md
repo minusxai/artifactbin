@@ -106,3 +106,32 @@ creates the directory without replacing existing contents. It is separate from
 imported datasets and media, and remains retained across rollout and rollback.
 
 The sandbox egress hook also drops IPv6 arriving from the dedicated sandbox bridge in the host INPUT and FORWARD chains. This covers kernel link-local addresses even though Docker IPv6 allocation is disabled. The same enabled service reapplies both address families at boot, after Docker restarts, and on deployment; setup refuses if IPv6 rules cannot be installed. Other bridges are unchanged.
+
+### Explicit code-only backup reuse
+
+The default always creates and restores a fresh backup. An administrator may
+instead install `deploy/verified-backup-reuse.py` as root-owned mode755
+`/usr/local/lib/artefactv2/verified-backup-reuse.py` alongside the reviewed receiver.
+The uploaded release cannot replace either privileged program.
+
+For a reviewed code-only change, create root-owned mode0600
+`/opt/artefactv2/reuse-backup.json` using the `ReuseApproval` contract in that helper.
+It binds the exact current and target commit, one receiver-owned timestamp dump,
+its SHA256 and verified-marker SHA256, the database host/port/name identity digest,
+and the complete production environment file SHA256. The identity digest is
+SHA256 of compact JSON `[PGHOST, integer PGPORT (default5432), PGDATABASE]`;
+backup and application destinations must also match. `verifiedAt` is the marker
+mtime as integer Unix seconds, and `expiresAt` must be within one hour of it.
+Both `reviewedCodeOnlyChange` and `acknowledgeRecoveryPointAtBackupTime` must be
+true. No connection values or approval contents are printed.
+
+The helper requires byte-identical startup schema SQL, initializer/SQL boundary,
+entrypoint, dependency locks, Dockerfile and compose files between the current
+and target releases. This is deliberately conservative; runtime code changes
+still require review for data mutations. Schema-affecting changes need a new
+backup. Invalid or stale approvals fail deployment rather than silently falling
+back or skipping a backup. A valid approval is consumed before compose rollout,
+and its archive is protected from retention even if rollout fails. A retry needs
+another explicit approval. Reuse does not advance the recovery point: writes
+since the selected backup are not covered by that backup. Existing health checks
+and image/composition rollback remain unchanged.
