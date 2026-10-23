@@ -195,7 +195,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    */
   const followDatasets = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => {
     if (closed) return;
-    const wanted = new Set(row.format === 'html' ? htmlLiveLinks(row.meta).flatMap(link=>link.kind==='dataset'?[link.datasetId]:[]) : row.format === 'folder' ? [row.id] : row.format==='html'?liveDatasetIds((row.meta.htmlLinks??[]) as import('@artifactbin/contracts').HtmlPageLink[]):[]);
+    const wanted = new Set(row.format === 'html' ? liveDatasetIds(htmlLiveLinks(row.meta)) : row.format === 'folder' ? [row.id] : []);
     for (const [datasetId, drop] of datasetUnsubs) {
       if (wanted.has(datasetId)) continue;
       datasetUnsubs.delete(datasetId);
