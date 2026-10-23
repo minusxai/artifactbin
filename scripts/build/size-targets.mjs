@@ -5,6 +5,8 @@
  *
  *   node scripts/build/size-targets.mjs <lab.json> [--markdown] [--strict]
  *
+ * Inline executable bodies are attributed at standalone gzip size in JS budgets;
+ * total transferred bytes keep their original HTML accounting without duplication.
  * One line per target: pass, fail, or "no data" when the lab did not measure
  * what the target needs (a fixture missing, a build that never signalled
  * ready). Exit 0 always, unless `--strict`, which fails on any target that is

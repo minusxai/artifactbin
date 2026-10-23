@@ -38,8 +38,9 @@ export function reportMarkdown(base, head) {
   if (head.documents) {
     const c = head.documents.conditions;
     lines.push(`### Document views`, '', sizeOnly
-      ? `Anonymous reader, cold cache, one unthrottled pass per fixture and route. \`view\` is the reader page (\`/a/<id>\`), \`raw\` is \`/a/<id>/raw\`. KB are response bodies; timing columns are informational.`
+      ? `Anonymous reader, cold cache, ${c.runs} unthrottled passes per fixture and route. \`view\` is the reader page (\`/a/<id>\`), \`raw\` is \`/a/<id>/raw\`. KB are response bodies; timing columns are informational.`
       : `Anonymous reader, cold cache, ${c.latencyMs} ms latency, ${c.downloadMbps} Mbps down, ${c.cpuSlowdown}× CPU slowdown, median of ${c.runs}. \`view\` is the reader page (\`/a/<id>\`), \`raw\` is \`/a/<id>/raw\`. Takeover: the app's rendered document replaces the server copy. Painted: charts/diagram drawn. KB are response bodies.`, '');
+    lines.push('JS before ready includes executable inline script bodies, attributed at standalone gzip size. Those bytes are already in HTML transfer and are never added again to total transferred bytes. Blob scripts are not network transfers.', '');
     lines.push(documentViewsMarkdown(head.documents.summary, base.documents?.summary ?? {}), '');
   }
   const headLoads = loadsSummary(head), baseLoads = loadsSummary(base);

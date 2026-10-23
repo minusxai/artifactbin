@@ -83,3 +83,18 @@ it('waits for the actual document frame and ignores unrelated ready messages', a
  expect(window.__documentView.takeover).not.toBeNull();expect(window.__documentView.painted).not.toBeNull();
  window.close();
 });
+
+it('attributes only executable inline scripts present at the real ready boundary', async () => {
+ const {JSDOM}=await import('jsdom');
+ const {documentViewProbe,scriptBudgetBytes}=await import('../lib/document-views.mjs');
+ const {window}=new JSDOM('<html><head><script>const core="inline";</script><script type="module">const author="module";</script><script type="application/json">{"privateState":"data"}</script><script type="importmap">{"imports":{}}</script><script src="/external.js"></script></head><body></body></html>');
+ new Function('window','document','performance','PerformanceObserver','MutationObserver','requestAnimationFrame',`(${documentViewProbe.toString()})()`)(window,window.document,window.performance,undefined,window.MutationObserver,fn=>fn());
+ window.document.dispatchEvent(new window.Event('mx:ready'));
+ expect(window.__documentView.inlineScripts).toEqual(['const core="inline";','const author="module";']);
+ const measured=scriptBudgetBytes({decoded:0,gzip:0},window.__documentView.inlineScripts);
+ expect(measured.inline.decoded).toBeGreaterThan(0);
+ const late=window.document.createElement('script');late.textContent='const afterReady=true;';window.document.body.append(late);
+ window.document.dispatchEvent(new window.Event('mx:ready'));
+ expect(scriptBudgetBytes({decoded:0,gzip:0},window.__documentView.inlineScripts)).toEqual(measured);
+ window.close();
+});

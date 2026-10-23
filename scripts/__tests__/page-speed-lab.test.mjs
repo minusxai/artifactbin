@@ -1,9 +1,10 @@
 /** The page-speed lab: its workflow stays off the critical path, and its report reads what it measured. */
+import { gzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import { describe, expect, it } from 'vitest';
-import { documentViewsMarkdown, median, summarizeDocumentViews, waitForStoredDiagrams, documentMeasurementMode, waitForQuiet } from '../lib/document-views.mjs';
+import { scriptBudgetBytes, documentViewsMarkdown, median, summarizeDocumentViews, waitForStoredDiagrams, documentMeasurementMode, waitForQuiet } from '../lib/document-views.mjs';
 import { PAGE_SPEED_FIXTURES, publishPageSpeedFixtures } from '../fixtures/page-speed/index.mjs';
 import { loadsSummary, reportMarkdown } from '../ci/performance-report.mjs';
 
@@ -201,11 +202,27 @@ describe('the lab report', () => {
     expect(text).toContain('| home | cold | 1000 (±0) | 50 (±0) | 2.0 (±0.0) |');
   });
 
-  it('labels a one-pass size report and omits app-load timing', () => {
-    const documents = { conditions: { mode: 'size-only', runs: 1 }, summary: summarizeDocumentViews([sample('prose', 'view')]) };
+  it('labels the measured size repetitions and omits app-load timing', () => {
+    const documents = { conditions: { mode: 'size-only', runs: 3 }, summary: summarizeDocumentViews([sample('prose', 'view')]) };
     const text = reportMarkdown({ revision: 'a'.repeat(40), documents }, { revision: 'b'.repeat(40), documents });
-    expect(text).toContain('one unthrottled pass');
+    expect(text).toContain('3 unthrottled passes');
+    expect(text).toContain('never added again to total transferred bytes');
     expect(text).toContain('JS before ready gz KB');
     expect(text).not.toContain('### App loads');
+  });
+});
+
+
+describe('inline executable byte attribution', () => {
+  it('counts inline core even when it makes no network script request', () => {
+    const source = 'globalThis.example = "native core";'.repeat(100);
+    expect(scriptBudgetBytes({decoded:0,gzip:0}, [source])).toEqual({decoded:Buffer.byteLength(source),gzip:gzipSync(source).length,inline:{decoded:Buffer.byteLength(source),gzip:gzipSync(source).length}});
+  });
+  it('adds executable attribution to external scripts, never mutating wire totals', () => {
+    const wire = {decoded:500,gzip:200};
+    const source = 'console.log("reader")';
+    expect(scriptBudgetBytes(wire,[source])).toMatchObject({decoded:500+Buffer.byteLength(source),gzip:200+gzipSync(source).length});
+    expect(wire).toEqual({decoded:500,gzip:200});
+    expect(scriptBudgetBytes(wire,[])).toEqual({...wire,inline:{decoded:0,gzip:0}});
   });
 });

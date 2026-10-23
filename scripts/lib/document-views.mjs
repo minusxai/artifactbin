@@ -1,3 +1,4 @@
+import { gzipSync } from 'node:zlib';
 /**
  * DOCUMENT VIEWS for the page-speed lab (scripts/ci/performance-loads.mjs).
  *
@@ -30,6 +31,19 @@
  *   scriptMs      — main-thread script execution (CDP ScriptDuration) for the tab
  */
 
+/**
+ * Inline executable code shares the HTML transfer. Its standalone gzip size is
+ * attributed to the JS budget only; it is never added to total wire bytes.
+ * @param {{decoded:number,gzip:number}} external Network script bytes before ready.
+ * @param {string[]} inline Script bodies present at ready, excluding JSON/import maps.
+ * @returns {{decoded:number,gzip:number,inline:{decoded:number,gzip:number}}}
+ */
+export function scriptBudgetBytes(external, inline) {
+  const source = inline.join('\n');
+  const attributed = { decoded: Buffer.byteLength(source), gzip: source ? gzipSync(source).length : 0 };
+  return { decoded: external.decoded + attributed.decoded, gzip: external.gzip + attributed.gzip, inline: attributed };
+}
+
 /** Installed before any page script; records paint entries and DOM milestones. */
 export function documentViewProbe() {
   const state = (window.__documentView = { fcp: null, lcp: null, takeover: null, painted: null, ready: null, want: null, view: false });
@@ -41,7 +55,7 @@ export function documentViewProbe() {
    * prose page: nothing to hydrate). `jsBeforeReady` counts the script bytes that
    * finished before this moment.
    */
-  const ready = () => { if (state.ready === null) { state.ready = performance.now(); if(window.parent!==window)window.parent.postMessage({type:'page-speed-native',ready:true},'*'); } };
+  const ready = () => { if (state.ready === null) { state.ready = performance.now(); state.inlineScripts = [...document.scripts].filter(script => !script.src && (!script.type || /^(?:module|(?:text|application)\/(?:java|ecma)script)$/i.test(script.type))).map(script => script.textContent ?? ''); if(window.parent!==window)window.parent.postMessage({type:'page-speed-native',ready:true},'*'); } };
   document.addEventListener('mx:ready', ready);
   // The idle SPA and standalone behavior scripts are modules too. A page with
   // no island data has no hydration boot to signal ready; modules have loaded
@@ -127,7 +141,7 @@ async function measureDocumentView(context, url, { route, painted, throttle = LA
     // opaque-origin sandbox, where every resource reports zero body bytes.
     const requests = new Map();
     const inflight = new Set();
-    cdp.on('Network.requestWillBeSent', event => { if (!event.request.url.startsWith('data:') && !requests.has(event.requestId)) requests.set(event.requestId, { url: event.request.url, type: event.type, headers: 0, gzip: 0, decoded: 0 }); if (!['EventSource', 'WebSocket', 'Ping'].includes(event.type)) inflight.add(event.requestId); });
+    cdp.on('Network.requestWillBeSent', event => { if (/^https?:/.test(event.request.url) && !requests.has(event.requestId)) requests.set(event.requestId, { url: event.request.url, type: event.type, headers: 0, gzip: 0, decoded: 0 }); if (!['EventSource', 'WebSocket', 'Ping'].includes(event.type)) inflight.add(event.requestId); });
     cdp.on('Network.responseReceived', event => { const r = requests.get(event.requestId); if (r) { r.type = event.type; r.headers = event.response.encodedDataLength ?? 0; } });
     cdp.on('Network.dataReceived', event => { const r = requests.get(event.requestId); if (r) r.decoded += event.dataLength; });
     cdp.on('Network.loadingFinished', event => { const r = requests.get(event.requestId); if (r) r.gzip = Math.max(0, event.encodedDataLength - r.headers); inflight.delete(event.requestId); });
@@ -150,7 +164,7 @@ async function measureDocumentView(context, url, { route, painted, throttle = LA
       // Resource timing names every script and when it finished, even at the opaque origin (where its sizes read zero).
       const scriptsBeforeReady = s.ready === null ? null
         : performance.getEntriesByType('resource').filter(e => e.initiatorType === 'script' || /\.m?js(\?|$)/.test(e.name)).filter(e => e.responseEnd <= s.ready).map(e => e.name);
-      return { fcp: s.fcp, lcp: s.lcp, takeover: s.takeover, painted: s.painted, readyAt: s.ready, scriptsBeforeReady };
+      return { fcp: s.fcp, lcp: s.lcp, takeover: s.takeover, painted: s.painted, readyAt: s.ready, scriptsBeforeReady, inlineScripts: s.inlineScripts ?? [] };
     });
     const metrics = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
     const bytes = { html: { decoded: 0, gzip: 0 }, js: { decoded: 0, gzip: 0 }, css: { decoded: 0, gzip: 0 }, other: { decoded: 0, gzip: 0 } };
@@ -160,13 +174,14 @@ async function measureDocumentView(context, url, { route, painted, throttle = LA
     }
     // JS BEFORE READY: the wire bytes (CDP, per URL) of the scripts the page had finished loading when it became ready.
     const before = new Set(measured.scriptsBeforeReady ?? []);
-    const jsBeforeReady = measured.scriptsBeforeReady === null ? null : { decoded: 0, gzip: 0 };
+    let jsBeforeReady = measured.scriptsBeforeReady === null ? null : { decoded: 0, gzip: 0 };
     const scriptsBeforeReady = [];
     if (jsBeforeReady) for (const request of requests.values()) if (kindOf(request) === 'js' && before.has(request.url)) {
       jsBeforeReady.decoded += request.decoded;
       jsBeforeReady.gzip += request.gzip;
       scriptsBeforeReady.push({ url: new URL(request.url).pathname, gzip: request.gzip });
     }
+    if (jsBeforeReady) jsBeforeReady = scriptBudgetBytes(jsBeforeReady, measured.inlineScripts);
     return {
       route, ready, errors,
       fcp: measured.fcp, lcp: measured.lcp,
@@ -254,8 +269,10 @@ const METRICS = {
   cssDecoded: s => s.bytes.css.decoded, cssGzip: s => s.bytes.css.gzip,
   /** Every response body on the wire (the size targets' "total transferred"). */
   totalGzip: s => Object.values(s.bytes).reduce((n, kind) => n + kind.gzip, 0),
-  /** Script bytes on the wire that had finished before the page was ready (the size targets' "JS before ready"); null on a build that never signalled ready. */
+  /** External wire bytes plus attributed inline executable gzip present when ready (the size targets' "JS before ready"); null on a build that never signalled ready. */
   jsBeforeReadyGzip: s => s.jsBeforeReady?.gzip ?? null,
+  inlineJsGzip: s => s.jsBeforeReady?.inline?.gzip ?? 0,
+  inlineJsDecoded: s => s.jsBeforeReady?.inline?.decoded ?? 0,
   fcp: s => s.fcp, lcp: s => s.lcp, takeover: s => s.takeover, painted: s => s.painted, readyAt: s => s.readyAt ?? null, scriptMs: s => s.scriptMs,
 };
 
@@ -288,7 +305,7 @@ const delta = (head, base, format) => {
 export function documentViewsMarkdown(head, base = {}) {
   const columns = [
     ['requests', 'Requests', String], ['htmlGzip', 'HTML gz KB', kb], ['jsDecoded', 'JS KB', kb], ['jsGzip', 'JS gz KB', kb],
-    ['jsBeforeReadyGzip', 'JS before ready gz KB', kb], ['totalGzip', 'Total gz KB', kb],
+    ['jsBeforeReadyGzip', 'JS before ready gz KB', kb], ['inlineJsGzip', 'Inline JS attributed gz KB', kb], ['totalGzip', 'Total gz KB', kb],
     ['cssGzip', 'CSS gz KB', kb], ['fcp', 'FCP ms', ms], ['lcp', 'LCP ms', ms], ['takeover', 'Takeover ms', ms],
     ['painted', 'Painted ms', ms], ['scriptMs', 'Script ms', ms],
   ];
