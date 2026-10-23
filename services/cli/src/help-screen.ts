@@ -5,7 +5,7 @@ import {createStyle,wrap,visibleWidth,type Style,type StyleOptions} from './styl
 /** Human help for a terminal, rendered from the same registry as the plain text, manual and skills. */
 interface ScreenOptions extends StyleOptions {columns?:number}
 export const COMMAND_GROUPS:ReadonlyArray<readonly [string,readonly string[]]>=[
- ['Local files',['add','mv','import','preview','pull','push','fork','status','diff','validate']],
+ ['Local files',['add','mv','pull','push','fork','status','diff','validate']],
  ['Published resources',['list','log','upload','export','query','runs','schedule','delete','comment','watch','invite','join','members','mention','open','sessions','testuser']],
  ['Setup and help',['setup','config','workspace','serve','auth','update','uninstall','remote','help']],
 ];
