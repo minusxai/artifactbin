@@ -13,7 +13,7 @@ import {exportAssetUrl} from './assets';
 import { createHash } from 'node:crypto';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/platform/config';
 import { services } from '@/lib/platform/services';
-import { ArtifactRow, VERSION_PARAM } from '@/lib/artifacts';
+import { ArtifactRow, getArtifactById, getVersionFor, writerFor, VERSION_PARAM } from '@/lib/artifacts';
 import {
   SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage,
   type SocialPreviewCrop,
@@ -353,7 +353,16 @@ export async function exportImageResponse(
   if (imageId) {
     // The caller has authorized the document; resolve its admitted reference
     // in the owner's scope, never by an unrestricted image-id lookup.
-    const image = await referencedArtifactForRow(artifact, imageId);
+    const storedPage = await getArtifactById(artifact.id);
+    const archived = storedPage && q.version != null
+      ? await getVersionFor(writerFor(storedPage), artifact.id, q.version)
+      : null;
+    // The renderer accepts a small pixel identity; reference authorization
+    // needs the stored owner and the selected publication's admitted refs.
+    const page = storedPage && (q.version == null || archived)
+      ? { ...storedPage, ...(archived ? {meta: archived.meta} : {}) }
+      : null;
+    const image = page ? await referencedArtifactForRow(page, imageId) : null;
     if (image?.format === 'image') {
       try {
         const produceCover=async()=>{
