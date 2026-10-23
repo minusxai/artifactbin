@@ -12,7 +12,7 @@ import {GET,POST} from '@/app/api/artifacts/[id]/graphql/route';
 import {request,useAppHarness,mintAccountToken} from './harness';
 const harness=useAppHarness();
 it('publishes, discovers and executes immutable GraphQL with file-scoped shared state through HTTP handlers',async()=>{
- const runner=await createRunner({db:await harness.db(),capabilities:(context,operation,args)=>localPageBackendCapability(context.request,operation,args)});
+ const runner=await createRunner({dockerImage:process.env.RUNNER_TEST_IMAGE,db:await harness.db(),capabilities:(context,operation,args)=>localPageBackendCapability(context.request,operation,args)});
  setServices({runner});
  try{
   const owner=await mintAccountToken('pagegraphql');
