@@ -42,7 +42,7 @@ export async function accountWorkspaceCoreFor(userId: string, email?: string | n
  */
 export async function accountWorkspaceInsightsFor(userId: string) {
   const [series, likes, followers, forks, { stats, views }] = await Promise.all([
-    viewSeriesByUser(userId, VIEW_SERIES_DAYS, 'markup'), likeSummaryByUser(userId),
+    viewSeriesByUser(userId, VIEW_SERIES_DAYS, 'html'), likeSummaryByUser(userId),
     count('follow', userId), forkCountByUser(userId), workspaceCountsFor(userId),
   ]);
 

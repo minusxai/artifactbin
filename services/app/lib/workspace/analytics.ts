@@ -99,7 +99,7 @@ const LOG_FORK_COUNT = `SELECT COUNT(*)::int AS n
    FROM ${EVENTS_SCHEMA}.events e
    JOIN artifacts a ON a.id = e.object_id
   WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb = 'forked'
-    AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}`;
+    AND a.format = 'html' AND a.${LIVE_ARTIFACT_SQL}`;
 
 /**
  * Daily view counts per artifact across everything the user owns, zero-filled
@@ -108,7 +108,7 @@ const LOG_FORK_COUNT = `SELECT COUNT(*)::int AS n
  * daily visitor hash; a NULL subject counts once). Artifacts with no views in
  * the window are absent from the map; with no events table the map is empty.
  */
-export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIES_DAYS, format: 'markup' | null = null): Promise<Map<string, number[]>> {
+export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIES_DAYS, format: 'html' | null = null): Promise<Map<string, number[]>> {
   if (!(await eventsTablePresent())) return new Map();
   const db = await getDb();
   const r = await db.query<{ artifact_id: string; day: string; n: number }>(LOG_SERIES, [userId, days, format]);
@@ -116,7 +116,7 @@ export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIE
 }
 
 interface LikeSummary {
-  /** Likes currently held by the user's live markup documents. */
+  /** Likes currently held by the user's live HTML pages. */
   total: number;
   /** Those live likes grouped by the day the relation was first created. */
   series: number[];
@@ -135,7 +135,7 @@ export async function likeSummaryByUser(userId: string, days: number = VIEW_SERI
      FROM relations r
      JOIN artifacts a ON a.id = r.object_id
      WHERE r.verb = 'like' AND r.object_kind = 'artifact' AND r.deleted_at IS NULL AND r.status='accepted'
-       AND a.user_id = $1 AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}
+       AND a.user_id = $1 AND a.format = 'html' AND a.${LIVE_ARTIFACT_SQL}
      GROUP BY day
      ORDER BY day`,
     [userId],
@@ -154,7 +154,7 @@ export async function likeSummaryByUser(userId: string, days: number = VIEW_SERI
 }
 
 /**
- * Forks made from the user's live markup artifacts. The canonical event log
+ * Forks made from the user's live HTML artifacts. The canonical event log
  * records the fork against its source artifact; 0 when there is no log.
  */
 export async function forkCountByUser(userId: string): Promise<number> {

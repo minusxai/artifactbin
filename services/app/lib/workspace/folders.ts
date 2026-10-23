@@ -67,7 +67,7 @@ export async function folderPageFor(
   let folders = 0;
   for (const c of picked.children) {
     if (c.format === 'folder') folders++;
-    else if (c.format === 'markup') documents++;
+    else if (c.format === 'html') documents++;
     rows.push({
       id: c.id,
       url: `/a/${c.id}`,

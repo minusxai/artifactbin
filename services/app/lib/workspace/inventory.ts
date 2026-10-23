@@ -10,13 +10,13 @@ const ASSETS_PAGE_SIZE = 50;
 type InventoryRow = Pick<ArtifactSummary, 'id' | 'title' | 'format' | 'version' | 'visibility' | 'ancestor_ids' | 'updated_at'>;
 const COLS = 'id, title, format, version, visibility, ancestor_ids, updated_at';
 const OWNED = `group_id IS NULL AND user_id = $1 AND ${LIVE_ARTIFACT_SQL}`;
-const ASSETS = `${OWNED} AND format NOT IN ('markup', 'folder')`;
+const ASSETS = `${OWNED} AND format NOT IN ('html', 'folder')`;
 const project = (row: InventoryRow) => ({ ...row, url: `/a/${row.id}` });
 
 export async function workspaceDocumentsFor(userId: string, groupId?:string) {
   const db = await getDb();
   const result = await db.query<InventoryRow>(`SELECT ${COLS}
-    FROM artifacts WHERE ${groupId ? 'group_id = $1 AND '+LIVE_ARTIFACT_SQL : OWNED} AND format IN ('markup', 'folder')
+    FROM artifacts WHERE ${groupId ? 'group_id = $1 AND '+LIVE_ARTIFACT_SQL : OWNED} AND format IN ('html', 'folder')
     ORDER BY updated_at DESC, id DESC LIMIT 1000`, [groupId??userId]);
   return result.rows;
 }
@@ -24,16 +24,16 @@ export async function workspaceDocumentsFor(userId: string, groupId?:string) {
 /**
  * The account's totals and every document's view count, in one read of the inventory and one aggregate
  * over the view events (view-totals): the shelf's per-document, all-time semantics, without its row limit.
- * `stats.views` is the sum of the markup documents' counts, so the headline and the per-document map can
+ * `stats.views` is the sum of the HTML pages' counts, so the headline and the per-document map can
  * never disagree. Documents and folders count views wherever they live; the artifact and asset counts are
  * the personal inventory (`OWNED`).
  */
 export async function workspaceCountsFor(userId: string): Promise<{ stats: WorkspaceStats; views: Record<string, number> }> {
   const db = await getDb();
   const result = await db.query<{ artifacts: number; assets: number; documents: string[]; folders: string[] }>(`SELECT
-    COUNT(*) FILTER (WHERE group_id IS NULL AND format = 'markup')::int AS artifacts,
-    COUNT(*) FILTER (WHERE group_id IS NULL AND format NOT IN ('markup', 'folder'))::int AS assets,
-    COALESCE(array_agg(id) FILTER (WHERE format = 'markup'), '{}') AS documents,
+    COUNT(*) FILTER (WHERE group_id IS NULL AND format = 'html')::int AS artifacts,
+    COUNT(*) FILTER (WHERE group_id IS NULL AND format NOT IN ('html', 'folder'))::int AS assets,
+    COALESCE(array_agg(id) FILTER (WHERE format = 'html'), '{}') AS documents,
     COALESCE(array_agg(id) FILTER (WHERE format = 'folder'), '{}') AS folders
     FROM artifacts WHERE user_id = $1 AND ${LIVE_ARTIFACT_SQL}`, [userId]);
   const { artifacts, assets, documents, folders } = result.rows[0];
