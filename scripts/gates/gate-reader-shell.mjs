@@ -173,6 +173,7 @@ await section('reader', async () => {
   check(await documentLocator(reader).locator('#sec-probe').innerText() === 'native-runtime-ready', 'the native core runs its Apollo client inside the isolated frame');
   // Tooltip trigger semantics stay immediate, but the positioning engine belongs
   // to the first actual use, never the initial document-reader payload.
+  check(await reader.evaluate(() => performance.getEntriesByType('resource').filter(entry => /\/assets\/(?:CspConsentBar|ScriptFailureNotice|InstallArtifact)-[^/]+\.js(?:\?|$)/.test(entry.name)).length) === 0, 'healthy reader does not fetch conditional notice controls');
   const popupLoads = () => reader.evaluate(() => performance.getEntriesByType('resource').filter(entry => /\/assets\/TooltipPopper-[^/]+\.js(?:\?|$)/.test(entry.name)).length);
   check(await popupLoads() === 0, 'reading does not fetch the unused tooltip positioning engine');
   const tooltipTrigger = reader.getByRole('button', {name:'Open artifact controls',exact:true});

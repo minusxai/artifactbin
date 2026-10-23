@@ -1,7 +1,7 @@
 import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
-import { InstallArtifact } from '../document/InstallArtifact';
+import {artifactAppPath} from '@/lib/serving/artifact-pwa';
 import { createEffect, createSignal, lazy, on, onCleanup, onMount, Show, Suspense, type JSX } from 'solid-js';
 import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story-ui/edit-bar';
 import { Portal } from 'solid-js/web';
@@ -20,8 +20,7 @@ import { reportArtifactView } from '@/solid/lib/artifact-view-report';
 import { useSession } from '../lib/session';
 import type { AnnotationWire } from '@/lib/annotations/store';
 import { ARTIFACT_ID_PATTERN, type ArtifactRole, canAnnotate as canAnnotateRole, canEdit as canEditRole, canGovern, type Visibility } from '@artifactbin/contracts';
-import { CspConsentBar } from '../document/CspConsentBar';
-import { ScriptFailureNotice } from '../document/ScriptFailureNotice';
+import {ReaderNotice} from '../document/ReaderNotice';
 import type { CspRequest } from '@/lib/document';
 import { SelectionActions } from '../document/SelectionActions';
 import { createFramedStory, fetchFrameNodes, framedDocumentFor, onFirstPressInto, type FramedStory } from '../document/create-framed-story';
@@ -346,7 +345,7 @@ export function DocumentPage(): JSX.Element {
       <Show when={editable() && (live()?.template ?? page!.surface?.template) === 'doc'}>
         <div class="fixed left-6" style={{ top: `${APP_BAR_H + 12}px` }}><Suspense fallback={<PendingReaderAction label="Loading agent handoff" readyLabel="Copy for agent" />}><CopyAgentButton id={id!} template="doc" /></Suspense></div>
       </Show>
-      <Show when={page?.surface?.pwaEnabled}><InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} /></Show>
+      <Show when={page?.surface?.pwaEnabled && location.pathname === artifactAppPath(id!) && new URLSearchParams(location.search).has('install')}><ReaderNotice label="App installation" load={() => import('../document/InstallArtifact')}>{({InstallArtifact}) => <InstallArtifact id={id!} title={page?.surface?.title ?? 'Untitled artifact'} />}</ReaderNotice></Show>
       <Show when={fork() && id}><Suspense fallback={<PendingReaderDialog title="Fork artifact" onClose={() => setFork(false)} />}><ForkConfirm id={id!} title={page?.surface?.title ?? 'this artifact'} onClose={() => setFork(false)} /></Suspense></Show>
     </TrustedUi>
     {/* The document's notice takes its own row above the frame (the frame shrinks), never over it. */}
@@ -359,11 +358,11 @@ export function DocumentPage(): JSX.Element {
       </TrustedUi></Portal>
     )}</Show>
     <Show when={page?.cspRequest?.status === 'blocked' && frameSlot()}>{(slot) => (
-      <Portal mount={slot()}><TrustedUi><CspConsentBar id={id!} request={page!.cspRequest!} accountSession={accountSession()} /></TrustedUi></Portal>
+      <Portal mount={slot()}><TrustedUi><ReaderNotice label="Document network access" load={() => import('../document/CspConsentBar')}>{module => <module.CspConsentBar id={id!} request={page!.cspRequest!} accountSession={accountSession()} />}</ReaderNotice></TrustedUi></Portal>
     )}</Show>
     {/* Gone once a newer version is shown: publish refuses a script that does not build, so any newer head built its own. */}
     <Show when={!!page?.scriptFailure?.errors.length && currentVersion() <= (page?.surface?.version ?? 0) && frameSlot()}>{(slot) => (
-      <Portal mount={slot()}><TrustedUi><ScriptFailureNotice errors={page!.scriptFailure!.errors} /></TrustedUi></Portal>
+      <Portal mount={slot()}><TrustedUi><ReaderNotice label="Page script error" load={() => import('../document/ScriptFailureNotice')}>{module => <module.ScriptFailureNotice errors={page!.scriptFailure!.errors} />}</ReaderNotice></TrustedUi></Portal>
     )}</Show>
     <TrustedUi overlay layer="discussion">
     <Show when={ready() && nonce()}>
