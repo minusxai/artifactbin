@@ -593,6 +593,8 @@ export const ACCESS_PENDING = 'Checking edit access…';
  * that read it must re-run.
  */
 export interface ArtifactDataEvent {
+  /** Native shared resource names to authoritative committed revisions; wakeups carry no values. */
+  revisions?: Record<string, string>;
   /** Dataset artifact ids (today always exactly one — the one that was written). */
   datasets: string[];
   /** The version that dataset reached, for a client that wants to drop a repeat. */

@@ -30,7 +30,9 @@ export async function getHtmlBackendStore(backendId:string):Promise<HtmlBackendS
 }
 export async function setHtmlBackendStore(backendId:string,value:HtmlJson,expectedVersion:number):Promise<HtmlBackendStoreWrite>{
  const db=await getDb();
- const row=(await db.query<{version:number}>(`WITH updated AS (UPDATE html_backend_stores SET value=$2::jsonb,version=version+1 WHERE backend_id=$1 AND version=$3 RETURNING version), notified AS (SELECT pg_notify($4 || v.page_id,updated.version::text) FROM updated JOIN (SELECT DISTINCT page_id FROM html_backend_versions WHERE backend_id=$1) v ON true) SELECT updated.version FROM updated CROSS JOIN (SELECT count(*) FROM notified) sent`,[backendId,JSON.stringify(value),expectedVersion,artifactChannel('')])).rows[0];
+ const row=(await db.query<{version:number}>(`WITH updated AS (UPDATE html_backend_stores SET value=$2::jsonb,version=version+1 WHERE backend_id=$1 AND version=$3 RETURNING version), notified AS (SELECT pg_notify($4 || lower(v.page_id),updated.version::text) FROM updated JOIN (SELECT DISTINCT page_id FROM html_backend_versions WHERE backend_id=$1) v ON true) SELECT updated.version FROM updated CROSS JOIN (SELECT count(*) FROM notified) sent`,[backendId,JSON.stringify(value),expectedVersion,artifactChannel('')])).rows[0];
  if(row)return {ok:true,version:row.version};
  const current=await getHtmlBackendStore(backendId);return {ok:false,version:current.version};
 }
+
+export {htmlLiveLinks,htmlSharedRevisions,changedHtmlSharedRevisions} from './live';
