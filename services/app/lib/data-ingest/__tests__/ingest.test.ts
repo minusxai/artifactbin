@@ -161,3 +161,9 @@ it('retains explicit CSV empty strings through ingestion while unquoted and shor
  const result=await ingestDataset({kind:'csv',text:'value,other\n"",\n12\n'});
  expect(result.rows).toEqual([{value:'',other:null},{value:'12',other:null}]);
 });
+
+it('infers only retained CSV rows when a quoted empty occurs after truncation',async()=>{
+ const result=await ingestDataset({kind:'csv',text:['value',...Array(MAX_ROWS_LIMIT).fill('12'),'""'].join('\n')});
+ expect(result.truncated).toBe(true);expect(result.totalRows).toBe(MAX_ROWS_LIMIT+1);
+ expect(result.rows[0]).toEqual({value:12});
+});
