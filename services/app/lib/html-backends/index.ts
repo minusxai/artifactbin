@@ -3,7 +3,7 @@ import {artifactChannel, type HtmlBackendLink,type HtmlJson,type Queryable} from
 import {mayPublishBackendChange,requiresFreshBackendIdentity} from './authority';
 import {getDb} from '../platform/db';
 import {generateFileId} from '../platform/ids';
-import type {PreparedHtmlBackend,HtmlBackendVersionRecord,HtmlBackendStoreValue,HtmlBackendStoreWrite} from './contracts';
+import type {PreparedHtmlBackend,HtmlBackendVersionRecord,HtmlBackendStoreValue,HtmlBackendStoreWrite,HtmlBackendWriteScope} from './contracts';
 export type {PreparedHtmlBackend,HtmlBackendVersionRecord} from './contracts';
 /** Called under the owning page lock before writing any immutable version. */
 export async function mayCommitHtmlBackends(tx:Queryable,pageId:string,personalOwner:boolean,prepared:readonly PreparedHtmlBackend[]):Promise<boolean>{
@@ -19,7 +19,7 @@ export async function commitHtmlBackends(tx:Queryable,pageId:string,ownerId:stri
  for(const backend of prepared){
   const prior=previous.find(link=>link.name===backend.name);
   // A removed name still recovers its own stable backend ID when explicitly reintroduced.
-  const old=prior?.backendId??(await tx.query<{backend_id:string}>('SELECT backend_id FROM html_backend_versions WHERE page_id=$1 AND name=$2 ORDER BY (owner_id=$3) DESC LIMIT 1',[pageId,backend.name,ownerId])).rows[0]?.backend_id;
+  const old=prior?.backendId??(await tx.query<{backend_id:string}>(`SELECT link->>'backendId' AS backend_id FROM artifact_versions v CROSS JOIN LATERAL jsonb_array_elements(COALESCE(v.meta->'htmlLinks','[]'::jsonb)) link WHERE v.artifact_id=$1 AND link->>'kind'='backend' AND link->>'name'=$2 ORDER BY v.version DESC LIMIT 1`,[pageId,backend.name])).rows[0]?.backend_id;
   const previousOwner=old?(await tx.query<{owner_id:string}>('SELECT owner_id FROM html_backend_versions WHERE backend_id=$1 LIMIT 1',[old])).rows[0]?.owner_id:undefined;
   const fresh=previousOwner!==undefined&&requiresFreshBackendIdentity({previousOwnerId:previousOwner,nextOwnerId:ownerId});
   const backendId=!old||fresh?generateFileId():old;
@@ -40,11 +40,18 @@ export async function getHtmlBackendStore(backendId:string):Promise<HtmlBackendS
  const row=(await (await getDb()).query<{value:HtmlJson|null;version:number}>('SELECT value,version FROM html_backend_stores WHERE backend_id=$1',[backendId])).rows[0];
  if(!row)throw new Error('Backend not found');return row;
 }
-export async function setHtmlBackendStore(backendId:string,value:HtmlJson,expectedVersion:number):Promise<HtmlBackendStoreWrite>{
+export async function setHtmlBackendStore(backendId:string,value:HtmlJson,expectedVersion:number,scope?:HtmlBackendWriteScope):Promise<HtmlBackendStoreWrite>{
  const db=await getDb();
- const row=(await db.query<{version:number}>(`WITH updated AS (UPDATE html_backend_stores SET value=$2::jsonb,version=version+1 WHERE backend_id=$1 AND version=$3 RETURNING version), notified AS (SELECT pg_notify($4 || lower(v.page_id),updated.version::text) FROM updated JOIN (SELECT DISTINCT page_id FROM html_backend_versions WHERE backend_id=$1) v ON true) SELECT updated.version FROM updated CROSS JOIN (SELECT count(*) FROM notified) sent`,[backendId,JSON.stringify(value),expectedVersion,artifactChannel('')])).rows[0];
+ return db.transaction(async tx=>{
+ if(scope){
+  // Publication locks the page before touching its backend stores. Keep that order here.
+  const page=(await tx.query<{user_id:string|null;meta:{htmlLinks?:HtmlBackendLink[]}}>('SELECT user_id,meta FROM artifacts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[scope.pageId])).rows[0];
+  if(!page||page.user_id&&page.user_id!==scope.ownerId||!page.meta.htmlLinks?.some(link=>link.kind==='backend'&&link.backendId===backendId&&link.version===scope.version))throw Error('backend_binding_changed');
+ }
+ const row=(await tx.query<{version:number}>(`WITH updated AS (UPDATE html_backend_stores SET value=$2::jsonb,version=version+1 WHERE backend_id=$1 AND version=$3 RETURNING version), notified AS (SELECT pg_notify($4 || lower(v.page_id),updated.version::text) FROM updated JOIN (SELECT DISTINCT page_id FROM html_backend_versions WHERE backend_id=$1) v ON true) SELECT updated.version FROM updated CROSS JOIN (SELECT count(*) FROM notified) sent`,[backendId,JSON.stringify(value),expectedVersion,artifactChannel('')])).rows[0];
  if(row)return {ok:true,version:row.version};
- const current=await getHtmlBackendStore(backendId);return {ok:false,version:current.version};
+ const current=(await tx.query<{version:number}>('SELECT version FROM html_backend_stores WHERE backend_id=$1',[backendId])).rows[0];if(!current)throw Error('Backend not found');return {ok:false,version:current.version};
+ });
 }
 
 export {htmlLiveLinks,htmlSharedRevisions,changedHtmlSharedRevisions} from './live';
