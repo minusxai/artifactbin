@@ -4,7 +4,9 @@ export type DatasetCellType = 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON';
 /** Stable IDs, never display labels, address rows and columns. Exactly one typed value (or null) per cell. */
 export type DatasetCellValue = {type:'STRING';value:string|null}|{type:'NUMBER';value:number|null}|{type:'BOOLEAN';value:boolean|null}|{type:'JSON';value:import('./html-page').HtmlJson};
 export interface DatasetColumnDescriptor { id:string; label:string; type:DatasetCellType; nullable:boolean; /** Original source type; dates and timestamps keep their string encoding. */ sourceType?:string }
-export interface DatasetTableDescriptor {id:string;label:string;columns:readonly DatasetColumnDescriptor[]}
+/** Source provenance is independent of query result pagination and filtered/aggregate row counts. */
+export interface DatasetSourceInfo {truncated:boolean;totalRows:number|null;storedRows:number|null}
+export interface DatasetTableDescriptor {id:string;label:string;columns:readonly DatasetColumnDescriptor[];source:DatasetSourceInfo}
 export interface DatasetSchemaResult {revision:string;tables:readonly DatasetTableDescriptor[]}
 export interface DatasetCell { columnId:string; value:DatasetCellValue }
 export interface DatasetGraphqlRow { id:string; cells:readonly DatasetCell[] }
@@ -24,6 +26,7 @@ export interface DatasetQueryRequest extends Omit<DatasetReadRequest,'filters'> 
  groupBy?:readonly string[];aggregates?:readonly DatasetAggregate[];
 }
 export interface DatasetReadResult {
+  source:DatasetSourceInfo;
   revision:string; columns:readonly DatasetColumnDescriptor[]; rows:readonly DatasetGraphqlRow[];
   pageInfo:{hasNextPage:boolean;endCursor:string|null};
 }
@@ -61,10 +64,11 @@ input QueryFilter { columnId: ID! operator: FilterOperator! value: CellValueInpu
 input Aggregate { id: ID! operation: AggregateOperation! columnId: ID }
 input Order { columnId: ID! direction: SortDirection! }
 type PageInfo { hasNextPage: Boolean! endCursor: String }
-type Rows { revision: String! columns: [Column!]! rows: [Row!]! pageInfo: PageInfo! }
+type DatasetSourceInfo { truncated: Boolean! totalRows: FiniteNumber storedRows: FiniteNumber }
+type Rows { source: DatasetSourceInfo! revision: String! columns: [Column!]! rows: [Row!]! pageInfo: PageInfo! }
 input RowChange { kind: RowChangeKind! rowId: ID cells: [CellInput!] }
 type WriteReceipt { requestId: ID! revision: String outcome: WriteOutcome! rowIds: [ID!]! }
-type DatasetTable { id: ID! label: String! columns: [Column!]! }
+type DatasetTable { id: ID! label: String! columns: [Column!]! source: DatasetSourceInfo! }
 type DatasetSchema { revision: String! tables: [DatasetTable!]! }
 type Query { schema: DatasetSchema! query(tableId: ID!, columnIds: [ID!], filters: [QueryFilter!], parameters: [QueryParameter!], groupBy: [ID!], aggregates: [Aggregate!], order: [Order!], first: Int! = 20, after: String): Rows! rows(tableId: ID!, columnIds: [ID!], filters: [Filter!], order: [Order!], first: Int! = 20, after: String): Rows! }
 type Mutation { writeRows(tableId: ID!, expectedRevision: String!, requestId: ID!, changes: [RowChange!]!): WriteReceipt! }

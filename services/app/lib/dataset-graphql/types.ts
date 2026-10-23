@@ -1,11 +1,12 @@
 import type { AccessActor } from '@/lib/accounts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
-import type { DatasetWriteRequest, DatasetWriteReceipt, HtmlDatasetLink, Scalar } from '@artifactbin/contracts';
+import type { DatasetSourceInfo, DatasetWriteRequest, DatasetWriteReceipt, HtmlDatasetLink, Scalar } from '@artifactbin/contracts';
 export interface DatasetRowIdentitySidecar {objectKey:string;ids:readonly string[]}
 /** Authorized, revision-specific data. Policy identity changes invalidate cursors. */
 export interface DatasetSnapshot {
  id:string; revision:string; policyIdentity:string; catalog:DatasetCatalog;
  rowIds:Readonly<Record<string,readonly string[]>>;
+ sources?:Readonly<Record<string,DatasetSourceInfo>>;
 }
 export interface DatasetStatement { sql:string; params:Record<string,Scalar> }
 /** Narrow port to the retained dataset executor, ACL, object storage and mutation transaction. */

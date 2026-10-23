@@ -7,7 +7,12 @@ import type {DatasetGraphqlPort,DatasetSnapshot} from './types';
 export type {DatasetGraphqlPort,DatasetSnapshot} from './types';
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('base64url');
 function tableFor(snapshot:DatasetSnapshot,id:string){const table=snapshot.catalog.tables.find(t=>tableIdentity(t)===id);if(!table)throw new Error('dataset_table_not_found');return table;}
-export function datasetSchema(snapshot:DatasetSnapshot){return {revision:snapshot.revision,tables:snapshot.catalog.tables.map(table=>({id:tableIdentity(table),label:table.name,columns:descriptors(table)}))};}
+function datasetSource(snapshot:DatasetSnapshot,tableId:string){
+ const source=snapshot.sources?.[tableId];if(source)return source;
+ const count=snapshot.rowIds[tableId]?.length??null;
+ return {truncated:false,totalRows:count,storedRows:count};
+}
+export function datasetSchema(snapshot:DatasetSnapshot){return {revision:snapshot.revision,tables:snapshot.catalog.tables.map(table=>({id:tableIdentity(table),label:table.name,columns:descriptors(table),source:datasetSource(snapshot,tableIdentity(table))}))};}
 function cursorOffset(identity:string,after:string|undefined):number {
  if(!after)return 0;
  if(after.length>1024)throw new Error('invalid_cursor');
@@ -26,7 +31,7 @@ export function createDatasetGraphql(port:DatasetGraphqlPort):DatasetGraphql<Acc
    const offset=cursorOffset(identity,input.after);
    const rows=await port.execute(actor,snapshot,input.tableId,plan.statement,{limit:input.first+1,offset},signal);
    const visible=rows.slice(0,input.first),hasNextPage=rows.length>input.first;
-   return {revision:snapshot.revision,columns:descriptors(table).filter(c=>plan.columns.some(p=>columnIdentity(input.tableId,p.name)===c.id)),
+   return {source:datasetSource(snapshot,input.tableId),revision:snapshot.revision,columns:descriptors(table).filter(c=>plan.columns.some(p=>columnIdentity(input.tableId,p.name)===c.id)),
     rows:visible.map(row=>{if(typeof row[ID_COLUMN]!=='string')throw new Error('dataset_row_identity_missing');return {id:row[ID_COLUMN] as string,cells:plan.columns.map(column=>({columnId:columnIdentity(input.tableId,column.name),value:typedCell(column,row[column.name])}))};}),
     pageInfo:{hasNextPage,endCursor:visible.length?Buffer.from(JSON.stringify([identity,offset+visible.length])).toString('base64url'):null}};
   },
@@ -42,7 +47,7 @@ export function createDatasetGraphql(port:DatasetGraphqlPort):DatasetGraphql<Acc
    const {after,...query}=input;
    const identity=hash([binding,snapshot.revision,snapshot.policyIdentity,actor,query]),offset=cursorOffset(identity,after);
    const rows=await port.execute(actor,snapshot,input.tableId,plan.statement,{limit:input.first+1,offset},signal),visible=rows.slice(0,input.first);
-   return {revision:snapshot.revision,columns:plan.columns,rows:visible.map(plan.row),pageInfo:{hasNextPage:rows.length>input.first,endCursor:visible.length?Buffer.from(JSON.stringify([identity,offset+visible.length])).toString('base64url'):null}};
+   return {source:datasetSource(snapshot,input.tableId),revision:snapshot.revision,columns:plan.columns,rows:visible.map(plan.row),pageInfo:{hasNextPage:rows.length>input.first,endCursor:visible.length?Buffer.from(JSON.stringify([identity,offset+visible.length])).toString('base64url'):null}};
   },
   async write(actor:AccessActor,binding:HtmlDatasetLink,input:DatasetWriteRequest,signal:AbortSignal){
    signal.throwIfAborted();
