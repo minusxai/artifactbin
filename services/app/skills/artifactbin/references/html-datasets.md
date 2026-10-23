@@ -24,18 +24,20 @@ Import `client,gql` from `@afbin/apollo`, then discover the namespace’s stable
 
 ```js
 const {data}=await client.query({query:gql`{
- repairs{schema{revision tables{id label columns{id label type nullable sourceType}}}}
+ repairs{schema{revision tables{id label source{truncated totalRows storedRows} columns{id label type nullable sourceType}}}}
 }`});
 ```
 
 Select tables and columns by their discovered labels for this task, then address them with the returned opaque IDs. Never hard-code a display label as a table or column ID. Dates/timestamps use STRING cells; `sourceType` preserves their source meaning.
+
+Every schema table and rows/query result carries `source:{truncated,totalRows,storedRows}`. If `truncated` is true, chart totals cover only stored rows: label them as a stored sample, for example “10,000 of 10,003 source rows.” Result pagination and source truncation are independent; fetching every page cannot recover rows discarded during import. Normal complete datasets have matching total/stored counts.
 
 The constant dataset schema exposes `rows(tableId,columnIds,filters,order,first,after)` and `writeRows(tableId,expectedRevision,requestId,changes)`. Use GraphQL variables:
 
 ```graphql
 query Rows($table:ID!,$after:String){
  repairs{rows(tableId:$table,first:100,after:$after){
-  revision columns{id label type nullable}
+  revision source{truncated totalRows storedRows} columns{id label type nullable}
   rows{id cells{columnId value{type string number boolean json}}}
   pageInfo{hasNextPage endCursor}
  }}
@@ -46,7 +48,7 @@ query Rows($table:ID!,$after:String){
 
 ## Server queries and aggregates
 
-For grouped charts or totals, use the namespace’s `query` field. It filters and aggregates the whole stored dataset before paginating the resulting rows. It accepts `tableId`, `columnIds`, `filters`, `parameters`, `groupBy`, `aggregates`, `order`, `first` and `after`. Use discovered column IDs. An aggregate is `{id:"total",operation:SUM,columnId:"<amount column ID>"}`; operations are COUNT, SUM, AVG, MIN and MAX. COUNT without a column counts all filtered rows; with a column it counts non-null cells. SUM requires a numeric column. Its `id` becomes the output column ID; grouped source columns retain their IDs. Order by the resulting metric, for example `{columnId:"total",direction:DESC}`. Read the same typed Rows result and follow its output cursor as needed.
+For grouped charts or totals, use the namespace’s `query` field. It filters and aggregates the whole stored dataset before paginating the resulting rows. Source truncation still applies: aggregate totals never include discarded upload rows. It accepts `tableId`, `columnIds`, `filters`, `parameters`, `groupBy`, `aggregates`, `order`, `first` and `after`. Use discovered column IDs. An aggregate is `{id:"total",operation:SUM,columnId:"<amount column ID>"}`; operations are COUNT, SUM, AVG, MIN and MAX. COUNT without a column counts all filtered rows; with a column it counts non-null cells. SUM requires a numeric column. Its `id` becomes the output column ID; grouped source columns retain their IDs. Order by the resulting metric, for example `{columnId:"total",direction:DESC}`. Read the same typed Rows result and follow its output cursor as needed.
 
 Filters may reference a named parameter: `{columnId:"<amount ID>",operator:GTE,parameter:"minimum"}`, paired with `parameters:[{name:"minimum",value:{type:NUMBER,number:0}}]`. Parameter values are typed cells, never SQL strings. No arbitrary SQL endpoint exists. Use schema discovery to inspect available input enums before constructing a new operation.
 

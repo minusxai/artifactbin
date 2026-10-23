@@ -142,9 +142,9 @@
 <script type="module">
 import {client,gql} from '@afbin/apollo';
 const preference=gql`{metric}`;
-const schemaQuery=gql`{repairs{schema{revision tables{id label columns{id label type nullable sourceType}}}}}`;
-const rowsQuery=gql`query Rows($table:ID!,$after:String){repairs{rows(tableId:$table,first:100,after:$after){revision columns{id label type nullable} rows{id cells{columnId value{type string number boolean json}}} pageInfo{hasNextPage endCursor}}}}`;
-let rows=[];
+const schemaQuery=gql`{repairs{schema{revision tables{id label source{truncated totalRows storedRows} columns{id label type nullable sourceType}}}}}`;
+const rowsQuery=gql`query Rows($table:ID!,$after:String){repairs{rows(tableId:$table,first:100,after:$after){revision source{truncated totalRows storedRows} columns{id label type nullable} rows{id cells{columnId value{type string number boolean json}}} pageInfo{hasNextPage endCursor}}}}`;
+let rows=[],sourceNote='';
 const status=document.querySelector('#status');
 function render(metric){
  document.querySelector('#metric').value=metric;
@@ -160,6 +160,7 @@ function render(metric){
   make('text',{x:130+width,y:y+24,fill:'currentColor','font-size':17},String(row[metric]));
  });
  document.querySelector('#summary').textContent=metric==='completed'?`${rows.reduce((n,row)=>n+row.completed,0)} repairs completed across ${rows.length} weeks.`:`${rows.at(-1)?.waiting??0} repairs waiting in the latest loaded week.`;
+ if(sourceNote)document.querySelector('#summary').textContent+=' '+sourceNote;
  const body=document.querySelector('#rows');body.replaceChildren();for(const row of rows){const tr=document.createElement('tr');for(const key of ['week','completed','waiting']){const td=document.createElement('td');td.textContent=String(row[key]);tr.append(td);}body.append(tr);}
 }
 async function refresh(){
@@ -177,6 +178,7 @@ async function refresh(){
    for(const row of page.rows){const cells=Object.fromEntries(row.cells.map(cell=>[cell.columnId,cell.value]));const week=cells[ids.week]?.string,completed=cells[ids.completed]?.number,waiting=cells[ids.waiting]?.number;if(typeof week!=='string'||!Number.isFinite(completed)||!Number.isFinite(waiting))throw Error('A row has missing or nonnumeric repair values.');loaded.push({week,completed,waiting});}
    after=page.pageInfo.hasNextPage?page.pageInfo.endCursor:null;if(page.pageInfo.hasNextPage&&!after)throw Error('Dataset returned no continuation cursor.');
   }while(after);
+  sourceNote=table.source.truncated?`Stored sample: ${table.source.storedRows??'unknown'} of ${table.source.totalRows??'unknown'} source rows. Totals cover stored rows only.`:'';
   rows=loaded.sort((a,b)=>a.week.localeCompare(b.week));const {data}=await client.query({query:preference});render(data.metric);status.textContent=`Loaded ${rows.length} sample rows at revision ${revision}.`;
  }catch(error){status.textContent=error.message||'Could not read this dataset.';}finally{button.disabled=false;}
 }
