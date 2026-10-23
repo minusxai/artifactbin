@@ -6,12 +6,12 @@ import { pageHtml, workloadHtml } from './native.mjs';
 const read = file => readFileSync(path.join(import.meta.dirname,file),'utf8');
 export const PAGE_SPEED_FIXTURES = [
  {key:'prose',title:'Perf A prose',painted:null},
- {key:'kit',title:'Perf B kit',painted:null},
- {key:'dashboard',title:'Perf C dashboard',painted:{charts:2}},
+ {key:'kit',title:'Perf B kit',painted:null,authorReady:true},
+ {key:'dashboard',title:'Perf C dashboard',painted:{charts:2},authorReady:true},
  {key:'deck',title:'Perf D deck',painted:null},
  {key:'mermaid',title:'Perf E mermaid',painted:{diagrams:1}},
  {key:'mermaid-industry',title:'Perf F mermaid, industry theme',painted:{diagrams:1}},
- {key:'kitchen',title:'Perf G kitchen sink',painted:{charts:1}},
+ {key:'kitchen',title:'Perf G kitchen sink',painted:{charts:1},authorReady:true},
 ];
 export async function publishPageSpeedFixtures(publish,visibility='unlisted') {
  const csv=read('sales.csv');
