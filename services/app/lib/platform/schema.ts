@@ -390,6 +390,7 @@ const ANNOTATIONS: Table = {
     // grow them by ADD COLUMN IF NOT EXISTS on the next boot.
     { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/document/annotation-range)
     { name: 'range', type: 'TEXT' }, // JSON AnnotationRange: parts addressed RELATIVE to the anchor
+    { name: 'html_anchor', type: 'JSONB' }, // Explicit HtmlNodeAnchor; never a compiler AST path
     { name: 'view_state', type: 'JSONB' }, // Optional bounded UI snapshot, independent of the comment target
     // The same soft-delete stamp `artifacts` carries, and the same gate: a row
     // with it set is nonexistent to every reader in lib/annotations.

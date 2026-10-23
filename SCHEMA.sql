@@ -1375,6 +1375,7 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   quote TEXT,
   range TEXT,
+  html_anchor JSONB,
   view_state JSONB,
   deleted_at TIMESTAMPTZ,
   author_remote JSONB,
@@ -1420,6 +1421,8 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS quote TEXT;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS range TEXT;
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS html_anchor JSONB;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS view_state JSONB;
 

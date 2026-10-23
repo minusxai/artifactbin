@@ -170,7 +170,7 @@ describe('the surviving vocabulary', () => {
     // The VALUE, not a regex over the declaration: the runtime list and the type are one
     // declaration now, so asserting the list asserts both.
     const { ARTIFACT_FORMATS } = await import('@artifactbin/contracts');
-    expect([...ARTIFACT_FORMATS].sort()).toEqual(['dataset', 'file', 'folder', 'image', 'markup', 'pdf', 'program', 'viz']);
+    expect([...ARTIFACT_FORMATS].sort()).toEqual(['dataset', 'file', 'folder', 'html', 'image', 'markup', 'pdf', 'program', 'viz']);
   });
 
   it('points every human link at /docs-human', () => {
