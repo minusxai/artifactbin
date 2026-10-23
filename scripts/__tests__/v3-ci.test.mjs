@@ -12,8 +12,8 @@ const directory = mkdtempSync(path.join(tmpdir(), 'v3-ci-policy-'));
 afterAll(() => rmSync(directory, {recursive:true,force:true}));
 const git = (...args) => execFileSync('git', args, {cwd:directory,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
 
-function admitted(expression, event, base) {
-  const source = expression.replaceAll('github.event_name', JSON.stringify(event)).replaceAll('github.base_ref', JSON.stringify(base)).replaceAll('always()', 'true');
+function admitted(expression, event, base, ref = 'refs/heads/main') {
+  const source = expression.replaceAll('github.event_name', JSON.stringify(event)).replaceAll('github.base_ref', JSON.stringify(base)).replaceAll('always()', 'true').replaceAll('github.ref', JSON.stringify(ref));
   return Function(`return (${source})`)();
 }
 
@@ -31,6 +31,14 @@ describe('v3 validation isolation', () => {
     expect(workflow('v3-codeql.yml').on.push.branches).toEqual(['artifactbinv3']);
     expect(workflow('codeql.yml').on.push.branches).toEqual(['main']);
     expect(ci.jobs['notify-consumer'].if).toContain("github.ref == 'refs/heads/main'");
+  });
+  it('blocks CLI release/install dispatches from v3 while preserving main', () => {
+    for (const [file, job] of [['release-afbin.yml','release'],['release-cli.yml','release'],['windows-install-smoke.yml','install']]) {
+      const expression = workflow(file).jobs[job].if;
+      expect(admitted(expression, 'workflow_dispatch', '', 'refs/heads/artifactbinv3')).toBe(false);
+      expect(admitted(expression, 'workflow_dispatch', '', 'refs/heads/main')).toBe(true);
+    }
+    expect(workflow('v3-fast.yml').jobs.fast['timeout-minutes']).toBe(2);
   });
   it('runs all retained service suites on every v3 SHA, including a prose-only merge', () => {
     git('init','-q'); git('config','user.name','CI fixture');git('config','user.email','ci@example.test');
