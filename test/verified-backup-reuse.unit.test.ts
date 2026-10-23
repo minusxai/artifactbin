@@ -37,6 +37,15 @@ with tempfile.TemporaryDirectory() as directory:
  try:m.validate_reuse(root,new,old,now=now,uid=uid)
  except ValueError:pass
  else:raise AssertionError('public approval accepted')
+ check();control=root/'reuse-backup.json';control.rename(root/'saved-control');control.symlink_to('saved-control')
+ try:m.validate_reuse(root,new,old,now=now,uid=uid)
+ except ValueError:pass
+ else:raise AssertionError('symlink control accepted')
+ control.unlink();(root/'saved-control').rename(control)
+ try:m.validate_reuse(root,new,old,now=now,uid=uid+1)
+ except ValueError:pass
+ else:raise AssertionError('wrong control owner accepted')
+ marker.rename(root/'saved-marker');marker.symlink_to(root/'saved-marker');refused();marker.unlink();(root/'saved-marker').rename(marker)
  check();archive.rename(root/'backups'/'saved');archive.symlink_to('saved');refused()
  archive.unlink();(root/'backups'/'saved').rename(archive)
  check();m.consume_reuse(root,new,old,now=now,uid=uid)
