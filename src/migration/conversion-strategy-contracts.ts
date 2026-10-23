@@ -6,6 +6,7 @@ export type MigrationConversionStrategy =
 export type MigrationSourceAdmission = "strict" | "offline-prototype";
 export interface MigrationConversionOptions {
   /** Explicit offline migration opt-in; normal runtime isolation and binding checks still apply. */
+  legacyDuckSqlAdmissions?: readonly import("./conversion/duck-sql-contracts.ts").LegacyDuckSqlAdmission[];
   sourceAdmission?: MigrationSourceAdmission;
   strategy: MigrationConversionStrategy;
   /** Explicit opt-in path; never discovered or used as a fallback. */

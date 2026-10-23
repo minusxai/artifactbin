@@ -17,6 +17,7 @@ export async function prepareMigrationHeadMutations(
     readonly BoundValueColumnProof[]
   > = new Map(),
   sourceAdmission: import("./conversion-strategy-contracts.ts").MigrationSourceAdmission = "strict",
+  legacyDuckSqlAdmissions: readonly import("./conversion/duck-sql-contracts.ts").LegacyDuckSqlAdmission[] = [],
 ): Promise<MigrationBackendPage[]> {
   if (!source.datasets) return [...pages];
   const receipts = receiptMap(source.datasets.receipts);
@@ -52,7 +53,7 @@ export async function prepareMigrationHeadMutations(
         : legacyDocumentSource(artifact.document);
       if (text === null) throw Error("Current document source is unavailable");
       const extracted = await extractLegacyMutations(
-        sourceAdmission === "offline-prototype" ? normalizeLegacySourceOperations(text,catalogs.map(c=>`ref:${c.datasetLegacyId}`)).source : text,
+        sourceAdmission === "offline-prototype" ? normalizeLegacySourceOperations(text,catalogs.map(c=>`ref:${c.datasetLegacyId}`),legacyDuckSqlAdmissions).source : text,
         catalogs,
         boundValueColumns.get(
           migrationDatasetVersionKey(page.legacyId, artifact.version),

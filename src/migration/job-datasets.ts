@@ -47,6 +47,7 @@ export async function prepareMigrationJobDatasets(
     options.sourceQueryRegistrations,
     deletedAdmission,
     options.sourceAdmission,
+    options.legacyDuckSqlAdmissions,
   );
   const issues = new Map(
     [...scan.issues].map(([id, reasons]) => [id, [...reasons]]),
@@ -77,6 +78,7 @@ export async function prepareMigrationJobDatasets(
     issues,
     boundValueColumns,
     options.sourceAdmission,
+    options.legacyDuckSqlAdmissions,
   );
 
   const prepared = await prepareMigrationBackends(

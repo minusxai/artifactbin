@@ -98,6 +98,7 @@ export async function runMigrationJob(
     createMigrationConverter({
       strategy: options.conversionStrategy,
       sourceAdmission,
+      legacyDuckSqlAdmissions: options.legacyDuckSqlAdmissions,
       legacyRoot: options.archivedRoot,
       fontBundle: options.fontBundle,
     });

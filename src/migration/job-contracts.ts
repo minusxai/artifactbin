@@ -40,6 +40,7 @@ export interface MigrationJobOptions {
   legacyOrigins: readonly string[];
   editorManageRestricted: boolean;
   conversionStrategy: MigrationConversionStrategy;
+  legacyDuckSqlAdmissions?: readonly import("./conversion/duck-sql-contracts.ts").LegacyDuckSqlAdmission[];
   sourceAdmission?: import("./conversion-strategy-contracts.ts").MigrationSourceAdmission;
   archivedRoot?: string;
   fontBundle?: import("./conversion/compiled/fonts/capture-contracts.ts").CapturedFontBundleInput;

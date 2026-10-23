@@ -115,7 +115,7 @@ export function createMigrationConverter(
       }
     }
     if(source!==null && options.sourceAdmission==='offline-prototype') {
-      try { source=normalizeLegacySourceOperations(source,(input.datasetBindings??[]).map(b=>b.legacyRef)).source; }
+      try { source=normalizeLegacySourceOperations(source,(input.datasetBindings??[]).map(b=>b.legacyRef),options.legacyDuckSqlAdmissions).source; }
       catch { /* Unsupported source syntax remains an explicit converter refusal. */ }
     }
     let sourceNormalization: import("./contracts.ts").ConversionOutput["sourceNormalization"];

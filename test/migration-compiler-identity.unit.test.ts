@@ -123,3 +123,28 @@ test("verified font closure cannot be bypassed by an injected compiler identity 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("audited SQL type admissions partition conversion cache identity", async () => {
+  const identify = async () => "same-compiler";
+  const admission = {
+    version: "duckdb-list-v1" as const,
+    sqlSha256: "a".repeat(64),
+    listExpressions: ["people"],
+    numericExpressions: [],
+  };
+  const base = await migrationCompilerIdentity({}, identify);
+  const admitted = await migrationCompilerIdentity(
+    { legacyDuckSqlAdmissions: [admission] },
+    identify,
+  );
+  assert.notEqual(base, admitted);
+  assert.notEqual(
+    admitted,
+    await migrationCompilerIdentity(
+      {
+        legacyDuckSqlAdmissions: [{ ...admission, listExpressions: ["other"] }],
+      },
+      identify,
+    ),
+  );
+});

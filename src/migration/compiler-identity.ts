@@ -7,7 +7,10 @@ import type { MigrationJobOptions } from "./job-contracts.ts";
 export async function migrationCompilerIdentity(
   options: Pick<
     MigrationJobOptions,
-    "archivedRoot" | "fontBundle" | "sourceAdmission"
+    | "archivedRoot"
+    | "fontBundle"
+    | "sourceAdmission"
+    | "legacyDuckSqlAdmissions"
   >,
   identify?: () => Promise<string>,
 ): Promise<string> {
@@ -33,7 +36,18 @@ export async function migrationCompilerIdentity(
           .digest("hex")
       : identity;
   };
-  const identity = await identifyBase();
+  const baseIdentity = await identifyBase();
+  const identity = options.legacyDuckSqlAdmissions?.length
+    ? createHash("sha256")
+        .update(
+          JSON.stringify([
+            "migration-duckdb-admissions-v1",
+            baseIdentity,
+            options.legacyDuckSqlAdmissions,
+          ]),
+        )
+        .digest("hex")
+    : baseIdentity;
   return options.sourceAdmission === "offline-prototype"
     ? createHash("sha256")
         .update(

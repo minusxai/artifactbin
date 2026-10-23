@@ -26,6 +26,7 @@ export async function scanMigrationDatasetImports(
   sourceQueryRegistrations: readonly import("../datasets/source-query/contracts.ts").MigrationSourceQueryRegistration[] = [],
   deletedAdmission?: import("./deleted-artifact-contracts.ts").DeletedArtifactAdmission,
   sourceAdmission: import("./conversion-strategy-contracts.ts").MigrationSourceAdmission = "strict",
+  legacyDuckSqlAdmissions: readonly import("./conversion/duck-sql-contracts.ts").LegacyDuckSqlAdmission[] = [],
 ): Promise<MigrationDatasetImportScan> {
   const assertDeleted = deletedAdmission ? createDeletedArtifactAdmissionValidator(deletedAdmission,source.manifest.sourceNamespace,source.maps) : undefined;
   const pendingSourceQueryPages = new Set(
@@ -130,7 +131,7 @@ export async function scanMigrationDatasetImports(
               if(!catalog.unavailableTables.length && catalog.tables.some(t=>t.schema==='public'&&t.name==='rows'))eligible.push(ref);
             } catch { /* Ordinary source admission retains the unresolved dependency. */ }
           }
-          text=normalizeLegacySourceOperations(text,eligible).source;
+          text=normalizeLegacySourceOperations(text,eligible,legacyDuckSqlAdmissions).source;
         } catch { /* The converter retains unsupported source syntax as blocked. */ }
       }
       const extracted = extractLegacyImports(text);
