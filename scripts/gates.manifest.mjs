@@ -44,10 +44,10 @@ export const GATE_SPECS = Object.freeze([
   // One walk over dataflow, local-sql-state, dataset-policies and data-ux (proposal row 10). Its PostgreSQL leg is
   // services/app/lib/datasets/__tests__/postgres-routes.test.ts now, so no gate starts Docker (was 21s with it).
   // Was 21s with it; 22s in one gate container of this change (four CPUs, two servers, eight gates at once).
-  { name: 'data-journey', needsMail: true, seconds: 20, timeoutMs: 60_000 },
+  { name: 'data-journey', needsMail: false, seconds: 20, timeoutMs: 60_000 },
   // editable-table, roadmap-views and row-images over one account (proposal row 13). Measured 18s in a gate container;
   // 27s in the eight-gate container run that dropped its forged write and second permission flip (was 33s).
-  { name: 'datasets-in-documents', needsMail: true, seconds: 30, timeoutMs: 60_000 },
+  { name: 'datasets-in-documents', needsMail: false, seconds: 30, timeoutMs: 60_000 },
   // full-kit, the compiled handover from hydration, libraries and fonts (proposal row 14). Needs esm.sh.
   // Measured 28s in a gate container.
   { name: 'kit-and-fonts', needsMail: false, seconds: 40, timeoutMs: 90_000 },
@@ -65,7 +65,7 @@ export const GATE_SPECS = Object.freeze([
   // and 53s here); the seconds below keep a margin for that run's lighter load. Re-read both from CI.
   { name: 'reader-shell', needsMail: true, seconds: 12, timeoutMs: 60_000 },
   // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
-  { name: 'own-origin-script', needsMail: true, seconds: 17, timeoutMs: 60_000 },
+  { name: 'own-origin-script', needsMail: false, seconds: 17, timeoutMs: 60_000 },
   { name: 'reading-geometry', needsMail: false, seconds: 74, timeoutMs: 190_000 },
   { name: 'media', needsMail: false, serialGroup: 'clipboard', seconds: 36, timeoutMs: 110_000 },
 ]);

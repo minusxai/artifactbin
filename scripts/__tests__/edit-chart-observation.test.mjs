@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readEditChartObservation } from '../gates/lib/edit-chart-observation.mjs';
+import { readEditChartObservation } from './fixtures/edit-chart-observation.mjs';
 
 afterEach(() => vi.unstubAllGlobals());
 function frame({ editing, marks, text = '' }) {
