@@ -1,4 +1,4 @@
-import { commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
+import { mayCommitHtmlBackends, commitHtmlBackends, type PreparedHtmlBackend } from '../html-backends';
 import type {HtmlBackendLink,HtmlDatasetLink} from '@artifactbin/contracts';
 import { completeMutationReceipt, type MutationReceipt, type MutationReply } from './mutation-receipt';
 import { canonicalizeHtmlPage, htmlBackendNames, type HtmlIdentityLedger } from '../html-page';
@@ -611,6 +611,7 @@ async function replaceScoped(
       const previous=((current.meta.htmlLinks??[]) as (HtmlBackendLink|HtmlDatasetLink)[]).filter((link):link is HtmlBackendLink=>link.kind==='backend');
       const names=htmlBackendNames(input.source??'');
       if(input.htmlBackends?.some(backend=>!names.includes(backend.name))||names.some(name=>!input.htmlBackends?.some(backend=>backend.name===name)&&!previous.some(link=>link.name===name)))return json({error:'unresolved_backend_link'},400);
+      if(input.htmlBackends&&!await mayCommitHtmlBackends(tx,id,!!current.user_id&&!current.group_id&&current.user_id===actor.userId,input.htmlBackends))return json({error:'backend_credentials_owner_required'},403);
       const changed=input.htmlBackends?await commitHtmlBackends(tx,id,current.user_id??current.token_id,input.htmlBackends,previous):[];
       const links=names.map(name=>changed.find(link=>link.name===name)??previous.find(link=>link.name===name)!);
       input={...input,meta:{...input.meta,htmlLinks:[...links,...(input.htmlDatasets??[])]}};
