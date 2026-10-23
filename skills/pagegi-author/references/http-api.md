@@ -104,7 +104,7 @@ A hosted page address accepts `?comment=<commentId>` or `?thread=<commentId>` to
 |---|---|---|
 | `GET /api/files/:id/comments` | | `{ comments, head, cursor }` |
 | `GET /api/files/:id/comments/:commentId/thread` | | `{ selectedId, rootId, comments }`; current read permission, including resolved threads and replies, at most 200 comments / 1 MB (`413` if larger) |
-| `POST /api/files/:id/comments` | `{ comment }`, optionally with header `Idempotency-Key` | The saved comment |
+| `POST /api/files/:id/comments` | `{ comment }`, optionally with header `Idempotency-Key` | `201`, the saved comment (also on an idempotent replay) |
 | `PUT /api/files/:id/comments/:commentId` | The change, for example `{ resolved: true }`, with header `If-Match: <revision>` | The updated comment |
 | `GET /api/files/:id/context/:commentId` | | `{ comment, source, state, url }`: the page source and the commenter's own local state when they commented |
 
@@ -157,6 +157,10 @@ A hosted page or connected download receives a document-scoped token, separate f
 |---|---|---|
 | `GET /api/files/:id/sharing` | | `{ policy, permissions, url, owner }` |
 | `PUT /api/files/:id/sharing` | One of `{ visibility }`, `{ linkRole }` or `{ email, role }` (`role: null` removes a person), with header `If-Match: <policy version>` | The updated sharing |
+
+Roles apply cumulatively: `viewer` can read the page and its comments; `commenter` can also post comments and replies when signed in; `editor` can also save page source with an account token. A named or link editor cannot change sharing (`PUT /sharing` returns `403`) or delete the page (`DELETE /api/files/:id` deliberately returns `404`). Only the owner or an active editor of the owning imported group has those management permissions. Reading sharing information does not grant management permission.
+
+Backend calls follow each field's `@auth` rules, independently of comment and source-write permissions: fields without `@auth` are callable by anyone who can open the page, including a `viewer`. An `editor` passes `@auth(role: EDITOR)`, including for backend mutations; this does not grant sharing or deletion rights. Anonymous link roles can satisfy backend role checks, but posting comments and saving source require sign-in; document-scoped tokens cannot save source.
 
 - **`If-Match`:** the `policy.version` from `GET`. A missing or stale version is `412` (this route differs from saves and comments, which answer `428` and `409`); read the sharing again and retry.
 - **`linkRole`** applies to anyone who opens the link, signed in or not: with `linkRole: "editor"`, an anonymous viewer passes a backend's `@auth(role: EDITOR)`. People named with `{ email, role }` get their role when signed in.
