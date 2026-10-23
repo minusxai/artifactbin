@@ -21,3 +21,12 @@ it('does not retarget missing or ambiguous anchors to another node', () => {
   expect(document.querySelector('[data-af="annotation-overlay"]')?.children.length).toBe(0);
   painter.dispose();
 });
+it('keeps area comments relative to their stable node after layout changes', () => {
+  document.body.innerHTML = '<section data-af-id="n1">area</section>';
+  vi.spyOn(document.querySelector('section')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 200, 200, 100));
+  const painter = createHtmlAnnotationPainter(document);
+  const positions = painter.paint({ pins: [{ id: 'c1', path: 'n1', anchor: { kind: 'html-node', v: 1, revision: '1', nodeId: 'n1', quote: '' }, range: { v: 1, kind: 'area', box: { x: .1, y: .2, w: .5, h: .4 } } }], mode: 'on', openId: null, hoverId: null });
+  expect(positions[0]?.rect).toEqual({ x: 120, y: 220, width: 100, height: 40 });
+  expect((document.querySelector('[data-af="annotation-overlay"]')!.firstElementChild as HTMLElement).style.width).toBe('100px');
+  painter.dispose();
+});
