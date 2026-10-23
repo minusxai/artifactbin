@@ -131,6 +131,7 @@ export function createDatasetUserChoiceRepository(
         (column as typeof column & { constraints?: UserConstraints })
           .constraints ?? {};
       if (
+        (constraints.memberOf && constraints.memberOf.length > 32) ||
         constraints.memberOf?.some((ref) => !/^ref:[A-Za-z0-9_-]+$/.test(ref))
       )
         return null;
@@ -157,13 +158,13 @@ export function createDatasetUserChoiceRepository(
             const legacyId = ref.slice(4);
             const pages = (
               await client.query(
-                "SELECT p.page_id,p.snapshot FROM dataset_pages p JOIN files f ON f.id=p.page_id AND f.head=p.page_version::text WHERE p.source_namespace=$1 AND p.snapshot->>'id'=$2 AND f.deleted_at IS NULL",
+                "SELECT p.page_id,p.snapshot FROM dataset_pages p JOIN files f ON f.id=p.page_id AND f.head=p.page_version::text WHERE p.source_namespace=$1 AND p.snapshot->>'id'=$2 AND f.deleted_at IS NULL LIMIT 2",
                 [saved.source_namespace, legacyId],
               )
             ).rows;
             const resources = (
               await client.query(
-                "SELECT r.*,a.principal_kind FROM dataset_resources r JOIN accounts a ON a.actor=r.owner WHERE r.source_namespace=$1 AND r.legacy_id=$2 AND NOT r.deleted",
+                "SELECT r.*,a.principal_kind FROM dataset_resources r JOIN accounts a ON a.actor=r.owner WHERE r.source_namespace=$1 AND r.legacy_id=$2 AND NOT r.deleted LIMIT 2",
                 [saved.source_namespace, legacyId],
               )
             ).rows;
@@ -208,11 +209,12 @@ export function createDatasetUserChoiceRepository(
             const joins = pages[0]
               ? (
                   await client.query(
-                    "SELECT legacy_user_id FROM dataset_page_joins WHERE page_id=$1 AND source_namespace=$2 ORDER BY legacy_user_id",
+                    "SELECT legacy_user_id FROM dataset_page_joins WHERE page_id=$1 AND source_namespace=$2 ORDER BY legacy_user_id LIMIT 1001",
                     [pages[0].page_id, saved.source_namespace],
                   )
                 ).rows
               : [];
+            if (joins.length > 1000) return null;
             const shares =
               (doc.access as { shares?: Record<string, string> })?.shares ?? {};
             scopeEvidence.push([ref, doc, snapshot, joins]);
