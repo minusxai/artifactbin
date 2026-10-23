@@ -7,8 +7,7 @@
  */
 
 /** Reader runs (offline, publish/prepared, routes, runner, serving, export). */
-export { acceptedMembers, dataflowForRow, dataflowRunsForRow, datasetResolverForActor, datasetsForDocument, holdImport, holdableImports, importsFingerprint, nameablePeople, refDataForRow, referencedArtifactForRow, runDocumentDataflow, viewerIdentityFor } from './dataflow';
-export type { ImportCache } from './dataflow';
+export { dataflowForRow, datasetResolverForActor, datasetsForDocument, holdImport, nameablePeople, refDataForRow, referencedArtifactForRow, runDocumentDataflow, viewerIdentityFor } from './dataflow';
 
 /** Writes (the mutate route, operations, runner). */
 export { runDocumentMutation } from './dataflow';

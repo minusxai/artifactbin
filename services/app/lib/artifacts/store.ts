@@ -343,20 +343,6 @@ interface VersionSummary {
   created_at: string;
 }
 
-/** Retain an offline download's already read-admitted server snapshot. Never
- * accept an offered/client graph here: the assembler passes the exact row it
- * authorized and will export. Copying that captured graph (not rebuilding its
- * source) keeps node revisions intact even if an autosave advances the head
- * before this insert. Download checkpoints do not reset autosave coalescing. */
-export async function retainDownloadedVersion(row: ArtifactRow): Promise<void> {
-  if (row.format !== 'markup' || row.version < 1 || row.document?.kind !== 'graph') return;
-  await (await getDb()).query(
-    `INSERT INTO artifact_versions (artifact_id, version, title, description, format, source, meta, actor_user_id, actor_token_id, document)
-     VALUES ($1,$2,$3,$4,$5,NULL,$6,$7,$8,$9::jsonb) ON CONFLICT DO NOTHING`,
-    [row.id,row.version,row.title,row.description,row.format,JSON.stringify(row.meta),row.actor_user_id,row.actor_token_id,JSON.stringify(row.document)],
-  );
-}
-
 /** Archive the head as it stands — its author rides along, so history can say who. */
 async function archiveVersion(tx: Queryable, current: ArtifactRow): Promise<void> {
   await tx.query(

@@ -57,16 +57,6 @@ export function unservable(row: StoredRow): UnservableDocument | null {
   return null;
 }
 
-/**
- * A row's HEADER (read without `document` or `source`) judged by what it carries: a markup row in the current data
- * syntax. Whether its document decodes is not in it: a validator asks this beside a current prepared page, which is
- * prepared only from a row {@link servableDocument} passed (lib/publish/prepared `preparedHeadFor`). Retiring another
- * stored shape must also retire the prepared pages of its versions.
- */
-export function servableHeader(row: Pick<StoredRow, 'format' | 'meta'>): boolean {
-  return row.format === 'markup' && hasCurrentDataSyntax(row.meta);
-}
-
 /** THE CHECK the read paths call: the row unchanged when the current code serves it, else {@link UnservableDocument} thrown. */
 export function servableDocument<T extends StoredRow>(row: T): T {
   const refusal = unservable(row);
