@@ -2,8 +2,8 @@ import type {HtmlDatasetLink} from '@artifactbin/contracts';
 import type {HtmlPageDeclarations} from './links-contracts';
 import { parse, serialize } from 'parse5';
 import { applyEdits, attribute, atHeadStart, insertAttribute, parseSource, removeElement, written } from './html-source';
-import type { CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPageMetadata } from './contracts';
-export type { HtmlIdentityLedger, CanonicalHtmlOptions, CanonicalHtmlPage } from './contracts';
+import type { CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPageMetadata,HtmlPwaSettings } from './contracts';
+export type { HtmlIdentityLedger, CanonicalHtmlOptions, CanonicalHtmlPage,HtmlPwaSettings } from './contracts';
 const CORE='/af/v1/core.js';
 const allElements=(html:string)=>{const document=parseSource(html);return {...document,all:[...document.elements,...document.templateElements]};};
 /** The persisted source is the authoring source. Runtime wrappers never enter it. */
@@ -84,4 +84,20 @@ export function htmlPageMetadata(html:string):HtmlPageMetadata{
   if(element.tagName==='meta'&&(attribute(element,'name')??'').toLowerCase()==='description'&&description===null)description=attribute(element,'content')?.trim()||null;
  }
  return {title,description};
+}
+
+/** Read static head metadata only; scripts and template content never declare install policy. */
+export function htmlPwaSettings(html:string):HtmlPwaSettings {
+ const {head,elements}=parseSource(html),settings:HtmlPwaSettings={};
+ const fields={enabled:'enabled',name:'name','short-name':'shortName',icon:'icon','theme-color':'themeColor','background-color':'backgroundColor'} as const;
+ for(const element of elements){
+  if(element.tagName!=='meta'||element.parentNode!==head)continue;
+  const name=attribute(element,'name'),value=attribute(element,'content');if(!name?.startsWith('artifactbin:pwa-')||value===null)continue;
+  const field=fields[name.slice('artifactbin:pwa-'.length) as keyof typeof fields];if(!field)continue;
+  if(field==='enabled'){if(value==='true'||value==='false')settings.enabled=value==='true';}
+  else if(field==='icon'){if(/^ref:[a-zA-Z0-9]{6,12}$/.test(value))settings.icon=value.slice(4);}
+  else if(field==='themeColor'||field==='backgroundColor'){if(/^#[0-9a-fA-F]{6}$/.test(value))settings[field]=value;}
+  else if(value.trim()&&value.length<=(field==='shortName'?30:100))settings[field]=value;
+ }
+ return settings;
 }

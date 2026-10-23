@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createDocumentGraph } from '@/lib/document/document-graph';
+
 import sharp from 'sharp';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
@@ -16,7 +16,7 @@ const app = createAppServer({ actorSecret: secret, indexHtml: async () => '<html
 async function world(enabled = true) {
   const owner = await ensureUsername(await createUser({ email: `mxmx_test_pwa_${enabled ? 'on' : 'off'}@example.com` }));
   const token = await mintToken('pwa', owner.id);
-  const make = async (visibility: 'public' | 'private') => (await (await createArtifactRoute(new Request('http://localhost/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token.token}` }, body: JSON.stringify({ markup: `${enabled ? '<Helmet><meta name="artifactbin:pwa-enabled" content="true" /></Helmet>' : ''}<h1>Live app</h1>`, title: 'My app <&>', visibility }) }))).json()) as { id: string };
+  const make = async (visibility: 'public' | 'private') => (await (await createArtifactRoute(new Request('http://localhost/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token.token}` }, body: JSON.stringify({ html: `<!doctype html><html><head>${enabled ? '<meta name="artifactbin:pwa-enabled" content="true">' : ''}</head><body><h1>Live app</h1></body></html>`, title: 'My app <&>', visibility }) }))).json()) as { id: string };
   return { public: await make('public'), private: await make('private'), headers: { [ACTOR_HEADER]: signActor({ credential: 'session', userId: owner.id, email: owner.email, emailVerified: true }, secret) } };
 }
 
@@ -28,7 +28,7 @@ it('serves an authorized app at its stable address with manifest discovery and n
   const html = await response.text();
   expect(html).toContain(`rel="manifest" href="/a/${w.public.id}/app/manifest.webmanifest" crossorigin="use-credentials"`);
   expect(html).toContain('rel="apple-touch-icon"');
-  expect(html).toContain('Live app');
+  expect(html).toContain('data-mx-document-frame');
   expect(html).toContain('mx-page-data');
   expect(html).not.toContain('"address":');
 });
@@ -80,8 +80,8 @@ it('publishes a separate admitted icon and settings, while refusing foreign priv
   const upload = await create({ image: `data:image/png;base64,${image.toString('base64')}`, visibility: 'private' });
   expect(upload.status).toBe(201);
   const icon = await upload.json();
-  const markup = `<Helmet><meta name="artifactbin:pwa-enabled" content="true" /><meta name="artifactbin:pwa-name" content="Separate app" /><meta name="artifactbin:pwa-short-name" content="App" /><meta name="artifactbin:pwa-theme-color" content="#112233" /><meta name="artifactbin:pwa-icon" content="ref:${icon.id}" /></Helmet><h1>Original title</h1>`;
-  const published = await create({ markup, visibility: 'public' });
+  const html = `<!doctype html><html><head><meta name="artifactbin:pwa-enabled" content="true" /><meta name="artifactbin:pwa-name" content="Separate app" /><meta name="artifactbin:pwa-short-name" content="App" /><meta name="artifactbin:pwa-theme-color" content="#112233" /><meta name="artifactbin:pwa-icon" content="ref:${icon.id}" /></head><body><h1>Original title</h1></body></html>`;
+  const published = await create({ html, visibility: 'public' });
   expect(published.status).toBe(201);
   const doc = await published.json();
   const base = `/a/${doc.id}/app/`;
@@ -95,7 +95,7 @@ it('publishes a separate admitted icon and settings, while refusing foreign priv
   // Neither the stored image nor a different owner's document becomes readable by guessing its id.
   expect((await app.request(`/a/${icon.id}/app/icon-192.png`)).status).toBe(404);
   const other = await mintToken('foreign');
-  const refused = await create({ markup }, other.token);
+  const refused = await create({ html }, other.token);
   expect(refused.status).toBe(400);
   expect(await refused.json()).toMatchObject({ error: 'invalid_refs' });
   expect((await app.request(`/a/${w.private.id}/app/icon-512.png`)).status).toBe(404);
@@ -128,6 +128,6 @@ it('requires explicit opt-in and stops discovery when disabled, while preserving
   for (const asset of ['manifest.webmanifest', 'icon-192.png', 'icon-512.png']) expect((await app.request(base + asset)).status).toBe(404);
   const on = await world();
   expect((await app.request(`/a/${on.public.id}/app/manifest.webmanifest`)).status).toBe(200);
-  await (await harness.db()).query('UPDATE artifacts SET source=NULL, document=$1::jsonb WHERE id=$2', [JSON.stringify(createDocumentGraph('<h1>Disabled</h1>', 1)), on.public.id]);
+  await (await harness.db()).query('UPDATE artifacts SET source=$1 WHERE id=$2', ['<!doctype html><html><head></head><body><h1>Disabled</h1></body></html>', on.public.id]);
   expect((await app.request(`/a/${on.public.id}/app/manifest.webmanifest`)).status).toBe(404);
 });

@@ -1,3 +1,4 @@
+import {artifactPwaEnabled} from './artifact-pwa.server';
 import { nativeHtmlTitle } from './native-html.server';
 import { publicCatalogOf } from '@/lib/datasets/catalog';
 /**
@@ -258,7 +259,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
   // The shell reads only this version's metadata.
   const row = servedRow(artifact, at);
   const membershipAvailable = false;
-  const pwaEnabled = false;
+  const pwaEnabled = artifactPwaEnabled(row);
   const framedDocument = nativeHtml;
   // Only the HTML door draws the frame (and mints its ticket); both doors answer a framed document with its FramedRuntime.
   const framing = !!options.pages && framedDocument;

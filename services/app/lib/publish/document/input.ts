@@ -5,7 +5,7 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
  */
 import { json } from '../../http/http';
 import {socialPreviewImage, socialPreviewImageValue} from '@/lib/document';
-import { canonicalizeHtmlPage,htmlPageMetadata } from '@/lib/html-page';
+import { canonicalizeHtmlPage,htmlPageMetadata,htmlPwaSettings } from '@/lib/html-page';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/publish/ingest/image';
 import { ingestPdfFromUrl } from '@/lib/publish/ingest/pdf';
@@ -102,7 +102,7 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
     const source=String(body.html);
     const size=tooLarge(source);if(size)return size;
     try{
-      canonicalizeHtmlPage(source);const metadata=htmlPageMetadata(source);
+      canonicalizeHtmlPage(source);const metadata=htmlPageMetadata(source),pwa=htmlPwaSettings(source);
       const imageId=socialPreviewImage(source);
       if(socialPreviewImageValue(source)!==null&&!imageId)return json({error:'invalid_social_preview_image'},400);
       const refs:Array<{id:string;kind:string}>=[];
@@ -111,6 +111,7 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
         if(ctx.loadRef&&image?.format!=='image')return json({error:'invalid_social_preview_image'},400);
         refs.push({id:imageId,kind:'image'});
       }
+      if(pwa.icon&&ctx.loadRef){const icon=await ctx.loadRef(pwa.icon);if(icon?.format!=='image')return json({error:'invalid_refs'},400);if(!refs.some(ref=>ref.id===pwa.icon))refs.push({id:pwa.icon,kind:'image'});}
       return {format:'html',source,meta:{refs},derivedTitle:metadata.title,derivedDescription:metadata.description};
     }
     catch(error){return json({error:'invalid_html',details:[error instanceof Error?error.message:String(error)]},400);}
