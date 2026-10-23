@@ -1,11 +1,15 @@
-import {deletedDatasetBatchFingerprint} from "./deleted-dataset-authority.ts";
+import { deletedDatasetBatchFingerprint } from "./deleted-dataset-authority.ts";
 import { createHash } from "node:crypto";
 import type {
+  DeletedArtifactAdmission,
   DeletedArtifactPlan,
   DeletedArtifactPlanningInput,
 } from "./deleted-artifact-contracts.ts";
+import type { PlannedPage } from "./contracts.ts";
 import { migrationPageDigest } from "./import.ts";
 import { canonicalMigrationValue } from "./verification-values.ts";
+import type { Hash } from "node:crypto";
+
 const sha = (value: unknown) =>
   createHash("sha256").update(canonicalMigrationValue(value)).digest("hex");
 const deletionRefusal =
@@ -17,11 +21,42 @@ function refuse(): never {
 }
 const validVersion = (v: number) => Number.isSafeInteger(v) && v > 0;
 const validSha = (v: string) => /^[a-f0-9]{64}$/.test(v);
-/** The admission is an external seal; destination preparation independently binds its archive. */
-export function prepareDeletedArtifactPlan(
-  input: DeletedArtifactPlanningInput,
-): DeletedArtifactPlan {
-  const { admission } = input;
+
+/** Incrementally hashes the exact current canonical representation of a full plan. */
+export function createDeletedArtifactPlanHasher(
+  header: Omit<DeletedArtifactPlan, "pages">,
+): {
+  update(entry: { page: PlannedPage; digest: string }): void;
+  digest(): string;
+} {
+  const empty = canonicalMigrationValue({ ...header, pages: [] });
+  const marker = '"pages":[]';
+  const at = empty.indexOf(marker);
+  if (at < 0 || empty.indexOf(marker, at + 1) >= 0)
+    throw new Error("Invalid deleted artifact plan header");
+  const hash = createHash("sha256");
+  hash.update(empty.slice(0, at) + '"pages":[');
+  const suffix = empty.slice(at + marker.length);
+  let count = 0;
+  return {
+    update(entry) {
+      if (count++) hash.update(",");
+      hash.update(canonicalMigrationValue(entry));
+    },
+    digest() {
+      const copy = hash.copy() as Hash;
+      copy.update("]");
+      copy.update(suffix);
+      return copy.digest("hex");
+    },
+  };
+}
+
+/** Validates the full admission once, then provides the exact existing per-page planner checks. */
+export function createDeletedArtifactPageValidator(
+  admission: DeletedArtifactAdmission,
+  protectedPageIds: ReadonlySet<string>,
+): (page: PlannedPage) => { page: PlannedPage; digest: string } {
   if (
     admission.kind !== "deleted-artifact-admission-v1" ||
     !admission.sourceNamespace.trim() ||
@@ -36,7 +71,7 @@ export function prepareDeletedArtifactPlan(
       !entry.pageId ||
       entries.has(entry.legacyId) ||
       destinations.has(entry.pageId) ||
-      input.protectedPageIds.has(entry.pageId) ||
+      protectedPageIds.has(entry.pageId) ||
       !validVersion(entry.headVersion) ||
       !validSha(entry.artifactSha256) ||
       !entry.deletedAt ||
@@ -46,9 +81,8 @@ export function prepareDeletedArtifactPlan(
     entries.set(entry.legacyId, entry);
     destinations.add(entry.pageId);
   }
-  if (input.pages.length !== entries.size) refuse();
   const seen = new Set<string>();
-  const pages = input.pages.map((page) => {
+  return (page: PlannedPage) => {
     const entry = entries.get(page.legacyId);
     if (
       !entry ||
@@ -143,13 +177,38 @@ export function prepareDeletedArtifactPlan(
     }
     const ready = { ...page, disposition: "ready" as const, issues: [] };
     return { page: ready, digest: migrationPageDigest(ready) };
-  });
+  };
+}
+
+/** The ordinary in-memory planner delegates to the same per-page validator used by replay. */
+export function prepareDeletedArtifactPlan(
+  input: DeletedArtifactPlanningInput,
+): DeletedArtifactPlan {
+  const { admission } = input;
+  const validatePage = createDeletedArtifactPageValidator(
+    admission,
+    input.protectedPageIds,
+  );
+  if (input.pages.length !== admission.entries.length) refuse();
+  const pages = input.pages.map(validatePage);
   return {
     kind: "deleted-artifact-plan-v1",
     sourceNamespace: admission.sourceNamespace,
     archiveDigest: admission.archiveDigest,
     admissionSha256: sha(admission),
     pages,
-    ...(input.preparedMetadata ? {metadataBinding:{batchSha256:deletedDatasetBatchFingerprint(input.preparedMetadata),pageVersions:input.preparedMetadata.metadata.pages.map(p=>({pageId:p.pageId,version:p.pageVersion})).sort((a,b)=>a.pageId.localeCompare(b.pageId)||a.version-b.version)}} : {}),
+    ...(input.preparedMetadata
+      ? {
+          metadataBinding: {
+            batchSha256: deletedDatasetBatchFingerprint(input.preparedMetadata),
+            pageVersions: input.preparedMetadata.metadata.pages
+              .map((p) => ({ pageId: p.pageId, version: p.pageVersion }))
+              .sort(
+                (a, b) =>
+                  a.pageId.localeCompare(b.pageId) || a.version - b.version,
+              ),
+          },
+        }
+      : {}),
   };
 }

@@ -5,6 +5,10 @@ import type {
   DeletedArtifactApplyResult,
 } from "./deleted-artifact-contracts.ts";
 import { migrationPageDigest } from "./import.ts";
+import type {MigrationMaps,PlannedPage} from "./contracts.ts";
+import type {DeletedArtifactReplayManifest,ValidatedDeletedArtifactReplay} from "./deleted-artifact-job-contracts.ts";
+import type {DeletedArtifactDestination} from "./deleted-artifact-contracts.ts";
+import type {MigrationRuntimeVerification} from "./verification-contracts.ts";
 /** Each page commits independently; a later failure is retried using the same sealed digests. */
 export async function applyDeletedArtifactPlan(
   input: DeletedArtifactApplyInput,
@@ -93,4 +97,24 @@ export async function applyDeletedArtifactPlan(
     revisions,
     verification,
   };
+}
+
+/** Applies a fully preflighted manifest while retaining only the current page in memory. */
+export async function applyDeletedArtifactReplay(input:{validated:ValidatedDeletedArtifactReplay;maps:MigrationMaps;destination:DeletedArtifactDestination;verifyProtectedState():Promise<void>;importMetadata():Promise<void>;verifyDeletedState(manifest:DeletedArtifactReplayManifest,pages:AsyncIterable<PlannedPage>):Promise<MigrationRuntimeVerification>}):Promise<DeletedArtifactApplyResult>{
+ const {validated,maps,destination}=input;
+ const manifest=validated.manifest;
+ await destination.prepareDeleted({sourceNamespace:manifest.sourceNamespace,archiveDigest:manifest.archiveDigest,maps});
+ await input.verifyProtectedState();
+ let created=0,unchanged=0;
+ for await(const {page,digest} of validated.pages()){
+  try{
+   const result=await destination.importDeletedPage(`${manifest.sourceNamespace}:${page.legacyId}`,digest,page);
+   if(result==="created")created++;else if(result==="unchanged")unchanged++;else throw Error("Invalid deleted artifact import result");
+  }catch(cause){throw new Error("Deleted artifact page import failed; completed pages remain retryable",{cause});}
+ }
+ await input.importMetadata();
+ const verification=await input.verifyDeletedState(manifest,(async function*(){for await(const {page} of validated.pages())yield page;})());
+ if(verification.pages!==manifest.pageCount||verification.sources!==manifest.revisionCount)throw Error("Deleted artifact verification count mismatch");
+ await input.verifyProtectedState();
+ return {complete:true,created,unchanged,pages:manifest.pageCount,revisions:manifest.revisionCount,verification};
 }

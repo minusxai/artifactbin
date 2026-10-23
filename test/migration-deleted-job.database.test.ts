@@ -13,9 +13,11 @@ import {captureAdditiveDatasetFacts} from '../src/migration/dataset-pages/additi
 import {deletedDatasetBatchFingerprint} from '../src/migration/deleted-dataset-authority.ts';
 import {prepareDeletedArtifactPlan} from '../src/migration/deleted-artifact-plan.ts';
 import {canonicalMigrationValue} from '../src/migration/verification-values.ts';
-import {runDeletedArtifactJob} from '../src/migration/deleted-artifact-job.ts';
+import {runDeletedArtifactJob,runDeletedArtifactReplayJob,validateDeletedArtifactReplayJob} from '../src/migration/deleted-artifact-job.ts';
+import {serializeDeletedArtifactReplayPage} from '../src/migration/deleted-artifact-replay.ts';
 import type {MigrationManifest} from '../src/migration/contracts.ts';
 import type {DatasetMigrationBatch} from '../src/migration/dataset-destination-contracts.ts';
+import type {DeletedArtifactReplayPageRef} from '../src/migration/deleted-artifact-job-contracts.ts';
 const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
 test('fixed deleted job imports pages and exact metadata before verified completion and retry',async()=>{
  const db=await testDatabase(),client=await db.pool.connect(),dir=await mkdtemp(join(tmpdir(),'deleted-job-'));
@@ -53,6 +55,20 @@ test('fixed deleted job imports pages and exact metadata before verified complet
  assert.equal(checks,3);
  assert.equal((await runDeletedArtifactJob(input)).unchanged,1);
  assert.equal((await client.query('SELECT count(*) FROM dataset_deleted_page_lifecycle_links')).rows[0].count,'1');
+ const replayRows=plan.pages.map(row=>({page:row.page,digest:row.digest}));
+ const persisted=replayRows.map(row=>Buffer.from(serializeDeletedArtifactReplayPage(row)));
+ const replayRefs=replayRows.map((row,index)=>({legacyId:row.page.legacyId,pageId:row.page.pageId,bytes:persisted[index]!.byteLength,sha256:sha(persisted[index]!.toString('utf8'))}));
+ const replayablePlan={...plan,pages:replayRows};
+ const replayManifest={kind:'deleted-artifact-replay-plan-v1' as const,sourceNamespace:plan.sourceNamespace,archiveDigest:plan.archiveDigest,admissionSha256:plan.admissionSha256,...(plan.metadataBinding?{metadataBinding:plan.metadataBinding}:{}),pageCount:replayRows.length,revisionCount:replayRows.reduce((n,p)=>n+p.page.revisions.length,0),canonicalPlanSha256:sha(canonicalMigrationValue(replayablePlan)),pages:replayRefs};
+ const replayBytes=new Map(replayRows.map((row,index)=>[row.page.legacyId,new Uint8Array(persisted[index]!)]));
+ const replayPageSource={read:async(ref:DeletedArtifactReplayPageRef)=>replayBytes.get(ref.legacyId)!};
+ const replayJobInput={destination,admission,manifest:replayManifest,maps,metadata,pageSource:replayPageSource};
+ const preflight=await validateDeletedArtifactReplayJob(replayJobInput);
+ const replayResult=await runDeletedArtifactReplayJob({...input,manifest:replayManifest,pageSource:replayPageSource,preflight});
+ assert.equal(replayResult.complete,true);
+ assert.equal(replayResult.unchanged,1);
+ assert.equal(replayResult.pages,1);
+ assert.equal((await runDeletedArtifactJob(input)).unchanged,1);
  const bad={...input,plan:{...plan,archiveDigest:'f'.repeat(64)}};
  await assert.rejects(runDeletedArtifactJob(bad),/binding/);
  assert.equal((await client.query('SELECT count(*) FROM files')).rows[0].count,'1');
