@@ -21,5 +21,12 @@ test('archived documents retain theme defaults, reading geometry and working con
     await page.getByRole('button',{name:'Go to section 2: Second section',exact:true}).click();
     await page.waitForFunction(()=>Math.abs(document.getElementById('second')!.getBoundingClientRect().top)<900);
     assert.equal(await page.locator('#second').getAttribute('data-af-id'),'second');
+    // Reader appearance overrides the archived authored/default mode in both roots.
+    await page.evaluate(()=>{document.documentElement.setAttribute('data-af-design-system','meridian');document.documentElement.removeAttribute('data-af-dark');});
+    await page.waitForFunction(()=>document.documentElement.classList.contains('light'));
+    assert.equal(await page.locator('[data-mx-inline-story]').getAttribute('class'),'light');
+    await page.evaluate(()=>document.documentElement.setAttribute('data-af-dark','true'));
+    await page.waitForFunction(()=>document.documentElement.classList.contains('dark'));
+    assert.equal(await page.locator('[data-mx-inline-story]').getAttribute('class'),'dark');
   } finally {await browser.close();}
 });
