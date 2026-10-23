@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { canonicalMigrationValue } from "./verification-values.ts";
 import type {
   DeletedArtifactApplyInput,
   DeletedArtifactApplyResult,
@@ -38,6 +40,19 @@ export async function applyDeletedArtifactPlan(
     sourceNamespace: plan.sourceNamespace,
     archiveDigest: plan.archiveDigest,
     maps,
+    publications: plan.pages.map(({ page }) => ({
+      kind: "deleted-migration-publication-v1",
+      sourceNamespace: plan.sourceNamespace,
+      archiveDigest: plan.archiveDigest,
+      admissionSha256: plan.admissionSha256,
+      legacyId: page.legacyId,
+      pageId: page.pageId,
+      headVersion: page.original.version,
+      deletedAt: String(page.original.deleted_at),
+      artifactSha256: createHash("sha256")
+        .update(canonicalMigrationValue(page.original))
+        .digest("hex"),
+    })),
   });
   for (const { page } of plan.pages)
     if (!destination.supportsExactDeletedAccess(page))

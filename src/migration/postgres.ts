@@ -42,6 +42,7 @@ export class PostgresMigrationDestination implements ImportDestination, DeletedA
  private maps:MigrationMaps={users:{},tokens:{},groups:{},pages:{}};
  private namespace='';
  private deletedPrepared=false;
+ private deletedPublications=new Map<string,import("./inactive-publication-contracts.ts").DeletedMigrationPublicationContext>();
  private readonly db:SqlReader;
  private readonly options:DestinationOptions;
  private readonly names:DestinationSchemas;
@@ -53,7 +54,7 @@ export class PostgresMigrationDestination implements ImportDestination, DeletedA
   await this.db.query('BEGIN');try{await this.db.query(`SET LOCAL search_path TO ${this.schema}`);const value=await operation();await this.db.query('COMMIT');return value;}catch(error){await this.db.query('ROLLBACK');throw error;}
  }
  async prepare(input:DestinationPreparation):Promise<void>{
-  this.deletedPrepared=false;
+  this.deletedPrepared=false;this.deletedPublications.clear();
   if(!this.options.isolated)throw new Error('An explicitly isolated destination is required');
   if(this.options.sourceNamespace!==undefined&&this.options.sourceNamespace!==input.manifest.sourceNamespace)throw Error("Destination source namespace differs");
   this.maps=input.maps;this.namespace=input.manifest.sourceNamespace;
@@ -114,12 +115,17 @@ export class PostgresMigrationDestination implements ImportDestination, DeletedA
   });
  }
  async prepareDeleted(input:DeletedDestinationPreparation):Promise<void>{
-  this.deletedPrepared=false;
+  this.deletedPrepared=false;this.deletedPublications.clear();
   if(!this.options.isolated)throw new Error('An explicitly isolated destination is required');
   if(this.options.sourceNamespace!==undefined&&this.options.sourceNamespace!==input.sourceNamespace)throw Error('Destination source namespace differs');
   const rows=(await this.db.query(`SELECT digest,maps FROM ${this.archive}.archives WHERE namespace=$1`,[input.sourceNamespace])).rows;
   if(rows.length!==1||rows[0]!.digest!==input.archiveDigest)throw Error('Deleted destination archive mismatch');
   if(canonicalMigrationValue(rows[0]!.maps)!==canonicalMigrationValue(input.maps))throw Error('Deleted destination maps mismatch');
+  this.deletedPublications=new Map((input.publications??[]).map(p=>{
+   if(p.sourceNamespace!==input.sourceNamespace||p.archiveDigest!==input.archiveDigest||input.maps.pages[p.legacyId]!==p.pageId)throw Error("Deleted publication preparation differs");
+   return [p.pageId,{...structuredClone(p),schema:this.options.schema}];
+  }));
+  if(this.deletedPublications.size!==(input.publications??[]).length)throw Error("Duplicate deleted publication preparation");
   this.namespace=input.sourceNamespace;this.maps=structuredClone(input.maps);this.deletedPrepared=true;
  }
  supportsExactAccess(page:PlannedPage):boolean {return !page.original.deleted_at&&this.supportsExactPageAccess(page);}
@@ -166,7 +172,7 @@ export class PostgresMigrationDestination implements ImportDestination, DeletedA
    await this.db.query('UPDATE files SET seed=$2::jsonb WHERE id=$1',[page.pageId,JSON.stringify(preparedHead.state)]);
    for(const r of normalized)await this.db.query('INSERT INTO sources(file_id,revision,content,node_ids,digest) VALUES($1,$2,$3,$4::jsonb,$5)',[page.pageId,String(r.version),r.prepared.source,JSON.stringify(r.prepared.nodeIds),r.sourceRevision]);
    for(const asset of page.assets??[])await this.db.query('INSERT INTO page_assets(page_id,revision,variant,sha256,content_type,filename,byte_length,storage_key) VALUES($1,$2,$3,$4,$5,$6,$7,$4)',[page.pageId,asset.revision,asset.variant,asset.sha256,asset.contentType,asset.filename,asset.bytes]);
-   if(page.backends?.length)await registerMigrationBackends(this.db,page.backends);
+   if(page.backends?.length)await registerMigrationBackends(this.db,page.backends,deleted?this.deletedPublications.get(page.pageId):undefined);
    if(!deleted){const parts=path.split('/').slice(1,-1);for(let i=1;i<=parts.length;i++)await this.db.query('INSERT INTO folders(owner,path) VALUES($1,$2) ON CONFLICT DO NOTHING',[owner,'/'+parts.slice(0,i).join('/')]);}
    const comments=page.comments.filter(c=>!c.deleted_at);let sequence=0;
    for(const c of comments){

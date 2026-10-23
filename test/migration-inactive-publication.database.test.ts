@@ -1,3 +1,6 @@
+import { registerMigrationDatasetAttachments } from "../src/migration/attachment-registration.ts";
+import { deletedDatasetBatchFingerprint } from "../src/migration/deleted-dataset-authority.ts";
+import type { DatasetMigrationBatch } from "../src/migration/dataset-destination-contracts.ts";
 // @requires migration-database
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -61,11 +64,12 @@ test("inactive publication preserves deletion, requires exact raw/head evidence,
         { pages: { "old-page": "Pg0001" } },
       ],
     );
-    await client.query("INSERT INTO sources(file_id,revision,content) VALUES('Pg0001','1','converted')");
     await client.query(
-      "UPDATE files SET deleted_at=$1",
-      [Date.parse(deletedAt)],
+      "INSERT INTO sources(file_id,revision,content) VALUES('Pg0001','1','converted')",
     );
+    await client.query("UPDATE files SET deleted_at=$1", [
+      Date.parse(deletedAt),
+    ]);
     await assert.rejects(registerMigrationViewerBinding(client, viewer));
     await assert.rejects(
       registerDatasetAttachments({ client, registrations: [reg] }),
@@ -104,6 +108,75 @@ test("inactive publication preserves deletion, requires exact raw/head evidence,
         publication,
       });
     }
+    const batch: DatasetMigrationBatch = {
+      baseManifestSha256: "a".repeat(64),
+      relationManifestSha256: "b".repeat(64),
+      relationExportedAt: "epoch",
+      metadata: {
+        sourceNamespace: "legacy",
+        bindings: [],
+        resources: [],
+        versions: [],
+        principals: [],
+        groups: [],
+        acceptedJoins: [],
+        attachments: [reg],
+        pages: [
+          {
+            pageId: "Pg0001",
+            pageVersion: 1,
+            snapshot: {
+              id: "old-page",
+              editId: "old-edit",
+              format: "markup",
+              deleted: true,
+              visibility: "private",
+              owner: { userId: "old-owner", tokenId: null },
+              ownerIsTestUser: false,
+              acceptedJoinUserIds: [],
+            },
+          },
+        ],
+      },
+    };
+    batch.deletedAdditive = {
+      kind: "deleted-dataset-additive-v1",
+      sourceNamespace: "legacy",
+      batchSha256: deletedDatasetBatchFingerprint(batch),
+      admitted: [
+        {
+          legacyId: "old-page",
+          pageId: "Pg0001",
+          version: 1,
+          artifactSha256: sha(original),
+        },
+      ],
+      base: {
+        verificationReport: { path: "offline", sha256: "c".repeat(64) },
+        inventory: {
+          sourceNamespace: "legacy",
+          datasetFingerprint: "d".repeat(64),
+          resources: [],
+          baseManifestSha256: batch.baseManifestSha256,
+          relationManifestSha256: batch.relationManifestSha256,
+          relationExportedAt: batch.relationExportedAt,
+          compilerIdentity: "fixture",
+          reservedFileIds: [],
+          protectedRows: [],
+          backendRows: [],
+          pageReceipts: [],
+          sources: [],
+          tables: [],
+        },
+      },
+    };
+    await registerMigrationDatasetAttachments(client, env.schema, batch);
+    await registerMigrationDatasetAttachments(client, env.schema, batch);
+    const wrong = structuredClone(batch);
+    wrong.deletedAdditive!.admitted[0]!.artifactSha256 = "f".repeat(64);
+    await assert.rejects(
+      registerMigrationDatasetAttachments(client, env.schema, wrong),
+    );
     assert.equal(
       (await client.query("SELECT deleted_at::text FROM files")).rows[0]
         .deleted_at,
@@ -120,7 +193,8 @@ test("inactive publication preserves deletion, requires exact raw/head evidence,
     assert.equal(await loadDatasetViewer(client, context, 100), null);
     const db = createSqlDatabase({
         pool: env.pool,
-        initialize: async () => {},statementTimeoutMs:15000,
+        initialize: async () => {},
+        statementTimeoutMs: 15000,
       }),
       repo = createDatasetAttachmentRepository({
         database: db,
