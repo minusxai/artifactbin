@@ -17,6 +17,6 @@ export async function pageBackendOperation(request:Request,operation:string,inpu
  try{
   const backend=await getHtmlBackendVersion(pin.artifactId,pin.version);
   if(!backend||backend.ownerId!==identity.userId||backend.compiled!==documentSource)return json({error:'backend_capability_forbidden'},403);
-  return json(await localPageBackendCapability({requestId:pin.runId,userId:identity.userId,artifactId:pin.artifactId,artifactVersion:pin.version,program:{source:documentSource,language:'javascript'},input:{kind:'invoke',principal:{tenant:backend.pageId,subject:null}}},'artifactbin.'+operation,input,request.signal));
+  return json(await localPageBackendCapability({requestId:pin.runId,pageBackendOperation:pin.pageBackendOperation,userId:identity.userId,artifactId:pin.artifactId,artifactVersion:pin.version,program:{source:documentSource,language:'javascript'},input:{kind:'invoke',principal:{tenant:backend.pageId,subject:null}}},'artifactbin.'+operation,input,request.signal));
  }catch{return json({error:'backend_capability_failed'},403);}
 }

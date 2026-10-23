@@ -67,7 +67,8 @@ export function verifyActor(header: string | null | undefined, secret: string, o
   if (claims.runner !== undefined) {
     const r = claims.runner;
     if (!r || !['runId','artifactId','version','editId','sourceHash'].every(k => typeof (r as unknown as Record<string,unknown>)[k] === 'string') || !Number.isSafeInteger(r.callId) || r.callId < 1) return null;
-    actor.runner = {runId:r.runId,artifactId:r.artifactId,version:r.version,editId:r.editId,sourceHash:r.sourceHash,callId:r.callId};
+    if (r.pageBackendOperation !== undefined && r.pageBackendOperation !== 'query' && r.pageBackendOperation !== 'mutation') return null;
+    actor.runner = {pageBackendOperation:r.pageBackendOperation,runId:r.runId,artifactId:r.artifactId,version:r.version,editId:r.editId,sourceHash:r.sourceHash,callId:r.callId};
   }
   return actor;
 }

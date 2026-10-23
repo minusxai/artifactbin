@@ -262,6 +262,7 @@ export async function createRunner(options: RunnerOptions): Promise<RunnerServic
                 throw Error('runner_closed');
             if (!input || typeof input.userId !== 'string' || !input.userId || input.userId.length > 256 || typeof input.requestId !== 'string' || !input.requestId || input.requestId.length > 256 || !['typescript', 'javascript'].includes(input.program?.language) || typeof input.program.source !== 'string')
                 throw Error('invalid_start');
+            if(input.pageBackendOperation !== undefined && input.pageBackendOperation !== 'query' && input.pageBackendOperation !== 'mutation')throw Error('invalid_backend_operation');
             if(input.document && (typeof input.document.source !== 'string' || typeof input.document.editId !== 'string' || !input.artifactId || !input.artifactVersion))throw Error('invalid_document');
             if(!Object.hasOwn(input,'input'))throw Error('invalid_start');
             json(input, 512 * 1024);

@@ -12,6 +12,8 @@ it('executes a compiled immutable backend through the retained isolated runner',
   const invoke=createBackendInvoker(runner,async()=>record);
   const call={namespace:'tasks',fileId:'backend1',version:'v1',operation:'mutation' as const,field:'add',args:{},principal:{tenant:'page1',subject:'viewer1'},signal:new AbortController().signal};
   expect(await invoke(call)).toBe(1);expect(value).toEqual({count:1});expect(version).toBe(1);
+  await expect(invoke({...call,operation:'query',field:'add',args:{pageBackendOperation:'mutation'}})).rejects.toThrow();
+  expect(version).toBe(1);expect(value).toEqual({count:1});
   expect(await invoke({...call,operation:'query',field:'count'})).toBe(1);
   expect(await invoke({...call,operation:'query',field:'remote'})).toBe('public');
  }finally{await runner.close();await db.close();}

@@ -48,7 +48,7 @@ export function compilePageBackend(source:string,signal?:AbortSignal):Promise<Co
 export function createBackendInvoker(runner:RunnerService,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>){return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
  const backend=await load(call.fileId,call.version);
  if(!backend||backend.backendId!==call.fileId||backend.version!==call.version||backend.pageId!==call.principal.tenant)throw new FieldNotExecuted('Backend link mismatch','forbidden');
- return run(runner,{requestId:randomUUID(),userId:backend.ownerId,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal);
+ return run(runner,{requestId:randomUUID(),userId:backend.ownerId,pageBackendOperation:call.operation,artifactId:backend.backendId,artifactVersion:backend.version,document:{source:backend.compiled,editId:backend.version},program:{source:backend.compiled,language:'javascript'},input:{kind:'invoke',field:call.field,args:call.args,principal:{...call.principal}},limits},call.signal);
 };}
 /** Called only by trusted runner composition using its admitted request snapshot. */
 export async function pageBackendCapability(store:PageBackendStore,request:RunStart,operation:string,args:RunnerJson,load:(fileId:string,version:string)=>Promise<PageBackendRecord|null>,fetcher?:PageBackendFetcher,secretReader?:(backend:PageBackendRecord,name:string)=>Promise<string>):Promise<RunnerJson>{
@@ -65,7 +65,7 @@ export async function pageBackendCapability(store:PageBackendStore,request:RunSt
   return {...await fetcher(args.url)};
  }
  if(operation==='artifactbin.pageBackend.store.get')return store.get(request.artifactId);
- if(operation!=='artifactbin.pageBackend.store.set'||!args||typeof args!=='object'||Array.isArray(args)||!Number.isSafeInteger(args.expected)||Number(args.expected)<0||!('value'in args))throw Error('backend_capability_forbidden');
+ if(request.pageBackendOperation!=='mutation'||operation!=='artifactbin.pageBackend.store.set'||!args||typeof args!=='object'||Array.isArray(args)||!Number.isSafeInteger(args.expected)||Number(args.expected)<0||!('value'in args))throw Error('backend_capability_forbidden');
  if(Buffer.byteLength(JSON.stringify(args.value))>60*1024)throw Error('store_limit');
  return store.set(request.artifactId,args.value,Number(args.expected));
 }

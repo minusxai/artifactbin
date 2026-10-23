@@ -17,6 +17,8 @@ export interface RunnerLimits {
 }
 
 export interface RunStart {
+  /** Trusted app operation authority; absent authority never permits backend writes. */
+  pageBackendOperation?: 'query' | 'mutation';
   name?: string;
   command?: string[]; // Native argv; requires an empty program source.
   compute?: { vcpu: number; memoryMiB: number; ttlSeconds: number; idleSeconds?: number };

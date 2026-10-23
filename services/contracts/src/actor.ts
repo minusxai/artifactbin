@@ -23,7 +23,7 @@ export interface Actor {
    */
   heldTokenIds?: string[];
   /** Runner-host attestation, absent from browser/token authentication. */
-  runner?: { runId: string; artifactId: string; version: string; editId: string; sourceHash: string; callId: number };
+  runner?: { pageBackendOperation?: 'query' | 'mutation'; runId: string; artifactId: string; version: string; editId: string; sourceHash: string; callId: number };
 }
 
 export const ANONYMOUS: Actor = { credential: 'none' };

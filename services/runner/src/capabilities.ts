@@ -96,5 +96,5 @@ export { boundedJson };
 /** Identity and snapshot binding are chosen outside the program, on both transports. */
 export function runnerIdentity(context: CapabilityContext): Actor {
     const {request, runId, callId} = context;
-    return {userId:request.userId,credential:'session',...(request.document && request.artifactId && request.artifactVersion && callId ? {runner:{runId,callId,artifactId:request.artifactId,version:request.artifactVersion,editId:request.document.editId,sourceHash:createHash('sha256').update(request.document.source).digest('hex')}} : {})};
+    return {userId:request.userId,credential:'session',...(request.document && request.artifactId && request.artifactVersion && callId ? {runner:{pageBackendOperation:request.pageBackendOperation,runId,callId,artifactId:request.artifactId,version:request.artifactVersion,editId:request.document.editId,sourceHash:createHash('sha256').update(request.document.source).digest('hex')}} : {})};
 }
