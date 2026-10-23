@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { etagOf } from '@/lib/http/revalidation';
+import { etagOf, matchingTag } from '@/lib/http/revalidation';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { HtmlRuntimeConfig } from '@/lib/html-runtime';
 import { assembleHtmlPage, downloadableHtml } from '@/lib/html-runtime';
@@ -55,4 +55,13 @@ export function nativeHtmlRuntimeIdentity(): Promise<string> {
       ? createHash('sha256').update(readFileSync(file)).digest('hex') : `unbundled:${randomUUID()}`;
     return etagOf({ core, implementation });
   }).catch(error => { coreIdentity = undefined; throw error; });
+}
+
+/** Public code only: no page, viewer, cookie or credential is an input to these bytes. */
+export async function nativeHtmlCoreResponse(request:Request):Promise<Response>{
+ const source=await htmlCore(),etag=etagOf({core:source});
+ const headers:Record<string,string>={'content-type':'application/javascript; charset=utf-8','cache-control':'public, max-age=0, must-revalidate','etag':etag,'x-content-type-options':'nosniff','access-control-allow-origin':'*'};
+ if(matchingTag(request.headers.get('if-none-match'),etag))return new Response(null,{status:304,headers});
+ headers['content-length']=String(new TextEncoder().encode(source).byteLength);
+ return new Response(request.method==='HEAD'?null:source,{headers});
 }
