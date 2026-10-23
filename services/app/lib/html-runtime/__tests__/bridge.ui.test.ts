@@ -150,3 +150,10 @@ it('keeps area drags separate from native text selection and restores normal sel
   document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
   bridge.dispose(); vi.restoreAllMocks();
 });
+it('initializes local defaults on first author import after the blocking reader has already loaded',async()=>{
+ vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'local-first-import',revision:'local',backends:[],offline:true});
+ await import('../browser-reader');
+ document.body.innerHTML='<script type="application/json" data-af="state">{"count":3}</script>';
+ const {client,gql}=await import('../browser-client');
+ expect((await client.query({query:gql`{count}`})).data).toEqual({count:3});
+});

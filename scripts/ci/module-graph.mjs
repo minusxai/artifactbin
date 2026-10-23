@@ -47,7 +47,7 @@ const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
  * an exact file; a leaf is a path under lib/islands without its extension.
  */
 export const ISLANDS_BROWSER_IMPORTERS = [
-  'services/app/lib/html-runtime/browser-client.ts',
+  'services/app/lib/html-runtime/browser-reader.ts',
   'services/app/solid/',
 ];
 const ISLANDS_BROWSER_LEAVES = [

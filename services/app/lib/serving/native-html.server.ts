@@ -6,7 +6,7 @@ import { etagOf, matchingTag } from '@/lib/http/revalidation';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { HtmlRuntimeConfig } from '@/lib/html-runtime';
 import { assembleHtmlPage, downloadableHtml } from '@/lib/html-runtime';
-import { buildHtmlCore } from '@/lib/html-runtime/build.server';
+import { buildHtmlAssets } from '@/lib/html-runtime/build.server';
 import type { HtmlPageLink } from '@artifactbin/contracts';
 import { buildDocumentCsp, markupCsp,appendCspExtensions } from '@/lib/page-styles';
 
@@ -23,14 +23,15 @@ export interface NativeHtmlRender {
 export interface NativeHtmlDocument { html: string; config: HtmlRuntimeConfig }
 
 // Only code is cached. ACL, source, bindings and viewer state are never retained here.
-let core: Promise<string> | undefined;
+let assets:ReturnType<typeof buildHtmlAssets>|undefined;
+const htmlAssets=()=>assets??=buildHtmlAssets().catch(error=>{assets=undefined;throw error;});
 function htmlCore(): Promise<string> {
-  return core ??= buildHtmlCore().catch((error) => { core = undefined; throw error; });
+  return htmlAssets().then(assets=>assets.core);
 }
 export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<NativeHtmlDocument> {
   const links=(input.row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[];
   const config:HtmlRuntimeConfig={pageId:input.row.id,revision:String(input.row.version),backends:links.map(link=>link.name),bindings:Object.fromEntries(links.map(link=>[link.name,link.kind==='backend'?link.backendId:link.datasetId])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{})};
-  const assembly={html:input.offline?input.row.source??'':await nativeHtmlAssets(input.row),config,core:await htmlCore()};
+  const assembly={html:input.offline?input.row.source??'':await nativeHtmlAssets(input.row),config,core:await htmlCore(),...(input.offline?{apollo:(await htmlAssets()).apollo}:{})};
   return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
 }
 /** Inline author code is confined to the per-page origin, or the opaque /raw sandbox. */
@@ -67,4 +68,13 @@ export async function nativeHtmlCoreResponse(request:Request):Promise<Response>{
  if(matchingTag(request.headers.get('if-none-match'),etag))return new Response(null,{status:304,headers});
  headers['content-length']=String(new TextEncoder().encode(source).byteLength);
  return new Response(request.method==='HEAD'?null:source,{headers});
+}
+
+/** A content-addressed author engine, fetched only when authored code imports it. */
+export async function nativeHtmlApolloResponse(request:Request,digest:string):Promise<Response>{
+ const assets=await htmlAssets();
+ if(assets.apolloPath!==`/af/v1/apollo/${digest}`)return new Response('Not found',{status:404});
+ const headers={'content-type':'application/javascript; charset=utf-8','cache-control':'public, max-age=31536000, immutable','access-control-allow-origin':'*','x-content-type-options':'nosniff','etag':`"${digest}"`};
+ if(matchingTag(request.headers.get('if-none-match'),headers.etag))return new Response(null,{status:304,headers});
+ return new Response(request.method==='HEAD'?null:assets.apollo,{headers});
 }

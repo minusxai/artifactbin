@@ -25,6 +25,8 @@ document.querySelector('#increment').onclick=()=>{
 
 State in `data-af="state"` initializes each viewer’s private browser state. Keep all page state through `client`; never rely on platform-injected globals, use localStorage as a parallel store or assume local state is shared. `client.query({query})` reads it; `client.updateQuery` changes it; `watchQuery(...).subscribe` observes changes. Unsubscribe listeners when removing their UI.
 
+The reader starts immediately. The client engine loads on the first `@afbin/apollo` import; await that import before using it. A raw authored file can use the core from an absolute server URL for local preview: without a hosted runtime context, only private local state is available. A downloaded page embeds the engine and works without fetching code.
+
 ## Dynamic elements and comments
 
 The server numbers elements present in saved HTML; preserve those returned `data-af-id` values. It cannot number elements your script creates later. Give each such element a stable identity derived from an immutable record ID and its role, not an array index, display text, sort order or a fresh random value on every render:
