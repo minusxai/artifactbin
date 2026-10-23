@@ -113,8 +113,6 @@ interface CliWorkspace {
 interface CliWorkspaceOptions {
   /** Default transport for `run`/`invoke`; each call may still override it. */
   fetch?: typeof fetch;
-  /** Explicit renderer boundary for dispatcher tests; compilation is covered by local HTML tests. */
-  localHtml?: CliContext['localHtml'];
   /** Put `.artifactbin` in a directory of its own, so a test can assert the workspace holds only the author's files. */
   separateHome?: boolean;
   /** Extra environment for the CLI process (`--secret-env` reads it). */
@@ -144,7 +142,6 @@ export async function cliWorkspace(prefix: string, options: CliWorkspaceOptions 
       interactive: false,
       ...(options.env ? { env: options.env } : {}),
       ...(fetchImpl ? { fetch: fetchImpl } : {}),
-      ...(options.localHtml ? { localHtml: options.localHtml } : {}),
       stdout: (value: string) => output.push(value),
       stderr: (value: string) => errors.push(value),
     });

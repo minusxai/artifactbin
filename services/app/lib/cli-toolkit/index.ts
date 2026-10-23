@@ -49,7 +49,6 @@ export { parseCsv } from '../data-ingest/csv';
 export { geoJsonRows, rowsGeoJson } from '../data-ingest/geojson';
 
 // ---- Designs and templates: the names validation and the teaching accept.
-export { resolveStoredStoryDesign } from '../data/story/story-themes';
 export { STORY_DESIGN_NAMES, STORY_TEMPLATE_NAMES } from '../validation/atlas-schemas';
 export type { StoryDesignName } from '../validation/atlas-schemas';
 

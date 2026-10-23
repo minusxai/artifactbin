@@ -42,7 +42,7 @@ export async function readSpeculationRules(sha: string): Promise<Uint8Array | nu
 
 let buildCache: CompilerBuild | undefined;
 /** Thrown once, with a message that names the fix, rather than a bare ENOENT from deep in build.server. */
-export function compilerBuild(): CompilerBuild {
+function compilerBuild(): CompilerBuild {
  if (buildCache) return buildCache;
  try {
   buildCache = loadCompilerBuild();

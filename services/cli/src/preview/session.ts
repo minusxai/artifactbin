@@ -1,6 +1,4 @@
-import {PREVIEW_CONNECT_PATH,PREVIEW_CONNECT_INSPECT_PATH,PREVIEW_CONNECT_IMPORT_PATH,PREVIEW_CONNECT_MAX_BYTES} from '../../../contracts/src/preview-connect';
 import {previewPublicOrigin} from '../preview-options';
-import {inspectPreviewOffer,importPreviewOffer,previewConnectPage} from './connect-import';
 import {loadWorkspace} from '../workspace';
 import {LOCAL_WORKSPACE_SCOPE,localWorkspaceState,migrateLocalDiscussion,recoverLocalFiles,saveLocalFile,identifiedLocalBody,identifyLocalDocument,needsNodeIds} from '../local-workspace';
 import {workspaceStateEnv} from '../config';
@@ -139,19 +137,6 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   * outside rewrite's re-stamp carries them from (a file that arrived already identified may have none yet). */
  const acknowledgeAnchors=async(file:string)=>{await localHistoryHead(root,file).catch(error=>{if(!(error instanceof CliError&&error.code==='invalid_history'))throw error;});};
  await migrateLocalDiscussion(root,home,comments);
- const admitImport=async(path:string)=>{
-  const identities={...options.localFiles,...await localInputReferences(await loadWorkspace(root,home),options.origin)};
-  const graph=await previewGraph(root,path,identities),refs=new Set<string>();
-  // Prepare the new graph first. Unrelated previously selected files may have been deleted externally.
-  for(const selected of graph)if(selected.toLowerCase().endsWith('.jsx')){
-   const body=parseDocument(await readFile(await confinedPath(root,join(root,selected)),'utf8')).body;
-   for(const ref of collectRefUses(body)??[])refs.add(ref.id);
-  }
-  Object.assign(options.localFiles!,identities);
-  for(const selected of graph){if(selected.toLowerCase().endsWith('.jsx'))allowed.add(selected);else resources.add(selected);}
-  for(const id of refs)remoteIds.add(id);
-  preparedCache.delete(path);compiledCache.delete(path);
- };
  /** The last revision `/document` recorded in local history, per file. */
  const served=new Map<string,string>();
  let url='';
@@ -168,23 +153,6 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('Cache-Control','no-store');
   const json=(value:unknown)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
-  if(req.method==='GET'&&(target.pathname===PREVIEW_CONNECT_PATH||target.pathname==='/'&&!options.files.length)){
-   if(options.capture)throw new Refusal(403,'Image export is read-only');
-   res.setHeader('Content-Type','text/html');
-   res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
-   return res.end(previewConnectPage());
-  }
-  if(req.method==='POST'&&(target.pathname===PREVIEW_CONNECT_INSPECT_PATH||target.pathname===PREVIEW_CONNECT_IMPORT_PATH)){
-   if(options.capture)throw new Refusal(403,'Image export is read-only');
-   if(!req.headers.origin||!sameOrigin)throw new Refusal(403,'A same-origin browser confirmation is required');
-   if(!req.headers['content-type']?.startsWith('application/json'))throw new Refusal(400,'Expected a JSON import offer');
-   // JSON escaping expands HTML; transport is bounded independently from the decoded 25 MB file limit.
-   const chunks:Buffer[]=[];let length=0;
-   for await(const chunk of req){const bytes=Buffer.from(chunk);length+=bytes.length;if(length>2*PREVIEW_CONNECT_MAX_BYTES)throw new Refusal(413,'Body too large');chunks.push(bytes);}
-   let input:unknown;try{input=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new Refusal(400,'Invalid import offer');}
-   if(target.pathname===PREVIEW_CONNECT_INSPECT_PATH){const {html:_html,filename:_filename,...inspected}=await inspectPreviewOffer(input,root);return json(inspected);}
-   return json(await serial(async()=>{const imported=await importPreviewOffer(root,home,input);await admitImport(imported.path);return {...imported,file:imported.path,path:'/workspace/'+imported.path.split('/').map(encodeURIComponent).join('/')};}));
-  }
   const workspaceFile=target.pathname.startsWith('/workspace/')?decodeURIComponent(target.pathname.slice('/workspace/'.length)):null;
   const file=workspaceFile??target.searchParams.get('file')??options.files[0]!;
   if(req.method==='GET'&&target.pathname==='/'){res.writeHead(302,{Location:'/workspace/'+file.split('/').map(encodeURIComponent).join('/')+(options.capture?'?capture=1':'')});return res.end();}

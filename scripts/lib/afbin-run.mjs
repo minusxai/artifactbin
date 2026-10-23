@@ -56,7 +56,6 @@ const runtimeOutputs = (root) => [
   'host.mjs',
   'preview.mjs',
   'preview/client.js',
-  'preview/connect.js',
   'preview/chrome.css',
   'preview/fonts.css',
   'public/islands/manifest.json',

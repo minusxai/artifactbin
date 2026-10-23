@@ -63,5 +63,3 @@ export async function exportPreviewImage(options:LocalImageOptions,assets:string
   return Buffer.from(result.bytes);
  }finally{try{await browser.close();}finally{await session.close();}}
 }
-
-export {exportLocalHtml} from './local-html';

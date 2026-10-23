@@ -25,7 +25,6 @@ One row per command `dispatch.ts` routes. Handler modules are listed in the orde
 | `export` | `export.ts` | `exportResources`, local and then remote |
 | `fork` | `fork.ts` | `forkResources` |
 | `help` | `teaching.ts`, `help-screen.ts`, `teaching-origin.ts` | also every `--help` |
-| `import` | `local-html-import.ts` | `importLocalHtml` |
 | `invite` | `dispatch.ts` | inline: `POST /artifacts/<id>/members` |
 | `join` | `dispatch.ts` | inline: `POST /artifacts/<id>/members` |
 | `list` | `read-commands.ts`, `remote-query.ts`, `account-workspace.ts` | `readCommand`; `--type table` `discoverTables`; `--type session` `listAccountCollection` |
@@ -115,7 +114,6 @@ What `dispatch.ts` calls to do a command's work.
 | `group-destination.ts` | Resolve group handles to immutable destination IDs and save authenticated setup defaults. |
 | `identities.ts` | Register and resolve file identities. |
 | `markdown.ts` | One-time Markdown to JSX conversion on push. |
-| `local-html-import.ts` | Import an exported HTML file as data. |
 | `local-comments-command.ts` | `comment` over the portable annotation store. |
 | `local-comment-watch.ts` | `watch <file>`: the comment changes feed over the portable annotation store, offline. |
 | `local-history.ts` | Portable local versions. |
@@ -123,8 +121,6 @@ What `dispatch.ts` calls to do a command's work.
 | `local-document-query.ts` | Run a local document's declared query. |
 | `local-dataflow.ts` | Compile and run a local document's dataflow in process. |
 | `local-verification.ts` | Validate's local query dry-run and chart-column checks, naming what did not run. |
-| `local-html.ts` | Offline HTML export over the local compiler and reader. |
-| `local-html-options.ts` | Options for the local HTML export. |
 | `local-image-options.ts` | Options for the local image export. |
 | `dataset-source.ts` | Bind a dataset's connection secret on push. |
 | `sqlite-wasm.ts` | Where the SQLite wasm comes from in a built CLI. |
@@ -158,7 +154,6 @@ What `dispatch.ts` calls to do a command's work.
 | `preview/annotations.ts` | Preview annotations over local state. |
 | `preview/comments.ts` | Preview comments with hosted anchors. |
 | `preview/compiled.ts` | The publish-time compiler, run locally. |
-| `preview/connect-import.ts` | Import browser offers through the existing importer. |
 | `preview/editor.ts` | The editor protocol over local files. |
 | `preview/graph.ts` | The documents and references a preview session covers. |
 | `preview/local-inputs.ts` | Local bytes behind a registered reference. |
@@ -209,7 +204,6 @@ The processes the CLI starts and the hosts it runs.
 | `foreground-process.ts` | Owned shutdown for foreground hosts. |
 | `host-runtime.ts` | Load the packaged team host. |
 | `preview-runtime.ts` | Load the packaged preview host. |
-| `local-html-runtime.ts` | Spawn the lazy runtime for HTML export. |
 | `local-image-runtime.ts` | Spawn the lazy runtime for image export. |
 | `pty.ts` | The node-pty binding. |
 | `runner.ts` | Run a remote agent session in the foreground. |
@@ -230,4 +224,3 @@ The browser half of `afbin preview`, bundled separately.
 | `preview/backend.ts` | `ArtifactBackend` over the local preview routes. |
 | `preview/edit-controller.ts` | The preview's story controller. |
 | `preview/types.ts` | The `/document` JSON shape. |
-| `preview/connect.tsx` | Local capabilities for the shared file receiver. |

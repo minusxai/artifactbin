@@ -42,7 +42,7 @@ export async function buildPreview(outdir=join(cli,'dist/runtime/preview')){
  await writeFile(join(outdir,'fonts.css'),documentUiFontCss(JSON.parse(await readFile(join(app,'lib/data/story/story-font-manifest.json'),'utf8')).app));
  await writeFile(join(outdir,'chrome.css'),optimize(compiler.build(scanner.scan()),{minify:true}).code);
  await build({
-  entryPoints:[join(cli,'src/preview/client.tsx'),join(cli,'src/preview/connect.tsx')],bundle:true,minify:true,format:'esm',splitting:true,outdir,
+  entryPoints:[join(cli,'src/preview/client.tsx')],bundle:true,minify:true,format:'esm',splitting:true,outdir,
   platform:'browser',target:'es2022',alias:{'@':app},define:{'process.env.NODE_ENV':'"production"'},
   loader:{'.png':'dataurl','.woff2':'dataurl','.css':'empty'},plugins:[solidPreviewPlugin()],
  });

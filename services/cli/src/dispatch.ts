@@ -4,7 +4,6 @@ import {rebindWorkspace} from './workspace-rebind';
 import {collectionFilters} from './collection-filters';
 import {localCommentCommand,localDeleteComments,offlineCommentTargets} from './local-comments-command';
 import {localHistory,localHistoryHead} from './local-history';
-import {importLocalHtml} from './local-html-import';
 import {publishLocalWorkspace} from './local-publication';
 import {registerLocalFiles,findLocalWorkspace,moveLocalFile} from './local-workspace';
 import {scheduleCommand} from './schedules';
@@ -70,7 +69,7 @@ import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {signal?:AbortSignal;/** Executable entry; defaults to the running CLI. */entry?:string;/** Override the local HTML runtime at the renderer boundary. */localHtml?:Parameters<typeof exportResources>[2]['localHtml'];preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;/** Answers uninstall's terminal question; tests inject one. */confirm?:(question:string)=>Promise<boolean>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {signal?:AbortSignal;/** Executable entry; defaults to the running CLI. */entry?:string;preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;/** Answers uninstall's terminal question; tests inject one. */confirm?:(question:string)=>Promise<boolean>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
  const update=automaticUpdate({home:context.home??homedir(),env:context.env,entry:context.entry,npm:context.npm,stderr:context.stderr??(value=>process.stderr.write(value))});
  const code=await dispatchCli(argv,context,update.observe);
@@ -200,7 +199,6 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   // These local operations change paths or identities that belong to a tracked workspace.
   // Check the binding before they can rewrite local state under a foreign managed session.
   if(command==='add'||command==='mv')await refuseForeignManagedWorkspace();
-  if(command==='import'){emit(await importLocalHtml(workspace,positionals[0]!,typeof flags.output==='string'?flags.output:undefined));return 0;}
   const portable=!!await findLocalWorkspace(workspace.root,workspace.home);
   if(command==='add'){emit(await registerLocalFiles(workspace,positionals));return 0;}
   if(command==='mv'){await (portable?moveLocalFile:moveFile)(workspace,positionals[0]!,positionals[1]!);emit({moved:true});return 0;}
@@ -322,7 +320,7 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   const selectedAddresses=await addresses();
   const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,
    ...(typeof flags.as==='string'?{as:{testuser:flags.as}}:{})});
-  const exportOptions=()=>({og:!!flags.og,refresh:!!flags.refresh,type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,emit,...(context.localHtml?{localHtml:context.localHtml}:{}),...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
+  const exportOptions=()=>({og:!!flags.og,refresh:!!flags.refresh,type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,emit,...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
   if(command==='fork'){const result=await forkResources(workspace,positionals,forkOptions());if(result){emit(result);return 0;}}
   if(command==='open'){
    const launch=context.auth?.open??openBrowser;

@@ -13,10 +13,7 @@ import {digest} from '../src/files';
 import {saveLocalFile,localWorkspaceState,LOCAL_WORKSPACE_SCOPE,workspaceCandidates,type DiscoveryHost} from '../src/local-workspace';
 import {previewAnnotations} from '../src/preview/annotations';
 import {parseDocument} from '../src/document';
-import {importLocalHtml} from '../src/local-html-import';
-import {inspectPreviewOffer,importPreviewOffer} from '../src/preview/connect-import';
 import {loadWorkspace,saveTracking} from '../src/workspace';
-import {sourceDigest,type ArtifactFile} from '../../app/lib/cli-toolkit';
 
 async function sandbox(run:(root:string,home:string)=>Promise<void>){
  const parent=await realpath(await mkdtemp(join(tmpdir(),'afbin-honest-'))),root=join(parent,'work'),home=join(parent,'home');
@@ -142,22 +139,6 @@ test('workspace discovery stops at a git root and at HOME, and names an ancestor
  assert.equal((await loadWorkspace(below,home)).root,below);
 }));
 
-const importBase='<p id="words">Initial</p>';
-const offlineFile=():ArtifactFile=>({format:1,origin:'http://localhost',artifactId:'Ab12Cd',liveUrl:'',downloadedBy:'Local',downloadedAt:new Date().toISOString(),base:{version:0,editId:'',source:importBase},source:importBase,metadata:{title:'Report',description:null,theme:null,template:null,colorMode:null},css:{base:'',compiled:null,author:null},island:{nodes:[],refData:{},colorMode:'light'},snapshot:{at:'now',state:{values:{},tables:{},errors:{}},variants:[],frozen:[]},journal:[],threads:[],localIds:[],bundle:'solid',localWorkspace:{documentId:'Ab12Cd',baseDigest:sourceDigest(importBase),threadsDigest:digest('[]'),assets:{}}} as unknown as ArtifactFile);
-const offlineHtml=(value:ArtifactFile)=>`<html><script type="application/json" id="afbin-file">${JSON.stringify(value).replace(/</g,'\\u003c')}</script></html>`;
-
-test('re-importing an offline file reconciles its existing copy; another name is refused by name with a fix',()=>sandbox(async(root,home)=>{
- await writeFile(join(root,'download.jsx.html'),offlineHtml(offlineFile()));
- const workspace=await loadWorkspace(root,home);
- assert.equal((await importLocalHtml(workspace,'download.jsx.html','fresh.jsx')).path,'fresh.jsx');
- assert.equal((await importLocalHtml(workspace,'download.jsx.html')).path,'fresh.jsx','the default destination is the copy that already holds this identity');
- await assert.rejects(importLocalHtml(workspace,'download.jsx.html','other.jsx'),(error:any)=>{
-  assert.equal(error.code,'duplicate_identity');assert.match(error.message,/fresh\.jsx/);assert.match(error.fix,/--output fresh\.jsx/);return true;
- });
- const inspected=await inspectPreviewOffer({html:offlineHtml(offlineFile()),filename:'Report (1).jsx.html'},root);
- assert.equal(inspected.target,'fresh.jsx','the preview import dialog proposes the existing copy');
-}));
-
 test('CLI comments without --agent are attributed to the CLI, not to the browser user',()=>sandbox(async(root,home)=>{
  await writeFile(join(root,'doc.jsx'),DOC);assert.equal((await cli(root,home,['add','doc.jsx','--json'])).code,0);
  const created=await cli(root,home,['comment','doc.jsx','--node','para','--body','From the terminal','--json']);
@@ -185,18 +166,6 @@ test('the home-store workspace climb stops at a git root and at HOME, like the m
  await saveTracking(await loadWorkspace(home,home),{server:'https://one.example',account:'usr_one'});
  const below=join(home,'projects');await mkdir(below);
  const underHome=await loadWorkspace(below,home);assert.equal(underHome.root,below);assert.equal(underHome.tracking,null);
-}));
-
-test('a preview import conflict names the person\'s file and what to do in the browser, never the temporary upload',()=>sandbox(async(root,home)=>{
- await writeFile(join(root,'download.jsx.html'),offlineHtml(offlineFile()));
- assert.equal((await importLocalHtml(await loadWorkspace(root,home),'download.jsx.html','fresh.jsx')).path,'fresh.jsx');
- await assert.rejects(importPreviewOffer(root,home,{html:offlineHtml(offlineFile()),filename:'Report (1).jsx.html',target:'other.jsx'}),(error:any)=>{
-  assert.equal(error.code,'duplicate_identity');
-  assert.match(error.message,/Report \(1\)\.jsx\.html is a copy of fresh\.jsx/);
-  assert.doesNotMatch(error.message+error.fix,/\.artifactbin|imports\//);
-  assert.match(error.fix,/choose fresh\.jsx as the file to import into/);
-  return true;
- });
 }));
 
 test('bounded discovery holds for Windows path forms: 8.3 temp names, drive-letter case, \\\\?\\ prefixes, drive roots, .git files, unreadable ancestors',async()=>{

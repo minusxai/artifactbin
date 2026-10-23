@@ -13,7 +13,6 @@ export { compilePage } from '../compiled-page/compiler';
 export {
   assembleReaderPage, type AssembleOverlay, bindModuleCode, type CompiledPage, type CompileInput, type CompilerBuild,
   createModuleStore, createSpeculationRulesStore, loadCompilerBuild, SPECULATION_RULES_HEADER,
-  withStoredCarriers,
 } from '../compiled-page';
 export { loadSsrModule } from '../compiled-page/bundle.server';
 export { documentStyleSheets } from '../page-styles';
