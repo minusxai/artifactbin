@@ -7,7 +7,7 @@ import { destinationSchemas } from "./destination-schema.ts";
 import { destinationAccess, publicationPath } from "./postgres.ts";
 import { prepareMigrationPageSources } from "./page-source-preparation.ts";
 import { projectMigrationCommentContext } from "./comment-projection.ts";
-import { requireMigrationEquality as equal } from "./verification-values.ts";
+import { requireMigrationEquality as equal, requireMigrationInventoryEquality } from "./verification-values.ts";
 import type { VerifyMigrationRuntime, VerifyDeletedMigrationRuntime } from "./verification-contracts.ts";
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 /** Compare actual content and authority to source-derived expectations, not import receipts. */
@@ -388,11 +388,11 @@ const verifyRuntime = async (
         [ids],
       )
     ).rows.map((r) => r.id);
-    equal(
+    requireMigrationInventoryEquality({
       actual,
-      ids.filter((id) => ready.has(id)).sort(),
-      "admitted/blocked page inventory",
-    );
+      expected: ids.filter((id) => ready.has(id)),
+      label: "admitted/blocked page inventory",
+    });
   }
   return totals;
 };

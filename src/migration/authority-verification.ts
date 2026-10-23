@@ -1,7 +1,7 @@
 import { destinationSchemas } from "./destination-schema.ts";
 import { planMigrationGroups } from "./groups.ts";
 import { isPreservedNonloginActor } from "./identities.ts";
-import { requireMigrationEquality as equal } from "./verification-values.ts";
+import { requireMigrationEquality as equal, requireMigrationInventoryEquality } from "./verification-values.ts";
 import type {
   SqlReader,
   MigrationManifest,
@@ -29,11 +29,11 @@ export async function verifyMigrationAuthority(
         [chunk],
       )
     ).rows;
-    equal(
-      rows.map((r) => r.actor),
-      chunk.sort(),
-      "preserved account identities",
-    );
+    requireMigrationInventoryEquality({
+      actual: rows.map((r) => r.actor),
+      expected: chunk,
+      label: "preserved account identities",
+    });
     for (const row of rows)
       if (isPreservedNonloginActor(String(row.actor)))
         equal(
@@ -62,18 +62,16 @@ export async function verifyMigrationAuthority(
       [{ active: group.active }],
       "group active authority",
     );
-    equal(
-      (
+    requireMigrationInventoryEquality({
+      actual: (
         await db.query(
           `SELECT actor,role FROM ${runtime}.group_memberships WHERE owner=$1 ORDER BY actor`,
           [group.actor],
         )
       ).rows,
-      group.members
-        .map((m) => ({ actor: m.actor, role: m.role }))
-        .sort((a, b) => a.actor.localeCompare(b.actor)),
-      "exact group memberships",
-    );
+      expected: group.members.map((m) => ({ actor: m.actor, role: m.role })),
+      label: "exact group memberships",
+    });
   }
   const reserved = [
     ...actors.filter(isPreservedNonloginActor),

@@ -20,3 +20,19 @@ export function requireMigrationEquality(
   if (canonicalMigrationValue(actual) !== canonicalMigrationValue(expected))
     throw Error("Migration verification failed: " + label);
 }
+
+/** Compare complete database inventories independently of database collation. */
+export interface MigrationInventoryComparison<T> {
+  actual: readonly T[];
+  expected: readonly T[];
+  label: string;
+}
+export function requireMigrationInventoryEquality<T>({
+  actual, expected, label,
+}: MigrationInventoryComparison<T>): void {
+  requireMigrationEquality(
+    actual.map(canonicalMigrationValue).sort(),
+    expected.map(canonicalMigrationValue).sort(),
+    label,
+  );
+}
