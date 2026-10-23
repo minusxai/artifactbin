@@ -128,7 +128,7 @@ export function DocumentPage(): JSX.Element {
     try {
       const head = await backend.load();
       if (!head) throw new Error('Social preview is unavailable. Refresh and try again.');
-      setPreviewHead({ source: head.markup ?? '', editId: head.edit_id, version: head.version });
+      setPreviewHead({ source: head.html ?? '', editId: head.edit_id, version: head.version });
       setSocialPreviewOpen(true); setSharingOpen(false);
     } catch (cause) { setMetadataError(cause instanceof Error ? cause.message : 'Could not load social preview.'); }
   };

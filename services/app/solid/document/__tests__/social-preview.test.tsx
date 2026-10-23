@@ -2,8 +2,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/dom';
 import { fireEvent, render } from '../../__tests__/helpers';
-import { createDocumentGraph, graphSource } from '@/lib/document/document-graph';
-import { applyGraphPatch } from '@/lib/document/document-graph-patch';
 import { SocialPreviewEditor } from '../SocialPreviewEditor';
 
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -24,28 +22,25 @@ const response = (status: number, body: unknown) => ({
 /** Model the actual authoring transport, including the read snapshot and the
  * JSONB commit, so geometry assertions inspect the resulting document. */
 function documentFetch(source: string, imageId = 'image1') {
-  const document = createDocumentGraph(source, 1); let saved: string | undefined;
-  const mock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const path = String(input);
-    if (path === '/api/my/artifacts') return response(201, { id: imageId });
-    if (path.endsWith('/prepare')) return response(200, { valid: true });
-    if (path.endsWith('/edits')) {
-      const update = JSON.parse(String(init?.body)).document_update;
-      const next = applyGraphPatch(document, 1, update.patch); expect(next).not.toBeNull();
-      saved = graphSource(next!).replace(/ id="[A-Za-z0-9]+"/g, '');
-      return response(200, { edit_id: 'e2', version: 2, document: next, markup: saved });
+  let saved: string | undefined;
+  const mock=vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    const path=String(input);
+    if(path==='/api/my/artifacts')return response(201,{id:imageId});
+    if(init?.method==='PUT'){
+      const body=JSON.parse(String(init.body));expect(body.expectedVersion).toBe(1);expect(body.expectedState).toBe('a'.repeat(64));
+      saved=body.html;return response(200,{edit_id:'e2',version:2,html:saved});
     }
-    return response(200, { edit_id: 'e1', version: 1, state: 'a'.repeat(64), format: 'markup', document, markup: source });
+    return response(200,{edit_id:'e1',version:1,state:'a'.repeat(64),format:'html',html:source});
   });
   return Object.assign(mock, { savedSource: () => saved });
 }
 
 describe('social preview editor', () => {
   it('loads the versioned, editor-only overview and resets by removing the directive', async () => {
-    const fetchMock = documentFetch('<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><p>x</p>', 'image1');
+    const fetchMock = documentFetch('<head><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></head><p>x</p>', 'image1');
     vi.stubGlobal('fetch', fetchMock);
     const close = vi.fn();
-    render(() => <SocialPreviewEditor id="story1" source={'<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><p>x</p>'} editId="e1" version={4} onClose={close} />);
+    render(() => <SocialPreviewEditor id="story1" source={'<head><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></head><p>x</p>'} editId="e1" version={4} onClose={close} />);
     expect(screen.getByAltText('Artifact preview')).toHaveAttribute('src', '/a/story1/export?mode=preview&format=jpg&v=4&pv=2');
     expect(screen.getByRole('status')).toHaveTextContent('rendering full-page overview');
     loadOverview();
@@ -55,9 +50,9 @@ describe('social preview editor', () => {
     fireEvent.click(screen.getByLabelText('Reset social preview'));
     fireEvent.click(screen.getByText('save preview'));
     await waitFor(() => expect(close).toHaveBeenCalled());
-    const sent = JSON.parse(String(fetchMock.mock.calls.find(([url]) => String(url).endsWith('/edits'))![1]?.body));
-    expect(sent.edit_id).toBe('e1');
-    expect(fetchMock.savedSource()).toBe('<Helmet></Helmet><p>x</p>');
+    const sent = JSON.parse(String(fetchMock.mock.calls.find(([url,init]) => String(url)==='/api/my/artifacts/story1' && init?.method==='PUT')![1]?.body));
+    expect(sent.expectedVersion).toBe(1);
+    expect(fetchMock.savedSource()).toBe('<head></head><p>x</p>');
   });
 
   it('moves and resizes with the keyboard while preserving the locked-ratio model', async () => {
@@ -77,7 +72,7 @@ describe('social preview editor', () => {
 
   it('keeps an inward resize stable, then focuses and sharpens it on release', () => {
     vi.stubGlobal('fetch', vi.fn());
-    render(() => <SocialPreviewEditor id="story1" source={'<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><p>x</p>'} editId="e1" version={4} onClose={() => {}} />);
+    render(() => <SocialPreviewEditor id="story1" source={'<head><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></head><p>x</p>'} editId="e1" version={4} onClose={() => {}} />);
     loadOverview();
     const canvas = screen.getByLabelText('Social preview canvas');
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ width: 800 } as DOMRect);
@@ -103,7 +98,7 @@ describe('social preview editor', () => {
   });
 
   it('keeps the draft framing when a concurrent edit moves the document head', async () => {
-    const fetchMock = vi.fn(async () => response(409, { error: 'doc_changed', edit_id: 'e2', source: '<Helmet><title>new</title></Helmet><p>x</p>' }));
+    const fetchMock = vi.fn(async () => response(409, { error: 'doc_changed', edit_id: 'e2', source: '<head><title>new</title></head><p>x</p>' }));
     vi.stubGlobal('fetch', fetchMock);
     render(() => <SocialPreviewEditor id="story1" source="<p>x</p>" editId="e1" version={1} onClose={() => {}} />);
     loadOverview();
@@ -114,11 +109,11 @@ describe('social preview editor', () => {
   });
 });
 
-it('uploads an asset before saving its Helmet reference and retains the crop', async () => {
-  const fetchMock = documentFetch('<Helmet><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /></Helmet><p>x</p>', 'image1');
+it('uploads an asset before saving its head reference and retains the crop', async () => {
+  const fetchMock = documentFetch('<head><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /></head><p>x</p>', 'image1');
   vi.stubGlobal('fetch', fetchMock);
   const close = vi.fn();
-  const source = '<Helmet><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /></Helmet><p>x</p>';
+  const source = '<head><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /></head><p>x</p>';
   render(() => <SocialPreviewEditor id="story1" source={source} editId="e1" version={1} onClose={close} />);
   const file = new File(['image'], 'card.png', { type: 'image/png' });
   fireEvent.change(screen.getByLabelText('Upload social preview image'), { target: { files: [file] } });
@@ -135,7 +130,7 @@ it('uploads an asset before saving its Helmet reference and retains the crop', a
 });
 
 it('removing an uploaded image restores the existing crop', async () => {
-  const source = '<Helmet><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /><meta name="artifactbin:og-image" content="ref:image1" /></Helmet><p>x</p>';
+  const source = '<head><meta name="artifactbin:og-crop" content="x=20;y=30;width=600" /><meta name="artifactbin:og-image" content="ref:image1" /></head><p>x</p>';
   const fetchMock = documentFetch(source, 'image1');
   vi.stubGlobal('fetch', fetchMock);
   render(() => <SocialPreviewEditor id="story1" source={source} editId="e1" version={1} onClose={() => {}} />);
@@ -150,7 +145,7 @@ it('removing an uploaded image restores the existing crop', async () => {
 
 it('keeps the current choice and allows retry after upload failure', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => response(413, { error: 'image_too_large' })));
-  render(() => <SocialPreviewEditor id="story1" source='<Helmet><meta name="artifactbin:og-image" content="ref:image1" /></Helmet><p>x</p>' editId="e1" version={1} onClose={() => {}} />);
+  render(() => <SocialPreviewEditor id="story1" source='<head><meta name="artifactbin:og-image" content="ref:image1" /></head><p>x</p>' editId="e1" version={1} onClose={() => {}} />);
   fireEvent.change(screen.getByLabelText('Upload social preview image'), { target: { files: [new File(['x'], 'x.png', { type: 'image/png' })] } });
   expect(await screen.findByText('image_too_large')).toBeTruthy();
   expect(screen.getByAltText('Uploaded social preview')).toBeTruthy();
@@ -158,7 +153,7 @@ it('keeps the current choice and allows retry after upload failure', async () =>
 });
 
 it('pans and resizes an uploaded image, saving independent bounds and reopening them', async () => {
-  const source = '<Helmet><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-crop" content="x=0;y=900;width=800" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /></Helmet><p>x</p>';
+  const source = '<head><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-crop" content="x=0;y=900;width=800" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /></head><p>x</p>';
   const fetchMock = documentFetch(source, 'image1');
   vi.stubGlobal('fetch', fetchMock);
   render(() => <SocialPreviewEditor id="story1" source={source} editId="e1" version={1} onClose={() => {}} />);
@@ -181,7 +176,7 @@ it('pans and resizes an uploaded image, saving independent bounds and reopening 
 });
 
 it('resets an image to its centered crop without clearing document framing', async () => {
-  const source = '<Helmet><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /><meta name="artifactbin:og-crop" content="x=0;y=900;width=800" /></Helmet><p>x</p>';
+  const source = '<head><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /><meta name="artifactbin:og-crop" content="x=0;y=900;width=800" /></head><p>x</p>';
   const fetchMock = documentFetch(source, 'image1');
   vi.stubGlobal('fetch', fetchMock);
   render(() => <SocialPreviewEditor id="story1" source={source} editId="e1" version={1} onClose={() => {}} />);
@@ -199,7 +194,7 @@ it('resets an image to its centered crop without clearing document framing', asy
 });
 
 it('starts a replacement image with fresh centered framing', async () => {
-  const source = '<Helmet><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /></Helmet><p>x</p>';
+  const source = '<head><meta name="artifactbin:og-image" content="ref:image1" /><meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" /></head><p>x</p>';
   const fetchMock = documentFetch(source, 'image2');
   vi.stubGlobal('fetch', fetchMock);
   render(() => <SocialPreviewEditor id="story1" source={source} editId="e1" version={1} onClose={() => {}} />);

@@ -4,6 +4,7 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
  * transaction. Data and byte tiers retain their original inputs and authority.
  */
 import { json } from '../../http/http';
+import {socialPreviewImage, socialPreviewImageValue} from '@/lib/document';
 import { canonicalizeHtmlPage,htmlPageMetadata } from '@/lib/html-page';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/publish/ingest/image';
@@ -100,7 +101,18 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   if(kind==='html'){
     const source=String(body.html);
     const size=tooLarge(source);if(size)return size;
-    try{canonicalizeHtmlPage(source);const metadata=htmlPageMetadata(source);return {format:'html',source,meta:{},derivedTitle:metadata.title,derivedDescription:metadata.description};}
+    try{
+      canonicalizeHtmlPage(source);const metadata=htmlPageMetadata(source);
+      const imageId=socialPreviewImage(source);
+      if(socialPreviewImageValue(source)!==null&&!imageId)return json({error:'invalid_social_preview_image'},400);
+      const refs:Array<{id:string;kind:string}>=[];
+      if(imageId){
+        const image=await ctx.loadRef?.(imageId);
+        if(ctx.loadRef&&image?.format!=='image')return json({error:'invalid_social_preview_image'},400);
+        refs.push({id:imageId,kind:'image'});
+      }
+      return {format:'html',source,meta:{refs},derivedTitle:metadata.title,derivedDescription:metadata.description};
+    }
     catch(error){return json({error:'invalid_html',details:[error instanceof Error?error.message:String(error)]},400);}
   }
 

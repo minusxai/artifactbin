@@ -8,9 +8,19 @@ import type {ArtifactBackend} from './types';
 export async function writeBrowserArtifact(id:string,change:Record<string,unknown>,editId?:string):Promise<Response>{
  const requests=artifactRequests(id);
  const observed=await requests.head();if(!observed.ok)return observed;
- const head=await observed.json() as {document?:DocumentGraph;format?:string;state?:string;version:number;edit_id:string;markup?:string;title?:string|null;description?:string|null;theme?:string|null;template?:string|null;colorMode?:string|null;sharing_revision?:number;ancestor_ids?:string[]};
+ const head=await observed.json() as {document?:DocumentGraph;format?:string;state?:string;version:number;edit_id:string;markup?:string;html?:string;title?:string|null;description?:string|null;theme?:string|null;template?:string|null;colorMode?:string|null;sharing_revision?:number;ancestor_ids?:string[]};
  if(typeof head.state!=='string'||!Number.isSafeInteger(head.version))return Response.json({error:'invalid_response',details:[{message:'Refresh the artifact before saving.'}]},{status:502});
  const {source,annotationOps,...fields}=change;
+ if(head.format==='html'&&typeof source==='string'){
+  if(head.edit_id!==editId)return Response.json({error:'doc_changed',edit_id:head.edit_id,version:head.version,source:head.html},{status:409});
+  const response=await fetch(`/api/my/artifacts/${encodeURIComponent(id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...fields,html:source,expectedVersion:head.version,expectedState:head.state})});
+  if(response.status!==409)return response;
+  // A race after the head read is a conflict, never an automatic replacement retry.
+  const latest=await requests.head();if(!latest.ok)return response;
+  const body=await latest.json() as {html?:string;edit_id?:string;version?:number};
+  return Response.json({error:'doc_changed',edit_id:body.edit_id,version:body.version,source:body.html},{status:409});
+ }
+
  if(source!==undefined&&head.edit_id!==editId)return Response.json({error:'doc_changed',edit_id:head.edit_id,version:head.version,source:head.markup},{status:409});
  if(head.document?.kind==='graph'&&head.format!=='folder'){
   const {prepareBrowserDocumentUpdate}=await import('../document/document-authoring-client');

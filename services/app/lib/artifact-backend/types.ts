@@ -46,6 +46,8 @@ export interface ArtifactHead {
   title: string | null;
   description?: string | null;
   markup: string | null;
+  /** Complete native HTML returned by the original authoring head endpoint. */
+  html?: string;
   theme: string | null;
   version: number;
   /** Head pointer of the edit protocol — every edit this session sends carries it. */

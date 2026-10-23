@@ -49,7 +49,7 @@ interface SaveResponse { edit_id?: string; source?: string; error?: string; deta
 interface SocialPreviewEditorProps { id: string; source: string; editId: string; version: number; onClose: () => void }
 
 /** The share-card crop editor: a locked 40:21 frame the owner pans and resizes over the document
- * overview or an uploaded image. Framing persists as Helmet meta directives (lib/document/social-preview);
+ * overview or an uploaded image. Framing persists as native HTML head metadata (lib/document/social-preview);
  * saving goes through the same authoring transport as any other document edit. */
 export function SocialPreviewEditor(props: SocialPreviewEditorProps): JSX.Element {
   const initialImage = socialPreviewImage(props.source);

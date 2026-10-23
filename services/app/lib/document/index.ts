@@ -48,7 +48,7 @@ export { displayTitle, firstHeadingTitle } from './title';
 export type { PwaSettings } from './pwa-settings';
 export { readPwaSettings } from './pwa-settings';
 export type { SocialPreviewCrop } from './social-preview';
-export { parseSocialPreviewCrop, SOCIAL_PREVIEW_OVERVIEW_GENERATION } from './social-preview';
+export { parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage, socialPreviewImageValue, clampImageCrop, savedSocialPreviewImageCrop, SOCIAL_PREVIEW_OVERVIEW_GENERATION } from './social-preview';
 export type { CspDirective, CspExtensions, CspRequest } from './csp-extensions';
 export {
   coversCspExtensions, CSP_DIRECTIVES, cspExtensionsOf, cspOriginMatches, EMPTY_CSP_EXTENSIONS, emptyCspExtensions, hasCspExtensions,
