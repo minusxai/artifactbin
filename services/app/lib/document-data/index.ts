@@ -27,3 +27,7 @@ export { evaluateNotificationQuery } from './notifications/query';
 export { notificationAuthority } from './notifications/authority';
 export { notificationJobStore } from './notifications/runtime';
 export { membershipInbox, updateMembershipInbox } from './notifications/membership-inbox';
+
+/** Native dataset GraphQL shares the retained write and policy boundary. */
+export {mutateDataset,isMutationRefused} from './dataset-mutate';
+export {canWriteDataset,canUseDataPolicy} from './dataset-policy';
