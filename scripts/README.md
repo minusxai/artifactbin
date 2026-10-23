@@ -140,9 +140,3 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/ci/linux-acceptance-deps.mjs` | Cache the Linux acceptance job's downloaded deb archives. | `ci.yml` |
 | `scripts/ci/docker-containerd-store.sh` | Switch a CI runner's Docker Engine to the containerd image store, which can import and export BuildKit caches (the company container's Caddy build). | `ci.yml` (`company-container`, `warm-caches`) |
 
-## Operator scripts
-
-| File | Purpose | Run by |
-|---|---|---|
-| `scripts/compiled-backfill.ts` | Recompile selected stored document versions on a running server. | an operator, by hand |
-| `scripts/audit-author-scripts.ts` | Read-only: list live documents whose current Helmet script no longer builds (`id, visibility, version, error`, `--json`). | an operator, by hand |
