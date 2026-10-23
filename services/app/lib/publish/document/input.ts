@@ -19,6 +19,7 @@ import type {ContentObjects} from '@/lib/object-store/prepared-objects';
  * Returns the stored fields or the error Response the route should send.
  */
 import { json } from '../../http/http';
+import { canonicalizeHtmlPage } from '@/lib/html-page';
 import { publishJsx } from './jsx-tier';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/publish/ingest/image';
@@ -109,7 +110,6 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   // Retired inputs, answered by name.
   const RETIRED: Record<string, string> = {
     markdown: 'send markup containing <Markdown> for continuous prose, or ordinary HTML tags for individually designed text; the top-level markdown field is not supported',
-    html: 'html is vocabulary inside markup now — send markup; put <style>/<script>/<title> in a top-level <Helmet>',
     jsx: 'the jsx field is retired — send markup',
   };
   for (const [key, hint] of Object.entries(RETIRED)) {
@@ -135,6 +135,12 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   }
   if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image_pdf' }, 400);
   const kind = present[0];
+  if(kind==='html'){
+    const source=String(body.html);
+    const size=tooLarge(source);if(size)return size;
+    try{canonicalizeHtmlPage(source);return {format:'html',source,meta:{},derivedTitle:null};}
+    catch(error){return json({error:'invalid_html',details:[error instanceof Error?error.message:String(error)]},400);}
+  }
   if(kind==='program'){
     try{
       const definition=parseProgramDefinition(typeof body.program==='string'?body.program:JSON.stringify(body.program));

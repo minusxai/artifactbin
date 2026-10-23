@@ -53,6 +53,7 @@ export const SUMMARY_META_FIELDS = {
   // ArtifactFormat rather than falling through to the `?? []`.
   folder: [],
   program: [],
+  html: [],
 } as const;
 
 function summaryMeta(format: ArtifactRow['format'], meta: Record<string, unknown>) {
@@ -182,7 +183,8 @@ export async function artifactToWire(row: ArtifactRow, base: string, openAnnotat
     // The trail rides in `...rest`; the parent is derived from it, and it is
     // the half a caller writes back.
     parent_id: parentOf(row),
-    markup: source,
+    markup:format==='html'?undefined:source,
+    ...(format==='html'?{html:source}:{}),
     // Annotations are sidecar state (lib/annotations) — the write path never
     // round-trips them, so every echo carries the open COUNT as the signal;
     // the artifact GET additionally inlines the full open set.
@@ -372,7 +374,7 @@ export async function replacedArtifactWire(
     // the only thing it is for.
     edit_id: row.edit_id, state: artifactState(row),...(row.shares!==undefined?{shares:row.shares}:{}),
     title:row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',parent_id:parentOf(row),format:row.format,
-    ...markupEcho(sentMarkup, row.source),
+    ...(row.format==='html'?{html:row.source}:markupEcho(sentMarkup, row.source)),
     // A dataset echoes its WRITE acl too: an agent that just set it should not
     // have to re-read to see what it got.
     ...(row.format === 'dataset' ? { access: row.access } : {}),
@@ -405,7 +407,7 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     // Where it landed. `parent_id` is what a caller writes back, so the create
     // reply hands it straight into the next call.
     parent_id: parentOf(row), ancestor_ids: row.ancestor_ids,
-    ...markupEcho(sentMarkup, row.source),
+    ...(row.format==='html'?{html:row.source}:markupEcho(sentMarkup, row.source)),
     // Echoes teach the agent its bindable surface without a second round trip.
     ...(row.format === 'dataset' ? datasetCreateFields(row.id, meta.columns, meta.rowCount, meta as { totalRows?: number; truncated?: boolean }, row.access) : {}),
     ...(row.format === 'viz' ? { slots: meta.slots } : {}),

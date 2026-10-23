@@ -120,6 +120,8 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
  * guidance strings are also rendered in local help.
  */
 const CONTENT_FIELDS = {
+  backendSources:z.record(z.string(),z.string()).optional().describe('Named backend TypeScript files, validated and published atomically with html.'),
+  html: z.string().optional().describe('A complete HTML document. The server saves canonical HTML with stable data-af-id identities.'),
   markup: z.string().optional().describe(MARKUP_FIELD_GUIDANCE),
   program: z.union([z.record(z.string(),z.unknown()),z.string()]).optional().describe('Native program definition JSON: {version:1,command:[executable,...args],compute?,env?}. Execution is owner-only. Store only nonsecret configuration; common credential environment names and runtime overrides are rejected. Credentials cannot be detected in arbitrary argument strings.'),
   dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
@@ -241,7 +243,7 @@ const updateArtifactOp: Operation = {
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
-    return fromResponse(await replaceArtifactWithBody(input, ctx.actor, String(input.id), ctx.base));
+    return fromResponse(await replaceArtifactWithBody(input, ctx.actor, String(input.id), ctx.base,{mutationReceipt:ctx.mutationReceipt}));
   },
 };
 

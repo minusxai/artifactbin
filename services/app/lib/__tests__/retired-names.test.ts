@@ -82,17 +82,10 @@ const SCANS: Scan[] = [
     proof: { atLeast: 50, contains: `${APP}/lib` },
   },
   {
-    // There is ONE document format. `html` and `markdown` are not formats, not inputs and not wire
-    // fields. The retirement touched the input parser, the wire echo, the pages, the editor and
-    // five docs sections; `format: 'html'` survived in a colour map past all of them.
-    label: 'no source file treats html or markdown as a format',
+    // HTML is the native document source; markdown remains a retired input.
+    label: 'no source file treats markdown as a format',
     dirs: [`${APP}/app`, `${APP}/solid`, `${APP}/lib`],
-    pattern: new RegExp([
-      /format\s*(?::|===|==|!==)\s*'html'/, /ArtifactFormat\s*=\s*[^;]*'html'/, /body\.(html|markdown)\b/,
-      /format\s*\?\?\s*'html'/, /default:\s*"'html'"/, /format IN \([^)]*'html'/,
-      /FormatBadge format="(html|markdown)"/, /\bhtml:\s*(row|artifact)\.content/,
-      /^\s*html:\s*(content|row\.content|artifact\.content)/, /^\s*(html|markdown):\s*['"]/,
-    ].map((r) => r.source).join('|'), 'm'),
+    pattern: /format\s*(?::|===|==|!==)\s*'markdown'|body\.markdown\b|FormatBadge format="markdown"/,
     allow: [`${APP}/lib/publish/document/input.ts`],
     proof: { atLeast: 50, contains: `${APP}/lib/publish/document/input.ts` },
   },

@@ -32,6 +32,49 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.html_backend_versions (
+  backend_id TEXT NOT NULL,
+  version TEXT NOT NULL,
+  page_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  source TEXT NOT NULL,
+  type_defs TEXT NOT NULL,
+  compiled TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  PRIMARY KEY (backend_id, version)
+);
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS backend_id TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS version TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS page_id TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS source TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS type_defs TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS compiled TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_versions ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_html_backend_page_name ON app.html_backend_versions (page_id, name);
+
+CREATE TABLE IF NOT EXISTS app.html_backend_stores (
+  backend_id TEXT NOT NULL,
+  value JSONB,
+  version INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (backend_id)
+);
+
+ALTER TABLE app.html_backend_stores ADD COLUMN IF NOT EXISTS backend_id TEXT NOT NULL;
+
+ALTER TABLE app.html_backend_stores ADD COLUMN IF NOT EXISTS value JSONB;
+
+ALTER TABLE app.html_backend_stores ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS app.groups (
   id TEXT NOT NULL,
   handle TEXT NOT NULL,
