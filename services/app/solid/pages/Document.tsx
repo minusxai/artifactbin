@@ -248,6 +248,10 @@ export function DocumentPage(): JSX.Element {
       id, framed, nodes: treeOnLoad ? askTree() : [],
       editId: () => page.surface?.editId ?? '',
       source: () => null,
+      htmlContext: page.surface?.format === 'html' ? () => ({
+        revision: String(page.archived?.version ?? page.surface?.version ?? 1),
+        readOnly: !!page.archived,
+      }) : undefined,
       version: live, reading: () => true,
       onPressed: askTreeOnPress,
     });

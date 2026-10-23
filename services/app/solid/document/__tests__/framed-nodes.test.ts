@@ -201,3 +201,34 @@ describe('a bridge made without the tree', () => {
     expect(posted.mock.calls.map(([message]) => (message as { payload?: { kind?: string } }).payload?.kind)).toEqual(['attach']);
   });
 });
+
+
+describe('native HTML trusted context', () => {
+  it('uses the platform revision and refuses archived writes through the original shell bridge', async () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const posted = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const fetcher = vi.fn(async () => answer(200, { data: {} }));
+    vi.stubGlobal('fetch', fetcher);
+    createRoot((dispose) => {
+      cleanups.push(dispose);
+      createFramedStory({ id: 'doc1', framed: { frame, origin: PAGES }, nodes: [], editId: () => 'head', source: () => null,
+        htmlContext: () => ({ revision: '2', readOnly: true }) });
+    });
+    const key = (posted.mock.calls[0][0] as { key: string }).key;
+    const send = (payload: unknown) => window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'mx:frame-bridge', key, payload }, origin: PAGES, source: frame.contentWindow,
+    }));
+    send({ kind: 'ready', nonce: 'native' });
+    const request = (operation: string) => ({ kind: 'fetch', call: 1, path: '/api/artifacts/doc1/graphql', method: 'POST', headers: {},
+      body: JSON.stringify({ operation, revision: '999', query: '{ count }' }) });
+    send(request('query'));
+    await Promise.resolve(); await Promise.resolve();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.parse((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body as string).revision).toBe('2');
+    send(request('mutation'));
+    await Promise.resolve(); await Promise.resolve();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(posted.mock.calls.some(([envelope]) => (envelope as {payload?:{status?:number}}).payload?.status === 403)).toBe(true);
+  });
+});
