@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {canonicalMigrationValue} from '../src/migration/verification-values.ts';
+import {scanMigrationDatasetImports} from '../src/migration/dataset-scan.ts';
+import type {MigrationJobSource} from '../src/migration/job-contracts.ts';
+import type {DeletedArtifactAdmission} from '../src/migration/deleted-artifact-contracts.ts';
+const sha=(x:unknown)=>createHash('sha256').update(canonicalMigrationValue(x)).digest('hex');
+test('deleted source queries require exact opt-in and retain original lifecycle', async()=>{
+ const sql='select 1 as value';
+ const row={id:'page01',version:1,format:'markup',document:null,source:'<Helmet><Query name="q" source="ref:source01">{`'+sql+'`}</Query></Helmet>',user_id:'owner',group_id:null,token_id:null,visibility:'private',link_role:'viewer',deleted_at:'2020-01-02T03:04:05Z'};
+ const manifest={schemaVersion:1,sourceNamespace:'fixture',exportedAt:'epoch',tables:{},artifacts:[row],tokenOwners:[]};
+ const maps={pages:{page01:'Page01'},users:{owner:'owner@example.test'},groups:{},tokens:{}};
+ const source={manifest:{schemaVersion:2,sourceNamespace:'fixture'},base:manifest,maps,ids:['page01'],readArtifact:async()=>manifest} as unknown as MigrationJobSource;
+ const registrations=[{pageLegacyId:'page01',pageVersion:1,name:'q',sourceRef:'ref:source01',resource:'source-source01',sql,sqlSha256:createHash('sha256').update(sql).digest('hex'),params:{},columns:[{name:'value',type:'number' as const}]}];
+ const admission:DeletedArtifactAdmission={kind:'deleted-artifact-admission-v1',sourceNamespace:'fixture',archiveDigest:'a'.repeat(64),entries:[{legacyId:'page01',pageId:'Page01',headVersion:1,deletedAt:row.deleted_at,artifactSha256:sha(row),revisions:[{version:1,artifactSha256:sha(row)}]}]};
+ await assert.rejects(scanMigrationDatasetImports(source,undefined,registrations),/not an active/);
+ await scanMigrationDatasetImports(source,undefined,registrations,admission);
+ assert.equal(row.deleted_at,'2020-01-02T03:04:05Z');
+ row.source+='changed';
+ await assert.rejects(scanMigrationDatasetImports(source,undefined,registrations,admission),/Deleted artifact admission/);
+});
+test('exact deleted admission never overrides an explicit remote-runtime exclusion', async()=>{
+ const {planMigration}=await import('../src/migration/import.ts');
+ const source=JSON.stringify({version:1,command:['node','-e','setTimeout(()=>{},30000)'],compute:{vcpu:1,memoryMiB:2048,ttlSeconds:60}});
+ const row={id:'prog01',version:1,format:'program',document:null,source,user_id:'owner',group_id:null,token_id:null,visibility:'private',link_role:'viewer',deleted_at:'2020-01-02T03:04:05Z'};
+ const admission:DeletedArtifactAdmission={kind:'deleted-artifact-admission-v1',sourceNamespace:'fixture',archiveDigest:'a'.repeat(64),entries:[{legacyId:row.id,pageId:'Prog01',headVersion:1,deletedAt:row.deleted_at,artifactSha256:sha(row),revisions:[{version:1,artifactSha256:sha(row)}]}]};
+ let conversions=0;
+ const plan=await planMigration({schemaVersion:1,sourceNamespace:'fixture',exportedAt:'epoch',tables:{},artifacts:[row],tokenOwners:[]},{maps:{pages:{prog01:'Prog01'},users:{owner:'owner@example.test'},tokens:{},groups:{}},coreUrl:'/af/v1/core.js',deletedAdmission:admission,convert:async()=>{conversions++;throw Error('must not convert excluded source');},excludedNativeProgramSources:[{sourceSha256:createHash('sha256').update(source).digest('hex'),decision:'remote-agent-runtime-not-migrated'}]});
+ assert.equal(conversions,0);assert.equal(plan.pages.length,0);assert.equal(plan.excludedNativePrograms?.length,1);
+});

@@ -1,3 +1,4 @@
+import {createDeletedArtifactAdmissionValidator} from "./deleted-artifact-admission.ts";
 import { hasLegacyServerModule } from "./query-source.ts";
 import { legacyDocumentSource } from "./conversion/index.ts";
 import { prepareMigrationQueryReceipt } from "./query-preparation.ts";
@@ -10,11 +11,14 @@ export async function prepareMigrationPageQueries(
   pages: readonly PlannedPage[],
   datasets: MigrationJobDatasets | undefined,
   queries?: { compiler: MigrationQueryCompiler; compilerIdentity: string },
+  deletedAuthority?: import("./deleted-artifact-contracts.ts").DeletedArtifactSourceAuthority,
 ): Promise<void> {
+  const assertDeleted = deletedAuthority ? createDeletedArtifactAdmissionValidator(deletedAuthority.admission,deletedAuthority.sourceNamespace,deletedAuthority.maps) : undefined;
   for (const page of pages) {
     const raw = page.original;
+    if (raw.deleted_at && assertDeleted) assertDeleted(raw);
     if (raw.format === "program") {
-      if (raw.deleted_at) continue;
+      if (raw.deleted_at && !assertDeleted) continue;
       const native = page.revisions.find((r) => r.version === raw.version)
         ?.conversion.nativeProgram;
       if (!native) continue; // Explicit native capability refusal belongs to content conversion.

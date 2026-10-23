@@ -1,3 +1,4 @@
+import {createDeletedArtifactAdmissionValidator} from "./deleted-artifact-admission.ts";
 import { attestMigrationSourceQueries } from "./source-query-preparation.ts";
 import {
   originalMigrationOwner,
@@ -21,7 +22,9 @@ export async function scanMigrationDatasetImports(
   source: MigrationJobSource,
   ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride,
   sourceQueryRegistrations: readonly import("../datasets/source-query/contracts.ts").MigrationSourceQueryRegistration[] = [],
+  deletedAdmission?: import("./deleted-artifact-contracts.ts").DeletedArtifactAdmission,
 ): Promise<MigrationDatasetImportScan> {
+  const assertDeleted = deletedAdmission ? createDeletedArtifactAdmissionValidator(deletedAdmission,source.manifest.sourceNamespace,source.maps) : undefined;
   const pendingSourceQueryPages = new Set(
     sourceQueryRegistrations.map((q) => q.pageLegacyId),
   );
@@ -43,9 +46,10 @@ export async function scanMigrationDatasetImports(
   for (const id of source.ids) {
     const artifact = await source.readArtifact(id);
     const head = artifact.artifacts[0]!;
+    if (head.deleted_at && assertDeleted) assertDeleted(head);
     if (pendingSourceQueryPages.has(id)) {
       if (
-        head.deleted_at ||
+        (head.deleted_at && !assertDeleted) ||
         head.format !== "markup" ||
         sourceQueryRegistrations.some(
           (q) => q.pageLegacyId === id && q.pageVersion !== head.version,
@@ -83,7 +87,7 @@ export async function scanMigrationDatasetImports(
       if ((row.format ?? head.format) === "program") {
         if (
           Number(row.version) === head.version &&
-          !head.deleted_at &&
+          (!head.deleted_at || Boolean(assertDeleted)) &&
           head.user_id &&
           !head.group_id
         ) {

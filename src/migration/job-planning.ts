@@ -29,11 +29,13 @@ export function createMigrationJobPlanner(
   options: MigrationJobOptions,
   convert: Converter,
   queries?: { compiler: MigrationQueryCompiler; compilerIdentity: string },
+  deletedAdmission?: import("./deleted-artifact-contracts.ts").DeletedArtifactAdmission,
 ): MigrationPagePlanner {
   const { maps, media, resourceMap } = source;
   const planArtifact = async (artifact: MigrationManifest) => {
     const plan = await planMigration(artifact, {
       maps,
+      deletedAdmission,
       standaloneVizRecipes: Boolean(options.standaloneVizPages),
       historicalUnavailable: options.historicalUnavailable,
       ownershipOverride: options.ownershipOverride,
@@ -116,6 +118,7 @@ export function createMigrationJobPlanner(
       plan.pages,
       source.preparedDatasets,
       queries,
+      deletedAdmission ? {admission:deletedAdmission,maps,sourceNamespace:source.manifest.sourceNamespace} : undefined,
     );
     for (const page of plan.pages) {
       const comments = new Set(

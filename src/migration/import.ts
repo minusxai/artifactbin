@@ -1,3 +1,4 @@
+import {createDeletedArtifactAdmissionValidator} from "./deleted-artifact-admission.ts";
 import { convertVizRecipePage } from "./viz-pages/convert.ts";
 import { createHash as vizCreateHash } from "node:crypto";
 import { convertStandaloneDatasetPage } from "./dataset-pages/convert.ts";
@@ -85,6 +86,7 @@ export function allocateMigrationMaps(
 export async function planMigration(
   manifest: MigrationManifest,
   options: {
+    deletedAdmission?: import("./deleted-artifact-contracts.ts").DeletedArtifactAdmission;
     historicalUnavailable?: import("./historical-unavailable-contracts.ts").HistoricalUnavailablePolicy;
     ownershipOverride?: import("./ownership-override-contracts.ts").MigrationOwnershipOverride;
     maps: MigrationMaps;
@@ -147,6 +149,7 @@ export async function planMigration(
     manifest.artifacts.map((a) => a.id),
     options.maps,
   );
+  const assertDeleted = options.deletedAdmission ? createDeletedArtifactAdmissionValidator(options.deletedAdmission,manifest.sourceNamespace,maps) : undefined;
   const occupied = new Set(Object.values(maps.pages));
   if (
     occupied.size !== Object.values(maps.pages).length ||
@@ -160,6 +163,7 @@ export async function planMigration(
   )) {
     if (seen.has(artifact.id)) throw new Error("Duplicate source artifact");
     seen.add(artifact.id);
+    if (artifact.deleted_at && assertDeleted) assertDeleted(artifact);
     if (artifact.format === "program") {
       const exclusion = await nativeProgramExclusion(
         String(artifact.source ?? ""),
@@ -342,7 +346,7 @@ export async function planMigration(
           title: String(original.title ?? artifact.title ?? "Program"),
           binding:
             Number(original.version) === artifact.version &&
-            !artifact.deleted_at
+            (!artifact.deleted_at || Boolean(assertDeleted))
               ? options.nativeProgramBinding?.(artifact.id, version)
               : undefined,
         });

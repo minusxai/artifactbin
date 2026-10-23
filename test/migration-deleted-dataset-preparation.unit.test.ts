@@ -300,3 +300,48 @@ test("deleted program and source-query metadata require exact seals while preser
   f.source.readArtifact = async id => ({...(await read(id)), tables:{artifact_versions:[overlap,{...overlap}]}});
   await assert.rejects(validateDeletedArtifactPreparation(f.source,f.admission), /Deleted artifact admission/);
  });
+
+test("standalone deleted dataset requires an exact explicit seal and preserves original lifecycle", async () => {
+  const f = fixture();
+  const original = structuredClone(f.artifact);
+  await assert.rejects(
+    scanStandaloneDatasetPages(f.source, f.options),
+    /source changed/,
+  );
+  const prepared = await prepareMigrationJobDatasets(
+    f.source,
+    f.options,
+    { host: standaloneDatasetHost },
+    f.admission,
+  );
+  assert.equal(prepared!.issues.size, 0);
+  assert.equal(prepared!.metadata.pages[0]!.snapshot.deleted, true);
+  assert.equal(prepared!.metadata.resources[0]!.deleted, true);
+  assert.deepEqual(f.artifact, original);
+  for (const change of [
+    (a: DeletedArtifactAdmission) => {
+      a.entries[0]!.deletedAt = "2020-01-03T00:00:00Z";
+    },
+    (a: DeletedArtifactAdmission) => {
+      a.entries[0]!.artifactSha256 = "f".repeat(64);
+    },
+    (a: DeletedArtifactAdmission) => {
+      a.entries[0]!.pageId = "Wrong1";
+    },
+    (a: DeletedArtifactAdmission) => {
+      a.sourceNamespace = "other";
+    },
+  ]) {
+    const admission = structuredClone(f.admission);
+    change(admission);
+    await assert.rejects(
+      prepareMigrationJobDatasets(
+        f.source,
+        f.options,
+        { host: standaloneDatasetHost },
+        admission,
+      ),
+      /Deleted artifact admission/,
+    );
+  }
+});

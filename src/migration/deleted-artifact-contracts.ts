@@ -59,3 +59,10 @@ export interface DeletedArtifactApplyInput {
   /** Fresh database comparison, not receipt-only acknowledgement. */
   verifyDeletedState(plan: DeletedArtifactPlan): Promise<MigrationRuntimeVerification>;
 }
+
+/** Raw source authority for explicit deleted planning; destination binding remains separate. */
+export interface DeletedArtifactSourceAuthority {
+  admission: DeletedArtifactAdmission;
+  maps: MigrationMaps;
+  sourceNamespace: string;
+}
