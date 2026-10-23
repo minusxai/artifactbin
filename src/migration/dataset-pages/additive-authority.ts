@@ -1,3 +1,4 @@
+import { standaloneDatasetVersionScope } from "./history.ts";
 import { validateComposedAdditiveVerification } from "./composed-verification.ts";
 import type { ComposedAdditiveVerification } from "./composed-verification-contracts.ts";
 import { createHash } from "node:crypto";
@@ -164,41 +165,66 @@ export async function verifyAdditiveDatasetBase(
   }
   const pageIds = new Set(batch.metadata.pages.map((p) => p.pageId));
   const scope = new Set(admission.heads.map((h) => h.legacyId));
+  const versionScope = standaloneDatasetVersionScope(admission);
+  const versionKey = (id: string, version: number) =>
+    admission.history ? JSON.stringify([id, version]) : id;
   const externalPages = new Map(
-    (admission.external ?? []).map((e) => [e.legacyId, e]),
+    (admission.external ?? []).map((e) => [
+      versionKey(e.legacyId, e.version),
+      e,
+    ]),
   );
   if (
     externalPages.size !== (admission.external ?? []).length ||
     [...externalPages.values()].some(
       (e) =>
-        !admission.heads.some(
-          (h) =>
-            h.legacyId === e.legacyId &&
-            h.version === e.version &&
-            h.artifactSha256 === e.artifactSha256,
-        ),
+        versionScope.get(JSON.stringify([e.legacyId, e.version])) !==
+        e.artifactSha256,
     )
   )
     throw Error("Invalid additive external scope");
-  const approvedModels=admission.models??[];
-  if(new Set(approvedModels.map(m=>m.legacyId)).size!==approvedModels.length||approvedModels.some(m=>!admission.heads.some(h=>h.legacyId===m.legacyId&&h.version===m.version&&h.artifactSha256===m.artifactSha256)))throw Error("Invalid additive model scope");
-  for(const page of batch.metadata.pages){
-    const expected=approvedModels.find(m=>m.legacyId===page.snapshot.id);
-    same(page.snapshot.standaloneDataset?.models??[],expected?.attestations??[],"exact stored model admission");
+  const approvedModels = admission.models ?? [];
+  if (
+    new Set(approvedModels.map((m) => versionKey(m.legacyId, m.version)))
+      .size !== approvedModels.length ||
+    approvedModels.some(
+      (m) =>
+        versionScope.get(JSON.stringify([m.legacyId, m.version])) !==
+        m.artifactSha256,
+    )
+  )
+    throw Error("Invalid additive model scope");
+  for (const page of batch.metadata.pages) {
+    const expected = approvedModels.find(
+      (m) => m.legacyId === page.snapshot.id && m.version === page.pageVersion,
+    );
+    same(
+      page.snapshot.standaloneDataset?.models ?? [],
+      expected?.attestations ?? [],
+      "exact stored model admission",
+    );
   }
   const groups = batch.sourceQueryRegistrations ?? [];
   const expectedExternal = batch.metadata.pages.filter((p) =>
-    externalPages.has(p.snapshot.id),
+    externalPages.has(versionKey(p.snapshot.id, p.pageVersion)),
   );
   if (
     groups.length !== expectedExternal.length ||
-    new Set(groups.map((g) => g.receipt.pageLegacyId)).size !== groups.length
+    new Set(
+      groups.map((g) =>
+        versionKey(g.receipt.pageLegacyId, g.receipt.pageVersion),
+      ),
+    ).size !== groups.length
   )
     throw Error("Incomplete additive external registrations");
   for (const group of groups) {
-    const approved = externalPages.get(group.receipt.pageLegacyId);
+    const approved = externalPages.get(
+      versionKey(group.receipt.pageLegacyId, group.receipt.pageVersion),
+    );
     const page = expectedExternal.find(
-      (p) => p.snapshot.id === group.receipt.pageLegacyId,
+      (p) =>
+        p.snapshot.id === group.receipt.pageLegacyId &&
+        p.pageVersion === group.receipt.pageVersion,
     );
     if (
       !approved ||
@@ -214,19 +240,22 @@ export async function verifyAdditiveDatasetBase(
   }
   if (
     batch.metadata.resources.some((r) => !scope.has(r.legacyId)) ||
-    batch.metadata.versions.some((v) => !scope.has(v.legacyId)) ||
+    batch.metadata.versions.some(
+      (v) =>
+        !scope.has(v.legacyId) ||
+        (admission.history &&
+          !versionScope.has(JSON.stringify([v.legacyId, v.version]))),
+    ) ||
     batch.metadata.profiles?.length ||
     batch.metadata.personBindings?.length ||
     batch.metadata.pages.some(
       (p) =>
-        (!externalPages.has(p.snapshot.id) &&
+        (!externalPages.has(versionKey(p.snapshot.id, p.pageVersion)) &&
           (p.snapshot.standaloneDataset?.datasetId !== p.snapshot.id ||
             p.snapshot.standaloneDataset.version !== p.pageVersion)) ||
-        (externalPages.has(p.snapshot.id) &&
+        (externalPages.has(versionKey(p.snapshot.id, p.pageVersion)) &&
           p.snapshot.standaloneDataset !== undefined) ||
-        !admission.heads.some(
-          (h) => h.legacyId === p.snapshot.id && h.version === p.pageVersion,
-        ),
+        !versionScope.has(JSON.stringify([p.snapshot.id, p.pageVersion])),
     ) ||
     batch.ownershipDatasetGrants?.length ||
     batch.metadata.operations?.length ||
@@ -234,7 +263,7 @@ export async function verifyAdditiveDatasetBase(
     batch.metadata.pages.some(
       (p) =>
         p.snapshot.format !== "dataset" ||
-        (!externalPages.has(p.snapshot.id) &&
+        (!externalPages.has(versionKey(p.snapshot.id, p.pageVersion)) &&
           p.snapshot.standaloneDataset?.kind !== "dataset-self-read-v1") ||
         !scope.has(p.snapshot.id),
     ) ||

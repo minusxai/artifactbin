@@ -1,3 +1,5 @@
+import { planDatasetMetadata } from "../src/migration/datasets/import-metadata.ts";
+import { additiveRowSha256 } from "../src/migration/dataset-pages/additive-authority.ts";
 import { createStoredModelResolver } from "../src/persistence/dataset-stored-models.ts";
 import { storedModelDependenciesSha256 } from "../src/datasets/stored-model/attestation.ts";
 import {
@@ -29,17 +31,77 @@ import { createMigrationJobPlanner } from "../src/migration/job-planning.ts";
 import { applyMigration } from "../src/migration/import.ts";
 import type { DatasetMigrationBatch } from "../src/migration/dataset-destination-contracts.ts";
 
-for (const [existingResource, external, model] of [
+for (const [existingResource, external, model, history] of [
   [true, false],
   [false, false],
   [true, true],
   [true, false, true],
+  [true, false, false, true],
 ])
-  test(`additive normal publication ${existingResource ? "reuses" : "introduces an approved original"} ${external ? "external " : model ? "stored model " : "stored "}resource, preserves base, replays and refuses changed authority`, async () => {
+  test(`additive normal publication ${history ? "with saved history " : ""}${existingResource ? "reuses" : "introduces an approved original"} ${external ? "external " : model ? "stored model " : "stored "}resource, preserves base, replays and refuses changed authority`, async () => {
     const db = await testDatabase();
     const client = await db.pool.connect();
     const dir = await mkdtemp(join(tmpdir(), "dataset-additive-"));
     const { source, options } = standaloneDatasetFixture(external);
+    if (history) {
+      const originalRead = source.readArtifact;
+      const artifact = (await originalRead("data01")).artifacts[0]!;
+      artifact.version = 5;
+      const prior = {
+        ...artifact,
+        id: "archive-record",
+        artifact_id: artifact.id,
+        version: 3,
+        edit_id: undefined,
+        title: "Prior table",
+        meta: {
+          catalog: {
+            kind: "stored",
+            tables: [
+              {
+                schema: "old",
+                name: "prior_rows",
+                columns: [{ name: "old_value", type: "string" }],
+              },
+            ],
+          },
+        },
+      };
+      source.readArtifact = async (id) => ({
+        ...(await originalRead(id)),
+        tables: { artifact_versions: [prior] },
+      });
+      options.standaloneDatasetPages!.heads[0]!.version = 5;
+      options.standaloneDatasetPages!.heads[0]!.artifactSha256 =
+        datasetPageArtifactSha256(artifact);
+      options.standaloneDatasetPages!.heads[0]!.resourceSha256 =
+        additiveRowSha256(
+          planDatasetMetadata({
+            manifest: {
+              ...source.base,
+              artifacts: [artifact],
+              tables: { ...source.base.tables, relations: [] },
+            },
+            maps: source.maps,
+            receipts: source.datasets!.receipts,
+            bindings: [],
+            relationProvenance: {
+              exportedAt: source.base.exportedAt,
+              manifestSha256: "b".repeat(64),
+            },
+          }).metadata.resources[0],
+        );
+      options.standaloneDatasetPages!.history = {
+        kind: "standalone-dataset-history-v1",
+        revisions: [
+          {
+            legacyId: artifact.id,
+            version: 3,
+            artifactSha256: datasetPageArtifactSha256(prior),
+          },
+        ],
+      };
+    }
     if (model) {
       const artifact = (await source.readArtifact("data01")).artifacts[0]!;
       const catalog = (
@@ -207,6 +269,38 @@ for (const [existingResource, external, model] of [
           }),
         /attempted base replacement|descriptor/,
       );
+      if (history) {
+        await assert.rejects(
+          () =>
+            verifyAdditiveDatasetBase(client, db.schema, {
+              ...base,
+              additive: options.standaloneDatasetPages,
+              metadata: {
+                ...prepared.metadata,
+                pages: prepared.metadata.pages.map((p) => ({
+                  ...p,
+                  pageVersion: 99,
+                })),
+              },
+            }),
+          /self reads/,
+        );
+        assert.equal(plan.pages[0]!.disposition, "ready");
+        assert.deepEqual(
+          plan.pages[0]!.revisions.map((r) => r.version),
+          [3, 5],
+        );
+        assert.ok(plan.pages[0]!.revisions.every((r) => r.conversion.html));
+        assert.deepEqual(
+          prepared.metadata.bindings.map((b) => b.page.version).sort(),
+          [3, 5],
+        );
+        assert.equal(
+          prepared.metadata.versions.find((v) => v.version === 3)!.tables[0]!
+            .name,
+          "prior_rows",
+        );
+      }
       const result = await applyMigration(plan, destination, { dryRun: false });
       assert.equal(result.created, 1);
       const batch: DatasetMigrationBatch = {

@@ -19,7 +19,7 @@ export function attestStandaloneDatasetModels(
     catalog.kind !== "stored" ||
     !Array.isArray(catalog.tables) ||
     row.version !== version.version ||
-    row.id !== version.legacyId
+    (row.artifact_id ?? row.id) !== version.legacyId
   )
     throw Error("Stored model source identity differs");
   const models = version.unavailableTables;

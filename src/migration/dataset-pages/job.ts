@@ -1,3 +1,5 @@
+import { validateDeletedArtifactPreparation } from "../deleted-artifact-admission.ts";
+import { admitStandaloneDatasetHistory } from "./history.ts";
 import { attestStandaloneDatasetModels } from "./models.ts";
 import {
   additiveAuthoritySha256,
@@ -25,7 +27,13 @@ export async function prepareStandaloneDatasetJob(
   if (!source.datasets || !options.standaloneDatasetPages)
     throw Error("Standalone dataset source unavailable");
   const admission = options.standaloneDatasetPages;
-  const { pages, issues } = await scanStandaloneDatasetPages(source, options);
+  if (deletedAdmission)
+    await validateDeletedArtifactPreparation(source, deletedAdmission);
+  const { pages, issues } = await scanStandaloneDatasetPages(
+    source,
+    options,
+    deletedAdmission,
+  );
   const reserved = new Set(admission.reservedFileIds);
   if (
     Object.values(source.maps.pages).some((id) => !reserved.has(id)) ||
@@ -55,14 +63,15 @@ export async function prepareStandaloneDatasetJob(
   >();
   for (const page of pages) {
     const artifact = await source.readArtifact(page.legacyId);
-    // Only the admitted current source catalog is registered. Earlier raw revisions stay archived,
-    // and the normal explicit historical-unavailable policy handles unregistered saved views.
+    // The opt-in inventory has already sealed every original archived row.
     const manifest = {
       ...artifact,
       tables: {
         ...source.base.tables,
         ...artifact.tables,
-        artifact_versions: [],
+        artifact_versions: admission.history
+          ? (artifact.tables.artifact_versions ?? [])
+          : [],
         relations: [...source.datasets.relations],
       },
       tokenOwners: source.base.tokenOwners.filter(
@@ -70,20 +79,18 @@ export async function prepareStandaloneDatasetJob(
       ),
     };
     const plan = planDatasetMetadata({
+      ...(deletedAdmission ? { deletedAdmission } : {}),
       manifest,
       maps: source.maps,
       receipts: source.datasets.receipts,
-      sourceQueryPages: page.revisions[0]!.standaloneExternalDataset
-        ? [
-            {
-              pageLegacyId: page.legacyId,
-              pageId: page.pageId,
-              pageVersion: page.revisions[0]!.version,
-              standaloneExternalDataset:
-                page.revisions[0]!.standaloneExternalDataset,
-            },
-          ]
-        : [],
+      sourceQueryPages: page.revisions
+        .filter((r) => r.standaloneExternalDataset)
+        .map((r) => ({
+          pageLegacyId: page.legacyId,
+          pageId: page.pageId,
+          pageVersion: r.version,
+          standaloneExternalDataset: r.standaloneExternalDataset,
+        })),
       bindings: prepared.bindings.filter(
         (b) => b.pageLegacyId === page.legacyId,
       ),
@@ -92,18 +99,32 @@ export async function prepareStandaloneDatasetJob(
         manifestSha256: source.datasets.provenance.relationManifestSha256,
       },
     });
-    const version = plan.metadata.versions.find(
-      (v) =>
-        v.legacyId === page.legacyId &&
-        v.version === artifact.artifacts[0]!.version,
+    const originals = admitStandaloneDatasetHistory(
+      artifact,
+      admission,
+      page.legacyId,
     );
-    const models=page.revisions[0]!.standaloneDataset?.models;
-    if(version&&models)attestStandaloneDatasetModels(artifact.artifacts[0]!,version,models);
-    if (
-      !version ||
-      (!page.revisions[0]!.standaloneExternalDataset &&
-        version.unavailableTables.length && !models?.length)
-    ) {
+    let invalidVersion = false;
+    for (const revision of page.revisions) {
+      const version = plan.metadata.versions.find(
+        (v) => v.legacyId === page.legacyId && v.version === revision.version,
+      );
+      const models = revision.standaloneDataset?.models;
+      if (version && models)
+        attestStandaloneDatasetModels(
+          originals.find((r) => r.version === revision.version)!,
+          version,
+          models,
+        );
+      if (
+        !version ||
+        (!revision.standaloneExternalDataset &&
+          version.unavailableTables.length &&
+          !models?.length)
+      )
+        invalidVersion = true;
+    }
+    if (invalidVersion) {
       issues.set(page.legacyId, ["dataset-source-registration-required"]);
       continue;
     }
@@ -153,10 +174,32 @@ export async function prepareStandaloneDatasetJob(
       prepared.receipts.filter((r) => r.pageLegacyId === page.legacyId),
     );
     for (const row of plan.browserBindings) {
-      if(models?.length){
-        const catalog=(artifact.artifacts[0]!.meta as {catalog:{tables:{schema:string;name:string}[]}}).catalog;
-        const order=new Map(catalog.tables.map((t,i)=>[JSON.stringify([t.schema,t.name]),i]));
-        row.binding={...row.binding,tables:[...row.binding.tables,...models.map(m=>({schema:m.schema,table:m.table,columns:m.columns}))].sort((a,b)=>order.get(JSON.stringify([a.schema,a.table]))!-order.get(JSON.stringify([b.schema,b.table]))!)};
+      const models = page.revisions.find((r) => r.version === row.pageVersion)
+        ?.standaloneDataset?.models;
+      if (models?.length) {
+        const catalog = (
+          originals.find((r) => r.version === row.pageVersion)!.meta as {
+            catalog: { tables: { schema: string; name: string }[] };
+          }
+        ).catalog;
+        const order = new Map(
+          catalog.tables.map((t, i) => [JSON.stringify([t.schema, t.name]), i]),
+        );
+        row.binding = {
+          ...row.binding,
+          tables: [
+            ...row.binding.tables,
+            ...models.map((m) => ({
+              schema: m.schema,
+              table: m.table,
+              columns: m.columns,
+            })),
+          ].sort(
+            (a, b) =>
+              order.get(JSON.stringify([a.schema, a.table]))! -
+              order.get(JSON.stringify([b.schema, b.table]))!,
+          ),
+        };
       }
       pageSources.set(
         migrationDatasetVersionKey(row.pageLegacyId, row.pageVersion),
@@ -167,14 +210,16 @@ export async function prepareStandaloneDatasetJob(
         [row.binding],
       );
     }
-    if (page.revisions[0]!.standaloneExternalDataset) {
+    for (const revision of page.revisions.filter(
+      (r) => r.standaloneExternalDataset,
+    )) {
       const receipt = prepared.receipts.find(
         (r) =>
           r.pageLegacyId === page.legacyId &&
-          r.pageVersion === page.revisions[0]!.version,
+          r.pageVersion === revision.version,
       )!;
       const tables = (
-        artifact.artifacts[0]!.meta as {
+        originals.find((r) => r.version === revision.version)!.meta as {
           catalog: { tables: { schema: string; name: string }[] };
         }
       ).catalog.tables;
@@ -185,7 +230,7 @@ export async function prepareStandaloneDatasetJob(
           registered: true,
           backendNamespace: "legacyData",
           backendHref: new URL(receipt.backendHref).pathname,
-          tables: page.revisions[0]!.sourceQueries!.map((query, i) => ({
+          tables: revision.sourceQueries!.map((query, i) => ({
             schema: tables[i]!.schema,
             table: tables[i]!.name,
             queryName: query.name,
@@ -213,7 +258,10 @@ export async function prepareStandaloneDatasetJob(
         pagesWithMembers: 0,
         pagesWithViewer: 0,
         headImports: pages.length,
-        historicalImports: 0,
+        historicalImports: pages.reduce(
+          (n, p) => n + p.revisions.length - 1,
+          0,
+        ),
         groupOwnedPages: 0,
         unresolvedPages: issues.size,
       },

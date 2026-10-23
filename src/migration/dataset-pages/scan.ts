@@ -1,3 +1,8 @@
+import { createDeletedArtifactAdmissionValidator } from "../deleted-artifact-admission.ts";
+import {
+  standaloneDatasetEditIdentity,
+  admitStandaloneDatasetHistory,
+} from "./history.ts";
 import { attestStandaloneDatasetModels } from "./models.ts";
 import { catalogVersion, receiptMap } from "../datasets/catalog.ts";
 import { attestMigrationSourceQueries } from "../source-query-preparation.ts";
@@ -30,15 +35,27 @@ export async function scanStandaloneDatasetPages(
     !admission.heads.length
   )
     throw Error("Invalid standalone dataset admission");
+  const assertDeleted = deletedAdmission
+    ? createDeletedArtifactAdmissionValidator(
+        deletedAdmission,
+        source.manifest.sourceNamespace,
+        source.maps,
+      )
+    : undefined;
   const unique = new Set<string>();
   const pages: MigrationBackendPage[] = [];
   const issues = new Map<string, string[]>();
   if (
-    new Set((admission.external ?? []).map((e) => e.legacyId)).size !==
-      (admission.external ?? []).length ||
+    new Set(
+      (admission.external ?? []).map((e) =>
+        admission.history
+          ? JSON.stringify([e.legacyId, e.version])
+          : e.legacyId,
+      ),
+    ).size !== (admission.external ?? []).length ||
     (admission.external ?? []).some(
       (e) =>
-        !admission.heads.some(
+        ![...admission.heads, ...(admission.history?.revisions ?? [])].some(
           (h) =>
             h.legacyId === e.legacyId &&
             h.version === e.version &&
@@ -47,7 +64,25 @@ export async function scanStandaloneDatasetPages(
     )
   )
     throw Error("Invalid standalone external admission");
-  if(new Set((admission.models??[]).map(m=>m.legacyId)).size!==(admission.models??[]).length||(admission.models??[]).some(m=>!admission.heads.some(h=>h.legacyId===m.legacyId&&h.version===m.version&&h.artifactSha256===m.artifactSha256)))throw Error("Invalid stored model admission scope");
+  if (
+    new Set(
+      (admission.models ?? []).map((m) =>
+        admission.history
+          ? JSON.stringify([m.legacyId, m.version])
+          : m.legacyId,
+      ),
+    ).size !== (admission.models ?? []).length ||
+    (admission.models ?? []).some(
+      (m) =>
+        ![...admission.heads, ...(admission.history?.revisions ?? [])].some(
+          (h) =>
+            h.legacyId === m.legacyId &&
+            h.version === m.version &&
+            h.artifactSha256 === m.artifactSha256,
+        ),
+    )
+  )
+    throw Error("Invalid stored model admission scope");
   for (const expected of admission.heads) {
     if (
       unique.has(expected.legacyId) ||
@@ -63,11 +98,12 @@ export async function scanStandaloneDatasetPages(
     if (
       head.id !== expected.legacyId ||
       head.format !== "dataset" ||
-      head.deleted_at ||
+      (head.deleted_at && !assertDeleted) ||
       head.version !== expected.version ||
       datasetPageArtifactSha256(head) !== expected.artifactSha256
     )
       throw Error("Standalone dataset source changed");
+    if (head.deleted_at) assertDeleted!(head);
     const owner = resolveMigrationOwnership(
       head,
       source.manifest.sourceNamespace,
@@ -84,45 +120,112 @@ export async function scanStandaloneDatasetPages(
       !source.maps.pages[head.id]
     )
       throw Error("Standalone dataset owner unavailable");
-    const catalog =
-      head.meta && typeof head.meta === "object"
-        ? (head.meta as Record<string, unknown>).catalog
-        : undefined;
-    if (
-      catalog &&
-      typeof catalog === "object" &&
-      (catalog as { kind?: unknown }).kind === "postgres"
-    ) {
-      if (head.dataset_policy != null)
-        throw Error(
-          "Standalone external dataset policy requires explicit admission",
+    const originals = admitStandaloneDatasetHistory(
+      artifact,
+      admission,
+      expected.legacyId,
+    );
+    for (const original of originals) {
+      const head: import("../contracts.ts").LegacyArtifact = {
+        ...artifact.artifacts[0]!,
+        ...original,
+        id: expected.legacyId,
+      };
+      const artifactSha256 = datasetPageArtifactSha256(original);
+      const editIdentity = standaloneDatasetEditIdentity(
+        original,
+        original.version !== artifact.artifacts[0]!.version,
+      );
+      const catalog =
+        head.meta && typeof head.meta === "object"
+          ? (head.meta as Record<string, unknown>).catalog
+          : undefined;
+      if (
+        catalog &&
+        typeof catalog === "object" &&
+        (catalog as { kind?: unknown }).kind === "postgres"
+      ) {
+        if (head.dataset_policy != null)
+          throw Error(
+            "Standalone external dataset policy requires explicit admission",
+          );
+        const external = admission.external?.find(
+          (e) => e.legacyId === head.id && e.version === head.version,
         );
-      const external = admission.external?.find((e) => e.legacyId === head.id);
-      if (!external) {
-        issues.set(head.id, ["external-registration-required"]);
+        if (!external) {
+          issues.set(head.id, ["external-registration-required"]);
+          continue;
+        }
+        if (
+          admission.models?.some(
+            (m) => m.legacyId === head.id && m.version === head.version,
+          )
+        )
+          throw Error("External dataset cannot receive stored model authority");
+        const queries = attestMigrationSourceQueries(
+          external.declarations,
+          head.id,
+          head.version,
+          external.queries,
+        );
+        const trusted = (options.sourceQueryRegistrations ?? []).filter(
+          (q) => q.pageLegacyId === head.id && q.pageVersion === head.version,
+        );
+        if (
+          !Array.isArray((catalog as { tables?: unknown }).tables) ||
+          queries.length !== (catalog as { tables: unknown[] }).tables.length ||
+          !queries.length ||
+          queries.some(
+            (q) =>
+              q.sourceRef !== "ref:" + head.id || Object.keys(q.params).length,
+          ) ||
+          canonicalMigrationValue(queries) !== canonicalMigrationValue(trusted)
+        )
+          throw Error("Standalone external trusted registration differs");
+        pages.push({
+          legacyId: head.id,
+          pageId: source.maps.pages[head.id]!,
+          owner: owner as MigrationBackendPage["owner"],
+          revisions: [
+            {
+              version: head.version,
+              ...editIdentity,
+              imports: [],
+              readsViewer: true,
+              sourceQueries: queries,
+              standaloneExternalDataset: {
+                sourceFormat: "dataset",
+                legacyId: head.id,
+                pageId: source.maps.pages[head.id]!,
+                pageVersion: head.version,
+                ...editIdentity,
+                artifactSha256,
+              },
+            },
+          ],
+        });
         continue;
       }
-      if(admission.models?.some(m=>m.legacyId===head.id))throw Error("External dataset cannot receive stored model authority");
-      const queries = attestMigrationSourceQueries(
-        external.declarations,
-        head.id,
-        head.version,
-        external.queries,
-      );
-      const trusted = (options.sourceQueryRegistrations ?? []).filter(
-        (q) => q.pageLegacyId === head.id && q.pageVersion === head.version,
-      );
       if (
-        !Array.isArray((catalog as { tables?: unknown }).tables) ||
-        queries.length !== (catalog as { tables: unknown[] }).tables.length ||
-        !queries.length ||
-        queries.some(
-          (q) =>
-            q.sourceRef !== "ref:" + head.id || Object.keys(q.params).length,
-        ) ||
-        canonicalMigrationValue(queries) !== canonicalMigrationValue(trusted)
+        admission.external?.some(
+          (e) => e.legacyId === head.id && e.version === head.version,
+        )
       )
-        throw Error("Standalone external trusted registration differs");
+        throw Error("Standalone external source kind differs");
+      const modelAdmission = admission.models?.find(
+        (m) => m.legacyId === head.id && m.version === head.version,
+      );
+      const models = modelAdmission
+        ? attestStandaloneDatasetModels(
+            original,
+            catalogVersion(
+              original,
+              head.id,
+              receiptMap(source.datasets!.receipts),
+            ),
+            modelAdmission.attestations,
+          )
+        : undefined;
       pages.push({
         legacyId: head.id,
         pageId: source.maps.pages[head.id]!,
@@ -130,56 +233,39 @@ export async function scanStandaloneDatasetPages(
         revisions: [
           {
             version: head.version,
-            editId: String(head.edit_id ?? ""),
-            imports: [],
-            readsViewer: true,
-            sourceQueries: queries,
-            standaloneExternalDataset: {
+            ...editIdentity,
+            standaloneDataset: {
+              ...(models ? { models } : {}),
               sourceFormat: "dataset",
               legacyId: head.id,
               pageId: source.maps.pages[head.id]!,
               pageVersion: head.version,
-              editId: String(head.edit_id ?? ""),
-              artifactSha256: expected.artifactSha256,
+              ...editIdentity,
+              artifactSha256,
             },
+            imports: [
+              {
+                name: "data",
+                legacyRef: "ref:" + head.id,
+                datasetLegacyId: head.id,
+                datasetVersion: head.version,
+                mode: "live",
+              },
+            ],
           },
         ],
       });
-      continue;
     }
-    if (admission.external?.some((e) => e.legacyId === head.id))
-      throw Error("Standalone external source kind differs");
-    const modelAdmission=admission.models?.find(m=>m.legacyId===head.id);
-    const models=modelAdmission ? attestStandaloneDatasetModels(head,catalogVersion(head,head.id,receiptMap(source.datasets!.receipts)),modelAdmission.attestations) : undefined;
-    pages.push({
-      legacyId: head.id,
-      pageId: source.maps.pages[head.id]!,
-      owner: owner as MigrationBackendPage["owner"],
-      revisions: [
-        {
-          version: head.version,
-          editId: String(head.edit_id ?? ""),
-          standaloneDataset: {
-            ...(models ? {models} : {}),
-            sourceFormat: "dataset",
-            legacyId: head.id,
-            pageId: source.maps.pages[head.id]!,
-            pageVersion: head.version,
-            editId: String(head.edit_id ?? ""),
-            artifactSha256: expected.artifactSha256,
-          },
-          imports: [
-            {
-              name: "data",
-              legacyRef: "ref:" + head.id,
-              datasetLegacyId: head.id,
-              datasetVersion: head.version,
-              mode: "live",
-            },
-          ],
-        },
-      ],
-    });
   }
-  return { pages, issues };
+  const grouped = new Map<string, MigrationBackendPage>();
+  for (const page of pages) {
+    const prior = grouped.get(page.legacyId);
+    if (prior)
+      grouped.set(page.legacyId, {
+        ...prior,
+        revisions: [...prior.revisions, ...page.revisions],
+      });
+    else grouped.set(page.legacyId, page);
+  }
+  return { pages: [...grouped.values()], issues };
 }

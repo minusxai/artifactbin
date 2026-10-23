@@ -1,3 +1,4 @@
+import { standaloneDatasetEditIdentity, assertStandaloneDatasetEditIdentity } from "../dataset-pages/history.ts";
 import {createDeletedArtifactAdmissionValidator} from "../deleted-artifact-admission.ts";
 import { attestStandaloneDatasetModels } from "../dataset-pages/models.ts";
 import { datasetPageArtifactSha256 } from "../dataset-pages/scan.ts";
@@ -342,7 +343,7 @@ export function planDatasetMetadata(
     const archivedPages = external ? (manifest.tables.artifact_versions ?? []).filter(r => r.artifact_id === member.pageLegacyId && r.version === member.pageVersion && r.format === "dataset") : [];
     if(archivedPages.some(r=>canonical(r)!==canonical(archivedPages[0])))throw Error("Ambiguous historical external dataset page");
     const original = headPage?.version === member.pageVersion ? headPage : archivedPages[0];
-    const page = headPage?.version === member.pageVersion ? headPage : headPage && original && external ? {...headPage,...original,id:headPage.id,edit_id:original.edit_id} : undefined;
+    const page = headPage?.version === member.pageVersion ? headPage : headPage && original && external ? {...headPage,...original,id:headPage.id,edit_id:standaloneDatasetEditIdentity(original,true).editId} : undefined;
     if (
       !page ||
       (page.format !== "markup" &&
@@ -362,6 +363,7 @@ export function planDatasetMetadata(
       throw Error("Invalid member page provenance");
     if (external) {
       const p=external;
+      assertStandaloneDatasetEditIdentity(original!,original!==headPage,p);
       if (p.sourceFormat!=="dataset" || p.legacyId!==page.id || p.pageId!==member.pageId || p.pageVersion!==member.pageVersion || p.editId!==page.edit_id || p.artifactSha256!==datasetPageArtifactSha256(original!)) throw Error("Invalid standalone external provenance");
     }
     addPage(page, {...member, ...(external ? {standaloneExternalDataset:external} : {})});
@@ -386,7 +388,7 @@ export function planDatasetMetadata(
               ...headPage,
               ...archivedPages[0],
               id: headPage.id,
-              edit_id: archivedPages[0].edit_id,
+              edit_id: b.standaloneDataset ? standaloneDatasetEditIdentity(archivedPages[0],true).editId : archivedPages[0].edit_id,
             }
           : undefined;
     const mode = b.mode ?? "live";
@@ -417,7 +419,8 @@ export function planDatasetMetadata(
       throw Error("Invalid or unresolved dataset binding");
     if (b.standaloneDataset) {
       const p = b.standaloneDataset;
-      if(p.models)attestStandaloneDatasetModels(page,version,p.models);
+      assertStandaloneDatasetEditIdentity(b.pageVersion===headPage?.version ? headPage : archivedPages[0]!,b.pageVersion!==headPage?.version,p);
+      if(p.models)attestStandaloneDatasetModels(headPage && b.pageVersion===headPage.version ? headPage : archivedPages[0]!,version,p.models);
       if (page.format !== "dataset" || p.sourceFormat !== "dataset" || b.pageLegacyId !== b.datasetLegacyId || p.legacyId !== page.id || p.pageId !== b.pageId || p.pageVersion !== b.pageVersion || p.editId !== page.edit_id || b.datasetVersion !== page.version || p.artifactSha256 !== datasetPageArtifactSha256(b.pageVersion === headPage?.version ? headPage : archivedPages[0]!)) throw Error("Invalid standalone dataset provenance");
     }
     const key = JSON.stringify([

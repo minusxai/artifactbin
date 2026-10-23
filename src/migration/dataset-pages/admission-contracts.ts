@@ -9,6 +9,16 @@ export interface StandaloneDatasetJobAdmission {
     /** Required to introduce an original resource not present in the completed base. */
     resourceSha256?: string;
   }[];
+  /** Opt-in exact complete inventory of distinct saved non-head dataset versions.
+   * Omitted originals stay absent; version one is never synthesized. */
+  history?: {
+    kind: "standalone-dataset-history-v1";
+    revisions: readonly {
+      legacyId: string;
+      version: number;
+      artifactSha256: string;
+    }[];
+  };
   /** Entire frozen source-ID and base backend-ID inventory, including deleted/blocked source artifacts. */
   reservedFileIds: readonly string[];
   base: AdditiveDatasetBaseApproval;
@@ -83,5 +93,7 @@ export interface StandaloneDatasetPageProvenance {
   pageId: string;
   pageVersion: number;
   editId: string;
+  /** Explicit internal identity derived only when the saved original has no edit_id. */
+  editIdentity?: "source-version-sha256";
   artifactSha256: string;
 }
