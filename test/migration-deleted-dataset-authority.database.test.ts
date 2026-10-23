@@ -69,6 +69,32 @@ test(
       };
       const destination = new PostgresDatasetMetadataDestination(db, schema);
       await destination.import(base);
+      const personDescriptor = {
+        valueName: "self",
+        backendId: "Backend01",
+        backendVersion: "v1",
+        pageId: "Deleted1",
+        pageVersion: 1,
+      };
+      const choiceDescriptor = {
+        name: "ownerChoice",
+        column: "owner_id",
+        bindingName: "data",
+        schema: "public",
+        table: "rows",
+        sourceColumn: "owner_id",
+      };
+      const insertProtectedRegistrations = async () => {
+        await db.query(
+          "INSERT INTO dataset_person_bindings VALUES ('Backend01','v1','Deleted1',1,'self','fixture',$1)",
+          [personDescriptor],
+        );
+        await db.query(
+          "INSERT INTO dataset_user_choice_bindings VALUES ('Backend01','v1','Deleted1',1,'fixture','ownerChoice','owner_id',$1)",
+          [choiceDescriptor],
+        );
+      };
+      await insertProtectedRegistrations();
       const fingerprint = (
         await db.query(
           `SELECT fingerprint FROM ${schema}_migration.dataset_receipts`,
@@ -79,6 +105,17 @@ test(
         schema,
         base,
         "test",
+      );
+      assert.deepEqual(
+        inventory.protectedRows
+          .filter((r) =>
+            ["dataset_person_bindings", "dataset_user_choice_bindings"].includes(
+              r.table,
+            ),
+          )
+          .map((r) => r.table)
+          .sort(),
+        ["dataset_person_bindings", "dataset_user_choice_bindings"],
       );
       const report = JSON.stringify({
         complete: true,
@@ -168,6 +205,11 @@ test(
         created: 2,
         unchanged: 0,
       });
+      await db.query(
+        "DELETE FROM dataset_person_bindings WHERE backend_id='Backend01'; DELETE FROM dataset_user_choice_bindings WHERE backend_id='Backend01'",
+      );
+      await assert.rejects(destination.import(batch), /protected|missing/i);
+      await insertProtectedRegistrations();
       assert.deepEqual(await destination.import(batch), {
         created: 0,
         unchanged: 2,

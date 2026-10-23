@@ -13,6 +13,21 @@ import {
 import { migrationDatasetTablePlans } from "./dataset-table-plans.ts";
 import { destinationSchemas } from "./destination-schema.ts";
 const protectedTables = {
+  dataset_person_bindings: [
+    "backend_id",
+    "backend_version",
+    "page_id",
+    "page_version",
+    "value_name",
+  ],
+  dataset_user_choice_bindings: [
+    "backend_id",
+    "backend_version",
+    "page_id",
+    "page_version",
+    "name",
+    "column_name",
+  ],
   dataset_mutation_operations: [
     "backend_id",
     "backend_version",
@@ -257,6 +272,51 @@ export async function verifyDeletedDatasetAuthority(
           binding_name: bindingName,
           dataset_id: o.datasetId,
           operation: o,
+        });
+    if (table === "dataset_person_bindings")
+      for (const r of batch.metadata.personBindings ?? [])
+        approve({
+          backend_id: r.backendId,
+          backend_version: r.backendVersion,
+          page_id: r.pageId,
+          page_version: r.pageVersion,
+          value_name: r.valueName,
+          source_namespace: a.sourceNamespace,
+          descriptor: r,
+        });
+    if (table === "dataset_user_choice_bindings")
+      for (const r of (
+        batch.metadata as typeof batch.metadata & {
+          userChoiceBindings?: readonly {
+            backendId: string;
+            backendVersion: string;
+            pageId: string;
+            pageVersion: number;
+            name: string;
+            column: string;
+            bindingName: string;
+            schema: string;
+            table: string;
+            sourceColumn: string;
+          }[];
+        }
+      ).userChoiceBindings ?? [])
+        approve({
+          backend_id: r.backendId,
+          backend_version: r.backendVersion,
+          page_id: r.pageId,
+          page_version: r.pageVersion,
+          name: r.name,
+          column_name: r.column,
+          source_namespace: a.sourceNamespace,
+          descriptor: {
+            name: r.name,
+            column: r.column,
+            bindingName: r.bindingName,
+            schema: r.schema,
+            table: r.table,
+            sourceColumn: r.sourceColumn,
+          },
         });
     if (table === "dataset_source_queries")
       for (const { receipt, queries } of batch.sourceQueryRegistrations ?? [])

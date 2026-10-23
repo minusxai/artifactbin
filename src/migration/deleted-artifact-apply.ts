@@ -103,7 +103,7 @@ export async function applyDeletedArtifactPlan(
 export async function applyDeletedArtifactReplay(input:{validated:ValidatedDeletedArtifactReplay;maps:MigrationMaps;destination:DeletedArtifactDestination;verifyProtectedState():Promise<void>;importMetadata():Promise<void>;verifyDeletedState(manifest:DeletedArtifactReplayManifest,pages:AsyncIterable<PlannedPage>):Promise<MigrationRuntimeVerification>}):Promise<DeletedArtifactApplyResult>{
  const {validated,maps,destination}=input;
  const manifest=validated.manifest;
- await destination.prepareDeleted({sourceNamespace:manifest.sourceNamespace,archiveDigest:manifest.archiveDigest,maps});
+ await destination.prepareDeleted({sourceNamespace:manifest.sourceNamespace,archiveDigest:manifest.archiveDigest,maps,publications:validated.publications});
  await input.verifyProtectedState();
  let created=0,unchanged=0;
  for await(const {page,digest} of validated.pages()){

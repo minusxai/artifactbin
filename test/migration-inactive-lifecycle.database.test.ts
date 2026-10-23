@@ -4,6 +4,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { testDatabase } from "./postgres.js";
 import { planMigration, migrationPageDigest } from "../src/migration/import.ts";
+import { prepareDeletedArtifactPlan } from "../src/migration/deleted-artifact-plan.ts";
+import { validateDeletedArtifactReplay, serializeDeletedArtifactReplayPage } from "../src/migration/deleted-artifact-replay.ts";
+import { applyDeletedArtifactReplay } from "../src/migration/deleted-artifact-apply.ts";
+import { verifyDeletedMigrationRuntime } from "../src/migration/page-verification.ts";
 import {
   PostgresMigrationDestination,
   buildAccountMaps,
@@ -14,6 +18,8 @@ import { boundedBackendSchema } from "../src/graphql/execution-policy.ts";
 import { sealDeployment } from "../src/backend/deployment.ts";
 import { canonicalMigrationValue } from "../src/migration/verification-values.ts";
 import type { MigrationManifest } from "../src/migration/contracts.ts";
+const canonicalSha = (value: unknown) =>
+  createHash("sha256").update(canonicalMigrationValue(value)).digest("hex");
 test("deleted lifecycle importer publishes viewer backend while file remains inactive", async () => {
   const db = await testDatabase(),
     client = await db.pool.connect();
@@ -126,6 +132,73 @@ test("deleted lifecycle importer publishes viewer backend while file remains ina
       await destination.importDeletedPage(key, digest, page),
       "unchanged",
     );
+    const admission = {
+      kind: "deleted-artifact-admission-v1" as const,
+      sourceNamespace: manifest.sourceNamespace,
+      archiveDigest: createHash("sha256")
+        .update(JSON.stringify(manifest))
+        .digest("hex"),
+      entries: [
+        {
+          legacyId: page.legacyId,
+          pageId: page.pageId,
+          headVersion: page.original.version,
+          deletedAt: String(page.original.deleted_at),
+          artifactSha256: canonicalSha(page.original),
+          revisions: page.revisions.map((revision) => ({
+            version: revision.version,
+            artifactSha256: canonicalSha(revision.original),
+          })),
+        },
+      ],
+    };
+    const replayPlan = prepareDeletedArtifactPlan({
+      admission,
+      pages: [page],
+      protectedPageIds: new Set(),
+    });
+    const replayEntry = replayPlan.pages[0]!;
+    const replayBytes = Buffer.from(
+      serializeDeletedArtifactReplayPage(replayEntry),
+    );
+    const replayManifest = {
+      kind: "deleted-artifact-replay-plan-v1" as const,
+      sourceNamespace: replayPlan.sourceNamespace,
+      archiveDigest: replayPlan.archiveDigest,
+      admissionSha256: replayPlan.admissionSha256,
+      pageCount: 1,
+      revisionCount: replayEntry.page.revisions.length,
+      canonicalPlanSha256: canonicalSha(replayPlan),
+      pages: [
+        {
+          legacyId: page.legacyId,
+          pageId: page.pageId,
+          bytes: replayBytes.byteLength,
+          sha256: createHash("sha256").update(replayBytes).digest("hex"),
+        },
+      ],
+    };
+    const replay = await validateDeletedArtifactReplay({
+      manifest: replayManifest,
+      admission,
+      source: { read: async () => new Uint8Array(replayBytes) },
+      protectedPageIds: new Set(),
+    });
+    const replayResult = await applyDeletedArtifactReplay({
+      validated: replay,
+      maps: plan.maps,
+      destination,
+      verifyProtectedState: async () => {},
+      importMetadata: async () => {},
+      verifyDeletedState: async (_manifest, pages) =>
+        verifyDeletedMigrationRuntime(client, db.schema, {
+          maps: plan.maps,
+          origin: options.origin,
+          pages,
+        }),
+    });
+    assert.equal(replayResult.complete, true);
+    assert.equal(replayResult.unchanged, 1);
     assert.equal(
       (
         await client.query(

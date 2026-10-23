@@ -154,6 +154,66 @@ test("replay refuses a changed page file before returning a usable source", asyn
   );
 });
 
+test("replay snapshot and lossless object codec resist authority mutation and prototype keys", async () => {
+  const f = fixture();
+  const validated = await validateDeletedArtifactReplay({
+    manifest: f.manifest,
+    admission: f.admission,
+    source: f.source,
+    protectedPageIds: new Set(),
+  });
+  const originalPageId = validated.manifest.pages[0]!.pageId;
+  f.manifest.pages[0]!.pageId = "attacker-page";
+  f.admission.entries[0]!.pageId = "attacker-page";
+  assert.equal(validated.manifest.pages[0]!.pageId, originalPageId);
+  assert.equal(Object.isFrozen(validated.manifest.pages[0]), true);
+  const replayed = await validated.pages().next();
+  assert.equal(replayed.value?.page.pageId, originalPageId);
+
+  const entry = structuredClone(f.persistedEntries[0]!);
+  const special = Object.create(null) as Record<string, unknown>;
+  Object.defineProperty(special, "$deletedArtifactReplayType", {
+    value: "ordinary-user-value",
+    enumerable: true,
+  });
+  Object.defineProperty(special, "__proto__", {
+    value: { constructor: "kept" },
+    enumerable: true,
+  });
+  entry.page.original.document = special;
+  const decoded = deserializeDeletedArtifactReplayPage(
+    serializeDeletedArtifactReplayPage(entry),
+  );
+  const document = decoded.page.original.document as Record<string, unknown>;
+  assert.equal(Object.hasOwn(document, "__proto__"), true);
+  assert.deepEqual(document.__proto__, { constructor: "kept" });
+  assert.equal(document.$deletedArtifactReplayType, "ordinary-user-value");
+  const duplicate = Buffer.from(
+    '{"$deletedArtifactReplayType":"object","entries":[["x",1],["x",2]]}',
+  );
+  assert.throws(
+    () => deserializeDeletedArtifactReplayPage(duplicate),
+    /Invalid deleted artifact replay plan/,
+  );
+});
+
+test("replay page codec accepts the observed 45.9 MB persisted page without a cache-size cap", () => {
+  const targetBytes = 45_922_484;
+  const prefix = Buffer.from(
+    `{"page":{},"digest":"${"a".repeat(64)}"}`,
+    "utf8",
+  );
+  const checkpoint = Buffer.concat([
+    prefix,
+    Buffer.alloc(targetBytes - prefix.byteLength, 0x20),
+  ]);
+  assert.equal(checkpoint.byteLength, targetBytes);
+  assert.equal(
+    deserializeDeletedArtifactReplayPage(checkpoint).digest,
+    "a".repeat(64),
+  );
+});
+
 test("replay refuses omitted, reordered, or mismatched manifest coverage", async () => {
   const f = fixture();
   const omitted = {
@@ -203,9 +263,11 @@ test("replay applies one page at a time, then runs metadata and full replay veri
     protectedPageIds: new Set(),
   });
   const events: string[] = [];
+  let preparedPublications: readonly Record<string, unknown>[] = [];
   const destination = {
-    prepareDeleted: async () => {
+    prepareDeleted: async (input: { publications?: readonly Record<string, unknown>[] }) => {
       events.push("prepare");
+      preparedPublications = input.publications ?? [];
     },
     supportsExactDeletedAccess: () => true,
     importDeletedPage: async (key: string) => {
@@ -246,6 +308,22 @@ test("replay applies one page at a time, then runs metadata and full replay veri
     },
   });
   assert.equal(result.complete, true);
+  assert.deepEqual(
+    preparedPublications.map(({ legacyId, pageId, headVersion, deletedAt, artifactSha256 }) => ({
+      legacyId,
+      pageId,
+      headVersion,
+      deletedAt,
+      artifactSha256,
+    })),
+    f.admission.entries.map(({ legacyId, pageId, headVersion, deletedAt, artifactSha256 }) => ({
+      legacyId,
+      pageId,
+      headVersion,
+      deletedAt,
+      artifactSha256,
+    })),
+  );
   assert.equal(result.pages, 2);
   assert.equal(result.revisions, 2);
   assert.deepEqual(events, [

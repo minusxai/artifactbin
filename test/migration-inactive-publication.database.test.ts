@@ -20,6 +20,10 @@ import {
 import { loadDatasetViewer } from "../src/persistence/dataset-viewer.ts";
 import { canonicalMigrationValue } from "../src/migration/verification-values.ts";
 import type { DeletedMigrationPublicationContext } from "../src/migration/inactive-publication-contracts.ts";
+import { prepareDeletedArtifactPlan } from "../src/migration/deleted-artifact-plan.ts";
+import { validateDeletedArtifactReplay } from "../src/migration/deleted-artifact-replay.ts";
+import { applyDeletedArtifactReplay } from "../src/migration/deleted-artifact-apply.ts";
+import { serializeDeletedArtifactReplayPage } from "../src/migration/deleted-artifact-replay.ts";
 test("inactive publication preserves deletion, requires exact raw/head evidence, retries and restores under current ACL", async () => {
   const { env } = await fixture(),
     client = await env.pool.connect();
@@ -30,6 +34,12 @@ test("inactive publication preserves deletion, requires exact raw/head evidence,
       deleted_at: deletedAt,
       format: "markup",
       source: "original",
+      user_id: "owner",
+      group_id: null,
+      token_id: null,
+      document: null,
+      visibility: "private",
+      link_role: "viewer",
     },
     sha = (v: unknown) =>
       createHash("sha256").update(canonicalMigrationValue(v)).digest("hex");
@@ -95,19 +105,13 @@ test("inactive publication preserves deletion, requires exact raw/head evidence,
         viewer,
       ),
     );
-    for (let i = 0; i < 2; i++) {
-      await registerInactiveMigrationViewerBinding(client, viewer, p);
-      const publication = await assertDeletedMigrationPublication(
-        client,
-        p,
-        viewer,
-      );
-      await registerInactiveDatasetAttachments({
-        client,
-        registrations: [reg],
-        publication,
-      });
-    }
+    await registerInactiveMigrationViewerBinding(client, viewer, p);
+    const publication = await assertDeletedMigrationPublication(client, p, viewer);
+    await registerInactiveDatasetAttachments({
+      client,
+      registrations: [reg],
+      publication,
+    });
     const batch: DatasetMigrationBatch = {
       baseManifestSha256: "a".repeat(64),
       relationManifestSha256: "b".repeat(64),
@@ -177,6 +181,133 @@ test("inactive publication preserves deletion, requires exact raw/head evidence,
     await assert.rejects(
       registerMigrationDatasetAttachments(client, env.schema, wrong),
     );
+    const page = {
+      legacyId: "old-page",
+      pageId: "Pg0001",
+      owner: { kind: "user" as const, id: "old-owner" },
+      disposition: "ready" as const,
+      issues: [],
+      original,
+      access: { visibility: "private", linkRole: "viewer", shares: [] },
+      comments: [],
+      identities: [],
+      revisions: [
+        {
+          version: 1,
+          original,
+          conversion: {
+            classification: "functional" as const,
+            html: "<html><body>saved</body></html>",
+            issues: [],
+            identities: {},
+          },
+        },
+      ],
+    };
+    const canonicalSha = (value: unknown) =>
+      createHash("sha256").update(canonicalMigrationValue(value)).digest("hex");
+    const admission = {
+      kind: "deleted-artifact-admission-v1" as const,
+      sourceNamespace: "legacy",
+      archiveDigest: p.archiveDigest,
+      entries: [
+        {
+          legacyId: "old-page",
+          pageId: "Pg0001",
+          headVersion: 1,
+          deletedAt,
+          artifactSha256: p.artifactSha256,
+          revisions: [{ version: 1, artifactSha256: p.artifactSha256 }],
+        },
+      ],
+    };
+    const planned = prepareDeletedArtifactPlan({
+      admission,
+      pages: [page],
+      protectedPageIds: new Set(),
+    });
+    const persistedEntry = planned.pages[0]!;
+    const persistedBytes = Buffer.from(
+      serializeDeletedArtifactReplayPage(persistedEntry),
+    );
+    const replayManifest = {
+      kind: "deleted-artifact-replay-plan-v1" as const,
+      sourceNamespace: planned.sourceNamespace,
+      archiveDigest: planned.archiveDigest,
+      admissionSha256: planned.admissionSha256,
+      pageCount: 1,
+      revisionCount: 1,
+      canonicalPlanSha256: canonicalSha({
+        ...planned,
+        pages: [persistedEntry],
+      }),
+      pages: [
+        {
+          legacyId: "old-page",
+          pageId: "Pg0001",
+          bytes: persistedBytes.byteLength,
+          sha256: createHash("sha256").update(persistedBytes).digest("hex"),
+        },
+      ],
+    };
+    const validated = await validateDeletedArtifactReplay({
+      manifest: replayManifest,
+      admission,
+      source: { read: async () => new Uint8Array(persistedBytes) },
+      protectedPageIds: new Set(),
+    });
+    let replayPublication: Record<string, unknown> | undefined;
+    const replayResult = await applyDeletedArtifactReplay({
+      validated,
+      maps: { pages: { "old-page": "Pg0001" }, users: {}, groups: {}, tokens: {} },
+      destination: {
+        prepareDeleted: async ({ publications }) => {
+          assert.equal(publications?.length, 1);
+          replayPublication = publications?.[0];
+        },
+        supportsExactDeletedAccess: () => true,
+        importDeletedPage: async () => {
+          const replayProof = await assertDeletedMigrationPublication(
+            client,
+            { ...p, ...replayPublication } as DeletedMigrationPublicationContext,
+            viewer,
+          );
+          await registerInactiveMigrationViewerBinding(client, viewer, {
+            ...p,
+            ...replayPublication,
+          } as DeletedMigrationPublicationContext);
+          await registerInactiveDatasetAttachments({
+            client,
+            registrations: [reg],
+            publication: replayProof,
+          });
+          return "unchanged";
+        },
+      },
+      verifyProtectedState: async () => {},
+      importMetadata: async () => {},
+      verifyDeletedState: async (_manifest, pages) => {
+        let pagesCount = 0,
+          sources = 0;
+        for await (const current of pages) {
+          pagesCount++;
+          sources += current.revisions.length;
+        }
+        return {
+          pages: pagesCount,
+          sources,
+          comments: 0,
+          snapshots: 0,
+          assets: 0,
+          backendLinks: 0,
+          normalizedBytes: 0,
+        };
+      },
+    });
+    assert.equal(replayResult.complete, true);
+    assert.equal(replayResult.unchanged, 1);
+    assert.equal(replayPublication?.legacyId, "old-page");
+    assert.equal(replayPublication?.pageId, "Pg0001");
     assert.equal(
       (await client.query("SELECT deleted_at::text FROM files")).rows[0]
         .deleted_at,

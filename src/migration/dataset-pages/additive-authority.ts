@@ -19,6 +19,21 @@ const backendTables = {
   af_backend_pages: ["page_id"],
 } as const;
 const protectedTables = {
+  dataset_person_bindings: [
+    "backend_id",
+    "backend_version",
+    "page_id",
+    "page_version",
+    "value_name",
+  ],
+  dataset_user_choice_bindings: [
+    "backend_id",
+    "backend_version",
+    "page_id",
+    "page_version",
+    "name",
+    "column_name",
+  ],
   dataset_mutation_operations: [
     "backend_id",
     "backend_version",

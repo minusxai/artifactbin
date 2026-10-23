@@ -33,6 +33,7 @@ export interface DeletedArtifactReplayPageSource {
 export interface DeletedArtifactReplayPageEntry {page:PlannedPage;digest:string}
 export interface ValidatedDeletedArtifactReplay {
  manifest:DeletedArtifactReplayManifest;
+ publications:readonly Omit<import('./inactive-publication-contracts.ts').DeletedMigrationPublicationContext,'schema'>[];
  pages():AsyncGenerator<DeletedArtifactReplayPageEntry>;
 }
 export interface DeletedArtifactReplayPreflightBinding {

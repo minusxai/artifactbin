@@ -61,10 +61,30 @@ test('fixed deleted job imports pages and exact metadata before verified complet
  const replayablePlan={...plan,pages:replayRows};
  const replayManifest={kind:'deleted-artifact-replay-plan-v1' as const,sourceNamespace:plan.sourceNamespace,archiveDigest:plan.archiveDigest,admissionSha256:plan.admissionSha256,...(plan.metadataBinding?{metadataBinding:plan.metadataBinding}:{}),pageCount:replayRows.length,revisionCount:replayRows.reduce((n,p)=>n+p.page.revisions.length,0),canonicalPlanSha256:sha(canonicalMigrationValue(replayablePlan)),pages:replayRefs};
  const replayBytes=new Map(replayRows.map((row,index)=>[row.page.legacyId,new Uint8Array(persisted[index]!)]));
- const replayPageSource={read:async(ref:DeletedArtifactReplayPageRef)=>replayBytes.get(ref.legacyId)!};
+ let mutateDuringReplay=false,mutatedDuringReplay=false;
+ const replayPageSource={read:async(ref:DeletedArtifactReplayPageRef)=>{
+  if(mutateDuringReplay&&!mutatedDuringReplay){
+   mutatedDuringReplay=true;
+   maps.pages[original.id]='Changed1';
+   admission.entries[0]!.pageId='Changed1';
+   metadata.metadata.pages=[];
+   destination.sourceNamespace='changed-namespace';
+   replayManifest.pages[0]!.pageId='Changed1';
+  }
+  return replayBytes.get(ref.legacyId)!;
+ }};
  const replayJobInput={destination,admission,manifest:replayManifest,maps,metadata,pageSource:replayPageSource};
  const preflight=await validateDeletedArtifactReplayJob(replayJobInput);
+ const originalMetadataPages=structuredClone(metadata.metadata.pages);
+ mutateDuringReplay=true;
  const replayResult=await runDeletedArtifactReplayJob({...input,manifest:replayManifest,pageSource:replayPageSource,preflight});
+ mutateDuringReplay=false;
+ assert.equal(mutatedDuringReplay,true);
+ maps.pages[original.id]=original.id;
+ admission.entries[0]!.pageId=original.id;
+ metadata.metadata.pages=originalMetadataPages;
+ destination.sourceNamespace=manifest.sourceNamespace;
+ replayManifest.pages[0]!.pageId=original.id;
  assert.equal(replayResult.complete,true);
  assert.equal(replayResult.unchanged,1);
  assert.equal(replayResult.pages,1);

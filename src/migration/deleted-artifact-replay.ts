@@ -20,6 +20,15 @@ const refuse = (): never => {
 };
 const undefinedTag = "$deletedArtifactReplayType";
 
+function freezeTree<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>))
+      freezeTree(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 function encodeReplayValue(value: unknown): unknown {
   if (value === undefined) return { [undefinedTag]: "undefined" };
   if (Array.isArray(value)) return value.map(encodeReplayValue);
@@ -58,7 +67,12 @@ function decodeReplayValue(value: unknown): unknown {
           Object.hasOwn(result, pair[0])
         )
           refuse();
-        result[pair[0]] = decodeReplayValue(pair[1]);
+        Object.defineProperty(result, pair[0], {
+          value: decodeReplayValue(pair[1]),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
       }
       return result;
     }
@@ -195,15 +209,18 @@ export async function validateDeletedArtifactReplay(input: {
   onPage?: (page: PlannedPage) => void;
 }): Promise<ValidatedDeletedArtifactReplay> {
   const { manifest, admission, source, protectedPageIds } = input;
-  validateManifest(manifest, admission);
+  const manifestSnapshot = freezeTree(structuredClone(manifest));
+  const admissionSnapshot = freezeTree(structuredClone(admission));
+  const protectedSnapshot = new Set(protectedPageIds);
+  validateManifest(manifestSnapshot, admissionSnapshot);
   const validatePage = createDeletedArtifactPageValidator(
-    admission,
-    protectedPageIds,
+    admissionSnapshot,
+    protectedSnapshot,
   );
-  const header = planHeader(manifest);
+  const header = planHeader(manifestSnapshot);
   const hasher = createDeletedArtifactPlanHasher(header);
   let revisions = 0;
-  for (const ref of manifest.pages) {
+  for (const ref of manifestSnapshot.pages) {
     const entry = await readEntry(source, ref);
     if (
       entry.page.legacyId !== ref.legacyId ||
@@ -221,18 +238,40 @@ export async function validateDeletedArtifactReplay(input: {
     hasher.update(entry);
   }
   if (
-    revisions !== manifest.revisionCount ||
-    hasher.digest() !== manifest.canonicalPlanSha256
+    revisions !== manifestSnapshot.revisionCount ||
+    hasher.digest() !== manifestSnapshot.canonicalPlanSha256
   )
     refuse();
+  const admissionByLegacy = new Map(
+    admissionSnapshot.entries.map((entry) => [entry.legacyId, entry]),
+  );
+  const publications = Object.freeze(
+    manifestSnapshot.pages.map((ref) => {
+      const entry = admissionByLegacy.get(ref.legacyId);
+      const admitted = entry ?? refuse();
+      if (admitted.pageId !== ref.pageId) refuse();
+      return Object.freeze({
+        kind: "deleted-migration-publication-v1" as const,
+        sourceNamespace: manifestSnapshot.sourceNamespace,
+        archiveDigest: manifestSnapshot.archiveDigest,
+        admissionSha256: manifestSnapshot.admissionSha256,
+        legacyId: admitted.legacyId,
+        pageId: admitted.pageId,
+        headVersion: admitted.headVersion,
+        deletedAt: admitted.deletedAt,
+        artifactSha256: admitted.artifactSha256,
+      });
+    }),
+  );
   return {
-    manifest,
+    manifest: manifestSnapshot,
+    publications,
     pages: async function* () {
       const validateReplayPage = createDeletedArtifactPageValidator(
-        admission,
-        protectedPageIds,
+        admissionSnapshot,
+        protectedSnapshot,
       );
-      for (const ref of manifest.pages) {
+      for (const ref of manifestSnapshot.pages) {
         const entry = await readEntry(source, ref);
         const checked = validateReplayPage(entry.page);
         if (
