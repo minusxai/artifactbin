@@ -1,17 +1,16 @@
 /**
  * Gate: WHO YOU ARE, AND WHAT IS YOURS — from a guest's first document to an account's shared workspace.
  *
- * No credential is ever shown to a person: the CLI's device approval (or an OAuth client's consent) is the only
- * door to one, a browser holds an httpOnly cookie and nothing in storage, and what a guest made follows them into
- * the account they verify. Each leg below is a different person, so they run at once in one browser (the
+ * Account API credentials come from an email-session grant or an OAuth client's consent. A browser holds an
+ * httpOnly cookie and nothing in storage; its artifacts belong to the verified account. Each leg below is a different person, so they run at once in one browser (the
  * start-page leg in its own, for the system clipboard), over one mail sink:
  *
- *   start    the guest start page makes a document and copies a tokenless paste; HTTP creation hands out no
- *            credential; the browser approves the CLI for its guest; the page fills in live when the agent
+ *   start    the signed-in start page makes a document and copies a tokenless paste; creation hands out no
+ *            credential; an email-session grant supplies HTTP authority; the page fills in live when the agent
  *            writes (formerly gate-simpler-start).
  *   door     the OAuth consent screen in a real browser — no guest grant, a signed-out visitor sent to log in
  *            and back, the form's redirect not blocked by `form-action` — and, signed in, the account-bound
- *            consent reaching the client and the CLI approved from the browser (formerly gate-oauth-browser and
+ *            consent reaching the client and an HTTP grant issued to the browser session (formerly gate-oauth-browser and
  *            gate-app-flows AUTH). The email-code door's own facts (no code in the response, one mail per
  *            request, a wrong code refused, sign out, the same account on the way back in) are
  *            services/auth/__tests__/login-routes.test.ts's ("the email-code door"); its form's change-email,
@@ -30,21 +29,14 @@
  *            agent publishes joins the open page live,
  *            an editor gets the verbs, a stranger never sees the private child, move/rename/card/trash/restore
  *            (formerly gate-folders).
- *   cli      the CLI's acceptance against this host: device login, guest merge into the account, dataset
- *            identities, private access, bound query, two-workspace conflict, a real PNG export
- *            (formerly gate-cli-conformance). `CONFORMANCE__CLI` substitutes the executable under test and
- *            `CONFORMANCE__CREDENTIAL_SOURCE` takes the account from the eval's credential helper instead of
- *            this browser — the reference-compatibility job's matrix.
  *
  * The fork and folders legs share one owner: an account that adopted a guest connection, the credential an
  * agent would hold. Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
  *
  *   usage: node scripts/gates/gate-accounts-and-workspace.mjs [base]
  */
-import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
-import { join } from 'node:path';
 import { documentFrame, DOCUMENT_FRAME, servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import { jsonRouteResponse, createdDocumentResponse } from './lib/json-route-response.mjs';
@@ -54,13 +46,13 @@ import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { bearerApi, connectAgent } from './lib/cli-connection.mjs';
-import { cliConformance } from './lib/cli-conformance.mjs';
 import { mergeGuestIntoAccount } from '../lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs, passTheWelcomePage } from '../lib/mail-login.mjs';
 
 const BASE = new URL(process.argv[2] ?? 'http://localhost:3030').origin;
 const check = createChecker('accounts-and-workspace');
 const stamp = Date.now().toString(36);
+const htmlPage = (body, title = 'Gate page') => `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><script data-af="core" src="/af/v1/core.js"></script></head><body>${body}</body></html>`;
 const sink = await startMailSink();
 const browser = await launchChromium();
 const context = () => browser.newContext({ viewport: { width: 1400, height: 950 } });
@@ -121,39 +113,27 @@ async function startLeg() {
       check(!('token' in started) && !('expiresAt' in started), 'and the API body hands out NO credential and no expiry');
       check(!/mx_/.test(JSON.stringify(started)), 'nothing token-shaped rides the response at all');
       check((await page.context().cookies(BASE)).some(c => /better-auth/.test(c.name) && c.httpOnly), 'email ownership uses an HttpOnly account session');
-      // The COPIED paste is tokenless and points at afbin — the agent-facing surface carries no secret.
+      // The copied handoff is tokenless and points to the HTTP authoring guide.
       check(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
-      check(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
+      check(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (the agent authenticates separately)');
       check(!/\/start\?k=/.test(prompt), 'and carries no start link');
       check(prompt.length < 600 && prompt.includes("\n\nIf the user hasn't specified a task, ask what artifact they'd like to build."), `and includes a short question for the user (${prompt.length} chars)`);
-      check(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
+      check(prompt.includes('/llms.txt') && !/\bafbin (?:auth|push|help)\b/.test(prompt), 'the paste points to the HTTP authoring guide without a retired CLI command');
       check(prompt.includes('/llms.txt') && !/ensure-node|afbin help|--server/.test(prompt), 'and links to the shared setup guide while keeping the handoff short');
 
       // The retired doors (the start-link brief, its claim door, the public anonymous mint) answering 404 are HTTP
       // facts with no browser in them: services/app/server/__tests__/docs-human.test.ts asserts them on the app server.
 
-      // ── the agent's leg: connect the way afbin does, then write ──
+      // ── the agent's leg: obtain the account HTTP grant, then write ──
       // OSS has the same artifact API for browser and HTTP clients; creation never
-      // grants a credential. Device approval still owns CLI authentication.
+      // grants a credential. The supported email-session grant owns HTTP API authentication.
       // Signed-out HTTP creation's 401 with no artifact and no cookie is start-flow.test.ts's ("refuses a signed-out starter").
       // The start door is the thing under test, so this leg cannot use the shared
       // start helper — it walks the same two steps by hand.
-      const agent = await connectAgent(BASE);
-      check(/^mx_/.test(agent.token ?? ''), 'the CLI device approval is the only way a credential exists');
-      const approval = await (await fetch(`${BASE}/api/agent-approvals`, {
-        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${agent.token}` },
-        body: JSON.stringify({ artifactId: id }),
-      })).json();
-      await page.goto(approval.verification_uri_complete);
-      await page.getByRole('button', { name: 'Approve access', exact: true }).click();
-      await page.getByRole('heading', { name: 'Access approved', exact: true }).waitFor();
-      const granted = await fetch(`${BASE}/api/agent-approvals/token`, {
-        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${agent.token}` },
-        body: JSON.stringify({ device_code: approval.device_code }),
-      });
-      const connection = await granted.json();
-      check(granted.ok && !!connection.access_token, 'the browser connects the CLI to its guest user');
-      agent.token = connection.access_token;
+      const granted = await page.request.post(`${BASE}/api/authentication/token`, {headers:{Origin:BASE},data:{}});
+      must(granted.status() === 201, 'the signed-in browser grants its account API credential');
+      const agent = {token:(await granted.json()).access_token};
+      const current = await (await fetch(`${BASE}/api/artifacts/${id}`, {headers:{Authorization:`Bearer ${agent.token}`}})).json();
 
       await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
       const put = await fetch(`${BASE}/api/artifacts/${id}`, {
@@ -161,8 +141,8 @@ async function startLeg() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${agent.token}` },
         body: JSON.stringify({
           title: 'gate doc',
-          markup: '<div data-design="tw" className="p-10"><h1 className="text-4xl font-bold">Landed by the agent</h1></div>',
-          theme: 'modernist',
+          html: htmlPage('<h1>Landed by the agent</h1>', 'gate doc'),
+          expectedVersion:current.version, expectedState:current.state,
         }),
       });
       check(put.status === 200, `the connection edits the original browser-created artifact (PUT ${put.status})`);
@@ -277,7 +257,7 @@ async function doorLeg() {
       const granted = await grant.json();
       const accountToken = granted.access_token;
       must(typeof accountToken === 'string' && accountToken.length > 0, 'the email session receives its API credential');
-      const published = await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ title: 'Connected artifact', markup: '<h1>connected</h1>' }) });
+      const published = await fetch(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accountToken}` }, body: JSON.stringify({ title: 'Connected artifact', html: htmlPage('<h1>connected</h1>') }) });
       must(published.status === 201, `the connection publishes its artifact (${published.status})`);
       await page.goto(`${BASE}/`, { waitUntil: 'load' });
       // The Solid dashboard loads its account listing after navigation; load + a fixed delay
@@ -327,7 +307,7 @@ async function forkLeg(owner) {
     const doc = await owner.api('/api/artifacts', {
       title: 'Fork gate',
       visibility: 'public',
-      markup: '<div class="p-8"><h1>Fork gate</h1><p>The original, published by its owner.</p></div>',
+      html: htmlPage('<div class="p-8"><h1>Fork gate</h1><p>The original, published by its owner.</p></div>'),
     });
     must(doc.visibility === 'public', 'a PUBLIC document — the case a stranger can reach at all');
 
@@ -459,9 +439,9 @@ async function foldersLeg(owner) {
     must(folder.format === 'folder' && folder.visibility === 'public', 'a public folder, created with no content');
     const seen = await owner.api('/api/artifacts', {
       title: 'Opening Note', visibility: 'public', parent_id: folder.id,
-      markup: '<div class="p-8"><h1>Opening Note</h1><p>the first note.</p></div>',
+      html: htmlPage('<div class="p-8"><h1>Opening Note</h1><p>the first note.</p></div>'),
     });
-    await owner.api('/api/artifacts', { title: 'Quiet Note', parent_id: folder.id, markup: '<div class="p-8"><h1>Quiet Note</h1></div>' });
+    await owner.api('/api/artifacts', { title: 'Quiet Note', parent_id: folder.id, html: htmlPage('<div class="p-8"><h1>Quiet Note</h1></div>') });
     // "raw is the uniform 404 for a folder" is an HTTP fact: folder-page.test.ts "has no document to serve: raw AND
     // the live frame are the uniform 404" asserts it on the routes.
 
@@ -518,7 +498,7 @@ async function foldersLeg(owner) {
     await o.evaluate(() => { window.__gateMark = 'kept'; });
     const live = await owner.api('/api/artifacts', {
       title: 'Live Note', visibility: 'public', parent_id: folder.id,
-      markup: '<div class="p-8"><h1>Live Note</h1></div>',
+      html: htmlPage('<div class="p-8"><h1>Live Note</h1></div>'),
     });
     await step('a document published by an agent joins the OPEN folder listing', () => o.locator('[aria-label^="Open Live Note"]').waitFor({ timeout: 20000 }));
     check(await o.evaluate(() => window.__gateMark === 'kept'), 'and it arrived with no page reload');
@@ -559,7 +539,7 @@ async function foldersLeg(owner) {
     check((await o.locator('[aria-label="Move to Field Notes"]').count()) === 1, 'the picker offers the account’s folders by name');
     await o.getByLabel('Move to root', { exact: true }).click();
     await Promise.all([
-      o.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/artifacts/${live.id}/edits`) && r.status() === 200, { timeout: 15000 }),
+      o.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/api/my/artifacts/${live.id}`) && r.status() === 200, { timeout: 15000 }),
       o.getByRole('button', { name: 'Move here', exact: true }).click(),
     ]);
     const moved = await o.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}`)).json()), live.id);
@@ -676,99 +656,6 @@ async function foldersLeg(owner) {
   await editorCtx.close();
   await strangerCtx.close();
 }
-
-// ── hosted restart recovery: compiled-browser coverage against a deterministic transport fixture ──
-async function hostedRestartLeg(owner) {
-  const { must, run } = lane(check, 'hosted-restart');
-  const page = await owner.newPage();
-  const session = {
-    id: `mxmx_test_restart_${stamp}`, runId: `mxmx_test_run_${stamp}`, name: 'mxmx-test-restart',
-    harness: 'codex', cwd: '/home/runner', machine: 'Hosted', online: true, controller: 'web',
-    cols: 100, rows: 30, exitCode: null, managed: true, activity: 'working',
-  };
-  const starting = { ...session, online: false, activity: 'starting' };
-  const capacityMessage = 'Waiting for compute capacity. Your agent will start automatically when a slot is available.';
-  let current = { ...session, online: false, activity: 'queued' };
-  const bodies = [];
-  const restartBodies = [];
-  let restarting = false;
-  let admitted = false;
-  let releaseAdmission;
-  const admissionReady = new Promise(resolve => { releaseAdmission = resolve; });
-  try {
-    await run(async () => {
-      await page.route('**/api/run-capabilities', route => route.fulfill({
-        status: 200, contentType: 'application/json', body: JSON.stringify({ version: 1, managedProcesses: true }),
-      }));
-      await page.route('**/api/runs', async route => {
-        const body = route.request().postDataJSON();
-        bodies.push(body);
-        if (restarting) restartBodies.push(body);
-        // Cancellation must work regardless of how many retries happened before the click.
-        // Keep that phase pending; the fresh click then owns one pending retry and admission.
-        if (!restarting || restartBodies.length === 1) {
-          await route.fulfill({ status: 409, headers: { 'Retry-After': '0.5' }, contentType: 'application/json', body: JSON.stringify({ error: 'box_restart_pending' }) });
-        } else {
-          await admissionReady;
-          admitted = true;
-          await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ runId: session.runId, session }) });
-        }
-      });
-      await page.route('**/api/remote/sessions**', route => {
-        const url = new URL(route.request().url());
-        const body = url.pathname === '/api/remote/sessions'
-          ? { sessions: admitted ? [current] : [] }
-          : { session: current, seq: 0, generation: session.runId, frames: [], snapshot: (current.activity === 'queued' ? capacityMessage : 'Starting your hosted box…') + '\r\n' };
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-      });
-      await page.goto(`${BASE}/chat`, { waitUntil: 'load' });
-      await page.getByRole('complementary', { name: 'Agents' }).getByRole('button', { name: 'Provision cloud agent', exact: true }).click();
-      await page.getByRole('textbox', { name: 'Agent name' }).fill(session.name);
-      await page.getByRole('group', { name: 'Hosted program' }).getByRole('button', { name: 'Codex', exact: true }).click();
-      await page.getByRole('button', { name: 'Start hosted box', exact: true }).click();
-      await page.getByText('Finishing the previous hosted box…', { exact: true }).waitFor({ state: 'visible' });
-      check(await page.getByRole('textbox', { name: 'Agent name' }).isDisabled(), 'the submitted box name stays frozen during teardown');
-      check(await page.getByRole('group', { name: 'Hosted program' }).getByRole('button', { name: 'Codex', exact: true }).isDisabled(), 'the submitted program stays frozen during teardown');
-      check(await page.getByRole('textbox', { name: 'SSH public key' }).isDisabled(), 'the submitted SSH key stays frozen during teardown');
-      await page.getByRole('button', { name: 'Stop waiting', exact: true }).click();
-      await page.getByRole('alert').getByText('Stopped waiting. Your hosted box may still be stopping. Check your sessions before starting again.', { exact: true }).waitFor({ state: 'visible' });
-      const stoppedCount = bodies.length;
-      // Cross the minimum retry delay after cancellation, independently of pre-click retries.
-      await page.waitForTimeout(1_100);
-      check(bodies.length === stoppedCount, `stopping the browser wait does not submit a follow-up retry (${stoppedCount} before, ${bodies.length} after)`);
-      restarting = true;
-      await page.getByRole('button', { name: 'Start hosted box', exact: true }).waitFor({ state: 'visible' });
-      await page.getByRole('button', { name: 'Start hosted box', exact: true }).click();
-      await page.getByText('Finishing the previous hosted box…', { exact: true }).waitFor({ state: 'visible' });
-      releaseAdmission();
-      await page.getByRole('button', { name: `Open ${session.name}`, exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
-      await page.waitForFunction(name => [...document.querySelectorAll('button[aria-pressed="true"]')].some(button => button.getAttribute('aria-label') === `Open ${name}`), session.name);
-      await page.getByText('codex · Waiting for capacity', { exact: true }).waitFor({ state: 'visible' });
-      await page.getByText('Waiting for capacity · codex · Cloud box', { exact: true }).waitFor({ state: 'visible' });
-      await page.getByRole('status').filter({ hasText: capacityMessage }).waitFor({ state: 'visible' });
-      check(await page.getByRole('textbox', { name: 'Message to agent' }).isDisabled(), 'capacity waiting disables terminal input');
-      check(await page.getByRole('button', { name: 'Stop agent', exact: true }).isEnabled(), 'capacity waiting remains cancelable');
-      current = starting;
-      await page.getByText('codex · Starting', { exact: true }).waitFor({ state: 'visible' });
-      await page.getByText('Starting · codex · Cloud box', { exact: true }).waitFor({ state: 'visible' });
-      await page.getByRole('status').filter({ hasText: 'Starting your hosted box…' }).waitFor({ state: 'visible' });
-      check(await page.getByRole('textbox', { name: 'Message to agent' }).isDisabled(), 'roster and terminal agree on Starting and do not enable input before the hosted terminal is ready');
-      current = { ...session, activity: 'listening' };
-      await page.getByText('Online · Ready · codex · Cloud box', { exact: true }).waitFor({ state: 'visible' });
-      await page.getByText('codex · Online · Ready', { exact: true }).waitFor({ state: 'visible' });
-      check(await page.getByRole('textbox', { name: 'Message to agent' }).isEnabled(), 'native readiness enables terminal input after capacity and startup');
-      must(restartBodies.length === 2, `a fresh click after Stop waiting retries one pending admission (${restartBodies.length} requests)`);
-      check(JSON.stringify(restartBodies[0]) === JSON.stringify(restartBodies[1]), 'the retried click reuses its exact request body and request id');
-      check(typeof restartBodies[0]?.requestId === 'string' && restartBodies[0].requestId.length > 0, 'the click carries one stable request id');
-      check(bodies[0]?.requestId !== restartBodies[0]?.requestId, 'a later click uses a fresh request id after the user stops waiting');
-      check(!(await page.locator('body').innerText()).includes('box_restart_pending'), 'the internal pending code is not shown as an error');
-    });
-  } finally {
-    releaseAdmission();
-    await page.close();
-  }
-}
-
 // A separate account prevents preference changes from racing the folder/fork fixtures.
 async function groupUiLeg() {
   const { must, run } = lane(check, 'group-ui');
@@ -811,16 +698,11 @@ async function groupUiLeg() {
   } finally { await ctx.close(); }
 }
 
-// ── cli: portable CLI/HTTP acceptance against this host — scripts/gates/lib/cli-conformance.mjs, shared with the
-// standalone scripts/gate-cli-conformance.mjs a downstream deployment runs against its own host.
-const cliLeg = () => cliConformance({ base: BASE, check, stamp, sink, context });
-
 const started = Date.now();
 await Promise.all([
   startLeg(),
   doorLeg(),
-  workspaceOwner().then((owner) => owner && Promise.all([forkLeg(owner), foldersLeg(owner), hostedRestartLeg(owner)])),
-  cliLeg(),
+  workspaceOwner().then((owner) => owner && Promise.all([forkLeg(owner), foldersLeg(owner)])),
   groupUiLeg(),
 ]);
 check.note(`account and workspace legs in ${((Date.now() - started) / 1000).toFixed(1)}s`);
