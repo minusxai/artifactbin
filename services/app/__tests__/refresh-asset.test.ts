@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * refresh_asset — the answer to "the source image changed".
  *
@@ -55,7 +56,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 
 const publishWithImage = async (token: string) => {
   const res = await createArtifact(request('/api/artifacts', { method: 'POST', token, json: {
-    markup: `<div><img src="${web}/photo.png" alt="p" /></div>`,
+    html: nativeHtml(`<div><img src="${web}/photo.png" alt="p" /></div>`),
   } }));
   expect(res.status).toBe(201);
   return (await res.json()) as { id: string };
@@ -125,7 +126,7 @@ describe('POST /api/artifacts/assets/refresh', () => {
     const t = await mintToken('t');
     const unseen = `${web}/photo.png?unseen=1`;
     const res0 = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
-      markup: `<div><img src="${unseen}" alt="p" /></div>`,
+      html: nativeHtml(`<div><img src="${unseen}" alt="p" /></div>`),
     } }));
     expect(res0.status).toBe(201);
     const made = (await res0.json()) as { id: string };

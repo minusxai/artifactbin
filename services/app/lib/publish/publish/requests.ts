@@ -1,3 +1,4 @@
+import {htmlAssetLinks} from '@/lib/html-page';
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
 import {htmlBackendNames,htmlPageDeclarations} from '@/lib/html-page';
 import {authorizeDatasetBinding} from '@/lib/dataset-graphql';
@@ -367,7 +368,7 @@ export async function refreshAssetsFor(
   if (id) {
     const row = await getArtifactFor(actor, id);
     if (!row) return json({ error: 'not_found' }, 404);
-    const named = collectExternalAssetUrls(row.source ?? '').all;
+    const named = row.format==='html' ? htmlAssetLinks(row.source ?? '').imageUrls : collectExternalAssetUrls(row.source ?? '').all;
     const held = await lookupWebAssets(named);
     urls = named.filter((u) => held.has(u));
     // The bytes belong to whoever the DOCUMENT belongs to, exactly as they did
