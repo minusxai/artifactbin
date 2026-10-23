@@ -1,3 +1,4 @@
+import type {PresenceViewer} from '@/lib/html-presence/contract';
 /**
  * Subscribe a mounted page to its
  * artifact's live document (`GET /a/<id>/events`).
@@ -49,6 +50,7 @@ interface LiveArtifactOptions {
    */
   whenIdle?: () => Promise<void>;
   /** A DATASET under this document changed (a named `data` frame — see app/a/[id]/events). */
+  onPresence?: (viewers:PresenceViewer[])=>void;
   onData?: (event: ArtifactDataEvent) => void;
   /** Native HTML reloads its server bootstrap on publication; it never fetches a JSX frame. */
   onPublication?: (version: number) => void;
@@ -173,6 +175,7 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
                 });
               }).catch(() => { /* the stream's own reconnect covers an unreachable server */ });
             },
+            onPresence: viewers => options.onPresence?.(viewers),
             onData: (frame) => {
               if (!Array.isArray(frame.datasets) || frame.datasets.length === 0) return;
               options.onData?.(frame);

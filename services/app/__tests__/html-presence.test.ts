@@ -1,5 +1,6 @@
 import {beforeEach,expect,it} from 'vitest';
-import {GET,POST} from '@/app/api/artifacts/[id]/presence/route';
+import {POST} from '@/app/api/artifacts/[id]/presence/route';
+import {GET} from '@/app/a/[id]/events/route';
 import {request,useAppHarness} from './harness';
 import {createUser} from '@/lib/accounts';
 import {runWithRequest} from '@/lib/platform';
@@ -14,7 +15,7 @@ it('enforces the original read ACL, source revision and exact platform origin be
  expect((await publish('prespublic',{session,revision:'2'})).status).toBe(400);
  expect((await publish('prespublic',{session,revision:'1'},{origin:'https://elsewhere.example'})).status).toBe(403);
  expect((await publish('presprivate',{session,revision:'1'},{actor:actor()})).status).toBe(200);
- const req=request('/api/artifacts/presprivate/presence');expect((await runWithRequest(req,()=>GET(req,params('presprivate')))).status).toBe(404);
+ const req=request('/a/presprivate/events');expect((await runWithRequest(req,()=>GET(req,params('presprivate')))).status).toBe(404);
 });
 it('assigns distinct public identities per window without broadcasting session secrets or page-controlled names',async()=>{
  const a=await(await publish('prespublic',{session,revision:'1',label:'Spoofed',cursor:{nodeId:'p',x:.4,y:.5}},{actor:actor()})).json();
@@ -23,12 +24,13 @@ it('assigns distinct public identities per window without broadcasting session s
  expect(a.id).toMatch(/^[a-f0-9]{64}$/);expect(a.id).not.toBe(b.id);expect(again.id).toBe(a.id);expect(JSON.stringify(a)).not.toContain(session);
  const guest=await(await publish('prespublic',{session,revision:'1'})).json();expect(guest.id).not.toBe(a.id);
 });
-it('fans a native cursor out to simultaneous live readers through the existing notification channel',async()=>{
- const readers=await Promise.all([0,1,2].map(async()=>{const req=request('/api/artifacts/presMixed/presence');const response=await runWithRequest(req,()=>GET(req,params('presMixed')));expect(response.status).toBe(200);return response.body!.getReader();}));
+it('fans a native cursor out to simultaneous mixed-case page readers on their existing document streams',async()=>{
+ const connections=await Promise.all([0,1,2].map(async()=>{const abort=new AbortController();const req=new Request(request('/a/presMixed/events'),{signal:abort.signal});const response=await runWithRequest(req,()=>GET(req,params('presMixed')));expect(response.status).toBe(200);return {abort,reader:response.body!.getReader()};}));
+ const readPresence=async(reader:ReadableStreamDefaultReader<Uint8Array>)=>{while(true){const chunk=await reader.read();if(chunk.done)throw new Error('Stream closed before presence');const text=new TextDecoder().decode(chunk.value);if(text.includes('event: presence'))return text;}};
  try{
-  await Promise.all(readers.map(reader=>reader.read()));
+  await Promise.all(connections.map(({reader})=>readPresence(reader)));
   await publish('presMixed',{session,revision:'1',cursor:{nodeId:'p',x:.4,y:.5},visible:true});
-  const received=await Promise.race([Promise.all(readers.map(reader=>reader.read())),new Promise<never>((_resolve,reject)=>setTimeout(()=>reject(new Error('Presence fanout timed out')),2000))]);
-  for(const chunk of received){const text=new TextDecoder().decode(chunk.value);expect(text).toContain('"nodeId":"p"');expect(text).not.toContain(session);}
- }finally{await Promise.all(readers.map(reader=>reader.cancel()));}
+  const received=await Promise.race([Promise.all(connections.map(({reader})=>readPresence(reader))),new Promise<never>((_resolve,reject)=>setTimeout(()=>reject(new Error('Presence fanout timed out')),2000))]);
+  for(const text of received){expect(text).toContain('"nodeId":"p"');expect(text).not.toContain(session);}
+ }finally{for(const {abort} of connections)abort.abort();await Promise.all(connections.map(({reader})=>reader.cancel()));}
 });

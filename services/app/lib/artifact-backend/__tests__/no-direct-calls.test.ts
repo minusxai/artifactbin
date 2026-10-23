@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 const APP = path.resolve(import.meta.dirname, '../../..');
 const CONE = [
+  'solid/document/create-reader-presence.ts',
   'solid/editor/ContextPanel.tsx',
   'solid/editor/create-in-place-edit.ts',
   'solid/editor/create-live-artifact.ts',

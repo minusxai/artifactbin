@@ -184,7 +184,7 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/artifacts/:id/mutate", dir: "/api/artifacts/[id]/mutate", methods: ["POST"], module: r34 },
   { path: "/api/artifacts/:id/policy", dir: "/api/artifacts/[id]/policy", methods: ["GET","PUT"], module: r35 },
   { path: "/api/artifacts/:id/prepare", dir: "/api/artifacts/[id]/prepare", methods: ["POST"], module: r36 },
-  { path: "/api/artifacts/:id/presence", dir: "/api/artifacts/[id]/presence", methods: ["GET","POST"], module: r37 },
+  { path: "/api/artifacts/:id/presence", dir: "/api/artifacts/[id]/presence", methods: ["POST"], module: r37 },
   { path: "/api/artifacts/:id/query", dir: "/api/artifacts/[id]/query", methods: ["POST"], module: r38 },
   { path: "/api/artifacts/:id/restore", dir: "/api/artifacts/[id]/restore", methods: ["POST"], module: r39 },
   { path: "/api/artifacts/:id/revert", dir: "/api/artifacts/[id]/revert", methods: ["POST"], module: r40 },

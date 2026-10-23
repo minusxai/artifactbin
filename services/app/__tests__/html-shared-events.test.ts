@@ -7,6 +7,15 @@ import {sseStream} from '@/__tests__/sse';
 import {resetLiveSubscriptions} from '@/lib/publish/realtime/live';
 import {setHtmlBackendStore} from '@/lib/html-backends';
 const harness=useAppHarness();
+// Presence shares this stream; dataset assertions wait for their named frame.
+async function nextData(stream:ReturnType<typeof sseStream>){
+ const deadline=Date.now()+3000;
+ while(Date.now()<deadline){
+  const event=(await stream.next(1,deadline-Date.now())).find(event=>event.event==='data');
+  if(event)return event;
+ }
+ throw new Error('Expected dataset data event');
+}
 beforeEach(resetLiveSubscriptions);
 it('two connected viewers hear committed stores; reconnect refetches writes missed while disconnected',async()=>{
  const token=await mintAccountToken('shared-events');
@@ -46,7 +55,7 @@ it('native live dataset links hear mutations and pinned aliases stay out of inva
   const {POST:mutate}=await import('@/app/api/artifacts/[id]/mutate/route');
   const write=await mutate(request(`/api/artifacts/${dataset}/mutate`,{method:'POST',token:token.token,json:{sql:"insert into public.rows (item) values ('two')"}}),{params:Promise.resolve({id:dataset})});
   expect(write.status).toBe(200);
-  const event=(await stream.next(1)).find(e=>e.event==='data');
+  const event=await nextData(stream);
   expect(event?.data.datasets).toEqual(['live']);
   expect(event?.data.revisions).toMatchObject({live:expect.stringContaining(`dataset:${dataset}:2:`)});
  }finally{stream.close();}

@@ -138,7 +138,7 @@ export function DocumentPage(): JSX.Element {
   const [nonce, setNonce] = createSignal<string | null>(null);
   const phone = createIsPhoneViewport();
   const runtimeRef: DocumentRuntimeRef = { current: null };
-  const readerPresence = createReaderPresence({id: id!, revision: String(page?.archived?.version ?? page?.surface?.version ?? 1), runtimeRef, nonce, enabled: () => ready() && page?.surface?.format === 'html' && !archivedNow()});
+  const readerPresence = createReaderPresence({id: id!, revision: String(page?.archived?.version ?? page?.surface?.version ?? 1), runtimeRef, nonce, backend, enabled: () => ready() && page?.surface?.format === 'html' && !archivedNow()});
   let story: FramedStory | null = null;
   /** The document's frame (create-framed-story), once this page has adopted the one the server drew. */
   const [documentFrame, setDocumentFrame] = createSignal<HTMLIFrameElement | null>(null);
@@ -179,6 +179,7 @@ export function DocumentPage(): JSX.Element {
     // revision changes atomically, while viewer state stays in browser storage.
     onPublication: page.surface.format === 'html' ? () => replaceDocument(window.location.href) : undefined,
     onAnnotations: setLiveAnnotations,
+    onPresence: readerPresence.receive,
     since: page.surface.runtime?.data.dataflow?.results?.since,
   }) : () => null;
 

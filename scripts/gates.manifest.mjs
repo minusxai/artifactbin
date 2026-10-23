@@ -63,6 +63,7 @@ export const GATE_SPECS = Object.freeze([
   // servers, CI's shape: 66s wall-clock); timeoutMs = max(60s, 3 × seconds), rounded up to ten seconds.
   // reader-shell and media were re-measured in one eight-gate container run of the gate diet (7s and 34s, from 22s
   // and 53s here); the seconds below keep a margin for that run's lighter load. Re-read both from CI.
+  { name: 'presence', needsMail: true, seconds: 25, timeoutMs: 90_000 },
   { name: 'reader-shell', needsMail: true, seconds: 12, timeoutMs: 60_000 },
   // Drives a server that serves every document on its own origin: the runner's do (APP__PAGES_HOST), so it boots none.
   { name: 'own-origin-script', needsMail: false, seconds: 17, timeoutMs: 60_000 },

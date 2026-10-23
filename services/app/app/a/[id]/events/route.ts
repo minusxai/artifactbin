@@ -1,3 +1,6 @@
+import {createPresenceRoom} from '@/lib/html-presence/room';
+import {presenceChannel} from '@/lib/html-presence/channel.server';
+import {PRESENCE_EVENT,type PresenceViewer} from '@/lib/html-presence/contract';
 /**
  * GET /a/:id/events — Server-Sent Events carrying this artifact's document
  * as it changes, so an open page (viewing OR editing) stays live.
@@ -19,7 +22,7 @@ import { canReadArtifact, getArtifactById, ownsArtifact, effectiveRole } from '@
 import { canAnnotate } from '@artifactbin/contracts';
 import { authorHandle, sessionActor } from '@/lib/accounts';
 import { ID_RE } from '@/lib/platform';
-import { subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
+import { subscribeChannel, subscribeToAnnotations, subscribeToArtifact, TooManyLiveChannels } from '@/lib/publish/realtime/live';
 import { STORY_ANNOTATIONS_EVENT, STORY_DATA_EVENT, type ArtifactDataEvent, type ArtifactVersionPing } from '@/lib/story-runtime/contract';
 import { changedSince, marksOf, marksOfToken, tokenOf,liveDatasetIds } from '@/lib/publish/realtime/dataset-marks';
 import { LIVE_KEEPALIVE_MS, liveKeepaliveFrame } from '@/lib/http';
@@ -81,6 +84,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const writer = writable.getWriter();
   let closed = false;
   let unsubscribe: (() => Promise<void>) | undefined;
+  let presenceRoom:Awaited<ReturnType<typeof createPresenceRoom>>|undefined;
+  let presenceWriting=false,latestPresence:PresenceViewer[]|null=null;
+  const writePresence=()=>{if(closed||presenceWriting||!latestPresence)return;const viewers=latestPresence;latestPresence=null;presenceWriting=true;void writer.write(encoder.encode(`event: ${PRESENCE_EVENT}\ndata: ${JSON.stringify(viewers)}\n\n`)).catch(()=>void close()).finally(()=>{presenceWriting=false;writePresence();});};
 
   /**
    * WHERE THIS READER STANDS: the mark of every dataset the stream follows (lib/publish/prepared/served-results
@@ -157,6 +163,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (closed) return;
     closed = true;
     clearInterval(keepalive);
+    presenceRoom?.dispose();latestPresence=null;
     if (unsubscribe) await unsubscribe().catch(() => {});
     if (annotationsUnsub) await annotationsUnsub().catch(() => {});
     for (const drop of datasetUnsubs.values()) await drop().catch(() => {});
@@ -286,6 +293,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     // window in which a write to this document's dataset reached nobody.
     // Later frames adjust the set when an edit changes what the document reads.
     await followDatasets(initial);
+    if(initial.format==='html')presenceRoom=await createPresenceRoom({revision:String(initial.version),
+      authorize:async()=>{const current=await getArtifactById(id);return !!current&&String(current.version)===String(initial.version)&&await canReadArtifact(current,actor);},
+      subscribe:(receive,lost)=>subscribeChannel(presenceChannel(id),receive,lost),
+      subscribeAcl:(changed,lost)=>subscribeToArtifact(id,changed,lost),
+      send:viewers=>{latestPresence=viewers;writePresence();},close:()=>void close(),
+      clock:{now:Date.now,setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>),setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>)}
+    });
     if (annotatorConnection) {
       try {
         annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations(), listenerLost);
