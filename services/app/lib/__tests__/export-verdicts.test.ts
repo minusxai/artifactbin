@@ -41,7 +41,7 @@ let n = 0;
 /** A fresh revision per test; the harness isolates persistent cache state. */
 // `source` rides along because the export door reads the document's own
 // `<Value>` declarations to canonicalize a link's selection (lib/export).
-const row = () => ({ id: 'exprt1', version: ++n + 1000, format: 'markup' as const, source: '<p>hi</p>' });
+const row = () => ({ id: 'exprt1', version: ++n + 1000, format: 'html' as const, source: '<!doctype html><html><head></head><body><p>hi</p></body></html>' });
 
 beforeEach(async () => { await resetExportRenderer(); });
 afterEach(async () => { await resetExportRenderer(); setServices({ browser: undefined }); });
@@ -133,7 +133,7 @@ describe('the one retry', () => {
 });
 
 describe('what the app asks the browser for', () => {
-  it('shoots a markup document from its own page, by a key it mints per attempt', async () => {
+  it('shoots a native HTML document from its own page, by a key it mints per attempt', async () => {
     const browser = scripted({ ok: false, reason: 'failed' }, PNG);
     await shoot(browser);
     for (const request of browser.seen) {
@@ -150,42 +150,13 @@ describe('what the app asks the browser for', () => {
     expect(browser.seen[0].url).not.toBe(browser.seen[1].url);
   });
 
-  it('lets a script document load its modules and waits for its components to mount before the shot', async () => {
-    const browser = scripted(PNG);
-    setServices({ browser });
-    const source = [
-      '<Helmet><script>{`',
-      "  import confetti from 'canvas-confetti';",
-      "  import { scale } from 'https://cdn.example.com/scale.js';",
-      '  export function Spark(props) { return <svg />; }',
-      '`}</script></Helmet>',
-      '<Spark><p>Loading…</p></Spark>',
-    ].join('\n');
-    await exportImageResponse({ id: 'exprt2', version: ++n + 1000, format: 'markup', source }, {}, 'http://localhost:3000');
-    const [request] = browser.seen;
-    expect(request.sameOriginOnly).toBe(true);
-    // The ESM CDN bare names resolve to, and the host a full-URL import names; nothing else.
-    expect(request.allowedOrigins).toEqual(['https://esm.sh', 'https://cdn.example.com']);
-    expect(request.waitForMountsMs).toBe(5000);
-  });
-
-  it('also admits the exact hosts a script document declares for scripts and connections, never a wildcard', async () => {
-    const browser = scripted(PNG);
-    setServices({ browser });
-    const source = [
-      '<Helmet>',
-      '<meta name="csp-connect" content="https://api.open-meteo.com https://*.example.org" />',
-      '<meta name="csp-script" content="https://cdn.plot.ly" />',
-      '<meta name="csp-img" content="https://images.example.com" />',
-      '<script>{`',
-      "  import { proxy } from 'page';",
-      '  export function Weather(props) { return <svg />; }',
-      '`}</script></Helmet>',
-      '<Weather><p>Loading…</p></Weather>',
-    ].join('\n');
-    await exportImageResponse({ id: 'exprt3', version: ++n + 2000, format: 'markup', source }, {}, 'http://localhost:3000');
-    const [request] = browser.seen;
-    expect(request.allowedOrigins).toEqual(['https://esm.sh', 'https://cdn.plot.ly', 'https://api.open-meteo.com']);
+  it('does not derive browser authority from authored scripts or metadata',async()=>{
+    const browser=scripted(PNG);setServices({browser});
+    const source='<!doctype html><html><head><meta name="csp-connect" content="https://api.example.test"><script type="module" src="https://cdn.example.test/page.js"></script></head><body>Page</body></html>';
+    await exportImageResponse({id:'exprt2',version:++n+1000,format:'html',source},{},'http://localhost:3000');
+    expect(browser.seen[0].sameOriginOnly).toBe(true);
+    expect(browser.seen[0].allowedOrigins).toBeUndefined();
+    expect(browser.seen[0].waitForMountsMs).toBeUndefined();
   });
 
   it('names the slide as a capture mode, not a separate verb', async () => {
@@ -197,7 +168,7 @@ describe('what the app asks the browser for', () => {
   it('asks for the card stage at the card viewport', async () => {
     const browser = scripted(PNG);
     await shoot(browser, { mode: 'card' });
-    expect(browser.seen[0].capture).toEqual({ card: { x: 0, y: 0, width: 1600 } });
+    expect(browser.seen[0].capture).toBe('card');
     expect(browser.seen[0].viewport).toEqual({ width: 1600, height: 840 });
   });
 });

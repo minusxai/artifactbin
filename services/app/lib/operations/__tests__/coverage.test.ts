@@ -29,9 +29,11 @@ function routePaths(dir: string, prefix: string, out: string[] = []): string[] {
 
 /** Routes that are deliberately NOT operations, each with its reason beside it here. */
 const EXCEPTIONS = new Set([
+  '/api/artifacts/{id}/graphql', // native page GraphQL transport; fields are admitted by the page schema
+  '/api/artifacts/{id}/edits', // retired atomic JSX editing route; answers 404
   '/api/artifacts/{id}/runs', // asynchronous execution admission; authoring adapter pins the program, no document edit
   '/api/artifacts/{id}/schedules', // runner scheduling control plane, not a document operation
-  '/api/artifacts/{id}/prepare', // authoring resource preparation; never edits the target document
+  '/api/artifacts/{id}/prepare', // retired authoring resource route; answers 404
   '/api/artifacts/reservations', // CLI identity-pool allocation, not an artifact operation
   '/api/artifacts/preflight', // read-only validation of the actual publication body
   '/api/artifacts/{id}/content', // immutable binary content download; no document rendering or imports
@@ -57,7 +59,6 @@ describe('the registry covers the surface', () => {
       ...routePaths(path.join(ROOT, 'app/api/artifacts'), '/api/artifacts'),
       ...routePaths(path.join(ROOT, 'app/api/datasets'), '/api/datasets'),
       ...routePaths(path.join(ROOT, 'app/api/secrets'), '/api/secrets'),
-      ...routePaths(path.join(ROOT, 'app/api/sessions'), '/api/sessions'),
       ...routePaths(path.join(ROOT, 'app/api/browser-sessions'), '/api/browser-sessions'),
       ...routePaths(path.join(ROOT, 'app/api/testusers'), '/api/testusers'),
       ...routePaths(path.join(ROOT, 'app/api/notification-runs'), '/api/notification-runs'),

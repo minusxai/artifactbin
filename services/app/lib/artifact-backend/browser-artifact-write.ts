@@ -1,9 +1,7 @@
-import {createDocumentGraph} from '../document/document-graph';
 /** Controls outside the live editor load an authoring snapshot, validate locally,
  * then submit one permission-scoped JSONB commit. Non-document metadata retains
  * its existing conditional protocol. */
 import type {DocumentGraph,DocumentUpdate} from '@artifactbin/contracts';
-import {prepareBrowserDocumentUpdate} from '../document/document-authoring-client';
 import {artifactRequests,createHttpBackend} from './http';
 import type {ArtifactBackend} from './types';
 /** Listings, folders and the social preview: an online write whose caller reads the Response itself. */
@@ -15,6 +13,7 @@ export async function writeBrowserArtifact(id:string,change:Record<string,unknow
  const {source,annotationOps,...fields}=change;
  if(source!==undefined&&head.edit_id!==editId)return Response.json({error:'doc_changed',edit_id:head.edit_id,version:head.version,source:head.markup},{status:409});
  if(head.document?.kind==='graph'&&head.format!=='folder'){
+  const {prepareBrowserDocumentUpdate}=await import('../document/document-authoring-client');
   const allowed=new Set(['title','description','theme','template','colorMode','visibility','linkRole','parent_id','shares']);
   if(Object.keys(fields).some(key=>!allowed.has(key)))return Response.json({error:'invalid_metadata',allowed:[...allowed]},{status:400});
   const metadata=Object.fromEntries(Object.entries(fields).filter(([k])=>['title','description','theme','template','colorMode'].includes(k))) as DocumentUpdate['metadata'];
@@ -35,6 +34,7 @@ export async function restoreBrowserArtifact(backend:ArtifactBackend,version:num
  const target=await backend.version(version);if(!target)return null;
  if(target.format!=='markup'){const reverted=await backend.revert({version,expectedVersion:head.version,expectedState:head.state as string});return reverted.ok?reverted.body.version:null;}
  if(typeof target.markup!=='string')return null;
+ const [{createDocumentGraph},{prepareBrowserDocumentUpdate}]=await Promise.all([import('../document/document-graph'),import('../document/document-authoring-client')]);
  const document=head.document?.kind==='graph'?head.document:createDocumentGraph('',head.version);
  const update=await prepareBrowserDocumentUpdate(backend,{...head,document,meta:{...head}},{source:target.markup,whole:true,metadata:{title:target.title??null,description:target.description??null,theme:target.meta.theme??null,template:target.meta.template??null,colorMode:target.meta.colorMode??null}});
  const committed=await backend.commitEdit({edit_id:head.edit_id,document_update:update});
