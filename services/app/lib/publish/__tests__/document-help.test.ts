@@ -4,7 +4,7 @@ import { AGENT_HELP_TITLE } from '@/lib/compiled-page/agent-discovery';
 import { assembleReaderPage } from '@/lib/compiled-page/assembler';
 import type { AssembleHead, AssembleInput, CompiledPage } from '@/lib/compiled-page/contract';
 
-const HELP = { url: 'https://x.test/llms.txt', cliInstruction: 'Optional CLI setup', instruction: 'afbin: a CLI to operate artifacts. Install: curl -fsSL https://x.test/chat/install.sh | sh' };
+const HELP = { url: 'https://x.test/llms.txt', instruction: 'Use the author skill and HTTP API at https://x.test/llms.txt' };
 const build = { id: 'b'.repeat(16), manifest: {} };
 const compiled: CompiledPage = {
   build: build.id, html: '<h1>Hello</h1>', islands: [], module: null, ssr: null,

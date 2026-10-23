@@ -10,7 +10,7 @@ export function createPreviewBackend(file:string,onSaved:(document:PreviewDocume
  };
  const editor=(operation:string,args:object={},signal?:AbortSignal)=>request('/editor',{operation,...args},signal);
  const refresh=async()=>{const response=await fetch('/document?file='+encodeURIComponent(file));if(!response.ok)throw new BackendRequestError('Could not reload saved file',response.status);onSaved(await response.json());};
- const reasons:Partial<Record<BackendFeature,string>>={webAssets:'Add files with afbin, then restart preview.',mentions:'Mentions are unavailable in local preview.',commentImages:'Comment screenshots are unavailable in local preview.',remoteSessions:'Agent sessions are unavailable in local preview.',live:'Local files refresh from disk.'};
+ const reasons:Partial<Record<BackendFeature,string>>={webAssets:'Add files with afbin, then restart preview.',mentions:'Mentions are unavailable in local preview.',commentImages:'Comment screenshots are unavailable in local preview.',live:'Local files refresh from disk.'};
  const unavailable=(feature:BackendFeature)=>reasons[feature]??null;
  const refuse=(feature:BackendFeature):never=>{throw new BackendRequestError(unavailable(feature)??'Unavailable in local preview',503);};
  return {
@@ -32,6 +32,6 @@ export function createPreviewBackend(file:string,onSaved:(document:PreviewDocume
   createAnnotation:(input,key)=>editor('annotations.create',{input,key}),
   actOnAnnotation:(id,input)=>editor('annotations.act',{id,input}),deleteAnnotation:id=>editor('annotations.delete',{id}),
   editAnnotation:(id,input)=>editor('annotations.edit',{id,input}),canEditLocalComment:comment=>comment.author.kind==='human'&&comment.author.label===LOCAL_AUTHOR_LABEL,
-  uploadCommentImage:async()=>refuse('commentImages'),members:async query=>query===undefined?{mentions:{}}:{people:[]},remoteSessions:async()=>({sessions:[]}),deleteRemoteSession:async()=>refuse('remoteSessions'),
+  uploadCommentImage:async()=>refuse('commentImages'),members:async query=>query===undefined?{mentions:{}}:{people:[]},
  };
 }

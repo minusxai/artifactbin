@@ -1,7 +1,7 @@
 ---
 name: artifactbin
 description: >-
-  Create, edit, publish, comment on, query or export Artifactbin artifacts. Use for artifactbin.dev (or self-hosted) links, afbin commands, and work on an Artifactbin document, dashboard, deck, dataset, plan, landing page or app. Use the documented npm CLI or authenticated HTTP API contracts.
+  Create, edit, publish, comment on, query or export Artifactbin artifacts. Use for artifactbin.dev (or self-hosted) links, work on an Artifactbin document, dashboard, deck, dataset, plan, landing page or app. Use the author skill and authenticated HTTP API contracts.
 ---
 ## Read first
 
@@ -21,21 +21,8 @@ The basic premise of Artifactbin is that it uses declarative markup, which means
 If the users' need is not clear, or the purpose/contents or the artifact you're building are not clear, ask the user to clarify!
 
 ## 1. Get connected
-BaseURL for both: [[ base ]]
-There are two ways to interact with Artifactbin - CLI and HTTP. Here's how to decide what to use when.
-
-```text
-Runnable afbin CLI installed?
-|-- Yes: use CLI and its installed skill.
-`-- No: saved credentials for this server in a supported store?
-    |-- Yes: use HTTP and reuse those credentials.
-    `-- No: persistent local environment where installation is allowed?
-        |-- Yes: ask whether to install CLI; try setup once if agreed.
-        |   `-- Declined or failed: use HTTP.
-        `-- No / uncertain: use HTTP.
-```
-
-Missing credentials do not mean a new user. Keep the selected method unless a capability failure blocks the task.
+BaseURL: [[ base ]]
+Use the authenticated HTTP API and reuse saved credentials for this origin. Missing credentials do not mean a new user.
 
 [% include workflows.introduction %]
 
@@ -108,11 +95,14 @@ Keep content away from viewport edges.
 
 All paths are relative to the installed skill’s `SKILL.md`.
 Branches group topics, not folders. Read only what the task needs.
-CLI: `afbin help <filename-without-.md>`. HTTP: `<origin>/llms/<filename-without-.md>`.
+Read a local reference or use HTTP: `<origin>/llms/<filename-without-.md>`.
 
 - **Connect and operate**
-  - [npm-local.md](references/npm-local.md) — Install CLI; local/offline work
-  - [publishing-auth.md](references/publishing-auth.md) — CLI sign-in and recovery
+[% if transport == "cli" %]
+  - [npm-local.md](references/npm-local.md) — Internal compatibility setup
+  - [publishing-auth.md](references/publishing-auth.md) — Internal compatibility authentication
+  - [commands.md](references/commands.md) — Internal command reference
+[% endif %]
   - [http-auth.md](references/http-auth.md) — HTTP sign-in, storage and refresh
   - [http-api.md](references/http-api.md) — HTTP operations and browser QA
   - [http-authoring.md](references/http-authoring.md) — Create and prepare source edits
@@ -122,14 +112,15 @@ CLI: `afbin help <filename-without-.md>`. HTTP: `<origin>/llms/<filename-without
   - [publishing-datasets.md](references/publishing-datasets.md) — Publish datasets and media
   - [publishing-query.md](references/publishing-query.md) — Query and inspect results
   - [publishing-versions.md](references/publishing-versions.md) — History, exports, forks and deletion
-  - [commands.md](references/commands.md) — CLI commands and flags
   - [operations.md](references/operations.md) — Operation contracts
   - [filters.md](references/filters.md) — List and comment filters
   - [errors.md](references/errors.md) — Specific errors and remedies
   - [groups.md](references/groups.md) — Ownership and membership
   - [live-sessions.md](references/live-sessions.md) — Browser sessions and interaction QA
   - [monitoring.md](references/monitoring.md) — Ongoing comment review
-  - [remote-review.md](references/remote-review.md) — Continue a remote review
+[% if transport == "cli" %]
+  - [remote-review.md](references/remote-review.md) — Internal compatibility review
+[% endif %]
 
 - **Content and design**
   - [copy.md](references/copy.md) — Writing and factual accuracy
@@ -164,7 +155,9 @@ CLI: `afbin help <filename-without-.md>`. HTTP: `<origin>/llms/<filename-without
 
 - **Authoring and features**
   - [markup.md](references/markup.md) — JSX syntax and allowed elements
-  - [markdown.md](references/markdown.md) — Markdown import
+[% if transport == "cli" %]
+  - [markdown.md](references/markdown.md) — Internal compatibility conversion
+[% endif %]
   - [markup-compare.md](references/markup-compare.md) — Side-by-side comparison tables
   - [markup-components.md](references/markup-components.md) — Layout and UI components
   - [markup-editing.md](references/markup-editing.md) — Source edits and persistent IDs

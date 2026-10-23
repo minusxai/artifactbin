@@ -10,7 +10,9 @@ Use one workflow through an installed CLI or authenticated HTTP. Reuse the artif
 
 ## Recipient setup
 
+[% if transport == "cli" %]
 CLI: `afbin setup --server [[ base ]] --group <handle> --set-default`. For requested setup when afbin is absent: `npx --yes @afbin/cli@latest setup --server [[ base ]] --group <handle> --set-default` (PowerShell: `npx.cmd`). Restart the agent to load the skill. Ordinary setup remains auth-free; explicit group/default selection authenticates first, using normal credential refresh. Chat/headless: [recipient sign-in](publishing-auth.md); ask actual email/code and wait.
+[% endif %]
 
 This command resolves the handle to immutable `group.id`, verifies editor or viewer membership, saves the account preference, then explicitly saves the canonical server as the local default. `--group` without `--set-default` verifies membership only. `--set-default` without a destination authenticates and selects only the host. Ordinary `setup --server` seeds a missing host and preserves an existing selection. Host precedence: `--server`, exported `ARTIFACTBIN_URL`, saved host, public default.
 

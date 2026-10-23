@@ -1,6 +1,7 @@
 /** Every discovery surface names npm afbin; CLI starters retain their auth loop,
  * while direct HTTP discovery teaches verified email issuance and graph claims.
  * Retired endpoints/brands remain forbidden on every surface. */
+import {isPublicSkillTopic} from '@/lib/skills/public-surface';
 import { describe, expect, it } from 'vitest';
 import { monitoringGuidance } from '@/lib/artifacts/monitoring-guidance';
 import { POST as startRoute } from '@/app/api/start/route';
@@ -9,7 +10,7 @@ import { POST as agentPromptRoute } from '@/app/api/my/artifacts/[id]/agent-prom
 import { agentContract } from '@/lib/serving';
 import { agentBlurb, existingPaste } from '@/lib/serving';
 import { DEFAULT_SERVER } from '@artifactbin/contracts';
-import { afbinInstallCommand, afbinWindowsInstallCommand, gettingStarted } from '@/lib/serving/getting-started';
+import { gettingStarted } from '@/lib/serving/getting-started';
 import { publicGuideText, llmsText } from '@/lib/serving/agent-references.server';
 import { GET as guideRoute } from '@/app/llms/[topic]/route';
 import { renderSkill } from '@/lib/skills/render';
@@ -17,7 +18,7 @@ import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/comp
 import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import {projectSkillLinks} from '@/lib/skills/serve';
-import { renderTree, skillExample, skillTree } from '@/lib/skills';
+import { skillExample, skillTree } from '@/lib/skills';
 import { buildQuickSheet, QUICK_SHEET_MAX_BYTES } from '@/test/helpers/skill-docs';
 import { createUser, mintToken } from '@/lib/accounts';
 import { POST as createCommentRoute, GET as listCommentsRoute } from '@/app/api/artifacts/[id]/annotations/route';
@@ -29,15 +30,10 @@ import { request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 
 const BASE = 'http://localhost:3000';
-const INSTALLER = `npx --yes @afbin/cli@latest setup`;
-/** The canonical bootstrap sentence: the one place the npm spelling appears in a document. */
-const BOOTSTRAP = 'npx --yes @afbin/cli@latest setup';
-
 /** The retired vocabulary. Each of these, in an agent's hands, is a wrong turn. */
 const RETIRED = ['paste', 'tokens/new', 'tokens/anonymous', 'MCP', '/raw', '/docs/'];
 const CLI_ONLY_RETIRED = ['mint','claim'];
 const httpDiscovery=(name:string)=>name==='the 401 hint'||name==='skills/artifactbin/llms.txt'||name==='skills/artifactbin/SKILL.md'||name==='lib/compiled-page/agent-discovery meta';
-const linkedInstaller = (name: string) => name==='skills/artifactbin/SKILL.md'||name==='skills/artifactbin/llms.txt'|| name === 'lib/agent-copy existingPaste' || name.endsWith(' prompt') ;
 
 /** The single sanctioned mention: a prohibition the skill is allowed to spell out, once. */
 const ALLOWED_SENTENCE = 'never mint or print tokens';
@@ -64,9 +60,9 @@ const surfaces = async (): Promise<Array<[name: string, text: string]>> => {
     ['lib/agent-copy existingPaste', existingPaste(BASE, 'ab3cd9')],
     ['POST /api/start prompt', started.prompt],
     ['POST /api/my/artifacts/:id/agent-prompt prompt', handed.prompt],
-    ['skills/artifactbin/SKILL.md', buildQuickSheet(BASE)],
+    ['skills/artifactbin/SKILL.md', llmsText(BASE)],
     ['skills/artifactbin/llms.txt', llmsText(BASE)],
-    ['lib/compiled-page/agent-discovery meta', agentDiscovery(BASE).instruction+' '+agentDiscovery(BASE).cliInstruction],
+    ['lib/compiled-page/agent-discovery meta', agentDiscovery(BASE).instruction],
     ['lib/agent-contract', agentContract(BASE)],
     ['the 401 hint', refused.help],
   ];
@@ -76,22 +72,12 @@ const surfaces = async (): Promise<Array<[name: string, text: string]>> => {
 const withoutTheException = (text: string): string => text.replace(ALLOWED_SENTENCE, '');
 
 describe('every agent-facing starter says the same thing', () => {
-  it('(a) names afbin', async () => {
-    for (const [name, text] of await surfaces()) expect(text, name).toContain('afbin');
-  });
-
-  it('(b) links HTTP auth on refusal and offers CLI setup on the relevant surfaces', async () => {
-    for (const [name, text] of await surfaces()) expect(text, name).toContain(name==='the 401 hint' ? `${BASE}/llms/http-auth` : name==='skills/artifactbin/SKILL.md' ? 'references/npm-local.md' : name==='skills/artifactbin/llms.txt' ? '/skills/artifactbin.zip' : linkedInstaller(name) ? `${BASE}/llms.txt` : INSTALLER);
-    expect(JSON.stringify(gettingStarted(BASE))).toContain(INSTALLER);
-  });
-
-  it('(b) spells npm only as that one setup line; every other command is `afbin <command>`', async () => {
-    for (const [name, text] of await surfaces()) {
-      expect(text.split('npx --yes @afbin/cli@').length - 1, name).toBe(linkedInstaller(name)||name==='the 401 hint' ? 0 : 1);
-      for (const [, command] of text.matchAll(/@afbin\/cli@\S+ ([a-z-]+)/g)) expect(command, name).toBe('setup');
+  it('links the author skill and HTTP guide without CLI setup',async()=>{
+    for(const [name,text] of await surfaces()){
+      expect(text,name).toContain(name==='the 401 hint'||name.startsWith('skills/')?`${BASE}/llms/http-auth`:`${BASE}/llms.txt`);
+      expect(text,name).not.toMatch(/afbin |@afbin\/cli|chat\/install/);
     }
   });
-
   it('(c) names none of the retired vocabulary', async () => {
     const offences: string[] = [];
     for (const [name, text] of await surfaces()) {
@@ -153,18 +139,6 @@ describe('every agent-facing starter says the same thing', () => {
  * sweep, and their retired-vocabulary lines to case (c) above and to retired-surfaces.test.ts.
  */
 describe('what the brief and the contract teach next', () => {
-  const brief = renderTree(skillTree(), 'https://artifactbin.dev').find(({ file }) => file.path === 'artifactbin/SKILL.md')!.text;
-
-  it('links optional CLI setup while teaching automatic sign-in and shared credential reuse', () => {
-    expect(brief).not.toContain(BOOTSTRAP);
-    expect(brief).toContain('npx downloads the CLI');
-    expect(brief).not.toContain('shorthand');
-    expect(brief).toContain('references/npm-local.md');
-    expect(brief).toMatch(/automatic|authenticates itself|signs you in/i);
-    expect(brief).toContain('origin-scoped credentials');
-    expect(brief).toContain('browser approval');
-    expect(brief).toMatch(/never.*mint/i);
-  });
 
   it('teaches reuse before new publication and preserves identity during recovery', () => {
     const sheet = buildQuickSheet('https://example.test');
@@ -176,15 +150,7 @@ describe('what the brief and the contract teach next', () => {
     expect(sheet).toContain('references/design.md');
   });
 
-  it('spells local help, origin-scoped browser setup and the current private config directory', () => {
-    const contract = agentContract('https://example.test');
-    expect(contract).toContain('`afbin auth --server https://example.test`');
-    expect(contract).toContain(BOOTSTRAP);
-    expect(contract).toContain('`afbin help`');
-    expect(contract).toContain('~/.artifactbin/hosts/<origin-id>/credentials.env');
-    expect(contract).toContain('--yes --json');
-    expect(contract).toContain('browser approval');
-  });
+
 });
 
 
@@ -201,7 +167,7 @@ describe('the brief', () => {
 
   it('its description is the trigger: links, the CLI and the tasks, within the harness cap', () => {
     expect(brief.description.length).toBeLessThanOrEqual(1024);
-    for (const trigger of ['artifactbin.dev', 'afbin', 'publish', 'edit', 'comment', 'query', 'export', 'dashboard', 'deck', 'dataset']) {
+    for (const trigger of ['artifactbin.dev', 'HTTP', 'publish', 'edit', 'comment', 'query', 'export', 'dashboard', 'deck', 'dataset']) {
       expect(brief.description).toContain(trigger);
     }
     expect(brief.description).toContain('Use for artifactbin.dev');
@@ -235,10 +201,8 @@ describe('llms.txt and the discovery head', () => {
     expect(agentBlurb()).toContain('artifactbin');
     const help = agentDiscovery(BASE);
     expect(help.url).toBe(`${BASE}/llms.txt`);
-    expect(help.cliInstruction).toContain('npx --yes @afbin/cli@latest setup');
-    expect(help.cliInstruction).toContain('--server');
-    expect(help.instruction).toContain('Read /llms.txt for all details. Or download all skills at /skills/artifactbin.zip.');
-    expect(help.instruction).toContain('Use the HTTP API');
+    expect(help.instruction).toContain(`${BASE}/skills/artifactbin.zip`);
+    expect(help.instruction).toContain('HTTP API');
     // Product blurb and shared root are separate; discovery need not repeat the blurb.
     expect(help.instruction).not.toContain(agentBlurb());
   });
@@ -248,54 +212,23 @@ describe('llms.txt and the discovery head', () => {
     for (const line of ['/skills/artifactbin.zip', 'POST /api/artifacts', 'expectedVersion', `${BASE}/llms/http-api`, 'skill']) expect(text,line).toContain(line);
     expect(text).not.toContain('[[');
     const guide = JSON.stringify(gettingStarted(BASE));
-    expect(guide).toContain(afbinInstallCommand(BASE));
-    expect(guide).toContain(afbinWindowsInstallCommand(BASE));
     expect(guide).toContain('artifactbin skill');
-    expect(guide.split('npx --yes @afbin/cli@').length - 1).toBe(1);
-    for (const [, command] of guide.matchAll(/@afbin\/cli@\S+ ([a-z-]+)/g)) expect(command).toBe('setup');
-    // `afbin setup`, /raw, MCP and /docs/ are retired-surfaces.test.ts's row for the one-pager.
+    expect(guide).not.toMatch(/@afbin\/cli|install\.sh/);
     expect(llmsText(`${BASE}/`)).toBe(text);
-  });
-
-  /**
-   * PUSH VALIDATES. The brief's publishing guidance says there is no separate validate step — push
-   * runs validation itself. The linked Getting started guide teaches the edit loop and must not
-   * insert a redundant validate command before publishing.
-   */
-  it('its command line ends at push, because push validates — no separate validate step', () => {
-    const edit = gettingStarted(DEFAULT_SERVER).sections.find(section => section.id === 'edit')!;
-    expect(edit).toBeDefined();
-    expect(edit.blocks.filter(block => block.kind === 'command').map(block => block.text)).toEqual([
-      "afbin pull 'ARTIFACT_URL' --output artifact.jsx", 'afbin preview artifact.jsx', 'afbin push artifact.jsx',
-    ]);
-    expect(edit.blocks.map(block => block.text).join('\n')).toContain('Push validates the file before publishing.');
   });
 
   it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {
     expect(AGENT_HELP_TITLE).toBe('Agent guide: authentication, creation, editing, and operations');
     const head = agentDiscoveryHead(agentDiscovery('https://x.test/'));
     expect(head).toContain(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}">`);
-    expect(head).toContain('setup --server');
     expect(head).toContain('name="agents"');
-    expect(head).toContain('name="cli"');
-  });
-});
-
-describe('npm setup keeps installed skills on the selected server',()=>{
-  it.each(['https://docs.example','http://127.0.0.1:5001/'])('selects self-hosted origins on Unix and Windows: %s',(base)=>{
-    const host=base.replace(/\/$/,'');
-    expect(afbinInstallCommand(base)).toBe(`curl -fsSL '${host}/chat/install.sh' | sh`);
-    expect(afbinWindowsInstallCommand(base)).toBe(`Invoke-RestMethod '${host}/chat/install.ps1' | Invoke-Expression`);
-  });
-  it.each([DEFAULT_SERVER,`${DEFAULT_SERVER}/`])('keeps the public setup command simple: %s',(base)=>{
-    expect(afbinInstallCommand(base)).toBe(`curl -fsSL '${DEFAULT_SERVER}/chat/install.sh' | sh`);
-    expect(afbinWindowsInstallCommand(base)).toBe(`Invoke-RestMethod '${DEFAULT_SERVER}/chat/install.ps1' | Invoke-Expression`);
+    expect(head).not.toContain('name="cli"');
   });
 });
 
 describe('public HTTP authoring references', () => {
   it('renders the existing reference sources with working public links and no template markers', () => {
-    for (const file of skillTree().files.filter(file => file.ref && file.dir === 'artifactbin')) {
+    for (const file of skillTree().files.filter(file => file.ref && file.dir === 'artifactbin' && isPublicSkillTopic(file.file.replace(/\.md$/,'')))) {
       const topic = file.file.replace(/\.md$/, '');
       const actual = publicGuideText(topic, BASE);
       const expected = projectSkillLinks(file,renderSkill(file,{base:BASE,transport:'http'}),BASE);

@@ -77,7 +77,7 @@ it('loads the account handle late while keeping profile controls without the ret
   expect(screen.queryByRole('heading', { name: 'Data' })).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Upload a CSV')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Google Sheet URL')).not.toBeInTheDocument();
-  expect(screen.getByText(/afbin CLI connection/)).toBeInTheDocument();
+  expect(screen.getByRole('link',{name:'HTTP authentication guide'})).toHaveAttribute('href','/llms/http-auth');
 });
 
 // The accounts gate's claim leg, moved here: a verified account's page lists CLI connections to revoke, and nothing

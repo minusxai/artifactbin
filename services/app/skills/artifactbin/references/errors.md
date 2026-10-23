@@ -8,7 +8,9 @@ Read the returned error code and recovery instruction. A refusal is not successf
 
 `afbin help errors` provides these rules; exact command flags are in `afbin <command> -h`. HTTP refusals carry non-success JSON; see [HTTP API](http-api.md).
 
+[% if transport == "cli" %]
 - `cli_npm_required`: prepare Node with [[ base ]]/chat/install-node.sh (Windows: install-node.ps1), then run the selected server’s npm setup from [installation](npm-local.md).
+[% endif %]
 - `doc_changed` / 409: reread the head and reconcile; do not reuse stale version or graph claims.
 - Invalid JSX/SQL: follow the validation error and allowlist, then prepare again.
 - 401: follow the [authentication refresh flow](http-auth.md#storage-and-refresh), serialize refresh and retry once. Missing or revoked credentials require email sign-in.
