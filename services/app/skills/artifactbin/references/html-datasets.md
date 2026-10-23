@@ -69,3 +69,9 @@ INSERT supplies cells; DELETE supplies rowId. Send the observed dataset revision
 See the installed CSV dashboard example for discovery, pagination, revision consistency and a chart computed from typed cells.
 
 CSV empty-cell rules: an unquoted empty field (or a missing trailing field) becomes null. A quoted empty field (`""`) is an empty string and keeps its column textual by default, including when other rows look numeric. Literal `null`/`NULL` remain text. An explicit non-string column type overrides inference and converts empty text to null; declare `type:"string"` to preserve it.
+
+## Files attached to a dataset
+
+The retained media HTTP doors accept files for a stored dataset declared by a live native page binding. A page link or accepted page membership never grants upload permission: the caller needs explicit dataset insert authority (a caller or group insert grant, or dataset editor authority on a writable dataset). Private dataset reads still require current dataset and page readership. Pinned bindings cannot upload.
+
+For signed-in browser image uploads use `POST /a/PAGE_ID/datasets/DATASET_ID/images` with the image bytes and image Content-Type. HTTP agents can upload images through the generic file door using an image filename. For generic files use `POST /api/artifacts/PAGE_ID/datasets/DATASET_ID/files`, the file bytes and Content-Type, plus an `X-Filename` containing the percent-encoded filename. Both require `X-Edit-Id` from the observed page head and a unique `Idempotency-Key`; replay the identical bytes and key after an uncertain response. Requests use supported HTTP account authentication, never a token embedded in page HTML. The response returns the stored ref and read URL; read that URL under the same current permissions. Revoked upload permission refuses even a cached replay. File and image size, type, count and stored-byte limits still apply. These are HTTP media uploads, not GraphQL mutations.
