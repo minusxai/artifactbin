@@ -1,0 +1,31 @@
+name: v3 fast
+
+on:
+  pull_request:
+    branches: [ artifactbinv3 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v3-fast-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: v3 fast checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+          cache: npm
+      # Full pinned install includes workspace native dependencies and every postinstall.
+      # No browser download, server build, or service is a prerequisite for the fast lane.
+      - run: npm ci --no-audit --no-fund
+      - run: npm run validate
+      - name: JavaScript syntax and module-local behavioral tests
+        run: node scripts/ci/fast-check.mjs

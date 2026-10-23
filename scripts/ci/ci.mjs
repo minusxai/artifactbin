@@ -233,19 +233,20 @@ if (mode === 'plan') {
   // A PR is judged on its whole branch (base...head); a push on what it actually added (before..head).
   const paths = usable ? changedPaths(env.CI__EVENT === 'pull_request' ? `${base}...${head}` : `${base}..${head}`) : null;
   const range = env.CI__EVENT === 'pull_request' ? `${base}...${head}` : `${base}..${head}`;
+  const v3Push = env.CI__EVENT === 'push' && env.CI__REF === 'refs/heads/artifactbinv3';
   const nightly = env.CI__EVENT === 'schedule';
-  const versionOnly = !nightly && Array.isArray(paths) && paths.length > 0
+  const versionOnly = !v3Push && !nightly && Array.isArray(paths) && paths.length > 0
     && paths.every((path) => VERSION_BUMP_FILES.includes(path))
     && isVersionOnlyBump(changedLines(range, paths));
   // Order matters: a version-only push must PACK its universal npm artifact, because the publisher uploads it
   // from this run. Only after that does a tree we already tested get to select nothing at all.
   let testedPatch = false;
-  let testedRun = !nightly && !versionOnly && env.CI__EVENT === 'push' ? await testedRunFor(treeOf(head)) : null;
+  let testedRun = !v3Push && !nightly && !versionOnly && env.CI__EVENT === 'push' ? await testedRunFor(treeOf(head)) : null;
   // THE TREE MISSED: another PR moved the base before this one merged. The PATCH may still be
   // recognisable (`patchIdOf` is invariant to that), and safe to skip re-testing when nothing that
   // changed in the gap it left behind overlaps what it touches (`patchGapIsSafe`) — otherwise this
   // falls straight through to the ordinary affected-modules selection below, unchanged.
-  if (!testedRun && !nightly && !versionOnly && env.CI__EVENT === 'push' && usable && Array.isArray(paths)) {
+  if (!v3Push && !testedRun && !nightly && !versionOnly && env.CI__EVENT === 'push' && usable && Array.isArray(paths)) {
     const patchId = patchIdOf(range);
     if (patchId) {
       const candidate = await testedRunForPatch(patchId);
@@ -259,7 +260,7 @@ if (mode === 'plan') {
     // A push with diff evidence is judged like a PR: the modules it changed and their dependents
     // (planCi still widens to everything for manifests, shared packages, CI config or unclassified
     // paths). Only a push with no usable base — a first push, a forced one — runs the full suite.
-    full: !nightly && !versionOnly && !(env.CI__EVENT === 'pull_request' || (env.CI__EVENT === 'push' && usable)),
+    full: v3Push || !nightly && !versionOnly && !(env.CI__EVENT === 'pull_request' || (env.CI__EVENT === 'push' && usable)),
     cliRelease: cliVersionChanged(env),
     versionOnly,
     nightly,

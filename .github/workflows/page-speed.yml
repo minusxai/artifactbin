@@ -6,8 +6,9 @@ name: page speed
 # the throttled timing comparison. Neither mode gates ci.yml or comments on PRs.
 on:
   pull_request:
+    branches-ignore: [ artifactbinv3 ]
   push:
-    branches: [ main ]
+    branches: [ main, artifactbinv3 ]
     paths:
       - 'services/app/**'
       - 'services/utils/**'
