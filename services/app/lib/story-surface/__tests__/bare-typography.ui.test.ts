@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { STORY_BARE_TYPOGRAPHY_CSS, BARE_TYPOGRAPHY_ELEMENTS } from '../bare-typography';
 import { STORY_ROOT_ATTR, STORY_STYLED_ATTR } from '@/lib/story-surface';
-import { htmlCarriesClass } from '@/lib/compiled-page/story-element';
+const htmlCarriesClass=(html:string):boolean=>[...html.matchAll(/<(style|script)\b[^>]*>[\s\S]*?<\/\1\s*>|<[a-zA-Z][^>]*?\sclass\s*=/gi)].some(match=>!match[1]);
 
 /** Every selector the sheet declares. */
 const selectors = STORY_BARE_TYPOGRAPHY_CSS.split('}')

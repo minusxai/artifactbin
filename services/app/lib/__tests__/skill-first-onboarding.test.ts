@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {agentDiscovery} from '@/lib/platform/agent-discovery';
-import {agentDiscoveryHead,agentDiscoveryTail} from '@/lib/compiled-page/agent-discovery';
+import {agentDiscoveryHead,agentDiscoveryTail} from '@/lib/serving/agent-discovery';
 import {gettingStarted} from '@/lib/serving/getting-started';
 import {existingPaste} from '@/lib/serving/agent-copy';
 import {skillTree} from '@/lib/skills';

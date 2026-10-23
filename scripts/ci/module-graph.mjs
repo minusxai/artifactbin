@@ -155,14 +155,6 @@ const DOCUMENT_BROWSER_LEAVES = [
   'document-update-client', 'edit-batch', 'edit-compose', 'helmet', 'nesting', 'person-mentions', 'pwa-settings',
   'query-notebook', 'social-preview', 'source-changes', 'table-catalog', 'update-parts',
 ];
-/**
- * lib/compiled-page: server code uses its index, or one of the three heavy entries the index must not
- * carry (Babel, node:vm; their headers say why); the offline file's browser-bundled HTML writer imports
- * three leaves.
- */
-const COMPILED_PAGE_ENTRIES = [''];
-const COMPILED_PAGE_BROWSER_IMPORTERS = [];
-const COMPILED_PAGE_BROWSER_LEAVES = [];
 /** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
 const PAGE_STYLES_BROWSER_IMPORTERS = [];
 const PAGE_STYLES_BROWSER_LEAVES = [];
@@ -188,7 +180,6 @@ export const DEEP_MODULES = {
   'lib/page-store': { entries: [''], browserImporters: PAGE_STORE_BROWSER_IMPORTERS, browserLeaves: PAGE_STORE_BROWSER_LEAVES },
   'lib/dataflow': { entries: ['', 'references', 'server'], browserImporters: DATAFLOW_BROWSER_IMPORTERS, browserLeaves: DATAFLOW_BROWSER_LEAVES },
   'lib/document': { entries: DOCUMENT_ENTRIES, browserImporters: DOCUMENT_BROWSER_IMPORTERS, browserLeaves: DOCUMENT_BROWSER_LEAVES, browserLeavesOnly: true },
-  'lib/compiled-page': { entries: COMPILED_PAGE_ENTRIES, browserImporters: COMPILED_PAGE_BROWSER_IMPORTERS, browserLeaves: COMPILED_PAGE_BROWSER_LEAVES },
   'lib/page-styles': { entries: [''], browserImporters: PAGE_STYLES_BROWSER_IMPORTERS, browserLeaves: PAGE_STYLES_BROWSER_LEAVES },
   'lib/accounts': { entries: ACCOUNTS_ENTRIES },
 };

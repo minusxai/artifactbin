@@ -216,18 +216,15 @@ describe('module graph', () => {
     // The shipped table, unmodified: a row whose module is absent from the tree is skipped.
     const check = (module, files) => checkModuleGraph(scanModuleGraph(tree(files)), allowList([])).violations.join('\n');
 
-    it('keeps page-style and compiled-page leaves behind their server entries', () => {
+    it('keeps page-style leaves behind their server entry', () => {
       const files = {
         'services/app/lib/page-styles/index.ts': '',
         'services/app/lib/page-styles/document-root.ts': '',
-        'services/app/lib/compiled-page/index.ts': '',
-        'services/app/lib/compiled-page/carriers.ts': '',
-        'services/app/server/app.ts': "import '@/lib/page-styles'; import '@/lib/compiled-page';",
+        'services/app/server/app.ts': "import '@/lib/page-styles';",
       };
       expect(check('lib/page-styles', files)).not.toContain('is entered through');
-      const violations = check('lib/page-styles', { ...files, 'services/app/solid/Reader.tsx': "import '@/lib/page-styles/document-root'; import '@/lib/compiled-page/carriers';" });
+      const violations = check('lib/page-styles', { ...files, 'services/app/solid/Reader.tsx': "import '@/lib/page-styles/document-root';" });
       expect(violations).toContain('services/app/solid/Reader.tsx imports @/lib/page-styles/document-root');
-      expect(violations).toContain('services/app/solid/Reader.tsx imports @/lib/compiled-page/carriers');
     });
 
   });

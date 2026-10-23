@@ -14,7 +14,7 @@ import { gettingStarted } from '@/lib/serving/getting-started';
 import { publicGuideText, llmsText } from '@/lib/serving/agent-references.server';
 import { GET as guideRoute } from '@/app/llms/[topic]/route';
 import { renderSkill } from '@/lib/skills/render';
-import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/compiled-page/agent-discovery';
+import { AGENT_HELP_TITLE, agentDiscovery, agentDiscoveryHead } from '@/lib/serving/agent-discovery';
 import { createArtifact } from '@/lib/artifacts';
 import { MARKDOWN_CONTENT_TYPE, unauthorized } from '@/lib/http';
 import {projectSkillLinks} from '@/lib/skills/serve';
