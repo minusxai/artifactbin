@@ -311,14 +311,14 @@ const DYNAMIC=html(`<h1>Data-derived identities</h1><div><button id="reverse">Re
 document.querySelector('#elsewhere').dataset.afId='task:123';let rows=[{id:'123',label:'First task'},{id:'456',label:'Second task'}];const render=()=>document.querySelector('#tasks').replaceChildren(...rows.map(row=>{const li=document.createElement('li');li.dataset.afId='task:'+row.id;li.textContent=row.label;return li}));render();document.querySelector('#reverse').onclick=()=>{rows.reverse();render()};document.querySelector('#remove').onclick=()=>{rows=rows.filter(row=>row.id!=='123');render()};document.querySelector('#restore').onclick=()=>{rows.push({id:'123',label:'First task'});render()};</script>`);
 async function dynamicLeg(browser,seed){
  const ctx=await browser.newContext(),page=await ctx.newPage();try{
-  await becomeOwner(page,BASE,seed.token);await page.goto(`${BASE}/a/${seed.id}`);const frame=documentLocator(page);await frame.locator('[data-af-id="task:123"]').waitFor();
-  await comment(page,frame,'[data-af-id="task:123"]','Follow this task');
+  await becomeOwner(page,BASE,seed.token);await page.goto(`${BASE}/a/${seed.id}`);const frame=documentLocator(page);await frame.locator('#tasks [data-af-id="task:123"]').waitFor();
+  await comment(page,frame,'#tasks [data-af-id="task:123"]','Follow this task');
   const wire=await until(()=>api(seed,'/annotations'),w=>w.annotations?.length===1);check(wire.annotations[0].anchor.nodeId==='task:123'&&wire.annotations[0].anchor.ancestorId==='tasks','native dynamic ID is persisted inside its saved ancestor scope');
   const painted=()=>frame.locator('[data-af="annotation-overlay"] > div');await expect(painted()).not.toHaveCount(0);
   await frame.locator('#reverse').click();await expect(frame.locator('#tasks li').first()).toHaveText('Second task');await expect(painted()).not.toHaveCount(0);check(true,'dynamic item comment survives reorder');
-  await frame.locator('#remove').click();await expect(frame.locator('[data-af-id="task:123"]')).toHaveCount(0);await expect(painted()).toHaveCount(0);check(true,'removed dynamic item loses its highlight instead of retargeting');
+  await frame.locator('#remove').click();await expect(frame.locator('#tasks [data-af-id="task:123"]')).toHaveCount(0);await expect(painted()).toHaveCount(0);check(true,'removed dynamic item loses its highlight instead of retargeting');
   await frame.locator('#restore').click();await expect(painted()).not.toHaveCount(0);check(true,'restoring the same data identity restores its highlight');
-  await page.reload();await frame.locator('[data-af-id="task:123"]').waitFor();await expect(painted()).not.toHaveCount(0);check(true,'dynamic comment reconnects after a fresh runtime launch');
+  await page.reload();await frame.locator('#tasks [data-af-id="task:123"]').waitFor();await expect(painted()).not.toHaveCount(0);check(true,'dynamic comment reconnects after a fresh runtime launch');
  }finally{await ctx.close();}
 }
 async function liveQuoteLeg(browser,seed){
