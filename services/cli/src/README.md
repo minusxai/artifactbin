@@ -33,7 +33,6 @@ One row per command `dispatch.ts` routes. Handler modules are listed in the orde
 | `mention` | `dispatch.ts` | inline: `GET /artifacts/<id>/members?query=` |
 | `mv` | `local-workspace.ts`, `identities.ts` | `moveLocalFile` in a portable folder, else `moveFile` |
 | `open` | `open.ts` | `openResources` |
-| `preview` | `preview-options.ts`, `preview-runtime.ts` | `servePreview` starts the packaged preview host |
 | `pull` | `pull.ts` | `preparePull`, `pull`, `pullToStdout` |
 | `push` | `sync.ts`, `local-publication.ts`, `markdown.ts`, `dataset-source.ts`, `account-workspace.ts` | `planPush`/`push`; portable folders `publishLocalWorkspace`; `.md` conversion; `--secret-env` |
 | `query` | `local-query.ts`, `remote-query.ts`, `mutation-command.ts` | local engines first; `mixedQuery`; `--write` `queryMutation` |
@@ -121,7 +120,6 @@ What `dispatch.ts` calls to do a command's work.
 | `local-document-query.ts` | Run a local document's declared query. |
 | `local-dataflow.ts` | Compile and run a local document's dataflow in process. |
 | `local-verification.ts` | Validate's local query dry-run and chart-column checks, naming what did not run. |
-| `local-image-options.ts` | Options for the local image export. |
 | `dataset-source.ts` | Bind a dataset's connection secret on push. |
 | `sqlite-wasm.ts` | Where the SQLite wasm comes from in a built CLI. |
 | `sqlite-wasm-embedded.ts` | The SQLite wasm bytes, replaced at build time. |
@@ -148,17 +146,10 @@ What `dispatch.ts` calls to do a command's work.
 | `team-config.ts` | Team host settings and data. |
 | `team-application.ts` | Compose the team host from the shared login and the app. |
 | `team-entry.ts` | Foreground team host entry. |
-| `preview-entry.ts` | Foreground preview host entry. |
-| `preview-options.ts` | Expand the files a preview serves. |
-| `preview-render.ts` | The local export's render request. |
 | `preview/annotations.ts` | Preview annotations over local state. |
 | `preview/comments.ts` | Preview comments with hosted anchors. |
-| `preview/compiled.ts` | The publish-time compiler, run locally. |
-| `preview/editor.ts` | The editor protocol over local files. |
 | `preview/graph.ts` | The documents and references a preview session covers. |
 | `preview/local-inputs.ts` | Local bytes behind a registered reference. |
-| `preview/problem-page.ts` | The page a reader sees when the file cannot be shown. |
-| `preview/session.ts` | File-backed preview sessions: saves, SQL inputs, comments. |
 
 ### Sync and publication
 
@@ -203,8 +194,6 @@ The processes the CLI starts and the hosts it runs.
 | `entry-args.ts` | Host selector arguments. |
 | `foreground-process.ts` | Owned shutdown for foreground hosts. |
 | `host-runtime.ts` | Load the packaged team host. |
-| `preview-runtime.ts` | Load the packaged preview host. |
-| `local-image-runtime.ts` | Spawn the lazy runtime for image export. |
 | `pty.ts` | The node-pty binding. |
 | `runner.ts` | Run a remote agent session in the foreground. |
 | `remote-worker.ts` | The detached remote worker. |
@@ -214,13 +203,7 @@ The processes the CLI starts and the hosts it runs.
 | `hosted-agent.ts` | Run a hosted agent with its native identity. |
 | `hosted-opencode.ts` | OpenCode session identity for hosted agents. |
 
-### Preview browser
 
-The browser half of `afbin preview`, bundled separately.
 
 | File | Purpose |
 |---|---|
-| `preview/client.tsx` | The preview page. |
-| `preview/backend.ts` | `ArtifactBackend` over the local preview routes. |
-| `preview/edit-controller.ts` | The preview's story controller. |
-| `preview/types.ts` | The `/document` JSON shape. |

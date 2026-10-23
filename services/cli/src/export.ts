@@ -1,5 +1,3 @@
-import {renderLocalImage} from './local-image-runtime';
-import type {LocalImageRenderer} from './local-image-options';
 import {localIdentities} from './identities';
 import {basename,extname,join,relative,resolve} from 'node:path';
 import {stat} from 'node:fs/promises';
@@ -40,7 +38,7 @@ const EXTENSIONS:Record<string,string>={png:'png',jpg:'jpg',html:'html',csv:'csv
 const rendered=(format:string):format is typeof RENDERED[number]=>RENDERED.includes(format as never);
 
 interface ExportOptions {
- localImage?:LocalImageRenderer;type?:string;format?:string;output?:string;name?:string;page?:number;og?:boolean;refresh?:boolean;force?:boolean;dryRun?:boolean;
+ type?:string;format?:string;output?:string;name?:string;page?:number;og?:boolean;refresh?:boolean;force?:boolean;dryRun?:boolean;
  server:string;/** Verified other addresses of `server`. */aliases?:readonly string[];client?:HttpClient;emit:(value:unknown)=>void;bytes?:(value:Uint8Array)=>void;
 }
 interface ExportTarget {ref:string;format:string;id?:string;path?:string;version?:number;render:boolean;htmlName?:string;defaultHtmlName?:boolean}
@@ -94,7 +92,7 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
  const results:ExportResult[]=[];
  for(const target of targets){
   const bytes=target.render
-   ?await renderTarget(workspace,target,options)
+   ?await renderTarget(target,options)
    :target.path!==undefined?await convertLocal(workspace,target,options):await convertRemote(target,options);
   results.push({bytes,format:target.format});
  }
@@ -121,9 +119,9 @@ function selectFormat(refs:string[],options:ExportOptions):string{
  throw new CliError('invalid_format','The export representation is not determined.','Add --format png|jpg|html|csv|json|yaml|original, or name an --output file with a known extension.');
 }
 
-async function renderTarget(workspace:Workspace,target:ExportTarget,options:ExportOptions):Promise<Buffer>{
+async function renderTarget(target:ExportTarget,options:ExportOptions):Promise<Buffer>{
  if(target.path!==undefined&&target.format==='html')throw new CliError('unsupported_format','Local HTML compiler exports have been retired.');
- if(target.path!==undefined&&(target.format==='png'||target.format==='jpg'))return (options.localImage??renderLocalImage)({cwd:workspace.root,home:workspace.home,path:target.path,server:options.server,format:target.format,page:options.page,og:options.og});
+ if(target.path!==undefined)throw new CliError('unsupported_format','Local compiler image exports have been retired.');
  const renderer=serverRenderer(options.server,options.client);
  const result=target.format==='html'
   ?await renderer.html(target.id!,target.version)

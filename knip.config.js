@@ -88,7 +88,7 @@ export default {
     'services/cli': {
       // The package's `exports` names its built dist/index.mjs; the preview client and connect bundles
       // (scripts/build-preview.mjs) and the preview host entry (scripts/build-host.mjs).
-      entry: ['src/index.ts', 'src/preview/{client,connect}.tsx', 'src/preview-entry.ts'],
+      entry: ['src/index.ts'],
       ignoreDependencies: [
         // Left out of the CLI bundle and resolved from its installed dependencies at run time
         // (scripts/build/runtime-externals.mjs CLI_RUNTIME_EXTERNALS) with no import in the CLI's own source.

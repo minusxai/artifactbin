@@ -147,7 +147,7 @@ describe('module graph', () => {
 
     it('ignores imports inside lib/islands and lists only real browser-side importers', () => {
       expect(check({ 'services/app/solid/Popover.tsx': "import '@/lib/islands/trusted-portal';\n", 'services/app/lib/islands/kit/popper.ts': "import '../contract';\n" })).toBe('');
-      expect(ISLANDS_BROWSER_IMPORTERS.filter(entry => !entry.endsWith('/'))).toEqual(expect.arrayContaining(['services/app/lib/cli-toolkit/browser.ts']));
+      expect(ISLANDS_BROWSER_IMPORTERS.filter(entry => !entry.endsWith('/'))).toEqual([]);
       expect(ISLANDS_BROWSER_IMPORTERS.some(entry => entry === 'services/app/lib/offline/')).toBe(false);
     });
   });
@@ -356,8 +356,6 @@ describe('module graph', () => {
     it('passes CLI source through the toolkit entries, and leaves CLI scripts and tests alone', () => {
       expect(check({
         'services/cli/src/a.ts': "import { parseJsx } from '../../app/lib/cli-toolkit';\nimport { compilePage } from '../../app/lib/cli-toolkit/host.server';\nimport type { X } from '@/lib/cli-toolkit/index.ts';\n",
-        'services/cli/src/preview/b.tsx': "import { PageBar } from '../../../app/lib/cli-toolkit/browser';\nimport { y } from '@artifactbin/contracts';\nimport './c';\n",
-        'services/cli/src/preview/connect.tsx': "import { FileConnectReceiver } from '../../../app/lib/cli-toolkit/browser-connect';\n",
         'services/cli/scripts/build.mjs': "import '../../app/lib/serving/app-font-face-css.mjs';\n",
         'services/cli/test/fixtures/worker.ts': "import { getDb } from '../../../app/lib/platform/db';\n",
       })).toBe('');

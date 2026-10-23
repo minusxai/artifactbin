@@ -48,11 +48,10 @@ const APP_DIRS = ['solid', 'server', 'app', 'web', 'src', 'scripts'];
  */
 export const ISLANDS_BROWSER_IMPORTERS = [
   'services/app/solid/',
-  'services/app/lib/cli-toolkit/browser.ts',
 ];
 const ISLANDS_BROWSER_LEAVES = [
   'contract', 'file-display', 'kit/dialog-shell', 'kit/popper', 'kit/popup-dismiss', 'kit/tooltip-core',
-  'live-update', 'morph/engine', 'person-face', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
+  'live-update', 'person-face', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles',
 ];
 /*
  * Rule 4's seed for the hub modules: every path outside non-test code imported on 2026-10-10, measured
@@ -72,7 +71,6 @@ const STORY_RUNTIME_BROWSER_IMPORTERS = [
   'services/app/web/',
   'services/app/lib/frame-edit/',
   'services/app/lib/islands/',
-  'services/app/lib/cli-toolkit/browser.ts',
   'services/app/lib/page-styles/document-root.ts',
 ];
 const STORY_RUNTIME_BROWSER_LEAVES = [
@@ -151,7 +149,6 @@ const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/lib/frame-edit/',
   'services/app/lib/annotations/markdown-lite.ts',
   'services/app/lib/artifact-backend/browser-artifact-write.ts',
-  'services/app/lib/cli-toolkit/browser.ts',
 ];
 const DOCUMENT_BROWSER_LEAVES = [
   'annotation-edits', 'annotation-range', 'asset-url', 'context', 'display-title', 'document-authoring-client', 'document-graph',
@@ -163,7 +160,7 @@ const DOCUMENT_BROWSER_LEAVES = [
  * carry (Babel, node:vm; their headers say why); the offline file's browser-bundled HTML writer imports
  * three leaves.
  */
-const COMPILED_PAGE_ENTRIES = ['', 'backfill.server', 'bundle.server', 'compiler'];
+const COMPILED_PAGE_ENTRIES = [''];
 const COMPILED_PAGE_BROWSER_IMPORTERS = [];
 const COMPILED_PAGE_BROWSER_LEAVES = [];
 /** lib/page-styles: server code uses its index; the offline file's two browser-bundled files import document-root. */
@@ -200,7 +197,7 @@ export const DEEP_MODULES = {
  * preview and team hosts), `browser` and `browser-connect` (the preview's two browser pages).
  * Paths without extension.
  */
-const CLI_TOOLKIT_ENTRIES = ['services/app/lib/cli-toolkit', 'services/app/lib/cli-toolkit/host.server', 'services/app/lib/cli-toolkit/browser', 'services/app/lib/cli-toolkit/browser-connect'];
+const CLI_TOOLKIT_ENTRIES = ['services/app/lib/cli-toolkit', 'services/app/lib/cli-toolkit/host.server'];
 const CLI_SOURCE = 'services/cli/src/';
 const DEFAULT_ALLOWED = fileURLToPath(new URL('./module-graph.allowed-cycles.json', import.meta.url));
 
@@ -347,7 +344,7 @@ function cliToolkitViolations(graph, entries) {
       if (file.startsWith(CLI_SOURCE) && !entries.includes(importPath(file, specifier))) refused.push(`  ${file} imports ${specifier}`);
     }
   }
-  return refused.length ? [`The CLI imports app code only through lib/cli-toolkit (CLI_TOOLKIT_ENTRIES in scripts/ci/module-graph.mjs): re-export the name from the entry of the bundle that uses it in services/app/lib/cli-toolkit (index.ts: the afbin process; host.server.ts: its preview and team hosts; browser.ts, browser-connect.ts: the preview's browser pages), and import it from there:`, ...refused] : [];
+  return refused.length ? [`The CLI imports app code only through lib/cli-toolkit (CLI_TOOLKIT_ENTRIES in scripts/ci/module-graph.mjs): re-export the name from the entry of the bundle that uses it in services/app/lib/cli-toolkit (index.ts: the afbin process; host.server.ts: the team host), and import it from there:`, ...refused] : [];
 }
 
 /** Graph: Map<from, Map<to, [{ file, specifier }]>> over cross-module imports. */

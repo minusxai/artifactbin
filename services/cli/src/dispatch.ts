@@ -10,8 +10,6 @@ import {scheduleCommand} from './schedules';
 import {runCommand} from './runs';
 import {emailAuthenticate} from './email-auth';
 import {addFiles,moveFile,localIdentities} from './identities';
-import {servePreview} from './preview-runtime';
-import {previewPublicOrigin,previewFiles,type PreviewOptions} from './preview-options';
 import {serveTeam} from './host-runtime';
 import type {ServeOptions} from './serve-config';
 import { browserSessionCommand } from './browser-sessions';
@@ -69,7 +67,7 @@ import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {signal?:AbortSignal;/** Executable entry; defaults to the running CLI. */entry?:string;preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;/** Answers uninstall's terminal question; tests inject one. */confirm?:(question:string)=>Promise<boolean>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {signal?:AbortSignal;/** Executable entry; defaults to the running CLI. */entry?:string;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;/** Answers uninstall's terminal question; tests inject one. */confirm?:(question:string)=>Promise<boolean>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** npm for setup's global install and update; tests inject one. */npm?:NpmRunner;/** Where this process runs from; defaults to the entry path. */installKind?:InstallKind;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
  const update=automaticUpdate({home:context.home??homedir(),env:context.env,entry:context.entry,npm:context.npm,stderr:context.stderr??(value=>process.stderr.write(value))});
  const code=await dispatchCli(argv,context,update.observe);
@@ -104,14 +102,6 @@ async function dispatchCli(argv:string[],context:CliContext,onRelease:ReturnType
   const watchLogFile=command==='watch'&&!flags.help&&typeof flags.output==='string'?resolve(context.cwd??process.cwd(),flags.output):undefined;
   if(command==='watch'&&!flags.help&&!context.stdout&&!watchLogFile&&positionals[0])refuseUnreadWatch(watchOutput(),positionals[0]);
   const watchStdout=watchLogFile?watchLog(watchLogFile):stdout;
-  if(command==='preview'&&!flags.help){
-   const port=Number(flags.port??0);if(!Number.isInteger(port)||port<0||port>65535)throw new CliError('invalid_arguments','--port must be an integer from 0 to 65535.');
-   const publicUrl=previewPublicOrigin(typeof flags['public-url']==='string'?flags['public-url']:undefined);
-   const workspace=await loadWorkspace(context.cwd,home),known=await localIdentities(workspace);
-   const paths=positionals.length?await previewFiles(workspace.root,workspace.cwd,positionals.map(path=>known[path]?resolve(workspace.root,known[path]):path)):[];
-   await registerLocalFiles(workspace,paths.map(path=>resolve(workspace.root,path)),{intent:'automatic'});
-   return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json,...(publicUrl?{publicUrl}:{}),server:typeof flags.server==='string'?flags.server:workspace.tracking?.server??await exportedServer(home,context.env)});
-  }
   if(command==='config'&&!flags.help){
    const [action,key,value]=positionals;
    if(action==='set'&&positionals.length===3){emit(await setClientDefault(key!,value!,home,context.env));return 0;}

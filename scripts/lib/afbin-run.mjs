@@ -54,10 +54,6 @@ const runtimePath = (root) => path.join(root, 'services', 'cli', 'dist', 'runtim
 const runtimeOutputs = (root) => [
   'bootstrap.cjs',
   'host.mjs',
-  'preview.mjs',
-  'preview/client.js',
-  'preview/chrome.css',
-  'preview/fonts.css',
   'public/islands/manifest.json',
   'dist/web/solid-app.html',
   'package.json',
