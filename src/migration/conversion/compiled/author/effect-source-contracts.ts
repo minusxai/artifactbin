@@ -14,3 +14,5 @@ export interface PreparedAuthorEffects {
 export interface PreparedOwnedAuthorComponents extends PreparedAuthorEffects {
   readonly exports: readonly string[];
 }
+/** Exact standalone legacy timer-await lowering; other awaits are refused by compilation. */
+export type LowerLegacyTimerAwait = (source: string, lifetimeIdentifier: string) => string;

@@ -1,3 +1,4 @@
+import {inlineLegacyDayjs} from "./legacy-dayjs.ts";
 import {LEGACY_PARAMS_BRIDGE_VERSION} from "./legacy-params-codemod.ts";
 import { createHash } from "node:crypto";
 import { Parser } from "acorn";
@@ -38,17 +39,46 @@ export function hasLegacyManagedFrame(source: string): boolean {
     return false;
   }
 }
+/** Detect calls in authored script syntax, never lookalike text in comments or strings. */
+function hasLegacyScalarParams(source: string): boolean {
+  if (!source.includes("params")) return false;
+  try {
+    const tree = Parser.extend(jsx()).parseExpressionAt("<>" + source + "</>", 0, { ecmaVersion: "latest" });
+    const walk = (value: any, script = false): boolean => {
+      if (!value || typeof value !== "object") return false;
+      if (Array.isArray(value)) return value.some(node => walk(node, script));
+      if (script && value.type === "CallExpression") {
+        const member = value.callee?.object;
+        if (value.callee.type === "MemberExpression" && !value.callee.computed &&
+          member?.type === "MemberExpression" && !member.computed &&
+          member.object?.type === "Identifier" && member.object.name === "mx" &&
+          member.property?.name === "params") return true;
+      }
+      if (!script && value.type === "JSXElement" && value.openingElement.name.name === "script") {
+        return value.children.some((child: any) => {
+          const expression = child.expression;
+          const text = expression?.type === "Literal" ? expression.value :
+            expression?.type === "TemplateLiteral" && !expression.expressions.length ? expression.quasis[0]?.value.cooked : null;
+          return typeof text === "string" && walk(Parser.extend(jsx()).parse(text, { ecmaVersion: "latest", sourceType: "module" }), true);
+        });
+      }
+      return Object.values(value).some(node => walk(node, script));
+    };
+    return walk(tree);
+  } catch { return false; }
+}
 export async function normalizeLegacyManagedFrames(
   source: string,
   port: LegacyScriptNormalizerPort,
 ): Promise<LegacyScriptNormalization | null> {
   if (
     Buffer.byteLength(source) > MAX_COMPILED_SOURCE_BYTES ||
-    !hasLegacyManagedFrame(source)
+    !hasLegacyManagedFrame(source) && !hasLegacyScalarParams(source)
   )
     return null;
   try {
-    const result = await port.migrate(source);
+    const prepared = await inlineLegacyDayjs(source);
+    const result = await port.migrate(prepared.source);
     if (
       !result ||
       !result.changed ||
@@ -68,8 +98,9 @@ export async function normalizeLegacyManagedFrames(
     return {
       source: result.source,
       receipt: {
-        kind: "original-managed-frame-codemod",
+        kind: hasLegacyManagedFrame(source) ? "original-managed-frame-codemod" : "original-scalar-params-codemod",
         paramsBridgeVersion: LEGACY_PARAMS_BRIDGE_VERSION,
+        ...(prepared.dayjs ? { dayjs: prepared.dayjs } : {}),
         codemodCommit: LEGACY_SCRIPT_CODEMOD_COMMIT,
         codemodSha256: LEGACY_SCRIPT_CODEMOD_SHA256,
         originalSourceSha256: hash(source),

@@ -1,3 +1,4 @@
+import {lowerLegacyTimerAwait} from "./timer-await.ts";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
@@ -37,7 +38,7 @@ export async function prepareAuthorBundle(
       : undefined;
   let paramsSuffix=0;
   while(source.includes("_afParamsLifetime"+paramsSuffix)||source.includes("_afParamsWindow"+paramsSuffix))paramsSuffix++;
-  const paramsEffects=prototype&&options.mode==="effects"&&source.includes("/* scalar-params-v1 */")?{source,lifetimeIdentifier:"_afParamsLifetime"+paramsSuffix,windowIdentifier:"_afParamsWindow"+paramsSuffix,capabilities:["effects" as const]}:undefined;
+  const paramsEffects=prototype&&options.mode==="effects"&&source.includes("/* scalar-params-v1 */")?{source:lowerLegacyTimerAwait(source,"_afParamsLifetime"+paramsSuffix),lifetimeIdentifier:"_afParamsLifetime"+paramsSuffix,windowIdentifier:"_afParamsWindow"+paramsSuffix,capabilities:["effects" as const]}:undefined;
   const effects = paramsEffects ??
     (!prototype && options.mode === "effects" ? prepareAuthorEffects(source) : undefined);
   if (!prototype && !effects && !owned) admitAuthorSource(source);

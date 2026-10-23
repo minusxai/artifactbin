@@ -75,3 +75,19 @@ test("frame detection follows JSX syntax without treating script strings or nati
     true,
   );
 });
+
+
+test("scalar params effects without managed frames reuse the versioned source-only adapter", async () => {
+  const original = '<Helmet><Value name="count" type="number" default={0}/><script>{`document.title=String(mx.params.get("count"));`}</script></Helmet><p>Saved layout</p>';
+  const derived = '<Helmet><Value name="count" type="number" default={0}/></Helmet><p>Saved layout</p>';
+  const result = await normalizeLegacyManagedFrames(original, {
+    migrate: async () => ({ source: derived, changed: true, applied: ["scalar params"], unresolved: [] }),
+  });
+  assert.equal(result?.receipt.kind, "original-scalar-params-codemod");
+  assert.equal(result?.receipt.originalSourceSha256, hash(original));
+  let calls = 0;
+  await normalizeLegacyManagedFrames('<Helmet><script>{`const example="mx.params.get()";`}</script></Helmet>', {
+    migrate: async () => { calls++; throw Error("not a bridge call"); },
+  });
+  assert.equal(calls, 0);
+});

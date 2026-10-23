@@ -6,8 +6,10 @@ export interface LegacyScriptMigration {
   unresolved: string[];
 }
 export interface LegacyScriptNormalizationReceipt {
-  kind: "original-managed-frame-codemod";
+  kind: "original-managed-frame-codemod" | "original-scalar-params-codemod";
   paramsBridgeVersion?: "scalar-params-v1";
+  /** Exact upstream classic library bytes embedded in a lexical frame binding. */
+  dayjs?: { version: "1.11.13"; sourceSha256: string };
   codemodCommit: string;
   codemodSha256: string;
   originalSourceSha256: string;
@@ -21,4 +23,9 @@ export interface LegacyScriptNormalization {
 }
 export interface LegacyScriptNormalizerPort {
   migrate(source: string): Promise<LegacyScriptMigration>;
+}
+
+export interface LegacyDayjsNormalization {
+  source: string;
+  dayjs?: NonNullable<LegacyScriptNormalizationReceipt["dayjs"]>;
 }
