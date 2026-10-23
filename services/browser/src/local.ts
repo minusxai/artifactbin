@@ -226,7 +226,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
       if (typeof req.capture === 'object' && 'slide' in req.capture) {
         // Bare readers retain hidden rail miniatures for hydration. Number only
         // rendered slides; Playwright's visibility includes offscreen content.
-        const slides = surface.locator('[data-mx-slide]:visible');
+        const slides = surface.locator('[data-af-slide]:visible');
         const count = await slides.count();
         if (req.capture.slide > count) throw new NoSlideError(count);
         const one = slides.nth(req.capture.slide - 1);

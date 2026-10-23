@@ -22,6 +22,7 @@ export interface RenderCardCrop {
   width: number;
 }
 
+/** Slide capture selects visible author-owned HTML elements with data-af-slide, in document order. */
 type RenderCapture = 'full' | 'card' | 'preview' | { slide: number } | { card: RenderCardCrop };
 
 /** One page load, as every operation that loads a page asks for it: where, how big, and what may load. */
