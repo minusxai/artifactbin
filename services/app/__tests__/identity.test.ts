@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The single-identifier contract: an artifact has ONE id — 6 chars of
@@ -61,7 +62,7 @@ afterAll(async () => {
 describe('the one identifier', () => {
   it('create returns a 6-char [a-zA-Z0-9] id, a /a/<id> url, and NO slug', async () => {
     const token = await mint();
-    const body = await create(token, { title: 'x', markup: '<h1>hi</h1>' });
+    const body = await create(token, { title: 'x', html:nativeHtml('<h1>hi</h1>') });
     expect(body.id).toMatch(/^[a-zA-Z0-9]{6}$/);
     expect(body.id).toMatch(ID_RE);
     expect(body.url).toBe(`${BASE}/a/${body.id}`);
@@ -70,7 +71,7 @@ describe('the one identifier', () => {
 
   it('list and single-read carry url = /a/<id> and no slug field', async () => {
     const token = await mint();
-    const created = await create(token, { title: 'x', markup: '<h1>hi</h1>' });
+    const created = await create(token, { title: 'x', html:nativeHtml('<h1>hi</h1>') });
 
     const single = await (await getArtifactRoute(request(`/api/artifacts/${created.id}`, { token: token }), params({ id: created.id }))).json();
     expect(single.url).toBe(`${BASE}/a/${created.id}`);
@@ -88,27 +89,25 @@ describe('the one identifier', () => {
       title: 'sales',
       dataset: [{ region: 'east', total: 1 }, { region: 'west', total: 2 }],
     });
-    const chart = (dsId: string) =>
-      `<Helmet><Import name="rows_data" src="ref:${dsId}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet>` +
-      `<section><Question title="t" data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"total","type":"quantitative"}}}}} height="200px" /></section>`;
+    const chart=(dsId:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="rows_data" href="ref:${dsId}" data-af-mode="live"></head><body><h1>Sales</h1></body></html>`;
 
-    const ok = await create(token, { title: 'doc', markup: chart(ds.id) });
+    const ok = await create(token, { title: 'doc', html: chart(ds.id) });
     const wire = await (await getArtifactRoute(request(`/api/artifacts/${ok.id}`, { token: token }), params({ id: ok.id }))).json();
-    expect(wire.refs).toEqual([{ id: ds.id, kind: 'dataset' }]);
+    expect(wire.html).toContain(`href="ref:${ds.id}"`);
 
     const bad = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', markup: chart('zzzzzzzz') } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', html: chart('zzzzzzzz') } }),
     );
     expect(bad.status).toBe(400);
     const err = await bad.json();
-    expect(err.error).toBe('invalid_refs');
+    expect(err.error).toBe('invalid_dataset_binding');
   });
 });
 
 describe('/a/<id> namespace', () => {
   it('serves raw bytes for MIXED-CASE ids and 404s malformed ones', async () => {
     const token = await mint();
-    const created = await create(token, { title: 'x', markup: '<h1>mixed</h1>' });
+    const created = await create(token, { title: 'x', html:nativeHtml('<h1>mixed</h1>') });
     await renameArtifact(created.id, 'AbC123');
 
     const ok = await rawRoute(request('/a/AbC123/raw'), params({ id: 'AbC123' }));
@@ -124,7 +123,7 @@ describe('/a/<id> namespace', () => {
 
   it('delivers live wakeups for a MIXED-CASE id on PGLite (the case-folding hazard)', async () => {
     const token = await mint();
-    const created = await create(token, { title: 'doc', markup: '<section><p>alpha</p></section>' });
+    const created = await create(token, { title: 'doc', html:nativeHtml('<section><p>alpha</p></section>') });
     await renameArtifact(created.id, 'AbC123');
 
     const stream = await eventsRoute(request('/a/AbC123/events'), params({ id: 'AbC123' }));
@@ -132,7 +131,7 @@ describe('/a/<id> namespace', () => {
 
     // First frame is the current state; then a whole-document PUT must wake us.
     const put = await putArtifact(
-      await observedRequest('/api/artifacts/AbC123', { method: 'PUT', token: token, json: { visibility: 'public', markup: '<section><p>beta</p></section>' } }),
+      await observedRequest('/api/artifacts/AbC123', { method: 'PUT', token: token, json: { visibility: 'public', html:nativeHtml('<section><p>beta</p></section>') } }),
       params({ id: 'AbC123' }),
     );
     expect(put.status).toBe(200);
@@ -141,6 +140,7 @@ describe('/a/<id> namespace', () => {
     expect(frames.length).toBe(2);
     expect(frames[1].version).toBe(2); // the wakeup arrived — the frame is fetched separately
     const frame = await (await frameRoute(request('/a/AbC123/events/frame'), params({ id: 'AbC123' }))).json();
-    expect(frame.source).toContain('beta');
+    expect(frame).toMatchObject({version:2});
+    const head=await getArtifactRoute(request('/api/artifacts/AbC123',{token}),params({id:'AbC123'}));expect((await head.json()).html).toContain('beta');
   });
 });

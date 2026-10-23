@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * TEST USERS: minted by an account, capped, erased with everything they own.
  * The operation family is the surface; `afbin testuser` and `--as` translate to it.
@@ -8,7 +9,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as likeRoute } from '@/app/api/my/artifacts/[id]/like/route';
 import { POST as followRoute } from '@/app/api/users/[id]/follow/route';
-import { POST as mutateRoute } from '@/app/a/[id]/mutate/route';
+import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import { POST as newTestUser, GET as listTestUsers } from '@/app/api/testusers/route';
 import { DELETE as deleteTestUser } from '@/app/api/testusers/[id]/route';
 import { getArtifactById } from '@/lib/artifacts';
@@ -55,7 +56,7 @@ describe('minting', () => {
 describe('the sandbox', () => {
   it('fork --as <testuser> copies an account artifact into the test user, and deleting the test user erases it', async () => {
     const a = await account('owner');
-    const page = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: '<p>hello</p>', visibility: 'unlisted', title: 'Hello' }, a.token));
+    const page = await createArtifactRoute(jreq('/api/artifacts', 'POST', { html:nativeHtml('<p>hello</p>'), visibility: 'unlisted', title: 'Hello' }, a.token));
     const { id } = (await page.json()) as { id: string };
     const tu = await mint(a.token);
     const forked = await forkOpRoute(jreq(`/api/artifacts/${id}/fork`, 'POST', { as: { testuser: tu.id } }, a.token), params(id));
@@ -80,7 +81,7 @@ describe('guests at the doors', () => {
     const a = await account('host');
     const ds = await createArtifactRoute(jreq('/api/artifacts', 'POST', { dataset: [{ who: null }], columns: [{ name: 'who', type: 'user' }], access: 'readwrite', visibility: 'unlisted' }, a.token));
     const dsId = ((await ds.json()) as { id: string }).id;
-    const page = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: `<Helmet><Import name="join_data" src="ref:${dsId}" /><Mutation name="join">{\`insert into join_data.rows (who) select $_me.id\`}</Mutation></Helmet><Button run="$join">Join</Button>`, visibility: 'unlisted' }, a.token));
+    const page = await createArtifactRoute(jreq('/api/artifacts', 'POST', { html:`<!doctype html><html><head><link rel="af-dataset" data-af-name="join_data" href="ref:${dsId}" data-af-mode="live"></head><body><h1>Join</h1></body></html>`, visibility: 'unlisted' }, a.token));
     const pageId = ((await page.json()) as { id: string }).id;
         const g = await createGuestOwner();
     const cookie = await agentCookie([g.tokenId]);
@@ -88,10 +89,10 @@ describe('guests at the doors', () => {
     for (const [name, res] of [
       ['like', await likeRoute(jreq(`/api/my/artifacts/${pageId}/like`, 'POST', undefined, undefined, cookie), params(pageId))],
       ['follow', await followRoute(jreq(`/api/users/${a.user.id}/follow`, 'POST', undefined, undefined, cookie), params(a.user.id))],
-      ['join', await mutateRoute(jreq(`/a/${pageId}/mutate`, 'POST', { mutation: 'join' }, undefined, cookie), params(pageId))],
+      ['join', await mutateRoute(jreq(`/api/artifacts/${dsId}/mutate`, 'POST', {sql:'insert into public.rows (who) select $_me.id'}, undefined, cookie), params(dsId))],
     ] as const) {
       expect([401, 403], name).toContain(res.status);
-      expect((await res.json()).error, name).toBe('sign_in_required');
+      expect((await res.json()).error,name).toBe(name==='join'?'unauthorized':'sign_in_required');
     }
   });
 });
