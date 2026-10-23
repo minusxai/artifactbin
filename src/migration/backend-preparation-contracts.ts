@@ -13,6 +13,8 @@ export interface MigrationBackendPage {
     /** Exact archived source identity; required for persistent mutation publication. */
     editId?: string;
     mutations?: readonly LegacyMutationDescriptor[];
+    /** Exact per-version queries. Saved standalone external datasets retain query
+     * authorization without a current-head readsViewer declaration. */
     sourceQueries?: readonly import("../datasets/source-query/contracts.ts").MigrationSourceQueryRegistration[];
     /** Canonical source-declared current-page accepted membership relation. */
     readsMembers?: true;
@@ -20,9 +22,10 @@ export interface MigrationBackendPage {
     readsViewer?: true;
     /** Exact head declares a server handler; no code runs during preparation. */
     runsProgram?: true;
-    /** Only exact stored dataset self-bindings may select the read-only source. */
+    /** Exact saved external dataset provenance permits historical query authorization. */
     standaloneExternalDataset?: import("./dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance;
-  standaloneDataset?: import("./dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance;
+    /** Only exact stored dataset self-bindings may select the read-only source. */
+    standaloneDataset?: import("./dataset-pages/admission-contracts.ts").StandaloneDatasetPageProvenance;
     imports: readonly {
       name: string;
       legacyRef: string;

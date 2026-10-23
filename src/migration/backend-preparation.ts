@@ -125,13 +125,13 @@ export async function prepareMigrationBackends(
     legacyPages.add(page.legacyId);
     runtimePages.add(page.pageId);
     allocated.add(page.pageId);
+    const headVersion = Math.max(...page.revisions.map((r) => r.version));
     const versions = new Set<number>();
     for (const revision of page.revisions) {
       if (
         revision.readsViewer !== undefined &&
         (revision.readsViewer !== true ||
-          revision.version !==
-            Math.max(...page.revisions.map((r) => r.version)))
+          revision.version !== headVersion)
       )
         invalid();
       if (
@@ -143,7 +143,7 @@ export async function prepareMigrationBackends(
       versions.add(revision.version);
       if (revision.standaloneExternalDataset) {
         const p=revision.standaloneExternalDataset;
-        if(p.sourceFormat!=="dataset" || p.legacyId!==page.legacyId || p.pageId!==page.pageId || p.pageVersion!==revision.version || p.editId!==revision.editId || !nonempty(p.editId) || !/^[a-f0-9]{64}$/.test(p.artifactSha256) || revision.standaloneDataset || revision.imports.length || revision.readsMembers || revision.readsViewer!==true || revision.runsProgram || !revision.sourceQueries?.length || revision.mutations?.length)invalid();
+        if(p.sourceFormat!=="dataset" || p.legacyId!==page.legacyId || p.pageId!==page.pageId || p.pageVersion!==revision.version || p.editId!==revision.editId || !nonempty(p.editId) || !/^[a-f0-9]{64}$/.test(p.artifactSha256) || revision.standaloneDataset || revision.imports.length || revision.readsMembers || (revision.version === headVersion && revision.readsViewer!==true) || revision.runsProgram || !revision.sourceQueries?.length || revision.mutations?.length)invalid();
       }
       if (revision.standaloneDataset) {
         const p = revision.standaloneDataset;
@@ -222,7 +222,7 @@ export async function prepareMigrationBackends(
         if (
           query.pageLegacyId !== page.legacyId ||
           query.pageVersion !== revision.version ||
-          revision.readsViewer !== true
+          (revision.readsViewer !== true && !revision.standaloneExternalDataset)
         )
           invalid();
       }

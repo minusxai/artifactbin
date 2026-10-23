@@ -191,7 +191,9 @@ export async function scanStandaloneDatasetPages(
               version: head.version,
               ...editIdentity,
               imports: [],
-              readsViewer: true,
+              ...(original.version === artifact.artifacts[0]!.version
+                ? { readsViewer: true as const }
+                : {}),
               sourceQueries: queries,
               standaloneExternalDataset: {
                 sourceFormat: "dataset",
