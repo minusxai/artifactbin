@@ -13,9 +13,6 @@ import { EXTRA_CLASS_SOURCES } from '../../../scripts/generate-story-ui-classes'
 import { STORY_UI_RECIPE_CLASSES } from '../recipe-classes';
 
 const REQUIRED_FILES = [
-  // The compiler writes the static shells (Grid geometry, native table cells) from its own literals.
-  'lib/compiled-page/compiler.ts',
-  'lib/compiled-page/rail-preview.server.ts',
   'lib/islands/rt.tsx',
   'lib/islands/chart.ts',
   'lib/story-ui/icon-contract.ts',

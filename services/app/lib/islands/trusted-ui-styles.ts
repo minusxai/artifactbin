@@ -34,7 +34,7 @@ export function openOverlay(root: HTMLElement, priority: number) {
 }
 
 /** Register only the app's compiled CSS, handed over explicitly by its entrypoint. */
-export function configureTrustedUiStyles(cssText: string): void {
+function configureTrustedUiStyles(cssText: string): void {
   // all:initial does not reset custom properties. Reset every property used by
   // trusted CSS (including Tailwind/Radix inputs), then apply OUR defaults in
   // the next layer. Unknown author variables are harmless unless trusted CSS

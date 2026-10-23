@@ -9,9 +9,6 @@
  * ISLANDS_BROWSER_LEAVES).
  */
 export type { IslandPageData } from './contract';
-export { LIVE_DIRECT_ATTR, STORY_FRAMED_ATTR } from './contract';
-export { cn, FAMILIES, RECIPES } from './kit/recipes';
-export { peopleClasses } from './kit/recipes/people';
-export { DRAWING_CLASS } from './chart';
+export { STORY_FRAMED_ATTR } from './contract';
 export { fileNameFromUrl } from './file-display';
 export { personFaceBackground, personInitial } from './person-face';

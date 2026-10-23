@@ -4,10 +4,7 @@
  * the same sandbox as `/raw` (app/a/[id]/raw) — for the live morph (lib/islands/morph/engine) to draw in
  * place. Browser-safe: the engine names it, the route and the markup CSP admit it.
  */
-import { parseCommentViewState, type ReviewJson } from '../../../contracts/src/comment-view-state';
-
-/** The server's half of the view state: its render of the fragment starts kit elements there (./comment-state). */
-export { renderAtCommentState } from './comment-state';
+import { type ReviewJson } from '../../../contracts/src/comment-view-state';
 
 /** The fragment's address for one document (path-exact in the `/raw` page's connect-src). */
 export const storyFragmentPath = (id: string): string => `/a/${encodeURIComponent(id)}/story`;
@@ -24,7 +21,7 @@ export type StorySurface = 'raw' | 'app';
  * chosen tab, an open disclosure — lib/story-runtime/comment-state) by key, beside its `$` values. Only the fragment
  * reads it: a page drawn from it keeps running tree state the server would otherwise draw at its defaults.
  */
-export const STORY_VIEW_PARAM = 'mx-view';
+const STORY_VIEW_PARAM = 'mx-view';
 
 /**
  * The most view state a fragment request carries, encoded: well inside a request line any server or proxy takes. A page
@@ -44,11 +41,4 @@ export function storyFragmentUrl(id: string, search: string, surface: StorySurfa
   params.delete(STORY_VIEW_PARAM);
   if (view && Object.keys(view).length) params.set(STORY_VIEW_PARAM, JSON.stringify(view));
   return `${storyFragmentPath(id)}?${params.toString()}`;
-}
-
-/** The view state a fragment request names, bounded as a comment's (contracts comment-view-state); null when absent or out of bounds. */
-export function storyFragmentView(search: string): Record<string, ReviewJson> | null {
-  const raw = new URLSearchParams(search).get(STORY_VIEW_PARAM);
-  if (!raw) return null;
-  try { return parseCommentViewState({ v: 2, state: JSON.parse(raw) as unknown })?.state ?? null; } catch { return null; }
 }

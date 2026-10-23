@@ -200,7 +200,6 @@ export interface StoryIslandData {
 export const QUERY_REQUEST_PARAM = 'q';
 
 /** DOM contract between the builder and the entry. */
-export const STORY_ROOT_ID = 'mx-story-root';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * The compiled reader page: what the assembler and compiler (lib/compiled-page) write
