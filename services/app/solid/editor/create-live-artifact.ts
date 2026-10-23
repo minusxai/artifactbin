@@ -50,6 +50,8 @@ interface LiveArtifactOptions {
   whenIdle?: () => Promise<void>;
   /** A DATASET under this document changed (a named `data` frame — see app/a/[id]/events). */
   onData?: (event: ArtifactDataEvent) => void;
+  /** Native HTML reloads its server bootstrap on publication; it never fetches a JSX frame. */
+  onPublication?: (version: number) => void;
   /** The ANNOTATIONS on this document changed (owner-credentialed connections only). */
   onAnnotations?: (annotations: AnnotationWire[]) => void;
   /** Where the stream picks up (ServedResults.since), read when the stream opens. */
@@ -72,6 +74,7 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
          * fetch must not mark it seen, or the page sits one version behind until the next write.
          */
         let seenVersion = initialVersion;
+        let publicationPending = false;
         let alive = true;
         let annotationsRequest: AbortController | undefined;
         /** The newest head announced and not yet fetched; a ping arriving mid-fetch replaces it. */
@@ -132,6 +135,13 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
             onPing: (ping) => {
               if (!Number.isInteger(ping.version)) return;
               if (ping.version < seenVersion) return;
+              if (options.onPublication) {
+                if (ping.version <= seenVersion || publicationPending) return;
+                seenVersion = ping.version;
+                publicationPending = true;
+                options.onPublication(ping.version);
+                return;
+              }
               placeOwn(ping.editId, (own) => {
                 // Re-checked: a held ping may have been overtaken while its owner was being decided.
                 if (ping.version < seenVersion) return;
@@ -150,7 +160,7 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
              * (or this page's own last write) changes nothing.
              */
             onWake: () => {
-              if (!alive) return;
+              if (!alive || options.onPublication) return;
               // A frame fetch is waiting out its backoff (it failed while offline): the page is back, try now.
               if (wanted && retry !== undefined) { attempt = 0; clearTimeout(retry); retry = undefined; fetchWanted(); return; }
               if (fetching || wanted) return;

@@ -1,3 +1,4 @@
+import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
 import { InstallArtifact } from '../document/InstallArtifact';
 import { CopyAgentButton } from '../components/CopyAgentButton';
@@ -171,6 +172,9 @@ export function DocumentPage(): JSX.Element {
       if (event.datasets.includes('_members')) setMembershipRevision((n) => n + 1);
       if (page.surface?.format === 'html') runtimeRef.current?.invalidate?.(event.datasets);
     },
+    // Reload the original server shell and its ticketed frame together: their trusted
+    // revision changes atomically, while viewer state stays in browser storage.
+    onPublication: page.surface.format === 'html' ? () => replaceDocument(window.location.href) : undefined,
     onAnnotations: setLiveAnnotations,
     since: page.surface.runtime?.data.dataflow?.results?.since,
   }) : () => null;

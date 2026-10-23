@@ -18,6 +18,7 @@ function liveBackend(liveFrame: ArtifactBackend['liveFrame']) {
     backend, unsubscribe,
     ping: (p: { version: number; editId: string; by?: string | null }) => handlers!.onPing({ by: null, ...p }),
     wake: () => handlers!.onWake?.(),
+    data: () => handlers!.onData?.({datasets:['garden']} as never),
   };
 }
 
@@ -237,4 +238,26 @@ it('a page coming back online retries a frame fetch that failed while offline at
   await vi.advanceTimersByTimeAsync(0);
   expect(liveFrame).toHaveBeenCalledTimes(calls + 1);
   expect(live()?.version).toBe(5);
+});
+
+
+it('refreshes native publication once without fetching a JSX frame or replaying data changes', () => {
+ const liveFrame=vi.fn(async()=>frame(2));
+ const {backend,ping,data,wake}=liveBackend(liveFrame);
+ const reload=vi.fn(); const invalidate=vi.fn();
+ renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,onPublication:reload,onData:invalidate}));
+ data(); wake();
+ expect(reload).not.toHaveBeenCalled();
+ expect(invalidate).toHaveBeenCalledOnce();
+ ping({version:2,editId:'saved'}); ping({version:2,editId:'saved'}); ping({version:1,editId:'initial'});
+ expect(reload).toHaveBeenCalledExactlyOnceWith(2);
+ expect(liveFrame).not.toHaveBeenCalled();
+});
+
+it('never refreshes the native archived view when a publication arrives', () => {
+ const {backend}=liveBackend(vi.fn(async()=>frame(2)));
+ const reload=vi.fn();
+ renderHook(()=>createLiveArtifact({backend,id:'html1',initialEditId:'initial',initialVersion:1,enabled:false,onPublication:reload}));
+ expect(backend.live).not.toHaveBeenCalled();
+ expect(reload).not.toHaveBeenCalled();
 });
