@@ -12,6 +12,15 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const html = document.childNodes.find((node): node is DefaultTreeAdapterMap['element'] => node.nodeName === 'html');
   const head = html?.childNodes.find((node): node is DefaultTreeAdapterMap['element'] => node.nodeName === 'head');
   if (!head) throw new Error('HTML parser did not produce a head');
+  let coreId: string | undefined;
+  const removeCore = (node: DefaultTreeAdapterMap['node']) => {
+    if (!('childNodes' in node)) return;
+    node.childNodes = node.childNodes.filter((child) => {
+      if ('attrs' in child && child.nodeName === 'script' && child.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core' || attr.name === 'src' && attr.value === '/af/v1/core.js')) { coreId ??= child.attrs.find((attr) => attr.name === 'data-af-id')?.value; return false; }
+      removeCore(child); return true;
+    });
+  };
+  removeCore(document);
   const { appOrigin, ...publicConfig } = input.config;
   if (!publicConfig.initialState) {
     const visit = (node: DefaultTreeAdapterMap['node']): HtmlJsonObject | undefined => {
@@ -27,7 +36,10 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   const json = JSON.stringify(config).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   const safeCore = input.core.replace(/<\/script/gi, '<\\/script');
   const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script><script data-af="core">${safeCore}</script>`);
-  for (const node of boot.childNodes) node.parentNode = head;
+  for (const node of boot.childNodes) {
+    node.parentNode = head;
+    if (coreId && 'attrs' in node && node.attrs.some((attr) => attr.name === 'data-af' && attr.value === 'core')) node.attrs.push({ name: 'data-af-id', value: coreId });
+  }
   head.childNodes.unshift(...boot.childNodes);
   return serialize(document);
 }

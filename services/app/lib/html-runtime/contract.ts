@@ -3,6 +3,8 @@ export interface HtmlRuntimeConfig {
   pageId: string;
   revision: string;
   backends: readonly string[];
+  /** Namespace -> immutable linked resource ID, for backend invalidation notifications. */
+  bindings?: Readonly<Record<string, string>>;
   /** Exact platform origin. Never a credential or a URL carrying one. */
   appOrigin?: string;
   initialState?: HtmlJsonObject;

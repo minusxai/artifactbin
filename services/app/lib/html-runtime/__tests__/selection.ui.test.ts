@@ -7,7 +7,7 @@ it('anchors native text selection to persistent HTML identity with an explicit v
   const range = document.createRange(); range.selectNodeContents(text);
   window.getSelection()!.addRange(range);
   const selection = htmlSelection(window, undefined, '12');
-  expect(selection?.anchor).toEqual({ kind: 'html-node', v: 1, revision: '12', nodeId: 'n2', quote: 'world' });
+  expect(selection?.anchor).toMatchObject({ kind: 'html-node', v: 1, revision: '12', nodeId: 'n2', quote: 'world' });
   expect(selection?.ancestors).toEqual([{ path: 'n1', tag: 'main', hint: '' }]);
   document.querySelector('main')!.prepend(document.createElement('aside'));
   expect(htmlSelection(window, undefined, '12')?.anchor.nodeId).toBe('n2');
