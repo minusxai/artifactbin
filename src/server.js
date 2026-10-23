@@ -205,6 +205,7 @@ export function createService({
             datasetMutations: datasetRuntime.mutations,
             datasetMembers: datasetRuntime.members,
             datasetViewer: datasetRuntime.viewer,
+            legacyViewer: datasetRuntime.legacyViewer,
             sourceQueries: datasetRuntime.sourceQueries,
             datasetAvailability: datasetRuntime.availability,
             datasetPerson: datasetRuntime.person,

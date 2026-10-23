@@ -350,6 +350,7 @@ export function createBackendRoutes(options: {
   datasetAvailability?: import("../datasets/mutation/availability-contracts.ts").DatasetMutationAvailabilityService;
   sourceQueries?: import("../datasets/source-query/contracts.ts").SourceQueryService;
   datasetViewer?: import("../datasets/viewer-contracts.ts").DatasetViewerService;
+  legacyViewer?: import("./legacy-viewer-contracts.ts").LegacyViewerCompatibility;
   datasetMembers?: import("../datasets/members-contracts.ts").DatasetMembersService;
   datasetMutations?: import("../datasets/mutation/contracts.ts").DatasetMutationService;
   log?(line: string): void;
@@ -413,13 +414,25 @@ export function createBackendRoutes(options: {
     }
   }
 
+  async function effectiveSchemas(links: CurrentLink[], pageId: FileId, signal: AbortSignal) {
+    const schemas = new Map<string, string>();
+    if (options.datasetViewer && options.legacyViewer) {
+      for (const link of links) {
+        const typeDefs = await options.legacyViewer.schema({pageId, backendId:link.id, backendVersion:link.version, deployment:link.deployment, typeDefs:link.typeDefs}, signal);
+        if (typeDefs !== null) schemas.set(link.name, typeDefs);
+      }
+    }
+    return schemas;
+  }
+
   async function list(request: AfRouteRequest, pageId: FileId) {
-    return database.transaction(async (client) => {
+    const links = await database.transaction(async (client) => {
       const who = await caller(client, pageId, request.credential);
-      if (!who.role) return NOT_FOUND;
-      const links = await currentLinks(client, pageId);
-      return reply(200, listing(links));
+      return who.role ? currentLinks(client, pageId) : null;
     });
+    if (!links) return NOT_FOUND;
+    const effective = await effectiveSchemas(links, pageId, request.signal);
+    return reply(200, listing(links.map(link => ({...link,typeDefs:effective.get(link.name) ?? link.typeDefs}))));
   }
 
   async function graphql(request: AfRouteRequest, pageId: FileId) {
@@ -440,18 +453,22 @@ export function createBackendRoutes(options: {
     });
     if (!loaded) return NOT_FOUND;
     const { who, links, envs } = loaded;
+    const effective = await effectiveSchemas(links, pageId, request.signal);
     const schema = composePageSchema(
       links.map(({ name, id, version, typeDefs }) => ({
         name,
         fileId: id,
         version,
-        typeDefs,
+        typeDefs: effective.get(name) ?? typeDefs,
       })),
     );
     const linked = new Map(links.map((link) => [link.name, link]));
     const invoke = async (call: FieldCall): Promise<AfJson> => {
       const link = linked.get(call.namespace);
       try {
+        if (link && call.operation === "query" && call.field === "viewer" && effective.has(link.name) && options.datasetViewer) {
+          return await options.datasetViewer.viewer({pageId, backendId:link.id, backendVersion:link.version, subject:call.principal.subject}, call.signal) as unknown as AfJson;
+        }
         if (!host || !link)
           throw new FieldNotExecuted(
             "backend_unavailable",

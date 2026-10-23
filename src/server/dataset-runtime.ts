@@ -1,3 +1,5 @@
+import { createLegacyViewerCompatibility } from "../backend/legacy-viewer.ts";
+import { createLegacyViewerBindingRepository } from "../persistence/legacy-viewer.ts";
 import { createHistoricalDatasetReplayRepository } from "../persistence/dataset-history.ts";
 import { createDatasetUserChoiceService } from "../datasets/user-choices/service.ts";
 import { createDatasetUserChoiceRepository } from "../persistence/dataset-user-choices.ts";
@@ -112,6 +114,7 @@ export function createDatasetRuntime(
       ...createDatasetPersonRepository(database),
       reads,
     }),
+    legacyViewer: createLegacyViewerCompatibility(createLegacyViewerBindingRepository(database)),
     viewer: createDatasetViewerService(
       createDatasetViewerRepository(database, now),
     ),

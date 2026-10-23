@@ -20,6 +20,7 @@ export interface DatasetRuntime {
   attachments?: import("./dataset-attachment-http-contracts.ts").DatasetAttachmentHttpPorts;
   availability: import("../datasets/mutation/availability-contracts.ts").DatasetMutationAvailabilityService;
   person: import("../datasets/person-contracts.ts").DatasetPersonService;
+  legacyViewer: import("../backend/legacy-viewer-contracts.ts").LegacyViewerCompatibility;
   viewer: import("../datasets/viewer-contracts.ts").DatasetViewerService;
   members: import("../datasets/members-contracts.ts").DatasetMembersService;
   mutations?: DatasetMutationService;
