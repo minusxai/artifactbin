@@ -12,15 +12,16 @@ export function createReaderPresence(options:{id:string;revision:string;enabled:
  createEffect(on([options.nonce,options.enabled],([nonce,enabled])=>{
   const controller=options.runtimeRef.current;if(!nonce||!controller||!enabled)return;
   const url=`/api/artifacts/${encodeURIComponent(options.id)}/presence`;
-  const session=createReaderPresenceSession({session:runtimeId(),revision:options.revision,nonce,readPreferences:preferences,active:()=>true,
+  let active=true;
+  const session=createReaderPresenceSession({session:runtimeId(),revision:options.revision,nonce,readPreferences:preferences,active:()=>active,
    publish:async input=>{const response=await fetch(url,{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify(input),keepalive:!input.visible});if(!response.ok)return null;const body=await response.json();return typeof body.id==='string'?body.id:null;},
    connect:receive=>{const stream=new EventSource(url);stream.onmessage=event=>{try{const value=JSON.parse(event.data);if(Array.isArray(value))receive(value);}catch{}};return()=>stream.close();},
    paint:input=>controller.send({type:'mx:presence',...input}),changed:setViewers,
    clock:{now:Date.now,setInterval:(work,ms)=>setInterval(work,ms),clearInterval:timer=>clearInterval(timer as ReturnType<typeof setInterval>),setTimeout:(work,ms)=>setTimeout(work,ms),clearTimeout:timer=>clearTimeout(timer as ReturnType<typeof setTimeout>)}
   });
   update=session.preferencesChanged;
-  const unsubscribe=controller.subscribe(session.receive),leave=()=>session.dispose();window.addEventListener('pagehide',leave);
-  onCleanup(()=>{update=()=>{};unsubscribe();window.removeEventListener('pagehide',leave);session.dispose();setViewers([]);});
+  const unsubscribe=controller.subscribe(session.receive),leave=()=>{active=false;session.activeChanged();},restore=()=>{active=true;session.activeChanged();};window.addEventListener('pagehide',leave);window.addEventListener('pageshow',restore);
+  onCleanup(()=>{update=()=>{};unsubscribe();window.removeEventListener('pagehide',leave);window.removeEventListener('pageshow',restore);session.dispose();setViewers([]);});
  }));
  return {preferences,viewers,setPreference:(name:keyof ReaderPreferences,value:boolean)=>{setPreferences(settings.set(name,value));update();}};
 }
