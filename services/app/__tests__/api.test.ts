@@ -96,11 +96,11 @@ describe('artifact CRUD', () => {
     expect(body.token_id).toBeUndefined();
   });
 
-  it('rejects a missing html/markup field with 400', async () => {
+  it('rejects missing publication content with 400', async () => {
     const { token } = await mint();
     const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { title: 'x' } }));
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: 'one_of_markup_dataset_viz_image_pdf' });
+    expect(await res.json()).toMatchObject({ error: 'one_of_html_dataset_viz_image_pdf_file' });
   });
 
   it('rejects oversized html with 413', async () => {
