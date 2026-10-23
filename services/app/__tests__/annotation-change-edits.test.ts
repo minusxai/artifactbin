@@ -1,3 +1,5 @@
+import {nativeHtml} from './native-html-fixture';
+import {nativeAnchor} from './native-annotation-fixture';
 /**
  * THE COMMENT FEED CARRIES HUMAN EDITS. A human rewriting a comment after a monitor's checkpoint is delivered once
  * as an edit event (same `type`, `change: 'edited'`, a distinct `event_id`); a comment the monitor has not seen yet
@@ -21,11 +23,11 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 async function fixture() {
   const t = await mintAccountToken('feed-edits');
   const actor = { credential: 'session' as const, userId: t.userId!, email: t.email!, emailVerified: true };
-  const made = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p id="intro">Read this</p>' } }));
+  const made = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { html:nativeHtml('<p data-af-id="intro">Read this</p>') } }));
   expect(made.status).toBe(201);
   const doc = await made.json();
   const comment = async (body: string) => {
-    const res = await createComment(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor, json: { node_id: 'intro', body } }), params({ id: doc.id, annId: '' }));
+    const res = await createComment(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', actor, json: { anchor:nativeAnchor('intro'), body } }), params({ id: doc.id, annId: '' }));
     expect(res.status).toBe(201);
     return (await res.json()) as { id: string; revision: number };
   };
@@ -99,7 +101,7 @@ it('two edits between reads collapse to one event carrying the latest words', as
 it('never delivers agent edits, edits of agent comments, unchanged text, or edits of deleted comments', async () => {
   const f = await fixture();
   const human = await f.comment('Human words');
-  const agentMade = await bearerCreate(request(`/api/artifacts/${f.doc.id}/annotations`, { method: 'POST', token: f.t.token, json: { node_id: 'intro', body: 'Agent words' } }), params({ id: f.doc.id, annId: '' }));
+  const agentMade = await bearerCreate(request(`/api/artifacts/${f.doc.id}/annotations`, { method: 'POST', token: f.t.token, json: { anchor:nativeAnchor('intro'), body: 'Agent words' } }), params({ id: f.doc.id, annId: '' }));
   const agent = (await agentMade.json()) as { id: string };
   const doomed = await f.comment('Soon gone');
   const cursor = await f.now();
@@ -150,7 +152,7 @@ it('says which comments are from the watching account\'s own user: author.you', 
   await updateSharingFor(identityForUser(f.t.userId!, f.t.id), f.doc.id, { shares: [{ email: colleague.email!, role: 'commenter' }] });
   const cursor = await f.now();
   const mine = await f.comment('From the owner');
-  const theirs = await createComment(request(`/api/my/artifacts/${f.doc.id}/annotations`, { method: 'POST', actor: { credential: 'session', userId: colleague.id, email: colleague.email!, emailVerified: true }, json: { node_id: 'intro', body: 'From a colleague' } }), params({ id: f.doc.id, annId: '' }));
+  const theirs = await createComment(request(`/api/my/artifacts/${f.doc.id}/annotations`, { method: 'POST', actor: { credential: 'session', userId: colleague.id, email: colleague.email!, emailVerified: true }, json: { anchor:nativeAnchor('intro'), body: 'From a colleague' } }), params({ id: f.doc.id, annId: '' }));
   expect(theirs.status).toBe(201);
   const page = await f.read(cursor);
   expect(page.events.map((e) => [e.body, e.author.you])).toEqual([['From the owner', true], ['From a colleague', false]]);

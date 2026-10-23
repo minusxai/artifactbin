@@ -1,3 +1,5 @@
+import {nativeHtml} from './native-html-fixture';
+import {nativeAnchor} from './native-annotation-fixture';
 /**
  * EDITING A COMMENT — its author rewrites the words; nobody else may.
  *
@@ -19,7 +21,7 @@ import { POST as bearerCreateRoute } from '@/app/api/artifacts/[id]/annotations/
 
 useAppHarness();
 
-const SOURCE = '<div id="root"><p id="lede">Revenue grew in the third quarter.</p></div>';
+const SOURCE = '<div data-af-id="root"><p data-af-id="lede">Revenue grew in the third quarter.</p></div>';
 
 async function person(name: string) {
   const user = await createUser({ email: `mxmx_test_edit_${name}@example.com` });
@@ -34,7 +36,7 @@ type Person = Awaited<ReturnType<typeof person>>;
 
 async function world() {
   const owner = await person('owner'), commenter = await person('commenter'), editor = await person('editor');
-  const row = await createArtifact(owner.token.id, owner.user.id, { format: 'markup', source: SOURCE, meta: {}, visibility: 'private', title: 'edits' });
+  const row = await createArtifact(owner.token.id, owner.user.id, { format: 'html', source: nativeHtml(SOURCE), meta: {}, visibility: 'private', title: 'edits' });
   await updateSharingFor(identityForUser(owner.user.id, owner.token.id), row.id, { shares: [
     { email: commenter.user.email!, role: 'commenter' }, { email: editor.user.email!, role: 'editor' },
   ] });
@@ -46,7 +48,7 @@ const ctx = (id: string, annId?: string) => ({ params: Promise.resolve({ id, ...
 interface Thread { id: string; revision: number; status: string; quote: string | null; anchor: { nodeId?: string } | null; thread: Array<{ id: string; body: string; edited_at?: string }> }
 
 async function comment(who: Person, id: string, body: string, extra: Record<string, unknown> = {}): Promise<Thread> {
-  const res = await createRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor: who.session, json: { node_id: 'lede', body, ...extra } }), ctx(id));
+  const res = await createRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', actor: who.session, json: { anchor:nativeAnchor('lede',1,typeof extra.quote==='string'?extra.quote:''), body } }), ctx(id));
   expect(res.status, await res.clone().text()).toBe(201);
   return res.json();
 }
@@ -112,7 +114,7 @@ describe('the author edits their own words', () => {
 
   it('an agent edits what its own account wrote through the bearer operation, with an Idempotency-Key', async () => {
     const w = await world();
-    const made = await bearerCreateRoute(request(`/api/artifacts/${w.id}/annotations`, { method: 'POST', token: w.editor.token.token, json: { node_id: 'lede', body: 'Agent note' } }), ctx(w.id));
+    const made = await bearerCreateRoute(request(`/api/artifacts/${w.id}/annotations`, { method: 'POST', token: w.editor.token.token, json: { anchor:nativeAnchor('lede'), body: 'Agent note' } }), ctx(w.id));
     expect(made.status, await made.clone().text()).toBe(201);
     const thread = await made.json() as Thread;
     const key = randomUUID();
