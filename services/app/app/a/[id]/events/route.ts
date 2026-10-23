@@ -93,6 +93,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    */
   const marks = marksOfToken(new URL(request.url).searchParams.get('since'));
   const position = () => {
+    if (initial.format === 'html') return '';
     for (const datasetId of [...marks.keys()]) if (!datasetUnsubs.has(datasetId)) marks.delete(datasetId);
     return marks.size ? `id: ${tokenOf(marks)}\n` : '';
   };
@@ -107,7 +108,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   let sharedQueue = Promise.resolve();
   const pushHtmlShared = (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>) => sharedQueue = sharedQueue.then(async () => {
     if (row.format !== 'html' || closed) return;
-    const current = await htmlSharedRevisions(await getDb(), htmlLiveLinks(row.meta));
+    const current = await htmlSharedRevisions(await getDb(), htmlLiveLinks(row.meta), {mayReadDataset:async datasetId=>{const dataset=await getArtifactById(datasetId);return !!dataset&&dataset.format==='dataset'&&await canReadArtifact(dataset,actor);}});
     if (closed) return;
     const changed = changedHtmlSharedRevisions(sharedMarks, current);
     sharedMarks = new Map(current.map(mark => [mark.name, mark.revision]));
@@ -220,7 +221,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       }
     }
     // Newly followed: marked now that they are subscribed (a mark the reader brought is kept for the catch-up).
-    if (added.length) for (const [datasetId, mark] of await marksOf(added)) if (!marks.has(datasetId)) marks.set(datasetId, mark);
+    if (row.format !== 'html' && added.length) for (const [datasetId, mark] of await marksOf(added)) if (!marks.has(datasetId)) marks.set(datasetId, mark);
   };
 
   // Last stylesheet sent on THIS connection, so repeats can be skipped.
@@ -330,7 +331,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * dataset this document reads and nothing else, exactly as a wakeup would.
    */
   const since = new URL(request.url).searchParams.get('since');
-  if (since) {
+  if (since && initial.format !== 'html') {
     void changedSince(since, [...datasetUnsubs.keys()])
       .then(async (changed) => { for (const datasetId of changed) await wakeDataset(datasetId); })
       .catch(() => { /* a failed catch-up is a missed wakeup: the next change still arrives */ });
