@@ -1,3 +1,4 @@
+import {syncMigratedDatasetLifecycle} from "../persistence/migrated-dataset-lifecycle.ts";
 import { projectCommentPersons } from "../comments/retained-person-repository.ts";
 import type { PageRevisionSelection } from "./page-revision-contracts.ts";
 import {
@@ -414,6 +415,7 @@ export function createPageService({
         if (!document || !permissions(document, actor, false, false, session?.groupAuthority).manage)
           fail(404, "File not found");
         await client.query("UPDATE files SET deleted_at=$2,trash_path=path,generation=generation+1 WHERE id=$1", [id, now()]);
+        await syncMigratedDatasetLifecycle(client,document.owner,[id]);
         return { id, deleted: true as const };
       });
     },

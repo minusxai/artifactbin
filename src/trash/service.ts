@@ -1,3 +1,4 @@
+import {syncMigratedDatasetLifecycle} from "../persistence/migrated-dataset-lifecycle.ts";
 import { updateRetainedLocations } from "../retained-folders/locations.ts";
 import { randomUUID } from "node:crypto";
 import { normalizePath } from "../path-model.ts";
@@ -68,6 +69,7 @@ export function createTrashService(
             "UPDATE files SET deleted_at=$3,trash_path=path,trash_batch=$4,generation=generation+1 WHERE owner=$1 AND id=ANY($2::text[])",
             [owner, ids, now, id],
           );
+          await syncMigratedDatasetLifecycle(client,owner,ids);
           await client.query(
             "DELETE FROM folders WHERE owner=$1 AND path=ANY($2::text[])",
             [owner, folders],
@@ -127,6 +129,7 @@ export function createTrashService(
                 [item.id, item.path],
               );
           }
+          await syncMigratedDatasetLifecycle(client,owner,files.map(r=>String(r.id)));
           const restoredRoot = restored.find(
             (item) => item.kind === "folder" && item.id === root.path,
           )!;
@@ -173,6 +176,7 @@ export function createTrashService(
           "UPDATE files SET path=$2,deleted_at=NULL,trash_path=NULL,generation=generation+1 WHERE id=$1",
           [id, restored.path],
         );
+        await syncMigratedDatasetLifecycle(client,owner,[id]);
         return { id, path: restored.path, restoredIds: [id] };
       });
     },

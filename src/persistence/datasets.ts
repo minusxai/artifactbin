@@ -1,3 +1,4 @@
+import {projectCurrentMigratedDatasetPage} from "./migrated-dataset-lifecycle.ts";
 import type { SqlClient, SqlDatabase } from "./sql.ts";
 import type { DatasetReadRepository } from "../datasets/repository-contracts.ts";
 import type {
@@ -230,7 +231,7 @@ export async function loadDatasetAuthority(
       shared.push(saved.dataset.id);
     facts.sharedArtifactIds = shared;
   }
-  const snapshot = pageRow.snapshot as DocumentSnapshot;
+  const snapshot = await projectCurrentMigratedDatasetPage(client,pageRow.snapshot as DocumentSnapshot,{sourceNamespace:namespace,pageId:context.pageId,owner:page.owner});
   if (
     snapshot.id !== saved.page.legacyId ||
     snapshot.editId !== saved.page.editId
