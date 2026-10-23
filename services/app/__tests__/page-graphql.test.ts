@@ -1,0 +1,27 @@
+import {it,expect} from 'vitest';
+import {createRunner} from '@artifactbin/runner/local';
+import {setServices} from '@/lib/platform';
+import {localPageBackendCapability} from '@/lib/page-operations';
+import {POST as publish} from '@/app/api/artifacts/route';
+import {GET,POST} from '@/app/api/artifacts/[id]/graphql/route';
+import {request,useAppHarness,mintAccountToken} from './harness';
+const harness=useAppHarness();
+it('publishes, discovers and executes immutable GraphQL with file-scoped shared state through HTTP handlers',async()=>{
+ const runner=await createRunner({db:await harness.db(),capabilities:(context,operation,args)=>localPageBackendCapability(context.request,operation,args)});
+ setServices({runner});
+ try{
+  const owner=await mintAccountToken('pagegraphql');
+  const source='export const typeDefs="type Query { count:Int! } type Mutation { add:Int! @auth(role:OWNER) }"; export default { count:async(args,p,c)=>(await c.store.get()).value?.count??0, add:async(args,p,c)=>{const s=await c.store.get();await c.store.set({count:(s.value?.count??0)+1},{expected:s.version});return 1;} };';
+  const result=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{html:'<html><head><link rel="af-backend" data-af-name="tasks" href="./tasks.ts"></head><body>Count</body></html>',backendSources:{tasks:source}}}));
+  expect(result.status).toBe(201);const created=await result.json();const context={params:Promise.resolve({id:created.id})};const path=`/api/artifacts/${created.id}/graphql`;
+  const discovery=await GET(request(path,{token:owner.token}),context);expect(discovery.status).toBe(200);expect((await discovery.json()).sdl).toContain('tasks__Query');
+  const mutation=await POST(request(path,{method:'POST',token:owner.token,json:{revision:'1',query:'mutation { tasks { add } }'}}),context);expect(mutation.status).toBe(200);expect(await mutation.json()).toMatchObject({data:{tasks:{add:1}},extensions:{outcomes:{'tasks.add':'committed'}}});
+  const query=await POST(request(path,{method:'POST',token:owner.token,json:{revision:'1',query:'{ tasks { count } }'}}),context);expect(await query.json()).toEqual({data:{tasks:{count:1}}});
+ }finally{await runner.close();}
+},20000);
+it('does not accept a page bearer as runner authority for file stores',async()=>{
+ const {POST:capability}=await import('@/app/api/runner/operations/route');
+ const owner=await mintAccountToken('capability');
+ const response=await capability(request('/api/runner/operations',{method:'POST',token:owner.token,json:{operation:'pageBackend.store.get',input:{backendId:'other'},documentSource:'forged'}}));
+ expect(response.status).toBe(403);
+});
