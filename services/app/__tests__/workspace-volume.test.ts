@@ -35,7 +35,7 @@ async function seed(docs: number, tag = 'vol') {
   const token = await mintAccountToken('volume', user.id);
   await db.query(
     `INSERT INTO artifacts (id, user_id, token_id, format, title, meta, version, visibility, updated_at)
-     SELECT '${tag}' || lpad(i::text, 3, '0'), $1, $2, 'markup', 'Document ' || i,
+     SELECT '${tag}' || lpad(i::text, 3, '0'), $1, $2, 'html', 'Document ' || i,
        jsonb_build_object('theme', 'paper', 'template', 'blank', 'css', repeat('.x{color:red}', 500)), 1, 'private', now() - (i || ' minutes')::interval
      FROM generate_series(1, $3::int) i`,
     [user.id, token.id, docs],
@@ -119,7 +119,7 @@ describe('Home insights', () => {
   it('keep the full workspace (Home plus a folder page) carrying views per row and no drawn sparkline', async () => {
     const user = await seed(8);
     const workspace = await accountWorkspaceFor(user.id, user.email);
-    expect(workspace.artifacts.filter((row) => row.format === 'markup').map((row) => row.views).sort()).toEqual(Array.from({ length: 8 }, (_, k) => expectedViews(k + 1)).sort());
+    expect(workspace.artifacts.filter((row) => row.format === 'html').map((row) => row.views).sort()).toEqual(Array.from({ length: 8 }, (_, k) => expectedViews(k + 1)).sort());
     for (const row of workspace.artifacts) expect(row).not.toHaveProperty('sparkline');
   });
 });
@@ -130,7 +130,7 @@ describe('the owner listing', () => {
     const user = await seed(docs);
     const rows = await listOwnedArtifacts('user_id', user.id);
     expect(rows).toHaveLength(docs + 1);
-    expect(viewsById(rows.filter((row) => row.format === 'markup'))).toEqual(expectedById(docs));
+    expect(viewsById(rows.filter((row) => row.format === 'html'))).toEqual(expectedById(docs));
     expect(rows.find((row) => row.id === 'volds1')?.views).toBe(1);
     // The reference: what the retired per-row subquery counted.
     const db = await getDb();
@@ -144,12 +144,12 @@ describe('the owner listing', () => {
     const docs = 30;
     const user = await seed(docs);
     const first = await listOwnedArtifacts('user_id', user.id);
-    expect(viewsById(first.filter((row) => row.format === 'markup'))).toEqual(expectedById(docs));
+    expect(viewsById(first.filter((row) => row.format === 'html'))).toEqual(expectedById(docs));
     const db = await getDb();
     // Everything before today leaves the table (retention, or simply a very long history elsewhere).
     await db.query("DELETE FROM analytics_events WHERE created_at < (now() AT TIME ZONE 'UTC')::date");
     const second = await listOwnedArtifacts('user_id', user.id);
-    expect(viewsById(second.filter((row) => row.format === 'markup'))).toEqual(expectedById(docs));
+    expect(viewsById(second.filter((row) => row.format === 'html'))).toEqual(expectedById(docs));
     // …and a view recorded afterwards is added to the folded total, once.
     await db.query("INSERT INTO analytics_events (event, artifact_id, visitor) VALUES ('view', $1, 'brand-new-visitor')", [docId(3)]);
     const third = await listOwnedArtifacts('user_id', user.id);
@@ -161,9 +161,9 @@ describe('the owner listing', () => {
     const docs = 12;
     const user = await seed(docs);
     const racers = await Promise.all([1, 2, 3, 4].map(() => listOwnedArtifacts('user_id', user.id)));
-    for (const rows of racers) expect(viewsById(rows.filter((row) => row.format === 'markup'))).toEqual(expectedById(docs));
+    for (const rows of racers) expect(viewsById(rows.filter((row) => row.format === 'html'))).toEqual(expectedById(docs));
     const again = await listOwnedArtifacts('user_id', user.id);
-    expect(viewsById(again.filter((row) => row.format === 'markup'))).toEqual(expectedById(docs));
+    expect(viewsById(again.filter((row) => row.format === 'html'))).toEqual(expectedById(docs));
   });
 
   it('issues a number of statements that does not grow with the documents or their events', async () => {
@@ -182,17 +182,17 @@ describe('the owner listing', () => {
     const user = await seed(6);
     const rows = await listOwnedArtifacts('user_id', user.id);
     const markup = rows.find((row) => row.id === docId(1))!;
-    expect(markup.meta).toEqual({ theme: 'paper', template: 'blank' });
+    expect(markup.meta).toEqual({});
     expect(JSON.stringify(rows).length).toBeLessThan(6 * 1200);
     // The dataset's listed facts survive; the wire is what it always was.
     expect(artifactSummaryToWire(rows.find((row) => row.id === 'volds1')!, 'http://app.test').meta).toEqual({ rowCount: 3 });
-    expect(artifactSummaryToWire(markup, 'http://app.test').meta).toEqual({ theme: 'paper', template: 'blank' });
+    expect(artifactSummaryToWire(markup, 'http://app.test').meta).toEqual({});
   });
 
   it('serves a browser\'s unclaimed drafts the same way', async () => {
     const db = await getDb();
     const token = await mintAccountToken('draft-holder', null);
-    await db.query("INSERT INTO artifacts (id, token_id, user_id, format, title, meta, version) VALUES ('draft1', $1, NULL, 'markup', 'Draft', '{\"css\":\"x\"}', 1)", [token.id]);
+    await db.query("INSERT INTO artifacts (id, token_id, user_id, format, title, meta, version) VALUES ('draft1', $1, NULL, 'html', 'Draft', '{\"css\":\"x\"}', 1)", [token.id]);
     await db.query("INSERT INTO analytics_events (event, artifact_id, visitor, created_at) VALUES ('view','draft1','a', now() - interval '2 days'),('view','draft1','b-old', now() - interval '2 days'),('view','draft1','b-new', now())");
     const drafts = await listDraftsByTokenIds([token.id]);
     expect(drafts.map((draft) => [draft.id, draft.views])).toEqual([['draft1', 3]]);

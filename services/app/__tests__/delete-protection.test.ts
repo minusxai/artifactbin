@@ -1,3 +1,4 @@
+import {nativeHtml} from './native-html-fixture';
 /**
  * Delete protection: deleting an artifact that other
  * documents reference answers 409 {has_dependents, dependents} — the caller
@@ -26,7 +27,7 @@ async function seedDatasetWithDependent(token: string) {
   ).json();
   const doc = await (
     await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'The doc', markup: `<Helmet><Import name="rows_data" src="ref:${ds.id}" /><Query name="rows">{\`select * from rows_data.rows\`}</Query></Helmet><div data-design="tw" className="p-4"><Question data="$rows" title="Rev" /></div>` } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'The doc', html: nativeHtml(`<link rel="af-dataset" data-af-name="rows" href="ref:${ds.id}"><p>Dataset consumer</p>`) } }),
     )
   ).json();
   return { ds, doc };
