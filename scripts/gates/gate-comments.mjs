@@ -21,7 +21,10 @@ const CAP_DOC=html('<h1>The cap</h1><p id="cap" data-af-id="cap">The cap is 5 to
 async function publish(source){const {token}=await connectAgent(BASE);const response=await fetch(`${BASE}/api/artifacts`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({html:source,visibility:'public'})});if(response.status!==201)throw new Error(`Native publication ${response.status}: ${await response.text()}`);return {...await response.json(),token};}
 async function api(seed,suffix='',body,method='POST'){const response=await fetch(`${BASE}/api/artifacts/${seed.id}${suffix}`,{method:body===undefined?'GET':method,headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});if(!response.ok)throw new Error(`Artifact API ${response.status}: ${await response.text()}`);return response.json();}
 async function openRail(page){if(await page.getByLabel('Annotation sidebar',{exact:true}).isVisible().catch(()=>false))return;await openArtifactControls(page);await page.getByLabel('Toggle comments',{exact:true}).click();await page.getByLabel('Annotation sidebar',{exact:true}).waitFor();}
-async function comment(page,frame,selector,body){await frame.locator(selector).click({clickCount:3});await frame.locator(selector).click({button:'right'});await page.getByLabel('Annotation comment',{exact:true}).waitFor();await page.getByLabel('Annotation comment',{exact:true}).fill(body);await page.getByLabel('Save annotation',{exact:true}).click();await page.getByLabel('Annotation composer',{exact:true}).waitFor({state:'hidden'});}
+async function comment(page,frame,selector,body){await frame.locator(selector).click({clickCount:3});await frame.locator(selector).click({button:'right'});await page.getByLabel('Annotation comment',{exact:true}).waitFor();if(body==='Check the Q3 sheet'){
+ const dialog=page.getByRole('dialog',{name:'Annotation composer'}),handle=dialog.getByRole('button',{name:'Move comment box'});
+ const before=await dialog.boundingBox(),grip=await handle.boundingBox();await page.mouse.move(grip.x+grip.width/2,grip.y+grip.height/2);await page.mouse.down();await page.mouse.move(240,300,{steps:12});await page.mouse.up();const moved=await dialog.boundingBox();check(Math.abs(moved.x-before.x)>5,'the original composer drags across the native iframe');
+ }await page.getByLabel('Annotation comment',{exact:true}).fill(body);await page.getByLabel('Save annotation',{exact:true}).click();await page.getByLabel('Annotation composer',{exact:true}).waitFor({state:'hidden'});}
 const AGENT_REPLY = [
   'Fixed in `lib/config.ts` — the cap was **10**:',
   '',
@@ -281,6 +284,9 @@ async function ownerLeg(browser,seed){
   await expect(overlay).not.toHaveCount(0);check(true,'saved native text receives an inert highlight overlay');
   const marker=page.locator('[aria-label^="Open annotation conversation by"]');await marker.first().waitFor();
   await marker.first().hover();await expect(page.getByLabel('Open annotation comments')).toContainText('Q3 sheet');check(true,'ambient marker reveals the conversation without opening the sidebar');
+  const card=page.locator('[data-annotation-id]').first();await card.getByRole('button',{name:'Reply',exact:true}).click();
+  const reply=page.getByRole('textbox',{name:'Reply to annotation',exact:true});await reply.fill('Answer from the hover card');await page.mouse.move(5,5);check(await reply.isVisible(),'a hover reply draft stays open when the pointer leaves');
+  await page.getByRole('button',{name:'Send reply',exact:true}).click();await until(()=>api(seed,'/annotations'),wire=>wire.annotations[0].thread.some(row=>row.body==='Answer from the hover card'));check(true,'the original hover reply composer saves on the native thread');await page.mouse.move(5,5);
   await openRail(page);await expect(page.getByLabel('Annotation sidebar',{exact:true})).toContainText('Q3 sheet');
   check(await page.evaluate(()=>location.hash)==='','opening comments enters no editing mode');
   await openArtifactControls(page);check(await page.getByLabel('Edit artifact',{exact:true}).count()===0,'native reader never offers the retired source editor');await dismissControls(page);
