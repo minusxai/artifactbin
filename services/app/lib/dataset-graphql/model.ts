@@ -1,15 +1,26 @@
 import {createHash,randomUUID} from 'node:crypto';
 import type { DatasetCellValue,DatasetColumn,DatasetColumnDescriptor,DatasetReadRequest,DatasetRowChange,Scalar } from '@artifactbin/contracts';
 import type {DatasetTable} from '@/lib/datasets/types';
-import type {DatasetStatement} from './types';
+import type {DatasetStatement,DatasetRowIdentitySidecar} from './types';
 export const ID_COLUMN='__af_graphql_row_id';
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('base64url');
 export const tableIdentity=(table:Pick<DatasetTable,'schema'|'name'>)=>`t_${digest([table.schema,table.name])}`;
 export const columnIdentity=(tableId:string,name:string)=>`c_${digest([tableId,name])}`;
 export const initialRowIds=(datasetId:string,tableId:string,objectKey:string,count:number)=>Array.from({length:count},(_,i)=>`r_${digest([datasetId,tableId,objectKey,i])}`);
+/** A changed content pointer is a replacement; a matching corrupt sidecar must never reset identities silently. */
+export function rowIdsForObject(datasetId:string,tableId:string,objectKey:string,count:number,prior:unknown):readonly string[]{
+ if(prior===undefined)return initialRowIds(datasetId,tableId,objectKey,count);
+ if(!prior||typeof prior!=='object'||typeof (prior as DatasetRowIdentitySidecar).objectKey!=='string')throw new Error('dataset_row_identity_corrupt');
+ const saved=prior as DatasetRowIdentitySidecar;
+ if(saved.objectKey!==objectKey)return initialRowIds(datasetId,tableId,objectKey,count);
+ if(!Array.isArray(saved.ids)||saved.ids.length!==count||new Set(saved.ids).size!==count||saved.ids.some(id=>typeof id!=='string'||!id))throw new Error('dataset_row_identity_corrupt');
+ return saved.ids;
+}
+
 const quote=(name:string)=>`"${name.replaceAll('"','""')}"`;
 const cellType=(column:DatasetColumn):DatasetCellValue['type']=>column.type==='number'?'NUMBER':column.type==='boolean'?'BOOLEAN':'STRING';
 export function descriptors(table:DatasetTable):DatasetColumnDescriptor[]{
+ if(table.columns.some(c=>c.name===ID_COLUMN))throw new Error('dataset_reserved_column');
  return table.columns.map(c=>({id:columnIdentity(tableIdentity(table),c.name),label:c.name,type:cellType(c),nullable:true,sourceType:c.type}));
 }
 export function typedCell(column:DatasetColumn,value:unknown):DatasetCellValue {

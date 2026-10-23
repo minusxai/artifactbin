@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {tableIdentity,columnIdentity,compileRead,compileChanges,initialRowIds,typedCell} from '../model';
+import {tableIdentity,columnIdentity,compileRead,compileChanges,initialRowIds,rowIdsForObject,typedCell} from '../model';
 const table={schema:'public',name:'rows',columns:[{name:'label',type:'string' as const},{name:'amount',type:'number' as const},{name:'date',type:'date' as const}],objectKey:'blob'};
 const id=tableIdentity(table), column=(name:string)=>columnIdentity(id,name);
 describe('dataset GraphQL planning',()=>{
@@ -27,4 +27,14 @@ describe('dataset GraphQL planning',()=>{
   const plan=compileChanges(table,[{kind:'INSERT',cells:[{columnId:column('amount'),value:{type:'NUMBER',value:0}}]},{kind:'DELETE',rowId:'row1'}]);
   expect(plan).toHaveLength(2);expect(plan[1]!.params).toEqual({rowId:'row1'});
  });
+});
+
+it('preserves saved identities and refuses a corrupt matching sidecar',()=>{
+ expect(rowIdsForObject('dataset',id,'blob',1,{objectKey:'blob',ids:['stable']})).toEqual(['stable']);
+ expect(()=>rowIdsForObject('dataset',id,'blob',1,{objectKey:'blob',ids:[]})).toThrow('dataset_row_identity_corrupt');
+ expect(rowIdsForObject('dataset',id,'replacement',1,{objectKey:'blob',ids:['stable']})).not.toEqual(['stable']);
+});
+it('rejects reserved column collisions and invalid null ordering predicates',()=>{
+ expect(()=>compileRead({...table,columns:[{name:'__af_graphql_row_id',type:'string'}]},{tableId:id,first:1})).toThrow('dataset_reserved_column');
+ expect(()=>compileRead(table,{tableId:id,first:1,filters:[{columnId:column('amount'),operator:'LT',value:{type:'NUMBER',value:null}}]})).toThrow('invalid_null_filter');
 });

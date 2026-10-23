@@ -7,7 +7,7 @@ import {objectStore} from '@/lib/object-store';
 import {canWriteDataset,canUseDataPolicy,isMutationRefused,mutateDataset} from '@/lib/document-data';
 import type {DatasetGraphqlPort} from './types';
 import {createDatasetGraphql} from './index';
-import {ID_COLUMN,initialRowIds,tableIdentity} from './model';
+import {ID_COLUMN,rowIdsForObject,tableIdentity} from './model';
 import {authorizedDataset,resolveDatasetBinding} from './authority';
 const unavailable=()=>new Error('dataset_not_found');
 /** Original dataset object store, executor, grants, version CAS and durable receipt ledger. */
@@ -16,12 +16,12 @@ export function retainedDatasetGraphqlPort():DatasetGraphqlPort {
   async snapshot(actor,binding,signal){
    signal.throwIfAborted();const row=await resolveDatasetBinding(actor,binding),catalog=catalogOf(row);if(!catalog)throw unavailable();
    if(catalog.kind!=='stored')throw new Error('dataset_stable_identity_unavailable');
-   const rowIds:Record<string,string[]>={};
+   const rowIds:Record<string,readonly string[]>={};
    const saved=(row.meta as {graphqlRowIds?:Record<string,{objectKey:string;ids:string[]}>}).graphqlRowIds;
    for(const table of catalog.tables){
     if(!table.objectKey||table.sql)throw new Error('dataset_stable_identity_unavailable');
     const tableId=tableIdentity(table),rows=await loadDatasetRows({meta:{objectKey:table.objectKey}}),prior=saved?.[tableId];
-    rowIds[tableId]=prior?.objectKey===table.objectKey&&prior.ids.length===rows.length&&new Set(prior.ids).size===rows.length&&prior.ids.every(id=>typeof id==='string')?prior.ids:initialRowIds(row.id,tableId,table.objectKey,rows.length);
+    rowIds[tableId]=rowIdsForObject(row.id,tableId,table.objectKey,rows.length,prior);
    }
    return {id:row.id,revision:String(row.version),policyIdentity:JSON.stringify([row.edit_id,row.policy_revision,row.sharing_revision]),catalog,rowIds};
   },

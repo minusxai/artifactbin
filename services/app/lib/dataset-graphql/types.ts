@@ -1,6 +1,7 @@
 import type { AccessActor } from '@/lib/accounts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetWriteRequest, DatasetWriteReceipt, HtmlDatasetLink, Scalar } from '@artifactbin/contracts';
+export interface DatasetRowIdentitySidecar {objectKey:string;ids:readonly string[]}
 /** Authorized, revision-specific data. Policy identity changes invalidate cursors. */
 export interface DatasetSnapshot {
  id:string; revision:string; policyIdentity:string; catalog:DatasetCatalog;

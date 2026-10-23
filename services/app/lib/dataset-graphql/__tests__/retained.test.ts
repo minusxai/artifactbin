@@ -1,9 +1,10 @@
 import {expect,it} from 'vitest';
+import {createHash} from 'node:crypto';
 import {setDatasetPolicy} from '@/lib/document-data/dataset-policy';
 import {getDb} from '@/lib/platform';
 import {useAppHarness,request,mintAccountToken} from '@/__tests__/harness';
 import {POST as create} from '@/app/api/artifacts/route';
-import {getArtifactById} from '@/lib/artifacts';
+import {getArtifactById,durableMutation} from '@/lib/artifacts';
 import {requestOrSessionActor} from '@/lib/accounts';
 import {loadDatasetRows} from '@/lib/datasets/dataset-store';
 import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '../retained';
@@ -74,4 +75,13 @@ it('executes constant GraphQL schema discovery, typed reads and writes over reta
  const column=f.table.columns.find(c=>c.label==='amount')!;
  const mutation=await graphql({schema,rootValue,source:'mutation($table:ID!,$column:ID!){ writeRows(tableId:$table,expectedRevision:"1",requestId:"graphql-insert",changes:[{kind:INSERT,cells:[{columnId:$column,value:{type:NUMBER,number:4.25}}]}]) { outcome revision rowIds } }',variableValues:{table:f.table.id,column:column.id}});
  expect(mutation.errors).toBeUndefined();expect(mutation.data).toMatchObject({writeRows:{outcome:'committed',revision:'2'}});
+});
+
+it('keeps an unfinished durable request unknown without executing it again',async()=>{
+ const f=await fixture(),column=f.table.columns.find(c=>c.label==='amount')!;
+ const input={tableId:f.table.id,expectedRevision:'1',requestId:'unfinished-request',changes:[{kind:'INSERT' as const,cells:[{columnId:column.id,value:{type:'NUMBER' as const,value:3}}]}]};
+ await expect(durableMutation(f.actor,'https://dataset.invalid',createHash('sha256').update(input.requestId).digest('base64url'),{datasetId:f.id,...input},async()=>{throw new Error('interrupted');})).rejects.toThrow('interrupted');
+ expect((await f.api.write(f.actor,f.binding,input,signal)).outcome).toBe('unknown');
+ expect((await f.api.write(f.actor,f.binding,input,signal)).outcome).toBe('unknown');
+ expect((await getArtifactById(f.id))!.version).toBe(1);
 });

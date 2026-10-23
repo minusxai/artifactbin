@@ -4,7 +4,6 @@ import type {AccessActor} from '@/lib/accounts';
 import {compileRead,compileChanges,columnIdentity,descriptors,tableIdentity,typedCell,ID_COLUMN} from './model';
 import type {DatasetGraphqlPort,DatasetSnapshot} from './types';
 export type {DatasetGraphqlPort,DatasetSnapshot} from './types';
-export {tableIdentity,columnIdentity} from './model';
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('base64url');
 function tableFor(snapshot:DatasetSnapshot,id:string){const table=snapshot.catalog.tables.find(t=>tableIdentity(t)===id);if(!table)throw new Error('dataset_table_not_found');return table;}
 export function datasetSchema(snapshot:DatasetSnapshot){return {revision:snapshot.revision,tables:snapshot.catalog.tables.map(table=>({id:tableIdentity(table),label:table.name,columns:descriptors(table)}))};}
