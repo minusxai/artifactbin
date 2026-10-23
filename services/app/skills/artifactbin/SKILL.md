@@ -22,7 +22,7 @@ For an existing page, read its canonical `html`, `version` and `state`, preserve
 
 ## Preserve the document
 
-Every saved page version remains available. Keep stable `data-af-id` attributes when moving or editing elements. Never reuse an ID removed in an earlier version. Newly authored elements may omit IDs and receive server-assigned identities; save the canonical returned HTML before the next edit. HTML `id` remains available for ordinary browser anchors and selectors.
+Every saved page version remains available. Keep stable `data-af-id` attributes when moving or editing elements. Never reuse an ID removed in an earlier version. Newly authored elements may omit IDs and receive server-assigned identities; save the canonical returned HTML before the next edit. For elements created by scripts, derive stable `data-af-id` values from record IDs and keep them beneath a container present in saved source; the platform scopes comments automatically. Read [dynamic element identities](references/html-runtime.md#dynamic-elements-and-comments). HTML `id` remains available for ordinary browser anchors and selectors.
 
 Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-system"` for platform blocks. Color mode/design selection belongs on `<html data-af-dark="false" data-af-design-system="NAME">`. Page scripts execute on the page’s runner origin, separately from account credentials.
 

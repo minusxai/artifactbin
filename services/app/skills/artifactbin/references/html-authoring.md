@@ -21,7 +21,7 @@ The server inserts the core first, assigns stable `data-af-id` identities to ele
 ## Edit the same page
 
 1. `GET /api/artifacts/ID`. Require `format:"html"`; retain canonical `html`, `version` and `state`.
-2. Edit that HTML. Keep existing `data-af-id` values, including when moving elements. New nodes can omit identities; a removed identity is never reused.
+2. Edit that HTML. Keep existing `data-af-id` values, including when moving elements. New elements in source can omit identities; the server assigns them on save. Script-created elements need stable identities derived from their logical data; keep them beneath a saved source container. Never assign a retired identity to another element. See [dynamic elements and comments](html-runtime.md#dynamic-elements-and-comments).
 3. `PUT /api/artifacts/ID` with `{"html":"<edited complete HTML>","expectedVersion":<observed version>,"expectedState":"<observed state>"}` and a new durable idempotency key.
 4. Save the successful canonical response for further edits. A 409 means another writer advanced the page; read the new head, reconcile and submit a newly intended write. Never silently overwrite it.
 
