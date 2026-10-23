@@ -1,5 +1,5 @@
 import {createHash,randomUUID} from 'node:crypto';
-import type { DatasetCellValue,DatasetColumn,DatasetColumnDescriptor,DatasetReadRequest,DatasetRowChange,Scalar } from '@artifactbin/contracts';
+import type { DatasetCellValue,DatasetColumn,DatasetColumnDescriptor,DatasetReadRequest,DatasetRowFilter,DatasetRowChange,Scalar } from '@artifactbin/contracts';
 import type {DatasetTable} from '@/lib/datasets/types';
 import type {DatasetStatement,DatasetRowIdentitySidecar} from './types';
 export const ID_COLUMN='__af_graphql_row_id';
@@ -17,7 +17,7 @@ export function rowIdsForObject(datasetId:string,tableId:string,objectKey:string
  return saved.ids;
 }
 
-const quote=(name:string)=>`"${name.replaceAll('"','""')}"`;
+export const quote=(name:string)=>`"${name.replaceAll('"','""')}"`;
 const cellType=(column:DatasetColumn):DatasetCellValue['type']=>column.type==='number'?'NUMBER':column.type==='boolean'?'BOOLEAN':'STRING';
 export function descriptors(table:DatasetTable):DatasetColumnDescriptor[]{
  if(table.columns.some(c=>c.name===ID_COLUMN))throw new Error('dataset_reserved_column');
@@ -40,13 +40,11 @@ function scalar(column:DatasetColumn,cell:DatasetCellValue):Scalar {
  if(cell.type!==cellType(column))throw new Error('dataset_cell_type_mismatch');
  return typedCell(column,cell.value).value as Scalar;
 }
-export function compileRead(table:DatasetTable,input:DatasetReadRequest):{statement:DatasetStatement;columns:DatasetColumn[]} {
- if(!Number.isInteger(input.first)||input.first<1||input.first>100)throw new Error('invalid_page_size');
- const columns=columnsFor(table), selected=input.columnIds?.map(id=>requireColumn(columns,id))??table.columns;
- if(new Set(selected).size!==selected.length||!selected.length)throw new Error('invalid_projection');
- if((input.filters?.length??0)>32||(input.order?.length??0)>16)throw new Error('dataset_query_too_complex');
+export function compileDatasetFilters(table:DatasetTable,filters:readonly DatasetRowFilter[]|undefined):{where:string;params:Record<string,Scalar>}{
+ if((filters?.length??0)>32)throw new Error('dataset_query_too_complex');
+ const columns=columnsFor(table);
  const params:Record<string,Scalar>={};
- const where=(input.filters??[]).map((filter,i)=>{
+ const where=(filters??[]).map((filter,i)=>{
   const col=requireColumn(columns,filter.columnId),q=quote(col.name);
   if(filter.operator==='IS_NULL')return `${q} IS NULL`;
   const operators={EQ:'=',NE:'<>',LT:'<',LTE:'<=',GT:'>',GTE:'>='} as const;
@@ -54,9 +52,17 @@ export function compileRead(table:DatasetTable,input:DatasetReadRequest):{statem
   const value=scalar(col,filter.value);if(value===null){if(filter.operator!=='EQ'&&filter.operator!=='NE')throw new Error('invalid_null_filter');return `${q} IS ${filter.operator==='NE'?'NOT ':''}NULL`;}
   const key=`filter${i}`;params[key]=value;return `${q} ${op} $${key}`;
  });
+ return {where:where.join(' AND '),params};
+}
+export function compileRead(table:DatasetTable,input:DatasetReadRequest):{statement:DatasetStatement;columns:DatasetColumn[]} {
+ if(!Number.isInteger(input.first)||input.first<1||input.first>100)throw new Error('invalid_page_size');
+ const columns=columnsFor(table), selected=input.columnIds?.map(id=>requireColumn(columns,id))??table.columns;
+ if(new Set(selected).size!==selected.length||!selected.length)throw new Error('invalid_projection');
+ if((input.filters?.length??0)>32||(input.order?.length??0)>16)throw new Error('dataset_query_too_complex');
+ const {where,params}=compileDatasetFilters(table,input.filters);
  const order=(input.order??[]).map(o=>{if(o.direction!=='ASC'&&o.direction!=='DESC')throw new Error('invalid_order');return `${quote(requireColumn(columns,o.columnId).name)} ${o.direction}`;});
  order.push(`${quote(ID_COLUMN)} ASC`);
- return {columns:selected,statement:{sql:`SELECT ${[...selected.map(c=>quote(c.name)),quote(ID_COLUMN)].join(', ')} FROM ${quote(table.schema)}.${quote(table.name)}${where.length?` WHERE ${where.join(' AND ')}`:''} ORDER BY ${order.join(', ')}`,params}};
+ return {columns:selected,statement:{sql:`SELECT ${[...selected.map(c=>quote(c.name)),quote(ID_COLUMN)].join(', ')} FROM ${quote(table.schema)}.${quote(table.name)}${where?` WHERE ${where}`:''} ORDER BY ${order.join(', ')}`,params}};
 }
 export function compileChanges(table:DatasetTable,changes:readonly DatasetRowChange[],identitySeed?:string):DatasetStatement[]{
  if(!changes.length||changes.length>100)throw new Error('invalid_changes');

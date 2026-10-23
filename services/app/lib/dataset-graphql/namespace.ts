@@ -1,4 +1,4 @@
-import {DATASET_GRAPHQL_SDL,datasetCellFromWire,type DatasetCellValue,type DatasetGraphql,type DatasetReadRequest,type DatasetRowChange,type DatasetWriteRequest,type HtmlDatasetLink,type HtmlJson,type PageNamespaceSource,type PageResolverFieldCall} from '@artifactbin/contracts';
+import {DATASET_GRAPHQL_SDL,datasetCellFromWire,type DatasetCellValue,type DatasetGraphql,type DatasetReadRequest,type DatasetQueryRequest,type DatasetRowChange,type DatasetWriteRequest,type HtmlDatasetLink,type HtmlJson,type PageNamespaceSource,type PageResolverFieldCall} from '@artifactbin/contracts';
 import type {AccessActor} from '@/lib/accounts';
 export const datasetNamespaceSources=(bindings:readonly HtmlDatasetLink[]):PageNamespaceSource[]=>bindings.map(binding=>({name:binding.name,fileId:binding.datasetId,version:binding.mode==='pinned'?binding.revision:'live',typeDefs:DATASET_GRAPHQL_SDL}));
 const object=(value:unknown):Record<string,unknown>=>{if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('invalid_dataset_input');return value as Record<string,unknown>;};
@@ -14,12 +14,17 @@ export function createDatasetNamespaceInvoker(actor:AccessActor,bindings:readonl
   if(!binding||binding.datasetId!==call.fileId||(binding.mode==='pinned'?binding.revision:'live')!==call.version)throw new Error('dataset_binding_changed');
   const args=object(call.args);
   if(call.operation==='query'&&call.field==='schema')return await service.schema(actor,binding,call.signal) as unknown as HtmlJson;
-  if(call.operation==='query'&&call.field==='rows'){
-   const input:DatasetReadRequest={tableId:string(args.tableId),first:args.first===undefined?20:Number(args.first),
+  if(call.operation==='query'&&(call.field==='rows'||call.field==='query')){
+   const input:DatasetQueryRequest={tableId:string(args.tableId),first:args.first===undefined?20:Number(args.first),
     ...(args.columnIds==null?{}:{columnIds:array(args.columnIds).map(string)}),...(args.after==null?{}:{after:string(args.after)}),
-    ...(args.filters==null?{}:{filters:array(args.filters).map(v=>{const filter=object(v);if(!['EQ','NE','LT','LTE','GT','GTE','IS_NULL'].includes(String(filter.operator)))throw new Error('invalid_dataset_filter');return {columnId:string(filter.columnId),operator:filter.operator as 'EQ',...(filter.value==null?{}:{value:cell(filter.value)})};})}),
+    ...(args.filters==null?{}:{filters:array(args.filters).map(v=>{const filter=object(v);if(!['EQ','NE','LT','LTE','GT','GTE','IS_NULL'].includes(String(filter.operator)))throw new Error('invalid_dataset_filter');return {columnId:string(filter.columnId),operator:filter.operator as 'EQ',...(filter.value==null?{}:{value:cell(filter.value)}),...(filter.parameter==null?{}:{parameter:string(filter.parameter)})};})}),
     ...(args.order==null?{}:{order:array(args.order).map(v=>{const order=object(v);if(order.direction!=='ASC'&&order.direction!=='DESC')throw new Error('invalid_dataset_order');return {columnId:string(order.columnId),direction:order.direction};})})};
-   const result=await service.read(actor,binding,input,call.signal);
+   if(call.field==='query'){
+    if(args.parameters!=null)input.parameters=array(args.parameters).map(v=>{const parameter=object(v);return {name:string(parameter.name),value:cell(parameter.value)};});
+    if(args.groupBy!=null)input.groupBy=array(args.groupBy).map(string);
+    if(args.aggregates!=null)input.aggregates=array(args.aggregates).map(v=>{const aggregate=object(v);if(!['COUNT','SUM','AVG','MIN','MAX'].includes(String(aggregate.operation)))throw new Error('invalid_dataset_aggregate');return {id:string(aggregate.id),operation:aggregate.operation as 'COUNT',...(aggregate.columnId==null?{}:{columnId:string(aggregate.columnId)})};});
+   }
+   const result=await (call.field==='query'?service.query(actor,binding,input,call.signal):service.read(actor,binding,input as DatasetReadRequest,call.signal));
    return {...result,rows:result.rows.map(row=>({...row,cells:row.cells.map(c=>({...c,value:wire(c.value)}))}))} as unknown as HtmlJson;
   }
   if(call.operation==='mutation'&&call.field==='writeRows'){

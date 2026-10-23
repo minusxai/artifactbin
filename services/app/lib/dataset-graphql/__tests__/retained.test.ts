@@ -11,9 +11,9 @@ import {createRetainedDatasetGraphql,retainedDatasetGraphqlPort} from '../retain
 import {datasetSchema} from '../index';
 useAppHarness();
 const signal=new AbortController().signal;
-async function fixture(){
+async function fixture(dataset:Record<string,unknown>[]=[{amount:1,label:'same'},{amount:1,label:'same'},{amount:3,label:null}]){
  const owner=await mintAccountToken('dataset_graphql_fixture');
- const req=request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{amount:1,label:'same'},{amount:1,label:'same'},{amount:3,label:null}],access:'readwrite'}});
+ const req=request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset,access:'readwrite'}});
  const actor=await requestOrSessionActor(req),response=await create(req);expect(response.status,await response.clone().text()).toBe(201);
  const {id}=await response.json(),binding={kind:'dataset' as const,name:'data',datasetId:id,mode:'live' as const};
  const api=createRetainedDatasetGraphql(),snapshot=await retainedDatasetGraphqlPort().snapshot(actor,binding,signal),schema=datasetSchema(snapshot),table=schema.tables[0]!;
@@ -84,4 +84,27 @@ it('keeps an unfinished durable request unknown without executing it again',asyn
  expect((await f.api.write(f.actor,f.binding,input,signal)).outcome).toBe('unknown');
  expect((await f.api.write(f.actor,f.binding,input,signal)).outcome).toBe('unknown');
  expect((await getArtifactById(f.id))!.version).toBe(1);
+});
+
+it('runs named-parameter whole-source aggregates through real GraphQL beyond source and display page limits',async()=>{
+ const {buildSchema,graphql}=await import('graphql');
+ const {DATASET_GRAPHQL_SDL}=await import('@artifactbin/contracts');
+ const {createDatasetNamespaceInvoker}=await import('../index');
+ const f=await fixture(Array.from({length:10005},(_,i)=>({amount:i+1,label:'all'}))),amount=f.table.columns.find(c=>c.label==='amount')!;
+ const invoke=createDatasetNamespaceInvoker(f.actor,[f.binding],f.api),schema=buildSchema(DATASET_GRAPHQL_SDL);
+ const result=await graphql({schema,rootValue:{query:(args:Record<string,unknown>)=>invoke({namespace:'data',fileId:f.id,version:'live',operation:'query',field:'query',args:args as never,principal:{tenant:'page',subject:'viewer'},signal})},source:'query($table:ID!,$amount:ID!){ query(tableId:$table,first:1,filters:[{columnId:$amount,operator:GT,parameter:"minimum"}],parameters:[{name:"minimum",value:{type:NUMBER,number:0}}],aggregates:[{id:"count",operation:COUNT},{id:"total",operation:SUM,columnId:$amount},{id:"average",operation:AVG,columnId:$amount}]) { revision columns { id type } rows { cells { columnId value { type number } } } pageInfo { hasNextPage } } }',variableValues:{table:f.table.id,amount:amount.id}});
+ expect(result.errors).toBeUndefined();expect(result.data).toMatchObject({query:{rows:[{cells:[{columnId:'count',value:{type:'NUMBER',number:10005}},{columnId:'total',value:{type:'NUMBER',number:50055015}},{columnId:'average',value:{type:'NUMBER',number:5003}}]}],pageInfo:{hasNextPage:false}}});
+});
+it('paginates complete groups and rejects cursors when named parameter inputs change',async()=>{
+ const f=await fixture(),amount=f.table.columns.find(c=>c.label==='amount')!,label=f.table.columns.find(c=>c.label==='label')!;
+ const input={tableId:f.table.id,first:1,filters:[{columnId:amount.id,operator:'GT' as const,parameter:'minimum'}],parameters:[{name:'minimum',value:{type:'NUMBER' as const,value:0}}],groupBy:[label.id],aggregates:[{id:'total',operation:'SUM' as const,columnId:amount.id}],order:[{columnId:'total',direction:'DESC' as const}]};
+ const first=await f.api.query(f.actor,f.binding,input,signal);expect(first.rows[0]!.cells.map(c=>c.value.value)).toEqual([null,3]);expect(first.pageInfo.hasNextPage).toBe(true);
+ const next=await f.api.query(f.actor,f.binding,{...input,after:first.pageInfo.endCursor!},signal);expect(next.rows[0]!.cells.map(c=>c.value.value)).toEqual(['same',2]);expect(next.pageInfo.hasNextPage).toBe(false);
+ await expect(f.api.query(f.actor,f.binding,{...input,after:first.pageInfo.endCursor!,parameters:[{name:'minimum',value:{type:'NUMBER',value:1}}]},signal)).rejects.toThrow('stale_cursor');
+ const injected=await f.api.query(f.actor,f.binding,{tableId:f.table.id,first:100,filters:[{columnId:label.id,operator:'EQ',parameter:'label'}],parameters:[{name:'label',value:{type:'STRING',value:"same' OR 1=1"}}]},signal);expect(injected.rows).toHaveLength(0);
+});
+it('preserves COUNT zero and nullable aggregate values for an empty filtered source',async()=>{
+ const f=await fixture(),amount=f.table.columns.find(c=>c.label==='amount')!,label=f.table.columns.find(c=>c.label==='label')!;
+ const result=await f.api.query(f.actor,f.binding,{tableId:f.table.id,first:1,filters:[{columnId:amount.id,operator:'GT',value:{type:'NUMBER',value:100}}],aggregates:[{id:'count',operation:'COUNT'},{id:'total',operation:'SUM',columnId:amount.id},{id:'firstLabel',operation:'MIN',columnId:label.id}]},signal);
+ expect(result.rows[0]!.cells.map(c=>c.value)).toEqual([{type:'NUMBER',value:0},{type:'NUMBER',value:null},{type:'STRING',value:null}]);
 });

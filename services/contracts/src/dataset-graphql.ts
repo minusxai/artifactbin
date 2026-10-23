@@ -14,6 +14,15 @@ export interface DatasetReadRequest {
   tableId:string; columnIds?:readonly string[]; filters?:readonly DatasetRowFilter[];
   order?:readonly {columnId:string;direction:'ASC'|'DESC'}[]; first:number; after?:string;
 }
+/** Structured named-parameter query; the platform compiles SQL, never accepts SQL from a page. */
+export interface DatasetQueryParameter {name:string;value:DatasetCellValue}
+export interface DatasetQueryFilter extends Omit<DatasetRowFilter,'value'> {value?:DatasetCellValue;parameter?:string}
+export type DatasetAggregateOperation='COUNT'|'SUM'|'AVG'|'MIN'|'MAX';
+export interface DatasetAggregate {id:string;operation:DatasetAggregateOperation;columnId?:string}
+export interface DatasetQueryRequest extends Omit<DatasetReadRequest,'filters'> {
+ filters?:readonly DatasetQueryFilter[];parameters?:readonly DatasetQueryParameter[];
+ groupBy?:readonly string[];aggregates?:readonly DatasetAggregate[];
+}
 export interface DatasetReadResult {
   revision:string; columns:readonly DatasetColumnDescriptor[]; rows:readonly DatasetGraphqlRow[];
   pageInfo:{hasNextPage:boolean;endCursor:string|null};
@@ -24,6 +33,7 @@ export interface DatasetWriteReceipt { requestId:string; revision:string|null; o
 /** Implement with original dataset policies/grants; page readability is insufficient authorization. */
 export interface DatasetGraphql<A> {
   schema(actor:A,binding:HtmlDatasetLink,signal:AbortSignal):Promise<DatasetSchemaResult>;
+  query(actor:A,binding:HtmlDatasetLink,request:DatasetQueryRequest,signal:AbortSignal):Promise<DatasetReadResult>;
   read(actor:A,binding:HtmlDatasetLink,request:DatasetReadRequest,signal:AbortSignal):Promise<DatasetReadResult>;
   write(actor:A,binding:HtmlDatasetLink,request:DatasetWriteRequest,signal:AbortSignal):Promise<DatasetWriteReceipt>;
 }
@@ -36,6 +46,7 @@ scalar FiniteNumber
 enum CellType { STRING NUMBER BOOLEAN JSON }
 enum FilterOperator { EQ NE LT LTE GT GTE IS_NULL }
 enum SortDirection { ASC DESC }
+enum AggregateOperation { COUNT SUM AVG MIN MAX }
 enum RowChangeKind { INSERT UPDATE DELETE }
 enum WriteOutcome { committed rejected unknown }
 type Column { id: ID! label: String! type: CellType! nullable: Boolean! sourceType: String }
@@ -45,6 +56,9 @@ type Cell { columnId: ID! value: CellValue! }
 input CellInput { columnId: ID! value: CellValueInput! }
 type Row { id: ID! cells: [Cell!]! }
 input Filter { columnId: ID! operator: FilterOperator! value: CellValueInput }
+input QueryParameter { name: String! value: CellValueInput! }
+input QueryFilter { columnId: ID! operator: FilterOperator! value: CellValueInput parameter: String }
+input Aggregate { id: ID! operation: AggregateOperation! columnId: ID }
 input Order { columnId: ID! direction: SortDirection! }
 type PageInfo { hasNextPage: Boolean! endCursor: String }
 type Rows { revision: String! columns: [Column!]! rows: [Row!]! pageInfo: PageInfo! }
@@ -52,7 +66,7 @@ input RowChange { kind: RowChangeKind! rowId: ID cells: [CellInput!] }
 type WriteReceipt { requestId: ID! revision: String outcome: WriteOutcome! rowIds: [ID!]! }
 type DatasetTable { id: ID! label: String! columns: [Column!]! }
 type DatasetSchema { revision: String! tables: [DatasetTable!]! }
-type Query { schema: DatasetSchema! rows(tableId: ID!, columnIds: [ID!], filters: [Filter!], order: [Order!], first: Int! = 20, after: String): Rows! }
+type Query { schema: DatasetSchema! query(tableId: ID!, columnIds: [ID!], filters: [QueryFilter!], parameters: [QueryParameter!], groupBy: [ID!], aggregates: [Aggregate!], order: [Order!], first: Int! = 20, after: String): Rows! rows(tableId: ID!, columnIds: [ID!], filters: [Filter!], order: [Order!], first: Int! = 20, after: String): Rows! }
 type Mutation { writeRows(tableId: ID!, expectedRevision: String!, requestId: ID!, changes: [RowChange!]!): WriteReceipt! }
 `;
 /** Pure preflight only. Runtime must still validate schema/IDs/cells and repeat policy inside its transaction. */

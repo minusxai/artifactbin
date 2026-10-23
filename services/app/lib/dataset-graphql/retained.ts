@@ -31,7 +31,7 @@ export function retainedDatasetGraphqlPort():DatasetGraphqlPort {
    const source=objectStore();
    const catalog={...snapshot.catalog,tables:snapshot.catalog.tables.map(t=>t===table?{...t,columns:[...t.columns,{name:ID_COLUMN,type:'string' as const}]}:t)};
    const authorize=async()=>{const row=await authorizedDataset(actor,snapshot.id);if(snapshot.policyIdentity!==JSON.stringify([row.edit_id,row.policy_revision,row.sharing_revision]))throw new Error('dataset_changed');};
-   const result=await executeCatalog(catalog,statement.sql,statement.params,{...window,actor,datasetId:snapshot.id,signal,authorize,
+   const result=await executeCatalog(catalog,statement.sql,statement.params,{...window,timeoutMs:5000,actor,datasetId:snapshot.id,signal,authorize,
     objects:{get:async key=>{
      const bytes=await source.get(key);if(key!==table.objectKey)return bytes;
      const rows=JSON.parse(bytes.toString('utf8')) as Record<string,unknown>[];
