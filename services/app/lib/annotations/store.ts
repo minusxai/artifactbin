@@ -23,7 +23,7 @@ import type { CommentTarget } from '@/lib/story-ui/comment-target';
  * source counts from the top. Listing translates the found node's source path
  * to a body path (`sourcePathToBodyPath`). Nothing in between converts.
  */
-import { readableArtifact, annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
+import { readableArtifactHeader, annotationScope, effectiveRole, type ArtifactRow, type Scope } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {
   anchorIndex, anchorKeyOf, snippetOf, type AnchorEntry, canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
@@ -465,7 +465,7 @@ async function wireFor(db: Queryable, head: AnnotatedHead, roots: AnnotationRowD
 export async function listAnnotationPageFor(actor: AccessActor, artifactId: string,
   opts: {status: 'open' | 'resolved' | 'all'; limit: number; after?: string;author?:string}): Promise<{annotations: AnnotationWire[]; next?: string} | null> {
   const db = await getDb();
-  const row = (await readableArtifact(actor, artifactId))?.row;
+  const row = (await readableArtifactHeader(actor, artifactId))?.row;
   if (!row) return null;
   const roots = await db.query<AnnotationRowDb>(
     `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id=$1 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}
@@ -482,7 +482,7 @@ export async function listAnnotationsFor(
   artifactId: string,
   opts?: { status?: 'open' | 'resolved' | 'all' },
 ): Promise<AnnotationWire[] | null> {
-  const row = (await readableArtifact(actor, artifactId))?.row;
+  const row = (await readableArtifactHeader(actor, artifactId))?.row;
   if (!row) return null;
   return annotationsWireForRow(row, opts);
 }

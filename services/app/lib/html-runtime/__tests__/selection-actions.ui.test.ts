@@ -145,3 +145,36 @@ it("preserves the chosen button through a full pointer gesture", () => {
   button.click();
   expect(chosen).toEqual(["annotate"]);
 });
+
+it("preserves a context menu already claimed by the author", () => {
+  const chosen = setup();
+  const target = document.querySelector('p')!;
+  target.addEventListener('contextmenu', event => event.preventDefault());
+  target.dispatchEvent(new MouseEvent('contextmenu', {bubbles:true,cancelable:true}));
+  expect(document.querySelector<HTMLElement>('[role="toolbar"]')?.hidden).toBe(true);
+  expect(chosen).toEqual([]);
+});
+
+it("uses the context target when a native selection ends at a parent boundary", () => {
+  document.body.innerHTML='<section data-af-id="section"><p data-af-id="p">hello world</p><p>other</p></section>';
+  const target=document.querySelector('p')!;
+  const range=document.createRange();range.setStart(target.firstChild!,0);range.setEnd(target.parentNode!,1);
+  window.getSelection()!.addRange(range);
+  const chosen:string[]=[];
+  actions=createHtmlSelectionActions({win:window,capture:node=>htmlSelection(window,node,'1'),onAction:(_action,selected)=>chosen.push(selected.nodeId!)});
+  actions.update(true);
+  target.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2}));
+  (document.querySelector('[data-mx-selection-action="annotate"]') as HTMLElement).click();
+  expect(chosen).toEqual(['p']);
+});
+
+it("uses the focused keyboard context target without stealing focus for a text bubble", () => {
+  const chosen=setup();const target=document.querySelector('p')!;
+  target.tabIndex=0;target.focus();select();
+  expect(document.activeElement).toBe(target);
+  window.getSelection()!.removeAllRanges();document.dispatchEvent(new Event('selectionchange'));
+  target.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:0}));
+  const button=document.querySelector<HTMLButtonElement>('[data-mx-selection-action="annotate"]')!;
+  expect(button.tabIndex).toBe(0);button.focus();button.click();
+  expect(chosen).toEqual(['annotate']);
+});

@@ -73,7 +73,7 @@ export function createHtmlSelectionActions({
     toolbar.style.top = `${Math.max(8, Math.min(y ?? selected.rect.y - rect.height - 8, win.innerHeight - rect.height - 8))}px`;
     toolbar.style.transform = "none";
   };
-  const selection = () => {
+  const selection = (target?: Node) => {
     if (context || held) return;
     const native = win.getSelection();
     if (
@@ -85,7 +85,7 @@ export function createHtmlSelectionActions({
       hide();
       return;
     }
-    const selected = capture();
+    const selected = capture(target);
     if (selected) show(selected);
     else hide();
   };
@@ -109,6 +109,7 @@ export function createHtmlSelectionActions({
   const menu = (event: MouseEvent) => {
     const target = event.target as Element | null;
     if (
+      event.defaultPrevented ||
       !enabled ||
       event.shiftKey ||
       !target?.closest ||
@@ -119,7 +120,7 @@ export function createHtmlSelectionActions({
       return;
     hide();
     if (win.getSelection()?.toString().trim()) {
-      selection();
+      selection(target);
       if (active) event.preventDefault();
       return;
     }

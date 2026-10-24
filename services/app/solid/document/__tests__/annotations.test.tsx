@@ -34,6 +34,7 @@ describe('AnnotationLayer', () => {
     expect(screen.queryByRole('button', { name: 'Screenshot' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign in to comment' })).toBeTruthy();
     expect(view.runtime.posts().some(post => post.type === 'mx:pick' && post.enabled)).toBe(false);
+    expect(view.runtime.posts().filter(post => post.type === 'mx:annotations').at(-1)).toMatchObject({canComment:false});
   });
 
   it('removes comment tools when an existing commenter loses mutation permission', async () => {

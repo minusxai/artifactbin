@@ -726,7 +726,9 @@ async function ownerLeg(browser, seed) {
     await api({ ...seed, token: memberAgent.token }, '/members', {
       action: 'accept',
     });
-    await page.getByLabel('Hide resolved conversation').click();
+    // Membership invalidation reloads the trusted shell and its ticket. Continue on its fresh reader.
+    await page.goto(`${BASE}/a/${seed.id}`);
+    await frame.locator('#figure').waitFor();
     await frame.locator('#figure').click({ button: 'right' });
     await frame.locator('[data-mx-selection-action="annotate"]').click();
     const field = page.getByLabel('Annotation comment', { exact: true });
@@ -755,32 +757,19 @@ async function ownerLeg(browser, seed) {
     try {
       await guest.goto(`${BASE}/a/${seed.id}`);
       await documentLocator(guest).locator('#figure').waitFor();
-      check(
-        (await guest
-          .locator('[aria-label^="Open annotation conversation by"]')
-          .count()) === 0,
-        'logged-out readers receive no private discussion markers',
-      );
-      const guestFrame = documentLocator(guest);
-      await until(
-        async () => {
-          if (new URL(guest.url()).pathname === '/login') return true;
-          await guestFrame
-            .locator('#figure')
-            .click({ button: 'right', timeout: 1000 })
-            .catch(() => {});
-          const choice = guestFrame.locator('[data-mx-selection-action="annotate"]');
-          if (await choice.isVisible().catch(() => false)) await choice.click();
-          return new URL(guest.url()).pathname === '/login';
-        },
-        (value) => value === true,
-        10000,
-      );
+      await openRail(guest);
+      await expect(guest.getByText('A second comment', {exact:true})).toBeVisible();
+      await expect(guest.getByRole('button', {name:'Sign in to comment', exact:true})).toBeVisible();
+      await expect(guest.getByLabel('Annotation comment', {exact:true})).toBeHidden();
+      await expect(guest.getByRole('button', {name:'Resolve annotation',exact:true})).toBeHidden();
+      check(true, 'admitted guests read retained threads without write controls');
+      await guest.getByRole('button', {name:'Sign in to comment',exact:true}).click();
+      await guest.waitForURL('**/login?**');
       const login = new URL(guest.url());
       check(
         login.pathname === '/login' &&
           login.searchParams.get('callbackUrl')?.includes('intent=comment'),
-        'a logged-out native right-click requires sign-in and preserves the return comment intent',
+        'the guest comment CTA requires sign-in and preserves the return comment intent',
       );
       await expect(
         guest.getByRole('textbox', { name: 'Email', exact: true }),
@@ -1039,6 +1028,66 @@ async function selectionLeg(browser, seed) {
   }
 }
 
+// One authored local-state projection; the draft is intentionally excluded.
+const VIEW_DOC = `<!doctype html><html><head><title>Saved comment view</title>
+<script src="/af/v1/core.js" data-af="core"></script>
+<script type="application/json" data-af="state" data-af-comment-version="one" data-af-comment-fields='["screen"]'>{"screen":"home","draft":""}</script></head>
+<body style="padding:40px"><button id="home">Home</button><button id="detail">Detail</button><input id="draft" aria-label="Private draft"><p id="target" data-af-id="target">Saved view target</p><output id="screen"></output>
+<script type="module">import {client,gql} from '@afbin/apollo';
+const query=gql\`{screen draft}\`;
+const draw=({data})=>{document.querySelector('#screen').textContent=data.screen;document.querySelector('#draft').value=data.draft};
+client.watchQuery({query}).subscribe(draw);
+for(const screen of ['home','detail'])document.getElementById(screen).onclick=()=>client.updateQuery({query},data=>({...data,screen}));
+document.querySelector('#draft').oninput=event=>client.updateQuery({query},data=>({...data,draft:event.target.value}));
+await client.query({query}).then(draw);document.documentElement.dataset.afReady='yes';</script></body></html>`;
+async function savedViewLeg(browser,seed) {
+ const context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();
+ try {
+  await becomeOwner(page,BASE,seed.token);
+  await page.goto(`${BASE}/a/${seed.id}`);
+  const frame=documentLocator(page);
+  await frame.locator('html[data-af-ready="yes"]').waitFor();
+  await frame.locator('#detail').click();
+  await expect(frame.locator('#screen')).toHaveText('detail');
+  // Actual text selection, rather than a synthetic bridge event.
+  await frame.locator('#target').click({clickCount:3});
+  await expect(frame.getByRole('button',{name:'Comment on selected text',exact:true})).toBeVisible();
+  await expect(frame.getByRole('button',{name:'Select',exact:true})).toBeVisible();
+  await frame.getByRole('button',{name:'Comment on selected text',exact:true}).click();
+  const composer=page.getByRole('dialog',{name:'Annotation composer',exact:true});
+  await composer.waitFor();
+  await page.getByLabel('Annotation comment',{exact:true}).fill('Saved detail view');
+  const grip=await composer.getByRole('button',{name:'Move comment box',exact:true}).boundingBox();
+  await page.mouse.move(grip.x+grip.width/2,grip.y+grip.height/2);
+  await page.mouse.down();await page.mouse.move(240,400,{steps:12});await page.mouse.up();
+  await openArtifactControls(page);
+  await page.getByRole('button',{name:'Light mode',exact:true}).click();
+  const color=()=>composer.evaluate(el=>getComputedStyle(el).backgroundColor);
+  const light=await color();
+  await page.getByRole('button',{name:'Dark mode',exact:true}).click();
+  await expect.poll(color).not.toBe(light);
+  await page.getByRole('button',{name:'Light mode',exact:true}).click();
+  await expect.poll(color).toBe(light);
+  check(true,'an already-open comment composer updates its computed palette when appearance changes');
+  await page.getByRole('button',{name:'Close page controls',exact:true}).click();
+  await page.getByLabel('Save annotation',{exact:true}).click();
+  const wire=await until(()=>api(seed,'/annotations'),value=>value.annotations?.length===1);
+  check(wire.annotations[0].view_state?.state?.$html?.fields?.screen==='detail' && !('draft' in wire.annotations[0].view_state.state.$html.fields),'saved comment captures only its declared view projection');
+  await openRail(page);
+  await page.getByLabel('Close comments',{exact:true}).click();
+  await frame.locator('#home').click();
+  await frame.locator('#draft').fill('Keep my private draft');
+  await openRail(page);
+  await page.getByRole('button',{name:'Restore saved view',exact:true}).click();
+  await expect(frame.locator('#screen')).toHaveText('detail');
+  await expect(frame.locator('#draft')).toHaveValue('Keep my private draft');
+  await page.getByLabel('Close comments',{exact:true}).click();
+  await expect(frame.locator('#screen')).toHaveText('home');
+  await expect(frame.locator('#draft')).toHaveValue('Keep my private draft');
+  check(true,'opening and closing a saved comment view restores the private view while preserving its draft');
+ } finally {await context.close();}
+}
+
 async function run() {
   const browser = await launchChromium();
   try {
@@ -1049,6 +1098,7 @@ async function run() {
       publish(DYNAMIC),
       publish(DOC),
       publish(DOC),
+      publish(VIEW_DOC),
     ]);
     const runLeg = async (leg, fixture) => {
       try {
@@ -1064,6 +1114,7 @@ async function run() {
         [dynamicLeg, fixtures[3]],
         [selectionLeg, fixtures[4]],
         [liveQuoteLeg, fixtures[5]],
+        [savedViewLeg, fixtures[6]],
       ].map(([leg, fixture]) => runLeg(leg, fixture)),
     );
     await runLeg(foldLeg, fixtures[2]);

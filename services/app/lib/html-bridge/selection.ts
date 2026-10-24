@@ -8,7 +8,7 @@ const htmlNode = (node: Node | null): Element | null => elementOf(node)?.closest
 export function htmlSelection(win: Window, target?: Node | null, revision = '', savedNodeIds?: readonly string[]): (StoryEditSelection & { anchor: HtmlNodeAnchor }) | null {
   const selected = win.getSelection();
   let range = selected?.rangeCount ? selected.getRangeAt(0) : null;
-  let node = htmlNode(target ?? range?.commonAncestorContainer ?? null);
+  let node = htmlNode(target ?? range?.startContainer ?? null);
   if (!node) return null;
   const quoteText=selected?.toString().replace(/\s+/g,' ').trim() ?? '';
   if(range && !range.collapsed && quoteText && range.intersectsNode(node)){

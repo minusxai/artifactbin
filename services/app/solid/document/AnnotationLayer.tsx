@@ -443,7 +443,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
     const selected = selection();
     postToFrame({
       type: 'mx:annotations', viewStateRequest: viewStateRequest(), mode: capture.busy() ? 'off' : 'on', pins, openId: open, hoverId: previewId(),
-      selectedPath: selected?.path ?? null, selected, canComment: true, pick: pick(),
+      selectedPath: selected?.path ?? null, selected, canComment: mayCreate(), pick: pick(),
     } satisfies StoryAnnotationsMessage);
   });
   // Closing the rail drops what only the rail was showing; the pins stay.

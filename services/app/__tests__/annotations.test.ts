@@ -495,3 +495,15 @@ it('keeps native source responses separate from the dedicated account-scoped com
  expect(await read.json()).not.toHaveProperty('annotations');
  const comments=await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`,{token:t.token}),params({id:doc.id}));expect(comments.status).toBe(200);expect((await comments.json()).annotations).toHaveLength(1);
 });
+
+it('admits an empty comment list without reading page content', async()=>{
+ const {doc,actor}=await publish();
+ const db=await getDb();const query=vi.spyOn(db,'query');
+ try {
+  const response=await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`,{actor}),params({id:doc.id}));
+  expect(response.status).toBe(200);expect((await response.json()).annotations).toEqual([]);
+  const artifactReads=query.mock.calls.map(call=>String(call[0])).filter(sql=>/^\s*SELECT/i.test(sql)&&/FROM artifacts\b/i.test(sql));
+  expect(artifactReads.length).toBeGreaterThan(0);
+  for(const sql of artifactReads){const projection=sql.split(/FROM artifacts/i)[0]!;expect(projection).not.toMatch(/SELECT\s+\*|\bsource\b|\bdocument\b/i);}
+ } finally {query.mockRestore();}
+});
