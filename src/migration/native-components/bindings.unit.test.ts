@@ -737,3 +737,145 @@ test("retained reactive text prints strings and numbers but not booleans or null
     await runtime.close();
   }
 });
+
+for (const keyed of [true, false])
+  test(`lazy conditions inside ${keyed ? "keyed" : "positional"} repeats inherit row identity and IDREF mappings`, async () => {
+    const loop = el("loop", "For", {
+      id: "loop",
+      ...(keyed ? { keyBy: "id" } : {}),
+    });
+    if (loop.type !== "element") throw Error();
+    loop.attributes.push({
+      name: "each",
+      start: 0,
+      end: 1,
+      value: {
+        static: false,
+        exprType: "Identifier",
+        source: "$rows",
+        reactive: { kind: "signal", name: "rows" },
+      },
+    });
+    const condition = el(
+      "condition",
+      "__mx_condition",
+      {},
+      { kind: "and", test: { kind: "signal", name: "open" } },
+    );
+    const text: RetainedJsxNode = {
+      type: "expression",
+      graphKey: "name",
+      start: 0,
+      end: 1,
+      source: "$_row.title",
+      value: {
+        static: false,
+        exprType: "MemberExpression",
+        source: "$_row.title",
+        reactive: { kind: "row", field: "title" },
+      },
+    };
+    const source = input(
+      [loop, condition, text],
+      [
+        {
+          kind: "loop",
+          sourceNode: "loop",
+          afId: "loop",
+          templateId: "row-shell",
+          identity: {
+            owner: "loop",
+            keyBy: keyed ? "id" : null,
+            templateIds: ["condition", "label", "name", "editor"],
+            domIds: [{ domId: "label-dom", templateAfId: "label" }],
+            encoding: "archived-instance-v1",
+          },
+        },
+        {
+          kind: "condition",
+          sourceNode: "condition",
+          afId: "condition",
+          templateId: "lazy-branch",
+        },
+        { kind: "text", sourceNode: "name", afId: "name" },
+      ],
+    );
+    source.queries = [query];
+    source.analysis.flow.queries = [{ name: "rows", start: 0, end: 1 }];
+    const result = emitNativeBindings(source);
+    assert.equal(result.status, "complete");
+    if (result.status !== "complete") return;
+    const doc = new Doc(),
+      host = new Element("div", { "data-af-id": "loop" });
+    doc.body.append(host);
+    doc.template("row-shell", [
+      new Element("span", { "data-af-id": "condition" }),
+    ]);
+    const label = new Element("label", {
+      "data-af-id": "label",
+      id: "label-dom",
+    });
+    label.append(new Element("span", { "data-af-id": "name" }));
+    doc.template("lazy-branch", [
+      label,
+      new Element("input", {
+        "data-af-id": "editor",
+        "aria-labelledby": "label-dom",
+      }),
+    ]);
+    const port = client({ open: false, filter: null }),
+      runtime = await execute(result.authorJs, port, doc);
+    try {
+      const response = answer("A");
+      response.data.records.evaluate.tables[0]!.rows.push(
+        answer("B").data.records.evaluate.tables[0]!.rows[0]!,
+      );
+      port.remotes[0]!.next(response);
+      assert.equal(host.children.length, 2);
+      await port.updateQuery({}, (v) => ({ ...v, open: true }));
+      const labels = host.children.map((row) => row.children[0]!.children[0]!);
+      assert.deepEqual(
+        labels.map((node) => node.children[0]!.textContent),
+        ["Visible A", "Visible B"],
+      );
+      assert.equal(
+        new Set(labels.map((node) => node.getAttribute("id"))).size,
+        2,
+      );
+      for (const [index, row] of host.children.entries()) {
+        const branch = row.children[0]!,
+          label = branch.children[0]!,
+          editor = branch.children[1]!,
+          key = keyed ? (index === 0 ? "A" : "B") : index,
+          scope = ["repeat", "loop", keyed ? "string" : "index", key];
+        assert.equal(
+          label.getAttribute("id"),
+          "mx-instance-" +
+            encodeURIComponent(JSON.stringify([scope, "label-dom"])),
+        );
+        assert.equal(
+          editor.getAttribute("aria-labelledby"),
+          label.getAttribute("id"),
+        );
+        assert.equal(
+          label.getAttribute("data-af-id"),
+          keyed
+            ? "mx-instance-" +
+                encodeURIComponent(JSON.stringify([scope, "label"]))
+            : null,
+        );
+      }
+      await port.updateQuery({}, (v) => ({ ...v, open: false }));
+      assert.ok(
+        host.children.every((row) => row.children[0]!.children.length === 0),
+      );
+      await port.updateQuery({}, (v) => ({ ...v, open: true }));
+      assert.equal(host.children[0]!.children[0]!.children[0], labels[0]);
+      assert.equal(
+        doc.body.children.some((node) => node.getAttribute("role") === "alert"),
+        false,
+      );
+    } finally {
+      await runtime.close();
+    }
+  });
