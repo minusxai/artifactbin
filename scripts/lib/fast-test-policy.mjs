@@ -41,6 +41,17 @@ export function auditFastSource(source, file) {
         && ts.isIdentifier(expression.expression.expression)
         && expression.expression.expression.text === 'ports'
         && expression.expression.name.text === 'clock';
+      // The pure query watch owns no network transport. This callback comes
+      // exclusively from QueryWatchOptions.remote; audit its callers' graph too.
+      const requestReceiver = ts.isPropertyAccessExpression(expression)
+        ? (ts.isNonNullExpression(expression.expression) ? expression.expression.expression : expression.expression)
+        : undefined;
+      const injectedQueryRequest = ts.isCallExpression(node)
+        && normalizedFile === 'services/app/lib/html-runtime/apollo/watch-query.ts'
+        && name === 'fetch' && node.arguments.length === 0
+        && requestReceiver && ts.isPropertyAccessExpression(requestReceiver)
+        && ts.isIdentifier(requestReceiver.expression) && requestReceiver.expression.text === 'options'
+        && requestReceiver.name.text === 'remote';
       // CSSTree's Function is a CSS grammar production, not JavaScript's
       // executable constructor. Keep this to its reviewed parser receivers.
       const cssGrammarFunction = ts.isCallExpression(node)
@@ -48,7 +59,7 @@ export function auditFastSource(source, file) {
         && ts.isPropertyAccessExpression(expression)
         && expression.expression.kind === ts.SyntaxKind.ThisKeyword
         && name === 'Function';
-      if (forbidden.has(name) && !injectedPresenceClock && !cssGrammarFunction) reasons.push(`${file}: ambient ${name}`);
+      if (forbidden.has(name) && !injectedPresenceClock && !injectedQueryRequest && !cssGrammarFunction) reasons.push(`${file}: ambient ${name}`);
       if ((expression.kind === ts.SyntaxKind.ImportKeyword || name === 'require') && (!node.arguments?.[0] || !ts.isStringLiteral(node.arguments[0]))) reasons.push(`${file}: computed module load`);
       // graphql-js's default field resolver calls a field supplied by the caller.
       // Keep the exception to this exact reviewed dispatcher, not arbitrary package calls.
