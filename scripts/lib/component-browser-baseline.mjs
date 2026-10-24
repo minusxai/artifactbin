@@ -5,6 +5,7 @@ import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { browserParityFixtures, parityThemes, parityViewports } from '../fixtures/component-baseline/index.mjs';
+export function actionTarget(frame,action){return action.authoredId===undefined?frame.getByRole(action.role,{...(action.name?{name:action.name,exact:true}:{})}):frame.locator(`[id=${JSON.stringify(action.authoredId)}]`);}
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
 /** Failure logs contain bounded technical context, never URL credentials or queries. */
@@ -117,7 +118,7 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       await frame.evaluate(()=>document.fonts.ready);
       for(const action of state.actions) {
         activeAction=action;phase=`action:${action.action}`;
-        const target=frame.getByRole(action.role,{...(action.name?{name:action.name,exact:true}:{})});
+        const target=actionTarget(frame,action);
         if(action.action==='press') await target.press(action.key);
         else if(action.action==='scroll')await target.evaluate(table=>{const scroll=table.parentElement;if(!scroll||scroll.scrollHeight<=scroll.clientHeight)throw Error('Table has no scrollable parent');scroll.scrollTop=scroll.scrollHeight;});
         else await target[action.action]();

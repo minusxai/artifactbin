@@ -32,7 +32,7 @@ export interface BrowserParityFixture {
   setup?: string;
   /** Honest exclusions: these are not evidence of covered behavior. */
   limitations?: string[];
-  states: Array<{ id: string; expected?: BrowserStateExpectation; actions: Array<{ role: string; name: string; action: 'click' | 'focus' | 'press' | 'scroll'; key?: string }> }>;
+  states: Array<{ id: string; expected?: BrowserStateExpectation; actions: Array<{ role: string; name: string; /** Exact retained authored DOM id for native elements without a browser role. */ authoredId?: string; action: 'click' | 'focus' | 'press' | 'scroll'; key?: string }> }>;
 }
 export interface BrowserParityCapture {
   fixture: string;

@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import {JSDOM} from 'jsdom';
 import {browserParityFixtures,parityThemes} from '../fixtures/component-baseline/index.mjs';
-import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof } from '../lib/component-browser-baseline.mjs';
+import { actionTarget, captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues, fontLoadingEvidence, fontByteProof } from '../lib/component-browser-baseline.mjs';
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
 async function capture(directory,implementation,color,overrides={}){
@@ -349,3 +349,5 @@ it('proves used font bytes through imported stylesheet URLs rather than losing t
  try{const evidence=await fontLoadingEvidence();expect(evidence.errors).toEqual([]);expect(evidence.used[0].sources).toEqual(['http://localhost/fonts/body.woff2']);}
  finally{globalThis.document=prior;}
 });
+
+it('clicks the exact retained authored target when the browser exposes no native role',()=>{const frame={getByRole:vi.fn(),locator:vi.fn().mockReturnValue('retained-target')};expect(actionTarget(frame,{role:'button',name:'Summary',authoredId:'summary-1'})).toBe('retained-target');expect(frame.locator).toHaveBeenCalledWith('[id=\"summary-1\"]');expect(frame.getByRole).not.toHaveBeenCalled();});
