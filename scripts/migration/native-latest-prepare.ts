@@ -15,7 +15,7 @@ interface Index {sha256:string;revisionScope:string;approvalInventory:Reference&
 const load=async<T>(file:string):Promise<T>=>JSON.parse(await readFile(file,'utf8')) as T;
 const seal=<T extends object>(payload:T)=>({...payload,sha256:nativeDigest(payload)});
 const save=async(file:string,value:unknown)=>writeFile(file,JSON.stringify(value,null,2)+'\n',{flag:'wx',mode:0o600});
-const [mode,input,output,legacyRoot,pin,outputDirectory,assemblyDirectory]=process.argv.slice(2);
+const [mode,input,output,legacyRoot,pin,outputDirectory,assemblyDirectory,reuseDirectory]=process.argv.slice(2);
 if(mode==='shared'&&input&&output){
  const index=await load<Index>(input);verifyReceipt(index);
  if(index.revisionScope!=='latest'||index.approvalInventory.count!==393||index.batches.length!==6)throw Error('native_latest_approval_scope');
@@ -46,11 +46,11 @@ if(mode==='shared'&&input&&output){
  console.log(JSON.stringify({stage:'shared-verified',heads:selected.size,objects:shared.objects.length}));
 }else if(mode==='batch'&&input&&output&&legacyRoot&&pin&&outputDirectory){
  const batch=await load<LatestBatchPreparation>(input),shared=await load<LatestSharedVerification>(output);
- const results=await prepareLatestBatch(batch,shared,pin,{fingerprint:()=>retainedCompilerFingerprint(legacyRoot),extract:document=>externalCompile<RetainedCompilerSnapshot,{document:unknown}>({document},{legacyRoot},'../../native-components/analyze-runner.mts')});
+ const results=await prepareLatestBatch(batch,shared,pin,{fingerprint:()=>retainedCompilerFingerprint(legacyRoot),extract:document=>externalCompile<RetainedCompilerSnapshot,{document:unknown}>({document},{legacyRoot},'../../native-components/analyze-runner.mts')},undefined,reuseDirectory&&reuseDirectory!=='-'?async head=>{try{return await load<import('../../src/migration/native-components/latest-batch-contracts.ts').LatestPreparedHead&{sha256:string}>(path.join(reuseDirectory,head.key.sourceId+'.json'));}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}}:undefined);
  const temporary=outputDirectory+'.preparing-'+process.pid;
  await mkdir(path.dirname(outputDirectory),{recursive:true});await mkdir(temporary);
  let assembled=0;try {for(const result of results){await save(path.join(temporary,result.key.sourceId+'.json'),seal(result));
- if(assemblyDirectory){
+ if(assemblyDirectory&&assemblyDirectory!=='-'){
   const receiptPath=path.join(assemblyDirectory,result.key.sourceId+'.json');
   let receipt:NativeV3AssemblyReceipt;
   try{receipt=await load<NativeV3AssemblyReceipt>(receiptPath);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')continue;throw error;}
@@ -71,4 +71,4 @@ if(mode==='shared'&&input&&output){
  await rename(temporary,outputDirectory);
  }catch(error){await rm(temporary,{recursive:true,force:true});throw error;}
  console.log(JSON.stringify({batch:batch.batch,prepared:results.filter(r=>r.status==='prepared-input').length,blocked:results.filter(r=>r.status==='source-analysis-blocked').length,assembled}));
-}else throw Error('usage: native-latest-prepare.ts shared INDEX NEW_RECEIPT | batch BATCH SHARED_RECEIPT LEGACY_ROOT COMPILER_SHA NEW_OUTPUT_DIRECTORY [EXISTING_ASSEMBLY_RECEIPTS_DIRECTORY]');
+}else throw Error('usage: native-latest-prepare.ts shared INDEX NEW_RECEIPT | batch BATCH SHARED_RECEIPT LEGACY_ROOT COMPILER_SHA NEW_OUTPUT_DIRECTORY [EXISTING_ASSEMBLY_RECEIPTS_DIRECTORY_OR_DASH] [EXACT_PREPARED_INPUTS_REUSE_DIRECTORY]');

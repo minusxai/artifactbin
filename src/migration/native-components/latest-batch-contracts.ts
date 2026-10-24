@@ -31,3 +31,5 @@ export interface LatestAssemblyAttempt {
  /** A complete assembly still requires publication, authority and paired UI evidence. */
  verificationStatus: 'not-verified';
 }
+/** Previously prepared inputs are reusable only under exact source and compiler pins. */
+export type LatestPreparedReuse = (head: LatestHeadPreparation) => Promise<(LatestPreparedHead & {sha256:string}) | undefined>;

@@ -60,3 +60,18 @@ test('conflicting source IDs fail even when primary row ID and hashes match',asy
  const entry={...head,sourceRowSha256:nativeDigest(conflicting),sourceFile:{...head.sourceFile,bytes:data.length,sha256:createHash('sha256').update(data).digest('hex')}};
  assert.throws(()=>selectLatestHead(entry,data,'plan'),/head/);
 });
+test('exact pinned prepared inputs avoid a second compiler extraction; altered reuse fails closed',async()=>{
+ const {createHash}=await import('node:crypto');const {analyzeNativeRevision}=await import('./recover.ts');const {bindNativeIdentities}=await import('./identity.ts');
+ const original={id:'example',version:7,document:{kind:'graph',schema:3,claimedIds:{},nodes:{$root:{parent:null,parts:[''],children:[],ast:null}}}};
+ const data=Buffer.from(JSON.stringify({heads:[original],versions:[]}));
+ const entry={...head,sourceRowSha256:nativeDigest(original),sourceFile:{...head.sourceFile,bytes:data.length,sha256:createHash('sha256').update(data).digest('hex')}};
+ const revision=selectLatestHead(entry,data,'plan'),graph=analyzeNativeRevision(revision);
+ const typed={key:entry.key,documentSha256:graph.documentSha256,sourceSha256:graph.sourceSha256,analysisSha256:nativeDigest(graph),compilerSourceSha256:'pin',nodes:[],flow:{imports:[],values:[],queries:[],mutations:[]},sourceSpans:graph.identities.map(n=>({sourceNode:n.sourceNode,sourceStart:n.sourceStart,sourceEnd:n.sourceEnd}))};
+ const identities=bindNativeIdentities([{graph,typed}])[0];const payload={key:entry.key,revision,status:'prepared-input' as const,evidence:{graph,typed,identities},sourceLimitations:[],assemblyStatus:'not-assembled' as const};const reused={...payload,sha256:nativeDigest(payload)};
+ const b={format:'native-latest-batch-preparation-v1' as const,stage:'preparation-only' as const,revisionScope:'latest' as const,batch:1,batchCount:6,approvalManifestSha256:'approval',identityPlanSha256:'plan',sharedPreparation:{path:'unused',sha256:'shared',batchMayPrepareSharedResources:false as const},heads:[entry]};const batch={...b,sha256:nativeDigest(b)};
+ const s={format:'native-latest-shared-verified-v1' as const,stage:'preparation-only' as const,indexSha256:'index',sharedSha256:'shared',identityPlanSha256:'plan',batches:[{batch:1,sha256:batch.sha256,heads:1}],verifiedObjects:1};const shared={...s,sha256:nativeDigest(s)};
+ const port={fingerprint:async()=> 'pin',extract:async()=>{throw Error('duplicate_compilation');}};
+ const result=await prepareLatestBatch(batch,shared,'pin',port,async()=>data,async()=>reused);
+ assert.equal(result[0]?.status,'prepared-input');
+ await assert.rejects(prepareLatestBatch(batch,shared,'pin',port,async()=>data,async()=>({...reused,key:{...reused.key,version:6}})),/receipt_digest/);
+});

@@ -1,3 +1,5 @@
+import type {NativeTypedAnalysis} from './analyze-contracts.ts';
+import type {LatestPreparedReuse} from './latest-batch-contracts.ts';
 import {nativeReceiptDigest} from './receipt-digest.ts';
 import {assembleNativePage} from './assemble.ts';
 import type {NativeV3AssemblyReceipt} from './v3-publication-contracts.ts';
@@ -25,20 +27,26 @@ export function selectLatestHead(head:LatestHeadPreparation,bytes:Uint8Array,pla
  if(!/^[A-Za-z0-9_-]+$/.test(head.key.sourceId)||page.heads?.length!==1||!row||row.version!==head.key.version||(row.id??row.artifact_id)!==head.key.sourceId||(row.id!==undefined&&row.id!==head.key.sourceId)||(row.artifact_id!==undefined&&row.artifact_id!==head.key.sourceId)||nativeDigest(row)!==head.sourceRowSha256)throw Error('native_latest_head');
  return {key:head.key,rowSha256:head.sourceRowSha256,documentSha256:nativeDigest(row.document),original:row,matchingArchives:[]};
 }
-export async function prepareLatestBatch(batch:LatestBatchPreparation,shared:LatestSharedVerification,pin:string,port:NativeTypedCompilerPort,read:(path:string)=>Promise<Uint8Array>=readFile):Promise<LatestPreparedHead[]> {
+export async function prepareLatestBatch(batch:LatestBatchPreparation,shared:LatestSharedVerification,pin:string,port:NativeTypedCompilerPort,read:(path:string)=>Promise<Uint8Array>=readFile,reuse?:LatestPreparedReuse):Promise<LatestPreparedHead[]> {
  verifyReceipt(batch);verifyReceipt(shared);
  if(batch.format!=='native-latest-batch-preparation-v1'||batch.stage!=='preparation-only'||batch.revisionScope!=='latest'||batch.sharedPreparation.batchMayPrepareSharedResources!==false||shared.format!=='native-latest-shared-verified-v1'||shared.sharedSha256!==batch.sharedPreparation.sha256||shared.identityPlanSha256!==batch.identityPlanSha256||!shared.batches.some(b=>b.batch===batch.batch&&b.sha256===batch.sha256&&b.heads===batch.heads.length)||new Set(batch.heads.map(h=>h.key.sourceId)).size!==batch.heads.length)throw Error('native_latest_scope');
  if(await port.fingerprint()!==pin)throw Error('native_typed_compiler_changed');
  const results:LatestPreparedHead[]=[];
  for(const head of batch.heads){
   const revision=selectLatestHead(head,await read(head.sourceFile.path),batch.identityPlanSha256);
+  const reused=await reuse?.(head);
+  if(reused){verifyReceipt(reused);if(reused.status!=='prepared-input'||nativeDigest(reused.key)!==nativeDigest(head.key)||nativeDigest(reused.revision)!==nativeDigest(revision))throw Error('native_latest_reuse_source');}
+  const cached=reused?.evidence as {graph:unknown;typed:NativeTypedAnalysis;identities:unknown}|undefined;
+  if(cached&&(cached.typed.compilerSourceSha256!==pin||nativeDigest(cached.typed.key)!==nativeDigest(head.key)))throw Error('native_latest_reuse_compiler');
   let evidence:unknown,status:LatestPreparedHead['status']='prepared-input';
   try {
    const graph=analyzeNativeRevision(revision);
-   const typed=await analyzeWithRetainedCompiler(revision,graph,pin,{fingerprint:async()=>pin,extract:d=>port.extract(d)});
+   if(cached&&(nativeDigest(cached.graph)!==nativeDigest(graph)||cached.typed.analysisSha256!==nativeDigest(graph)||cached.typed.sourceSha256!==graph.sourceSha256||cached.typed.documentSha256!==graph.documentSha256))throw Error('native_latest_reuse_graph');
+   const typed=await analyzeWithRetainedCompiler(revision,graph,pin,{fingerprint:async()=>pin,extract:d=>cached?Promise.resolve({nodes:cached.typed.nodes,flow:cached.typed.flow}):port.extract(d)});
    const identities=bindNativeIdentities([{graph,typed}])[0];
+   if(cached&&nativeDigest(cached.identities)!==nativeDigest(identities))throw Error('native_latest_reuse_identity');
    evidence={graph,typed,identities,requiredAssemblyReceipts:['modules','resources','styles','operations','reader-template','charts-if-used'],components:graph.components,flowCounts:Object.fromEntries(Object.entries(typed.flow).map(([k,v])=>[k,v.length]))};
-  }catch(error){status='source-analysis-blocked';evidence={error:error instanceof Error?error.message:'native_latest_analysis_failed'};}
+  }catch(error){if(cached)throw error;status='source-analysis-blocked';evidence={error:error instanceof Error?error.message:'native_latest_analysis_failed'};}
   results.push({key:head.key,revision,status,evidence,sourceLimitations:head.unresolvedReferences,assemblyStatus:'not-assembled'});
  }
  if(await port.fingerprint()!==pin)throw Error('native_typed_compiler_changed');
