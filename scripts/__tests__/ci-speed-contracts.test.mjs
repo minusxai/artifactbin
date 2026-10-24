@@ -49,7 +49,7 @@ it('supplies ordinary composition the cached exact-tree universal package before
  expect(steps[pack].if).toContain("needs.plan.outputs.cli-pack != 'true'");
  const cache=steps.find(step=>step.id==='build-cache');
  expect(cache.with.path).toMatch(/^dist$/m);
- expect(cache.with.key).toContain('app-build-v3-');
+ expect(cache.with.key).toContain('app-build-v4-');
  expect(cache.with.key).toContain('needs.plan.outputs.cli-pack');
  expect(jobs['reference-compatibility'].steps.find(step=>step.with?.name==='afbin-npm-packages')).toBeUndefined();
  const release=jobs['cli-pack'].steps.find(step=>step.with?.name==='afbin-npm-packages');

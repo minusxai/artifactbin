@@ -76,12 +76,12 @@ export async function createNativeLocalObjectSink(
 export function createNativeS3ObjectSink(
   config: S3Config,
 ): NativeImmutableObjectSink {
-  const require = createRequire(import.meta.url),
+  const loadAws = createRequire(import.meta.url),
     {
       S3Client,
       PutObjectCommand,
       GetObjectCommand,
-    } = require("@aws-sdk/client-s3");
+    } = loadAws("@aws-sdk/client-s3");
   const client = new S3Client({
     requestChecksumCalculation: "WHEN_REQUIRED",
     region: config.region,

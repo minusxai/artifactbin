@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {execFileSync} from 'node:child_process';
+import {retainedComponentSource} from '../source-provenance.mjs';
 import path from 'node:path';
 import {interactionBaselineFixtures,interactionPagingSql,settleInteraction} from '../interaction.mjs';
 import {stateExpectationIssues} from '../../../lib/component-browser-baseline.mjs';
@@ -7,8 +7,7 @@ const fixture=id=>interactionBaselineFixtures.find(item=>item.id===id);
 const semantic=(text,controls,rows=[])=>({text,controls,rows,overflow:0});
 describe('actual original interaction contracts',()=>{
   it('pins supported Select writes and real DataGrid sort cycle to the original source',()=>{
-    const repo=path.resolve(import.meta.dirname,'../../../..');
-    const source=file=>execFileSync('git',['show',`8eaac63810b66eb575b018be89bb63443e1b7aaf:${file}`],{cwd:repo,encoding:'utf8'});
+    const source=file=>retainedComponentSource({revision:'8eaac63810b66eb575b018be89bb63443e1b7aaf',path:file});
     expect(source('services/app/lib/islands/kit/select.tsx')).toContain('close(false, true)');
     expect(source('services/app/lib/islands/kit/select.tsx')).toContain('island.setValue(name, coerceScalarInput');
     const grid=source('services/app/lib/islands/kit/data.tsx');
