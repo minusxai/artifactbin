@@ -1,4 +1,4 @@
-import {LOCAL_CHROME_COLLAPSED_HEIGHT,LOCAL_CHROME_CANVAS_SCHEME} from './contracts';
+import {LOCAL_CHROME_COLLAPSED_HEIGHT,LOCAL_CHROME_CANVAS_SCHEME,validLocalSourceEvidence} from './contracts';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {validLinkedDocument} from './registry';
 import type {LinkedDocument,LocalConnection,LocalConnectionState,LocalOperation,SourceObservation} from './contracts';
@@ -11,11 +11,12 @@ export interface ConnectLocalDocumentOptions {
  /** Tests can shorten a transport deadline without changing production policy. */
  timeoutMs?:number;
 }
-export interface LocalDocumentConnection extends LocalConnection {post(message:unknown):void}
+export interface LocalDocumentConnection extends LocalConnection {post(message:unknown):void;reportSource(localDigest:string):void}
 /** No credential enters this window. The remote broker owns normal browser authentication. */
 export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalDocumentConnection{
  const {win,identity}=options;let disposed=false,stopped=false,connected=false;
  let iframe:HTMLIFrameElement|undefined,remote:Window|null=null,port:MessagePort|undefined,timer:ReturnType<typeof setTimeout>|undefined,nonce='';let call=0,generation=0;
+ let localDigest:string|undefined;
  let chromeHeight:number|'viewport'=LOCAL_CHROME_COLLAPSED_HEIGHT;
  const resizeChrome=()=>{if(iframe)iframe.style.height=Math.max(40,Math.min(win.innerHeight||1000,chromeHeight==='viewport'?(win.innerHeight||1000):chromeHeight))+'px';};
  const pending=new Map<number,{resolve:(value:unknown)=>void;reject:(reason:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
@@ -43,6 +44,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
     if(typeof data.error==='string')waiter.reject(Error(data.error));else waiter.resolve(data.value);
    }else if(data.kind==='bridge'&&connected)options.onMessage?.(data.message);
   };
+  if(localDigest)port.postMessage({kind:'local-source-evidence',localDigest});
   port.onmessageerror=()=>{cleanup();state('blocked');};port.start();
   remote!.postMessage({kind:'af:local-bind',nonce,identity,observeSource:options.onSourceObservation!==undefined},identity.platformOrigin,[channel.port2]);
  };
@@ -62,6 +64,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
   retry(){if(!options.privatePreview)begin();},
   disconnect(){stopped=true;cleanup();state('offline');},
   dispose(){if(disposed)return;stopped=true;cleanup();win.removeEventListener('message',receive);win.removeEventListener('resize',resizeChrome);disposed=true;},
+  reportSource(value){if(disposed||stopped||!validLocalSourceEvidence({kind:'local-source-evidence',localDigest:value}))return;localDigest=value;port?.postMessage({kind:'local-source-evidence',localDigest});},
   post(message){if(connected)port?.postMessage({kind:'bridge',message});},
   request(operation:LocalOperation){
    if(!connected||!port)return Promise.reject(Error('Document is disconnected'));

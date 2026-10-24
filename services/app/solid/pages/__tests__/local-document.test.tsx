@@ -106,3 +106,19 @@ it('keeps a matching transparent canvas scheme while dark platform controls reta
  const view=mount();ready();expect(document.documentElement.style.colorScheme).toBe('light');expect(document.documentElement.dataset.theme).toBe('dark');
  expect(await screen.findByRole('button',{name:'Dark mode'})).toHaveAttribute('aria-pressed','true');view.unmount();expect(document.documentElement.style.colorScheme).toBe('dark');expect(document.documentElement.style.getPropertyPriority('color-scheme')).toBe('important');document.documentElement.style.removeProperty('color-scheme');
 });
+
+it('renders advisory actual-source comparison in the connected trusted status strip without granting writes',async()=>{
+ mount();ready();const options=captured.options!;
+ options.onSourceObservation?.({remoteDigest:'a'.repeat(64),remoteRevision:'1'});
+ expect(await screen.findByText(/Current file bytes have not been verified/)).toBeTruthy();
+ options.onLocalSourceEvidence?.('b'.repeat(64));
+ expect(await screen.findByText(/Local source has edits\. Publish changes explicitly/)).toBeTruthy();
+ options.onSourceObservation?.({remoteDigest:'c'.repeat(64),remoteRevision:'2'});
+ expect(await screen.findByText(/Local and remote source changed\. Review both copies/)).toBeTruthy();
+ options.onLocalSourceEvidence?.('c'.repeat(64));
+ expect(await screen.findByText(/Local and remote source match a newer revision/)).toBeTruthy();
+ options.onLocalSourceEvidence?.('a'.repeat(64));
+ expect(await screen.findByText(/Remote source is newer\. Local file preserved/)).toBeTruthy();
+ options.onState('unavailable');expect(await screen.findByText(/Current remote source is unavailable/)).toBeTruthy();
+ expect(annotation.canCreate).toBe(false);expect(broker.authorize).not.toHaveBeenCalled();
+});

@@ -14,3 +14,17 @@ it('saves actual edited bytes with only the explicitly supplied current private 
  expect(readPortableDocument(html).privateState).toEqual({filter:'current',draft:'private'});
  expect(html).not.toContain('/secret-session');
 });
+
+it('acquires actual edited selection and reports canonical bytes, while cancellation downloads nothing',async()=>{
+ const baseline='<html><body>Before</body></html>',edited=baseline.replace('Before','Edited');
+ const selected=portableScript({version:1,source:baseline})+edited;
+ document.head.innerHTML='<script data-af="runtime" type="application/json">{}</script><script data-af="apollo" type="application/json">"module"</script><script data-af="reader" type="application/json">"reader"</script><script data-af="core">boot()</script>';
+ const onSource=vi.fn();let blob:Blob|undefined;
+ const download=vi.spyOn(URL,'createObjectURL').mockImplementation(value=>{blob=value as Blob;return 'blob:selected';});
+ vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{});
+ const picker=vi.spyOn(HTMLInputElement.prototype,'click').mockImplementation(function(this:HTMLInputElement){Object.defineProperty(this,'files',{value:[new File([selected],'edited.html')],configurable:true});this.dispatchEvent(new Event('change'));});
+ expect(await saveLocalDocument({win:window,onSource})).toBe(true);
+ expect(onSource).toHaveBeenCalledWith(edited);expect(readPortableDocument(await blob!.text()).source).toBe(edited);
+ download.mockClear();onSource.mockClear();picker.mockImplementation(function(this:HTMLInputElement){this.dispatchEvent(new Event('cancel'));});
+ expect(await saveLocalDocument({win:window,onSource})).toBe(false);expect(onSource).not.toHaveBeenCalled();expect(download).not.toHaveBeenCalled();vi.restoreAllMocks();
+});
