@@ -902,6 +902,8 @@ async function selectionLeg(browser, seed) {
     await expect(page.getByLabel('Annotation comment', { exact: true })).toBeHidden();
     await expect(frame.getByRole('button', { name: 'Comment', exact: true })).toBeVisible();
     await frame.getByRole('button', { name: 'Select', exact: true }).click();
+    await expect(page.getByRole('status', {name:'Select tool active',exact:true})).toBeVisible();
+    check(true, 'Select starts original block picking before an empty discussion layer has loaded');
     check(true, 'native right-click offers Comment and Select before performing an action');
     await page.keyboard.press('Escape');
     await openRail(page);

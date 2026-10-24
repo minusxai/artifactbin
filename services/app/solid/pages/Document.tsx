@@ -122,9 +122,10 @@ export function DocumentPage(): JSX.Element {
   const toldMode = pick;
   /** The APP's appearance, which the bar's controls panel shows: never the document's mode (see bug: a light document read the app's toggle as light). */
   const appAppearance = createAppAppearance();
+  const [pickRequested, setPickRequested] = createSignal(false);
   const [initialAnnotationSelection, setInitialAnnotationSelection] = createSignal<StoryEditSelection | null>(null);
   createEffect(() => {
-    setDiscussionActive(needsCommentPresentation({ canRead: comments().canReadComments, active: discussionActive(), linked: !!(new URLSearchParams(location.search).get('comment') || new URLSearchParams(location.search).get('thread')), railOpen: railOpen(), composing: !!initialAnnotationSelection(), openCount: openAnnotationCount(), liveCount: liveAnnotations()?.length ?? 0 }));
+    setDiscussionActive(needsCommentPresentation({ canRead: comments().canReadComments, active: discussionActive(), linked: !!(new URLSearchParams(location.search).get('comment') || new URLSearchParams(location.search).get('thread')), railOpen: railOpen(), composing: !!initialAnnotationSelection(), picking: pickRequested(), openCount: openAnnotationCount(), liveCount: liveAnnotations()?.length ?? 0 }));
   });
   const [sharingOpen, setSharingOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
@@ -359,7 +360,7 @@ export function DocumentPage(): JSX.Element {
     )}</Show>
     <TrustedUi overlay layer="discussion">
     <Show when={ready() && nonce()}>
-      <SelectionActions runtimeRef={runtimeRef} nonce={nonce()} canAnnotate={canStartComment()}
+      <SelectionActions runtimeRef={runtimeRef} nonce={nonce()} canAnnotate={canStartComment()} onSelect={() => { if (annotatable()) setPickRequested(true); }}
         onAnnotate={(selection) => {
           if (annotatable()) setInitialAnnotationSelection(selection);
           else if (!accountSession()) window.location.assign(loginHref(window.location, 'comment'));
@@ -369,7 +370,7 @@ export function DocumentPage(): JSX.Element {
       <Suspense fallback={null}><AnnotationLayer id={id!} canCreateComment={annotatable()} onSignIn={!accountSession() && !archivedNow() ? () => window.location.assign(loginHref(window.location, 'comment')) : undefined} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
         railOpen={railOpen()} onRailOpenChange={setRailOpen} membershipRevision={membershipRevision()} showViewComments={comments().canReadComments} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}
-        pickOnOpen onAnnotationsChange={setAnnotationItems} topOffset={APP_BAR_H} /></Suspense>
+        pickRequested={pickRequested()} pickOnOpen onAnnotationsChange={setAnnotationItems} topOffset={APP_BAR_H} /></Suspense>
     </Show>
     <Show when={sharingOpen() && id}>
       <Suspense fallback={<PendingReaderDialog title="Share artifact" onClose={() => setSharingOpen(false)} />}><DocumentSharing refs={page?.surface?.refs} id={id!} title={shownTitle()} owner={isOwner()} editable={editable()} variant="dialog" version={currentVersion()}
