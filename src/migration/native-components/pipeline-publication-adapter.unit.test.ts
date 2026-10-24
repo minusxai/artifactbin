@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
-import {selectNativePipelinePublicationPage} from './pipeline-publication-adapter.ts';
+import {createNativePipelinePublication,selectNativePipelinePublicationPage} from './pipeline-publication-adapter.ts';
 import {nativeDigest} from './selection.ts';
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 function fixture(id:string){const row={id,version:1,document:{},meta:{}};const raw=JSON.stringify({snapshot:{},heads:[row],versions:[]});const receipt={id,path:'page.json',bytes:Buffer.byteLength(raw),sha256:hash(raw),expectedVersion:1,distinctRevisions:1,archivedRows:0};const manifest=JSON.stringify({receipts:[receipt],failures:[]});return {bytes:Buffer.from(raw),manifest:{encoding:'base64' as const,data:Buffer.from(manifest).toString('base64'),sha256:hash(manifest)},revision:{key:{sourceNamespace:'fixture',sourceId:id,version:1},original:row,matchingArchives:[],rowSha256:nativeDigest(row),documentSha256:nativeDigest(row.document)}};}
@@ -12,4 +12,12 @@ test('approved latest overlay cannot add an unselected source or replace the ori
  await assert.rejects(selectNativePipelinePublicationPage({selectionManifest:f.manifest,approvedSelectionManifestSha256:f.manifest.sha256,refreshManifest:overlay,approvedRefreshManifestSha256:overlay.sha256},f.bytes,f.revision),/refresh_prior/);
  const extra=encode({revisionScope:'latest',selectionUnchanged:true,priorManifestSha256:f.manifest.sha256,receipts:[{...original,id:'unselected',priorReceipt:original}]});
  await assert.rejects(selectNativePipelinePublicationPage({selectionManifest:f.manifest,approvedSelectionManifestSha256:f.manifest.sha256,refreshManifest:extra,approvedRefreshManifestSha256:extra.sha256},f.bytes,f.revision),/refresh_selection/);
+});
+
+test('host capabilities stay host-only while explicit schema or namespace substitution stops staging',async()=>{
+ const configuration={shared:{schemas:{appSchema:'app',authSchema:'accounts'},identity:{plan:{sourceNamespace:'approved'}}}} as Parameters<typeof createNativePipelinePublication>[0];
+ const callback=createNativePipelinePublication(configuration);let staged=0;
+ const invocation={context:{assembly:{sha256:'assembly',key:{sourceNamespace:'wrong',sourceId:'first',version:1}},revision:{key:{sourceNamespace:'wrong',sourceId:'first',version:1}}},reviewedRecipe:{assemblySha256:'assembly',authority:{appSchema:'app',authSchema:'accounts',capabilities:['operator']}},prepareRuntime:async()=>{staged++;throw Error('unexpected');}} as unknown as Parameters<typeof callback>[0];
+ await assert.rejects(callback(invocation),/namespace/);assert.equal(staged,0);
+ invocation.reviewedRecipe.authority.authSchema='decoy';await assert.rejects(callback(invocation),/authority_binding/);assert.equal(staged,0);
 });

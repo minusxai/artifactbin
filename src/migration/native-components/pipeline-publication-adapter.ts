@@ -37,7 +37,7 @@ export function createNativePipelinePublication(config:NativePipelinePublication
  const captured=structuredClone(config);
  return async invocation=>{
   const {context,reviewedRecipe,files}=invocation;
-  if(reviewedRecipe.assemblySha256!==context.assembly.sha256||nativeDigest(context.assembly.key)!==nativeDigest(context.revision.key)||nativeDigest(reviewedRecipe.authority)!==nativeDigest(captured.shared.schemas))throw Error('native_pipeline_publication_authority_binding');
+  if(reviewedRecipe.assemblySha256!==context.assembly.sha256||nativeDigest(context.assembly.key)!==nativeDigest(context.revision.key)||nativeDigest({appSchema:reviewedRecipe.authority.appSchema,authSchema:reviewedRecipe.authority.authSchema})!==nativeDigest(captured.shared.schemas))throw Error('native_pipeline_publication_authority_binding');
   if(context.revision.key.sourceNamespace!==captured.shared.identity.plan.sourceNamespace)throw Error('native_pipeline_publication_namespace');
   const page=await selectNativePipelinePublicationPage(captured,files.sourceHead,context.revision);
   const result=await prepareNativePublication({selection:{sourceNamespace:context.revision.key.sourceNamespace,manifestSha256:captured.approvedSelectionManifestSha256,page},assemblies:[context.assembly],relations:encodeNativePublicationBytes(files.comments),shared:structuredClone(captured.shared),exportedAt:captured.exportedAt,coreUrl:captured.coreUrl},{prepare:async(assemblies,planned)=>{
