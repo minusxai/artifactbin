@@ -19,6 +19,8 @@ export interface PortableCopyOptions {
   document: Document;
   /** Actual selected file/helper response bytes; stale embedded source is never authoritative. */
   sourceBytes: string;
+  /** Explicit Save may adopt server-assigned IDs only if selected author bytes still match publication input. */
+  publishedSource?: { source:string; localSourceDigest:string };
   portable: PortableDocument;
   privateState?: HtmlJsonObject;
 }

@@ -11,6 +11,16 @@ import type {HtmlRuntimeConfig} from './contract';
 import {RemoteUnreachable,type RemotePort} from './apollo/apollo-contracts';
 declare const __AF_RUNTIME_CONFIG__:HtmlRuntimeConfig&{offline?:boolean};
 export const config=__AF_RUNTIME_CONFIG__;
+function sourceNamespaces(document:Document):{names:string[];bindings:Record<string,string>}{
+ const names:string[]=[],bindings:Record<string,string>={};
+ for(const link of document.querySelectorAll('link[data-af-name]')){
+  const rel=(link.getAttribute('rel')??'').split(/\s+/),name=link.getAttribute('data-af-name')??'';
+  if(!rel.some(value=>value==='af-backend'||value==='af-dataset')||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__')||names.includes(name))continue;
+  names.push(name);const id=/^ref:([A-Za-z0-9_-]+)$/.exec(link.getAttribute('href')??'')?.[1];if(id)bindings[name]=id;
+ }
+ return {names,bindings};
+}
+if(!config.backends.length)config.backends=sourceNamespaces(document).names;
 const preview=config.localPreview?createLocalDatasetTransport({privatePreview:document.documentElement.hasAttribute('data-af-private-preview'),endpoint:config.localPreview.endpoint},location,fetch):undefined;
 export const remote: RemotePort = {
   online: () => preview?.online()===true || !config.offline && !!config.appOrigin && window.parent !== window,
@@ -145,11 +155,11 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
 }
 
 /** Downloads attach only a credential-free document transport; no source upload occurs. */
-export function startPortableDocument(win:Window=window):()=>void {
+export function startPortableDocument(win:Window=window,publishOrigin?:string):()=>void {
  let connected=false;
  let execute:Parameters<Parameters<typeof startPortableSession>[0]['online']>[1];
  const originalOnline=remote.online,originalExecute=remote.execute;
  remote.online=()=>connected||originalOnline();
  remote.execute=request=>connected&&execute?execute(request) as ReturnType<RemotePort['execute']>:originalExecute(request);
- return startPortableSession({win,attach:post=>startFrameBridge({win,post}),online(value,request){connected=value;execute=request;}});
+ return startPortableSession({win,publishOrigin,adoptIdentity(identity,source){config.pageId=identity.artifactId;config.revision=identity.baseRevision;const parsed=new DOMParser().parseFromString(source,'text/html'),declarations=sourceNamespaces(parsed);config.backends=declarations.names;config.bindings=declarations.bindings;},attach:post=>startFrameBridge({win,post}),online(value,request){connected=value;execute=request;}});
 }

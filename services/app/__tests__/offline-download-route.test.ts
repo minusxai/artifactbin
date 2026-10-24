@@ -76,3 +76,18 @@ it('packs admitted private raster image bytes only for an authorized current rea
  await (await getDb()).query("UPDATE artifacts SET deleted_at=now() WHERE id=$1",[image.id]);
  expect((await download(request(`/a/${page.id}/download`,{token:actor.token}),params(page.id))).status).toBe(404);
 });
+it('packs authorized bundle CSS and module bytes while retaining original canonical publication source',async()=>{
+ const actor=await mintAccountToken('offline-bundle-owner');
+ const file=(path:string,content:string,contentType:string)=>({path,contentType,base64:Buffer.from(content).toString('base64')});
+ const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'offline_bundle_export_01'},json:{html:'<html><head><link rel="stylesheet" href="./site.css"><script type="module" src="./app.js"></script></head><body><h1 data-af-id="heading">Bundle</h1></body></html>',publicationBundle:{entryPath:'index.html',files:[file('site.css','body{color:green}','text/css'),file('app.js','document.body.dataset.ready="yes"','text/javascript')]}}}));
+ expect(response.status).toBe(201);const saved=await response.json();
+ const downloaded=await download(request(`/a/${saved.id}/download`,{token:actor.token}),params(saved.id));expect(downloaded.status).toBe(200);
+ const bytes=await downloaded.text(),doc=new JSDOM(bytes).window.document;
+ expect(doc.querySelector('link[rel="stylesheet"]')?.getAttribute('href')).toMatch(/^data:text\/css;base64,/);
+ expect(doc.querySelector('script[type="module"][src]')?.getAttribute('src')).toMatch(/^data:text\/javascript;base64,/);
+ expect(readPortableDocument(bytes).source).toBe((await getArtifactById(saved.id))!.source);
+ expect(bytes).not.toContain(actor.token);
+ await (await getDb()).query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[saved.dependencyReceipts[0].id]);
+ // A fresh export never embeds bytes from a dependency whose current ACL/readability was revoked.
+ expect((await download(request(`/a/${saved.id}/download`,{token:actor.token}),params(saved.id))).status).toBe(404);
+});

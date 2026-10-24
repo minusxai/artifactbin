@@ -265,13 +265,14 @@ async function runRemote(
 }
 
 export function createClient(options: ClientOptions): AfClient {
-  const backends = new Set(options.backends);
+  const backendNames=options.backends;
+  const backends=()=>new Set(typeof backendNames==='function'?backendNames():backendNames);
   const state: StatePort = options.state;
   const remote = options.remote;
   const maxAttempts = options.maxAttempts ?? DEFAULT_ATTEMPTS;
   if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1) throw new TypeError("maxAttempts must be a positive integer");
   const resolvers = new Map<string, LocalResolver>();
-  const isBackend = (field: FieldNode) => backends.has(field.name.value);
+  const isBackend = (field: FieldNode) => backends().has(field.name.value);
 
   function localOnly(document: DocumentNode, variables: Variables | undefined, what: string) {
     const op = operation(document, variables);

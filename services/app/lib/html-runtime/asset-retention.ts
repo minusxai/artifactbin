@@ -3,7 +3,7 @@ import type {RuntimeAssetRetention,RuntimeAssetStore} from './asset-retention-co
 /** Release-independent public code, verified by its requested content address. */
 export function createRuntimeAssetRetention(current:HtmlRuntimeAssets,store:RuntimeAssetStore,hash:(source:string)=>string):RuntimeAssetRetention {
  let persisted:Promise<HtmlRuntimeAssets>|undefined;
- const modules=[{source:current.apollo,path:current.apolloPath,prefix:'apollo'},{source:current.reader,path:current.readerPath,prefix:'reader'}].map(module=>({...module,digest:hash(module.source)}));
+ const modules=[{source:current.apollo,path:current.apolloPath,prefix:'apollo'},{source:current.reader,path:current.readerPath,prefix:'reader'},...(current.chrome&&current.chromePath?[{source:current.chrome,path:current.chromePath,prefix:'reader'}]:[])].map(module=>({...module,digest:hash(module.source)}));
  const expose=()=>persisted??=(async()=>{
   for(const module of modules)if(module.path!==`/af/v1/${module.prefix}/${module.digest}`)throw Error('Runtime asset digest mismatch');
   await Promise.all(modules.map(module=>store.put(module.digest,module.source)));

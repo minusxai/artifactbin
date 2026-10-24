@@ -567,6 +567,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('Cache-Control', 'no-store');
     return c.req.header('Accept')?.includes('text/html') ? c.redirect('/docs-human', 302) : apiNotFound(c);
   });
+  app.on(['GET','HEAD'],'/local/publish',(c)=>page(c));
   app.get('/docs-human', (c) => page(c));
   // The broker is platform-owned chrome, framed by file:// or loopback documents.
   app.get('/local/connect', (c) => page(c));

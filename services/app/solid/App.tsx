@@ -30,6 +30,7 @@ const ArtifactAddressRoute = lazy(() => import('./pages/ArtifactAddress').then((
 const AssetsPage = lazy(() => import('./pages/Assets').then((m) => ({ default: m.AssetsPage })));
 const DatasetEditorPage = lazy(() => import('./pages/DatasetEditor').then((m) => ({ default: m.DatasetEditorPage })));
 const FileUploadPage = lazy(() => import('./pages/FileUpload').then((m) => ({ default: m.FileUploadPage })));
+const LocalPublishPage = lazy(() => import('./pages/LocalPublish').then(m => ({default:m.LocalPublishPage})));
 const LocalDocumentPage = lazy(() => import('./pages/LocalDocument').then(m => ({default:m.LocalDocumentPage})));
 const DocumentPage = lazy(() => import('./pages/Document').then((m) => ({ default: m.DocumentPage })));
 /**
@@ -120,6 +121,7 @@ export function App(): JSX.Element {
       <Route path="/datasets/new" component={DatasetEditorPage} />
       <Route path="/files/new" component={FileUploadPage} />
       <Route path="/a/:id/edit" component={ArtifactEditRoute} />
+      <Route path="/local/publish" component={LocalPublishPage} />
       <Route path="/local/connect" component={LocalDocumentPage} />
       <Route path="/login" component={LoginRoute} />
       <Route path="/start" component={StartPage} />

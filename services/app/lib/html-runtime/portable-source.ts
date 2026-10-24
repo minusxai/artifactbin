@@ -1,10 +1,10 @@
 import {sha256Hex} from '@artifactbin/utils/sha256';
 import { parse, serialize, type DefaultTreeAdapterMap } from 'parse5';
-import { readPortableDocument } from './portable';
+import { readPortableDocument,hasPortableDocument } from './portable';
 const generated=new Set(['runtime','apollo','reader','portable','chrome','core']);
 /** Recover author bytes from an explicitly selected disk file, never the running DOM. */
 export function recoverPortableRendering(fileBytes:string):string {
- if(!fileBytes.includes('data-af="portable"'))return fileBytes;
+ if(!hasPortableDocument(fileBytes))return fileBytes;
  readPortableDocument(fileBytes);
  const document=parse(fileBytes,{sourceCodeLocationInfo:true});
  const spans:{start:number;end:number;replacement:string}[]=[];
@@ -30,7 +30,7 @@ export function portableRenderedDigest(html:string):string {
  clean(doc);return sha256Hex(serialize(doc));
 }
 export function recoverPortableSource(fileBytes:string):string {
- if(!fileBytes.includes('data-af="portable"'))return fileBytes;
+ if(!hasPortableDocument(fileBytes))return fileBytes;
  const envelope=readPortableDocument(fileBytes),source=recoverPortableRendering(fileBytes),digest=portableRenderedDigest(source);
  return digest===portableRenderedDigest(envelope.source)||digest===envelope.renderedDigest?envelope.source:source;
 }
