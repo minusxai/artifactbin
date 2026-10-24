@@ -38,4 +38,10 @@ Dataset mutations affect the current server session only. They never change CSV/
 
 The registry holds at most four sessions, expires clean sessions after 30 idle minutes, limits each to 512 operations and four concurrent operations, and bounds request JSON to 64 KiB with a five-second operation abort signal. Declared data is limited to 8 MiB per file and 16 MiB per session; served static files retain the separate 32/128 MiB project bounds above. These are preview resource limits, not publication or account permissions.
 
-Explicit local Save tooling can read `GET /__af_preview/source?path=ENCODED_PATHNAME` for unchanged source HTML and `GET /__af_preview/export-runtime` for bundled browser code. Neither endpoint reads account state or writes a file; saving remains a deliberate viewer/agent action.
+## Save a portable copy
+
+The toolbar’s **Save HTML** packs the selected HTML’s local scripts, literal module imports (including shared, lazy and cyclic modules), styles and media into the downloaded copy. Registered libraries shipped with the skill are included when referenced. Computed imports, missing dependencies, foreign resources and paths outside the selected project produce an error before download; they are not silently omitted. Fetching application data dynamically is separate from packaging source dependencies. Export local dataset edits using the session controls above.
+
+The saved copy retains the original author source for recovery and a separate packed rendering. Save never overwrites the selected disk file, publishes, or copies account credentials. Private viewer state is included only when explicitly selected. Saving an already exported copy preserves its recoverable source.
+
+Explicit local Save tooling uses `GET /__af_preview/export-source?path=ENCODED_PATHNAME` for unchanged `html` plus packed `renderedHtml`, and `GET /__af_preview/export-runtime` for bundled browser code. `GET /__af_preview/source?path=ENCODED_PATHNAME` remains available for unchanged source alone. These endpoints never write files or read account state.
