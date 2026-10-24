@@ -1,6 +1,6 @@
 /** Run against an isolated gate server built from the explicitly named source.
  * No production host or credential is accepted. Produces a URL manifest only. */
-import {readFile,writeFile} from 'node:fs/promises';
+import {writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
@@ -16,8 +16,12 @@ const publish=async(body,options={})=>{
   if(!response.ok)throw Error(`Fixture publication failed (${response.status}): ${await response.text()}`);
   return response.json();
 };
-const themeCss=implementation==='html'?await readFile(path.join(source,'services/app/skills/artifactbin/design-systems/almanac.css'),'utf8'):null;
-const entries=await publishBaselineFixtures({implementation,publish,repo:source,serverOrigin:base,themeCss:themeCss?()=>themeCss:undefined});
+let skillArchive;
+if(implementation==='html'){
+  const response=await fetch(`${base}/skills/artifactbin.zip`);if(!response.ok)throw Error(`Candidate skill archive unavailable (${response.status})`);
+  skillArchive=new Uint8Array(await response.arrayBuffer());if(skillArchive.byteLength>128*1024*1024)throw Error('Candidate skill archive limit exceeded');
+}
+const entries=await publishBaselineFixtures({implementation,publish,serverOrigin:base,skillArchive});
 const manifest={implementation,sourceRevision,output:path.join(path.dirname(output),implementation+'-evidence'),entries:entries.map(({fixture,theme,id})=>({fixture,theme,url:`${base}/a/${id}/raw`}))};
 await writeFile(output,JSON.stringify(manifest,null,2));
 return manifest;

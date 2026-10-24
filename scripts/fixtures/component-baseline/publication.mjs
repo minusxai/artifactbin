@@ -1,26 +1,42 @@
 /** Build real API payloads. publish(body) is the owning revision's existing gate
  * authentication/API helper; this module never sends credentials or contacts hosts. */
 import path from 'node:path';
-import {copyFile,mkdtemp,mkdir,readdir,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,mkdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
+import {pathToFileURL} from 'node:url';
 import { browserParityFixtures, parityThemes } from './index.mjs';
 /** @typedef {{idempotencyKey?:string}} PublicationRequestOptions */
 /** @typedef {(body:object, options?:PublicationRequestOptions)=>Promise<{id:string}>} PublishFixture */
 const pascal=name=>name==='deck-gl'?'DeckGL':name.split('-').map(word=>word[0].toUpperCase()+word.slice(1)).join('');
+/** Stored UTF-8 ZIP is the product's normal public skill format. Validate the
+ * complete immutable archive before writing any selected package member. */
+function installedFiles(archive){
+  if(!(archive instanceof Uint8Array)||archive.byteLength>128*1024*1024)throw Error('Candidate requires a bounded actual HTTP skill archive');
+  const bytes=Buffer.from(archive),files=new Map();let offset=0;
+  while(offset+30<=bytes.length&&bytes.readUInt32LE(offset)===0x04034b50){
+    if(files.size>=4000||bytes.readUInt16LE(offset+8)!==0||(bytes.readUInt16LE(offset+6)&~0x800)!==0)throw Error('Unsupported skill ZIP member');
+    const size=bytes.readUInt32LE(offset+18),length=bytes.readUInt16LE(offset+26),extra=bytes.readUInt16LE(offset+28),start=offset+30+length+extra,end=start+size;
+    if(size!==bytes.readUInt32LE(offset+22)||end>bytes.length)throw Error('Truncated skill ZIP member');
+    const name=bytes.subarray(offset+30,offset+30+length).toString('utf8');
+    if(!/^artifactbin\/[A-Za-z0-9._/-]+$/.test(name)||name.split('/').some(part=>!part||part==='.'||part==='..'))throw Error('Unsafe skill ZIP member');
+    const relative=name.slice('artifactbin/'.length);if(files.has(relative))throw Error('Duplicate skill ZIP member');files.set(relative,bytes.subarray(start,end));offset=end;
+  }
+  if(!files.size||offset+4>bytes.length||![0x02014b50,0x06054b50].includes(bytes.readUInt32LE(offset)))throw Error('Invalid stored skill ZIP');
+  for(const name of ['scripts/publication-bundle.mjs','scripts/preview-html.mjs','design-systems/almanac.css'])if(!files.has(name))throw Error('Installed skill archive is missing '+name);
+  if(![...files.keys()].some(name=>/^fonts\/[^/]+\.woff2$/.test(name)))throw Error('Installed skill archive has no packaged fonts');
+  return files;
+}
 /** Candidate snapshots use the installed component bytes and normal agent helper. */
-export async function publishBaselineFixtures({implementation,publish,repo,themeCss,serverOrigin}) {
+export async function publishBaselineFixtures({implementation,publish,serverOrigin,skillArchive}) {
   const entries=[];
   let uploadDataset,staging,prepareBundle;
   try{
   if(implementation==='html'){
-    // Intentional engine boundary: pinned original JSX checkouts do not contain
-    // the candidate HTML helper and must publish without importing its source.
-    ({prepareBundle}=await import('../../../services/app/skills/artifactbin/scripts/publication-bundle.mjs'));
-    staging=await mkdtemp(path.join(tmpdir(),'component-publication-'));await mkdir(path.join(staging,'components'));await mkdir(path.join(staging,'design-systems'));await mkdir(path.join(staging,'fonts'));
-    const installed=path.join(repo,'services/app/skills/artifactbin/components');
-    for(const name of await readdir(installed))if(name.endsWith('.js'))await copyFile(path.join(installed,name),path.join(staging,'components',name));
-    const fonts=path.join(repo,'services/app/skills/artifactbin/fonts');
-    for(const name of await readdir(fonts).catch(error=>{if(error.code==='ENOENT')return [];throw error;}))if(name.endsWith('.woff2'))await copyFile(path.join(fonts,name),path.join(staging,'fonts',name));
+    // Original JSX checkouts have no candidate source or archive. Only this
+    // branch installs and executes the selected candidate's normal Node helper.
+    const files=installedFiles(skillArchive);staging=await mkdtemp(path.join(tmpdir(),'component-publication-'));
+    for(const [name,bytes]of files)if(/^(?:scripts|components|design-systems|fonts)\//.test(name)){const target=path.join(staging,name);await mkdir(path.dirname(target),{recursive:true});await writeFile(target,bytes);}
+    ({prepareBundle}=await import(pathToFileURL(path.join(staging,'scripts/publication-bundle.mjs')).href));
   }
   for(const fixture of browserParityFixtures)for(const theme of parityThemes){
     const started=performance.now();let body,request;
@@ -32,9 +48,7 @@ export async function publishBaselineFixtures({implementation,publish,repo,theme
       const content=oldJsx.replace(helmet,'');
       body={title:`Component baseline ${fixture.id}`,theme:'almanac',colorMode:theme,markup:`${helmet}<div data-design="tw" className="p-6">${content}</div>`};
     }else if(implementation==='html'){
-      if(typeof themeCss!=='function')throw Error('Candidate must supply the same actual almanac theme CSS as the original reader');
       const source=fixture.modules.map(name=>`import {register${pascal(name)}} from "./components/${name}.js";register${pascal(name)}();`).join('\n')+'\n'+(fixture.setup||'')+'\ndocument.documentElement.dataset.baselineReady="yes";';
-      await writeFile(path.join(staging,'design-systems/almanac.css'),await themeCss(theme));
       const code=source.replace(/<\/script/gi,'<\\/script');
       const html=`<!doctype html><html data-af-design-system="almanac" data-af-dark="${theme==='dark'}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="./design-systems/almanac.css"><style>body{margin:0;padding:24px}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${fixture.newHtml}<script type="module">${code}</script></body></html>`;
       await writeFile(path.join(staging,'index.html'),html);

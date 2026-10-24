@@ -55,6 +55,21 @@ describe('default candidate reader gate',()=>{
   });
 });
 
+let actualArchive;
+async function candidateArchive(){
+  if(!actualArchive)actualArchive=(async()=>{const {GET}=await import('../../services/app/app/skills/artifactbin.zip/route.ts');const response=await GET(new Request('https://example.test/skills/artifactbin.zip'));expect(response.status).toBe(200);return new Uint8Array(await response.arrayBuffer());})();
+  return actualArchive;
+}
+const archiveContents=new WeakMap();
+function archiveMember(archive,relative){
+  let files=archiveContents.get(archive);if(!files){
+    files=new Map();const bytes=Buffer.from(archive.buffer,archive.byteOffset,archive.byteLength);let offset=0;
+    while(bytes.readUInt32LE(offset)===0x04034b50){const length=bytes.readUInt16LE(offset+26),start=offset+30+length+bytes.readUInt16LE(offset+28),end=start+bytes.readUInt32LE(offset+18),name=bytes.subarray(offset+30,offset+30+length).toString();files.set(name,bytes.subarray(start,end));offset=end;}
+    archiveContents.set(archive,files);
+  }
+  const value=files.get('artifactbin/'+relative);if(!value)throw Error('Missing actual HTTP archive member: '+relative);return value;
+}
+
 describe('actual fixture publication payloads',()=>{
   it('declares an actual dataset and string state for original upload markup',async()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
@@ -71,13 +86,14 @@ describe('actual fixture publication payloads',()=>{
   it('publishes every candidate through the installed component graph within the real API limits',async()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
     const repo=path.resolve(import.meta.dirname,'../..');
-    const css=await readFile(path.join(repo,'services/app/skills/artifactbin/design-systems/almanac.css'),'utf8');
+    const skillArchive=await candidateArchive();
     const {planPublicationBundle}=await import('../../services/app/lib/html-publication-bundle/plan.ts');
     const bodies=[],keys=new Set();
-    await publishBaselineFixtures({implementation:'html',repo,serverOrigin:'https://example.test',themeCss:()=>css,publish:async(body,request)=>{
+    await publishBaselineFixtures({implementation:'html',skillArchive,serverOrigin:'https://example.test',publish:async(body,request)=>{
       expect(body.publicationBundle).toBeDefined();expect(request.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);keys.add(request.idempotencyKey);
       const plan=planPublicationBundle(body.html,body.publicationBundle);expect(plan.dependencies.length).toBeGreaterThan(0);expect(Buffer.byteLength(body.html)).toBeLessThan(4_000_000);
-      for(const file of body.publicationBundle.files){expect(file.path).toMatch(/^(?:components\/[a-z0-9-]+\.js|design-systems\/almanac\.css|fonts\/[a-zA-Z0-9._-]+\.woff2)$/);expect(Buffer.from(file.base64,'base64')).toEqual(await readFile(path.join(repo,'services/app/skills/artifactbin',file.path)));}
+      for(const file of body.publicationBundle.files){expect(file.path).toMatch(/^(?:components\/[a-z0-9-]+\.js|design-systems\/almanac\.css|fonts\/[a-zA-Z0-9._-]+\.woff2)$/);expect(Buffer.from(file.base64,'base64').equals(archiveMember(skillArchive,file.path))).toBe(true);if(file.path.startsWith('fonts/'))expect(Buffer.from(file.base64,'base64').equals(await readFile(path.join(repo,'services/app/public',file.path)))).toBe(true);}
+      expect(body.publicationBundle.files.filter(file=>file.path.startsWith('fonts/'))).toHaveLength(20);
       expect(body.publicationBundle.files.some(file=>file.path==='design-systems/almanac.css')).toBe(true);expect(body.html).toContain('href="./design-systems/almanac.css"');
       bodies.push(body);return {id:'Page123'};
     }});
@@ -85,15 +101,15 @@ describe('actual fixture publication payloads',()=>{
     expect(bodies).toHaveLength(browserParityFixtures.length*parityThemes.length);
     expect(bodies.every(body=>body.html.includes('data-af-design-system="almanac"')&&body.html.includes('baselineReady'))).toBe(true);
   },30_000);
-  it('stages real font bytes beside linked skill CSS and lets the normal helper discover them',async()=>{
-    const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs'),{planPublicationBundle}=await import('../../services/app/lib/html-publication-bundle/plan.ts');
-    const repo=path.resolve(import.meta.dirname,'../..'),fixtureRepo=await mkdtemp(path.join(tmpdir(),'font-component-publisher-'));try{
-      const target=path.join(fixtureRepo,'services/app/skills/artifactbin');await mkdir(path.join(target,'components'),{recursive:true});await mkdir(path.join(target,'fonts'));
-      const modules=path.join(repo,'services/app/skills/artifactbin/components');for(const name of await readdir(modules))if(name.endsWith('.js'))await copyFile(path.join(modules,name),path.join(target,'components',name));
-      const manifest=JSON.parse(await readFile(path.join(repo,'services/app/lib/data/story/story-font-manifest.json'),'utf8')),face=manifest.systems['DM Sans'].find(face=>face.style==='normal'),name=path.basename(face.url),bytes=await readFile(path.join(repo,'services/app/public',face.url));await writeFile(path.join(target,'fonts',name),bytes);
-      let verified=false;
-      await expect(publishBaselineFixtures({implementation:'html',repo:fixtureRepo,serverOrigin:'https://example.test',themeCss:()=>`@font-face{font-family:"DM Sans";font-style:${face.style};font-weight:${face.weight};src:url("../fonts/${name}") format("woff2");unicode-range:${face.unicodeRange}}`,publish:async body=>{const plan=planPublicationBundle(body.html,body.publicationBundle),font=plan.dependencies.find(file=>file.path==='fonts/'+name);expect(Buffer.from(font.bytes)).toEqual(bytes);expect(body.html).not.toContain('fonts.gstatic');verified=true;throw Error('font graph verified');}})).rejects.toThrow('font graph verified');expect(verified).toBe(true);
-    }finally{await rm(fixtureRepo,{recursive:true,force:true});}
+  it('refuses missing or malformed archives without falling back to source helpers or fonts',async()=>{
+    const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');const publish=()=>{throw Error('must not publish');};
+    for(const skillArchive of [undefined,new Uint8Array([1,2,3]),(await candidateArchive()).slice(0,100)])await expect(publishBaselineFixtures({implementation:'html',serverOrigin:'https://example.test',skillArchive,publish})).rejects.toThrow(/archive|ZIP/);
+  });
+  it('rejects traversal members before installing the archive',async()=>{
+    const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
+    const name=Buffer.from('artifactbin/../escape.mjs'),header=Buffer.alloc(30);header.writeUInt32LE(0x04034b50);header.writeUInt16LE(name.length,26);
+    const skillArchive=Buffer.concat([header,name,Buffer.from([0x50,0x4b,0x01,0x02])]);
+    await expect(publishBaselineFixtures({implementation:'html',skillArchive,publish:async()=>{throw Error('must not publish');}})).rejects.toThrow('Unsafe skill ZIP member');
   });
   it('publishes original JSX in an isolated old tree with no candidate helper or packages',async()=>{
     const {execFileSync}=await import('node:child_process'),root=await mkdtemp(path.join(tmpdir(),'old-component-publisher-'));try{
@@ -105,8 +121,8 @@ describe('actual fixture publication payloads',()=>{
   });
   it('removes the staged project and identifies the fixture when publication fails',async()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
-    const before=new Set(await readdir(tmpdir())),repo=path.resolve(import.meta.dirname,'../..');
-    await expect(publishBaselineFixtures({implementation:'html',repo,serverOrigin:'https://example.test',themeCss:()=>'',publish:async()=>{throw Error('publication refused');}})).rejects.toThrow('Component fixture button light failed: publication refused');
+    const before=new Set(await readdir(tmpdir())),skillArchive=await candidateArchive();
+    await expect(publishBaselineFixtures({implementation:'html',skillArchive,serverOrigin:'https://example.test',publish:async()=>{throw Error('publication refused');}})).rejects.toThrow('Component fixture button light failed: publication refused');
     expect((await readdir(tmpdir())).filter(name=>name.startsWith('component-publication-')&&!before.has(name))).toEqual([]);
   });
 });
