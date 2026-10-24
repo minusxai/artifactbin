@@ -120,3 +120,23 @@ test('opt-in refresh failures retain empty identity and disposed requests cannot
 test('clearOnRefresh has no effect on local-only query publications',async()=>{
  const state=createLocalStore({count:1});const seen:any[]=[];const sub=createQueryWatch({state,clearOnRefresh:true,signature:d=>String(d.count),local:d=>d,empty:{}}).subscribe(r=>seen.push(r.data));await state.write({expected:{count:1},next:{count:2}});assert.deepEqual(seen,[{count:1},{count:2}]);sub.unsubscribe();
 });
+
+test('backend watch explicitly separates pending clear, unavailable answer and error through coalesced refetch and disposal',async()=>{
+ const state=createLocalStore({});let notify=()=>{};const jobs:Array<{resolve:(v:any)=>void;reject:(e:Error)=>void}>=[],seen:any[]=[];
+ const watch=createQueryWatch({state,signature:()=>'',local:()=>({}),empty:{backend:null},clearOnRefresh:true,remote:{acquire:()=>()=>{},subscribe:f=>{notify=f;return()=>{};},fetch:()=>new Promise((resolve,reject)=>jobs.push({resolve,reject}))}});
+ const tick=async()=>{for(let i=0;i<5;i++)await Promise.resolve();};
+ const sub=watch.subscribe(r=>seen.push(r));assert.equal(seen.at(-1).loading,true);
+ jobs.shift()!.resolve({data:{backend:{value:1}}});await tick();assert.equal(seen.at(-1).loading,false);
+ notify();assert.deepEqual(seen.at(-1),{data:{backend:null},loading:true});notify();
+ jobs.shift()!.resolve({data:{backend:{value:'obsolete'}}});await tick();assert.deepEqual(seen.at(-1),{data:{backend:null},loading:true});
+ jobs.shift()!.resolve({data:{backend:null}});await tick();assert.deepEqual(seen.at(-1),{data:{backend:null},loading:false});
+ notify();jobs.shift()!.reject(Error('revoked'));await tick();assert.equal(seen.at(-1).loading,false);assert.equal(seen.at(-1).data.backend,null);assert.deepEqual(seen.at(-1).errors,[{message:'revoked'}]);
+ notify();const count=seen.length;sub.unsubscribe();jobs.shift()!.resolve({data:{backend:{value:'late'}}});await tick();assert.equal(seen.length,count);
+});
+test('default backend watch announces pending while retaining its prior snapshot',async()=>{
+ const state=createLocalStore({});let notify=()=>{};const jobs:Array<(v:any)=>void>=[],seen:any[]=[];
+ const watch=createQueryWatch({state,signature:()=>'',local:()=>({}),empty:{backend:null},remote:{acquire:()=>()=>{},subscribe:f=>{notify=f;return()=>{};},fetch:()=>new Promise(resolve=>jobs.push(resolve))}});
+ const sub=watch.subscribe(r=>seen.push(r));assert.equal(seen[0].loading,true);
+ jobs.shift()!({data:{backend:7}});for(let i=0;i<5;i++)await Promise.resolve();assert.equal(seen.at(-1).loading,false);
+ notify();assert.deepEqual(seen.at(-1),{data:{backend:7},loading:true});sub.unsubscribe();
+});

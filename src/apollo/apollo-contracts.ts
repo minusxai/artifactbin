@@ -30,6 +30,8 @@ export interface ResultError {
   path?: (string | number)[];
 }
 export interface QueryResult<T = AfJsonObject> {
+  /** Backend watchQuery only: true during a read; false on its answer/error. Not backend data. */
+  loading?:boolean;
   data: T;
   errors?: ResultError[];
 }

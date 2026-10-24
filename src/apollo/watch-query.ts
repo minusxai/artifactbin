@@ -25,6 +25,7 @@ export function createQueryWatch<T>(
       const release = options.remote?.acquire();
       let active = true,
         running = false,
+        pending = !!options.remote,
         dirty = false,
         generation = 0;
       let snapshot: QueryResult = { data: options.empty };
@@ -57,6 +58,7 @@ export function createQueryWatch<T>(
         if (!active) return;
         next({
           ...snapshot,
+          ...(options.remote?{loading:pending}:{}),
           data: {
             ...options.local(options.state.read()),
             ...snapshot.data,
@@ -66,7 +68,9 @@ export function createQueryWatch<T>(
       const refresh = () => {
         if (!active || !options.remote) return;
         generation++;
-        if(options.clearOnRefresh){snapshot={data:options.empty};publish();if(!active)return;}
+        const wasPending=pending;pending=true;
+        if(options.clearOnRefresh){snapshot={data:options.empty};publish();}else if(!wasPending)publish();
+        if(!active)return;
         dirty = true;
         if (running) return;
         running = true;
@@ -91,6 +95,7 @@ export function createQueryWatch<T>(
               }
               if (!active || generation !== expected) continue;
               snapshot = result;
+              pending=false;
               publish();
             }
           } finally {
