@@ -40,6 +40,8 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 - [Design systems](references/html-design-systems.md): select one, then read its generated native guide.
 - [Examples and verification](references/html-examples.md): report, CSV dashboard and shared task app.
 
+For a private local project preview, read [local preview](references/html-preview.md) and run `node scripts/preview.mjs PROJECT_DIR`; the downloaded skill includes local runtime assets.
+
 Optional `scripts/publish.mjs` sends a saved JSON request with an origin-bound token supplied outside the page. It is a helper inside this skill, not an installed product command.
 [% else %]
 

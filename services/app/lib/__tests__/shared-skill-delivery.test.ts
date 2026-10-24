@@ -1,3 +1,4 @@
+import {pathToFileURL} from 'node:url';
 import {isPublicSkillTopic} from '../skills/public-surface';
 import {credentialPaths} from '@artifactbin/utils/node/credentials';
 import {describe,it,expect} from 'vitest';
@@ -72,6 +73,21 @@ describe('installable shared skill folder',()=>{
    const zip=path.join(dir,'artifactbin.zip');writeFileSync(zip,new Uint8Array(await response.arrayBuffer()));
    execFileSync('unzip',['-q','-n',zip,'-d',dir]);
    for(const [name,text] of Object.entries(expected))expect(readFileSync(path.join(dir,'artifactbin',name),'utf8'),name).toBe(text);
+   const runtime=readFileSync(path.join(dir,'artifactbin/scripts/preview-runtime.mjs'),'utf8');
+   expect(runtime).toContain('export default ');
+   const assets=JSON.parse(runtime.slice('export default '.length).trim().replace(/;$/, ''));
+   expect(assets.core).toContain('@afbin/apollo');
+   expect(assets.reader).toContain('offline');
+   expect(assets.apolloPath).toMatch(/^\/af\/v1\/apollo\//);
+   const previewModule=pathToFileURL(path.join(dir,'artifactbin/scripts/preview.mjs')).href;
+   const {startPreview}=await import(/* @vite-ignore */ previewModule);
+   const preview=await startPreview({root:path.join(dir,'artifactbin'),port:0});
+   try {
+    for(const [resource,source] of [['/af/v1/core.js',assets.core],[assets.apolloPath,assets.apollo],[assets.readerPath,assets.reader]]){
+     const response=await fetch(new URL(resource,preview.url));
+     expect(response.status).toBe(200);expect(await response.text()).toBe(source);
+    }
+   } finally {await preview.close();}
    expect(expected['SKILL.md']).toMatch(/^---\nname: artifactbin\n/);
    expect(expected['SKILL.md']).toContain(origin);
 

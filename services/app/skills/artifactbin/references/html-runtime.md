@@ -112,3 +112,6 @@ An authorized reader can download `/a/ID/download` as one offline HTML file. For
 Replace the example ID with a real admitted image artifact. Download packs readable PNG, JPEG, GIF, WebP and AVIF references in `img/src`, `source/src` and `video/poster` into data URLs. Both the page version's original admission and the downloading reader's current image access are required. Unavailable images refuse the download; unsupported referenced image types return `unsupported_image` (415), and files over 25 MiB return `too_large` (413).
 
 Existing data images and inline SVG stay intact. External URLs, CSS images and `srcset` are not automatically packed; do not promise those assets work offline. Image packing does not snapshot remote backend data or add credentials or reconnection. Test the downloaded file without a network.
+
+
+For an unpublished local project, read [private local preview](html-preview.md).
