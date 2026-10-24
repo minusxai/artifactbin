@@ -20,13 +20,14 @@ function browserState() {
     if(ids){const label=clean(ids.split(/\s+/).map(id=>document.getElementById(id)?.textContent||'').join(' '));if(label)return label;}
     if(node.hasAttribute('aria-label'))return clean(node.getAttribute('aria-label'));
     if(node.tagName==='IMG')return clean(node.getAttribute('alt'));
+    if(node.tagName==='TH'){const button=node.querySelector('button[aria-label]');if(button)return clean(button.getAttribute('aria-label'));}
     if(node.labels?.length)return clean([...node.labels].map(label=>label.textContent).join(' '));
     if(node.tagName==='INPUT'&&['button','submit','reset'].includes(node.type))return clean(node.value||(node.type==='submit'?'Submit':node.type==='reset'?'Reset':''));
     return clean(node.textContent||node.getAttribute('title'));
   };
   return {
     text: document.body.innerText.replace(/\s+/g,' ').trim(),
-    controls: [...document.querySelectorAll('button,input,select,textarea,dialog,[role="tab"],[role="dialog"],[role="option"],[role="listbox"],[role="slider"],[role="switch"],[role="checkbox"],[role="radio"],[role="combobox"],[role="button"],[role="textbox"],[role="searchbox"],[role="spinbutton"],[role="progressbar"],[role="img"],[role="tooltip"],svg[aria-label],img[alt]')].filter(visible).map(node=>({role:node.getAttribute('role') || (node.tagName==='INPUT'?({file:'file-input',button:'button',submit:'button',reset:'button',checkbox:'checkbox',radio:'radio',range:'slider',number:'spinbutton',search:'searchbox'})[node.type]||'textbox':({BUTTON:'button',SELECT:'combobox',TEXTAREA:'textbox',DIALOG:'dialog',IMG:'img',svg:'svg'})[node.tagName]),name:name(node),disabled:node.matches(':disabled') || node.getAttribute('aria-disabled')==='true',selected:node.getAttribute('aria-selected'),checked:node.getAttribute('aria-checked')??(node.tagName==='INPUT'&&['checkbox','radio'].includes(node.type)?String(node.checked):null),pressed:node.getAttribute('aria-pressed'),valueNow:node.getAttribute('aria-valuenow'),valueMin:node.getAttribute('aria-valuemin'),valueMax:node.getAttribute('aria-valuemax'),expanded:node.getAttribute('aria-expanded'),focused:document.activeElement===node,value:'value' in node?node.value:undefined})),
+    controls: [...document.querySelectorAll('button,input,select,textarea,dialog,th[scope="col"],[role="tab"],[role="dialog"],[role="option"],[role="listbox"],[role="slider"],[role="switch"],[role="checkbox"],[role="radio"],[role="combobox"],[role="button"],[role="textbox"],[role="searchbox"],[role="spinbutton"],[role="progressbar"],[role="img"],[role="tooltip"],svg[aria-label],img[alt]')].filter(visible).map(node=>({role:node.getAttribute('role') || (node.tagName==='INPUT'?({file:'file-input',button:'button',submit:'button',reset:'button',checkbox:'checkbox',radio:'radio',range:'slider',number:'spinbutton',search:'searchbox'})[node.type]||'textbox':({BUTTON:'button',SELECT:'combobox',TEXTAREA:'textbox',DIALOG:'dialog',TH:'columnheader',IMG:'img',svg:'svg'})[node.tagName]),name:name(node),disabled:node.matches(':disabled') || node.getAttribute('aria-disabled')==='true',selected:node.getAttribute('aria-selected'),checked:node.getAttribute('aria-checked')??(node.tagName==='INPUT'&&['checkbox','radio'].includes(node.type)?String(node.checked):null),pressed:node.getAttribute('aria-pressed'),valueNow:node.getAttribute('aria-valuenow'),valueMin:node.getAttribute('aria-valuemin'),valueMax:node.getAttribute('aria-valuemax'),expanded:node.getAttribute('aria-expanded'),sort:node.getAttribute('aria-sort'),focused:document.activeElement===node,value:'value' in node?node.value:undefined})),
     rows:[...document.querySelectorAll('tr')].filter(visible).map(row=>[...row.querySelectorAll('th,td')].map(cell=>cell.textContent?.trim())),
     overflow:document.documentElement.scrollWidth-innerWidth,
   };
@@ -213,6 +214,7 @@ export function stateExpectationIssues(expected,actual) {
     if(!matches.some(control=>Object.entries(role).every(([key,value])=>key==='role'||key==='name'||(key==='disabled'?control[key]===value:String(control[key])===String(value)))))issues.push(`Unexpected state for ${role.role} ${JSON.stringify(role.name)}: expected ${JSON.stringify(role)}`);
   }
   if(expected.rows&&JSON.stringify(expected.rows)!==JSON.stringify(actual.rows))issues.push('Unexpected rendered table rows');
+  if(expected.bodyRows&&JSON.stringify(expected.bodyRows)!==JSON.stringify(actual.rows.slice(1)))issues.push('Unexpected rendered table body rows');
   for(const role of expected.rolesAbsent||[])if(actual.controls.some(control=>control.role===role.role&&control.name===role.name))issues.push(`Unexpected visible ${role.role} ${JSON.stringify(role.name)}`);
   return issues;
 }

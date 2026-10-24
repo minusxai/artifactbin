@@ -5,6 +5,7 @@ interface BrowserRoleExpectation {
   pressed?: boolean | string;
   selected?: boolean | string;
   expanded?: boolean | string;
+  sort?: 'none' | 'ascending' | 'descending';
   valueNow?: string | number | null;
   valueMin?: string | number | null;
   valueMax?: string | number | null;
@@ -18,6 +19,7 @@ export interface BrowserStateExpectation {
   textIncludes?: string[];
   hiddenText?: string[];
   rows?: string[][];
+  bodyRows?: string[][];
 }
 /** Both implementations must be served through their real application reader. */
 export interface BrowserParityFixture {
