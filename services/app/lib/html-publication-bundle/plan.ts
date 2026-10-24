@@ -136,12 +136,16 @@ export function inspectPublicationBundle(html:string,bundle:PublicationBundle){
  return {entryPath:plan.entryPath,backends:plan.backends,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{files:99,fileBytes:4_000_000,totalBytes:16_000_000}};
 }
 /** Pin hosted dependency reads to the immutable parent version, including nested stylesheet/module URLs. */
-export function pinPublicationAssetUrls(source:string,pageId:string,version:number,contentType='text/html'):string{
+export function pinPublicationAssetUrls(source:string,pageId:string,version:number,contentType='text/html',admittedAssets:readonly {id:string;revision:string}[]=[]):string{
  const matches=links(source,contentType==='text/css',/^(?:text|application)\/javascript$/.test(contentType));let result=source;
  for(const link of matches.sort((a,b)=>b.start-a.start)){
-  if(!link.value.startsWith(`/a/${pageId}/assets?`))continue;
+  if(!/^\/a\/[A-Za-z0-9]+\/assets\?/.test(link.value))continue;
   const url=new URL(link.value,'https://bundle.invalid');
-  if(url.pathname!==`/a/${pageId}/assets`||url.searchParams.getAll('dependency').length!==1)continue;
+  if(url.searchParams.getAll('dependency').length!==1)continue;
+  if(url.pathname!==`/a/${pageId}/assets`){
+   if(url.searchParams.getAll('revision').length!==1||!admittedAssets.some(asset=>asset.id===url.searchParams.get('dependency')&&asset.revision===url.searchParams.get('revision')))continue;
+   url.pathname=`/a/${pageId}/assets`;
+  }
   url.searchParams.set('version',String(version));
   const address=url.pathname+url.search+url.hash;
   const escaped=link.htmlAttribute?address.replaceAll('&','&amp;').replaceAll('"','&quot;'):address;

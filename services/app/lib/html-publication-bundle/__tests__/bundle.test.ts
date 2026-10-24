@@ -1,6 +1,15 @@
 import {describe,it,expect} from 'vitest';
 import {planPublicationBundle} from '../plan';
 const file=(path:string,text:string,contentType='text/plain')=>({path,contentType,base64:Buffer.from(text).toString('base64')});
+it('rebases only exact admitted immutable dependencies from reused module and CSS bytes',async()=>{
+ const {pinPublicationAssetUrls}=await import('../plan');
+ const source='import "/a/OLD123/assets?dependency=CHILD1&revision=2#export";import "/a/OLD123/assets?dependency=CHILD1&revision=3";const literal="/a/OLD123/assets?dependency=CHILD1&revision=2";';
+ const result=pinPublicationAssetUrls(source,'NEW123',4,'text/javascript',[{id:'CHILD1',revision:'2'}]);
+ expect(result).toContain('import "/a/NEW123/assets?dependency=CHILD1&revision=2&version=4#export"');
+ expect(result).toContain('import "/a/OLD123/assets?dependency=CHILD1&revision=3"');
+ expect(result).toContain('const literal="/a/OLD123/assets?dependency=CHILD1&revision=2"');
+ expect(pinPublicationAssetUrls('a{src:url(/a/OLD123/assets?dependency=CHILD1&revision=2)}','NEW123',4,'text/css',[{id:'CHILD1',revision:'2'}])).toContain('/a/NEW123/assets?dependency=CHILD1&revision=2&version=4');
+});
 describe('dependency publication plan',()=>{
  it('finds nested CSS assets once and keeps remote datasets',()=>{
  const html='<link rel="stylesheet" href="./css/main.css"><img src="./img/a.svg"><link rel="af-dataset" data-af-name="tasks" href="./data/tasks.csv"><link rel="af-dataset" data-af-name="other" href="ref:ABC123">';

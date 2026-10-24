@@ -28,7 +28,7 @@ export async function serveBundleAsset(request:Request,actor:AccessActor,pageId:
  // Opaque /raw runners need CORS for admitted modules and fonts; admission
  // above remains the authority, and no credentialed wildcard is granted.
  const response=await serveStoredFile(request,asset,true),contentType=response.headers.get('content-type')??'';
- if(response.ok&&request.method!=='HEAD'&&['text/css','text/javascript','application/javascript'].includes(contentType)&&new URL(request.url).searchParams.has('version'))return new Response(pinPublicationAssetUrls(await response.text(),pageId,admitted.version,contentType),{status:response.status,headers:response.headers});
+ if(response.ok&&request.method!=='HEAD'&&['text/css','text/javascript','application/javascript'].includes(contentType)&&new URL(request.url).searchParams.has('version'))return new Response(pinPublicationAssetUrls(await response.text(),pageId,admitted.version,contentType,admitted.receipts.filter(item=>item.kind==='asset')),{status:response.status,headers:response.headers});
  return response;
 }
 async function parallel<T,R>(items:readonly T[],work:(item:T)=>Promise<R>):Promise<R[]>{
