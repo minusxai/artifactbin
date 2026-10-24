@@ -7,6 +7,7 @@ import { gzipSync } from 'node:zlib';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 import { launchChromium } from './lib/browser.mjs';
+import { withNativeFileChooser } from './lib/native-file-chooser.mjs';
 import { createChecker, createSection } from './lib/assert.mjs';
 import { semanticSnapshot, semanticDifferences, tabsParityFixtures, tabsInteractionHtml, tabsInteractionCases, componentBrowserFixtures, contrastRatio, duplicateIdentities } from '../lib/component-parity.mjs';
 
@@ -286,11 +287,16 @@ try {
           const documentFocusedBefore=await page.evaluate(()=>document.hasFocus());await page.bringToFront();await page.waitForFunction(()=>document.hasFocus(),null,{timeout:2500});
           await page.locator('#before').focus();await page.keyboard.press('Tab');await visibleFocus(choose,`${tag} chooser keyboard focus`);
           await upload.evaluate((node,before)=>{const button=node.querySelector('button'),input=node.querySelector('input');const details={documentFocusedBefore:before,clicks:[],inputClicks:[]};node.chooserDiagnostics=details;const record=event=>({trusted:event.isTrusted,documentFocused:document.hasFocus(),activation:navigator.userActivation.isActive,inputConnected:input.isConnected,inputDisabled:input.disabled,activeTag:document.activeElement?.localName});button.addEventListener('click',event=>details.clicks.push(record(event)),true);input.addEventListener('click',event=>details.inputClicks.push(record(event)),true);},documentFocusedBefore);
-          let chooser;const chooserPromise=page.waitForEvent('filechooser',{timeout:2000});
-          try {[,chooser]=await Promise.all([page.keyboard.press('Enter'),chooserPromise]);}
-          catch(error){check.note(`${tag} native chooser diagnostics ${JSON.stringify(await upload.evaluate(node=>node.chooserDiagnostics))}`);throw error;}
-          check.note(`${tag} native chooser diagnostics ${JSON.stringify(await upload.evaluate(node=>node.chooserDiagnostics))}`);
-          await chooser.setFiles({name:'sample.txt',mimeType:'text/plain',buffer:Buffer.from('Sample')});
+          const chooserProtocol={};
+          const chooserDiagnostics=async()=>({...await upload.evaluate(node=>node.chooserDiagnostics),protocol:chooserProtocol});
+          try {
+            await withNativeFileChooser(page,()=>page.keyboard.press('Enter'),async chooser=>{
+              check(chooser.isMultiple() && await chooser.element().evaluate(node=>node===document.querySelector('af-file-upload input[type=file]')),`${tag} native chooser belongs to enabled upload input`);
+              await chooser.setFiles({name:'sample.txt',mimeType:'text/plain',buffer:Buffer.from('Sample')});
+            },{timeout:2000,diagnostics:chooserProtocol});
+          } catch(error){check.note(`${tag} native chooser diagnostics ${JSON.stringify(await chooserDiagnostics())}`);throw error;}
+          check.note(`${tag} native chooser diagnostics ${JSON.stringify(await chooserDiagnostics())}`);
+          check(chooserProtocol.armed && chooserProtocol.protocolEvents.length===1 && chooserProtocol.playwrightEvents===1,`${tag} one acknowledged native chooser event`);
           await page.waitForFunction(()=>document.querySelector('af-file-upload').value.length===1);check(await upload.getByRole('list',{name:'Attachments files',exact:true}).textContent().then(text=>text.includes('sample.txt')),`${tag} native picker invokes deterministic adapter`);check(await page.locator('body').getAttribute('data-upload-dataset')==='fixture-files',`${tag} adapter receives dataset name`);
           await upload.getByRole('button',{name:'Remove sample.txt',exact:true}).click();check(await upload.evaluate(node=>node.value.length)===0 && await focused(choose),`${tag} removal restores chooser focus`);
           await upload.locator('input[type=file]').setInputFiles({name:'retry.txt',mimeType:'text/plain',buffer:Buffer.from('Retry')});await upload.getByRole('alert').waitFor();check(await upload.getByRole('alert').textContent().then(text=>text.includes('Fixture upload failed')),`${tag} failure is visible`);
