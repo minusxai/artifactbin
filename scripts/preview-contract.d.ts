@@ -9,3 +9,8 @@ export interface PreviewOptions {
 }
 export interface PreviewSession { server: Server; url: string; close(): Promise<void> }
 export declare function startPreview(options: PreviewOptions): Promise<PreviewSession>;
+/** A content revision covers admitted project files, including dependencies and deletions.
+ * Poll GET /__af_preview/revision. It invalidates the view; it never patches the DOM.
+ * Intermediate writes between polls may coalesce. Reload remains an explicit viewer action.
+ */
+export interface PreviewRevision { revision: string }

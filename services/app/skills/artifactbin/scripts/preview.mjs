@@ -2,6 +2,7 @@
 import {createServer} from 'node:http';
 import {realpath,stat,readFile} from 'node:fs/promises';
 import {resolve,relative,sep,extname} from 'node:path';
+import {projectRevision,changeNotice} from './preview-changes.mjs';
 import {pathToFileURL} from 'node:url';
 
 // No remote sources, frames, forms, workers or popup permissions. This is a
@@ -26,6 +27,7 @@ export async function startPreview({root,port=0,runtimeDir}) {
   try {
    const pathname=decodeURIComponent((req.url||'/').split('?')[0]);
    if(!pathname.startsWith('/')||pathname.includes('\\')||pathname.includes('\0'))return end(404,'Not found');
+   if(pathname==='/__af_preview/revision'){res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({revision:await projectRevision(base)}));}
    const source=bundled&&(pathname==='/af/v1/core.js'?bundled.core:pathname===bundled.readerPath?bundled.reader:pathname===bundled.apolloPath?bundled.apollo:undefined);
    if(source!==undefined){res.setHeader('Content-Type','text/javascript; charset=utf-8');res.setHeader('Content-Length',Buffer.byteLength(source));return end(200,source);}
    const segments=pathname.split('/');if(segments.some(part=>part.startsWith('.')))return end(404,'Not found');
@@ -35,7 +37,9 @@ export async function startPreview({root,port=0,runtimeDir}) {
    file=await realpath(file);if(!inside(selected,file)||relative(selected,file).split(sep).some(part=>part.startsWith('.')))return end(404,'Not found');
    const info=await stat(file);if(!info.isFile())return end(404,'Not found');
    const type=types[extname(file).toLowerCase()]||(isRuntime?'text/javascript; charset=utf-8':'application/octet-stream');
-   res.setHeader('Content-Type',type);res.setHeader('Content-Length',info.size);
+   res.setHeader('Content-Type',type);
+   if(type.startsWith('text/html')){const html=await readFile(file,'utf8');const body=html+changeNotice(await projectRevision(base));res.setHeader('Content-Length',Buffer.byteLength(body));return end(200,body);}
+   res.setHeader('Content-Length',info.size);
    if(req.method==='HEAD')return end(200);
    end(200,await readFile(file));
   }catch{return end(404,'Not found');}
