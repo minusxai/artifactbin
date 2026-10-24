@@ -7,3 +7,14 @@ export interface InteractionParityFixture extends Omit<BrowserParityFixture, 'st
   provenance: { revision: string; files: string[]; facts: string[] };
   states: Array<Omit<BrowserParityFixture['states'][number], 'expected'> & { expected: InteractionStateExpectation }>;
 }
+
+/** Observable scroll/slide coordinates; null means the selected slide is unavailable. */
+export interface SlideGeometrySettleOptions {
+  implementation: 'jsx' | 'html';
+  timeoutMs?: number;
+  stableMs?: number;
+  tolerance?: number;
+  sample?: () => number[] | null;
+  now?: () => number;
+  nextFrame?: () => Promise<unknown>;
+}

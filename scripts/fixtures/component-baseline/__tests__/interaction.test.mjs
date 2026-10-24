@@ -44,7 +44,7 @@ describe('actual original interaction contracts',()=>{
 it('waits for the shared SlideDeck count to reach the clicked slide with a bounded timeout',async()=>{
   const {JSDOM}=await import('jsdom');const dom=new JSDOM('<body><output>2 / 2</output></body>');dom.window.document.body.innerText='Overview Details 2 / 2';
   const previous=Object.getOwnPropertyDescriptor(globalThis,'document');globalThis.document=dom.window.document;
-  const frame={waitForFunction:async(predicate,_argument,options)=>{expect(predicate()).toBe(true);expect(options).toEqual({timeout:5000});}};
+  const frame={waitForFunction:async(predicate,_argument,options)=>{expect(predicate()).toBe(true);expect(options).toEqual({timeout:5000});},evaluate:async(fn,arg)=>{expect(fn.name).toBe('settleSlideGeometry');expect(arg).toEqual({implementation:'jsx'});}};
   try{await settleInteraction({fixture:{id:'slides-two'},action:{action:'click',name:'Next slide'},frame,implementation:'jsx'});}
   finally{if(previous)Object.defineProperty(globalThis,'document',previous);else delete globalThis.document;dom.window.close();}
 });

@@ -52,11 +52,48 @@ interactionBaselineFixtures.push({
   ],
   limitations:['Original Query uses the real SQLite paging transport; native HTML uses its public caller-owned TableSource over the identical authored sequence. This proves component paging and virtualization, not backend authorization.','Original retains its footer after completion; native HTML removes its completed footer. Raw copy and controls are retained rather than normalized.'],
 });
+/** Serialized into the page frame: observe the real slide and every scroll ancestor.
+ * Compare against the stable anchor, not successive frames (slow drift is motion).
+ * @param {import('./interaction-contract').SlideGeometrySettleOptions} options
+ */
+export async function settleSlideGeometry(options){
+  const {implementation,timeoutMs=5000,stableMs=200,tolerance=0.25}=options;
+  const now=options.now??(()=>performance.now());
+  const nextFrame=options.nextFrame??(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+  const sample=options.sample??(()=>{
+    const slide=implementation==='jsx'
+      ?document.querySelectorAll('.mx-doc [data-mx-slide]')[1]
+      :[...document.querySelectorAll('af-slide-deck af-slide')].filter(node=>node.closest('af-slide-deck')===document.querySelector('af-slide-deck'))[1];
+    if(!slide)return null;
+    const rect=slide.getBoundingClientRect();
+    if(rect.width<=0||rect.height<=0)return null;
+    const coordinates=[rect.top,rect.left,rect.width,rect.height,window.scrollX,window.scrollY];
+    for(let node=slide.parentElement;node;node=node.parentElement)coordinates.push(node.scrollTop,node.scrollLeft);
+    return coordinates;
+  });
+  const started=now();let anchor=null,stableAt=started,frames=0,timer;
+  // The wall deadline also bounds a suspended/background requestAnimationFrame.
+  const deadline=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Slide geometry did not settle before timeout')),timeoutMs);});
+  try{
+    await Promise.race([deadline,(async()=>{
+      while(now()-started<timeoutMs){
+        const current=sample();
+        const valid=Array.isArray(current)&&current.length>0&&current.every(Number.isFinite);
+        const same=valid&&anchor&&anchor.length===current.length&&current.every((value,index)=>Math.abs(value-anchor[index])<=tolerance);
+        if(!same){anchor=valid?current.slice():null;stableAt=now();frames=0;}
+        else if(++frames>=3&&now()-stableAt>=stableMs)return;
+        await nextFrame();
+      }
+      throw new Error('Slide geometry did not settle before timeout');
+    })()]);
+  }finally{clearTimeout(timer);}
+}
 /** Gate afterAction hook: wait for real transport completion before scrolling,
  * then for the real virtual window to mount its appended final row. */
 export async function settleInteraction({fixture,action,frame,implementation}){
   if(fixture.id==='slides-two'&&action.action==='click'&&action.name==='Next slide'){
     await frame.waitForFunction(()=>document.body.innerText.includes('2 / 2'),undefined,{timeout:5000});
+    await frame.evaluate(settleSlideGeometry,{implementation});
     return;
   }
   if(fixture.id!=='data-table-load-more')return;
