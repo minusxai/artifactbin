@@ -205,7 +205,7 @@ export class AfAccordionContent extends HTMLElement {}
 export const accordionStyles = `
 af-accordion{display:block}
 af-accordion-item{display:block;border-bottom:1px solid var(--border,#ddd)}
-af-accordion-trigger{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left;font:inherit;color:inherit;cursor:pointer}
+af-accordion-trigger{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;padding:1rem 0;text-align:left;font:inherit;font-size:.875rem;font-weight:500;line-height:1.25rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));color:inherit;cursor:pointer}
 af-accordion-trigger:focus-visible{outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
 af-accordion-trigger[aria-disabled=true]{opacity:.5;cursor:default}
 af-accordion-content{display:block;overflow:hidden;padding:0 0 1rem;font-size:.875rem}

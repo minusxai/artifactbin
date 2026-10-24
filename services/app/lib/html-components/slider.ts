@@ -112,7 +112,7 @@ export class AfSlider extends HTMLElement implements SliderContract {
 
 const sliderStyles = `
 af-slider{display:inline-flex;flex-direction:column;gap:.375rem;min-width:12rem;font:inherit;color:inherit}
-af-slider>label{font-size:.875rem;line-height:1.25rem}
+af-slider>label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.4;color:var(--muted-foreground,#555)}
 af-slider>input[type=range]{width:100%;accent-color:var(--primary,currentColor)}
 af-slider>input[type=range]:disabled{opacity:.55}
 af-slider>[part=readout]{align-self:flex-end;font-variant-numeric:tabular-nums;font-size:.875rem}

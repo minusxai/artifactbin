@@ -118,9 +118,9 @@ export class AfTabsContent extends HTMLElement {}
 export const tabsStyles = `
 af-tabs{display:flex;gap:.5rem;flex-direction:column}
 af-tabs[orientation=vertical]{flex-direction:row}
-af-tabs-list{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:fit-content;height:36px;padding:3px;border-radius:var(--radius-lg,.5rem);background:var(--muted,#eee);color:var(--muted-foreground,#555)}
+af-tabs-list{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:fit-content;height:36px;padding:3px;border-radius:var(--radius-lg,var(--radius,.625rem));background:var(--muted,#eee);color:var(--muted-foreground,#555)}
 af-tabs-list[data-orientation=vertical]{height:fit-content;flex-direction:column}
-af-tabs-trigger{box-sizing:border-box;position:relative;display:inline-flex;flex:1;align-items:center;justify-content:center;gap:.375rem;height:calc(100% - 1px);cursor:pointer;border:1px solid transparent;padding:4px 8px;border-radius:var(--radius-md,.375rem);font-family:inherit;font-size:14px;font-weight:500;line-height:20px;white-space:nowrap;color:var(--muted-foreground,#555);transition:background-color .15s,color .15s,box-shadow .15s}
+af-tabs-trigger{box-sizing:border-box;position:relative;display:inline-flex;flex:1;align-items:center;justify-content:center;gap:.375rem;height:calc(100% - 1px);cursor:pointer;border:1px solid transparent;padding:4px 8px;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));font-family:inherit;font-size:14px;font-weight:500;line-height:20px;white-space:nowrap;color:var(--muted-foreground,#555);transition:background-color .15s,color .15s,box-shadow .15s}
 af-tabs-list[data-orientation=vertical]>af-tabs-trigger{width:100%;justify-content:flex-start}
 af-tabs-trigger:focus-visible{z-index:10;outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
 af-tabs-trigger[disabled]{opacity:.5;cursor:default;pointer-events:none}
