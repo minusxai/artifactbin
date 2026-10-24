@@ -71,6 +71,35 @@ describe('a styled element is never touched', () => {
     expect(padding.some((s) => bareDoc.querySelector('div')!.matches(s))).toBe(true);
   });
 
+  it('does not give a top-level Markdown component the bare article gutter', () => {
+    const style = document.createElement('style');
+    style.textContent = STORY_BARE_TYPOGRAPHY_CSS;
+    document.head.append(style);
+    const componentRoot = rootWith('<af-markdown>Heading</af-markdown>');
+    const articleRoot = rootWith('<article>Plain article</article>');
+    try {
+      const component = componentRoot.firstElementChild!;
+      const article = articleRoot.firstElementChild!;
+      expect(componentRoot.hasAttribute(STORY_STYLED_ATTR)).toBe(false);
+      expect(articleRoot.hasAttribute(STORY_STYLED_ATTR)).toBe(false);
+      expect(getComputedStyle(component).paddingBlockStart).toBe('0');
+      expect(getComputedStyle(component).paddingBlockEnd).toBe('0');
+      expect(getComputedStyle(article).paddingBlockStart).toBe('40px');
+      expect(getComputedStyle(article).paddingBlockEnd).toBe('48px');
+      const pagePadding = selectors.filter((selector) => selector.includes(STORY_STYLED_ATTR));
+      expect(pagePadding).toHaveLength(3);
+      for (const selector of pagePadding) {
+        expect(selector).toContain(':not(af-markdown)');
+        expect(component.matches(selector)).toBe(false);
+        expect(article.matches(selector)).toBe(true);
+      }
+    } finally {
+      componentRoot.remove();
+      articleRoot.remove();
+      style.remove();
+    }
+  });
+
   it('decides "styled" from the root flag, never by testing the subtree, so a class change re-matches nothing', () => {
     // `:has([class])` on the root re-matched it at every class change anywhere below: a whole-page style pass each.
     expect(STORY_BARE_TYPOGRAPHY_CSS).not.toContain(':has(');
