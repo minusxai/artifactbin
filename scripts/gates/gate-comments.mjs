@@ -95,6 +95,8 @@ async function comment(page, frame, selector, body) {
       await frame
         .locator(selector)
         .click({ button: 'right', position: { x: 12, y: 12 } });
+      const choice = frame.locator('[data-mx-selection-action="annotate"]');
+      if (await choice.isVisible().catch(() => false)) await choice.click();
       return field.isVisible().catch(() => false);
     },
     (value) => value === true,
@@ -726,6 +728,7 @@ async function ownerLeg(browser, seed) {
     });
     await page.getByLabel('Hide resolved conversation').click();
     await frame.locator('#figure').click({ button: 'right' });
+    await frame.locator('[data-mx-selection-action="annotate"]').click();
     const field = page.getByLabel('Annotation comment', { exact: true });
     await field.waitFor();
     await field.fill('@');
@@ -766,6 +769,8 @@ async function ownerLeg(browser, seed) {
             .locator('#figure')
             .click({ button: 'right', timeout: 1000 })
             .catch(() => {});
+          const choice = guestFrame.locator('[data-mx-selection-action="annotate"]');
+          if (await choice.isVisible().catch(() => false)) await choice.click();
           return new URL(guest.url()).pathname === '/login';
         },
         (value) => value === true,
@@ -914,6 +919,16 @@ async function selectionLeg(browser, seed) {
     await page.goto(`${BASE}/a/${seed.id}`);
     const frame = documentLocator(page);
     await frame.locator('#figure').waitFor();
+    await frame.locator('#figure').click({ button: 'right' });
+    await until(async () => {
+      await frame.locator('#figure').click({ button: 'right' });
+      return frame.getByRole('toolbar', { name: 'Document actions' }).isVisible();
+    }, value => value === true, 15000);
+    await expect(page.getByLabel('Annotation comment', { exact: true })).toBeHidden();
+    await expect(frame.getByRole('button', { name: 'Comment', exact: true })).toBeVisible();
+    await frame.getByRole('button', { name: 'Select', exact: true }).click();
+    check(true, 'native right-click offers Comment and Select before performing an action');
+    await page.keyboard.press('Escape');
     await openRail(page);
     const tool = page.getByRole('button', { name: 'Select', exact: true });
     await expect(tool).toHaveAttribute('aria-pressed', 'true');
@@ -968,6 +983,7 @@ async function selectionLeg(browser, seed) {
     });
     if (await cancel.isVisible()) await cancel.click();
     await frame.locator('#figure').click({ button: 'right' });
+    await frame.locator('[data-mx-selection-action="annotate"]').click();
     const field = page.getByLabel('Annotation comment', { exact: true });
     await field.waitFor();
     const png = (
