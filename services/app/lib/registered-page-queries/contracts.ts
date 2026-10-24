@@ -92,3 +92,12 @@ export const QUERY_LIMITS = Object.freeze({
   outputBytes: 1024 * 1024,
   wallMs: 20000,
 });
+
+/** Read-only presentation identity, derived from this request's authenticated target subject.
+ * Source identity translation belongs to migration mappings, never caller arguments. */
+export interface RegisteredViewerDescriptor {
+ namespace: string;
+ identity: 'target-subject-v1';
+ document: string;
+ responsePath: readonly [string,'viewer','id'];
+}

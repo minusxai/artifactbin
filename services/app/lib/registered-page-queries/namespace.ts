@@ -3,7 +3,7 @@ import type {
   HtmlPageVersion,
   PageResolverFieldCall,
 } from "@artifactbin/contracts";
-import type { QueryContext, QueryPlan } from "./contracts";
+import type { QueryContext, QueryPlan, RegisteredViewerDescriptor } from "./contracts";
 /** Schema generated from immutable declarations; no arbitrary JSON/SQL/dataset/builtin input. */
 export function registeredQuerySchema(
   program: Pick<QueryPlan, "scalars" | "queries">,
@@ -19,7 +19,8 @@ export function registeredQuerySchema(
  type Row {cells:[Cell!]!}
  type Table {name:String! columns:[Column!]! rows:[Row!]! error:String}
  type Answer {tables:[Table!]!}
- type Query {evaluate(${scalars.length ? "values:Values! " : ""}only:[QueryName!]!):Answer!}`;
+ type Viewer {id:String}
+ type Query {viewer:Viewer! evaluate(${scalars.length ? "values:Values! " : ""}only:[QueryName!]!):Answer!}`;
 }
 export function registeredQueryInvoker(
   page: HtmlPageVersion,
@@ -33,13 +34,15 @@ export function registeredQueryInvoker(
   return async (call: PageResolverFieldCall): Promise<HtmlJson> => {
     if (
       call.operation !== "query" ||
-      call.field !== "evaluate" ||
+      !["evaluate", "viewer"].includes(call.field) ||
       call.principal.tenant !== page.pageId ||
       call.principal.subject !== context.subject ||
       call.fileId !== context.backendId ||
       call.version !== context.backendVersion
     )
       throw Error("registered_query_unavailable");
+    call.signal.throwIfAborted();
+    if (call.field === "viewer") return {id:context.subject};
     const args = { ...call.args, values: call.args.values ?? {} };
     const answer = await execute(context, args, call.signal);
     return {
@@ -96,4 +99,10 @@ export function registeredQueryDescriptor(
     decode: "registered-page-table-cells-v1" as const,
     document: `query RegisteredQuery(${values.length ? `$values: ${namespace}__Values!, ` : ""}$only: [${namespace}__QueryName!]!) { ${namespace} { evaluate(${values.length ? "values: $values, " : ""}only: $only) { tables { name error columns { name type } rows { cells { text number boolean isNull } } } } } }`,
   };
+}
+
+/** Viewer identity is an explicit remote namespace field, never local page state or credentials. */
+export function registeredViewerDescriptor(namespace:string):RegisteredViewerDescriptor {
+ if(!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(namespace))throw Error("invalid_viewer_descriptor");
+ return {namespace,identity:"target-subject-v1",document:`query NativeViewer { ${namespace} { viewer { id } } }`,responsePath:[namespace,"viewer","id"]};
 }
