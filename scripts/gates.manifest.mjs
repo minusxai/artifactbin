@@ -35,6 +35,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'html-components', needsMail: false, seconds: 10, timeoutMs: 60_000 },
   // Actual reader fixtures; provisional weight until measured.
   { name: 'component-baseline', needsMail: true, seconds: 30, timeoutMs: 120_000 },
+  // Real local Mermaid/WebGL engines; provisional bound pending measurement.
+  { name: 'html-rich-components', needsMail: false, seconds: 45, timeoutMs: 180_000 },
   // Journey gates: each absorbs several former gates; `seconds` measured in
   // scripts/gate-container.mjs (four CPUs, two servers, the four run together).
   // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
