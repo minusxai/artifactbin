@@ -1,5 +1,5 @@
 /** The retained download door emits native HTML with the original read policy. */
-import {sha256Hex} from '@artifactbin/utils';
+import {sha256Hex} from '@artifactbin/utils/sha256';
 import {readPortableDocument} from '@/lib/html-runtime/portable';
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
