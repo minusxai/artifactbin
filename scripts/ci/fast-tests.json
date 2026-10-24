@@ -51,6 +51,7 @@
   "services/app/lib/jsx/__tests__/deck-spec.test.ts",
   "services/app/lib/jsx/__tests__/template.test.ts",
   "services/app/lib/local-connection/__tests__/registry.test.ts",
+  "services/app/lib/local-connection/__tests__/read-only-operation.test.ts",
   "services/app/lib/mermaid-images/__tests__/drawn.test.ts",
   "services/app/lib/object-store/__tests__/url.test.ts",
   "services/app/lib/page-operations/__tests__/service.test.ts",

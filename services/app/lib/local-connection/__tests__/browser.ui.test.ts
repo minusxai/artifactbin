@@ -7,7 +7,7 @@ describe('local file connection',()=>{
   for(const mode of [{privatePreview:true},{stayOffline:true}]){
    const states:string[]=[];const connection=connectLocalDocument({win:window,identity,...mode,onState:s=>states.push(s)});
    expect(document.querySelector('iframe')).toBeNull();expect(states).toEqual(['offline']);
-   if('privatePreview' in mode){connection.retry();connection.signIn();expect(document.querySelector('iframe')).toBeNull();}
+   if('privatePreview' in mode){connection.retry();expect(document.querySelector('iframe')).toBeNull();}
    connection.dispose();
   }
  });
@@ -57,4 +57,9 @@ it('uses secure random bytes when randomUUID is absent and fails clearly if WebC
 it('does not contact an HTTP DNS alias preserved as portable provenance',()=>{
  const states:string[]=[];const connection=connectLocalDocument({win:window,identity:{...identity,platformOrigin:'http://app.lvh.me:53324'},onState:value=>states.push(value)});
  expect(document.querySelector('iframe')).toBeNull();expect(states).toContain('unavailable');connection.retry();expect(document.querySelector('iframe')).toBeNull();connection.dispose();
+});
+it('does not expire the initial handshake timer after a connected idle period',async()=>{
+ vi.useFakeTimers();const port={onmessage:null as ((event:MessageEvent)=>void)|null,onmessageerror:null,start:vi.fn(),close:vi.fn(),postMessage:vi.fn()};vi.stubGlobal('MessageChannel',class{port1=port;port2={};});const states:string[]=[];const connection=connectLocalDocument({win:window,identity,timeoutMs:10,onState:state=>states.push(state)});
+ try{const frame=document.querySelector('iframe')!;vi.spyOn(frame.contentWindow!,'postMessage').mockImplementation(()=>{});const nonce=new URLSearchParams(new URL(frame.src).hash.slice(1)).get('nonce');window.dispatchEvent(new MessageEvent('message',{origin:identity.platformOrigin,source:frame.contentWindow,data:{kind:'af:local-ready',nonce}}));port.onmessage?.({data:{kind:'state',state:'connected',role:'viewer'}} as MessageEvent);await vi.advanceTimersByTimeAsync(300_000);expect(states.at(-1)).toBe('connected');expect(frame.isConnected).toBe(true);expect(port.close).not.toHaveBeenCalled();}
+ finally{connection.dispose();vi.useRealTimers();}
 });

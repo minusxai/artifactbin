@@ -69,6 +69,8 @@ interface PageChromeProps {
   mode?: Accessor<'light' | 'dark'>;
   onMode?: (next: 'light' | 'dark') => void;
   star?: boolean;
+  /** Local read-only shells send account work to their original hosted document. */
+  onOpenOriginal?: () => void;
 }
 
 export function PageChrome(props: PageChromeProps = {}): JSX.Element {
@@ -119,9 +121,9 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
         </>}>{props.byline}</Show>
 </>} actions={<>
         <Show when={compact() && props.compactActions} fallback={<><Show when={props.star !== false}><Star mobile={false} /><Star mobile={true} /></Show>{props.actions}</>}>{render => render()()}</Show>
-        <Show when={person()}><Tooltip content="Notifications"><Button icon size="bar" variant={panel() === 'notifications' ? 'secondary' : 'ghost'} aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={event => toggle('notifications', event)} class="relative"><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" /></Show></Button></Tooltip></Show>
+        <Show when={person() && !props.onOpenOriginal}><Tooltip content="Notifications"><Button icon size="bar" variant={panel() === 'notifications' ? 'secondary' : 'ghost'} aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={event => toggle('notifications', event)} class="relative"><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" /></Show></Button></Tooltip></Show>
         <Tooltip content={controlsName()}><Button icon size="bar" variant={panel() === 'controls' ? 'secondary' : 'ghost'} aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={event => toggle('controls', event)}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</Button></Tooltip>
-        <Tooltip content="menu"><Button icon size="bar" variant={panel() === 'menu' ? 'secondary' : 'ghost'} aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={event => toggle('menu', event)}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></Button></Tooltip>
+        <Show when={props.onOpenOriginal} fallback={<Tooltip content="menu"><Button icon size="bar" variant={panel() === 'menu' ? 'secondary' : 'ghost'} aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={event => toggle('menu', event)}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></Button></Tooltip>}><Button size="bar" variant="secondary" onClick={()=>props.onOpenOriginal?.()}>Open original</Button></Show>
 </>} />
     {/* Each panel is a Drawer (own scrim, in the page's trusted overlay) from PageChromePanels, loaded when one first opens. */}
     <Show when={panels()}>{loaded => <>

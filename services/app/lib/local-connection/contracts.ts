@@ -8,7 +8,7 @@ export interface LinkedDocument {
 export type LocalConnectionState='offline'|'connecting'|'connected'|'signin-required'|'permission-required'|'blocked'|'stale'|'unavailable'|'unknown-outcome';
 export interface LocalOperation {query:string;variables?:Record<string,unknown>;operationName?:string;operation?:'query'|'mutation'}
 export interface ConnectionAdmission {identity:LinkedDocument;actor:string;role:string;authenticated?:boolean}
-export interface ConnectionGrant {capability:string;expires:number;role:string;authenticated:boolean}
+export interface ConnectionGrant {readOnly:true;capability:string;expires:number;role:string;authenticated:boolean}
 export interface ConnectionAuthority {
  /** Called at admission and before/after protected reads. Must consult current ACL and head. */
  inspect(identity:LinkedDocument,previous?:ConnectionAdmission):Promise<ConnectionAdmission>;
@@ -29,7 +29,6 @@ export class LocalConnectionError extends Error {
 }
 export interface LocalConnection {
  retry():void;
- signIn():void;
  disconnect():void;
  dispose():void;
  request(operation:LocalOperation):Promise<unknown>;

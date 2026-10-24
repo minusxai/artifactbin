@@ -36,7 +36,7 @@ export function startPortableSession(options:PortableSessionOptions):()=>void {
   const labels:Record<typeof value.state,string>={match:'Source matches the saved remote.',behind:'Remote source is newer. Local file preserved.','local-edits':'Local source has edits. Publish changes explicitly.',diverged:'Local and remote source changed. Review both copies.',converged:'Local and remote source match a newer revision.','unknown-base':'No verified common source base.','local-unverified':'Current file bytes have not been verified.','network-unknown':'Current remote source is unavailable.'};
   return labels[value.state];
  };
- const update=()=>{chrome?.update({state,kind:identity?'linked':'unpublished',...(identity?{identity}:{}),sourceStatus:sourceStatus()});const host=win.document.querySelector<HTMLElement>('[data-af-local-chrome]');if(host)host.style.visibility=win.document.querySelector('iframe[data-af-local-broker]')&&['connected','permission-required','signin-required','stale','unavailable'].includes(state)?'hidden':'visible';};
+ const update=()=>{chrome?.update({state,kind:identity?'linked':'unpublished',...(identity?{identity}:{}),sourceStatus:sourceStatus()});chrome?.setVisible(!(win.document.querySelector('iframe[data-af-local-broker]')&&['connected','permission-required','signin-required','stale','unavailable','blocked'].includes(state)));};
  const disconnect=(remember=false)=>{
   if(remember){const key=preferenceKey();if(key)try{win.localStorage.setItem(key,'true');}catch{/* Optional browser preference. */}}
   attempt++;cancelFrameMount();connection?.dispose();connection=undefined;frame?.dispose();frame=undefined;options.online(false);state='offline';update();

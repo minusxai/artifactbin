@@ -6,7 +6,7 @@ afterEach(()=>{document.documentElement.removeAttribute('data-af-private-preview
 function session(linked=false){
  if(linked)document.head.innerHTML=`<script type="application/json" data-af="portable">${JSON.stringify({version:1,source:'<p>source</p>',identity})}</script>`;
  let controls!:PortableChromeOptions;
- const chrome={update:vi.fn(),dispose:vi.fn()};
+ const chrome={update:vi.fn(),setVisible:vi.fn(),dispose:vi.fn()};
  const connection={retry:vi.fn(),signIn:vi.fn(),disconnect:vi.fn(),dispose:vi.fn(),post:vi.fn(),request:vi.fn()};
  const connect=vi.fn((_options:Parameters<typeof import('../../local-connection/browser').connectLocalDocument>[0])=>connection);
  const dispose=startPortableSession({win:window,connect,attach:()=>({receive:vi.fn(),dispose:vi.fn()}),online:vi.fn(),loadChrome:async()=>({stylesheet:'css',mountPortableChrome(options){controls=options;return chrome;}})});
@@ -37,7 +37,7 @@ it('delegates preview reload and persists only an explicit viewer appearance cho
 it('starts linked autoconnection before chrome or DOMContentLoaded and accepts synchronous transport callbacks once',async()=>{
  document.head.innerHTML=`<script data-af="portable">${JSON.stringify({version:1,source:'<p>source</p>',identity})}</script>`;
  const ready=vi.spyOn(document,'readyState','get').mockReturnValue('loading');
- let mount!:()=>void;const loading=new Promise<{stylesheet:string;mountPortableChrome(options:PortableChromeOptions):{update:()=>void;dispose:()=>void}}>(resolve=>{mount=()=>resolve({stylesheet:'',mountPortableChrome:()=>({update(){},dispose(){}})});});
+ let mount!:()=>void;const loading=new Promise<{stylesheet:string;mountPortableChrome(options:PortableChromeOptions):{update:()=>void;setVisible:()=>void;dispose:()=>void}}>(resolve=>{mount=()=>resolve({stylesheet:'',mountPortableChrome:()=>({update(){},setVisible(){},dispose(){}})});});
  const connection={retry:vi.fn(),signIn:vi.fn(),disconnect:vi.fn(),dispose:vi.fn(),post:vi.fn(),request:vi.fn()};
  const online=vi.fn(),attach=vi.fn(()=>({receive:vi.fn(),dispose:vi.fn()}));
  let transport!:Parameters<typeof import('../../local-connection/browser').connectLocalDocument>[0];
@@ -52,7 +52,13 @@ it('makes transport usable without a body, then mounts the frame after parsing a
  const callbacks:Array<Parameters<typeof import('../../local-connection/browser').connectLocalDocument>[0]>=[];
  const connection={retry:vi.fn(),signIn:vi.fn(),disconnect:vi.fn(),dispose:vi.fn(),post:vi.fn(),request:vi.fn()};
  const online=vi.fn(),attach=vi.fn(()=>({receive:vi.fn(),dispose:vi.fn()}));let controls!:PortableChromeOptions;
- const stop=startPortableSession({win:window,connect:options=>{callbacks.push(options);return connection;},attach,online,loadChrome:async()=>({stylesheet:'',mountPortableChrome(options){controls=options;return {update(){},dispose(){}};}})});
+ const stop=startPortableSession({win:window,connect:options=>{callbacks.push(options);return connection;},attach,online,loadChrome:async()=>({stylesheet:'',mountPortableChrome(options){controls=options;return {update(){},setVisible(){},dispose(){}};}})});
  try{callbacks[0]!.onState('connected');callbacks[0]!.onConnected?.({identity,role:'viewer'});expect(online).toHaveBeenCalledWith(true,connection.request);expect(attach).not.toHaveBeenCalled();document.documentElement.append(body);document.dispatchEvent(new Event('DOMContentLoaded'));await Promise.resolve();await Promise.resolve();expect(attach).toHaveBeenCalledOnce();controls.onConnect();const before=online.mock.calls.length;callbacks[0]!.onConnected?.({identity,role:'viewer'});expect(online).toHaveBeenCalledTimes(before);callbacks[1]!.onState('connecting');callbacks[1]!.onState('stale');expect(online.mock.lastCall).toEqual([false,undefined,false]);}
  finally{if(!document.body)document.documentElement.append(body);stop();}
+});
+
+it('hides the actual fallback overlay while a trusted broker owns connected or blocked recovery controls',async()=>{
+ const page=session(true);await Promise.resolve();const frame=document.createElement('iframe');frame.dataset.afLocalBroker='';document.documentElement.append(frame);
+ try{const callbacks=page.connect.mock.calls[0]![0];callbacks.onState('connected');expect(page.chrome.setVisible).toHaveBeenLastCalledWith(false);callbacks.onState('blocked');expect(page.chrome.setVisible).toHaveBeenLastCalledWith(false);frame.remove();callbacks.onState('blocked');expect(page.chrome.setVisible).toHaveBeenLastCalledWith(true);}
+ finally{frame.remove();page.dispose();}
 });
