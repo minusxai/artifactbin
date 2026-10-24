@@ -2,3 +2,4 @@
 import "../src/migration/native-components/selection.unit.test.ts";
 import "../src/migration/native-components/recover.unit.test.ts";
 import '../src/migration/native-components/analyze.unit.test.ts';
+import '../src/migration/native-components/analyze-batch.unit.test.ts';

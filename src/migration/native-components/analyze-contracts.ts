@@ -34,3 +34,6 @@ export interface NativeTypedCompilerPort {
  extract(document: unknown): Promise<RetainedCompilerSnapshot>;
 }
 export type AnalyzeNativeTypedRevision = (revision: NativeSelectedRevision, analysis: NativeGraphAnalysis, options: NativeAnalyzeOptions) => Promise<NativeTypedAnalysis>;
+/** Bounded offline work only; the whole batch is discarded if the compiler pin changes. */
+export interface NativeTypedBatchInput { revision: NativeSelectedRevision; analysis: NativeGraphAnalysis }
+export type AnalyzeNativeTypedBatch = (inputs: readonly NativeTypedBatchInput[], options: NativeAnalyzeOptions) => Promise<NativeTypedAnalysis[]>;

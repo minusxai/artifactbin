@@ -10,6 +10,8 @@ import type {
 } from "./contracts.ts";
 import type {
   AnalyzeNativeTypedRevision,
+  AnalyzeNativeTypedBatch,
+  NativeTypedBatchInput,
   NativeTypedAnalysis,
   NativeTypedCompilerPort,
   RetainedCompilerSnapshot,
@@ -175,3 +177,43 @@ export const analyzeNativeTypedRevision: AnalyzeNativeTypedRevision = (
         ),
     },
   );
+
+/** Compiler source is verified at both batch boundaries, never cached across calls.
+ * Outputs remain private until the closing check passes; any failure rejects the whole batch.
+ * This is a bracketed verification session, not an assertion that a mutable tree is immutable.
+ */
+export async function analyzeBatchWithRetainedCompiler(
+  inputs: readonly NativeTypedBatchInput[],
+  pin: string,
+  port: NativeTypedCompilerPort,
+): Promise<NativeTypedAnalysis[]> {
+  if (!inputs.length || inputs.length > 64)
+    throw Error("native_typed_batch_size");
+  if ((await port.fingerprint()) !== pin)
+    throw Error("native_typed_compiler_changed");
+  const results: NativeTypedAnalysis[] = [];
+  for (const { revision, analysis } of inputs) {
+    results.push(
+      await analyzeWithRetainedCompiler(revision, analysis, pin, {
+        fingerprint: async () => pin,
+        extract: (document) => port.extract(document),
+      }),
+    );
+  }
+  if ((await port.fingerprint()) !== pin)
+    throw Error("native_typed_compiler_changed");
+  return results;
+}
+export const analyzeNativeTypedBatch: AnalyzeNativeTypedBatch = (
+  inputs,
+  options,
+) =>
+  analyzeBatchWithRetainedCompiler(inputs, options.compilerSourceSha256, {
+    fingerprint: () => retainedCompilerFingerprint(options.legacyRoot),
+    extract: (document) =>
+      externalCompile<RetainedCompilerSnapshot, { document: unknown }>(
+        { document },
+        { legacyRoot: options.legacyRoot },
+        "../../native-components/analyze-runner.mts",
+      ),
+  });
