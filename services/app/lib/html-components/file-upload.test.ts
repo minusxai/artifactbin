@@ -119,3 +119,21 @@ it('keeps the supported signed-out or unbound state unavailable until an adapter
   await element.upload([file()]);
   expect(element.value).toEqual([]);
 });
+
+// Retained FileUpload uses a visually clipped input, not a hidden accessibility node.
+it('keeps the named file picker accessible while unavailable and delegates the chooser when enabled', () => {
+  const element = fixture(); element.setAttribute('label', 'Screenshots');
+  const input = element.querySelector('input')!;
+  expect(input.hidden).toBe(false);
+  expect(input.tabIndex).toBe(-1);
+  expect(input.getAttribute('aria-label')).toBe('Choose Screenshots');
+  expect(input.disabled).toBe(true);
+  const click = vi.spyOn(input, 'click');
+  element.adapter = { upload: async () => ({ref:'one',name:'file'}) };
+  expect(element.querySelector('input')).toBe(input);
+  expect(input.disabled).toBe(false);
+  element.querySelector<HTMLButtonElement>('[aria-label="Choose Screenshots"]')!.click();
+  expect(click).toHaveBeenCalledOnce();
+  element.disabled = true;
+  expect(input.disabled).toBe(true);
+});
