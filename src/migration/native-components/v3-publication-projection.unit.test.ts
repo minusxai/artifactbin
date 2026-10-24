@@ -835,3 +835,24 @@ test("relation bindings use actual reader eligibility without deleting inert-tem
  const {input,host}=fixture();const history=projectNativeV3Publication(input,host),before=structuredClone(history);assert.ok(projectNativeV3RelationBindings(input,history,host).length>0);host.commentNodeIds=()=>[];const bindings=projectNativeV3RelationBindings(input,history,host);assert.deepEqual(bindings,[]);assert.deepEqual(history,before);assert.ok(history.revisions.every(revision=>revision.ledger.allocatedIds.length>0));
 });
 test("relation projection refuses missing reader eligibility before calling a host",()=>{const {input,host,events}=fixture();const history=projectNativeV3Publication(input,host);events.length=0;delete host.commentNodeIds;assert.throws(()=>projectNativeV3RelationBindings(input,history,host),/comment_reader_required/);assert.deepEqual(events,[]);});
+
+test("latest human-owned pages retain an absent creator token without fabricating credentials", () => {
+  const {input,host}=latestFixture();
+  for(const revision of input.selection.page.revisions){revision.original.token_id=null;revision.rowSha256=nativeDigest(revision.original);}
+  for(const receipt of input.assemblies){receipt.sourceRowSha256=input.selection.page.revisions.find(r=>r.key.version===receipt.key.version)!.rowSha256;const {sha256,...payload}=receipt;receipt.sha256=nativeReceiptDigest(payload);}
+  input.plannedSha256=sha(canonicalMigrationValue(input.planned));
+  input.targetIdentitySha256=nativeDigest(input.targets);
+  const output=projectNativeV3Publication(input,host);
+  assert.deepEqual(output.owner,{userId:"usr_target",tokenId:null});
+  assert.equal(output.revisions.length,1);
+  assert.equal(input.planned.original.token_id,null);
+});
+test("an absent creator token never substitutes for an unmapped human owner", () => {
+  const {input,host,events}=fixture();
+  input.planned.original.token_id=null;
+  input.targets.actors={};
+  input.plannedSha256=sha(canonicalMigrationValue(input.planned));
+  input.targetIdentitySha256=nativeDigest(input.targets);
+  assert.throws(()=>projectNativeV3Publication(input,host),/account_owner_required/);
+  assert.equal(events.length,0);
+});

@@ -170,7 +170,8 @@ export interface NativeV3HistoryImport {
   projectionSha256: string;
   relationSha256?: string;
   pageId: string;
-  owner: { userId: string; tokenId: string };
+  /** Source creator credential may be absent; human ownership remains required. */
+  owner: { userId: string; tokenId: string | null };
   visibility: "public" | "private" | "unlisted";
   linkRole: "viewer" | "commenter" | "editor";
   shares: { email: string; role: "viewer" | "commenter" | "editor" }[];
