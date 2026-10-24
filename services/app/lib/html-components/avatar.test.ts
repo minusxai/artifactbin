@@ -89,6 +89,12 @@ describe('native light-DOM avatars', () => {
     expect(getComputedStyle(avatar).width).toBe('24px');
     expect(avatar.dataset.size).toBe('sm');
     expect(badge.dataset.slot).toBe('avatar-badge');
+    expect(getComputedStyle(badge).width).toBe('8px');
+    expect(getComputedStyle(badge).boxShadow).toContain('2px');
+    expect(getComputedStyle(badge).borderTopStyle).toBe('none');
+    expect(getComputedStyle(badge).overflow).toBe('visible');
+    expect(getComputedStyle(badge).fontSize).not.toBe('0px');
+    expect(getComputedStyle(badge).zIndex).toBe('10');
     const group = document.createElement('af-avatar-group');
     group.innerHTML = '<af-avatar size="lg"><af-avatar-fallback>A</af-avatar-fallback></af-avatar><af-avatar-group-count data-af-id="count">+3</af-avatar-group-count>';
     document.body.append(group);
@@ -105,6 +111,7 @@ describe('native light-DOM avatars', () => {
     const avatars = [...group.querySelectorAll('af-avatar')];
     expect(avatars.map(avatar => getComputedStyle(avatar).width)).toEqual(['24px', '32px', '40px']);
     expect(getComputedStyle(count).width).toBe('24px');
+    expect(getComputedStyle(group).alignItems).toBe('flex-start');
     for (const part of [...avatars, count]) {
       expect(getComputedStyle(part).boxShadow).toContain('2px');
       expect(getComputedStyle(part).borderTopStyle).toBe('none');

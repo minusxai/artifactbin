@@ -84,7 +84,7 @@ export class AfIcon extends HTMLElement implements AfIconContract {
 }
 
 const iconStyles = `
-af-icon{display:inline-flex;vertical-align:middle;color:inherit}
+af-icon{display:inline-block;vertical-align:-.125em;color:inherit}
 af-icon>svg[data-af-icon]{display:block;flex:none;color:inherit;stroke:currentColor}
 `;
 
