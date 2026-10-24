@@ -38,3 +38,13 @@ it('ends authority after an uncertain operation deadline and never sends a secon
   expect(port.postMessage.mock.calls.filter(call=>call[0].kind==='operation')).toHaveLength(1);
  }finally{connection.dispose();vi.useRealTimers();vi.unstubAllGlobals();}
 });
+it('ignores queued authority and observation messages after explicit disconnect',()=>{
+ const port={onmessage:null as ((event:MessageEvent)=>void)|null,onmessageerror:null,start:vi.fn(),close:vi.fn(),postMessage:vi.fn()};vi.stubGlobal('MessageChannel',class {port1=port;port2={};});
+ const states:string[]=[],observed=vi.fn();const connection=connectLocalDocument({win:window,identity,onState:s=>states.push(s),onSourceObservation:observed});
+ try{
+  const frame=document.querySelector('iframe')!;vi.spyOn(frame.contentWindow!,'postMessage').mockImplementation(()=>{});const nonce=new URLSearchParams(new URL(frame.src).hash.slice(1)).get('nonce');
+  window.dispatchEvent(new MessageEvent('message',{origin:identity.platformOrigin,source:frame.contentWindow,data:{kind:'af:local-ready',nonce}}));
+  connection.disconnect();port.onmessage?.({data:{kind:'state',state:'connected',role:'owner'}} as MessageEvent);port.onmessage?.({data:{kind:'source-observation',remoteDigest:'b'.repeat(64),remoteRevision:'2'}} as MessageEvent);
+  expect(states.at(-1)).toBe('offline');expect(observed).not.toHaveBeenCalled();
+ }finally{connection.dispose();vi.unstubAllGlobals();}
+});

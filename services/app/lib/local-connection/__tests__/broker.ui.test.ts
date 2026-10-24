@@ -54,3 +54,12 @@ it('does not replay duplicate mutation calls and revokes an unavailable connecti
  await port.onmessage?.({data:{...operation,call:2}} as MessageEvent);expect(states.at(-1)).toBe('unavailable');
  await port.onmessage?.({data:{...operation,call:3}} as MessageEvent);expect(fetch).toHaveBeenCalledTimes(4);broker.dispose();
 });
+it('reports readable remote evidence for a stale base without connecting or sending authority',async()=>{
+ history.replaceState(null,'','/#nonce=test-nonce');
+ const observation={remoteDigest:'b'.repeat(64),remoteRevision:'2'};
+ const fetch=vi.fn().mockResolvedValueOnce({ok:false,status:409,json:async()=>({error:'stale'})}).mockResolvedValueOnce({ok:true,json:async()=>observation});vi.stubGlobal('fetch',fetch);
+ const evidence=vi.fn(),states:string[]=[];const broker=installLocalConnectionBroker({win:window,onState:s=>states.push(s),onSourceObservation:evidence}),port=fakePort();
+ window.dispatchEvent(new MessageEvent('message',{origin:'null',source:window,data:{kind:'af:local-bind',nonce:'test-nonce',identity:identity()},ports:[port]}));
+ await vi.waitFor(()=>expect(states.at(-1)).toBe('stale'));expect(evidence).toHaveBeenCalledExactlyOnceWith(observation);
+ expect(port.postMessage).toHaveBeenCalledWith({kind:'source-observation',...observation});expect(states).not.toContain('connected');expect(fetch.mock.calls[1]![1]).toMatchObject({credentials:'omit'});broker.dispose();
+});

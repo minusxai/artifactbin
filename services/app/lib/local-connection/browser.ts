@@ -1,10 +1,11 @@
 import {validLinkedDocument} from './registry';
-import type {LinkedDocument,LocalConnection,LocalConnectionState,LocalOperation} from './contracts';
+import type {LinkedDocument,LocalConnection,LocalConnectionState,LocalOperation,SourceObservation} from './contracts';
 export interface ConnectLocalDocumentOptions {
  win:Window;identity:LinkedDocument;privatePreview?:boolean;stayOffline?:boolean;
  onState(state:LocalConnectionState):void;
  onConnected?(value:{identity:LinkedDocument;role:string}):void;
  onMessage?(message:unknown):void;
+ onSourceObservation?(observation:SourceObservation):void;
  /** Tests can shorten a transport deadline without changing production policy. */
  timeoutMs?:number;
 }
@@ -12,16 +13,20 @@ export interface LocalDocumentConnection extends LocalConnection {post(message:u
 /** No credential enters this window. The remote broker owns normal browser authentication. */
 export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalDocumentConnection{
  const {win,identity}=options;let disposed=false,stopped=false,connected=false;
- let iframe:HTMLIFrameElement|undefined,remote:Window|null=null,port:MessagePort|undefined,timer:ReturnType<typeof setTimeout>|undefined,nonce='';let call=0;
+ let iframe:HTMLIFrameElement|undefined,remote:Window|null=null,port:MessagePort|undefined,timer:ReturnType<typeof setTimeout>|undefined,nonce='';let call=0,generation=0;
  const pending=new Map<number,{resolve:(value:unknown)=>void;reject:(reason:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
  const state=(value:LocalConnectionState)=>{if(!disposed)options.onState(value);};
  const failPending=()=>{for(const value of pending.values()){clearTimeout(value.timer);value.reject(Error('Connection ended; operation outcome may be unknown'));}pending.clear();};
- const cleanup=()=>{connected=false;clearTimeout(timer);port?.postMessage({kind:'disconnect'});port?.close();port=undefined;iframe?.remove();iframe=undefined;remote=null;failPending();};
+ const cleanup=()=>{generation++;connected=false;clearTimeout(timer);port?.postMessage({kind:'disconnect'});port?.close();port=undefined;iframe?.remove();iframe=undefined;remote=null;failPending();};
  const receive=(event:MessageEvent)=>{
   if(disposed||stopped||event.source!==remote||event.origin!==identity.platformOrigin||!event.data||event.data.kind!=='af:local-ready'||event.data.nonce!==nonce||port)return;
-  const channel=new MessageChannel();port=channel.port1;
+  const epoch=generation,channel=new MessageChannel();port=channel.port1;
   port.onmessage=(message:MessageEvent)=>{
+   if(disposed||stopped||epoch!==generation)return;
    const data=message.data;if(!data||typeof data!=='object')return;
+   if(data.kind==='source-observation'){
+    if(typeof data.remoteDigest==='string'&&/^[a-f0-9]{64}$/.test(data.remoteDigest)&&typeof data.remoteRevision==='string'&&/^[1-9]\d*$/.test(data.remoteRevision))options.onSourceObservation?.({remoteDigest:data.remoteDigest,remoteRevision:data.remoteRevision});return;
+   }
    if(data.kind==='chrome-size'&&iframe&&Number.isFinite(data.height)){iframe.style.height=Math.max(40,Math.min(win.innerHeight||1000,data.height))+'px';return;}
    if(data.kind==='state'){
     const valid:LocalConnectionState[]=['offline','connecting','connected','signin-required','permission-required','blocked','stale','unavailable','unknown-outcome'];
@@ -35,7 +40,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
    }else if(data.kind==='bridge'&&connected)options.onMessage?.(data.message);
   };
   port.onmessageerror=()=>{cleanup();state('blocked');};port.start();
-  remote!.postMessage({kind:'af:local-bind',nonce,identity},identity.platformOrigin,[channel.port2]);
+  remote!.postMessage({kind:'af:local-bind',nonce,identity,observeSource:options.onSourceObservation!==undefined},identity.platformOrigin,[channel.port2]);
  };
  const begin=()=>{
   if(disposed||options.privatePreview)return;

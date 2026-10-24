@@ -8,7 +8,7 @@ import {pageOperationKind} from '@/lib/page-operations';
 import {pageGraphql} from '@/lib/page-graphql';
 import {currentRequest,runWithRequest} from '@/lib/platform/request-context';
 import {createConnectionRegistry,validLinkedDocument} from './registry';
-import {LocalConnectionError} from './contracts';
+import {LocalConnectionError,type SourceObservation} from './contracts';
 const approved=new WeakSet<Request>();
 const registry=createConnectionRegistry({random:()=>randomBytes(32).toString('base64url'),async inspect(identity,previous){
  const request=currentRequest();if(!request||identity.platformOrigin!==baseUrl(request))throw new LocalConnectionError('invalid_identity');
@@ -61,5 +61,26 @@ export async function localConnectionGraphql(request:Request,artifactId:string):
    if(isQuery)await registry.authorize(capability,artifactId);
   }
   return response;
+ }catch(error){return refusal(error);}});
+}
+
+/** Read only current head evidence; a stale claimed base never becomes a grant. */
+export async function observeLocalSource(request:Request):Promise<Response>{
+ if(!sameOrigin(request))return json({error:'forbidden'},403);
+ return runWithRequest(request,async()=>{try{
+  const body=await readJson(request);
+  if(!validLinkedDocument(body?.identity)||body.identity.platformOrigin!==baseUrl(request))throw new LocalConnectionError('invalid_identity');
+  const authenticated=body.authorizePrivate===true;
+  const actor=authenticated?await requestOrSessionActor(request,{revalidate:true}):ANONYMOUS_ACTOR;
+  if(authenticated&&!actor.userId&&!actor.tokenId)throw new LocalConnectionError('signin_required');
+  if(!authenticated&&body.checkSession===true){const session=await requestOrSessionActor(request,{revalidate:true});if(session.userId||session.tokenId)throw new LocalConnectionError('permission_required');}
+  try{
+   await readHtmlPage(actor,body.identity.artifactId);
+   const currentActor=authenticated?await requestOrSessionActor(request,{revalidate:true}):ANONYMOUS_ACTOR;
+   if(JSON.stringify(currentActor)!==JSON.stringify(actor))throw new LocalConnectionError('revoked');
+   const current=await readHtmlPage(currentActor,body.identity.artifactId);
+   const observation:SourceObservation={remoteDigest:createHash('sha256').update(current.html).digest('hex'),remoteRevision:current.revision};
+   return json(observation,200,{'Cache-Control':'no-store'});
+  }catch(error){if(error instanceof LocalConnectionError)throw error;throw new LocalConnectionError(authenticated?'unavailable':'signin_required');}
  }catch(error){return refusal(error);}});
 }

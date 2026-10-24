@@ -38,3 +38,25 @@ it('never lets an ambient bearer elevate guest reads of a linked private dataset
  const guest=await run(await open(false));expect(guest.errors).toHaveLength(1);expect(JSON.stringify(guest)).not.toContain(dataset.id);
  const account=await run(await open(true));expect(account.errors).toBeUndefined();expect(account.data.data.schema.tables.length).toBeGreaterThan(0);
 });
+it('observes stale source metadata without granting operations or leaking private heads',async()=>{
+ const {POST:observe}=await import('@/app/api/local-connection/observe-source/route');
+ const owner=await mintAccountToken('local-observation');
+ const made=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'public',html:'<html><body>Remote head</body></html>'}}));expect(made.status).toBe(201);const {id}=await made.json();
+ const page=await readHtmlPage({userId:owner.userId,tokenId:null,email:owner.email,documentEditor:false},id);
+ const identity={platformOrigin:'http://localhost:3000',artifactId:id,baseRevision:'99',sourceDigest:'0'.repeat(64)};
+ const read=(extra:Record<string,unknown>={})=>observe(request('/api/local-connection/observe-source',{method:'POST',token:owner.token,json:{identity,...extra}}));
+ const response=await read();expect(response.status).toBe(200);expect(await response.json()).toEqual({remoteDigest:createHash('sha256').update(page.html).digest('hex'),remoteRevision:page.revision});
+ const validIdentity={...identity,baseRevision:page.revision,sourceDigest:createHash('sha256').update(page.html).digest('hex')};
+ const live=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity:validIdentity}}));const cap=(await live.json()).capability;
+ await(await harness.db()).query('UPDATE artifacts SET version=version+1 WHERE id=$1',[id]);
+ const observedNew=await read();expect((await observedNew.json()).remoteRevision).toBe('2');
+ const mutation=request(`/api/local-connection/${id}/graphql`,{method:'POST',token:owner.token,json:{revision:page.revision,query:'mutation { tasks { add } }'}});mutation.headers.set('X-Af-Local-Capability',cap);
+ expect((await execute(mutation,{params:Promise.resolve({id})})).status).toBe(409);
+ const admission=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity}}));expect(admission.status).toBe(409);
+ await(await harness.db()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
+ const denied=await read();expect(denied.status).toBe(401);expect(await denied.json()).not.toHaveProperty('remoteDigest');
+ expect((await read({checkSession:true})).status).toBe(403);
+ const allowed=await read({authorizePrivate:true});expect(allowed.status).toBe(200);
+ const stranger=await mintAccountToken('local-observation-stranger');
+ const revoked=await observe(request('/api/local-connection/observe-source',{method:'POST',token:stranger.token,json:{identity,authorizePrivate:true}}));expect(revoked.status).toBe(404);expect(await revoked.json()).not.toHaveProperty('remoteRevision');
+});

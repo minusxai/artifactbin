@@ -33,3 +33,5 @@ export interface LocalConnection {
  dispose():void;
  request(operation:LocalOperation):Promise<unknown>;
 }
+/** Current readable remote head metadata. Observation grants no execution authority. */
+export interface SourceObservation {remoteDigest:string;remoteRevision:string}
