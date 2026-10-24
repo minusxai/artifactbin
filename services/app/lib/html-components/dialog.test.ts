@@ -78,6 +78,22 @@ it('uses a native child as the single control and restores its authored disabled
   button.disabled = true; trigger.setAttribute('disabled',''); await tick(); trigger.removeAttribute('disabled'); await tick(); expect(button.disabled).toBe(true);
   trigger.replaceChildren('Plain'); await tick(); trigger.setAttribute('disabled',''); await tick(); expect(trigger.tabIndex).toBe(-1);
 });
+it('styles only a nested native trigger button like the text-only trigger and preserves disabled/focus behavior', async () => {
+  const {root,trigger} = fixture();
+  trigger.innerHTML = '<button>Native</button>'; await tick();
+  const button = trigger.querySelector('button')!;
+  const textOnly = document.createElement('af-dialog-trigger'); textOnly.textContent = 'Plain'; document.body.append(textOnly);
+  const nestedStyle = getComputedStyle(button); const textStyle = getComputedStyle(textOnly);
+  for (const property of ['display','paddingTop','paddingRight','paddingBottom','paddingLeft','fontSize','fontWeight','background','color','borderRadius','cursor'] as const) {
+    expect(nestedStyle[property], property).toBe(textStyle[property]);
+  }
+  const unrelated = document.createElement('button'); unrelated.textContent = 'Content action'; root.querySelector('af-dialog-content')!.append(unrelated);
+  expect(getComputedStyle(unrelated).display).not.toBe(nestedStyle.display);
+  trigger.setAttribute('disabled',''); await tick();
+  expect(button.disabled).toBe(true); expect(getComputedStyle(button).opacity).toBe('0.5'); expect(getComputedStyle(button).cursor).toBe('default');
+  trigger.removeAttribute('disabled'); await tick(); button.focus();
+  expect(document.activeElement).toBe(button);
+});
 it('disposes an open native modal on content removal and accepts replacement content', async () => {
   const {root,trigger,content,native} = fixture(); trigger.focus(); trigger.click(); content.remove(); await tick();
   expect(native.open).toBe(false); expect(native.isConnected).toBe(false); expect(document.activeElement).toBe(trigger);
