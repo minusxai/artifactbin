@@ -242,6 +242,15 @@ function scanImports(root, files) {
   const found = [];
   for (const file of files) {
     const text = fs.readFileSync(path.join(root, file), 'utf8');
+    // The lexical preprocessor recognizes import/export, import types and literal
+    // dynamic/require forms without allocating a complete AST. Files whose only
+    // references stay inside their module or external cannot add a graph edge.
+    const references = ts.preProcessFile(text, true, true).importedFiles;
+    const from = moduleOf(file);
+    if (!references.some(ref => { const to = resolveImport(file, ref.fileName); return to && to !== from; })) {
+      for (const ref of references) found.push({ file, specifier: ref.fileName, typeOnly: false });
+      continue;
+    }
     const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : /\.(mjs|js)$/.test(file) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false, kind);
     const add = (specifier, typeOnly) => found.push({ file, specifier, typeOnly });

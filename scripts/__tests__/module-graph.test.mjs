@@ -66,6 +66,16 @@ describe('module graph', () => {
     });
   });
 
+  it('keeps external-only modules and detects literal nested dynamic, require and import type edges',()=>{
+    const graph=scanModuleGraph(tree({
+      'services/app/lib/external/index.ts':"import fs from 'node:fs';\nexport const value=1;",
+      'services/app/lib/a/index.ts':'',
+      'services/app/lib/b/index.ts':"export function nested(){ return () => import(`@/lib/a/dynamic`); }\nconst value=require(`@/lib/a/required`);\ntype T=import('@/lib/a/typed').T;\nconst example=\"import('ignored')\";",
+    }));
+    expect([...graph.get('lib/external')]).toEqual([]);
+    expect(graph.get('lib/b').get('lib/a').map(({specifier,typeOnly})=>[specifier,typeOnly])).toEqual([['@/lib/a/dynamic',false],['@/lib/a/required',false],['@/lib/a/typed',true]]);
+  });
+
   it('fails a library cycle that the allow-list does not record, naming the edges', () => {
     const { violations } = checkModuleGraph(scanModuleGraph(tree(libCycle)), allowList([]));
     expect(violations.join('\n')).toContain('lib/a -> lib/b');
