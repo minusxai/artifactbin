@@ -16,6 +16,7 @@ import type {
   NativeControlWriteback,
 } from "./bindings-contracts.ts";
 import { normalizeTimestamp } from "../../datasets/timestamp.ts";
+import {nativePersonProjection} from "./person-runtime.ts";
 import { NATIVE_BINDINGS_RUNTIME } from "./bindings-runtime.ts";
 import { nativeTableTarget } from "./table-columns.ts";
 import { nativeDigest } from "./selection.ts";
@@ -203,6 +204,7 @@ export function emitNativeBindings(
       return false;
     }
   };
+  if(input.people&&(!name(input.people.namespace)||input.people.authority!=="linked-dataset-typed-user-v1"||!/^ref:[A-Za-z0-9_-]+$/.test(input.people.datasetRef)||input.people.mode!=="live"))block("$people","invalid-people-descriptor");
   if (input.viewer) {
     const viewer=input.viewer;
     try {
@@ -290,6 +292,10 @@ export function emitNativeBindings(
         continue;
       }
       result.expression = admit(expression(node.value), node.graphKey);
+    } else if(target.kind==="person") {
+      if(node.type!=="element"||node.tag!=="User"||node.children.length||!input.people){block(target.sourceNode,"invalid-person-target");continue;}
+      const value=node.attributes.find(attr=>attr.name==="userId")?.value;
+      result.expression=admit(value?.static&&typeof value.json==="string"&&value.json.startsWith("$")?expression({static:false,exprType:"reference",source:value.json}):value?expression(value):null,node.graphKey);
     } else if (target.kind === "cell") {
       if(node.type!=="element"||!["Cell","Number"].includes(node.tag)||target.attribute!=="data") {block(target.sourceNode,"invalid-cell-target");continue;}
       const attrs=new Map(node.attributes.map(attr=>[attr.name,attr.value]));
@@ -599,10 +605,11 @@ export function emitNativeBindings(
     queries: input.queries,
     mutations: input.mutations,
     viewer: input.viewer,
+    people:input.people,
   };
   const evaluator = evaluateLocalReactiveExpression.toString();
   const cellImport=targets.some(target=>target.kind==="cell")?`import {formatNativeLiveCell} from ${escapedJson(input.cellAdapter!.specifier)};\n`:"";
-  const authorJs = `${cellImport}import {client,gql} from "@afbin/apollo";\nconst own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;\nconst DatasetReadError=Error;\nexport const dispose=(${NATIVE_BINDINGS_RUNTIME})(client,gql,document,${escapedJson(plan)},(${evaluator}),(${normalizeTimestamp.toString()}),${targets.some(target=>target.kind==="cell")?"formatNativeLiveCell":"null"});\ndocument.defaultView?.addEventListener("pagehide",event=>{if(!event.persisted)dispose();});\n`;
+  const authorJs = `${cellImport}import {client,gql} from "@afbin/apollo";\nconst own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;\nconst DatasetReadError=Error;\nexport const dispose=(${NATIVE_BINDINGS_RUNTIME})(client,gql,document,${escapedJson(plan)},(${evaluator}),(${normalizeTimestamp.toString()}),${targets.some(target=>target.kind==="cell")?"formatNativeLiveCell":"null"},(${nativePersonProjection.toString()}));\ndocument.defaultView?.addEventListener("pagehide",event=>{if(!event.persisted)dispose();});\n`;
   return {
     status: "complete",
     authorJs,

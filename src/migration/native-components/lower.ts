@@ -22,6 +22,7 @@ export interface NativeLowerFormattedReceipt {
   text: string;
 }
 export interface NativeLowerInput {
+  authDelegations?:readonly import("./person-contracts.ts").NativeAuthDelegation[];
   analysis: NativeTypedAnalysis;
   authorPrograms?:readonly NativeAuthorProgramReceipt[];
   emitTextIdentities?: boolean;
@@ -133,7 +134,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   usedAf.set(value.afId,node.graphKey);identities.push({sourceNode:node.graphKey,afId:value.afId,kind});return value;
  };
  const admittedTarget=(node:RetainedJsxNode,kind:NativeBindingTarget['kind'],attribute?:string):NativeBindingTarget|undefined=>{
-  const targets=input.admittedBindings?.filter(t=>t.sourceNode===node.graphKey&&t.kind===kind&&(attribute===undefined||(t.kind==='property'||t.kind==='cell')&&t.attribute===attribute))??[];
+  const targets=input.admittedBindings?.filter(t=>t.sourceNode===node.graphKey&&t.kind===kind&&(attribute===undefined||(t.kind==='property'||t.kind==='cell'||t.kind==='person')&&t.attribute===attribute))??[];
   if(!targets.length)return;
   const t=targets[0],proof=input.identityBindings.find(b=>b.sourceNode===node.graphKey);
   if(targets.length!==1||!t||!proof||t.afId!==proof.afId||t.analysisSha256!==proof.analysisSha256||t.sourceSha256!==proof.sourceSha256||t.sourceStart!==proof.sourceStart||t.sourceEnd!==proof.sourceEnd||t.proofSha256!==proof.proofSha256){block('adapter-identity-mismatch',node,'Adapter target must match the exact graph identity receipt');return;}
@@ -163,6 +164,15 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   }
   if(declarationTags[node.tag]){const kind=declarationTags[node.tag]!,name=node.attributes.find(a=>a.name==='name')?.value;if(name?.static&&typeof name.json==='string'&&input.admittedDeclarations?.some(r=>r.kind===kind&&r.name===name.json&&r.analysisSha256===input.analysis.analysisSha256))return '';require(declarationTags[node.tag]!,node,'Nonvisual declarations need admitted operation adapters');return '';}
   if(node.tag==='Helmet'){identities.push({sourceNode:node.graphKey,kind:'nonvisual'});for(const child of node.children)head.push(walk(child,ancestors,depth+1));return '';}
+  if(node.tag==='SignIn'){
+   const receipts=input.authDelegations?.filter(receipt=>receipt.sourceNode===node.graphKey)??[];
+   const safe=node.attributes.every(attribute=>['id','class','className'].includes(attribute.name)&&attribute.value.static&&typeof attribute.value.json==='string');
+   if(receipts.length===1&&receipts[0]?.analysisSha256===input.analysis.analysisSha256&&receipts[0].destination==='platform-topbar-sign-in'&&receipts[0].behavior==='platform-sign-in-replaces-embedded-auth'&&safe&&node.children.every(child=>child.type==='text')){
+    const proof=binding(node),attrs:Record<string,string>={};
+    for(const attribute of node.attributes){if(!attribute.value.static)continue;const name=attribute.name==='className'?'class':attribute.name,value=String(attribute.value.json);if(name==='class'&&!digest(input.authoredStyleSha256))require('style',node,'Delegated sign-in classes require the exact CSS closure',name);if(name==='id'){if(usedDom.has(value))block('duplicate-dom-id',node,'Delegated sign-in DOM ID collides',name);usedDom.add(value);}attrs[name]=value;}
+    return proof?`<span data-af-id="${escape(proof.afId)}" data-native-auth-delegation="platform-topbar-sign-in"${Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('')}>${node.children.map(child=>walk(child,ancestors,depth+1)).join('')} — use Sign in in the page menu.</span>`:'';
+   }
+  }
   const operation: Readonly<Record<string,NativeLowerRequirementKind>>={For:'loop',Question:'chart',Chart:'chart',Column:'table-column',Script:'script',script:'script',Iframe:'iframe',iframe:'iframe',SignIn:'auth'};
   if(node.tag==='For'){
    const admitted=admittedTarget(node,'loop');
@@ -219,7 +229,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   const values: Record<string,NativeJson>=Object.create(null),seen=new Set<string>();
   for(const attribute of node.attributes){
    if(seen.has(attribute.name)){block('duplicate-attribute',node,'Repeated source attributes are ambiguous',attribute.name);continue;}seen.add(attribute.name);
-   if(!attribute.value.static){if(admittedTarget(node,'property',attribute.name)||attribute.name==='data'&&admittedTarget(node,'cell','data'))continue;require('binding',node,'Typed dynamic attribute requires an admitted binding',attribute.name);continue;}
+   if(!attribute.value.static){if(admittedTarget(node,'person',attribute.name)||admittedTarget(node,'property',attribute.name)||attribute.name==='data'&&admittedTarget(node,'cell','data'))continue;require('binding',node,'Typed dynamic attribute requires an admitted binding',attribute.name);continue;}
    values[attribute.name]=attribute.value.json;
   }
   const patch=input.resourcePatches?.find(p=>p.sourceNode===node.graphKey);
@@ -268,7 +278,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(name==='data-af-id'){if(!proof||value!==proof.afId)block('annotation-identity-mismatch',node,'Authored annotation ID must agree with its proof',name);continue;}
    if(/^on/i.test(name)){require('script',node,'Authored handler needs explicit program admission',name);continue;}
    if(name==='run'||name==='set'||name==='args'){if(name!=='args'&&admittedTarget(node,'action'))continue;require('button-action',node,'Preserve action parameters, authority, affected-count/reset and commit semantics',name);continue;}
-   if(node.tag==='User'&&name==='userId'){require('person',node,'Resolve the exact actor/person binding through an admitted identity adapter',name);continue;}
+   if(node.tag==='User'&&name==='userId'){if(admittedTarget(node,'person','userId'))continue;require('person',node,'Resolve the exact actor/person binding through an admitted identity adapter',name);continue;}
    if(referenceProps.has(name)&&typeof value==='string'&&/^\$/.test(value)){if(admittedTarget(node,'property',name)||name==='data'&&(admittedTarget(node,'cell','data')||admittedTarget(node,'table')))continue;require('binding',node,'Legacy reference is an explicit typed binding, never a literal native value',name);continue;}
    if((node.tag==='Number'||node.tag==='Cell')&&['data','format','prefix','suffix','col','agg'].includes(name)){
     if(name!=='data'&&typeof value!=='string'&&value!==null)block('unsupported-cell-property',node,'Retained Cell formatting properties require literal strings',name);

@@ -86,6 +86,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
   }
   const cellData=literal(node,'data');if((node.tag==='Cell'||node.tag==='Number')&&cellData&&(!cellData.static||typeof cellData.json==='string'&&cellData.json.startsWith('$')))targets.push({...proof,kind:'cell',attribute:'data'});
   if(node.tag==='DataTable'&&literal(node,'data')!==undefined&&!node.children.some(child=>child.type==='element'&&child.tag==='Column'))targets.push({...proof,kind:'property',property:'data',attribute:'data'});
+  if(node.tag==='User'&&literal(node,'userId')!==undefined)targets.push({...proof,kind:'person',attribute:'userId'});
   if(node.tag==='Button'&&node.attributes.some(a=>['set','run'].includes(a.name)))targets.push({...proof,kind:'action'});
   for(const chart of input.chartMappings?.filter(chart=>chart.sourceNode===node.graphKey)??[]){if(!verifyNativeChartMapping(input.analysis,chart)){block('chart-mapping-proof',node.graphKey);continue;}if(chart.data.kind==='table')targets.push({...proof,kind:'property',property:'data',attribute:'data'});}
   for(const attribute of node.attributes){
@@ -114,10 +115,10 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  }
  if(new Set(input.backends.map(b=>b.namespace)).size!==input.backends.length)block('duplicate-backend');
  if(input.viewer&&input.backends.filter(backend=>backend.namespace===input.viewer!.namespace).length!==1)block('viewer-backend-admission');
- const emitted=emitNativeBindings({identityBindings:identity.bindings,cellAdapter:input.cellAdapter,viewer:input.viewer,analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
+ const emitted=emitNativeBindings({identityBindings:identity.bindings,cellAdapter:input.cellAdapter,people:input.people,viewer:input.viewer,analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
  if(emitted.status==='blocked')blockers.push(...emitted.blockers);
  const admittedDeclarations=[...input.analysis.flow.values.map(d=>({kind:'value',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.queries.map(d=>({kind:'query',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.mutations.map(d=>({kind:'mutation',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.imports.map(d=>({kind:'import',name:d.name,analysisSha256:input.analysis.analysisSha256}))];
- const lowered=lowerNativeComponents({analysis:input.analysis,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches,chartMappings:input.chartMappings,admittedChartData:emitted.status==='complete'?targets.filter(t=>t.kind==='property'&&t.property==='data').map(t=>({sourceNode:t.sourceNode,analysisSha256:input.analysis.analysisSha256})):[]});
+ const lowered=lowerNativeComponents({analysis:input.analysis,authDelegations:input.authDelegations,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches,chartMappings:input.chartMappings,admittedChartData:emitted.status==='complete'?targets.filter(t=>t.kind==='property'&&t.property==='data').map(t=>({sourceNode:t.sourceNode,analysisSha256:input.analysis.analysisSha256})):[]});
  blockers.push(...lowered.blockers,...lowered.requirements.map(r=>({sourceNode:r.sourceNode,code:`unadmitted-${r.kind}`})));
  if(blockers.length||lowered.html===null||emitted.status!=='complete')return {status:'blocked',html:null,bindingTargets:targets,blockers};
  const files=input.files??[];
@@ -144,7 +145,10 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  if(/<\/script/i.test(authorJs)){block('author-script-end-tag');return {status:'blocked',html:null,bindingTargets:targets,blockers};}
  for(const backend of input.backends)if(!/^[A-Za-z_]\w*$/.test(backend.namespace)||!safeUrl(backend.url))block('backend-link');
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};
- const links=input.backends.map(b=>`<link rel="af-backend" href="${escape(b.url)}" data-af-name="${escape(b.namespace)}">`).join('');
+ if(input.people&&input.analysis.flow.imports.filter(entry=>entry.name===input.people!.namespace&&'ref:'+entry.ref===input.people!.datasetRef).length!==1){block('people-source-import');return {status:'blocked',html:null,bindingTargets:targets,blockers};}
+ if(input.people&&input.backends.some(backend=>backend.namespace===input.people!.namespace)){block('people-namespace-collision');return {status:'blocked',html:null,bindingTargets:targets,blockers};}
+ const personLink=input.people?`<link rel="af-dataset" href="${escape(input.people.datasetRef)}" data-af-name="${escape(input.people.namespace)}" data-af-mode="live">`:'';
+ const links=personLink+input.backends.map(b=>`<link rel="af-backend" href="${escape(b.url)}" data-af-name="${escape(b.namespace)}">`).join('');
  const attributes=(values:Readonly<Record<string,string>>)=>Object.entries(values).map(([name,value])=>{if(!/^(?:class|id|lang|dir|data-[a-z0-9-]+)$/.test(name))block('root-attribute');return ` ${name}="${escape(value)}"`;}).join('');
  const htmlAttributes=attributes(input.style?.htmlAttributes??{});
  const wrapper=input.style?.storyWrapper;

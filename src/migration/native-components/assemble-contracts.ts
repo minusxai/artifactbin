@@ -33,6 +33,8 @@ export interface NativeAssemblyBackend {
 export interface NativeAssemblyModule {name:string;register:string;specifier:string;sha256:string}
 export interface NativeAssemblyFile {path:string;bytes:Uint8Array;sha256:string}
 export interface NativeAssemblyInput {
+ people?:import("./person-contracts.ts").NativeBindingPeople;
+ authDelegations?:readonly import("./person-contracts.ts").NativeAuthDelegation[];
  cellAdapter?:NativeCellAdapter;
  viewer?: NativeBindingViewer;
  readerTemplate?:NativeReaderTemplateReceipt;

@@ -1466,3 +1466,37 @@ test('unknown mutation keeps its request identity through temporary viewer branc
  viewer.next({data:{queries:null}});viewer.next({data:{queries:{viewer:{id:'first-user'}}}});await port.updateQuery({},v=>({...v,filter:'changed'}));await button.click();assert.equal(requests.length,2);assert.equal(requests[1].requestId,requests[0].requestId);assert.deepEqual(requests[1].values,{filter:'original'});
  }finally{await running.close();}
 });
+
+test('person binding follows exact typed row ID and clears stale, missing and error cards on scope disposal',async()=>{
+ const person=el('person','User',{userId:'$_row.owner'}),loop=el('loop','For',{each:'$rows',id:'rows',keyBy:'id'});
+ if(loop.type!=='element')throw Error();loop.children=[person];loop.attributes.find(a=>a.name==='each')!.value={static:false,exprType:'reference',source:'$rows'};
+ const source=input([loop],[{kind:'loop',sourceNode:'loop',afId:'loop',templateId:'items',identity:{owner:'rows',keyBy:'id',templateIds:['person'],encoding:'archived-instance-v1'}},{kind:'person',sourceNode:'person',afId:'person',attribute:'userId'}]);
+ source.analysis.flow.values=[];source.analysis.flow.queries=[{name:'rows',sql:'select 1',start:0,end:1} as never];
+ source.queries=[{name:'rows',document:'query { registered { evaluate { tables { name } } } }',namespace:'registered',values:[],tableName:'rows',responsePath:['registered','evaluate','tables'],decode:'registered-page-table-cells-v1'}];
+ source.people={namespace:'peopleData',authority:'linked-dataset-typed-user-v1',datasetRef:'ref:dataset',mode:'live'};
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete',JSON.stringify(result.blockers));if(result.status!=='complete')return;
+ const doc=new Doc(),list=new Element('div',{'data-af-id':'loop'});doc.body.append(list);doc.template('items',[new Element('af-user',{'data-af-id':'person'})]);
+ const port=client({});const module=await execute(result.authorJs,port,doc);
+ const publish=(rows:unknown[])=>port.remotes[0]!.next({data:{registered:{evaluate:{tables:[{name:'rows',error:null,columns:[{name:'id',type:'string'},{name:'owner',type:'user'}],rows:rows.map(row=>({cells:(row as string[]).map(text=>({isNull:false,text}))}))}]}}}});
+ publish([['r','usr_one']]);const host=list.children[0]!.children[0]! as any;
+ assert.deepEqual(port.remotes[1]!.variables,{ids:['usr_one']});assert.equal(host.loading,true);
+ port.remotes[1]!.next({data:{peopleData:{people:[{id:'usr_one',name:'Actual profile',handle:null,image:null}]}}});assert.equal(host.person.name,'Actual profile');
+ publish([['r','usr_two']]);assert.equal(port.remotes[1]!.stopped,true);assert.equal(host.person,null);
+ port.remotes[1]!.next({data:{peopleData:{people:[{id:'usr_one',name:'Stale profile',handle:null,image:null}]}}});assert.equal(host.person,null);
+ port.remotes[2]!.next({data:{peopleData:{people:[]}}});assert.equal(host.identityState,'missing');assert.equal(host.person,null);
+ publish([['r','usr_three']]);port.remotes[3]!.next({errors:[{message:'forbidden'}]});assert.equal(host.error,'Person unavailable');assert.equal(host.person,null);
+ publish([]);assert.equal(port.remotes[3]!.stopped,true);await module.close();
+});
+
+test('person viewer binding waits for authenticated identity and clears cards during viewer changes',async()=>{
+ const source=input([el('person','User',{userId:'$_me.id'})],[{kind:'person',sourceNode:'person',afId:'person',attribute:'userId'}]);
+ source.analysis.flow.values=[];source.viewer={namespace:'identity',identity:'target-subject-v1',document:'query {identity{viewer{id}}}',responsePath:['identity','viewer','id']};
+ source.people={namespace:'peopleData',authority:'linked-dataset-typed-user-v1',datasetRef:'ref:dataset',mode:'live'};
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete',JSON.stringify(result.blockers));if(result.status!=='complete')return;
+ const doc=new Doc(),host=new Element('af-user',{'data-af-id':'person'}) as any;doc.body.append(host);const port=client({}),running=await execute(result.authorJs,port,doc);
+ assert.equal(port.remotes.length,1);assert.equal(host.hidden,true);
+ port.remotes[0]!.next({data:{identity:{viewer:{id:'usr_one'}}}});assert.equal(host.hidden,false);assert.deepEqual(port.remotes[1]!.variables,{ids:['usr_one']});
+ port.remotes[1]!.next({data:{peopleData:{people:[{id:'usr_one',name:'Actual profile',handle:null,image:null}]}}});assert.equal(host.person.name,'Actual profile');
+ port.remotes[0]!.next({loading:true});assert.equal(host.person,null);assert.equal(host.hidden,true);assert.equal(port.remotes[1]!.stopped,true);
+ port.remotes[0]!.next({data:{identity:{viewer:{id:null}}}});assert.equal(host.person,null);assert.equal(host.hidden,false);await running.close();
+});

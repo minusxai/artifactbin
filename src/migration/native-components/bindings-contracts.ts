@@ -58,6 +58,7 @@ export interface NativeTableColumn {
 export type NativeBindingTarget = NativeBindingIdentity &
   (
     | { kind: "text" }
+    | {kind:"person";attribute:"userId"}
     | {kind:"cell";attribute:"data"}
     | {
         kind: "property";
@@ -88,6 +89,7 @@ export interface NativeBindingViewer {
   responsePath: readonly [string, "viewer", "id"];
 }
 export interface NativeBindingsInput {
+  people?:import("./person-contracts.ts").NativeBindingPeople;
   cellAdapter?:NativeCellAdapter;
   identityBindings?: readonly (NativeBindingIdentity & {authoredDomId?: string})[];
   viewer?: NativeBindingViewer;

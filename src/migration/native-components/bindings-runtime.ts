@@ -1,7 +1,8 @@
 /** Ordinary author JavaScript, embedded in the emitted module. No platform
  * runtime extension, source evaluation, network authority or shared-state cache. */
+import {NATIVE_PERSON_RUNTIME} from './person-runtime.ts';
 import { NATIVE_TABLE_RUNTIME } from './table-runtime.ts';
-export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp,formatCell){
+export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp,formatCell,projectPerson){
  const createTable=(${NATIVE_TABLE_RUNTIME}),tableBindings=new WeakMap();
  let disposed=false,values={},tables={},tableData={},tablePending={},localSub,viewerSub,viewerId,viewerReady=false,failed=false;
  const cells=new WeakMap();
@@ -14,6 +15,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  const own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;
  const at=(record,path)=>path.reduce((value,key)=>own(value,key),record);
  const doc=source=>gql([source]);
+ const renderPerson=(${NATIVE_PERSON_RUNTIME})(client,doc,at,plan,projectPerson);
  const error=message=>{if(disposed)return;const notice=document.createElement('p');notice.setAttribute('role','alert');notice.textContent=message;document.body.append(notice);};
  const read=(expr,row)=>evaluate(expr,{values:{...values,...tables,...(viewerReady?{'_me.id':viewerId}:{})},row});
  const bindingId=node=>node.getAttribute?.('data-native-binding-id')||node.getAttribute?.('data-af-id');
@@ -40,7 +42,8 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   const ids=context?.ids??{},scope=context?.scope??rootScope;
   if(disposed||failed||!scope.active)return;
   for(const target of plan.targets){if(target.sourceNode===skip)continue;const host=lookup(root,ids[target.afId]||target.afId);if(!host)continue;
-   if(target.viewerIdentity){if(!viewerReady){if(target.kind==='condition')clearCondition(host);else host.hidden=true;continue;}host.hidden=false;}
+   if(target.viewerIdentity){if(!viewerReady){if(target.kind==='condition')clearCondition(host);else {host.hidden=true;if(target.kind==='person')renderPerson(host,null,scope);}continue;}host.hidden=false;}
+   if(target.kind==='person')renderPerson(host,read(target.expression,row),scope);
    if(target.kind==='text'){const value=read(target.expression,row);host.textContent=typeof value==='string'||typeof value==='number'?String(value):'';}
    if(target.kind==='cell'){
     let state=cells.get(host);if(!state){const child=document.createElement('span');host.replaceChildren(child);state={child,rows:null};cells.set(host,state);}

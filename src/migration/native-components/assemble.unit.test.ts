@@ -171,3 +171,11 @@ test('a table with authored Column children reserves data projection for its cus
  const result=assembleNativePage(input);
  assert.equal(result.bindingTargets.filter(t=>t.sourceNode===node.graphKey&&t.kind==='property'&&t.property==='data').length,0);
 });
+
+test('person lookup links the exact retained dataset import and refuses namespace collisions',()=>{
+ const source=fixture();source.analysis.flow.imports=[{name:'peopleData',ref:'source_dataset',start:0,end:1}];
+ source.people={namespace:'peopleData',authority:'linked-dataset-typed-user-v1',datasetRef:'ref:source_dataset',mode:'live'};
+ const result=assembleNativePage(source);assert.equal(result.status,'complete');if(result.status==='complete')assert.match(result.html,/<link rel="af-dataset" href="ref:source_dataset" data-af-name="peopleData" data-af-mode="live">/);
+ source.people.datasetRef='ref:other_dataset';assert.ok(assembleNativePage(source).blockers.some(b=>b.code==='people-source-import'));
+ source.people.datasetRef='ref:source_dataset';source.backends=[{namespace:'peopleData',url:'https://example.test/api.js',descriptorsSha256:'a'.repeat(64),planSha256:'b'.repeat(64),operations:[]}];assert.ok(assembleNativePage(source).blockers.some(b=>b.code==='people-namespace-collision'));
+});
