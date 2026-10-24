@@ -5,7 +5,8 @@
  * reader produced by that revision's normal HTTP publication API. */
 import assert from 'node:assert/strict';
 import {runNativeMigrationPilot} from '../lib/native-migration-pilot.mjs';
-import {connectAgent} from './lib/cli-connection.mjs';
+import {createBaselineSession} from '../lib/component-baseline-session.mjs';
+import {connectAgent,signInAccount} from './lib/cli-connection.mjs';
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -61,12 +62,14 @@ const browsers=[];
 try {
   for(let worker=0;worker<2;worker++)browsers.push(await launchChromium({args:['--enable-unsafe-swiftshader']}));
   const browser=browsers[0];
+  const session=input.account?await createBaselineSession({base:new URL(input.entries[0].url).origin,account:input.account,signIn:signInAccount}):null;
   const captures=await captureBrowserBaseline({...input,browser,workerBrowsers:browsers,mount:async({fixture,theme,page})=>{
     const entry=input.entries.find(entry=>entry.fixture===fixture.id&&entry.theme===theme);
     if(!entry)throw Error(`Missing real reader URL for ${fixture.id}/${theme}`);
     const url=new URL(entry.url);
     if(!['localhost','127.0.0.1','app.lvh.me','lvh.me'].includes(url.hostname)&&!url.hostname.endsWith('.lvh.me'))throw Error('Only isolated local reader URLs are allowed');
     if(!url.pathname.endsWith('/raw'))throw Error('Capture the raw production reader without platform chrome');
+    if(session){if(url.origin!==new URL(input.entries[0].url).origin)throw Error('Authenticated readers must share the login origin');await session.mount(page);}
     await page.goto(url.href,{waitUntil:'networkidle'});
     return {frame:page.mainFrame(),ready:async()=>{
       if(input.implementation==='html')await page.waitForFunction(()=>document.documentElement.dataset.baselineReady==='yes');

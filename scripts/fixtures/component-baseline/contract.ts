@@ -68,3 +68,20 @@ export interface BrowserCaptureFailure {
   semantics?: unknown;
   diagnostics: unknown;
 }
+
+/** A disposable local identity reference. Credentials are never persisted in evidence. */
+export interface BaselineAccountReference {
+  email: `mxmx_test_${string}@example.com`;
+}
+export interface BaselineBrowserSession {
+  /** Browser session cookies only; API bearer tokens must never enter browser storage. */
+  mount(page: { context(): { addCookies(cookies: Array<{ name: string; value: string; url: string }>): Promise<void> }; request: { get(url: string): Promise<{ ok(): boolean; json(): Promise<{ user?: { id?: string; email?: string } }> }> } }): Promise<void>;
+}
+
+/** Actual account data read back after normal local profile operations. */
+export interface BaselineSeededIdentity {
+  id: string;
+  name: string;
+  handle: string;
+  image: string | null;
+}
