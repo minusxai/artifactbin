@@ -96,6 +96,28 @@ describe('native light-DOM avatars', () => {
     expect(group.querySelector('[data-af-id="count"]')?.textContent).toBe('+3');
   });
 
+  it('keeps mixed-size group count and overlap geometry in the avatar style contract', () => {
+    const group = document.createElement('af-avatar-group');
+    group.innerHTML = '<af-avatar size="sm"><af-avatar-fallback>AL</af-avatar-fallback></af-avatar><af-avatar><af-avatar-fallback>BK</af-avatar-fallback></af-avatar><af-avatar size="lg"><af-avatar-fallback>CS</af-avatar-fallback></af-avatar><af-avatar-group-count>+2</af-avatar-group-count>';
+    document.body.append(group);
+
+    const count = group.querySelector('af-avatar-group-count')!;
+    const avatars = [...group.querySelectorAll('af-avatar')];
+    expect(avatars.map(avatar => getComputedStyle(avatar).width)).toEqual(['24px', '32px', '40px']);
+    expect(getComputedStyle(count).width).toBe('24px');
+    for (const part of [...avatars, count]) {
+      expect(getComputedStyle(part).boxShadow).toContain('2px');
+      expect(getComputedStyle(part).borderTopStyle).toBe('none');
+    }
+    expect(getComputedStyle(avatars[1]!).marginInlineStart).toBe('-8px');
+    expect(getComputedStyle(count).marginInlineStart).toBe('-8px');
+
+    const largeGroup = document.createElement('af-avatar-group');
+    largeGroup.innerHTML = '<af-avatar size="lg"><af-avatar-fallback>CS</af-avatar-fallback></af-avatar><af-avatar-group-count>+2</af-avatar-group-count>';
+    document.body.append(largeGroup);
+    expect(getComputedStyle(largeGroup.querySelector('af-avatar-group-count')!).width).toBe('40px');
+  });
+
   it('cleans up image listeners on removal, reconnects, and does not duplicate status events', () => {
     const { avatar, image } = fixture();
     const authored = image;
