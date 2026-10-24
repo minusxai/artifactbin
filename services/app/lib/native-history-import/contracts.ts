@@ -1,4 +1,5 @@
 import type { HtmlPageVersion, Queryable } from "@artifactbin/contracts";
+import type { publishBundleDependencies } from "@/lib/html-publication-bundle";
 import type { HtmlIdentityLedger } from "@/lib/html-page";
 import type { createArtifact } from "@/lib/artifacts";
 import type { prepareRegisteredQueryBackend } from "@/lib/registered-page-queries/registry";
@@ -6,7 +7,10 @@ import type { prepareRegisteredMutationBackend } from "@/lib/registered-page-mut
 /** Offline, trusted projection only. Never an HTTP request or authored backend argument. */
 export interface NativeHistoryRevision {
   page: HtmlPageVersion;
+  /** Cumulative lifetime allocation ledger; counters never decrease. Identity continuity is proven by the trusted source projector. */
   ledger: HtmlIdentityLedger;
+  /** Actual publication bundle receipts; omission and an explicitly empty bundle remain distinct. */
+  htmlPublicationDependencies?: Readonly<Awaited<ReturnType<typeof publishBundleDependencies>>["receipts"]>;
   sourceSha256: string;
   title: string | null;
   description: string | null;

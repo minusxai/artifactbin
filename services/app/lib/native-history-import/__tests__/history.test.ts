@@ -257,3 +257,83 @@ it("preserves private reach and fails replay after destination sharing changes",
   ).rejects.toThrow("native_import_collision");
   expect((await readHtmlPage(actor, input.pageId)).version).toBe(3);
 });
+
+for (const [table, column, value] of [
+  ["artifacts", "title", "'changed'"],
+  ["artifacts", "description", "'changed'"],
+  ["artifacts", "actor_user_id", "NULL"],
+  ["artifacts", "creator_user_id", "NULL"],
+  ["artifacts", "document", "'{}'::jsonb"],
+  ["artifacts", "actor_token_id", "NULL"],
+  ["artifacts", "created_at", "now()"],
+  ["artifacts", "updated_at", "now()"],
+  ["artifacts", "updated_at", "updated_at + interval '1 microsecond'"],
+  ["artifacts", "meta", "jsonb_set(meta,'{htmlIdentity,nextNodeId}','999')"],
+  ["artifact_versions", "title", "'changed'"],
+  ["artifact_versions", "description", "'changed'"],
+  ["artifact_versions", "actor_user_id", "NULL"],
+  ["artifact_versions", "actor_token_id", "NULL"],
+  ["artifact_versions", "created_at", "now()"],
+  ["artifact_versions", "created_at", "created_at + interval '1 microsecond'"],
+  ["artifact_versions", "format", "'markup'"],
+  ["artifact_versions", "document", "'{}'::jsonb"],
+  ["artifact_versions", "meta", "jsonb_set(meta,'{htmlIdentity,nextNodeId}','999')"],
+  ["artifact_source_ids", "first_version", "99"],
+  ["artifact_source_ids", "retired_version", "99"],
+] as const) it(`rejects replay after ${table}.${column} changes`, async () => {
+  const { db, input } = await fixture();
+  await importNativeHistory(db, input);
+  await db.query(`UPDATE ${table} SET ${column}=${value}`);
+  await expect(importNativeHistory(db, input)).rejects.toThrow("native_import_collision");
+});
+
+it("verifies created history after relation projection in the same transaction", async () => {
+  const { db, input } = await fixture();
+  await expect(importNativeHistory(db, {...input, relationSha256: "f".repeat(64)}, {
+    sourceSha256: "f".repeat(64),
+    apply: async tx => { await tx.query("UPDATE artifact_versions SET title='changed'"); },
+    verify: async () => {},
+  })).rejects.toThrow("native_import_collision");
+  expect((await db.query("SELECT id FROM artifacts")).rows).toHaveLength(0);
+});
+
+
+it("preserves a retained identity restored after an intervening absence", async () => {
+  const { db, input } = await fixture();
+  const middle = structuredClone(input.revisions[0]!);
+  middle.page.version = 2;
+  middle.page.revision = "2";
+  middle.page.html = middle.page.html.replace(/<p[^>]*>.*?<\/p>/, "");
+  middle.page.links = [];
+  middle.queries = [];
+  middle.mutations = [];
+  middle.sourceSha256 = pageSourceDigest(middle.page.html);
+  const changed = {...input, revisions: [input.revisions[0]!, middle, input.revisions[1]!]};
+  expect(await importNativeHistory(db, changed)).toBe("created");
+  expect(await importNativeHistory(db, changed)).toBe("unchanged");
+  expect((await db.query("SELECT first_version,retired_version FROM artifact_source_ids WHERE source_id='stable'")).rows).toEqual([{first_version: 1, retired_version: null}]);
+});
+
+it("rejects regressing lifetime allocation ledgers and counters", async () => {
+  const { db, input } = await fixture();
+  for (const ledger of [
+    {...input.revisions[1]!.ledger, allocatedIds: input.revisions[1]!.ledger.allocatedIds.filter(id => id !== "reserved")},
+    {...input.revisions[1]!.ledger, nextNodeId: 1},
+  ]) {
+    const first = {...input.revisions[0]!, ledger: {...input.revisions[0]!.ledger, allocatedIds: [...input.revisions[0]!.ledger.allocatedIds, "reserved"]}};
+    const last = {...input.revisions[1]!, ledger, page: {...input.revisions[1]!.page, nextNodeId: ledger.nextNodeId}};
+    await expect(importNativeHistory(db, {...input, revisions: [first,last]})).rejects.toThrow("native_import_invalid");
+  }
+});
+
+it("retains exact per-version publication receipts and rejects changed receipts", async () => {
+  const { db, input } = await fixture();
+  const receipts = [{path: "image.png", kind: "asset" as const, id: "SyntheticAsset", revision: "7", sha256: "a".repeat(64)}];
+  const projected = {...input, revisions: input.revisions.map((r,i) => ({...r, htmlPublicationDependencies: i ? [] : receipts}))};
+  expect(await importNativeHistory(db, projected)).toBe("created");
+  expect((await db.query("SELECT meta->'htmlPublicationDependencies' AS receipts FROM artifact_versions ORDER BY version")).rows).toEqual([{receipts}, {receipts: []}]);
+  expect((await db.query("SELECT meta->'htmlPublicationDependencies' AS receipts FROM artifacts")).rows).toEqual([{receipts: []}]);
+  expect(await importNativeHistory(db, projected)).toBe("unchanged");
+  await db.query("UPDATE artifact_versions SET meta=jsonb_set(meta,'{htmlPublicationDependencies}','[]') WHERE version=1");
+  await expect(importNativeHistory(db, projected)).rejects.toThrow("native_import_collision");
+});

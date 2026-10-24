@@ -44,6 +44,7 @@ export async function writeNativeHistory(
     throw fail();
   const allocated = new Set<string>();
   let next = 1;
+  const identities = new Map<string, { source_id: string; provenance: string; first_version: number; retired_version: number | null }>();
   for (const r of revisions) {
     const canonical = canonicalizeHtmlPage(r.page.html, {
       previousHtml: r.page.html,
@@ -64,7 +65,17 @@ export async function writeNativeHistory(
       throw fail();
     if (canonical.nodeIds.some((id) => !r.ledger.allocatedIds.includes(id)))
       throw fail();
-    for (const id of r.ledger.allocatedIds) allocated.add(id);
+    if (new Set(r.ledger.allocatedIds).size !== r.ledger.allocatedIds.length ||
+        [...allocated].some(id => !r.ledger.allocatedIds.includes(id)) ||
+        r.ledger.nextNodeId < next) throw fail();
+    const active = new Set(canonical.nodeIds);
+    for (const id of r.ledger.allocatedIds) {
+      allocated.add(id);
+      if (!identities.has(id)) identities.set(id, { source_id: id, provenance: "authored", first_version: r.page.version, retired_version: null });
+      const identity = identities.get(id)!;
+      if (active.has(id)) identity.retired_version = null;
+      else if (identity.retired_version === null) identity.retired_version = r.page.version;
+    }
     next = Math.max(next, r.ledger.nextNodeId);
     const programs = [...r.queries, ...r.mutations];
     if (
@@ -141,50 +152,49 @@ export async function writeNativeHistory(
     "SELECT pg_advisory_xact_lock(hashtext('native-import:' || $1))",
     [input.pageId],
   );
-  const existing = (
-    await tx.query<{
-      meta: { nativeImport?: unknown };
-      source: string;
-      version: number;
-      user_id: string;
-      token_id: string;
-      visibility: string;
-      link_role: string;
-    }>(
-      "SELECT meta,source,version,user_id,token_id,visibility,link_role FROM artifacts WHERE id=$1 FOR UPDATE",
-      [input.pageId],
-    )
-  ).rows[0];
-  if (existing) {
-    if (
-      !isDeepStrictEqual(existing.meta.nativeImport, receipt) ||
-      existing.source !== head.page.html ||
-      existing.version !== head.page.version ||
-      existing.user_id !== input.owner.userId ||
-      existing.token_id !== input.owner.tokenId ||
-      existing.visibility !== input.visibility ||
-      existing.link_role !== input.linkRole
-    )
+  const first = revisions[0]!;
+  const revisionMeta = (r: (typeof revisions)[number]) => ({
+    htmlIdentity: r.ledger, htmlLinks: r.page.links, nativeImport: receipt,
+    ...(r.htmlPublicationDependencies === undefined ? {} : {htmlPublicationDependencies: r.htmlPublicationDependencies}),
+  });
+  interface StoredRevision {
+    version: number; source: string; title: string | null; description: string | null;
+    format: string; document: unknown; meta: Record<string, unknown>;
+    actor_user_id: string | null; actor_token_id: string | null;
+  }
+  interface StoredHead extends StoredRevision {
+    creator_user_id: string; user_id: string; token_id: string; visibility: string; link_role: string;
+    deleted_at: Date | string | null; group_id: string | null;
+  }
+  const matchesRevision = (row: StoredRevision, r: (typeof revisions)[number]) =>
+    row.version === r.page.version && row.source === r.page.html &&
+    row.title === r.title && row.description === r.description && row.format === "html" && row.document === null &&
+    row.actor_user_id === r.actorUserId && row.actor_token_id === r.actorTokenId &&
+    isDeepStrictEqual(row.meta, revisionMeta(r));
+  const verifyProjection = async () => {
+    const row = (await tx.query<StoredHead>("SELECT * FROM artifacts WHERE id=$1", [input.pageId])).rows[0];
+    if (!row || !matchesRevision(row, head) || row.user_id !== input.owner.userId ||
+        row.token_id !== input.owner.tokenId || row.visibility !== input.visibility ||
+        row.link_role !== input.linkRole || row.creator_user_id !== input.owner.userId || row.deleted_at !== null || row.group_id !== null)
       throw Error("native_import_collision");
-    const saved = (
-      await tx.query<{
-        version: number;
-        source: string;
-        meta: Record<string, unknown>;
-      }>(
-        "SELECT version,source,meta FROM artifact_versions WHERE artifact_id=$1 ORDER BY version",
-        [input.pageId],
-      )
-    ).rows;
-    if (
-      saved.length !== revisions.length ||
-      saved.some(
-        (r, i) =>
-          r.version !== revisions[i]!.page.version ||
-          r.source !== revisions[i]!.page.html ||
-          !isDeepStrictEqual(r.meta.htmlLinks, revisions[i]!.page.links),
-      )
-    )
+    const saved = (await tx.query<StoredRevision>(
+      "SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version", [input.pageId])).rows;
+    if (saved.length !== revisions.length || saved.some((r, i) =>
+        !matchesRevision(r, revisions[i]!)))
+      throw Error("native_import_collision");
+    // Compare in Postgres: driver Date values truncate timestamp microseconds.
+    const changedTimes = await tx.query(
+      `SELECT 1 FROM artifacts WHERE id=$1 AND (created_at<>$2::timestamptz OR updated_at<>$3::timestamptz)
+       UNION ALL
+       SELECT 1 FROM artifact_versions v
+       JOIN jsonb_to_recordset($4::jsonb) AS expected(version integer, created_at timestamptz) ON v.version=expected.version
+       WHERE v.artifact_id=$1 AND v.created_at<>expected.created_at`,
+      [input.pageId, first.createdAt, head.createdAt, JSON.stringify(revisions.map(r => ({version: r.page.version, created_at: r.createdAt})))],
+    );
+    if (changedTimes.rows.length) throw Error("native_import_collision");
+    const sourceIds = (await tx.query<{source_id: string; provenance: string; first_version: number; retired_version: number | null}>(
+      "SELECT source_id,provenance,first_version,retired_version FROM artifact_source_ids WHERE artifact_id=$1 ORDER BY source_id", [input.pageId])).rows;
+    if (!isDeepStrictEqual(sourceIds, [...identities.values()].sort((a,b) => a.source_id < b.source_id ? -1 : a.source_id > b.source_id ? 1 : 0)))
       throw Error("native_import_collision");
     const shares = (
       await tx.query<{ email: string; role: string }>(
@@ -197,6 +207,12 @@ export async function writeNativeHistory(
       .sort((a, b) => a.email.localeCompare(b.email));
     if (!isDeepStrictEqual(shares, expectedShares))
       throw Error("native_import_collision");
+  };
+  const existing = (await tx.query<{meta: {nativeImport?: unknown}}>(
+    "SELECT meta FROM artifacts WHERE id=$1 FOR UPDATE", [input.pageId])).rows[0];
+  if (existing) {
+    if (!isDeepStrictEqual(existing.meta.nativeImport, receipt)) throw Error("native_import_collision");
+    await verifyProjection();
     await verifyPrograms();
     if (relations) await relations.verify(tx, input.pageId);
     return "unchanged";
@@ -206,7 +222,6 @@ export async function writeNativeHistory(
     [input.pageId, input.owner.userId],
   );
   if (!reservation.rows.length) throw Error("native_import_collision");
-  const first = revisions[0]!;
   await createArtifact(
     input.owner.tokenId,
     input.owner.userId,
@@ -230,11 +245,7 @@ export async function writeNativeHistory(
     [input.pageId, first.page.version],
   );
   for (const r of revisions) {
-    const meta = {
-      htmlIdentity: r.ledger,
-      htmlLinks: r.page.links,
-      nativeImport: receipt,
-    };
+    const meta = revisionMeta(r);
     await tx.query(
       "UPDATE artifacts SET version=$2,source=$3,title=$4,description=$5,meta=$6::jsonb,actor_user_id=$7,actor_token_id=$8,updated_at=$9 WHERE id=$1",
       [
@@ -288,27 +299,24 @@ export async function writeNativeHistory(
     "UPDATE artifacts SET meta=jsonb_set(meta,'{htmlIdentity}',$2::jsonb),created_at=$3 WHERE id=$1",
     [
       input.pageId,
-      JSON.stringify({ allocatedIds: [...allocated], nextNodeId: next }),
+      JSON.stringify(head.ledger),
       first.createdAt,
     ],
   );
-  await tx.query(
-    "UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND NOT(source_id=ANY($3::text[]))",
-    [
-      input.pageId,
-      head.page.version,
-      canonicalizeHtmlPage(head.page.html).nodeIds,
-    ],
+  for (const identity of identities.values()) await tx.query(
+    "UPDATE artifact_source_ids SET first_version=$3,retired_version=$4 WHERE artifact_id=$1 AND source_id=$2",
+    [input.pageId, identity.source_id, identity.first_version, identity.retired_version],
   );
   await tx.query(
     "UPDATE artifact_edits SET inserted=$2,span_end=$3,document_state=jsonb_build_object('version',$4::integer) WHERE artifact_id=$1",
     [input.pageId, head.page.html, head.page.html.length, head.page.version],
   );
-  await verifyPrograms();
   if (relations) {
     await relations.apply(tx, input.pageId);
     await relations.verify(tx, input.pageId);
   }
+  await verifyProjection();
+  await verifyPrograms();
   return "created";
 }
 
