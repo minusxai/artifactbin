@@ -32,7 +32,7 @@ const native = (tag: string, module: string, register: string, attributes: Nativ
 };
 native('Button','button','registerButton',{type:['button','submit','reset'],variant:['default','destructive','outline','secondary','ghost','link'],size:['default','xs','sm','lg','icon','icon-xs','icon-sm','icon-lg'],disabled:'boolean',busy:'boolean',label:'string',name:'string',value:'string'});
 native('Dialog','dialog','registerDialog',{defaultOpen:'boolean'},['open']);
-for(const tag of ['DialogTrigger','DialogClose'] as const)native(tag,'dialog','registerDialog',{disabled:'boolean'},[],['Dialog']);
+for(const tag of ['DialogTrigger','DialogClose'] as const)native(tag,'dialog','registerDialog',{disabled:'boolean',...(tag==='DialogTrigger'?{type:['button','submit','reset'] as const}:{})},[],['Dialog']);
 native('DialogContent','dialog','registerDialog',{},[],['Dialog']);
 const textAttributes={label:'string',name:'string',placeholder:'string',disabled:'boolean',readOnly:'boolean',required:'boolean',autoFocus:'boolean',minLength:'number',maxLength:'number',defaultValue:'string'} as const;
 native('Input','input','registerInput',{...textAttributes,type:['text','number','email','url','search','password'],min:'number',max:'number',step:'number'},['value']);

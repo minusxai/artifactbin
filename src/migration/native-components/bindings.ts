@@ -274,7 +274,7 @@ export function emitNativeBindings(
       const attr = node.attributes.find(
         (attr) => attr.name === target.attribute,
       );
-      if (!["disabled", "checked", "value"].includes(target.property))
+      if (!["disabled", "checked", "value", "open"].includes(target.property))
         block(node.graphKey, "unsupported-bound-property");
       const value = attr?.value;
       result.expression = admit(
@@ -299,6 +299,7 @@ export function emitNativeBindings(
         Switch: "checked",
         Segmented: "value",
         DatePicker: "value",
+        Dialog: "open",
       } as Record<string, string>;
       const isNative = ["input", "textarea", "select"].includes(node.tag);
       const isControl =
@@ -315,6 +316,8 @@ export function emitNativeBindings(
         if (!declaration || read?.kind !== "signal")
           block(node.graphKey, "nonassignable-control-binding");
         else {
+          if (node.tag === "Dialog" && declaration.type !== "boolean")
+            block(node.graphKey, "dialog-needs-boolean-binding");
           const multiple =
             node.tag === "Select" &&
             node.attributes.some(

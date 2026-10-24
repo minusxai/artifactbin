@@ -126,3 +126,8 @@ test('admitted For preserves the source div wrapper id and class and blocks inco
  const table=element('tbody',{},[loop]);const unsupported=input([table]);unsupported.identityBindings=source.identityBindings.concat(unsupported.identityBindings.filter(b=>b.sourceNode!==loop.graphKey));unsupported.admittedBindings=source.admittedBindings;unsupported.authoredStyleSha256=digest;
  assert.ok(lowerNativeComponents(unsupported).blockers.some(b=>b.code==='loop-wrapper-context'));
 });
+test('DialogTrigger retains the ordinary button type attribute contract',()=>{
+ const source=input([element('Dialog',{},[element('DialogTrigger',{type:'button'},[text('Open')])])]);
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/<af-dialog-trigger[^>]*type="button"/);
+ const invalid=lowerNativeComponents(input([element('Dialog',{},[element('DialogTrigger',{type:'javascript:invalid'})])]));assert.equal(invalid.status,'blocked');
+});

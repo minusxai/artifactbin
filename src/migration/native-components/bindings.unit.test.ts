@@ -898,6 +898,7 @@ for (const [tag, property, type, next, expected] of [
   ["Select", "value", "number", "7", 7],
   ["Slider", "value", "number", 4, 4],
   ["Switch", "checked", "boolean", true, true],
+  ["Dialog", "open", "boolean", true, true],
   ["Segmented", "value", "boolean", "true", true],
   ["DatePicker", "value", "date", "2026-01-02", "2026-01-02"],
 ] as const)
@@ -1268,4 +1269,41 @@ test("same mutation remains independently runnable in different stable rows", as
   } finally {
     await runtime.close();
   }
+});
+
+test("Dialog af-change closes and reopens the same viewer-owned boolean binding", async () => {
+  const source = input(
+    [el("dialog", "Dialog", { open: "$open" })],
+    [
+      {
+        kind: "property",
+        sourceNode: "dialog",
+        afId: "dialog",
+        property: "open",
+        attribute: "open",
+      },
+    ],
+  );
+  const result = emitNativeBindings(source);
+  assert.equal(result.status, "complete");
+  if (result.status !== "complete") return;
+  const doc = new Doc(),
+    host = new Element("af-dialog", { "data-af-id": "dialog" });
+  doc.body.append(host);
+  const port = client({ open: false, filter: null }),
+    runtime = await execute(result.authorJs, port, doc);
+  try {
+    for (const next of [true, false, true]) {
+      await host.emit("af-change", next);
+      assert.equal(port.state.open, next);
+      assert.equal((host as any).open, next);
+    }
+    runtime.module.dispose();
+    await host.emit("af-change", false);
+    assert.equal(port.state.open, true);
+  } finally {
+    await runtime.close();
+  }
+  source.analysis.flow.values[0]!.type = "string";
+  assert.equal(emitNativeBindings(source).status, "blocked");
 });
