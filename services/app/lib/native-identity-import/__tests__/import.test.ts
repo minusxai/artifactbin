@@ -440,3 +440,15 @@ it('refuses a changed app search path even with authority minted earlier in the 
  expect((await db.query('SELECT * FROM migration_decoy_app.users')).rows).toEqual([]);
  expect((await db.query('SELECT * FROM auth."user"')).rows).toEqual([]);
 });
+it('captures caller input before waiting for transaction scope admission',async()=>{
+ const db=await getDb(),input=fixture(),original=input.plan.createUsers[0]!.name;
+ await db.transaction(async tx=>{
+  let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
+  const held:Queryable={query:async(sql,params)=>{if(sql==='SELECT current_schema() AS schema')await gate;return tx.query(sql,params);}};
+  const authority=await authorizeNativeIdentityTransaction(held,fixtureSchemas);
+  const pending=writeWithAuthority(held,input,authority);
+  input.plan.createUsers[0]!.name='Caller changed after invocation';release();
+  expect(await pending).toMatchObject({createdUsers:1});
+ });
+ expect((await db.query<{name:string}>('SELECT name FROM users WHERE id=$1',[sourceUser.id])).rows[0]?.name).toBe(original);
+});

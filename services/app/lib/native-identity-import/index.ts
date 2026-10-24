@@ -38,10 +38,10 @@ export async function writeNativeIdentities(
   raw: NativeIdentityImport,
   authority:NativeIdentityMigrationAuthority,
 ): Promise<NativeIdentityImportResult> {
-  await nativeIdentityMigrationScope(tx,authority);
   // Capture caller-owned input before the first await, so it cannot change during a transaction.
-  const input = plain(raw),
-    proof = verifyNativeIdentityInput(input),
+  const input = plain(raw);
+  await nativeIdentityMigrationScope(tx,authority);
+  const proof = verifyNativeIdentityInput(input),
     result = { createdUsers: 0, reusedUsers: 0, createdTokens: 0, replayed: 0 };
   const ns = input.plan.sourceNamespace;
   await tx.query(
