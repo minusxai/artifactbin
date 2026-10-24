@@ -1,10 +1,12 @@
-import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,mkdir,rm} from 'node:fs/promises';
 import path from 'node:path';
 import {tmpdir} from 'node:os';
 import sharp from 'sharp';
+import {prepareBundle} from '../../services/app/skills/artifactbin/scripts/publication-bundle.mjs';
+import {planPublicationBundle} from '../../services/app/lib/html-publication-bundle/plan';
 import {describe,it,expect} from 'vitest';
 import {createHash} from 'node:crypto';
-import {validatePilotInputs,pilotFixture,pilotComparisonIssues,stylingRegressionEvidence,pilotHarnessSha256,compareNativeMigrationPilot} from '../lib/native-migration-pilot.mjs';
+import {validatePilotInputs,pilotFixture,pilotComparisonIssues,stylingRegressionEvidence,pilotHarnessSha256,compareNativeMigrationPilot,prepareNativePilotSnapshot,pilotHarnessFiles} from '../lib/native-migration-pilot.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const canonical=value=>JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a<b?-1:a>b?1:0)):v);
 const digest=value=>sha(canonical(value));
@@ -52,4 +54,16 @@ it('binds harness files and refuses unmatched paired source evidence before comp
   await writeFile(path.join(directory,'migration-pilot.json'),JSON.stringify(proof));await writeFile(path.join(directory,'jsx-captures.json'),'[]');await writeFile(path.join(directory,'html-captures.json'),'[]');
   await expect(compareNativeMigrationPilot({baselineDirectory:directory,candidateDirectory:directory,output:directory})).rejects.toThrow('unmatched');
  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+it('normal publication helper receives the complete declared inline stylesheet closure',async()=>{
+ const bundle=await mkdtemp(path.join(tmpdir(),'pilot-bundle-'));
+ try{
+  await mkdir(path.join(bundle,'assets'));const html='<html><head><style>@import url("./assets/theme.css");</style></head><body>Actual</body></html>',css='body{color:black}';
+  await writeFile(path.join(bundle,'index.html'),html);await writeFile(path.join(bundle,'assets/theme.css'),css);
+  const input={bundleFiles:[{path:'index.html',sha256:sha(html)},{path:'assets/theme.css',sha256:sha(css)}]};
+  const prepared=await prepareNativePilotSnapshot({prepareBundle,input,bundle,server:'http://localhost:3030'});
+  expect(planPublicationBundle(prepared.body.html,prepared.body.publicationBundle).dependencies.map(d=>d.path)).toEqual(['assets/theme.css']);
+  const closure=await pilotHarnessFiles(path.resolve(import.meta.dirname,'../..'));expect(closure).toContain('scripts/lib/component-baseline-evidence.mjs');expect(closure).toContain('scripts/gates/lib/cli-connection.mjs');
+ }finally{await rm(bundle,{recursive:true,force:true});}
 });

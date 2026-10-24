@@ -37,7 +37,7 @@ from the public component suite. Without private input it makes no migration
 claim. The external manifest contract is
 `scripts/lib/native-migration-pilot-contract.ts`: pin both application revisions,
 the canonical row/export and recovered source, the complete native bundle, the
-five harness files, and matching retained theme, viewports and interaction states.
+complete static harness import closure, and matching retained theme, viewports and interaction states.
 
 Supply absolute private paths through `NATIVE_MIGRATION_PILOT__INPUT`,
 `NATIVE_MIGRATION_PILOT__CANONICAL`, `NATIVE_MIGRATION_PILOT__RECOVERY`,

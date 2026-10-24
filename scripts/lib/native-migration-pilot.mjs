@@ -6,12 +6,19 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import sharp from 'sharp';
+import {build} from 'esbuild';
 import {installedFiles} from '../fixtures/component-baseline/publication.mjs';
 import {captureBrowserBaseline,compareBrowserBaselines} from './component-browser-baseline.mjs';
 const sha=value=>createHash('sha256').update(value).digest('hex');
 const digest=value=>sha(JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a<b?-1:a>b?1:0)):v));
-const PILOT_HARNESS_FILES=Object.freeze(['scripts/lib/native-migration-pilot.mjs','scripts/lib/component-browser-baseline.mjs','scripts/gates/gate-component-baseline.mjs','scripts/lib/gate-container.mjs','scripts/fixtures/component-baseline/publication.mjs']);
-export async function pilotHarnessSha256(root){return digest(await Promise.all(PILOT_HARNESS_FILES.map(async file=>[file,sha(await readFile(path.join(root,file)))])));}
+/** Full static local import closure, including the host-only mount seam. */
+export async function pilotHarnessFiles(root){
+ const result=await build({absWorkingDir:root,entryPoints:['scripts/gates/gate-component-baseline.mjs','scripts/lib/gate-container.mjs'],bundle:true,format:'esm',platform:'node',packages:'external',metafile:true,write:false,outdir:'unused-pilot-output',logLevel:'silent'});
+ const files=Object.keys(result.metafile.inputs).sort();
+ if(files.some(file=>path.isAbsolute(file)||file.startsWith('../')))throw Error('pilot-harness-path');
+ return files;
+}
+export async function pilotHarnessSha256(root){return digest(await Promise.all((await pilotHarnessFiles(root)).map(async file=>[file,sha(await readFile(path.join(root,file)))])));}
 const hash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 /** Pure admission boundary, independently testable without a browser or server.
  * @param {import('./native-migration-pilot-contract').NativeMigrationPilotInput} input */
@@ -64,7 +71,7 @@ export async function runNativeMigrationPilot({base,paths,browser,connectAgent})
  for(const file of input.bundleFiles)if(sha(await readFile(path.join(paths.bundle,file.path)))!==file.sha256)throw Error('pilot-bundle-file-digest');
  await mkdir(paths.output,{recursive:true,mode:0o700});
  const {token}=await connectAgent(server);
- const publish=async(body,key)=>{const response=await fetch(server+'/api/artifacts',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`,...(key?{'idempotency-key':key}:{})},body:JSON.stringify({visibility:'unlisted',...body})});if(!response.ok)throw Error(`pilot-publication-${response.status}`);const value=await response.json();if(typeof value.id!=='string')throw Error('pilot-publication-id');return value;};
+ const publish=async(body,key)=>{const response=await fetch(server+'/api/artifacts',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`,...(key?{'idempotency-key':key}:{})},body:JSON.stringify({visibility:'unlisted',...body})});if(!response.ok){await writeFile(path.join(paths.output,'publication-failure.json'),JSON.stringify({status:response.status,body:(await response.text()).slice(0,1000000)},null,2),{mode:0o600});throw Error(`pilot-publication-${response.status}`);}const value=await response.json();if(typeof value.id!=='string')throw Error('pilot-publication-id');return value;};
  let staging,prepareBundle,skillSha256;
  try{
   if(input.implementation==='html'){
@@ -74,9 +81,7 @@ export async function runNativeMigrationPilot({base,paths,browser,connectAgent})
   }
   const publishSnapshot=async regression=>{
    if(input.implementation==='jsx'){if(regression)throw Error('pilot-original-regression');const meta=source.row.meta??{};return publish({markup:source.markup,title:source.row.title,description:source.row.description,theme:meta.theme,template:meta.template,colorMode:meta.colorMode});}
-   const entry=await readFile(path.join(paths.bundle,'index.html'),'utf8');
-   const html=regression?entry.replace('</head>','<style>body{transform:translateX(17px)!important}</style></head>'):entry;
-   const prepared=await prepareBundle({root:paths.bundle,entry:'index.html',entryHtml:html,server});return publish(prepared.body,prepared.idempotencyKey);
+   const prepared=await prepareNativePilotSnapshot({prepareBundle,input,bundle:paths.bundle,server,regression});return publish(prepared.body,prepared.idempotencyKey);
   };
   const fixture=pilotFixture(input),sourceRevision=input.implementation==='jsx'?input.originalRevision:input.candidateRevision;
   const capture=async(regression,output)=>{
@@ -109,4 +114,11 @@ export async function compareNativeMigrationPilot({baselineDirectory,candidateDi
  const report={format:'native-migration-pilot-comparison-v1',baselineRevision:baselineProof.sourceRevision,candidateRevision:candidateProof.sourceRevision,pairedStates:results.length,passed:issues.length===0,control:candidateProof.control,issues,results};
  await writeFile(path.join(output,'migration-pilot-comparison.json'),JSON.stringify(report,null,2),{mode:0o600});
  return report;
+}
+
+/** The normal helper's explicit manifest covers resources referenced in inline CSS. */
+export async function prepareNativePilotSnapshot({prepareBundle,input,bundle,server,regression=false}){
+ const entry=await readFile(path.join(bundle,'index.html'),'utf8');
+ const html=regression?entry.replace('</head>','<style>body{transform:translateX(17px)!important}</style></head>'):entry;
+ return prepareBundle({root:bundle,entry:'index.html',entryHtml:html,server,manifest:input.bundleFiles.filter(file=>file.path!=='index.html').map(file=>file.path)});
 }
