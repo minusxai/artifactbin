@@ -1448,3 +1448,20 @@ test('viewer pending and signout dispose cached branch actions, then restore the
  viewer.next({data:{queries:{viewer:{id:'target-user'}}}});assert.equal(host.children[0],cached);const before=port.writes.length;await cached.click();assert.equal(port.state.open,true);assert.equal(port.writes.length,before+1);
  }finally{await running.close();}
 });
+
+test('unknown mutation keeps its request identity through temporary viewer branch removal and refuses another subject',async()=>{
+ const branch=el('branch','div',{}, {kind:'and',test:{kind:'signal',name:'_me.id'}});if(branch.type!=='element')throw Error();branch.children=[el('save','Button',{run:'$save'})];
+ const source=input([branch],[{kind:'condition',sourceNode:'branch',afId:'branch',templateId:'signed-in'},{kind:'action',sourceNode:'save',afId:'save'}]);
+ source.analysis.flow.mutations=[{name:'save',start:0,end:1}];source.viewer={namespace:'queries',identity:'target-subject-v1',document:'query NativeViewer{queries{viewer{id}}}',responsePath:['queries','viewer','id']};
+ source.mutations=[{name:'save',namespace:'records',document:'mutation Save($values:records__Values!,$requestId:String!){records{run(values:$values,requestId:$requestId){requestId outcome reset}}}',values:[{name:'filter',type:'string',nullable:true}],outcomePath:['records','run'],reset:[]}];
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ const doc=new Doc(),host=new Element('div',{'data-af-id':'branch'});doc.body.append(host);doc.template('signed-in',[new Element('button',{'data-af-id':'save'})]);
+ const port=client({open:false,filter:'original'}),requests:any[]=[];let release:(value:unknown)=>void=()=>{};
+ port.mutate=async(options:any)=>{requests.push(options.variables);if(requests.length===1)return await new Promise(resolve=>release=resolve);return {data:{records:{run:{requestId:options.variables.requestId,outcome:'committed',reset:[]}}}};};
+ const running=await execute(result.authorJs,port,doc),viewer=port.remotes[0]!;
+ try {viewer.next({data:{queries:{viewer:{id:'first-user'}}}});const button=host.children[0]!,first=button.click();await Promise.resolve();assert.equal(requests.length,1);
+ viewer.next({data:{queries:null}});release({data:{records:{run:{requestId:requests[0].requestId,outcome:'unknown',reset:[]}}}});await first;
+ viewer.next({data:{queries:{viewer:{id:'second-user'}}}});await button.click();assert.equal(requests.length,1);
+ viewer.next({data:{queries:null}});viewer.next({data:{queries:{viewer:{id:'first-user'}}}});await port.updateQuery({},v=>({...v,filter:'changed'}));await button.click();assert.equal(requests.length,2);assert.equal(requests[1].requestId,requests[0].requestId);assert.deepEqual(requests[1].values,{filter:'original'});
+ }finally{await running.close();}
+});

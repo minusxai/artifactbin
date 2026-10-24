@@ -3,7 +3,7 @@
 export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp,formatCell){
  let disposed=false,values={},tables={},tableData={},tablePending={},localSub,viewerSub,viewerId,viewerReady=false,failed=false;
  const cells=new WeakMap();
- const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
+ const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),requestOwners=new WeakMap(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
  const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
  const rootScope={active:true,cleanups:new Set()},scopes=new Set([rootScope]);
  const disposeScope=scope=>{if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
@@ -88,15 +88,15 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
     const click=async()=>{if(disposed||failed||!scope.active||host.disabled||action.busy||!context?.ids&&target.run&&operationLocks.has(target.run))return;action.busy=true;if(!context?.ids&&target.run)operationBusy(target.run,true);host.disabled=true;try{
      if(target.set){const patch={};for(const [name,expr]of Object.entries(target.set)){const value=read(expr,action.row);if(!scalar(value)||!plan.valueTypes[name]||value!==null&&typeof value!==plan.valueTypes[name])throw Error('Invalid local action value');patch[name]=value;}await client.updateQuery({query:doc(plan.localQuery)},data=>disposed||!scope.active?data:({...data,...patch}));}
      if(disposed||!scope.active)return;
-     if(target.run){const mutation=plan.mutations.find(item=>item.name===target.run);let request=pending.get(host);if(!request){const snapshot={};for(const field of mutation.values){const value=field.source?.kind==='row'?own(action.row,field.source.field):own(values,field.name);if(!scalar(value)||value===null&&field.nullable===false||value!==null&&typeof value!==({date:'string',timestamp:'string',user:'string'}[field.type]||field.type))throw Error('Invalid mutation argument');snapshot[field.name]=value;}request={requestId:crypto.randomUUID(),values:snapshot};pending.set(host,request);}const result=await client.mutate({mutation:doc(mutation.document),variables:request});if(disposed||!scope.active)return;
+     if(target.run){const mutation=plan.mutations.find(item=>item.name===target.run);let request=pending.get(host);if(request&&plan.viewer&&(!viewerReady||requestOwners.get(request)!==viewerId))throw Error('Viewer changed while a mutation outcome is unresolved');if(!request){const snapshot={};for(const field of mutation.values){const value=field.source?.kind==='row'?own(action.row,field.source.field):own(values,field.name);if(!scalar(value)||value===null&&field.nullable===false||value!==null&&typeof value!==({date:'string',timestamp:'string',user:'string'}[field.type]||field.type))throw Error('Invalid mutation argument');snapshot[field.name]=value;}request={requestId:crypto.randomUUID(),values:snapshot};pending.set(host,request);requestOwners.set(request,plan.viewer?viewerId:undefined);}const result=await client.mutate({mutation:doc(mutation.document),variables:request});
       if(result.errors?.length)throw Error('Mutation failed; local values were retained');const receipt=at(result.data,mutation.outcomePath);if(!receipt||receipt.requestId!==request.requestId||!['committed','rejected','unknown'].includes(receipt.outcome))throw Error('Mutation outcome unavailable; local values were retained');
-      if(receipt.outcome==='unknown')throw Error('Mutation outcome unknown; retry keeps the original request');pending.delete(host);
+      if(receipt.outcome==='unknown')throw Error('Mutation outcome unknown; retry keeps the original request');if(pending.get(host)===request)pending.delete(host);if(disposed||!scope.active||plan.viewer&&requestOwners.get(request)!==viewerId)return;
       if(receipt.outcome==='rejected')throw Error('Mutation rejected; local values were retained');
       if(!Array.isArray(receipt.reset)||JSON.stringify([...receipt.reset].sort())!==JSON.stringify([...mutation.reset].sort()))throw Error('Unadmitted mutation reset');
       if(receipt.reset.length)await client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed||!scope.active)return data;const next={...data};for(const name of receipt.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;});
      }
     }catch(cause){error(cause.message);}finally{action.busy=false;host.disabled=false;if(!context?.ids&&target.run)operationBusy(target.run,false);if(!disposed&&scope.active)render();}};
-    host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);pending.delete(host);topActions.delete(action);actions.delete(host);});
+    host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);if(disposed)pending.delete(host);topActions.delete(action);actions.delete(host);});
    }
   }
  }
@@ -112,5 +112,5 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
  }
  if(plan.localQuery)localSub=client.watchQuery({query:doc(plan.localQuery)}).subscribe(result=>{if(disposed)return;values=result.data;refresh();});else refresh();
  if(plan.viewer)viewerSub=client.watchQuery({query:doc(plan.viewer.document),clearOnRefresh:true}).subscribe(result=>{if(disposed)return;viewerReady=false;try{const identity=at(result.data,plan.viewer.responsePath.slice(0,-1)),id=at(result.data,plan.viewer.responsePath);if(result.errors?.length||!result.data||at(result.data,[plan.viewer.namespace])===null){render();return;}if(!identity||!Object.hasOwn(identity,'id')||id!==null&&(typeof id!=='string'||!id))throw Error('Invalid viewer identity');viewerId=id;viewerReady=true;render();}catch(cause){render();error(cause.message);}});
- return ()=>{if(disposed)return;disposed=true;localSub?.unsubscribe();viewerSub?.unsubscribe();stopQueries();for(const scope of scopes)disposeScope(scope);};
+ return ()=>{if(disposed)return;disposed=true;localSub?.unsubscribe();viewerSub?.unsubscribe();pending.clear();stopQueries();for(const scope of scopes)disposeScope(scope);};
 }`;
