@@ -108,6 +108,17 @@ it('styles a nested native close button like the text-only close control without
   expect(getComputedStyle(unrelated).borderTopStyle).toBe(bareStyle.borderTopStyle);
   expect(getComputedStyle(unrelated).paddingTop).toBe(bareStyle.paddingTop);
 });
+it('uses the themed three-pixel focus ring on keyboard-focused dialog controls', () => {
+  const {root,close} = fixture();
+  root.style.setProperty('--ring','rgb(12, 34, 56)');
+  close.focus();
+  expect(document.activeElement).toBe(close);
+  expect(getComputedStyle(close).getPropertyValue('--ring')).toBe('rgb(12, 34, 56)');
+  const focusRule = document.querySelector<HTMLStyleElement>('style[data-af-dialog-styles]')!.textContent!
+    .replace(/\s+/g,'');
+  expect(focusRule).toContain('af-dialog-trigger:focus-visible,af-dialog-close:focus-visible,af-dialog-trigger>button:focus-visible,af-dialog-close>button:focus-visible{outline:none;border-color:var(--ring);box-shadow:0003pxcolor-mix(inoklab,var(--ring)50%,transparent)}');
+  root.remove();
+});
 it('disposes an open native modal on content removal and accepts replacement content', async () => {
   const {root,trigger,content,native} = fixture(); trigger.focus(); trigger.click(); content.remove(); await tick();
   expect(native.open).toBe(false); expect(native.isConnected).toBe(false); expect(document.activeElement).toBe(trigger);
