@@ -163,3 +163,11 @@ test('plain DataTable binds a registered query without serializing a source refe
  input.modules=[{name:'data-table',register:'registerDataTable',specifier:'./components/data-table.js',sha256}];input.files=[{path:'components/data-table.js',bytes,sha256}];
  const ready=assembleNativePage(input);assert.equal(ready.status,'complete');if(ready.status==='complete'){assert.equal(ready.bindingTargets.filter(t=>t.kind==='property'&&t.property==='data').length,1);assert.match(ready.html,/<af-data-table[^>]+data-af-id=/);assert.doesNotMatch(ready.html,/data="\$rows"/);assert.match(ready.html,/\["columns"\]=\[\{"col":"n","title":"Count"\}\]/);}
 });
+
+test('a table with authored Column children reserves data projection for its custom column adapter',()=>{
+ const input=fixture(),node=input.analysis.nodes[0]!;if(node.type!=='element')throw Error();
+ node.tag='DataTable';node.attributes=[{name:'data',value:{static:true,json:'$rows'},start:0,end:1}];
+ node.children=[{type:'element',tag:'Column',isComponent:true,selfClosing:true,start:0,end:1,graphKey:'text',attributes:[],children:[]}];
+ const result=assembleNativePage(input);
+ assert.equal(result.bindingTargets.filter(t=>t.sourceNode===node.graphKey&&t.kind==='property'&&t.property==='data').length,0);
+});
