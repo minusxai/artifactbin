@@ -140,8 +140,10 @@ it("keeps the grouped row count and load-more footer after the final page", asyn
   const el = document.createElement("af-data-table") as AfDataTable;
   const columns = [{ name: "id", type: "number" }];
   const rows = Array.from({ length: 1001 }, (_, id) => ({ id: id + 1 }));
+  let reads = 0;
   el.source = {
     async read({ offset, limit }) {
+      reads++;
       return {
         columns,
         rows: rows.slice(offset, offset + limit),
@@ -158,21 +160,27 @@ it("keeps the grouped row count and load-more footer after the final page", asyn
   };
   document.body.append(el);
 
-  el.querySelector<HTMLButtonElement>('button[aria-label="Load more rows"]')!.click();
+  const initialButton = el.querySelector<HTMLButtonElement>(
+    'button[aria-label="Load more rows"]',
+  )!;
+  expect(getComputedStyle(initialButton).borderStyle).toBe("none");
+  expect(getComputedStyle(initialButton).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(initialButton).cursor).toBe("pointer");
+  expect(initialButton.style.getPropertyValue("font-weight")).toBe("500");
+  initialButton.click();
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   const footer = el.querySelector<HTMLDivElement>("[data-slot=table-footer]")!;
   const rowCount = footer.querySelector('[aria-label="Row count"]');
-  const loadMore = footer.querySelector<HTMLButtonElement>(
-    'button[aria-label="Load more rows"]',
-  );
   expect(el.data.rows.at(-1)?.id).toBe(1001);
+  expect(el.data.truncated).toBe(false);
   expect(rowCount?.textContent).toBe("1,001 of 1,001 rows");
-  expect(loadMore).toBeTruthy();
-  expect(getComputedStyle(loadMore!).borderStyle).toBe("none");
-  expect(getComputedStyle(loadMore!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
-  expect(getComputedStyle(loadMore!).cursor).toBe("pointer");
-  expect(loadMore!.style.getPropertyValue("font-weight")).toBe("500");
+  expect(
+    footer.querySelector('button[aria-label="Load more rows"]'),
+  ).toBeNull();
+  expect(reads).toBe(1);
+  await el.loadMore();
+  expect(reads).toBe(1);
 });
 it("bounds large loaded results and recovers stable identities after scrolling", () => {
   const el = document.createElement("af-data-table") as AfDataTable;

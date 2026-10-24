@@ -63,6 +63,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   resolveSrc?: (url: string) => string | null;
   private loader = new TableLoader();
   private transport?: TableSource;
+  private showRowCount = false;
   private pending = false;
   private requestEpoch = 0;
   private instancePrefix = `af-table-${++tableSequence}`;
@@ -85,6 +86,10 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     if (this.viewport && (v?.rows.length ?? 0) < this.value.rows.length)
       this.viewport.scrollTop = 0;
     this.value = v ?? empty();
+    this.showRowCount = Boolean(
+      this.value.truncated ||
+        (this.value.totalRows ?? 0) > this.value.rows.length,
+    );
     this.error = "";
     this.pending = false;
     this.render();
@@ -116,6 +121,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     this.loader.cancel();
     ++this.requestEpoch;
     this.transport = v;
+    this.showRowCount = false;
     this.pending = false;
     this.error = "";
     if (v) {
@@ -238,6 +244,12 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
   }
   async loadMore(replace = false): Promise<void> {
     if (!this.source || this.pending) return;
+    if (
+      !replace &&
+      !this.data.truncated &&
+      (this.data.totalRows ?? 0) <= this.data.rows.length
+    )
+      return;
     const epoch = ++this.requestEpoch;
     this.pending = true;
     this.error = "";
@@ -249,12 +261,21 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
         sort: this.sort,
       });
       if (!result) return;
+      const rows = replace ? result.rows : [...this.data.rows, ...result.rows];
+      this.showRowCount = replace
+        ? Boolean(
+            this.showRowCount ||
+              result.truncated ||
+              (result.totalRows ?? 0) > rows.length,
+          )
+        : Boolean(
+            this.showRowCount ||
+              result.truncated ||
+              (result.totalRows ?? 0) > rows.length,
+          );
       this.value = {
         ...result,
-        rows: replace ? result.rows : [...this.data.rows, ...result.rows],
-        truncated: replace
-          ? result.truncated
-          : this.data.truncated || result.truncated,
+        rows,
       };
     } catch (e) {
       if (epoch === this.requestEpoch)
@@ -725,6 +746,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
     );
     if (this.pending) this.footer!.append("loading rows…");
     else if (
+      this.showRowCount ||
       this.data.truncated ||
       (this.data.totalRows ?? 0) > this.data.rows.length
     ) {
