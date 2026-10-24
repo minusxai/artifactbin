@@ -1,5 +1,6 @@
+import {installGateSkill} from '../lib/installed-gate-skill.mjs';
 /** Native HTML, fonts, CSS and script behavior in the real isolated reader. */
-import { readFile, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { createChecker } from "./lib/assert.mjs";
 import { fixtureFetch as fetch } from "./lib/fixture-http.mjs";
 import { launchChromium, PAGES_HOST } from "./lib/browser.mjs";
@@ -33,12 +34,13 @@ const pool = async (tasks) => {
   );
 };
 const mint = await connectAgent(B);
-const publish = async (body) => {
+const publish = async (body, options = {}) => {
   const response = await fetch(`${B}/api/artifacts`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${mint.token}`,
+      ...(options.idempotencyKey ? {"Idempotency-Key": options.idempotencyKey} : {}),
     },
     body: JSON.stringify({ visibility: "unlisted", ...body }),
   });
@@ -108,39 +110,19 @@ const [fontDoc, prose, kit, popover, bars, fixtures] = await Promise.all([
   }),
   publishPageSpeedFixtures(publish),
 ]);
-const systems = await readdir(
-  new URL(
-    "../../services/app/skills/artifactbin/design-systems/",
-    import.meta.url,
-  ),
-);
-const themeDocs = await Promise.all(
-  systems
-    .filter((file) => file.endsWith(".css"))
-    .map(async (file) => {
-      const name = file.slice(0, -4),
-        sheet = await readFile(
-          new URL(
-            `../../services/app/skills/artifactbin/design-systems/${file}`,
-            import.meta.url,
-          ),
-          "utf8",
-        );
-      return {
-        name,
-        ...(await publish({
-          html: html(
-            name,
-            '<h1 class="t-title">Typography holds still</h1><p class="t-body">Readable body copy.</p><p class="t-label">Measured today</p>',
-            "",
-            {},
-            `<style data-af="design-system">${sheet}</style>`,
-            name,
-          ),
-        })),
-      };
-    }),
-);
+const archiveResponse = await fetch(`${B}/skills/artifactbin.zip`);
+if (!archiveResponse.ok) throw Error(`Installed skill unavailable (${archiveResponse.status})`);
+const installed = await installGateSkill(new Uint8Array(await archiveResponse.arrayBuffer()), B);
+const systems = [...installed.files.keys()].filter(name => /^design-systems\/[^/]+\.css$/.test(name));
+const themeDocs = await Promise.all(systems.map(async file => {
+  const name = file.slice('design-systems/'.length, -4);
+  const prepared = await installed.prepare(html(
+    name,
+    '<h1 class="t-title">Typography holds still</h1><p class="t-body">Readable body copy.</p><p class="t-label">Measured today</p>',
+    '', {}, `<link data-af="design-system" rel="stylesheet" href="./${name}.css">`, name,
+  ), `design-systems/gate-${name}.html`);
+  return {name, ...(await publish(prepared.body, {idempotencyKey:prepared.idempotencyKey}))};
+})).finally(() => installed.dispose());
 const sceneScript = `import * as THREE from 'https://esm.sh/three@0.170.0';try{const canvas=document.querySelector('canvas');const renderer=new THREE.WebGLRenderer({canvas,preserveDrawingBuffer:true});renderer.setSize(400,300,false);const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(45,4/3,.1,100);camera.position.z=4;const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array([-1,-1,0,1,-1,0,0,1,0]),3));scene.add(new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:'#ef3340',side:THREE.DoubleSide})));renderer.render(scene,camera);const pixel=new Uint8Array(4);renderer.getContext().readPixels(200,150,1,1,renderer.getContext().RGBA,renderer.getContext().UNSIGNED_BYTE,pixel);canvas.dataset.pixel=JSON.stringify([...pixel]);canvas.dataset.same=String(THREE===await import('https://esm.sh/three@0.170.0'))}catch(error){document.querySelector('canvas').dataset.error=String(error)}`;
 const sceneDocs = await Promise.all(
   [false, true].map((card) =>
@@ -674,7 +656,7 @@ try {
               await document.fonts.ready;
               return {
                 system: document.documentElement.dataset.afDesignSystem,
-                css: !!document.querySelector('style[data-af="design-system"]'),
+                css: !!document.querySelector('style[data-af="design-system"]') || !!document.querySelector('link[data-af="design-system"]')?.sheet,
                 family: getComputedStyle(document.querySelector("h1"))
                   .fontFamily,
                 faces: [...document.fonts].length,

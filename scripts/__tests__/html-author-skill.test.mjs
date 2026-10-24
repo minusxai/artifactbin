@@ -1,3 +1,4 @@
+import {installGateSkill} from '../lib/installed-gate-skill.mjs';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -60,4 +61,21 @@ describe('native author resources',()=>{
    expect(await readFile(path.join(ROOT,`design-systems/${slug}.css`),'utf8')).toBe(nativeSystemCss(slug));
   }
  });
+});
+
+it('prepares an installed design-system stylesheet with its complete ../fonts graph',async()=>{
+ const archive=new Uint8Array(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer());
+ const installed=await installGateSkill(archive,BASE);
+ try{
+  const sheet=Buffer.from(installed.files.get('design-systems/almanac.css')).toString();
+  const html=`<!doctype html><html><head><link data-af="design-system" rel="stylesheet" href="./almanac.css"></head><body><h1>Local font graph</h1></body></html>`;
+  const prepared=await installed.prepare(html,'design-systems/gate-almanac.html');
+  const files=prepared.body.publicationBundle.files;
+  const names=files.map(file=>file.path);
+  const refs=[...sheet.matchAll(/url\(['"]?([^)'"\s]+\.woff2)['"]?\)/g)].map(match=>path.posix.normalize(path.posix.join('design-systems',match[1])));
+  expect(refs.length).toBeGreaterThan(0);expect(names).toEqual(expect.arrayContaining(refs));
+  expect(files.filter(file=>file.path.startsWith('fonts/')).length).toBe(new Set(refs).size);
+  expect(names).toContain('design-systems/almanac.css');
+  expect(prepared.body.html).toContain('link data-af="design-system"');
+ }finally{await installed.dispose();}
 });
