@@ -445,7 +445,7 @@ export function createClient(options: ClientOptions): AfClient {
     const result: MutationResult<T> = { data: data as T };
     if (errors.length) result.errors = errors;
     if (anyRemote) result.extensions = { outcomes };
-    if(Object.values(outcomes).includes("committed"))for(const notify of [...invalidations])notify();
+    if(Object.values(outcomes).includes("committed"))for(const notify of [...invalidations])try{notify();}catch{/* A view failure cannot change a committed mutation outcome or skip other views. */}
     return result;
   }
 
@@ -455,7 +455,7 @@ export function createClient(options: ClientOptions): AfClient {
     const names=[...new Set(localFields.map(field=>field.name.value))];read(localFields,op,{});
     return createQueryWatch<T>({clearOnRefresh,state,signature:current=>names.map(name=>canonical(own(current,name))).join("\u0000"),local:current=>read(localFields,op,current),empty:Object.fromEntries(remoteFields.map(field=>[responseKey(field),null])),...(remoteFields.length?{remote:{
       acquire(){if(remoteWatches>=16)throw Error("Too many remote query subscriptions");remoteWatches++;return()=>{remoteWatches--;};},
-      subscribe(notify:()=>void){invalidations.add(notify);const stop=remote?.subscribe?.(notify);return()=>{invalidations.delete(notify);stop?.();};},
+      subscribe(notify:()=>void){invalidations.add(notify);try{const stop=remote?.subscribe?.(notify);return()=>{invalidations.delete(notify);stop?.();};}catch(error){invalidations.delete(notify);throw error;}},
       async fetch(){const settled=await runRemote(remote,op,remoteFields,"query");return settled.errors.length?{data:settled.data,errors:settled.errors}:{data:settled.data};}
     }}:{})});
   }

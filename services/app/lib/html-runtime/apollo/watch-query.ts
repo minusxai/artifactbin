@@ -32,19 +32,14 @@ export function createQueryWatch<T>(
       let last = options.signature(options.state.read());
       let stopState = () => {},
         stopRemote = () => {};
+      const stopSafely = (stop: () => void) => {try {stop();} catch {/* Cleanup failures must not escape notifications or interrupt other owners. */}};
       const close = () => {
         if (!active) return;
         active = false;
         generation++;
-        try {
-          stopState();
-        } finally {
-          try {
-            stopRemote();
-          } finally {
-            release?.();
-          }
-        }
+        stopSafely(stopState);
+        stopSafely(stopRemote);
+        release?.();
       };
       const publish = (propagate = false) => {
         try {
@@ -104,14 +99,18 @@ export function createQueryWatch<T>(
         })();
       };
       try {
-        stopState = options.state.subscribe((document) => {
+        const stateCleanup = options.state.subscribe((document) => {
           const key = options.signature(document);
           if (key !== last) {
             last = key;
             publish();
           }
         });
-        stopRemote = options.remote?.subscribe(refresh) ?? (() => {});
+        if(active)stopState=stateCleanup;else stopSafely(stateCleanup);
+        if(active){
+          const remoteCleanup=options.remote?.subscribe(refresh) ?? (() => {});
+          if(active)stopRemote=remoteCleanup;else stopSafely(remoteCleanup);
+        }
         publish(true);
         refresh();
       } catch (error) {

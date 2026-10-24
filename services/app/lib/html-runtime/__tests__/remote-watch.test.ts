@@ -23,3 +23,32 @@ it('default watch keeps prior rows during an explicit pending refresh and a comm
  expect(seen.at(-1)).toEqual({data:{records:{value:2}},loading:true});expect(f.sent.filter(r=>r.operation==='mutation')).toHaveLength(1);
  f.jobs.shift()!.resolve({data:{records:{value:3}}});await tick();expect(seen.at(-1)?.loading).toBe(false);sub.unsubscribe();
 });
+it('committed mutations still resolve and refresh other watches when one observer and its cleanup throw',async()=>{
+ let subscriptions=0,reads=0,stops=0,failObserver=false;
+ const remote:RemotePort={online:()=>true,subscribe(){const index=++subscriptions;return()=>{stops++;if(index===1)throw Error('cleanup failed');};},async execute(request):ReturnType<RemotePort['execute']>{if(request.operation==='mutation')return {data:{records:{save:true}},extensions:{outcomes:{'records.save':'committed'}}};reads++;return {data:{records:{value:reads}}};}};
+ const client=createClient({backends:['records'],state:createLocalStore(),remote}),seen:QueryResult[]=[];
+ const broken=client.watchQuery({query:gql`{records{value}}`}).subscribe(result=>{if(failObserver&&result.loading)throw Error('view removed');});
+ const healthy=client.watchQuery({query:gql`{records{value}}`}).subscribe(result=>seen.push(result));await tick();failObserver=true;
+ await expect(client.mutate({mutation:gql`mutation {records{save}}`})).resolves.toMatchObject({data:{records:{save:true}},extensions:{outcomes:{'records.save':'committed'}}});
+ await tick();expect(reads).toBe(3);expect(seen.at(-1)?.loading).toBe(false);expect(stops).toBe(1);
+ broken.unsubscribe();healthy.unsubscribe();expect(stops).toBe(2);
+});
+it('synchronous remote invalidation during subscription releases an observer that throws and its eventual cleanup',async()=>{
+ let stops=0,reads=0;
+ const remote:RemotePort={online:()=>true,subscribe(listener){listener();return()=>{stops++;};},async execute(){reads++;return {data:{records:{value:1}}};}};
+ const client=createClient({backends:['records'],state:createLocalStore(),remote});
+ for(let i=0;i<20;i++){
+  const subscription=client.watchQuery({query:gql`{records{value}}`,clearOnRefresh:true}).subscribe(()=>{throw Error('view failed');});
+  subscription.unsubscribe();
+ }
+ await tick();expect(stops).toBe(20);expect(reads).toBe(0);
+});
+it('a synchronous state notification that closes setup cleans state without acquiring a remote listener',()=>{
+ let stops=0,remoteSubscriptions=0;
+ const state=createLocalStore({filter:'old'});
+ state.subscribe=listener=>{listener({filter:'new'});return()=>{stops++;};};
+ const remote:RemotePort={online:()=>true,subscribe(){remoteSubscriptions++;return()=>{};},async execute(){throw Error('closed watcher must not read');}};
+ const client=createClient({backends:['records'],state,remote});
+ const sub=client.watchQuery({query:gql`{filter records{value}}`}).subscribe(()=>{throw Error('view failed');});
+ sub.unsubscribe();expect(stops).toBe(1);expect(remoteSubscriptions).toBe(0);
+});

@@ -130,6 +130,7 @@ export class RemoteUnreachable extends Error {
 /** The page's backend endpoint (POST /api/files/:id/graphql through the platform frame). */
 export interface RemotePort {
   /** Invalidation/reconnection signal only; never carries results or credentials. */
+  /** May notify synchronously; the returned cleanup is owned exactly once, even if the observer closes during setup. */
   subscribe?(listener:()=>void):()=>void;
   online(): boolean;
   /** Queries alone may await a bounded, already pending connection. The returned sender rejects after cancellation. */
