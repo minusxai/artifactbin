@@ -11,12 +11,11 @@
  *
  * The document itself is not here: it is the frame under this bar, on its own origin (lib/serving/document-frame).
  */
-import { createSignal, Show, type Accessor, type JSX } from 'solid-js';
+import { createSignal, lazy, Show, Suspense, type Accessor, type JSX } from 'solid-js';
 import Heart from 'lucide-solid/icons/heart';
 import GitFork from 'lucide-solid/icons/git-fork';
 import Download from 'lucide-solid/icons/download';
 import Ellipsis from 'lucide-solid/icons/ellipsis';
-import { REPO_URL } from '@/lib/serving/repo';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { loginHref } from '@/lib/http/login-href';
 import { artifactAppPath } from '@/lib/serving/artifact-pwa';
@@ -25,7 +24,8 @@ import type { Visibility } from '@artifactbin/contracts';
 import { PageChrome, type Panel } from '../components/PageChrome';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
-import { Menu, type MenuEntry } from '../ui/Menu';
+// Compact-only actions must not make the wide reader import menu positioning and its UI chunk.
+const CompactMenu = lazy(() => import('./DocumentCompactMenu').then(module => ({ default: module.DocumentCompactMenu })));
 import { DocumentTitle } from '../components/PageBar';
 import { DocumentCommentAction } from './DocumentBarActions';
 import { Avatar } from '../ui/Avatar';
@@ -34,7 +34,7 @@ import { sendReaction } from './reactions';
 /** The one line an archived render's bar carries. */
 const archivedBanner = (version: number, head: number): string => `Version ${version} of ${head} · read-only`;
 
-interface DocumentChromeProps {
+export interface DocumentChromeProps {
   id: string;
   title: Accessor<string>;
   author: { username: string | null; id?: string | null; image?: string | null } | null;
@@ -138,29 +138,9 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
     </Show>
   </>;
 
-  const compactItems = (): MenuEntry[] => {
-    const items: MenuEntry[] = [];
-    const handle = username();
-    if (handle) {
-      items.push({ label: `View @${handle}'s profile`, text: `@${handle}`, href: `/@${handle}` });
-      const state = follow();
-      if (state) items.push({ label: `${state.following ? 'Unfollow' : 'Follow'} @${handle}`, text: state.following ? 'Unfollow author' : 'Follow author', onSelect: () => void toggleFollow() });
-    }
-    if (reading()) {
-      items.push({ label: like().liked ? 'Unlike' : 'Like', text: `${like().liked ? 'Unlike' : 'Like'}${like().count ? ` · ${like().count}` : ''}`, onSelect: () => void toggleLike() });
-      if (props.canFork) items.push({ label: 'Fork artifact', text: 'Fork artifact', onSelect: props.onFork });
-      if (props.install) items.push({ label: 'Install app', text: 'Install app', href: `${artifactAppPath(props.id)}?install=1` });
-      if (props.owner) items.push({ label: 'Share', text: 'Share', onSelect: props.onShare });
-      if (props.membership) items.push({ label: membershipLabel(), text: props.membership === 'joined' ? 'View people' : props.membership === 'pending' ? 'View pending request' : 'Join artifact', onSelect: props.onMembership });
-    }
-    if (props.archived) items.push({ label: archivedBanner(props.archived.version, props.archived.head), text: archivedBanner(props.archived.version, props.archived.head), disabled: true });
-    items.push({ label: 'Star artifactbin on GitHub', text: 'Star artifactbin on GitHub', href: REPO_URL, target: '_blank' });
-    return items;
-  };
   const compactActions = () => <>
     <Show when={reading()}><DocumentCommentAction count={props.comments()} onClick={props.onComment} /></Show>
-    <Menu label="Artifact actions" items={compactItems()} trigger={attrs =>
-      <Button {...attrs} variant="ghost" size="bar" icon aria-label="More artifact actions"><Ellipsis size={20} stroke-width={1.5} /></Button>} />
+    <Suspense fallback={<Button variant="ghost" size="bar" icon disabled aria-label="Loading artifact actions"><Ellipsis size={20} stroke-width={1.5} /></Button>}><CompactMenu page={props} like={like} follow={follow} onLike={toggleLike} onFollow={toggleFollow} /></Suspense>
   </>;
 
   return <PageChrome compactContext={<Show when={props.archived}>{at =>

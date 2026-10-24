@@ -22,6 +22,7 @@ let mockCsp: Record<string, unknown> | undefined;
 let mockScriptFailure: {errors:string[]} | undefined;
 let mockTemplate: string | null = null;
 let mockPwa = false;
+let mockOpenAnnotations = 0;
 let mockSourceLength: number | undefined;
 let mockLive = () => null as ArtifactLiveEvent | null;
 let mockSelectionBridge = false;
@@ -40,7 +41,7 @@ vi.mock('../document/create-framed-story', async (importOriginal) => {
   } };
 });
 vi.mock('../editor/create-live-artifact', () => ({ createLiveArtifact: () => () => mockLive() }));
-vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, scriptFailure: mockScriptFailure, surface: { id: 'doc12345', template: mockTemplate, pwaEnabled: mockPwa, title: mockTitle, format: 'html', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
+vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: mockKind, role: mockRole, archived: mockArchived, cspRequest: mockCsp, scriptFailure: mockScriptFailure, surface: { id: 'doc12345', template: mockTemplate, pwaEnabled: mockPwa, openAnnotations: mockOpenAnnotations, title: mockTitle, format: 'html', version: 3, sourceLength: mockSourceLength, framedOrigin: 'http://646f633132333435.lvh.me', author: { username: 'ada', id: 'u1', forkedFrom: { label: 'Source document', href: '/a/source' } } } }) }));
 vi.mock('@/lib/http/login-href', () => ({ loginHref: vi.fn(() => '/login') }));
 import { loginHref } from '@/lib/http/login-href';
 vi.mock('../lib/copy-text', () => ({ copyText: vi.fn(async () => true) }));
@@ -62,6 +63,7 @@ beforeEach(() => {
   mockScriptFailure = undefined;
   mockTemplate = null;
   mockPwa = false;
+  mockOpenAnnotations = 0;
   mockSourceLength = undefined;
   mockLive = () => null;
   mockSelectionBridge = false;
@@ -667,4 +669,28 @@ it('loads the requested PWA install dialog and prompts synchronously only on its
   const button=await trusted().findByRole('button',{name:'Install app'});expect(prompt).not.toHaveBeenCalled();
   gesture=true;fireEvent.click(button);gesture=false;expect(prompt).toHaveBeenCalledOnce();
  } finally {dispose();}
+});
+
+it('does not fetch or mount discussion for an empty guest reader until its rail is requested', async () => {
+  mockKind = 'anon'; mockRole = 'viewer';
+  mount();
+  await vi.dynamicImportSettled();
+  expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/annotations'))).toHaveLength(0);
+  fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/annotations'))).toBe(true));
+  expect(await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' })).toBeInTheDocument();
+  expect(loginHref).not.toHaveBeenCalled();
+});
+it('loads existing guest-visible comment pins even while the discussion rail is closed', async () => {
+  mockKind = 'anon'; mockRole = 'viewer'; mockOpenAnnotations = 1;
+  mount();
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/annotations'))).toBe(true));
+  expect(trusted(1).queryByRole('complementary', { name: 'Annotation sidebar' })).toBeNull();
+  expect(loginHref).not.toHaveBeenCalled();
+});
+
+it.each(['comment','thread'])('admits a linked %s even without an open-comment bootstrap count',async key=>{
+ mockKind='anon';mockRole='viewer';mount('/a/doc?'+key+'=thread-1');
+ await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url])=>String(url).includes('/annotations'))).toBe(true));
+ expect(loginHref).not.toHaveBeenCalled();
 });

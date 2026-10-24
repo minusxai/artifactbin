@@ -1,3 +1,4 @@
+import { needsCommentPresentation } from '../document/comment-presentation';
 import {createReaderPresence} from '../document/create-reader-presence';
 import { replaceDocument } from '../lib/document-navigation';
 /* @jsxImportSource solid-js */
@@ -38,7 +39,7 @@ import {PendingReaderDialog} from '../document/PendingReaderDialog';
 /** The document's own ground around its frame (a starter shows the app's dotted page instead). These hexes are the document's colors, not the app theme: they match the served reader's ground in each mode. */
 const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
-/** Dialogs and controls load on first use. Annotation tools load as soon as an authorized commenter is ready.
+/** Dialogs and controls load on first use. Discussion tools load when there are comments or the reader requests them.
  * SelectionActions stays eager so the first native selection/right-click retains its capability bridge. */
 const CopyAgentButton = lazy(() => import('../components/CopyAgentButton').then(m => ({default:m.CopyAgentButton})));
 const NotFoundPage = lazy(() => import('./NotFound').then(m => ({default:m.NotFoundPage})));
@@ -107,6 +108,7 @@ export function DocumentPage(): JSX.Element {
   const [annotationItems, setAnnotationItems] = createSignal<AnnotationWire[] | null>(null);
   const [liveAnnotations, setLiveAnnotations] = createSignal<AnnotationWire[] | null>(null);
   const openAnnotationCount = () => (annotationItems() ?? liveAnnotations())?.filter((row) => row.status === 'open').length ?? page?.surface?.openAnnotations ?? 0;
+  const [discussionActive, setDiscussionActive] = createSignal(false);
   const [panel, setPanel] = createSignal<Panel>(null);
   const [fork, setFork] = createSignal(false);
   /**
@@ -121,6 +123,9 @@ export function DocumentPage(): JSX.Element {
   /** The APP's appearance, which the bar's controls panel shows: never the document's mode (see bug: a light document read the app's toggle as light). */
   const appAppearance = createAppAppearance();
   const [initialAnnotationSelection, setInitialAnnotationSelection] = createSignal<StoryEditSelection | null>(null);
+  createEffect(() => {
+    setDiscussionActive(needsCommentPresentation({ canRead: comments().canReadComments, active: discussionActive(), linked: !!(new URLSearchParams(location.search).get('comment') || new URLSearchParams(location.search).get('thread')), railOpen: railOpen(), composing: !!initialAnnotationSelection(), openCount: openAnnotationCount(), liveCount: liveAnnotations()?.length ?? 0 }));
+  });
   const [sharingOpen, setSharingOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [socialPreviewOpen, setSocialPreviewOpen] = createSignal(false);
@@ -360,7 +365,7 @@ export function DocumentPage(): JSX.Element {
           else if (!accountSession()) window.location.assign(loginHref(window.location, 'comment'));
         }} />
     </Show>
-    <Show when={ready() && comments().canReadComments && id}>
+    <Show when={ready() && id && discussionActive() && comments().canReadComments}>
       <Suspense fallback={null}><AnnotationLayer id={id!} canCreateComment={annotatable()} onSignIn={!accountSession() && !archivedNow() ? () => window.location.assign(loginHref(window.location, 'comment')) : undefined} canDeleteAny={isOwner()} editId={shownEditId()} runtimeRef={runtimeRef} sessionNonce={nonce()}
         railOpen={railOpen()} onRailOpenChange={setRailOpen} membershipRevision={membershipRevision()} showViewComments={comments().canReadComments} liveAnnotations={liveAnnotations()}
         initialSelection={initialAnnotationSelection()} onSelectionConsumed={() => setInitialAnnotationSelection(null)}

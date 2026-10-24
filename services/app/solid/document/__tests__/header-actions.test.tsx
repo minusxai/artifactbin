@@ -28,7 +28,7 @@ it.each([390, 700])('retains compact header actions in a reachable menu at %ipx'
   expect(actions.comment).toHaveBeenCalledOnce();
   expect(screen.getByRole('button', { name: 'Open artifact controls' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Open menu' })).toBeInTheDocument();
-  const open = screen.getByRole('button', { name: 'More artifact actions' });
+  const open = await screen.findByRole('button', { name: 'More artifact actions' });
   fireEvent.click(open);
   const menu = await screen.findByRole('menu', { name: 'Artifact actions' });
   for (const name of ["View @example_author_with_a_long_name's profile", 'Follow @example_author_with_a_long_name', 'Like', 'Fork artifact', 'Install app', 'Share', 'Join artifact', 'Star artifactbin on GitHub']) {
@@ -40,10 +40,10 @@ it.each([390, 700])('retains compact header actions in a reachable menu at %ipx'
   expect(open).toHaveFocus();
 });
 
-it('returns the direct desktop actions after resizing', () => {
+it('returns the direct desktop actions after resizing', async () => {
   vi.stubGlobal('innerWidth', 700);
   mount();
-  expect(screen.getByRole('button', { name: 'More artifact actions' })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'More artifact actions' })).toBeInTheDocument();
   vi.stubGlobal('innerWidth', 1280);
   fireEvent(window, new Event('resize'));
   expect(screen.queryByRole('button', { name: 'More artifact actions' })).toBeNull();
@@ -55,7 +55,7 @@ it('preserves capability and archived guards in the compact action menu', async 
   vi.stubGlobal('innerWidth', 700);
   mount({ owner: false, canFork: false, install: false, membership: undefined, archived: { version: 1, head: 2 } });
   expect(screen.queryByRole('button', { name: 'Comment' })).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'More artifact actions' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'More artifact actions' }));
   const menu = await screen.findByRole('menu', { name: 'Artifact actions' });
   for (const name of ['Like', 'Fork artifact', 'Install app', 'Share', 'Join artifact']) {
     expect(within(menu).queryByRole('menuitem', { name })).toBeNull();
@@ -64,13 +64,13 @@ it('preserves capability and archived guards in the compact action menu', async 
   expect(within(menu).getByRole('menuitem', { name: 'Version 1 of 2 · read-only' })).toBeDisabled();
   fireEvent.keyDown(menu, { key: 'Escape' });
   expect(screen.queryByRole('menu')).toBeNull();
-  expect(screen.getByRole('button', { name: 'More artifact actions' })).toHaveFocus();
+  expect(await screen.findByRole('button', { name: 'More artifact actions' })).toHaveFocus();
 });
 
 it('keeps reading actions while excluding unavailable owner and install capabilities', async () => {
   vi.stubGlobal('innerWidth', 390);
   mount({ owner: false, canFork: false, install: false, membership: undefined });
-  fireEvent.click(screen.getByRole('button', { name: 'More artifact actions' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'More artifact actions' }));
   const menu = await screen.findByRole('menu', { name: 'Artifact actions' });
   expect(within(menu).getByRole('menuitem', { name: 'Like' })).toBeInTheDocument();
   for (const name of ['Fork artifact', 'Install app', 'Share', 'Join artifact']) {
