@@ -15,6 +15,7 @@ import type {
   NativeV3HistoryImport,
   NativeV3AssemblyReceipt,
   NativeV3Page,
+  NativeV3DatasetLink,
   NativeV3PublicationModules,
   NativeV3BundleDependency,
   NativeV3Preflight,
@@ -44,6 +45,15 @@ export function nativeV3ReaderPolicy(
     template: typeof meta.template === "string" ? meta.template : null,
     chrome: true,
   };
+}
+/** Only an admitted source import may become a reader dataset namespace. */
+function readerDatasetLinks(input:NativeV3ProjectionInput,receipt:NativeV3AssemblyReceipt):NativeV3DatasetLink[]{
+ const people=receipt.input.people;if(!people)return [];
+ const sourceId=/^ref:([A-Za-z0-9]{6,128})$/.exec(people.datasetRef)?.[1];
+ if(!sourceId||input.maps.pages[sourceId]!==sourceId)invalid("dataset_identity");
+ if(people.mode!=="live"||receipt.input.analysis.flow.imports.filter(entry=>entry.name===people.namespace&&entry.ref===sourceId).length!==1)invalid("dataset_source_import");
+ if(receipt.programs.some(program=>program.namespace===people.namespace))invalid("dataset_namespace_collision");
+ return [{kind:"dataset",name:people.namespace,datasetId:sourceId,mode:"live"}];
 }
 function admit(input: NativeV3ProjectionInput): NativeV3AssemblyReceipt[] {
   const { selection, planned, targets } = input;
@@ -154,6 +164,7 @@ function admit(input: NativeV3ProjectionInput): NativeV3AssemblyReceipt[] {
       receipt.result.status !== "complete"
     )
       invalid("assembly_incomplete");
+    readerDatasetLinks(input,receipt);
     const readerPolicy = nativeV3ReaderPolicy(source.original),
       reader = receipt.input.readerTemplate;
     if (reader) {
@@ -437,7 +448,7 @@ export function projectNativeV3Publication(
     const mutations = receipt.programs
       .filter((p) => p.kind === "mutation")
       .map((p) => host.prepareMutation(page, p));
-    page.links = [...queries, ...mutations].map((p) => p.link);
+    page.links = [...readerDatasetLinks(input,receipt),...[...queries, ...mutations].map((p) => p.link)];
     for (const prepared of [...queries, ...mutations]) {
       const expected = receipt.programs.find(
         (p) => p.namespace === prepared.link.name,

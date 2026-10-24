@@ -55,6 +55,9 @@ export interface NativeV3BackendLink {
   backendId: string;
   version: string;
 }
+export interface NativeV3DatasetLink {
+ kind: 'dataset'; name: string; datasetId: string; mode: 'live';
+}
 export interface NativeV3PreparedBackend {
   link: NativeV3BackendLink;
   backend: { name: string; source: string; compiled: string; typeDefs: string };
@@ -66,7 +69,7 @@ export interface NativeV3Page {
   revision: string;
   html: string;
   nextNodeId: number;
-  links: readonly NativeV3BackendLink[];
+  links: readonly (NativeV3BackendLink | NativeV3DatasetLink)[];
 }
 export interface NativeV3Ledger {
   allocatedIds: readonly string[];

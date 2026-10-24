@@ -24,7 +24,7 @@ import type { NativeGraphAnalysis } from "./contracts.ts";
 import type { NativeTypedAnalysis } from "./analyze-contracts.ts";
 import type { NativeAssemblyInput } from "./assemble-contracts.ts";
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
-function fixture() {
+function fixture(withPeople = false) {
   const sourceNamespace = "synthetic",
     sourceId = "SourcePage",
     pageId = "TargetPage";
@@ -84,7 +84,7 @@ function fixture() {
       { type: "text", graphKey: "text", start: 0, end: 8, value: "Retained" },
     ],
     flow: {
-      imports: [],
+      imports: withPeople ? [{name:"people",ref:"Dataset",start:0,end:8}] : [],
       values: [],
       queries: [{ name: "rows", start: 0, end: 8 }],
       mutations: [],
@@ -120,6 +120,7 @@ function fixture() {
     };
     const input: NativeAssemblyInput = {
       analysis,
+      ...(withPeople ? {people:{namespace:"people",datasetRef:"ref:Dataset",mode:"live" as const,authority:"linked-dataset-typed-user-v1" as const}} : {}),
       identity: identities[i]!,
       targetRevision: NATIVE_COMPONENT_TARGET,
       coreUrl: "/af/v1/core.js",
@@ -241,7 +242,7 @@ function fixture() {
     planned,
     plannedSha256: sha(canonicalMigrationValue(planned)),
     maps: {
-      pages: { [sourceId]: pageId },
+      pages: { [sourceId]: pageId, ...(withPeople ? {Dataset:"Dataset"} : {}) },
       users: { "old-user": "owner@example.test" },
       tokens: { "old-token": "owner@example.test" },
       groups: {},
@@ -817,4 +818,14 @@ test("catalog source survives publication host preparation and is fenced by prog
   program.program.queries[0]!.source="ChangedCatalog";
   const {sha256,...payload}=receipt;receipt.sha256=nativeReceiptDigest(payload);
   assert.throws(()=>projectNativeV3Publication(input,host),/program_provenance/);
+});
+
+test("preserves the exact source-bound live people dataset link beside SQL links in saved reader versions",()=>{
+ const {input,host}=fixture(true);const result=projectNativeV3Publication(input,host);for(const revision of result.revisions){assert.ok(revision.page.html.includes('rel="af-dataset"'));assert.deepEqual(revision.page.links.filter(link=>link.kind==='dataset'),[{kind:'dataset',name:'people',datasetId:'Dataset',mode:'live'}]);assert.equal(revision.page.links.filter(link=>link.kind==='backend').length,1);}
+});
+test("refuses an unadmitted or rewritten people dataset identity rather than inventing a destination link",()=>{
+ for(const mapping of [undefined,'OtherDataset']){const {input,host}=fixture(true);if(mapping===undefined)delete input.maps.pages.Dataset;else input.maps.pages.Dataset=mapping;assert.throws(()=>projectNativeV3Publication(input,host),/dataset_identity/);}
+});
+test("rejects a people namespace collision with SQL registration before any host write",()=>{
+ const {input,host,events}=fixture(true);for(const receipt of input.assemblies){receipt.input.people!.namespace='records';receipt.input.analysis.flow.imports[0]!.name='records';const {sha256:_,...body}=receipt;receipt.sha256=nativeReceiptDigest(body);}assert.throws(()=>projectNativeV3Publication(input,host),/dataset_namespace_collision/);assert.deepEqual(events,[]);
 });
