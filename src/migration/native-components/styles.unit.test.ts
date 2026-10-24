@@ -38,3 +38,10 @@ test('source-keyed original image patches retain dimensions and rewrite both ful
  const result=closeNativeStyles({...snapshot,presentationUrls:[...full.sources,...small.sources],resourcePatches:[{sourceNode:'image',attributes:{src:full.sources[0]!,srcSet:`${small.sources[0]} 64w, ${full.sources[0]} 640w`,width:'640',height:'320',sizes:'100vw'}}]},snapshot,[asset,full,small]);
  const patch=result.resourcePatches[0]!;assert.equal(patch.sourceNode,'image');assert.equal(patch.attributes.width,'640');assert.equal(patch.attributes.height,'320');assert.equal(patch.attributes.sizes,'100vw');assert.match(patch.attributes.src!,/^\.\/assets\//);assert.equal(patch.attributes.srcSet,`${result.urls.find(u=>u.source===small.sources[0])!.target} 64w, ${patch.attributes.src} 640w`);
 });
+
+test('source story column and exact component recipes survive resource closure and bind into its root proof',()=>{
+ const storyColumn={tag:'div' as const,attributes:{class:'mx-doc' as const}},componentRecipes=[{sourceNode:'button',tag:'Button' as const,className:'inline-flex flex-col h-auto',attributes:{'data-slot':'button','data-variant':'outline','data-size':'default'}}];
+ const closed=closeNativeStyles({...snapshot,storyColumn,componentRecipes},snapshot,[asset]);
+ assert.deepEqual(closed.style.storyColumn,storyColumn);assert.deepEqual(closed.componentRecipes,componentRecipes);
+ assert.notEqual(closed.style.rootSha256,closeNativeStyles(snapshot,snapshot,[asset]).style.rootSha256);
+});

@@ -1,3 +1,4 @@
+import type {NativeComponentRecipe} from './component-presentation-contracts.ts';
 import {verifyNativeAuthorProgram} from './author-programs.ts';
 import type {NativeAuthorProgramReceipt} from './author-program-contracts.ts';
 import {verifyNativeChartMapping} from './chart-mapping.ts';
@@ -22,6 +23,7 @@ export interface NativeLowerFormattedReceipt {
   text: string;
 }
 export interface NativeLowerInput {
+ componentRecipes?:readonly NativeComponentRecipe[];
   authDelegations?:readonly import("./person-contracts.ts").NativeAuthDelegation[];
   analysis: NativeTypedAnalysis;
   authorPrograms?:readonly NativeAuthorProgramReceipt[];
@@ -225,7 +227,11 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   const rule=nativeComponentRule(node.tag);
   if(!rule&&!htmlTags.has(node.tag)){block('unsupported-component',node,'No reviewed semantic/native mapping exists for this tag');return '';}
   if(rule?.parent&&!rule.parent.some(parent=>ancestors.includes(parent)))block('compound-parent-required',node,'Native compound part requires its owning component');
-  const proof=binding(node),tag=rule?.htmlTag??node.tag;
+  const recipeEntries=input.componentRecipes?.filter(entry=>entry.sourceNode===node.graphKey)??[];
+  const recipe=recipeEntries[0];
+  const recipeTag={Button:'button',Card:'div',CardHeader:'div',CardTitle:'div',CardDescription:'div',CardContent:'div',CardFooter:'div',CardAction:'div'} as const;
+  if(recipe&&(recipeEntries.length!==1||recipe.tag!==node.tag||!recipeTag[recipe.tag]||!digest(input.authoredStyleSha256)||typeof recipe.className!=='string'||recipe.actionWrapper!==undefined&&(recipe.tag!=='Button'||recipe.actionWrapper!=='mutation-hint')||Object.keys(recipe.attributes).some(name=>!/^data-(slot|variant|size)$/.test(name)&&!(name==='type'&&recipe.attributes.type==='button'))))block('component-recipe-proof',node,'Exact source component recipe and stylesheet closure required');
+  const proof=binding(node),tag=recipe?recipeTag[recipe.tag]:(rule?.htmlTag??node.tag);
   const values: Record<string,NativeJson>=Object.create(null),seen=new Set<string>();
   for(const attribute of node.attributes){
    if(seen.has(attribute.name)){block('duplicate-attribute',node,'Repeated source attributes are ambiguous',attribute.name);continue;}seen.add(attribute.name);
@@ -237,7 +243,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   const serializedStyle=input.serializedStyles?.find(p=>p.sourceNode===node.graphKey);
   const attrs: Record<string,string>=Object.create(null),styles: string[]=[];
   if(proof)attrs['data-af-id']=proof.afId;
-  if(rule?.generatedClass)attrs.class=rule.generatedClass;
+  if(recipe){attrs.class=recipe.className;Object.assign(attrs,recipe.attributes);}else if(rule?.generatedClass)attrs.class=rule.generatedClass;
 
   if(node.tag==='Alert')attrs.role='alert';
   if(node.tag==='TableHead')attrs.scope='col';
@@ -275,6 +281,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(shown!==undefined)formatted=`<span aria-label="${label}">${escape(shown)}</span>`;
   }
   for(const [name,value]of Object.entries(values)){
+   if(recipe&&['class','className','variant','size'].includes(name))continue;
    if(name==='data-af-id'){if(!proof||value!==proof.afId)block('annotation-identity-mismatch',node,'Authored annotation ID must agree with its proof',name);continue;}
    if(/^on/i.test(name)){require('script',node,'Authored handler needs explicit program admission',name);continue;}
    if(name==='run'||name==='set'||name==='args'){if(name!=='args'&&admittedTarget(node,'action'))continue;require('button-action',node,'Preserve action parameters, authority, affected-count/reset and commit semantics',name);continue;}
@@ -324,8 +331,9 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(kind==='boolean'||booleanAttrs.has(target)){if(!rule){if(value)attrs[target]='';}else if(value===true)attrs[target]='';else if(value!==false&&value!==null)block('invalid-attribute',node,'Native boolean attributes require exact boolean literals',name);continue;}
    if(value!==null)attrs[target]=String(value);
   }
+  if(recipe?.attributes.type)attrs.type=recipe.attributes.type;
   if(styles.length)attrs.style=styles.join(';');
-  if(rule?.module)modules.set(rule.module,{name:rule.module,register:rule.register!,targetRevision:NATIVE_COMPONENT_TARGET});
+  if(rule?.module&&!recipe)modules.set(rule.module,{name:rule.module,register:rule.register!,targetRevision:NATIVE_COMPONENT_TARGET});
   const table= node.tag==='DataTable'?admittedTarget(node,'table'):undefined;
   if(node.tag==='DataTable'&&node.children.some(child=>child.type==='element'&&child.tag==='Column')&&!table)require('table-column',node,'Preserve typed column templates/actions and stable row identity through the table adapter');
   if(node.tag==='User'&&!seen.has('userId')&&!seen.has('fallback'))require('person',node,'A user element requires an explicit person or fallback binding');
@@ -346,7 +354,8 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(gridCanvas!==undefined)children=`<div class="native-grid-canvas" style="${escape(gridCanvas)}">${children}</div>`;
   if(voidTags.has(tag)&&node.children.length)block('void-element-children',node,'Void HTML cannot retain authored children');
   const attributes=Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('');
-  return `<${tag}${attributes}>${voidTags.has(tag)?'':children+`</${tag}>`}`;
+  const rendered=`<${tag}${attributes}>${voidTags.has(tag)?'':children+`</${tag}>`}`;
+  return recipe?.actionWrapper?`<span data-slot="tooltip-trigger" data-state="closed" class="inline-flex"><span style="display:contents">${rendered}</span></span>`:rendered;
  };
  const body=input.analysis.nodes.map(node=>walk(node)).join('');
  const html=body+templates.join('');

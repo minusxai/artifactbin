@@ -1,3 +1,4 @@
+import type {NativeComponentRecipe,NativeStoryColumn} from './component-presentation-contracts.ts';
 import type {NativeCellAdapter} from './cell-contracts.ts';
 import type {NativeReaderTemplateReceipt} from './reader-template-contracts.ts';
 import type { NativeAuthorProgramReceipt } from './author-program-contracts.ts';
@@ -7,6 +8,7 @@ import type { NativeIdentityRevision } from './identity-contracts.ts';
 import type { NativeBindingQuery, NativeBindingMutation, NativeBindingTarget, NativeBindingViewer } from './bindings-contracts.ts';
 import type { NativeOperationCoverage } from './operations-contracts.ts';
 export interface NativeAssemblyStyle {
+ storyColumn?:NativeStoryColumn;
  /** Exact source CSS bytes, including the recovered theme and authored utility closure. */
  rootSha256?: string;
  htmlAttributes?: Readonly<Record<string,string>>;
@@ -17,6 +19,7 @@ export interface NativeAssemblyStyle {
 }
 /** Trusted retained renderer output, bound to exact analysis and each original node. */
 export interface NativeAssemblyPresentation {
+ componentRecipes?:readonly (NativeComponentRecipe & {nodeSha256:string})[];
  sourceSha256:string; analysisSha256:string; compilerSha256:string;
  inlineStyles:readonly {sourceNode:string;nodeSha256:string;css:string}[];
  resourcePatches:readonly {sourceNode:string;nodeSha256:string;attributes:Readonly<Record<string,string>>}[];

@@ -1,6 +1,9 @@
+import type {NativeComponentRecipe,NativeStoryColumn} from './component-presentation-contracts.ts';
 import {nativeDigest} from './selection.ts';
 import {closeNativeResources,rewriteNativeCss,resourceSha256,type NativeResourceAsset,type NativeResourceClosure} from './resources.ts';
 export interface NativeStyleSnapshot {
+ componentRecipes?:readonly NativeComponentRecipe[];
+ storyColumn?:NativeStoryColumn;
  sourceSha256:string;analysisSha256:string;compilerSha256:string;
  sourceFiles:readonly {path:string;sha256:string}[];
  sheets:readonly {attr:string;css:string}[];
@@ -10,7 +13,8 @@ export interface NativeStyleSnapshot {
  resourcePatches?:readonly {sourceNode:string;attributes:Record<string,string>}[];
 }
 export interface NativeStyleClosure extends NativeResourceClosure {
- style:{css:string;sha256:string;sourceSha256:string;htmlAttributes:Record<string,string>;storyWrapper:{tag:'div';attributes:Record<string,string>};rootSha256:string};
+ componentRecipes?:readonly NativeComponentRecipe[];
+ style:{storyColumn?:NativeStoryColumn;css:string;sha256:string;sourceSha256:string;htmlAttributes:Record<string,string>;storyWrapper:{tag:'div';attributes:Record<string,string>};rootSha256:string};
  analysisSha256:string;compilerSha256:string;
  htmlAttributes:Record<string,string>;storyAttributes:Record<string,string>;
  sheets:readonly {attr:string;path:string;sha256:string}[];
@@ -28,8 +32,8 @@ export function closeNativeStyles(snapshot:NativeStyleSnapshot,expected:{sourceS
   if(!files.some(file=>file.path===path))files.push({path,bytes,sha256});
   return {attr:sheet.attr,path,sha256};
  });
- const root={sourceSha256:snapshot.sourceSha256,htmlAttributes:{...snapshot.htmlAttributes},storyWrapper:{tag:'div' as const,attributes:{...snapshot.storyAttributes}}};
+ const root={...(snapshot.storyColumn?{storyColumn:structuredClone(snapshot.storyColumn)}:{}),sourceSha256:snapshot.sourceSha256,htmlAttributes:{...snapshot.htmlAttributes},storyWrapper:{tag:'div' as const,attributes:{...snapshot.storyAttributes}}};
  const css=sheets.map(sheet=>`@import url("./${sheet.path}");`).join('\n');
  const resourcePatches=(snapshot.resourcePatches??[]).map(patch=>({sourceNode:patch.sourceNode,attributes:Object.fromEntries(Object.entries(patch.attributes).map(([name,value])=>[name,name==='srcSet'||name==='srcset'?value.split(', ').map(part=>{const at=part.lastIndexOf(' ');const source=at<0?part:part.slice(0,at);return (closure.urls.find(url=>url.source===source)?.target??source)+(at<0?'':part.slice(at));}).join(', '):closure.urls.find(url=>url.source===value)?.target??value]))}));
- return {...closure,files,sheets,resourcePatches,style:{css,sha256:resourceSha256(css),...root,rootSha256:nativeDigest(root)},analysisSha256:snapshot.analysisSha256,compilerSha256:snapshot.compilerSha256,htmlAttributes:{...snapshot.htmlAttributes},storyAttributes:{...snapshot.storyAttributes},inlineStyles:snapshot.inlineStyles.map(style=>({...style,css:rewriteNativeCss(style.css,closure.urls).css}))};
+ return {...closure,...(snapshot.componentRecipes?{componentRecipes:structuredClone(snapshot.componentRecipes)}:{}),files,sheets,resourcePatches,style:{css,sha256:resourceSha256(css),...root,rootSha256:nativeDigest(root)},analysisSha256:snapshot.analysisSha256,compilerSha256:snapshot.compilerSha256,htmlAttributes:{...snapshot.htmlAttributes},storyAttributes:{...snapshot.storyAttributes},inlineStyles:snapshot.inlineStyles.map(style=>({...style,css:rewriteNativeCss(style.css,closure.urls).css}))};
 }

@@ -146,3 +146,29 @@ test('User exact person adapter consumes userId binding without leaking ID as na
  const binding=source.identityBindings[0]!;source.admittedBindings=[{...binding,kind:'person',attribute:'userId'}];
  const result=lowerNativeComponents(source);assert.equal(result.status,'complete',JSON.stringify(result));assert.match(result.html!,/<af-user/);assert.doesNotMatch(result.html!,/\$_row|user-id|userId/);
 });
+
+test('source-bound Button and Card recipes preserve ordinary DOM, exact merged classes and authored identities',()=>{
+ const button=element('Button',{variant:'outline',size:'sm',type:'button',className:'h-auto flex-col px-2 py-2','aria-label':'Choose day'},[element('span',{},[text('Day')]),element('span',{},[text('12')])]);
+ const card=element('Card',{},[element('CardHeader',{},[element('CardTitle',{},[text('Notes')])]),element('CardContent',{},[button])]);
+ const source=input([card]);source.authoredStyleSha256=proof;
+ const classes:Record<string,string>={Card:'flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm',CardHeader:'grid gap-2 px-6',CardTitle:'leading-none font-semibold',CardContent:'px-6',Button:'inline-flex shrink-0 items-center justify-center gap-2 rounded-md border h-auto flex-col px-2 py-2'};
+ const visit=(node:RetainedJsxNode):any[]=>node.type==='element'?[...(classes[node.tag]?[{sourceNode:node.graphKey,tag:node.tag,className:classes[node.tag],attributes:{'data-slot':node.tag.replace(/[A-Z]/g,(c,i)=>(i?'-':'')+c.toLowerCase()),...(node.tag==='Button'?{'data-variant':'outline','data-size':'sm'}:{})}}]:[]),...node.children.flatMap(visit)]:[];
+ source.componentRecipes=visit(card);
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');
+ assert.match(result.html!,/<button[^>]*data-af-id="stable-4"/);assert.match(result.html!,/aria-label="Choose day"/);assert.match(result.html!,/type="button"/);
+ assert.match(result.html!,/data-slot="card"/);assert.match(result.html!,/class="flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm"/);
+ assert.match(result.html!,/class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border h-auto flex-col px-2 py-2"/);
+ assert.doesNotMatch(result.html!,/af-button|native-card|<h2/);assert.deepEqual(result.modules,[]);
+ const wrong={...source,componentRecipes:[{...source.componentRecipes![0]!,tag:'Button' as const}]};assert.equal(lowerNativeComponents(wrong).status,'blocked');
+});
+
+test('ordinary source buttons retain native type, disabled and ARIA plus the action flex wrapper without extra identities',()=>{
+ for(const type of ['button','submit','reset'] as const){
+  const node=element('Button',{type,disabled:true,'aria-label':'Choose option','aria-describedby':'help'},[text('Choose')]),source=input([node]);source.authoredStyleSha256=proof;
+  source.componentRecipes=[{sourceNode:node.graphKey,tag:'Button',className:'inline-flex flex-col',actionWrapper:'mutation-hint',attributes:{'data-slot':'button','data-size':'default','data-variant':'default'}}];
+  const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,new RegExp(`type="${type}"`));assert.match(result.html!,/disabled=""/);assert.match(result.html!,/aria-label="Choose option"/);assert.match(result.html!,/aria-describedby="help"/);
+  assert.match(result.html!,/^<span[^>]*class="inline-flex"><span style="display:contents"><button/);assert.equal([...result.html!.matchAll(/data-af-id=/g)].length,1);
+ }
+ const row=element('Button',{type:'submit'},[text('Act')]),source=input([row]);source.authoredStyleSha256=proof;source.componentRecipes=[{sourceNode:row.graphKey,tag:'Button',className:'inline-flex',attributes:{'data-slot':'button',type:'button'}}];
+ assert.match(lowerNativeComponents(source).html!,/type="button"/);
+});

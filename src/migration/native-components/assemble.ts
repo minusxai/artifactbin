@@ -1,3 +1,4 @@
+import type {NativeComponentRecipe} from './component-presentation-contracts.ts';
 import {verifyNativeReaderTemplate,renderNativeReaderTemplate} from './reader-template.ts';
 import {verifyNativeAuthorProgram} from './author-programs.ts';
 import {verifyNativeChartMapping} from './chart-mapping.ts';
@@ -17,11 +18,11 @@ const json=(value:unknown)=>JSON.stringify(value).replaceAll('<','\\u003c').repl
 const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
 const safeUrl=(value:string)=>{try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&!url.hash;}catch{return false;}};
 /** Bind already extracted pure renderer output; callers must retain and verify its compiler proof. */
-export function bindNativePresentation(analysis:NativeTypedAnalysis,closure:{style:{sourceSha256:string};analysisSha256:string;compilerSha256:string;inlineStyles:readonly {sourceNode:string;css:string}[];resourcePatches:readonly {sourceNode:string;attributes:Readonly<Record<string,string>>}[]}):NativeAssemblyPresentation {
+export function bindNativePresentation(analysis:NativeTypedAnalysis,closure:{style:{sourceSha256:string};analysisSha256:string;compilerSha256:string;componentRecipes?:readonly NativeComponentRecipe[];inlineStyles:readonly {sourceNode:string;css:string}[];resourcePatches:readonly {sourceNode:string;attributes:Readonly<Record<string,string>>}[]}):NativeAssemblyPresentation {
  if(closure.style.sourceSha256!==analysis.sourceSha256||closure.analysisSha256!==analysis.analysisSha256)throw Error('Presentation analysis association mismatch');
  const nodes=new Map<string,RetainedJsxNode>();const visit=(node:RetainedJsxNode)=>{if(nodes.has(node.graphKey))throw Error('Duplicate presentation source node');nodes.set(node.graphKey,node);if(node.type==='element')node.children.forEach(visit);};analysis.nodes.forEach(visit);
  const bind=<T extends {sourceNode:string}>(entry:T)=>{const node=nodes.get(entry.sourceNode);if(!node)throw Error('Unknown presentation source node');return {...entry,nodeSha256:nativeDigest(node)};};
- const payload={sourceSha256:analysis.sourceSha256,analysisSha256:analysis.analysisSha256,compilerSha256:closure.compilerSha256,inlineStyles:closure.inlineStyles.map(bind),resourcePatches:closure.resourcePatches.map(bind)};
+ const payload={sourceSha256:analysis.sourceSha256,analysisSha256:analysis.analysisSha256,compilerSha256:closure.compilerSha256,...(closure.componentRecipes?{componentRecipes:closure.componentRecipes.map(bind)}:{}),inlineStyles:closure.inlineStyles.map(bind),resourcePatches:closure.resourcePatches.map(bind)};
  return {...payload,sha256:nativeDigest(payload)};
 }
 export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResult {
@@ -31,7 +32,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  if(nativeDigest(identity.key)!==nativeDigest(input.analysis.key)||nativeDigest({key:identity.key,bindings:identity.bindings,reservedIdentities:identity.reservedIdentities})!==identity.proofSha256)block('identity-revision-proof');
  if(input.coreUrl!=='/af/v1/core.js'&&(!safeUrl(input.coreUrl)||new URL(input.coreUrl).pathname!=='/af/v1/core.js'))block('core-url');
  if(input.style&&(hash(input.style.css)!==input.style.sha256||input.style.sourceSha256!==input.analysis.sourceSha256||/<\/style/i.test(input.style.css)))block('style-closure-proof');
- if(input.style&&(input.style.htmlAttributes||input.style.storyWrapper)&&input.style.rootSha256!==nativeDigest({sourceSha256:input.style.sourceSha256,htmlAttributes:input.style.htmlAttributes,storyWrapper:input.style.storyWrapper}))block('style-root-proof');
+ if(input.style&&(input.style.htmlAttributes||input.style.storyWrapper||input.style.storyColumn)&&input.style.rootSha256!==nativeDigest({...(input.style.storyColumn?{storyColumn:input.style.storyColumn}:{}),sourceSha256:input.style.sourceSha256,htmlAttributes:input.style.htmlAttributes,storyWrapper:input.style.storyWrapper}))block('style-root-proof');
  const reader=input.readerTemplate;
  if(reader&&!verifyNativeReaderTemplate({analysis:input.analysis,identity:input.identity,sourceRecordSha256:reader.sourceRecordSha256,template:reader.template,chrome:reader.chrome},reader))block('reader-template-proof');
  const nodes:RetainedJsxNode[]=[];
@@ -45,9 +46,10 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
   const {sha256,...payload}=presentation;
   if(sha256!==nativeDigest(payload)||presentation.sourceSha256!==input.analysis.sourceSha256||presentation.analysisSha256!==input.analysis.analysisSha256||!/^[a-f0-9]{64}$/.test(presentation.compilerSha256)||!input.style)block('presentation-proof');
   const seen=new Set<string>();
-  for(const [kind,entries]of [['style',presentation.inlineStyles],['resource',presentation.resourcePatches]] as const)for(const entry of entries){
+  for(const [kind,entries]of [['style',presentation.inlineStyles],['resource',presentation.resourcePatches],['recipe',presentation.componentRecipes??[]]] as const)for(const entry of entries){
    const matches=nodes.filter(node=>node.graphKey===entry.sourceNode),node=matches[0],key=kind+':'+entry.sourceNode;
    if(seen.has(key)||matches.length!==1||!node||node.type!=='element'||entry.nodeSha256!==nativeDigest(node)){block('presentation-source',entry.sourceNode);continue;}seen.add(key);
+   if('className'in entry){if(node.tag!==entry.tag||typeof entry.className!=='string'||Object.entries(entry.attributes).some(([name,value])=>(!/^data-(slot|variant|size)$/.test(name)&&!(name==='type'&&value==='button'))||typeof value!=='string'))block('presentation-recipe-shape',entry.sourceNode);continue;}
    if('css'in entry){if(!node.attributes.some(a=>a.name==='style'&&a.value.static)||/[\u0000]/.test(entry.css))block('presentation-style',entry.sourceNode);try{for(const url of rewriteNativeCss(entry.css,[]).urls)if(!input.urls?.some(u=>u.target===url||u.source===url)||/^javascript:/i.test(url))block('presentation-style-url',entry.sourceNode);}catch{block('presentation-style-css',entry.sourceNode);}}
    else {
     if(node.isComponent||node.tag.toLowerCase()!=='img'||!node.attributes.some(a=>a.name==='src'&&a.value.static&&typeof a.value.json==='string'&&a.value.json.startsWith('ref:')))block('presentation-resource-shape',entry.sourceNode);
@@ -119,7 +121,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  const emitted=emitNativeBindings({identityBindings:identity.bindings,cellAdapter:input.cellAdapter,people:input.people,viewer:input.viewer,analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
  if(emitted.status==='blocked')blockers.push(...emitted.blockers);
  const admittedDeclarations=[...input.analysis.flow.values.map(d=>({kind:'value',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.queries.map(d=>({kind:'query',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.mutations.map(d=>({kind:'mutation',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.imports.map(d=>({kind:'import',name:d.name,analysisSha256:input.analysis.analysisSha256}))];
- const lowered=lowerNativeComponents({analysis:input.analysis,authDelegations:input.authDelegations,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches,chartMappings:input.chartMappings,admittedChartData:emitted.status==='complete'?targets.filter(t=>t.kind==='property'&&t.property==='data').map(t=>({sourceNode:t.sourceNode,analysisSha256:input.analysis.analysisSha256})):[]});
+ const lowered=lowerNativeComponents({componentRecipes:blockers.length?[]:presentation?.componentRecipes,analysis:input.analysis,authDelegations:input.authDelegations,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches,chartMappings:input.chartMappings,admittedChartData:emitted.status==='complete'?targets.filter(t=>t.kind==='property'&&t.property==='data').map(t=>({sourceNode:t.sourceNode,analysisSha256:input.analysis.analysisSha256})):[]});
  blockers.push(...lowered.blockers,...lowered.requirements.map(r=>({sourceNode:r.sourceNode,code:`unadmitted-${r.kind}`})));
  if(blockers.length||lowered.html===null||emitted.status!=='complete')return {status:'blocked',html:null,bindingTargets:targets,blockers};
  const files=input.files??[];
@@ -156,7 +158,9 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  const wrapperAttributes=attributes(wrapper?.attributes??{});
  if(wrapper&&wrapper.tag!=='div')block('story-wrapper');
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};
- const content=readerOutput?.html??lowered.html;
+ const column=input.style?.storyColumn;
+ if(column&&(column.tag!=='div'||column.attributes.class!=='mx-doc'||Object.keys(column.attributes).length!==1)){block('story-column');return {status:'blocked',html:null,bindingTargets:targets,blockers};}
+ const content=readerOutput?.html??(column?`<div${attributes(column.attributes)}>${lowered.html}</div>`:lowered.html);
  const story=wrapper?`<div${wrapperAttributes}>${content}</div>`:content;
  const html=`<!DOCTYPE html><html${htmlAttributes}><head><script src="${escape(input.coreUrl)}"></script>${links}<style>${lowered.css}</style><style>${input.style?.css??''}</style>${readerOutput?`<style>${readerOutput.css}</style>`:''}${lowered.headHtml}</head><body>${story}<script type="application/json" data-af="state">${json(emitted.localDefaults)}</script><script type="module">${authorJs}</script></body></html>`;
  if(Buffer.byteLength(html)>6000000){block('page-size');return {status:'blocked',html:null,bindingTargets:targets,blockers};}

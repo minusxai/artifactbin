@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from 'parse5';
-import { assembleNativePage } from './assemble.ts';
+import { assembleNativePage, bindNativePresentation } from './assemble.ts';
 import { bindNativeIdentities } from './identity.ts';
 import { nativeDigest } from './selection.ts';
 import { NATIVE_COMPONENT_TARGET } from './component-map.ts';
@@ -187,4 +187,18 @@ test('catalog query route assembles only through its exact registered backend na
  input.backends=[{namespace:'catalogOps',url:'https://example.test/backend',descriptorsSha256:nativeDigest({queries:input.queries,mutations:[]}),planSha256:'c'.repeat(64),operations:[{kind:'query',name:'catalogRows',operationSha256:'b'.repeat(64)}]}];
  const result=assembleNativePage(input);assert.equal(result.status,'complete',JSON.stringify(result.blockers));if(result.status==='complete')assert.match(result.html,/data-af-name="catalogOps"/);
  input.backends=[];assert.ok(assembleNativePage(input).blockers.some(blocker=>blocker.code==='registered-descriptor-admission'));
+});
+
+test('verified presentation recipes and default story column retain source container geometry without an outline',()=>{
+ const input=fixture();input.analysis.flow.values=[];
+ const root=input.analysis.nodes[0]!;if(root.type!=='element')throw Error();delete root.control;root.tag='Card';root.children=[];
+ const storyColumn={tag:'div' as const,attributes:{class:'mx-doc' as const}},wrapper={tag:'div' as const,attributes:{id:'story'}};
+ input.style={sourceSha256:input.analysis.sourceSha256,css:'.mx-doc{container-type:inline-size}',sha256:createHash('sha256').update('.mx-doc{container-type:inline-size}').digest('hex'),storyWrapper:wrapper,htmlAttributes:{},storyColumn,rootSha256:nativeDigest({sourceSha256:input.analysis.sourceSha256,htmlAttributes:{},storyWrapper:wrapper,storyColumn})};
+ const componentRecipes=[{sourceNode:root.graphKey,tag:'Card' as const,className:'flex flex-col gap-6 py-6 rounded-xl',attributes:{'data-slot':'card'}}];
+ const closure={style:input.style,analysisSha256:input.analysis.analysisSha256,compilerSha256:'a'.repeat(64),inlineStyles:[],resourcePatches:[],componentRecipes};
+ const {sha256:_,...payload}=bindNativePresentation(input.analysis,closure);input.presentation={...payload,sha256:nativeDigest(payload)};
+ const result=assembleNativePage(input);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ assert.match(result.html,/<div id="story"><div class="mx-doc"><div data-af-id=/);assert.match(result.html,/class="flex flex-col gap-6 py-6 rounded-xl"/);
+ const wrong=structuredClone(input);wrong.presentation!.componentRecipes![0]!.nodeSha256='f'.repeat(64);assert.equal(assembleNativePage(wrong).status,'blocked');
+ const changed=structuredClone(input);changed.style!.storyColumn!.attributes.class='wrong' as 'mx-doc';assert.equal(assembleNativePage(changed).status,'blocked');
 });
