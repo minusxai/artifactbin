@@ -188,3 +188,15 @@ it('initializes local defaults on first author import after the blocking reader 
  const {client,gql}=await import('../browser-client');
  expect((await client.query({query:gql`{count}`})).data).toEqual({count:3});
 });
+it('uploads through the credential-free author port and rejects late or portable writes',async()=>{
+ vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'Page123',revision:'2',backends:['attachments'],bindings:{attachments:'Dataset123'},appOrigin:'https://platform.example'});
+ const runtime=await import('../browser-client');const events:Array<any>=[];
+ const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event)});bridges.push(bridge);
+ const file=new File(['hello'],'sample.txt',{type:'text/plain'});const first=runtime.uploadFile(file,{dataset:'attachments'});
+ for(let i=0;i<8;i++)await Promise.resolve();
+ const sent=events.find(event=>event.kind==='upload-file');expect(sent).toMatchObject({datasetId:'Dataset123',filename:'sample.txt'});expect(sent).not.toHaveProperty('credentials');
+ bridge.receive({kind:'fetch-result',call:sent.call,status:201,headers:{},body:JSON.stringify({ref:'dfile:abc123def456',name:'sample.txt',contentType:'text/plain',size:5,url:'/a/Page123/datasets/Dataset123/files/abc123def456'})});
+ expect(await first).toMatchObject({ref:'dfile:abc123def456',url:'https://platform.example/a/Page123/datasets/Dataset123/files/abc123def456'});
+ const controller=new AbortController();const canceled=runtime.uploadFile(file,{dataset:'attachments',signal:controller.signal});for(let i=0;i<8;i++)await Promise.resolve();controller.abort();await expect(canceled).rejects.toThrow('canceled');
+ bridge.dispose();await expect(runtime.uploadFile(file,{dataset:'attachments'})).rejects.toThrow('connection unavailable');
+});

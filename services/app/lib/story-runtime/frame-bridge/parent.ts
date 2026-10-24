@@ -1,3 +1,4 @@
+import {relayedFileUpload} from './upload';
 /**
  * THE PARENT HALF OF THE BRIDGE — a stand-in for the island controller, for a document framed on its own origin.
  *
@@ -128,6 +129,7 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
   const target = frameOrigin === 'null' ? '*' : frameOrigin;
   let key = runtimeId();
   let nonce = '';
+  let pendingUploads=0;
   /** The frame's controller answered `ready` under the current key: commands go straight out. */
   let attached = false;
   let closed = false;
@@ -232,6 +234,13 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
         if (!waiting) return;
         if (payload.ok) waiting.resolve(); else waiting.reject(new Error(payload.error));
         return;
+      }
+      case 'upload-file': {
+        const context=options.htmlContext?.();
+        const request=context?relayedFileUpload(id,options.editId(),context.readOnly,payload):null;
+        if(!request||pendingUploads>=4){post({kind:'fetch-result',call:payload.call,status:403,headers:{'content-type':'application/json'},body:JSON.stringify({error:'Upload is not permitted in this reader'})});return;}
+        pendingUploads++;
+        void (async()=>{try{const response=await appFetch(request.path,request.init);post({kind:'fetch-result',call:payload.call,status:response.status,headers:{'content-type':'application/json'},body:await response.text()});}catch{post({kind:'fetch-result',call:payload.call,error:'Upload outcome unknown'});}finally{pendingUploads--;}})();return;
       }
       case 'fetch': void relay(payload); return;
       case 'pressed': options.onPressed?.(); return;

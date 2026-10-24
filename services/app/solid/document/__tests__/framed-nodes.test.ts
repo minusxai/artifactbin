@@ -232,3 +232,23 @@ describe('native HTML trusted context', () => {
     expect(posted.mock.calls.some(([envelope]) => (envelope as {payload?:{status?:number}}).payload?.status === 403)).toBe(true);
   });
 });
+
+describe('native upload trusted context',()=>{
+ it('pins the live edit and passes only bounded upload fields to the authenticated file door',async()=>{
+  const frame=document.createElement('iframe');document.body.append(frame);const posted=vi.spyOn(frame.contentWindow!,'postMessage');
+  const fetcher=vi.fn(async()=>answer(403,{error:'dataset_file_upload_failed',detail:'No insert grant permits this upload'}));vi.stubGlobal('fetch',fetcher);
+  createRoot(dispose=>{cleanups.push(dispose);createFramedStory({id:'Page123',framed:{frame,origin:PAGES},nodes:[],editId:()=> 'trusted-edit',source:()=>null,htmlContext:()=>({revision:'3',readOnly:false})});});
+  const key=(posted.mock.calls[0][0] as {key:string}).key;
+  const send=(payload:unknown)=>window.dispatchEvent(new MessageEvent('message',{data:{type:'mx:frame-bridge',key,payload},origin:PAGES,source:frame.contentWindow}));send({kind:'ready',nonce:'native'});
+  send({kind:'upload-file',call:2,datasetId:'Dataset123',filename:'sample.txt',contentType:'text/plain',requestId:'upload-request-123',bytes:new Uint8Array([1,2]),editId:'forged',authorization:'Bearer forged'});
+  for(let i=0;i<6;i++)await Promise.resolve();
+  expect(fetcher).toHaveBeenCalledTimes(1);const [path,init]=fetcher.mock.calls[0] as unknown as [string,RequestInit];expect(path).toBe('/a/Page123/datasets/Dataset123/files');expect(init.headers).toEqual({'Content-Type':'text/plain','X-Filename':'sample.txt','X-Edit-Id':'trusted-edit','Idempotency-Key':'upload-request-123'});expect(init.credentials).toBe('same-origin');
+  await vi.waitFor(()=>expect(posted.mock.calls.some(([message])=>(message as {payload?:{status?:number}}).payload?.status===403)).toBe(true));
+ });
+ it('refuses archived uploads without making a request',async()=>{
+  const frame=document.createElement('iframe');document.body.append(frame);const posted=vi.spyOn(frame.contentWindow!,'postMessage');const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
+  createRoot(dispose=>{cleanups.push(dispose);createFramedStory({id:'Page123',framed:{frame,origin:PAGES},nodes:[],editId:()=> 'head',source:()=>null,htmlContext:()=>({revision:'2',readOnly:true})});});
+  const key=(posted.mock.calls[0][0] as {key:string}).key;const send=(payload:unknown)=>window.dispatchEvent(new MessageEvent('message',{data:{type:'mx:frame-bridge',key,payload},origin:PAGES,source:frame.contentWindow}));send({kind:'ready',nonce:'native'});send({kind:'upload-file',call:2,datasetId:'Dataset123',filename:'sample.txt',contentType:'text/plain',requestId:'upload-request-123',bytes:new Uint8Array([1])});
+  await Promise.resolve();expect(fetcher).not.toHaveBeenCalled();expect(posted.mock.calls.some(([message])=>(message as {payload?:{status?:number}}).payload?.status===403)).toBe(true);
+ });
+});

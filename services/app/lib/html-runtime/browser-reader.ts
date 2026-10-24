@@ -1,3 +1,5 @@
+import {createFileUploader} from './upload';
+import {createUploadRelay} from './upload-relay';
 import {createQueryReadiness} from './query-readiness';
 import { createLocalDatasetTransport } from './browser-local-datasets';
 import { createHtmlSelectionActions } from './selection-actions';
@@ -46,6 +48,10 @@ import { htmlSelection } from '../html-bridge/selection';
 import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationPaint } from '../html-bridge/annotations';
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
 const relayWaiters = new Set<() => void>();
+let uploads:ReturnType<typeof createUploadRelay>|undefined;
+const uploader=createFileUploader({readOnly:()=>config.offline===true,datasetId:name=>config.bindings?.[name],send:(request,signal)=>{if(!uploads)return Promise.reject(Error('Page connection unavailable; reload and retry'));return uploads.send(request,signal).then(result=>({...result,url:new URL(result.url,config.appOrigin).href}));}});
+export const uploadFile=uploader.upload;
+export type {FileUploadOptions} from './upload-contract';
 let connectedBefore=false;
 remote.execute = async (request) => {
   if(portableReadiness.online())return portableReadiness.execute(request);
@@ -64,6 +70,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
   const stopLinks = config.appOrigin ? followAppLinks(win, config.appOrigin) : () => {};
   const nonce = runtimeId();
   let call = 0;
+  const uploadSession=createUploadRelay(post,()=>++call);uploads=uploadSession;
   let canAnnotate = false;
   let annotations: HtmlAnnotationPaint = { pins: [], mode: 'off', openId: null, hoverId: null };
   const painter = createHtmlAnnotationPainter(win.document);
@@ -129,6 +136,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
   return {
     receive(payload) {
       if (payload.kind === 'restored') post({ kind: 'restored', call: payload.call, ok: true });
+      if (uploadSession.receive(payload))return;
       if (payload.kind === 'fetch-result') {
         const current = pending.get(payload.call);
         if (!current) return;
@@ -149,6 +157,7 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
     },
     dispose() {
       stopLinks();
+      uploadSession.dispose();if(uploads===uploadSession)uploads=undefined;
       relay = null;
       observation.dispose();
       painter.dispose();

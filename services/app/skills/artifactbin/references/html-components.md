@@ -78,7 +78,7 @@ Registrations follow PascalCase: `registerDatePicker`, `registerDataTable`, `reg
 
 DataTable's optional `source.read({offset,limit,sort,signal})` returns `{rows,columns,totalRows?,truncated?}`. Events: `af-sort-change` (sort) and `af-edit-intent` (`{row,key,column,value}`). App owns edits, drafts and transport. `rowKey` must be stable and unique.
 
-FileUpload requires an app-owned `adapter.upload(file,{dataset,signal})` returning file metadata; optional `fileUrl(file,dataset)` resolves previews. Enforce permissions and byte policy in the adapter. Pass Apollo results as properties; components carry no account credentials or access grants.
+FileUpload takes `adapter.upload(file,{dataset,signal})`; optional `fileUrl` resolves previews. Use the real credential-free platform adapter in [HTML uploads](html-uploads.md). Components carry no account credentials or access grants.
 
 ## Theme and identity
 

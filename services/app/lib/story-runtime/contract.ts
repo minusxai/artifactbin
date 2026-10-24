@@ -563,6 +563,7 @@ export type FrameBridgeFramePayload =
   | { kind: 'restored'; call: number; ok: true }
   | { kind: 'restored'; call: number; ok: false; error: string }
   /** One of the controller's app requests (IslandControllerInput.appFetch), for the page to make with its session. */
+  | { kind: 'upload-file'; call:number; datasetId:string; filename:string; contentType:string; requestId:string; bytes:Uint8Array }
   | { kind: 'fetch'; call: number; path: string; method: 'GET' | 'POST'; headers: Record<string, string>; body: string | null }
   /** The document scrolled: geometry the page placed over it moves. */
   | { kind: 'scroll'; scrollX: number; scrollY: number }

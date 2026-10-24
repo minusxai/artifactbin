@@ -7,9 +7,9 @@ it('the emitted author module watches backend results with explicit loading with
  vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{}});vi.stubGlobal('navigator',{});
  vi.stubGlobal('addEventListener',()=>{});vi.stubGlobal('removeEventListener',()=>{});
  let finish!:(value:unknown)=>void;
- const fixture={config:{pageId:'built-watch',revision:'1',backends:['orders'],initialState:{filter:'private'}},remote:{online:()=>true,execute:()=>new Promise(resolve=>{finish=resolve;})},startFrameBridge(){},onBackendChange(){},remoteReadOnly:false};
+ const fixture={config:{pageId:'built-watch',revision:'1',backends:['orders'],initialState:{filter:'private'}},remote:{online:()=>true,execute:()=>new Promise(resolve=>{finish=resolve;})},startFrameBridge(){},onBackendChange(){},remoteReadOnly:false,uploadFile:()=>{throw Error("No upload fixture");}};
  vi.stubGlobal('__builtWatchReader',fixture);
- const reader='const r=globalThis.__builtWatchReader;export const {config,remote,startFrameBridge,onBackendChange,remoteReadOnly}=r;';
+ const reader='const r=globalThis.__builtWatchReader;export const {config,remote,startFrameBridge,onBackendChange,remoteReadOnly,uploadFile}=r;';
  const readerUrl='data:text/javascript;base64,'+Buffer.from(reader).toString('base64');
  const source=assets.apollo.replace(/(["'])@afbin\/reader\1/g,JSON.stringify(readerUrl));
  const runtime=await import(/* @vite-ignore */ 'data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
