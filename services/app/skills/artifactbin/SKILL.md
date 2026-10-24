@@ -34,7 +34,7 @@ Copy the installed `components/` module graph into the project and import its co
 | [Data/media](references/html-components.md#content-and-data) | `af-data-table`, `af-file-upload`, `af-deck-gl` |
 | [Slides](references/html-components.md#content-and-data) | `af-slide-deck`, `af-slide` |
 
-Chart is pending phase 2. Components use page tokens and author-owned Apollo state; the app supplies data and authorized transport. Verify the actual browser behavior required by the page.
+Native HTML pages can author charts directly with the separately shipped Vega and Vega-Lite modules; see [Data visualization](references/dataviz.md). No HTML `Chart` custom element is shipped. Components use page tokens and author-owned Apollo state; the app supplies data and authorized transport. Verify the actual browser behavior required by the page.
 
 ## Preserve the document
 

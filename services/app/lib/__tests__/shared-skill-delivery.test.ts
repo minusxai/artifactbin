@@ -44,6 +44,16 @@ import {withTeachingOrigin} from '../../../cli/src/teaching-origin';
 import {GET as zipRoute} from '@/app/skills/artifactbin.zip/route';
 
 describe('installable shared skill folder',()=>{
+ it('distinguishes direct native HTML Vega usage from an unavailable chart custom element',()=>{
+  const root=skillTree().get('artifactbin/SKILL.md')!;
+  const components=skillTree().get('artifactbin/references/html-components.md')!;
+  expect(root).toContain('author charts directly with the separately shipped Vega and Vega-Lite modules');
+  expect(root).toContain('No HTML `Chart` custom element is shipped');
+  expect(components).toContain('No chart custom element is shipped');
+  expect(components).toContain('[dataviz guide](dataviz.md)');
+  expect(root).not.toContain('Chart is pending phase 2');
+  expect(components).not.toContain('Chart is pending phase 2');
+ });
  it('rewrites root/backlinks and anchors on the supplied origin',()=>{
   const file=skillTree().get('artifactbin/references/http-api.md')!;
   expect(projectSkillLinks(file,'[root](../SKILL.md#read-first) [task](./http-auth.md#sign-in)','https://recipient.example')).toBe('[root](https://recipient.example/llms.txt#read-first) [task](https://recipient.example/llms/http-auth#sign-in)');

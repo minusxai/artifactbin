@@ -4,7 +4,7 @@ description: Optional native HTML components, module installation, controlled st
 ---
 ## Read first
 
-Optional custom elements use light DOM and page tokens. Chart is pending phase 2. Verify browser behavior; full legacy parity is not implied.
+Optional custom elements use light DOM and page tokens. No chart custom element is shipped; native HTML pages can use the separate Vega and Vega-Lite modules directly ([dataviz guide](dataviz.md)). Verify browser behavior; full legacy parity is not implied.
 
 ## Load modules
 
