@@ -247,7 +247,7 @@ describe('bounded independent reader capture',()=>{
     const directory=await setup();let started=0,closed=0;
     const browser={newContext:async()=>{const id=started++;return {newPage:async()=>({id,on:()=>{}}),close:async()=>{await new Promise(resolve=>setTimeout(resolve,5));closed++;}};}};
     await expect(captureBrowserBaseline({browser,workerBrowsers:[browser,browser],mount:async()=>{throw Error('mount failed');},implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]})).rejects.toThrow('mount failed');
-    expect(started).toBe(2);expect(closed).toBe(started);
+    expect(started).toBe(4);expect(closed).toBe(started);
   });
 });
 
@@ -304,10 +304,26 @@ it('persists successful partial captures and a diagnostic failed state before re
   const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Completed',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
   await expect(captureBrowserBaseline({browser,mount:async({page})=>{if(page.id===1)throw Error('actual state failed');return {frame};},implementation:'html',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]})).rejects.toThrow('one/light/390/initial: actual state failed');
   const partial=JSON.parse(await readFile(path.join(directory,'html-partial-captures.json'),'utf8'));
-  expect(partial).toHaveLength(1);expect(partial[0].semantics.text).toBe('Completed');
+  expect(partial).toHaveLength(3);expect(partial[0].semantics.text).toBe('Completed');
   const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));
-  expect(status).toMatchObject({complete:false,planned:4,completed:1,failures:[{fixture:'one',state:'initial',theme:'light',viewport:{width:390,height:844},phase:'mount',message:'actual state failed'}]});
+  expect(status).toMatchObject({complete:false,planned:4,completed:3,failures:[{fixture:'one',state:'initial',theme:'light',viewport:{width:390,height:844},phase:'mount',message:'actual state failed'}]});
   expect(await readFile(path.join(directory,'one-light-390-initial-html-failure.png'))).toEqual(bytes);
   await expect(readFile(path.join(directory,'html-captures.json'))).rejects.toMatchObject({code:'ENOENT'});
-  expect(closed).toBe(2);
+  expect(closed).toBe(4);
+});
+
+it('captures later independent fixture groups after early failure and rejects the entire run',async()=>{
+  const directory=await setup();let sequence=0,active=0,peak=0,closed=0;
+  const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+  const browser={newContext:async()=>{const id=sequence++;active++;peak=Math.max(peak,active);return {newPage:async()=>({id,on:()=>{},screenshot:async()=>bytes}),close:async()=>{active--;closed++;}};}};
+  const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Later independent success',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+  let failure;
+  try{await captureBrowserBaseline({browser,workerBrowsers:[browser,browser],mount:async({page})=>{if(page.id===0)throw Error('early failure');if(page.id===2)throw Error('second failure');return {frame};},implementation:'html',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'first',states:[{id:'initial',actions:[]}]},{id:'later',states:[{id:'initial',actions:[]}]}]});}catch(error){failure=error;}
+  expect(failure).toBeInstanceOf(AggregateError);expect(failure.errors).toHaveLength(2);expect(failure.message).toContain('early failure');expect(failure.message).toContain('second failure');
+  const partial=JSON.parse(await readFile(path.join(directory,'html-partial-captures.json'),'utf8'));
+  expect(partial).toHaveLength(6);expect(partial.filter(capture=>capture.fixture==='later')).toHaveLength(4);
+  const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));
+  expect(status).toMatchObject({complete:false,planned:8,completed:6});expect(status.failures).toHaveLength(2);
+  expect(peak).toBe(2);expect(closed).toBe(8);expect(active).toBe(0);
+  await expect(readFile(path.join(directory,'html-captures.json'))).rejects.toMatchObject({code:'ENOENT'});
 });

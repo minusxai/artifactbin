@@ -154,15 +154,17 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       throw new Error(`${diagnosticText(cause.message)}; reader diagnostics: ${JSON.stringify(diagnostics)}`,{cause});
     } finally {await context.close();}
   }
-  let next=0,failed=false;
+  let next=0;const taskErrors=[];
   const workers=await Promise.allSettled(Array.from({length:Math.min(2,workerBrowsers.length,tasks.length)},async(_,workerIndex)=>{
-    while(!failed&&next<tasks.length){const index=next++;try{captures[index]=await capture(tasks[index],workerBrowsers[workerIndex]);}catch(error){failed=true;const task=tasks[index];throw new Error(`${task.fixture.id}/${task.theme}/${task.viewport.width}/${task.state.id}: ${error.message}`,{cause:error});}}
+    while(next<tasks.length){const index=next++;try{captures[index]=await capture(tasks[index],workerBrowsers[workerIndex]);}catch(error){const task=tasks[index];taskErrors.push({index,error:new Error(`${task.fixture.id}/${task.theme}/${task.viewport.width}/${task.state.id}: ${error.message}`,{cause:error})});}}
   }));
-  const failure=workers.find(worker=>worker.status==='rejected');
-  if(failure){
+  const errors=taskErrors.sort((a,b)=>a.index-b.index).map(item=>item.error);
+  errors.push(...workers.filter(worker=>worker.status==='rejected').map(worker=>worker.reason));
+  if(errors.length){
+    const failure=new AggregateError(errors,`${errors.length} reader capture(s) failed: ${errors.map(error=>error.message).join('\n')}`);
     try{await writeFile(path.join(output,`${implementation}-partial-captures.json`),JSON.stringify(captures.filter(Boolean),null,2));await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,completed:captures.filter(Boolean).length,failures},null,2));}
-    catch(error){failure.reason.message+=`; partial evidence write failed: ${diagnosticText(error.message)}`;}
-    throw failure.reason;
+    catch(error){failure.message+=`; partial evidence write failed: ${diagnosticText(error.message)}`;}
+    throw failure;
   }
   await writeFile(path.join(output,`${implementation}-captures.json`),JSON.stringify(captures,null,2));
   await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:true,planned:tasks.length,completed:captures.length,failures:[]}));
