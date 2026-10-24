@@ -3,3 +3,6 @@ export { forkArtifact, forkDatasetPreview, forkRefusal } from './fork';
 export type { ForkOverrides } from './fork';
 export { preflightPublication } from './publication-preflight';
 export { createArtifactFromBody, refreshAssetsFor, replaceArtifactWithBody } from './requests';
+
+/** Trusted offline composition uses the same dependency preparation as normal publication. */
+export {preparePublicationBundle} from './bundle';

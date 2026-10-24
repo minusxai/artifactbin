@@ -73,6 +73,7 @@ export function prepare(plan: QueryPlan, request: unknown) {
       !name(q.name) ||
       typeof q.sql !== "string" ||
       Buffer.byteLength(q.sql) > limits.sqlBytes ||
+      (q.source!==undefined&&(typeof q.source!=='string'||!q.source||q.source.length>512||q.dependencies?.length!==0)) ||
       !Array.isArray(q.dependencies) ||
       q.dependencies.some((d: unknown) => !name(d))
     )
@@ -118,6 +119,6 @@ export function prepare(plan: QueryPlan, request: unknown) {
     only: [...request.only] as string[],
     queries: ordered
       .filter((q) => needed.has(q.name))
-      .map((q) => ({ name: q.name, sql: q.sql })),
+      .map((q) => ({ name: q.name, sql: q.sql,...(q.source?{source:q.source}:{}) })),
   };
 }

@@ -24,6 +24,8 @@ export interface QueryPlan {
     name: string;
     sql: string;
     dependencies: readonly string[];
+    /** Exact dataset identity selected by the immutable program, never request SQL. */
+    source?: string;
   }[];
   /** Server-owned bindings resolve CURRENT data, through original document reach and viewer row grants.
    * They are not raw-dataset readership grants and must never be returned to the page. */
@@ -48,6 +50,10 @@ export interface QuerySource {
   ): Promise<QueryWindow>;
   /** Rechecks live dataset revision, document reach, viewer grants and policy after execution. */
   verify(signal: AbortSignal): Promise<void>;
+}
+interface QueryCatalogSource {
+ execute(sql:string,params:Record<string,Scalar>,paramTypes:Record<string,ColumnType>,signal:AbortSignal):Promise<QueryOutcome>;
+ verify(signal:AbortSignal):Promise<void>;
 }
 /** Owned async execution; cancelAndDrain MUST settle only when work no longer holds resources.
  * The service does not race an uncancellable SQL call and abandon it. */
@@ -75,6 +81,8 @@ export interface QueryPorts {
     binding: Readonly<QueryPlan["imports"][number]>,
     signal: AbortSignal,
   ): Promise<QuerySource>;
+  /** Direct catalog queries keep filters and aggregates inside their original dataset engine. */
+  catalog?(context:Readonly<QueryContext>,source:string,signal:AbortSignal):Promise<QueryCatalogSource>;
   /** Composition root adapts the CURRENT host SqlService. SQL is exclusively from the immutable registry. */
   execute(input: RunInput, signal: AbortSignal): QueryExecution;
 }

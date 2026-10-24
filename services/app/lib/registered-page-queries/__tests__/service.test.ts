@@ -341,3 +341,36 @@ it('exposes only the authenticated target viewer identity through the readonly r
  await expect(invoke({...call,principal:{tenant:'page',subject:'forged'}})).rejects.toThrow('registered_query_unavailable');
  expect(registeredViewerDescriptor('queries')).toMatchObject({namespace:'queries',identity:'target-subject-v1',responsePath:['queries','viewer','id']});
 });
+it('executes immutable source queries inside their catalog without materializing large base tables',async()=>{
+ const f=fixture(),checks:string[]=[];
+ f.ports.registry=async()=>({...plan,queries:[{name:'total',sql:'select count(*) as amount from public.rows where amount >= $amount',source:'connectedDataset',dependencies:[]}]});
+ f.ports.catalog=async(_context,id)=>{expect(id).toBe('connectedDataset');return {verify:async()=>{checks.push('verified');},execute:async(sql,params,types)=>{expect(sql).toBe('select count(*) as amount from public.rows where amount >= $amount');expect(params.amount).toBe(3);expect(types.amount).toBe('number');return {columns:[{name:'amount',type:'number'}],rows:[{amount:250000}]};}};};
+ expect(await f.run({values:{amount:3},only:['total']})).toMatchObject({total:{rows:[{amount:250000}]}});
+ expect(f.calls).toEqual([]);expect(checks.length).toBeGreaterThanOrEqual(2);
+});
+it('makes bounded catalog results available to local derived queries and retains catalog revocation fences',async()=>{
+ const f=fixture(),sql=createSqliteSql();let revoked=false;
+ f.ports.registry=async()=>({...plan,queries:[{name:'base',sql:'select count(*) as amount from public.rows',source:'connectedDataset',dependencies:[]},{name:'total',sql:'select amount*2 as amount from base',dependencies:['base']}]});
+ f.ports.catalog=async()=>({verify:async()=>{if(revoked)throw Error('catalog_revoked');},execute:async()=>({columns:[{name:'amount',type:'number'}],rows:[{amount:250000}]})});
+ f.ports.execute=input=>({result:sql.run(input),cancelAndDrain:async()=>{}});
+ expect(await f.run(validRequest)).toMatchObject({total:{rows:[{amount:500000}]}});
+ const execute=f.ports.execute;f.ports.execute=(...args)=>{revoked=true;return execute(...args);};
+ await expect(f.run(validRequest)).rejects.toThrow('catalog_revoked');
+});
+it('refuses unavailable catalog ports, truncated catalog results and source query dependency ambiguity',async()=>{
+ const f=fixture();const connected={...plan,queries:[{name:'total',sql:'select amount from public.rows',source:'connectedDataset',dependencies:[]}]};
+ f.ports.registry=async()=>connected;
+ await expect(f.run(validRequest)).rejects.toThrow('query_source_unsupported');
+ f.ports.catalog=async()=>({verify:async()=>{},execute:async()=>({columns:[],rows:[],truncated:true})});
+ await expect(f.run(validRequest)).rejects.toThrow('invalid_query_output');
+ f.ports.registry=async()=>({...connected,queries:[{...connected.queries[0]!,dependencies:['total']}]});
+ await expect(f.run(validRequest)).rejects.toThrow('invalid_query_registry');
+});
+it('drains direct catalog work before returning cancellation',async()=>{
+ const f=fixture(),abort=new AbortController();let finish!:()=>void,started!:()=>void,settled=false;
+ const ready=new Promise<void>(r=>{started=r;});
+ f.ports.registry=async()=>({...plan,queries:[{name:'total',sql:'select count(*) as amount from public.rows',source:'connectedDataset',dependencies:[]}]});
+ f.ports.catalog=async()=>({verify:async()=>{},execute:async()=>{started();await new Promise<void>(r=>{finish=r;});settled=true;return {columns:[],rows:[]};}});
+ const run=createRegisteredPageQueries(f.ports).execute(context,validRequest,abort.signal);await ready;abort.abort(Error('stop_catalog'));
+ await Promise.resolve();expect(settled).toBe(false);finish();await expect(run).rejects.toThrow('stop_catalog');expect(settled).toBe(true);
+});

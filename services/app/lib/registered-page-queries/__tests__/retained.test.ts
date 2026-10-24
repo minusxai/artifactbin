@@ -96,6 +96,7 @@ it("persists immutable query registration atomically and serves anonymous result
       {
         scalars: { minimum: { type: "number", default: null } },
         queries: [
+          {name:'connected',sql:'select count(*) as amount from public.rows where amount >= $minimum',source:dataset.id,dependencies:[]},
           {
             name: "spin",
             sql: "with recursive c(n) as (select 1 union all select n+1 from c) select count(*) as n from c",
@@ -208,6 +209,9 @@ it("persists immutable query registration atomically and serves anonymous result
         },
       },
     });
+    // A computed public table must retain its stored base relation in the execution catalog.
+    await db.query("UPDATE artifacts SET version=version+1,meta=$2::jsonb WHERE id=$1", [dataset.id, JSON.stringify({...metadata,catalog:{...catalog,tables:[{...catalog.tables[0]!,name:'base',objectKey:key},{schema:'public',name:'rows',columns:catalog.tables[0]!.columns,sql:'select amount*2 as amount from base'}]}})]);
+    expect(await (await run()).json()).toMatchObject({data:{queries:{evaluate:{tables:[{rows:[{cells:[{number:22}]}]}]}}}});
     expect(ownedSourceWindows).toBeGreaterThan(0);
     const cancellation = new AbortController();
     const spinning = createRetainedRegisteredQueries(
@@ -222,6 +226,35 @@ it("persists immutable query registration atomically and serves anonymous result
     cancellation.abort(Error("stop_registered_read"));
     await expect(spinning).rejects.toThrow("stop_registered_read");
     expect(spinReleased).toBe(true);
+    // Connected models execute once, then serve coherent bounded windows of that result.
+    const connected={kind:'postgres' as const,defaultSchema:'public',refreshSeconds:0,connection:{host:'database.invalid',port:5432,database:'fixture',username:'reader',ssl:true,passwordSecretId:'sec_fixture'},notebook:{cells:[{id:'model',name:'model',sql:'select amount from source'}]},tables:[{schema:'public',name:'rows',columns:[{name:'amount',type:'number' as const}],modelCellId:'model'}]};
+    await db.query("UPDATE artifacts SET version=version+1,meta=$2::jsonb WHERE id=$1",[dataset.id,JSON.stringify({...metadata,catalog:connected})]);
+    let connectedReads=0,credentialRotated=false;
+    const connectedRun=(truncated=false,rotate=false)=>createRetainedRegisteredQueries(ANONYMOUS_ACTOR,page,{
+      sourceStats:async()=>{throw Error('connected_source_is_not_an_object');},
+      resolveConnection:async()=>({host:'database.invalid',port:5432,database:'fixture',username:'reader',ssl:true,password:credentialRotated?'rotated-password':'fixture-password'}),
+      readWindow:async(saved,_sql,_params,options)=>{
+        connectedReads++;expect(saved).toEqual(connected);expect(options).toMatchObject({datasetId:dataset.id,limit:10000,offset:0});await options?.authorize?.();credentialRotated=rotate;
+        return {columns:connected.tables[0]!.columns,rows:Array.from({length:501},()=>({amount:1})),truncated,refreshedAt:new Date().toISOString()};
+      },
+    }).execute({...plan.registration,subject:null},{values:{minimum:null},only:['total']},new AbortController().signal);
+    expect(await connectedRun()).toMatchObject({total:{rows:[{amount:501}]}});
+    expect(connectedReads).toBe(1);
+    await expect(connectedRun(true)).rejects.toThrow('query_input_limit');
+    await expect(connectedRun(false,true)).rejects.toThrow('dataset_changed');
+    credentialRotated=false;
+    const directRun=(revoke=false)=>createRetainedRegisteredQueries(ANONYMOUS_ACTOR,page,{
+      sourceStats:async()=>{throw Error('large_catalog_must_not_materialize');},
+      resolveConnection:async()=>({host:'database.invalid',port:5432,database:'fixture',username:'reader',ssl:true,password:'fixture-password'}),
+      readWindow:async(saved,sql,params,options)=>{
+        expect(saved).toEqual(connected);expect(sql).toBe('select count(*) as amount from public.rows where amount >= $minimum');expect(params?.minimum).toBe(3);expect(options).toMatchObject({datasetId:dataset.id,limit:10000,offset:0,paramTypes:{minimum:'number'}});
+        await options?.authorize?.();if(revoke)await db.query('UPDATE artifacts SET sharing_revision=sharing_revision+1 WHERE id=$1',[dataset.id]);
+        return {columns:connected.tables[0]!.columns,rows:[{amount:250000}],truncated:false,refreshedAt:new Date().toISOString()};
+      },
+    }).execute({...plan.registration,subject:null},{values:{minimum:3},only:['connected']},new AbortController().signal);
+    expect(await directRun()).toMatchObject({connected:{rows:[{amount:250000}]}});
+    await expect(directRun(true)).rejects.toThrow('dataset_changed');
+
     // Restoring the current v2 private read audience must deny the same anonymous result.
     await db.query(
       "UPDATE artifacts SET dataset_policy=$2::jsonb WHERE id=$1",

@@ -99,8 +99,24 @@ export function createRegisteredPageQueries(
         };
         let rows = 0,
           cells = 0;
-        const sources: QuerySource[] = [];
-        for (const binding of plan.imports) {
+        const sources: Pick<QuerySource,"verify">[] = [];
+        const catalogAnswers:Record<string,QueryOutcome>={};
+        const catalogs=new Map<string,Awaited<ReturnType<NonNullable<QueryPorts['catalog']>>>>();
+        for(const query of prepared.queries){
+          if(!query.source)continue;
+          if(!ports.catalog)throw Error('query_source_unsupported');
+          let source=catalogs.get(query.source);
+          if(!source){source=await wait(()=>ports.catalog!(context,query.source!,active));catalogs.set(query.source,source);sources.push(source);}
+          await wait(()=>source.verify(active));
+          const outcome=await wait(()=>source.execute(query.sql,prepared.params,prepared.paramTypes,active));
+          if('error' in outcome||outcome.truncated||outcome.rows.length>limits.rows||outcome.rows.length*outcome.columns.length>limits.cells)throw Error('invalid_query_output');
+          catalogAnswers[query.name]=structuredClone(outcome);
+          if(Buffer.byteLength(JSON.stringify(catalogAnswers))>limits.outputBytes)throw Error('invalid_query_output');
+          input.tables![query.name]=structuredClone(outcome);
+          await wait(()=>source.verify(active));
+        }
+        input.queries=prepared.queries.filter(query=>!query.source).map(query=>({name:query.name,sql:query.sql}));
+        for (const binding of input.queries.length?plan.imports:[]) {
           const source = await wait(() =>
             ports.source(context, Object.freeze({ ...binding }), active),
           );
@@ -149,6 +165,8 @@ export function createRegisteredPageQueries(
         if (Buffer.byteLength(JSON.stringify(input)) > limits.inputBytes)
           throw Error("query_input_limit");
         active.throwIfAborted();
+        let answer: Record<string, QueryOutcome>={...catalogAnswers};
+        if(input.queries.length){
         const execution = ports.execute(input, active);
         let draining: Promise<void> | undefined;
         const cancel = () => {
@@ -156,9 +174,8 @@ export function createRegisteredPageQueries(
         };
         active.addEventListener("abort", cancel, { once: true });
         if (active.aborted) cancel();
-        let answer: Record<string, QueryOutcome>;
         try {
-          answer = await new Promise((resolve, reject) => {
+          const localAnswer:Record<string,QueryOutcome> = await new Promise((resolve, reject) => {
             const rejectAbort = () =>
               reject(active.reason ?? Error("cancelled"));
             active.addEventListener("abort", rejectAbort, { once: true });
@@ -168,9 +185,11 @@ export function createRegisteredPageQueries(
               .finally(() => active.removeEventListener("abort", rejectAbort))
               .catch(() => {});
           });
+          answer={...answer,...localAnswer};
         } finally {
           active.removeEventListener("abort", cancel);
           if (draining) await draining;
+        }
         }
         active.throwIfAborted();
         answer = structuredClone(answer);
@@ -180,7 +199,7 @@ export function createRegisteredPageQueries(
           Buffer.byteLength(JSON.stringify(answer)) > limits.outputBytes
         )
           throw Error("invalid_query_output");
-        for (const query of input.queries) {
+        for (const query of prepared.queries) {
           const outcome = answer[query.name];
           if (
             !outcome ||

@@ -112,3 +112,35 @@ describe('explicit self-host private network opt-in', () => {
     await expect(resolvePostgresHost('postgres', true)).rejects.toThrow(/not permitted/);
   });
 });
+describe('exact reviewed private target network scope',()=>{
+ it.each(['10.1.2.3','172.16.1.2','192.168.1.2','fc00::123','fd12:3456::1','::ffff:a00:1'])('admits only reviewed RFC1918 or ULA address %s and pins the answer',async address=>{
+  answers(address);await expect(resolvePostgresHost('reviewed.example.test',false,[],true)).resolves.toBe(address);
+  answers(address);await expect(resolvePostgresHost('unreviewed.example.test',false,[],false)).rejects.toThrow(/not permitted/);
+ });
+ it.each(['127.0.0.1','::1','::ffff:7f00:1','169.254.169.254','169.254.1.2','fe80::1','100.64.0.1','198.18.0.1','ff02::1'])('never admits loopback, metadata, link-local or special address %s',async address=>{
+  answers('10.1.2.3',address);await expect(resolvePostgresHost('reviewed.example.test',false,[],true)).rejects.toThrow(/not permitted/);
+ });
+ it('rechecks every DNS answer on every operation, including a rebinding to metadata',async()=>{
+  answers('10.1.2.3');expect(await resolvePostgresHost('reviewed.example.test',false,[],true)).toBe('10.1.2.3');
+  answers('169.254.169.254');await expect(resolvePostgresHost('reviewed.example.test',false,[],true)).rejects.toThrow(/not permitted/);expect(lookupMock).toHaveBeenCalledTimes(2);
+ });
+});
+describe('IPv6 metadata is never an approved private database',()=>{
+ const scopes=[{name:'self-host',allowPrivate:true,reviewed:false},{name:'reviewed tuple',allowPrivate:false,reviewed:true}];
+ for(const scope of scopes){
+  it.each(['fd00:ec2::254','FD00:EC2::254','fd00:0ec2:0000:0000:0000:0000:0000:0254'])('rejects canonical and equivalent metadata literals %s under '+scope.name,async address=>{
+   await expect(resolvePostgresHost(address,scope.allowPrivate,[],scope.reviewed)).rejects.toThrow(/not permitted/);
+   await expect(resolvePostgresHost('['+address+']',scope.allowPrivate,[],scope.reviewed)).rejects.toThrow(/not permitted/);
+   expect(lookupMock).not.toHaveBeenCalled();
+  });
+  it('refuses mixed DNS answers containing IPv6 metadata under '+scope.name,async()=>{
+   answers('fd12:3456::1','FD00:0EC2:0:0:0:0:0:0254');
+   await expect(resolvePostgresHost('reviewed.example.test',scope.allowPrivate,[],scope.reviewed)).rejects.toThrow(/not permitted/);
+  });
+  it('rejects a subsequent rebinding from a private database to IPv6 metadata under '+scope.name,async()=>{
+   answers('fd12:3456::1');expect(await resolvePostgresHost('reviewed.example.test',scope.allowPrivate,[],scope.reviewed)).toBe('fd12:3456::1');
+   answers('fd00:ec2::254');await expect(resolvePostgresHost('reviewed.example.test',scope.allowPrivate,[],scope.reviewed)).rejects.toThrow(/not permitted/);
+   expect(lookupMock).toHaveBeenCalledTimes(2);
+  });
+ }
+});

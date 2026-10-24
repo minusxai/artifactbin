@@ -1,4 +1,5 @@
-import {DATASET_ALLOW_PRIVATE_NETWORKS,DATASET_DNS_SERVERS} from '@/lib/platform/config';
+import {approvedDatasetPrivateTarget} from './private-target-policy';
+import {DATASET_ALLOW_PRIVATE_NETWORKS,DATASET_DNS_SERVERS,DATASET_PRIVATE_TARGET_HASHES} from '@/lib/platform/config';
 import {resolvePostgresHost} from './network';
 import {DatasetError} from './errors';
 import {isIP} from 'node:net';
@@ -85,7 +86,7 @@ function checkPostgresIdentity(host: string, certificate: PeerCertificate): Erro
  * actual cancellation; the client timeout additionally bounds a broken network. */
 async function transaction<T>(config: PostgresConfig, timeoutMs: number, work: (client: pg.Client) => Promise<T>): Promise<T> {
   return withConnectionSlot(async () => {
-    const address = await resolvePostgresHost(config.host, DATASET_ALLOW_PRIVATE_NETWORKS, DATASET_DNS_SERVERS).catch(() => {
+    const address = await resolvePostgresHost(config.host, DATASET_ALLOW_PRIVATE_NETWORKS, DATASET_DNS_SERVERS,approvedDatasetPrivateTarget(config,DATASET_PRIVATE_TARGET_HASHES)).catch(() => {
       throw new DatasetError('Postgres connection failed. Check connection settings and retry.',503);
     });
     const identityHost = config.host.startsWith('[') ? config.host.slice(1, -1) : config.host;
