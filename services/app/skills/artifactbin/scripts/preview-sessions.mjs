@@ -51,7 +51,7 @@ export function createPreviewSessions(root,{now=Date.now,ttlMs=30*60*1000,maxSes
    // Loader consumes the checked snapshot, not a second unbounded disk read.
    const adapter=await createLocalPreviewDatasets(root,declarations,{readText:async path=>{if(!admitted.has(path))throw failure(400,'Undeclared local dataset read');return admitted.get(path);}});
    const id=randomBytes(18).toString('base64url');
-   
+
    for(const session of sessions.values())if(session.pathname===pathname)session.obsolete=true;
    sessions.set(id,{adapter,key,pathname,expires:now()+ttlMs,names:new Set(grouped.keys()),bytes,operations:0,active:0,dirty:false,conflict:false});
    return {id,schema:adapter.schema,names:[...grouped.keys()]};
