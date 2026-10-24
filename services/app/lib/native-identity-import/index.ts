@@ -7,6 +7,7 @@ import type {
 } from "./contracts";
 import {
   nativeIdentityDigest,
+  nativeIdentityTimestamp,
   storedUser,
   verifyNativeIdentityInput,
 } from "./model";
@@ -15,7 +16,7 @@ export type {
   NativeIdentityImportResult,
 } from "./contracts";
 const userColumns =
-  "id,email,kind,parent_user_id,merged_into_user_id,expires_at,created_at,name,username,image_key";
+  "id,email,kind,parent_user_id,merged_into_user_id,to_jsonb(users)->>'expires_at' AS expires_at,to_jsonb(users)->>'created_at' AS created_at,name,username,image_key";
 const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 interface Ledger {
   target_id: string;
@@ -42,7 +43,7 @@ export async function writeNativeIdentities(
   const ledger = async (kind: string, id: string) =>
     (
       await tx.query<Ledger>(
-        "SELECT target_id,action,source_sha256,target_sha256,original_state,created_at FROM native_identity_imports WHERE source_namespace=$1 AND kind=$2 AND source_id=$3 FOR UPDATE",
+        "SELECT target_id,action,source_sha256,target_sha256,original_state,to_jsonb(native_identity_imports)->>'created_at' AS created_at FROM native_identity_imports WHERE source_namespace=$1 AND kind=$2 AND source_id=$3 FOR UPDATE",
         [ns, kind, id],
       )
     ).rows[0];
@@ -159,8 +160,8 @@ export async function writeNativeIdentities(
     const prior = await ledger("token", mapping.sourceId);
     if (prior) verifyLedger(prior, mapping);
     const revokedAt = prior
-      ? new Date(prior.created_at).toISOString()
-      : input.revokedAt;
+      ? nativeIdentityTimestamp(prior.created_at)
+      : nativeIdentityTimestamp(input.revokedAt);
     // Deliberately NOT a SHA256 credential hash: no bearer plaintext can hash to this marker.
     const tokenHash =
       "!native-provenance:v1:" +
@@ -170,7 +171,7 @@ export async function writeNativeIdentities(
       user_id: mapping.userId,
       token_hash: tokenHash,
       name: "imported provenance (disabled)",
-      created_at: mapping.sourceCreatedAt ?? revokedAt,
+      created_at: nativeIdentityTimestamp(mapping.sourceCreatedAt ?? revokedAt),
       deleted_at: revokedAt,
       expires_at: revokedAt,
       audience: null,
@@ -181,7 +182,7 @@ export async function writeNativeIdentities(
     const read = async () =>
       (
         await tx.query<typeof expected>(
-          "SELECT id,user_id,token_hash,name,created_at,deleted_at,expires_at,audience,scope,request_authority FROM tokens WHERE id=$1 FOR UPDATE",
+          "SELECT id,user_id,token_hash,name,to_jsonb(tokens)->>'created_at' AS created_at,to_jsonb(tokens)->>'deleted_at' AS deleted_at,to_jsonb(tokens)->>'expires_at' AS expires_at,audience,scope,request_authority FROM tokens WHERE id=$1 FOR UPDATE",
           [mapping.targetId],
         )
       ).rows[0];
@@ -190,7 +191,16 @@ export async function writeNativeIdentities(
       if (
         !current ||
         prior.target_sha256 !== targetSha ||
-        nativeIdentityDigest(plain(current)) !== targetSha
+        nativeIdentityDigest({
+          ...plain(current),
+          created_at: nativeIdentityTimestamp(current.created_at),
+          deleted_at: current.deleted_at
+            ? nativeIdentityTimestamp(current.deleted_at)
+            : null,
+          expires_at: current.expires_at
+            ? nativeIdentityTimestamp(current.expires_at)
+            : null,
+        }) !== targetSha
       )
         throw Error("native_identity_token_replay_changed");
       result.replayed++;
@@ -209,7 +219,19 @@ export async function writeNativeIdentities(
       ],
     );
     current = await read();
-    if (!current || nativeIdentityDigest(plain(current)) !== targetSha)
+    if (
+      !current ||
+      nativeIdentityDigest({
+        ...plain(current),
+        created_at: nativeIdentityTimestamp(current.created_at),
+        deleted_at: current.deleted_at
+          ? nativeIdentityTimestamp(current.deleted_at)
+          : null,
+        expires_at: current.expires_at
+          ? nativeIdentityTimestamp(current.expires_at)
+          : null,
+      }) !== targetSha
+    )
       throw Error("native_identity_token_verification_failed");
     await save("token", mapping, targetSha, {
       sourceCreatedAt: mapping.sourceCreatedAt,

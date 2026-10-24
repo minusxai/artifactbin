@@ -234,3 +234,87 @@ it("never copies unexpected credential fields into the imported account, token, 
   expect(JSON.stringify(rows)).not.toContain("synthetic-unused-marker");
   expect(JSON.stringify(rows)).not.toContain("password_hash");
 });
+
+it("preserves six-digit timestamp precision and accepts equivalent PostgreSQL text offsets on replay", async () => {
+  const db = await getDb(),
+    input = fixture();
+  const user = {
+    ...sourceUser,
+    created_at: "2020-01-01T00:00:00.123456+00:00",
+  };
+  const token = {
+    ...input.sourceInventory.tokens[0]!,
+    created_at: "2020-02-01T01:00:00.654321+01:00",
+  };
+  input.sourceInventory = { users: [user], tokens: [token] };
+  input.plan.sourceInventorySha256 = digest(input.sourceInventory);
+  input.plan.users = [
+    { ...input.plan.users[0]!, sourceRowSha256: digest(user) },
+  ];
+  input.plan.createUsers = [
+    { ...user, sourceId: user.id, sourceRowSha256: digest(user) },
+  ];
+  input.plan.tokens = [
+    {
+      ...input.plan.tokens[0]!,
+      sourceRowSha256: digest(token),
+      sourceCreatedAt: token.created_at,
+    },
+  ];
+  input.revokedAt = "2026-01-01T00:00:00.123456Z";
+  await importNativeIdentities(db, resign(input));
+  const times = (
+    await db.query<any>(
+      "SELECT to_char((SELECT created_at FROM users WHERE id='source_account') AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS.US') AS user_time,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS.US') AS token_time FROM tokens WHERE id='source_token'",
+    )
+  ).rows[0];
+  expect(times.user_time).toBe("2020-01-01 00:00:00.123456");
+  expect(times.token_time).toBe("2020-02-01 00:00:00.654321");
+  expect(await importNativeIdentities(db, input)).toMatchObject({
+    replayed: 2,
+  });
+});
+it("retains parent and merged references when the referenced account sorts later", async () => {
+  const db = await getDb(),
+    input = fixture();
+  const child = {
+      ...sourceUser,
+      id: "a_child",
+      email: null,
+      kind: "testuser",
+      parent_user_id: "z_parent",
+      merged_into_user_id: "z_parent",
+    },
+    parent = { ...sourceUser, id: "z_parent" };
+  input.sourceInventory = { users: [child, parent], tokens: [] };
+  input.plan.sourceInventorySha256 = digest(input.sourceInventory);
+  input.plan.users = [child, parent].map((u) => ({
+    sourceId: u.id,
+    targetId: u.id,
+    action: "create-preserved" as const,
+    sourceRowSha256: digest(u),
+  }));
+  input.plan.createUsers = [child, parent].map((u) => ({
+    ...u,
+    sourceId: u.id,
+    sourceRowSha256: digest(u),
+  }));
+  input.plan.targets = {
+    users: Object.fromEntries(
+      [child, parent].map((u) => [u.id, { userId: u.id, email: u.email }]),
+    ),
+    actors: {},
+    tokens: {},
+  };
+  input.plan.tokens = [];
+  await importNativeIdentities(db, resign(input));
+  const row = (
+    await db.query<any>(
+      "SELECT parent_user_id,merged_into_user_id FROM users WHERE id='a_child'",
+    )
+  ).rows[0];
+  expect(row).toEqual({
+    parent_user_id: "z_parent",
+    merged_into_user_id: "z_parent",
+  });
+});

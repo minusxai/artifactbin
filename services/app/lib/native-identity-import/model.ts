@@ -17,6 +17,20 @@ export function nativeIdentityDigest(value: unknown): string {
 }
 const normalizedEmail = (value: string | null) =>
   value?.trim().toLowerCase() ?? null;
+/** PostgreSQL microseconds survive comparison; Date is used only for whole seconds and timezone conversion. */
+export function nativeIdentityTimestamp(value: string): string {
+  const match =
+    /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/.exec(
+      value,
+    );
+  if (!match) throw Error("native_identity_timestamp_invalid");
+  const second = new Date(match[1]!.replace(" ", "T") + match[3]!);
+  if (!Number.isFinite(second.getTime()))
+    throw Error("native_identity_timestamp_invalid");
+  return second
+    .toISOString()
+    .replace(".000Z", "." + (match[2] ?? "").padEnd(6, "0") + "Z");
+}
 export function storedUser(row: NativeIdentityUser) {
   return {
     id: row.id,
@@ -24,8 +38,8 @@ export function storedUser(row: NativeIdentityUser) {
     kind: row.kind,
     parent_user_id: row.parent_user_id ?? null,
     merged_into_user_id: row.merged_into_user_id ?? null,
-    expires_at: row.expires_at ?? null,
-    created_at: row.created_at,
+    expires_at: row.expires_at ? nativeIdentityTimestamp(row.expires_at) : null,
+    created_at: nativeIdentityTimestamp(row.created_at),
     name: row.name ?? null,
     username: row.username ?? null,
     image_key: row.image_key ?? null,
