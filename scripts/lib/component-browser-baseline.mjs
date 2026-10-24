@@ -7,6 +7,8 @@ import sharp from 'sharp';
 import { browserParityFixtures, parityThemes, parityViewports } from '../fixtures/component-baseline/index.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
+/** Failure logs contain bounded technical context, never URL credentials or queries. */
+function diagnosticText(value){return String(value).replace(/https?:\/\/[^\s"'<>]+/g,value=>{try{const url=new URL(value);return url.origin+url.pathname;}catch{return '[URL]';}}).slice(0,1000);}
 /** Serializable behavior and geometry; generated IDs/classes intentionally excluded. */
 function browserState() {
   const visible = node => !!node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
@@ -90,18 +92,21 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
   const captures=new Array(tasks.length);
   async function capture({fixture,theme,viewport,state},workerBrowser) {
     const context=await workerBrowser.newContext({viewport,colorScheme:theme,reducedMotion:'reduce',locale:'en-US',timezoneId:'UTC'});
+    const errors=[],fontResources=[],fontPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='';
     try {
       const page=await context.newPage();
-      const errors=[],fontResources=[],fontPending=[],resourceErrors=[];
       page.on('pageerror',error=>errors.push(error.message));
+      page.on('console',message=>{if(message.type()==='error'&&consoleErrors.length<20)consoleErrors.push(diagnosticText(message.text()));});
+      page.on('requestfailed',request=>{if(requestFailures.length<20)requestFailures.push({type:request.resourceType(),url:diagnosticText(request.url()),error:diagnosticText(request.failure()?.errorText||'unknown')});});
+      page.on('response',response=>{if(response.status()>=400&&httpFailures.length<20)httpFailures.push({type:response.request().resourceType(),url:diagnosticText(response.url()),status:response.status(),contentType:response.headers()['content-type']||''});});
       const local=value=>{const url=new URL(value);return ['data:','blob:'].includes(url.protocol)||['localhost','127.0.0.1','app.lvh.me','lvh.me'].includes(url.hostname)||url.hostname.endsWith('.lvh.me');};
       await page.route?.('**/*',route=>{const request=route.request();if(!local(request.url())){resourceErrors.push({url:request.url(),error:`External ${request.resourceType()} request blocked: ${request.url()}`});return route.abort('blockedbyclient');}return route.continue();});
       page.on('requestfailed',request=>{if(request.resourceType()==='font')resourceErrors.push({url:request.url(),error:`Font request failed: ${request.url()} (${request.failure()?.errorText||'unknown'})`});});
       page.on('response',response=>{if(response.request().resourceType()==='font')fontPending.push((async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}})());});
       const {frame,ready,afterAction}=await mount({fixture,theme,viewport,state,page});
-      const url=new URL(frame.url());
+      const url=new URL(frame.url());readerUrl=diagnosticText(url.href);
       if (!['127.0.0.1','localhost','app.lvh.me','lvh.me'].includes(url.hostname) && !url.hostname.endsWith('.lvh.me')) throw Error('Browser baseline must use an isolated local reader');
-      await ready?.();
+      phase='ready';await ready?.();phase='capture';
       await frame.evaluate(()=>document.fonts.ready);
       for(const action of state.actions) {
         const target=frame.getByRole(action.role,{...(action.name?{name:action.name,exact:true}:{})});
@@ -122,6 +127,7 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       const screenshot=await page.screenshot({fullPage:false,animations:'disabled',caret:'hide'});
       await writeFile(path.join(output,name),screenshot);
       return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode:'viewport',browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
+    } catch(cause){const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures};throw new Error(`${diagnosticText(cause.message)}; reader diagnostics: ${JSON.stringify(diagnostics)}`,{cause});
     } finally {await context.close();}
   }
   let next=0,failed=false;
