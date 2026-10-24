@@ -69,9 +69,9 @@ it('normal publication helper receives the complete declared inline stylesheet c
 });
 
 it('waits on the original reader marker without requiring a fabricated native marker',async()=>{
- const reader=markers=>({locator:selector=>({waitFor:async()=>{if(!selector.split(',').some(marker=>markers.has(marker)))throw Error('reader-not-ready');}})});
+ const reader=markers=>({locator:selector=>({first:()=>({waitFor:async()=>{if(!selector.split(',').some(marker=>markers.has(marker)))throw Error('reader-not-ready');}})})});
  const original=reader(new Set(['[data-mx-inline-story]'])),native=reader(new Set(['html[data-af-ready="yes"]']));
- await waitForImportedPilotReady(original,'jsx');await waitForImportedPilotReady(native,'html');
+ await waitForImportedPilotReady(original,'jsx');await waitForImportedPilotReady(native,'html');await waitForImportedPilotReady(reader(new Set(['[data-mx-story-root]','[data-mx-inline-story]'])),'jsx');
  await expect(waitForImportedPilotReady(original,'html')).rejects.toThrow('reader-not-ready');
  await expect(waitForImportedPilotReady(native,'jsx')).rejects.toThrow('reader-not-ready');
  const closure=await pilotHarnessFiles(path.resolve(import.meta.dirname,'../..'));expect(closure).toContain('scripts/gates.mjs');expect(closure).toContain('scripts/lib/native-prepared-pilot-store.mjs');

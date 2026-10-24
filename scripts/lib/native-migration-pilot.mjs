@@ -150,5 +150,5 @@ async function captureImportedPilot({input,paths,browser,server,connectAgent}){
 /** Each actual reader owns its readiness marker; private probes then await shared data. */
 export async function waitForImportedPilotReady(frame,implementation){
  if(!['html','jsx'].includes(implementation))throw Error('pilot-reader-implementation');
- await frame.locator(implementation==='html'?'html[data-af-ready="yes"]':'[data-mx-story-root],[data-mx-inline-story]').waitFor();
+ await frame.locator(implementation==='html'?'html[data-af-ready="yes"]':'[data-mx-story-root],[data-mx-inline-story]').first().waitFor();
 }

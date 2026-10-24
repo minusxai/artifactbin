@@ -29,6 +29,7 @@ export interface NativePreparedPilotStore {
  format:'native-prepared-store-v1';
  directory:'prepared-store';
  fixtureAuthSecret?:{path:'fixture-auth-secret';sha256:string;bytes:number;provenance:'disposable-target-test-key'};
+ directories:readonly string[];
  files:readonly {path:string;sha256:string;bytes:number}[];
  reader:{pageId:string;version:number;accountEmail:string;datasetIds:readonly string[];identityPlanSha256:string};
  sha256:string;
