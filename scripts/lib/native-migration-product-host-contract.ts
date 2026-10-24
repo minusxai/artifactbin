@@ -11,9 +11,18 @@ export interface NativeProductImportRecipe {
  relations:NativeRelationProjection;
  membership:NativeArtifactRelationsInput;
  identity:NativeIdentityImport;
+ /** Explicit reviewed mapping for pre-existing group identities; no inferred or created groups. */
+ identityGroups?:Readonly<Record<string,string>>;
  schemas:NativeIdentityMigrationSchemas;
  catalog:{projection:NativeCatalogProjection;root:string;ledgerPath:string;receipts:Parameters<typeof canonicalNativeObjectSource>[2];sinkDirectory:string};
 }
 export interface NativeProductImportDb {
  transaction<T>(work:(tx:Queryable)=>Promise<T>):Promise<T>;
 }
+
+interface NativeHostEncodedBytes {encoding:'base64';data:string;sha256:string}
+export type NativeSerializedProductImportRecipe=Omit<NativeProductImportRecipe,'membership'>&{
+ membership:Omit<NativeArtifactRelationsInput,'source'>&{source:{
+  capture:NativeHostEncodedBytes;selectionManifest:NativeHostEncodedBytes;canonicalSource:NativeHostEncodedBytes;headWitness:NativeHostEncodedBytes;refreshManifest?:NativeHostEncodedBytes;
+ }};
+};

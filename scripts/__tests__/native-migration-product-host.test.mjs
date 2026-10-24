@@ -34,12 +34,15 @@ it('runs actual adapters for two unrelated reviewed source identities, verifies 
  try{
   const db=await getDb();
   for(const prefix of ['HostFirst','HostSecond']){
-   const recipe=await fixture(prefix,root),prepared=await prepareNativeProductImport(recipe);
+   const recipe=await fixture(prefix,root);
+   if(prefix==='HostSecond'){for(const [field,value] of Object.entries(recipe.membership.source))recipe.membership.source[field]={encoding:'base64',data:Buffer.from(value).toString('base64'),sha256:sha(value)};}
+   const prepared=await prepareNativeProductImport(recipe);
    expect(await prepared.import(db)).toMatchObject({disposition:'created',identities:{createdUsers:1,createdTokens:1}});
    expect(await prepared.import(db)).toMatchObject({disposition:'unchanged'});
    expect((await db.query('SELECT user_id,token_id,version FROM artifacts WHERE id=$1',[recipe.history.pageId])).rows[0]).toEqual({user_id:prefix+'user',token_id:prefix+'token',version:3});
    const runtimeAssembly={key:{sourceNamespace:prefix,sourceId:recipe.history.sourceId,version:3},sha256:sha(prefix+'assembly'),result:{status:'complete',html:recipe.history.revisions[0].page.html,htmlSha256:sha(recipe.history.revisions[0].page.html),files:[]}};
-   const runtime=await prepareNativeProductRuntime([runtimeAssembly],{pageId:recipe.history.pageId,actor:{userId:prefix+'user',tokenId:prefix+'token'},origin:'http://localhost:3000',visibility:'private',shares:[]});
+   const runtimeOptions={pageId:recipe.history.pageId,actor:{userId:prefix+'user',tokenId:prefix+'token'},origin:'http://localhost:3000',visibility:'private',shares:[]};
+   const runtime=await prepareNativeProductRuntime([runtimeAssembly],runtimeOptions);runtimeOptions.pageId='MutatedDestination';
    expect(runtime.prepareBundle(runtimeAssembly,recipe.history.pageId).sourceHtmlSha256).toBe(runtimeAssembly.result.htmlSha256);
    expect(()=>runtime.prepareBundle({...runtimeAssembly,key:{...runtimeAssembly.key,sourceId:'other'}},recipe.history.pageId)).toThrow('runtime_binding');
    const raw=db.raw();if(raw.kind!=='pglite')throw Error('pglite');const dump=await raw.instance.dumpDataDir('none'),html=recipe.history.revisions[0].page.html;
@@ -50,6 +53,8 @@ it('runs actual adapters for two unrelated reviewed source identities, verifies 
   const broken=await prepareNativeProductImport(rolledBack);await expect(broken.import(db)).rejects.toThrow('native_import_invalid');
   expect((await db.query('SELECT id FROM users WHERE id=$1',['HostRollbackuser'])).rows).toEqual([]);
   expect((await db.query('SELECT id FROM auth."user" WHERE id=$1',['HostRollbackuser'])).rows).toEqual([]);
+  const encoded=await fixture('HostEncoded',root);encoded.membership.source.capture={encoding:'base64',data:Buffer.from('wrong').toString('base64'),sha256:sha('expected')};
+  await expect(prepareNativeProductImport(encoded)).rejects.toThrow('source_digest');
   const denied=await fixture('HostDenied',root);denied.schemas={};
   await expect((await prepareNativeProductImport(denied)).import(db)).rejects.toThrow('scope_required');
   expect((await db.query('SELECT id FROM users WHERE id=$1',['HostDenieduser'])).rows).toEqual([]);
