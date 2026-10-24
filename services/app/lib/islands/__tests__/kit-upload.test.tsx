@@ -32,9 +32,16 @@ describe('FileUpload over the bound page store',()=>{
     const upload=vi.fn(async()=>receipt('dfile:abc234def456'));
     const s=setup(upload,true,true,DeferredFileUpload);
     expect(s.host.textContent).toContain('Preparing uploads');
+    expect(s.host.querySelector<HTMLButtonElement>('button')!.hidden).toBe(true);
     await vi.waitFor(()=>expect(s.host.querySelector('input')).not.toBeNull());
     s.choose([new File(['png'],'screen.png',{type:'image/png'})]);
     await vi.waitFor(()=>expect(s.store.getValue('refs')).toBe('["dfile:abc234def456"]'));
+  });
+  it('does not mount a late optional interaction chunk after disposal',async()=>{
+    const upload=vi.fn(async()=>receipt('dfile:abc234def456'));
+    const s=setup(upload,true,true,DeferredFileUpload);s.dispose();
+    await new Promise(resolve=>setTimeout(resolve,0));
+    expect(s.host.querySelector('input')).toBeNull();expect(upload).not.toHaveBeenCalled();
   });
   it('renders a static preview without a store or upload request',()=>{
     const host=document.createElement('div');const dispose=render(()=><PreviewFileUpload p={{dataset:'attachments',value:'$refs',multiple:true,label:'Screenshots'}}/>,host);stops.push(dispose);
