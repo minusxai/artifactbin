@@ -1,13 +1,21 @@
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {JSDOM} from 'jsdom';
-import {describe,it,expect} from 'vitest';
+import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {nativeSystemCss,nativeSystemMd} from '../../design-systems/lib/html-skill.mjs';
 import {ROSTER} from '../../design-systems/lib/pages.mjs';
-import {prepareSample,sendPublication} from '../../services/app/skills/artifactbin/scripts/publish.mjs';
+import {GET as skillArchive} from '../../services/app/app/skills/artifactbin.zip/route.ts';
+import {pathToFileURL} from 'node:url';
 const ROOT=path.resolve(import.meta.dirname,'../../services/app/skills/artifactbin'),BASE='https://example.test';
+let installedDir,prepareSample,sendPublication;
+beforeAll(async()=>{
+ installedDir=await mkdtemp(path.join(tmpdir(),'native-author-installed-'));
+ const zip=path.join(installedDir,'skill.zip');await writeFile(zip,new Uint8Array(await (await skillArchive(new Request(BASE+'/skills/artifactbin.zip'))).arrayBuffer()));execFileSync('unzip',['-q',zip,'-d',installedDir]);
+ ({prepareSample,sendPublication}=await import(pathToFileURL(path.join(installedDir,'artifactbin/scripts/publish.mjs')).href));
+});
+afterAll(async()=>{if(installedDir)await rm(installedDir,{recursive:true,force:true});});
 describe('native author resources',()=>{
  it('prepares real HTML, CSV and paired backend requests without leaking a credential',async()=>{
   for(const name of ['report','repairs-data','csv-dashboard','shared-app']){
@@ -36,8 +44,9 @@ describe('native author resources',()=>{
   expect(requests).toHaveLength(2);
  });
  it('refuses to overwrite a prepared request so retries keep their identity',async()=>{
-  const dir=await mkdtemp(path.join(tmpdir(),'native-author-')),output=path.join(dir,'request.json'),helper=path.join(ROOT,'scripts/publish.mjs');
+  const dir=await mkdtemp(path.join(tmpdir(),'native-author-'));
   try{
+   const output=path.join(dir,'request.json'),helper=path.join(installedDir,'artifactbin/scripts/publish.mjs');
    execFileSync(process.execPath,[helper,'--prepare','report','--server',BASE,'--output',output]);
    const original=await readFile(output,'utf8');
    expect(()=>execFileSync(process.execPath,[helper,'--prepare','report','--server',BASE,'--output',output],{stdio:'pipe'})).toThrow();

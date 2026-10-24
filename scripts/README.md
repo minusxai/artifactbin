@@ -64,6 +64,7 @@ fails when one moves: `services/app/__tests__/downstream-script-paths.test.ts`.
 |---|---|---|
 | `scripts/gates.mjs` | Run the journey gates as a set: servers, shards, manifest bijection (`gates.manifest.mjs`). | `npm run test:gates`, `ci.yml` |
 | `scripts/gate-container.mjs` | Run named gates in a Linux container built and served as CI does. | by hand, agents (pre-merge only) |
+| `scripts/component-baseline-decode.mjs` | Decode captured component-baseline evidence for review. | by hand, with a capture directory |
 
 ## Journey gates
 
@@ -75,13 +76,17 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | `scripts/gates/gate-accounts-and-workspace.mjs` | Guest start, OAuth consent, login, claim, fork, folders and CLI acceptance. | `gates.mjs` |
 | `scripts/gates/gate-collab-roles.mjs` | Delivery follows the link's role for owner, signed-in stranger and visitor. | `gates.mjs` |
 | `scripts/gates/gate-comments.mjs` | The owner pins feedback to a node; the agent answers. | `gates.mjs` |
+| `scripts/gates/gate-component-baseline.mjs` | Verify the reader's component asset and baseline evidence. | `gates.mjs` |
 | `scripts/gates/gate-data-journey.mjs` | A dataset becomes numbers on a page that re-runs its own queries. | `gates.mjs` |
 | `scripts/gates/gate-datasets-in-documents.mjs` | Editable cells that write real rows, under every sharing permission. | `gates.mjs` |
 | `scripts/gates/gate-exports.mjs` | What the exporter photographs, checked as pixels. | `gates.mjs` |
 | `scripts/gates/gate-kit-and-fonts.mjs` | The component kit and its type; the compiled reader handover. | `gates.mjs` |
 | `scripts/gates/gate-live.mjs` | Someone else writes and the open page follows without a reload. | `gates.mjs` |
+| `scripts/gates/gate-html-components.mjs` | Check the HTML component author and reader contract. | `gates.mjs` |
+| `scripts/gates/gate-html-rich-components.mjs` | Check rich HTML component content through publication and reading. | `gates.mjs` |
 | `scripts/gates/gate-native-core.mjs` | Immediate reader, lazy author import, trusted relay and self-contained offline client behavior. | `gates.mjs` |
 | `scripts/gates/gate-presence.mjs` | Reader cursors, selections and preferences stay isolated across accounts and tabs on the shared document stream. | `gates.mjs` |
+| `scripts/gates/gate-private-preview-save.mjs` | Save a private preview and verify its reader handover. | `gates.mjs` |
 | `scripts/gates/gate-media.mjs` | Files, images and web URLs from the author to a stranger's browser. | `gates.mjs` |
 | `scripts/gates/gate-offline-file.mjs` | The offline file and the screenshot comment in Chromium, Firefox and WebKit. | `gates.mjs` |
 | `scripts/gates/gate-own-origin-script.mjs` | A script document on its own origin: framed, queried, edited, exported. | `gates.mjs` |
@@ -99,6 +104,7 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | File | Purpose | Run by |
 |---|---|---|
 | `scripts/build/build-server.mjs` | Bundle a server entry into one ESM file with native packages external. | `npm run build`, `ci.yml` |
+| `scripts/build/build-html-components.mjs` | Build the HTML component module graph for the installed author skill. | by hand, when refreshing the skill bundle |
 | `scripts/build/build-islands.mjs` | The shared reader island build and its manifest. | `npm run build:islands -w services/app`, `ci.yml`, downstream |
 | `scripts/build/build-gate-inputs.mjs` | Build only what the browser gates run: app, server bundle, CLI bundle. | `ci.yml`, `gate-container.mjs` |
 | `scripts/lib/generate-teaching.mjs` | Generate the CLI's teaching once per input change (content-verified cache); also the library the dev tools import. | app `prebuild`, `services/cli/scripts/build.mjs` |
