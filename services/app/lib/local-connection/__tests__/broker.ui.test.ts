@@ -68,3 +68,13 @@ it('retains pre-bind chrome sizing and sends a fixed viewport expansion request'
  const broker=installLocalConnectionBroker({win:window,onState:()=>{}}),port=fakePort();
  try{broker.resize(76);window.dispatchEvent(new MessageEvent('message',{origin:'null',source:window,data:{kind:'af:local-bind',nonce:'test-nonce',identity:identity()},ports:[port]}));await vi.waitFor(()=>expect(port.postMessage).toHaveBeenCalledWith({kind:'chrome-size',height:76}));broker.resize({mode:'viewport'});expect(port.postMessage).toHaveBeenLastCalledWith({kind:'chrome-size',mode:'viewport'});broker.resize(76);expect(port.postMessage).toHaveBeenLastCalledWith({kind:'chrome-size',height:76});}finally{broker.dispose();}
 });
+
+it('accepts only exact advisory local evidence and ignores messages after disposal without changing authority',async()=>{
+ history.replaceState(null,'','/#nonce=test-nonce');const fetch=vi.fn().mockResolvedValue({ok:false,status:409,json:async()=>({})});vi.stubGlobal('fetch',fetch);
+ const evidence=vi.fn(),states:string[]=[];const broker=installLocalConnectionBroker({win:window,onState:s=>states.push(s),onLocalSourceEvidence:evidence}),port=fakePort();
+ window.dispatchEvent(new MessageEvent('message',{origin:'null',source:window,data:{kind:'af:local-bind',nonce:'test-nonce',identity:identity()},ports:[port]}));await vi.waitFor(()=>expect(states.at(-1)).toBe('stale'));
+ for(const data of [{kind:'local-source-evidence',localDigest:'bad'},{kind:'local-source-evidence',localDigest:'b'.repeat(64),baseRevision:'999'}])await port.onmessage?.({data} as MessageEvent);
+ expect(evidence).not.toHaveBeenCalled();const message={kind:'local-source-evidence',localDigest:'b'.repeat(64)};
+ await port.onmessage?.({data:message} as MessageEvent);expect(evidence).toHaveBeenCalledExactlyOnceWith(message.localDigest);expect(states).not.toContain('connected');expect(fetch).toHaveBeenCalledTimes(1);
+ broker.dispose();await port.onmessage?.({data:message} as MessageEvent);expect(evidence).toHaveBeenCalledTimes(1);
+});

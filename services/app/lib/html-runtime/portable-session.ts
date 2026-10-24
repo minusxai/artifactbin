@@ -46,9 +46,9 @@ export function startPortableSession(options:PortableSessionOptions):()=>void {
    let privateState:HtmlJsonObject|undefined;
    if(includePrivateState){const name='@afbin/apollo';const author=await import(name) as {readViewerDocument():HtmlJsonObject};privateState=author.readViewerDocument();}
    const {saveLocalDocument}=await import('./save-local');
-   const saved=await saveLocalDocument({win,identity,privateState,publishedSource,onSource(source){localDigest=sha256Hex(source);update();}});
-   if(saved)chrome?.update({state,notice:'Download started. Original disk file unchanged.'});
-  }catch(error){chrome?.update({state,notice:error instanceof Error?error.message:'Save failed. Original disk file unchanged.'});}
+   const saved=await saveLocalDocument({win,identity,privateState,publishedSource,onSource(source){if(disposed)return;localDigest=sha256Hex(source);connection?.reportSource(localDigest);update();}});
+   if(saved&&!disposed)chrome?.update({state,notice:'Download started. Original disk file unchanged.'});
+  }catch(error){if(!disposed)chrome?.update({state,notice:error instanceof Error?error.message:'Save failed. Original disk file unchanged.'});}
  };
  const connect=()=>{
   if(!identity||disposed)return;
@@ -82,7 +82,7 @@ export function startPortableSession(options:PortableSessionOptions):()=>void {
     }
    },
   });
-  connection=current;activate();
+  connection=current;if(localDigest)current.reportSource(localDigest);activate();
  };
  const publish=async(platformOrigin:string)=>{
   try{const {publishLocalDocument}=await import('../local-publication');publishLocalDocument({win,platformOrigin,onPublished(receipt){identity=receipt.identity;if(receipt.localSourceDigest)publishedSource={source:receipt.source,localSourceDigest:receipt.localSourceDigest};options.adoptIdentity?.(identity,receipt.source);remoteObservation={remoteDigest:identity.sourceDigest,remoteRevision:identity.baseRevision};update();chrome?.update({state,notice:'Published—Save linked HTML and reopen to load its saved identity and any new comment anchors.'});connect();}});}catch(error){chrome?.update({state,notice:error instanceof Error?error.message:'Publication could not open.'});}

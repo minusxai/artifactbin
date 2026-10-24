@@ -71,3 +71,14 @@ it('expands against the parent viewport, follows its resize and collapses withou
   send(76);expect(frame.style.height).toBe('76px');send('viewport');expect(frame.style.height).toBe('720px');vi.stubGlobal('innerHeight',480);window.dispatchEvent(new Event('resize'));expect(frame.style.height).toBe('480px');send('invalid');expect(frame.style.height).toBe('480px');send(76);window.dispatchEvent(new Event('resize'));expect(frame.style.height).toBe('76px');connection.disconnect();send('viewport');expect(frame.isConnected).toBe(false);connection.dispose();expect(removed).toHaveBeenCalledWith('resize',expect.any(Function));
  }finally{connection.dispose();}
 });
+
+it('replays only validated advisory source evidence on a fresh channel and stops after disposal',()=>{
+ const ports:Array<{onmessage:unknown;onmessageerror:unknown;start:ReturnType<typeof vi.fn>;close:ReturnType<typeof vi.fn>;postMessage:ReturnType<typeof vi.fn>}>=[];
+ vi.stubGlobal('MessageChannel',class {port1={onmessage:null,onmessageerror:null,start:vi.fn(),close:vi.fn(),postMessage:vi.fn()};port2={};constructor(){ports.push(this.port1);}});
+ const connection=connectLocalDocument({win:window,identity,onState:()=>{}});
+ const bind=()=>{const frame=document.querySelector('iframe')!;vi.spyOn(frame.contentWindow!,'postMessage').mockImplementation(()=>{});const nonce=new URLSearchParams(new URL(frame.src).hash.slice(1)).get('nonce');window.dispatchEvent(new MessageEvent('message',{origin:identity.platformOrigin,source:frame.contentWindow,data:{kind:'af:local-ready',nonce}}));};
+ connection.reportSource('bad');bind();expect(ports[0]!.postMessage).not.toHaveBeenCalled();
+ const message={kind:'local-source-evidence',localDigest:'b'.repeat(64)};connection.reportSource(message.localDigest);expect(ports[0]!.postMessage).toHaveBeenCalledWith(message);
+ connection.retry();bind();expect(ports[1]!.postMessage).toHaveBeenCalledWith(message);
+ connection.dispose();const count=ports[1]!.postMessage.mock.calls.length;connection.reportSource('c'.repeat(64));expect(ports[1]!.postMessage).toHaveBeenCalledTimes(count);
+});

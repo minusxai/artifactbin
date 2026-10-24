@@ -52,3 +52,10 @@ export interface ConnectionMonitorOptions {
  intervalMs?:number;
  timeoutMs?:number;
 }
+
+/** Advisory parent-observed source bytes; never authority, provenance or a write grant. */
+export interface LocalSourceEvidence {kind:'local-source-evidence';localDigest:string}
+export function validLocalSourceEvidence(value:unknown):value is LocalSourceEvidence {
+ if(!value||typeof value!=='object')return false;const data=value as Record<string,unknown>;
+ return Object.keys(data).length===2&&data.kind==='local-source-evidence'&&typeof data.localDigest==='string'&&/^[a-f0-9]{64}$/.test(data.localDigest);
+}

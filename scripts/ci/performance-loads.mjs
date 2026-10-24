@@ -26,6 +26,7 @@
  *   trust byte and request counts, which are deterministic.
  */
 import assert from 'node:assert/strict';
+import { installPerformanceUsefulObserver } from '../lib/performance-useful.mjs';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -146,19 +147,7 @@ try {
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   // Use a browser-side observer: runner round trips are not part of useful DOM
   // timing. Two animation frames represent a paint opportunity after the commit.
-  await page.addInitScript(() => {
-    window.__performanceUseful = null;
-    const mark = () => { if(window.__performanceUseful===null) requestAnimationFrame(() => requestAnimationFrame(() => { window.__performanceUseful=performance.now(); })); };
-    window.addEventListener('message',event=>{const frame=document.querySelector('iframe[data-mx-document-frame]');if(frame && event.source===frame.contentWindow && event.data?.type==='page-speed-useful')mark();});
-    const observer = new MutationObserver(() => {
-      const home = location.pathname === '/' && [...document.querySelectorAll('a')].some(a => a.textContent?.includes('Workspace sample'));
-      const prose = [...document.querySelectorAll('h1')].some(h => h.textContent === 'Performance fixture');
-      if (!home && !prose) return;
-      observer.disconnect();
-      if(window.parent!==window)window.parent.postMessage({type:'page-speed-useful'},'*');else mark();
-    });
-    observer.observe(document, { subtree: true, childList: true });
-  });
+  await page.addInitScript(installPerformanceUsefulObserver);
   const sessionCookies = await context.cookies(base);
   for (const route of ['home', 'reader']) {
     if (route === 'reader') await context.clearCookies();

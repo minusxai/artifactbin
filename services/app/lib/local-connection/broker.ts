@@ -1,4 +1,4 @@
-import {LOCAL_CHROME_COLLAPSED_HEIGHT} from './contracts';
+import {LOCAL_CHROME_COLLAPSED_HEIGHT,validLocalSourceEvidence} from './contracts';
 import {startConnectionMonitor} from './monitor';
 import {validLinkedDocument} from './registry';
 import type {LinkedDocument,LocalConnectionState,SourceObservation} from './contracts';
@@ -9,6 +9,8 @@ export interface LocalBrokerOptions {
  onConnected?(value:{identity:LinkedDocument;role:string;readOnly:true}):void;
  onMessage?(message:unknown):void;
  onSourceObservation?(observation:SourceObservation):void;
+ /** Advisory only; must never affect admission or writes. */
+ onLocalSourceEvidence?(localDigest:string):void;
 }
 export interface LocalConnectionBroker {post(message:unknown):void;sourceChanged():void;retry():void;disconnect():void;resize(height:number|{mode:'viewport'}):void;dispose():void}
 /** Platform-origin only. Capabilities and authentication remain inside this document. */
@@ -28,7 +30,9 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
   if(!local||!validLinkedDocument(event.data.identity)||event.data.identity.platformOrigin!==win.location.origin)return;
   clearInterval(ready);observe=options.onSourceObservation!==undefined||event.data.observeSource===true;identity={...event.data.identity};options.onIdentity?.(identity!);port=event.ports[0];
   port.onmessage=async(message:MessageEvent)=>{
+   if(disposed)return;
    const data=message.data;if(!data||typeof data!=='object')return;
+   if(data.kind==='local-source-evidence'){if(validLocalSourceEvidence(data))options.onLocalSourceEvidence?.(data.localDigest);return;}
    if(data.kind==='disconnect'){revoke();state('offline');port?.close();return;}
    if(data.kind==='bridge'){if(connected)options.onMessage?.(data.message);return;}
    if(data.kind!=='operation'||!connected||!capability||!identity||!Number.isSafeInteger(data.call)||data.call<1||seen.has(data.call))return;
