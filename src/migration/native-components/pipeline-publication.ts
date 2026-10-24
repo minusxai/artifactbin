@@ -312,6 +312,14 @@ export async function prepareNativePublication(
       for (const table of tables)
         if (typeof table.objectKey === "string") keys.add(table.objectKey);
     }
+  // Derived typed-user metadata names target objects; immutable source bytes still
+  // belong in the selected closure so target staging can verify the remap.
+  for (const remap of catalogBody.typedUserRemaps ?? [])
+    if (
+      sourceIds.has(remap.sourceId) &&
+      typeof remap.sourceObjectKey === "string"
+    )
+      keys.add(remap.sourceObjectKey);
   const selectedCatalog = {
     ...catalogBody,
     datasets,
