@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { planMigration } from "../import.ts";
 import { canonicalMigrationValue } from "../verification-values.ts";
 import { nativeDigest } from "./selection.ts";
+import { resolveNativeIdentityComment } from "./identity.ts";
 import {
   projectNativeV3Publication,
   projectNativeV3RelationBindings,
@@ -14,6 +15,7 @@ import type {
   NativePublicationHost,
   NativePublicationResult,
   NativePublicationCatalogImport,
+  NativePublicationCommentAnchor,
 } from "./pipeline-publication-contracts.ts";
 function fail(code: string): never {
   throw Error("native_publication_" + code);
@@ -164,6 +166,53 @@ export async function prepareNativePublication(
           ? 1
           : 0),
   );
+  const rootAnchor = (
+    root: LegacyRow,
+  ): NativePublicationCommentAnchor | null => {
+    if (
+      root.anchor_version !== page.headVersion ||
+      typeof root.anchor_key !== "string"
+    )
+      return null;
+    const quote = root.quote ?? "";
+    if (
+      typeof quote !== "string" ||
+      quote.length > 32768 ||
+      /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(quote)
+    )
+      return null;
+    // Retained annotation keys explicitly name authored DOM IDs. Never guess
+    // a graph key, another version, or a text match when that ID is absent.
+    let target;
+    try {
+      target = resolveNativeIdentityComment([assembly.input.identity], {
+        key: assembly.key,
+        target: { kind: "dom", value: root.anchor_key },
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "native_identity_comment_target"
+      )
+        return null;
+      throw error;
+    }
+    if (
+      !bindings.some(
+        (binding) =>
+          binding.version === page.headVersion &&
+          binding.sourceNodeId === target.sourceNode &&
+          binding.nodeId === target.afId,
+      )
+    )
+      return null;
+    return {
+      version: page.headVersion,
+      sourceNamespace: selection.sourceNamespace,
+      sourceNodeId: target.sourceNode,
+      quote,
+    };
+  };
   const projected = sorted.map((a) => {
     const root =
       a.root_id === null
@@ -173,6 +222,7 @@ export async function prepareNativePublication(
     const retained = page.revisions.some(
       (r) => r.key.version === root.anchor_version,
     );
+    const attachment = rootAnchor(root);
     const fields = {
       id: a.id,
       revision: a.revision,
@@ -197,7 +247,7 @@ export async function prepareNativePublication(
     };
     return {
       ...fields,
-      anchor: null,
+      anchor: a.root_id === null ? attachment : null,
       retainedContext: {
         sourceNamespace: selection.sourceNamespace,
         sourceId: page.sourceId,
@@ -205,8 +255,16 @@ export async function prepareNativePublication(
         originalAnchorKey: root.anchor_key,
         targetVersionMigrated: root.anchor_version === page.headVersion,
         sourceVersionRetained: retained,
-        status: retained ? "orphaned-source" : "unavailable-version",
-        reason: retained ? "retired-anchor-attribute" : "not-retained",
+        status: attachment
+          ? "attached-source"
+          : retained
+            ? "orphaned-source"
+            : "unavailable-version",
+        reason: attachment
+          ? "mapped-source-id"
+          : retained
+            ? "retired-or-unmapped-anchor"
+            : "not-retained",
         sourceAnnotation: a,
         raw: {
           anchor_key: a.anchor_key,

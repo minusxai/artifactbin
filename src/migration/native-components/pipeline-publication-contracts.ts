@@ -99,6 +99,12 @@ export interface NativePublicationInput {
   exportedAt: string;
   coreUrl: string;
 }
+export interface NativePublicationCommentAnchor {
+  version: number;
+  sourceNamespace: string;
+  sourceNodeId: string;
+  quote: string;
+}
 export interface NativePublicationRelationProjection {
   history: NativeV3HistoryImport;
   bindings: readonly {
@@ -108,7 +114,9 @@ export interface NativePublicationRelationProjection {
     sourceNodeId: string;
     nodeId: string;
   }[];
-  annotations: readonly Record<string, unknown>[];
+  annotations: readonly (Record<string, unknown> & {
+    anchor: NativePublicationCommentAnchor | null;
+  })[];
   members: readonly [];
   images: readonly Record<string, unknown>[];
 }

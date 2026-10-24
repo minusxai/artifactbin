@@ -22,6 +22,7 @@ const pin = "a".repeat(64),
 function fixture(
   sourceId = "SourceA",
   targetId = "TargAA",
+  element = false,
 ): { input: NativePublicationInput; host: NativePublicationHost } {
   const row = {
     id: sourceId,
@@ -78,9 +79,36 @@ function fixture(
     documentSha256: graph.documentSha256,
     analysisSha256: nativeDigest(graph),
     compilerSourceSha256: pin,
-    nodes: [
-      { type: "text", graphKey: "text", value: "Retained", start: 0, end: 8 },
-    ],
+    nodes: element
+      ? [
+          {
+            type: "element",
+            tag: "div",
+            graphKey: "text",
+            isComponent: false,
+            attributes: [
+              {
+                name: "id",
+                value: { static: true, json: "authored-node" },
+                start: 0,
+                end: 8,
+              },
+            ],
+            children: [],
+            selfClosing: false,
+            start: 0,
+            end: 8,
+          },
+        ]
+      : [
+          {
+            type: "text",
+            graphKey: "text",
+            value: "Retained",
+            start: 0,
+            end: 8,
+          },
+        ],
     flow: { values: [], queries: [], mutations: [], imports: [] },
     sourceSpans: graph.identities.map((n) => ({
       sourceNode: n.sourceNode,
@@ -377,4 +405,80 @@ test("shared catalog filters unrelated dataset and object evidence from a select
   assert.deepEqual(output.recipe.catalog.projection.typedUserRemaps, []);
   assert.deepEqual(output.recipe.catalog.projection.externalConnections, []);
   assert.deepEqual(output.recipe.catalog.receipts, {});
+});
+
+test("latest roots attach only through exact authored IDs and eligible canonical bindings", async () => {
+  const { input, host } = fixture("SourceA", "TargAA", true);
+  const root = {
+    id: "root",
+    artifact_id: "SourceA",
+    revision: 1,
+    root_id: null,
+    seq: "1",
+    body: "current context",
+    author_kind: "human",
+    author_user_id: "old-user",
+    author_token_id: "old-token",
+    author_label: null,
+    author_transport: "browser",
+    status: "open",
+    resolved_at: null,
+    created_at: "2020-01-01T00:00:00.000Z",
+    edited_at: null,
+    deleted_at: null,
+    change_seq: 1,
+    author_remote: null,
+    snippet: "context",
+    quote: "quote",
+    range: null,
+    view_state: null,
+    anchor_key: "authored-node",
+    anchor_version: 3,
+  };
+  input.relations = encode({
+    annotations: [
+      root,
+      { ...root, id: "reply", root_id: "root", seq: "2" },
+      { ...root, id: "unmapped", seq: "3", anchor_key: "text" },
+      { ...root, id: "unavailable", seq: "4", anchor_version: 0 },
+    ],
+  });
+  const result = await prepareNativePublication(input, host),
+    comments = result.recipe.relations.annotations;
+  const attached = comments.find((c) => c.id === "root")!;
+  assert.deepEqual(attached.anchor, {
+    version: 3,
+    sourceNamespace: "synthetic",
+    sourceNodeId: "text",
+    quote: "quote",
+  });
+  assert.equal((attached.retainedContext as any).status, "attached-source");
+  assert.equal(comments.find((c) => c.id === "reply")?.anchor, null);
+  assert.equal(
+    (comments.find((c) => c.id === "reply")?.retainedContext as any).status,
+    "attached-source",
+  );
+  assert.equal(comments.find((c) => c.id === "unmapped")?.anchor, null);
+  assert.equal(
+    (comments.find((c) => c.id === "unmapped")?.retainedContext as any).status,
+    "orphaned-source",
+  );
+  assert.equal(comments.find((c) => c.id === "unavailable")?.anchor, null);
+  assert.equal(
+    (comments.find((c) => c.id === "unavailable")?.retainedContext as any)
+      .status,
+    "unavailable-version",
+  );
+  const originalPrepare = host.prepare;
+  const ineligible = await prepareNativePublication(input, {
+    prepare: async (...args) => ({
+      ...(await originalPrepare(...args)),
+      commentNodeIds: () => [],
+    }),
+  });
+  assert.equal(
+    ineligible.recipe.relations.annotations.find((c) => c.id === "root")
+      ?.anchor,
+    null,
+  );
 });
