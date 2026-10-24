@@ -17,7 +17,7 @@ describe('local file connection',()=>{
  });
  it('connects only to the saved platform and removes the broker on disconnect',()=>{
   const states:string[]=[];const connection=connectLocalDocument({win:window,identity,onState:s=>states.push(s)});
-  const frame=document.querySelector('iframe')!;expect(new URL(frame.src).origin).toBe(identity.platformOrigin);expect(frame.src).toContain('/local/connect#nonce=');
+  const frame=document.querySelector('iframe')!;expect(frame.style.colorScheme).toBe('light');expect(new URL(frame.src).origin).toBe(identity.platformOrigin);expect(frame.src).toContain('/local/connect#nonce=');
   expect(states).toEqual(['connecting']);connection.disconnect();expect(document.querySelector('iframe')).toBeNull();expect(states.at(-1)).toBe('offline');connection.dispose();
  });
 });
