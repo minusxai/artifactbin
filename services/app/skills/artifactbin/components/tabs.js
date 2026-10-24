@@ -1,3 +1,15 @@
+// services/app/lib/html-components/tab-navigation.ts
+function tabFocusTarget({ key, index, count, orientation, dir, loop }) {
+  if (count < 1) return null;
+  if (key === "Home") return 0;
+  if (key === "End") return count - 1;
+  const forward = orientation === "vertical" ? "ArrowDown" : dir === "rtl" ? "ArrowLeft" : "ArrowRight";
+  const backward = orientation === "vertical" ? "ArrowUp" : dir === "rtl" ? "ArrowRight" : "ArrowLeft";
+  if (key !== forward && key !== backward) return null;
+  const next = index + (key === forward ? 1 : -1);
+  return loop ? (next + count) % count : Math.max(0, Math.min(count - 1, next));
+}
+
 // services/app/lib/html-components/tabs.ts
 var nextId = 0;
 var AfTabs = class extends HTMLElement {
@@ -92,17 +104,9 @@ var AfTabs = class extends HTMLElement {
     }
     const vertical = this.getAttribute("orientation") === "vertical";
     const rtl = (this.closest("[dir]")?.getAttribute("dir") ?? getComputedStyle(this).direction) === "rtl";
-    const forward = vertical ? "ArrowDown" : rtl ? "ArrowLeft" : "ArrowRight";
-    const backward = vertical ? "ArrowUp" : rtl ? "ArrowRight" : "ArrowLeft";
     const enabled = this.enabled();
-    let index = enabled.indexOf(trigger);
-    if (event.key === "Home") index = 0;
-    else if (event.key === "End") index = enabled.length - 1;
-    else if (event.key === forward || event.key === backward) {
-      index += event.key === forward ? 1 : -1;
-      if (this.getAttribute("loop") !== "false") index = (index + enabled.length) % enabled.length;
-      else index = Math.max(0, Math.min(enabled.length - 1, index));
-    } else return;
+    const index = tabFocusTarget({ key: event.key, index: enabled.indexOf(trigger), count: enabled.length, orientation: vertical ? "vertical" : "horizontal", dir: rtl ? "rtl" : "ltr", loop: this.getAttribute("loop") !== "false" });
+    if (index === null) return;
     event.preventDefault();
     const next = enabled[index];
     if (!next) return;

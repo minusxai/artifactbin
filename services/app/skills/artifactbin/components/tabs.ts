@@ -1,3 +1,4 @@
+import {tabFocusTarget} from './tab-navigation';
 /** Author-owned selection; components emit intent and never persist viewer state. */
 export interface TabsChangeDetail { value: string }
 export type TabsOrientation = 'horizontal' | 'vertical';
@@ -64,16 +65,9 @@ export class AfTabs extends HTMLElement implements TabsContract {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.choose(trigger); return; }
     const vertical = this.getAttribute('orientation') === 'vertical';
     const rtl = (this.closest('[dir]')?.getAttribute('dir') ?? getComputedStyle(this).direction) === 'rtl';
-    const forward = vertical ? 'ArrowDown' : rtl ? 'ArrowLeft' : 'ArrowRight';
-    const backward = vertical ? 'ArrowUp' : rtl ? 'ArrowRight' : 'ArrowLeft';
-    const enabled = this.enabled(); let index = enabled.indexOf(trigger);
-    if (event.key === 'Home') index = 0;
-    else if (event.key === 'End') index = enabled.length - 1;
-    else if (event.key === forward || event.key === backward) {
-      index += event.key === forward ? 1 : -1;
-      if (this.getAttribute('loop') !== 'false') index = (index + enabled.length) % enabled.length;
-      else index = Math.max(0, Math.min(enabled.length - 1, index));
-    } else return;
+    const enabled = this.enabled();
+    const index=tabFocusTarget({key:event.key,index:enabled.indexOf(trigger),count:enabled.length,orientation:vertical?'vertical':'horizontal',dir:rtl?'rtl':'ltr',loop:this.getAttribute('loop')!=='false'});
+    if(index===null)return;
     event.preventDefault(); const next = enabled[index]; if (!next) return;
     this.focused = next; next.focus();
     if (this.getAttribute('activation-mode') !== 'manual') this.choose(next);

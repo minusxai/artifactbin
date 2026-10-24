@@ -1,4 +1,5 @@
 [
+  "services/app/lib/html-components/tab-navigation.test.ts",
   "scripts/__tests__/artifact-file-payload.test.mjs",
   "scripts/__tests__/conformance-account.test.mjs",
   "scripts/__tests__/edit-chart-observation.test.mjs",
