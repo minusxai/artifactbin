@@ -281,6 +281,7 @@ export class AfDataTable extends HTMLElement implements DataTableContract {
       this.viewport = document.createElement("div");
       this.viewport.dataset.slot = "table-scroll";
       this.table = document.createElement("table");
+      this.table.setAttribute("data-mx-kit-table", "");
       this.table.createTHead().insertRow();
       this.table.createTBody();
       this.viewport.append(this.table);
