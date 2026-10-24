@@ -15,3 +15,7 @@ it('compresses only already-static reader dependencies together',()=>{
  expect(grouping([], [reader])).toBeNull();
  expect(grouping([reader], [], '/repo/services/app/lib/optional-author-code.ts')).toBeNull();
 });
+it('keeps the shared local/hosted presence lifecycle in the existing reader compression boundary',()=>{
+ expect(grouping([reader,local], [], '/repo/services/app/solid/document/create-reader-presence.ts')).toBe('reader');
+ expect(grouping([reader,entry], [], '/repo/services/app/solid/document/create-reader-presence.ts')).toBeNull();
+});

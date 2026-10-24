@@ -13,7 +13,7 @@ import {Button} from '../ui/Button';
 import {serializePortableCopy,downloadPortableCopy} from '@/lib/html-runtime/browser-portable';
 import {readPortableDocument} from '@/lib/html-runtime/portable';
 import {createLocalReader} from '../document/create-local-reader';
-import {ReaderPresenceControls} from '../document/ReaderPresenceControls';
+const ReaderPresenceControls=lazy(()=>import('../document/ReaderPresenceControls').then(module=>({default:module.ReaderPresenceControls})));
 const AnnotationLayer=lazy(()=>import('../document/AnnotationLayer').then(module=>({default:module.AnnotationLayer})));
 /** Shared platform chrome and comments; author HTML never runs on this origin. */
 export function LocalDocumentPage(){
