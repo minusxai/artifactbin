@@ -23,7 +23,7 @@ it('uses reader typography and themed copy controls without overriding shared ta
  expect(MARKDOWN_CSS).toContain('.dark .mx-markdown');
  expect(getComputedStyle(el.querySelector('h1')!).fontFamily).toContain('--font-display');
  expect(getComputedStyle(el.querySelector('h1')!).marginBlockStart).toBe('0px');
- expect(getComputedStyle(el.querySelector('table')!).width).toBe('100%');
+ expect(getComputedStyle(el.querySelector('table')!).width).toBe('fit-content');
  expect(getComputedStyle(el.querySelector('th')!).textAlign).toBe('start');
  expect(getComputedStyle(el.querySelector('button')!).color).toContain('--foreground');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('background:var(--background,Canvas)');
@@ -31,7 +31,7 @@ it('uses reader typography and themed copy controls without overriding shared ta
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('outline:2px solid var(--ring,Highlight)');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('min-width: 6em');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('padding: .5em .75em');
- expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).not.toContain('width:fit-content');
+ expect(getComputedStyle(el.querySelector('table')!).overflowX).toBe('auto');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).toContain('af-markdown .mx-markdown > :first-child{margin-block-start:0}');
  expect(document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent).not.toContain('padding:1rem;background:var(--muted');
  expect(el.querySelector('table')?.parentElement?.classList.contains('mx-md-table-scroll')).toBe(true);
@@ -60,4 +60,12 @@ it('uses the owning document clipboard after adoption',async()=>{
  const iframe=document.createElement('iframe');document.body.append(iframe);const doc=iframe.contentDocument!;
  const el=document.createElement('af-markdown') as AfMarkdown;el.source='```\ncopy this\n```';doc.adoptNode(el);doc.body.append(el);
  let copied='';Object.defineProperty(doc.defaultView!.navigator,'clipboard',{configurable:true,value:{writeText:async(text:string)=>{copied=text;}}});el.querySelector('button')!.click();await Promise.resolve();expect(copied).toBe('copy this');expect(el.querySelector('button')!.textContent).toBe('Copied');expect(el.querySelector('button')!.ownerDocument).toBe(doc);
+});
+
+it('preserves reader preflight and bare prose rhythm without shifting code for its copy affordance',()=>{
+ const el=document.createElement('af-markdown') as AfMarkdown;el.source='# Heading\n\nParagraph\n\n> Quoted\n\n```js\nconst x = 1\n```\n\n| Region | Count |\n| --- | --- |\n| North | 12 |';document.body.append(el);
+ const quote=getComputedStyle(el.querySelector('blockquote')!),pre=getComputedStyle(el.querySelector('pre')!),copy=getComputedStyle(el.querySelector('button')!),cell=getComputedStyle(el.querySelector('td')!),table=getComputedStyle(el.querySelector('table')!);
+ expect(parseFloat(quote.marginLeft)).toBe(0);expect(quote.maxWidth).toBe('544px');expect(quote.borderInlineStart).toBe('3px solid currentcolor');
+ expect(pre.fontSize).toBe('16px');expect(pre.maxWidth).toBe('544px');expect(copy.position).toBe('absolute');expect(copy.opacity).toBe('0');
+ expect(cell.paddingTop).toBe('6.4px');expect(table.width).toBe('fit-content');expect(table.maxWidth).toBe('100%');expect(el.querySelector('button')!.textContent).toBe('Copy code');
 });
