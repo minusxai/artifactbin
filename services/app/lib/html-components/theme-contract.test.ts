@@ -38,7 +38,7 @@ interface RadiusContract {selector:string;size:'sm'|'md'|'lg'}
 const contracts:RadiusContract[]=[
  {selector:'af-tabs-list',size:'lg'},{selector:'af-tabs-trigger',size:'md'},
  {selector:'af-input>.af-text-control',size:'md'},{selector:'af-textarea>.af-text-control',size:'md'},
- {selector:'af-segmented',size:'md'},{selector:'af-select .af-select-trigger',size:'md'},
+ {selector:'af-segmented .af-segmented-options',size:'md'},{selector:'af-select .af-select-trigger',size:'md'},
  {selector:'af-select .af-select-popup',size:'md'},{selector:'af-select input',size:'sm'},
  {selector:'af-select [role=option]',size:'sm'},{selector:'dialog[data-af-dialog-native]',size:'lg'},
  {selector:'af-dialog-trigger',size:'md'},{selector:'af-dialog-close',size:'md'},
@@ -54,10 +54,10 @@ it('uses the retained rounded-sm/md/lg scale when a theme supplies only --radius
   expect(radius(css,{[`--radius-${contract.size}`]:'12px'}),contract.selector+' explicit override').toBe(12);
   expect(radius(css,{}),contract.selector+' neutral fallback').toBe(10-({sm:4,md:2,lg:0}[contract.size]));
  }
- expect(declaration('af-segmented>button[data-segment-option]','border-radius')).toBe('5px');
+ expect(declaration('af-segmented .af-segmented-options>button[data-segment-option]','border-radius')).toBe('5px');
 });
 it('keeps control captions and select typography consistent with retained controls in every theme',()=>{
- for(const selector of ['af-input>label[data-af-control-label]','af-textarea>label[data-af-control-label]','af-select .af-select-label','af-switch .af-switch-label','af-slider>label']){
+ for(const selector of ['af-input>label[data-af-control-label]','af-textarea>label[data-af-control-label]','af-segmented .af-segmented-label','af-select .af-select-label','af-switch .af-switch-label','af-slider>label']){
   expect(declaration(selector,'font-size'),selector).toBe('11px');expect(declaration(selector,'font-weight'),selector).toBe('500');expect(declaration(selector,'text-transform'),selector).toBe('uppercase');expect(parseFloat(declaration(selector,'letter-spacing')),selector).toBe(.05);
  }
  expect(parseFloat(declaration('af-select button','font-size'))).toBe(.875);

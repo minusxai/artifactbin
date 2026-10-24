@@ -13,6 +13,28 @@ function fixture(attrs = '', options: readonly (string | number | boolean | null
 const buttons = (element: AfSegmented) => [...element.querySelectorAll<HTMLButtonElement>('button[data-segment-option]')];
 
 describe('native authored segmented control', () => {
+  it('renders its caption and names the group without duplicating option names', () => {
+    const control = fixture();
+    const caption = control.querySelector<HTMLElement>('.af-segmented-label');
+    expect(caption?.textContent).toBe('Size');
+    expect(caption?.hidden).toBe(false);
+    expect(control.getAttribute('role')).toBe('group');
+    expect(control.getAttribute('aria-label')).toBe('Size');
+    expect(buttons(control).map(button => [button.textContent, button.getAttribute('aria-label')]))
+      .toEqual([['S', null], ['M', null], ['L', null]]);
+
+    control.setAttribute('label', 'Width');
+    expect(caption?.textContent).toBe('Width');
+    control.setAttribute('aria-label', 'Dimensions');
+    expect(caption?.textContent).toBe('Width');
+    expect(control.getAttribute('aria-label')).toBe('Dimensions');
+    control.removeAttribute('aria-label');
+    expect(control.getAttribute('aria-label')).toBe('Width');
+    control.removeAttribute('label');
+    expect(caption?.hidden).toBe(true);
+    expect(control.hasAttribute('aria-label')).toBe(false);
+  });
+
   it('supports scalar and labeled options, default selection, and stable option nodes', () => {
     const control = fixture('default-value=M', ['S', {value:'M', label:'Medium'}, 'L']);
     const before = buttons(control);
