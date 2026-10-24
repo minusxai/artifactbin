@@ -89,12 +89,18 @@ class Element {
   getAttribute(name: string) {
     return this.attrs.get(name) ?? null;
   }
+  removeAttribute(name: string) {
+    this.attrs.delete(name);
+  }
   setAttribute(name: string, value: string) {
     this.attrs.set(name, value);
   }
   querySelectorAll(_selector: string): Element[] {
     return this.children.flatMap((child) => [
-      ...(child.attrs.has("data-af-id") ? [child] : []),
+      ...(child.attrs.has("data-af-id") ||
+      child.attrs.has("data-native-binding-id")
+        ? [child]
+        : []),
       ...child.querySelectorAll(_selector),
     ]);
   }
@@ -569,6 +575,164 @@ test("typed duplicate row keys fail visibly instead of silently changing annotat
     assert.ok(
       doc.body.children.some((node) => node.getAttribute("role") === "alert"),
     );
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("For without keyBy uses archived index DOM scopes without claiming durable row annotations", async () => {
+  const loop = el("loop", "For", { id: "loop", className: "authored-grid" });
+  if (loop.type !== "element") throw Error();
+  loop.attributes.push({
+    name: "each",
+    start: 0,
+    end: 1,
+    value: {
+      static: false,
+      exprType: "Identifier",
+      source: "$rows",
+      reactive: { kind: "signal", name: "rows" },
+    },
+  });
+  const text: RetainedJsxNode = {
+    type: "expression",
+    graphKey: "text",
+    start: 0,
+    end: 1,
+    source: "$_row.title",
+    value: {
+      static: false,
+      exprType: "MemberExpression",
+      source: "$_row.title",
+      reactive: { kind: "row", field: "title" },
+    },
+  };
+  const source = input(
+    [loop, text],
+    [
+      {
+        kind: "loop",
+        sourceNode: "loop",
+        afId: "loop",
+        templateId: "rows-template",
+        identity: {
+          owner: "loop",
+          keyBy: null,
+          templateIds: ["title"],
+          domIds: [{ domId: "authored-title", templateAfId: "title" }],
+          encoding: "archived-instance-v1",
+        },
+      },
+      { kind: "text", sourceNode: "text", afId: "title" },
+    ],
+  );
+  source.queries = [query];
+  source.analysis.flow.queries = [{ name: "rows", start: 0, end: 1 }];
+  const result = emitNativeBindings(source);
+  assert.equal(result.status, "complete");
+  if (result.status !== "complete") return;
+  const doc = new Doc(),
+    host = new Element("div", {
+      "data-af-id": "loop",
+      class: "authored-grid",
+      style: "display:contents",
+    });
+  doc.body.append(host);
+  doc.template("rows-template", [
+    new Element("span", { "data-af-id": "title", id: "authored-title" }),
+  ]);
+  const port = client({ open: false, filter: null }),
+    runtime = await execute(result.authorJs, port, doc);
+  try {
+    port.remotes[0]!.next(answer("A"));
+    const child = host.children[0]!.children[0]!;
+    assert.equal(child.textContent, "Visible A");
+    assert.equal(child.getAttribute("data-af-id"), null);
+    assert.equal(
+      child.getAttribute("id"),
+      "mx-instance-" +
+        encodeURIComponent(
+          JSON.stringify([["repeat", "loop", "index", 0], "authored-title"]),
+        ),
+    );
+    assert.equal(host.getAttribute("class"), "authored-grid");
+    assert.equal(host.getAttribute("data-af-id"), "loop");
+    port.remotes[0]!.next(answer("B"));
+    assert.equal(host.children[0]!.children[0]!.textContent, "Visible B");
+    assert.equal(
+      host.children[0]!.children[0]!.getAttribute("data-af-id"),
+      null,
+    );
+  } finally {
+    await runtime.close();
+  }
+});
+test("row-key field names follow retained nonempty-string grammar rather than identifier restrictions", () => {
+  const loop = el("loop", "For", { id: "loop", keyBy: "Order ID" });
+  if (loop.type !== "element") throw Error();
+  loop.attributes.push({
+    name: "each",
+    start: 0,
+    end: 1,
+    value: {
+      static: false,
+      exprType: "Identifier",
+      source: "$rows",
+      reactive: { kind: "signal", name: "rows" },
+    },
+  });
+  const source = input(
+    [loop],
+    [
+      {
+        kind: "loop",
+        sourceNode: "loop",
+        afId: "loop",
+        templateId: "template",
+        identity: {
+          owner: "loop",
+          keyBy: "Order ID",
+          templateIds: ["cell"],
+          encoding: "archived-instance-v1",
+        },
+      },
+    ],
+  );
+  source.queries = [query];
+  source.analysis.flow.queries = [{ name: "rows", start: 0, end: 1 }];
+  assert.equal(emitNativeBindings(source).status, "complete");
+});
+
+test("retained reactive text prints strings and numbers but not booleans or null", async () => {
+  const node: RetainedJsxNode = {
+    type: "expression",
+    graphKey: "flag",
+    start: 0,
+    end: 1,
+    source: "$open",
+    value: {
+      static: false,
+      exprType: "Identifier",
+      source: "$open",
+      reactive: { kind: "signal", name: "open" },
+    },
+  };
+  const source = input(
+    [node],
+    [{ kind: "text", sourceNode: "flag", afId: "flag" }],
+  );
+  const result = emitNativeBindings(source);
+  assert.equal(result.status, "complete");
+  if (result.status !== "complete") return;
+  const doc = new Doc(),
+    host = new Element("span", { "data-af-id": "flag" });
+  doc.body.append(host);
+  const port = client({ open: false, filter: null }),
+    runtime = await execute(result.authorJs, port, doc);
+  try {
+    assert.equal(host.textContent, "");
+    await port.updateQuery({}, (value) => ({ ...value, open: true }));
+    assert.equal(host.textContent, "");
   } finally {
     await runtime.close();
   }

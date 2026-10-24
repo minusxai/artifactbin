@@ -326,9 +326,12 @@ export function emitNativeBindings(
         !target.identity.owner ||
         !owner?.value.static ||
         owner.value.json !== target.identity.owner ||
-        !name(target.identity.keyBy) ||
-        !key?.value.static ||
-        key.value.json !== target.identity.keyBy ||
+        (target.identity.keyBy === null
+          ? key !== undefined
+          : typeof target.identity.keyBy !== "string" ||
+            !target.identity.keyBy ||
+            !key?.value.static ||
+            key.value.json !== target.identity.keyBy) ||
         !target.identity.templateIds.length ||
         new Set(target.identity.templateIds).size !==
           target.identity.templateIds.length ||

@@ -41,7 +41,8 @@ export type NativeBindingTarget = NativeBindingIdentity &
         templateId: string;
         identity: {
           owner: string;
-          keyBy: string;
+          /** null is the archived non-durable positional mode, never a guessed key. */
+          keyBy: string | null;
           templateIds: readonly string[];
           domIds?: readonly { domId: string; templateAfId: string }[];
           encoding: "archived-instance-v1";
