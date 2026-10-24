@@ -3,6 +3,44 @@ export interface MarkdownContract { source: string }
 import { markdownContent } from '../markdown/content';
 import { MARKDOWN_CSS } from '../markdown/styles';
 let nextHeadingScope = 0;
+function splitSelectors(value:string):string[]{
+ const selectors:string[]=[];let start=0,depth=0,quote='',comment=false;
+ for(let index=0;index<value.length;index++){
+  const char=value[index],next=value[index+1];
+  if(comment){if(char==='*'&&next==='/'){comment=false;index++;}continue;}
+  if(quote){if(char==='\\'){index++;continue;}if(char===quote)quote='';continue;}
+  if(char==='/'&&next==='*'){comment=true;index++;continue;}
+  if(char==='"'||char==="'"){quote=char;continue;}
+  if(char==='('||char==='[')depth++;
+  else if(char===')'||char===']')depth--;
+  else if(char===','&&depth===0){selectors.push(value.slice(start,index));start=index+1;}
+ }
+ selectors.push(value.slice(start));return selectors;
+}
+function scopeMarkdownBranch(value:string):string{
+ const leading=value.match(/^(?:(?:\s+)|(?:\/\*[\s\S]*?\*\/\s*))*/)?.[0]??'';
+ const selector=value.slice(leading.length).trim();
+ const ancestorTheme=selector.match(/^(\.dark|\[data-theme=["']dark["']\])\s+(.*)$/s);
+ if(ancestorTheme){const scoped=`${ancestorTheme[1]} af-markdown ${ancestorTheme[2]}`;return `${leading}${ancestorTheme[1]==='.dark'?`${scoped}, [data-af-dark="true"] af-markdown ${ancestorTheme[2]}`:scoped}`;}
+ if(selector.startsWith(':where(')){
+  let depth=1,quote='',comment=false,close=-1;
+  for(let index=7;index<selector.length;index++){
+   const char=selector[index],next=selector[index+1];
+   if(comment){if(char==='*'&&next==='/'){comment=false;index++;}continue;}
+   if(quote){if(char==='\\'){index++;continue;}if(char===quote)quote='';continue;}
+   if(char==='/'&&next==='*'){comment=true;index++;continue;}
+   if(char==='"'||char==="'"){quote=char;continue;}
+   if(char==='(')depth++;else if(char===')'&&--depth===0){close=index;break;}
+  }
+  if(close>=0){const scoped=splitSelectors(selector.slice(7,close)).map(scopeMarkdownBranch).join(', ');return `${leading}:where(${scoped})${selector.slice(close+1)}`;}
+ }
+ return `${leading}af-markdown ${selector}`;
+}
+function scopeMarkdownCss(css:string):string{
+ // MARKDOWN_CSS is a flat list of rules. Split only selector commas at the
+ // top level so commas inside :where(), :has(), fallbacks, and strings survive.
+ return css.replace(/(^|})([^{}]+)\{/g,(_rule,close:string,selectors:string)=>`${close}${splitSelectors(selectors).map(scopeMarkdownBranch).join(', ')}{`);
+}
 /** Only generated output is replaced; the host remains the authored identity. */
 export class AfMarkdown extends HTMLElement implements MarkdownContract {
  static observedAttributes = ['source'];
@@ -27,7 +65,7 @@ export class AfMarkdown extends HTMLElement implements MarkdownContract {
   this.output.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code'); if(!code) return; const button=this.ownerDocument.createElement('button'); button.type='button'; button.textContent='Copy code'; button.addEventListener('click',()=>{const clipboard=this.ownerDocument.defaultView?.navigator.clipboard; if(!clipboard?.writeText){button.textContent='Copy unavailable';return;} try {void clipboard.writeText(code.textContent ?? '').then(()=>{button.textContent='Copied';},()=>{button.textContent='Copy unavailable';});} catch {button.textContent='Copy unavailable';}}); pre.append(button);});
  }
 }
-const markdownStyles=`${MARKDOWN_CSS}
+const markdownStyles=`${scopeMarkdownCss(MARKDOWN_CSS)}
 af-markdown{display:block}
 af-markdown .mx-markdown{line-height:1.65;overflow-wrap:anywhere}
 af-markdown pre{overflow:auto;padding:1rem;background:var(--muted,#f3f4f6);border-radius:.4rem}
