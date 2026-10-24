@@ -42,3 +42,16 @@ it('creates retry keys from strong bytes without randomUUID and rejects unavaila
     expect(() => localPublicationRequest(body())).toThrow(/Secure browser randomness/);
   } finally { vi.unstubAllGlobals(); }
 });
+
+it('recovers the committed source receipt on HTTP without crypto.subtle', async () => {
+  const request = localPublicationRequest(body(), 'http_receipt_retry_001');
+  const send = vi.fn(async (url: string | URL | Request) => new Response(JSON.stringify(String(url) === '/api/my/artifacts' ? { id: 'AbC123' } : { html: 'abc', version: 1 })));
+  vi.stubGlobal('crypto', { getRandomValues: (bytes: Uint8Array) => bytes });
+  try {
+    const saved = await sendLocalPublication(request, 'http://localhost:3000', send);
+    expect(saved.identity.sourceDigest).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+    expect(saved.localSourceDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(send.mock.calls[0]?.[0]).toBe('/api/my/artifacts');
+    expect(request.key).toBe('http_receipt_retry_001');
+  } finally { vi.unstubAllGlobals(); }
+});

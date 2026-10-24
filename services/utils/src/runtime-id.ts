@@ -1,7 +1,7 @@
 /** UUIDs for runtime instances and operations, including internal HTTP export pages.
  * getRandomValues is available outside secure contexts; randomUUID is not.
  */
-export function runtimeId(random: Pick<Crypto, 'getRandomValues'> | null = globalThis.crypto): string {
+export function runtimeId(random: Pick<typeof globalThis.crypto, 'getRandomValues'> | null = globalThis.crypto): string {
   if (typeof random?.getRandomValues !== 'function') throw new Error('Secure browser randomness is unavailable. Open this page in a browser with Web Crypto support.');
   let index = 0;
   const bytes = random.getRandomValues(new Uint8Array(31));
