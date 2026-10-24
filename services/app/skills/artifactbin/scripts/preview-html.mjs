@@ -2,8 +2,10 @@ export {packPreviewExport} from './preview-export.mjs';
 // The downloadable archive bundles this parser; installed previews need only Node.
 import {parse,parseFragment,serialize} from 'parse5';
 import {initSync,parse as parseImports} from 'es-module-lexer';
+import parseCss from 'css-tree/parser';
+import walkCss from 'css-tree/walker';
 initSync();
-/** Literal file references for publication snapshots; runtime-computed URLs need a manifest.
+/** Literal HTML, CSS URL/@import and module references for publication snapshots; runtime-computed URLs need a manifest.
  * Module imports must be literals, matching the server publication contract. */
 export function publicationLocalReferences(source,contentType){
  const moduleReferences=text=>parseImports(text)[0].flatMap(item=>{
@@ -12,6 +14,7 @@ export function publicationLocalReferences(source,contentType){
   return item.n.startsWith('.')||item.n.startsWith('/')||/^[a-z][a-z\d+.-]*:/i.test(item.n)?[item.n]:[];
  });
  if(contentType==='text/javascript')return moduleReferences(source);
+ if(contentType==='text/css'){const references=[];walkCss(parseCss(source),function(node){if(node.type==='Url'||node.type==='String'&&this.atrule?.name.toLowerCase()==='import')references.push(node.value);});return references;}
  const references=[];
  const walk=node=>{
   if(node.tagName){

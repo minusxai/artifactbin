@@ -20,7 +20,7 @@ export async function prepareBundle({root,entry,server,manifest=[],mappings={}})
   const contentType=types[path.extname(name).toLowerCase()]??'application/octet-stream';files.set(name,{path:name,contentType,base64:bytes.toString('base64')});
   if(name===entry||contentType==='text/css'||contentType==='text/javascript'){
    const source=bytes.toString('utf8');
-   const urls=contentType==='text/css'?[...source.matchAll(/\/\*[\s\S]*?\*\/|url\(\s*["']?([^"'\s)]+)|@import\s+["']([^"']+)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/gi)].map(match=>match[1]??match[2]):publicationLocalReferences(source,contentType);
+   const urls=publicationLocalReferences(source,contentType);
    for(const url of urls){if(!url||/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url))continue;const dep=path.posix.normalize(path.posix.join(path.posix.dirname(name),decodeURIComponent(url.split(/[?#]/)[0])));if(!mappings[dep])await load(dep);}
   }
  }

@@ -62,3 +62,16 @@ it('preserves URL query identity in inline modules and styles while escaping HTM
  const pinned=pinPublicationAssetUrls(rewritten,'PAGE12',3);
  expect(pinned).toContain('import "'+address+'&version=3"');expect(pinned).toContain('url('+address+'&version=3)');expect(pinned).toContain('src="'+address.replace('&','&amp;')+'&amp;version=3"');
 });
+
+it('snapshots every quoted font URL and escaped CSS import without admitting comment or content strings',async()=>{
+ const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');const {planPublicationBundle}=await import('../plan');
+ const root=await mkdtemp(join(tmpdir(),'bundle-fonts-'));try{
+  await mkdir(join(root,'css'));await mkdir(join(root,'fonts'));await writeFile(join(root,'index.html'),'<link rel="stylesheet" href="./css/main.css">');
+  await writeFile(join(root,'css/main.css'),'@font-face{src:url("../fonts/first.woff2")}@font-face{src:url(\'../fonts/second.woff2\')}@import "./nested\\20 theme.css";/*url("../fonts/ignored.woff2")*/.a{content:"url(../fonts/also-ignored.woff2)"}');
+  await writeFile(join(root,'css/nested theme.css'),'@font-face{src:url("../fonts/third\\20 face.woff2")}');
+  for(const name of ['first.woff2','second.woff2','third face.woff2'])await writeFile(join(root,'fonts',name),name);
+  const prepared=await prepareBundle({root,entry:'index.html',server:'https://example.test'});
+  expect(prepared.body.publicationBundle.files.map(file=>file.path).sort()).toEqual(['css/main.css','css/nested theme.css','fonts/first.woff2','fonts/second.woff2','fonts/third face.woff2']);
+  expect(planPublicationBundle(prepared.body.html,prepared.body.publicationBundle).dependencies).toHaveLength(5);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
