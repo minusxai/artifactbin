@@ -26,7 +26,13 @@ it('uses a trusted bounded immutable reader without rereading filesystem data',a
  try{
  const paths:string[]=[];
  const preview=await createLocalPreviewDatasets(root,[{name:'localSales',files:[{path:'not-on-disk.csv',table:'sales'}]}],{readText:async relative=>{paths.push(relative);return 'amount\n2\n';}});
- expect(paths).toEqual(['not-on-disk.csv']);expect(preview.export('localSales').tables[0]!.rows).toEqual([{amount:2}]);
+ expect(await preview.status()).toEqual({dirty:false,namespaces:[]});
+ const snapshot=preview.export('localSales'),table=snapshot.tables[0]!;
+ const {tableIdentity,columnIdentity}=await import('../model');
+ const tableId=tableIdentity(table),columnId=columnIdentity(tableId,'amount');
+ const reply=await preview.execute({query:'mutation($table:ID!,$revision:String!,$column:ID!){localSales{writeRows(tableId:$table,expectedRevision:$revision,requestId:"change",changes:[{kind:INSERT,cells:[{columnId:$column,value:{type:NUMBER,number:3}}]}]){outcome}}}',variables:{table:tableId,revision:snapshot.revision,column:columnId}},new AbortController().signal);
+ expect(reply.errors).toBeUndefined();expect(await preview.status()).toEqual({dirty:true,namespaces:['localSales']});
+ expect(paths).toEqual(['not-on-disk.csv']);expect(preview.export('localSales').tables[0]!.rows).toEqual([{amount:2},{amount:3}]);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
