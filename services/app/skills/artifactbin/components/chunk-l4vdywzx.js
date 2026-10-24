@@ -1,0 +1,1 @@
+function w({key:r,index:i,count:t,orientation:n,dir:a,loop:l}){if(t<1)return null;if(r==="Home")return 0;if(r==="End")return t-1;let o=n==="vertical"?"ArrowDown":a==="rtl"?"ArrowLeft":"ArrowRight";if(r!==o&&r!==(n==="vertical"?"ArrowUp":a==="rtl"?"ArrowRight":"ArrowLeft"))return null;let e=i+(r===o?1:-1);return l?(e+t)%t:Math.max(0,Math.min(t-1,e))}export{w as a};
