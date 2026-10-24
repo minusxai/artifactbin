@@ -88,19 +88,38 @@ describe('actual fixture publication payloads',()=>{
     const repo=path.resolve(import.meta.dirname,'../..');
     const skillArchive=await candidateArchive();
     const {planPublicationBundle}=await import('../../services/app/lib/html-publication-bundle/plan.ts');
-    const bodies=[],keys=new Set();
+    const {publishBundleDependencies}=await import('../../services/app/lib/html-publication-bundle/execute.ts');
+    const bodies=[],keys=new Set();let created=0,reused=0;
     await publishBaselineFixtures({implementation:'html',skillArchive,serverOrigin:'https://example.test',publish:async(body,request)=>{
       expect(body.publicationBundle).toBeDefined();expect(request.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);keys.add(request.idempotencyKey);
       const plan=planPublicationBundle(body.html,body.publicationBundle);expect(plan.dependencies.length).toBeGreaterThan(0);expect(Buffer.byteLength(body.html)).toBeLessThan(4_000_000);
       for(const file of body.publicationBundle.files){expect(file.path).toMatch(/^(?:components\/[a-z0-9-]+\.js|design-systems\/almanac\.css|fonts\/[a-zA-Z0-9._-]+\.woff2)$/);expect(Buffer.from(file.base64,'base64').equals(archiveMember(skillArchive,file.path))).toBe(true);if(file.path.startsWith('fonts/'))expect(Buffer.from(file.base64,'base64').equals(await readFile(path.join(repo,'services/app/public',file.path)))).toBe(true);}
       expect(body.publicationBundle.files.filter(file=>file.path.startsWith('fonts/'))).toHaveLength(20);
       expect(body.publicationBundle.files.some(file=>file.path==='design-systems/almanac.css')).toBe(true);expect(body.html).toContain('href="./design-systems/almanac.css"');
-      bodies.push(body);return {id:'Page123'};
+      if(bodies.length)expect(Object.keys(body.publicationBundle.mappings).length).toBeGreaterThanOrEqual(21);
+      expect(Object.keys(body.publicationBundle.mappings).every(name=>body.publicationBundle.files.some(file=>file.path===name))).toBe(true);
+      const result=await publishBundleDependencies(plan,request.idempotencyKey,{create:async()=>{const id='Asset'+(++created);return {id,revision:'v1',address:'/assets/'+id};},reuse:async(name,mapping)=>{reused++;return '/assets/'+mapping.id;}},body.publicationBundle.mappings);
+      bodies.push(body);return {id:'Page123',dependencyReceipts:result.receipts};
     }});
+    expect(created).toBeLessThan(100);expect(reused).toBeGreaterThan(1000);
     expect(keys.size).toBe(browserParityFixtures.length*parityThemes.length);
     expect(bodies).toHaveLength(browserParityFixtures.length*parityThemes.length);
     expect(bodies.every(body=>body.html.includes('data-af-design-system="almanac"')&&body.html.includes('baselineReady'))).toBe(true);
   },30_000);
+  it('reuses successful receipts only for reachable unchanged dependency closures',async()=>{
+    const {dependencyReceiptCache}=await import('../fixtures/component-baseline/publication.mjs');
+    const {publicationLocalReferences}=await import('../../services/app/skills/artifactbin/scripts/preview-html.mjs');
+    const {createHash}=await import('node:crypto');const cache=dependencyReceiptCache(publicationLocalReferences);
+    const file=(name,text,type='text/javascript')=>({path:name,contentType:type,base64:Buffer.from(text).toString('base64')});
+    const first={files:[file('parent.js','import "./leaf.js"'),file('leaf.js','export const n=1'),file('other.js','export const n=0')]};
+    const receipts=first.files.map(item=>({path:item.path,kind:'asset',id:item.path,revision:'v1',sha256:createHash('sha256').update(Buffer.from(item.base64,'base64')).digest('hex')}));
+    expect(cache.mappings(first)).toEqual({});cache.record(first,{dependencyReceipts:receipts});
+    const reachable={files:first.files.slice(0,2)};expect(Object.keys(cache.mappings(reachable))).toEqual(['parent.js','leaf.js']);
+    const changed={files:[first.files[0],file('leaf.js','export const n=2')]};expect(cache.mappings(changed)).toEqual({});
+    cache.record(changed,{dependencyReceipts:[{...receipts[1],revision:'bad'}]});expect(cache.mappings(changed)).toEqual({});
+    expect(Object.keys(cache.mappings(reachable))).toEqual(['parent.js','leaf.js']);
+    const fresh=dependencyReceiptCache(publicationLocalReferences);fresh.record(first,{});expect(fresh.mappings(first)).toEqual({});
+  });
   it('refuses missing or malformed archives without falling back to source helpers or fonts',async()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');const publish=()=>{throw Error('must not publish');};
     for(const skillArchive of [undefined,new Uint8Array([1,2,3]),(await candidateArchive()).slice(0,100)])await expect(publishBaselineFixtures({implementation:'html',serverOrigin:'https://example.test',skillArchive,publish})).rejects.toThrow(/archive|ZIP/);
@@ -118,6 +137,13 @@ describe('actual fixture publication payloads',()=>{
       await writeFile(path.join(root,'verify.mjs'),'import {publishBaselineFixtures} from "./scripts/fixtures/component-baseline/publication.mjs";let count=0;const entries=await publishBaselineFixtures({implementation:"jsx",publish:async body=>{if(body.publicationBundle)throw Error("candidate payload entered old path");count++;return {id:body.dataset?"Dataset123":"Page123"};}});if(entries.length!==50||count!==51)throw Error("original fixture publication missing");process.stdout.write("original-complete");');
       expect(execFileSync(process.execPath,[path.join(root,'verify.mjs')],{cwd:root,encoding:'utf8'})).toContain('original-complete');
     }finally{await rm(root,{recursive:true,force:true});}
+  });
+  it('does not carry dependency receipts from a failed run into another publication',async()=>{
+    const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');const skillArchive=await candidateArchive();
+    let calls=0;
+    await expect(publishBaselineFixtures({implementation:'html',skillArchive,serverOrigin:'https://example.test',publish:async body=>{calls++;expect(body.publicationBundle.mappings).toEqual({});throw Object.assign(Error('response failed'),{dependencyReceipts:[{path:'design-systems/almanac.css',kind:'asset',id:'Unconfirmed',revision:'v1'}]});}})).rejects.toThrow('response failed');
+    await expect(publishBaselineFixtures({implementation:'html',skillArchive,serverOrigin:'https://example.test',publish:async body=>{calls++;expect(body.publicationBundle.mappings).toEqual({});throw Error('stopped before write');}})).rejects.toThrow('stopped before write');
+    expect(calls).toBe(2);
   });
   it('removes the staged project and identifies the fixture when publication fails',async()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');

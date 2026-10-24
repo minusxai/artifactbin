@@ -39,7 +39,7 @@ contains `kind` (`asset` or `dataset`), `id`, observed `revision`, and the retur
 checks ownership, kind and current revision and derives its own URL. Mappings reuse unchanged content. Changed local files update the same resource ID
 conditionally against the mapping revision and state; datasets keep their own
 revision. A concurrent remote change returns a conflict instead of overwriting it.
-Keep returned path receipts, including state and revision, for the next update.
+Keep returned path receipts, including state and revision, for the next update. Unchanged dependency receipts may also be supplied when creating other pages on the same server with the same authorized account; verify local byte digests and the full dependency closure before reusing them.
 
 The send helper saves `REQUEST.json.receipt.json` with the returned path mapping,
 including partial-success receipts. Keep the saved request and idempotency key. Dependencies use actor-owned reserved
