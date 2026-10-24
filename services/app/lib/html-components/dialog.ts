@@ -8,7 +8,10 @@ export class AfDialog extends HTMLElement implements DialogContract {
   private initialized = false;
   private supplied: boolean | undefined;
   private native: HTMLDialogElement | undefined;
+  private mountedContent: HTMLElement | undefined;
   private opener: HTMLElement | null = null;
+  private controlAttributes = new WeakMap<HTMLElement, {role: string | null; tab: string | null}>();
+  private disabledChildren = new Map<HTMLElement, {disabled: string | null; tab: string | null}>();
   private observer = new MutationObserver(() => this.sync());
   get open(): boolean { return this.supplied ?? (this.hasAttribute('open') || this.local); }
   set open(value: boolean | undefined) { if (value === undefined) this.local = this.open; this.supplied = value; this.sync(); }
@@ -53,26 +56,55 @@ export class AfDialog extends HTMLElement implements DialogContract {
   private cancel = (event: Event): void => { event.preventDefault(); this.intent(false); };
   private closed = (): void => { if (this.isConnected && this.open && !this.native?.open) this.intent(false); };
   private identify(node: HTMLElement): void { if (!node.id) { let id: string; do { id = `af-dialog-label-${++sequence}`; } while (this.ownerDocument.getElementById(id)); node.id = id; } }
+  private restoreAttribute(node: HTMLElement, name: string, value: string | null): void { if (value === null) node.removeAttribute(name); else node.setAttribute(name,value); }
   private sync(): void {
     if (!this.isConnected) return;
     const content = this.own('af-dialog-content')[0];
+    if (this.native && (content !== this.mountedContent || !content || !this.native.contains(content))) {
+      const obsolete = this.native; this.native = undefined;
+      obsolete.removeEventListener('cancel',this.cancel); obsolete.removeEventListener('close',this.closed);
+      if (content && obsolete.contains(content)) obsolete.before(content);
+      if (obsolete.open) obsolete.close(); obsolete.remove();
+      if (this.opener?.isConnected) this.opener.focus(); this.opener = null;
+    }
     if (!content) return;
     if (!this.native) {
       this.native = this.ownerDocument.createElement('dialog');
       this.native.setAttribute('data-af-dialog-native',''); this.native.tabIndex = -1;
       this.native.addEventListener('cancel',this.cancel);
       this.native.addEventListener('close',this.closed);
-      content.before(this.native); this.native.append(content);
+      content.before(this.native); this.native.append(content); this.mountedContent = content;
     } else if (content.parentElement !== this.native) this.native.append(content);
     for (const [tag,attribute] of [['af-dialog-title','aria-labelledby'],['af-dialog-description','aria-describedby']] as const) {
       const nodes = this.own(tag); nodes.forEach(n => this.identify(n));
       if (nodes.length) this.native.setAttribute(attribute,nodes.map(n => n.id).join(' ')); else this.native.removeAttribute(attribute);
     }
+    const disabledTargets = new Set<HTMLElement>();
     for (const control of this.own('af-dialog-trigger,af-dialog-close')) {
-      if (!control.hasAttribute('role')) control.setAttribute('role','button');
-      if (!control.hasAttribute('tabindex')) control.tabIndex = 0;
-      control.setAttribute('aria-disabled',String(control.hasAttribute('disabled')));
-      if (control.localName === 'af-dialog-trigger') { control.setAttribute('aria-haspopup','dialog'); control.setAttribute('aria-expanded',String(this.open)); }
+      let authored = this.controlAttributes.get(control);
+      if (!authored) { authored = {role:control.getAttribute('role'),tab:control.getAttribute('tabindex')}; this.controlAttributes.set(control,authored); }
+      const child = control.querySelector<HTMLElement>('button,input,select,textarea,a[href]');
+      const target = child ?? control;
+      if (child) {
+        this.restoreAttribute(control,'role',authored.role); this.restoreAttribute(control,'tabindex',authored.tab);
+        control.removeAttribute('aria-haspopup'); control.removeAttribute('aria-expanded'); control.removeAttribute('aria-disabled');
+      } else {
+        control.setAttribute('role',authored.role ?? 'button'); control.tabIndex = control.hasAttribute('disabled') ? -1 : Number(authored.tab ?? 0);
+      }
+      const disabled = control.hasAttribute('disabled');
+      if (child && disabled) {
+        disabledTargets.add(child);
+        if (!this.disabledChildren.has(child)) this.disabledChildren.set(child,{disabled:child.getAttribute('disabled'),tab:child.getAttribute('tabindex')});
+        if ('disabled' in child && !child.hasAttribute('disabled')) child.setAttribute('disabled','');
+        child.tabIndex = -1;
+      }
+      target.setAttribute('aria-disabled',String(disabled || (child?.hasAttribute('disabled') ?? false)));
+      if (control.localName === 'af-dialog-trigger') { target.setAttribute('aria-haspopup','dialog'); target.setAttribute('aria-expanded',String(this.open)); }
+    }
+    for (const [child,authored] of this.disabledChildren) {
+      if (disabledTargets.has(child)) continue;
+      this.restoreAttribute(child,'disabled',authored.disabled); this.restoreAttribute(child,'tabindex',authored.tab);
+      child.setAttribute('aria-disabled',String(authored.disabled !== null)); this.disabledChildren.delete(child);
     }
     this.dataset.state = this.open ? 'open' : 'closed';
     if (this.open && !this.native.open) {
@@ -94,14 +126,15 @@ export class AfDialogDescription extends HTMLElement {}
 export class AfDialogClose extends HTMLElement {}
 export const dialogStyles = `
 af-dialog{display:contents}
-dialog[data-af-dialog-native]{margin:auto;max-height:calc(100svh - 4rem);width:fit-content;max-width:min(32rem,calc(100vw - 2rem));overflow:auto;border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--background);padding:1.5rem;color:var(--foreground);box-shadow:var(--shadow-lg)}
+dialog[data-af-dialog-native]{margin:auto;max-height:calc(100svh - 4rem);width:fit-content;max-width:min(32rem,calc(100vw - 2rem));overflow:auto;border-radius:var(--radius-lg,var(--radius,.5rem));border:1px solid var(--border);background:var(--background);padding:1.5rem;color:var(--foreground);box-shadow:var(--shadow-lg,0 10px 15px -3px color-mix(in srgb,var(--foreground) 10%,transparent),0 4px 6px -4px color-mix(in srgb,var(--foreground) 10%,transparent))}
 dialog[data-af-dialog-native]::backdrop{background:color-mix(in srgb,var(--foreground) 50%,transparent)}
 af-dialog-content{display:flex;flex-direction:column;gap:1rem}
 af-dialog-header{display:flex;flex-direction:column;gap:.5rem}
 af-dialog-footer{display:flex;justify-content:flex-end;gap:.5rem}
 af-dialog-title{display:block;font-size:1.125rem;font-weight:600;line-height:1}
 af-dialog-description{display:block;color:var(--muted-foreground);font-size:.875rem}
-af-dialog-trigger,af-dialog-close{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border-radius:var(--radius-md);padding:.5rem 1rem;font:inherit;font-size:.875rem;font-weight:500;cursor:pointer;background:var(--primary);color:var(--primary-foreground)}
+af-dialog-trigger,af-dialog-close{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border-radius:var(--radius-md,var(--radius,.375rem));padding:.5rem 1rem;font:inherit;font-size:.875rem;font-weight:500;cursor:pointer;background:var(--primary);color:var(--primary-foreground)}
+af-dialog-trigger:has(button,input,select,textarea,a[href]),af-dialog-close:has(button,input,select,textarea,a[href]){display:contents}
 af-dialog-close{border:1px solid var(--border);background:var(--background);color:var(--foreground)}
 af-dialog-trigger:focus-visible,af-dialog-close:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 af-dialog-trigger[disabled],af-dialog-close[disabled]{opacity:.5;cursor:default}

@@ -68,3 +68,21 @@ it('supports keyboard controls and native form closure through author intent', (
   trigger.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})); expect(root.open).toBe(true);
   root.addEventListener('af-change', e => e.preventDefault()); native.close(); expect(root.open).toBe(true); expect(native.open).toBe(true);
 });
+it('uses a native child as the single control and restores its authored disabled state', async () => {
+  const {root,trigger} = fixture(); trigger.innerHTML = '<button>Native</button>'; await tick();
+  const button = trigger.querySelector('button')!;
+  expect(trigger.hasAttribute('role')).toBe(false); expect(trigger.hasAttribute('tabindex')).toBe(false);
+  expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+  trigger.setAttribute('disabled',''); await tick(); expect(button.disabled).toBe(true); button.click(); expect(root.open).toBe(false);
+  trigger.removeAttribute('disabled'); await tick(); expect(button.disabled).toBe(false);
+  button.disabled = true; trigger.setAttribute('disabled',''); await tick(); trigger.removeAttribute('disabled'); await tick(); expect(button.disabled).toBe(true);
+  trigger.replaceChildren('Plain'); await tick(); trigger.setAttribute('disabled',''); await tick(); expect(trigger.tabIndex).toBe(-1);
+});
+it('disposes an open native modal on content removal and accepts replacement content', async () => {
+  const {root,trigger,content,native} = fixture(); trigger.focus(); trigger.click(); content.remove(); await tick();
+  expect(native.open).toBe(false); expect(native.isConnected).toBe(false); expect(document.activeElement).toBe(trigger);
+  const replacement = document.createElement('af-dialog-content'); replacement.textContent = 'Replacement'; root.append(replacement); await tick();
+  const next = root.querySelector('dialog')!; expect(next).not.toBe(native); expect(next.contains(replacement)).toBe(true); expect(next.open).toBe(true);
+  const simultaneous = document.createElement('af-dialog-content'); replacement.replaceWith(simultaneous); await tick();
+  expect(next.open).toBe(false); expect(next.isConnected).toBe(false); expect(root.querySelector('dialog')!.contains(simultaneous)).toBe(true);
+});
