@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import type {NativeTypedAnalysis,RetainedJsxNode,NativeJson} from './analyze-contracts.ts';
-import {lowerNativeComponents,type NativeLowerInput} from './lower.ts';
+import {lowerNativeComponents,formatNativeCell,type NativeLowerInput} from './lower.ts';
 import {NATIVE_COMPONENT_TARGET} from './component-map.ts';
 const digest='a'.repeat(64),proof='b'.repeat(64);
 let next=0;
@@ -39,7 +39,7 @@ test('resource URLs require admitted rewriting while fragment IDREF links preser
  source.urls=[{source:'ref:synthetic',target:'./assets/example.png',sha256:proof}];const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/href="#section"/);assert.match(result.html!,/src="\.\/assets\/example.png"/);
 });
 test('Number/Cell uses exact admitted formatter text rather than guessing old formats or flattening query references',()=>{
- const number=element('Number',{value:1234.5,fmt:',.2f',prefix:'$'});const source=input([number]);assert.ok(lowerNativeComponents(source).requirements.some(value=>value.kind==='format'));
+ const number=element('Number',{data:'table',col:'amount',format:',.2f',prefix:'$'});const source=input([number]);assert.ok(lowerNativeComponents(source).requirements.some(value=>value.kind==='format'));
  source.formattedValues=[{sourceNode:number.graphKey,analysisSha256:digest,formatterSha256:proof,text:'$1,234.50'}];const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/>\$1,234\.50<\/span>/);
 });
 
@@ -65,4 +65,36 @@ test('retained static CSS string expressions preserve literal raw-text rather th
 test('Grid retains responsive 42rem container fallback and flow minHeight/clamping',()=>{
  const result=lowerNativeComponents(input([element('Grid',{mode:'flow',cols:12},[element('GridItem',{w:20,minHeight:120},[text('Flow')])])]));
  assert.equal(result.status,'complete');assert.match(result.html!,/grid-column:span 12/);assert.match(result.html!,/min-height:120px/);assert.match(result.css,/@container \(width < 42rem\)/);assert.match(result.css,/grid-column:span 1!important/);
+});
+
+test('Cell exact text, null, numeric coercion, aggregation and explicit d3 formatting',()=>{
+ const format=(rows:Record<string,unknown>[]|null,extra={})=>formatNativeCell({rows,col:'v',format:'.2f',...extra});
+ assert.deepEqual(format(null,{prefix:'$'}),{status:'formatted',text:'—'});
+ for(const v of [NaN,Infinity,-Infinity,undefined])assert.deepEqual(format([{v}]),{status:'formatted',text:'—'});
+ assert.deepEqual(format([{v:null}]),{status:'formatted',text:'0.00'});
+ assert.deepEqual(format([{v:'  '}]),{status:'formatted',text:'0.00'});
+ assert.deepEqual(format([{v:'1200'}],{format:'$,.2f'}),{status:'formatted',text:'$1,200.00'});
+ assert.deepEqual(format([{v:'NaN'}],{prefix:'[',suffix:']'}),{status:'formatted',text:'[NaN]'});
+ assert.deepEqual(format([{v:4},{v:2},{v:10},{v:8}],{agg:'median'}),{status:'formatted',text:'6.00'});
+ assert.deepEqual(format([],{agg:'sum',prefix:'$'}),{status:'formatted',text:'$0.00'});
+ assert.deepEqual(format([],{agg:'avg',prefix:'$'}),{status:'formatted',text:'$—'});
+});
+test('Intl default and invalid format require captured source locale, never converter defaults',()=>{
+ const base={rows:[{v:1234567.891}],col:'v'};
+ assert.equal(formatNativeCell(base).status,'requires-locale');assert.equal(formatNativeCell({...base,format:',0'}).status,'requires-locale');
+ const localeReceipt={locale:'en-IN',numberingSystem:'latn',sourceRuntimeSha256:proof};
+ assert.deepEqual(formatNativeCell({...base,localeReceipt}),{status:'formatted',text:new Intl.NumberFormat('en-IN',{numberingSystem:'latn',maximumFractionDigits:2}).format(1234567.891)});
+ assert.deepEqual(formatNativeCell({...base,format:',0',localeReceipt}),formatNativeCell({...base,localeReceipt}));
+});
+test('Number alias never invents value/fmt/unit shorthand',()=>{
+ const result=lowerNativeComponents(input([element('Number',{value:3,fmt:'.2f',unit:'USD'})]));for(const attribute of ['value','fmt','unit'])assert.ok(result.blockers.some(b=>b.attribute===attribute));
+});
+
+test('lowerer formats admitted exact table snapshots and preserves query binding requirement',()=>{
+ const node=element('Cell',{data:'$table',col:'v',format:'$,.2f'}),source=input([node]);
+ source.cellTables=[{sourceNode:node.graphKey,analysisSha256:digest,tableSha256:proof,rows:[{v:1234.5}]}];
+ const result=lowerNativeComponents(source);assert.ok(!result.requirements.some(r=>r.kind==='format'));assert.ok(result.requirements.some(r=>r.kind==='binding'));assert.equal(result.html,null);
+});
+test('missing unbound Cell table renders original bare dash with placeholder chrome',()=>{
+ const result=lowerNativeComponents(input([element('Cell',{prefix:'$',suffix:' units'})]));assert.equal(result.status,'complete');assert.match(result.html!,/data-mx-live=""/);assert.match(result.html!,/aria-busy="false"/);assert.match(result.html!,/<span aria-label="Number placeholder">—<\/span>/);
 });
