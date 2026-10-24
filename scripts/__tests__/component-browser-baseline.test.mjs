@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior } from '../lib/component-browser-baseline.mjs';
+import {JSDOM} from 'jsdom';
+import {browserParityFixtures,parityThemes} from '../fixtures/component-baseline/index.mjs';
+import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues, comparableBehavior, stateExpectationIssues } from '../lib/component-browser-baseline.mjs';
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
 async function capture(directory,implementation,color,overrides={}){
@@ -58,7 +60,7 @@ describe('actual fixture publication payloads',()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
     const bodies=[];
     const entries=await publishBaselineFixtures({implementation:'jsx',publish:async body=>{bodies.push(body);return {id:body.dataset?'Dataset123':'Page123'};}});
-    expect(entries).toHaveLength(12);
+    expect(entries).toHaveLength(browserParityFixtures.length*parityThemes.length);
     expect(bodies.filter(body=>body.dataset)).toHaveLength(1);
     const upload=bodies.find(body=>body.markup?.includes('<FileUpload'));
     expect(upload.markup).toContain('src="ref:Dataset123"');
@@ -72,9 +74,9 @@ describe('actual fixture publication payloads',()=>{
     const css=await readFile(path.join(repo,'services/app/skills/artifactbin/design-systems/almanac.css'),'utf8');
     const bodies=[];
     await publishBaselineFixtures({implementation:'html',repo,themeCss:()=>css,publish:async body=>{bodies.push(body);return {id:'Page123'};}});
-    expect(bodies).toHaveLength(12);
+    expect(bodies).toHaveLength(browserParityFixtures.length*parityThemes.length);
     expect(bodies.every(body=>body.html.includes('data-af-design-system="almanac"')&&body.html.includes('baselineReady'))).toBe(true);
-  });
+  },30_000);
 });
 
 describe('reader screenshot contract',()=>{
@@ -96,5 +98,53 @@ describe('explicit semantic serialization normalization',()=>{
     expect(comparableBehavior(old)).toEqual(comparableBehavior(current));
     expect(old.controls[0].value).toBe('');
     expect(comparableBehavior({text:'PERSON Ada',controls:[]})).not.toEqual(comparableBehavior({text:'Person Ada',controls:[]}));
+  });
+});
+
+describe('expanded fixture state expectations',()=>{
+  it('rejects incorrect checked, pressed, expanded and native field values',()=>{
+    const expected={roles:[{role:'switch',name:'Notifications',checked:true},{role:'button',name:'Later',pressed:true},{role:'button',name:'More details',expanded:true},{role:'textbox',name:'Notes',value:'Review details\nx'}],textIncludes:['Additional information'],hiddenText:['Hidden information']};
+    const actual={text:'Additional information',controls:[{role:'switch',name:'Notifications',checked:'false'},{role:'button',name:'Later',pressed:'false'},{role:'button',name:'More details',expanded:'false'},{role:'textbox',name:'Notes',value:'Review details'}]};
+    expect(stateExpectationIssues(expected,actual)).toHaveLength(4);
+    actual.controls[0].checked='true';actual.controls[1].pressed='true';actual.controls[2].expanded='true';actual.controls[3].value='Review details\nx';
+    expect(stateExpectationIssues(expected,actual)).toEqual([]);
+  });
+  it('fails missing or unexpectedly visible roles and preserves real text case',()=>{
+    expect(stateExpectationIssues({roles:[{role:'slider',name:'Level',value:50}],rolesAbsent:[{role:'dialog',name:'Details'}],textIncludes:['PERSON']},{text:'Person',controls:[{role:'dialog',name:'Details'}]})).toHaveLength(3);
+  });
+});
+
+describe('browser semantic collection',()=>{
+  it('reads associated labels, ARIA name precedence, checked and pressed state without calling file inputs textboxes',async()=>{
+    const directory=await setup();
+    const dom=new JSDOM('<body><label for="terms">Accept terms</label><input id="terms" type="checkbox" checked><span id="switch-label">Notifications</span><button role="switch" aria-label="Wrong" aria-labelledby="switch-label" aria-checked="true">Toggle</button><button aria-pressed="true">Later</button><input type="file" aria-label="Attachment"></body>');
+    Object.defineProperty(dom.window.HTMLElement.prototype,'getClientRects',{value:()=>[{}]});
+    Object.defineProperty(dom.window.document.body,'innerText',{value:dom.window.document.body.textContent});
+    const saved=Object.fromEntries(['document','getComputedStyle','innerWidth'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
+    Object.assign(globalThis,{document:dom.window.document,getComputedStyle:dom.window.getComputedStyle.bind(dom.window),innerWidth:800});
+    try {
+      const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+      const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?fn():undefined};
+      const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}})};
+      const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'controls',states:[{id:'initial',actions:[]}]}]});
+      expect(captures[0].semantics.controls).toEqual(expect.arrayContaining([expect.objectContaining({role:'checkbox',name:'Accept terms',checked:'true'}),expect.objectContaining({role:'switch',name:'Notifications',checked:'true'}),expect.objectContaining({role:'button',name:'Later',pressed:'true'}),expect.objectContaining({role:'file-input',name:'Attachment'})]));
+    } finally {for(const [key,descriptor] of Object.entries(saved))if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];dom.window.close();}
+  });
+});
+
+describe('bounded independent reader capture',()=>{
+  it('runs at most two contexts and returns fixture order despite completion order',async()=>{
+    const directory=await setup();let active=0,peak=0,sequence=0;const completed=[];
+    const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    const browser={newContext:async()=>{const id=sequence++;active++;peak=Math.max(peak,active);return {newPage:async()=>({id,on:()=>{},screenshot:async()=>{completed.push(id);return bytes;}}),close:async()=>{active--;}};}};
+    const mount=async({page})=>{if(page.id===0)await new Promise(resolve=>setTimeout(resolve,20));return {frame:{url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:String(page.id),controls:[],rows:[],overflow:0}:undefined}};};
+    const captures=await captureBrowserBaseline({browser,workerBrowsers:[browser,browser],mount,implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]});
+    expect(peak).toBe(2);expect(active).toBe(0);expect(completed[0]).toBe(1);expect(captures.map(capture=>capture.semantics.text)).toEqual(['0','1','2','3']);
+  });
+  it('closes every started context and waits for in-flight cleanup on failure',async()=>{
+    const directory=await setup();let started=0,closed=0;
+    const browser={newContext:async()=>{const id=started++;return {newPage:async()=>({id,on:()=>{}}),close:async()=>{await new Promise(resolve=>setTimeout(resolve,5));closed++;}};}};
+    await expect(captureBrowserBaseline({browser,workerBrowsers:[browser,browser],mount:async()=>{throw Error('mount failed');},implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]})).rejects.toThrow('mount failed');
+    expect(started).toBe(2);expect(closed).toBe(started);
   });
 });
