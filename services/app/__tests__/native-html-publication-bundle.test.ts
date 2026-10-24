@@ -155,3 +155,14 @@ it('supports group membership granted after private bundle publication without b
  const read=()=>assetGet(request(`/a/${saved.id}/assets?dependency=${child.id}&revision=1`,{actor:{credential:'session',userId:member.id,email:member.email!,emailVerified:true}}),params);
  expect((await read()).status).toBe(404);await setGroupMember(user.id,group.id,member.id,'viewer');expect((await read()).status).toBe(200);await removeGroupMember(user.id,group.id,member.id);expect((await read()).status).toBe(404);
 });
+it('retains the complete dataset update wire reply including affected dependents on its first response and retry',async()=>{
+ const actor=await mintAccountToken('dataset-receipt-equivalence');
+ const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{dataset:'name,value\nA,1\n'}}));const dataset=await created.json();
+ const dependent=await (await POST(request('/api/artifacts',{method:'POST',token:actor.token,json:{html:`<link rel="af-dataset" data-af-name="tasks" href="ref:${dataset.id}"><h1>Dependent page</h1>`}}))).json();
+ const params={params:Promise.resolve({id:dataset.id})};const head=await (await GET(request('/api/artifacts/'+dataset.id,{token:actor.token}),params)).json();
+ const body={dataset:'name,value\nB,2\n',expectedVersion:head.version,expectedState:head.state};
+ const send=()=>PUT(request('/api/artifacts/'+dataset.id,{method:'PUT',token:actor.token,headers:{'Idempotency-Key':'dataset_complete_wire_reply'},json:body}),params);
+ const first=await send();const receipt=await first.json();expect(first.status,JSON.stringify(receipt)).toBe(200);expect(receipt.affected_dependents).toEqual([{id:dependent.id,title:dependent.title}]);
+ const retry=await send();expect(retry.status).toBe(first.status);expect(await retry.json()).toEqual(receipt);
+ const db=await harness.db();expect((await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[dataset.id])).rows[0]?.version).toBe(2);
+});

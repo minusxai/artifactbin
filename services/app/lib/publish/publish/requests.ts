@@ -239,6 +239,12 @@ export async function replaceArtifactWithBody(
   if (current.format === 'folder' && expected.expectedVersion !== undefined && current.version !== expected.expectedVersion) {
     return json({ error: 'version_conflict', currentVersion: current.version }, 409);
   }
+  // Resolve advisory effects before the storage transaction so the exact wire reply
+  // can be committed atomically without querying outside PGLite's transaction connection.
+  const receiptEffects=options.mutationReceipt?{
+    warnings:await refreshWarningsFor(actor,{...current,...input,version:current.version+1}),
+    affected:['dataset','image','pdf','file'].includes(input.format)?await findDependentsFor(actor,id):null,
+  }:undefined;
   let row;
   try { row = current.format === 'folder'
     ? await setMetadataFor(actor, id, {
@@ -247,7 +253,7 @@ export async function replaceArtifactWithBody(
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, expected)
-    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,undefined,{affected:null,warnings:[],openAnnotations:0}),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
+    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares,...(options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,sentMarkup,{affected:receiptEffects?.affected??null,warnings:receiptEffects?.warnings??[],repairs:parsed.repairs,openAnnotations:committedOpenAnnotations(saved)}),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
   } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
@@ -261,8 +267,8 @@ export async function replaceArtifactWithBody(
 
   // Dataset/viz refresh: warn about dependents whose bindings no longer
   // resolve (warnings, never blocks).
-  const warnings = await refreshWarningsFor(actor, row);
-  const affected = ['dataset','image','pdf','file'].includes(row.format) ? await findDependentsFor(actor,row.id) : null;
+  const warnings = receiptEffects?receiptEffects.warnings:await refreshWarningsFor(actor, row);
+  const affected = receiptEffects?receiptEffects.affected:['dataset','image','pdf','file'].includes(row.format) ? await findDependentsFor(actor,row.id) : null;
   return json({...await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, repairs: parsed.repairs, openAnnotations: committedOpenAnnotations(row) }),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})});
 }
 
