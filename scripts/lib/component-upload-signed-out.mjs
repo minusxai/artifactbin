@@ -19,7 +19,7 @@ export async function captureSignedOutUpload({browser,entries,origin,output,impl
    const element=page.locator('iframe[data-mx-document-frame]');await element.waitFor();const frame=await (await element.elementHandle()).contentFrame();assert.ok(frame);
    if(implementation==='html')await frame.waitForFunction(()=>document.documentElement.dataset.baselineReady==='yes');
    const input=frame.locator('input[type=file]');await input.waitFor({state:'attached'});
-   const button=frame.getByRole('button',{name:'Choose Attachments',exact:true});await button.waitFor();
+   const button=frame.locator('button[aria-label="Choose Attachments"]');await button.waitFor();
    // Retained viewer data is asynchronous; wait for its actual settled helper.
    await frame.getByText(implementation==='jsx'?'Sign in to upload files.':'Or drop files here.',{exact:true}).waitFor();
    Object.assign(proof,await input.evaluate(input=>({inputDisabled:input.disabled,inputHidden:input.hidden})),{buttonDisabled:await button.isDisabled(),text:await frame.locator('body').innerText()});

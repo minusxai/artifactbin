@@ -32,7 +32,7 @@ export async function runUploadBaseline({base,implementation,browser,sourceRevis
   await page.goto(`${origin}/a/${entry.id}`,{waitUntil:'networkidle'});
   const element=page.locator('iframe[data-mx-document-frame]');await element.waitFor();const frame=await (await element.elementHandle()).contentFrame();assert.ok(frame);
   return {frame,screenshot:()=>element.screenshot({animations:'disabled',caret:'hide'}),ready:async()=>{
-   const input=frame.locator('input[type=file]');await input.waitFor({state:'attached'});await frame.getByRole('button',{name:'Choose Attachments',exact:true}).waitFor();await input.evaluate(input=>{if(input.disabled)throw Error('Real authenticated chooser is disabled');});
+   const input=frame.locator('input[type=file]');await input.waitFor({state:'attached'});await frame.locator('button[aria-label="Choose Attachments"]').waitFor();await input.evaluate(input=>{if(input.disabled)throw Error('Real authenticated chooser is disabled');});
   },performAction:async action=>{
    if(action.action==='upload')await frame.locator('input[type=file]').setInputFiles(action.files.map(file=>({name:file.name,mimeType:file.mimeType,buffer:file.bytes?Buffer.alloc(file.bytes,65):Buffer.from(file.text??'')})));
    else if(action.action==='click')await frame.getByRole(action.role,{name:action.name,exact:true}).click();
