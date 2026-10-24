@@ -1,3 +1,2 @@
-export type {LinkedDocument,LocalConnectionState,LocalOperation,LocalConnection,ConnectionAdmission} from './contracts';
-export {LocalConnectionError} from './contracts';
-export {validLinkedDocument,createConnectionRegistry} from './registry';
+/** Server HTTP adapter; browser imports use browser.ts and broker.ts. */
+export {grantLocalConnection,revokeLocalConnection,localConnectionGraphql} from './server';

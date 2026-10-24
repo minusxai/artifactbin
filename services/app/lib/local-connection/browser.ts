@@ -22,8 +22,10 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
   const channel=new MessageChannel();port=channel.port1;
   port.onmessage=(message:MessageEvent)=>{
    const data=message.data;if(!data||typeof data!=='object')return;
+   if(data.kind==='signin'){begin(true);return;}
+   if(data.kind==='chrome-size'&&iframe&&Number.isFinite(data.height)){iframe.style.height=Math.max(40,Math.min(win.innerHeight||1000,data.height))+'px';return;}
    if(data.kind==='state'){
-    const valid:LocalConnectionState[]=['offline','connecting','connected','signin-required','blocked','stale','unavailable','unknown-outcome'];
+    const valid:LocalConnectionState[]=['offline','connecting','connected','signin-required','permission-required','blocked','stale','unavailable','unknown-outcome'];
     if(!valid.includes(data.state))return;
     connected=data.state==='connected';clearTimeout(timer);state(data.state);
     if(connected&&typeof data.role==='string')options.onConnected?.({identity,role:data.role});

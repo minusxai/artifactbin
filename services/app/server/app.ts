@@ -434,7 +434,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const ordered = withReaderHeadOrder(appRow ? withArtifactAppHead(indexed, appRow) : indexed);
     return compressDynamic(c.req.raw, new Response(withAgentDiscoveryTail(inlined ? withBootstrap(ordered, inlined) : ordered, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
-      'content-security-policy': pageCsp(c.req.url),
+      'content-security-policy': new URL(c.req.url).pathname==='/local/connect' ? pageCsp(c.req.url).replace("frame-ancestors 'self'", "frame-ancestors file: http://localhost:* http://127.0.0.1:* http://[::1]:*") : pageCsp(c.req.url),
       ...readerHeaders(found?.reader),
       // A document's address carries the agent pointer as a header too, for a fetch that reads no body.
       ...(frame ? { Link: `<${agentDiscovery(baseUrl(c.req.raw)).url}>; rel="help"` } : {}),
@@ -568,6 +568,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return c.req.header('Accept')?.includes('text/html') ? c.redirect('/docs-human', 302) : apiNotFound(c);
   });
   app.get('/docs-human', (c) => page(c));
+  // The broker is platform-owned chrome, framed by file:// or loopback documents.
+  app.get('/local/connect', (c) => page(c));
   app.get('/getting-started', (c) => page(c));
   // Page data is finished JSON: brotli for a client that takes it (server/content-encoding).
   app.use('/api/page/*', dynamicEncoding());

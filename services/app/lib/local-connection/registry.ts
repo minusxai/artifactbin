@@ -1,4 +1,4 @@
-import {LocalConnectionError,type ConnectionAuthority,type ConnectionRegistry,type ConnectionAdmission,type LinkedDocument} from './contracts';
+import {LocalConnectionError,type ConnectionGrant,type ConnectionAuthority,type ConnectionRegistry,type ConnectionAdmission,type LinkedDocument} from './contracts';
 export function validLinkedDocument(value:unknown):value is LinkedDocument{
  if(!value||typeof value!=='object')return false;
  const v=value as LinkedDocument;
@@ -12,7 +12,7 @@ export function createConnectionRegistry(options:ConnectionAuthority):Connection
  const grants=new Map<string,{admission:ConnectionAdmission;expires:number}>();let pending=0;
  const sweep=()=>{for(const [key,value] of grants)if(value.expires<=now())grants.delete(key);};
  return {
-  async grant(identity){
+  async grant(identity):Promise<ConnectionGrant>{
    if(!validLinkedDocument(identity))throw new LocalConnectionError('invalid_identity');
    sweep();if(grants.size+pending>=capacity)throw new LocalConnectionError('capacity');pending++;
    try{
@@ -27,7 +27,7 @@ export function createConnectionRegistry(options:ConnectionAuthority):Connection
    sweep();const entry=grants.get(capability);
    if(!entry||entry.admission.identity.artifactId!==artifactId)throw new LocalConnectionError('revoked');
    try{
-    const current=await options.inspect({...entry.admission.identity});
+    const current=await options.inspect({...entry.admission.identity},entry.admission);
     if(grants.get(capability)!==entry||entry.expires<=now()||current.actor!==entry.admission.actor)throw new LocalConnectionError('revoked');
     if(!sameIdentity(current.identity,entry.admission.identity))throw new LocalConnectionError('stale');
     return current;

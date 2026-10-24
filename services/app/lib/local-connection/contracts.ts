@@ -5,13 +5,13 @@ export interface LinkedDocument {
  baseRevision:string;
  sourceDigest:string;
 }
-export type LocalConnectionState='offline'|'connecting'|'connected'|'signin-required'|'blocked'|'stale'|'unavailable'|'unknown-outcome';
+export type LocalConnectionState='offline'|'connecting'|'connected'|'signin-required'|'permission-required'|'blocked'|'stale'|'unavailable'|'unknown-outcome';
 export interface LocalOperation {query:string;variables?:Record<string,unknown>;operationName?:string;operation?:'query'|'mutation'}
-export interface ConnectionAdmission {identity:LinkedDocument;actor:string;role:string}
+export interface ConnectionAdmission {identity:LinkedDocument;actor:string;role:string;authenticated?:boolean}
 export interface ConnectionGrant {capability:string;expires:number;role:string}
 export interface ConnectionAuthority {
  /** Called at admission and before/after protected reads. Must consult current ACL and head. */
- inspect(identity:LinkedDocument):Promise<ConnectionAdmission>;
+ inspect(identity:LinkedDocument,previous?:ConnectionAdmission):Promise<ConnectionAdmission>;
  now?:()=>number;
  random?:()=>string;
  ttl?:number;
@@ -22,7 +22,7 @@ export interface ConnectionRegistry {
  authorize(capability:string,artifactId:string):Promise<ConnectionAdmission>;
  revoke(capability:string):void;
 }
-export type ConnectionFailure='invalid_identity'|'signin_required'|'unavailable'|'stale'|'revoked'|'capacity';
+export type ConnectionFailure='invalid_identity'|'signin_required'|'permission_required'|'unavailable'|'stale'|'revoked'|'capacity';
 export class LocalConnectionError extends Error {
  constructor(readonly code:ConnectionFailure){super(code);}
 }
