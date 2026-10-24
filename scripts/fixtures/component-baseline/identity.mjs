@@ -1,7 +1,7 @@
 /** Paired real-account scenarios. IDs and image URLs below are substituted only
  * after normal local OTP/profile/dataset API operations on each actual server.
  * The unchanged fixture definition remains the paired input identity. */
-export const identityProfileImage={contentType:'image/png',bytes:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAADbtmxLAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAASUlEQVRYhe2WAQkAQAwCF8dMpruoH2PPOFgAET03KV/drCuIgtChmqHYMtbxE8GIDtUMxZcghBGOdjhwe1weeF8xbShDdKgAAAABJRU5ErkJggg==','base64')};
+export const identityProfileImage={contentType:'image/png',bytes:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAADbtmxLAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAASklEQVRYhe2WQQ0AQAzCZqpeEIH/98nYZWkyAYRA2dB8dbOuAAVFh2qGsGVZxw+CMTpUM4QtyzqE8EGLDtUMYcsihyIY63RweFwfuYvWTPPtUKAAAAAASUVORK5CYII=','base64')};
 const declaration='<Helmet><Import name="identity" src="ref:{{identityDataset}}" /><Query name="identityRows">{`select who from identity.rows`}</Query></Helmet>';
 const link='<link rel="af-dataset" data-af-name="identity" href="ref:{{identityDataset}}" data-af-mode="live">';
 const setup='import {client,gql} from "@afbin/apollo";const result=await client.query({query:gql`query($ids:[ID!]!){identity{people(ids:$ids){id name handle image}}}`,variables:{ids:["{{identityId}}"]}});if(result.errors?.length)throw Error("Actual identity lookup failed");const person=result.data.identity.people.find(person=>person.id==="{{identityId}}");if(!person)throw Error("Actual identity was not returned");document.querySelector("#identity-person").person=person;';

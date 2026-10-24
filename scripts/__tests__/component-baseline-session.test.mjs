@@ -52,3 +52,10 @@ it('publishes the same scoped real-identity fixture inputs with server-specific 
  expect(bodies.every(body=>!body.markup.includes('{{identity'))).toBe(true);
  expect(JSON.stringify(identityBrowserParityFixtures)).toBe(before);
 });
+
+it('supplies a fully decodable real image for the normal profile upload API',async()=>{
+ const sharp=(await import('sharp')).default;
+ const {identityProfileImage}=await import('../fixtures/component-baseline/identity.mjs');
+ const decoded=await sharp(identityProfileImage.bytes).webp().toBuffer();
+ expect(decoded.length).toBeGreaterThan(0);
+});
