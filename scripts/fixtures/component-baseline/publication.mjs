@@ -11,6 +11,16 @@ import { browserParityFixtures, parityThemes } from './index.mjs';
 /** @typedef {(body:object, options?:PublicationRequestOptions)=>Promise<{id:string,dependencyReceipts?:DependencyReceipt[]}>} PublishFixture */
 const pascal=name=>name==='deck-gl'?'DeckGL':name.split('-').map(word=>word[0].toUpperCase()+word.slice(1)).join('');
 export const htmlBodyPadding=fixture=>fixture.bareRoot?'0px':'24px';
+/** Select whole fixture definitions without rewriting their states or hashes.
+ * @template {{id:string}} T
+ * @param {T[]} fixtures
+ * @param {import('./contract').BrowserParitySelection['fixtureIds']} [fixtureIds]
+ */
+export function selectBaselineFixtures(fixtures,fixtureIds){
+ if(fixtureIds===undefined)return fixtures;
+ if(!Array.isArray(fixtureIds)||!fixtureIds.length||fixtureIds.some(id=>typeof id!=='string')||new Set(fixtureIds).size!==fixtureIds.length||fixtureIds.some(id=>!fixtures.some(fixture=>fixture.id===id)))throw Error('Invalid fixture selection: require unique known fixture IDs');
+ return fixtures.filter(fixture=>fixtureIds.includes(fixture.id));
+}
 /** Stored UTF-8 ZIP is the product's normal public skill format. Validate the
  * complete immutable archive before writing any selected package member. */
 export function installedFiles(archive){
@@ -60,7 +70,8 @@ export function dependencyReceiptCache(localReferences){
   };
 }
 /** Candidate snapshots use the installed component bytes and normal agent helper. */
-export async function publishBaselineFixtures({implementation,publish,serverOrigin,skillArchive,fixtures=browserParityFixtures,substitutions={}}) {
+export async function publishBaselineFixtures({implementation,publish,serverOrigin,skillArchive,fixtures=browserParityFixtures,fixtureIds,substitutions={}}) {
+  fixtures=selectBaselineFixtures(fixtures,fixtureIds);
   const entries=[];
   const substitute=value=>Object.entries(substitutions).reduce((source,[name,replacement])=>source.replaceAll('{{'+name+'}}',replacement),value);
   let uploadDataset,staging,prepareBundle,reuse;

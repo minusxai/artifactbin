@@ -1,3 +1,6 @@
+export interface BrowserParitySelection {
+  fixtureIds?: string[];
+}
 interface BrowserRoleExpectation {
   role: string;
   name: string;

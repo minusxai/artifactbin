@@ -130,11 +130,12 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
   await mkdir(output,{recursive:true});
   /** @type {import('../fixtures/component-baseline/contract').BrowserParityCapture[]} */
   const browserVersion=browser.version?.()||'unreported';
+  const fixtureIds=fixtures.map(fixture=>fixture.id);
   const tasks=fixtures.flatMap(fixture=>themes.flatMap(theme=>viewports.flatMap(viewport=>fixture.states.map(state=>({fixture,theme,viewport,state})))));
   const captures=new Array(tasks.length),failures=[];
   // A failed new run must never archive a stale full verdict as current evidence.
   await Promise.all([`${implementation}-captures.json`,`${implementation}-partial-captures.json`].map(name=>rm(path.join(output,name),{force:true})));
-  await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,completed:0,failures:[]}));
+  await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,fixtureIds,completed:0,failures:[]}));
   async function capture({fixture,theme,viewport,state},workerBrowser) {
     const context=await workerBrowser.newContext({viewport,colorScheme:theme,reducedMotion:'reduce',locale:'en-US',timezoneId:'UTC'});
     const errors=[],fontResources=[],fontPending=[],stylesheetResponses=[],stylesheetPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='',page,frame,activeAction;
@@ -214,12 +215,12 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
   errors.push(...workers.filter(worker=>worker.status==='rejected').map(worker=>worker.reason));
   if(errors.length){
     const failure=new AggregateError(errors,`${errors.length} reader capture(s) failed: ${errors.map(error=>error.message).join('\n')}`);
-    try{await writeFile(path.join(output,`${implementation}-partial-captures.json`),JSON.stringify(captures.filter(Boolean),null,2));await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,completed:captures.filter(Boolean).length,failures},null,2));}
+    try{await writeFile(path.join(output,`${implementation}-partial-captures.json`),JSON.stringify(captures.filter(Boolean),null,2));await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,fixtureIds,completed:captures.filter(Boolean).length,failures},null,2));}
     catch(error){failure.message+=`; partial evidence write failed: ${diagnosticText(error.message)}`;}
     throw failure;
   }
   await writeFile(path.join(output,`${implementation}-captures.json`),JSON.stringify(captures,null,2));
-  await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:true,planned:tasks.length,completed:captures.length,failures:[]}));
+  await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:true,planned:tasks.length,fixtureIds,completed:captures.length,failures:[]}));
   return captures;
 }
 

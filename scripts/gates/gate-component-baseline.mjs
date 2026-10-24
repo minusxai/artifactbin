@@ -12,6 +12,8 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {publishReaderManifest} from '../component-baseline-publish.mjs';
+import {selectBaselineFixtures} from '../fixtures/component-baseline/publication.mjs';
+import {browserParityFixtures} from '../fixtures/component-baseline/index.mjs';
 import {settleInteraction} from '../fixtures/component-baseline/interaction.mjs';
 import {identityBrowserParityFixtures,identityBaselineReadiness} from '../fixtures/component-baseline/identity.mjs';
 import {richBaselineReadiness} from '../fixtures/component-baseline/rich.mjs';
@@ -76,7 +78,8 @@ try {
   const browser=browsers[0];
   if(input.fixtureSet==='identity'&&!input.account)throw Error('Real identity fixtures require a verified disposable account');
   const session=input.account?await createBaselineSession({base:new URL(input.entries[0].url).origin,account:input.account,signIn:signInAccount}):null;
-  const captures=await captureBrowserBaseline({...input,browser,workerBrowsers:browsers,...(input.fixtureSet==='identity'?{fixtures:identityBrowserParityFixtures}:{}),mount:async({fixture,theme,page})=>{
+  const fixtures=selectBaselineFixtures(input.fixtureSet==='identity'?identityBrowserParityFixtures:browserParityFixtures,input.fixtureIds);
+  const captures=await captureBrowserBaseline({...input,browser,workerBrowsers:browsers,fixtures,mount:async({fixture,theme,page})=>{
     const entry=input.entries.find(entry=>entry.fixture===fixture.id&&entry.theme===theme);
     if(!entry)throw Error(`Missing real reader URL for ${fixture.id}/${theme}`);
     const url=new URL(entry.url);

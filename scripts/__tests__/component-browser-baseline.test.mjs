@@ -436,7 +436,7 @@ it('persists successful partial captures and a diagnostic failed state before re
   const partial=JSON.parse(await readFile(path.join(directory,'html-partial-captures.json'),'utf8'));
   expect(partial).toHaveLength(3);expect(partial[0].semantics.text).toBe('Completed');
   const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));
-  expect(status).toMatchObject({complete:false,planned:4,completed:3,failures:[{fixture:'one',state:'initial',theme:'light',viewport:{width:390,height:844},phase:'mount',message:'actual state failed'}]});
+  expect(status).toMatchObject({complete:false,planned:4,fixtureIds:['one'],completed:3,failures:[{fixture:'one',state:'initial',theme:'light',viewport:{width:390,height:844},phase:'mount',message:'actual state failed'}]});
   expect(await readFile(path.join(directory,'one-light-390-initial-html-failure.png'))).toEqual(bytes);
   await expect(readFile(path.join(directory,'html-captures.json'))).rejects.toMatchObject({code:'ENOENT'});
   expect(closed).toBe(4);
