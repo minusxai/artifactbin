@@ -45,13 +45,20 @@ describe('native authored progress', () => {
     expect(indicator).toBeTruthy(); progress.value = 50;
     expect(progress.firstElementChild).toBe(authored); expect(progress.querySelector('[data-slot="progress-indicator"]')).toBe(indicator);
   });
-  it('exposes progressbar semantics and an optional accessible label', () => {
-    const progress = fixture('<af-progress aria-label="Uploading" value="12"></af-progress>');
+  it('exposes progressbar semantics and maps label unless an explicit aria-label takes precedence', () => {
+    const progress = fixture('<af-progress label="Uploading" value="12"></af-progress>');
     expect(progress.getAttribute('role')).toBe('progressbar'); expect(progress.getAttribute('aria-label')).toBe('Uploading');
     expect(progress.getAttribute('aria-valuenow')).toBe('12');
+    progress.setAttribute('label', 'Sending'); expect(progress.getAttribute('aria-label')).toBe('Sending');
+    progress.setAttribute('aria-label', 'Custom'); progress.setAttribute('label', 'Queued');
+    expect(progress.getAttribute('aria-label')).toBe('Custom');
+    progress.removeAttribute('aria-label'); expect(progress.getAttribute('aria-label')).toBe('Queued');
+    progress.removeAttribute('label'); expect(progress.hasAttribute('aria-label')).toBe(false);
   });
   it('installs semantic token styles once and scopes independent instances', () => {
     const one = fixture('<af-progress value="10"></af-progress>'); const two = fixture('<af-progress></af-progress>');
+    expect(getComputedStyle(one).display).toBe('block');
+    expect(getComputedStyle(one).width).toBe('100%');
     expect(getComputedStyle(one).height).toBe('8px');
     expect(getComputedStyle(one.querySelector('[data-slot="progress-indicator"]')!).backgroundColor).not.toBe('');
     registerProgress(); expect(document.querySelectorAll('style[data-af-progress-styles]')).toHaveLength(1);
