@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import {afterEach,expect,it} from 'vitest';
 import {AfMarkdown,registerMarkdown,type MarkdownContract} from './markdown';
+import { MARKDOWN_CSS } from '../markdown/styles';
 registerMarkdown();
 afterEach(()=>document.body.replaceChildren());
 it('renders retained GFM with stable headings, highlighting and preserved authored identity',()=>{
@@ -14,6 +15,24 @@ it('refuses unsafe links and unsupported HTML through the existing vocabulary',(
 });
 it('preserves authored nodes outside its generated output',()=>{
  const el=document.createElement('af-markdown') as AfMarkdown; const note=document.createElement('aside'); note.setAttribute('data-af-id','note'); el.append(note); document.body.append(el); el.source='# Heading'; expect(el.querySelector('aside')).toBe(note);
+});
+it('uses reader typography, intrinsic tables, and themed copy controls in both themes',()=>{
+ const el=document.createElement('af-markdown') as AfMarkdown;el.source='# Heading\n\n| Name | Value |\n| --- | --- |\n| short | 1 |\n\n```js\nconst value = 1\n```';document.body.append(el);
+ const ownStyle=document.querySelector<HTMLStyleElement>('style[data-af-markdown-styles]')!.textContent!;
+ expect(ownStyle).toContain(MARKDOWN_CSS);
+ expect(ownStyle).toContain('width:fit-content;max-width:100%');
+ expect(ownStyle).toContain('af-markdown .mx-markdown th{text-align:start');
+ expect(ownStyle).toContain('af-markdown pre button{');
+ expect(ownStyle).toContain('color:var(--foreground,CanvasText)');
+ expect(ownStyle).toContain('background:var(--background,Canvas)');
+ expect(ownStyle).toContain('border:1px solid var(--border');
+ expect(ownStyle).toContain('outline:2px solid var(--ring,Highlight)');
+ expect(MARKDOWN_CSS).toContain('font-family: var(--font-display, inherit)');
+ expect(MARKDOWN_CSS).toContain('font-family: var(--font-mono, monospace)');
+ expect(MARKDOWN_CSS).toContain('.dark .mx-markdown');
+ expect(el.querySelector('table')?.parentElement?.classList.contains('mx-md-table-scroll')).toBe(true);
+ expect(el.querySelector('th')?.textContent).toBe('Name');
+ expect(el.querySelector('button')?.textContent).toBe('Copy code');
 });
 it('reports unavailable and rejected clipboard access explicitly',async()=>{
  const el=document.createElement('af-markdown') as AfMarkdown;el.source='```js\nconst x = 1\n```';document.body.append(el);

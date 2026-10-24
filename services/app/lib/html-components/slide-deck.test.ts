@@ -13,6 +13,13 @@ function fixture(attrs='') {
   return {deck,slides,next:deck.querySelector<HTMLButtonElement>('[aria-label="Next slide"]')!,previous:deck.querySelector<HTMLButtonElement>('[aria-label="Previous slide"]')!};
 }
 describe('native slide deck',()=>{
+  it('uses the design system display font for authored slide headings while preserving the reader rail width',()=>{
+    const {slides}=fixture();const css=document.querySelector<HTMLStyleElement>('style[data-af-slide-deck-styles]')!.textContent!;
+    expect(css).toContain('af-slide :is(h1,h2,h3,h4,h5,h6){font-family:var(--font-display,inherit)');
+    expect(css).toContain('grid-template-columns:190px minmax(0,1fr)');
+    expect(slides[0]!.querySelector('h1')!.textContent).toBe('Hello');
+    expect(slides[0]!.querySelector('input')!.value).toBe('Keep me');
+  });
   it('keeps authored slides mounted with stable identities and accessible rail/count/chrome',()=>{
     const {deck,slides,next}=fixture();const input=slides[0]!.querySelector('input');
     expect(deck.index).toBe(0);expect(deck.querySelector('[data-af-deck-count]')?.textContent).toBe('1 / 2');
