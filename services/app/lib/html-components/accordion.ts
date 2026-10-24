@@ -88,7 +88,8 @@ export class AfAccordion extends HTMLElement implements AccordionContract {
   private isDisabled(item: AfAccordionItem, trigger?: AfAccordionTrigger): boolean {
     const buttons = trigger ? [...trigger.querySelectorAll<HTMLButtonElement>('button')] : [];
     const nativeDisabled = buttons.length > 0 && buttons.every(button => button.disabled);
-    return this.hasAttribute('disabled') || item.hasAttribute('disabled') || Boolean(trigger?.hasAttribute('disabled')) || nativeDisabled;
+    const missingValue = item.getAttribute('value') == null || item.getAttribute('value') === '';
+    return this.hasAttribute('disabled') || item.hasAttribute('disabled') || Boolean(trigger?.hasAttribute('disabled')) || nativeDisabled || missingValue;
   }
 
   private onClick = (event: Event): void => {
@@ -110,8 +111,9 @@ export class AfAccordion extends HTMLElement implements AccordionContract {
       event.preventDefault(); this.request(item.getAttribute('value') ?? ''); return;
     }
     const orientation = this.getAttribute('orientation') === 'horizontal' ? 'horizontal' : 'vertical';
-    const forward = orientation === 'vertical' ? 'ArrowDown' : 'ArrowRight';
-    const backward = orientation === 'vertical' ? 'ArrowUp' : 'ArrowLeft';
+    const rtl = (this.closest('[dir]')?.getAttribute('dir') ?? getComputedStyle(this).direction) === 'rtl';
+    const forward = orientation === 'vertical' ? 'ArrowDown' : rtl ? 'ArrowLeft' : 'ArrowRight';
+    const backward = orientation === 'vertical' ? 'ArrowUp' : rtl ? 'ArrowRight' : 'ArrowLeft';
     const enabled = this.items().flatMap(candidate => this.triggers(candidate).filter(trigger => !this.isDisabled(candidate,trigger)).map(trigger => ({item:candidate,trigger})));
     let index = enabled.findIndex(entry => entry.trigger === target);
     if (event.key === 'Home') index = 0;
@@ -124,7 +126,7 @@ export class AfAccordion extends HTMLElement implements AccordionContract {
   };
 
   private request(itemValue: string): void {
-    if (this.hasAttribute('disabled')) return;
+    if (itemValue === '' || this.hasAttribute('disabled')) return;
     const next = toggleAccordionValue(this.type,this.value,itemValue,this.type === 'single' && this.hasAttribute('collapsible'));
     if (equalAccordionValue(this.type,next,this.value)) return;
     const event = new CustomEvent<AccordionChangeDetail>('af-change',{detail:{value:Array.isArray(next) ? [...next] : next},bubbles:true,composed:true,cancelable:true});
@@ -144,11 +146,13 @@ export class AfAccordion extends HTMLElement implements AccordionContract {
     const type = this.type; const value = this.value; const orientation = this.getAttribute('orientation') === 'horizontal' ? 'horizontal' : 'vertical';
     for (const item of this.items()) {
       const itemValue = item.getAttribute('value') ?? '';
-      const open = type === 'single' ? value === itemValue : (value as string[]).includes(itemValue);
+      const open = itemValue !== '' && (type === 'single' ? value === itemValue : (value as string[]).includes(itemValue));
       const disabled = this.isDisabled(item);
       item.dataset.state = open ? 'open' : 'closed'; item.dataset.orientation = orientation;
-      const triggers = this.triggers(item); const content = this.contents(item)[0];
-      if (content) this.identify(content,'content');
+      const triggers = this.triggers(item); const contents = this.contents(item);
+      for (const content of contents) this.identify(content,'content');
+      const controlledIds = contents.map(content => content.id).join(' ');
+      const labelledByIds: string[] = [];
       for (const trigger of triggers) {
         this.identify(trigger,'trigger');
         if (!this.triggerSemantics.has(trigger)) this.triggerSemantics.set(trigger,{role:trigger.getAttribute('role'),tabindex:trigger.getAttribute('tabindex')});
@@ -169,13 +173,13 @@ export class AfAccordion extends HTMLElement implements AccordionContract {
             }
             button.setAttribute('aria-expanded',String(open));
             button.setAttribute('aria-disabled',String(triggerDisabled || button.disabled));
-            if (content) button.setAttribute('aria-controls',content.id); else button.removeAttribute('aria-controls');
+            if (controlledIds) button.setAttribute('aria-controls',controlledIds); else button.removeAttribute('aria-controls');
           }
         } else {
           const semantics = this.triggerSemantics.get(trigger);
           trigger.setAttribute('role','button'); trigger.setAttribute('aria-expanded',String(open));
           trigger.setAttribute('aria-disabled',String(triggerDisabled));
-          if (content) trigger.setAttribute('aria-controls',content.id); else trigger.removeAttribute('aria-controls');
+          if (controlledIds) trigger.setAttribute('aria-controls',controlledIds); else trigger.removeAttribute('aria-controls');
           if (triggerDisabled) trigger.tabIndex = -1;
           else if (semantics?.tabindex === null) trigger.tabIndex = 0;
           else if (semantics?.tabindex !== undefined) trigger.setAttribute('tabindex',semantics.tabindex);
@@ -183,9 +187,10 @@ export class AfAccordion extends HTMLElement implements AccordionContract {
         trigger.dataset.state = open ? 'open' : 'closed'; trigger.dataset.orientation = orientation;
         const control = buttons[0] ?? trigger;
         if (control === trigger) this.identify(trigger,'trigger'); else this.identify(control,'trigger-control');
-        if (content) content.setAttribute('aria-labelledby',control.id);
+        labelledByIds.push(control.id);
       }
-      if (content) {
+      for (const content of contents) {
+        if (labelledByIds.length) content.setAttribute('aria-labelledby',labelledByIds.join(' ')); else content.removeAttribute('aria-labelledby');
         content.setAttribute('role','region'); content.hidden = !open; content.toggleAttribute('inert',!open);
         content.dataset.state = open ? 'open' : 'closed'; content.dataset.orientation = orientation;
       }

@@ -68,6 +68,43 @@ describe('native authored accordion', () => {
     expect(document.activeElement).toBe(triggers[0]);
     root.setAttribute('disabled',''); triggers[1]!.click(); expect(root.value).toBe('');
   });
+  it('moves horizontally in inherited RTL direction', () => {
+    const {root,triggers} = fixture('orientation="horizontal" dir="rtl"','<af-accordion-trigger>Toggle</af-accordion-trigger>',['a','b','c','d']);
+    triggers[0]!.focus(); triggers[0]!.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}));
+    expect(document.activeElement).toBe(triggers[1]);
+    triggers[1]!.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
+    expect(document.activeElement).toBe(triggers[0]);
+    expect(root.value).toBe('');
+  });
+  it('keeps missing and empty item values closed, disabled, and unselectable by keyboard', async () => {
+    const {root,items,triggers,contents} = fixture();
+    items[0]!.removeAttribute('value'); items[1]!.setAttribute('value','');
+    await tick();
+    let changes = 0; root.addEventListener('af-change',() => changes++);
+    for (const index of [0,1]) {
+      expect(contents[index]!.hidden).toBe(true); expect(triggers[index]!.getAttribute('aria-disabled')).toBe('true');
+      triggers[index]!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+    }
+    expect(root.value).toBe(''); expect(changes).toBe(0);
+  });
+  it('opens all items sharing a duplicate value and treats them as one selection', () => {
+    const {root,triggers,contents} = fixture('', '<af-accordion-trigger>Toggle</af-accordion-trigger>', ['shared','shared','other']);
+    triggers[0]!.click();
+    expect(root.value).toBe('shared');
+    expect(contents[0]!.hidden).toBe(false); expect(contents[1]!.hidden).toBe(false); expect(contents[2]!.hidden).toBe(true);
+    expect(triggers[0]!.getAttribute('aria-expanded')).toBe('true'); expect(triggers[1]!.getAttribute('aria-expanded')).toBe('true');
+  });
+  it('links and retains every content part belonging to an item', async () => {
+    const {root,triggers,contents} = fixture('collapsible','<af-accordion-trigger>Toggle</af-accordion-trigger>', ['a','b']);
+    const extra = document.createElement('af-accordion-content'); extra.innerHTML='<p>Additional panel</p>'; root.querySelector('af-accordion-item')!.append(extra);
+    await tick();
+    const trigger=triggers[0]!; const first=contents[0]!;
+    expect(extra.hidden).toBe(true); expect(extra.hasAttribute('inert')).toBe(true);
+    expect(trigger.getAttribute('aria-controls')).toBe(`${first.id} ${extra.id}`);
+    expect(extra.getAttribute('aria-labelledby')).toBe(trigger.id);
+    trigger.click(); expect(first.hidden).toBe(false); expect(extra.hidden).toBe(false);
+    trigger.click(); expect(first.hidden).toBe(true); expect(extra.hidden).toBe(true);
+  });
   it('links existing panel IDs and generated unique IDs while retaining authored data-af-id', () => {
     const {triggers,contents} = fixture();
     expect(triggers[1]!.getAttribute('aria-controls')).toBe('authored-panel');
