@@ -1,5 +1,6 @@
 import {packOfflineDependencies} from '@/lib/offline-dependencies';
 import {loadBundleAssetResources} from '@/lib/html-publication-bundle';
+import {referencedLibraryResources} from '@/lib/libraries/assets.server';
 /**
  * The offline file: one self-contained `.html` a reader can open without a
  * network and pass on. Assembly and access live in lib/offline/assemble.server
@@ -48,6 +49,7 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     }
     let resources:Awaited<ReturnType<typeof loadBundleAssetResources>>;
     try{resources=await loadBundleAssetResources(request,actor,id);}catch{return json({error:'not_found'},404);}
+    try{resources.push(...await referencedLibraryResources(packed,resources,request.url));}catch{return json({error:'offline_dependency_unavailable'},422);}
     if(resources.length){try{packed=(await packOfflineDependencies({html:packed,baseUrl:new URL(request.url).href,resources})).html;}catch{return json({error:'offline_dependency_unavailable'},422);}}
     const { html } = await nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:platformOrigin, offline: true });
     if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({ error: 'too_large' }, 413);

@@ -136,3 +136,13 @@ test('runtime admission verifies all split modules against immutable source path
  assert.throws(()=>runtimeAssetManifest({core:'core()',portableEngine:source,portableEnginePath:'https://example.invalid/runtime'}),/immutable source/);
  assert.throws(()=>runtimeAssetManifest({core:'core()',portableEnginePath:path}),/immutable source/);
 });
+
+test('private preview mounts only admitted versioned library bytes without eval permissions',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'preview-libraries-'));let session;
+ try {
+  await writeFile(join(dir,'index.html'),'<script type="module">import * as vega from "/libraries/vega-6.3.1/index.js";</script>');
+  session=await startPreview({root:dir,libraryAssets:{'/libraries/vega-6.3.1/index.js':'export const version="6.3.1";'}});
+  const response=await fetch(session.url+'libraries/vega-6.3.1/index.js'); assert.equal(response.status,200); assert.equal(await response.text(),'export const version="6.3.1";');
+  assert.equal((await fetch(session.url+'libraries/vega-999.0.0/index.js')).status,404); assert.doesNotMatch(response.headers.get('content-security-policy'),/'unsafe-eval'/);
+ }finally{await session?.close();await rm(dir,{recursive:true,force:true});}
+});

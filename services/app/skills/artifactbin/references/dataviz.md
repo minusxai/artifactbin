@@ -8,6 +8,31 @@ Use **Vega-Lite** for analytical charts; **Vega** for custom layouts/signals. Th
 
 Name question, unit, grain, source, period, timezone and missing/partial data. Read [runtime](html-runtime.md) and [datasets](html-datasets.md).
 
+## Bootstrap
+
+Use the exact versioned ESM URLs below, not bare `vega` imports or globals. The core import map supplies Apollo, not chart packages. The downloaded author skill's private preview serves the same modules locally. Hosted downloads pack referenced registered libraries into the HTML; external data still needs admission or an honest offline state.
+
+```html
+<div id="chart" role="img" aria-label="Completed tasks by category"></div>
+<script src="/af/v1/core.js"></script>
+<script type="module">
+import * as vega from "/libraries/vega-6.3.1/index.js";
+import {compile} from "/libraries/vega-lite-6.4.3/index.js";
+const spec = compile({width:280, height:160,
+  data:{values:[{category:"A", count:18},{category:"B", count:12}]},
+  mark:"bar", encoding:{x:{field:"category",type:"nominal"},
+    y:{field:"count",type:"quantitative"}}}).spec;
+const view = new vega.View(vega.parse(spec, undefined, {ast:true}), {
+  container:document.querySelector("#chart"), renderer:"svg",
+  expr:vega.expressionInterpreter
+});
+await view.runAsync();
+window.addEventListener("pagehide", () => view.finalize(), {once:true});
+</script>
+```
+
+For native Vega, omit the compiler import and pass the Vega spec directly to `parse`. `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Keep the original source canonical; downloaded copies embed the admitted bytes. This is a minimal bootstrap; add the table, resizing, theme and teardown described below.
+
 ## Contents
 
 [Choice](#choose-a-chart) · [Encodings](#encodings-and-theme) · [Layout](#layout-and-interaction) · [Data](#data-and-lifetime) · [Examples](#examples)

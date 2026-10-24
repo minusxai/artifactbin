@@ -6,6 +6,8 @@ export interface PreviewOptions {
   port?: number;
   /** Optional prebuilt public core/module assets, mounted at /af/v1/. */
   runtimeDir?: string;
+  /** Trusted source-owned pinned browser modules; never read from page markup. */
+  libraryAssets?: Readonly<Record<string,string>>;
   /** Short shared content-scan cache; tests may set zero. */
   revisionIntervalMs?: number;
   /** Trusted embedding/test options; never supplied by page markup or request JSON. */
@@ -30,3 +32,4 @@ export declare function createRevisionSource(root: string, options?: { now?: () 
 export interface PreviewLocalDatasetConfig { endpoint: string; schema: unknown }
 /** Exact code-only runtime admission, validated against each content-addressed path. */
 export declare function runtimeAssetManifest(assets: Readonly<Record<string, string | undefined>>): ReadonlyMap<string, string>;
+export declare function libraryAssetManifest(assets: Readonly<Record<string,string>>): ReadonlyMap<string,string>;
