@@ -54,6 +54,31 @@ describe('native authored segmented control', () => {
     options[0]!.dispatchEvent(new KeyboardEvent('keydown', {key:'End', bubbles:true, cancelable:true}));
     expect(document.activeElement).toBe(options[2]);
   });
+  it('preserves option nodes through reorder, removes missing options, and deduplicates typed values', () => {
+    const control = fixture('', ['a', 'a', 'b', 2, '2']);
+    const initial = buttons(control); expect(initial).toHaveLength(4);
+    control.options = ['b', 'a', 2, '2'];
+    expect(buttons(control)).toEqual([initial[1], initial[0], initial[2], initial[3]]);
+    expect(buttons(control).map(button => button.textContent)).toEqual(['b', 'a', '2', '2']);
+    control.options = ['a']; expect(buttons(control)).toEqual([initial[0]]);
+  });
+  it('keeps typed defaultValue values without string round trips', () => {
+    const control = document.createElement('af-segmented') as AfSegmented;
+    control.options = [2, '2', false, null];
+    for (const expected of [2, '2', false, null]) { control.defaultValue = expected; expect(control.defaultValue).toBe(expected); }
+  });
+  it('ignores nested segmented buttons and removes a mapped label cleanly', () => {
+    const outer = fixture('label=Outer'); const inner = document.createElement('af-segmented') as AfSegmented;
+    inner.options = ['inside', 'other']; outer.append(inner); document.body.append(outer);
+    const before = outer.value; buttons(inner)[0]!.click(); expect(outer.value).toBe(before);
+    outer.setAttribute('label', 'Updated'); expect(outer.getAttribute('aria-label')).toBe('Updated');
+    outer.removeAttribute('label'); expect(outer.hasAttribute('aria-label')).toBe(false);
+  });
+  it('reverses horizontal arrow navigation in RTL', () => {
+    const control = fixture('default-value=M dir=rtl'); const options = buttons(control);
+    options[1]!.focus(); options[1]!.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', bubbles:true, cancelable:true}));
+    expect(document.activeElement).toBe(options[0]);
+  });
   it('preserves authored children and data-af-id, reconnects cleanly, and registers styles once', () => {
     const control = fixture('default-value=M'); const authored = document.createElement('span'); authored.dataset.afId = 'kept';
     authored.textContent = 'description'; control.prepend(authored);

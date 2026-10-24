@@ -13,14 +13,20 @@ const isValue = (value: unknown): value is SegmentedValue => value === null || t
 const keyOf = (value: SegmentedValue): string => `${typeof value}:${String(value)}`;
 
 export class AfSegmented extends HTMLElement implements SegmentedContract {
-  static observedAttributes = ['value', 'default-value', 'disabled', 'orientation', 'label'];
+  static observedAttributes = ['value', 'default-value', 'disabled', 'orientation', 'label', 'aria-label'];
   private optionValues: readonly (SegmentedValue | SegmentedOption)[] = [];
   private buttons = new Map<string, HTMLButtonElement>();
+  private buttonOptions = new WeakMap<HTMLButtonElement, SegmentedOption>();
   private selection: SegmentedValue = null;
   private controlled = false;
   private propertyValue: SegmentedValue | undefined;
   private initialized = false;
   private writingValue = false;
+  private defaultValueOverride: SegmentedValue = null;
+  private hasDefaultValueOverride = false;
+  private writingDefaultValue = false;
+  private mappedLabel = false;
+  private writingMappedLabel = false;
 
   get options(): readonly (SegmentedValue | SegmentedOption)[] { return this.optionValues; }
   set options(value: readonly (SegmentedValue | SegmentedOption)[]) {
@@ -41,9 +47,17 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
     this.writingValue = false;
     this.render();
   }
-  get defaultValue(): SegmentedValue { return this.hasAttribute('default-value') ? this.fromAttribute(this.getAttribute('default-value') ?? '') : null; }
+  get defaultValue(): SegmentedValue {
+    if (this.hasDefaultValueOverride) return this.defaultValueOverride;
+    return this.hasAttribute('default-value') ? this.fromAttribute(this.getAttribute('default-value') ?? '') : null;
+  }
   set defaultValue(value: SegmentedValue) {
-    if (value === null) this.setAttribute('default-value', ''); else this.setAttribute('default-value', String(value));
+    this.defaultValueOverride = isValue(value) ? value : null;
+    this.hasDefaultValueOverride = true;
+    this.writingDefaultValue = true;
+    if (this.defaultValueOverride === null) this.setAttribute('default-value', '');
+    else this.setAttribute('default-value', String(this.defaultValueOverride));
+    this.writingDefaultValue = false;
   }
   get disabled(): boolean { return this.hasAttribute('disabled'); }
   set disabled(value: boolean) { this.toggleAttribute('disabled', Boolean(value)); }
@@ -66,14 +80,43 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
     this.removeEventListener('click', this.onClick);
     this.removeEventListener('keydown', this.onKeyDown);
   }
-  attributeChangedCallback(name: string): void { if (name === 'value' && !this.writingValue) this.propertyValue = undefined; this.render(); }
+  attributeChangedCallback(name: string): void {
+    if (name === 'value' && !this.writingValue) this.propertyValue = undefined;
+    if (name === 'default-value' && !this.writingDefaultValue) this.hasDefaultValueOverride = false;
+    if (name === 'aria-label') {
+      if (this.writingMappedLabel) return;
+      this.mappedLabel = false;
+      this.syncLabel();
+    }
+    this.render();
+  }
 
   private fromAttribute(raw: string): SegmentedValue {
     const match = this.normalized().find(option => String(option.value ?? '') === raw);
     return match?.value ?? (raw === '' && this.normalized().some(option => option.value === null) ? null : raw);
   }
   private normalized(): SegmentedOption[] {
-    return this.optionValues.map(item => isValue(item) ? {value:item, label:item === null ? 'All' : String(item)} : item as SegmentedOption);
+    const unique = new Map<string, SegmentedOption>();
+    for (const item of this.optionValues) {
+      const option = isValue(item) ? {value:item, label:item === null ? 'All' : String(item)} : item as SegmentedOption;
+      if (!unique.has(keyOf(option.value))) unique.set(keyOf(option.value), option);
+    }
+    return [...unique.values()];
+  }
+  private ownedButtons(): HTMLButtonElement[] {
+    return [...this.children].filter((node): node is HTMLButtonElement => node instanceof HTMLButtonElement && node.hasAttribute('data-segment-option'));
+  }
+  private syncLabel(): void {
+    if (!this.isConnected || this.writingMappedLabel) return;
+    const label = this.getAttribute('label');
+    if (this.hasAttribute('aria-label') && !this.mappedLabel) return;
+    if (label !== null) {
+      this.writingMappedLabel = true; this.setAttribute('aria-label', label); this.writingMappedLabel = false;
+      this.mappedLabel = true;
+    } else if (this.mappedLabel) {
+      this.writingMappedLabel = true; this.removeAttribute('aria-label'); this.writingMappedLabel = false;
+      this.mappedLabel = false;
+    }
   }
   private controlledValue(): boolean { return this.propertyValue !== undefined || this.hasAttribute('value') || this.controlled; }
   private currentValue(): SegmentedValue {
@@ -84,15 +127,14 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
   private render(): void {
     if (!this.isConnected) return;
     this.setAttribute('role', 'group');
-    const label = this.getAttribute('label');
-    if (label !== null) this.setAttribute('aria-label', label); else if (!this.hasAttribute('aria-label')) this.removeAttribute('aria-label');
+    this.syncLabel();
     this.dataset.orientation = this.orientation;
     this.dataset.disabled = String(this.disabled);
     const normalized = this.normalized();
     const active = normalized.find(option => option.value === this.currentValue()) ?? normalized[0];
     const validKeys = new Set<string>();
     normalized.forEach((option, index) => {
-      const baseKey = keyOf(option.value); const key = `${baseKey}#${index}`; validKeys.add(key);
+      const key = keyOf(option.value); validKeys.add(key);
       let button = this.buttons.get(key);
       if (!button) { button = this.ownerDocument.createElement('button'); button.type = 'button'; button.dataset.segmentOption = ''; this.buttons.set(key, button); }
       button.textContent = option.label; button.disabled = this.disabled;
@@ -100,14 +142,16 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
       button.tabIndex = !this.disabled && option === active ? 0 : -1;
       button.dataset.state = option.value === this.currentValue() ? 'active' : 'inactive';
       button.dataset.value = String(option.value ?? '');
-      if (button.parentElement !== this) this.append(button);
+      this.buttonOptions.set(button, option);
+      const owned = this.ownedButtons();
+      const desiredAtIndex = owned[index];
+      if (desiredAtIndex !== button) this.insertBefore(button, desiredAtIndex ?? null);
     });
     for (const [key, button] of this.buttons) if (!validKeys.has(key)) { button.remove(); this.buttons.delete(key); }
   }
   private optionFor(button: Element | null): SegmentedOption | undefined {
-    if (!button || !this.contains(button)) return undefined;
-    const index = [...this.querySelectorAll('button[data-segment-option]')].indexOf(button);
-    return this.normalized()[index];
+    if (!button || button.parentElement !== this || button.closest('af-segmented') !== this) return undefined;
+    return this.buttonOptions.get(button as HTMLButtonElement);
   }
   private choose(option: SegmentedOption): void {
     if (this.disabled || option.value === this.currentValue()) return;
@@ -122,16 +166,17 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
   private onKeyDown = (event: KeyboardEvent): void => {
     const target = event.target instanceof Element ? event.target.closest('button[data-segment-option]') : null;
     const current = this.optionFor(target); if (!current || this.disabled || event.defaultPrevented) return;
-    const options = this.normalized(); const index = [...this.querySelectorAll('button[data-segment-option]')].indexOf(target!);
-    const forward = this.orientation === 'vertical' ? 'ArrowDown' : 'ArrowRight';
-    const backward = this.orientation === 'vertical' ? 'ArrowUp' : 'ArrowLeft';
+    const options = this.normalized(); const index = this.ownedButtons().indexOf(target as HTMLButtonElement);
+    const rtl = (this.closest('[dir]')?.getAttribute('dir') ?? getComputedStyle(this).direction) === 'rtl';
+    const forward = this.orientation === 'vertical' ? 'ArrowDown' : rtl ? 'ArrowLeft' : 'ArrowRight';
+    const backward = this.orientation === 'vertical' ? 'ArrowUp' : rtl ? 'ArrowRight' : 'ArrowLeft';
     let next = -1;
     if (event.key === forward) next = (index + 1) % options.length;
     else if (event.key === backward) next = (index - 1 + options.length) % options.length;
     else if (event.key === 'Home') next = 0;
     else if (event.key === 'End') next = options.length - 1;
     if (next < 0 || !options[next]) return;
-    event.preventDefault(); this.buttons.get(`${keyOf(options[next]!.value)}#${next}`)?.focus(); this.choose(options[next]!);
+    event.preventDefault(); this.buttons.get(keyOf(options[next]!.value))?.focus(); this.choose(options[next]!);
   };
 }
 
