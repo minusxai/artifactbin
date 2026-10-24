@@ -41,3 +41,29 @@ it('clears to null, prevents read-only intent and cleans up on reconnect',()=>{
  expect(root.value).toBe(null); expect(count).toBe(1);
  root.remove(); document.body.append(root); root.setAttribute('read-only',''); root.querySelector<HTMLButtonElement>('button')!.click(); expect(count).toBe(1);
 });
+it('keeps one roving day and focused date during author updates, supports Home and RTL',()=>{
+ const root=fixture('default-value="2024-02-29"'); root.querySelector<HTMLButtonElement>('button')!.click();
+ expect(root.querySelectorAll('[data-date][tabindex="0"]')).toHaveLength(1);
+ root.value='2024-02-28'; expect((document.activeElement as HTMLElement).dataset.date).toBe('2024-02-29');
+ document.activeElement!.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true})); expect((document.activeElement as HTMLElement).dataset.date).toBe('2024-02-25');
+ root.setAttribute('dir','rtl'); document.activeElement!.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true})); expect((document.activeElement as HTMLElement).dataset.date).toBe('2024-02-26');
+});
+it('injects today, cancels nullable intent and closes when readonly changes',()=>{
+ const root=fixture('default-value="2024-02-29"'); root.clock=()=>new Date(2024,1,29,23); root.querySelector<HTMLButtonElement>('button')!.click();
+ expect(root.querySelector('[aria-current=date]')?.getAttribute('data-date')).toBe('2024-02-29');
+ root.addEventListener('af-change',event=>event.preventDefault()); root.querySelector<HTMLButtonElement>('[aria-label="Clear date"]')!.click(); expect(root.value).toBe('2024-02-29');
+ root.querySelector<HTMLButtonElement>('button')!.click(); root.setAttribute('readonly',''); expect(root.querySelector<HTMLElement>('[role=dialog]')!.hidden).toBe(true);
+});
+it('clamps keyboard movement inclusively and preserves day through month navigation',()=>{
+ const root=fixture('default-value="2024-02-29" min="2024-02-28" max="2024-03-29"'); root.querySelector<HTMLButtonElement>('button')!.click();
+ document.activeElement!.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true})); expect((document.activeElement as HTMLElement).dataset.date).toBe('2024-02-28');
+ root.querySelector<HTMLButtonElement>('[aria-label="Next month"]')!.click(); expect(root.querySelector<HTMLElement>('[data-date][tabindex="0"]')?.dataset.date).toBe('2024-03-28');
+ root.querySelector<HTMLButtonElement>('[data-date][tabindex="0"]')!.focus(); document.activeElement!.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true})); expect((document.activeElement as HTMLElement).dataset.date).toBe('2024-03-29');
+});
+it('disables year boundary overflow and reconnects without duplicate change listeners',()=>{
+ const root=fixture('default-value="9999-12-31"'); root.querySelector<HTMLButtonElement>('button')!.click();
+ for(const day of root.querySelectorAll<HTMLButtonElement>('[data-date^="10000"]')) expect(day.disabled).toBe(true);
+ root.setAttribute('disabled',''); expect(root.querySelector<HTMLElement>('[role=dialog]')!.hidden).toBe(true);
+ root.removeAttribute('disabled'); root.remove(); document.body.append(root); let count=0; root.addEventListener('af-change',()=>count++);
+ root.querySelector<HTMLButtonElement>('button')!.click(); root.querySelector<HTMLButtonElement>('[aria-label="Clear date"]')!.click(); expect(count).toBe(1); expect(root.value).toBe(null);
+});
