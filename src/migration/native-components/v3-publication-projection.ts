@@ -26,6 +26,23 @@ function invalid(code: string): never {
 const exact = (a: unknown, b: unknown, code: string) => {
   if (!isDeepStrictEqual(a, b)) invalid(code);
 };
+/** Retained ordinary reader policy: servedRow supplies this exact version's meta.template;
+ * prepareStoryParts defaults chrome to true. Capture ?chrome=0 is a request mode, not meta.chrome. */
+export function nativeV3ReaderPolicy(
+  original: Readonly<Record<string, unknown>>,
+) {
+  const meta =
+    original.meta &&
+    typeof original.meta === "object" &&
+    !Array.isArray(original.meta)
+      ? (original.meta as Record<string, unknown>)
+      : {};
+  return {
+    sourceRecordSha256: nativeDigest(original),
+    template: typeof meta.template === "string" ? meta.template : null,
+    chrome: true,
+  };
+}
 function admit(input: NativeV3ProjectionInput): NativeV3AssemblyReceipt[] {
   const { selection, planned, targets } = input;
   if (
@@ -133,6 +150,19 @@ function admit(input: NativeV3ProjectionInput): NativeV3AssemblyReceipt[] {
       receipt.result.status !== "complete"
     )
       invalid("assembly_incomplete");
+    const readerPolicy = nativeV3ReaderPolicy(source.original),
+      reader = receipt.input.readerTemplate;
+    if (reader) {
+      if (
+        reader.sourceRecordSha256 !== source.rowSha256 ||
+        reader.template !== readerPolicy.template ||
+        reader.chrome !== readerPolicy.chrome
+      )
+        invalid("reader_source_policy");
+    } else if (
+      ["doc", "editorial", "plan"].includes(readerPolicy.template ?? "")
+    )
+      invalid("reader_template_required");
     const result = assembleNativePage(receipt.input);
     if (
       result.status !== "complete" ||

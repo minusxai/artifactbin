@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { nativeDigest } from "./selection.ts";
 import { canonicalMigrationValue } from "../verification-values.ts";
 import { bindNativeIdentities } from "./identity.ts";
+import { prepareNativeReaderTemplate } from "./reader-template.ts";
 import { assembleNativePage } from "./assemble.ts";
 import { NATIVE_COMPONENT_TARGET } from "./component-map.ts";
 import {
@@ -627,4 +628,87 @@ test("preserves separately admitted mutation target, typed values and commit-onl
   assert.equal(calls, 2);
   assert.equal(output.revisions[0]!.mutations[0]!.link.name, "actions");
   assert.equal(output.revisions[1]!.page.links.length, 2);
+});
+
+function readerFixture(template: string | null = "doc") {
+  const fixtureInput = fixture(),
+    { input } = fixtureInput;
+  const row = input.selection.page.revisions[0]!.original;
+  row.meta = { template, chrome: false };
+  const selected = input.selection.page.revisions[0]!;
+  selected.rowSha256 = nativeDigest(row);
+  const receipt = input.assemblies[0]!;
+  receipt.sourceRowSha256 = selected.rowSha256;
+  receipt.input.readerTemplate = prepareNativeReaderTemplate({
+    analysis: receipt.input.analysis,
+    identity: receipt.input.identity,
+    sourceRecordSha256: selected.rowSha256,
+    template,
+    chrome: true,
+  });
+  receipt.result = assembleNativePage(receipt.input);
+  assert.equal(receipt.result.status, "complete");
+  const { sha256, ...payload } = receipt;
+  receipt.sha256 = nativeDigest(payload);
+  input.plannedSha256 = sha(canonicalMigrationValue(input.planned));
+  return fixtureInput;
+}
+test("reader template binds exact saved revision metadata and ordinary reader chrome rather than meta.chrome", () => {
+  const { input, host } = readerFixture();
+  const history = projectNativeV3Publication(input, host);
+  assert.match(history.revisions[0]!.page.html, /mx-doc--document/);
+  assert.doesNotMatch(history.revisions[1]!.page.html, /mx-doc--document/);
+  const other = readerFixture("landing");
+  assert.equal(
+    projectNativeV3Publication(other.input, other.host).revisions.length,
+    2,
+  );
+});
+test("rejects correctly rehashed reader receipts for another source row, template or capture policy", () => {
+  for (const change of [
+    (r: NonNullable<NativeAssemblyInput["readerTemplate"]>) => {
+      r.sourceRecordSha256 = "0".repeat(64);
+    },
+    (r: NonNullable<NativeAssemblyInput["readerTemplate"]>) => {
+      r.template = "editorial";
+    },
+    (r: NonNullable<NativeAssemblyInput["readerTemplate"]>) => {
+      r.chrome = false;
+    },
+  ]) {
+    const { input, host, events } = readerFixture();
+    const receipt = input.assemblies[0]!,
+      reader = receipt.input.readerTemplate!;
+    change(reader);
+    receipt.input.readerTemplate = prepareNativeReaderTemplate({
+      analysis: receipt.input.analysis,
+      identity: receipt.input.identity,
+      sourceRecordSha256: reader.sourceRecordSha256,
+      template: reader.template,
+      chrome: reader.chrome,
+    });
+    receipt.result = assembleNativePage(receipt.input);
+    assert.equal(receipt.result.status, "complete");
+    const { sha256, ...payload } = receipt;
+    receipt.sha256 = nativeDigest(payload);
+    assert.throws(
+      () => projectNativeV3Publication(input, host),
+      /native_v3_reader_source_policy/,
+    );
+    assert.equal(events.length, 0);
+  }
+});
+test("requires retained normal-reader recipe for doc/editorial/plan instead of silently omitting navigation", () => {
+  for (const template of ["doc", "editorial", "plan"]) {
+    const { input, host } = readerFixture(template),
+      receipt = input.assemblies[0]!;
+    delete receipt.input.readerTemplate;
+    receipt.result = assembleNativePage(receipt.input);
+    const { sha256, ...payload } = receipt;
+    receipt.sha256 = nativeDigest(payload);
+    assert.throws(
+      () => projectNativeV3Publication(input, host),
+      /native_v3_reader_template_required/,
+    );
+  }
 });
