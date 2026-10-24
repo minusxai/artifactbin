@@ -47,12 +47,14 @@ export function changeNotice(revision,localConfig){
  const baseline=${JSON.stringify(revision)},local=${JSON.stringify(localConfig??null)};
  let timer,controller,stopped=false,changed=false,epoch=0,dirty=false,conflict=false,problem='';
  const host=document.createElement('div');host.setAttribute('data-af-preview-notice','');
- const shadow=host.attachShadow({mode:'open'});shadow.innerHTML='<style>:host{all:initial!important;position:fixed!important;left:0!important;right:0!important;top:0!important;z-index:2147483647!important}div{font:14px system-ui;color:#fff;background:#222;padding:12px 16px;box-shadow:0 2px 12px #0006}button,a{font:inherit;margin-left:12px;padding:4px 10px;cursor:pointer;color:inherit}button{color:#111}p{margin:8px 0 0}</style><div role="status" hidden><span></span><nav></nav><button type="button" hidden>Reload</button><p hidden>Reload discards the current local dataset session. Export edits first, or explicitly discard them.<button type="button">Reload and discard local edits</button></p></div>';
+ const shadow=host.attachShadow({mode:'open'});shadow.innerHTML='<style>:host{all:initial!important;position:fixed!important;left:0!important;right:0!important;top:var(--af-preview-notice-top,0px)!important;z-index:2147483647!important}div{font:14px system-ui;color:#fff;background:#222;padding:12px 16px;box-shadow:0 2px 12px #0006}button,a{font:inherit;margin-left:12px;padding:4px 10px;cursor:pointer;color:inherit}button{color:#111}p{margin:8px 0 0}</style><div role="status" hidden><span></span><nav></nav><button type="button" hidden>Reload</button><p hidden>Reload discards the current local dataset session. Export edits first, or explicitly discard them.<button type="button">Reload and discard local edits</button></p></div>';
  const box=shadow.querySelector('div'),label=shadow.querySelector('span'),links=shadow.querySelector('nav'),buttons=shadow.querySelectorAll('button'),reload=buttons[0],discard=buttons[1],confirmation=shadow.querySelector('p');
  if(local)for(const name of local.names){const link=document.createElement('a');link.textContent='Export '+name;link.href=local.endpoint+'/export/'+encodeURIComponent(name);link.download='local-'+name+'.json';links.append(link);}
- function render(){box.hidden=!changed&&!dirty&&!conflict&&!problem;label.textContent=problem||(changed?(dirty?'File changed — local dataset edits are unsaved':'File changed'):(conflict?'Local data source changed — retained unsaved session':'Local dataset edits are unsaved'));reload.hidden=!changed&&!dirty&&!conflict;links.hidden=!dirty&&!conflict;}
+ function render(){const shared=document.documentElement.getAttribute('data-af-local-chrome-ready')==='true';host.style.setProperty('--af-preview-notice-top',shared?'76px':'0px');box.hidden=shared?confirmation.hidden:!changed&&!dirty&&!conflict&&!problem;label.textContent=problem||(changed?(dirty?'File changed — local dataset edits are unsaved':'File changed'):(conflict?'Local data source changed — retained unsaved session':'Local dataset edits are unsaved'));reload.hidden=!changed&&!dirty&&!conflict;links.hidden=!dirty&&!conflict;}
  async function readStatus(signal){if(!local)return;const response=await fetch(local.endpoint+'/status',{cache:'no-store',signal});const status=await response.json();if(!response.ok)throw Error(status.error||'Local session unavailable');dirty=status.dirty;conflict=status.conflict;}
- reload.onclick=async()=>{try{await readStatus();if(dirty||conflict){confirmation.hidden=false;render();}else location.reload();}catch(error){problem=error.message;render();}};
+ async function reloadPreview(){try{await readStatus();if(dirty||conflict){confirmation.hidden=false;render();}else location.reload();}catch(error){problem=error.message;confirmation.hidden=false;render();}}
+ reload.onclick=reloadPreview;const requestedReload=()=>{void reloadPreview();};
+ const chromeObserver=new MutationObserver(render);
  discard.onclick=async()=>{try{const response=await fetch(local.endpoint+'/discard',{method:'POST',credentials:'omit'});if(!response.ok)throw Error('Could not discard local session; retry');location.reload();}catch(error){problem=error.message;render();}};
  document.documentElement.append(host);
  async function poll(){
@@ -63,8 +65,8 @@ export function changeNotice(revision,localConfig){
   }catch(error){if(stopped||generation!==epoch)return;try{await readStatus(controller.signal);}catch{}if(stopped||generation!==epoch)return;problem=error.message;render();dispatchEvent(new CustomEvent('af:preview-status',{detail:{changed,dirty,conflict,connected:false,error:error.message}}));}
   finally{if(generation===epoch)controller=undefined;if(!stopped&&generation===epoch)timer=setTimeout(poll,1500);}
  }
- function stop(){epoch++;stopped=true;clearTimeout(timer);controller?.abort();}
- function start(){if(!stopped&&timer)return;stopped=false;clearTimeout(timer);timer=setTimeout(poll,1500);}
+ function stop(){epoch++;stopped=true;chromeObserver.disconnect();removeEventListener('af:preview-reload',requestedReload);clearTimeout(timer);controller?.abort();}
+ function start(){if(!stopped&&timer)return;stopped=false;chromeObserver.observe(document.documentElement,{attributes:true,attributeFilter:['data-af-local-chrome-ready']});addEventListener('af:preview-reload',requestedReload);render();clearTimeout(timer);timer=setTimeout(poll,1500);}
  addEventListener('pagehide',stop);addEventListener('pageshow',start);start();
 })();</script>`;
 }

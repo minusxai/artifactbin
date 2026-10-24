@@ -52,7 +52,7 @@ try {
  await page.waitForFunction(()=>document.querySelector('#rows').textContent==='2');await page.getByText('Local dataset edits are unsaved',{exact:true}).waitFor();
  await writeFile(join(root,'sales.csv'),'amount\n4\n');await page.getByText('File changed — local dataset edits are unsaved',{exact:true}).waitFor();
  await page.reload();await page.waitForFunction(()=>document.querySelector('#rows').textContent==='2'); // Native reload retains dirty session.
- await page.getByRole('button',{name:'Reload',exact:true}).click();await page.getByRole('button',{name:'Reload and discard local edits'}).waitFor();
+ await page.evaluate(()=>{document.documentElement.setAttribute('data-af-local-chrome-ready','true');dispatchEvent(new Event('af:preview-reload'));});await page.getByRole('button',{name:'Reload and discard local edits'}).waitFor();
  assert.equal(await page.locator('#rows').textContent(),'2');
  const downloadPromise=page.waitForEvent('download');await page.getByRole('link',{name:'Export sales',exact:true}).click();const download=await downloadPromise;const exported=join(dir,'export.json');await download.saveAs(exported);
  assert.equal(JSON.parse(await readFile(exported,'utf8')).tables[0].rows.length,2);assert.equal(await readFile(join(root,'sales.csv'),'utf8'),'amount\n4\n');
