@@ -44,6 +44,8 @@ export interface NativeLowerOutput {
   status: 'complete'|'requires-adapter'|'blocked';
   /** Null until every operation/identity/resource requirement is admitted. */
   html: string|null;
+  /** Authored Helmet/title/style output, kept separate for normal document head assembly. */
+  headHtml: string|null;
   css: string;
   modules: readonly { name: string; register: string; targetRevision: string }[];
   /** Adapter emits these as ordinary author-owned module assignments, not globals. */
@@ -55,7 +57,7 @@ export interface NativeLowerOutput {
 const escape = (value: unknown): string => String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const digest = (value: unknown): value is string => typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const afId = (value: string): boolean => /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value);
-const htmlTags = new Set('a abbr address article aside b bdi bdo blockquote br button caption cite code col colgroup dd del details dfn dialog div dl dt em figcaption figure footer h1 h2 h3 h4 h5 h6 header hgroup hr i img input kbd label legend li main mark menu nav ol optgroup option output p picture pre progress q rp rt ruby s samp section select small source span strong sub summary sup table tbody td textarea tfoot th thead time tr u ul var video audio track wbr fieldset form'.split(' '));
+const htmlTags = new Set('title style a abbr address article aside b bdi bdo blockquote br button caption cite code col colgroup dd del details dfn dialog div dl dt em figcaption figure footer h1 h2 h3 h4 h5 h6 header hgroup hr i img input kbd label legend li main mark menu nav ol optgroup option output p picture pre progress q rp rt ruby s samp section select small source span strong sub summary sup table tbody td textarea tfoot th thead time tr u ul var video audio track wbr fieldset form'.split(' '));
 const voidTags = new Set('br col hr img input source track wbr'.split(' '));
 const common = new Set('id class className title role lang dir tabIndex hidden inert slot'.split(' '));
 const nativeHtml = new Set('href src alt width height type name value checked selected disabled required readOnly multiple placeholder rows cols min max step minLength maxLength htmlFor for colSpan rowSpan scope open controls loop muted preload loading decoding target rel download dateTime start reversed autoComplete autoFocus'.split(' '));
@@ -73,6 +75,11 @@ function safeUrl(value: string): boolean {
  if(value.startsWith('./')||value.startsWith('#')||value.startsWith('/'))return !value.split('/').includes('..');
  try {const url=new URL(value);return ['https:','http:','mailto:'].includes(url.protocol)&&!url.username&&!url.password;}catch{return false;}
 }
+// Retained compiled-page/compiler.ts gridParts/static-solid/attrs.ts (b8f59e0df parent),
+// story-ui/grid-layout.ts and data-table.ts normalization, copied as
+// pure arithmetic so the offline migrator never imports the legacy renderer.
+function integer(value:NativeJson|undefined,lo:number,hi:number,fallback:number):number {return Math.min(hi,Math.max(lo,typeof value==='number'&&Number.isFinite(value)?Math.round(value):fallback));}
+function tableHeight(value:NativeJson):number {if(typeof value==='number')return Number.isFinite(value)&&value>0?value:420;if(typeof value!=='string')return 420;const match=/^\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i.exec(value);const n=match?Number(match[1]):0;return Number.isFinite(n)&&n>0?n:420;}
 function validProperty(tag:string,name:string,value:NativeJson):boolean {
  const scalar=(v:NativeJson):boolean=>v===null||['string','boolean','number'].includes(typeof v);
  if(name==='options')return Array.isArray(value)&&value.every(v=>scalar(v)&&(tag==='Segmented'||v!==null)||v!==null&&!Array.isArray(v)&&typeof v==='object'&&'value'in v&&scalar(v.value)&&typeof v.label==='string'&&(tag==='Segmented'||v.value!==null));
@@ -88,6 +95,8 @@ function validProperty(tag:string,name:string,value:NativeJson):boolean {
 }
 export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutput {
  const blockers: NativeLowerBlocker[]=[],requirements: NativeLowerRequirement[]=[],assignments: Array<{afId:string;property:string;value:NativeJson}>=[],identities: Array<{sourceNode:string;afId?:string;kind:'element'|'text'|'nonvisual'}>=[];
+ const head:string[]=[];
+ const layouts=new Map<string,string>();
  const modules=new Map<string,{name:string;register:string;targetRevision:string}>();
  const usedAf=new Map<string,string>(),usedDom=new Set<string>(),usedBindings=new Set<NativeLowerIdentityBinding>();
  const spans=new Set(input.analysis.sourceSpans.map(span=>span.sourceNode));
@@ -125,9 +134,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    require('condition',node,'Preserve the complete typed conditional and keyed branch identity plan');return '';
   }
   if(declarationTags[node.tag]){require(declarationTags[node.tag]!,node,'Nonvisual declarations need admitted operation adapters');return '';}
-  if(node.tag==='title'||node.tag==='meta'||node.tag==='link'){require('head',node,'Authored metadata requires explicit head admission');return '';}
-  if(node.tag==='style'){require('style',node,'Authored stylesheet requires exact CSS closure admission');return '';}
-  if(node.tag==='Helmet'){require('head',node,'Authored head content must be separately admitted and retained');for(const child of node.children)walk(child,ancestors,depth+1);return '';}
+  if(node.tag==='Helmet'){identities.push({sourceNode:node.graphKey,kind:'nonvisual'});for(const child of node.children)head.push(walk(child,ancestors,depth+1));return '';}
   const operation: Readonly<Record<string,NativeLowerRequirementKind>>={For:'loop',Question:'chart',Chart:'chart',Column:'table-column',Script:'script',script:'script',Iframe:'iframe',iframe:'iframe',SignIn:'auth'};
   if(operation[node.tag]){require(operation[node.tag]!,node,'This typed shape requires its native operation/program adapter');return '';}
   const rule=nativeComponentRule(node.tag);
@@ -143,9 +150,25 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   const attrs: Record<string,string>=Object.create(null),styles: string[]=[];
   if(proof)attrs['data-af-id']=proof.afId;
   if(rule?.generatedClass)attrs.class=rule.generatedClass;
-  if(node.tag==='Grid'||node.tag==='GridItem')require('style',node,'Preserve original positioned/flow geometry and responsive CSS using an admitted layout adapter; see retained story-ui/grid-layout.ts');
+
   if(node.tag==='Alert')attrs.role='alert';
   if(node.tag==='TableHead')attrs.scope='col';
+  let gridCanvas:string|undefined;
+  if(node.tag==='Grid'){
+   {
+    const cols=integer(values.cols,1,24,12),row=integer(values.rowHeight,20,400,86);let rows=1;
+    for(const child of node.children){if(child.type!=='element'||child.tag!=='GridItem')continue;
+     const v=Object.fromEntries(child.attributes.filter(a=>a.value.static).map(a=>[a.name,a.value.static?a.value.json:null]));
+     if(child.attributes.some(a=>!a.value.static)){require('style',child,'Dynamic grid geometry needs a binding adapter');continue;}
+     const w=integer(v.w,1,cols,6),h=integer(v.h,1,Number.MAX_SAFE_INTEGER,4),x=integer(v.x,0,cols-w,0),y=integer(v.y,0,Number.MAX_SAFE_INTEGER,0);rows=Math.max(rows,y+h);
+     layouts.set(child.graphKey,values.mode==='flow'?`position:relative;grid-column:span ${w};min-height:${typeof v.minHeight==='number'&&Number.isFinite(v.minHeight)?Math.max(0,Math.min(10000,v.minHeight)):0}px;padding:3px;min-width:0`:`position:absolute;left:${x/cols*100}%;top:${y*row}px;width:${w/cols*100}%;height:${h*row}px;padding:3px;overflow:hidden`);
+    }
+    gridCanvas=values.mode==='flow'?`display:grid;grid-template-columns:repeat(${cols},minmax(0,1fr));align-items:start`:`position:relative;height:${rows*row}px`;
+    if(values.mode==='flow')attrs['data-native-grid-mode']='flow';
+    for(const child of node.children)if(child.type!=='element'||child.tag!=='GridItem'){if(child.type==='text'&&!child.value.trim())continue;require('style',child,'Legacy Grid only renders GridItems; extra authored content needs explicit preservation admission');}
+   }
+  }
+  if(node.tag==='GridItem'){const layout=layouts.get(node.graphKey);if(layout)styles.push(layout);else require('style',node,'GridItem needs its positioned Grid parent geometry');}
   let formatted: string|undefined;
   if(node.tag==='Number'||node.tag==='Cell'){
    const receipt=input.formattedValues?.find(value=>value.sourceNode===node.graphKey&&value.analysisSha256===input.analysis.analysisSha256&&digest(value.formatterSha256));
@@ -180,29 +203,32 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
     usedDom.add(value);attrs.id=value;continue;
    }
    const generic=common.has(name)||/^aria-[a-z-]+$/.test(name)||/^data-[a-z0-9_-]+$/.test(name)||(!rule&&nativeHtml.has(name));
-   if(node.tag==='DataTable'&&['columns','sort','metrics'].includes(name)){require('table-column',node,'Admit the exact table parser semantics for column/sort/metric specifications',name);continue;}
+   if(node.tag==='DataTable'&&name==='columns'){if(proof)assignments.push({afId:proof.afId,property:name,value});continue;}
+   if(node.tag==='DataTable'&&['sort','metrics'].includes(name)){require('table-column',node,'Admit table sort/metric specifications',name);continue;}
    if(rule?.properties?.includes(name)){
     if(!validProperty(node.tag,name,value)){block('unsupported-property-shape',node,'Property shape is not admitted by the pinned native setter contract',name);continue;}
     if(proof)assignments.push({afId:proof.afId,property:name,value});continue;
    }
-   if(node.tag==='DataTable'&&name==='height'&&typeof value==='string'){require('style',node,'Legacy CSS table height requires exact parse/translation admission',name);continue;}
+   if(node.tag==='DataTable'&&name==='height'){attrs.height=String(tableHeight(value));continue;}
    const kind=rule?.attributes?.[name];
    if(!generic&&(!kind||!validAttribute(value,kind))){block('unsupported-attribute',node,'Property is absent from or incompatible with the pinned native/semantic contract',name);continue;}
    if(value!==null&&typeof value==='object'){block('invalid-attribute',node,'Object/array values require an explicit native property assignment',name);continue;}
    const target=aliases[name]??name;
-   if(kind==='boolean'||booleanAttrs.has(target)){if(value===true)attrs[target]='';else if(value!==false&&value!==null)block('invalid-attribute',node,'Boolean attributes require exact boolean literals',name);continue;}
+   if(kind==='boolean'||booleanAttrs.has(target)){if(!rule){if(value)attrs[target]='';}else if(value===true)attrs[target]='';else if(value!==false&&value!==null)block('invalid-attribute',node,'Native boolean attributes require exact boolean literals',name);continue;}
    if(value!==null)attrs[target]=String(value);
   }
   if(styles.length)attrs.style=styles.join(';');
   if(rule?.module)modules.set(rule.module,{name:rule.module,register:rule.register!,targetRevision:NATIVE_COMPONENT_TARGET});
   if(node.tag==='DataTable'&&node.children.some(child=>child.type==='element'&&child.tag==='Column'))require('table-column',node,'Preserve typed column templates/actions and stable row identity through the table adapter');
   if(node.tag==='User'&&!seen.has('userId')&&!seen.has('fallback'))require('person',node,'A user element requires an explicit person or fallback binding');
-  const children=formatted??node.children.map(child=>walk(child,[...ancestors,node.tag],depth+1)).join('');
+  if(node.tag==='style'){if(node.children.some(child=>child.type!=='text'&&!(child.type==='expression'&&child.value.static&&typeof child.value.json==='string')))require('style',node,'Nonliteral CSS needs explicit expression admission');else {const raw=node.children.map(child=>child.type==='text'?child.value:child.type==='expression'&&child.value.static?String(child.value.json):'').join('');if(/<\/style/i.test(raw))block('style-end-tag',node,'Raw style terminator cannot be represented in an HTML raw-text element');else if(/@import|url\s*\(/i.test(raw))require('resource',node,'CSS resource dependencies require exact resource closure admission');else {formatted=raw;for(const child of node.children)identities.push({sourceNode:child.graphKey,kind:child.type==='text'?'text':'nonvisual'});}}}
+  let children=formatted??node.children.map(child=>walk(child,[...ancestors,node.tag],depth+1)).join('');
+  if(gridCanvas!==undefined)children=`<div class="native-grid-canvas" style="${escape(gridCanvas)}">${children}</div>`;
   if(voidTags.has(tag)&&node.children.length)block('void-element-children',node,'Void HTML cannot retain authored children');
   const attributes=Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('');
   return `<${tag}${attributes}>${voidTags.has(tag)?'':children+`</${tag}>`}`;
  };
  const html=input.analysis.nodes.map(node=>walk(node)).join('');
  const status=blockers.length?'blocked':requirements.length?'requires-adapter':'complete';
- return {status,html:status==='complete'?html:null,css:modules.size||html?NATIVE_SEMANTIC_CSS:'',modules:[...modules.values()].sort((a,b)=>a.name.localeCompare(b.name)),assignments,identities,requirements,blockers};
+ return {status,html:status==='complete'?html:null,headHtml:status==='complete'?head.join(''):null,css:modules.size||html?NATIVE_SEMANTIC_CSS:'',modules:[...modules.values()].sort((a,b)=>a.name.localeCompare(b.name)),assignments,identities,requirements,blockers};
 }

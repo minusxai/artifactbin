@@ -14,7 +14,7 @@ function input(nodes:RetainedJsxNode[]):NativeLowerInput {
 }
 test('semantic layout preserves exact authored text, DOM IDs and ARIA separately from proved annotation IDs',()=>{
  const source=input([element('Card',{id:'dom-card','aria-labelledby':'heading'},[element('CardHeader',{},[element('CardTitle',{id:'heading'},[text('A < B & C\n  preserved')])]),element('Alert',{'aria-label':'Notice'},[text('Read this')])])]);
- const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/<section[^>]*id="dom-card"/);assert.match(result.html!,/aria-labelledby="heading"/);assert.match(result.html!,/data-af-id="stable-0"/);assert.match(result.html!,/A &lt; B &amp; C\n  preserved/);assert.doesNotMatch(result.html!,/<(?:Card|Grid|Alert)/);assert.match(result.css,/display:grid/);assert.equal(result.modules.length,0);
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/<section[^>]*id="dom-card"/);assert.match(result.html!,/aria-labelledby="heading"/);assert.match(result.html!,/data-af-id="stable-0"/);assert.match(result.html!,/A &lt; B &amp; C\n  preserved/);assert.doesNotMatch(result.html!,/<(?:Card|Grid|Alert)/);assert.match(result.css,/container-type:inline-size/);assert.equal(result.modules.length,0);
 });
 test('native compound controls retain child identity and emit only reviewed attributes and author property assignments',()=>{
  const source=input([element('Dialog',{defaultOpen:false},[element('DialogTrigger',{},[text('Open')]),element('DialogContent',{'aria-label':'Details'},[element('Textarea',{label:'Notes',value:'literal',rows:3}),element('DialogClose',{},[text('Close')])])]),element('Segmented',{label:'Mode',options:['One','Two'],value:'One'})]);
@@ -48,13 +48,21 @@ test('native property shapes cannot be silently discarded by target setters',()=
   const result=lowerNativeComponents(input([node]));assert.equal(result.status,'blocked');assert.ok(result.blockers.some(value=>value.code==='unsupported-property-shape'));
  }
 });
-test('Grid geometry remains explicit until original positioned/flow CSS is admitted',()=>{
- const result=lowerNativeComponents(input([element('Grid',{cols:12},[element('GridItem',{x:0,y:0,w:6,h:4},[text('Panel')])])]));
- assert.equal(result.html,null);assert.ok(result.requirements.some(value=>value.kind==='style'&&value.tag==='Grid'));
- assert.equal(result.blockers.length,0);
+test('static positioned Grid uses retained 12-column coordinates and exact row rhythm',()=>{
+ const result=lowerNativeComponents(input([element('Grid',{cols:12},[element('GridItem',{x:6,y:2,w:6,h:4},[text('Panel')])])]));
+ assert.equal(result.status,'complete');assert.match(result.html!,/left:50%/);assert.match(result.html!,/top:172px/);assert.match(result.html!,/height:344px/);assert.match(result.html!,/height:516px/);
 });
-test('head content and legacy table specifications retain explicit admission requirements',()=>{
- const source=input([element('Helmet',{},[element('title',{},[text('Exact title')]),element('style',{},[text('p { color: red }')])]),element('DataTable',{height:'40vh',columns:[{col:'count'}]})]);
- const result=lowerNativeComponents(source);assert.equal(result.html,null);assert.equal(result.blockers.length,0);
- for(const kind of ['head','style','table-column'])assert.ok(result.requirements.some(value=>value.kind===kind));
+test('head title/style, hidden literals and table specs preserve retained semantics',()=>{
+ const source=input([element('Helmet',{},[element('title',{},[text('Exact < title')]),element('style',{},[text('p > a { color: red }')])]),element('p',{hidden:'false'},[text('Hidden')]),element('div',{hidden:''}),element('DataTable',{height:'420px',columns:[{col:'count',title:'Count',width:80}]})]);
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.headHtml!,/Exact &lt; title/);assert.match(result.headHtml!,/p > a \{ color: red \}/);assert.match(result.html!,/<p[^>]*hidden=""/);assert.doesNotMatch(result.html!,/<div[^>]*hidden/);assert.match(result.html!,/height="420"/);assert.deepEqual(result.assignments.find(v=>v.property==='columns')?.value,[{col:'count',title:'Count',width:80}]);
+});
+
+test('retained static CSS string expressions preserve literal raw-text rather than escape CSS',()=>{
+ const css:RetainedJsxNode={type:'expression',graphKey:'css-static',start:0,end:1,source:'synthetic CSS literal',value:{static:true,json:'p > a { color: red }'}};
+ const result=lowerNativeComponents(input([element('Helmet',{},[element('style',{},[css])])]));assert.equal(result.status,'complete');assert.match(result.headHtml!,/p > a \{ color: red \}/);
+});
+
+test('Grid retains responsive 42rem container fallback and flow minHeight/clamping',()=>{
+ const result=lowerNativeComponents(input([element('Grid',{mode:'flow',cols:12},[element('GridItem',{w:20,minHeight:120},[text('Flow')])])]));
+ assert.equal(result.status,'complete');assert.match(result.html!,/grid-column:span 12/);assert.match(result.html!,/min-height:120px/);assert.match(result.css,/@container \(width < 42rem\)/);assert.match(result.css,/grid-column:span 1!important/);
 });
