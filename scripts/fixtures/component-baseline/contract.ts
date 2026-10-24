@@ -52,3 +52,19 @@ export interface BrowserParityCapture {
   resourceEvidence?: { stylesheets: Array<{ url: string; loaded: boolean }>; errors: string[] };
   fontEvidence: { faces: unknown[]; used: unknown[]; resources: unknown[]; errors: string[] };
 }
+
+/** A failed state is diagnostics, never a successful parity capture. */
+export interface BrowserCaptureFailure {
+  fixture: string;
+  state: string;
+  theme: 'light' | 'dark';
+  viewport: { width: number; height: number };
+  implementation: 'jsx' | 'html';
+  sourceRevision: string;
+  phase: string;
+  action?: { action: string; role: string; name: string; key?: string };
+  message: string;
+  screenshot?: string;
+  semantics?: unknown;
+  diagnostics: unknown;
+}

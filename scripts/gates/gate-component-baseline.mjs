@@ -6,11 +6,11 @@
 import assert from 'node:assert/strict';
 import { readFile, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import {gzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 import {publishReaderManifest} from '../component-baseline-publish.mjs';
 import {settleInteraction} from '../fixtures/component-baseline/interaction.mjs';
 import {richBaselineReadiness} from '../fixtures/component-baseline/rich.mjs';
+import {withComponentBaselineEvidence} from '../lib/component-baseline-evidence.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues } from '../lib/component-browser-baseline.mjs';
 const repo=path.resolve(import.meta.dirname,'../..');
@@ -46,6 +46,7 @@ if(!input.entries) {
   input.output=evidenceOutput;
 }
 // Match the existing real-library gate's software WebGL configuration.
+await withComponentBaselineEvidence({output:input.output,run:async()=>{
 const browsers=[];
 try {
   for(let worker=0;worker<2;worker++)browsers.push(await launchChromium({args:['--enable-unsafe-swiftshader']}));
@@ -68,10 +69,8 @@ try {
       if(fixture.id==='tooltip-keyboard'&&action.action==='focus')await page.getByRole('tooltip').waitFor();
     }};
   }});
-  const files=await readdir(input.output);
-  const evidence=await Promise.all(files.filter(file=>file.endsWith('.png')||file.endsWith('-captures.json')).map(async name=>({name,base64:(await readFile(path.join(input.output,name))).toString('base64')})));
-  console.log('COMPONENT_BASELINE_EVIDENCE_GZIP_BASE64 '+gzipSync(Buffer.from(JSON.stringify({format:'component-baseline-files-v1',files:evidence}))).toString('base64'));
   const issues=input.defaultCandidateValidation?candidateCaptureIssues(captures):captures.flatMap(capture=>[...capture.errors,...(capture.assertionErrors||[]),...(capture.fontEvidence?.errors||[]),...(capture.resourceEvidence?.errors||[])]);
   assert.equal(issues.length,0,'Reader capture failures: '+issues.join('; '));
   console.log(`Captured ${captures.length} actual ${input.implementation} reader states; no visual parity claim made.`);
 } finally {await Promise.allSettled(browsers.map(browser=>browser.close()));}
+}});

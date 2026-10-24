@@ -295,3 +295,19 @@ describe('component gate resource acceptance',()=>{
     }finally{if(prior===undefined)delete process.env.COMPONENT_BASELINE__INPUT;else process.env.COMPONENT_BASELINE__INPUT=prior;vi.doUnmock('../gates/lib/browser.mjs');vi.doUnmock('../lib/component-browser-baseline.mjs');}
   });
 });
+
+it('persists successful partial captures and a diagnostic failed state before rejecting',async()=>{
+  const directory=await setup();let sequence=0,closed=0;
+  await writeFile(path.join(directory,'html-captures.json'),'[{"state":"stale prior run"}]');
+  const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+  const browser={newContext:async()=>{const id=sequence++;return {newPage:async()=>({id,on:()=>{},screenshot:async()=>bytes}),close:async()=>{closed++;}};}};
+  const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Completed',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+  await expect(captureBrowserBaseline({browser,mount:async({page})=>{if(page.id===1)throw Error('actual state failed');return {frame};},implementation:'html',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'one',states:[{id:'initial',actions:[]}]}]})).rejects.toThrow('one/light/390/initial: actual state failed');
+  const partial=JSON.parse(await readFile(path.join(directory,'html-partial-captures.json'),'utf8'));
+  expect(partial).toHaveLength(1);expect(partial[0].semantics.text).toBe('Completed');
+  const status=JSON.parse(await readFile(path.join(directory,'capture-status.json'),'utf8'));
+  expect(status).toMatchObject({complete:false,planned:4,completed:1,failures:[{fixture:'one',state:'initial',theme:'light',viewport:{width:390,height:844},phase:'mount',message:'actual state failed'}]});
+  expect(await readFile(path.join(directory,'one-light-390-initial-html-failure.png'))).toEqual(bytes);
+  await expect(readFile(path.join(directory,'html-captures.json'))).rejects.toMatchObject({code:'ENOENT'});
+  expect(closed).toBe(2);
+});

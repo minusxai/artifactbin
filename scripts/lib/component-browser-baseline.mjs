@@ -1,7 +1,7 @@
 /** Actual reader capture only: caller mounts a freshly published real reader URL.
  * No page.setContent, hand-rendered JSX, CSS surrogate or production writes. */
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { browserParityFixtures, parityThemes, parityViewports } from '../fixtures/component-baseline/index.mjs';
@@ -92,12 +92,15 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
   /** @type {import('../fixtures/component-baseline/contract').BrowserParityCapture[]} */
   const browserVersion=browser.version?.()||'unreported';
   const tasks=fixtures.flatMap(fixture=>parityThemes.flatMap(theme=>parityViewports.flatMap(viewport=>fixture.states.map(state=>({fixture,theme,viewport,state})))));
-  const captures=new Array(tasks.length);
+  const captures=new Array(tasks.length),failures=[];
+  // A failed new run must never archive a stale full verdict as current evidence.
+  await Promise.all([`${implementation}-captures.json`,`${implementation}-partial-captures.json`].map(name=>rm(path.join(output,name),{force:true})));
+  await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,completed:0,failures:[]}));
   async function capture({fixture,theme,viewport,state},workerBrowser) {
     const context=await workerBrowser.newContext({viewport,colorScheme:theme,reducedMotion:'reduce',locale:'en-US',timezoneId:'UTC'});
-    const errors=[],fontResources=[],fontPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='';
+    const errors=[],fontResources=[],fontPending=[],resourceErrors=[],consoleErrors=[],requestFailures=[],httpFailures=[];let phase='mount',readerUrl='',page,frame,activeAction;
     try {
-      const page=await context.newPage();
+      page=await context.newPage();
       page.on('pageerror',error=>errors.push(error.message));
       page.on('console',message=>{if(message.type()==='error'&&consoleErrors.length<20)consoleErrors.push(diagnosticText(message.text()));});
       page.on('requestfailed',request=>{if(requestFailures.length<20)requestFailures.push({type:request.resourceType(),url:diagnosticText(request.url()),error:diagnosticText(request.failure()?.errorText||'unknown')});});
@@ -106,18 +109,20 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       await page.route?.('**/*',route=>{const request=route.request();if(!local(request.url())){resourceErrors.push({url:request.url(),error:`External ${request.resourceType()} request blocked: ${request.url()}`});return route.abort('blockedbyclient');}return route.continue();});
       page.on('requestfailed',request=>{if(request.resourceType()==='font')resourceErrors.push({url:request.url(),error:`Font request failed: ${request.url()} (${request.failure()?.errorText||'unknown'})`});});
       page.on('response',response=>{if(response.request().resourceType()==='font')fontPending.push((async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}})());});
-      const {frame,ready,afterAction}=await mount({fixture,theme,viewport,state,page});
+      const mounted=await mount({fixture,theme,viewport,state,page});frame=mounted.frame;const {ready,afterAction}=mounted;
       const url=new URL(frame.url());readerUrl=diagnosticText(url.href);
       if (!['127.0.0.1','localhost','app.lvh.me','lvh.me'].includes(url.hostname) && !url.hostname.endsWith('.lvh.me')) throw Error('Browser baseline must use an isolated local reader');
       phase='ready';await ready?.();phase='capture';
       await frame.evaluate(()=>document.fonts.ready);
       for(const action of state.actions) {
+        activeAction=action;phase=`action:${action.action}`;
         const target=frame.getByRole(action.role,{...(action.name?{name:action.name,exact:true}:{})});
         if(action.action==='press') await target.press(action.key);
         else if(action.action==='scroll')await target.evaluate(table=>{const scroll=table.parentElement;if(!scroll||scroll.scrollHeight<=scroll.clientHeight)throw Error('Table has no scrollable parent');scroll.scrollTop=scroll.scrollHeight;});
         else await target[action.action]();
         await afterAction?.(action);
       }
+      activeAction=undefined;phase='capture';
       await frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       const resourceEvidence=await frame.evaluate(browserResources);resourceEvidence.stylesheets??=[];resourceEvidence.errors=[];
       for(const sheet of resourceEvidence.stylesheets)if(!sheet.loaded)resourceEvidence.errors.push(`Stylesheet did not load: ${diagnosticText(sheet.url)}`);
@@ -136,7 +141,17 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       const screenshot=await page.screenshot({fullPage:false,animations:'disabled',caret:'hide'});
       await writeFile(path.join(output,name),screenshot);
       return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode:'viewport',browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,resourceEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
-    } catch(cause){const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures};throw new Error(`${diagnosticText(cause.message)}; reader diagnostics: ${JSON.stringify(diagnostics)}`,{cause});
+    } catch(cause){
+      const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures};
+      /** @type {import('../fixtures/component-baseline/contract').BrowserCaptureFailure} */
+      const failure={fixture:fixture.id,state:state.id,theme,viewport,implementation,sourceRevision,phase,...(activeAction?{action:activeAction}:{}),message:diagnosticText(cause.message),diagnostics};
+      const stem=`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}-failure`;
+      try{if(page?.screenshot){await writeFile(path.join(output,stem+'.png'),await page.screenshot({fullPage:false,animations:'disabled',caret:'hide',timeout:3000}));failure.screenshot=stem+'.png';}}catch(error){diagnostics.screenshotError=diagnosticText(error.message);}
+      // Snapshot already mounted documents only; do not run readiness again.
+      try{if(frame)failure.semantics=await frame.evaluate(browserState);}catch(error){diagnostics.snapshotError=diagnosticText(error.message);}
+      failures.push(failure);
+      try{await writeFile(path.join(output,stem+'.json'),JSON.stringify(failure,null,2));}catch(error){diagnostics.evidenceWriteError=diagnosticText(error.message);}
+      throw new Error(`${diagnosticText(cause.message)}; reader diagnostics: ${JSON.stringify(diagnostics)}`,{cause});
     } finally {await context.close();}
   }
   let next=0,failed=false;
@@ -144,8 +159,13 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
     while(!failed&&next<tasks.length){const index=next++;try{captures[index]=await capture(tasks[index],workerBrowsers[workerIndex]);}catch(error){failed=true;const task=tasks[index];throw new Error(`${task.fixture.id}/${task.theme}/${task.viewport.width}/${task.state.id}: ${error.message}`,{cause:error});}}
   }));
   const failure=workers.find(worker=>worker.status==='rejected');
-  if(failure)throw failure.reason;
+  if(failure){
+    try{await writeFile(path.join(output,`${implementation}-partial-captures.json`),JSON.stringify(captures.filter(Boolean),null,2));await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:false,planned:tasks.length,completed:captures.filter(Boolean).length,failures},null,2));}
+    catch(error){failure.reason.message+=`; partial evidence write failed: ${diagnosticText(error.message)}`;}
+    throw failure.reason;
+  }
   await writeFile(path.join(output,`${implementation}-captures.json`),JSON.stringify(captures,null,2));
+  await writeFile(path.join(output,'capture-status.json'),JSON.stringify({complete:true,planned:tasks.length,completed:captures.length,failures:[]}));
   return captures;
 }
 
