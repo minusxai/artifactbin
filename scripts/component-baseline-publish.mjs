@@ -1,6 +1,6 @@
 /** Run against an isolated gate server built from the explicitly named source.
  * No production host or credential is accepted. Produces a URL manifest only. */
-import {writeFile} from 'node:fs/promises';
+import {readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
@@ -16,8 +16,8 @@ const publish=async body=>{
   if(!response.ok)throw Error(`Fixture publication failed (${response.status}): ${await response.text()}`);
   return response.json();
 };
-const nativeSystemCss=implementation==='html'?(await import('../design-systems/lib/html-skill.mjs')).nativeSystemCss:null;
-const entries=await publishBaselineFixtures({implementation,publish,repo:source,themeCss:nativeSystemCss?()=>nativeSystemCss('modernist'):undefined});
+const themeCss=implementation==='html'?await readFile(path.join(source,'services/app/skills/artifactbin/design-systems/almanac.css'),'utf8'):null;
+const entries=await publishBaselineFixtures({implementation,publish,repo:source,themeCss:themeCss?()=>themeCss:undefined});
 const manifest={implementation,sourceRevision,output:path.join(path.dirname(output),implementation+'-evidence'),entries:entries.map(({fixture,theme,id})=>({fixture,theme,url:`${base}/a/${id}/raw`}))};
 await writeFile(output,JSON.stringify(manifest,null,2));
 return manifest;

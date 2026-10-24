@@ -49,3 +49,27 @@ describe('default candidate reader gate',()=>{
     expect(candidateCaptureIssues([capture])).toEqual([]);
   });
 });
+
+describe('actual fixture publication payloads',()=>{
+  it('declares an actual dataset and string state for original upload markup',async()=>{
+    const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
+    const bodies=[];
+    const entries=await publishBaselineFixtures({implementation:'jsx',publish:async body=>{bodies.push(body);return {id:body.dataset?'Dataset123':'Page123'};}});
+    expect(entries).toHaveLength(12);
+    expect(bodies.filter(body=>body.dataset)).toHaveLength(1);
+    const upload=bodies.find(body=>body.markup?.includes('<FileUpload'));
+    expect(upload.markup).toContain('src="ref:Dataset123"');
+    expect(upload.markup).toContain('name="refs" type="string"');
+    expect(upload.markup).not.toContain('{{uploadDataset}}');
+    expect(upload.theme).toBe('almanac');
+  });
+  it('builds candidate fixtures with the installed retained theme and actual modules',async()=>{
+    const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
+    const repo=path.resolve(import.meta.dirname,'../..');
+    const css=await readFile(path.join(repo,'services/app/skills/artifactbin/design-systems/almanac.css'),'utf8');
+    const bodies=[];
+    await publishBaselineFixtures({implementation:'html',repo,themeCss:()=>css,publish:async body=>{bodies.push(body);return {id:'Page123'};}});
+    expect(bodies).toHaveLength(12);
+    expect(bodies.every(body=>body.html.includes('data-af-design-system="almanac"')&&body.html.includes('baselineReady'))).toBe(true);
+  });
+});
