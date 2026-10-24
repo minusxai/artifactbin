@@ -1,5 +1,6 @@
 /** Author-owned visibility: af-change announces a cancelable request, never persists state. */
 export interface DialogChangeDetail { value: boolean }
+/** Content aria-label/labelledby/describedby are forwarded; authored names outrank derived parts. */
 export interface DialogContract { open: boolean | undefined }
 let sequence = 0;
 export class AfDialog extends HTMLElement implements DialogContract {
@@ -12,7 +13,11 @@ export class AfDialog extends HTMLElement implements DialogContract {
   private opener: HTMLElement | null = null;
   private controlAttributes = new WeakMap<HTMLElement, {role: string | null; tab: string | null}>();
   private disabledChildren = new Map<HTMLElement, {disabled: string | null; tab: string | null}>();
-  private observer = new MutationObserver(() => this.sync());
+  private observer = new MutationObserver(records => {
+    // Native projection writes must not feed back into this observer.
+    if (records.some(record => record.type === 'childList' || record.attributeName === 'id' || record.attributeName === 'disabled' ||
+      (record.target instanceof Element && record.target.localName === 'af-dialog-content' && record.target.closest('af-dialog') === this))) this.sync();
+  });
   get open(): boolean { return this.supplied ?? (this.hasAttribute('open') || this.local); }
   set open(value: boolean | undefined) { if (value === undefined) this.local = this.open; this.supplied = value; this.sync(); }
   connectedCallback(): void {
@@ -20,7 +25,7 @@ export class AfDialog extends HTMLElement implements DialogContract {
     if (!this.initialized) { this.local = this.hasAttribute('default-open'); this.initialized = true; }
     this.addEventListener('click', this.onClick);
     this.addEventListener('keydown', this.keydown);
-    this.observer.observe(this, {childList:true,subtree:true,attributes:true,attributeFilter:['id','disabled']});
+    this.observer.observe(this, {childList:true,subtree:true,attributes:true,attributeFilter:['id','disabled','aria-label','aria-labelledby','aria-describedby']});
     this.sync();
   }
   disconnectedCallback(): void {
@@ -89,9 +94,16 @@ export class AfDialog extends HTMLElement implements DialogContract {
       this.native.addEventListener('close',this.closed);
       content.before(this.native); this.native.append(content); this.mountedContent = content;
     } else if (content.parentElement !== this.native) this.native.append(content);
+    this.restoreAttribute(this.native,'aria-label',content.getAttribute('aria-label'));
     for (const [tag,attribute] of [['af-dialog-title','aria-labelledby'],['af-dialog-description','aria-describedby']] as const) {
-      const nodes = this.own(tag); nodes.forEach(n => this.identify(n));
-      if (nodes.length) this.native.setAttribute(attribute,nodes.map(n => n.id).join(' ')); else this.native.removeAttribute(attribute);
+      const explicit = content.getAttribute(attribute);
+      // aria-labelledby has native priority over aria-label; a derived title must not override an authored name.
+      if (explicit !== null || (attribute === 'aria-labelledby' && content.hasAttribute('aria-label'))) {
+        this.restoreAttribute(this.native,attribute,explicit);
+      } else {
+        const nodes = this.own(tag); nodes.forEach(n => this.identify(n));
+        this.restoreAttribute(this.native,attribute,nodes.length ? nodes.map(n => n.id).join(' ') : null);
+      }
     }
     const disabledTargets = new Set<HTMLElement>();
     for (const control of this.own('af-dialog-trigger,af-dialog-close')) {
