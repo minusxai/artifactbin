@@ -3,7 +3,6 @@
 import path from 'node:path';
 import {copyFile,mkdtemp,mkdir,readdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {prepareBundle} from '../../../services/app/skills/artifactbin/scripts/publication-bundle.mjs';
 import { browserParityFixtures, parityThemes } from './index.mjs';
 /** @typedef {{idempotencyKey?:string}} PublicationRequestOptions */
 /** @typedef {(body:object, options?:PublicationRequestOptions)=>Promise<{id:string}>} PublishFixture */
@@ -11,9 +10,12 @@ const pascal=name=>name==='deck-gl'?'DeckGL':name.split('-').map(word=>word[0].t
 /** Candidate snapshots use the installed component bytes and normal agent helper. */
 export async function publishBaselineFixtures({implementation,publish,repo,themeCss,serverOrigin}) {
   const entries=[];
-  let uploadDataset,staging;
+  let uploadDataset,staging,prepareBundle;
   try{
   if(implementation==='html'){
+    // Intentional engine boundary: pinned original JSX checkouts do not contain
+    // the candidate HTML helper and must publish without importing its source.
+    ({prepareBundle}=await import('../../../services/app/skills/artifactbin/scripts/publication-bundle.mjs'));
     staging=await mkdtemp(path.join(tmpdir(),'component-publication-'));await mkdir(path.join(staging,'components'));
     const installed=path.join(repo,'services/app/skills/artifactbin/components');
     for(const name of await readdir(installed))if(name.endsWith('.js'))await copyFile(path.join(installed,name),path.join(staging,'components',name));

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -84,6 +84,14 @@ describe('actual fixture publication payloads',()=>{
     expect(bodies).toHaveLength(browserParityFixtures.length*parityThemes.length);
     expect(bodies.every(body=>body.html.includes('data-af-design-system="almanac"')&&body.html.includes('baselineReady'))).toBe(true);
   },30_000);
+  it('publishes original JSX in an isolated old tree with no candidate helper or packages',async()=>{
+    const {execFileSync}=await import('node:child_process'),root=await mkdtemp(path.join(tmpdir(),'old-component-publisher-'));try{
+      const fixtureDir=path.join(root,'scripts/fixtures/component-baseline');await mkdir(fixtureDir,{recursive:true});
+      for(const name of ['publication.mjs','index.mjs','controls.mjs','rich.mjs'])await copyFile(new URL('../fixtures/component-baseline/'+name,import.meta.url),path.join(fixtureDir,name));
+      await writeFile(path.join(root,'verify.mjs'),'import {publishBaselineFixtures} from "./scripts/fixtures/component-baseline/publication.mjs";let count=0;const entries=await publishBaselineFixtures({implementation:"jsx",publish:async body=>{if(body.publicationBundle)throw Error("candidate payload entered old path");count++;return {id:body.dataset?"Dataset123":"Page123"};}});if(entries.length!==50||count!==51)throw Error("original fixture publication missing");process.stdout.write("original-complete");');
+      expect(execFileSync(process.execPath,[path.join(root,'verify.mjs')],{cwd:root,encoding:'utf8'})).toContain('original-complete');
+    }finally{await rm(root,{recursive:true,force:true});}
+  });
   it('removes the staged project and identifies the fixture when publication fails',async()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
     const before=new Set(await readdir(tmpdir())),repo=path.resolve(import.meta.dirname,'../..');
