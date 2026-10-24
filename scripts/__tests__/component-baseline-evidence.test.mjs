@@ -52,6 +52,13 @@ it('accepts complete legacy archives but rejects truncated gzip',()=>{
  expect(decodeComponentBaselineEvidence('COMPONENT_BASELINE_EVIDENCE_GZIP_BASE64 '+compressed.toString('base64'))).toEqual(archive);
  expect(()=>decodeComponentBaselineEvidence('COMPONENT_BASELINE_EVIDENCE_GZIP_BASE64 '+compressed.subarray(0,-5).toString('base64'))).toThrow();
 });
+it('decodes realistic multi-megabyte evidence without recursive regex backtracking',()=>{
+ const bytes=randomBytes(3*1024*1024),archive={format:'component-baseline-files-v1',files:[{name:'capture.png',base64:bytes.toString('base64')}]};
+ const encoded=gzipSync(JSON.stringify(archive)).toString('base64');
+ expect(encoded.length).toBeGreaterThan(4*1024*1024);
+ const decoded=decodeComponentBaselineEvidence('COMPONENT_BASELINE_EVIDENCE_GZIP_BASE64 '+encoded);
+ expect(Buffer.from(decoded.files[0].base64,'base64')).toEqual(bytes);
+});
 it('writes decoded files only after the complete archive verifies',async()=>{
  const {decodeComponentBaselineLog}=await import('../component-baseline-decode.mjs');
  const {readFile,access}=await import('node:fs/promises');

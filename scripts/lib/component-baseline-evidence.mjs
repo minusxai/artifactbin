@@ -24,7 +24,21 @@ export async function withComponentBaselineEvidence({output,run,emit=writeLine,r
     }catch(error){if(failure){try{await report(`Could not archive component evidence: ${error.message}`);}catch{ /* Keep the original capture failure. */ }}else throw error;}
   }
 }
-const base64Bytes=value=>{if(typeof value!=='string'||!/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value))throw Error('Invalid evidence base64');const bytes=Buffer.from(value,'base64');if(bytes.toString('base64')!==value)throw Error('Invalid evidence base64');return bytes;};
+const base64Bytes=value=>{
+  if(typeof value!=='string'||value.length%4!==0)throw Error('Invalid evidence base64');
+  let padding=0;
+  if(value.endsWith('='))padding++;
+  if(value.endsWith('=='))padding++;
+  const dataLength=value.length-padding;
+  for(let index=0;index<dataLength;index++){
+    const code=value.charCodeAt(index);
+    if(!(code>=65&&code<=90||code>=97&&code<=122||code>=48&&code<=57||code===43||code===47))throw Error('Invalid evidence base64');
+  }
+  for(let index=dataLength;index<value.length;index++)if(value.charCodeAt(index)!==61)throw Error('Invalid evidence base64');
+  const bytes=Buffer.from(value,'base64');
+  if(bytes.toString('base64')!==value)throw Error('Invalid evidence base64');
+  return bytes;
+};
 /** Decode only the latest attempted archive. Never substitute an earlier complete
  * capture for a truncated new run. Legacy single-line gzip remains readable. */
 export function decodeComponentBaselineEvidence(log){
