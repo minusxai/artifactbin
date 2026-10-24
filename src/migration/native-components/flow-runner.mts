@@ -21,5 +21,5 @@ async function fingerprint(){
  const hashes=await Promise.all(files.sort().map(async file=>[file,createHash('sha256').update(await readFile(path.join(root,file))).digest('hex')]));
  return {compilerSourceSha256:await retainedCompilerFingerprint(root),sqlEngineSha256:nativeDigest({hashes,runtime:{node:process.versions.node,v8:process.versions.v8,icu:process.versions.icu,tz:process.versions.tz}})};
 }
-const host=await retainedNativeFlowHost({legacyRoot:root,fingerprint,queryFunctions(sql){const sha=createHash('sha256').update(sql).digest('hex'),matches=input.queryFunctions.filter(q=>q.sqlSha256===sha);if(matches.length!==1)throw Error('native_query_authorizer_receipt_missing');return matches[0]!.functions;}});
+const host=await retainedNativeFlowHost({legacyRoot:root,fingerprint,queryFunctions(sql){const sha=createHash('sha256').update(sql).digest('hex'),matches=input.queryFunctions.filter(q=>q.sqlSha256===sha);if(matches.length>1)throw Error('native_query_authorizer_receipt_ambiguous');return matches[0]?.functions;}});
 process.stdout.write(JSON.stringify(await compileNativeFlow({document:input.document,analysis:input.analysis,sqlEngineSha256:input.sqlEngineSha256,host,resolveCatalog:cachedNativeCatalogResolver(input.catalogs)})));

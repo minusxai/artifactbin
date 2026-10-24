@@ -32,3 +32,15 @@ test('cached catalog probes require exact SQL, parameter and type evidence',asyn
  await assert.rejects(resolve('other'),/catalog_missing/);
  assert.throws(()=>cachedNativeCatalogResolver([{...body,sha256:'a'.repeat(64)}]),/changed/);
 });
+test('retained host captures actual authorizer facts without hand-authored query metadata',async()=>{
+ const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),path=await import('node:path');
+ const {retainedNativeFlowHost}=await import('../src/migration/native-components/flow-producer.ts');
+ const root=await mkdtemp(path.join(tmpdir(),'native-authorizer-'));
+ try{await mkdir(path.join(root,'services/app/lib/document'),{recursive:true});await mkdir(path.join(root,'services/app/lib/dataflow'),{recursive:true});
+ await writeFile(path.join(root,'services/app/lib/document/document-graph.ts'),'export const graphNodes=d=>d;');
+ await writeFile(path.join(root,'services/app/lib/document/helmet.ts'),'export const splitHelmet=d=>({content:d,body:d});export const dataflowOf=d=>d;');
+ await writeFile(path.join(root,'services/app/lib/dataflow/compile-dataflow.ts'),'export async function prepareCompile(){return{engine:{analyze(sql){return{kind:"select",functions:["count"]}}}}};export function compileDataflow(flow,ctx){ctx.engine.analyze(flow.sql);return{ok:true,compiled:{imports:[],values:[],queries:[{name:"q",engine:"sqlite",sql:flow.sql}],mutations:[]}}}');
+ const host=await retainedNativeFlowHost({legacyRoot:root,fingerprint:async()=>({compilerSourceSha256:'compiler',sqlEngineSha256:'sql'})});const flow={sql:'select count(*) from rows'},context=await host.prepare(flow,async()=>null),result=host.compile(flow,context,null);assert.ok(result.ok);if(result.ok)assert.deepEqual(result.compiled.queries[0]?.functions,['count']);
+ const mismatch=await retainedNativeFlowHost({legacyRoot:root,fingerprint:host.fingerprint,queryFunctions:()=>['invented']});assert.throws(()=>mismatch.compile(flow,context,null),/authorizer_receipt_changed/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

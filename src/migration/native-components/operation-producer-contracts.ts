@@ -26,6 +26,8 @@ export interface NativeFlowCompilerHost {
  prepare(flow:unknown,resolve:(ref:string)=>Promise<unknown>):Promise<unknown>;
  compile(flow:unknown,context:unknown,body:unknown):{ok:true;compiled:Omit<NativeOperationCompilation,'sourceSha256'|'compilerSourceSha256'|'sqlEngineSha256'>}|{ok:false;errors:unknown};
 }
+export interface NativeFlowStatementFact {sqlSha256:string;kind:string;functions:readonly string[]}
+export type NativeFlowCompilationResult=NativeOperationCompilation & {statementFacts?:readonly NativeFlowStatementFact[]};
 export interface NativeFlowCompileInput {
  document:unknown;analysis:NativeTypedAnalysis;sqlEngineSha256:string;
  /** Exact ref resolver backed by independently verified schema and query probe receipts. */
@@ -37,7 +39,7 @@ export interface NativeRetainedFlowHostOptions {
  /** Must hash actual compiler and SQL engine trees; checked around every compile. */
  fingerprint:NativeFlowCompilerHost['fingerprint'];
  /** SQLite authorizer facts for immutable SQL; absent facts refuse compilation. */
- queryFunctions(sql:string):readonly string[];
+ queryFunctions?(sql:string):readonly string[] | undefined;
 }
 export interface NativeCachedCatalogReceipt {
  sourceRef:string;catalog:{kind:string;tables:unknown[]};

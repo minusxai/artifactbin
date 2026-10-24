@@ -1,8 +1,9 @@
+import {createHash} from 'node:crypto';
 import {nativeDigest} from './selection.ts';
 import type {NativeFlowCompileInput} from './operation-producer-contracts.ts';
 import type {NativeOperationCompilation} from './operations-contracts.ts';
 /** Compile the authored flow using retained semantics. Never evaluates HTML or substitutes SSR output. */
-export async function compileNativeFlow(input:NativeFlowCompileInput):Promise<NativeOperationCompilation>{
+export async function compileNativeFlow(input:NativeFlowCompileInput):Promise<import('./operation-producer-contracts.ts').NativeFlowCompilationResult>{
  const expected={compilerSourceSha256:input.analysis.compilerSourceSha256,sqlEngineSha256:input.sqlEngineSha256};
  const check=async()=>{if(nativeDigest(await input.host.fingerprint())!==nativeDigest(expected))throw Error('operation_compiler_identity_mismatch');};
  await check();
@@ -26,14 +27,25 @@ export async function retainedNativeFlowHost(options:import('./operation-produce
   extract(document){const split=helmet.splitHelmet(graph.graphNodes(document));return {flow:helmet.dataflowOf(split.content),body:split.body};},
   prepare:compiler.prepareCompile,
   compile(flow,context,body){
-   const result=compiler.compileDataflow(flow,context,body);
+   const facts=new Map<string,import('./operation-producer-contracts.ts').NativeFlowStatementFact>();
+   const engine=(context as {engine:{analyze:(...args:unknown[])=>{kind:string;functions:readonly string[]}}}).engine,original=engine.analyze;
+   engine.analyze=(...args)=>{const result=original.apply(engine,args);if(typeof args[0]!=='string')throw Error('operation_authorizer_statement');const sqlSha256=createHash('sha256').update(args[0]).digest('hex'),fact={sqlSha256,kind:result.kind,functions:[...result.functions]},prior=facts.get(sqlSha256);if(prior&&nativeDigest(prior)!==nativeDigest(fact))throw Error('operation_authorizer_changed');facts.set(sqlSha256,fact);return result;};
+   let result;
+   try{result=compiler.compileDataflow(flow,context,body);}finally{engine.analyze=original;}
    if(!result.ok)return result;
-   return {ok:true,compiled:{...result.compiled,queries:result.compiled.queries.map((query:{sql:string})=>({...query,functions:options.queryFunctions(query.sql)}))}};
+   return {ok:true,compiled:{...result.compiled,statementFacts:[...facts.values()],queries:result.compiled.queries.map((query:{sql:string;engine:string})=>{
+    const sha=createHash('sha256').update(query.sql).digest('hex'),captured=facts.get(sha),expected=options.queryFunctions?.(query.sql);
+    if(!captured&&query.engine!=='postgres')throw Error('operation_authorizer_missing');
+    const functions=captured?.functions??[];
+    if(expected&&nativeDigest([...expected].sort())!==nativeDigest([...functions].sort()))throw Error('operation_authorizer_receipt_changed');
+    return {...query,functions};
+   })}};
+
   },
  };
 }
 
-export async function compileNativeFlowOffline(input:import('./operation-producer-contracts.ts').NativeSerializedFlowInput,options:{legacyRoot:string;timeoutMs?:number}):Promise<NativeOperationCompilation>{
+export async function compileNativeFlowOffline(input:import('./operation-producer-contracts.ts').NativeSerializedFlowInput,options:{legacyRoot:string;timeoutMs?:number}):Promise<import('./operation-producer-contracts.ts').NativeFlowCompilationResult>{
  const {externalCompile}=await import('../conversion/compiled/index.ts');
- return externalCompile<NativeOperationCompilation,typeof input>(input,options,'../../native-components/flow-runner.mts');
+ return externalCompile<import('./operation-producer-contracts.ts').NativeFlowCompilationResult,typeof input>(input,options,'../../native-components/flow-runner.mts');
 }
