@@ -188,3 +188,17 @@ it('serves admitted module and font bytes to opaque runners without granting pri
   const unrelated=await load(publicPage,receipt,'null',owner.token);expect(unrelated.status).toBe(404);expect(unrelated.headers.has('access-control-allow-origin')).toBe(false);
  }
 });
+
+
+it('admits linked CSS only through this native raw page asset endpoint',async()=>{
+ const {GET:rawGet}=await import('@/app/a/[id]/raw/route');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
+ const owner=await mintAccountToken('bundle-linked-style');
+ const created=await POST(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':'bundle_linked_style_01'},json:{visibility:'unlisted',html:'<link rel="stylesheet" href="./theme.css"><h1>Styled</h1>',publicationBundle:{entryPath:'index.html',files:[file('theme.css','body{background:#f2e7d6}@font-face{font-family:Fixture;src:url(./face.woff2)}','text/css'),file('face.woff2','wOF2fixture','font/woff2')]}}}));
+ const saved=await created.json();expect(created.status).toBe(201);const params={params:Promise.resolve({id:saved.id})};
+ const rawRequest=request(`/a/${saved.id}/raw`),raw=await rawGet(rawRequest,params);expect(raw.status).toBe(200);
+ const style=raw.headers.get('content-security-policy')!.split('; ').find(value=>value.startsWith('style-src '))!;
+ const endpoint=new URL(rawRequest.url).origin+`/a/${saved.id}/assets`;expect(style.split(' ')).toContain(endpoint);expect(style.split(' ')).not.toContain("'self'");expect(style).not.toContain('/a/OtherPage/assets');expect(style.split(' ')).not.toContain(new URL(rawRequest.url).origin);
+ const html=await raw.text();expect(html).toContain('rel="stylesheet"');expect(html).toContain(`/a/${saved.id}/assets?dependency=`);
+ const css=saved.dependencyReceipts.find((receipt:{path:string})=>receipt.path==='theme.css');
+ const served=await assetGet(request(`/a/${saved.id}/assets?dependency=${css.id}&revision=1&version=1`,{headers:{Origin:'null'}}),params);expect(served.status).toBe(200);expect(served.headers.get('content-type')).toBe('text/css');expect(served.headers.get('access-control-allow-origin')).toBe('*');expect(await served.text()).toContain(`/a/${saved.id}/assets?dependency=`);
+});

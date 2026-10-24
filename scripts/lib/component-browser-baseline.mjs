@@ -9,6 +9,8 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
 /** Failure logs contain bounded technical context, never URL credentials or queries. */
 function diagnosticText(value){return String(value).replace(/https?:\/\/[^\s"'<>]+/g,value=>{try{const url=new URL(value);return url.origin+url.pathname;}catch{return '[URL]';}}).slice(0,1000);}
+/** Linked stylesheet absence is a failure even before any font face is declared. */
+function browserResources(){return {stylesheets:[...document.querySelectorAll('link[rel~="stylesheet"]')].filter(link=>!link.disabled).map(link=>({url:link.href,loaded:link.sheet!==null}))};}
 /** Serializable behavior and geometry; generated IDs/classes intentionally excluded. */
 function browserState() {
   const visible = node => !!node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
@@ -114,6 +116,10 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
         await afterAction?.(action);
       }
       await frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      const resourceEvidence=await frame.evaluate(browserResources);resourceEvidence.stylesheets??=[];resourceEvidence.errors=[];
+      for(const sheet of resourceEvidence.stylesheets)if(!sheet.loaded)resourceEvidence.errors.push(`Stylesheet did not load: ${diagnosticText(sheet.url)}`);
+      const localFailures=[...requestFailures,...httpFailures].filter(failure=>['stylesheet','script'].includes(failure.type)&&local(failure.url));
+      for(const failure of localFailures)resourceEvidence.errors.push(`Local ${failure.type} failed: ${failure.url} (${failure.error||failure.status})`);
       const fontEvidence=await frame.evaluate(fontLoadingEvidence);
       await Promise.all(fontPending);
       fontEvidence.resources=fontResources;
@@ -126,7 +132,7 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       // Capture the document viewport itself, excluding platform chrome.
       const screenshot=await page.screenshot({fullPage:false,animations:'disabled',caret:'hide'});
       await writeFile(path.join(output,name),screenshot);
-      return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode:'viewport',browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
+      return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode:'viewport',browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,resourceEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
     } catch(cause){const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures};throw new Error(`${diagnosticText(cause.message)}; reader diagnostics: ${JSON.stringify(diagnostics)}`,{cause});
     } finally {await context.close();}
   }
@@ -157,7 +163,7 @@ export async function compareBrowserBaselines({baseline,candidate,baselineDirect
     let changedPixels=null,diff;
     if(sizeEqual){changedPixels=0;diff=Buffer.alloc(left.data.length);for(let i=0;i<left.data.length;i+=4){const changed=[0,1,2,3].some(channel=>left.data[i+channel]!==right.data[i+channel]);if(changed)changedPixels++;diff[i]=changed?255:Math.round(left.data[i]*.25);diff[i+1]=changed?0:Math.round(left.data[i+1]*.25);diff[i+2]=changed?128:Math.round(left.data[i+2]*.25);diff[i+3]=255;}
       await sharp(diff,{raw:{width:left.info.width,height:left.info.height,channels:4}}).png().toFile(path.join(output,`${key(old).replaceAll('/','-')}-diff.png`));}
-    results.push({key:key(old),sizeEqual,changedPixels,changedFraction:changedPixels===null?null:changedPixels/(left.info.width*left.info.height),fontBytesEqual:JSON.stringify(fontByteProof(old.fontEvidence).used)===JSON.stringify(fontByteProof(current.fontEvidence).used),fontProofErrors:[...fontByteProof(old.fontEvidence).errors,...fontByteProof(current.fontEvidence).errors],rawBehaviorEqual:JSON.stringify(old.semantics)===JSON.stringify(current.semantics),behaviorEqual:JSON.stringify(comparableBehavior(old.semantics))===JSON.stringify(comparableBehavior(current.semantics)),baselineErrors:[...old.errors,...(old.assertionErrors||[]),...(old.fontEvidence?.errors||[])],candidateErrors:[...current.errors,...(current.assertionErrors||[]),...(current.fontEvidence?.errors||[])]});
+    results.push({key:key(old),sizeEqual,changedPixels,changedFraction:changedPixels===null?null:changedPixels/(left.info.width*left.info.height),fontBytesEqual:JSON.stringify(fontByteProof(old.fontEvidence).used)===JSON.stringify(fontByteProof(current.fontEvidence).used),fontProofErrors:[...fontByteProof(old.fontEvidence).errors,...fontByteProof(current.fontEvidence).errors],rawBehaviorEqual:JSON.stringify(old.semantics)===JSON.stringify(current.semantics),behaviorEqual:JSON.stringify(comparableBehavior(old.semantics))===JSON.stringify(comparableBehavior(current.semantics)),baselineErrors:[...old.errors,...(old.assertionErrors||[]),...(old.fontEvidence?.errors||[])],candidateErrors:[...current.errors,...(current.assertionErrors||[]),...(current.fontEvidence?.errors||[]),...(current.resourceEvidence?.errors||[])]});
   }
   for(const extra of candidates.keys())results.push({key:extra,error:'Missing original capture'});
   await writeFile(path.join(output,'comparison.json'),JSON.stringify(results,null,2));
@@ -169,7 +175,7 @@ export function candidateCaptureIssues(captures) {
   const issues=[];
   for(const capture of captures) {
     const state=capture.semantics;
-    issues.push(...(capture.assertionErrors||[]),...(capture.fontEvidence?.errors||[]));
+    issues.push(...(capture.assertionErrors||[]),...(capture.fontEvidence?.errors||[]),...(capture.resourceEvidence?.errors||[]));
     if(capture.errors.length)issues.push(`${capture.fixture}: reader page errors`);
     if(state.overflow>1)issues.push(`${capture.fixture}: horizontal overflow`);
     const includes=text=>state.text.includes(text);

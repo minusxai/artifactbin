@@ -154,6 +154,18 @@ describe('actual fixture publication payloads',()=>{
 });
 
 describe('reader screenshot contract',()=>{
+  it('rejects a missing linked theme stylesheet even when no font faces were declared',async()=>{
+    const directory=await setup(),dom=new JSDOM('<html><head><link rel="stylesheet" href="/a/Page123/assets?dependency=Missing"></head><body>Ready</body></html>',{url:'http://app.lvh.me/a/Page123/raw'});
+    const saved=Object.getOwnPropertyDescriptor(globalThis,'document');globalThis.document=dom.window.document;
+    try{
+      const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+      const frame={url:()=> 'http://app.lvh.me/a/Page123/raw',evaluate:async fn=>fn.name==='browserResources'?fn():fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+      const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:async()=>bytes}),close:async()=>{}})};
+      const captures=await captureBrowserBaseline({browser,mount:async()=>({frame}),implementation:'html',sourceRevision:'a'.repeat(40),output:directory,fixtures:[{id:'theme',states:[{id:'initial',actions:[]}]}]});
+      expect(captures[0].fontEvidence.faces).toEqual([]);expect(candidateCaptureIssues(captures)).toContain('Stylesheet did not load: http://app.lvh.me/a/Page123/assets');
+    }finally{if(saved)Object.defineProperty(globalThis,'document',saved);else delete globalThis.document;dom.window.close();}
+  });
+
   it('preserves bounded runtime and network diagnostics when readiness fails',async()=>{
     const directory=await setup(),listeners=new Map();let closed=0;
     const page={on:(event,callback)=>listeners.set(event,[...(listeners.get(event)||[]),callback])};const emit=(event,value)=>{for(const listener of listeners.get(event)||[])listener(value);};
