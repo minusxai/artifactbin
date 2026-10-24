@@ -1,4 +1,4 @@
-import type { PortableIdentity } from '../html-runtime/portable-contract';
+import type { PortableIdentity } from '@artifactbin/contracts';
 
 /** Explicitly selected browser files. Paths are relative to the chosen project folder. */
 export interface LocalSelectedFile { path: string; bytes: Uint8Array; contentType: string }
