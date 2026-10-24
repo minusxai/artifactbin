@@ -12,6 +12,7 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {publishReaderManifest} from '../component-baseline-publish.mjs';
+import {attachVerifiedComponentAssets,writeBaselineComponentAssets} from '../lib/component-baseline-input.mjs';
 import {selectBaselineFixtures} from '../fixtures/component-baseline/publication.mjs';
 import {browserParityFixtures} from '../fixtures/component-baseline/index.mjs';
 import {settleInteraction} from '../fixtures/component-baseline/interaction.mjs';
@@ -43,6 +44,7 @@ catch(error) {
   input=await publishReaderManifest({implementation:'html',base:process.argv[2]||'http://localhost:3030',source:repo,sourceRevision:'candidate-source-sha256:'+sourceHash.digest('hex'),output:path.join(output,'candidate-readers.json')});
   input.defaultCandidateValidation=true;
 }
+const importedReaderEntries=Boolean(input.entries);
 if(process.env.COMPONENT_BASELINE__OUTPUT)input.output=process.env.COMPONENT_BASELINE__OUTPUT;
 if(input.mode==='publish') {
   await publishReaderManifest(input);
@@ -69,7 +71,8 @@ if(!input.entries) {
   input=await publishReaderManifest({...input,base:process.argv[2]||input.base||'http://localhost:3030',source:input.source||repo,output:path.join(evidenceOutput,'readers.json')});
   input.output=evidenceOutput;
 }
-if(input.componentAssets)await writeFile(path.join(input.output,'component-assets.json'),JSON.stringify({implementation:input.implementation,sourceRevision:input.sourceRevision,componentAssets:input.componentAssets},null,2));
+if(importedReaderEntries)input=await attachVerifiedComponentAssets(input,{source:input.source||repo,base:process.argv[2]||input.base||'http://localhost:3030'});
+await writeBaselineComponentAssets(input);
 // Match the existing real-library gate's software WebGL configuration.
 await withComponentBaselineEvidence({output:input.output,run:async()=>{
 const browsers=[];

@@ -1,5 +1,6 @@
 import type {UploadContext} from '@artifactbin/contracts';
-import {relayedFileUpload} from './upload';
+/** Validation/body transport is an intentional lazy browser chunk, loaded only by an admitted upload call. */
+const loadUploadRelay=()=>import('./upload');
 /**
  * THE PARENT HALF OF THE BRIDGE — a stand-in for the island controller, for a document framed on its own origin.
  *
@@ -254,12 +255,12 @@ export function createFrameBridgeParent(options: FrameBridgeParentOptions): Fram
       case 'upload-file': {
         const current=readUploadContext();
         const context=options.htmlContext?.();
-        const request=current.state==='signed-in'&&context?relayedFileUpload(id,options.editId(),context.readOnly,payload):null;
-        if(!request||pendingUploads>=4){post({kind:'fetch-result',call:payload.call,status:403,headers:{'content-type':'application/json'},body:JSON.stringify({error:'Upload is not permitted in this reader'})});return;}
+        if(current.state!=='signed-in'||!context||pendingUploads>=4){post({kind:'fetch-result',call:payload.call,status:403,headers:{'content-type':'application/json'},body:JSON.stringify({error:'Upload is not permitted in this reader'})});return;}
         pendingUploads++;
         const controller=new AbortController();uploadControllers.add(controller);
         const uploadKey=key,uploadScope=current.scope;const reply=(answer:FrameBridgeParentPayload)=>{if(!closed&&key===uploadKey&&readUploadContext().scope===uploadScope)post(answer);};
-        void (async()=>{try{const response=await appFetch(request.path,{...request.init,signal:controller.signal});reply({kind:'fetch-result',call:payload.call,status:response.status,headers:{'content-type':'application/json'},body:await response.text()});}catch{reply({kind:'fetch-result',call:payload.call,error:'Upload outcome unknown'});}finally{pendingUploads--;uploadControllers.delete(controller);}})();return;
+        const editId=options.editId();
+        void (async()=>{try{const {relayFileUpload}=await loadUploadRelay();if(controller.signal.aborted||closed||key!==uploadKey||readUploadContext().scope!==uploadScope)return;await relayFileUpload({documentId:id,editId,readOnly:context.readOnly,input:payload,signal:controller.signal,appFetch,reply});}catch{reply({kind:'fetch-result',call:payload.call,error:'Upload outcome unknown'});}finally{pendingUploads--;uploadControllers.delete(controller);}})();return;
       }
       case 'fetch': void relay(payload); return;
       case 'pressed': options.onPressed?.(); return;

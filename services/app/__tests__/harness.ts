@@ -173,6 +173,10 @@ export function useAppHarness(): AppHarness {
     for (const table of SCHEMA_TABLES.toReversed()) {
       await db.query(`DELETE FROM ${table}`);
     }
+    // Co-hosted auth creates its tables at service boot, outside SCHEMA_TABLES.
+    // Discover them rather than copying Better Auth's table list into each test.
+    const authTables=await db.query<{name:string}>("SELECT format('%I.%I',schemaname,tablename) AS name FROM pg_tables WHERE schemaname='auth' ORDER BY tablename");
+    if(authTables.rows.length)await db.query(`TRUNCATE TABLE ${authTables.rows.map(row=>row.name).join(', ')} CASCADE`);
     // The events table belongs to the events SERVICE, so it is not in the
     // app's schema and no test file may wipe it itself (harness-rollout pins
     // that). It exists only in a file that created it; guard on to_regclass so

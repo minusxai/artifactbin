@@ -76,6 +76,21 @@ it('snapshots every quoted font URL and escaped CSS import without admitting com
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+it('resolves subfolder stylesheet and font URLs inside the project before enforcing traversal limits',async()=>{
+ const {mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');const {planPublicationBundle}=await import('../plan');
+ const root=await mkdtemp(join(tmpdir(),'bundle-relative-fonts-'));try{
+  await mkdir(join(root,'examples'));await mkdir(join(root,'design-systems'));await mkdir(join(root,'fonts'));
+  await writeFile(join(root,'examples/page.html'),'<link rel="stylesheet" href="../design-systems/theme.css">');
+  await writeFile(join(root,'design-systems/theme.css'),'@font-face{src:url("../fonts/type.woff2")}');
+  await writeFile(join(root,'fonts/type.woff2'),Buffer.from('wOF2'));
+  const bundle=await prepareBundle({root,entry:'examples/page.html',server:'https://example.test'});
+  expect(bundle.body.publicationBundle.files.map((file:{path:string})=>file.path).sort()).toEqual(['design-systems/theme.css','fonts/type.woff2']);
+  expect(planPublicationBundle(bundle.body.html,bundle.body.publicationBundle).dependencies).toHaveLength(2);
+  await writeFile(join(root,'examples/page.html'),'<img src="../../../outside.png">');
+  await expect(prepareBundle({root,entry:'examples/page.html',server:'https://example.test'})).rejects.toThrow(/escapes project root/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
 it('snapshots an admitted in-memory entry override before discovery without changing disk source',async()=>{
  const {mkdtemp,writeFile,readFile,symlink,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {prepareBundle}=await import('../../../skills/artifactbin/scripts/publication-bundle.mjs');
  const root=await mkdtemp(join(tmpdir(),'bundle-entry-'));try{

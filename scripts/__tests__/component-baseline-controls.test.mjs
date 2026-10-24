@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import {retainedComponentSource} from '../fixtures/component-baseline/source-provenance.mjs';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp, cp, rm } from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {pathToFileURL} from 'node:url';
 import path from 'node:path';
 import { build } from 'esbuild';
 import ts from 'typescript';
@@ -17,7 +19,7 @@ describe('retained control baseline provenance and authored scenarios',()=>{
     for(const fixture of controlBaselineFixtures){
       const {revision,path:sourcePath,sha256,exports:names}=fixture.provenance;
       const key=`${revision}:${sourcePath}`;
-      if(!sources.has(key))sources.set(key,execFileSync('git',['show',key],{cwd:repo,encoding:'utf8'}));
+      if(!sources.has(key))sources.set(key,retainedComponentSource({revision,path:sourcePath,sha256}));
       const source=sources.get(key);
       expect(createHash('sha256').update(source).digest('hex')).toBe(sha256);
       for(const name of names){
@@ -27,6 +29,19 @@ describe('retained control baseline provenance and authored scenarios',()=>{
       const parsed=ts.createSourceFile(`${fixture.id}.tsx`,`const page=<>${fixture.oldJsx}</>`,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
       expect(parsed.parseDiagnostics).toEqual([]);
     }
+  });
+  it('verifies exact retained source without any repository history',async()=>{
+    const directory=await mkdtemp(path.join(tmpdir(),'retained-component-source-'));
+    try{
+      for(const entry of ['source-provenance.mjs','retained-source'])await cp(path.join(repo,'scripts/fixtures/component-baseline',entry),path.join(directory,entry),{recursive:true});
+      const {retainedComponentSource:readSource}=await import(pathToFileURL(path.join(directory,'source-provenance.mjs')).href);
+      const proof=controlBaselineFixtures[0].provenance;
+      expect(createHash('sha256').update(readSource(proof)).digest('hex')).toBe(proof.sha256);
+    }finally{await rm(directory,{recursive:true,force:true});}
+  });
+  it('refuses unknown revisions, source paths and mismatched source commitments',()=>{
+    const proof=controlBaselineFixtures[0].provenance;
+    for(const changed of [{...proof,revision:'0'.repeat(40)},{...proof,path:'../current-source.tsx'},{...proof,sha256:'f'.repeat(64)}])expect(()=>retainedComponentSource(changed)).toThrow('retained_component_source_unadmitted');
   });
   it('declares independent, unique capture states within the existing action contract',()=>{
     expect(new Set(controlBaselineFixtures.map(f=>f.id)).size).toBe(8);

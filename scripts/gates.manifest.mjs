@@ -37,7 +37,7 @@ export const GATE_SPECS = Object.freeze([
   // Local container measurement: 28s; CI scheduling weight pending first run.
   { name: 'html-components', needsMail: false, seconds: 28, timeoutMs: 60_000 },
   // Real Mermaid/WebGL engines: 8s in the local container.
-  { name: 'html-rich-components', needsMail: false, seconds: 8, timeoutMs: 180_000 },
+  { name: 'html-rich-components', needsMail: false, serialGroup: 'clipboard', seconds: 8, timeoutMs: 180_000 },
   // Actual installed archive/private Save: 20s in the local container.
   { name: 'private-preview-save', needsMail: false, seconds: 20, timeoutMs: 120_000 },
   // Journey gates: each absorbs several former gates; `seconds` measured in

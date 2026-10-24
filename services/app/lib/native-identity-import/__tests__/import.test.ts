@@ -22,7 +22,7 @@ const provisionNativeIdentityAuthCompanion=async(tx:Queryable,input:NativeIdenti
 useAppHarness();
 let human:HumanAuth,otp='';
 beforeAll(async()=>{const db=await getDb(),raw=db.raw();if(raw.kind!=='pglite')throw Error('pglite required');human=await createHumanAuth({pglite:raw.instance,secret:'synthetic-native-identity-auth'.padEnd(32,'0'),baseURL:'http://localhost:3000',mail:{send:async message=>{otp=message.otp??'';}}});});
-beforeEach(async()=>{const db=await getDb();for(const table of ['session','account','verification','user'])await db.query('DELETE FROM auth."'+table+'"');otp='';});
+beforeEach(()=>{otp='';});
 function digest(v: unknown): string {
   const canonical = (x: unknown): unknown =>
     Array.isArray(x)

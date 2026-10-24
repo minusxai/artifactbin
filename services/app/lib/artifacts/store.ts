@@ -159,13 +159,16 @@ export async function createArtifact(
    *                governs (a fork of an app copies both). Every other route to
    *                a policy is the document data module's `setDatasetPolicy`, which
    *                needs the row to exist first; a copy has no "first".
+   *   seedOwnerParticipation — trusted migration may supply false when an exact
+   *                captured relation adapter owns membership. Ordinary creation
+   *                defaults to the normal accepted owner join.
    *   tx         — run inside the caller's OPEN transaction instead of opening
    *                one. The caller then owns the post-commit effects
    *                (`afterCreated`): reaching trackEvent/notifyParent from
    *                inside a transaction would enqueue a query behind the
    *                transaction that holds PGLite's one connection.
    */
-  atCreation: { reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
+  atCreation: { seedOwnerParticipation?:boolean; reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
   const destination=atCreation.tx ? (input.destination??{type:'personal'} as const) : await newArtifactDestination(identityForUser(userId,tokenId),input.destination,input.ancestor_ids?.at(-1));
   input={...input,destination};
@@ -318,7 +321,7 @@ async function insertArtifact(
   );
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
   await bindCurrentUserScopes(tx,created.rows[0]);
-  if((input.format==='markup'||input.format==='html')&&userId)await seedOwnerJoin(tx,id,userId);
+  if(atCreation.seedOwnerParticipation!==false&&(input.format==='markup'||input.format==='html')&&userId)await seedOwnerJoin(tx,id,userId);
   if(!atCreation.forkedFrom)await documentMentions(tx,created.rows[0],creator);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
   return created.rows[0];

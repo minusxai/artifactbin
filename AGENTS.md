@@ -59,7 +59,7 @@ or rerun unchanged code to hide slowness. Report cold and warm timings separatel
   against the candidate; HTTP discovery/guides/auth/API use the target. Isolate harness homes,
   credentials/data. Record server/source revision, candidate/skill hashes and harness/model/settings;
   invalidate stale assets on relevant inputs.
-  CLI/shared-package/skill edits reach the next run without release.
+  CLI, package and skill edits reach the next run.
   Reproductions/timings (including Pi) reuse this eval harness, target/candidate, isolation,
   auth, traces and metrics; add scenarios/capabilities, never separate runners. URL probes use
   verbatim user requests. Changed harness semantics require a matched new baseline.

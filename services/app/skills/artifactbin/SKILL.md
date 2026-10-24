@@ -202,6 +202,7 @@ Read a local reference or use HTTP: `<origin>/llms/<filename-without-.md>`.
     - [templates-app.md](references/templates-app.md) — Applications
     - [templates-scrolly.md](references/templates-scrolly.md) — Scrollytelling
   - [design-systems.md](references/design-systems.md) — Choose one visual system
+  - [dataviz.md](references/dataviz.md) — Native chart authoring
     - [system-almanac.md](references/system-almanac.md) — Almanac system
     - [system-arcade.md](references/system-arcade.md) — Arcade system
     - [system-broadsheet.md](references/system-broadsheet.md) — Broadsheet system

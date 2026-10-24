@@ -282,7 +282,8 @@ try {
           const upload=page.locator('af-file-upload').first();await upload.evaluate(node=>{
             let failed=false;node.adapter={upload:async(file,context)=>{document.body.dataset.uploadCalls=String(Number(document.body.dataset.uploadCalls??0)+1);document.body.dataset.uploadDataset=context.dataset;if(file.name==='retry.txt'&&!failed){failed=true;throw new Error('Fixture upload failed');}if(file.name==='pending.txt')await new Promise(resolve=>node.addEventListener('fixture:release',()=>resolve(),{once:true}));return {ref:`fixture-${file.name}`,name:file.name,contentType:file.type,size:file.size};}};
           });
-          const choose=upload.getByRole('button',{name:'Choose Attachments',exact:true});
+          // The clipped file input shares this accessible name; focus and click the visible proxy button.
+          const choose=upload.locator('button[aria-label="Choose Attachments"]');
           // Fullscreen can change native window focus. A native chooser requires the active browser document.
           const documentFocusedBefore=await page.evaluate(()=>document.hasFocus());await page.bringToFront();await page.waitForFunction(()=>document.hasFocus(),null,{timeout:2500});
           await page.locator('#before').focus();await page.keyboard.press('Tab');await visibleFocus(choose,`${tag} chooser keyboard focus`);
@@ -304,7 +305,7 @@ try {
           await upload.locator('input[type=file]').setInputFiles({name:'pending.txt',mimeType:'text/plain',buffer:Buffer.from('Pending')});await page.waitForFunction(()=>document.querySelector('af-file-upload').busy);check(await choose.isDisabled() && await upload.getByRole('progressbar',{name:'Uploading files',exact:true}).isVisible(),`${tag} pending adapter disables chooser and exposes progress`);
           await upload.evaluate(node=>node.dispatchEvent(new Event('fixture:release')));await page.waitForFunction(()=>!document.querySelector('af-file-upload').busy);check(await upload.evaluate(node=>node.value.length)===2,`${tag} pending upload commits on deterministic release`);
           const calls=await page.locator('body').getAttribute('data-upload-calls');await upload.locator('input[type=file]').setInputFiles({name:'invalid.bin',mimeType:'application/octet-stream',buffer:Buffer.from('x')});await upload.getByRole('alert').waitFor();check(await page.locator('body').getAttribute('data-upload-calls')===calls,`${tag} rejected file never reaches adapter`);
-          check(await page.getByRole('button',{name:'Choose Disabled attachments',exact:true}).isDisabled(),`${tag} disabled chooser semantics`);check(requests.length===requestMark,`${tag} fake uploads issue no HTTP requests`);await readable('af-file-upload button',tag);
+          check(await page.locator('af-file-upload[disabled] button[aria-label="Choose Disabled attachments"]').isDisabled(),`${tag} disabled chooser semantics`);check(requests.length===requestMark,`${tag} fake uploads issue no HTTP requests`);await readable('af-file-upload button',tag);
         } else if(fixture.family==='slide-deck') {
           const deck=page.locator('af-slide-deck').first(),next=deck.getByRole('button',{name:'Next slide',exact:true});
           const priorViewport=page.viewportSize(),rail=deck.getByRole('navigation',{name:'Slides',exact:true,includeHidden:true});
