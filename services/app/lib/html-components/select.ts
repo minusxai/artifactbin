@@ -1,3 +1,4 @@
+import { draftCommit, normalizeOptions, normalizeSelection, optionInput, selectKey } from './select-model';
 export type AfSelectScalar = string | number | boolean;
 export type AfSelectValue = AfSelectScalar | null | AfSelectScalar[];
 export type AfSelectOption = AfSelectScalar | { value: AfSelectScalar; label: string };
@@ -23,6 +24,9 @@ export class AfSelect extends HTMLElement implements AfSelectContract {
   private state: AfSelectValue = null;
   private initial = false;
   private expanded = false;
+  private draftStart: AfSelectValue = null;
+  private readonly optionIds = new Map<string, string>();
+  private nextOptionId = 0;
   private draft: AfSelectScalar[] = [];
   private query = '';
   private highlight = -1;
@@ -32,9 +36,9 @@ export class AfSelect extends HTMLElement implements AfSelectContract {
   private search?: HTMLInputElement;
   private list?: HTMLDivElement;
   private done?: HTMLButtonElement;
-  get options(): AfSelectOption[] { return this.suppliedOptions ?? this.json<AfSelectOption[]>('options', []); }
-  set options(value: AfSelectOption[]) { this.suppliedOptions = value; this.update(); }
-  get value(): AfSelectValue { return this.controlled ? this.suppliedValue ?? null : this.hasAttribute('value') ? this.json<AfSelectValue>('value', this.getAttribute('value')) : this.state; }
+  get options(): AfSelectOption[] { return optionInput(this.suppliedOptions ?? this.json<unknown>('options', [])); }
+  set options(value: AfSelectOption[]) { this.suppliedOptions = optionInput(value); this.update(); }
+  get value(): AfSelectValue { return normalizeSelection(this.controlled ? this.suppliedValue : this.hasAttribute('value') ? this.json<AfSelectValue>('value', this.getAttribute('value')) : this.state, this.multiple); }
   set value(value: AfSelectValue) { this.controlled = true; this.suppliedValue = value; this.update(); }
   get defaultValue(): AfSelectValue { return this.json<AfSelectValue>('default-value', this.multiple ? [] : null); }
   set defaultValue(value: AfSelectValue) { this.setAttribute('default-value', JSON.stringify(value)); }
@@ -53,23 +57,25 @@ export class AfSelect extends HTMLElement implements AfSelectContract {
     this.structure(); this.update();
     this.ownerDocument.addEventListener('pointerdown', this.outside);
     this.ownerDocument.addEventListener('focusin', this.outside);
+    this.ownerDocument.defaultView?.addEventListener('resize', this.position);
+    this.ownerDocument.addEventListener('scroll', this.position, true);
   }
-  disconnectedCallback(): void { this.close(false); this.ownerDocument.removeEventListener('pointerdown', this.outside); this.ownerDocument.removeEventListener('focusin', this.outside); }
+  disconnectedCallback(): void { this.close(false); this.ownerDocument.removeEventListener('pointerdown', this.outside); this.ownerDocument.removeEventListener('focusin', this.outside); this.ownerDocument.defaultView?.removeEventListener('resize', this.position); this.ownerDocument.removeEventListener('scroll', this.position, true); }
   attributeChangedCallback(): void { if (this.disabled) this.close(false); this.update(); }
   private outside = (event: Event): void => { if (!event.composedPath().includes(this)) this.close(true); };
   private entries(): {value: AfSelectScalar | null; label: string}[] {
-    const entries = this.options.map(option => typeof option === 'object' ? option : { value: option, label: String(option) });
+    const entries: { value: AfSelectScalar; label: string }[] = normalizeOptions(this.options);
     for (const value of this.draft) if (!entries.some(option => option.value === value)) entries.push({ value, label: String(value) });
     return [...(!this.multiple && this.hasAttribute('placeholder') ? [{ value: null, label: this.getAttribute('placeholder')! }] : []), ...entries];
   }
   private filtered() { return this.entries().filter(option => option.label.toLocaleLowerCase().includes(this.query.trim().toLocaleLowerCase())); }
-  private canCreate(): boolean { return this.multiple && this.allowCreate && !!this.query.trim() && !this.entries().some(option => String(option.value) === this.query.trim()); }
+  private canCreate(): boolean { return this.multiple && this.allowCreate && !!this.query.trim() && !this.entries().some(option => option.value === this.query.trim()); }
   private structure(): void {
     if (this.trigger) return;
     const doc = this.ownerDocument;
     this.labelNode = doc.createElement('span'); this.labelNode.className = 'af-select-label';
     this.trigger = doc.createElement('button'); this.trigger.type = 'button'; this.trigger.className = 'af-select-trigger'; this.trigger.setAttribute('aria-haspopup', 'listbox');
-    this.popup = doc.createElement('div'); this.popup.dataset.popup = ''; this.popup.className = 'af-select-popup';
+    this.popup = doc.createElement('div'); this.popup.dataset.popup = ''; this.popup.setAttribute('popover', 'manual'); this.popup.className = 'af-select-popup';
     this.search = doc.createElement('input'); this.search.type = 'text'; this.search.setAttribute('role', 'searchbox'); this.search.placeholder = 'Type to filter…';
     this.list = doc.createElement('div'); this.list.setAttribute('role', 'listbox'); this.list.id = `${this.popupId}-list`; this.search.setAttribute('aria-controls', this.list.id); this.trigger.setAttribute('aria-controls', this.list.id);
     this.done = doc.createElement('button'); this.done.type = 'button'; this.done.dataset.done = ''; this.done.textContent = 'Done';
@@ -81,7 +87,7 @@ export class AfSelect extends HTMLElement implements AfSelectContract {
     });
     this.search.addEventListener('input', () => { this.query = this.search!.value; this.highlight = 0; this.renderOptions(); });
     this.addEventListener('keydown', event => {
-      if (!this.expanded) return;
+      if (!this.expanded || (event.target as Element).closest('af-select') !== this) return;
       if (event.key === 'Escape') { event.preventDefault(); this.close(false, true); }
       if (event.target !== this.search) return;
       const count = this.filtered().length + Number(this.canCreate());
@@ -91,8 +97,8 @@ export class AfSelect extends HTMLElement implements AfSelectContract {
     });
     this.done.addEventListener('click', () => this.close(true, true));
   }
-  private open(): void { if (this.disabled || this.expanded) return; this.expanded = true; this.draft = Array.isArray(this.value) ? [...this.value] : []; this.query = ''; this.highlight = -1; this.update(); this.search?.focus(); }
-  private close(commit: boolean, focus = false): void { if (!this.expanded) return; this.expanded = false; if (commit && this.multiple && !this.disabled) this.commit([...this.draft]); this.query = ''; this.update(); if (focus) this.trigger?.focus(); }
+  private open(): void { if (this.disabled || this.expanded) return; this.expanded = true; this.draftStart = Array.isArray(this.value) ? [...this.value] : this.value; this.draft = Array.isArray(this.value) ? [...this.value] : []; this.query = ''; this.highlight = -1; this.update(); this.search?.focus(); }
+  private close(commit: boolean, focus = false): void { if (!this.expanded) return; this.expanded = false; if (this.multiple && !this.disabled) { const next = draftCommit(this.draftStart, this.value, this.draft, commit); if (next) this.commit(next); } this.query = ''; this.update(); if (focus) this.trigger?.focus(); }
   private commit(value: AfSelectValue): void {
     if (!this.dispatchEvent(new CustomEvent<AfSelectChangeDetail>('af-change', { detail: { value }, bubbles: true, composed: true, cancelable: true }))) return;
     if (!this.controlled && !this.hasAttribute('value')) this.state = value;
@@ -110,7 +116,9 @@ export class AfSelect extends HTMLElement implements AfSelectContract {
     const add = (label: string, value: AfSelectScalar | null, index: number, create = false) => {
       const button = this.ownerDocument.createElement('button'); button.type = 'button'; button.setAttribute('role', 'option'); button.tabIndex = -1; button.textContent = label;
       button.setAttribute('aria-selected', String(!create && (this.multiple ? this.draft.includes(value as AfSelectScalar) : this.value === value)));
-      button.id = `${this.popupId}-option-${index}`;
+      const key = create ? `create:${selectKey(value)}` : selectKey(value);
+      let id = this.optionIds.get(key); if (!id) { id = `${this.popupId}-option-${++this.nextOptionId}`; this.optionIds.set(key, id); }
+      button.id = id;
       if (index === this.highlight) this.search?.setAttribute('aria-activedescendant', button.id);
       button.dataset.highlighted = String(index === this.highlight); if (create) button.dataset.create = '';
       button.addEventListener('mousedown', event => event.preventDefault()); button.addEventListener('click', () => this.choose(value));
@@ -120,6 +128,19 @@ export class AfSelect extends HTMLElement implements AfSelectContract {
     if (this.canCreate()) add(`Create “${this.query.trim()}”`, this.query.trim(), entries.length, true);
     else if (!entries.length) { const status = this.ownerDocument.createElement('div'); status.setAttribute('role', 'status'); status.textContent = 'No matches'; this.list.append(status); }
   }
+  private position = (): void => {
+    if (!this.expanded || !this.popup || !this.trigger) return;
+    const view = this.ownerDocument.defaultView; if (!view) return;
+    const rect = this.trigger.getBoundingClientRect(); const margin = 8;
+    const width = Math.min(Math.max(rect.width, 200), Math.max(0, view.innerWidth - margin * 2));
+    this.popup.style.margin = '0'; this.popup.style.inset = 'auto'; this.popup.style.boxSizing = 'border-box'; this.popup.style.position = 'fixed'; this.popup.style.width = `${width}px`; this.popup.style.minWidth = '0';
+    this.popup.style.left = `${Math.max(margin, Math.min(rect.left, view.innerWidth - width - margin))}px`;
+    const below = view.innerHeight - rect.bottom - margin; const above = rect.top - margin;
+    const height = this.popup.getBoundingClientRect().height;
+    const flip = below < height && above > below; const space = Math.max(0, flip ? above : below);
+    this.popup.style.maxHeight = `${space}px`; this.popup.style.overflow = 'auto';
+    this.popup.style.top = `${flip ? Math.max(margin, rect.top - Math.min(height, space) - 4) : rect.bottom + 4}px`;
+  };
   private update(): void {
     if (!this.trigger || !this.labelNode || !this.popup || !this.search || !this.list || !this.done) return;
     const label = this.getAttribute('label') ?? ''; const name = this.getAttribute('aria-label') || label;
@@ -127,8 +148,12 @@ export class AfSelect extends HTMLElement implements AfSelectContract {
     this.trigger.setAttribute('aria-label', name); this.trigger.setAttribute('aria-expanded', String(this.expanded)); this.trigger.disabled = this.disabled;
     const values = Array.isArray(this.value) ? this.value : this.value === null ? [] : [this.value];
     this.trigger.textContent = values.map(value => this.entries().find(entry => entry.value === value)?.label ?? String(value)).join(', ') || this.getAttribute('placeholder') || 'All';
-    this.popup.hidden = !this.expanded; this.search.value = this.query; this.search.setAttribute('aria-label', name ? `Search ${name}` : 'Search options');
-    this.list.setAttribute('aria-label', name); this.list.setAttribute('aria-multiselectable', String(this.multiple)); this.done.hidden = !this.multiple; this.renderOptions();
+    this.popup.hidden = !this.expanded;
+    if (this.isConnected && typeof this.popup.showPopover === 'function') {
+      if (this.expanded && !this.popup.matches(':popover-open')) this.popup.showPopover();
+      else if (!this.expanded && this.popup.matches(':popover-open')) this.popup.hidePopover();
+    } this.search.value = this.query; this.search.setAttribute('aria-label', name ? `Search ${name}` : 'Search options');
+    this.list.setAttribute('aria-label', name); this.list.setAttribute('aria-multiselectable', String(this.multiple)); this.done.hidden = !this.multiple; this.renderOptions(); this.position();
   }
 }
 const styles = `af-select{display:inline-flex;position:relative;flex-direction:column;gap:.375rem;color:var(--foreground,light-dark(#222,#eee));font:inherit}af-select [hidden]{display:none!important}af-select .af-select-label{font-size:11px;color:var(--muted-foreground,light-dark(#555,#aaa))}af-select button,af-select input{font:inherit;color:inherit;border:1px solid var(--input,light-dark(#ddd,#555));background:var(--background,light-dark(#fff,#222));border-radius:4px;padding:.5rem .75rem}af-select button{cursor:pointer}af-select button:disabled{opacity:.5;cursor:not-allowed}af-select button:focus-visible,af-select input:focus-visible{outline:2px solid var(--ring,light-dark(#777,#aaa));outline-offset:2px}af-select .af-select-trigger{min-width:9rem;text-align:left}af-select .af-select-popup{position:absolute;top:100%;left:0;min-width:100%;z-index:50;padding:.375rem;border:1px solid var(--border,light-dark(#ddd,#555));background:var(--popover,var(--background,light-dark(#fff,#222)));color:var(--popover-foreground,var(--foreground,light-dark(#222,#eee)));border-radius:6px;box-shadow:0 4px 16px #0002}af-select [role=listbox]{max-height:14rem;overflow:auto}af-select [role=option]{display:block;width:100%;text-align:left;border:0}af-select [role=option][aria-selected=true]{font-weight:600}af-select [role=option]:hover,af-select [data-highlighted=true]{background:var(--accent,light-dark(#eee,#444));color:var(--accent-foreground,var(--foreground,light-dark(#222,#eee)))}af-select [role=status]{padding:.75rem;color:var(--muted-foreground,light-dark(#555,#aaa))}`;
