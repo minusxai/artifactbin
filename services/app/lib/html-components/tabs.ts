@@ -1,0 +1,138 @@
+/** Author-owned selection; components emit intent and never persist viewer state. */
+export interface TabsChangeDetail { value: string }
+export type TabsOrientation = 'horizontal' | 'vertical';
+export type TabsActivationMode = 'automatic' | 'manual';
+export interface TabsContract { value: string | undefined }
+let nextId = 0;
+export class AfTabs extends HTMLElement implements TabsContract {
+  static observedAttributes = ['value', 'orientation', 'activation-mode', 'dir', 'loop', 'variant'];
+  private selection: string | undefined;
+  private controlled = false;
+  private propertyValue: string | undefined;
+  private focused: AfTabsTrigger | undefined;
+  private observer = new MutationObserver(() => this.sync());
+  get value(): string | undefined { return this.controlled ? this.propertyValue : this.getAttribute('value') ?? this.selection; }
+  set value(value: string | undefined) {
+    if (value === undefined) this.selection = this.value;
+    this.controlled = value !== undefined;
+    this.propertyValue = value;
+    this.sync();
+  }
+  connectedCallback(): void {
+    if (Object.prototype.hasOwnProperty.call(this, 'value')) {
+      const value = this.value; delete (this as {value?: string}).value; this.value = value;
+    }
+    if (this.selection === undefined) this.selection = this.getAttribute('default-value') ?? undefined;
+    this.addEventListener('click', this.onClick);
+    this.addEventListener('keydown', this.keydown);
+    this.addEventListener('focusin', this.focusin);
+    this.observer.observe(this, {childList:true, subtree:true, attributes:true, attributeFilter:['disabled','value']});
+    this.sync();
+  }
+  disconnectedCallback(): void {
+    this.observer.disconnect();
+    this.removeEventListener('click', this.onClick);
+    this.removeEventListener('keydown', this.keydown);
+    this.removeEventListener('focusin', this.focusin);
+  }
+  attributeChangedCallback(): void { this.sync(); }
+  private own<T extends HTMLElement>(tag: string): T[] {
+    return [...this.querySelectorAll<T>(tag)].filter(node => node.closest('af-tabs') === this);
+  }
+  private triggers(): AfTabsTrigger[] { return this.own<AfTabsTrigger>('af-tabs-trigger'); }
+  private enabled(): AfTabsTrigger[] { return this.triggers().filter(t => !t.hasAttribute('disabled')); }
+  private target(event: Event): AfTabsTrigger | undefined {
+    const node = event.target instanceof Element ? event.target.closest<AfTabsTrigger>('af-tabs-trigger') : null;
+    return node?.closest('af-tabs') === this && !node.hasAttribute('disabled') ? node : undefined;
+  }
+  private choose(trigger: AfTabsTrigger): void {
+    const value = trigger.getAttribute('value');
+    if (value === null || value === this.value) return;
+    const event = new CustomEvent<TabsChangeDetail>('af-change', {detail:{value}, bubbles:true, composed:true, cancelable:true});
+    if (this.dispatchEvent(event) && !this.controlled && !this.hasAttribute('value')) this.selection = value;
+    this.sync();
+  }
+  private onClick = (event: Event): void => { const trigger = this.target(event); if (trigger && !event.defaultPrevented) { this.focused = trigger; trigger.focus(); this.choose(trigger); } };
+  private focusin = (event: Event): void => { const trigger = this.target(event); if (trigger) { this.focused = trigger; this.sync(); } };
+  private keydown = (event: KeyboardEvent): void => {
+    const trigger = this.target(event); if (!trigger || event.defaultPrevented) return;
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.choose(trigger); return; }
+    const vertical = this.getAttribute('orientation') === 'vertical';
+    const rtl = (this.closest('[dir]')?.getAttribute('dir') ?? getComputedStyle(this).direction) === 'rtl';
+    const forward = vertical ? 'ArrowDown' : rtl ? 'ArrowLeft' : 'ArrowRight';
+    const backward = vertical ? 'ArrowUp' : rtl ? 'ArrowRight' : 'ArrowLeft';
+    const enabled = this.enabled(); let index = enabled.indexOf(trigger);
+    if (event.key === 'Home') index = 0;
+    else if (event.key === 'End') index = enabled.length - 1;
+    else if (event.key === forward || event.key === backward) {
+      index += event.key === forward ? 1 : -1;
+      if (this.getAttribute('loop') !== 'false') index = (index + enabled.length) % enabled.length;
+      else index = Math.max(0, Math.min(enabled.length - 1, index));
+    } else return;
+    event.preventDefault(); const next = enabled[index]; if (!next) return;
+    this.focused = next; next.focus();
+    if (this.getAttribute('activation-mode') !== 'manual') this.choose(next);
+    this.sync();
+  };
+  private identify(node: HTMLElement, kind: string): void {
+    if (node.id) return;
+    let id: string;
+    do { id = `af-tabs-${kind}-${++nextId}`; } while (this.ownerDocument.getElementById(id));
+    node.id = id;
+  }
+  private sync(): void {
+    if (!this.isConnected) return;
+    const triggers = this.triggers(); const panels = this.own<AfTabsContent>('af-tabs-content');
+    const enabled = this.enabled();
+    if (!this.focused || !enabled.includes(this.focused)) this.focused = enabled.find(t => t.getAttribute('value') === this.value) ?? enabled[0];
+    for (const list of this.own('af-tabs-list')) {
+      list.setAttribute('role','tablist'); list.setAttribute('aria-orientation', this.getAttribute('orientation') === 'vertical' ? 'vertical' : 'horizontal');
+    }
+    for (const trigger of triggers) {
+      this.identify(trigger, 'trigger');
+      const active = trigger.getAttribute('value') === this.value;
+      trigger.setAttribute('role','tab'); trigger.setAttribute('aria-selected',String(active));
+      trigger.setAttribute('aria-disabled',String(trigger.hasAttribute('disabled')));
+      trigger.tabIndex = trigger === this.focused ? 0 : -1;
+      trigger.dataset.state = active ? 'active' : 'inactive';
+      const panel = panels.find(p => p.getAttribute('value') === trigger.getAttribute('value'));
+      if (panel) { this.identify(panel, 'panel'); trigger.setAttribute('aria-controls',panel.id); }
+      else trigger.removeAttribute('aria-controls');
+    }
+    for (const panel of panels) {
+      this.identify(panel, 'panel');
+      const active = panel.getAttribute('value') === this.value;
+      panel.setAttribute('role','tabpanel'); panel.hidden = !active; panel.toggleAttribute('inert',!active);
+      panel.dataset.state = active ? 'active' : 'inactive'; panel.tabIndex = active ? 0 : -1;
+      const trigger = triggers.find(t => t.getAttribute('value') === panel.getAttribute('value'));
+      if (trigger) panel.setAttribute('aria-labelledby',trigger.id); else panel.removeAttribute('aria-labelledby');
+    }
+  }
+}
+export class AfTabsList extends HTMLElement {}
+export class AfTabsTrigger extends HTMLElement {}
+export class AfTabsContent extends HTMLElement {}
+/** Light DOM styles may be bundled once by the author runtime. */
+export const tabsStyles = `
+af-tabs{display:flex;gap:.5rem;flex-direction:column}
+af-tabs[orientation=vertical]{flex-direction:row}
+af-tabs-list{display:inline-flex;align-items:center;width:fit-content;padding:3px;border-radius:var(--radius,.5rem);background:var(--muted,#eee);color:var(--muted-foreground,#555)}
+af-tabs[orientation=vertical]>af-tabs-list{flex-direction:column}
+af-tabs-trigger{position:relative;cursor:pointer;padding:.25rem .5rem;border-radius:var(--radius,.375rem);font:inherit}
+af-tabs-trigger:focus-visible{outline:2px solid var(--ring,#777);outline-offset:2px}
+af-tabs-trigger[disabled]{opacity:.5;cursor:default}
+af-tabs-trigger[data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff)}
+af-tabs-list[variant=line],af-tabs[variant=line]>af-tabs-list{background:transparent;gap:.25rem}
+af-tabs-list[variant=line]>af-tabs-trigger[data-state=active],af-tabs[variant=line]>af-tabs-list>af-tabs-trigger[data-state=active]{background:transparent;color:var(--foreground,#222);box-shadow:0 2px var(--primary,#222)}
+af-tabs-content{flex:1;outline:none}
+af-tabs-content[hidden]{display:none!important}
+`;
+export function registerTabs(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
+  if (!document.querySelector('style[data-af-tabs-styles]')) {
+    const style = document.createElement('style'); style.setAttribute('data-af-tabs-styles', '');
+    style.textContent = tabsStyles; document.head.append(style);
+  }
+  for (const [name, ctor] of Object.entries({ 'af-tabs': AfTabs, 'af-tabs-list': AfTabsList, 'af-tabs-trigger': AfTabsTrigger, 'af-tabs-content': AfTabsContent })) {
+    if (!registry.get(name)) registry.define(name, ctor);
+  }
+}
