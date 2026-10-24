@@ -7,6 +7,7 @@ const FILE_TYPES = {
   pdf: 'application/pdf', txt: 'text/plain', csv: 'text/csv', json: 'application/json', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf',
   zip: 'application/zip',
+  css:'text/css', js:'text/javascript', mjs:'text/javascript',
 } as const;
 
 export const FILE_EXTENSIONS = Object.keys(FILE_TYPES);

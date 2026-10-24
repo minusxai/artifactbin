@@ -9,7 +9,8 @@
  * present and unforgeable.
  */
 import { artifactToWireWithAnnotations } from '@/lib/annotations';
-import { replaceArtifactFromRequest } from '@/lib/publish/publish';
+import {runOperation} from '@/lib/operations/http';
+import {ensureUserToken,withAccountToken} from '@/lib/accounts';
 import { getEditableArtifactFor } from '@/lib/artifacts';
 import {updateMetadataFromBody} from '@/lib/artifacts';
 import { browserActor } from '@/lib/accounts';
@@ -55,7 +56,9 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const actor = await browserActor(request);
   if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
-  return replaceArtifactFromRequest(request, actor, id, baseUrl(request));
+  const body=await readJson(request);if(!body)return json({error:'invalid_json'},400);
+  const writer=actor.userId?{...actor,tokenId:await ensureUserToken(actor.userId)}:await withAccountToken(actor);
+  return writer?runOperation('update_artifact',request,writer,{...body,id}):json({error:'unauthorized'},401);
 }
 
 /** Browser metadata shares the same state condition and validation as the CLI. */

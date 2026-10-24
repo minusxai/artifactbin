@@ -119,6 +119,7 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
  * guidance strings are also rendered in local help.
  */
 const CONTENT_FIELDS = {
+  publicationBundle:z.object({entryPath:z.string(),files:z.array(z.object({path:z.string(),contentType:z.string(),base64:z.string()})).max(99),mappings:z.record(z.string(),z.object({kind:z.enum(['asset','dataset']),id:z.string(),revision:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/).optional()})).optional()}).optional(),
   backendSources:z.record(z.string(),z.string()).optional().describe('Named backend TypeScript files, validated and published atomically with html.'),
   html: z.string().optional().describe('A complete HTML document. The server saves canonical HTML with stable data-af-id identities.'),
   program: z.union([z.record(z.string(),z.unknown()),z.string()]).optional().describe('Native program definition JSON: {version:1,command:[executable,...args],compute?,env?}. Execution is owner-only. Store only nonsecret configuration; common credential environment names and runtime overrides are rejected. Credentials cannot be detected in arbitrary argument strings.'),
@@ -240,7 +241,7 @@ const updateArtifactOp: Operation = {
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
-    return fromResponse(await replaceArtifactWithBody(input, ctx.actor, String(input.id), ctx.base,{mutationReceipt:ctx.mutationReceipt}));
+    return fromResponse(await replaceArtifactWithBody(input, ctx.actor, String(input.id), ctx.base,{mutationReceipt:ctx.mutationReceipt,request:ctx.request}));
   },
 };
 

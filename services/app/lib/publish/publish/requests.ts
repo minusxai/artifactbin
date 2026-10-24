@@ -1,3 +1,5 @@
+import {preparePublicationBundle} from './bundle';
+import {getSharingFor} from '@/lib/artifacts';
 import {htmlAssetLinks} from '@/lib/html-page';
 import {trackEvent} from '@/lib/platform/analytics';
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
@@ -21,7 +23,7 @@ import { parseAnnotationOperations, normalizeNodeIds, collectExternalAssetUrls }
 import { prepareCatalog, catalogOf } from '@/lib/datasets/catalog';
 import { DatasetError } from '@/lib/datasets/errors';
 import type { ServerRefLoader } from '@/lib/datasets/schema-loader';
-import { json, readJson } from '@/lib/http/http';
+import { json } from '@/lib/http/http';
 import { ID_RE } from '@/lib/platform/ids-shape';
 import { getDb } from '@/lib/platform/db';
 import { prepareContentInput, applyPreparedContent, type PreparedContent } from '../prepared/prepare-content';
@@ -74,26 +76,16 @@ function parseVisibility(body: Record<string, unknown>, canPrivate: boolean): Vi
  * claimed by an account stamps its artifacts with that account, so the actor's
  * userId IS the row's owner and no extra read is needed.
  */
-export async function replaceArtifactFromRequest(
-  request: Request,
-  actor: AccessActor,
-  id: string,
-  base: string,
-): Promise<Response> {
-  const body = await readJson(request);
-  return replaceArtifactWithBody(body, actor, id, base);
-}
-
 /** The same pipeline with the body already in hand — what the operations registry calls. */
 export async function replaceArtifactWithBody(
   body: Record<string, unknown> | null,
   actor: AccessActor,
   id: string,
   base: string,
-  options: {dryRun?:boolean;mutationReceipt?:MutationReceipt} = {},
+  options: {dryRun?:boolean;mutationReceipt?:MutationReceipt;request?:Request} = {},
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
-  if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body,key)))return json({error:'native_html_required',hint:'Replace native pages with the complete html field and observed version and state.'},400);
+  if(['markup','jsx','markdown','document_update'].some(key=>Object.hasOwn(body!,key)))return json({error:'native_html_required',hint:'Replace native pages with the complete html field and observed version and state.'},400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
   // the writer — an editor (artifact_shares.role) replacing a document that
   // carries its owner's <Mutation> or private image must not fail on assets
@@ -110,6 +102,20 @@ export async function replaceArtifactWithBody(
   if(!annotationOps||annotationOps.length&&typeof sentMarkup!=='string')return json({error:'invalid_annotation_operations'},400);
   const expected = parseExpectedVersion(body);
   if (expected instanceof Response) return expected;
+  let bundleReceipts:unknown[]=[];
+  if(typeof body.html==='string'){
+    if(expected.expectedVersion!==undefined&&expected.expectedVersion!==current.version||expected.expectedState!==undefined&&expected.expectedState!==artifactState(current))return json({error:'version_conflict',currentVersion:current.version,currentState:artifactState(current)},409);
+    if(body.publicationBundle!==undefined&&(expected.expectedVersion===undefined||expected.expectedState===undefined))return json({error:'bundle_requires_observed_state'},400);
+    if(body.publicationBundle!==undefined&&(!actor.tokenId||options.dryRun))return json({error:'bundle_requires_authenticated_commit'},400);
+    if(body.publicationBundle!==undefined){
+      if(!await getOwnedArtifactFor(actor,id))return json({error:'bundle_requires_page_owner'},403);
+      const sharing=await getSharingFor(actor,id);
+      body={...body,visibility:body.visibility??current.visibility,shares:body.shares??sharing?.shares};
+    }
+    const bundled=await preparePublicationBundle(body,actor as TokenHoldingActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,actor as TokenHoldingActor,base,dependencyRequest),id);
+    if(bundled instanceof Response)return bundled;
+    body=bundled.body;bundleReceipts=bundled.receipts;
+  }
   let normalizeMarkup: ((source: string) => ReturnType<typeof normalizeNodeIds>) | undefined;
   if(typeof body.markup==='string') {
     const db=await getDb();
@@ -197,6 +203,7 @@ export async function replaceArtifactWithBody(
   parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
+    meta:{...parsed.meta,...(bundleReceipts.length?{htmlPublicationDependencies:bundleReceipts}:current.meta.htmlPublicationDependencies?{htmlPublicationDependencies:current.meta.htmlPublicationDependencies}:{})},
     ...(htmlBackends?{htmlBackends}:{}),
     ...(htmlDatasets?{htmlDatasets}:{}),
     ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : parsed.format==='html'?{title:parsed.derivedTitle}:{}),
@@ -232,7 +239,7 @@ export async function replaceArtifactWithBody(
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, expected)
-    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares,...(input.format==='html'&&options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:await replacedArtifactWire(saved,base,undefined,{affected:null,warnings:[],openAnnotations:0})})}:{})});
+    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares,...(input.format==='html'&&options.mutationReceipt?{mutationReceipt:options.mutationReceipt,mutationReply:async(saved:ArtifactRow):Promise<MutationReply>=>({status:200,body:{...await replacedArtifactWire(saved,base,undefined,{affected:null,warnings:[],openAnnotations:0}),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})}})}:{})});
   } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   // A refusal the replace composed for itself — `policy_locked` (409) or
   // `policy_mismatch` (400). It exists so this door stops answering the
@@ -248,7 +255,7 @@ export async function replaceArtifactWithBody(
   // resolve (warnings, never blocks).
   const warnings = await refreshWarningsFor(actor, row);
   const affected = ['dataset','image','pdf','file'].includes(row.format) ? await findDependentsFor(actor,row.id) : null;
-  return json(await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, repairs: parsed.repairs, openAnnotations: committedOpenAnnotations(row) }));
+  return json({...await replacedArtifactWire(row, base, sentMarkup, { affected, warnings, repairs: parsed.repairs, openAnnotations: committedOpenAnnotations(row) }),...(bundleReceipts.length?{dependencyReceipts:bundleReceipts}:{})});
 }
 
 /**
@@ -257,12 +264,21 @@ export async function replaceArtifactWithBody(
  * transport-only branch of its own: a raw `Content-Type: image/*` body, which
  * has no JSON envelope for this function to read.
  */
-export async function createArtifactFromBody(
+export async function createArtifactFromBody(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request?:Request,options:{dryRun?:boolean}={}):Promise<Response>{
+ if(options.dryRun&&body.publicationBundle!==undefined)return json({error:'bundle_preflight_requires_dependency_plan'},400);
+ const bundled=await preparePublicationBundle(body,actor,base,request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,actor,base,dependencyRequest));
+ if(bundled instanceof Response)return bundled;
+ const response=await createArtifactFromBodyPrepared(bundled.body,actor,base,request,{...options,bundleReceipts:bundled.receipts});
+ if(!bundled.receipts.length)return response;
+ return json({...await response.json(),dependencyReceipts:bundled.receipts},response.status);
+}
+
+async function createArtifactFromBodyPrepared(
   body: Record<string, unknown>,
   actor: TokenHoldingActor,
   base: string,
   request?: Request,
-  options: {dryRun?:boolean} = {},
+  options: {dryRun?:boolean;bundleReceipts?:unknown[]} = {},
 ): Promise<Response> {
   let destination;
   try{destination=parseArtifactDestination(body.destination);}catch(error){if(error instanceof DatasetError)return json({error:'invalid_destination',details:[error.message]},error.status);throw error;}
@@ -325,6 +341,7 @@ export async function createArtifactFromBody(
   let row;
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
+    meta:{...parsed.meta,...(options.bundleReceipts?.length?{htmlPublicationDependencies:options.bundleReceipts}:{})},
     ...(htmlBackends?{htmlBackends}:{}),
     ...(htmlDatasets?{htmlDatasets}:{}),
     title: body.title===null || typeof body.title === 'string' ? body.title : parsed.derivedTitle,

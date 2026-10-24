@@ -2,4 +2,4 @@
 export { forkArtifact, forkDatasetPreview, forkRefusal } from './fork';
 export type { ForkOverrides } from './fork';
 export { preflightPublication } from './publication-preflight';
-export { createArtifactFromBody, refreshAssetsFor, replaceArtifactFromRequest, replaceArtifactWithBody } from './requests';
+export { createArtifactFromBody, refreshAssetsFor, replaceArtifactWithBody } from './requests';

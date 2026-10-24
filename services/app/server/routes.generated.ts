@@ -151,7 +151,7 @@ import * as r147 from '@/app/workspace/[id]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
-  { path: "/a/:id/assets", dir: "/a/[id]/assets", methods: ["GET"], module: r0 },
+  { path: "/a/:id/assets", dir: "/a/[id]/assets", methods: ["GET","HEAD"], module: r0 },
   { path: "/a/:id/css", dir: "/a/[id]/css", methods: ["GET"], module: r1 },
   { path: "/a/:id/datasets/:datasetId/files/:fileId", dir: "/a/[id]/datasets/[datasetId]/files/[fileId]", methods: ["GET"], module: r2 },
   { path: "/a/:id/datasets/:datasetId/files", dir: "/a/[id]/datasets/[datasetId]/files", methods: ["POST"], module: r3 },

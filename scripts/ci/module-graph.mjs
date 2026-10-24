@@ -171,6 +171,7 @@ const ACCOUNTS_ENTRIES = ['', 'tokens'];
  * A listed index is never stale: it is the module's door even while nothing outside uses it.
  */
 export const DEEP_MODULES = {
+  'lib/html-publication-bundle': { entries: [''], serverOnly: [''] },
   'lib/islands': { entries: [''], browserImporters: ISLANDS_BROWSER_IMPORTERS, browserLeaves: ISLANDS_BROWSER_LEAVES, browserLeavesOnly: true },
   'lib/artifacts': { entries: ['', 'table'], serverOnly: ['', 'table'] },
   'lib/document-data': { entries: [''], serverOnly: [''] },

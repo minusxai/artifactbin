@@ -149,6 +149,7 @@ Read a local reference or use HTTP: `<origin>/llms/<filename-without-.md>`.
   - [http-api.md](references/http-api.md) — HTTP operations and browser QA
   - [http-authoring.md](references/http-authoring.md) — Create and prepare source edits
   - [http-document-graph.md](references/http-document-graph.md) — Advanced graph updates
+  - [publication-bundles.md](references/publication-bundles.md) — Native HTML project dependencies
   - [publishing.md](references/publishing.md) — Sync, identity and conflict recovery
   - [publishing-annotations.md](references/publishing-annotations.md) — Read and reply to comments
   - [publishing-datasets.md](references/publishing-datasets.md) — Publish datasets and media
