@@ -2,11 +2,11 @@
 import {runtimeAssetManifest} from './preview-runtime-assets.mjs';
 import {libraryAssetManifest} from './preview-library-assets.mjs';
 import {createServer} from 'node:http';
-import {realpath,stat} from 'node:fs/promises';
+import {realpath,stat,lstat} from 'node:fs/promises';
 import {resolve,relative,sep,extname} from 'node:path';
 import {createRevisionSource,changeNotice} from './preview-changes.mjs';
 import {createPreviewSessions} from './preview-sessions.mjs';
-import {previewHtml} from './preview-html.mjs';
+import {previewHtml,packPreviewExport} from './preview-html.mjs';
 import {readPreviewFile,PREVIEW_LIMITS,PreviewLimitError} from './preview-files.mjs';
 import {pathToFileURL} from 'node:url';
 
@@ -58,6 +58,20 @@ export async function startPreview({root,port=0,runtimeDir,libraryAssets,revisio
    const pathname=decodeURIComponent((req.url||'/').split('?')[0]);
    if(!pathname.startsWith('/')||pathname.includes('\\')||pathname.includes('\0'))return end(404,'Not found');
    if(pathname==='/__af_preview/export-runtime'){res.setHeader('Content-Type','application/json');return end(bundled?200:503,JSON.stringify(bundled??{error:'Use the downloaded HTTP author skill for bundled runtime export.'}));}
+   if(pathname==='/__af_preview/export-source'){
+    const requested=new URL(req.url,'http://preview.invalid').searchParams.get('path')??'/';
+    if(!requested.startsWith('/')||requested.includes('\\')||requested.split('/').some(part=>part.startsWith('.'))||!(requested==='/'||/\.html?$/i.test(requested)))return end(400,'A local HTML page path is required');
+    const selected=requested==='/'?'/index.html':requested;
+    const load=async name=>{
+     if(publicLibraries.has(name))return {contentType:'text/javascript',bytes:Buffer.from(publicLibraries.get(name))};
+     const decoded=decodeURIComponent(name);if(!decoded.startsWith('/')||decoded.includes('\\')||decoded.includes('\0')||decoded.split('/').some(part=>part.startsWith('.')))throw Error('Invalid local export path');
+     try{let target=base;for(const part of decoded.slice(1).split('/')){target=resolve(target,part);if(!inside(base,target)||(await lstat(target)).isSymbolicLink())throw Error('Symlink or escaping local export dependency refused: '+name);}
+      return {contentType:types[extname(target).toLowerCase()]??'application/octet-stream',bytes:await readPreviewFile(base,target)};
+     }catch(error){if(error.code==='ENOENT')throw Error('Missing local dependency: '+name);throw error;}
+    };
+    try{const source=await load(selected),html=source.bytes.toString('utf8'),renderedHtml=await packPreviewExport({html,pathname:selected,load});res.setHeader('Content-Type','application/json');return end(200,JSON.stringify({html,renderedHtml,pathname:requested}));}
+    catch(error){res.setHeader('Content-Type','application/json');return end(error.code==='PREVIEW_LIMIT'?413:422,JSON.stringify({error:'Local export failed: '+(error.code==='ENOENT'?'a project dependency is missing':error.message)}));}
+   }
    if(pathname==='/__af_preview/source'){
     const requested=new URL(req.url,'http://preview.invalid').searchParams.get('path')??'/';
     if(!requested.startsWith('/')||requested.includes('\\')||requested.split('/').some(part=>part.startsWith('.'))||!(requested==='/'||/\.html?$/i.test(requested)))return end(400,'A local HTML page path is required');

@@ -10,7 +10,7 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
  const recovered=recoverPortableSource(options.sourceBytes);
  const adopt=options.publishedSource&&sha256Hex(recovered)===options.publishedSource.localSourceDigest;
  const source=adopt?options.publishedSource!.source:recovered;
- const rendered=recoverPortableRendering(options.sourceBytes);
+ const rendered=recoverPortableRendering(options.renderedSource??options.sourceBytes);
  const target=parser.parseFromString(rendered,'text/html');
  if(adopt){
   const canonical=parser.parseFromString(source,'text/html');
@@ -20,7 +20,7 @@ export function serializePortableCopy(options: PortableCopyOptions): string {
   for(let index=0;index<before.length;index++){const id=after[index]!.getAttribute('data-af-id');if(id)before[index]!.setAttribute('data-af-id',id);}
  }
  const renderedSource=(rendered.match(/^\s*(<!doctype[^>]*>)/i)?.[1]??'')+target.documentElement.outerHTML;
- const envelope={version:1 as const,source,...(portable.identity?{identity:portable.identity}:{}),...((portable.renderedDigest||adopt)?{renderedDigest:portableRenderedDigest(renderedSource)}:{}),...(options.privateState?{privateState:options.privateState}:{})};
+ const envelope={version:1 as const,source,...(portable.identity?{identity:portable.identity}:{}),...((portable.renderedDigest||adopt||options.renderedSource!==undefined)?{renderedDigest:portableRenderedDigest(renderedSource)}:{}),...(options.privateState?{privateState:options.privateState}:{})};
  const block=parser.parseFromString(portableScript(envelope),'text/html').querySelector('script')!;
  for(const old of target.querySelectorAll('script[data-af="core"],script[src="/af/v1/core.js"]')) old.remove();
  const fragments:Node[]=[];

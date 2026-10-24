@@ -1,3 +1,4 @@
+export {packPreviewExport} from './preview-export.mjs';
 // The downloadable archive bundles this parser; installed previews need only Node.
 import {parse,parseFragment,serialize} from 'parse5';
 import {initSync,parse as parseImports} from 'es-module-lexer';

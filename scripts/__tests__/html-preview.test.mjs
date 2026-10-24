@@ -146,3 +146,16 @@ test('private preview mounts only admitted versioned library bytes without eval 
   assert.equal((await fetch(session.url+'libraries/vega-999.0.0/index.js')).status,404); assert.doesNotMatch(response.headers.get('content-security-policy'),/'unsafe-eval'/);
  }finally{await session?.close();await rm(dir,{recursive:true,force:true});}
 });
+
+test('explicit export packs local component graphs and registered libraries without changing source',async()=>{
+ const {readFile}=await import('node:fs/promises');const dir=await mkdtemp(join(tmpdir(),'preview-export-'));let session;
+ try{
+  const html='<script type="module">import {lazy} from "./components/main.js";lazy();</script>';
+  await mkdir(join(dir,'components'));await writeFile(join(dir,'index.html'),html);
+  await writeFile(join(dir,'components/main.js'),'export const lazy=()=>import("./lazy.js");');await writeFile(join(dir,'components/lazy.js'),'export {value} from "/libraries/fixture-1.0.0/index.js";');
+  session=await startPreview({root:dir,libraryAssets:{'/libraries/fixture-1.0.0/index.js':'export const value=42;'}});
+  const response=await fetch(session.url+'__af_preview/export-source?path=%2F');assert.equal(response.status,200);const packed=await response.json();assert.equal(packed.html,html);assert.match(packed.renderedHtml,/data:text\/javascript;base64,/);assert.match(packed.renderedHtml,/@afbin\/local-export/);assert.equal(await readFile(join(dir,'index.html'),'utf8'),html);
+  for(const source of ['<script type="module">import "https://foreign.test/a.js";</script>','<script src="./missing.js"></script>','<script src="../outside.js"></script>']){await writeFile(join(dir,'index.html'),source);const failed=await fetch(session.url+'__af_preview/export-source?path=%2F');assert.equal(failed.status,422);assert.match((await failed.json()).error,/Local export failed/);assert.equal(await readFile(join(dir,'index.html'),'utf8'),source);}
+  await writeFile(join(dir,'index.html'),'<script src="./link.js"></script>');await symlink(join(dir,'components/main.js'),join(dir,'link.js'));const failed=await fetch(session.url+'__af_preview/export-source?path=%2F');assert.equal(failed.status,422);assert.match((await failed.json()).error,/Symlink/);
+ }finally{await session?.close();await rm(dir,{recursive:true,force:true});}
+});

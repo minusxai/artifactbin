@@ -16,13 +16,15 @@ export interface SaveLocalDocumentOptions {
 export async function saveLocalDocument(options:SaveLocalDocumentOptions):Promise<boolean>{
  const {win}=options;
  let name='page.html',sourceBytes=options.sourceBytes;
- let assetDocument=win.document;
+ let assetDocument=win.document,renderedSource:string|undefined;
  const preview=win.document.documentElement.hasAttribute('data-af-private-preview')&&win.location.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(win.location.hostname);
  if(preview){
-  const responses=await Promise.all([win.fetch('/__af_preview/source?'+new URLSearchParams({path:win.location.pathname}),{credentials:'omit',redirect:'error'}),win.fetch('/__af_preview/export-runtime',{credentials:'omit',redirect:'error'})]);
-  if(responses.some(response=>!response.ok))throw Error('Local source or runtime unavailable; original file unchanged');
+  const responses=await Promise.all([win.fetch('/__af_preview/export-source?'+new URLSearchParams({path:win.location.pathname}),{credentials:'omit',redirect:'error'}),win.fetch('/__af_preview/export-runtime',{credentials:'omit',redirect:'error'})]);
+  if(!responses[0]!.ok){const failure=await responses[0]!.json().catch(()=>({}));throw Error(typeof failure.error==='string'?failure.error:'Local source or dependencies unavailable; original file unchanged');}
+  if(!responses[1]!.ok)throw Error('Local runtime unavailable; original file unchanged');
   const selected=await responses[0]!.json(),assets=await responses[1]!.json();
-  if(typeof selected.html!=='string')throw Error('Local source unavailable');
+  if(typeof selected.html!=='string'||typeof selected.renderedHtml!=='string')throw Error('Local source or dependency export unavailable');
+  renderedSource=selected.renderedHtml;
   sourceBytes=selected.html;name=decodeURIComponent(win.location.pathname.split('/').pop()||'page.html');
   assetDocument=new DOMParser().parseFromString('<html><head></head><body></body></html>','text/html');
   const runtime=win.document.querySelector('script[data-af="runtime"]')?.textContent??JSON.stringify({pageId:'local:'+win.location.pathname,revision:'local',backends:[],offline:true});
@@ -45,7 +47,7 @@ export async function saveLocalDocument(options:SaveLocalDocumentOptions):Promis
   portable={...portable,identity:options.identity};
  }
  options.onSource?.(recoverPortableSource(sourceBytes));
- const html=serializePortableCopy({document:assetDocument,sourceBytes,portable,publishedSource:options.publishedSource,...(options.privateState?{privateState:options.privateState}:{})});
+ const html=serializePortableCopy({document:assetDocument,sourceBytes,portable,...(renderedSource!==undefined?{renderedSource}:{}),publishedSource:options.publishedSource,...(options.privateState?{privateState:options.privateState}:{})});
  downloadPortableCopy(win,html,name);
  return true;
 }
