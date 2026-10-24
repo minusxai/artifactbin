@@ -20,7 +20,7 @@ export function createConnectionRegistry(options:ConnectionAuthority):Connection
     if(!sameIdentity(admission.identity,identity))throw new LocalConnectionError('stale');
     const capability=random(),expires=now()+ttl;
     if(grants.has(capability))throw new LocalConnectionError('capacity');
-    grants.set(capability,{admission:{...admission,identity:{...identity}},expires});return {capability,expires,role:admission.role};
+    grants.set(capability,{admission:{...admission,identity:{...identity}},expires});return {capability,expires,role:admission.role,authenticated:admission.authenticated===true};
    }finally{pending--;}
   },
   async authorize(capability,artifactId){

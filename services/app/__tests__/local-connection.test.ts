@@ -12,11 +12,11 @@ it('keeps automatic connection anonymous, scopes grants and requires explicit ac
  const {id}=await created.json();const page=await readHtmlPage({userId:owner.userId,tokenId:null,email:owner.email,documentEditor:false},id);
  const identity={platformOrigin:'http://localhost:3000',artifactId:id,baseRevision:page.revision,sourceDigest:createHash('sha256').update(page.html).digest('hex')};
  const makeGrant=(extra:Record<string,unknown>={})=>grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity,...extra}}));
- const guestResponse=await makeGrant();expect(guestResponse.status).toBe(200);const guest=await guestResponse.json();expect(guest.role).toBe('viewer');expect(guest).not.toHaveProperty('actor');
+ const guestResponse=await makeGrant();expect(guestResponse.status).toBe(200);const guest=await guestResponse.json();expect(guest.role).toBe('viewer');expect(guest.authenticated).toBe(false);expect(guest).not.toHaveProperty('actor');
  const operation=(capability:string,pageId=id)=>{const req=request(`/api/local-connection/${pageId}/graphql`,{method:'POST',token:owner.token,json:{revision:'1',query:'{ __typename }'}});req.headers.set('X-Af-Local-Capability',capability);return execute(req,{params:Promise.resolve({id:pageId})});};
  expect((await operation(guest.capability,'different')).status).toBe(410);
  expect((await makeGrant({checkSession:true})).status).toBe(403);
- const approved=await makeGrant({authorizePrivate:true});expect(approved.status).toBe(200);const account=await approved.json();expect(account.role).toBe('owner');
+ const approved=await makeGrant({authorizePrivate:true});expect(approved.status).toBe(200);const account=await approved.json();expect(account.role).toBe('owner');expect(account.authenticated).toBe(true);
  expect((await operation(account.capability)).status).toBe(200);
  const stop=request('/api/local-connection',{method:'DELETE'});stop.headers.set('X-Af-Local-Capability',account.capability);expect((await revoke(stop)).status).toBe(200);expect((await operation(account.capability)).status).toBe(410);
  await (await harness.db()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1',[id,'private']);

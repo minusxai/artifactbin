@@ -82,3 +82,11 @@ it('opens login securely without randomUUID and reports missing WebCrypto before
  window.dispatchEvent(new MessageEvent('message',{origin:'null',source:window,data:{kind:'af:local-bind',nonce:'test-nonce',identity:identity()},ports:[port]}));await vi.waitFor(()=>expect(states.at(-1)).toBe('signin-required'));
  broker.signIn();expect(open).toHaveBeenCalledTimes(1);vi.stubGlobal('crypto',undefined);expect(()=>broker.signIn()).toThrow(/Web ?Crypto|getRandomValues/);expect(states.at(-1)).toBe('blocked');expect(open).toHaveBeenCalledTimes(1);broker.dispose();
 });
+it('reports actual guest versus approved account scope only to trusted platform UI',async()=>{
+ history.replaceState(null,'','/#nonce=test-nonce');let grants=0;
+ const fetch=vi.fn().mockImplementation(async(_url,init)=>({ok:true,json:async()=>init?.method==='DELETE'?{}:++grants===1?{capability:'guest-secret',role:'viewer',authenticated:false}:{capability:'account-secret',role:'commenter',authenticated:true}}));vi.stubGlobal('fetch',fetch);
+ const connected=vi.fn();const broker=installLocalConnectionBroker({win:window,onState:()=>{},onConnected:connected}),port=fakePort();
+ window.dispatchEvent(new MessageEvent('message',{origin:'null',source:window,data:{kind:'af:local-bind',nonce:'test-nonce',identity:identity()},ports:[port]}));await vi.waitFor(()=>expect(connected).toHaveBeenCalledTimes(1));expect(connected.mock.calls[0]![0]).toMatchObject({role:'viewer',authenticated:false});
+ broker.authorize();await vi.waitFor(()=>expect(connected).toHaveBeenCalledTimes(2));expect(connected.mock.calls[1]![0]).toMatchObject({role:'commenter',authenticated:true});
+ expect(JSON.stringify(vi.mocked(port.postMessage).mock.calls)).not.toContain('authenticated');broker.dispose();
+});

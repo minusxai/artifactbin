@@ -6,7 +6,7 @@ export interface LocalBrokerOptions {
  win:Window;
  onState(state:LocalConnectionState):void;
  onIdentity?(identity:LinkedDocument):void;
- onConnected?(value:{identity:LinkedDocument;role:string}):void;
+ onConnected?(value:{identity:LinkedDocument;role:string;authenticated:boolean}):void;
  onMessage?(message:unknown):void;
  onSourceObservation?(observation:SourceObservation):void;
 }
@@ -69,7 +69,7 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
    }
    if(!response.ok){state(response.status===409?'stale':response.status===401?(loginCompleted?'blocked':'signin-required'):response.status===403?'permission-required':'unavailable');return;}
    if(typeof value.capability!=='string'||typeof value.role!=='string'){state('blocked');return;}
-   capability=value.capability;state('connected',value.role);options.onConnected?.({identity:identity!,role:value.role});
+   capability=value.capability;state('connected',value.role);options.onConnected?.({identity:identity!,role:value.role,authenticated:value.authenticated===true});
    const activeCapability=capability!,activeIdentity=identity!,activeRole=value.role;
    monitor?.dispose();monitor=startConnectionMonitor({foreground:()=>win.document.visibilityState!=='hidden',
     async poll(signal){
