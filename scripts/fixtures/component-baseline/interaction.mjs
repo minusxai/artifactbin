@@ -36,3 +36,28 @@ export const interactionBaselineFixtures=[
     limitations:['Local sort cycle only; remote paging, query transport and virtualization require a separate >1000-row paired fixture.'],
   },
 ];
+
+// The original default result window is DISPLAY_ROWS=1000. This is an authored
+// data source, not an intercepted network response or fabricated rendered state.
+export const interactionPagingSql='with recursive seq(id) as (select 1 union all select id+1 from seq where id<1001) select id from seq order by id';
+interactionBaselineFixtures.push({
+  id:'data-table-load-more',family:'DataTable',modules:['data-table'],
+  provenance:{revision,files:['services/contracts/src/sql.ts','services/app/lib/islands/kit/data.tsx'],facts:['The original display window is1000 rows','Load more reads an actual500-row page and appends its rows','Virtual scrolling mounts the final loaded row when scrolled to the bottom']},
+  oldJsx:`<Helmet><Query name="sequence">{\`${interactionPagingSql}\`}</Query></Helmet><DataTable data="$sequence" rowKey="id" height={360} columns={[{col:"id",fmt:"d"}]} />`,
+  newHtml:'<div id="table-mount"></div>',
+  setup:`const table=document.createElement("af-data-table");const rows=Array.from({length:1001},(_,i)=>({id:i+1}));const columns=[{name:"id",type:"number"}];table.columns=[{col:"id",fmt:"d"}];table.setAttribute("row-key","id");table.setAttribute("height","360");table.source={async read({offset,limit,sort,signal}){if(signal.aborted)throw new DOMException("Aborted","AbortError");const ordered=sort?.dir==="desc"?[...rows].reverse():rows;return {columns,rows:ordered.slice(offset,offset+limit),totalRows:rows.length,truncated:offset+limit<rows.length};}};table.data={columns,rows:rows.slice(0,1000),totalRows:1001,truncated:true};document.querySelector("#table-mount").append(table);`,
+  states:[
+    {id:'initial',actions:[],expected:{roles:[{role:'button',name:'Load more rows',disabled:false}]}},
+    {id:'loaded-end',actions:[click('button','Load more rows'),{action:'scroll',role:'table',name:''}],expected:{bodyRowsInclude:[['1001']]}},
+  ],
+  limitations:['Original Query uses the real SQLite paging transport; native HTML uses its public caller-owned TableSource over the identical authored sequence. This proves component paging and virtualization, not backend authorization.','Original retains its footer after completion; native HTML removes its completed footer. Raw copy and controls are retained rather than normalized.'],
+});
+/** Gate afterAction hook: wait for real transport completion before scrolling,
+ * then for the real virtual window to mount its appended final row. */
+export async function settleInteraction({fixture,action,frame,implementation}){
+  if(fixture.id!=='data-table-load-more')return;
+  if(action.action==='click')await frame.waitForFunction(implementation==='jsx'
+    ?()=>document.body.innerText.includes('1,001 of 1,001 rows')
+    :()=>document.querySelector('af-data-table')?.data.rows.length===1001);
+  if(action.action==='scroll')await frame.waitForFunction(()=>[...document.querySelectorAll('tbody tr')].some(row=>row.querySelector('td')?.textContent?.trim()==='1001'));
+}

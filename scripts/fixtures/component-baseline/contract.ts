@@ -20,6 +20,7 @@ export interface BrowserStateExpectation {
   hiddenText?: string[];
   rows?: string[][];
   bodyRows?: string[][];
+  bodyRowsInclude?: string[][];
 }
 /** Both implementations must be served through their real application reader. */
 export interface BrowserParityFixture {
@@ -31,7 +32,7 @@ export interface BrowserParityFixture {
   setup?: string;
   /** Honest exclusions: these are not evidence of covered behavior. */
   limitations?: string[];
-  states: Array<{ id: string; expected?: BrowserStateExpectation; actions: Array<{ role: string; name: string; action: 'click' | 'focus' | 'press'; key?: string }> }>;
+  states: Array<{ id: string; expected?: BrowserStateExpectation; actions: Array<{ role: string; name: string; action: 'click' | 'focus' | 'press' | 'scroll'; key?: string }> }>;
 }
 export interface BrowserParityCapture {
   fixture: string;

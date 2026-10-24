@@ -113,7 +113,9 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       await frame.evaluate(()=>document.fonts.ready);
       for(const action of state.actions) {
         const target=frame.getByRole(action.role,{...(action.name?{name:action.name,exact:true}:{})});
-        if(action.action==='press') await target.press(action.key); else await target[action.action]();
+        if(action.action==='press') await target.press(action.key);
+        else if(action.action==='scroll')await target.evaluate(table=>{const scroll=table.parentElement;if(!scroll||scroll.scrollHeight<=scroll.clientHeight)throw Error('Table has no scrollable parent');scroll.scrollTop=scroll.scrollHeight;});
+        else await target[action.action]();
         await afterAction?.(action);
       }
       await frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
@@ -215,6 +217,7 @@ export function stateExpectationIssues(expected,actual) {
   }
   if(expected.rows&&JSON.stringify(expected.rows)!==JSON.stringify(actual.rows))issues.push('Unexpected rendered table rows');
   if(expected.bodyRows&&JSON.stringify(expected.bodyRows)!==JSON.stringify(actual.rows.slice(1)))issues.push('Unexpected rendered table body rows');
+  for(const row of expected.bodyRowsInclude||[])if(!actual.rows.slice(1).some(actualRow=>JSON.stringify(actualRow)===JSON.stringify(row)))issues.push('Missing rendered table body row '+JSON.stringify(row));
   for(const role of expected.rolesAbsent||[])if(actual.controls.some(control=>control.role===role.role&&control.name===role.name))issues.push(`Unexpected visible ${role.role} ${JSON.stringify(role.name)}`);
   return issues;
 }

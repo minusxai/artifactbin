@@ -133,8 +133,8 @@ describe('actual fixture publication payloads',()=>{
   it('publishes original JSX in an isolated old tree with no candidate helper or packages',async()=>{
     const {execFileSync}=await import('node:child_process'),root=await mkdtemp(path.join(tmpdir(),'old-component-publisher-'));try{
       const fixtureDir=path.join(root,'scripts/fixtures/component-baseline');await mkdir(fixtureDir,{recursive:true});
-      for(const name of ['publication.mjs','index.mjs','controls.mjs','rich.mjs'])await copyFile(new URL('../fixtures/component-baseline/'+name,import.meta.url),path.join(fixtureDir,name));
-      await writeFile(path.join(root,'verify.mjs'),'import {publishBaselineFixtures} from "./scripts/fixtures/component-baseline/publication.mjs";let count=0;const entries=await publishBaselineFixtures({implementation:"jsx",publish:async body=>{if(body.publicationBundle)throw Error("candidate payload entered old path");count++;return {id:body.dataset?"Dataset123":"Page123"};}});if(entries.length!==50||count!==51)throw Error("original fixture publication missing");process.stdout.write("original-complete");');
+      for(const name of ['publication.mjs','index.mjs','controls.mjs','rich.mjs','interaction.mjs'])await copyFile(new URL('../fixtures/component-baseline/'+name,import.meta.url),path.join(fixtureDir,name));
+      await writeFile(path.join(root,'verify.mjs'),'import {publishBaselineFixtures} from "./scripts/fixtures/component-baseline/publication.mjs";let count=0;const entries=await publishBaselineFixtures({implementation:"jsx",publish:async body=>{if(body.publicationBundle)throw Error("candidate payload entered old path");count++;return {id:body.dataset?"Dataset123":"Page123"};}});if(entries.length!==56||count!==57)throw Error("original fixture publication missing");process.stdout.write("original-complete");');
       expect(execFileSync(process.execPath,[path.join(root,'verify.mjs')],{cwd:root,encoding:'utf8'})).toContain('original-complete');
     }finally{await rm(root,{recursive:true,force:true});}
   });

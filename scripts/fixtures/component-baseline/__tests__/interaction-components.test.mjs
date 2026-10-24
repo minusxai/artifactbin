@@ -32,3 +32,20 @@ it('executes real sorting and detects an ignored second sort activation',()=>{
   header.click();expect(stateExpectationIssues(fixture.states[1].expected,tableState())).toEqual([]);
   header.click();expect(stateExpectationIssues(fixture.states[2].expected,tableState())).toEqual([]);
 });
+it('appends the real source page and exposes its final row through the virtual window',async()=>{
+  const fixture=pair('data-table-load-more');mount(fixture);
+  const root=document.querySelector('af-data-table'),requests=[],read=root.source.read;
+  root.source.read=async request=>{requests.push({offset:request.offset,limit:request.limit});return read(request);};
+  expect(root.data.rows).toHaveLength(1000);
+  root.querySelector('button[aria-label="Load more rows"]').click();
+  await new Promise(resolve=>setTimeout(resolve,0));
+  expect(requests).toEqual([{offset:1000,limit:500}]);expect(root.data.rows).toHaveLength(1001);
+  const scroll=root.querySelector('[data-slot=table-scroll]');scroll.scrollTop=36036;scroll.dispatchEvent(new Event('scroll'));
+  expect(stateExpectationIssues(fixture.states[1].expected,tableState())).toEqual([]);
+  mount(fixture);
+  // Negative control: ignore load-more; scrolling the remaining1000 rows must fail.
+  document.querySelector('button[aria-label="Load more rows"]').addEventListener('click',event=>event.stopImmediatePropagation(),{capture:true});
+  document.querySelector('button[aria-label="Load more rows"]').click();
+  const unchanged=document.querySelector('[data-slot=table-scroll]');unchanged.scrollTop=36036;unchanged.dispatchEvent(new Event('scroll'));
+  expect(stateExpectationIssues(fixture.states[1].expected,tableState())).not.toEqual([]);
+});

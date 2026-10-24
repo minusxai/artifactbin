@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
-import {interactionBaselineFixtures} from '../interaction.mjs';
+import {interactionBaselineFixtures,interactionPagingSql} from '../interaction.mjs';
 import {stateExpectationIssues} from '../../../lib/component-browser-baseline.mjs';
 const fixture=id=>interactionBaselineFixtures.find(item=>item.id===id);
 const semantic=(text,controls,rows=[])=>({text,controls,rows,overflow:0});
@@ -59,4 +59,19 @@ it('captures native columnheader names and aria-sort while retaining raw header 
     expect(stateExpectationIssues({bodyRows:[['85','Linus']]},capture.semantics)).toEqual([]);
     expect(stateExpectationIssues({roles:[{role:'columnheader',name:'Sort by score',sort:'descending'}]},capture.semantics)).not.toEqual([]);
   }finally{for(const [key,descriptor] of Object.entries(saved))if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];dom.window.close();await rm(output,{recursive:true,force:true});}
+});
+
+
+it('uses actual SQLite display truncation and the next page for row1001',async()=>{
+  const {loadSqlite}=await import('@artifactbin/sql/core');const engine=await loadSqlite();
+  const input={tables:{},queries:[{name:'sequence',sql:interactionPagingSql}],params:{},paramTypes:{}};
+  const initial=engine.run(input,{limit:1000,pageLimit:500,timeoutMs:2000});
+  const table=initial.sequence||initial.tables?.sequence;
+  expect(table.rows).toHaveLength(1000);expect(table.truncated).toBe(true);expect(table.totalRows).toBe(1001);
+  const page=engine.run({...input,page:{name:'sequence',offset:1000,limit:500}},{limit:1000,pageLimit:500,timeoutMs:2000});
+  const next=page.sequence||page.tables?.sequence;
+  expect(next.rows).toEqual([{id:1001}]);
+  const expected=fixture('data-table-load-more').states[1].expected;
+  expect(stateExpectationIssues(expected,semantic('',[],[['id'],['1001']]))).toEqual([]);
+  expect(stateExpectationIssues(expected,semantic('',[],[['id'],['1000']]))).not.toEqual([]);
 });

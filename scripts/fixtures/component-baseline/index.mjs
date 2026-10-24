@@ -1,3 +1,4 @@
+import {interactionBaselineFixtures} from './interaction.mjs';
 import {controlBaselineFixtures} from './controls.mjs';
 import {richBrowserParityFixtures} from './rich.mjs';
 /** Identical authored content. No baseline markup/CSS is manufactured: oldJsx must
@@ -22,6 +23,6 @@ export const browserParityFixtures=[...coreFixtures.map(fixture=>({...fixture,st
   if(fixture.id==='file-upload')expected={roles:[{role:'button',name:'Choose Screenshots',disabled:true}],textIncludes:['Screenshots','Choose files']};
   if(fixture.id==='data-table')expected={rows:[['name','score'],['Ada','92'],['Grace','98'],['Linus','85']]};
   return {...state,expected};
-})})),...controlBaselineFixtures,...richBrowserParityFixtures];
+})})),...controlBaselineFixtures,...richBrowserParityFixtures,...interactionBaselineFixtures];
 export const parityViewports = [{width:800,height:600},{width:390,height:844}];
 export const parityThemes = ['light','dark'];
