@@ -12,12 +12,14 @@ export interface LocalPublicationBody {
 export interface LocalPublicationPlan {
   entryPath: string;
   dependencies: Array<{ path: string; kind: 'asset' | 'dataset'; contentType: string; bytes: number; dependencies: string[] }>;
+  backends?: Array<{ name: string; path: string; bytes: number }>;
   reusedPaths: string[];
   limits: { files: number; fileBytes: number; totalBytes: number };
 }
 export interface LocalPublicationReceipt {
   identity: PortableIdentity;
   source: string;
+  localSourceDigest?: string;
   dependencyIdentity?: Readonly<Record<string, string>>;
 }
 /** A request snapshot is retained unchanged after errors, so retries cannot create a second page. */
