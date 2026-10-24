@@ -136,9 +136,9 @@ it("sorts from the whole header and its accessible button exactly once", () => {
   expect(button.getAttribute("aria-label")).toBe("Sort by score");
   expect(header.scope).toBe("col");
 });
-it("keeps the grouped row count and load-more footer after the final page", async () => {
+it("keeps the grouped row count after the final page without more requests", async () => {
   const el = document.createElement("af-data-table") as AfDataTable;
-  const columns = [{ name: "id", type: "number" }];
+  const columns = [{ name: "id", type: "number" as const }];
   const rows = Array.from({ length: 1001 }, (_, id) => ({ id: id + 1 }));
   let reads = 0;
   el.source = {

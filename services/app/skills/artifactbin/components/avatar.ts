@@ -160,11 +160,11 @@ af-avatar[data-size=sm]>af-avatar-badge{width:.5rem;height:.5rem}
 af-avatar[data-size=lg]>af-avatar-badge{width:.75rem;height:.75rem}
 af-avatar-badge>svg{width:.5rem;height:.5rem;flex:none}
 af-avatar-group{display:flex;align-items:center}
-af-avatar-group>af-avatar,af-avatar-group>af-avatar-group-count{border:2px solid var(--background,#fff)}
+af-avatar-group>af-avatar,af-avatar-group>af-avatar-group-count{box-shadow:0 0 0 2px var(--background,#fff)}
 af-avatar-group>af-avatar~af-avatar,af-avatar-group>af-avatar-group-count{margin-inline-start:-.5rem}
 af-avatar-group-count{position:relative;display:inline-flex;flex:none;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:9999px;background:var(--muted,#f5f5f5);color:var(--muted-foreground,#737373);font-size:.875rem;line-height:1}
-af-avatar-group:has(af-avatar[data-size=sm])>af-avatar-group-count{width:1.5rem;height:1.5rem;font-size:.75rem}
 af-avatar-group:has(af-avatar[data-size=lg])>af-avatar-group-count{width:2.5rem;height:2.5rem}
+af-avatar-group:has(af-avatar[data-size=sm])>af-avatar-group-count{width:1.5rem;height:1.5rem;font-size:.75rem}
 af-avatar-group-count>svg{width:1rem;height:1rem}
 `;
 
