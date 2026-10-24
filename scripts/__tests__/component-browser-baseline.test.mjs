@@ -182,6 +182,17 @@ describe('reader screenshot contract',()=>{
     expect(closed).toBeGreaterThan(0);
   });
 
+  it('captures a real mounted document frame only in explicit frame mode',async()=>{
+    const directory=await setup(),bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();
+    const performAction=vi.fn(async()=>{}),screenshot=vi.fn(async()=>bytes),pageScreenshot=vi.fn(async()=>bytes);
+    const frame={url:()=> 'http://fixture.lvh.me/a/Example1/raw',evaluate:async fn=>fn.name==='browserState'?{text:'Ready',controls:[],rows:[],overflow:0}:{faces:[],used:[],errors:[]}};
+    const browser={newContext:async()=>({newPage:async()=>({on:()=>{},screenshot:pageScreenshot}),close:async()=>{}})};
+    const captures=await captureBrowserBaseline({browser,mount:async()=>({frame,screenshot,performAction}),screenshotMode:'document-frame',implementation:'jsx',sourceRevision:'a'.repeat(40),output:directory,themes:['light'],viewports:[{width:800,height:600}],fixtures:[{id:'identity',states:[{id:'loaded',actions:[{action:'upload',role:'button',name:'Upload',files:[{name:'sample.txt',mimeType:'text/plain',text:'Actual upload'}]}]}]}]});
+    expect(performAction).toHaveBeenCalledWith({action:'upload',role:'button',name:'Upload',files:[{name:'sample.txt',mimeType:'text/plain',text:'Actual upload'}]});
+    expect(screenshot).toHaveBeenCalledOnce();expect(pageScreenshot).not.toHaveBeenCalled();
+    expect(captures[0].screenshotMode).toBe('document-frame');
+  });
+
   it('captures the configured page viewport rather than cropping the html element',async()=>{
     const directory=await setup();const calls=[];
     const bytes=await sharp({create:{width:2,height:2,channels:4,background:'white'}}).png().toBuffer();

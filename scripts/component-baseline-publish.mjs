@@ -35,7 +35,7 @@ if(implementation==='html'){
   componentAssets=await verifyComponentAssetArchive({root:source,files:installedFiles(skillArchive)});
 }
 const entries=await publishBaselineFixtures({implementation,publish,serverOrigin:base,skillArchive,fixtures,substitutions});
-const manifest={implementation,sourceRevision,...(componentAssets?{componentAssets}:{}),...(fixtureSet?{fixtureSet}:{}),...(account?{account}:{}),output:path.join(path.dirname(output),implementation+'-evidence'),entries:entries.map(({fixture,theme,id})=>({fixture,theme,url:`${base}/a/${id}/raw`}))};
+const manifest={implementation,sourceRevision,...(componentAssets?{componentAssets}:{}),...(fixtureSet?{fixtureSet,screenshotMode:'document-frame'}:{}),...(account?{account}:{}),output:path.join(path.dirname(output),implementation+'-evidence'),entries:entries.map(({fixture,theme,id})=>({fixture,theme,url:`${base}/a/${id}${fixtureSet==='identity'?'':'/raw'}`}))};
 await writeFile(output,JSON.stringify(manifest,null,2));
 return manifest;
 

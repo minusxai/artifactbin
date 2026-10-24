@@ -5,6 +5,7 @@ import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { browserParityFixtures, parityThemes, parityViewports } from '../fixtures/component-baseline/index.mjs';
+/** @param {import('../fixtures/component-baseline/contract').BrowserParityAction} action */
 export function actionTarget(frame,action){return action.authoredId===undefined?frame.getByRole(action.role,{...(action.name?{name:action.name,exact:true}:{})}):frame.locator(`[id=${JSON.stringify(action.authoredId)}]`);}
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -119,10 +120,13 @@ export function fontByteProof(evidence) {
   return {used,errors};
 }
 
-/** mount({fixture,theme,viewport,state,page}) returns {frame,ready?}; must navigate to
- * a real local reader. Source revisions are supplied independently, never inferred. */
-export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures,themes=parityThemes,viewports=parityViewports,workerBrowsers=[browser]}) {
+/** mount returns a real local reader frame, optional ready/afterAction, and an
+ * optional performAction for every static fixture action. document-frame mode
+ * additionally requires a camera of the real app-mounted iframe rectangle.
+ * Source revisions are supplied independently, never inferred. */
+export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures,themes=parityThemes,viewports=parityViewports,workerBrowsers=[browser],screenshotMode='viewport'}) {
   if (!['jsx','html'].includes(implementation) || typeof sourceRevision!=='string' || !sourceRevision) throw Error('Explicit implementation and source identity required');
+  if(!['viewport','document-frame'].includes(screenshotMode))throw Error('Unknown browser baseline screenshot mode');
   await mkdir(output,{recursive:true});
   /** @type {import('../fixtures/component-baseline/contract').BrowserParityCapture[]} */
   const browserVersion=browser.version?.()||'unreported';
@@ -147,17 +151,21 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       await page.route?.('**/*',route=>{const request=route.request();if(!local(request.url())){resourceErrors.push({url:request.url(),error:`External ${request.resourceType()} request blocked: ${request.url()}`});return route.abort('blockedbyclient');}return route.continue();});
       page.on('requestfailed',request=>{if(request.resourceType()==='font')resourceErrors.push({url:request.url(),error:`Font request failed: ${request.url()} (${request.failure()?.errorText||'unknown'})`});});
       page.on('response',response=>{if(response.request().resourceType()==='font')fontPending.push((async()=>{const status=response.status();try{const bytes=await response.body();fontResources.push({frame:responseFrame(response),url:response.url(),status,sha256:hash(bytes)});if(status>=400)resourceErrors.push({url:response.url(),error:`Font HTTP ${status}: ${response.url()}`});}catch(error){resourceErrors.push({url:response.url(),error:`Font response unreadable: ${response.url()} (${error.message})`});}})());});
-      const mounted=await mount({fixture,theme,viewport,state,page});frame=mounted.frame;const {ready,afterAction}=mounted;
+      const mounted=await mount({fixture,theme,viewport,state,page});frame=mounted.frame;const {ready,afterAction,performAction}=mounted;
       const url=new URL(frame.url());readerUrl=diagnosticText(url.href);
       if (!['127.0.0.1','localhost','app.lvh.me','lvh.me'].includes(url.hostname) && !url.hostname.endsWith('.lvh.me')) throw Error('Browser baseline must use an isolated local reader');
       phase='ready';await ready?.();phase='capture';
       await frame.evaluate(()=>document.fonts.ready);
       for(const action of state.actions) {
         activeAction=action;phase=`action:${action.action}`;
+        if(performAction)await performAction(action);
+        else{
         const target=actionTarget(frame,action);
         if(action.action==='press') await target.press(action.key);
         else if(action.action==='scroll')await target.evaluate(table=>{const scroll=table.parentElement;if(!scroll||scroll.scrollHeight<=scroll.clientHeight)throw Error('Table has no scrollable parent');scroll.scrollTop=scroll.scrollHeight;});
+        else if(action.action==='upload')throw Error('Upload actions require the mounted real upload adapter');
         else await target[action.action]();
+        }
         await afterAction?.(action);
       }
       activeAction=undefined;phase='capture';
@@ -179,10 +187,12 @@ export async function captureBrowserBaseline({browser,mount,implementation,sourc
       await frame.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       const semantics=await frame.evaluate(browserState);
       const name=`${fixture.id}-${theme}-${viewport.width}-${state.id}-${implementation}.png`;
-      // Capture the document viewport itself, excluding platform chrome.
-      const screenshot=await page.screenshot({fullPage:false,animations:'disabled',caret:'hide'});
+      // Raw fixtures retain the whole viewport/top layer. Authorized fixtures
+      // explicitly capture the real iframe, preserving its actual dimensions.
+      if(screenshotMode==='document-frame'&&typeof mounted.screenshot!=='function')throw Error('Document-frame capture requires the mounted real frame camera');
+      const screenshot=screenshotMode==='document-frame'?await mounted.screenshot():await page.screenshot({fullPage:false,animations:'disabled',caret:'hide'});
       await writeFile(path.join(output,name),screenshot);
-      return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode:'viewport',browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,resourceEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
+      return {fixture:fixture.id,state:state.id,theme,viewport,screenshotMode,browserVersion,implementation,sourceRevision,fixtureHash:hash(JSON.stringify(fixture)),screenshot:name,screenshotSha256:hash(screenshot),semantics,fontEvidence,resourceEvidence,errors,assertionErrors:stateExpectationIssues(state.expected,semantics)};
     } catch(cause){
       const diagnostics={phase,url:readerUrl,pageErrors:errors.slice(0,20).map(diagnosticText),consoleErrors,requestFailures,httpFailures};
       /** @type {import('../fixtures/component-baseline/contract').BrowserCaptureFailure} */

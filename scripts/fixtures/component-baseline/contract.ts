@@ -22,6 +22,16 @@ export interface BrowserStateExpectation {
   bodyRows?: string[][];
   bodyRowsInclude?: string[][];
 }
+export interface BrowserParityAction {
+  role: string;
+  name: string;
+  /** Exact retained authored DOM id for native elements without a browser role. */
+  authoredId?: string;
+  action: 'click' | 'focus' | 'press' | 'scroll' | 'upload';
+  key?: string;
+  /** Authored disposable upload inputs are part of the static paired fixture hash. */
+  files?: Array<{name:string;mimeType:string;text?:string;bytes?:number}>;
+}
 /** Both implementations must be served through their real application reader. */
 export interface BrowserParityFixture {
   id: string;
@@ -32,7 +42,7 @@ export interface BrowserParityFixture {
   setup?: string;
   /** Honest exclusions: these are not evidence of covered behavior. */
   limitations?: string[];
-  states: Array<{ id: string; expected?: BrowserStateExpectation; actions: Array<{ role: string; name: string; /** Exact retained authored DOM id for native elements without a browser role. */ authoredId?: string; action: 'click' | 'focus' | 'press' | 'scroll'; key?: string }> }>;
+  states: Array<{ id: string; expected?: BrowserStateExpectation; actions: BrowserParityAction[] }>;
 }
 export interface BrowserParityCapture {
   fixture: string;
@@ -42,7 +52,7 @@ export interface BrowserParityCapture {
   implementation: 'jsx' | 'html';
   sourceRevision: string;
   fixtureHash: string;
-  screenshotMode: 'viewport';
+  screenshotMode: 'viewport' | 'document-frame';
   browserVersion: string;
   screenshot: string;
   screenshotSha256: string;

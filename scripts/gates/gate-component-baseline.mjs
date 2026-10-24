@@ -1,8 +1,9 @@
 /** Self-contained candidate reader gate, with optional paired reader evidence.
  * Must run inside scripts/gate-container.mjs.
  * COMPONENT_BASELINE__INPUT names a JSON file with implementation, sourceRevision,
- * output and entries [{fixture,theme,url}]. Every URL must be a real local /raw
- * reader produced by that revision's normal HTTP publication API. */
+ * output and entries [{fixture,theme,url}]. Static fixtures use real local /raw
+ * readers; authenticated identity fixtures use the real app shell and document
+ * iframe. Every reader comes from the normal HTTP publication API. */
 import assert from 'node:assert/strict';
 import {runNativeMigrationPilot} from '../lib/native-migration-pilot.mjs';
 import {createBaselineSession} from '../lib/component-baseline-session.mjs';
@@ -15,6 +16,7 @@ import {settleInteraction} from '../fixtures/component-baseline/interaction.mjs'
 import {identityBrowserParityFixtures,identityBaselineReadiness} from '../fixtures/component-baseline/identity.mjs';
 import {richBaselineReadiness} from '../fixtures/component-baseline/rich.mjs';
 import {withComponentBaselineEvidence} from '../lib/component-baseline-evidence.mjs';
+import {documentFrame,DOCUMENT_FRAME} from './lib/page-facts.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues } from '../lib/component-browser-baseline.mjs';
 if(process.env.NATIVE_MIGRATION_PILOT__INPUT){
@@ -64,25 +66,29 @@ const browsers=[];
 try {
   for(let worker=0;worker<2;worker++)browsers.push(await launchChromium({args:['--enable-unsafe-swiftshader']}));
   const browser=browsers[0];
+  if(input.fixtureSet==='identity'&&!input.account)throw Error('Real identity fixtures require a verified disposable account');
   const session=input.account?await createBaselineSession({base:new URL(input.entries[0].url).origin,account:input.account,signIn:signInAccount}):null;
   const captures=await captureBrowserBaseline({...input,browser,workerBrowsers:browsers,...(input.fixtureSet==='identity'?{fixtures:identityBrowserParityFixtures}:{}),mount:async({fixture,theme,page})=>{
     const entry=input.entries.find(entry=>entry.fixture===fixture.id&&entry.theme===theme);
     if(!entry)throw Error(`Missing real reader URL for ${fixture.id}/${theme}`);
     const url=new URL(entry.url);
     if(!['localhost','127.0.0.1','app.lvh.me','lvh.me'].includes(url.hostname)&&!url.hostname.endsWith('.lvh.me'))throw Error('Only isolated local reader URLs are allowed');
-    if(!url.pathname.endsWith('/raw'))throw Error('Capture the raw production reader without platform chrome');
+    const framed=input.fixtureSet==='identity';
+    if(framed?!/^\/a\/[a-zA-Z0-9]+$/.test(url.pathname):!url.pathname.endsWith('/raw'))throw Error('Capture the declared real reader mode');
     if(session){if(url.origin!==new URL(input.entries[0].url).origin)throw Error('Authenticated readers must share the login origin');await session.mount(page);}
     await page.goto(url.href,{waitUntil:'networkidle'});
-    return {frame:page.mainFrame(),ready:async()=>{
-      if(input.implementation==='html')await page.waitForFunction(()=>document.documentElement.dataset.baselineReady==='yes');
-      else await page.waitForFunction(()=>document.querySelector('[data-mx-inline-story]'));
-      if(input.fixtureSet==='identity')await page.waitForFunction(identityBaselineReadiness[fixture.id],undefined,{timeout:30_000});
+    const frame=framed?await documentFrame(page):page.mainFrame();
+    if(framed&&frame===page.mainFrame())throw Error('Authenticated identity requires the real isolated document frame');
+    return {frame,...(framed?{screenshot:()=>page.locator(DOCUMENT_FRAME).screenshot({animations:'disabled',caret:'hide'})}:{}),ready:async()=>{
+      if(input.implementation==='html')await frame.waitForFunction(()=>document.documentElement.dataset.baselineReady==='yes');
+      else await frame.waitForFunction(()=>document.querySelector('[data-mx-inline-story]'));
+      if(input.fixtureSet==='identity')await frame.waitForFunction(identityBaselineReadiness[fixture.id],undefined,{timeout:30_000});
       const engineReady=richBaselineReadiness[fixture.id]?.[input.implementation];
-      if(engineReady)await page.waitForFunction(engineReady,undefined,{timeout:30_000});
+      if(engineReady)await frame.waitForFunction(engineReady,undefined,{timeout:30_000});
     },afterAction:async action=>{
-      await settleInteraction({fixture,action,frame:page,implementation:input.implementation});
-      if(fixture.id==='date-picker-fixed'&&action.action==='click'&&action.name==='')await page.getByRole('button',{name:'2024-06-16',exact:true}).waitFor();
-      if(fixture.id==='tooltip-keyboard'&&action.action==='focus')await page.getByRole('tooltip').waitFor();
+      await settleInteraction({fixture,action,frame,implementation:input.implementation});
+      if(fixture.id==='date-picker-fixed'&&action.action==='click'&&action.name==='')await frame.getByRole('button',{name:'2024-06-16',exact:true}).waitFor();
+      if(fixture.id==='tooltip-keyboard'&&action.action==='focus')await frame.getByRole('tooltip').waitFor();
     }};
   }});
   const issues=input.defaultCandidateValidation?candidateCaptureIssues(captures):captures.flatMap(capture=>[...capture.errors,...(capture.assertionErrors||[]),...(capture.fontEvidence?.errors||[]),...(capture.resourceEvidence?.errors||[])]);
