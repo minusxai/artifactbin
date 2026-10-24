@@ -49,9 +49,10 @@ async function accountFor(tokenId: string): Promise<string | null> {
  * Bytes this token's OWNER has caused to be stored — the account's, when there
  * is one, and the token's own when there is not.
  */
-export async function assetBytesForToken(tokenId: string): Promise<number> {
+export async function assetBytesForToken(tokenId: string | null, ownerUserId?: string | null): Promise<number> {
   const db = await getDb();
-  const userId = await accountFor(tokenId);
+  const userId = tokenId ? await accountFor(tokenId) : ownerUserId ?? null;
+  if (!userId && !tokenId) throw new Error("Byte quota requires a user or token");
   const r = userId
     ? await db.query<{ n: number }>(
       `SELECT
@@ -76,10 +77,10 @@ export async function assetBytesForToken(tokenId: string): Promise<number> {
 }
 
 /** True when the next import must be refused with `quota_exceeded`. */
-export async function assetByteQuotaExceeded(tokenId: string): Promise<boolean> {
+export async function assetByteQuotaExceeded(tokenId: string | null, ownerUserId?: string | null): Promise<boolean> {
   const cap = override !== undefined ? override : ASSETS_MAX_BYTES_PER_TOKEN;
   if (!cap) return false;
-  return (await assetBytesForToken(tokenId)) >= cap;
+  return (await assetBytesForToken(tokenId, ownerUserId)) >= cap;
 }
 
 /** The same cap applies to staged comment images, including incoming bytes. */

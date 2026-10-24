@@ -29,7 +29,8 @@ export interface NativeHistoryImport {
   /** Existing retained relation projection digest; requires same-transaction apply+verify adapter. */
   relationSha256?: string;
   pageId: string;
-  owner: { userId: string; tokenId: string };
+  /** Missing source creator credential stays null; a human owner is still required. */
+  owner: { userId: string; tokenId: string | null };
   visibility: "public" | "unlisted" | "private";
   linkRole: "viewer" | "commenter" | "editor";
   shares: NonNullable<Parameters<typeof createArtifact>[3]>["shares"];

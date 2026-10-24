@@ -953,7 +953,7 @@ CREATE INDEX IF NOT EXISTS idx_tokens_user ON app.tokens (user_id) WHERE deleted
 
 CREATE TABLE IF NOT EXISTS app.artifacts (
   id TEXT NOT NULL,
-  token_id TEXT NOT NULL,
+  token_id TEXT,
   user_id TEXT,
   group_id TEXT,
   creator_user_id TEXT,
@@ -984,7 +984,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 
-ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS token_id TEXT NOT NULL;
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS token_id TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS user_id TEXT;
 
@@ -1046,6 +1046,8 @@ BEGIN
   END IF;
 EXCEPTION WHEN feature_not_supported THEN NULL;
 END $$;
+
+ALTER TABLE app.artifacts ALTER COLUMN token_id DROP NOT NULL;
 
 ALTER TABLE app.artifacts DROP COLUMN IF EXISTS folder;
 

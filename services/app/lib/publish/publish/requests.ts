@@ -162,7 +162,8 @@ export async function replaceArtifactWithBody(
       prepareDataset: (input,objects) => prepareCatalog(input,actor,current,objects),
       normalizeMarkup,
       loadRef: refLoaderForActor(owner),
-      overByteQuota: byteQuotaFor(owner.tokenId),
+      // Account-owned imports may have no historical creator credential.
+      overByteQuota: byteQuotaFor(owner.tokenId, owner.userId),
     }, {allowRemoteInputs:!options.dryRun});
   if (prepared instanceof Response) return prepared;
   let parsed = prepared.content;

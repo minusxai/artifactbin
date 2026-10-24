@@ -12,7 +12,7 @@
  * lib/accounts/{users,guest-owner,testusers} (account merges and cascades), lib/notifications/events
  * (recipient joins) and lib/datasets/user-fields.
  */
-import { ACCOUNT_REACH_SQL, identityForUser, type AccessActor, type TokenHoldingActor } from '@/lib/accounts';
+import { ACCOUNT_REACH_SQL, identityForUser, type AccessActor } from '@/lib/accounts';
 import type { StoredDocument } from '../document';
 
 export { artifactQuery } from './document';
@@ -22,7 +22,7 @@ export interface ArtifactRow {
   document?:StoredDocument|null;
   open_annotations?:number;
   id: string;
-  token_id: string;
+  token_id: string | null;
   /** Owner account; NULL until the creating token is claimed. */
   user_id: string | null;
   group_id?: string | null;
@@ -195,4 +195,4 @@ export const commentMonitorScope = (actor:AccessActor):Scope => {
 };
 
 /** The document author's identity resolves its declared data references, never a viewer's write authority. */
-export const writerFor = (doc: Pick<ArtifactRow, 'token_id' | 'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>): TokenHoldingActor => ({ ...identityForUser(doc.user_id, doc.token_id), groupId: doc.group_id ?? null });
+export const writerFor = (doc: Pick<ArtifactRow, 'token_id' | 'user_id'> & Partial<Pick<ArtifactRow,'group_id'>>): AccessActor => ({ ...identityForUser(doc.user_id, doc.token_id), groupId: doc.group_id ?? null });
