@@ -17,6 +17,7 @@ it('enforces the original read ACL, source revision and exact platform origin be
  expect((await publish('prespublic',{session,revision:'2'})).status).toBe(400);
  expect((await publish('prespublic',{session,revision:'1'},{origin:'https://elsewhere.example'})).status).toBe(403);
  expect((await publish('presprivate',{session,revision:'1'},{actor:actor()})).status).toBe(200);
+ const anonymous=request('/a/presprivate/events?anonymous=1',{actor:actor()});expect((await runWithRequest(anonymous,()=>GET(anonymous,params('presprivate')))).status).toBe(404);
  const req=request('/a/presprivate/events');expect((await runWithRequest(req,()=>GET(req,params('presprivate')))).status).toBe(404);
 });
 it('assigns distinct public identities per window without broadcasting session secrets or page-controlled names',async()=>{

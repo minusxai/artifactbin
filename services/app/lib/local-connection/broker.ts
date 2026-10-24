@@ -9,7 +9,7 @@ export interface LocalBrokerOptions {
  onMessage?(message:unknown):void;
  onSourceObservation?(observation:SourceObservation):void;
 }
-export interface LocalConnectionBroker {post(message:unknown):void;retry():void;disconnect():void;resize(height:number):void;dispose():void}
+export interface LocalConnectionBroker {post(message:unknown):void;sourceChanged():void;retry():void;disconnect():void;resize(height:number):void;dispose():void}
 /** Platform-origin only. Capabilities and authentication remain inside this document. */
 export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalConnectionBroker{
  const {win}=options,params=new URLSearchParams(win.location.hash.slice(1)),nonce=params.get('nonce');
@@ -93,5 +93,5 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
  const wake=()=>monitor?.wake();
  win.addEventListener('focus',wake);win.document.addEventListener('visibilitychange',wake);
  win.addEventListener('pagehide',dispose);
- return {retry(){if(!connected){revoke();void connect();}},disconnect(){revoke();state('offline');},resize(height){if(Number.isFinite(height))port?.postMessage({kind:'chrome-size',height:Math.max(40,Math.min(1000,height))});},post(message){if(connected)port?.postMessage({kind:'bridge',message});},dispose};
+ return {sourceChanged(){if(!disposed){revoke();state('stale');}},retry(){if(!connected){revoke();void connect();}},disconnect(){revoke();state('offline');},resize(height){if(Number.isFinite(height))port?.postMessage({kind:'chrome-size',height:Math.max(40,Math.min(1000,height))});},post(message){if(connected)port?.postMessage({kind:'bridge',message});},dispose};
 }
