@@ -161,9 +161,12 @@ af-dialog-title{display:block;font-size:1.125rem;font-weight:600;line-height:1}
 af-dialog-description{display:block;color:var(--muted-foreground);font-size:.875rem}
 af-dialog-trigger,af-dialog-close{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.5rem 1rem;font:inherit;font-size:.875rem;font-weight:500;cursor:pointer;background:var(--primary);color:var(--primary-foreground)}
 af-dialog-trigger:has(button,input,select,textarea,a[href]),af-dialog-close:has(button,input,select,textarea,a[href]){display:contents}
+af-dialog-trigger>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:0;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.5rem 1rem;font:inherit;font-size:.875rem;font-weight:500;cursor:pointer;background:var(--primary);color:var(--primary-foreground)}
 af-dialog-close{border:1px solid var(--border);background:var(--background);color:var(--foreground)}
 af-dialog-trigger:focus-visible,af-dialog-close:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+af-dialog-trigger>button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 af-dialog-trigger[disabled],af-dialog-close[disabled]{opacity:.5;cursor:default}
+af-dialog-trigger[disabled]>button,af-dialog-trigger>button:disabled,af-dialog-trigger>button[aria-disabled="true"]{opacity:.5;cursor:default}
 `;
 export function registerDialog(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
   if (!document.querySelector('style[data-af-dialog-styles]')) { const style = document.createElement('style'); style.setAttribute('data-af-dialog-styles',''); style.textContent = dialogStyles; document.head.append(style); }

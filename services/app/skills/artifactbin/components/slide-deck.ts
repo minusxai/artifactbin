@@ -122,7 +122,10 @@ export class AfSlideDeck extends HTMLElement implements SlideDeckContract {
     });
     for(const row of this.rail.children)if(!keep.has(row as HTMLButtonElement))row.remove();
     this.count!.textContent=`${slides.length?index+1:0} / ${slides.length}`;
-    this.previous!.disabled=index<=0;this.next!.disabled=index<0||index>=slides.length-1;this.present!.disabled=slides.length===0||this.pendingPresentation;
+    // The reader keeps both paging controls available at the ends. Requests
+    // are clamped by slideIndex, so a boundary click is a harmless no-op and
+    // never wraps around the deck.
+    this.previous!.disabled=index<0;this.next!.disabled=index<0;this.present!.disabled=slides.length===0||this.pendingPresentation;
     this.paintPresentation();this.toolbar!.hidden=this.documentDeck()!==this;
     if(scroll)this.scrollToIndex();
   }
@@ -204,7 +207,7 @@ class AfSlide extends HTMLElement {
 
 const slideDeckStyles=`
 af-slide-deck{display:grid;grid-template-columns:190px minmax(0,1fr);align-items:start;position:relative;width:100%;min-width:0;color:var(--foreground,CanvasText);background:var(--background,Canvas)}
-af-slide{display:flex;position:relative;box-sizing:border-box;flex-direction:column;width:100%;min-width:0;min-height:var(--af-slide-height,760px);overflow-wrap:anywhere;scroll-margin-top:0}
+af-slide{display:flex;position:relative;box-sizing:border-box;flex-direction:column;width:100%;min-width:0;min-height:var(--af-slide-height,100svh);overflow-wrap:anywhere;scroll-margin-top:0}
 af-slide-deck>af-slide{grid-column:2}
 af-slide-deck>[data-af-deck-chrome=rail]{grid-column:1;grid-row:1/span var(--af-deck-slide-count,1);position:sticky;top:0;width:190px;max-height:100svh;overflow:auto;box-sizing:border-box;padding:12px 10px;border-right:1px solid var(--border,#8884);background:var(--background,Canvas)}
 af-slide-deck [data-af-deck-row]{display:block;width:100%;text-align:left;cursor:pointer;margin:0 0 8px;padding:6px;border:1px solid transparent;border-radius:6px;background:none;color:inherit;font:inherit}

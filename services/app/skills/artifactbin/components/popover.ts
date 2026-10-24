@@ -116,7 +116,7 @@ export class AfPopover extends HTMLElement implements PopoverContract {
   const visible = this.open && !!panel;
   if (visible !== this.visible) {
    this.visible = visible; floatingVisibility(this,this.visible);
-   if (this.visible && panel) { this.opener = trigger ?? null; this.position(); (panel.querySelector<HTMLElement>('[autofocus],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]') ?? panel).focus(); }
+   if (this.visible && panel) { this.opener = trigger ?? null; this.position(); }
    else if(!this.leavingFocus && panel?.contains(this.ownerDocument.activeElement) && this.opener?.isConnected && !this.opener.matches(':disabled')) this.opener.focus();
   }
   this.position();

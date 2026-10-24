@@ -17,6 +17,7 @@ export class AfSlider extends HTMLElement implements SliderContract {
   private controlled = false;
   private propertyValue: number | null = null;
   private selection: number | null = null;
+  private header: HTMLElement | undefined;
   private input: HTMLInputElement | undefined;
   private labelElement: HTMLLabelElement | undefined;
   private readout: HTMLElement | undefined;
@@ -50,6 +51,12 @@ export class AfSlider extends HTMLElement implements SliderContract {
   attributeChangedCallback(): void { this.sync(); }
 
   private ensureParts(): void {
+    this.header = this.querySelector<HTMLElement>('[part="header"]') ?? undefined;
+    if (!this.header) {
+      this.header = this.ownerDocument.createElement('div');
+      this.header.setAttribute('part', 'header');
+      this.prepend(this.header);
+    }
     this.input ??= this.querySelector<HTMLInputElement>('input[type="range"]') ?? undefined;
     if (!this.input) {
       this.input = this.ownerDocument.createElement('input');
@@ -64,15 +71,15 @@ export class AfSlider extends HTMLElement implements SliderContract {
     this.labelElement = this.querySelector<HTMLLabelElement>('label') ?? undefined;
     if (!this.labelElement) {
       this.labelElement = this.ownerDocument.createElement('label');
-      this.prepend(this.labelElement);
     }
+    this.header.append(this.labelElement);
     this.labelElement.htmlFor = this.input.id;
     this.readout = this.querySelector<HTMLElement>('[part="readout"]') ?? undefined;
     if (!this.readout) {
       this.readout = this.ownerDocument.createElement('output');
       this.readout.setAttribute('part', 'readout');
-      this.append(this.readout);
     }
+    this.header.append(this.readout);
   }
 
   private onInput = (): void => {
@@ -112,10 +119,11 @@ export class AfSlider extends HTMLElement implements SliderContract {
 
 const sliderStyles = `
 af-slider{display:inline-flex;flex-direction:column;gap:.375rem;min-width:12rem;font:inherit;color:inherit}
-af-slider>label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.4;color:var(--muted-foreground,#555)}
+af-slider>[part=header]{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem}
+af-slider>[part=header]>label{font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;line-height:1.4;color:var(--muted-foreground,#555)}
 af-slider>input[type=range]{width:100%;accent-color:var(--primary,currentColor)}
 af-slider>input[type=range]:disabled{opacity:.55}
-af-slider>[part=readout]{align-self:flex-end;font-variant-numeric:tabular-nums;font-size:.875rem}
+af-slider>[part=header]>[part=readout]{font-variant-numeric:tabular-nums;font-size:.875rem}
 `;
 
 export function registerSlider(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {

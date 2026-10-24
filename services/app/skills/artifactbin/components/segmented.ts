@@ -17,6 +17,8 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
   private optionValues: readonly (SegmentedValue | SegmentedOption)[] = [];
   private buttons = new Map<string, HTMLButtonElement>();
   private buttonOptions = new WeakMap<HTMLButtonElement, SegmentedOption>();
+  private labelNode?: HTMLSpanElement;
+  private optionsNode?: HTMLDivElement;
   private selection: SegmentedValue = null;
   private controlled = false;
   private propertyValue: SegmentedValue | undefined;
@@ -103,12 +105,37 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
     }
     return [...unique.values()];
   }
+  private ensureStructure(): void {
+    this.labelNode ??= [...this.children].find((child): child is HTMLSpanElement =>
+      child instanceof HTMLSpanElement && child.classList.contains('af-segmented-label'));
+    if (!this.labelNode) {
+      this.labelNode = this.ownerDocument.createElement('span');
+      this.labelNode.className = 'af-segmented-label';
+      this.labelNode.dataset.afControlLabel = '';
+    }
+    this.optionsNode ??= [...this.children].find((child): child is HTMLDivElement =>
+      child instanceof HTMLDivElement && child.hasAttribute('data-segment-options'));
+    if (!this.optionsNode) {
+      this.optionsNode = this.ownerDocument.createElement('div');
+      this.optionsNode.className = 'af-segmented-options';
+      this.optionsNode.setAttribute('data-segment-options', '');
+    }
+    if (this.labelNode.parentElement !== this || this.labelNode.nextElementSibling !== this.optionsNode) {
+      this.insertBefore(this.labelNode, this.optionsNode.parentElement === this ? this.optionsNode : null);
+    }
+    if (this.optionsNode.parentElement !== this) this.append(this.optionsNode);
+  }
   private ownedButtons(): HTMLButtonElement[] {
-    return [...this.children].filter((node): node is HTMLButtonElement => node instanceof HTMLButtonElement && node.hasAttribute('data-segment-option'));
+    return this.optionsNode ? [...this.optionsNode.children].filter((node): node is HTMLButtonElement =>
+      node instanceof HTMLButtonElement && node.hasAttribute('data-segment-option')) : [];
   }
   private syncLabel(): void {
     if (!this.isConnected || this.writingMappedLabel) return;
     const label = this.getAttribute('label');
+    if (this.labelNode) {
+      this.labelNode.textContent = label ?? '';
+      this.labelNode.hidden = !label;
+    }
     if (this.hasAttribute('aria-label') && !this.mappedLabel) return;
     if (label !== null) {
       this.writingMappedLabel = true; this.setAttribute('aria-label', label); this.writingMappedLabel = false;
@@ -126,6 +153,7 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
   }
   private render(): void {
     if (!this.isConnected) return;
+    this.ensureStructure();
     this.setAttribute('role', 'group');
     this.syncLabel();
     this.dataset.orientation = this.orientation;
@@ -145,12 +173,12 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
       this.buttonOptions.set(button, option);
       const owned = this.ownedButtons();
       const desiredAtIndex = owned[index];
-      if (desiredAtIndex !== button) this.insertBefore(button, desiredAtIndex ?? null);
+      if (desiredAtIndex !== button) this.optionsNode!.insertBefore(button, desiredAtIndex ?? null);
     });
     for (const [key, button] of this.buttons) if (!validKeys.has(key)) { button.remove(); this.buttons.delete(key); }
   }
   private optionFor(button: Element | null): SegmentedOption | undefined {
-    if (!button || button.parentElement !== this || button.closest('af-segmented') !== this) return undefined;
+    if (!button || button.parentElement !== this.optionsNode || button.closest('af-segmented') !== this) return undefined;
     return this.buttonOptions.get(button as HTMLButtonElement);
   }
   private choose(option: SegmentedOption): void {
@@ -181,13 +209,16 @@ export class AfSegmented extends HTMLElement implements SegmentedContract {
 }
 
 export const segmentedStyles = `
-af-segmented{display:inline-flex;align-items:center;gap:.125rem;width:fit-content;box-sizing:border-box;border:1px solid var(--input,#ddd);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.125rem;background:color-mix(in srgb,var(--muted,#eee) 40%,transparent);box-shadow:0 1px 2px #0000000d}
-af-segmented[data-orientation=vertical]{flex-direction:column;align-items:stretch}
-af-segmented>button[data-segment-option]{position:relative;box-sizing:border-box;height:2rem;cursor:pointer;border:0;border-radius:5px;padding:0 .75rem;background:transparent;color:var(--muted-foreground,#555);font:inherit;font-size:.875rem;transition:background-color .15s,color .15s}
-af-segmented>button[data-segment-option][data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff);box-shadow:0 1px 2px #0000000d}
-af-segmented>button[data-segment-option]:not([data-state=active]):hover{background:color-mix(in srgb,var(--foreground,#222) 10%,transparent);color:var(--foreground,#222)}
-af-segmented>button[data-segment-option]:focus-visible{z-index:1;outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
-af-segmented>button[data-segment-option]:disabled{cursor:not-allowed;opacity:.5}
+af-segmented{display:inline-flex;flex-direction:column;align-items:flex-start;gap:.375rem;width:fit-content;box-sizing:border-box;color:inherit;font:inherit}
+af-segmented .af-segmented-label{font-family:inherit;font-size:11px;font-weight:500;line-height:1.4;letter-spacing:.05em;text-transform:uppercase;color:var(--muted-foreground,#666)}
+af-segmented .af-segmented-label[hidden]{display:none!important}
+af-segmented .af-segmented-options{display:inline-flex;align-items:center;gap:.125rem;width:fit-content;box-sizing:border-box;border:1px solid var(--input,#ddd);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.125rem;background:color-mix(in srgb,var(--muted,#eee) 40%,transparent);box-shadow:0 1px 2px #0000000d}
+af-segmented[data-orientation=vertical] .af-segmented-options{flex-direction:column;align-items:stretch}
+af-segmented .af-segmented-options>button[data-segment-option]{position:relative;box-sizing:border-box;height:2rem;cursor:pointer;border:0;border-radius:5px;padding:0 .75rem;background:transparent;color:var(--muted-foreground,#555);font:inherit;font-size:.875rem;transition:background-color .15s,color .15s}
+af-segmented .af-segmented-options>button[data-segment-option][data-state=active]{background:var(--primary,#222);color:var(--primary-foreground,#fff);box-shadow:0 1px 2px #0000000d}
+af-segmented .af-segmented-options>button[data-segment-option]:not([data-state=active]):hover{background:color-mix(in srgb,var(--foreground,#222) 10%,transparent);color:var(--foreground,#222)}
+af-segmented .af-segmented-options>button[data-segment-option]:focus-visible{z-index:1;outline:2px solid color-mix(in srgb,var(--ring,#777) 50%,transparent);outline-offset:2px}
+af-segmented .af-segmented-options>button[data-segment-option]:disabled{cursor:not-allowed;opacity:.5}
 `;
 export function registerSegmented(registry: CustomElementRegistry = customElements, document: Document = globalThis.document): void {
   if (!document.querySelector('style[data-af-segmented-styles]')) {
