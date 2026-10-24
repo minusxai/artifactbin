@@ -142,6 +142,13 @@ describe('private migration pilot mounts',()=>{
 
 describe('private paired component evidence mount',()=>{
  const base={name:'identity',image:'image',volume:'deps',buildKey:'a'.repeat(32),worktree:'/tree',cpus:4,memory:'8g',servers:1,gates:['component-baseline']};
+ it('mounts only an explicitly supplied absolute capture input read-only',()=>{
+  const args=dockerRunArgs({...base,env:{COMPONENT_BASELINE__INPUT:'/private/capture.json'}});
+  expect(args).toContain('/private/capture.json:/component-input.json:ro');
+  expect(args).toContain('COMPONENT_BASELINE__INPUT=/component-input.json');
+  expect(dockerRunArgs(base).join(' ')).not.toContain('/component-input.json');
+  for(const input of ['relative','/private/input:rw','/private/input\nother'])expect(()=>dockerRunArgs({...base,env:{COMPONENT_BASELINE__INPUT:input}})).toThrow('absolute');
+ });
  it('persists only the explicitly selected evidence directory without exposing credentials',()=>{
   const args=dockerRunArgs({...base,env:{COMPONENT_BASELINE__OUTPUT:'/private/identity-evidence'}});
   expect(args).toContain('/private/identity-evidence:/component-evidence:rw');

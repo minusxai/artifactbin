@@ -166,8 +166,10 @@ function migrationPilotMounts(env={}) {
 export function dockerRunArgs({ name, image, volume, buildKey, worktree, cpus, memory, servers, gates, env = {} }) {
   const pilotArgs=migrationPilotMounts(env);
   const output=env.COMPONENT_BASELINE__OUTPUT;
+  const input=env.COMPONENT_BASELINE__INPUT;
+  if(input!==undefined&&(typeof input!=='string'||!input.startsWith('/')||/[:\\\n\r]/.test(input)))throw Error('Component capture input requires an explicit absolute private path');
   if(output!==undefined&&(typeof output!=='string'||!output.startsWith('/')||/[:\\\n\r]/.test(output)))throw Error('Component evidence requires an explicit absolute private path');
-  const componentArgs=output?['-v',`${output}:/component-evidence:rw`,'-e','COMPONENT_BASELINE__OUTPUT=/component-evidence']:[];
+  const componentArgs=[...(output?['-v',`${output}:/component-evidence:rw`,'-e','COMPONENT_BASELINE__OUTPUT=/component-evidence']:[]),...(input?['-v',`${input}:/component-input.json:ro`,'-e','COMPONENT_BASELINE__INPUT=/component-input.json']:[])];
   return [
     'run', '--rm', '-i', '--init',
     '--name', name,
