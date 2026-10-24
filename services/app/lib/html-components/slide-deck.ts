@@ -5,7 +5,7 @@ const previewSvgTags=new Set(['svg','g','path','rect','circle','ellipse','line',
 const previewSvgAttributes=['viewBox','d','points','x','y','x1','x2','y1','y2','width','height','cx','cy','r','rx','ry','fill','stroke','stroke-width','stroke-linecap','stroke-linejoin','transform','opacity','font-size','font-weight','text-anchor','preserveAspectRatio'];
 const numberAttribute=(element:Element,name:string,fallback:number):number=>{const raw=element.getAttribute(name);return raw===null||raw.trim()===''?fallback:Number(raw);};
 const previewTags=new Set(['div','section','article','p','h1','h2','h3','h4','h5','h6','span','strong','em','ul','ol','li','dl','dt','dd','table','thead','tbody','tr','th','td','blockquote','pre','code','br','hr']);
-const previewProperties=['display','flex-direction','flex-wrap','align-items','justify-content','gap','grid-template-columns','padding','margin','color','background-color','font-size','font-weight','line-height','text-align','border','border-radius','width','height','max-width','min-height'];
+const previewProperties=['display','position','box-sizing','flex-direction','flex-wrap','align-items','justify-content','gap','grid-template-columns','padding','margin','color','background-color','font-family','font-size','font-style','font-weight','line-height','letter-spacing','text-align','text-transform','border','border-radius','width','height','max-width','min-height','overflow','overflow-wrap','white-space'];
 /** Rebuild only passive HTML: no custom element upgrade, copied identity, event attribute, URL or nested control. */
 function previewNode(source:Node,doc:Document):Node {
   if(source.nodeType===3)return doc.createTextNode(source.textContent??'');
@@ -22,7 +22,13 @@ function previewNode(source:Node,doc:Document):Node {
   const node=doc.createElement(previewTags.has(source.localName)?source.localName:'div');
   // CSS classes may be used by authored design systems; URL-bearing attributes and inline URL paints are never copied.
   if(source.hasAttribute('class'))node.className=source.getAttribute('class')!;
-  if(source instanceof HTMLElement)for(const property of previewProperties){const value=source.style.getPropertyValue(property);if(value && !/url\s*\(|var\s*\(/i.test(value))node.style.setProperty(property,value);}
+  if(source instanceof HTMLElement){
+    const computed=source.ownerDocument.defaultView?.getComputedStyle(source);
+    for(const property of previewProperties){
+      const value=computed?.getPropertyValue(property)||source.style.getPropertyValue(property);
+      if(value && !/url\s*\(|var\s*\(/i.test(value))node.style.setProperty(property,value);
+    }
+  }
   for(const child of source.childNodes)node.append(previewNode(child,doc));
   return node;
 }
@@ -210,9 +216,9 @@ af-slide-deck{display:grid;grid-template-columns:190px minmax(0,1fr);align-items
 /* The rail is beside the padded document column; each slide is one page in that column. */
 af-slide{display:flex;position:relative;box-sizing:border-box;flex-direction:column;width:100%;min-width:0;min-height:var(--af-slide-height,100svh);padding:24px;overflow-wrap:anywhere;scroll-margin-top:0}
 af-slide>h1:first-child,af-slide>h2:first-child,af-slide>h3:first-child,af-slide>h4:first-child,af-slide>h5:first-child,af-slide>h6:first-child{margin-top:0}
-af-slide :is(h1,h2,h3,h4,h5,h6){font-family:var(--font-display,inherit);font-weight:600;line-height:1.2}
+af-slide :is(h1,h2,h3,h4,h5,h6){font-family:var(--font-display,inherit);font-size:clamp(2rem,5vw,2.5rem);font-weight:600;line-height:1.2}
 af-slide-deck>af-slide{grid-column:2}
-af-slide-deck>[data-af-deck-chrome=rail]{grid-column:1;grid-row:1/span var(--af-deck-slide-count,1);position:sticky;top:0;width:190px;max-height:100svh;overflow:auto;box-sizing:border-box;padding:12px 10px;border-right:1px solid var(--border,#8884);background:var(--background,Canvas)}
+af-slide-deck>[data-af-deck-chrome=rail]{grid-column:1;grid-row:1/span var(--af-deck-slide-count,1);position:sticky;top:0;width:190px;height:100vh;overflow:auto;box-sizing:border-box;padding:12px 10px;border-right:1px solid var(--border,#8884);background:var(--background,Canvas)}
 af-slide-deck [data-af-deck-row]{display:block;width:100%;text-align:left;cursor:pointer;margin:0 0 8px;padding:6px;border:1px solid transparent;border-radius:6px;background:none;color:inherit;font:inherit}
 af-slide-deck [data-af-deck-row][aria-current=true]{border-color:var(--border,#8888);background:color-mix(in srgb,var(--foreground,gray) 12%,transparent)}
 af-slide-deck [data-af-deck-label]{display:block;font:11px/1.3 ui-sans-serif,system-ui,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
