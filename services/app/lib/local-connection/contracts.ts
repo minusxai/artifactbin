@@ -1,3 +1,5 @@
+/** Shared 44px platform bar plus 32px local status strip. */
+export const LOCAL_CHROME_COLLAPSED_HEIGHT=76;
 /** Portable provenance is public metadata, never an authentication credential. */
 export interface LinkedDocument {
  platformOrigin:string;

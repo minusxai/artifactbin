@@ -1,3 +1,4 @@
+import {LOCAL_CHROME_COLLAPSED_HEIGHT} from './contracts';
 import {startConnectionMonitor} from './monitor';
 import {validLinkedDocument} from './registry';
 import type {LinkedDocument,LocalConnectionState,SourceObservation} from './contracts';
@@ -9,12 +10,13 @@ export interface LocalBrokerOptions {
  onMessage?(message:unknown):void;
  onSourceObservation?(observation:SourceObservation):void;
 }
-export interface LocalConnectionBroker {post(message:unknown):void;sourceChanged():void;retry():void;disconnect():void;resize(height:number):void;dispose():void}
+export interface LocalConnectionBroker {post(message:unknown):void;sourceChanged():void;retry():void;disconnect():void;resize(height:number|{mode:'viewport'}):void;dispose():void}
 /** Platform-origin only. Capabilities and authentication remain inside this document. */
 export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalConnectionBroker{
  const {win}=options,params=new URLSearchParams(win.location.hash.slice(1)),nonce=params.get('nonce');
  const source=win.parent;
  let port:MessagePort|undefined,identity:LinkedDocument|undefined,capability:string|undefined,disposed=false,connected=false,generation=0,observe=false;
+ let chromeSize:{kind:'chrome-size';height:number}|{kind:'chrome-size';mode:'viewport'}={kind:'chrome-size',height:LOCAL_CHROME_COLLAPSED_HEIGHT};
  let monitor:ReturnType<typeof startConnectionMonitor>|undefined;
  const controllers=new Set<AbortController>(),calls=new Set<number>(),seen=new Set<number>();
  const state=(value:LocalConnectionState,role?:string)=>{if(disposed)return;connected=value==='connected';options.onState(value);port?.postMessage({kind:'state',state:value,...(role?{role}:{})});};
@@ -43,7 +45,7 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
    }catch{if(!disposed&&epoch===generation){revoke();state('unknown-outcome');port?.postMessage({kind:'result',call:data.call,error:'Operation outcome is unknown; do not automatically retry'});}}
    finally{controllers.delete(controller);calls.delete(data.call);}
   };
-  port.start();await connect();
+  port.start();port.postMessage(chromeSize);await connect();
  };
  const connect=async()=>{
   if(!identity||disposed)return;state('connecting');const epoch=generation,controller=new AbortController();controllers.add(controller);
@@ -93,5 +95,5 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
  const wake=()=>monitor?.wake();
  win.addEventListener('focus',wake);win.document.addEventListener('visibilitychange',wake);
  win.addEventListener('pagehide',dispose);
- return {sourceChanged(){if(!disposed){revoke();state('stale');}},retry(){if(!connected){revoke();void connect();}},disconnect(){revoke();state('offline');},resize(height){if(Number.isFinite(height))port?.postMessage({kind:'chrome-size',height:Math.max(40,Math.min(1000,height))});},post(message){if(connected)port?.postMessage({kind:'bridge',message});},dispose};
+ return {sourceChanged(){if(!disposed){revoke();state('stale');}},retry(){if(!connected){revoke();void connect();}},disconnect(){revoke();state('offline');},resize(height){if(typeof height==='object'&&height?.mode==='viewport')chromeSize={kind:'chrome-size',mode:'viewport'};else if(typeof height==='number'&&Number.isFinite(height))chromeSize={kind:'chrome-size',height:Math.max(40,Math.min(1000,height))};else return;port?.postMessage(chromeSize);},post(message){if(connected)port?.postMessage({kind:'bridge',message});},dispose};
 }

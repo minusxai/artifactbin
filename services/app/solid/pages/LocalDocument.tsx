@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import {createEffect,createSignal,lazy,on,onCleanup,onMount,Show,Suspense} from 'solid-js';
 import {installLocalConnectionBroker,type LocalConnectionBroker} from '@/lib/local-connection/broker';
-import type {LinkedDocument,LocalConnectionState} from '@/lib/local-connection/contracts';
+import {LOCAL_CHROME_COLLAPSED_HEIGHT,type LinkedDocument,type LocalConnectionState} from '@/lib/local-connection/contracts';
 import {STORY_READER_MODE_MESSAGE,type StoryController,type FrameBridgeFramePayload} from '@/lib/story-runtime/contract';
 import {chooseTheme,storedTheme} from '@/lib/story-runtime/reader-mode';
 import {createAppAppearance} from '../ui/theme';
@@ -42,6 +42,9 @@ export function LocalDocumentPage(){
  const hosted=()=>identity()?`${identity()!.platformOrigin}/a/${encodeURIComponent(identity()!.artifactId)}`:null;
  const openHosted=()=>{const url=hosted();if(url)window.open(url,'_blank','noopener');};
  onMount(()=>{
+  // The broker iframe overlays the author page; only its chrome and panels paint a surface.
+  const backgrounds=[document.documentElement,document.body].map(element=>{const saved=Array.from(element.style).filter(name=>name==='background'||name.startsWith('background-')).map(name=>({name,value:element.style.getPropertyValue(name),priority:element.style.getPropertyPriority(name)}));element.style.setProperty('background','transparent','important');return()=>{element.style.removeProperty('background');for(const item of saved)element.style.setProperty(item.name,item.value,item.priority);};});
+  onCleanup(()=>backgrounds.forEach(restore=>restore()));
   broker=installLocalConnectionBroker({win:window,onState(next){if(next!=='connected'){setNonce(null);runtimeRef.current?.dispose();runtimeRef.current=null;}setState(next);},onIdentity:setIdentity,onSourceObservation(observation){const current=identity();setRemoteChanged(Boolean(current&&observation.remoteDigest!==current.sourceDigest));},onConnected(value){
    setIdentity(value.identity);
    const controller:StoryController={nonce:'local',send(command){broker!.post({kind:'frame',payload:{kind:'send',command}});},update(){},invalidate(datasets){controller.send({type:'mx:data',datasets});},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},getViewportRect(){return new DOMRect(0,0,window.innerWidth,window.innerHeight);},dispose(){listeners.clear();}};
@@ -58,7 +61,7 @@ export function LocalDocumentPage(){
  });
  createEffect(on([nonce,pick],([signed,mode])=>{if(signed&&mode)runtimeRef.current?.send({type:STORY_READER_MODE_MESSAGE,mode});}));
  createEffect(()=>{if(state()==='permission-required'||state()==='signin-required'||state()==='blocked')setPanel('controls');});
- createEffect(()=>{broker?.resize(panel()||rail()?window.innerHeight:76);});
+ createEffect(()=>{broker?.resize(panel()||rail()?{mode:'viewport'}:LOCAL_CHROME_COLLAPSED_HEIGHT);});
  const disconnect=()=>{broker?.disconnect();setState('offline');};
  return <>
   <Input ref={picker} type="file" accept=".html,.htm,text/html" aria-label="Choose current HTML file" class="sr-only" onChange={event=>void saveSelected(event.currentTarget.files?.[0])} />
