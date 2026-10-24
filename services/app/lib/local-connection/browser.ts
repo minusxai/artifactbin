@@ -1,3 +1,4 @@
+import {LOCAL_CHROME_COLLAPSED_HEIGHT} from './contracts';
 import {runtimeId} from '@artifactbin/utils/runtime-id';
 import {validLinkedDocument} from './registry';
 import type {LinkedDocument,LocalConnection,LocalConnectionState,LocalOperation,SourceObservation} from './contracts';
@@ -15,6 +16,8 @@ export interface LocalDocumentConnection extends LocalConnection {post(message:u
 export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalDocumentConnection{
  const {win,identity}=options;let disposed=false,stopped=false,connected=false;
  let iframe:HTMLIFrameElement|undefined,remote:Window|null=null,port:MessagePort|undefined,timer:ReturnType<typeof setTimeout>|undefined,nonce='';let call=0,generation=0;
+ let chromeHeight:number|'viewport'=LOCAL_CHROME_COLLAPSED_HEIGHT;
+ const resizeChrome=()=>{if(iframe)iframe.style.height=Math.max(40,Math.min(win.innerHeight||1000,chromeHeight==='viewport'?(win.innerHeight||1000):chromeHeight))+'px';};
  const pending=new Map<number,{resolve:(value:unknown)=>void;reject:(reason:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
  const state=(value:LocalConnectionState)=>{if(!disposed)options.onState(value);};
  const failPending=()=>{for(const value of pending.values()){clearTimeout(value.timer);value.reject(Error('Connection ended; operation outcome may be unknown'));}pending.clear();};
@@ -28,7 +31,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
    if(data.kind==='source-observation'){
     if(typeof data.remoteDigest==='string'&&/^[a-f0-9]{64}$/.test(data.remoteDigest)&&typeof data.remoteRevision==='string'&&/^[1-9]\d*$/.test(data.remoteRevision))options.onSourceObservation?.({remoteDigest:data.remoteDigest,remoteRevision:data.remoteRevision});return;
    }
-   if(data.kind==='chrome-size'&&iframe&&Number.isFinite(data.height)){iframe.style.height=Math.max(40,Math.min(win.innerHeight||1000,data.height))+'px';return;}
+   if(data.kind==='chrome-size'&&iframe){if(data.mode==='viewport')chromeHeight='viewport';else if(Number.isFinite(data.height))chromeHeight=Math.max(40,Math.min(1000,data.height));else return;resizeChrome();return;}
    if(data.kind==='state'){
     const valid:LocalConnectionState[]=['offline','connecting','connected','signin-required','permission-required','blocked','stale','unavailable','unknown-outcome'];
     if(!valid.includes(data.state))return;
@@ -49,15 +52,15 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
   stopped=false;cleanup();try{nonce=runtimeId(win.crypto??null);}catch(error){state('blocked');throw error;}state('connecting');
   const address=new URL('/local/connect',identity.platformOrigin);address.hash=new URLSearchParams({nonce}).toString();
   iframe=win.document.createElement('iframe');iframe.src=address.href;iframe.setAttribute('aria-label','Connected document controls');iframe.dataset.afLocalBroker='';
-  iframe.style.cssText='position:fixed;left:0;top:0;width:100%;height:56px;border:0;z-index:2147483646';
-  win.document.documentElement.append(iframe);remote=iframe.contentWindow;
+  iframe.style.cssText=`position:fixed;left:0;top:0;width:100%;height:${LOCAL_CHROME_COLLAPSED_HEIGHT}px;border:0;z-index:2147483646`;
+  chromeHeight=LOCAL_CHROME_COLLAPSED_HEIGHT;resizeChrome();win.document.documentElement.append(iframe);remote=iframe.contentWindow;
   timer=setTimeout(()=>{cleanup();state('blocked');},options.timeoutMs??15_000);
  };
- win.addEventListener('message',receive);
+ win.addEventListener('message',receive);win.addEventListener('resize',resizeChrome);
  const connection:LocalDocumentConnection={
   retry(){if(!options.privatePreview)begin();},
   disconnect(){stopped=true;cleanup();state('offline');},
-  dispose(){if(disposed)return;stopped=true;cleanup();win.removeEventListener('message',receive);disposed=true;},
+  dispose(){if(disposed)return;stopped=true;cleanup();win.removeEventListener('message',receive);win.removeEventListener('resize',resizeChrome);disposed=true;},
   post(message){if(connected)port?.postMessage({kind:'bridge',message});},
   request(operation:LocalOperation){
    if(!connected||!port)return Promise.reject(Error('Document is disconnected'));
@@ -70,6 +73,6 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
  };
  if(!validLinkedDocument(identity)){state('unavailable');}
  else if(options.privatePreview||options.stayOffline){state('offline');}
- else {try{begin();}catch(error){win.removeEventListener('message',receive);disposed=true;throw error;}}
+ else {try{begin();}catch(error){win.removeEventListener('message',receive);win.removeEventListener('resize',resizeChrome);disposed=true;throw error;}}
  return connection;
 }

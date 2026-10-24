@@ -63,3 +63,11 @@ it('does not expire the initial handshake timer after a connected idle period',a
  try{const frame=document.querySelector('iframe')!;vi.spyOn(frame.contentWindow!,'postMessage').mockImplementation(()=>{});const nonce=new URLSearchParams(new URL(frame.src).hash.slice(1)).get('nonce');window.dispatchEvent(new MessageEvent('message',{origin:identity.platformOrigin,source:frame.contentWindow,data:{kind:'af:local-ready',nonce}}));port.onmessage?.({data:{kind:'state',state:'connected',role:'viewer'}} as MessageEvent);await vi.advanceTimersByTimeAsync(300_000);expect(states.at(-1)).toBe('connected');expect(frame.isConnected).toBe(true);expect(port.close).not.toHaveBeenCalled();}
  finally{connection.dispose();vi.useRealTimers();}
 });
+it('expands against the parent viewport, follows its resize and collapses without stale resize authority',()=>{
+ const port={onmessage:null as ((event:MessageEvent)=>void)|null,onmessageerror:null,start:vi.fn(),close:vi.fn(),postMessage:vi.fn()};vi.stubGlobal('MessageChannel',class{port1=port;port2={};});vi.stubGlobal('innerHeight',720);
+ const removed=vi.spyOn(window,'removeEventListener');const connection=connectLocalDocument({win:window,identity,onState:()=>{}});
+ try{const frame=document.querySelector('iframe')!;expect(frame.style.height).toBe('76px');vi.spyOn(frame.contentWindow!,'postMessage').mockImplementation(()=>{});const nonce=new URLSearchParams(new URL(frame.src).hash.slice(1)).get('nonce');window.dispatchEvent(new MessageEvent('message',{origin:identity.platformOrigin,source:frame.contentWindow,data:{kind:'af:local-ready',nonce}}));
+  const send=(height:unknown)=>port.onmessage?.({data:height==='viewport'?{kind:'chrome-size',mode:'viewport'}:{kind:'chrome-size',height}} as MessageEvent);
+  send(76);expect(frame.style.height).toBe('76px');send('viewport');expect(frame.style.height).toBe('720px');vi.stubGlobal('innerHeight',480);window.dispatchEvent(new Event('resize'));expect(frame.style.height).toBe('480px');send('invalid');expect(frame.style.height).toBe('480px');send(76);window.dispatchEvent(new Event('resize'));expect(frame.style.height).toBe('76px');connection.disconnect();send('viewport');expect(frame.isConnected).toBe(false);connection.dispose();expect(removed).toHaveBeenCalledWith('resize',expect.any(Function));
+ }finally{connection.dispose();}
+});

@@ -81,3 +81,14 @@ it('opens trusted recovery after idle blocking without implicitly approving an a
 it('connects anonymous live comments and presence only while the local transport is ready',async()=>{
  vi.stubGlobal('EventSource',class{});mount();ready();await waitFor(()=>expect(live.options?.enabled).toBe(true));expect(live.options?.backend.unavailable('live')).toBeNull();const comments:never[]=[];live.options?.onAnnotations?.(comments);await waitFor(()=>expect(annotation.live).toBe(comments));expect(await screen.findByRole('button',{name:'Readers · 0'})).toBeTruthy();live.options?.onPresence?.([{id:'peer',label:'Guest',revision:'1',seen:Date.now(),cursor:null,selection:null}]);await screen.findByRole('button',{name:'Readers · 1'});live.options?.onData?.({datasets:['counter'],version:1});expect(broker.post).toHaveBeenCalledWith({kind:'frame',payload:{kind:'send',command:{type:'mx:data',datasets:['counter']}}});live.options?.onPublication?.(2);expect(broker.sourceChanged).toHaveBeenCalledOnce();captured.options!.onState('unavailable');await waitFor(()=>expect(live.options?.enabled).toBe(false));expect(captured.options).toBeTruthy();
 });
+
+it('requests the parent viewport for controls and comments, then restores bar plus status height',async()=>{
+ mount();ready();fireEvent.click(await screen.findByRole('button',{name:'Close artifact controls'}));await waitFor(()=>expect(broker.resize).toHaveBeenLastCalledWith(76));
+ fireEvent.click(screen.getByRole('button',{name:'Open artifact controls'}));
+ await waitFor(()=>expect(broker.resize).toHaveBeenLastCalledWith({mode:'viewport'}));
+ fireEvent.click(await screen.findByRole('button',{name:'Close artifact controls'}));
+ await waitFor(()=>expect(broker.resize).toHaveBeenLastCalledWith(76));
+ fireEvent.click(screen.getByRole('button',{name:'Comment'}));
+ await waitFor(()=>expect(broker.resize).toHaveBeenLastCalledWith({mode:'viewport'}));
+ fireEvent.click(screen.getByRole('button',{name:'Comment'}));await waitFor(()=>expect(broker.resize).toHaveBeenLastCalledWith(76));
+});

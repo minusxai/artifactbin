@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import {createEffect,createSignal,lazy,on,onCleanup,onMount,Show,Suspense} from 'solid-js';
 import {installLocalConnectionBroker,type LocalConnectionBroker} from '@/lib/local-connection/broker';
-import type {LinkedDocument,LocalConnectionState} from '@/lib/local-connection/contracts';
+import {LOCAL_CHROME_COLLAPSED_HEIGHT,type LinkedDocument,type LocalConnectionState} from '@/lib/local-connection/contracts';
 import {STORY_READER_MODE_MESSAGE,type StoryController,type FrameBridgeFramePayload} from '@/lib/story-runtime/contract';
 import {chooseTheme,storedTheme} from '@/lib/story-runtime/reader-mode';
 import {createAppAppearance} from '../ui/theme';
@@ -58,7 +58,7 @@ export function LocalDocumentPage(){
  });
  createEffect(on([nonce,pick],([signed,mode])=>{if(signed&&mode)runtimeRef.current?.send({type:STORY_READER_MODE_MESSAGE,mode});}));
  createEffect(()=>{if(state()==='permission-required'||state()==='signin-required'||state()==='blocked')setPanel('controls');});
- createEffect(()=>{broker?.resize(panel()||rail()?window.innerHeight:76);});
+ createEffect(()=>{broker?.resize(panel()||rail()?{mode:'viewport'}:LOCAL_CHROME_COLLAPSED_HEIGHT);});
  const disconnect=()=>{broker?.disconnect();setState('offline');};
  return <>
   <Input ref={picker} type="file" accept=".html,.htm,text/html" aria-label="Choose current HTML file" class="sr-only" onChange={event=>void saveSelected(event.currentTarget.files?.[0])} />
