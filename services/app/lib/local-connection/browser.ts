@@ -53,6 +53,7 @@ export function connectLocalDocument(options:ConnectLocalDocumentOptions):LocalD
   const address=new URL('/local/connect',identity.platformOrigin);address.hash=new URLSearchParams({nonce}).toString();
   iframe=win.document.createElement('iframe');iframe.src=address.href;iframe.setAttribute('aria-label','Connected document controls');iframe.dataset.afLocalBroker='';
   iframe.style.cssText=`position:fixed;left:0;top:0;width:100%;height:${LOCAL_CHROME_COLLAPSED_HEIGHT}px;border:0;z-index:2147483646`;
+  // Match the embedded root canvas even when the author page uses a different color scheme.
   iframe.style.colorScheme=LOCAL_CHROME_CANVAS_SCHEME;chromeHeight=LOCAL_CHROME_COLLAPSED_HEIGHT;resizeChrome();win.document.documentElement.append(iframe);remote=iframe.contentWindow;
   timer=setTimeout(()=>{cleanup();state('blocked');},options.timeoutMs??15_000);
  };
