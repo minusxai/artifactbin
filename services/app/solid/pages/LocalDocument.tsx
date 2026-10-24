@@ -6,6 +6,8 @@ import {STORY_READER_MODE_MESSAGE,type StoryController,type FrameBridgeFramePayl
 import {chooseTheme,storedTheme} from '@/lib/story-runtime/reader-mode';
 import {createAppAppearance} from '../ui/theme';
 import type {DocumentRuntimeRef} from '@/lib/story-runtime/document-endpoint';
+import {commentAccess} from '../document/comment-access';
+import type {ArtifactRole} from '@artifactbin/contracts';
 import {DocumentChrome} from '../document/DocumentChrome';
 import type {Panel} from '../components/PageChrome';
 import {Input} from '../ui/Field';
@@ -20,6 +22,7 @@ export function LocalDocumentPage(){
  const [state,setState]=createSignal<LocalConnectionState>('connecting');
  const [identity,setIdentity]=createSignal<LinkedDocument>();
  const [role,setRole]=createSignal('viewer');
+ const [authenticated,setAuthenticated]=createSignal(false);
  const [title,setTitle]=createSignal('Local file');
  const [panel,setPanel]=createSignal<Panel>(null);
  // A missing reader choice leaves the authored HTML mode unchanged. The platform panel follows app chrome.
@@ -39,11 +42,13 @@ export function LocalDocumentPage(){
  const listeners=new Set<(event:unknown)=>void>();
  const runtimeRef:DocumentRuntimeRef={current:null};
  let broker:LocalConnectionBroker|undefined;
+ const commentPermissions=()=>commentAccess(role() as ArtifactRole,authenticated(),false);
+ const upgradeAccount=()=>{if(session()?.kind==='account')broker?.authorize();else broker?.signIn();};
  const hosted=()=>identity()?`${identity()!.platformOrigin}/a/${encodeURIComponent(identity()!.artifactId)}`:null;
  const openHosted=()=>{const url=hosted();if(url)window.open(url,'_blank','noopener');};
  onMount(()=>{
   broker=installLocalConnectionBroker({win:window,onState:setState,onIdentity:setIdentity,onSourceObservation(observation){const current=identity();setRemoteChanged(Boolean(current&&observation.remoteDigest!==current.sourceDigest));},onConnected(value){
-   setIdentity(value.identity);setRole(value.role);
+   setIdentity(value.identity);setRole(value.role);setAuthenticated(value.authenticated===true);
    const controller:StoryController={nonce:'local',send(command){broker!.post({kind:'frame',payload:{kind:'send',command}});},update(){},invalidate(datasets){controller.send({type:'mx:data',datasets});},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},getViewportRect(){return new DOMRect(0,0,window.innerWidth,window.innerHeight);},dispose(){listeners.clear();}};
    runtimeRef.current=controller;
    void fetch(`/api/page/artifact/${encodeURIComponent(value.identity.artifactId)}`,{credentials:'same-origin'}).then(response=>response.ok?response.json():null).then(page=>{if(page?.surface?.title)setTitle(page.surface.title);});
@@ -64,8 +69,8 @@ export function LocalDocumentPage(){
   <Input ref={picker} type="file" accept=".html,.htm,text/html" aria-label="Choose current HTML file" class="sr-only" onChange={event=>void saveSelected(event.currentTarget.files?.[0])} />
   <DocumentChrome id={identity()?.artifactId??'local'} title={title} author={null} like={{liked:false,count:0}} signedIn={()=>session()?.kind==='account'} comments={comments} canFork={false} owner={false} remoteAvailable={state()==='connected'}
    panel={panel} setPanel={setPanel} mode={appAppearance} onMode={chooseMode} onComment={()=>setRail(value=>!value)} onFork={openHosted} onShare={openHosted} onMembership={openHosted}
-   controls={close=><div class="space-y-2"><Show when={state()==='permission-required'}><Button variant="secondary" size="sm" onClick={()=>broker?.authorize()}>Connect this file</Button><p>Allow this saved file to use this account for its original remote.</p></Show><Show when={state()==='signin-required'}><Button variant="secondary" size="sm" onClick={()=>broker?.signIn()}>Sign in</Button></Show><Button variant="ghost" size="sm" onClick={()=>state()==='connected'?broker?.post({kind:'local-action',action:'save-copy',includePrivateState:false}):picker.click()}>Save linked HTML</Button><Show when={state()!=='connected'}><Button variant="ghost" size="sm" onClick={()=>broker?.retry()}>Retry</Button></Show><p>Select the current HTML file to preserve edits on disk. Saving downloads a copy.</p><Show when={saveStatus()}><p role="status">{saveStatus()}</p></Show><p role="status">{state()==='connected'?'Connected to the saved remote.':state()}</p><Show when={hosted()}><Button variant="ghost" size="sm" onClick={openHosted}>Open hosted</Button></Show><Button variant="ghost" size="sm" onClick={()=>{close();disconnect();}}>Disconnect</Button><Button variant="ghost" size="sm" onClick={()=>{close();broker?.post({kind:'local-action',action:'stay-offline'});}}>Stay offline</Button></div>} />
+   controls={close=><div class="space-y-2"><Show when={state()==='connected'&&!authenticated()}><p>Connected as a guest. Use an account for permitted comments and shared changes.</p><Show when={session()?.kind==='account'} fallback={<Button variant="secondary" size="sm" onClick={()=>broker?.signIn()}>Sign in</Button>}><Button variant="secondary" size="sm" onClick={()=>broker?.authorize()}>Use my account</Button></Show></Show><Show when={state()==='permission-required'}><Button variant="secondary" size="sm" onClick={()=>broker?.authorize()}>Connect this file</Button><p>Allow this saved file to use this account for its original remote.</p></Show><Show when={state()==='signin-required'}><Button variant="secondary" size="sm" onClick={()=>broker?.signIn()}>Sign in</Button></Show><Button variant="ghost" size="sm" onClick={()=>state()==='connected'?broker?.post({kind:'local-action',action:'save-copy',includePrivateState:false}):picker.click()}>Save linked HTML</Button><Show when={state()!=='connected'}><Button variant="ghost" size="sm" onClick={()=>broker?.retry()}>Retry</Button></Show><p>Select the current HTML file to preserve edits on disk. Saving downloads a copy.</p><Show when={saveStatus()}><p role="status">{saveStatus()}</p></Show><p role="status">{state()==='connected'?'Connected to the saved remote.':state()}</p><Show when={hosted()}><Button variant="ghost" size="sm" onClick={openHosted}>Open hosted</Button></Show><Button variant="ghost" size="sm" onClick={()=>{close();disconnect();}}>Disconnect</Button><Button variant="ghost" size="sm" onClick={()=>{close();broker?.post({kind:'local-action',action:'stay-offline'});}}>Stay offline</Button></div>} />
   <div class="h-8 flex items-center px-3 text-xs border-b bg-surface text-muted" role="status">{remoteChanged()?'File changed remotely. Open hosted to review; local edits stay here.':state()==='connected'?'Connected to original remote · Save downloads a copy':state()==='stale'?'Saved revision changed. Open hosted to review.':'Local file · '+state()}</div>
-  <Show when={state()==='connected'&&identity()&&nonce()}><Suspense><AnnotationLayer id={identity()!.artifactId} runtimeRef={runtimeRef} sessionNonce={nonce()} canCreateComment={['owner','editor','commenter'].includes(role())} canDeleteAny={role()==='owner'} railOpen={rail()} onRailOpenChange={setRail} showViewComments onAnnotationsChange={items=>setComments(items.filter(item=>item.status==='open').length)} /></Suspense></Show>
+  <Show when={state()==='connected'&&identity()&&nonce()}><Suspense><AnnotationLayer id={identity()!.artifactId} runtimeRef={runtimeRef} sessionNonce={nonce()} canCreateComment={commentPermissions().canCreateComment} onSignIn={!authenticated()?upgradeAccount:undefined} canDeleteAny={role()==='owner'} railOpen={rail()} onRailOpenChange={setRail} showViewComments onAnnotationsChange={items=>setComments(items.filter(item=>item.status==='open').length)} /></Suspense></Show>
  </>;
 }
