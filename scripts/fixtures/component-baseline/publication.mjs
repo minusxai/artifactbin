@@ -10,6 +10,7 @@ import { browserParityFixtures, parityThemes } from './index.mjs';
 /** @typedef {{path:string,kind:"asset"|"dataset",id:string,revision:string,sha256:string,state?:string}} DependencyReceipt */
 /** @typedef {(body:object, options?:PublicationRequestOptions)=>Promise<{id:string,dependencyReceipts?:DependencyReceipt[]}>} PublishFixture */
 const pascal=name=>name==='deck-gl'?'DeckGL':name.split('-').map(word=>word[0].toUpperCase()+word.slice(1)).join('');
+export const htmlBodyPadding=fixture=>fixture.bareRoot?'0px':'24px';
 /** Stored UTF-8 ZIP is the product's normal public skill format. Validate the
  * complete immutable archive before writing any selected package member. */
 export function installedFiles(archive){
@@ -83,7 +84,10 @@ export async function publishBaselineFixtures({implementation,publish,serverOrig
     }else if(implementation==='html'){
       const source=fixture.modules.map(name=>`import {register${pascal(name)}} from "./components/${name}.js";register${pascal(name)}();`).join('\n')+'\n'+(fixture.setup||'')+'\ndocument.documentElement.dataset.baselineReady="yes";';
       const code=source.replace(/<\/script/gi,'<\\/script');
-      const html=`<!doctype html><html data-af-design-system="almanac" data-af-dark="${theme==='dark'}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="./design-systems/almanac.css"><style>body{margin:0;padding:24px}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${fixture.newHtml}<script type="module">${code}</script></body></html>`;
+      // A root SlideDeck owns the page column beside its rail; don't wrap the
+      // whole host in the generic page inset that ordinary HTML fixtures get.
+      const bodyPadding=htmlBodyPadding(fixture);
+      const html=`<!doctype html><html data-af-design-system="almanac" data-af-dark="${theme==='dark'}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="./design-systems/almanac.css"><style>body{margin:0;padding:${bodyPadding}}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${fixture.newHtml}<script type="module">${code}</script></body></html>`;
       await writeFile(path.join(staging,'index.html'),html);
       const prepared=await prepareBundle({root:staging,entry:'index.html',server:serverOrigin});body=prepared.body;body.publicationBundle.mappings=reuse.mappings(body.publicationBundle);request={idempotencyKey:prepared.idempotencyKey};
     }else throw Error('Unknown implementation');

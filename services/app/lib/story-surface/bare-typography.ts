@@ -32,13 +32,10 @@ const bare = (selector: string) => `:where([data-mx-story-root]) :where(${select
 
 /** The story root of a document none of whose elements carries a class (STORY_STYLED_ATTR absent). */
 const unstyledRoot = ':where([data-mx-story-root]:not([data-mx-styled]))';
-// The HTML Markdown host replaces the compiled `.mx-markdown` block, whose
-// authored class marks the old output as styled before the reader adds its
-// bare-page gutter. Exclude this registered component from that gutter while
-// keeping ordinary unstyled HTML (including article) unchanged. Other
-// component hosts with their own outer geometry need matched baselines before
-// joining this list.
-const rootGutterExclusion = ':not(af-markdown)';
+// These registered hosts own their page-column geometry (Markdown body and
+// SlideDeck's content column beside its rail). Keep the automatic bare-page
+// gutter on ordinary unstyled HTML, including a plain article.
+const rootGutterExclusion = ':not(af-markdown):not(af-slide-deck)';
 
 export const STORY_BARE_TYPOGRAPHY_CSS = [
   // A measure and rhythm, so a bare document reads as a document.

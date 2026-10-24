@@ -17,8 +17,19 @@ describe('native slide deck',()=>{
     const {slides}=fixture();const css=document.querySelector<HTMLStyleElement>('style[data-af-slide-deck-styles]')!.textContent!;
     expect(css).toContain('af-slide :is(h1,h2,h3,h4,h5,h6){font-family:var(--font-display,inherit)');
     expect(css).toContain('grid-template-columns:190px minmax(0,1fr)');
+    expect(css).toContain('af-slide>h1:first-child,af-slide>h2:first-child,af-slide>h3:first-child,af-slide>h4:first-child,af-slide>h5:first-child,af-slide>h6:first-child{margin-top:0}');
     expect(slides[0]!.querySelector('h1')!.textContent).toBe('Hello');
     expect(slides[0]!.querySelector('input')!.value).toBe('Keep me');
+  });
+  it('keeps the rail local to the deck and applies page gutter only to the content column',()=>{
+    const {deck,slides}=fixture();const rail=deck.querySelector<HTMLElement>('[data-af-deck-chrome="rail"]')!;
+    const css=document.querySelector<HTMLStyleElement>('style[data-af-slide-deck-styles]')!.textContent!;
+    expect(css).toContain('af-slide{display:flex;position:relative;box-sizing:border-box;flex-direction:column;width:100%;min-width:0;min-height:var(--af-slide-height,100svh);padding:24px');
+    expect(css).toContain('position:sticky;top:0;width:190px');
+    expect(css).not.toContain('translateX(var(--af-deck-rail-shift');
+    slides[0]!.style.padding='8px';
+    expect(getComputedStyle(slides[0]!).paddingTop).toBe('8px');
+    expect(rail.parentElement).toBe(deck);
   });
   it('keeps authored slides mounted with stable identities and accessible rail/count/chrome',()=>{
     const {deck,slides,next}=fixture();const input=slides[0]!.querySelector('input');
