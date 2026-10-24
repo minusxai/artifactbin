@@ -42,6 +42,13 @@ jobs:
       - name: Prepare patched npm
         run: node scripts/ci/prepare-npm.mjs
       - run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       - name: Bump the npm CLI and release pointer
         id: bump
         env:

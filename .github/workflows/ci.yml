@@ -141,9 +141,16 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       # A CLI CHANGE THAT SHIPS NO VERSION SHIPS NOWHERE: the publisher only uploads when the version
       # moved, so the source would sit on main, released to nobody, until someone noticed. The rule
       # and its wording live in scripts/lib/ci-plan.mjs, where they are tested.
@@ -192,9 +199,16 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       # The test global setup builds the server reader and the islands behind content-verified
       # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
       # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
@@ -239,9 +253,16 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: playwright
         with:
@@ -302,9 +323,16 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       # The test global setup builds the server reader and the islands behind content-verified
       # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
       # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
@@ -358,9 +386,16 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       # The test global setup builds the server reader and the islands behind content-verified
       # markers: 38s of every cold shard. Restore the latest build (this PR's, else main's); a marker
       # that no longer matches this tree rebuilds, so a stale restore costs only the build it replaces.
@@ -406,9 +441,16 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       # THE SAME SOURCES BUILD THE SAME BYTES. The key hashes git's object ids for every build input
       # (scripts/lib/ci-plan.mjs `isBuildInput`: not tests, gates, workflows or prose), so a push that
       # changed only those restores the last build of these sources and skips the ~75s below. No
@@ -502,9 +544,16 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       # The export tests drive real headless Chromium (lib/export.ts). The
       # browser download is the slow half of the install; cache it on what pins
       # the browser (playwright-core's browsers.json), as the gates do — keyed on
@@ -584,9 +633,16 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       # A BUILD OF THESE EXACT SOURCES ALREADY CACHED (see the `build` job) means there is nothing to
       # build: the shard restores it and starts its gates at once. Restore only — the entry is written by
       # `build`, never by a shard.
@@ -748,9 +804,16 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       # Disjoint engine caches: a Chromium-only writer cannot freeze an incomplete all-browser key.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: browser-chromium
@@ -1036,9 +1099,16 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      - name: Restore verified compiler payloads
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       # Markers validate every actual build input before reusing these prepared assets.
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: test-builds
@@ -1079,6 +1149,11 @@ jobs:
       # Publish the signed candidate before transferring native seeds, so the cold
       # standard-user proof can install while consumers wait for their own seed.
       - run: npm run pack:release -w services/cli
+      - name: Cache verified compiler payloads
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
       - name: Sign the actual build's npm provenance
         if: fromJSON(needs.plan.outputs.plan).cliRelease && github.repository == 'minusxai/artifactbin' && github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         env:
@@ -1327,6 +1402,15 @@ jobs:
           key: npm-acceptance-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('scripts/ci/npm-acceptance/package-lock.json', 'services/contracts/package.json', 'services/utils/package.json') }}
       - if: matrix.phase != 'native' && steps.install.outputs.cache-hit != 'true'
         run: npm ci --prefix scripts/ci/npm-acceptance --no-audit --no-fund
+      - name: Restore verified compiler payloads
+        if: matrix.phase != 'native'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: scripts/ci/npm-acceptance/node_modules/.cache/esbuild-compilers
+          key: compiler-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs', 'services/cli/scripts/prepare-esbuild.mjs') }}
+      - name: Prepare patched compilers
+        if: matrix.phase != 'native'
+        run: node scripts/ci/prepare-esbuild.mjs --root=scripts/ci/npm-acceptance
       - if: matrix.phase != 'native'
         run: node scripts/ci/link-npm-acceptance.mjs
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -1490,10 +1574,12 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'design-systems/fonts.json', 'services/app/scripts/system-font-packages.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/prepare-esbuild.mjs', 'scripts/lib/*-toolchain.mjs', 'scripts/ci/prepare-esbuild.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
         working-directory: .
+      - name: Prepare patched compilers
+        run: node scripts/ci/prepare-esbuild.mjs
       # Share the pinned Chromium prerequisite with Chromium-only gates and the main warmer.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: browser-chromium

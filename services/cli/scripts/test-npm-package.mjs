@@ -11,6 +11,7 @@ import {installNpmConsumer} from './npm-consumer-install.mjs';
 import {npmConsumerArgs,npmInstallPhaseTimings} from './npm-consumer-args.mjs';
 import {runAcceptanceProcesses} from './acceptance-processes.mjs';
 import {cleanupFailedNativeConsumer} from './native-consumer-lifecycle.mjs';
+import {COMPILER_TARGETS,compilerPayload,compilerIntegrity} from './prepare-esbuild.mjs';
 const ci=process.argv[2]==='--ci';
 const installOnly=process.argv.includes('--install-only');
 const dependencyCacheIndex=process.argv.indexOf('--dependency-cache');
@@ -54,6 +55,14 @@ try{
  assert.ok(await readFile(join(cli,'npm-shrinkwrap.json'),'utf8'));
  await assert.rejects(readdir(join(cli,'dist/runtime/node_modules')));
  await assert.rejects(readdir(env.PLAYWRIGHT_BROWSERS_PATH));
+ const compilerRequire=createRequire(join(cli,'package.json')),compilerVersion=compilerRequire('esbuild/package.json').version;
+ const compilerAssets=join(cli,'dist/compiler');
+ for(const target of COMPILER_TARGETS)await compilerPayload(compilerAssets,compilerVersion,target);
+ const compiler=await compilerPayload(compilerAssets,compilerVersion,`${process.platform}-${process.arch}`);
+ const installedCompiler=compilerRequire.resolve(`@esbuild/${process.platform}-${process.arch}/${process.platform==='win32'?'esbuild.exe':'bin/esbuild'}`);
+ assert.equal(compilerIntegrity(await readFile(installedCompiler)),compilerIntegrity(await readFile(compiler)));
+ assert.equal(compilerRequire('esbuild').transformSync('const answer: number = 42',{loader:'ts'}).code.trim(),'const answer = 42;');
+ if(process.platform==='win32')assert.match(await readFile(join(dirname(compilerRequire.resolve('esbuild/package.json')),'bin/esbuild'),'utf8'),/^#!\/usr\/bin\/env node/);
  if(!installOnly){
  await writeFile(join(root,'rows.csv'),'amount\n10\n20\n');
  // Unix Node22 lanes prove standalone npx; Windows has its Restricted standard-user proof.

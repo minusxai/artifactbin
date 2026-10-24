@@ -39,8 +39,6 @@ export default {
       // vitest.config.ts setup files: resolved by the services/app workspace, which owns them.
       ignoreUnresolved: [/^\.\/services\/app\/test\/setup\//],
       ignoreDependencies: [
-        // scripts/lib/type-check.mjs runs its platform binary by path.
-        '@typescript/native-preview',
         // The Solid transform the island build and Vitest apply (scripts/lib/cached-solid.mjs).
         'babel-preset-solid',
       ],

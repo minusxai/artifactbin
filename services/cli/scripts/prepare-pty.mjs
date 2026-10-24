@@ -1,6 +1,8 @@
 import { createRequire } from "node:module";
 import { chmodSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { preparePackageCompiler } from './prepare-esbuild.mjs';
+await preparePackageCompiler();
 const require = createRequire(import.meta.url);
 let root;
 try { root = dirname(require.resolve("node-pty/package.json")); }

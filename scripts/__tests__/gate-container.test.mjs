@@ -55,7 +55,7 @@ describe('image and dependency volume', () => {
   it('builds on the official Playwright image for the pinned version, with Node 22 and bubblewrap', () => {
     const file = dockerfile('1.62.1');
     expect(file).toContain('FROM mcr.microsoft.com/playwright:v1.62.1-noble');
-    expect(file).toContain('FROM node:22.23.4-bookworm-slim AS node');
+    expect(file).toContain('FROM node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS node');
     expect(file).toMatch(/apt-get install[^\n]*bubblewrap/);
     expect(imageTag('1.62.1')).toMatch(/^afbin-gate:pw1\.62\.1-[0-9a-f]{12}$/);
     expect(imageTag('1.62.1')).not.toBe(imageTag('1.63.0'));

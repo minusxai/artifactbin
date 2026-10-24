@@ -13,12 +13,17 @@ function run(args){return execFileSync(process.execPath,[npm,...args],{cwd:stage
 try{
  try{await lstat(join(cli,'dist/runtime/node_modules'));throw new Error('Refusing build-machine runtime dependencies in universal npm package.');}catch(error){if(error.code!=='ENOENT')throw error;}
  const manifest=JSON.parse(await readFile(join(cli,'package.json'),'utf8'));
+ if(manifest.files.includes('scripts/prepare-esbuild.mjs')){
+  // Keep producer preparation at the script boundary, as the host bundler does.
+  execFileSync(process.execPath,[resolve(cli,'../../scripts/ci/prepare-esbuild.mjs'),'--package'],{stdio:'inherit'});
+ }
  delete manifest.devDependencies;
  await writeFile(join(stage,'package.json'),JSON.stringify(manifest,null,2)+'\n');
  try{await cp(join(cli,'README.md'),join(stage,'README.md'));}catch(error){if(error.code!=='ENOENT')throw error;}
  try{await cp(resolve(cli,'../../LICENSE'),join(stage,'LICENSE'));}catch(error){if(error.code!=='ENOENT')throw error;}
  await cp(join(cli,'dist'),join(stage,'dist'),{recursive:true,filter:source=>!source.includes(`${join('dist','packages')}`)&&!source.endsWith('.tgz')});
- await mkdir(join(stage,'scripts'));await cp(join(cli,'scripts/prepare-pty.mjs'),join(stage,'scripts/prepare-pty.mjs'));
+ await mkdir(join(stage,'scripts'));
+ for(const file of manifest.files.filter(file=>file.startsWith('scripts/')))await cp(join(cli,file),join(stage,file));
  // Consumer resolution produces registry dependencies, never repository workspace links.
  const lock=JSON.parse(await readFile(join(cli,'npm-shrinkwrap.json'),'utf8'));
  lock.version=manifest.version;lock.packages[''].version=manifest.version;

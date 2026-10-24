@@ -18,6 +18,8 @@
     "dist/index.mjs",
     "dist/types",
     "scripts/prepare-pty.mjs",
+    "scripts/prepare-esbuild.mjs",
+    "dist/compiler",
     "dist/skills",
     "dist/share",
     "dist/runtime",

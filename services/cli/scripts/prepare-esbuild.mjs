@@ -1,0 +1,65 @@
+/** Installs a source-built compiler from this package's integrity-checked payload, never the network. */
+import {createHash,randomUUID} from 'node:crypto';
+import {readFile,copyFile,chmod,access,rename,rm} from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import {dirname,join,resolve} from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import {execFileSync} from 'node:child_process';
+
+export const COMPILER_TARGETS=['darwin-arm64','darwin-x64','linux-arm64','linux-x64','win32-x64'];
+export function compilerIntegrity(bytes){return 'sha512-'+createHash('sha512').update(bytes).digest('base64');}
+export async function compilerPayload(directory,version,target){
+ if(!COMPILER_TARGETS.includes(target))throw new Error(`Unsupported compiler platform: ${target}`);
+ const manifest=JSON.parse(await readFile(join(directory,'manifest.json'),'utf8'));
+ if(manifest.version!==1||manifest.go!=='go1.27.3'||manifest.sys!=='v0.44.0')throw new Error('Unsupported compiler build recipe');
+ const entry=manifest.compilers?.[version]?.[target];
+ const file=`${version}/${target}/esbuild${target.startsWith('win32-')?'.exe':''}`;
+ if(entry?.file!==file||!/^sha512-[A-Za-z0-9+/]{86}==$/.test(entry.integrity))throw new Error(`Missing compiler payload: ${version}/${target}`);
+ const path=join(directory,file),bytes=await readFile(path);
+ if(compilerIntegrity(bytes)!==entry.integrity)throw new Error(`Compiler integrity mismatch: ${version}/${target}`);
+ return path;
+}
+
+export async function installCompiler(packageRoot,assets,{platform=process.platform,arch=process.arch}={}){
+ const require=createRequire(join(packageRoot,'package.json'));
+ const version=JSON.parse(await readFile(join(packageRoot,'package.json'),'utf8')).version;
+ const source=await compilerPayload(assets,version,`${platform}-${arch}`);
+ const reported=execFileSync(source,['--version'],{encoding:'utf8',timeout:10000}).trim();
+ if(reported!==version)throw new Error(`Compiler protocol mismatch: ${reported} != ${version}`);
+ // Windows bin/esbuild is a JavaScript launcher used by npm's .cmd shim. Keep it intact.
+ const subpath=platform==='win32'?'esbuild.exe':'bin/esbuild';
+ const fallback=join(packageRoot,'lib',`downloaded-@esbuild-${platform}-${arch}-${platform==='win32'?'esbuild.exe':'esbuild'}`);
+ let native;
+ try{native=require.resolve(`@esbuild/${platform}-${arch}/${subpath}`);}
+ catch(error){
+  if(error.code!=='MODULE_NOT_FOUND')throw error;
+  native=fallback;
+  await access(native); // Only replace an installed compiler, never create an untracked fallback.
+ }
+ const destinations=[native,...(platform==='win32'?[]:[join(packageRoot,'bin/esbuild')])];
+ try{await access(fallback);destinations.push(fallback);}catch(error){if(error.code!=='ENOENT')throw error;}
+ for(const destination of new Set(destinations)){
+  // Replacing an executable inode also preserves running processes and Mach-O code-signing caches.
+  const temporary=`${destination}.${randomUUID()}.tmp`;
+  try{await copyFile(source,temporary);await chmod(temporary,0o755);await rename(temporary,destination);}
+  finally{await rm(temporary,{force:true});}
+ }
+ // A fresh process validates the installed package without reusing a caller's cached compiler worker.
+ execFileSync(process.execPath,['-e',`
+  const esbuild=require(process.argv[1]);
+  try{if(esbuild.version!==process.argv[2]||esbuild.transformSync('const answer: number = 42',{loader:'ts'}).code.trim()!=='const answer = 42;')throw new Error('Compiler JavaScript protocol check failed');}
+  finally{esbuild.stop();}
+ `,packageRoot,version],{encoding:'utf8',timeout:15000});
+}
+
+export async function preparePackageCompiler(){
+ const cli=resolve(dirname(fileURLToPath(import.meta.url)),'..'),assets=join(cli,'dist/compiler');
+ try{await access(join(assets,'manifest.json'));}
+ catch(error){
+  if(error.code!=='ENOENT')throw error;
+  try{await access(join(cli,'src/main.ts'));return;}catch{throw new Error('Published CLI is missing its compiler payload');}
+ }
+ const require=createRequire(join(cli,'package.json'));
+ await installCompiler(dirname(require.resolve('esbuild/package.json')),assets);
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)await preparePackageCompiler();

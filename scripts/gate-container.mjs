@@ -129,7 +129,7 @@ async function host({ cpus, memory, servers, gates }) {
     volume = depsVolume({
       lock: normalisedLock(lockText),
       copyAssets: readFileSync(path.join(ROOT, 'services/app/scripts/copy-assets.mjs'), 'utf8'),
-      preparePty: readFileSync(path.join(ROOT, 'services/cli/scripts/prepare-pty.mjs'), 'utf8'),
+      preparePty: ['services/cli/scripts/prepare-pty.mjs','services/cli/scripts/prepare-esbuild.mjs','scripts/lib/esbuild-toolchain.mjs','scripts/ci/prepare-esbuild.mjs'].map(file=>readFileSync(path.join(ROOT,file),'utf8')).join('\0'),
       image: tag,
     });
     for (const name of [volume, BUILD_VOLUME]) {
@@ -244,6 +244,7 @@ async function inside({ servers, gates, buildKey: key }) {
       echo "dependencies restored from the volume"
     else
       npm ci --no-audit --no-fund
+      node scripts/ci/prepare-esbuild.mjs
       rm -rf ${INSIDE.deps}/tree.tmp && mkdir -p ${INSIDE.deps}/tree.tmp
       cp -a --parents node_modules services/*/node_modules services/app/public/fonts services/app/lib/data/story/story-font-manifest.json ${INSIDE.deps}/tree.tmp/
       rm -rf ${INSIDE.deps}/tree && mv ${INSIDE.deps}/tree.tmp ${INSIDE.deps}/tree && touch ${INSIDE.deps}/ready
