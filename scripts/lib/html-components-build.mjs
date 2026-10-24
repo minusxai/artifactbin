@@ -11,6 +11,9 @@ const APP_DIR=fileURLToPath(new URL('../../services/app/',import.meta.url));
  * every output before replacing the previous installation; readable sources remain. */
 /** @param {ComponentBuildOptions} options */
 export async function buildComponentAssets({sourceDir,outputDir,appDir=APP_DIR}) {
+  // fileURLToPath(directoryURL) retains a trailing separator. Staging must be a
+  // sibling of the installation, never a directory inside it.
+  outputDir=path.resolve(outputDir);
   const names=(await readdir(sourceDir,{withFileTypes:true}))
     .filter(entry=>entry.isFile() && /^[a-z][a-z0-9-]*\.ts$/.test(entry.name))
     .map(entry=>entry.name).sort();

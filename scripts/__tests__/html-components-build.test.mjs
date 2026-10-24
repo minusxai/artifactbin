@@ -67,3 +67,12 @@ it('refuses unresolved remote module dependencies without touching installed ass
  await writeFile(path.join(dirs.sourceDir,'remote.ts'),'export const load=()=>import("https://example.invalid/engine.js");'); await expect(buildComponentAssets(dirs)).rejects.toThrow();
  expect(await readFile(path.join(dirs.outputDir,'kept.js'),'utf8')).toBe('kept');
 });
+it('accepts the build wrapper trailing output separator without staging inside the installed directory',async()=>{
+ const dirs=await fixture(); await mkdir(dirs.outputDir); await writeFile(path.join(dirs.outputDir,'README.md'),'keep'); await writeFile(path.join(dirs.outputDir,'tabs.js'),'old');
+ await writeFile(path.join(dirs.sourceDir,'tabs.ts'),'export const value="new";');
+ const options={...dirs,outputDir:`${dirs.outputDir}${path.sep}`};
+ await buildComponentAssets(options); expect(await readFile(path.join(dirs.outputDir,'tabs.js'),'utf8')).toContain('new'); expect(await readFile(path.join(dirs.outputDir,'README.md'),'utf8')).toBe('keep');
+ const installed=await readFile(path.join(dirs.outputDir,'tabs.js'),'utf8');
+ await writeFile(path.join(dirs.sourceDir,'tabs.ts'),'export const = ;'); await expect(buildComponentAssets(options)).rejects.toThrow();
+ expect(await readFile(path.join(dirs.outputDir,'tabs.js'),'utf8')).toBe(installed); expect((await readdir(dirs.outputDir)).some(name=>name.includes('stage-'))).toBe(false);
+});
