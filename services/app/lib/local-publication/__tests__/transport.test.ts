@@ -31,3 +31,14 @@ it('keeps the creation key recoverable when reading back committed source fails'
   await expect(sendLocalPublication(request, 'https://example.test', send)).rejects.toThrow();
   expect(request.key).toBe('readback_retry_001');
 });
+
+it('creates retry keys from strong bytes without randomUUID and rejects unavailable cryptography', () => {
+  const bytes = vi.fn((target: Uint8Array) => { target.fill(0x72); return target; });
+  vi.stubGlobal('crypto', { getRandomValues: bytes });
+  try {
+    expect(localPublicationRequest(body()).key).toMatch(/^[a-f0-9-]{36}$/);
+    expect(bytes).toHaveBeenCalled();
+    vi.stubGlobal('crypto', undefined);
+    expect(() => localPublicationRequest(body())).toThrow(/Secure browser randomness/);
+  } finally { vi.unstubAllGlobals(); }
+});

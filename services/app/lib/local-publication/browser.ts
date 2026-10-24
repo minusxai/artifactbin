@@ -1,9 +1,10 @@
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts';
 import { LOCAL_PUBLICATION_MESSAGE, type LocalPublicationReceipt } from './contracts';
 
 export function publicationPlatformOrigin(value: string): string {
   const url = new URL(value);
-  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]' || url.hostname.endsWith('.lvh.me');
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
   if (url.username || url.password || url.pathname !== '/' || url.search || url.hash || !(url.protocol === 'https:' || url.protocol === 'http:' && local)) throw new Error('Choose an HTTPS platform origin, or a loopback development origin.');
   return url.origin;
 }
@@ -18,7 +19,7 @@ function receiptOf(value: unknown, origin: string): LocalPublicationReceipt | nu
 }
 /** Called only from the local document's Publish click; no credentials or file reads happen here. */
 export function publishLocalDocument(options: { win: Window; platformOrigin: string; onPublished: (receipt: LocalPublicationReceipt) => void }): { dispose(): void } {
-  const origin = publicationPlatformOrigin(options.platformOrigin), nonce = crypto.randomUUID();
+  const origin = publicationPlatformOrigin(options.platformOrigin), nonce = runtimeId();
   const url = new URL('/local/publish', origin);
   url.hash = new URLSearchParams({ af_nonce: nonce, af_opener: options.win.location.origin }).toString();
   let port: MessagePort | undefined, done = false;

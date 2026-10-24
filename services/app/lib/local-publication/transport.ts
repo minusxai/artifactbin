@@ -1,3 +1,4 @@
+import { runtimeId } from '@artifactbin/utils/runtime-id';
 import { ARTIFACT_ID_PATTERN } from '@artifactbin/contracts';
 import type { LocalPublicationBody, LocalPublicationPlan, LocalPublicationReceipt, LocalPublicationRequest } from './contracts';
 
@@ -14,7 +15,7 @@ export async function inspectLocalPublication(body: LocalPublicationBody, send: 
   return await answer(await send('/api/my/local-publications/plan', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })) as unknown as LocalPublicationPlan;
 }
 /** Freezes both key and bytes before the first write. The caller keeps this object on retry. */
-export function localPublicationRequest(body: LocalPublicationBody, key: string = crypto.randomUUID()): LocalPublicationRequest {
+export function localPublicationRequest(body: LocalPublicationBody, key: string = runtimeId()): LocalPublicationRequest {
   return { key, body: JSON.parse(JSON.stringify(body)) as LocalPublicationBody };
 }
 const digest = async (source: string) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(source)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
