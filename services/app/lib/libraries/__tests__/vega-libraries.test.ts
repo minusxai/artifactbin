@@ -52,3 +52,17 @@ it('compiles Vega-Lite separately and renders its actual output using the same V
   const svg=await view.toSVG(); expect(svg).toContain('<svg'); expect(svg).toContain('A'); expect(svg).toContain('B'); expect(blocked).not.toHaveBeenCalled();
  } finally {view?.finalize(); vi.unstubAllGlobals();}
 });
+it('executes both dataviz reference grammars with shipped modules under no-eval',async()=>{
+ const reference=await readFile(path.resolve('skills/artifactbin/references/dataviz.md'),'utf8');
+ const examples=[...reference.matchAll(/```json\n([^`]+)```/g)].map(match=>JSON.parse(match[1]!));expect(examples).toHaveLength(2);
+ const {module:vega}=await bundled('vega');const {module:lite}=await bundled('vega-lite');
+ const blocked=vi.fn(()=>{throw new Error('eval forbidden');});vi.stubGlobal('Function',blocked);
+ try{for(const labelColor of ['#57606a','#8b949e'])for(const [index,example]of examples.entries()){
+  const config={background:'transparent',axis:{labelColor},numberFormat:'.3~s'};
+  const spec=index===0?lite.compile({...example,config}).spec:example;
+  const view=new vega.View(vega.parse(spec,index===0?undefined:config,{ast:true}),{renderer:'none',expr:vega.expressionInterpreter});
+  try{await view.runAsync();const svg=await view.toSVG();expect(svg).toContain('A');expect(svg).toContain('B');expect(svg).not.toContain('NaN');expect(svg.toLowerCase()).toContain(labelColor);
+   if(index===1){await view.data('rows',[{category:'Updated',count:7}]).runAsync();expect(await view.toSVG()).toContain('Updated');}
+  }finally{view.finalize();}
+ }expect(blocked).not.toHaveBeenCalled();}finally{vi.unstubAllGlobals();}
+});

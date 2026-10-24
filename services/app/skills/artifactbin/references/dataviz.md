@@ -4,7 +4,7 @@ description: Chart choice, truthful encodings and Vega-Lite or Vega authoring fo
 ---
 ## Read first
 
-Use **Vega-Lite** for analytical charts; **Vega** for custom layouts/signals. They are separate libraries: Vega-Lite compiles to Vega. Use documented runtime imports; assume no globals, embed helper or automatic theme. Grammar examples follow.
+Use **Vega-Lite** for analytical charts; **Vega** for custom layouts/signals. They are separate libraries: Vega-Lite compiles to Vega. Use documented runtime imports; assume no globals, embed helper or automatic theme.
 
 Name question, unit, grain, source, period, timezone and missing/partial data. Read [runtime](html-runtime.md) and [datasets](html-datasets.md).
 
@@ -31,7 +31,7 @@ window.addEventListener("pagehide", () => view.finalize(), {once:true});
 </script>
 ```
 
-For native Vega, omit the compiler import and pass the Vega spec directly to `parse`. `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Keep the original source canonical; downloaded copies embed the admitted bytes. This is a minimal bootstrap; add the table, resizing, theme and teardown described below.
+For native Vega, omit the compiler import and pass the Vega spec directly to `parse`. `{ast:true}` and `expressionInterpreter` work with the page's no-eval CSP. Keep the original source canonical; downloaded copies embed the admitted bytes. Add the table, resizing, theme and teardown below.
 
 ## Contents
 
@@ -49,11 +49,11 @@ Missing is not zero. Null observations can create line gaps; absent rows cannot.
 
 Aggregate once at the stated grain. Ratios need the right denominator/weighting. Unaggregated Vega-Lite tooltip fields can change grouping. Preserve calculation precision; format labels with units. `.1%` expects a fraction. The old compact default `.3~s` is useful for large numbers; offer exact values too.
 
-Choose explicit timestamp offsets and reporting timezone before grouping days. Vega-Lite time units default to local time; UTC units use the `utc` prefix. UTC scales govern positioning, not arbitrary timezone conversion. Precompute reporting-zone buckets when needed; preserve date-only calendar semantics.
+Choose explicit timestamp offsets and reporting timezone before grouping. Vega-Lite time units default to local time; UTC units use the `utc` prefix. UTC scales govern positioning, not arbitrary timezone conversion. Precompute reporting-zone buckets when needed; preserve date-only calendar semantics.
 
-Preserve existing Chart choices: shared theme, transparent surface, restrained grids, readable labels, small line points and explicit formats. Categorical colors convey identity; lightness ramps convey magnitude; diverging scales need a meaningful center.
+Original Chart defaults: transparent surface, `.3~s` numbers, 11px axis labels, 12px normal-weight axis titles, dashed `[3,3]` grids, top legend, line width 2 with filled size-25 points and bar end-radius 2. Apply these explicitly through Vega-Lite `config`; native Vega uses parser config/mark encodings. Categorical colors convey identity; lightness ramps convey magnitude; diverging scales need a meaningful center.
 
-Old renderer token resolution, legend wrapping/selection and styled tooltips are **not automatic** in standalone libraries. Resolve font/colors from the chart's design-system scope; pass concrete sRGB colors, since CSS-variable/OKLCH strings can fail in expressions. Recompute configuration on documented theme changes. Keep category identity stable and check text, grids, ramps and explicit colors in both modes.
+Old renderer token resolution, legend wrapping/selection and styled tooltips are **not automatic** in standalone libraries. Resolve font/colors from the chart's design-system scope; pass concrete sRGB colors, since CSS-variable/OKLCH strings can fail in expressions. Observe the host’s theme scope (`data-af-dark`, `data-af-design-system`, class/style changes on ancestors); rebuild configuration when resolved tokens change, and disconnect the observer on teardown. Keep category identity stable and check text, grids, ramps and explicit colors in both modes.
 
 ## Layout and interaction
 
@@ -61,15 +61,15 @@ Size the host. Single/layered Vega-Lite supports `width: "container"`. For Vega 
 
 Provide title, units, `description` and an accessible table. Supplement color with labels/shapes. Necessary actions/information must work with keyboard/touch and without hover.
 
-Tooltip fields need human titles/formats, not internal columns. Styled tooltips require a handler/plugin: escape text, keep overlays in the chart document/viewport, dismiss on outside action, Escape and teardown. Explain selection/reset; keep events view-scoped. Legend highlighting must not silently change totals. Query filters need loading/errors and stale-response protection.
+Tooltip fields need human titles/formats, not internal columns. Styled tooltips require a handler/plugin: escape text, keep overlays in the chart document/viewport, dismiss on outside action, Escape and teardown. Explain selection/reset; keep events view-scoped. Honor `prefers-reduced-motion`: avoid animated transitions/auto-play, keep static updates usable, and remove media listeners on teardown. Legend highlighting must not silently change totals. Query filters need loading/errors and stale-response protection.
 
 ## Data and lifetime
 
-Read shared facts with `client.query` under linked `data-af-name`. Discover dataset IDs; collect all pages at one revision or use supported server aggregates. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `client` local state. `onBackendChange` means re-query; `watchQuery` observes local state. Selection is local. Keep credentials out of specs/files.
+Import CSV through the dataset flow, not a credentialed chart URL. CSV fields may be strings: preserve identifiers, parse declared numeric/date fields, and reject non-finite values rather than turning blanks into zero. Normalize GraphQL typed cells into named row fields before encoding. Read shared facts with `client.query` under linked `data-af-name`. Discover dataset IDs; collect all pages at one revision or use supported server aggregates. Disclose source truncation. Keep rows transient; persist only viewer filters/selections through `client` local state. `onBackendChange` means re-query; `watchQuery` observes local state. Selection is local. Keep credentials out of specs/files.
 
 Retain one view per chart. Update named data then run the dataflow; discard superseded renders. On replacement call `view.finalize()`, disconnect observers, unsubscribe client listeners and remove tooltip/listeners. Rebuild for compile-time theme/layout changes while preserving intended viewer choices.
 
-Offline needs local libraries/assets and permitted data. Download does not automatically snapshot GraphQL or pack arbitrary dependencies. Show unavailable states honestly; test the downloaded file without a network.
+Offline needs local libraries/assets and permitted data. Download does not automatically snapshot GraphQL or pack arbitrary dependencies. Show unavailable states honestly; test downloads offline.
 
 ## Examples
 
