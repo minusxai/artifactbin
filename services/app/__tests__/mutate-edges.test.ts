@@ -18,7 +18,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 
-import { liveChannelCount, resetLiveSubscriptions } from '@/lib/publish/realtime/live';
+import { liveSubscriptionSnapshot, resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
 import { useAppHarness, request } from '@/__tests__/harness';
 import {sseStream} from '@/__tests__/sse';
@@ -32,6 +32,11 @@ const create = async (token: string, body: Record<string, unknown>) => {
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string };
 };
+import { artifactChannel, annotationsChannel } from '@artifactbin/contracts';
+import { presenceChannel } from '@/lib/html-presence/channel.server';
+const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
+const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1 });
+
 const ROWS = [{ choice: 'ramen' }];
 const DOC = (ds: string) => `<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${ds}"></head><body>Votes</body></html>`;
 
@@ -90,12 +95,12 @@ describe('the stream releases what it watched', () => {
     const request = new Request(`${BASE}/a/${doc}/events`, { signal: controller.signal });
     const res = await eventsRoute(request, params({ id: doc }));
     expect(res.status).toBe(200);
-    const stream=sseStream(res.body!);await stream.next(2);
-    // The page and dataset are joined by one page-local presence channel.
-    expect(liveChannelCount()).toBe(3);
+    const stream=sseStream(res.body!);await stream.named('message');
+    // Presence also holds an ACL subscriber on the document's shared channel.
+    expect(subscriptions()).toEqual({ ...documentSubscriptions(doc), [artifactChannel(ds)]: 1 });
     stream.close();
     controller.abort();
-    await vi.waitFor(()=>expect(liveChannelCount()).toBe(0));
+    await vi.waitFor(()=>expect(subscriptions()).toEqual({}));
   });
 
   it('two streams over the same dataset SHARE its channel, and one leaving keeps the other watching', async () => {
@@ -108,15 +113,15 @@ describe('the stream releases what it watched', () => {
     const second=new AbortController();
     const resB = await eventsRoute(new Request(`${BASE}/a/${b}/events`,{signal:second.signal}), params({ id: b }));
     const streamA=sseStream(resA.body!),streamB=sseStream(resB.body!);
-    await Promise.all([streamA.next(2),streamB.next(2)]);
-    // Two page channels, two presence channels, and ONE shared dataset channel.
-    expect(liveChannelCount()).toBe(5);
+    await Promise.all([streamA.named('message'),streamB.named('message')]);
+    // One dataset transport has two subscribers; each page keeps its own comment and presence channels.
+    expect(subscriptions()).toEqual({ ...documentSubscriptions(a), ...documentSubscriptions(b), [artifactChannel(ds)]: 2 });
     streamA.close();
     first.abort();
-    // Page b retains its document, presence and shared dataset subscriptions.
-    await vi.waitFor(()=>expect(liveChannelCount()).toBe(3));
+    // Only page b remains, with one subscriber left on the shared dataset transport.
+    await vi.waitFor(()=>expect(subscriptions()).toEqual({ ...documentSubscriptions(b), [artifactChannel(ds)]: 1 }));
     streamB.close();second.abort();
-    await vi.waitFor(()=>expect(liveChannelCount()).toBe(0));
+    await vi.waitFor(()=>expect(subscriptions()).toEqual({}));
     expect((await getArtifactById(ds))!.access).toBe('readwrite');
   });
 });

@@ -205,11 +205,11 @@ await section('reader', async () => {
   const ownerText = await docHeading(owner);
   check(ownerText === 'SEC-PROBE-DOC' && await ownerBar(owner), 'owner sees the shell with the document in its frame');
 
-  // The busiest authenticated toolbar must retain every action on narrow phones.
+  // The busiest authenticated toolbar retains essentials directly and secondary actions in its menu.
   for (const width of [320, 390]) {
     await owner.setViewportSize({ width, height: 844 });
     const bar = owner.getByRole('banner', { name: 'Page bar' });
-    for (const name of ['Like', 'Comment', 'Share', 'Notifications', 'Open artifact controls', 'Open menu']) {
+    for (const name of ['Comment', 'More artifact actions', 'Notifications', 'Open artifact controls', 'Open menu']) {
       await bar.getByRole('button', { name, exact: true }).waitFor({ state: 'visible' });
     }
     const geometry = await bar.evaluate(element => {
@@ -223,6 +223,19 @@ await section('reader', async () => {
     check(geometry.scrollWidth <= width, `owner toolbar has no page overflow at ${width}px`);
     check(geometry.controls.every(control => control.left >= 0 && control.right <= width && control.width >= 36 && control.reachable),
       `all owner toolbar controls keep full targets inside ${width}px: ${JSON.stringify(geometry.controls)}`);
+    const more = bar.getByRole('button', { name: 'More artifact actions', exact: true });
+    await more.focus();
+    await owner.keyboard.press('ArrowDown');
+    const actions = owner.getByRole('menu', { name: 'Artifact actions', exact: true });
+    await actions.waitFor({ state: 'visible' });
+    for (const name of ['Like', 'Share', 'Star artifactbin on GitHub']) {
+      check(await actions.getByRole('menuitem', { name, exact: true }).isVisible(), `${name} remains reachable at ${width}px`);
+    }
+    check(await actions.getByRole('menuitem').first().evaluate(element => element.getRootNode().activeElement === element), `compact actions accept keyboard focus at ${width}px`);
+    await owner.keyboard.press('ArrowDown');
+    check(await actions.getByRole('menuitem').nth(1).evaluate(element => element.getRootNode().activeElement === element), `compact actions move keyboard focus at ${width}px`);
+    await owner.keyboard.press('Escape');
+    check(await more.evaluate(element => document.activeElement === element), `compact actions return focus at ${width}px`);
     await bar.getByRole('button', { name: 'Open menu', exact: true }).click();
     await owner.getByRole('navigation', { name: 'Menu', exact: true }).waitFor({ state: 'visible' });
     check(await owner.getByRole('button', { name: 'Dismiss menu', exact: true }).isVisible(), `owner menu is reachable at ${width}px`);

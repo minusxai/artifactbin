@@ -6,14 +6,14 @@
  * other address; the document page reports one view as it shows its frame.
  */
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@solidjs/testing-library';
+import { cleanup, render, screen, waitFor } from '@solidjs/testing-library';
 import { Route, Router } from '@solidjs/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STORY_NAVIGATE_MESSAGE, STORY_NAVIGATING_MESSAGE } from '@/lib/story-runtime/contract';
 
 const FRAMED_ORIGIN = 'http://646f633132333435.lvh.me';
 let served: HTMLElement | null = null;
-vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: 'viewer', archived: null, surface: { id: 'doc12345', title: 'A doc', format: 'markup', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: null } }) }));
+vi.mock('@/solid/lib/bootstrap', () => ({ takeBootstrap: () => ({ kind: 'account', role: 'viewer', archived: null, surface: { id: 'doc12345', title: 'A doc', format: 'html', version: 3, framedOrigin: 'http://646f633132333435.lvh.me', author: null } }) }));
 vi.mock('@/solid/lib/served-frame', () => ({ adoptServedFrame: () => { const frame = served; served = null; return frame; } }));
 
 import { answerFrameNavigation, appNavigationTarget } from '../frame-navigation';
@@ -151,11 +151,13 @@ describe('the document page', () => {
 
   it('follows a link to an app page from its frame through the router', async () => {
     const { frame } = mount();
-    // The frame was moved into the page's viewport: its window is the one now in the page.
+    // The frame stays in the served host; its own window is the admitted navigation source.
     const answers = recordAnswers(frame);
     ask('/', frame.contentWindow);
     expect(await screen.findByRole('heading', { name: 'App home' })).toBeInTheDocument();
-    expect(window.location.pathname).toBe('/');
+    // Router transitions commit history after pending lazy reader UI settles.
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(frame.isConnected).toBe(false);
     // (Leaving the document also detaches its bridge: that envelope is the bridge's, not this answer.)
     expect(answers.filter(([data]) => (data as { type?: string }).type === STORY_NAVIGATING_MESSAGE)).toEqual([[{ type: STORY_NAVIGATING_MESSAGE, href: '/' }, FRAMED_ORIGIN]]);
   });

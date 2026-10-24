@@ -80,8 +80,10 @@ export function Menu(props: {
   const close = () => { setOpen(false); trigger?.focus({ preventScroll: true }); };
 
   const onPanelKeyDown = (event: KeyboardEvent) => {
-    const all = itemsOf((event.target as HTMLElement).closest('[role="menu"]'));
-    const at = all.indexOf(document.activeElement as HTMLElement);
+    const menu = (event.target as HTMLElement).closest('[role="menu"]');
+    const all = itemsOf(menu);
+    const root = menu?.getRootNode() as Document | ShadowRoot | undefined;
+    const at = all.findIndex(item => item === root?.activeElement);
     const go = (index: number) => all[(index + all.length) % all.length]?.focus();
     if (event.key === 'ArrowDown') go(at < 0 ? 0 : at + 1);
     else if (event.key === 'ArrowUp') go(at < 0 ? -1 : at - 1);

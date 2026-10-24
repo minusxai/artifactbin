@@ -1,5 +1,5 @@
 /** Native dataset aliases invalidate readers; reconnect always refetches authoritative revisions. */
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { identityForUser, createUser, claimToken } from '@/lib/accounts';
 import { changeMembership, getArtifactById } from '@/lib/artifacts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
@@ -13,8 +13,12 @@ import { PUT } from '@/app/api/artifacts/[id]/route';
 import { POST } from '@/app/api/artifacts/route';
 import {
   resetLiveSubscriptions,
-  liveChannelCount,
+  liveSubscriptionSnapshot,
 } from '@/lib/publish/realtime/live';
+import { artifactChannel, annotationsChannel } from '@artifactbin/contracts';
+import { presenceChannel } from '@/lib/html-presence/channel.server';
+const subscriptions = () => Object.fromEntries(liveSubscriptionSnapshot().map(({ channel, subscribers }) => [channel, subscribers]));
+const documentSubscriptions = (id: string) => ({ [artifactChannel(id)]: 2, [annotationsChannel(id)]: 1, [presenceChannel(id)]: 1 });
 useAppHarness();
 beforeEach(resetLiveSubscriptions);
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -66,10 +70,11 @@ it('refreshes membership and action permissions without publishing a version', a
       action: 'leave',
     });
     expect(
-      (await stream.next(2)).find((e) => e.event === 'data')?.data,
+      (await stream.named('data'))[0]?.data,
     ).toMatchObject({ datasets: ['_members'], version: 1 });
   } finally {
     stream.close();
+    await vi.waitFor(() => expect(subscriptions()).toEqual({}));
   }
 });
 it('names the native alias after committed dataset mutation, retaining one subscription per dependency', async () => {
@@ -78,12 +83,12 @@ it('names the native alias after committed dataset mutation, retaining one subsc
     stream = await connect(doc.id);
   try {
     expect(
-      (await stream.next(2)).find((e) => e.event === 'data')?.data,
+      (await stream.named('data'))[0]?.data,
     ).toMatchObject({
       datasets: ['choices'],
       revisions: { choices: expect.stringContaining(`dataset:${ds.id}:1:`) },
     });
-    expect(liveChannelCount()).toBe(3);
+    expect(subscriptions()).toEqual({ ...documentSubscriptions(doc.id), [artifactChannel(ds.id)]: 1 });
     const written = await mutate(
       request(`/api/artifacts/${ds.id}/mutate`, {
         method: 'POST',
@@ -99,6 +104,7 @@ it('names the native alias after committed dataset mutation, retaining one subsc
     });
   } finally {
     stream.close();
+    await vi.waitFor(() => expect(subscriptions()).toEqual({}));
   }
 });
 it('a folder hears its own child without adding a second channel', async () => {
@@ -107,20 +113,22 @@ it('a folder hears its own child without adding a second channel', async () => {
     stream = await connect(folder.id);
   try {
     await stream.named('message');
-    expect(liveChannelCount()).toBe(1);
+    // Version and child-list invalidation share one transport, with distinct subscribers.
+    expect(subscriptions()).toEqual({ [artifactChannel(folder.id)]: 2, [annotationsChannel(folder.id)]: 1 });
     await create({ html: nativeHtml('<p>Filed</p>'), parent_id: folder.id });
     expect(
-      (await stream.next(2)).find((e) => e.event === 'data')?.data.datasets,
+      (await stream.named('data'))[0]?.data.datasets,
     ).toEqual([folder.id]);
   } finally {
     stream.close();
+    await vi.waitFor(() => expect(subscriptions()).toEqual({}));
   }
 });
 it('reconnect refetches the current revision including missed writes without replaying mutation', async () => {
   const { token, create, ds } = await fixture(),
     doc = await create({ html: linked(ds.id) }),
     first = await connect(doc.id);
-  const opening = await first.next(2);
+  const opening = await first.named('data');
   first.close();
   const before = opening.find((e) => e.event === 'data')!.data.revisions;
   expect(
@@ -137,7 +145,7 @@ it('reconnect refetches the current revision including missed writes without rep
   ).toBe(200);
   const again = await connect(doc.id);
   try {
-    const data = (await again.next(2)).find((e) => e.event === 'data')!.data;
+    const data = (await again.named('data'))[0]!.data;
     expect(data.datasets).toEqual(['choices']);
     expect(data.revisions).not.toEqual(before);
     expect(data.revisions).toMatchObject({
@@ -173,7 +181,7 @@ it('whole-dataset replacement invalidates aliases while unrelated pages hear not
       ).status,
     ).toBe(200);
     expect((await a.named('data'))[0]?.data.datasets).toEqual(['choices']);
-    expect((await b.next(1, 300)).filter((e) => e.event === 'data')).toEqual(
+    expect(await b.named('data', 1, 300)).toEqual(
       [],
     );
   } finally {
@@ -187,7 +195,7 @@ it('a newly published native link is subscribed before its version is announced'
     stream = await connect(doc.id);
   try {
     await stream.named('message');
-    expect(liveChannelCount()).toBe(2);
+    expect(subscriptions()).toEqual(documentSubscriptions(doc.id));
     expect(
       (
         await PUT(
@@ -205,8 +213,9 @@ it('a newly published native link is subscribed before its version is announced'
       'choices',
     ]);
     expect(events.find((e) => e.event === 'message')?.data.version).toBe(2);
-    expect(liveChannelCount()).toBe(3);
+    expect(subscriptions()).toEqual({ ...documentSubscriptions(doc.id), [artifactChannel(ds.id)]: 1 });
   } finally {
     stream.close();
+    await vi.waitFor(() => expect(subscriptions()).toEqual({}));
   }
 });

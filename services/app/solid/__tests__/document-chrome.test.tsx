@@ -151,13 +151,17 @@ it('never takes the served frame out of the document: a moved iframe loads its s
   try {
     mockRole = 'viewer';
     const { host, frame } = mount();
-    // What the page does around its frame: a notice takes its row above the frame, and is dismissed.
+    const originalWindow = frame.contentWindow;
+    const originalSrc = frame.getAttribute('src');
+    // The retained read-only rail opens and closes around the frame; it never adopts the frame into UI.
     fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
-    await settle();
-    expect(host.querySelector('[data-mx-frame-slot]')!.childElementCount).toBe(1);
-    fireEvent.click(within(host.querySelector<HTMLElement>('[data-mx-frame-slot] [data-trusted-ui]')!.shadowRoot!.querySelector<HTMLElement>('[data-trusted-ui-root]')!).getByRole('button', { name: 'Dismiss comment access notice' }));
-    await settle();
+    const rail = await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' });
+    expect(rail).toHaveTextContent('You have read-only comment access.');
     expect(host.querySelector('[data-mx-frame-slot]')!.childElementCount).toBe(0);
+    fireEvent.click(within(rail).getByRole('button', { name: 'Close comments' }));
+    await waitFor(() => expect(rail).not.toBeInTheDocument());
+    expect(frame.contentWindow).toBe(originalWindow);
+    expect(frame.getAttribute('src')).toBe(originalSrc);
     observer.takeRecords().forEach((record) => record.removedNodes.forEach((node) => moved.push(node)));
     expect(moved.filter((node) => node === frame || node === host || node.contains(frame))).toEqual([]);
     expect(frame.parentElement).toBe(host);
@@ -373,26 +377,30 @@ it('opens a carried fork intent after login and consumes the query parameter', a
   expect(window.location.search).toBe('');
 });
 
-it('consumes a signed-in viewer comment intent without restarting login', () => {
+it('consumes a signed-in viewer comment intent into the read-only rail without restarting login', async () => {
   mockRole = 'viewer';
   mount('/a/doc?intent=comment');
   expect(window.location.search).toBe('');
   expect(loginHref).not.toHaveBeenCalled();
-  const notice = [...document.querySelectorAll('[data-trusted-ui]')].map(host => host.shadowRoot?.querySelector('[role="status"]')).find(Boolean);
-  expect(notice).toHaveTextContent('You have view-only access. Ask the owner for comment access.');
-  fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+  const rail = await trusted(1).findByRole('complementary', {name:'Annotation sidebar'});
+  expect(rail).toHaveTextContent('You have read-only comment access.');
+  expect(within(rail).queryByRole('button', {name:'Sign in to comment'})).toBeNull();
+  expect(within(rail).queryByRole('button', {name:'Select'})).toBeNull();
+  fireEvent.click(within(rail).getByRole('button', {name:'Close comments'}));
+  await waitFor(() => expect(rail).not.toBeInTheDocument());
   expect(loginHref).not.toHaveBeenCalled();
-  const noticeHost = notice!.getRootNode() as ShadowRoot;
-  fireEvent.click(within(noticeHost.querySelector<HTMLElement>('[data-trusted-ui-root]')!).getByRole('button', { name: 'Dismiss comment access notice' }));
-  expect(notice).not.toBeInTheDocument();
 });
 
-it('does not send a signed-in owner of an archived version back to login', () => {
+it('opens archived comments read-only and consumes the owner intent without login', async () => {
   mockRole = 'owner'; mockArchived = { version: 2, head: 3 };
   mount('/a/doc?intent=comment');
+  expect(window.location.search).toBe('');
   expect(loginHref).not.toHaveBeenCalled();
-  const notice = [...document.querySelectorAll('[data-trusted-ui]')].map(host => host.shadowRoot?.querySelector('[role="status"]')).find(Boolean);
-  expect(notice).toHaveTextContent('Comments are unavailable on archived versions.');
+  const rail = await trusted(1).findByRole('complementary', {name:'Annotation sidebar'});
+  expect(rail).toHaveTextContent('You have read-only comment access.');
+  expect(within(rail).queryByRole('button', {name:'Sign in to comment'})).toBeNull();
+  expect(within(rail).queryByRole('button', {name:'Select'})).toBeNull();
+  expect(trusted(1).queryByRole('dialog', {name:'Annotation composer'})).toBeNull();
 });
 
 it('opens a carried comment intent for an authorized commenter without login', async () => {
@@ -402,10 +410,16 @@ it('opens a carried comment intent for an authorized commenter without login', a
   expect(await trusted(1).findByRole('complementary', { name: 'Annotation sidebar' })).toBeInTheDocument();
 });
 
-it('still offers login to a guest asking to comment', () => {
+it.each(['/a/doc', '/a/doc?intent=comment'])('lets a guest read comments before asking to sign in to post (%s)', async (path) => {
   mockKind = 'anon'; mockRole = 'viewer';
-  mount();
-  fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+  mount(path);
+  if (!path.includes('intent=')) fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
+  const rail = await trusted(1).findByRole('complementary', {name:'Annotation sidebar'});
+  expect(window.location.search).toBe('');
+  expect(loginHref).not.toHaveBeenCalled();
+  expect(within(rail).queryByRole('button', {name:'Select'})).toBeNull();
+  expect(trusted(1).queryByRole('dialog', {name:'Annotation composer'})).toBeNull();
+  fireEvent.click(within(rail).getByRole('button', {name:'Sign in to comment'}));
   expect(loginHref).toHaveBeenCalledWith(window.location, 'comment');
 });
 

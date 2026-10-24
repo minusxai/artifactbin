@@ -60,6 +60,7 @@ await section('private origin and credential boundary',async()=>{
 await section('comments through original chrome',async()=>{
  const frame=await documentFrame(page),third=frame.locator('#third');
  await third.click({clickCount:3});await third.click({button:'right'});
+await frame.locator('[data-mx-selection-action="annotate"]').click();
  await page.getByLabel('Annotation comment',{exact:true}).waitFor();
  check(true,'selected native text opens the original context-menu comment composer');
  const composer=page.getByLabel('Annotation comment',{exact:true});await composer.fill('Native framed comment');await page.getByLabel('Save annotation',{exact:true}).click();

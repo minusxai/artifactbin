@@ -1,6 +1,6 @@
 /* @jsxImportSource solid-js */
 import { isChunkLoadError, reloadForNewBuild } from '../lib/app-build';
-import { createContext, createEffect, createSignal, For, on, Show, useContext, type Accessor, type JSX, type Setter } from 'solid-js';
+import { createContext, createEffect, createSignal, For, on, onMount, onCleanup, Show, useContext, type Accessor, type JSX, type Setter } from 'solid-js';
 /** Shared Solid app chrome. One owner closes one panel before another opens. */
 import { Bell, ChevronRight, CircleUser, SlidersVertical, X } from 'lucide-solid';
 import { Dynamic } from 'solid-js/web';
@@ -58,6 +58,10 @@ interface PageChromeProps {
   title?: string | null;
   label?: string;
   actions?: JSX.Element;
+  /** Below the wide navigation breakpoint, retain secondary actions in the page's compact surface. */
+  compactActions?: () => JSX.Element;
+  /** Persistent compact title context, such as the archived revision being read. */
+  compactContext?: JSX.Element;
   controls?: (close: () => void) => JSX.Element;
   byline?: JSX.Element;
   panel?: Accessor<Panel>;
@@ -70,6 +74,14 @@ interface PageChromeProps {
 export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   const location = useLocation();
   const phone = createIsPhoneViewport();
+  // Matches PageBar's lg navigation breakpoint; the shared phone helper is fixed at sm (640px).
+  const [compact, setCompact] = createSignal(typeof window !== 'undefined' && window.innerWidth < 1024);
+  onMount(() => {
+    const resize = () => setCompact(window.innerWidth < 1024);
+    resize();
+    window.addEventListener('resize', resize);
+    onCleanup(() => window.removeEventListener('resize', resize));
+  });
   const { session } = useSession();
   // The app shell provides the inbox; a page rendered on its own (a test) has none and shows no unread mark.
   const inbox = useOptionalInbox();
@@ -100,13 +112,13 @@ export function PageChrome(props: PageChromeProps = {}): JSX.Element {
   createEffect(on(panel, (now, before) => { if (!now && before && opener?.isConnected) opener.focus(); }, { defer: true }));
   return <>
     <PageBar logo={<img src="/logo-128.png" alt="" style={{ width: `${CHROME_IDENTITY.logoSize}px`, height: `${CHROME_IDENTITY.logoSize}px` }} />} mobileTitle={props.byline ? props.title ?? undefined : crumbs().at(-1)?.label}
-      navigation={<>        <a href="/" class={`shrink-0 no-underline hover:text-accent ${crumbs().length || props.byline ? 'text-muted' : 'font-semibold text-fg'}`}>artifactbin</a>
+      compactContext={props.compactContext} compactNavigation={Boolean(props.compactActions)} navigation={<>        <a href="/" class={`shrink-0 no-underline hover:text-accent ${crumbs().length || props.byline ? 'text-muted' : 'font-semibold text-fg'}`}>artifactbin</a>
         <Show when={props.byline} fallback={<>
           <Show when={!crumbs().length}><span aria-hidden="true" class="text-faint">·</span><span class="truncate font-normal text-muted">Google Docs for agents</span></Show>
           <For each={crumbs()}>{crumb => <span class="flex min-w-0 items-center gap-2"><ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" /><Show when={crumb.href} fallback={<span aria-current="page" class="min-w-0 truncate font-semibold text-fg">{crumb.label}</span>}><a href={crumb.href} class="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a></Show></span>}</For>
         </>}>{props.byline}</Show>
-</>} actions={<>        <Show when={props.star !== false}><Star mobile={false} /><Star mobile={true} /></Show>
-        {props.actions}
+</>} actions={<>
+        <Show when={compact() && props.compactActions} fallback={<><Show when={props.star !== false}><Star mobile={false} /><Star mobile={true} /></Show>{props.actions}</>}>{render => render()()}</Show>
         <Show when={person()}><Tooltip content="Notifications"><Button icon size="bar" variant={panel() === 'notifications' ? 'secondary' : 'ghost'} aria-label={unread() ? 'Notifications, unread updates' : 'Notifications'} aria-expanded={panel() === 'notifications'} onClick={event => toggle('notifications', event)} class="relative"><Bell size={20} strokeWidth={1.5} /><Show when={unread()}><span aria-hidden="true" class="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" /></Show></Button></Tooltip></Show>
         <Tooltip content={controlsName()}><Button icon size="bar" variant={panel() === 'controls' ? 'secondary' : 'ghost'} aria-label={`${panel() === 'controls' ? 'Close' : 'Open'} ${controlsName()}`} aria-expanded={panel() === 'controls'} onClick={event => toggle('controls', event)}>{panel() === 'controls' ? <X size={17} /> : <SlidersVertical size={20} strokeWidth={1.5} />}</Button></Tooltip>
         <Tooltip content="menu"><Button icon size="bar" variant={panel() === 'menu' ? 'secondary' : 'ghost'} aria-label={panel() === 'menu' ? 'Close menu' : 'Open menu'} aria-expanded={panel() === 'menu'} onClick={event => toggle('menu', event)}><Show when={person()} fallback={panel() === 'menu' ? <X size={17} /> : <CircleUser size={20} strokeWidth={1.5} />}><span class={`rounded-full ring-offset-1 ring-offset-surface ${panel() === 'menu' ? 'ring-2 ring-accent' : ''}`}><Avatar image={person()?.image ?? null} initial={person()?.username || person()?.email || '?'} userId={person()?.id ?? ''} size={24} /></span></Show></Button></Tooltip>
