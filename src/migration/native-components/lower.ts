@@ -201,8 +201,22 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    const admitted=admittedTarget(node,'loop');
    if(admitted?.kind==='loop'){
     if(ancestors.includes('For')){block('nested-loop-unsupported',node,'Nested loop identities require a separately admitted composition');return '';}
-    const proof=binding(node);templates.push(`<template id="${escape(admitted.templateId)}">${node.children.map(child=>walk(child,[...ancestors,'For'],depth+1)).join('')}</template>`);
-    return proof?`<span style="display:contents" data-af-id="${escape(proof.afId)}"></span>`:'';
+    const proof=binding(node),attrs:Record<string,string>={style:'display:contents'};
+    if(ancestors.some(tag=>['svg','table','thead','tbody','tfoot','tr','colgroup','select','optgroup','Table','TableHeader','TableBody','TableFooter','TableRow'].includes(tag))){block('loop-wrapper-context',node,'This retained parent requires a separately admitted range/SVG repeat host');return '';}
+    for(const attribute of node.attributes){
+     if(['each','keyBy'].includes(attribute.name))continue;
+     if(!attribute.value.static){require('binding',node,'Repeat wrapper attribute requires an admitted binding',attribute.name);continue;}
+     const value=attribute.value.json;
+     if(['className','class'].includes(attribute.name)){
+      if(!digest(input.authoredStyleSha256))require('style',node,'Repeat wrapper classes require their exact CSS closure',attribute.name);
+      if(typeof value!=='string')block('invalid-attribute',node,'Repeat class must be literal text',attribute.name);else attrs.class=value;
+     }else if(attribute.name==='id'){
+      if(typeof value!=='string'||!value||usedDom.has(value))block('duplicate-dom-id',node,'Repeat owner id must be a unique literal DOM id',attribute.name);else {usedDom.add(value);attrs.id=value;}
+     }else require(attribute.name==='style'?'style':'binding',node,'Repeat wrapper attribute needs explicit semantic admission',attribute.name);
+    }
+    if(proof)attrs['data-af-id']=proof.afId;
+    templates.push(`<template id="${escape(admitted.templateId)}">${node.children.map(child=>walk(child,[...ancestors,'For'],depth+1)).join('')}</template>`);
+    return proof?`<div${Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('')}></div>`:'';
    }
   }
   if(operation[node.tag]){require(operation[node.tag]!,node,'This typed shape requires its native operation/program adapter');return '';}

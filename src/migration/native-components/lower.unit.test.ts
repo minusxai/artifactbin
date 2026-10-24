@@ -118,3 +118,11 @@ test('admitted expression and condition targets emit exact slots and inert templ
  const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/data-af-id="adapter-0"/);assert.match(result.html!,/<template id="template-branch"><span[^>]*data-af-id="adapter-1"/);
  const stale=structuredClone(source);stale.admittedBindings![0]!.analysisSha256='f'.repeat(64);assert.equal(lowerNativeComponents(stale).status,'blocked');
 });
+test('admitted For preserves the source div wrapper id and class and blocks incompatible parent contexts',()=>{
+ const loop=element('For',{id:'owner',className:'source-classes'},[text('Row')]);
+ const source=input([loop]);source.authoredStyleSha256=digest;
+ source.admittedBindings=[{...source.identityBindings[0]!,kind:'loop',templateId:'row-template',identity:{owner:'owner',keyBy:null,templateIds:['row-child'],encoding:'archived-instance-v1'}}];
+ const result=lowerNativeComponents(source);assert.equal(result.status,'complete');assert.match(result.html!,/<div style="display:contents" id="owner" class="source-classes" data-af-id="stable-0"><\/div>/);assert.match(result.html!,/<template id="row-template">Row<\/template>/);
+ const table=element('tbody',{},[loop]);const unsupported=input([table]);unsupported.identityBindings=source.identityBindings.concat(unsupported.identityBindings.filter(b=>b.sourceNode!==loop.graphKey));unsupported.admittedBindings=source.admittedBindings;unsupported.authoredStyleSha256=digest;
+ assert.ok(lowerNativeComponents(unsupported).blockers.some(b=>b.code==='loop-wrapper-context'));
+});

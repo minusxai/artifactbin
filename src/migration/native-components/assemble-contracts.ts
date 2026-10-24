@@ -4,6 +4,9 @@ import type { NativeBindingQuery, NativeBindingMutation, NativeBindingTarget } f
 import type { NativeOperationCoverage } from './operations-contracts.ts';
 export interface NativeAssemblyStyle {
  /** Exact source CSS bytes, including the recovered theme and authored utility closure. */
+ rootSha256?: string;
+ htmlAttributes?: Readonly<Record<string,string>>;
+ storyWrapper?: {tag:'div';attributes:Readonly<Record<string,string>>};
  css: string;
  sha256: string;
  sourceSha256: string;

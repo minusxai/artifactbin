@@ -46,3 +46,19 @@ test('native modules require exact actual bundle file mapping and retain relativ
  input.files=[{path:'components/button.js',bytes,sha256}];input.modules=[{name:'button',register:'registerButton',specifier:'./components/button.js',sha256}];
  const complete=assembleNativePage(input);assert.equal(complete.status,'complete');if(complete.status==='complete'){assert.match(complete.html,/from "\.\/components\/button.js"/);assert.doesNotMatch(complete.html,/@afbin\/button/);assert.equal(complete.files[0]!.sha256,sha256);}
 });
+test('historical read-only and local SQL mutation routes cannot become remote mutation actions',()=>{
+ const input=fixture();input.analysis.flow.mutations=[{name:'change',start:0,end:1}];
+ input.mutations=[{name:'change',document:'mutation { ops { run { outcome } } }',namespace:'ops',values:[],outcomePath:['ops','run'],reset:[]}];
+ input.operationCoverage={sourceSha256:input.analysis.sourceSha256,compilerSourceSha256:input.analysis.compilerSourceSha256,sqlEngineSha256:'a'.repeat(64),queryOrder:[],blockers:[],operations:[{kind:'mutation',name:'change',sourceNode:'$flow',operationSha256:'b'.repeat(64),route:'historical-readonly',dependencies:[],requiredGuarantees:[],status:'attested-plan'}]};
+ const result=assembleNativePage(input);assert.equal(result.status,'blocked');assert.ok(result.blockers.some(b=>b.code==='operation-route-not-supported'));
+ input.operationCoverage.operations[0]!.route='apollo-local-mutation';const local=assembleNativePage(input);assert.equal(local.status,'blocked');assert.ok(local.blockers.some(b=>b.code==='operation-route-not-supported'));
+});
+test('exact theme root receipts and ordered stylesheet imports survive HTML assembly',()=>{
+ const input=fixture();
+ const css='@import url("./assets/theme.css");';
+ input.style={css,sha256:'5794a0a3cc90f8e9a53f3eba1a7ac2b349c56540d52d889d3654bb0d34138e60',sourceSha256:input.analysis.sourceSha256,htmlAttributes:{class:'dark','data-theme':'source-theme'},storyWrapper:{tag:'div',attributes:{id:'source-story','data-story-root':''}}};
+ input.style.rootSha256=nativeDigest({sourceSha256:input.style.sourceSha256,htmlAttributes:input.style.htmlAttributes,storyWrapper:input.style.storyWrapper});
+ input.files=[{path:'assets/theme.css',bytes:new TextEncoder().encode(''),sha256:'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}];
+ const result=assembleNativePage(input);assert.equal(result.status,'complete');if(result.status==='complete'){assert.match(result.html,/<html class="dark" data-theme="source-theme">/);assert.match(result.html,/<style>@import url\("\.\/assets\/theme.css"\);<\/style>/);assert.match(result.html,/<body><div id="source-story" data-story-root="">/);}
+ input.style.htmlAttributes={class:'light'};assert.equal(assembleNativePage(input).status,'blocked');
+});
