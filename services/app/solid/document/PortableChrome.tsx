@@ -32,6 +32,7 @@ const NOTICE = {
 
 export function PortableChrome(props: Omit<PortableChromeOptions, 'win' | 'stylesheet' | 'state' | 'title'> & { current: PortableChromeUpdate }): JSX.Element {
   const kind = () => props.current.kind ?? props.kind;
+  const mode = () => props.current.mode ?? props.mode ?? 'light';
   const identity = (): PortableChromeIdentity | undefined => props.current.identity ?? props.identity;
   const [publishOpen, setPublishOpen] = createSignal(false);
   const [publishOrigin, setPublishOrigin] = createSignal(props.publishOrigin ?? '');
@@ -54,15 +55,18 @@ export function PortableChrome(props: Omit<PortableChromeOptions, 'win' | 'style
   };
   const notice = () => {
     if (saveError()) return 'Could not save HTML. Try again.';
-    if (props.current.notice) return props.current.notice;
     const preview: PortablePreviewStatus | undefined = props.current.previewStatus;
     if (preview?.error) return 'Private preview is unavailable. Your local file is preserved.';
-    if (preview?.changed) return 'Private preview has changes. Save HTML to keep them.';
+    if (preview?.changed) return 'File changed on disk. Reload to view it.';
+    if (props.current.notice) return props.current.notice;
     if (preview?.connected) return 'Private preview is connected. Save HTML keeps a local copy.';
     return kind() === 'unpublished' && props.current.state === 'offline' ? 'Unpublished local file. Publish when you’re ready.' : NOTICE[props.current.state];
   };
   const items = (): MenuEntry[] => {
-    const entries: MenuEntry[] = [{ label: 'Include private filters and drafts', text: 'Include private filters and drafts', checked: includePrivateState(), onSelect: () => setIncludePrivateState(value => !value) }];
+    const entries: MenuEntry[] = [{ label: 'Include private filters and drafts', text: 'Include private filters and drafts', checked: includePrivateState(), onSelect: () => setIncludePrivateState(value => !value) },
+      { separator: true },
+      { label: 'Light mode', text: 'Light', checked: mode() === 'light', onSelect: () => props.onMode?.('light') },
+      { label: 'Dark mode', text: 'Dark', checked: mode() === 'dark', onSelect: () => props.onMode?.('dark') }];
     if (kind() === 'linked' && identity()) entries.push({ label: 'Open original', text: 'Open original', onSelect: props.onOpenHosted });
     if (props.current.state === 'connected') entries.push({ label: 'Disconnect', text: 'Disconnect', onSelect: props.onDisconnect });
     else if (props.current.state !== 'offline') entries.push({ label: 'Stay offline', text: 'Stay offline', onSelect: props.onStayOffline });
@@ -73,7 +77,7 @@ export function PortableChrome(props: Omit<PortableChromeOptions, 'win' | 'style
     try { return `Original: ${new URL(identity()?.platformOrigin ?? '').host}`; }
     catch { return 'Local copy of original'; }
   };
-  return <><section aria-label="Local HTML controls" class="fixed inset-x-0 top-0 z-40 font-sans text-fg" style={{ height: `${PORTABLE_CHROME_HEIGHT}px` }}>
+  return <><section aria-label="Local HTML controls" data-app-appearance={mode()} class="fixed inset-x-0 top-0 z-40 font-sans text-fg" style={{ height: `${PORTABLE_CHROME_HEIGHT}px` }}>
     <PageBar home={null} mobileTitle={props.current.title ?? 'Local document'}
       navigation={<span class="min-w-0 truncate">{props.current.title ?? 'Local document'}</span>}
       actions={<>
@@ -86,6 +90,7 @@ export function PortableChrome(props: Omit<PortableChromeOptions, 'win' | 'style
     <div role="status" aria-live="polite" class="flex h-8 min-w-0 items-center gap-2 border-b border-edge bg-surface px-3 font-mono text-micro text-muted">
       <span class="shrink-0 text-fg">{LABEL[props.current.state]}</span>
       <span class="min-w-0 truncate">{notice()}</span>
+      <Show when={props.current.previewStatus?.changed}><Button variant="secondary" size="sm" aria-label="Reload file" disabled={!props.onReloadPreview} onClick={() => props.onReloadPreview?.()}>Reload</Button></Show>
       <span class="ml-auto hidden shrink-0 sm:inline">{props.current.sourceStatus ?? source()}</span>
     </div>
   </section>

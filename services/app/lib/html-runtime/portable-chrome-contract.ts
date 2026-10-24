@@ -9,6 +9,7 @@ export interface PortableChromeIdentity {
 export interface PortablePreviewStatus { changed: boolean; connected: boolean; error?: string; }
 export interface PortableChromeUpdate {
   state: PortableChromeState;
+  mode?: 'light' | 'dark';
   title?: string;
   previewStatus?: PortablePreviewStatus;
   kind?: 'unpublished' | 'linked';
@@ -25,6 +26,11 @@ export interface PortableChromeOptions {
   kind: 'unpublished' | 'linked';
   identity?: PortableChromeIdentity;
   state: PortableChromeState;
+  mode?: 'light' | 'dark';
+  /** Local viewer choice only; the renderer updates data-af-dark without remote work. */
+  onMode?: (mode: 'light' | 'dark') => void;
+  /** Delegated to the private preview's dirty-safe reload flow. */
+  onReloadPreview?: () => void;
   onConnect: () => void;
   onDisconnect: () => void;
   onStayOffline: () => void;

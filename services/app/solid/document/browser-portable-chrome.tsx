@@ -11,11 +11,23 @@ export function mountPortableChrome(options: PortableChromeOptions): PortableChr
   configureTrustedUiStyles(options.stylesheet);
   const boundary = createTrustedOverlayHost({ doc: options.win.document, layer: 'navigation', overlay: true });
   boundary.host.setAttribute('data-af-local-chrome', '');
-  const [current, setCurrent] = createSignal<PortableChromeUpdate>({ state: options.state, title: options.title, kind: options.kind, identity: options.identity });
-  const unmount = render(() => <PortableChrome {...options} current={current()} />, boundary.content);
+  const initialMode = options.mode ?? (options.win.document.documentElement.hasAttribute('data-af-dark') ? 'dark' : 'light');
+  options.win.document.documentElement.toggleAttribute('data-af-dark', initialMode === 'dark');
+  const [current, setCurrent] = createSignal<PortableChromeUpdate>({ state: options.state, title: options.title, kind: options.kind, identity: options.identity, mode: initialMode });
   let disposed = false;
+  const pickMode = (mode: 'light' | 'dark') => {
+    if (disposed) return;
+    options.win.document.documentElement.toggleAttribute('data-af-dark', mode === 'dark');
+    setCurrent(previous => ({ ...previous, mode }));
+    options.onMode?.(mode);
+  };
+  const unmount = render(() => <PortableChrome {...options} current={current()} onMode={pickMode} />, boundary.content);
   return {
-    update(next) { if (!disposed) setCurrent(previous => ({ ...previous, ...next })); },
+    update(next) {
+      if (disposed) return;
+      if (next.mode) options.win.document.documentElement.toggleAttribute('data-af-dark', next.mode === 'dark');
+      setCurrent(previous => ({ ...previous, ...next }));
+    },
     dispose() { if (disposed) return; disposed = true; unmount(); boundary.dispose(); },
   };
 }

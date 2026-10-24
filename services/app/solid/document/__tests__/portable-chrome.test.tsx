@@ -6,7 +6,7 @@ import type { PortableChromeOptions, PortableChromeState } from '@/lib/html-runt
 import { cleanup } from '@/solid/__tests__/helpers';
 
 const disposals: Array<() => void> = [];
-afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); cleanup(); document.documentElement.removeAttribute('data-af-dark'); vi.restoreAllMocks(); });
 function mount(overrides: Partial<PortableChromeOptions> = {}) {
   const options: PortableChromeOptions = {
     win: window, stylesheet: '', title: 'Local document', kind: 'linked', state: 'offline',
@@ -69,7 +69,7 @@ it('connects only the linked original and keeps local controls after disconnect 
   expect(options.onStayOffline).toHaveBeenCalledOnce();
   chrome.update({ state: 'offline', title: 'Renamed local document', previewStatus: { changed: true, connected: false } });
   expect(ui.getByRole('button', { name: 'Save HTML' })).toBeEnabled();
-  expect(ui.getByRole('status')).toHaveTextContent('Private preview has changes');
+  expect(ui.getByRole('status')).toHaveTextContent('File changed on disk');
 });
 
 it('removes its host and portalled menu when disposed', () => {
@@ -97,4 +97,30 @@ it('rejects a publish destination with a path without calling the publication fl
   fireEvent.click(within(dialog).getByRole('button', { name: 'Publish' }));
   expect(within(dialog).getByRole('textbox', { name: 'Platform URL' })).toHaveAttribute('aria-invalid', 'true');
   expect(options.onPublish).not.toHaveBeenCalled();
+});
+
+it('offers explicit dirty-safe reload when the file changed on disk without claiming Save preserves it', () => {
+  const onReloadPreview = vi.fn();
+  const { chrome, ui } = mount({ onReloadPreview });
+  chrome.update({ state: 'offline', previewStatus: { changed: true, connected: true }, notice: 'Save HTML keeps a local copy.' });
+  expect(ui.getByRole('status')).toHaveTextContent('File changed on disk');
+  expect(ui.getByRole('status')).not.toHaveTextContent('Save HTML');
+  expect(onReloadPreview).not.toHaveBeenCalled();
+  fireEvent.click(ui.getByRole('button', { name: 'Reload file' }));
+  expect(onReloadPreview).toHaveBeenCalledOnce();
+});
+
+it.each(['unpublished', 'linked'] as const)('provides local Light and Dark choices for an offline %s file', (kind) => {
+  const onMode = vi.fn();
+  const { ui } = mount({ kind, mode: 'light', onMode });
+  fireEvent.click(ui.getByRole('button', { name: 'Local file actions' }));
+  expect(ui.getByRole('menuitemcheckbox', { name: 'Light mode' })).toHaveAttribute('aria-checked', 'true');
+  fireEvent.click(ui.getByRole('menuitemcheckbox', { name: 'Dark mode' }));
+  expect(document.documentElement).toHaveAttribute('data-af-dark');
+  expect(onMode).toHaveBeenLastCalledWith('dark');
+  fireEvent.click(ui.getByRole('button', { name: 'Local file actions' }));
+  expect(ui.getByRole('menuitemcheckbox', { name: 'Dark mode' })).toHaveAttribute('aria-checked', 'true');
+  fireEvent.click(ui.getByRole('menuitemcheckbox', { name: 'Light mode' }));
+  expect(document.documentElement).not.toHaveAttribute('data-af-dark');
+  expect(onMode).toHaveBeenLastCalledWith('light');
 });
