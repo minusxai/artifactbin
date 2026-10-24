@@ -500,3 +500,14 @@ it('bounds transient gh HTTP failures by the original deadline and three request
  await expect(requestCurrentArtifact(['api','fixture'],options)).rejects.toThrow('gh HTTP 503');expect(calls).toBe(3);expect(time).toBe(100);
  calls=0;time=198;await expect(requestCurrentArtifact(['api','fixture'],options)).rejects.toThrow(/artifact timed out/);expect(calls).toBe(1);expect(time).toBe(200);
 });
+
+it('bounds expanded candidates independently from compressed transfer bytes',async()=>{
+ const {validateCandidateCompression,MAX_CANDIDATE_EXPANDED_BYTES,MAX_ARTIFACT_ARCHIVE_BYTES}=await import('../lib/ci-artifact-wait.mjs');
+ expect(MAX_ARTIFACT_ARCHIVE_BYTES).toBe(128*1024*1024);
+ expect(MAX_CANDIDATE_EXPANDED_BYTES).toBe(256*1024*1024);
+ const compressed=gzipSync(Buffer.alloc(64));
+ expect(validateCandidateCompression(compressed)).toBe(64);
+ expect(()=>validateCandidateCompression(compressed,{maxExpandedBytes:32})).toThrow(/expanded.*limit/);
+ expect(()=>validateCandidateCompression(compressed.subarray(0,compressed.length-4))).toThrow(/truncated or invalid/);
+ expect(()=>validateCandidateCompression(compressed,{maxExpandedBytes:MAX_CANDIDATE_EXPANDED_BYTES+1})).toThrow(/bound/);
+});

@@ -140,6 +140,7 @@ if(!$rejected){throw 'Native command failure was ignored'}
 $env:npm_config_audit='false';$env:npm_config_fund='false';$env:npm_config_update_notifier='false'
 $env:npm_config_cache=Join-Path '__ROOT__' 'npm-cache';$env:ARTIFACTBIN_HOME=Join-Path '__ROOT__' 'afbin-home';$env:CLI__AUTO_UPDATE='0';$env:ARTIFACTBIN_SKILLS='off';$env:ARTIFACTBIN_URL='http://127.0.0.1:1'
 $env:npm_config_timing='true'
+$env:ARTIFACTBIN_COMPILER_DIAGNOSTICS=Join-Path '__DIAGNOSTICS__' 'compiler-install.json'
 $rows=Join-Path '__ROOT__' 'rows.csv';[IO.File]::WriteAllText($rows,"amount`n10`n20`n")
 $seededCache=[bool]::Parse('__SEEDED_CACHE__')
 if(!$seededCache -and (Test-Path $env:npm_config_cache)){throw 'Expected genuinely cold npm cache'}

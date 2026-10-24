@@ -22,7 +22,7 @@ coreutils)
   make -j2
   # Exercise upstream regression suites, including SIZE_MAX sort offsets and multibyte uniq widths.
   chown -R nobody:nogroup /corebuild
-  runuser -u nobody -- make -j2 check TESTS='tests/sort/sort-field-limit.sh tests/sort/sort.pl tests/uniq/uniq.pl tests/uniq/uniq-c-width.sh tests/uniq/uniq-perf.sh'
+  runuser -u nobody -- make -j2 check-TESTS RUN_EXPENSIVE_TESTS=yes TESTS='tests/sort/sort-field-limit.sh tests/sort/sort.pl tests/uniq/uniq.pl tests/uniq/uniq-c-width.sh tests/uniq/uniq-perf.sh'
   make DESTDIR=/corestage install
   PATH=/corestage/usr/bin:$PATH python3 "$helper_dir/check-utilities.py" coreutils
   python3 "$helper" coreutils /corestage /out

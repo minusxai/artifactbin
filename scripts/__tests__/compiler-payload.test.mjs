@@ -53,12 +53,16 @@ it('replaces the installed Unix native copies and preserves the real JavaScript 
  expect(execFileSync(join(packageRoot,'bin/esbuild'),['--version'],{encoding:'utf8'}).trim()).toBe(require('esbuild/package.json').version);
 }));
 
-it('refuses a version mismatch before changing any installed binary',()=>fixture(async({assets,manifest,packageRoot,version})=>{
+it('refuses a version mismatch and preserves the original diagnostic outside the disposable install',()=>fixture(async({root,assets,manifest,packageRoot,version})=>{
  const target=`${process.platform}-${process.arch}`;
  manifest.compilers['0.0.0']={[target]:{...manifest.compilers[version][target],file:`0.0.0/${target}/esbuild${process.platform==='win32'?'.exe':''}`}};
  const destination=join(assets,manifest.compilers['0.0.0'][target].file);await mkdir(dirname(destination),{recursive:true});await cp(join(assets,manifest.compilers[version][target].file),destination);
  await writeFile(join(assets,'manifest.json'),JSON.stringify(manifest));await writeFile(join(packageRoot,'package.json'),JSON.stringify({version:'0.0.0'}));
- await expect(installCompiler(packageRoot,assets)).rejects.toThrow('Compiler protocol mismatch');
+ const diagnosticsPath=join(root,'compiler-install.json');
+ await expect(installCompiler(packageRoot,assets,{diagnosticsPath})).rejects.toThrow('Compiler protocol mismatch');
+ const diagnostic=JSON.parse(await readFile(diagnosticsPath,'utf8'));
+ expect(diagnostic.operation).toBe('check compiler version');expect(diagnostic.message).toContain('Compiler protocol mismatch');
+ expect(diagnostic.destination).toBeNull();
 }));
 
 it('preserves the Windows JavaScript launcher while replacing the platform executable',()=>fixture(async({root,assets,manifest,packageRoot,version,binary})=>{

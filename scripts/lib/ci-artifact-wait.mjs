@@ -11,6 +11,17 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {inspectBundle} from '../ci/npm-provenance.mjs';
 const artifactTimeout=()=>Error('Current-attempt artifact timed out');
 export const MAX_ARTIFACT_ARCHIVE_BYTES=128*1024*1024;
+// The five supported compiler payloads make the signed candidate 142MB expanded;
+// keep transfer and decompression separately bounded instead of treating valid gzip as corruption.
+export const MAX_CANDIDATE_EXPANDED_BYTES=256*1024*1024;
+export function validateCandidateCompression(bytes,{maxExpandedBytes=MAX_CANDIDATE_EXPANDED_BYTES}={}){
+ if(!Number.isSafeInteger(maxExpandedBytes)||maxExpandedBytes<1||maxExpandedBytes>MAX_CANDIDATE_EXPANDED_BYTES)throw Error('Invalid candidate expansion bound');
+ try{return gunzipSync(bytes,{maxOutputLength:maxExpandedBytes}).length;}
+ catch(error){
+  if(error.code==='ERR_BUFFER_TOO_LARGE')throw Error('expanded candidate exceeds its size limit');
+  throw Error('truncated or invalid gzip candidate');
+ }
+}
 /** Three transport attempts share the caller's original readiness deadline.
  * Transient GitHub HTTP failures are read-only API failures, not schema or auth failures. */
 export async function requestCurrentArtifact(args,{deadline,now=Date.now,sleep:pause=sleep,request=execFileSync,command='gh',requestTimeout=30000,retryDelay=1000,encoding='utf8',maxBuffer=1024*1024}){
@@ -124,7 +135,7 @@ export async function downloadAndExtractCurrentArtifactFiles(artifact,{repo,dead
    const file=execute(command,windows?['-xOf',archivePath,member.memberName]:['-p',archivePath,member.memberName],{encoding:null,maxBuffer:member.maxBytes??MAX_ARTIFACT_ARCHIVE_BYTES,...(deadline===undefined?{}:{timeout:Math.max(1,Math.ceil(deadline-now()))})});
    if(file.length>MAX_ARTIFACT_ARCHIVE_BYTES)throw Error(`Current-run artifact member exceeds ${MAX_ARTIFACT_ARCHIVE_BYTES} byte extraction limit`);
    if(file.length>(member.maxBytes??MAX_ARTIFACT_ARCHIVE_BYTES))throw Error(`Current-run artifact member ${member.memberName} exceeds its size limit`);
-   if(member.memberName.endsWith('.tgz'))try{gunzipSync(file,{maxOutputLength:MAX_ARTIFACT_ARCHIVE_BYTES});}catch{throw Error(`Current-run npm candidate ${member.memberName} is truncated or invalid`);}
+   if(member.memberName.endsWith('.tgz'))try{validateCandidateCompression(file);}catch(error){throw Error(`Current-run npm candidate ${member.memberName} is ${error.message}`);}
    write(member.outputPath,file);extracted.push({memberName:member.memberName,size:file.length});
   }
   return extracted;

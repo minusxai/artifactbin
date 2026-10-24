@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {readFileSync,readdirSync,mkdtempSync,mkdirSync,writeFileSync,existsSync,rmSync} from 'node:fs';
+import {readFileSync,readdirSync,mkdtempSync,mkdirSync,writeFileSync,existsSync,rmSync,realpathSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -42,8 +42,8 @@ it('normalizes legacy executable inventory while retaining ancillary file bytes'
   const bin=join(directory,'bin');mkdirSync(bin);
   // This fixture verifies paths and bytes, not protected macOS system-file flags.
   if(process.platform==='darwin')writeFileSync(join(bin,'cp'),'#!/bin/sh\nshift\nexec /bin/cp "$@"\n',{mode:0o755});
-  writeFileSync(join(bin,'dpkg-query'),`#!/bin/sh\nprintf '%s\\n' /bin/sh "$INVENTORY_DOCUMENT"\n`,{mode:0o755});
-  execFileSync('sh',['-eu','-c',helper+'\ncopy_inventory ignored "$1"','inventory-fixture',destination],{env:{...process.env,PATH:bin+':'+process.env.PATH,INVENTORY_DOCUMENT:documentation}});
+  writeFileSync(join(bin,'dpkg-query'),`#!/bin/sh\nprintf '%s\\n' /bin/sh "$INVENTORY_SHELL_TARGET" "$INVENTORY_DOCUMENT"\n`,{mode:0o755});
+  execFileSync('sh',['-eu','-c',helper+'\ncopy_inventory ignored "$1"','inventory-fixture',destination],{env:{...process.env,PATH:bin+':'+process.env.PATH,INVENTORY_DOCUMENT:documentation,INVENTORY_SHELL_TARGET:realpathSync('/bin/sh')}});
   expect(readFileSync(join(destination,'usr/bin/sh'))).toEqual(readFileSync('/bin/sh'));
   expect(existsSync(join(destination,'bin/sh'))).toBe(false);
   expect(readFileSync(join(destination,documentation),'utf8')).toBe('ancillary package information');
