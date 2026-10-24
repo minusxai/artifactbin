@@ -3,7 +3,8 @@ import {createHash,randomUUID} from 'node:crypto';
 import {mkdir,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {baselineLocalOrigin,createBaselineSession,validateBaselineAccount} from './component-baseline-session.mjs';
-import {publishBaselineFixtures} from '../fixtures/component-baseline/publication.mjs';
+import {publishBaselineFixtures,installedFiles} from '../fixtures/component-baseline/publication.mjs';
+import {verifyComponentAssetArchive} from './component-asset-proof.mjs';
 import {uploadBrowserParityFixtures} from '../fixtures/component-baseline/upload.mjs';
 import {captureBrowserBaseline} from './component-browser-baseline.mjs';
 import {observeUploadRequests} from './component-upload-route.mjs';
@@ -16,7 +17,7 @@ export async function runUploadBaseline({base,implementation,browser,sourceRevis
  const publish=async(body,options={})=>{const response=await fetch(origin+'/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json',...(options.idempotencyKey?{'Idempotency-Key':options.idempotencyKey}:{})},body:JSON.stringify({visibility:'unlisted',...body})});assert.equal(response.status,201,'Actual upload fixture publication');return response.json();};
  const allowed=await publish({title:'Disposable upload backing data',dataset:[{fixture:'upload'}],access:'readwrite'});
  const denied=await publish({title:'Disposable read-only backing data',dataset:[{fixture:'upload-denied'}],access:'readonly'});
- let skillArchive;if(implementation==='html'){const response=await fetch(origin+'/skills/artifactbin.zip');assert.equal(response.status,200);skillArchive=new Uint8Array(await response.arrayBuffer());}
+ let skillArchive,componentAssets;if(implementation==='html'){const response=await fetch(origin+'/skills/artifactbin.zip');assert.equal(response.status,200);skillArchive=new Uint8Array(await response.arrayBuffer());componentAssets=await verifyComponentAssetArchive({root:path.resolve(import.meta.dirname,'../..'),files:installedFiles(skillArchive)});}
  const entries=[];
  for(const fixture of uploadBrowserParityFixtures)entries.push(...await publishBaselineFixtures({implementation,publish,serverOrigin:origin,skillArchive,fixtures:[fixture],substitutions:{uploadDataset:fixture.uploadScenario==='permission'?denied.id:allowed.id,platformOrigin:origin}}));
  /** @type {import('../fixtures/component-baseline/upload-contract').UploadBackendProof[]} */
@@ -51,6 +52,6 @@ export async function runUploadBaseline({base,implementation,browser,sourceRevis
     Object.assign(proof,{readbackSha256:sha(bytes),replayed:receipt.replayed===true});
    }
   }};
- }});complete=true;}finally{await writeFile(path.join(output,'upload-backend-proof.json'),JSON.stringify({complete,implementation,sourceRevision,account,proofs},null,2));}
+ }});complete=true;}finally{await writeFile(path.join(output,'upload-backend-proof.json'),JSON.stringify({complete,implementation,sourceRevision,componentAssets,account,proofs},null,2));}
  const issues=captures.flatMap(c=>[...c.errors,...c.assertionErrors,...c.fontEvidence.errors,...c.resourceEvidence.errors]);assert.deepEqual(issues,[],'Real upload capture issues');return {captures,proofs};
 }
