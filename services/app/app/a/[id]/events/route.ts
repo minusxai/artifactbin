@@ -154,6 +154,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     datasetUnsubs.clear();
     await writer.close().catch(() => {});
   };
+  // A cancelled response reader rejects the writable side even when the request's
+  // signal stays live (for example a streaming client that releases its body).
+  // Release every LISTEN immediately, rather than waiting for another write to fail.
+  void writer.closed.catch(() => void close());
+
 
   /**
    * A dataset wakeup. The document's own ACL is re-checked here exactly as it

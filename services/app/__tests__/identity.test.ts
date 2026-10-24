@@ -24,7 +24,7 @@ import { mintAccountToken } from '@/__tests__/harness';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { ID_RE } from '@/lib/platform';
 import { useAppHarness, request } from '@/__tests__/harness';
-import { readFrames } from '@/__tests__/sse';
+import { sseStream } from '@/__tests__/sse';
 
 const harness = useAppHarness();
 
@@ -129,18 +129,21 @@ describe('/a/<id> namespace', () => {
     const stream = await eventsRoute(request('/a/AbC123/events'), params({ id: 'AbC123' }));
     expect(stream.status).toBe(200);
 
-    // First frame is the current state; then a whole-document PUT must wake us.
+    const reader = sseStream(stream.body!);
+    expect((await reader.named('message'))[0]?.data.version).toBe(1);
+    // Comment wakeups may interleave with version pings; only message events carry versions.
     const put = await putArtifact(
       await observedRequest('/api/artifacts/AbC123', { method: 'PUT', token: token, json: { visibility: 'public', html:nativeHtml('<section><p>beta</p></section>') } }),
       params({ id: 'AbC123' }),
     );
     expect(put.status).toBe(200);
 
-    const frames = await readFrames(stream.body!, 2);
-    expect(frames.length).toBe(2);
-    expect(frames[1].version).toBe(2); // the wakeup arrived — the frame is fetched separately
+    const frames = await reader.named('message');
+    expect(frames).toHaveLength(1);
+    expect(frames[0]?.data.version).toBe(2); // the wakeup arrived — the frame is fetched separately
     const frame = await (await frameRoute(request('/a/AbC123/events/frame'), params({ id: 'AbC123' }))).json();
     expect(frame).toMatchObject({version:2});
     const head=await getArtifactRoute(request('/api/artifacts/AbC123',{token}),params({id:'AbC123'}));expect((await head.json()).html).toContain('beta');
+    reader.close();
   });
 });

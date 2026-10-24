@@ -8,7 +8,7 @@ import { artifactQuery } from '@/lib/artifacts/table';
 import { linkRoleOf } from '@/lib/artifacts/access';
 import { ANONYMOUS_CEILING, type ArtifactRole, atLeast, canAnnotate, canEdit, canGovern, canRead, capRole, maxRole, rankOf, ROLE_ORDER, SHARE_ROLE_LABEL, SHARE_ROLES, type ShareRole, shareRolesAtLeast, type Visibility } from '@artifactbin/contracts';
 import { ANONYMOUS_ACTOR, NO_IDENTITY, identityForUser, type RequestIdentity, claimToken, createUser, setUserEmail, ensureUsername, setRelationState, has, count, linked, link } from '@/lib/accounts';
-import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor } from '@/lib/annotations';
+import { createAnnotationFor, listAnnotationsFor, actOnAnnotationFor, deleteAnnotationFor } from '@/lib/annotations';
 import { PUT as putArtifactRoute, GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute, POST as create, GET as listArtifactsRoute } from '@/app/api/artifacts/route';
 import { GET as getSharingRoute, PUT as putSharingRoute, GET as read, PUT as write } from '@/app/api/my/artifacts/[id]/sharing/route';
@@ -469,7 +469,15 @@ describe('the commenter role, through the routes', () => {
 
       const byViewer = await createAnnotationFor(identityForUser(w.viewer.id, w.tv.id), w.doc.id, { ...input, baseEditId: head.edit_id }, human);
       expect(byViewer, 'a viewer is refused with the uniform miss').toBeNull();
-      expect(await listAnnotationsFor(identityForUser(w.viewer.id, w.tv.id), w.doc.id)).toBeNull();
+      const viewer = identityForUser(w.viewer.id, w.tv.id);
+      const visible = await listAnnotationsFor(viewer, w.doc.id);
+      expect(visible?.map(row => row.id).sort()).toEqual([id, (byEditor as { id: string }).id].sort());
+      expect(visible?.find(row => row.id === id)?.thread.map(comment => comment.body)).toEqual(['is this right?', 'still wondering']);
+      expect(await actOnAnnotationFor(viewer, w.doc.id, id, { reply: 'not permitted' }, human)).toBeNull();
+      expect(await actOnAnnotationFor(viewer, w.doc.id, id, { resolve: true }, human)).toBeNull();
+      expect(await deleteAnnotationFor(viewer, w.doc.id, id)).toBe(false);
+      expect(await listAnnotationsFor(viewer, w.doc.id)).toEqual(visible);
+      expect(await actOnAnnotationFor(identityForUser(w.commenter.id, w.tc.id), w.doc.id, id, { resolve: true }, human)).toMatchObject({ id, status: 'resolved' });
     });
 
     it('may NOT edit, replace, or delete — every write door is the uniform 404', async () => {
