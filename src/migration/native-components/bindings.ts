@@ -228,7 +228,9 @@ export function emitNativeBindings(
       !validateDocument(mutation, "mutation") ||
       mutation.outcomePath.join(".") !==
         [mutation.namespace, "run"].join(".") ||
-      mutation.values.some((field) => !Object.hasOwn(defaults, field.name)) ||
+      mutation.values.some((field) => field.source
+        ? field.source.kind !== "row" || !name(field.name) || !name(field.source.field) || !["string", "number", "boolean"].includes(field.type)
+        : !Object.hasOwn(defaults, field.name)) ||
       mutation.reset.some((field) => !Object.hasOwn(defaults, field))
     )
       block(mutation.name, "invalid-mutation-descriptor");

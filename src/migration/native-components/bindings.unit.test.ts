@@ -1179,7 +1179,7 @@ test("top-level buttons share an operation busy lock before awaiting local write
   }
 });
 
-test("same mutation remains independently runnable in different stable rows", async () => {
+test("same mutation remains independently runnable in different stable rows with exact admitted row arguments", async () => {
   const loop = el("loop", "For", { id: "loop", keyBy: "id" });
   if (loop.type !== "element") throw Error();
   loop.attributes.push({
@@ -1220,7 +1220,7 @@ test("same mutation remains independently runnable in different stable rows", as
       namespace: "records",
       document:
         "mutation Save($values:records__Values!,$requestId:String!){records{run(values:$values,requestId:$requestId){requestId outcome reset}}}",
-      values: [],
+      values: [{name:"row_id",type:"string",source:{kind:"row",field:"id"}}],
       outcomePath: ["records", "run"],
       reset: [],
     },
@@ -1266,6 +1266,7 @@ test("same mutation remains independently runnable in different stable rows", as
     assert.notEqual(requests[0].requestId, requests[1].requestId);
     for (const release of releases) release();
     await Promise.all([first, second]);
+    assert.deepEqual(requests.map(request=>request.values.row_id), ["A", "B"]);
   } finally {
     await runtime.close();
   }
@@ -1376,4 +1377,16 @@ test("historical readonly actions stay disabled while local-only actions remain 
  const running=await execute(result.authorJs,port,doc);
  assert.equal(save.disabled,true);await save.click();await local.click();assert.equal(port.state.open,true);
  await running.close();
+});
+
+test("registered mutation snapshots admitted row fields separately from viewer local scalars", async () => {
+ const source=input([el('save','Button',{run:'$save'})],[{kind:'action',sourceNode:'save',afId:'save'}]);
+ source.analysis.flow.mutations=[{name:'save',start:0,end:1}];
+ source.mutations=[{name:'save',namespace:'records',document:'mutation Save($values:records__Values!,$requestId:String!){records{run(values:$values,requestId:$requestId){requestId outcome reset}}}',values:[{name:'row_id',type:'string',nullable:true,source:{kind:'row',field:'id'}},{name:'filter',type:'string',nullable:true}],outcomePath:['records','run'],reset:[]}];
+ const result=emitNativeBindings(source);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ const doc=new Doc(),button=new Element('button',{'data-af-id':'save'});doc.body.append(button);
+ const port=client({open:false,filter:'local'});let request:any;
+ port.mutate=async(options:any)=>{request=options.variables;return {data:{records:{run:{requestId:request.requestId,outcome:'committed',reset:[]}}}};};
+ const running=await execute(result.authorJs,port,doc);
+ try {await button.click();assert.deepEqual(request.values,{row_id:null,filter:'local'});assert.equal(Object.hasOwn(port.state,'row_id'),false);} finally {await running.close();}
 });

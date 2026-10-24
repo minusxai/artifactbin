@@ -14,7 +14,7 @@ export interface NativeRegisteredBindingMutation {
   name: string;
   document: string;
   namespace: string;
-  values: readonly { name: string; type: string; nullable?: boolean }[];
+  values: readonly { name: string; type: string; nullable?: boolean; source?: {kind: "row"; field: string} }[];
   /** Registered operation outcome object; only outcome=committed may reset. */
   outcomePath: readonly string[];
   reset: readonly string[];
