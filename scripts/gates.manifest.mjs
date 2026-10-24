@@ -33,14 +33,12 @@
 export const GATE_SPECS = Object.freeze([
   // Candidate actual-reader suite; paired original evidence is an explicit run mode.
   { name: 'component-baseline', needsMail: false, seconds: 30, timeoutMs: 300_000 },
-  // New component pilot: provisional scheduling weight until its first CI measurement.
-  { name: 'html-components', needsMail: false, seconds: 10, timeoutMs: 60_000 },
-  // Actual reader fixtures; provisional weight until measured.
-  { name: 'component-baseline', needsMail: true, seconds: 30, timeoutMs: 120_000 },
-  // Real local Mermaid/WebGL engines; provisional bound pending measurement.
-  { name: 'html-rich-components', needsMail: false, seconds: 45, timeoutMs: 180_000 },
-  // Actual installed archive/private Save; provisional until container measurement.
-  { name: 'private-preview-save', needsMail: false, seconds: 25, timeoutMs: 120_000 },
+  // Local container measurement: 28s; CI scheduling weight pending first run.
+  { name: 'html-components', needsMail: false, seconds: 28, timeoutMs: 60_000 },
+  // Real Mermaid/WebGL engines: 8s in the local container.
+  { name: 'html-rich-components', needsMail: false, seconds: 8, timeoutMs: 180_000 },
+  // Actual installed archive/private Save: 20s in the local container.
+  { name: 'private-preview-save', needsMail: false, seconds: 20, timeoutMs: 120_000 },
   // Journey gates: each absorbs several former gates; `seconds` measured in
   // scripts/gate-container.mjs (four CPUs, two servers, the four run together).
   // The offline file from file:// and the screenshot comment, Chromium, Firefox and WebKit concurrently in one
