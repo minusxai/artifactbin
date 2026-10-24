@@ -9,12 +9,12 @@ import {LocalDocumentPage} from '../LocalDocument';
 const broker=vi.hoisted(()=>({sourceChanged:vi.fn(),authorize:vi.fn(),signIn:vi.fn(),resize:vi.fn(),post:vi.fn(),disconnect:vi.fn(),retry:vi.fn(),dispose:vi.fn()}));
 const account=vi.hoisted(()=>({signedIn:false}));
 vi.mock('../../lib/session',()=>({useSession:()=>({session:()=>({kind:account.signedIn?'account':'none'})})}));
-const annotation=vi.hoisted(()=>({canCreate:false,live:null as unknown,onSignIn:undefined as (()=>void)|undefined}));
+const annotation=vi.hoisted(()=>({topOffset:undefined as number|undefined,canCreate:false,live:null as unknown,onSignIn:undefined as (()=>void)|undefined}));
 const live=vi.hoisted(()=>({options:null as Parameters<typeof import('../../editor/create-live-artifact').createLiveArtifact>[0]|null}));
 vi.mock('../../editor/create-live-artifact',()=>({createLiveArtifact(options:Parameters<typeof import('../../editor/create-live-artifact').createLiveArtifact>[0]){live.options=options;return ()=>null;}}));
 const captured=vi.hoisted(()=>({options:null as LocalBrokerOptions|null}));
 vi.mock('@/lib/local-connection/broker',()=>({installLocalConnectionBroker(options:LocalBrokerOptions){captured.options=options;options.onIdentity?.({platformOrigin:'https://platform.example',artifactId:'p',baseRevision:'1',sourceDigest:'a'.repeat(64)});options.onState('permission-required');return broker;}}));
-vi.mock('../../document/AnnotationLayer',()=>({AnnotationLayer:(props:{canCreateComment:boolean;onSignIn?:()=>void;liveAnnotations?:unknown})=>{Object.defineProperty(annotation,'live',{get:()=>props.liveAnnotations,configurable:true});Object.defineProperty(annotation,'onSignIn',{get:()=>props.onSignIn,configurable:true});Object.defineProperty(annotation,'canCreate',{get:()=>props.canCreateComment,configurable:true});return null;}}));
+vi.mock('../../document/AnnotationLayer',()=>({AnnotationLayer:(props:{topOffset?:number;canCreateComment:boolean;onSignIn?:()=>void;liveAnnotations?:unknown})=>{Object.defineProperty(annotation,'topOffset',{get:()=>props.topOffset,configurable:true});Object.defineProperty(annotation,'live',{get:()=>props.liveAnnotations,configurable:true});Object.defineProperty(annotation,'onSignIn',{get:()=>props.onSignIn,configurable:true});Object.defineProperty(annotation,'canCreate',{get:()=>props.canCreateComment,configurable:true});return null;}}));
 beforeEach(()=>{vi.clearAllMocks();account.signedIn=false;localStorage.clear();document.documentElement.removeAttribute('data-theme');vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));});
 afterEach(async()=>{cleanup();await vi.dynamicImportSettled();localStorage.clear();document.documentElement.removeAttribute('data-theme');vi.unstubAllGlobals();});
 const mount=()=>render(()=><MemoryRouter><Route path="/" component={LocalDocumentPage}/></MemoryRouter>);
@@ -98,3 +98,5 @@ it('makes only the mounted local broker backdrop transparent and restores prior 
  const view=mount();expect(document.documentElement.style.getPropertyValue('background')).toBe('transparent');expect(document.body.style.getPropertyValue('background')).toBe('transparent');expect(document.body.style.getPropertyPriority('background')).toBe('important');
  view.unmount();expect(document.documentElement.style.getPropertyValue('background')).toBe(html);expect(document.documentElement.style.getPropertyPriority('background')).toBe('important');expect(document.body.style.getPropertyValue('background')).toBe(body);expect(document.body.style.getPropertyPriority('background')).toBe('');document.documentElement.style.removeProperty('background');document.body.style.removeProperty('background');
 });
+
+it('places the comment rail below both local chrome rows',async()=>{mount();ready();await waitFor(()=>expect(annotation.topOffset).toBe(76));});

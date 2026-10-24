@@ -23,6 +23,11 @@ beforeEach(installAnnotationFetch);
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('AnnotationLayer', () => {
+  it('keeps a local read-only rail and its Close action below both platform chrome rows',async()=>{
+    const close=vi.fn();layer({railOpen:true,topOffset:76,canCreateComment:false,onRailOpenChange:close});
+    await screen.findByText('is this right?');const rail=screen.getByRole('complementary',{name:'Annotation sidebar'});expect(rail.style.top).toBe('76px');
+    await fireEvent.click(within(rail).getByRole('button',{name:'Close comments'}));expect(close).toHaveBeenCalledWith(false);expect(fetchCalls.some(call=>call.init?.method&&call.init.method!=='GET')).toBe(false);
+  });
   it('lets a read-only viewer open existing conversations without mutation controls', async () => {
     const view = layer({ railOpen: true, canCreateComment: false, onSignIn: vi.fn() });
     await screen.findByText('is this right?');
