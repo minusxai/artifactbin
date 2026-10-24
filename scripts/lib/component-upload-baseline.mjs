@@ -29,8 +29,8 @@ export async function runUploadBaseline({base,implementation,browser,sourceRevis
  const mount=async({fixture,theme,viewport,page})=>{
   await session.mount(page);const entry=entries.find(entry=>entry.fixture===fixture.id&&entry.theme===theme);assert.ok(entry);
   const proof={phase,fixture:fixture.id,theme,viewport:viewport.width,requests:0,statuses:[],requestIds:[],refs:[]};proofs.push(proof);
-  await page.goto(`${origin}/a/${entry.id}`,{waitUntil:'networkidle'});
-  const element=page.locator('iframe[data-mx-document-frame]');await element.waitFor();const frame=await (await element.elementHandle()).contentFrame();assert.ok(frame);
+  await page.goto(`${origin}/a/${entry.id}`,{waitUntil:'domcontentloaded'});
+  const element=page.locator('iframe[data-mx-document-frame]');await element.waitFor();const frame=await (await element.elementHandle()).contentFrame();assert.ok(frame);await frame.waitForURL(url=>['http:','https:'].includes(url.protocol),{waitUntil:'domcontentloaded'});
   const records=await observeUploadRequests({page,origin,runnerOrigin:new URL(frame.url()).origin,proof,discardFirstSuccess:fixture.uploadScenario==='lost-response-retry'});
   return {frame,screenshot:()=>element.screenshot({animations:'disabled',caret:'hide'}),ready:async()=>{
    const input=frame.locator('input[type=file]');await input.waitFor({state:'attached'});await frame.locator('button[aria-label="Choose Attachments"]').waitFor();await input.evaluate(input=>{if(input.disabled)throw Error('Real authenticated chooser is disabled');});

@@ -14,8 +14,8 @@ export async function captureSignedOutUpload({browser,entries,origin,output,impl
    assert.equal((await session.json())?.user?.id,undefined,'Signed-out observation must have no account session');
    const entry=entries.find(entry=>entry.fixture==='file-upload-success'&&entry.theme===theme);assert.ok(entry);
    const proof={theme,viewport:width,inputDisabled:false,inputHidden:false,buttonDisabled:false,text:'',requests:0,statuses:[],requestIds:[],refs:[]};proofs.push(proof);
-   await page.goto(`${origin}/a/${entry.id}`,{waitUntil:'networkidle'});
-   const element=page.locator('iframe[data-mx-document-frame]');await element.waitFor();const frame=await (await element.elementHandle()).contentFrame();assert.ok(frame);
+   await page.goto(`${origin}/a/${entry.id}`,{waitUntil:'domcontentloaded'});
+   const element=page.locator('iframe[data-mx-document-frame]');await element.waitFor();const frame=await (await element.elementHandle()).contentFrame();assert.ok(frame);await frame.waitForURL(url=>['http:','https:'].includes(url.protocol),{waitUntil:'domcontentloaded'});
    const records=await observeUploadRequests({page,origin,runnerOrigin:new URL(frame.url()).origin,proof});
    if(implementation==='html')await frame.waitForFunction(()=>document.documentElement.dataset.baselineReady==='yes');
    const input=frame.locator('input[type=file]');await input.waitFor({state:'attached'});
