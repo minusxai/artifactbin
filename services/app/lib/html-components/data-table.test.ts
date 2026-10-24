@@ -1,8 +1,28 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
+import { STORY_TABLE_CSS } from "@/lib/page-styles/chrome-css";
 import { AfDataTable, registerDataTable } from "./data-table";
 registerDataTable();
-afterEach(() => document.body.replaceChildren());
+afterEach(() => {
+  document.body.replaceChildren();
+  document.head.querySelectorAll("style[data-table-layout-test]").forEach((style) => style.remove());
+});
+it("keeps its virtual table in native table layout under document table styling", () => {
+  const page = document.createElement("div");
+  page.setAttribute("data-mx-story-root", "");
+  const style = document.createElement("style");
+  style.setAttribute("data-table-layout-test", "");
+  style.textContent = STORY_TABLE_CSS;
+  document.head.append(style);
+  const el = document.createElement("af-data-table") as AfDataTable;
+  el.data = {
+    columns: [{ name: "id", type: "number" }],
+    rows: [{ id: 1 }, { id: 2 }],
+  };
+  page.append(el);
+  document.body.append(page);
+  expect(getComputedStyle(el.querySelector("table")!).display).not.toBe("block");
+});
 it("retains keyed rows and controls while cycling sort with accessible buttons", () => {
   const el = document.createElement("af-data-table") as AfDataTable;
   el.rowKey = "id";
