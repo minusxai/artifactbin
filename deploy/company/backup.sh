@@ -17,5 +17,8 @@ docker compose exec -T postgres pg_dump -U artifactbin -d artifactbin --format=c
 # the restored app reinstalls it on its first export, or at once with `afbin setup --service chromium`.
 docker compose run -T --rm --no-deps --entrypoint tar volume-init -C /data --exclude=./chromium -czf - . >"$destination/artifacts.tar.gz"
 mkdir -p packages
-tar -czf "$destination/configuration.tar.gz" packages backup.sh restore.sh .env config secrets Caddyfile dns-provider.caddy compose.yaml Dockerfile Caddy.Dockerfile caddy-entrypoint.sh
+set -- packages backup.sh restore.sh .env config secrets Caddyfile dns-provider.caddy compose.yaml Dockerfile Caddy.Dockerfile caddy-entrypoint.sh
+# New images share this build input; older deployment contexts did not have it.
+[ ! -f patch-npm.mjs ] || set -- "$@" patch-npm.mjs
+tar -czf "$destination/configuration.tar.gz" "$@"
 printf '%s\n' 'Consistent backup complete. Contains login/provider secrets: encrypt and copy off this server.' >&2

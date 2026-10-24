@@ -131,6 +131,8 @@ Run one with `node scripts/gate-container.mjs <name>`.
 | File | Purpose | Run by |
 |---|---|---|
 | `scripts/bump-cli-version.mjs` | Bump the CLI release version (patch, minor or major). | `npm run release:cli`, `release-afbin.yml` |
+| `scripts/ci/prepare-npm.mjs` | Install and verify the patched npm toolchain in the active CI Node prefix. | Node setup workflow steps |
+| `scripts/ci/npm-driver.mjs` | Invoke the active npm JavaScript CLI with exact arguments, avoiding shell shim reparsing. | `ci.yml` native candidate installs; imported by npm tooling |
 | `scripts/ci/npm-provenance.mjs` | Sign and verify the CLI tarball's build provenance. | `ci.yml` (`cli-pack`), `release-cli.yml` |
 | `scripts/lib/ci-artifact-wait.mjs` | Wait for and extract this run's release artifacts for native acceptance. | `ci.yml` |
 | `scripts/ci/link-npm-acceptance.mjs` | Link the native acceptance tooling's `node_modules`. | `ci.yml` |
