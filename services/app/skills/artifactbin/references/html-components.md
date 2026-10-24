@@ -83,3 +83,15 @@ FileUpload requires an app-owned `adapter.upload(file,{dataset,signal})` returni
 ## Theme and identity
 
 Use one [design system](html-design-systems.md): `<html data-af-design-system="NAME" data-af-dark="false">`; use `data-af-dark="true"` for dark mode. Components inherit fonts and tokens such as `--background`, `--foreground`, `--primary`, `--border` and `--ring`. No shadow roots are used. Preserve authored `data-af-id`s outside generated output; keep state and record identity outside virtualized cells.
+
+For a User ID from a linked dataset's typed `user` column, request actual cards through that authorized namespace:
+
+```js
+const {data}=await client.query({
+ query:gql`query($ids:[ID!]!){bookings{people(ids:$ids){id name handle image}}}`,
+ variables:{ids:[userId]}
+});
+element.person=data.bookings.people.find(person=>person.id===userId)??null;
+```
+
+Only IDs present in that linked dataset's typed user columns can resolve. Ordinary strings and guessed IDs grant no lookup. Requests accept at most 100 IDs. Current dataset read permission is checked before and after lookup. Offline preview cannot resolve account cards. Keep an absent card null; never invent a name from the ID.

@@ -7,7 +7,7 @@ const binding={kind:'dataset' as const,name:'data',datasetId:'dataset',mode:'liv
 const call:PageResolverFieldCall={namespace:'data',fileId:'dataset',version:'live',operation:'query',field:'rows',args:{tableId:'table',first:2},principal:{tenant:'tenant',subject:'untrusted-page'},signal:new AbortController().signal};
 it('uses constant schema and trusted actor with typed wire outputs',async()=>{
  const read=vi.fn().mockResolvedValue({revision:'1',columns:[],rows:[{id:'row',cells:[{columnId:'column',value:{type:'NUMBER',value:2.5}}]}],pageInfo:{hasNextPage:false,endCursor:null}});
- const service={schema:vi.fn(),query:vi.fn(),read,write:vi.fn()} as DatasetGraphql<AccessActor>,invoke=createDatasetNamespaceInvoker(actor,[binding],service);
+ const service={people:vi.fn(),schema:vi.fn(),query:vi.fn(),read,write:vi.fn()} as DatasetGraphql<AccessActor>,invoke=createDatasetNamespaceInvoker(actor,[binding],service);
  expect(datasetNamespaceSources([binding])[0]).toMatchObject({name:'data',fileId:'dataset',version:'live'});
  expect(await invoke(call)).toMatchObject({rows:[{cells:[{value:{type:'NUMBER',number:2.5}}]}]});
  expect(read.mock.calls[0]![0]).toBe(actor);
@@ -15,7 +15,7 @@ it('uses constant schema and trusted actor with typed wire outputs',async()=>{
 });
 it('rejects mixed wire slots before mutation and preserves unknown outcomes',async()=>{
  const write=vi.fn().mockResolvedValue({requestId:'req',outcome:'unknown',revision:null,rowIds:[]});
- const invoke=createDatasetNamespaceInvoker(actor,[binding],{schema:vi.fn(),query:vi.fn(),read:vi.fn(),write});
+ const invoke=createDatasetNamespaceInvoker(actor,[binding],{people:vi.fn(),schema:vi.fn(),query:vi.fn(),read:vi.fn(),write});
  const mutation={...call,operation:'mutation' as const,field:'writeRows',args:{tableId:'table',expectedRevision:'1',requestId:'req',changes:[{kind:'INSERT',cells:[{columnId:'column',value:{type:'NUMBER',number:3}}]}]}};
  const reportOutcome=vi.fn(),reportedMutation={...mutation,reportOutcome};
  expect(await invoke(reportedMutation)).toMatchObject({outcome:'unknown'});expect(reportOutcome).toHaveBeenCalledWith('unknown');

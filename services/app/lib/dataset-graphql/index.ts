@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {DATASET_GRAPHQL_MAX_PEOPLE} from '@artifactbin/contracts';
 import type {DatasetGraphql,DatasetReadRequest,DatasetReadResult,DatasetWriteRequest,HtmlDatasetLink} from '@artifactbin/contracts';
 import type {AccessActor} from '@/lib/accounts';
 import {compileDatasetQuery,parameterizedFilters} from './query';
@@ -23,6 +24,13 @@ function cursorOffset(identity:string,after:string|undefined):number {
 /** Pure request orchestration. Every continuation first resolves current dataset ACL again. */
 export function createDatasetGraphql(port:DatasetGraphqlPort):DatasetGraphql<AccessActor> {
  return {
+  async people(actor,binding,ids,signal){
+   signal.throwIfAborted();
+   if(!Array.isArray(ids)||ids.length>DATASET_GRAPHQL_MAX_PEOPLE||ids.some(id=>typeof id!=='string'||!/^usr_[a-zA-Z0-9]+$/.test(id)))throw Error('invalid_people');
+   const snapshot=await port.snapshot(actor,binding,signal);
+   if(!port.people)throw Error('dataset_people_unavailable');
+   return port.people(actor,snapshot,[...new Set(ids)],signal);
+  },
   async schema(actor,binding,signal){signal.throwIfAborted();return datasetSchema(await port.snapshot(actor,binding,signal));},
   async read(actor:AccessActor,binding:HtmlDatasetLink,input:DatasetReadRequest,signal:AbortSignal):Promise<DatasetReadResult>{
    signal.throwIfAborted();

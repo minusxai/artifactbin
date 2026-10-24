@@ -12,6 +12,7 @@ export function createDatasetNamespaceInvoker<A>(actor:A,bindings:readonly HtmlD
   const binding=bindings.find(b=>b.name===call.namespace);
   if(!binding||binding.datasetId!==call.fileId||(binding.mode==='pinned'?binding.revision:'live')!==call.version)throw new Error('dataset_binding_changed');
   const args=object(call.args);
+  if(call.operation==='query'&&call.field==='people')return await service.people(actor,binding,array(args.ids).map(string),call.signal) as unknown as HtmlJson;
   if(call.operation==='query'&&call.field==='schema')return await service.schema(actor,binding,call.signal) as unknown as HtmlJson;
   if(call.operation==='query'&&(call.field==='rows'||call.field==='query')){
    const input:DatasetQueryRequest={tableId:string(args.tableId),first:args.first===undefined?20:Number(args.first),
