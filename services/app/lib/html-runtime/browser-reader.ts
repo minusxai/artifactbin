@@ -1,3 +1,4 @@
+import {createQueryReadiness} from './query-readiness';
 import { createLocalDatasetTransport } from './browser-local-datasets';
 import { createHtmlSelectionActions } from './selection-actions';
 import {createHtmlCommentViewSession} from '../html-bridge/comment-view-session';
@@ -21,8 +22,14 @@ function sourceNamespaces(document:Document):{names:string[];bindings:Record<str
 }
 if(!config.backends.length)config.backends=sourceNamespaces(document).names;
 const preview=config.localPreview?createLocalDatasetTransport({privatePreview:document.documentElement.hasAttribute('data-af-private-preview'),endpoint:config.localPreview.endpoint},location,fetch):undefined;
+function pendingPortableConnection():boolean {
+ if(!config.offline||document.documentElement.hasAttribute('data-af-private-preview'))return false;
+ try{const identity=JSON.parse(document.querySelector('script[data-af="portable"]')?.textContent??'{}').identity;if(!identity)return false;try{return localStorage.getItem(`af:offline:${identity.platformOrigin}:${identity.artifactId}`)!=='true';}catch{return true;}}catch{return false;}
+}
+const portableReadiness=createQueryReadiness({pending:pendingPortableConnection(),schedule:(callback,delay)=>window.setTimeout(callback,delay),cancel:handle=>window.clearTimeout(handle as number)});
 export const remote: RemotePort = {
-  online: () => preview?.online()===true || !config.offline && !!config.appOrigin && window.parent !== window,
+  online: () => portableReadiness.online() || preview?.online()===true || !config.offline && !!config.appOrigin && window.parent !== window,
+  whenReady:()=>{if(portableReadiness.pending())void startPortableDocument().catch(()=>{});return portableReadiness.wait();},
   execute: async () => { throw new RemoteUnreachable('Remote relay has not attached'); },
 };
 const invalidationListeners = new Set<(names: readonly string[]) => void>();
@@ -37,6 +44,7 @@ import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationP
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
 const relayWaiters = new Set<() => void>();
 remote.execute = async (request) => {
+  if(portableReadiness.online())return portableReadiness.execute(request);
   if(preview?.online())return preview.execute(request);
   if (!relay) await new Promise<void>((resolve, reject) => {
     const ready = () => { clearTimeout(timer); relayWaiters.delete(ready); resolve(); };
@@ -154,12 +162,16 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
 }
 
 /** Downloads attach only a credential-free document transport; no source upload occurs. */
-export async function startPortableDocument(win:Window=window,publishOrigin?:string):Promise<()=>void> {
- const name='@afbin/portable';const {startPortableSession}=await import(name) as typeof import('./portable-session');
- let connected=false;
- let execute:Parameters<Parameters<typeof startPortableSession>[0]['online']>[1];
- const originalOnline=remote.online,originalExecute=remote.execute;
- remote.online=()=>connected||originalOnline();
- remote.execute=request=>connected&&execute?execute(request) as ReturnType<RemotePort['execute']>:originalExecute(request);
- return startPortableSession({win,publishOrigin,adoptIdentity(identity,source){config.pageId=identity.artifactId;config.revision=identity.baseRevision;const parsed=new DOMParser().parseFromString(source,'text/html'),declarations=sourceNamespaces(parsed);config.backends=declarations.names;config.bindings=declarations.bindings;},attach:post=>startFrameBridge({win,post}),online(value,request){connected=value;execute=request;}});
+let portableStartup:Promise<()=>void>|undefined;
+export function startPortableDocument(win:Window=window,publishOrigin?:string):Promise<()=>void> {
+ if(portableStartup)return portableStartup;
+ portableStartup=(async()=>{
+  const name='@afbin/portable';const {startPortableSession}=await import(name) as typeof import('./portable-session');
+  const dispose=startPortableSession({win,publishOrigin,adoptIdentity(identity,source){config.pageId=identity.artifactId;config.revision=identity.baseRevision;const parsed=new DOMParser().parseFromString(source,'text/html'),declarations=sourceNamespaces(parsed);config.backends=declarations.names;config.bindings=declarations.bindings;},attach:post=>startFrameBridge({win,post}),online(value,request,pending){
+   const available=portableReadiness.update(value,request as RemotePort['execute']|undefined,pending);
+   if(available&&config.backends.length)for(const listener of invalidationListeners)try{listener([...config.backends]);}catch{/* Independent author subscribers. */}
+  }});
+  return ()=>{portableReadiness.dispose();dispose();};
+ })().catch(error=>{portableReadiness.update(false);win.document.documentElement.setAttribute('data-af-connection','unavailable');throw error;});
+ return portableStartup;
 }

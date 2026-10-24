@@ -81,7 +81,7 @@ An HTML link declares one unique `data-af-name`. The published page version bind
 
 Remote queries wait up to three seconds for the trusted hosted parent to attach. If it never attaches, they return offline errors without sending a request. Do not depend on platform-internal bridge functions.
 
-Subscribe to shared-data invalidation with the named export `onBackendChange`:
+Use `onBackendChange` for named invalidation, including usable connection/reconnection and account upgrades; explicitly query again:
 
 ```js
 import {onBackendChange} from '@afbin/apollo';
@@ -97,7 +97,7 @@ Remote data is never silently copied into persisted local state. Keep temporary 
 
 ## Offline and downloaded pages
 
-Local state keeps working without a network. Shared mutations cannot commit offline; report the offline outcome and retain the user’s intent. A downloaded file never carries account tokens. The current downloaded core has no reconnect protocol: backend query fields are null with offline errors, and mutations have an offline outcome. Do not teach sign-in or reconnect from a downloaded file. Do not claim a shared action succeeded until the remote receipt confirms it. Test downloads independently from the live page.
+Local state keeps working without a network. Shared mutations cannot commit offline; report the offline outcome and retain the user’s intent. A downloaded file never carries account tokens. Linked downloads auto-connect to their original document. Initial queries wait at most 15 seconds; Stay offline/private preview return immediately. Platform controls own sign-in/account approval. Mutations never queue or replay. Do not claim a shared action succeeded until the remote receipt confirms it. Test downloads separately.
 
 A URL hash `#af-state=<base64url JSON>` initializes private viewer state and persists it only in that browser; it does not update shared backend data.
 
@@ -111,7 +111,7 @@ An authorized reader can download `/a/ID/download` as one offline HTML file. For
 
 Replace the example ID with a real admitted image artifact. Download packs readable PNG, JPEG, GIF, WebP and AVIF references in `img/src`, `source/src` and `video/poster` into data URLs. Both the page version's original admission and the downloading reader's current image access are required. Unavailable images refuse the download; unsupported referenced image types return `unsupported_image` (415), and files over 25 MiB return `too_large` (413).
 
-Existing data images and inline SVG stay intact. External URLs, CSS images and `srcset` are not automatically packed; do not promise those assets work offline. Image packing does not snapshot remote backend data or add credentials or reconnection. Test the downloaded file without a network.
+Existing data images and inline SVG stay intact. External URLs, CSS images and `srcset` are not automatically packed; do not promise those assets work offline. Image packing does not snapshot remote backend data or add credentials. Test the downloaded file without a network.
 
 
 For an unpublished local project, read [private local preview](html-preview.md).
