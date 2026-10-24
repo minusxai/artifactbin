@@ -218,3 +218,13 @@ it('the public initializer uses trusted context, cancels an old subject and keep
  expect(change).not.toHaveBeenCalled();expect(control.value).toEqual([]);expect(control.textContent).toContain('Sign in to upload files.');
  binding.dispose();bridge.receive({kind:'upload-context',context:{state:'signed-in',scope:'account-b'}});expect(control.disabled).toBe(true);
 });
+it('a direct upload started before a session change cannot send bytes under the replacement account',async()=>{
+ vi.stubGlobal('__AF_RUNTIME_CONFIG__',{pageId:'Page123',revision:'2',backends:['attachments'],bindings:{attachments:'Dataset123'},appOrigin:'https://platform.example'});
+ const runtime=await import('../browser-client'),events:any[]=[];
+ const bridge=runtime.startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'Page123',nodes:[],editId:'2',source:null,uploadContext:{state:'signed-in',scope:'first-account'}}});bridges.push(bridge);
+ let bytes!:(value:ArrayBuffer)=>void;const file=new File(['hello'],'sample.txt',{type:'text/plain'});
+ vi.spyOn(file,'arrayBuffer').mockImplementation(()=>new Promise(resolve=>{bytes=resolve;}));
+ const pending=runtime.uploadFile(file,{dataset:'attachments'});const rejected=expect(pending).rejects.toThrow(/session changed/);
+ bridge.receive({kind:'upload-context',context:{state:'signed-in',scope:'second-account'}});bytes(new ArrayBuffer(5));
+ await rejected;expect(events.some(event=>event.kind==='upload-file')).toBe(false);
+});

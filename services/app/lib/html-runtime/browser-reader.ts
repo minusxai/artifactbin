@@ -55,7 +55,16 @@ const uploadContext=createUploadContext(config.offline===true);
 export const watchUploadContext=uploadContext.watch;
 let uploads:ReturnType<typeof createUploadRelay>|undefined;
 const uploader=createFileUploader({readOnly:()=>config.offline===true,datasetId:name=>config.bindings?.[name],send:(request,signal)=>{if(!uploads)return Promise.reject(Error('Page connection unavailable; reload and retry'));if(uploadContext.read().state!=='signed-in')return Promise.reject(Error('Uploads unavailable for this session'));return uploads.send(request,signal).then(result=>({...result,url:new URL(result.url,config.appOrigin).href}));}});
-export const uploadFile=uploader.upload;
+export async function uploadFile(file:File,options:import('./upload-contract').FileUploadOptions){
+ if(!uploads)throw Error('Page connection unavailable; reload and retry');
+ const initial=uploadContext.read();if(initial.state!=='signed-in')throw Error('Uploads unavailable for this session');
+ const controller=new AbortController();
+ const cancel=()=>controller.abort(options.signal?.reason);
+ if(options.signal?.aborted)cancel();else options.signal?.addEventListener('abort',cancel,{once:true});
+ const subscription=watchUploadContext(next=>{if(next.scope!==initial.scope||next.state!==initial.state)controller.abort(Error('Upload session changed; retry the same File to recover its outcome'));});
+ try{return await uploader.upload(file,{...options,signal:controller.signal});}
+ finally{subscription.unsubscribe();options.signal?.removeEventListener('abort',cancel);}
+}
 /** Installs the real platform port and session availability; dataset grants are still checked by the server. */
 export function bindFileUpload(control:PlatformUploadControl,options:{disabled?:boolean;helperText?:string}={}){
  return bindUploadControl(control,{upload:uploadFile,fileUrl(file,dataset){
