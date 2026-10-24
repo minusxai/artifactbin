@@ -452,3 +452,15 @@ it('captures caller input before waiting for transaction scope admission',async(
  });
  expect((await db.query<{name:string}>('SELECT name FROM users WHERE id=$1',[sourceUser.id])).rows[0]?.name).toBe(original);
 });
+
+it('captures public import input and schema configuration before transaction scheduling',async()=>{
+ const db=await getDb(),input=fixture(),original=input.plan.createUsers[0]!.name;
+ const schemas={...fixtureSchemas};let release!:()=>void;
+ const gate=new Promise<void>(resolve=>{release=resolve;});
+ const delayed:NativeIdentityImportDb={transaction:async work=>{await gate;return db.transaction(work);}};
+ const pending=importWithSchemas(delayed,input,schemas);
+ input.plan.createUsers[0]!.name='Changed before transaction callback';schemas.authSchema='wrong_schema';release();
+ expect(await pending).toMatchObject({createdUsers:1});
+ expect((await db.query<{name:string}>('SELECT name FROM users WHERE id=$1',[sourceUser.id])).rows[0]?.name).toBe(original);
+ expect((await db.query('SELECT id FROM auth."user" WHERE id=$1',[sourceUser.id])).rows).toHaveLength(1);
+});

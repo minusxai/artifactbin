@@ -255,10 +255,11 @@ export async function writeNativeIdentities(
   return result;
 }
 /** Atomic identity preparation; compose writeNativeIdentities with page publication for one larger transaction. */
-export function importNativeIdentities(
+export async function importNativeIdentities(
   db: NativeIdentityImportDb,
   input: NativeIdentityImport,
   schemas:NativeIdentityMigrationSchemas,
 ) {
-  return db.transaction(async(tx) => writeNativeIdentities(tx, input,await authorizeNativeIdentityTransaction(tx,schemas)));
+  const capturedInput=plain(input),capturedSchemas=schemas&&plain(schemas);
+  return db.transaction(async(tx) => writeNativeIdentities(tx, capturedInput,await authorizeNativeIdentityTransaction(tx,capturedSchemas)));
 }
