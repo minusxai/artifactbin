@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -68,15 +68,28 @@ describe('actual fixture publication payloads',()=>{
     expect(upload.markup).not.toContain('{{uploadDataset}}');
     expect(upload.theme).toBe('almanac');
   });
-  it('builds candidate fixtures with the installed retained theme and actual modules',async()=>{
+  it('publishes every candidate through the installed component graph within the real API limits',async()=>{
     const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
     const repo=path.resolve(import.meta.dirname,'../..');
     const css=await readFile(path.join(repo,'services/app/skills/artifactbin/design-systems/almanac.css'),'utf8');
-    const bodies=[];
-    await publishBaselineFixtures({implementation:'html',repo,themeCss:()=>css,publish:async body=>{bodies.push(body);return {id:'Page123'};}});
+    const {planPublicationBundle}=await import('../../services/app/lib/html-publication-bundle/plan.ts');
+    const bodies=[],keys=new Set();
+    await publishBaselineFixtures({implementation:'html',repo,serverOrigin:'https://example.test',themeCss:()=>css,publish:async(body,request)=>{
+      expect(body.publicationBundle).toBeDefined();expect(request.idempotencyKey).toMatch(/^[a-f0-9-]{36}$/);keys.add(request.idempotencyKey);
+      const plan=planPublicationBundle(body.html,body.publicationBundle);expect(plan.dependencies.length).toBeGreaterThan(0);expect(Buffer.byteLength(body.html)).toBeLessThan(4_000_000);
+      for(const file of body.publicationBundle.files){expect(file.path).toMatch(/^components\/[a-z0-9-]+\.js$/);expect(Buffer.from(file.base64,'base64')).toEqual(await readFile(path.join(repo,'services/app/skills/artifactbin',file.path)));}
+      bodies.push(body);return {id:'Page123'};
+    }});
+    expect(keys.size).toBe(browserParityFixtures.length*parityThemes.length);
     expect(bodies).toHaveLength(browserParityFixtures.length*parityThemes.length);
     expect(bodies.every(body=>body.html.includes('data-af-design-system="almanac"')&&body.html.includes('baselineReady'))).toBe(true);
   },30_000);
+  it('removes the staged project and identifies the fixture when publication fails',async()=>{
+    const {publishBaselineFixtures}=await import('../fixtures/component-baseline/publication.mjs');
+    const before=new Set(await readdir(tmpdir())),repo=path.resolve(import.meta.dirname,'../..');
+    await expect(publishBaselineFixtures({implementation:'html',repo,serverOrigin:'https://example.test',themeCss:()=>'',publish:async()=>{throw Error('publication refused');}})).rejects.toThrow('Component fixture button light failed: publication refused');
+    expect((await readdir(tmpdir())).filter(name=>name.startsWith('component-publication-')&&!before.has(name))).toEqual([]);
+  });
 });
 
 describe('reader screenshot contract',()=>{

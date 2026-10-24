@@ -11,13 +11,13 @@ if(!['localhost','127.0.0.1','app.lvh.me','lvh.me'].includes(url.hostname)&&!url
 const sourceRevision=suppliedRevision || execFileSync('git',['-C',source,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
 const {connectAgent}=await import(pathToFileURL(path.join(source,'scripts/gates/lib/cli-connection.mjs')));
 const {token}=await connectAgent(base);
-const publish=async body=>{
-  const response=await fetch(`${base}/api/artifacts`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify({visibility:'unlisted',...body})});
+const publish=async(body,options={})=>{
+  const response=await fetch(`${base}/api/artifacts`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`,...(options.idempotencyKey?{'Idempotency-Key':options.idempotencyKey}:{})},body:JSON.stringify({visibility:'unlisted',...body})});
   if(!response.ok)throw Error(`Fixture publication failed (${response.status}): ${await response.text()}`);
   return response.json();
 };
 const themeCss=implementation==='html'?await readFile(path.join(source,'services/app/skills/artifactbin/design-systems/almanac.css'),'utf8'):null;
-const entries=await publishBaselineFixtures({implementation,publish,repo:source,themeCss:themeCss?()=>themeCss:undefined});
+const entries=await publishBaselineFixtures({implementation,publish,repo:source,serverOrigin:base,themeCss:themeCss?()=>themeCss:undefined});
 const manifest={implementation,sourceRevision,output:path.join(path.dirname(output),implementation+'-evidence'),entries:entries.map(({fixture,theme,id})=>({fixture,theme,url:`${base}/a/${id}/raw`}))};
 await writeFile(output,JSON.stringify(manifest,null,2));
 return manifest;

@@ -1,15 +1,26 @@
 /** Build real API payloads. publish(body) is the owning revision's existing gate
  * authentication/API helper; this module never sends credentials or contacts hosts. */
 import path from 'node:path';
-import { build } from 'esbuild';
+import {copyFile,mkdtemp,mkdir,readdir,rm,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {prepareBundle} from '../../../services/app/skills/artifactbin/scripts/publication-bundle.mjs';
 import { browserParityFixtures, parityThemes } from './index.mjs';
+/** @typedef {{idempotencyKey?:string}} PublicationRequestOptions */
+/** @typedef {(body:object, options?:PublicationRequestOptions)=>Promise<{id:string}>} PublishFixture */
 const pascal=name=>name==='deck-gl'?'DeckGL':name.split('-').map(word=>word[0].toUpperCase()+word.slice(1)).join('');
-/** Candidate inline module comes from actual implementation, never a mock. */
-export async function publishBaselineFixtures({implementation,publish,repo,themeCss}) {
+/** Candidate snapshots use the installed component bytes and normal agent helper. */
+export async function publishBaselineFixtures({implementation,publish,repo,themeCss,serverOrigin}) {
   const entries=[];
-  let uploadDataset;
+  let uploadDataset,staging;
+  try{
+  if(implementation==='html'){
+    staging=await mkdtemp(path.join(tmpdir(),'component-publication-'));await mkdir(path.join(staging,'components'));
+    const installed=path.join(repo,'services/app/skills/artifactbin/components');
+    for(const name of await readdir(installed))if(name.endsWith('.js'))await copyFile(path.join(installed,name),path.join(staging,'components',name));
+  }
   for(const fixture of browserParityFixtures)for(const theme of parityThemes){
-    let body;
+    const started=performance.now();let body,request;
+    try{
     if(implementation==='jsx'){
       if(fixture.oldJsx.includes('{{uploadDataset}}')&&!uploadDataset)uploadDataset=(await publish({title:'Upload baseline backing data',dataset:[{fixture:'upload-baseline'}]})).id;
       const oldJsx=fixture.oldJsx.replaceAll('{{uploadDataset}}',uploadDataset||'');
@@ -18,14 +29,18 @@ export async function publishBaselineFixtures({implementation,publish,repo,theme
       body={title:`Component baseline ${fixture.id}`,theme:'almanac',colorMode:theme,markup:`${helmet}<div data-design="tw" className="p-6">${content}</div>`};
     }else if(implementation==='html'){
       if(typeof themeCss!=='function')throw Error('Candidate must supply the same actual almanac theme CSS as the original reader');
-      const source=fixture.modules.map(name=>`import {register${pascal(name)}} from ${JSON.stringify(path.join(repo,'services/app/lib/html-components',name+'.ts'))};register${pascal(name)}();`).join('\n')+'\n'+(fixture.setup||'')+'\ndocument.documentElement.dataset.baselineReady="yes";';
-      const bundle=await build({stdin:{contents:source,resolveDir:repo,sourcefile:'component-baseline.ts'},bundle:true,write:false,format:'esm',minify:true,platform:'browser',alias:{'@':path.join(repo,'services/app')},target:'es2022'});
-      const code=bundle.outputFiles[0].text.replaceAll('</script','<\\/script');
-      body={html:`<!doctype html><html data-af-design-system="almanac" data-af-dark="${theme==='dark'}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${await themeCss(theme)}\nbody{margin:0;padding:24px}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${fixture.newHtml}<script type="module">${code}</script></body></html>`};
+      const source=fixture.modules.map(name=>`import {register${pascal(name)}} from "./components/${name}.js";register${pascal(name)}();`).join('\n')+'\n'+(fixture.setup||'')+'\ndocument.documentElement.dataset.baselineReady="yes";';
+      const html=`<!doctype html><html data-af-design-system="almanac" data-af-dark="${theme==='dark'}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${await themeCss(theme)}\nbody{margin:0;padding:24px}</style><script src="/af/v1/core.js" data-af="core"></script></head><body>${fixture.newHtml}<script type="module">${source}</script></body></html>`;
+      await writeFile(path.join(staging,'index.html'),html);
+      const prepared=await prepareBundle({root:staging,entry:'index.html',server:serverOrigin});body=prepared.body;request={idempotencyKey:prepared.idempotencyKey};
     }else throw Error('Unknown implementation');
-    const document=await publish(body);
+    const snapshotMs=Math.round(performance.now()-started),publishing=performance.now();
+    const document=await publish(body,request);
     if(!document.id)throw Error('Publication returned no document id');
     entries.push({fixture:fixture.id,theme,id:document.id});
+    console.log(`Component fixture ${entries.length}/${browserParityFixtures.length*parityThemes.length} ${fixture.id} ${theme}: snapshot ${snapshotMs}ms, publish ${Math.round(performance.now()-publishing)}ms`);
+    }catch(error){throw Error(`Component fixture ${fixture.id} ${theme} failed: ${error.message}`,{cause:error});}
   }
   return entries;
+  }finally{if(staging)await rm(staging,{recursive:true,force:true});}
 }
