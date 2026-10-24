@@ -31,6 +31,8 @@
 // attempt excluded (data-journey and offline-file each passed a first attempt once). The comments on
 // the rows below record where each gate's timeout was measured; the `seconds` are these CI numbers.
 export const GATE_SPECS = Object.freeze([
+  // Candidate actual-reader suite; paired original evidence is an explicit run mode.
+  { name: 'component-baseline', needsMail: false, seconds: 30, timeoutMs: 300_000 },
   // New component pilot: provisional scheduling weight until its first CI measurement.
   { name: 'html-components', needsMail: false, seconds: 10, timeoutMs: 60_000 },
   // Actual reader fixtures; provisional weight until measured.
