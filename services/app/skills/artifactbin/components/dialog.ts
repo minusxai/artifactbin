@@ -164,9 +164,7 @@ af-dialog-trigger:has(button,input,select,textarea,a[href]),af-dialog-close:has(
 af-dialog-trigger>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:0;border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.5rem 1rem;font:inherit;font-size:.875rem;font-weight:500;cursor:pointer;background:var(--primary);color:var(--primary-foreground)}
 af-dialog-close{border:1px solid var(--border);background:var(--background);color:var(--foreground)}
 af-dialog-close>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;border:1px solid var(--border);border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));padding:.5rem 1rem;font:inherit;font-size:.875rem;font-weight:500;cursor:pointer;background:var(--background);color:var(--foreground)}
-af-dialog-trigger:focus-visible,af-dialog-close:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
-af-dialog-trigger>button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
-af-dialog-close>button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+af-dialog-trigger:focus-visible,af-dialog-close:focus-visible,af-dialog-trigger>button:focus-visible,af-dialog-close>button:focus-visible{outline:none;border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 50%,transparent)}
 af-dialog-trigger[disabled],af-dialog-close[disabled]{opacity:.5;cursor:default}
 af-dialog-trigger[disabled]>button,af-dialog-trigger>button:disabled,af-dialog-trigger>button[aria-disabled="true"]{opacity:.5;cursor:default}
 af-dialog-close[disabled]>button,af-dialog-close>button:disabled,af-dialog-close>button[aria-disabled="true"]{opacity:.5;cursor:default}

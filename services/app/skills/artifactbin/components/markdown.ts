@@ -67,16 +67,12 @@ export class AfMarkdown extends HTMLElement implements MarkdownContract {
 }
 const markdownStyles=`${scopeMarkdownCss(MARKDOWN_CSS)}
 af-markdown{display:block}
-af-markdown .mx-markdown{line-height:1.65;overflow-wrap:anywhere}
-af-markdown pre{overflow:auto;padding:1rem;background:var(--muted,#f3f4f6);border-radius:.4rem}
+af-markdown .mx-markdown > :first-child{margin-block-start:0}
+af-markdown pre{overflow:auto}
 af-markdown pre button{display:block;margin-top:.5rem;padding:.25rem .5rem;color:var(--foreground,CanvasText);background:var(--background,Canvas);border:1px solid var(--border,#8888);border-radius:var(--radius-sm,calc(var(--radius,.625rem) - .25rem));font:inherit;cursor:pointer}
 af-markdown pre button:hover{background:var(--muted,Canvas)}
 af-markdown pre button:focus-visible{outline:2px solid var(--ring,Highlight);outline-offset:2px}
-af-markdown .mx-md-table-scroll{overflow:auto}
-af-markdown .mx-markdown table{border-collapse:collapse;width:fit-content;max-width:100%}
-af-markdown .mx-markdown th,af-markdown .mx-markdown td{padding:.5rem;border:1px solid var(--border,#ccc)}
-af-markdown .mx-markdown th{text-align:start}
-af-markdown blockquote{border-inline-start:3px solid var(--border,#ccc);padding-inline-start:1rem}`;
+`;
 export function registerMarkdown(registry:CustomElementRegistry=customElements,doc:Document=document):void {
  if(!doc.querySelector('style[data-af-markdown-styles]')) {const style=doc.createElement('style');style.setAttribute('data-af-markdown-styles','');style.textContent=markdownStyles;doc.head.append(style);}
  if(!registry.get('af-markdown')) registry.define('af-markdown',AfMarkdown);

@@ -51,6 +51,6 @@ export class AfMermaid extends HTMLElement implements MermaidContract {
  }
 }
 export function registerMermaid(registry:CustomElementRegistry=customElements,doc:Document=document):void {
- if(!doc.querySelector('style[data-af-mermaid-styles]')){const style=doc.createElement('style');style.setAttribute('data-af-mermaid-styles','');style.textContent='af-mermaid{display:block;min-width:0}af-mermaid figure{margin:1rem 0}af-mermaid figcaption{font-family:var(--font-mono,monospace);margin-bottom:.5rem}af-mermaid img{display:block;max-width:100%;height:auto}';doc.head.append(style);}
+ if(!doc.querySelector('style[data-af-mermaid-styles]')){const style=doc.createElement('style');style.setAttribute('data-af-mermaid-styles','');style.textContent='af-mermaid{display:block;min-width:0}af-mermaid figure{margin:1rem 0}af-mermaid figcaption{font-family:var(--font-mono,monospace);font-size:.875rem;line-height:1.25rem;font-weight:500;margin-bottom:.5rem}af-mermaid img{display:block;max-width:100%;height:auto}';doc.head.append(style);}
  if(!registry.get('af-mermaid'))registry.define('af-mermaid',AfMermaid);
 }

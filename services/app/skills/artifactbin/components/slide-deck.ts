@@ -207,7 +207,9 @@ class AfSlide extends HTMLElement {
 
 const slideDeckStyles=`
 af-slide-deck{display:grid;grid-template-columns:190px minmax(0,1fr);align-items:start;position:relative;width:100%;min-width:0;color:var(--foreground,CanvasText);background:var(--background,Canvas)}
-af-slide{display:flex;position:relative;box-sizing:border-box;flex-direction:column;width:100%;min-width:0;min-height:var(--af-slide-height,100svh);overflow-wrap:anywhere;scroll-margin-top:0}
+/* The rail is beside the padded document column; each slide is one page in that column. */
+af-slide{display:flex;position:relative;box-sizing:border-box;flex-direction:column;width:100%;min-width:0;min-height:var(--af-slide-height,100svh);padding:24px;overflow-wrap:anywhere;scroll-margin-top:0}
+af-slide>h1:first-child,af-slide>h2:first-child,af-slide>h3:first-child,af-slide>h4:first-child,af-slide>h5:first-child,af-slide>h6:first-child{margin-top:0}
 af-slide :is(h1,h2,h3,h4,h5,h6){font-family:var(--font-display,inherit);font-weight:600;line-height:1.2}
 af-slide-deck>af-slide{grid-column:2}
 af-slide-deck>[data-af-deck-chrome=rail]{grid-column:1;grid-row:1/span var(--af-deck-slide-count,1);position:sticky;top:0;width:190px;max-height:100svh;overflow:auto;box-sizing:border-box;padding:12px 10px;border-right:1px solid var(--border,#8884);background:var(--background,Canvas)}

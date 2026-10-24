@@ -9402,7 +9402,7 @@ fn fragmentMain(varyings: WeightVaryings) -> @location(0) vec4<f32> {
     af-deck-gl figure[part="map"] .maplibregl-canvas-container{position:absolute;inset:0}
     af-deck-gl figure[part="map"] .maplibregl-interactive{cursor:grab}
     af-deck-gl figure[part="map"] .maplibregl-interactive:active{cursor:grabbing}
-    af-deck-gl figure[part="map"] [data-af-deck-controls]{position:absolute;right:8px;top:8px;z-index:1;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--border,#cfbea2);border-radius:var(--radius-md,calc(var(--radius,.625rem) - .125rem));background:var(--background,#f4ead9);color:var(--foreground,#1f2937);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+    af-deck-gl figure[part="map"] [data-af-deck-controls]{position:absolute;right:8px;top:32px;z-index:1;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--border,#cfbea2);border-radius:var(--radius-md,calc(var(--radius,.625rem) - .125rem));background:var(--background,#f4ead9);color:var(--foreground,#1f2937);box-shadow:0 1px 3px rgba(0,0,0,.12)}
     af-deck-gl figure[part="map"] [data-af-deck-controls] button{display:flex;width:28px;height:28px;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:inherit;cursor:pointer}
     af-deck-gl figure[part="map"] [data-af-deck-controls] button+button{border-top:1px solid var(--border,#cfbea2)}
     af-deck-gl figure[part="map"] [data-af-deck-controls] button:hover{background:var(--muted,rgba(0,0,0,.06))}
