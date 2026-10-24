@@ -47,4 +47,26 @@ describe('af-textarea', () => {
     await Promise.resolve(); await Promise.resolve();
     expect(events).toEqual([{value:'draft'}]); expect(native.value).toBe('server');
   });
+  it('deduplicates the trailing input after composition for uncontrolled and reflected controlled values', () => {
+    const uncontrolled = textarea('<af-textarea default-value="start"></af-textarea>');
+    const native = uncontrolled.querySelector('textarea')!; const uncontrolledEvents: unknown[] = [];
+    uncontrolled.addEventListener('af-change', event => uncontrolledEvents.push((event as CustomEvent).detail));
+    native.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+    native.value = 'draft'; native.dispatchEvent(new InputEvent('input', {bubbles:true, isComposing:true}));
+    native.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));
+    native.dispatchEvent(new InputEvent('input', {bubbles:true, isComposing:false}));
+    expect(uncontrolledEvents).toEqual([{value:'draft'}]); expect(native.value).toBe('draft');
+
+    const controlled = textarea('<af-textarea value="start"></af-textarea>');
+    const controlledNative = controlled.querySelector('textarea')!; const controlledEvents: unknown[] = [];
+    controlled.addEventListener('af-change', event => {
+      const detail = (event as CustomEvent<{value:string|null}>).detail;
+      controlledEvents.push(detail); controlled.setAttribute('value', detail.value ?? '');
+    });
+    controlledNative.dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true}));
+    controlledNative.value = 'reflected'; controlledNative.dispatchEvent(new InputEvent('input', {bubbles:true, isComposing:true}));
+    controlledNative.dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));
+    controlledNative.dispatchEvent(new InputEvent('input', {bubbles:true, isComposing:false}));
+    expect(controlledEvents).toEqual([{value:'reflected'}]); expect(controlledNative.value).toBe('reflected');
+  });
 });

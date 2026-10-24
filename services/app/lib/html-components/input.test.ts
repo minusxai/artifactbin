@@ -55,8 +55,19 @@ describe('af-input', () => {
     expect(root.querySelector('input')).toBe(native); expect(native.value).toBe('hello'); expect(native.selectionStart).toBe(2);
     root.removeAttribute('disabled'); root.removeAttribute('readonly');
     root.remove(); document.body.append(root); let count = 0; root.addEventListener('af-change', () => count++);
+    native.value = 'hello again';
     native.dispatchEvent(new Event('input', { bubbles: true })); expect(count).toBe(1);
     root.setAttribute('disabled', ''); expect(native.disabled).toBe(true);
+  });
+  it('keeps the uncontrolled accepted value across reconnect for later canceled and readonly edits', () => {
+    const root = input('<af-input default-value="initial"></af-input>'); const native = root.querySelector('input')!;
+    native.value = 'accepted'; native.dispatchEvent(new Event('input', {bubbles:true}));
+    root.remove(); document.body.append(root);
+    root.addEventListener('af-change', event => event.preventDefault());
+    native.value = 'rejected'; native.dispatchEvent(new Event('input', {bubbles:true}));
+    expect(native.value).toBe('accepted');
+    root.setAttribute('readonly', ''); native.value = 'blocked'; native.dispatchEvent(new Event('input', {bubbles:true}));
+    expect(native.value).toBe('accepted');
   });
   it('restores canceled uncontrolled edits and adopts a pre-upgrade property', () => {
     const root = input('<af-input default-value="initial"></af-input>'); const native = root.querySelector('input')!;
@@ -67,9 +78,10 @@ describe('af-input', () => {
   it('returns a numeric value attribute as a number and reports an empty text value as null', () => {
     const numeric = input('<af-input type="number" value="12.5"></af-input>');
     expect(numeric.value).toBe(12.5);
-    const empty = input('<af-input value=""></af-input>'); let detail: unknown;
+    const empty = input('<af-input value="something"></af-input>'); let detail: unknown;
     empty.addEventListener('af-change', event => detail = (event as CustomEvent).detail);
-    empty.querySelector('input')!.dispatchEvent(new Event('input', {bubbles:true}));
+    const emptyNative = empty.querySelector('input')!; emptyNative.value = '';
+    emptyNative.dispatchEvent(new Event('input', {bubbles:true}));
     expect(detail).toEqual({value:null});
   });
   it('does not emit for disabled or readonly synthetic input events', () => {

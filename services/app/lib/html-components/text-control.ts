@@ -35,11 +35,11 @@ export function connectTextControl(host: HTMLElement, kind: TextControlKind, pro
   label.htmlFor = native.id;
   let composing = false;
   let queuedDuringComposition = false;
-  let acceptedValue: string | number | null = '';
   const numeric = () => kind === 'input' && (native as HTMLInputElement).type === 'number';
   const current = (): string | number | null => numeric()
     ? native!.value === '' || !Number.isFinite(Number(native!.value)) ? null : Number(native!.value)
     : native!.value === '' ? null : native!.value;
+  let acceptedValue: string | number | null = current();
   const setNativeValue = (value: unknown) => {
     const next = value == null ? '' : String(value);
     if (native!.value !== next) native!.value = next;
@@ -86,6 +86,7 @@ export function connectTextControl(host: HTMLElement, kind: TextControlKind, pro
     if (composing) { queuedDuringComposition = true; return; }
     if (native!.disabled || (native as HTMLInputElement | HTMLTextAreaElement).readOnly) { setNativeValue(modelValue()); return; }
     const value = current();
+    if (value === acceptedValue) return;
     const detail: TextControlChangeDetail = numeric()
       ? {value: value === null ? null : Number(value)}
       : {value: value === null ? null : String(value)};
