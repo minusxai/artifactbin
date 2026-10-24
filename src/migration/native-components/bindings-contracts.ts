@@ -40,7 +40,7 @@ export type NativeBindingTarget = NativeBindingIdentity &
     | { kind: "text" }
     | {
         kind: "property";
-        property: "disabled" | "value" | "checked" | "open";
+        property: "disabled" | "value" | "checked" | "open" | "data";
         attribute: string;
       }
     | { kind: "condition"; templateId: string }

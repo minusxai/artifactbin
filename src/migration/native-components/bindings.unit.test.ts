@@ -1307,3 +1307,61 @@ test("Dialog af-change closes and reopens the same viewer-owned boolean binding"
   source.analysis.flow.values[0]!.type = "string";
   assert.equal(emitNativeBindings(source).status, "blocked");
 });
+
+test("chart data targets project declared query TableData without persisting shared tables locally", async () => {
+  const source = input(
+    [el("chart", "LayeredVegaLite", { data: "$rows" })],
+    [
+      {
+        kind: "property",
+        sourceNode: "chart",
+        afId: "chart",
+        property: "data",
+        attribute: "data",
+      },
+    ],
+  );
+  source.queries = [query];
+  source.analysis.flow.queries = [{ name: "rows", start: 0, end: 1 }];
+  const result = emitNativeBindings(source);
+  assert.equal(result.status, "complete");
+  if (result.status !== "complete") return;
+  const doc = new Doc(),
+    host = new Element("div", { "data-af-id": "chart" });
+  doc.body.append(host);
+  const port = client({ open: false, filter: null }),
+    runtime = await execute(result.authorJs, port, doc);
+  try {
+    assert.equal((host as any).data, null);
+    port.remotes[0]!.next(answer("A"));
+    assert.deepEqual((host as any).data.columns, [
+      { name: "id", type: "string" },
+      { name: "title", type: "string" },
+    ]);
+    assert.equal((host as any).data.rows[0].title, "Visible A");
+    assert.equal(port.state.rows, undefined);
+    await port.updateQuery({}, (v) => ({ ...v, filter: "next" }));
+    assert.equal((host as any).data, null);
+    port.remotes[0]!.next(answer("stale"));
+    assert.equal((host as any).data, null);
+    const empty = answer("B");
+    empty.data.records.evaluate.tables[0]!.rows = [];
+    port.remotes[1]!.next(empty);
+    assert.deepEqual((host as any).data.rows, []);
+  } finally {
+    await runtime.close();
+  }
+  const invalid = input(
+    [el("chart", "LayeredVegaLite", { data: "$filter" })],
+    [
+      {
+        kind: "property",
+        sourceNode: "chart",
+        afId: "chart",
+        property: "data",
+        attribute: "data",
+      },
+    ],
+  );
+  assert.equal(emitNativeBindings(invalid).status, "blocked");
+});

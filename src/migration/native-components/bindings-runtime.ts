@@ -1,7 +1,7 @@
 /** Ordinary author JavaScript, embedded in the emitted module. No platform
  * runtime extension, source evaluation, network authority or shared-state cache. */
 export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp){
- let disposed=false,values={},tables={},localSub,failed=false;
+ let disposed=false,values={},tables={},tableData={},localSub,failed=false;
  const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
  const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
  const rootScope={active:true,cleanups:new Set()},scopes=new Set([rootScope]);
@@ -29,7 +29,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   const table=answer.find(item=>item.name===query.tableName);if(!table||table.error!==null)throw Error('Registered query failed');
   if(!Array.isArray(table.columns)||!Array.isArray(table.rows))throw Error('Invalid registered table');
   const names=new Set();for(const column of table.columns){if(!column||typeof column.name!=='string'||names.has(column.name)||['__proto__','prototype','constructor'].includes(column.name)||!['string','number','boolean','date','timestamp','user'].includes(column.type))throw Error('Invalid registered column');names.add(column.name);}
-  return table.rows.map(row=>{if(!Array.isArray(row.cells)||row.cells.length!==table.columns.length)throw Error('Invalid registered row');const record=Object.create(null);row.cells.forEach((cell,index)=>{const column=table.columns[index],key=column.type==='number'?'number':column.type==='boolean'?'boolean':'text';if(!cell||typeof cell.isNull!=='boolean'||!cell.isNull&&(typeof cell[key]!==({number:'number',boolean:'boolean',text:'string'})[key]||typeof cell[key]==='number'&&!Number.isFinite(cell[key])))throw Error('Invalid registered cell');record[column.name]=cell.isNull?null:cell[key];});return record;});
+  const rows=table.rows.map(row=>{if(!Array.isArray(row.cells)||row.cells.length!==table.columns.length)throw Error('Invalid registered row');const record=Object.create(null);row.cells.forEach((cell,index)=>{const column=table.columns[index],key=column.type==='number'?'number':column.type==='boolean'?'boolean':'text';if(!cell||typeof cell.isNull!=='boolean'||!cell.isNull&&(typeof cell[key]!==({number:'number',boolean:'boolean',text:'string'})[key]||typeof cell[key]==='number'&&!Number.isFinite(cell[key])))throw Error('Invalid registered cell');record[column.name]=cell.isNull?null:cell[key];});return record;});return {columns:table.columns.map(column=>({...column})),rows};
  }
  function render(root=document,row,context,skip){
   const ids=context?.ids??{},scope=context?.scope??rootScope;
@@ -37,7 +37,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   for(const target of plan.targets){if(target.sourceNode===skip)continue;const host=lookup(root,ids[target.afId]||target.afId);if(!host)continue;
    if(target.kind==='text'){const value=read(target.expression,row);host.textContent=typeof value==='string'||typeof value==='number'?String(value):'';}
    if(target.kind==='property'){
-    const binding=target.writeback;let projection=read(target.expression,row);
+    const binding=target.writeback;let projection=target.property==='data'?tableData[target.expression.name]??null:read(target.expression,row);
     if(binding?.multiple){try{projection=projection===null?[]:JSON.parse(projection);if(!Array.isArray(projection))throw Error();}catch{error('Invalid multiple selection');projection=[];}}
     host[target.property]=projection;
     if(binding){let bound=controls.get(host);if(!bound){bound=new Set();controls.set(host,bound);}if(!bound.has(target.property)){bound.add(target.property);
@@ -90,8 +90,8 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   if(disposed)return;
   try{
    for(const query of plan.queries){const selected={};for(const field of query.values)selected[field.name]=own(values,field.name);const variables={...(query.values.length?{values:selected}:{}),only:[query.tableName]},signature=JSON.stringify(variables),prior=subscriptions.get(query.name);if(prior?.signature===signature)continue;
-    if(prior){prior.active=false;prior.sub?.unsubscribe();}tables[query.name]=null;const item={signature,active:true,sub:null};subscriptions.set(query.name,item);
-    item.sub=client.watchQuery({query:doc(query.document),variables,clearOnRefresh:true}).subscribe(result=>{if(disposed||!item.active)return;try{if(at(result.data,[query.namespace])===null&&!result.errors?.length){tables[query.name]=null;}else tables[query.name]=decode(query,result);render();}catch(cause){tables[query.name]=null;render();error(cause.message);}});
+    if(prior){prior.active=false;prior.sub?.unsubscribe();}tables[query.name]=null;tableData[query.name]=null;const item={signature,active:true,sub:null};subscriptions.set(query.name,item);
+    item.sub=client.watchQuery({query:doc(query.document),variables,clearOnRefresh:true}).subscribe(result=>{if(disposed||!item.active)return;try{if(at(result.data,[query.namespace])===null&&!result.errors?.length){tables[query.name]=null;tableData[query.name]=null;}else {const decoded=decode(query,result);tables[query.name]=decoded.rows;tableData[query.name]=decoded;}render();}catch(cause){tables[query.name]=null;tableData[query.name]=null;render();error(cause.message);}});
    }
    render();
   }catch(cause){failed=true;stopQueries();error(cause.message);}

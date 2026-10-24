@@ -274,7 +274,11 @@ export function emitNativeBindings(
       const attr = node.attributes.find(
         (attr) => attr.name === target.attribute,
       );
-      if (!["disabled", "checked", "value", "open"].includes(target.property))
+      if (
+        !["disabled", "checked", "value", "open", "data"].includes(
+          target.property,
+        )
+      )
         block(node.graphKey, "unsupported-bound-property");
       const value = attr?.value;
       result.expression = admit(
@@ -291,6 +295,13 @@ export function emitNativeBindings(
             : null,
         node.graphKey,
       );
+      if (
+        target.property === "data" &&
+        (target.attribute !== "data" ||
+          result.expression?.kind !== "signal" ||
+          !queryNames.has(result.expression.name))
+      )
+        block(node.graphKey, "data-target-needs-declared-query");
       const custom = {
         Input: "value",
         Textarea: "value",
