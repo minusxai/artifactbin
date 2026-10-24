@@ -387,6 +387,45 @@ it("publishes exact sparse catalogs atomically and real retained queries preserv
     await rm(f.root, { recursive: true, force: true });
   }
 });
+
+it("admits only exact current dataset state from complete canonical receipts in explicit latest mode", async () => {
+  const f=await fixture(),db=await getDb();
+  try {
+    const projection=structuredClone(f.projection);projection.revisionScope="latest";
+    const dataset=projection.datasets[0]!;
+    dataset.versions=dataset.versions.filter(version=>version.version===dataset.currentVersion);
+    dataset.expectedVersions=[dataset.currentVersion];
+    projection.objects=[projection.objects[1]!];
+    const raw=JSON.parse((await f.source.dataset()).toString());
+    raw.versions[0].actor_user_id="unselected_old_actor";
+    const rawBytes=Buffer.from(JSON.stringify(raw));dataset.sourceSha256=nativeCatalogBytes(rawBytes);
+    const relations=JSON.parse((await f.source.relations()).toString());
+    relations.dataset_policy_audit.push({...relations.dataset_policy_audit[0],revision:1,actor_user_id:"unselected_old_actor",actor_token_id:"unselected_old_token"});
+    const relationBytes=Buffer.from(JSON.stringify(relations));dataset.relationsSha256=nativeCatalogBytes(relationBytes);
+    const {sha256,...payload}=projection;projection.sha256=nativeCatalogDigest(payload);
+    const stagedKeys:string[]=[],stored=new Map<string,Buffer>();
+    const staged=await stageNativeCatalog(projection,{...f.source,dataset:async()=>rawBytes,relations:async()=>relationBytes,read:async object=>{
+      expect(object.objectKey).toBe(projection.objects[0]!.objectKey);return f.source.read(object);
+    }},{get:async key=>stored.get(key)!,putIfAbsent:async(key,bytes)=>{stagedKeys.push(key);stored.set(key,bytes);return "created";}});
+    const history={...f.history,relationSha256:staged.sourceSha256};
+    expect(await importNativeHistory(db,history,staged)).toBe("created");
+    expect(await importNativeHistory(db,history,staged)).toBe("unchanged");
+    expect((await db.query("SELECT version FROM artifact_versions WHERE artifact_id=$1 ORDER BY version",[f.dataId])).rows).toEqual([{version:3}]);
+    expect(stagedKeys).toEqual([projection.objects[0]!.targetKey]);
+    const saved=(await getArtifactById(f.dataId))!;
+    expect(saved).toMatchObject({version:3,visibility:dataset.authority.visibility,link_role:dataset.authority.linkRole,access:dataset.authority.access,dataset_policy:dataset.authority.datasetPolicy});
+    expect((await db.query("SELECT revision FROM dataset_policy_audit WHERE dataset_id=$1",[f.dataId])).rows).toEqual([{revision:2}]);
+  } finally {await rm(f.root,{recursive:true,force:true});}
+});
+
+it("latest dataset admission refuses projected history, omitted current audit and changed head metadata", async()=>{
+ const f=await fixture();try{
+  for(const mutate of [()=>{},(p:NativeCatalogProjection)=>{const d=p.datasets[0]!;d.expectedVersions=[3];d.versions=d.versions.filter(v=>v.version===3);d.policyAudit=[];},(p:NativeCatalogProjection)=>{const d=p.datasets[0]!;d.expectedVersions=[3];d.versions=d.versions.filter(v=>v.version===3);d.versions[0]!.title="changed";}]){
+   const p=structuredClone(f.projection);p.revisionScope="latest";mutate(p);const {sha256,...payload}=p;p.sha256=nativeCatalogDigest(payload);
+   await expect(stageNativeCatalog(p,f.source,f.sink)).rejects.toThrow(/native_catalog/);
+  }
+ }finally{await rm(f.root,{recursive:true,force:true});}
+});
 it("late verification failure rolls back page, dataset, registry and catalogs while immutable staging remains independent", async () => {
   const f = await fixture(),
     db = await getDb();

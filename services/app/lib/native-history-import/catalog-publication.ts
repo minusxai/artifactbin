@@ -4,6 +4,7 @@ import type { HtmlBackendVersionRecord } from "@/lib/html-backends";
 import type { Queryable } from "@artifactbin/contracts";
 import { validateDatasetPolicyForRow } from "@/lib/datasets/policy/validation";
 import { nativeCatalogDigest } from "./catalog-digest";
+import { validateNativeCatalogDatasetSelection, validateNativeCatalogRevisionScope } from "./catalog-selection";
 import type {
   NativeCatalogProjection,
   NativeCatalogDataset,
@@ -62,6 +63,7 @@ function catalogKeys(meta: Record<string, unknown>): string[] {
   return [...new Set(keys)];
 }
 export function validateNativeCatalogProjection(p: NativeCatalogProjection) {
+  validateNativeCatalogRevisionScope(p);
   if (
     !p.sourceNamespace ||
     ![
@@ -74,6 +76,7 @@ export function validateNativeCatalogProjection(p: NativeCatalogProjection) {
     throw Error("native_catalog_provenance");
   const ids = new Set<string>();
   for (const dataset of p.datasets) {
+    validateNativeCatalogDatasetSelection(p, dataset);
     if (
       new Set(dataset.policyAudit.map((row) => row.revision)).size !==
         dataset.policyAudit.length ||

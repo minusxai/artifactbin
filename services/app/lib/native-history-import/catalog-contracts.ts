@@ -75,6 +75,10 @@ export interface NativeCatalogImport {
   table: string;
 }
 export interface NativeCatalogProjection {
+  /** Omission preserves complete-history admission. Latest selects only each exact
+   * canonical head and its current policy-revision audit row, when present; raw
+   * export/relation receipts remain complete and digest-bound. */
+  revisionScope?: "all" | "latest";
   /** Root-reviewed identity plan; required when deriving typed user objects. */
   identityPlanSha256?: string;
   typedUserRemaps?: readonly NativeCatalogUserRemap[];

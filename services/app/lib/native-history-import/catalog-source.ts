@@ -7,6 +7,7 @@ import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { nativeCatalogBytes, nativeCatalogDigest } from "./catalog-digest";
+import { nativeCatalogPolicyAuditSelected, selectNativeCatalogSourceVersions } from "./catalog-selection";
 import type {
   NativeCatalogProjection,
   NativeCatalogObjectSource,
@@ -135,7 +136,7 @@ export async function verifyNativeCanonicalDatasets(
     if (!Array.isArray(relations.dataset_policy_audit))
       throw Error("native_catalog_source_audit_required");
     const audit = relations.dataset_policy_audit
-      .filter((row) => row.dataset_id === dataset.sourceId)
+      .filter((row) => row.dataset_id === dataset.sourceId && nativeCatalogPolicyAuditSelected(p, dataset, row.revision))
       .map((row) => ({
         revision: row.revision,
         policy: nativeCatalogMappedPolicy(row.policy, p.identities),
@@ -153,20 +154,7 @@ export async function verifyNativeCanonicalDatasets(
       throw Error("native_catalog_source_audit");
 
     const head = heads[0]!,
-      versions = new Map<number, Record<string, unknown>>();
-    for (const row of exported.versions ?? [])
-      if (row.artifact_id === dataset.sourceId) {
-        if (versions.has(Number(row.version)))
-          throw Error("native_catalog_source_duplicate");
-        versions.set(Number(row.version), row);
-      }
-    versions.set(Number(head.version), head);
-    if (
-      Number(head.version) !== dataset.currentVersion ||
-      nativeCatalogDigest([...versions.keys()].sort((a, b) => a - b)) !==
-        nativeCatalogDigest([...dataset.expectedVersions].sort((a, b) => a - b))
-    )
-      throw Error("native_catalog_source_history");
+      versions = selectNativeCatalogSourceVersions(p, dataset, head, exported.versions ?? []);
     for (const version of dataset.versions) {
       const row = versions.get(version.version);
       if (row)
