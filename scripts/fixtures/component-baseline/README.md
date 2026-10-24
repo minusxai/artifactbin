@@ -2,15 +2,21 @@
 
 This harness compares the original JSX compiler/reader against published HTML components. It never renders an invented baseline. The original pinned source is `8eaac63810b66eb575b018be89bb63443e1b7aaf`; use an isolated gate container built from that checkout. Candidate and original servers must have independent disposable storage. No production publication is allowed.
 
-`gate-component-baseline.mjs` reads `COMPONENT_BASELINE__INPUT`, a JSON configuration file inside its container. Register `component-baseline` in the gate manifest before using the standard container gate runner. Gates are SLOW-tier: run once at the end of the brief, never per edit. The orchestrator coordinates the original and candidate container runs.
+`gate-component-baseline.mjs` is self-contained without configuration: it publishes candidate HTML through normal gate authentication and the HTTP API, then captures and checks the 48 candidate states. This default proves candidate reader behavior only. Register `component-baseline` in the gate manifest. Gates are SLOW-tier: run once at the end of the brief, never per edit. The orchestrator coordinates the original and candidate container runs.
 
-Publication configuration:
+For paired evidence, copy this harness's script files into an isolated original-source worktree without modifying its product implementation. Register the gate there. Put an untracked optional configuration file at `scripts/fixtures/component-baseline/run.json` (the container runner copies untracked nonignored source files). Run the normal `node scripts/gate-container.mjs component-baseline`. No environment forwarding or production writes are needed. The optional file must never be committed.
+
+Original configuration (replace the source revision with the exact verified original Git revision):
 
 ```json
-{"mode":"publish","implementation":"jsx","base":"http://app.lvh.me:3030","source":"/workspace","output":"/workspace/tmp/original-readers.json"}
+{"implementation":"jsx","sourceRevision":"8eaac63810b66eb575b018be89bb63443e1b7aaf","output":"/work/tmp/original-evidence"}
 ```
 
-Use `implementation: "html"` with the candidate server and checkout for the candidate. Publication uses the owning checkout's normal gate authentication and real HTTP API. The generated URL manifest is the capture configuration: run the same gate with `COMPONENT_BASELINE__INPUT` pointing at it. It records explicit source revision, fixture hash, image hash, browser errors and behavior for every state. Keep the manifests and images together. Compare configuration:
+Use `implementation: "html"`, the candidate's full Git revision and a candidate output path for the candidate container. These modes publish and capture within the same server/container lifecycle, so disposable reader URLs never outlive their server. Optional `source` defaults to the current container checkout; gate runner's server base is passed automatically. Explicit `mode: "publish"` is available only for debugging publication inside an already running server.
+
+Capture archives are emitted as `COMPONENT_BASELINE_EVIDENCE_GZIP_BASE64` log lines: decode base64, gunzip, parse the JSON and write each file's decoded base64 under its name. This preserves the images and capture manifest after container teardown. The archives carry source revision, fixture and image hashes, browser errors and behavior. Default candidate runs use an explicitly labeled source hash, which comparison refuses as a substitute for verified Git provenance.
+
+To compare extracted evidence, use optional config:
 
 ```json
 {"mode":"compare","baseline":"/evidence/original/jsx-captures.json","candidate":"/evidence/candidate/html-captures.json","baselineDirectory":"/evidence/original","candidateDirectory":"/evidence/candidate","output":"/evidence/diffs"}

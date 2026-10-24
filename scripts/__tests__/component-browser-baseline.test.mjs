@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import { compareBrowserBaselines } from '../lib/component-browser-baseline.mjs';
+import { compareBrowserBaselines, candidateCaptureIssues } from '../lib/component-browser-baseline.mjs';
 const directories=[];
 afterEach(async()=>{await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true})));});
 async function capture(directory,implementation,color,overrides={}){
@@ -33,5 +33,19 @@ describe('paired real reader evidence comparison',()=>{
     const directory=await setup();const original=await capture(directory,'jsx','white');const candidate=await capture(directory,'html','white');
     await writeFile(path.join(directory,candidate.screenshot),'changed');
     await expect(compareBrowserBaselines({baseline:[original],candidate:[candidate],baselineDirectory:directory,candidateDirectory:directory,output:directory})).rejects.toThrow('hash mismatch');
+  });
+});
+
+describe('default candidate reader gate',()=>{
+  it('fails when the real reader does not open a dialog or render table rows',()=>{
+    const empty={text:'',controls:[],rows:[],overflow:0};
+    expect(candidateCaptureIssues([{fixture:'dialog',state:'open',semantics:empty,errors:[]}])).toContain('dialog: did not open');
+    expect(candidateCaptureIssues([{fixture:'data-table',state:'initial',semantics:{...empty,text:'Ada Grace Linus'},errors:[]}])).toContain('data-table: expected header and three rows');
+  });
+  it('checks the result of tab keyboard navigation rather than only page errors',()=>{
+    const capture={fixture:'tabs',state:'arrow-right',semantics:{text:'First panel',controls:[],rows:[],overflow:0},errors:[]};
+    expect(candidateCaptureIssues([capture])).toContain('tabs/arrow-right: missing Second panel');
+    capture.semantics.text='Second panel';
+    expect(candidateCaptureIssues([capture])).toEqual([]);
   });
 });

@@ -22,7 +22,7 @@ function browserState() {
 /** mount({fixture,theme,viewport,page}) returns {frame,ready?}; must navigate to
  * a real local reader. Source revisions are supplied independently, never inferred. */
 export async function captureBrowserBaseline({browser,mount,implementation,sourceRevision,output,fixtures=browserParityFixtures}) {
-  if (!['jsx','html'].includes(implementation) || !/^[a-f0-9]{40}$/.test(sourceRevision)) throw Error('Explicit implementation and full source revision required');
+  if (!['jsx','html'].includes(implementation) || typeof sourceRevision!=='string' || !sourceRevision) throw Error('Explicit implementation and source identity required');
   await mkdir(output,{recursive:true});
   /** @type {import('../fixtures/component-baseline/contract').BrowserParityCapture[]} */
   const captures=[];
@@ -62,7 +62,7 @@ export async function compareBrowserBaselines({baseline,candidate,baselineDirect
   for(const old of baseline) {
     const current=candidates.get(key(old));candidates.delete(key(old));
     if(!current){results.push({key:key(old),error:'Missing candidate capture'});continue;}
-    if(old.implementation!=='jsx'||current.implementation!=='html'||old.fixtureHash!==current.fixtureHash){results.push({key:key(old),error:'Unmatched implementation or fixture inputs'});continue;}
+    if(old.implementation!=='jsx'||current.implementation!=='html'||old.fixtureHash!==current.fixtureHash||!(/^[a-f0-9]{40}$/.test(old.sourceRevision)&&/^[a-f0-9]{40}$/.test(current.sourceRevision))){results.push({key:key(old),error:'Unmatched implementation or fixture inputs'});continue;}
     const [a,b]=await Promise.all([readFile(path.join(baselineDirectory,old.screenshot)),readFile(path.join(candidateDirectory,current.screenshot))]);
     if(hash(a)!==old.screenshotSha256||hash(b)!==current.screenshotSha256)throw Error('Capture image hash mismatch');
     const [left,right]=await Promise.all([sharp(a).ensureAlpha().raw().toBuffer({resolveWithObject:true}),sharp(b).ensureAlpha().raw().toBuffer({resolveWithObject:true})]);
@@ -75,4 +75,21 @@ export async function compareBrowserBaselines({baseline,candidate,baselineDirect
   for(const extra of candidates.keys())results.push({key:extra,error:'Missing original capture'});
   await writeFile(path.join(output,'comparison.json'),JSON.stringify(results,null,2));
   return results;
+}
+
+/** Default CI gate assertions are candidate evidence only, never old/new parity. */
+export function candidateCaptureIssues(captures) {
+  const issues=[];
+  for(const capture of captures) {
+    const state=capture.semantics;
+    if(capture.errors.length)issues.push(`${capture.fixture}: reader page errors`);
+    if(state.overflow>1)issues.push(`${capture.fixture}: horizontal overflow`);
+    const includes=text=>state.text.includes(text);
+    const required={button:['Continue','Secondary','Outline','Unavailable'],tabs:[capture.state==='second'||capture.state==='arrow-right'?'Second panel':'First panel'],select:['Person','Ada'],'file-upload':['Screenshots'],'data-table':['Ada','Grace','Linus']}[capture.fixture]||[];
+    for(const text of required)if(!includes(text))issues.push(`${capture.fixture}/${capture.state}: missing ${text}`);
+    if(capture.fixture==='dialog'&&capture.state==='open'&&!includes('Review changes'))issues.push('dialog: did not open');
+    if(capture.fixture==='dialog'&&capture.state==='escape'&&state.controls.some(control=>control.role==='dialog'))issues.push('dialog: did not close on Escape');
+    if(capture.fixture==='data-table'&&state.rows.length!==4)issues.push('data-table: expected header and three rows');
+  }
+  return issues;
 }
