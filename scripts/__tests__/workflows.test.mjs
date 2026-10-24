@@ -1,5 +1,5 @@
 /** CI job-ownership contracts and immutable maintenance action pins. */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, globSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import yaml from 'yaml';
@@ -305,4 +305,20 @@ describe('page speed: the base is main\'s own measurement of the same bytes', ()
     expect(baseCommit({ EVENT: 'push', BEFORE: 'gone' }, known)).toBeNull();
     expect(baseCommit({ EVENT: 'workflow_dispatch' }, known)).toBeNull();
   });
+});
+
+it('keeps runner Docker COPY inputs available in each workflow build context', () => {
+  const workflow = yaml.parse(readFileSync(path.join(root, '.github/workflows/runner-design.yml'), 'utf8'));
+  const builds = workflow.jobs['linux-worker'].steps.map(step => step.run).filter(command => command?.startsWith('docker build '));
+  expect(builds.length).toBe(2);
+  for (const command of builds) {
+    const args = command.split(/\s+/), context = path.resolve(root, args.at(-1));
+    const file = args.includes('-f') ? path.resolve(root, args[args.indexOf('-f') + 1]) : path.join(context, 'Dockerfile');
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      if (!line.startsWith('COPY ') || line.startsWith('COPY --from=')) continue;
+      for (const source of line.split(/\s+/).slice(1, -1)) {
+        expect(globSync(source, { cwd: context }).length, `${file}: ${source} missing from ${context}`).toBeGreaterThan(0);
+      }
+    }
+  }
 });

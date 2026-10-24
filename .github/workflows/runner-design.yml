@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'docs/proposals/runner-validation/**'
+      - 'deploy/company/patch-npm.mjs'
+      - 'scripts/ci/prepare-npm.mjs'
       - 'services/runner/**'
       - 'services/app/**/runner*'
       - 'services/app/lib/runner/**'
@@ -44,7 +46,7 @@ jobs:
         run: node scripts/ci/prepare-npm.mjs
       - run: npm ci
       - run: npm ci --prefix docs/proposals/runner-validation --no-audit --no-fund
-      - run: docker build -t runner-design-worker docs/proposals/runner-validation
+      - run: docker build -f docs/proposals/runner-validation/Dockerfile -t runner-design-worker .
       - name: Prove the path with restricted Linux workers
         env:
           RUNNER_VALIDATION_DOCKER: runner-design-worker
