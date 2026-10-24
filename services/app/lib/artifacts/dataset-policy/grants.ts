@@ -1,3 +1,4 @@
+import {verifyRegisteredHtmlMutation} from '../registered-html-mutation';
 import {liveAccessFacts,type AccessFacts} from '@/lib/artifacts/access-facts';
 import {artifactQuery} from '@/lib/artifacts/document';
 import {JOIN_RELATIONS} from '@/lib/accounts';
@@ -13,7 +14,7 @@ export function grantsOf(row: Pick<ArtifactRow,'dataset_policy'>): DatasetGrantP
   return value&&typeof value==='object'&&'version' in value&&value.version===2?parseDatasetGrants(value):null;
 }
 const principalOf=(row:Pick<ArtifactRow,'user_id'|'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>)=>({userId:row.group_id?null:row.user_id,tokenId:row.group_id?null:row.token_id,groupId:row.group_id??null});
-export interface GrantDocument {id:string;editId:string}
+export interface GrantDocument {id:string;editId:string;registeredHtml?:object}
 function owns(row:Pick<ArtifactRow,'user_id'|'token_id'> & Partial<Pick<ArtifactRow,'group_id'>>,actor:AccessActor){return row.group_id ? actor.groupId===row.group_id : (row.user_id?!!actor.userId&&row.user_id===actor.userId:!!actor.tokenId&&row.token_id===actor.tokenId);}
 /** The row fields a read decision consults. */
 export type ReadRow = Pick<ArtifactRow,'id'|'user_id'|'token_id'|'visibility'|'format'> & Partial<Pick<ArtifactRow,'group_id'|'dataset_policy'>>;
@@ -34,7 +35,7 @@ export async function grantContext(dataset:ArtifactRow,actor:AccessActor,documen
  if(identity?.kind==='testuser'&&!(await db.query("SELECT 1 FROM users WHERE id=$1 AND kind='testuser'",[dataset.user_id])).rows.length)throw new DatasetError('Test users may only act inside their sandbox',403);
  if(!document){if(!identity&&!owns(dataset,actor))throw new DatasetError('Sign in to change data',403);return context;}
  const doc=(await artifactQuery<ArtifactRow>(db,'SELECT * FROM artifacts WHERE id=$1 AND deleted_at IS NULL',[document.id])).rows[0];
- if(!doc||doc.format!=='markup'||doc.edit_id!==document.editId||!(await readThrough(db,doc,actor)))throw new DatasetError('Document access or action changed',403);
+ if(!doc||(doc.format!=='markup'&&!(doc.format==='html'&&await verifyRegisteredHtmlMutation(document,db)))||doc.edit_id!==document.editId||!(await readThrough(db,doc,actor)))throw new DatasetError('Document access or action changed',403);
  const tokenCreator=!doc.group_id&&!doc.user_id&&owns(doc,actor);
  if(!tokenCreator){
   if(!identity||identity.kind==='guest')throw new DatasetError('Sign in and join this artifact to use its actions',403);

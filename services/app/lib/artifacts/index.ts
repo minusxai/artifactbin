@@ -75,3 +75,5 @@ export { mutationInvocation } from './mutation-invocation';
 export { emitDatasetCommitted } from './after-commit';
 export { compileErrorText, compileResultForRow } from './row-compile';
 export { childrenTableFor } from './placement';
+/** Host-only registered HTML action attestation; never created from namespace arguments. */
+export {attestRegisteredHtmlMutation,verifyRegisteredHtmlMutation} from './registered-html-mutation';
