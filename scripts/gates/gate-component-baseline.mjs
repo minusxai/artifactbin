@@ -9,6 +9,7 @@ import path from 'node:path';
 import {gzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 import {publishReaderManifest} from '../component-baseline-publish.mjs';
+import {settleInteraction} from '../fixtures/component-baseline/interaction.mjs';
 import {richBaselineReadiness} from '../fixtures/component-baseline/rich.mjs';
 import { launchChromium } from './lib/browser.mjs';
 import { captureBrowserBaseline, compareBrowserBaselines, candidateCaptureIssues } from '../lib/component-browser-baseline.mjs';
@@ -62,6 +63,7 @@ try {
       const engineReady=richBaselineReadiness[fixture.id]?.[input.implementation];
       if(engineReady)await page.waitForFunction(engineReady,undefined,{timeout:30_000});
     },afterAction:async action=>{
+      await settleInteraction({fixture,action,frame:page,implementation:input.implementation});
       if(fixture.id==='date-picker-fixed'&&action.action==='click'&&action.name==='')await page.getByRole('button',{name:'2024-06-16',exact:true}).waitFor();
       if(fixture.id==='tooltip-keyboard'&&action.action==='focus')await page.getByRole('tooltip').waitFor();
     }};
