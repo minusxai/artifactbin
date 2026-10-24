@@ -37,14 +37,13 @@ export async function prepareNativeProductImport(raw:NativeProductImportRecipe|N
   apply:async(tx:Parameters<typeof writeNativeHistory>[0],id:string)=>{await annotations.apply(tx,id);await stagedCatalog.apply(tx,id);},
   verify:async(tx:Parameters<typeof writeNativeHistory>[0],id:string)=>{await annotations.verify(tx,id);await stagedCatalog.verify(tx,id);}};
  history.relationSha256=relations.sourceSha256;
- return {history,relations,catalog:stagedCatalog,
-  async import(db:NativeProductImportDb){return db.transaction(async tx=>{
+ const write=async(tx:Parameters<typeof writeNativeHistory>[0])=>{
    const authority=await authorizeNativeIdentityTransaction(tx,recipe.schemas);
    const identities=await writeNativeIdentities(tx,identity,authority);
    const disposition=await writeNativeHistory(tx,history,relations);
    return {disposition,identities,historyProjectionSha256:history.projectionSha256,relationsSha256:relations.sourceSha256};
-  });},
  };
+ return {history,relations,catalog:stagedCatalog,identityPlan:identity.plan,datasetIds:catalog.projection.datasets.map(dataset=>dataset.targetId),write,async import(db:NativeProductImportDb){return db.transaction(write);}};
 }
 
 /** Stage real runtime assets before the converter's synchronous history projection.

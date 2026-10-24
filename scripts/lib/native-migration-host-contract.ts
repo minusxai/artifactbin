@@ -14,7 +14,7 @@ export interface NativeHostRecipe {
 /** @public Host adapter contract. */
 export interface NativeHostContext {
  revision:{key:NativeHostKey};assembly:{key:NativeHostKey;sha256:string;result:{htmlSha256:string}};
- receiptRoot:string;outputDirectory:string;authorityRecipePath:string;
+ receiptRoot:string;outputDirectory:string;authorityRecipePath:string;baselineRecipePath?:string;candidateRecipePath?:string;
 }
 /** @public Host adapter contract. */
 export interface NativeHostPrepared {
