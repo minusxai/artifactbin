@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { EXTERNALS } from './runtime-externals.mjs';
 import { copyRunnerAssets } from './copy-runner-assets.mjs';
-import { prebuiltHtmlCore } from './html-core.mjs';
+import { prebuiltHtmlCore, prebuiltPreviewAssets } from './html-core.mjs';
 
 /*
  * Requires the bundle names but never reaches, so no image installs them: @babel/core (the
@@ -56,7 +56,7 @@ await esbuild.build({
   outfile: out,
   external: [...EXTERNALS, ...BUNDLE_ONLY_EXTERNALS, ...process.argv.slice(4).filter(arg=>!arg.startsWith('--'))],
   define: tailwindDefine,
-  plugins: [prebuiltHtmlCore(fileURLToPath(new URL('../../',import.meta.url)))],
+  plugins: [prebuiltHtmlCore(fileURLToPath(new URL('../../',import.meta.url))),prebuiltPreviewAssets(fileURLToPath(new URL('../../',import.meta.url)))],
   // `require` for the bundled CJS deps, under a name nothing else can collide
   // with: the app itself uses createRequire (lib/object-store, lib/mermaid-images/fonts
   // resolve packages that way), and a plain banner declared it twice — a SyntaxError at

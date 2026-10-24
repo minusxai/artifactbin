@@ -32,7 +32,7 @@ describe('one root for installed and direct HTTP agents',()=>{
  });
 });
 
-import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -89,11 +89,42 @@ describe('installable shared skill folder',()=>{
    const {startPreview}=await import(/* @vite-ignore */ previewModule);
    const preview=await startPreview({root:path.join(dir,'artifactbin'),port:0});
    try {
+    expect(await (await fetch(new URL('/__af_preview/export-runtime',preview.url))).json()).toEqual(assets);
     for(const [resource,source] of [['/af/v1/core.js',assets.core],[assets.apolloPath,assets.apollo],[assets.readerPath,assets.reader]]){
      const response=await fetch(new URL(resource,preview.url));
      expect(response.status).toBe(200);expect(await response.text()).toBe(source);
     }
    } finally {await preview.close();}
+   const project=path.join(dir,'project');mkdirSync(project);
+   writeFileSync(path.join(project,'sales.csv'),'amount\n2\n');
+   writeFileSync(path.join(project,'index.html'),'<link rel="af-dataset" data-af-name="sales" href="./sales.csv"><h1>Local data</h1>');
+   const local=await startPreview({root:project,revisionIntervalMs:0});
+   try {
+    const html=await (await fetch(local.url)).text();
+    const config=JSON.parse(html.match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
+    expect(config.offline).toBe(true);expect(config.localPreview.endpoint).toMatch(/^\/__af_preview\/datasets\/[A-Za-z0-9_-]+$/);
+    const endpoint=new URL(config.localPreview.endpoint,local.url);
+    expect((await fetch(endpoint,{method:'POST',headers:{origin:'https://foreign.example','content-type':'application/json'},body:'{}'})).status).toBe(403);
+    const execute=async(query:string)=>await (await fetch(endpoint,{method:'POST',headers:{origin:new URL(local.url).origin,'content-type':'application/json'},body:JSON.stringify({query})})).json();
+    const discovered=await execute('{sales{schema{revision tables{id label columns{id label}}}}}');
+    expect(discovered.errors).toBeUndefined();const schema=discovered.data.sales.schema,table=schema.tables[0];
+    const mutation=await execute(`mutation {sales{writeRows(tableId:${JSON.stringify(table.id)},expectedRevision:${JSON.stringify(schema.revision)},requestId:"preview-insert",changes:[{kind:INSERT,cells:[{columnId:${JSON.stringify(table.columns[0].id)},value:{type:NUMBER,number:9}}]}]){outcome}}}`);
+    expect(mutation.errors).toBeUndefined();expect(mutation.data.sales.writeRows.outcome).toBe('committed');
+    const exported=await (await fetch(endpoint+'/export/sales')).json();expect(exported.tables[0].rows).toHaveLength(2);
+    expect(readFileSync(path.join(project,'sales.csv'),'utf8')).toBe('amount\n2\n');
+    expect((await fetch(endpoint+'/export/other')).status).toBe(404);
+    const fresh=JSON.parse((await (await fetch(local.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
+    expect(fresh.localPreview.endpoint).toBe(config.localPreview.endpoint);
+    writeFileSync(path.join(project,'sales.csv'),'amount\n4\n');
+    const changed=JSON.parse((await (await fetch(local.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
+    expect(changed.localPreview.endpoint).toBe(config.localPreview.endpoint);
+    expect(await (await fetch(endpoint+'/status')).json()).toMatchObject({dirty:true,conflict:true});
+    expect((await fetch(endpoint,{method:'POST',headers:{origin:new URL(local.url).origin,'content-type':'application/json'},body:JSON.stringify({query:'{sales{schema{revision}}}'})})).status).toBe(200);
+    expect((await (await fetch(endpoint+'/export/sales')).json()).tables[0].rows).toHaveLength(2);
+    expect((await fetch(endpoint+'/discard',{method:'POST',headers:{origin:new URL(local.url).origin}})).status).toBe(200);
+    const reset=JSON.parse((await (await fetch(local.url)).text()).match(/<script[^>]*data-af="runtime"[^>]*>([\s\S]*?)<\/script>/)![1]!);
+    expect(reset.localPreview.endpoint).not.toBe(config.localPreview.endpoint);
+   } finally {await local.close();}
    expect(expected['SKILL.md']).toMatch(/^---\nname: artifactbin\n/);
    expect(expected['SKILL.md']).toContain(origin);
 
