@@ -6,6 +6,9 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import sharp from 'sharp';
+import {becomeOwner} from './start-doc.mjs';
+import {documentFrame} from '../gates/lib/page-facts.mjs';
+import {loadImportedPilotProbe} from './native-prepared-pilot-probe.mjs';
 import {build} from 'esbuild';
 import {installedFiles} from '../fixtures/component-baseline/publication.mjs';
 import {captureBrowserBaseline,compareBrowserBaselines} from './component-browser-baseline.mjs';
@@ -70,6 +73,7 @@ export async function runNativeMigrationPilot({base,paths,browser,connectAgent})
  const source=validatePilotInputs(input,await readFile(paths.canonical),await readFile(paths.recovery));
  for(const file of input.bundleFiles)if(sha(await readFile(path.join(paths.bundle,file.path)))!==file.sha256)throw Error('pilot-bundle-file-digest');
  await mkdir(paths.output,{recursive:true,mode:0o700});
+ if(input.preparedStore)return captureImportedPilot({input,paths,browser,server,connectAgent});
  const {token}=await connectAgent(server);
  const publish=async(body,key)=>{const response=await fetch(server+'/api/artifacts',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`,...(key?{'idempotency-key':key}:{})},body:JSON.stringify({visibility:'unlisted',...body})});if(!response.ok){await writeFile(path.join(paths.output,'publication-failure.json'),JSON.stringify({status:response.status,body:(await response.text()).slice(0,1000000)},null,2),{mode:0o600});throw Error(`pilot-publication-${response.status}`);}const value=await response.json();if(typeof value.id!=='string')throw Error('pilot-publication-id');return value;};
  let staging,prepareBundle,skillSha256;
@@ -121,4 +125,24 @@ export async function prepareNativePilotSnapshot({prepareBundle,input,bundle,ser
  const entry=await readFile(path.join(bundle,'index.html'),'utf8');
  const html=regression?entry.replace('</head>','<style>body{transform:translateX(17px)!important}</style></head>'):entry;
  return prepareBundle({root:bundle,entry:'index.html',entryHtml:html,server,manifest:input.bundleFiles.filter(file=>file.path!=='index.html').map(file=>file.path)});
+}
+
+/** Existing actual-reader camera, operating on the imported library rather than republishing. */
+async function captureImportedPilot({input,paths,browser,server,connectAgent}){
+ const store=input.preparedStore,reader=store.reader;if(reader.version!==input.key.version)throw Error('pilot-imported-version');
+ const probeScratch=await mkdtemp(path.join(tmpdir(),'native-imported-probe-'));
+ const probe=await loadImportedPilotProbe({input,bundle:paths.bundle,scratch:probeScratch});
+ const {token}=await connectAgent(server,{email:reader.accountEmail});
+ const fixture=pilotFixture(input),capture=async(regression,output)=>captureBrowserBaseline({browser,implementation:input.implementation,sourceRevision:input.implementation==='jsx'?input.originalRevision:input.candidateRevision,output,fixtures:[fixture],themes:[input.theme],viewports:input.viewports,screenshotMode:'document-frame',mount:async({page,state,viewport})=>{
+  await becomeOwner(page,server,token);await page.goto(server+'/a/'+encodeURIComponent(reader.pageId),{waitUntil:'domcontentloaded'});
+  const frame=await documentFrame(page);
+  const hooks=await probe?.mountImportedPilot({page,frame,state,viewport,regression,server,reader,output,authenticate:async(email,targetPage=page)=>{const session=await connectAgent(server,{email});await becomeOwner(targetPage,server,session.token);}});
+  return {frame,performAction:hooks?.performAction,afterAction:hooks?.afterAction,ready:async()=>{await frame.locator('html[data-af-ready="yes"]').waitFor();await hooks?.ready?.();if(regression)await frame.addStyleTag({content:'body{transform:translateX(17px)!important}'});},screenshot:()=>page.locator('iframe[data-mx-document-frame]').screenshot({animations:'disabled',caret:'hide'})};
+ }});
+ try{
+ const captures=await capture(false,paths.output),regressionDirectory=path.join(paths.output,'regression'),regression=await capture(true,regressionDirectory),control=await stylingRegressionEvidence({candidate:captures,regression,directory:paths.output,regressionDirectory});
+ const issues=captures.flatMap(c=>[...c.errors,...(c.assertionErrors??[]),...(c.fontEvidence?.errors??[]),...(c.resourceEvidence?.errors??[])]);if(!control.detected)issues.push('styling-regression-control-not-detected');
+ const receipt={format:'native-migration-pilot-capture-v1',harnessSha256:input.harnessSha256,implementation:input.implementation,sourceRevision:input.implementation==='jsx'?input.originalRevision:input.candidateRevision,sourceSha256:input.sourceSha256,documentSha256:input.documentSha256,canonicalSha256:input.canonicalSha256,bundleManifestSha256:digest(input.bundleFiles),preparedStoreSha256:store.sha256,probeSha256:probe?.sha256,identityPlanSha256:reader.identityPlanSha256,importedLibrary:true,normalAccountLogin:true,theme:input.theme,viewports:input.viewports,states:input.states.map(s=>s.id),control,issues};
+ await writeFile(path.join(paths.output,'migration-pilot.json'),JSON.stringify(receipt,null,2),{mode:0o600});if(issues.length)throw Error('native-imported-pilot-incomplete:'+issues.length);return receipt;
+ }finally{await rm(probeScratch,{recursive:true,force:true});}
 }
