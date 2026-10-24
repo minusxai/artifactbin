@@ -29,4 +29,11 @@ export async function prepareInstalledCompilers(root=repositoryRoot,{packagePayl
  }
  console.log(versions.length?`Prepared esbuild ${versions.join(', ')} with go1.27.3 and x/sys v0.44.0${packagePayload?' and universal CLI payload':''}`:'No installed esbuild packages');
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)await prepareInstalledCompilers(process.argv.find(value=>value.startsWith('--root='))?.slice(7)??repositoryRoot,{packagePayload:process.argv.includes('--package')});
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
+ const root=resolve(process.argv.find(value=>value.startsWith('--root='))?.slice(7)??repositoryRoot);
+ if(process.argv.includes('--cache-package')){
+  // This producer may run beside the CLI build: touch only the compiler cache, never installed executables or dist.
+  const version=JSON.parse(await readFile(join(root,'services/cli/package.json'),'utf8')).dependencies.esbuild;
+  await prepareCompilerAssets(join(root,'node_modules/.cache/esbuild-compilers'),{versions:[version],targets:COMPILER_TARGETS});
+ }else await prepareInstalledCompilers(root,{packagePayload:process.argv.includes('--package')});
+}

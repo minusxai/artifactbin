@@ -127,6 +127,8 @@ try{
   fetchCommand.length&&!prepareOnly?runAsync(process.cwd(),fetchCommand[0],fetchCommand.slice(1),{timeout:240_000}):Promise.resolve(),
   prepareOnly?caddy:deployment.then(()=>together(
    composeAsync(first,['build','smtpfixture'],{timeout:300_000}),
+   // Build and test the runtime source packages while the exact candidate is being packed.
+   runAsync(first,'docker',['build','--target','runtime-packages','-t','afbin-runtime-packages-ci','.'],{timeout:300_000}),
    composeAsync(first,['pull','--quiet','postgres'],{timeout:300_000}),
   )),
   prepareOnly?Promise.resolve():mkdir(restored).then(()=>configureFixture(restored)),
@@ -148,6 +150,15 @@ async function acceptance(){
  await cp(join(candidate,tarballs[0]),join(first,'packages/afbin.tgz'));
  compose(first,['build','volume-init'],{timeout:300_000});
  compose(first,['up','-d','--wait','--wait-timeout','90','app']);
+ const osInventory=compose(first,['exec','-T','app','dpkg-query','-W','-f=${binary:Package}\t${Version}\n'],{capture:true});
+ const evidence=process.env.RUNNER_TEMP??scratch;
+ await writeFile(join(evidence,'company-os-packages.tsv'),osInventory);
+ await writeFile(join(evidence,'company-os-image.json'),JSON.stringify({source:process.env.GITHUB_SHA??null,image:compose(first,['images','-q','app'],{capture:true}).trim()},null,2)+'\n');
+ const runtimePackages=compose(first,['exec','-T','app','sh','-ec',
+  "dpkg-query -W tar dash libpcre2-8-0 libexpat1 coreutils ncurses-bin libtinfo6; test \"$(dpkg-query -W -f='${Version}' tar)\" = 1.35+fedora10-1+runtime1; test \"$(dpkg-query -W -f='${Version}' dash)\" = 0.5.12+libcfnmatch-1+runtime1; test \"$(dpkg-query -W -f='${Version}' libpcre2-8-0)\" = 10.49-1+runtime1; dpkg --compare-versions \"$(dpkg-query -W -f='${Version}' libexpat1)\" eq 2.9.0+security20261023-1+runtime1; test \"$(dpkg-query -W -f='${Version}' coreutils)\" = 9.12-1+runtime1; test \"$(dpkg-query -W -f='${Version}' ncurses-bin)\" = 6.6-1+runtime1; test \"$(dpkg-query -W -f='${Version}' libtinfo6)\" = 6.6-1+runtime1; timeout 5 dash -c 'value=$(printf \"%050000d\" 0 | tr 0 .); case \"$value\" in *.*.*.*.*.tar.gz) exit 1;; *) printf \"libc matcher stress passed\\n\";; esac'"
+ ],{capture:true});
+ console.log('Installed runtime package proof: '+runtimePackages.trim());
+
  const uid=compose(first,['exec','-T','app','node','-p','process.getuid()'],{capture:true});assert.notEqual(uid.trim(),'0');
  compose(first,['exec','-T','app','node','-e',"fetch('http://127.0.0.1:7445/api/auth/email-otp/send-verification-otp',{method:'POST',headers:{'content-type':'application/json',origin:'https://company.example.com'},body:JSON.stringify({email:'mxmx_test_owner@example.com',type:'sign-in'})}).then(r=>{if(!r.ok)throw Error('SMTP email-code request failed:'+r.status)}).catch(e=>{console.error(e.message);process.exit(1)})"]);
  const delivered=(await readFile(join(first,'ci-tls/messages.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));

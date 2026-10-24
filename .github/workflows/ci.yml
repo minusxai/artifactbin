@@ -1130,22 +1130,26 @@ jobs:
           key: ${{ steps.npm-seed-key.outputs.key }}-${{ hashFiles('services/cli/scripts/npm-dependency-cache.mjs') }}
       # Create only pinned public tarballs, never an arbitrary prior user cache.
       - name: Prepare public downloads while building the CLI
-        if: needs.plan.outputs.cli == 'true'
         env:
           SEED_CACHE_HIT: ${{ steps.npm-seeds.outputs.cache-hit }}
+          PLATFORM_SEEDS_REQUIRED: ${{ needs.plan.outputs.cli }}
         run: |
-          if [[ "$SEED_CACHE_HIT" != true ]]; then
+          compiler_pid=
+          seed_pid=
+          trap '[[ -z "$compiler_pid" ]] || kill "$compiler_pid" 2>/dev/null || true; [[ -z "$seed_pid" ]] || kill "$seed_pid" 2>/dev/null || true' EXIT
+          # The host compiler is already patched. Cross-build only into the cache while dist is building.
+          node scripts/ci/prepare-esbuild.mjs --cache-package &
+          compiler_pid=$!
+          if [[ "$PLATFORM_SEEDS_REQUIRED" == true && "$SEED_CACHE_HIT" != true ]]; then
             node services/cli/scripts/npm-dependency-cache.mjs prepare-seed "$RUNNER_TEMP/npm-public-seed" &
             seed_pid=$!
-            trap 'kill "$seed_pid" 2>/dev/null || true' EXIT
           fi
           npm run build -w services/cli
-          if [[ "$SEED_CACHE_HIT" != true ]]; then
-            wait "$seed_pid"
-            trap - EXIT
+          if wait "$compiler_pid"; then compiler_pid=; else prepare_status=$?; compiler_pid=; exit "$prepare_status"; fi
+          if [[ -n "$seed_pid" ]]; then
+            if wait "$seed_pid"; then seed_pid=; else prepare_status=$?; seed_pid=; exit "$prepare_status"; fi
           fi
-      - if: needs.plan.outputs.cli != 'true'
-        run: npm run build -w services/cli
+          trap - EXIT
       # Publish the signed candidate before transferring native seeds, so the cold
       # standard-user proof can install while consumers wait for their own seed.
       - run: npm run pack:release -w services/cli
@@ -1306,6 +1310,15 @@ jobs:
           node deploy/company/ci-smoke.mjs npm-candidate --caddy-cache "$RUNNER_TEMP/company-caddy-cache" $SAVE_CADDY_CACHE -- \
             node scripts/lib/ci-artifact-wait.mjs --extract "${{ github.repository }}" "${{ github.run_id }}" "${{ github.run_attempt }}" \
             afbin-npm-packages "afbin-cli-$version.tgz" "$GITHUB_WORKSPACE/npm-candidate/afbin-cli-$version.tgz"
+      - name: Record the exact shipped OS package inventory
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: company-runtime-packages
+          path: |
+            ${{ runner.temp }}/company-os-packages.tsv
+            ${{ runner.temp }}/company-os-image.json
+          if-no-files-found: ignore
 
   # A fresh standard-user bootstrap is a separate machine/user proof. It must not
   # contend with native install/browser consumers in the same Windows VM.

@@ -20,5 +20,6 @@ mkdir -p packages
 set -- packages backup.sh restore.sh .env config secrets Caddyfile dns-provider.caddy compose.yaml Dockerfile Caddy.Dockerfile caddy-entrypoint.sh
 # New images share this build input; older deployment contexts did not have it.
 [ ! -f patch-npm.mjs ] || set -- "$@" patch-npm.mjs
+[ ! -d runtime-source ] || set -- "$@" runtime-source
 tar -czf "$destination/configuration.tar.gz" "$@"
 printf '%s\n' 'Consistent backup complete. Contains login/provider secrets: encrypt and copy off this server.' >&2

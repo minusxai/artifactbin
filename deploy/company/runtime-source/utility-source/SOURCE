@@ -1,0 +1,9 @@
+Verified official upstream release archives; SHA256 enforced in build-utilities.sh.
+Coreutils 9.12: https://ftp.gnu.org/gnu/coreutils/coreutils-9.12.tar.xz
+SHA256 a480198559733e9b3da999e90543ac6f888a2caa544d8d664c5a1f17e528e210
+Ncurses 6.6: https://invisible-island.net/archives/ncurses/ncurses-6.6.tar.gz
+SHA256 355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11
+Detached release signatures have not been verified; no signature-verification claim.
+Coreutils retains upstream sort/uniq regression suites and exact SIZE_MAX/multibyte cases.
+Ncurses retains actual installed interfaces, compares shared-library exports and tests terminfo/termcap/tput behavior.
+Build and regression execution on the exact runtime base belongs to container CI.

@@ -1,0 +1,24 @@
+Fedora tar 1.35-10 patchset, commit e4e337c57a86b5faa686872c6d7f22d58686e66c
+https://src.fedoraproject.org/rpms/tar/tree/e4e337c57a86b5faa686872c6d7f22d58686e66c
+Patches retain upstream authorship; GNU tar GPLv3-or-later applies.
+
+Original patch order and filenames:
+00.patch tar-1.28-loneZeroWarning.patch
+01.patch tar-1.28-vfatTruncate.patch
+02.patch tar-1.29-wildcards.patch
+03.patch tar-1.28-atime-rofs.patch
+04.patch tar-1.28-document-exclude-mistakes.patch
+05.patch tar-1.33-fix-capabilities-test.patch
+06.patch tar-1.35-padding-zeros.patch
+07.patch tar-1.30-disk-read-error.patch
+08.patch tar-1.35-fix-spurious-diagnostic-during-extraction-of-.-with-keep-newer-files.patch
+09.patch tar-1.35-add-forgotten-tests-from-upstream.patch
+10.patch tar-1.35-revert-fix-savannah-bug-633567.patch
+11.patch tar-1.35-Fix-Savane-bug-64581.patch
+12.patch tar-1.35-no-overwrite-dir-no-overwrite-even-temporarily.patch
+13.patch tar-1.35-CVE-2025-45582.patch
+14.patch tar-1.35-tar-one-top-level-DIR-must-be-relative.patch
+15.patch tar-1.35-Avoid-acl_-prefix-for-functions.patch
+16.patch tar-1.35-CVE-2026-5704.patch
+17.patch tar-1.35-fix-absolute-one-top-level.patch
+18.patch tar-1.35-CVE-2026-18477.patch

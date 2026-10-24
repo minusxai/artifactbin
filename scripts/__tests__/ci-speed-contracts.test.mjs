@@ -395,9 +395,12 @@ const fs=require('node:fs');const path=process.argv[3];fs.appendFileSync(${JSON.
 
 it('builds pack-only candidates without preparing or uploading unused native download seeds',()=>{
  const steps=workflow().jobs['cli-pack'].steps;
- const selected=steps.filter(step=>step.run?.includes('prepare-seed')||step.run?.includes('pack-seeds')||step.with?.name?.startsWith('afbin-npm-dependency-seed-'));
- expect(selected).toHaveLength(7);expect(selected.every(step=>step.if.startsWith("needs.plan.outputs.cli == 'true'"))).toBe(true);
- expect(steps.find(step=>step.run==='npm run build -w services/cli').if).toBe("needs.plan.outputs.cli != 'true'");
+ const selected=steps.filter(step=>step.run?.includes('pack-seeds')||step.with?.name?.startsWith('afbin-npm-dependency-seed-'));
+ expect(selected).toHaveLength(6);expect(selected.every(step=>step.if.startsWith("needs.plan.outputs.cli == 'true'"))).toBe(true);
+ const build=steps.find(step=>step.name==='Prepare public downloads while building the CLI');
+ expect(build.if).toBeUndefined();expect(build.env.PLATFORM_SEEDS_REQUIRED).toBe('${{ needs.plan.outputs.cli }}');
+ expect(build.run).toContain('"$PLATFORM_SEEDS_REQUIRED" == true && "$SEED_CACHE_HIT" != true');
+ expect(build.run).toContain('npm run build -w services/cli');
  expect(steps.find(step=>step.run==='npm run pack:release -w services/cli').if).toBeUndefined();
  expect(steps.find(step=>step.with?.name==='afbin-npm-packages').if).toBeUndefined();
 });
@@ -416,11 +419,16 @@ it('reuses current-attempt waiting for prepared CLI packages without accepting o
 it('recovers a real gh transport timeout within the original artifact deadline',async()=>{
  const {requestCurrentArtifact}=await import('../lib/ci-artifact-wait.mjs');
  const directory=mkdtempSync(join(tmpdir(),'afbin-gh-transport-')),calls=join(directory,'calls'),gh=join(directory,'gh');
- writeFileSync(gh,`#!${process.execPath}
-const fs=require('node:fs');const file=${JSON.stringify(calls)};const count=fs.existsSync(file)?Number(fs.readFileSync(file,'utf8')):0;fs.writeFileSync(file,String(count+1));if(!count)setInterval(()=>{},1000);else console.log(JSON.stringify({ready:true}));
+ // Use a real small executable: Node startup under parallel test load can consume the entire request timeout before recording the first call.
+ writeFileSync(gh,`#!/bin/sh
+count=0
+if test -f "$3"; then count=$(cat "$3"); fi
+printf '%s' "$((count+1))" > "$3"
+if test "$count" = 0; then exec sleep 60; fi
+printf '{"ready":true}\\n'
 `);chmodSync(gh,0o755);
  try{
-  const result=await requestCurrentArtifact(['api','fixture'],{command:gh,deadline:Date.now()+5000,requestTimeout:1000,retryDelay:1});
+  const result=await requestCurrentArtifact(['api','fixture',calls],{command:gh,deadline:Date.now()+5000,requestTimeout:1000,retryDelay:1});
   expect(JSON.parse(result)).toEqual({ready:true});expect(readFileSync(calls,'utf8')).toBe('2');
  }finally{rmSync(directory,{recursive:true,force:true});}
 });
