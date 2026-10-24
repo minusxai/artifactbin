@@ -10,8 +10,10 @@ import type {MutationContext,RegisteredMutationPorts} from './contracts';
 const unavailable=()=>Error('registered_mutation_unavailable');
 /** Host factory receives actual request actor and immutable saved page/backend, not page arguments. */
 export function createRetainedRegisteredMutation(actor:AccessActor,page:HtmlPageVersion,link:HtmlBackendLink,backend:HtmlBackendVersionRecord,revalidateActor:()=>Promise<AccessActor>){
+ // Public authentication admits account-backed credentials only; legacy ownership tokens cannot authenticate.
+ if(!actor.userId)throw Error('registered_mutation_account_required');
  const plan=registeredMutationPlan(page,link,backend);if(!plan)throw unavailable();
- const context:MutationContext={...plan.registration,subject:actor.userId??actor.tokenId??null,callerKey:JSON.stringify([actor.userId,actor.tokenId,actor.groupId??null])};
+ const context:MutationContext={...plan.registration,subject:actor.userId,callerKey:JSON.stringify([actor.userId,actor.tokenId,actor.groupId??null])};
  let doc:ArtifactRow|undefined,dataset:ArtifactRow|undefined,document:{id:string;editId:string;registeredHtml:object}|undefined;
  const verifyTransaction=async(tx:Queryable)=>{
   // Token revocation and account expiry cannot race the final transaction.

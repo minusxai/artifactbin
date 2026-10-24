@@ -7,11 +7,13 @@ import { getArtifactById, changeMembership } from "@/lib/artifacts";
 import { setDatasetPolicy } from "@/lib/document-data/dataset-policy";
 import { catalogOf } from "@/lib/datasets/catalog";
 import { loadDatasetRows } from "@/lib/datasets/dataset-store";
+import { getHtmlBackendVersion } from "@/lib/html-backends";
 import { readHtmlPage } from "@/lib/html-publication";
 import {
   prepareRegisteredMutationBackend,
   commitRegisteredMutationBackend,
   registeredMutationDescriptor,
+  createRetainedRegisteredMutation,
   type MutationProgram,
 } from "@/lib/registered-page-mutations";
 import { pageGraphql } from "../index";
@@ -240,4 +242,41 @@ it("rejects unknown reserved or tampered envelopes before dispatching any ordina
   }
   expect(runner).not.toHaveBeenCalled();
   expect(await f.rows()).toHaveLength(1);
+});
+
+it("rejects legacy token-only identities explicitly and revoked account credentials without writes", async () => {
+  const f = await fixture();
+  const legacy = await mintAccountToken("legacy_unattached", null);
+  const resolved = await requestOrSessionActor(
+    request("/api/artifacts", { token: legacy.token }),
+  );
+  expect(resolved.userId).toBeNull();
+  expect(resolved.tokenId).toBeNull();
+  const backend = (await getHtmlBackendVersion(
+    f.prepared.link.backendId,
+    f.prepared.link.version,
+  ))!;
+  const tokenActor = { ...f.actor, userId: null, tokenId: legacy.id };
+  expect(() =>
+    createRetainedRegisteredMutation(
+      tokenActor,
+      f.page,
+      f.prepared.link,
+      backend,
+      async () => tokenActor,
+    ),
+  ).toThrow("registered_mutation_account_required");
+  for (const token of [undefined, legacy.token]) {
+    const reply = await f.call(token, "unsupported_request_123456");
+    expect((await reply.json()).errors?.length).toBeGreaterThan(0);
+  }
+  await f.db.query("UPDATE tokens SET deleted_at=now() WHERE id=$1", [
+    f.owner.id,
+  ]);
+  const revoked = await f.call(f.owner.token, "revoked_request_123456789");
+  expect((await revoked.json()).errors?.length).toBeGreaterThan(0);
+  expect(await f.rows()).toEqual([{ body: "seed" }]);
+  expect(
+    (await f.db.query("SELECT response FROM mutation_receipts")).rows,
+  ).toHaveLength(0);
 });
