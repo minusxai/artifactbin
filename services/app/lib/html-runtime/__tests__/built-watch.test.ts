@@ -1,4 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest';
+vi.mock('../build-portable-chrome.server',()=>({buildPortableChrome:async()=>''}));
 import {buildHtmlAssets} from '../build.server';
 afterEach(()=>{vi.unstubAllGlobals();});
 it('the emitted author module watches backend results with explicit loading without persisting them',async()=>{
@@ -7,12 +8,14 @@ it('the emitted author module watches backend results with explicit loading with
  vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>{}});vi.stubGlobal('navigator',{});
  vi.stubGlobal('addEventListener',()=>{});vi.stubGlobal('removeEventListener',()=>{});
  let finish!:(value:unknown)=>void;
- const fixture={config:{pageId:'built-watch',revision:'1',backends:['orders'],initialState:{filter:'private'}},remote:{online:()=>true,execute:()=>new Promise(resolve=>{finish=resolve;})},startFrameBridge(){},onBackendChange(){},remoteReadOnly:false,uploadFile:()=>{throw Error("No upload fixture");}};
+ const fixture={config:{pageId:'built-watch',revision:'1',backends:['orders'],initialState:{filter:'private'}},remote:{online:()=>true,execute:()=>new Promise(resolve=>{finish=resolve;})},startFrameBridge(){},onBackendChange(){},remoteReadOnly:false,uploadFile:()=>{throw Error("No upload fixture");},watchUploadContext:()=>({unsubscribe(){}}),bindFileUpload:()=>()=>{}};
  vi.stubGlobal('__builtWatchReader',fixture);
- const reader='const r=globalThis.__builtWatchReader;export const {config,remote,startFrameBridge,onBackendChange,remoteReadOnly,uploadFile}=r;';
+ const reader='const r=globalThis.__builtWatchReader;export const {config,remote,startFrameBridge,onBackendChange,remoteReadOnly,uploadFile,watchUploadContext,bindFileUpload}=r;';
  const readerUrl='data:text/javascript;base64,'+Buffer.from(reader).toString('base64');
  const source=assets.apollo.replace(/(["'])@afbin\/reader\1/g,JSON.stringify(readerUrl));
  const runtime=await import(/* @vite-ignore */ 'data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+ expect(runtime.watchUploadContext).toBeTypeOf('function');
+ expect(runtime.bindFileUpload).toBeTypeOf('function');
  const results:any[]=[];
  const subscription=runtime.client.watchQuery({query:runtime.gql`{orders{total} filter}`,clearOnRefresh:true}).subscribe((value:unknown)=>results.push(value));
  expect(results.at(-1)).toEqual({data:{filter:'private',orders:null},loading:true});

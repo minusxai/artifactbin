@@ -44,6 +44,7 @@ describe('browser fixture acceptance contracts', () => {
       const doc = new JSDOM(fixture.html).window.document;
       expect(doc.querySelector(fixture.subject)).not.toBeNull();
       expect(fixture.evidence).toBe('candidate-browser-contract');
+      if (fixture.family === 'date-picker') expect(doc.querySelector('af-date-picker').hasAttribute('show-clear')).toBe(true);
     }
   });
   it('measures readable contrast rather than mere color inequality', () => {
