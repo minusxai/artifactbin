@@ -65,6 +65,8 @@ describe('installable shared skill folder',()=>{
   expect(expected['scripts/publish.mjs']).toContain('sendPublication');
   expect(Object.keys(cli).some(name=>name.startsWith('scripts/'))).toBe(false);
   expect(expected['references/html-datasets.md']).toContain('dataset');
+  expect(expected['references/html-uploads.md']).toContain('uploadFile');
+  expect(publicGuideText('html-uploads',origin)).toContain('uploadFile');
   expect(cli['references/publishing-datasets.md']).not.toContain('## HTTP dataset creation');
   expect(Object.keys(expected).some(name=>name.startsWith('fragments/'))).toBe(false);
   const response=await zipRoute(new Request(`${origin}/skills/artifactbin.zip`));
