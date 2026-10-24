@@ -246,6 +246,7 @@ export async function writeNativeHistory(
     {
       tx,
       reservedId: input.pageId,
+      seedOwnerParticipation: false,
       linkRole: input.linkRole,
       shares: input.shares,
     },
@@ -338,3 +339,6 @@ export function importNativeHistory(
 }
 
 export { prepareNativeHistoryRelations } from './relations';
+
+export {prepareNativeArtifactRelations} from "./artifact-relations";
+export type {NativeArtifactRelationsInput,NativeArtifactRelationRow} from "./artifact-relation-contracts";

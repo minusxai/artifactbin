@@ -8,6 +8,8 @@ import { htmlCommentNodes } from "@/lib/annotations/html-anchor";
 import { pageSourceDigest } from "@/lib/registered-page-queries/registry";
 import type { NativeImportRelations } from "./contracts";
 import type { NativeRelationProjection } from "./relation-contracts";
+import type {NativeArtifactRelations} from "./artifact-relation-contracts";
+import {assertNativeArtifactRelations} from "./artifact-relations";
 const fail = (): never => {
   throw Error("native_relation_mismatch");
 };
@@ -80,9 +82,11 @@ function normalized(row: Record<string, unknown>) {
 /** Exact source-node bindings only. A retained but unselected context stays inert in the receipt. */
 export function prepareNativeHistoryRelations(
   input: NativeRelationProjection,
+  artifactRelations?: NativeArtifactRelations,
 ): NativeImportRelations {
   const projection = structuredClone(input),
     history = projection.history;
+  if(artifactRelations){assertNativeArtifactRelations(artifactRelations,history);if(projection.members.length)fail();}
   const versions = new Map(
     history.revisions.map((r) => [
       r.page.version,
@@ -215,6 +219,7 @@ export function prepareNativeHistoryRelations(
       members,
       images,
       archive,
+      artifactRelations: artifactRelations?.sourceSha256,
     }),
   );
   async function insert(
@@ -268,6 +273,7 @@ export function prepareNativeHistoryRelations(
         await insert(tx, "annotations", annotationColumns, row, {
           artifact_id: pageId,
         });
+      if(artifactRelations)await artifactRelations.apply(tx,pageId);
       for (const row of members)
         await insert(tx, "relations", memberColumns, row, {
           subject_kind: "user",
@@ -298,6 +304,7 @@ export function prepareNativeHistoryRelations(
         ],
         ["comment_images", imageColumns, images, "artifact_id=$1", "id"],
       ] as const) {
+        if(table === "relations" && artifactRelations)continue;
         const actual = await tx.query<Record<string, unknown>>(
           `SELECT ${columns.join(",")} FROM ${table} WHERE ${where}${table === "annotations" ? " ORDER BY seq" : ""}`,
           [pageId],
@@ -314,6 +321,7 @@ export function prepareNativeHistoryRelations(
         )
           fail();
       }
+      if(artifactRelations)await artifactRelations.verify(tx,pageId);
       const row = (
         await tx.query<{ context: unknown }>(
           "SELECT meta->'nativeRelationContext' AS context FROM artifacts WHERE id=$1",
