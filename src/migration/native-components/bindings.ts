@@ -273,6 +273,19 @@ export function emitNativeBindings(
         continue;
       }
       result.expression = admit(expression(node.value), node.graphKey);
+    } else if (target.kind === "cell") {
+      if(node.type!=="element"||!["Cell","Number"].includes(node.tag)||target.attribute!=="data") {block(target.sourceNode,"invalid-cell-target");continue;}
+      const attrs=new Map(node.attributes.map(attr=>[attr.name,attr.value]));
+      const data=attrs.get("data");
+      result.expression=admit(data?.static&&typeof data.json==="string"&&data.json.startsWith("$")?expression({static:false,exprType:"reference",source:data.json}):data?expression(data):null,node.graphKey);
+      if(result.expression?.kind!=="signal"||!queryNames.has(result.expression.name))block(node.graphKey,"cell-target-needs-declared-query");
+      result.format={};
+      for(const property of ["col","agg","format","prefix","suffix"]){const value=attrs.get(property);if(value===undefined)continue;if(!value.static||typeof value.json!=="string"&&value.json!==null){block(node.graphKey,"invalid-cell-format-property");continue;}if(value.json!==null)result.format[property]=value.json;}
+      if(result.format.agg!==undefined&&!["first","last","sum","avg","median","min","max","count"].includes(result.format.agg))block(node.graphKey,"invalid-cell-aggregate");
+      const className=attrs.get("className")??attrs.get("class");
+      if(className&&(!className.static||typeof className.json!=="string"))block(node.graphKey,"invalid-cell-class");
+      result.authorClass=className?.static?className.json:null;
+      if(!input.cellAdapter||!/^\.\/components\/[A-Za-z0-9_.-]+\.js$/.test(input.cellAdapter.specifier)||!/^[a-f0-9]{64}$/.test(input.cellAdapter.sha256))block(node.graphKey,"cell-formatter-adapter-required");
     } else if (target.kind === "property") {
       if (node.type !== "element") {
         block(node.graphKey, "invalid-property-target");
@@ -516,7 +529,7 @@ export function emitNativeBindings(
       if (
         !attr.value.static &&
         !(node.tag === "For" && attr.name === "each") &&
-        !hasTarget(node.graphKey, "property", attr.name)
+        !hasTarget(node.graphKey, "property", attr.name) && !(attr.name==="data"&&hasTarget(node.graphKey,"cell"))
       )
         block(node.graphKey, "missing-property-target");
   }
@@ -561,7 +574,8 @@ export function emitNativeBindings(
     mutations: input.mutations,
   };
   const evaluator = evaluateLocalReactiveExpression.toString();
-  const authorJs = `import {client,gql} from "@afbin/apollo";\nconst own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;\nconst DatasetReadError=Error;\nexport const dispose=(${NATIVE_BINDINGS_RUNTIME})(client,gql,document,${escapedJson(plan)},(${evaluator}),(${normalizeTimestamp.toString()}));\ndocument.defaultView?.addEventListener("pagehide",event=>{if(!event.persisted)dispose();});\n`;
+  const cellImport=targets.some(target=>target.kind==="cell")?`import {formatNativeLiveCell} from ${escapedJson(input.cellAdapter!.specifier)};\n`:"";
+  const authorJs = `${cellImport}import {client,gql} from "@afbin/apollo";\nconst own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;\nconst DatasetReadError=Error;\nexport const dispose=(${NATIVE_BINDINGS_RUNTIME})(client,gql,document,${escapedJson(plan)},(${evaluator}),(${normalizeTimestamp.toString()}),${targets.some(target=>target.kind==="cell")?"formatNativeLiveCell":"null"});\ndocument.defaultView?.addEventListener("pagehide",event=>{if(!event.persisted)dispose();});\n`;
   return {
     status: "complete",
     authorJs,

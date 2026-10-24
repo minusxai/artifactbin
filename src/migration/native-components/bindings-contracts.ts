@@ -1,3 +1,4 @@
+import type {NativeCellAdapter} from './cell-contracts.ts';
 import type { NativeJson, NativeTypedAnalysis } from "./analyze-contracts.ts";
 export interface NativeBindingQuery {
   name: string;
@@ -45,6 +46,7 @@ export interface NativeBindingIdentity {
 export type NativeBindingTarget = NativeBindingIdentity &
   (
     | { kind: "text" }
+    | {kind:"cell";attribute:"data"}
     | {
         kind: "property";
         property: "disabled" | "value" | "checked" | "open" | "data";
@@ -66,6 +68,7 @@ export type NativeBindingTarget = NativeBindingIdentity &
     | { kind: "action" }
   );
 export interface NativeBindingsInput {
+  cellAdapter?:NativeCellAdapter;
   analysis: NativeTypedAnalysis;
   targets: readonly NativeBindingTarget[];
   queries: readonly NativeBindingQuery[];

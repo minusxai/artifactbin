@@ -4,7 +4,10 @@ import {verifyNativeChartMapping} from './chart-mapping.ts';
 import type {NativeChartMapping} from './chart-contracts.ts';
 /** Pure offline lowering only. Typed analysis and admitted receipts are supplied
  * by owners; no source fetch, compiler execution, destination write or evaluation. */
-import {format as d3format} from 'd3-format';
+import {formatNativeCell} from './cell-format.ts';
+import type {NativeCellFormatInput,NativeNumberLocaleReceipt} from './cell-format.ts';
+export {formatNativeCell,NATIVE_CELL_SOURCE_PROOF} from './cell-format.ts';
+export type {NativeCellFormatInput,NativeCellFormatOutput,NativeNumberLocaleReceipt} from './cell-format.ts';
 import { NATIVE_COMPONENT_TARGET, NATIVE_SEMANTIC_CSS, nativeComponentRule, type NativeAttributeKind } from './component-map.ts';
 import type { NativeBindingTarget } from './bindings-contracts.ts';
 import type { NativeJson, NativeTypedAnalysis, RetainedJsxNode } from './analyze-contracts.ts';
@@ -18,18 +21,6 @@ export interface NativeLowerFormattedReceipt {
   /** Exact admitted formatter output; never recompute with a guessed locale/default. */
   text: string;
 }
-/** Exact retained Cell/Number formatting API. Locale is recorded from the source
- * rendering runtime, never selected by the converter. */
-export const NATIVE_CELL_SOURCE_PROOF=Object.freeze({targetRevision:NATIVE_COMPONENT_TARGET,d3FormatVersion:'3.1.2',numberFormatSha256:'1b4b1b8298ff1acdf935aff2e39783f62e64d7d0812ec5187ef6d4b5a2e15fe3',numberAggregationSha256:'11d02d37632e7110efe107beebbb6fc4c81386142cc19e978fa35f80ae191b02',kitDataSha256:'d31e77797d697b50e01ef146248966f4f632ca6841ca7d96251a53e315c56649'});
-export interface NativeNumberLocaleReceipt {locale:string;numberingSystem:string;sourceRuntimeSha256:string}
-export interface NativeCellFormatInput {
- rows:readonly Readonly<Record<string,unknown>>[]|null;
- col?:string;
- agg?:'first'|'last'|'sum'|'avg'|'median'|'min'|'max'|'count';
- format?:string;prefix?:string;suffix?:string;
- localeReceipt?:NativeNumberLocaleReceipt;
-}
-export type NativeCellFormatOutput={status:'formatted';text:string}|{status:'requires-locale';detail:string};
 export interface NativeLowerInput {
   analysis: NativeTypedAnalysis;
   authorPrograms?:readonly NativeAuthorProgramReceipt[];
@@ -100,43 +91,6 @@ function safeUrl(value: string): boolean {
  if(value.startsWith('./')||value.startsWith('#')||value.startsWith('/'))return !value.split('/').includes('..');
  try {const url=new URL(value);return ['https:','http:','mailto:'].includes(url.protocol)&&!url.username&&!url.password;}catch{return false;}
 }
-/** Source proof: retained islands/kit/data.tsx Cell, dataflow/number-aggregation.ts,
- * dataflow/number-format.ts at NATIVE_COMPONENT_TARGET. d3-format pinned3.1.2.
- * Alias Number consumes table data, not a numeric value/unit shorthand. */
-export function formatNativeCell(input:NativeCellFormatInput):NativeCellFormatOutput {
- if(input.rows===null)return {status:'formatted',text:'—'};
- const rows=input.rows,col=input.col??Object.keys(rows[0]??{})[0]??'',agg=input.agg??'first';
- let value:number|string|null=null;
- if(agg==='first'||agg==='last'){
-  for(let i=0;i<rows.length;i++){
-   const raw=rows[agg==='first'?i:rows.length-1-i]?.[col];
-   if(typeof raw==='string'&&raw.trim()!==''&&!Number.isFinite(Number(raw))){value=raw;break;}
-   const n=Number(raw);if(Number.isFinite(n)){value=n;break;}
-  }
- }else {
-  const nums=rows.map(r=>Number(r[col])).filter(Number.isFinite);
-  if(agg==='count')value=rows.length;
-  else if(agg==='sum')value=nums.reduce((a,b)=>a+b,0);
-  else if(nums.length){
-   if(agg==='avg')value=nums.reduce((a,b)=>a+b,0)/nums.length;
-   else if(agg==='median'){const sorted=[...nums].sort((a,b)=>a-b),mid=sorted.length>>1;value=sorted.length%2?sorted[mid]!:(sorted[mid-1]!+sorted[mid]!)/2;}
-   else if(agg==='min')value=Math.min(...nums);else if(agg==='max')value=Math.max(...nums);
-  }
- }
- let shown=value===null||typeof value==='number'&&!Number.isFinite(value)?'—':typeof value==='string'?value:undefined;
- if(shown===undefined){
-  let compiled:((n:number)=>string)|undefined;
-  if(input.format)try{compiled=d3format(input.format);}catch{/* original fallback */}
-  if(compiled)try{shown=compiled(value as number);}catch{/* original fallback */}
-  if(shown===undefined){
-   const receipt=input.localeReceipt;
-   if(!receipt||!digest(receipt.sourceRuntimeSha256))return {status:'requires-locale',detail:'Default/invalid d3 format uses source runtime Intl locale and numbering system'};
-   if(!receipt.locale||!receipt.numberingSystem)return {status:'requires-locale',detail:'Source Intl locale receipt is incomplete'};
-   try{shown=new Intl.NumberFormat(receipt.locale,{numberingSystem:receipt.numberingSystem,maximumFractionDigits:2}).format(value as number);}catch{return {status:'requires-locale',detail:'Source Intl locale receipt is invalid in this runtime'};}
-  }
- }
- return {status:'formatted',text:`${input.prefix??''}${shown}${input.suffix??''}`};
-}
 // Retained compiled-page/compiler.ts gridParts/static-solid/attrs.ts (b8f59e0df parent),
 // story-ui/grid-layout.ts and data-table.ts normalization, copied as
 // pure arithmetic so the offline migrator never imports the legacy renderer.
@@ -179,7 +133,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   usedAf.set(value.afId,node.graphKey);identities.push({sourceNode:node.graphKey,afId:value.afId,kind});return value;
  };
  const admittedTarget=(node:RetainedJsxNode,kind:NativeBindingTarget['kind'],attribute?:string):NativeBindingTarget|undefined=>{
-  const targets=input.admittedBindings?.filter(t=>t.sourceNode===node.graphKey&&t.kind===kind&&(attribute===undefined||t.kind==='property'&&t.attribute===attribute))??[];
+  const targets=input.admittedBindings?.filter(t=>t.sourceNode===node.graphKey&&t.kind===kind&&(attribute===undefined||(t.kind==='property'||t.kind==='cell')&&t.attribute===attribute))??[];
   if(!targets.length)return;
   const t=targets[0],proof=input.identityBindings.find(b=>b.sourceNode===node.graphKey);
   if(targets.length!==1||!t||!proof||t.afId!==proof.afId||t.analysisSha256!==proof.analysisSha256||t.sourceSha256!==proof.sourceSha256||t.sourceStart!==proof.sourceStart||t.sourceEnd!==proof.sourceEnd||t.proofSha256!==proof.proofSha256){block('adapter-identity-mismatch',node,'Adapter target must match the exact graph identity receipt');return;}
@@ -265,7 +219,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   const values: Record<string,NativeJson>=Object.create(null),seen=new Set<string>();
   for(const attribute of node.attributes){
    if(seen.has(attribute.name)){block('duplicate-attribute',node,'Repeated source attributes are ambiguous',attribute.name);continue;}seen.add(attribute.name);
-   if(!attribute.value.static){if(admittedTarget(node,'property',attribute.name))continue;require('binding',node,'Typed dynamic attribute requires an admitted binding',attribute.name);continue;}
+   if(!attribute.value.static){if(admittedTarget(node,'property',attribute.name)||attribute.name==='data'&&admittedTarget(node,'cell','data'))continue;require('binding',node,'Typed dynamic attribute requires an admitted binding',attribute.name);continue;}
    values[attribute.name]=attribute.value.json;
   }
   const patch=input.resourcePatches?.find(p=>p.sourceNode===node.graphKey);
@@ -297,7 +251,8 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
   if(node.tag==='Number'||node.tag==='Cell'){
    const receipt=input.formattedValues?.find(value=>value.sourceNode===node.graphKey&&value.analysisSha256===input.analysis.analysisSha256&&digest(value.formatterSha256));
    let shown:string|undefined,label='Number placeholder';
-   if(receipt)shown=receipt.text;
+   if(admittedTarget(node,'cell','data')){shown='—';}
+   else if(receipt)shown=receipt.text;
    else {
     const table=input.cellTables?.find(value=>value.sourceNode===node.graphKey&&value.analysisSha256===input.analysis.analysisSha256&&digest(value.tableSha256));
     if(table||values.data===undefined||values.data===null){
@@ -314,7 +269,7 @@ export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutpu
    if(/^on/i.test(name)){require('script',node,'Authored handler needs explicit program admission',name);continue;}
    if(name==='run'||name==='set'||name==='args'){if(name!=='args'&&admittedTarget(node,'action'))continue;require('button-action',node,'Preserve action parameters, authority, affected-count/reset and commit semantics',name);continue;}
    if(node.tag==='User'&&name==='userId'){require('person',node,'Resolve the exact actor/person binding through an admitted identity adapter',name);continue;}
-   if(referenceProps.has(name)&&typeof value==='string'&&/^\$/.test(value)){if(admittedTarget(node,'property',name))continue;require('binding',node,'Legacy reference is an explicit typed binding, never a literal native value',name);continue;}
+   if(referenceProps.has(name)&&typeof value==='string'&&/^\$/.test(value)){if(admittedTarget(node,'property',name)||name==='data'&&admittedTarget(node,'cell','data'))continue;require('binding',node,'Legacy reference is an explicit typed binding, never a literal native value',name);continue;}
    if((node.tag==='Number'||node.tag==='Cell')&&['data','format','prefix','suffix','col','agg'].includes(name)){
     if(name!=='data'&&typeof value!=='string'&&value!==null)block('unsupported-cell-property',node,'Retained Cell formatting properties require literal strings',name);
     if(name==='agg'&&typeof value==='string'&&!['first','last','sum','avg','median','min','max','count'].includes(value))block('unsupported-cell-property',node,'Unknown aggregate is not silently normalized',name);

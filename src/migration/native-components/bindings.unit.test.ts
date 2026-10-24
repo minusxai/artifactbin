@@ -1,3 +1,5 @@
+import {buildNativeCellAdapter} from './cell-build.ts';
+import type {NativeAssemblyFile} from './assemble-contracts.ts';
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
@@ -225,7 +227,7 @@ function client(initial: Record<string, unknown>) {
     },
   };
 }
-async function execute(source: string, clientPort: unknown, document: Doc) {
+async function execute(source: string, clientPort: unknown, document: Doc,files:readonly NativeAssemblyFile[]=[]) {
   parse(source, { ecmaVersion: "latest", sourceType: "module" });
   const root = await mkdtemp(path.join(tmpdir(), "native-binding-"));
   const key = "native-binding-test-" + root;
@@ -244,6 +246,7 @@ async function execute(source: string, clientPort: unknown, document: Doc) {
       path.join(pkg, "index.js"),
       `export const client=globalThis[${JSON.stringify(key)}];export const gql=strings=>strings.join('');`,
     );
+    for(const file of files){await mkdir(path.dirname(path.join(root,file.path)),{recursive:true});await writeFile(path.join(root,file.path),file.bytes);}
     await writeFile(path.join(root, "page.mjs"), source);
     const module = await import(
       pathToFileURL(path.join(root, "page.mjs")).href
@@ -1389,4 +1392,27 @@ test("registered mutation snapshots admitted row fields separately from viewer l
  port.mutate=async(options:any)=>{request=options.variables;return {data:{records:{run:{requestId:request.requestId,outcome:'committed',reset:[]}}}};};
  const running=await execute(result.authorJs,port,doc);
  try {await button.click();assert.deepEqual(request.values,{row_id:null,filter:'local'});assert.equal(Object.hasOwn(port.state,'row_id'),false);} finally {await running.close();}
+});
+
+
+test('dynamic Cell updates from registered tables, retains figure only while explicitly pending, and clears unavailable answers',async()=>{
+ const bundled=await buildNativeCellAdapter();
+ const source=input([el('figure','Cell',{data:'$rows',col:'n',className:'author-number',prefix:'$'})],[{kind:'cell',sourceNode:'figure',afId:'figure',attribute:'data'}]);source.queries=[query];source.analysis.flow.queries=[{name:'rows',start:0,end:1}];source.cellAdapter=bundled.adapter;
+ const emitted=emitNativeBindings(source);assert.equal(emitted.status,'complete');if(emitted.status!=='complete')return;
+ const doc=new Doc(),host=new Element('span',{'data-af-id':'figure',class:'author-number'});doc.body.append(host);const port=client({filter:null,open:false}),running=await execute(emitted.authorJs,port,doc,bundled.files);
+ const remote=port.remotes[0]!;
+ try{
+  assert.equal(host.getAttribute('aria-busy'),'true');assert.equal(host.children[0]!.textContent,'—');
+  remote.next({data:{records:{evaluate:{tables:[{name:'rows',error:null,columns:[{name:'n',type:'number'}],rows:[{cells:[{isNull:false,number:12345.678}]}]}]}}},loading:false});
+  assert.equal(host.children[0]!.textContent,'$'+new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(12345.678));assert.equal(host.getAttribute('class'),'author-number');assert.equal(host.children[0]!.getAttribute('aria-label'),'Live number');
+  remote.next({data:{records:null},loading:true});assert.equal(host.getAttribute('aria-busy'),'true');assert.equal(host.getAttribute('class'),'mx-busy-inline');assert.notEqual(host.children[0]!.textContent,'—');
+  remote.next({data:{records:null},loading:false});assert.equal(host.children[0]!.textContent,'—');assert.equal(host.getAttribute('aria-busy'),'false');assert.equal(host.getAttribute('class'),'author-number');assert.equal(host.children[0]!.getAttribute('aria-label'),'Number placeholder');
+ }finally{await running.close();}
+});
+test('Cell target refuses an undeclared data query, dynamic format and missing adapter',()=>{
+ const node=el('figure','Cell',{data:'$unknown',col:'n'}),source=input([node],[{kind:'cell',sourceNode:'figure',afId:'figure',attribute:'data'}]);
+ const missing=emitNativeBindings(source);assert.equal(missing.status,'blocked');assert.ok(missing.blockers.some(b=>b.code==='cell-formatter-adapter-required'));assert.ok(missing.blockers.some(b=>b.code==='cell-target-needs-declared-query'));
+ if(node.type!=="element")throw Error('fixture');
+ node.attributes.push({name:'format',start:0,end:1,value:{static:false,source:'$filter',exprType:'Identifier'}});source.queries=[query];source.analysis.flow.queries=[{name:'rows',start:0,end:1}];node.attributes[0]!.value={static:true,json:'$rows'};source.cellAdapter={specifier:'./components/native-cell.js',sha256:'a'.repeat(64)};
+ const dynamic=emitNativeBindings(source);assert.ok(dynamic.blockers.some(b=>b.code==='invalid-cell-format-property'));
 });

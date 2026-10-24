@@ -1,7 +1,8 @@
 /** Ordinary author JavaScript, embedded in the emitted module. No platform
  * runtime extension, source evaluation, network authority or shared-state cache. */
-export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp){
- let disposed=false,values={},tables={},tableData={},localSub,failed=false;
+export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp,formatCell){
+ let disposed=false,values={},tables={},tableData={},tablePending={},localSub,failed=false;
+ const cells=new WeakMap();
  const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),controls=new WeakMap(),operationLocks=new Set(),topActions=new Set();
  const operationBusy=(name,busy)=>{if(busy)operationLocks.add(name);else operationLocks.delete(name);for(const item of topActions)if(item.run===name){if(busy)item.beforeBusy=item.host.disabled;item.host.disabled=busy?true:item.beforeBusy;if(busy)item.host.setAttribute('aria-busy','true');else item.host.removeAttribute('aria-busy');}};
  const rootScope={active:true,cleanups:new Set()},scopes=new Set([rootScope]);
@@ -36,6 +37,15 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   if(disposed||failed||!scope.active)return;
   for(const target of plan.targets){if(target.sourceNode===skip)continue;const host=lookup(root,ids[target.afId]||target.afId);if(!host)continue;
    if(target.kind==='text'){const value=read(target.expression,row);host.textContent=typeof value==='string'||typeof value==='number'?String(value):'';}
+   if(target.kind==='cell'){
+    let state=cells.get(host);if(!state){const child=document.createElement('span');host.replaceChildren(child);state={child,rows:null};cells.set(host,state);}
+    const name=target.expression.name,busy=!!tablePending[name],current=tables[name]??null;
+    if(current!==null||!busy)state.rows=current;
+    state.child.textContent=formatCell(state.rows,target.format);
+    state.child.setAttribute('aria-label',state.rows===null?'Number placeholder':'Live number');
+    host.setAttribute('aria-busy',busy?'true':'false');
+    if(busy)host.setAttribute('class','mx-busy-inline');else if(target.authorClass!==null)host.setAttribute('class',target.authorClass);else host.removeAttribute('class');
+   }
    if(target.kind==='property'){
     const binding=target.writeback;let projection=target.property==='data'?tableData[target.expression.name]??null:read(target.expression,row);
     if(binding?.multiple){try{projection=projection===null?[]:JSON.parse(projection);if(!Array.isArray(projection))throw Error();}catch{error('Invalid multiple selection');projection=[];}}
@@ -91,8 +101,8 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   if(disposed)return;
   try{
    for(const query of plan.queries){const selected={};for(const field of query.values)selected[field.name]=own(values,field.name);const variables={...(query.values.length?{values:selected}:{}),only:[query.tableName]},signature=JSON.stringify(variables),prior=subscriptions.get(query.name);if(prior?.signature===signature)continue;
-    if(prior){prior.active=false;prior.sub?.unsubscribe();}tables[query.name]=null;tableData[query.name]=null;const item={signature,active:true,sub:null};subscriptions.set(query.name,item);
-    item.sub=client.watchQuery({query:doc(query.document),variables,clearOnRefresh:true}).subscribe(result=>{if(disposed||!item.active)return;try{if(at(result.data,[query.namespace])===null&&!result.errors?.length){tables[query.name]=null;tableData[query.name]=null;}else {const decoded=decode(query,result);tables[query.name]=decoded.rows;tableData[query.name]=decoded;}render();}catch(cause){tables[query.name]=null;tableData[query.name]=null;render();error(cause.message);}});
+    if(prior){prior.active=false;prior.sub?.unsubscribe();}tables[query.name]=null;tableData[query.name]=null;tablePending[query.name]=true;const item={signature,active:true,sub:null};subscriptions.set(query.name,item);
+    item.sub=client.watchQuery({query:doc(query.document),variables,clearOnRefresh:true}).subscribe(result=>{if(disposed||!item.active)return;tablePending[query.name]=!!result.loading;try{if(at(result.data,[query.namespace])===null&&!result.errors?.length){tables[query.name]=null;tableData[query.name]=null;}else {const decoded=decode(query,result);tables[query.name]=decoded.rows;tableData[query.name]=decoded;}render();}catch(cause){tables[query.name]=null;tableData[query.name]=null;tablePending[query.name]=false;render();error(cause.message);}});
    }
    render();
   }catch(cause){failed=true;stopQueries();error(cause.message);}

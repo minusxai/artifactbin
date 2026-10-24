@@ -82,6 +82,7 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
    const templateId=`native-template-${proof.afId}`;templateIds.add(templateId);
    targets.push({...proof,kind:'loop',templateId,identity:{owner:owner.json,keyBy:keyBy?.static?keyBy.json as string:null,templateIds:children.map(child=>binding(child)?.afId).filter((id):id is string=>!!id),encoding:'archived-instance-v1',domIds:children.flatMap(child=>{const proof=binding(child);return proof?.authoredDomId?[{domId:proof.authoredDomId,templateAfId:proof.afId}]:[];})}});
   }
+  const cellData=literal(node,'data');if((node.tag==='Cell'||node.tag==='Number')&&cellData&&(!cellData.static||typeof cellData.json==='string'&&cellData.json.startsWith('$')))targets.push({...proof,kind:'cell',attribute:'data'});
   if(node.tag==='Button'&&node.attributes.some(a=>['set','run'].includes(a.name)))targets.push({...proof,kind:'action'});
   for(const chart of input.chartMappings?.filter(chart=>chart.sourceNode===node.graphKey)??[]){if(!verifyNativeChartMapping(input.analysis,chart)){block('chart-mapping-proof',node.graphKey);continue;}if(chart.data.kind==='table')targets.push({...proof,kind:'property',property:'data',attribute:'data'});}
   for(const attribute of node.attributes){
@@ -109,13 +110,14 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
   }
  }
  if(new Set(input.backends.map(b=>b.namespace)).size!==input.backends.length)block('duplicate-backend');
- const emitted=emitNativeBindings({analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
+ const emitted=emitNativeBindings({cellAdapter:input.cellAdapter,analysis:input.analysis,targets,queries:input.queries,mutations:input.mutations});
  if(emitted.status==='blocked')blockers.push(...emitted.blockers);
  const admittedDeclarations=[...input.analysis.flow.values.map(d=>({kind:'value',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.queries.map(d=>({kind:'query',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.mutations.map(d=>({kind:'mutation',name:d.name,analysisSha256:input.analysis.analysisSha256})),...input.analysis.flow.imports.map(d=>({kind:'import',name:d.name,analysisSha256:input.analysis.analysisSha256}))];
  const lowered=lowerNativeComponents({analysis:input.analysis,targetRevision:input.targetRevision,emitTextIdentities:true,authorPrograms:input.authorPrograms,identityBindings:identity.bindings,reservedIdentities:identity.reservedIdentities,admittedBindings:emitted.status==='complete'?targets:[],admittedDeclarations:blockers.length?[]:admittedDeclarations,authoredStyleSha256:input.style?.sha256,urls:input.urls,formattedValues:input.formattedValues,serializedStyles:blockers.length?[]:presentation?.inlineStyles,resourcePatches:blockers.length?[]:presentation?.resourcePatches,chartMappings:input.chartMappings,admittedChartData:emitted.status==='complete'?targets.filter(t=>t.kind==='property'&&t.property==='data').map(t=>({sourceNode:t.sourceNode,analysisSha256:input.analysis.analysisSha256})):[]});
  blockers.push(...lowered.blockers,...lowered.requirements.map(r=>({sourceNode:r.sourceNode,code:`unadmitted-${r.kind}`})));
  if(blockers.length||lowered.html===null||emitted.status!=='complete')return {status:'blocked',html:null,bindingTargets:targets,blockers};
  const files=input.files??[];
+ if(targets.some(target=>target.kind==='cell')){const adapter=input.cellAdapter;if(!adapter||!/^\.\/components\/[A-Za-z0-9_.-]+\.js$/.test(adapter.specifier)||files.filter(file=>'./'+file.path===adapter.specifier&&file.sha256===adapter.sha256).length!==1)block('cell-adapter-file-proof');}
  for(const file of files)if(!/^(components|assets)\/[A-Za-z0-9_./-]+$/.test(file.path)||file.path.split('/').some(part=>!part||part==='.'||part==='..')||createHash('sha256').update(file.bytes).digest('hex')!==file.sha256)block('module-file-proof');
  if(new Set(files.map(f=>f.path)).size!==files.length)block('duplicate-module-file');
  for(const match of input.style?.css.matchAll(/@import\s+(?:url\(\s*)?["']?([^"'()\s;]+)["']?\s*\)?\s*;/gi)??[]){const path=match[1]!;if(!path.startsWith('./assets/')||files.filter(file=>'./'+file.path===path).length!==1)block('style-import-file');}
