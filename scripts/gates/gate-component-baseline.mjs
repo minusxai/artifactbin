@@ -76,7 +76,9 @@ try {
     const framed=input.fixtureSet==='identity';
     if(framed?!/^\/a\/[a-zA-Z0-9]+$/.test(url.pathname):!url.pathname.endsWith('/raw'))throw Error('Capture the declared real reader mode');
     if(session){if(url.origin!==new URL(input.entries[0].url).origin)throw Error('Authenticated readers must share the login origin');await session.mount(page);}
-    await page.goto(url.href,{waitUntil:'networkidle'});
+    // The trusted shell starts live readers; document/frame readiness, below,
+    // owns completion rather than waiting for those transports to become idle.
+    await page.goto(url.href,{waitUntil:framed?'domcontentloaded':'networkidle'});
     const frame=framed?await documentFrame(page):page.mainFrame();
     if(framed&&frame===page.mainFrame())throw Error('Authenticated identity requires the real isolated document frame');
     return {frame,...(framed?{screenshot:()=>page.locator(DOCUMENT_FRAME).screenshot({animations:'disabled',caret:'hide'})}:{}),ready:async()=>{
