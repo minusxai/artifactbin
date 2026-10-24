@@ -7,6 +7,7 @@ import {publishBaselineFixtures} from '../fixtures/component-baseline/publicatio
 import {uploadBrowserParityFixtures} from '../fixtures/component-baseline/upload.mjs';
 import {captureBrowserBaseline} from './component-browser-baseline.mjs';
 import {observeUploadRequests} from './component-upload-route.mjs';
+import {captureSignedOutUpload} from './component-upload-signed-out.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 /** Real HTTP publication, verified OTP session, actual frame upload port. No injected adapter, synthetic receipt, or credential in page code. */
 export async function runUploadBaseline({base,implementation,browser,sourceRevision,output,connectAgent,signInAccount,account:providedAccount}){
@@ -22,6 +23,7 @@ export async function runUploadBaseline({base,implementation,browser,sourceRevis
  const proofs=[];
  const session=await createBaselineSession({base:origin,account,signIn:signInAccount});
  await mkdir(output,{recursive:true});
+ await captureSignedOutUpload({browser,entries,origin,output,implementation});
  let captures,complete=false;try{captures=await captureBrowserBaseline({browser,implementation,sourceRevision,output,fixtures:uploadBrowserParityFixtures,screenshotMode:'document-frame',mount:async({fixture,theme,viewport,page})=>{
   await session.mount(page);const entry=entries.find(entry=>entry.fixture===fixture.id&&entry.theme===theme);assert.ok(entry);
   const proof={fixture:fixture.id,theme,viewport:viewport.width,requests:0,statuses:[],requestIds:[],refs:[]};proofs.push(proof);
