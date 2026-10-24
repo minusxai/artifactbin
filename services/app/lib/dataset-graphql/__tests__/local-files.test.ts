@@ -1,4 +1,4 @@
-import {mkdtemp,writeFile,symlink,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,symlink,rm,truncate} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {describe,it,expect} from 'vitest';
@@ -20,4 +20,19 @@ describe('local dataset file boundary',()=>{
  await expect(loadLocalDataset(root,'bad',[{path:'escape.csv',table:'bad'}])).rejects.toThrow('local_dataset_path');
  }finally{await rm(root,{recursive:true,force:true});}
  });
+});
+it('uses a trusted bounded immutable reader without rereading filesystem data',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'local-dataset-reader-'));
+ try{
+ const paths:string[]=[];
+ const preview=await createLocalPreviewDatasets(root,[{name:'localSales',files:[{path:'not-on-disk.csv',table:'sales'}]}],{readText:async relative=>{paths.push(relative);return 'amount\n2\n';}});
+ expect(paths).toEqual(['not-on-disk.csv']);expect(preview.export('localSales').tables[0]!.rows).toEqual([{amount:2}]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+it('refuses oversized declared files before loading their contents',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'local-dataset-size-'));
+ try{const target=path.join(root,'large.csv');await writeFile(target,'');await truncate(target,32*1024*1024+1);
+ await expect(loadLocalDataset(root,'large',[{path:'large.csv',table:'large'}])).rejects.toThrow('local_dataset_file_size');
+ }finally{await rm(root,{recursive:true,force:true});}
 });

@@ -1,5 +1,5 @@
 import {RemoteUnreachable,type RemotePort} from './apollo/apollo-contracts';
-/** Server-injected private preview capability. Never derive it from authored page markup. */
+/** Preview routing configuration, not authorization. Server validates Host/Origin and the opaque session. */
 export interface LocalDatasetTransportConfig {privatePreview:boolean;endpoint:string}
 export function createLocalDatasetTransport(config:LocalDatasetTransportConfig,location:Pick<Location,'origin'|'protocol'|'hostname'>,send:typeof fetch):RemotePort{
  const allowed=config.privatePreview&&location.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(location.hostname)&&/^\/__af_preview\/datasets(?:\/[A-Za-z0-9_-]+)?$/.test(config.endpoint);
