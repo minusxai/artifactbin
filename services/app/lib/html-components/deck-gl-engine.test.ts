@@ -84,6 +84,42 @@ it("renders offline deck layers, controls and reset without any basemap", () => 
   expect(state.deck[0]!.finalize).toHaveBeenCalledTimes(1);
   expect(host.children).toHaveLength(0);
 });
+it("renders compact map controls and a labeled gradient legend", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  mountDeckGL(host, {
+    data: [
+      { longitude: 10, latitude: 20, value: 12 },
+      { longitude: 11, latitude: 21, value: 20 },
+    ],
+    layers: [
+      {
+        "@@type": "ScatterplotLayer",
+        getPosition: "@@=[longitude, latitude]",
+        getRadius: 20_000,
+        getFillColor: "@@=ramp(value)",
+      },
+    ],
+    basemap: "none",
+    legend: true,
+  });
+
+  const controls = host.querySelector('[role="group"][aria-label="Map controls"]');
+  expect(controls?.querySelectorAll("button")).toHaveLength(3);
+  expect(Array.from(controls?.querySelectorAll("button") ?? []).map((button) => button.getAttribute("aria-label"))).toEqual([
+    "Zoom in",
+    "Zoom out",
+    "Reset view",
+  ]);
+  expect(controls?.querySelectorAll("button svg[aria-hidden='true']")).toHaveLength(3);
+
+  const legend = host.querySelector('[role="group"][aria-label="Map legend"]');
+  expect(legend?.textContent).toContain("value");
+  expect(legend?.textContent).toContain("12");
+  expect(legend?.textContent).toContain("20");
+  expect(legend?.querySelector('[role="img"][aria-label="value: 12 to 20"]')).not.toBeNull();
+  expect((legend?.querySelector('[role="img"]') as HTMLElement | null)?.style.background).toContain("linear-gradient");
+});
 it("keeps deck view with an accessible explanation when street WebGL2 is unavailable", () => {
   state.fail = true;
   const host = document.createElement("div");

@@ -12,6 +12,7 @@ import {
   rgbCss,
   compactNumber,
   ATTRIBUTION,
+  MAP_CLASSES,
   type MapViewState,
   type PickingInfo,
 } from "../viz/deck-engine-core";
@@ -40,13 +41,15 @@ export function mountDeckGL(
     "af-deck-gl .maplibregl-canvas{position:absolute;left:0;top:0}af-deck-gl .maplibregl-canvas-container{position:absolute;inset:0}af-deck-gl .maplibregl-interactive{cursor:grab}af-deck-gl .maplibregl-interactive:active{cursor:grabbing}";
   root.append(style);
   const controls = doc.createElement("div");
-  controls.style.cssText =
-    "position:absolute;right:8px;top:8px;display:flex;gap:4px";
+  controls.className = MAP_CLASSES.controls;
+  controls.setAttribute("role", "group");
+  controls.setAttribute("aria-label", "Map controls");
   root.append(controls);
   const legend = doc.createElement("div");
   legend.setAttribute("part", "legend");
-  legend.style.cssText =
-    "position:absolute;left:8px;bottom:28px;background:var(--card,white);color:var(--foreground,#172033);padding:8px";
+  legend.className = MAP_CLASSES.legend;
+  legend.setAttribute("role", "group");
+  legend.setAttribute("aria-label", "Map legend");
   root.append(legend);
   const credit = doc.createElement("p");
   credit.style.cssText =
@@ -104,7 +107,29 @@ export function mountDeckGL(
   ] as const) {
     const button = doc.createElement("button");
     button.type = "button";
-    button.textContent = label;
+    button.className = MAP_CLASSES.button;
+    button.setAttribute("aria-label", label);
+    const icon = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.setAttribute("viewBox", "0 0 24 24");
+    icon.setAttribute("width", "16");
+    icon.setAttribute("height", "16");
+    icon.setAttribute("fill", "none");
+    icon.setAttribute("stroke", "currentColor");
+    icon.setAttribute("stroke-width", "1.5");
+    icon.setAttribute("stroke-linecap", "round");
+    icon.setAttribute("stroke-linejoin", "round");
+    icon.setAttribute("aria-hidden", "true");
+    const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute(
+      "d",
+      delta > 0
+        ? "M12 5v14M5 12h14"
+        : delta < 0
+          ? "M5 12h14"
+          : "M3 12a9 9 0 1 0 3-6.7M3 4v5h5",
+    );
+    icon.append(path);
+    button.append(icon);
     button.addEventListener("click", () => {
       if (!model) return;
       if (delta)
@@ -236,23 +261,46 @@ export function mountDeckGL(
     if (options.legend !== false)
       for (const scale of legendScales(built, palette)) {
         const entry = doc.createElement("div");
+        entry.className = MAP_CLASSES.legendEntry;
         const label = doc.createElement("strong");
+        label.className = MAP_CLASSES.legendLabel;
         label.textContent = scale.label;
         entry.append(label);
         if (scale.kind === "ramp") {
           const ramp = doc.createElement("div");
-          ramp.textContent = `${compactNumber.format(scale.min)} — ${compactNumber.format(scale.max)}`;
-          ramp.style.background = `linear-gradient(to right,${scale.colors.map(rgbCss).join(",")})`;
+          ramp.className = MAP_CLASSES.ramp;
+          const min = doc.createElement("span");
+          min.textContent = compactNumber.format(scale.min);
+          const bar = doc.createElement("span");
+          bar.className = MAP_CLASSES.rampBar;
+          bar.setAttribute(
+            "aria-label",
+            `${scale.label}: ${compactNumber.format(scale.min)} to ${compactNumber.format(scale.max)}`,
+          );
+          bar.setAttribute("role", "img");
+          bar.style.background = `linear-gradient(to right,${scale.colors.map(rgbCss).join(",")})`;
+          const max = doc.createElement("span");
+          max.textContent = compactNumber.format(scale.max);
+          ramp.append(min, bar, max);
           entry.append(ramp);
-        } else
+        } else {
+          const swatches = doc.createElement("ul");
+          swatches.className = MAP_CLASSES.swatches;
           for (const item of scale.entries) {
-            const row = doc.createElement("div"),
+            const row = doc.createElement("li"),
               dot = doc.createElement("span");
-            dot.textContent = "● ";
-            dot.style.color = rgbCss(item.color);
-            row.append(dot, doc.createTextNode(String(item.value)));
-            entry.append(row);
+            row.className = MAP_CLASSES.swatch;
+            dot.className = MAP_CLASSES.dot;
+            dot.setAttribute("aria-hidden", "true");
+            dot.style.background = rgbCss(item.color);
+            const value = doc.createElement("span");
+            value.className = MAP_CLASSES.swatchLabel;
+            value.textContent = String(item.value);
+            row.append(dot, value);
+            swatches.append(row);
           }
+          entry.append(swatches);
+        }
         legend.append(entry);
       }
   };
