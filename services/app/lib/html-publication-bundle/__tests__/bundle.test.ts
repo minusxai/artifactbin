@@ -44,3 +44,14 @@ it('resolves local backend TypeScript into the native atomic backend source cont
  const plan=planPublicationBundle('<link rel="af-backend" data-af-name="jobs" href="./api.ts">',{entryPath:'index.html',files:[file('api.ts',source,'text/typescript')]});
  expect(plan.backendSources).toEqual({jobs:source});expect(plan.backends).toEqual([{name:'jobs',path:'api.ts',bytes:Buffer.byteLength(source)}]);expect(plan.dependencies).toEqual([]);expect(plan.html).not.toContain('api.ts');expect(plan.html).toContain('data-af-name="jobs"');
 });
+
+it('accepts atomically supplied backend namespaces but still rejects missing local files',()=>{
+ const html='<link rel="af-backend" data-af-name="db" href="./garden.ts">';
+ expect(planPublicationBundle(html,{entryPath:'index.html',files:[]},{resolvedBackendNames:['db']}).dependencies).toEqual([]);
+ expect(()=>planPublicationBundle(html,{entryPath:'index.html',files:[]})).toThrow('garden.ts');
+ expect(()=>planPublicationBundle(html+'<img src="./missing.svg">',{entryPath:'index.html',files:[]},{resolvedBackendNames:['db']})).toThrow('missing.svg');
+});
+it('preserves literal native bindings without admitting arbitrary dynamic asset paths',()=>{
+ for(const value of ['$pick','{$pick}'])expect(planPublicationBundle(`<DataTable data="$current"/><img src="${value}">`,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
+ for(const html of ['<object data="./missing.pdf">','<img src="$pick/image.svg">','<img src="./missing.svg">'])expect(()=>planPublicationBundle(html,{entryPath:'index.html',files:[]})).toThrow('Unresolved local dependencies');
+});

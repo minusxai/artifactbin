@@ -5,7 +5,7 @@ import {trackEvent} from '@/lib/platform/analytics';
 import {compilePageBackend,composePageSchema} from '@/lib/page-operations';
 import {htmlBackendNames,htmlPageDeclarations} from '@/lib/html-page';
 import {authorizeDatasetBinding,DatasetBindingUnsupportedError} from '@/lib/dataset-graphql';
-import type {HtmlDatasetLink} from '@artifactbin/contracts';
+import type {HtmlDatasetLink,HtmlPageLink} from '@artifactbin/contracts';
 import type {PreparedHtmlBackend} from '@/lib/html-backends';
 /**
  * THE PUBLISH REQUESTS — create, replace and asset refresh, the use cases both
@@ -120,7 +120,7 @@ export async function replaceArtifactWithBody(
       const sharing=await getSharingFor(actor,id);
       body={...body,visibility:body.visibility??current.visibility,shares:body.shares??sharing?.shares};
     }
-    const bundled=await preparePublicationBundle(body,actor as TokenHoldingActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,actor as TokenHoldingActor,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as TokenHoldingActor,base,dependencyId,input,key),id);
+    const bundled=await preparePublicationBundle(body,actor as TokenHoldingActor,base,options.request,(dependency,dependencyRequest)=>createArtifactFromBody(dependency,actor as TokenHoldingActor,base,dependencyRequest),(dependencyId,input,key)=>updateBundleDependency(actor as TokenHoldingActor,base,dependencyId,input,key),id,((current.meta.htmlLinks??[]) as HtmlPageLink[]).filter(link=>link.kind==='backend').map(link=>link.name));
     if(bundled instanceof Response)return bundled;
     body=bundled.body;bundleReceipts=bundled.receipts;
   }

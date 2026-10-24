@@ -67,6 +67,15 @@ const appFontFaces = (): Plugin => ({
  * (`includeDependenciesRecursively: false`), so solid-js and the rest stay where they were.
  */
 const UI_MODULE = /[\\/]services[\\/]app[\\/]solid[\\/]ui[\\/][^\\/]+\.tsx?$/;
+const READER_SHARED = [
+  'solid/document/DocumentChrome.tsx', 'solid/document/DocumentBarActions.tsx',
+  'solid/document/comment-access.ts', 'solid/document/reactions.ts',
+  'solid/components/TrustedUi.tsx', 'solid/editor/create-live-artifact.ts', 'solid/lib/document-navigation.ts',
+  'lib/artifact-backend/reader-http.ts', 'lib/artifact-backend/api.ts', 'lib/annotations/pages.ts',
+  'lib/islands/trusted-overlay-host.ts', 'lib/story-runtime/document-endpoint.ts', 'lib/serving/artifact-pwa.ts',
+  'lib/http/login-href.ts', 'lib/document/display-title.ts', 'lib/edit-protocol/index.ts',
+];
+const isReaderShared = (id: string) => READER_SHARED.some(suffix => id.replaceAll('\\', '/').endsWith('/services/app/' + suffix));
 const READER_PAGE = /[\\/]services[\\/]app[\\/]solid[\\/]pages[\\/]Document\.tsx$/;
 type ModuleInfoOf = (id: string) => { isEntry: boolean; importers: readonly string[]; dynamicImporters: readonly string[] } | null;
 /** Whether `id` is statically imported, directly or not, by a module `reaches` accepts. */
@@ -82,6 +91,9 @@ const staticallyImportedBy = (id: string, getModuleInfo: ModuleInfoOf, reaches: 
 export const uiChunkName = (id: string, ctx: { getModuleInfo: ModuleInfoOf }): string | null => {
   const getModuleInfo: ModuleInfoOf = (module) => ctx.getModuleInfo(module);
   const info = getModuleInfo(id);
+  // Every static reader dependency was already required before its frame. Keep those
+  // shared leaves together rather than one compressed stream per local/hosted importer.
+  if (isReaderShared(id) && !info?.dynamicImporters.length && !staticallyImportedBy(id, getModuleInfo, (_, isEntry) => isEntry) && staticallyImportedBy(id, getModuleInfo, at => READER_PAGE.test(at))) return 'reader';
   const library = UI_MODULE.test(id) || !!info?.importers.some((importer) => UI_MODULE.test(importer));
   // A module some page imports lazily (DocumentSharing's `import('../ui/Select')`) keeps its own chunk: inside
   // a group it would need a namespace object, whose bundler helper lives in the JSX-parser chunk.

@@ -37,7 +37,7 @@ const chromeBlock=document.querySelector('[data-af="chrome"]');
 const chrome=chromeBlock?blob(JSON.parse(chromeBlock.textContent)):new URL(${JSON.stringify(chromePath)},document.currentScript.src||location.href).href;
 if(!config.publishOrigin&&document.currentScript.src)config.publishOrigin=new URL(document.currentScript.src,location.href).origin;
 const map=document.createElement('script');map.type='importmap';map.textContent=JSON.stringify({imports:{'@afbin/apollo':apollo,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine}});document.currentScript.after(map);
-if(window.parent===window){const local=()=>import(reader).then(module=>module.startPortableDocument(window,config.publishOrigin));if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',local,{once:true});else local();}
+if(config.offline&&window.parent===window){const local=()=>import(reader).then(module=>module.startPortableDocument(window,config.publishOrigin));if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',local,{once:true});else local();}
 if(config.appOrigin&&!config.offline&&window.parent!==window){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await build({...options,stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'});
  if(!core.outputFiles?.[0]?.text)throw Error('HTML core is empty');

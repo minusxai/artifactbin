@@ -5,7 +5,7 @@ import parseCss from 'css-tree/parser';
 import walkCss from 'css-tree/walker';
 initSync();
 import {parse, type DefaultTreeAdapterMap} from 'parse5';
-import type {PublicationBundle,BundlePlan,BundleDependency} from './contracts';
+import type {PublicationBundle,BundlePlan,BundleDependency,BundleResolutionContext} from './contracts';
 export type {PublicationBundle,BundlePlan} from './contracts';
 const MAX_FILES=99,MAX_BYTES=16_000_000,MAX_FILE=4_000_000;
 interface Link {start:number;end:number;value:string;kind:'asset'|'dataset'}
@@ -52,6 +52,9 @@ function links(source:string,css:boolean,js=false):Link[]{
    for(const attr of node.attrs){
     if(!['src','href','poster','data','srcset','style'].includes(attr.name))continue;
     // Hyperlinks are navigation, not uploaded content. Core and absolute API paths remain server-owned.
+    if(attr.name==='data'&&node.tagName!=='object')continue;
+    // Literal authored image bindings are retained; they are not project filenames.
+    if(node.tagName==='img'&&attr.name==='src'&&/^\$[_A-Za-z][_0-9A-Za-z]*$|^\{\$[_A-Za-z][_0-9A-Za-z]*\}$/.test(attr.value))continue;
     if(attr.name==='href'&&!['link','image','use'].includes(node.tagName))continue;
     const loc=node.sourceCodeLocation?.attrs?.[attr.name];if(!loc)continue;
     const written=source.slice(loc.startOffset,loc.endOffset),equals=written.indexOf('=');if(equals<0)continue;
@@ -76,7 +79,7 @@ function links(source:string,css:boolean,js=false):Link[]{
   if('childNodes'in node)for(const child of node.childNodes)visit(child);
  };visit(doc);return result;
 }
-export function planPublicationBundle(html:string,bundle:PublicationBundle):BundlePlan{
+export function planPublicationBundle(html:string,bundle:PublicationBundle,context:BundleResolutionContext={}):BundlePlan{
  if(!bundle||typeof bundle.entryPath!=='string'||!Array.isArray(bundle.files)||bundle.files.length>MAX_FILES)throw Error('Invalid publication bundle');
  if(html.length>4_000_000||JSON.stringify(bundle).length>24_000_000||Object.keys(bundle.mappings??{}).length>99)throw Error('Publication bundle limit exceeded');
  for(const name of Object.keys(bundle.mappings??{}))if(normalized(name)!==name)throw Error('Noncanonical mapping path');
@@ -88,15 +91,17 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle):Bund
   if(typeof file.contentType!=='string'||file.contentType.length>128)throw Error('Invalid bundle content type');files.set(name,{bytes,contentType:fileContentType(name)??file.contentType});
  }
  const backendSources:Record<string,string>={},backends:Array<{name:string;path:string;bytes:number}>=[],backendPaths=new Set<string>(),backendEdits:Array<{start:number;end:number}>=[];
+ const backendNames=new Set<string>();
  const backendDocument=parse(html,{sourceCodeLocationInfo:true});
  const findBackends=(node:DefaultTreeAdapterMap['node']):void=>{
   if('tagName'in node&&node.tagName==='link'&&node.attrs.some(attr=>attr.name==='rel'&&attr.value.split(/\s+/).includes('af-backend'))){
    const href=node.attrs.find(attr=>attr.name==='href')?.value,name=node.attrs.find(attr=>attr.name==='data-af-name')?.value;
    const local=href&&resolve(href,entryPath);
    if(local){
-    if(!name||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||backendSources[name]!==undefined)throw Error('Invalid or duplicate backend namespace');
-    const file=files.get(local);if(!file)throw Error('Unresolved local dependencies: '+local);
-    backendSources[name]=file.bytes.toString('utf8');backends.push({name,path:local,bytes:file.bytes.byteLength});backendPaths.add(local);
+    if(!name||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||backendNames.has(name))throw Error('Invalid or duplicate backend namespace');
+    backendNames.add(name);
+    const file=files.get(local);if(!file&&!context.resolvedBackendNames?.includes(name))throw Error('Unresolved local dependencies: '+local);
+    if(file){backendSources[name]=file.bytes.toString('utf8');backends.push({name,path:local,bytes:file.bytes.byteLength});}backendPaths.add(local);
     const location=node.sourceCodeLocation?.attrs?.href;if(location)backendEdits.push({start:location.startOffset,end:location.endOffset});
    }
   }

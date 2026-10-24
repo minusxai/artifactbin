@@ -2,7 +2,7 @@
  * getRandomValues is available outside secure contexts; randomUUID is not.
  */
 export function runtimeId(random: Pick<typeof globalThis.crypto, 'getRandomValues'> | null = globalThis.crypto): string {
-  if (typeof random?.getRandomValues !== 'function') throw new Error('Secure browser randomness is unavailable. Open this page in a browser with Web Crypto support.');
+  if (!random?.getRandomValues) throw Error('Web Crypto required');
   let index = 0;
   const bytes = random.getRandomValues(new Uint8Array(31));
   // XOR the variant's two random bits into RFC 4122's fixed 10 prefix.

@@ -57,7 +57,9 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (actor instanceof Response) return actor;
   const { id } = await ctx.params;
   const body=await readJson(request);if(!body)return json({error:'invalid_json'},400);
-  const writer=actor.userId?{...actor,tokenId:await ensureUserToken(actor.userId)}:await withAccountToken(actor);
+  // Only bundled HTML allocates dependencies. Other saves keep the initiating credential for audit.
+  const allocatesDependencies=typeof body.html==='string'&&body.publicationBundle!==undefined;
+  const writer=allocatesDependencies?(actor.userId?{...actor,tokenId:await ensureUserToken(actor.userId)}:await withAccountToken(actor)):actor;
   return writer?runOperation('update_artifact',request,writer,{...body,id}):json({error:'unauthorized'},401);
 }
 

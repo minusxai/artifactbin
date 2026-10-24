@@ -3,10 +3,10 @@ import type {TokenHoldingActor} from '@/lib/accounts';
 import {getOwnedArtifactFor,reserveIds} from '@/lib/artifacts';
 import {json} from '@/lib/http';
 import {planPublicationBundle,publishBundleDependencies,type PublicationBundle} from '@/lib/html-publication-bundle';
-export async function preparePublicationBundle(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,existingPageId?:string):Promise<{body:Record<string,unknown>;receipts:unknown[]}|Response>{
+export async function preparePublicationBundle(body:Record<string,unknown>,actor:TokenHoldingActor,base:string,request:Request|undefined,create:(body:Record<string,unknown>,request:Request)=>Promise<Response>,update:(id:string,body:Record<string,unknown>,key:string)=>Promise<Response>,existingPageId?:string,resolvedBackendNames:readonly string[]=[]):Promise<{body:Record<string,unknown>;receipts:unknown[]}|Response>{
  if(typeof body.html!=='string')return body.publicationBundle===undefined?{body,receipts:[]}:json({error:'invalid_publication_bundle'},400);
  let plan;const bundle=body.publicationBundle as PublicationBundle|undefined;
- try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
+ try{plan=planPublicationBundle(body.html,bundle??{entryPath:'index.html',files:[]},{resolvedBackendNames:[...resolvedBackendNames,...Object.entries(body.backendSources??{}).filter(([,source])=>typeof source==='string').map(([name])=>name)]});}catch(error){return json({error:'unresolved_publication_dependencies',details:[(error as Error).message]},400);}
  if(Object.keys(plan.backendSources).length){
   const explicit=body.backendSources as Record<string,unknown>|undefined;
   if(explicit&&Object.entries(plan.backendSources).some(([name,source])=>explicit[name]!==undefined&&explicit[name]!==source))return json({error:'conflicting_backend_sources'},400);
