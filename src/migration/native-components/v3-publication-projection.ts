@@ -7,6 +7,7 @@ import {
 } from "../ownership-override.ts";
 import { emailAddress } from "../../email.ts";
 import { nativeDigest } from "./selection.ts";
+import { nativeReceiptDigest } from "./receipt-digest.ts";
 import { assembleNativePage } from "./assemble.ts";
 import type {
   NativeV3ProjectionInput,
@@ -139,7 +140,7 @@ function admit(input: NativeV3ProjectionInput): NativeV3AssemblyReceipt[] {
     const receipt = matches[0]!;
     const { sha256, ...payload } = receipt;
     if (
-      sha256 !== nativeDigest(payload) ||
+      sha256 !== nativeReceiptDigest(payload) ||
       receipt.sourceRowSha256 !== source.rowSha256
     )
       invalid("assembly_digest");
@@ -166,7 +167,7 @@ function admit(input: NativeV3ProjectionInput): NativeV3AssemblyReceipt[] {
     const result = assembleNativePage(receipt.input);
     if (
       result.status !== "complete" ||
-      nativeDigest(result) !== nativeDigest(receipt.result) ||
+      nativeReceiptDigest(result) !== nativeReceiptDigest(receipt.result) ||
       sha(result.html) !== receipt.result.htmlSha256
     )
       invalid("assembly_proof");

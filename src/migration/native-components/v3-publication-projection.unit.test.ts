@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { nativeDigest } from "./selection.ts";
+import { nativeReceiptDigest } from "./receipt-digest.ts";
 import { canonicalMigrationValue } from "../verification-values.ts";
 import { bindNativeIdentities } from "./identity.ts";
 import { prepareNativeReaderTemplate } from "./reader-template.ts";
@@ -174,7 +175,7 @@ function fixture() {
         },
       ],
     };
-    return { ...receipt, sha256: nativeDigest(receipt) };
+    return { ...receipt, sha256: nativeReceiptDigest(receipt) };
   });
   const planned: NativeV3ProjectionInput["planned"] = {
     legacyId: sourceId,
@@ -357,6 +358,44 @@ test("rejects missing/extra histories, changed original rows and unbound assembl
     assert.equal(events.length, 0);
   }
 });
+test("binds exact assembled file bytes in the native assembly receipt", () => {
+  const { input, host, events } = fixture();
+  const receipt = input.assemblies[0]!;
+  const bytes = Buffer.from([0, 1, 127, 128, 255]);
+  receipt.input.files = [
+    {
+      path: "components/receipt-proof.js",
+      bytes,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    },
+  ];
+  receipt.result = assembleNativePage(receipt.input);
+  assert.equal(receipt.result.status, "complete");
+  const { sha256, ...payload } = receipt;
+  receipt.sha256 = nativeReceiptDigest(payload);
+  host.prepareBundle = (assembly, pageId) => {
+    if (assembly.result.status !== "complete") throw Error("assembly blocked");
+    return {
+      pageId,
+      sourceHtmlSha256: assembly.result.htmlSha256,
+      html: assembly.result.html,
+      assetsSha256: "8".repeat(64),
+      dependencies: [],
+      fileDigests: assembly.result.files.map(({ path, sha256 }) => ({
+        path,
+        sha256,
+      })),
+    };
+  };
+  projectNativeV3Publication(input, host);
+  const prepared = events.length;
+  bytes[2] = bytes[2]! ^ 1;
+  assert.throws(
+    () => projectNativeV3Publication(input, host),
+    /native_v3_assembly_digest/,
+  );
+  assert.equal(events.length, prepared);
+});
 test("rejects group ownership, missing target identities, mismatched actor maps and unsupported ACLs explicitly", () => {
   for (const change of [
     (i: NativeV3ProjectionInput) => {
@@ -380,7 +419,7 @@ test("rejects changed program content and provenance rather than registering ano
   const { input, host, events } = fixture();
   input.assemblies[0]!.programs[0]!.programSha256 = "0".repeat(64);
   const { sha256, ...payload } = input.assemblies[0]!;
-  input.assemblies[0]!.sha256 = nativeDigest(payload);
+  input.assemblies[0]!.sha256 = nativeReceiptDigest(payload);
   assert.throws(() => projectNativeV3Publication(input, host));
   assert.equal(events.length, 0);
 });
@@ -463,7 +502,7 @@ test("requires staged real bundle rewrite receipt before canonicalization for no
   receipt.result = assembleNativePage(receipt.input);
   assert.equal(receipt.result.status, "complete");
   const { sha256, ...payload } = receipt;
-  receipt.sha256 = nativeDigest(payload);
+  receipt.sha256 = nativeReceiptDigest(payload);
   assert.throws(
     () => projectNativeV3Publication(input, host),
     /bundle_adapter_required/,
@@ -596,7 +635,7 @@ test("preserves separately admitted mutation target, typed values and commit-onl
       JSON.stringify(receipt.result.blockers),
     );
     const { sha256, ...payload } = receipt;
-    receipt.sha256 = nativeDigest(payload);
+    receipt.sha256 = nativeReceiptDigest(payload);
   }
   let calls = 0;
   host.prepareMutation = (page, receipt) => {
@@ -649,7 +688,7 @@ function readerFixture(template: string | null = "doc") {
   receipt.result = assembleNativePage(receipt.input);
   assert.equal(receipt.result.status, "complete");
   const { sha256, ...payload } = receipt;
-  receipt.sha256 = nativeDigest(payload);
+  receipt.sha256 = nativeReceiptDigest(payload);
   input.plannedSha256 = sha(canonicalMigrationValue(input.planned));
   return fixtureInput;
 }
@@ -690,7 +729,7 @@ test("rejects correctly rehashed reader receipts for another source row, templat
     receipt.result = assembleNativePage(receipt.input);
     assert.equal(receipt.result.status, "complete");
     const { sha256, ...payload } = receipt;
-    receipt.sha256 = nativeDigest(payload);
+    receipt.sha256 = nativeReceiptDigest(payload);
     assert.throws(
       () => projectNativeV3Publication(input, host),
       /native_v3_reader_source_policy/,
@@ -705,7 +744,7 @@ test("requires retained normal-reader recipe for doc/editorial/plan instead of s
     delete receipt.input.readerTemplate;
     receipt.result = assembleNativePage(receipt.input);
     const { sha256, ...payload } = receipt;
-    receipt.sha256 = nativeDigest(payload);
+    receipt.sha256 = nativeReceiptDigest(payload);
     assert.throws(
       () => projectNativeV3Publication(input, host),
       /native_v3_reader_template_required/,
