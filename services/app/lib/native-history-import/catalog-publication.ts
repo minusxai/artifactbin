@@ -139,9 +139,19 @@ export function validateNativeCatalogProjection(p: NativeCatalogProjection) {
       )
         throw Error("native_catalog_version");
       for (const key of catalogKeys(version.meta)) {
-        const matches = p.objects.filter(
-          (o) => o.objectKey === key && o.targetKey === key,
-        );
+        const candidates = [
+          ...p.objects.filter(
+            (o) => o.objectKey === key && o.targetKey === key,
+          ),
+          ...(p.typedUserRemaps ?? [])
+            .filter((r) => r.targetKey === key)
+            .map((r) => ({ sha256: r.targetSha256, bytes: r.targetBytes })),
+        ];
+        const matches = [
+          ...new Map(
+            candidates.map((o) => [JSON.stringify([o.sha256, o.bytes]), o]),
+          ).values(),
+        ];
         if (
           matches.length !== 1 ||
           (key.startsWith("dataset/") &&

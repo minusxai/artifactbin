@@ -1,3 +1,4 @@
+import { verifyNativeUserDerivations } from "./catalog-user-staging";
 import type {
   NativeCatalogProjection,
   NativeCatalogObjectSource,
@@ -24,7 +25,7 @@ export async function stageNativeCatalog(
   validateNativeCatalogProjection(projection);
   if (source.objectManifestSha256 !== projection.objectManifestSha256)
     throw Error("native_catalog_source_manifest_digest");
-  await verifyNativeCanonicalDatasets(projection, source);
+  const userTables = await verifyNativeCanonicalDatasets(projection, source);
   const keys = new Set<string>();
   for (const object of projection.objects) {
     assertNativeObjectKey(object.objectKey);
@@ -54,19 +55,27 @@ export async function stageNativeCatalog(
     if (object.objectKey.startsWith("dataset/")) {
       const rows: unknown = JSON.parse(bytes.toString("utf8"));
       if (!Array.isArray(rows)) throw Error("native_catalog_row_object");
-      const visit = (value: unknown): void => {
-        if (
-          typeof value === "string" &&
-          Object.hasOwn(projection.identities.users, value) &&
-          projection.identities.users[value] !== value
-        )
-          throw Error("native_catalog_cell_identity_translation_required");
-        if (Array.isArray(value)) value.forEach(visit);
-        else if (value && typeof value === "object")
-          Object.values(value).forEach(visit);
-      };
-      visit(rows);
     }
+  }
+  const derivatives = await verifyNativeUserDerivations(
+    projection,
+    userTables,
+    source,
+  );
+  const complete = new Map(
+    projection.objects.map((o) => [
+      o.targetKey,
+      { sha256: o.sha256, bytes: o.bytes },
+    ]),
+  );
+  for (const { receipt: r } of derivatives) {
+    const prior = complete.get(r.targetKey);
+    if (
+      prior &&
+      (prior.sha256 !== r.targetSha256 || prior.bytes !== r.targetBytes)
+    )
+      throw Error("native_catalog_user_target_collision");
+    complete.set(r.targetKey, { sha256: r.targetSha256, bytes: r.targetBytes });
   }
   for (const object of projection.objects) {
     const bytes = await source.read(object);
@@ -74,22 +83,30 @@ export async function stageNativeCatalog(
     await sink.putIfAbsent(object.targetKey, bytes, object.contentType);
     check(await sink.get(object.targetKey), object);
   }
+  for (const { receipt: r, bytes } of derivatives) {
+    await sink.putIfAbsent(r.targetKey, bytes, "application/json");
+    check(await sink.get(r.targetKey), {
+      sha256: r.targetSha256,
+      bytes: r.targetBytes,
+    });
+  }
   const verifyObjects = async () => {
-    for (const object of projection.objects)
-      check(await sink.get(object.targetKey), object);
+    for (const [key, object] of complete) check(await sink.get(key), object);
   };
   return {
     projectionSha256: sha256,
     sourceSha256: sha256,
+    get derivedUserObjects() {
+      return structuredClone(derivatives.map((d) => d.receipt));
+    },
     get staged() {
       return structuredClone(projection.objects);
     },
     async verifyObject(key, hash, bytes) {
-      const matches = projection.objects.filter(
-        (o) => o.targetKey === key && o.sha256 === hash && o.bytes === bytes,
-      );
-      if (matches.length !== 1) throw Error("native_catalog_object_not_staged");
-      check(await sink.get(key), matches[0]!);
+      const match = complete.get(key);
+      if (!match || match.sha256 !== hash || match.bytes !== bytes)
+        throw Error("native_catalog_object_not_staged");
+      check(await sink.get(key), match);
     },
     async apply(tx, pageId) {
       await verifyObjects();

@@ -1,3 +1,8 @@
+import {
+  nativeCatalogUserTables,
+  remapNativeCatalogMetadata,
+} from "./catalog-user-remap";
+import type { NativeCatalogUserTable } from "./catalog-user-remap-contracts";
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -69,6 +74,7 @@ export async function verifyNativeCanonicalDatasets(
   p: NativeCatalogProjection,
   source: NativeCatalogObjectSource,
 ) {
+  const userTables: NativeCatalogUserTable[] = [];
   for (const dataset of p.datasets) {
     if (!source.dataset) throw Error("native_catalog_source_receipt_required");
     const bytes = await source.dataset(dataset);
@@ -163,14 +169,32 @@ export async function verifyNativeCanonicalDatasets(
       throw Error("native_catalog_source_history");
     for (const version of dataset.versions) {
       const row = versions.get(version.version);
+      if (row)
+        userTables.push(
+          ...nativeCatalogUserTables(
+            row.meta as Record<string, unknown>,
+            dataset.sourceId,
+            version.version,
+          ),
+        );
       if (
         !row ||
         row.format !== "dataset" ||
         nativeCatalogDigest(row) !== version.sourceSha256 ||
         !isDeepStrictEqual(
-          nativeCatalogMappedMetadata(
+          remapNativeCatalogMetadata(
             row.meta as Record<string, unknown>,
-            p.identities,
+            nativeCatalogMappedMetadata(
+              row.meta as Record<string, unknown>,
+              p.identities,
+            ),
+            dataset.sourceId,
+            version.version,
+            (p.typedUserRemaps ?? []).filter(
+              (r) =>
+                r.sourceId === dataset.sourceId &&
+                r.version === version.version,
+            ),
           ),
           version.meta,
         ) ||
@@ -223,6 +247,7 @@ export async function verifyNativeCanonicalDatasets(
     )
       throw Error("native_catalog_source_authority");
   }
+  return userTables;
 }
 /** Canonical object ledger loader. Paths remain private; every raw ledger byte
  * is digest-bound, then realpath containment and raw size/hash are rechecked. */

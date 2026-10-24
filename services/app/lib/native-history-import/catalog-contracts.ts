@@ -1,3 +1,4 @@
+import type { NativeCatalogUserRemap } from "./catalog-user-remap-contracts";
 import type { Queryable } from "@artifactbin/contracts";
 import type { NativeImportRelations } from "./contracts";
 /** Raw canonical-export receipt; no inference, row samples or synthesized objects. */
@@ -74,6 +75,9 @@ export interface NativeCatalogImport {
   table: string;
 }
 export interface NativeCatalogProjection {
+  /** Root-reviewed identity plan; required when deriving typed user objects. */
+  identityPlanSha256?: string;
+  typedUserRemaps?: readonly NativeCatalogUserRemap[];
   imports: readonly NativeCatalogImport[];
   identities: NativeCatalogIdentityMap;
   sourceNamespace: string;
@@ -105,6 +109,7 @@ export interface NativeCatalogObjectSource {
 export interface NativeStagedCatalog extends NativeImportRelations {
   readonly projectionSha256: string;
   readonly staged: readonly NativeCatalogObject[];
+  readonly derivedUserObjects: readonly NativeCatalogUserRemap[];
   verifyObject(key: string, sha256: string, bytes: number): Promise<void>;
   apply(tx: Queryable, pageId: string): Promise<void>;
   verify(tx: Queryable, pageId: string): Promise<void>;
