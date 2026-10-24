@@ -1,0 +1,15 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
+import {selectNativePipelinePublicationPage} from './pipeline-publication-adapter.ts';
+import {nativeDigest} from './selection.ts';
+const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+function fixture(id:string){const row={id,version:1,document:{},meta:{}};const raw=JSON.stringify({snapshot:{},heads:[row],versions:[]});const receipt={id,path:'page.json',bytes:Buffer.byteLength(raw),sha256:hash(raw),expectedVersion:1,distinctRevisions:1,archivedRows:0};const manifest=JSON.stringify({receipts:[receipt],failures:[]});return {bytes:Buffer.from(raw),manifest:{encoding:'base64' as const,data:Buffer.from(manifest).toString('base64'),sha256:hash(manifest)},revision:{key:{sourceNamespace:'fixture',sourceId:id,version:1},original:row,matchingArchives:[],rowSha256:nativeDigest(row),documentSha256:nativeDigest(row.document)}};}
+test('shared publication selection binds two unrelated heads without retaining their mutable state',async()=>{for(const id of ['first','second']){const f=fixture(id);const page=await selectNativePipelinePublicationPage({selectionManifest:f.manifest,approvedSelectionManifestSha256:f.manifest.sha256},f.bytes,f.revision);assert.equal(page.sourceId,id);assert.equal(page.revisions.length,1);assert.equal(page.revisions[0]?.rowSha256,f.revision.rowSha256);}});
+test('publication rejects source bytes and independently approved manifest substitution',async()=>{const f=fixture('first');await assert.rejects(selectNativePipelinePublicationPage({selectionManifest:f.manifest,approvedSelectionManifestSha256:'0'.repeat(64)},f.bytes,f.revision),/manifest/);await assert.rejects(selectNativePipelinePublicationPage({selectionManifest:f.manifest,approvedSelectionManifestSha256:f.manifest.sha256},Buffer.from('{}'),f.revision),/digest/);});
+test('approved latest overlay cannot add an unselected source or replace the original receipt',async()=>{
+ const f=fixture('first');const original=JSON.parse(Buffer.from(f.manifest.data,'base64').toString()).receipts[0];
+ const encode=(value:unknown)=>{const raw=JSON.stringify(value);return {encoding:'base64' as const,data:Buffer.from(raw).toString('base64'),sha256:hash(raw)};};
+ const overlay=encode({revisionScope:'latest',selectionUnchanged:true,priorManifestSha256:f.manifest.sha256,receipts:[{...original,priorReceipt:{...original,sha256:'0'.repeat(64)}}]});
+ await assert.rejects(selectNativePipelinePublicationPage({selectionManifest:f.manifest,approvedSelectionManifestSha256:f.manifest.sha256,refreshManifest:overlay,approvedRefreshManifestSha256:overlay.sha256},f.bytes,f.revision),/refresh_prior/);
+ const extra=encode({revisionScope:'latest',selectionUnchanged:true,priorManifestSha256:f.manifest.sha256,receipts:[{...original,id:'unselected',priorReceipt:original}]});
+ await assert.rejects(selectNativePipelinePublicationPage({selectionManifest:f.manifest,approvedSelectionManifestSha256:f.manifest.sha256,refreshManifest:extra,approvedRefreshManifestSha256:extra.sha256},f.bytes,f.revision),/refresh_selection/);
+});
