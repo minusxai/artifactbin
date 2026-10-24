@@ -31,3 +31,18 @@ it('embeds srcset, icons and JS-imported CSS and binary with their admitted MIME
 });
 
 it('removes invalidated subresource integrity only in the rendered copy',async()=>{const html='<script type="module" integrity="sha256-old" src="./x.js"></script>';const packed=await packOfflineDependencies({html,baseUrl,resources:[file('./x.js','text/javascript','globalThis.x=1;')]});expect(packed.html).not.toContain('sha256-old');expect(html).toContain('sha256-old');});
+it('preserves exact classic bytes and browser global handoff to the next inline script',async()=>{
+ const {JSDOM}=await import('jsdom');const source='var libraryValue=40;function libraryAdd(n){return this.libraryValue+n;}';
+ const result=await packOfflineDependencies({html:'<script src="./library.js"></script><script>window.answer=libraryAdd(2);</script>',baseUrl,resources:[file('./library.js','text/javascript',source)]});
+ const src=/src="([^"]+)"/.exec(result.html)![1]!;expect(Buffer.from(src.split(',')[1]!,'base64').toString()).toBe(source);
+ const dom=new JSDOM(result.html,{runScripts:'dangerously',resources:'usable'});await new Promise<void>((resolve,reject)=>{dom.window.addEventListener('load',()=>resolve());dom.window.addEventListener('error',event=>reject(event.error));});expect(dom.window.answer).toBe(42);dom.window.close();
+ await expect(packOfflineDependencies({html:'<script src="./x.js"></script>',baseUrl,resources:[file('./x.js','text/javascript','import("./x.js")')]})).rejects.toThrow(/Classic script dependencies/);
+});
+it('preserves SVG fragment and custom CSS properties and existing self-contained scripts',async()=>{
+ const data='data:text/javascript;base64,'+Buffer.from('var standalone=1;').toString('base64');
+ const result=await packOfflineDependencies({html:`<img src="./p.svg#icon"><style>:root{--accent:#aabbcc;--icon:url('./p.svg#icon')}p{color:var(--accent)}</style><script src="${data}"></script>`,baseUrl,resources:[file('./p.svg','image/svg+xml','<svg><path id="icon"/></svg>')]});expect(result.html).toContain('#icon');expect(result.html).toMatch(/--accent:\s*#aabbcc/);expect(result.html).toContain('var(--accent)');expect(result.html).toContain(data);
+});
+it('bounds HTML size, resource count, per-resource and aggregate bytes before parsing',async()=>{
+ const {OFFLINE_DEPENDENCY_LIMITS:l}=await import('..');
+ const cases=[{html:'x'.repeat(l.htmlBytes+1),resources:[]},{html:'',resources:Array.from({length:l.resources+1},()=>file('./x','text/plain',''))},{html:'',resources:[{url:'./x',contentType:'image/png',bytes:new Uint8Array(l.resourceBytes+1)}]},{html:'',resources:[{url:'./x',contentType:'image/png',bytes:new Uint8Array(l.totalBytes)},{url:'./y',contentType:'image/png',bytes:new Uint8Array(1)}]}];for(const input of cases)await expect(packOfflineDependencies({...input,baseUrl})).rejects.toThrow(/limit/);
+});
