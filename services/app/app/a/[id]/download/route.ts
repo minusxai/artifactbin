@@ -1,3 +1,5 @@
+import {packOfflineDependencies} from '@/lib/offline-dependencies';
+import {loadBundleAssetResources} from '@/lib/html-publication-bundle';
 /**
  * The offline file: one self-contained `.html` a reader can open without a
  * network and pass on. Assembly and access live in lib/offline/assemble.server
@@ -7,7 +9,7 @@
 import {packOfflineHtmlImages,OfflineHtmlMediaError} from '@/lib/export';
 import {loadImage} from '@/lib/object-store/image-store';
 import { requestOrSessionActor } from '@/lib/accounts';
-import { json } from '@/lib/http';
+import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/platform';
 import { getArtifactById, refusingUnservable, canReadArtifact, archivedVersionFor, servedRow } from '@/lib/artifacts';
 import { nativeHtmlDocument, nativeHtmlTitle } from '@/lib/serving/native-html.server';
@@ -30,6 +32,7 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
     if (actor.tokenId !== artifact.token_id && !await canReadArtifact(artifact, actor)) return json({ error: 'not_found' }, 404);
     const at = await archivedVersionFor(request, artifact);
     if (at === 'not_found') return json({ error: 'not_found' }, 404);
+    const platformOrigin=new URL(baseUrl(request)).origin;
     const row = { ...servedRow(artifact, at), version: at?.version ?? artifact.version };
     let packed:string;
     try{
@@ -43,7 +46,10 @@ async function download(request: Request, ctx: { params: Promise<{ id: string }>
       if(!(error instanceof OfflineHtmlMediaError))throw error;
       return error.reason==='too_large'?json({error:'too_large'},413):error.reason==='unsupported_type'?json({error:'unsupported_image'},415):json({error:'not_found'},404);
     }
-    const { html } = await nativeHtmlDocument({ row:{...row,source:packed}, offline: true });
+    let resources:Awaited<ReturnType<typeof loadBundleAssetResources>>;
+    try{resources=await loadBundleAssetResources(request,actor,id);}catch{return json({error:'not_found'},404);}
+    if(resources.length){try{packed=(await packOfflineDependencies({html:packed,baseUrl:new URL(request.url).href,resources})).html;}catch{return json({error:'offline_dependency_unavailable'},422);}}
+    const { html } = await nativeHtmlDocument({ row, renderedHtml:packed, appOrigin:platformOrigin, offline: true });
     if (Buffer.byteLength(html) > OFFLINE_FILE_MAX_BYTES) return json({ error: 'too_large' }, 413);
     const name = fileName(nativeHtmlTitle(row));
     return new Response(html, { headers: {

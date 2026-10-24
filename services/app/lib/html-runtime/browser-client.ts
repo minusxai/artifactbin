@@ -18,7 +18,7 @@ const state = createViewerState({
   observe(listener) { const changed = (event: StorageEvent) => { if (event.key === key) listener(); }; addEventListener('storage', changed); return () => removeEventListener('storage', changed); },
   ...(navigator.locks ? { lock: (work: () => Promise<StoreReceipt>) => navigator.locks.request(key, work) } : {}),
 });
-export const client=createClient({backends:config.backends??[],state,remote});
+export const client=createClient({backends:()=>config.backends??[],state,remote});
 
 // Authors explicitly choose UI fields suitable for sharing beside a comment.
 const viewBlock=document.querySelector('[data-af="state"][data-af-comment-fields][data-af-comment-version]');
@@ -30,3 +30,6 @@ if(viewBlock) {
  }catch { installHtmlCommentView(document,{capture(){throw new Error('Invalid comment view declaration');},async restore(){throw new Error('Invalid comment view declaration');}}); }
 }
 else installHtmlCommentView(document,undefined);
+
+/** Read only for an explicit local Save action; this private document is never uploaded automatically. */
+export const readViewerDocument=()=>state.read();

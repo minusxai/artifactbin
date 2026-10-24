@@ -33,12 +33,15 @@ Use `data-af="meta"`, `data-af="state"`, `data-af="core"` and `data-af="design-s
 - [Authentication](references/http-auth.md): verified email, private credential storage and serialized refresh.
 - [HTML publication](references/html-authoring.md): create, conditional replacement, identity and retry recovery.
 - [Runtime](references/html-runtime.md): Apollo local state, remote namespaces and offline behavior.
+- [Local HTML files](references/local-files.md): private preview, linked copies, actual source comparison and deliberate save/publication.
 - [Installable pages and slides](references/html-authoring.md#installable-page-presentation): static head metadata and explicit capture boundaries.
 - [Offline images](references/html-runtime.md#portable-images) and [reader presence](references/html-sharing.md#reader-presence): download limits and platform-owned preferences.
 - [Datasets](references/html-datasets.md): CSV import, schema discovery and stable dataset IDs.
 - [Backend files](references/html-backends.md): TypeScript resolvers, shared stores and permissions.
 - [Design systems](references/html-design-systems.md): select one, then read its generated native guide.
 - [Examples and verification](references/html-examples.md): report, CSV dashboard and shared task app.
+
+For a private local project preview, read [local preview](references/html-preview.md) and run `node scripts/preview.mjs PROJECT_DIR`; the downloaded skill includes local runtime assets.
 
 Optional `scripts/publish.mjs` sends a saved JSON request with an origin-bound token supplied outside the page. It is a helper inside this skill, not an installed product command.
 [% else %]
@@ -147,6 +150,7 @@ Read a local reference or use HTTP: `<origin>/llms/<filename-without-.md>`.
   - [http-api.md](references/http-api.md) — HTTP operations and browser QA
   - [http-authoring.md](references/http-authoring.md) — Create and prepare source edits
   - [http-document-graph.md](references/http-document-graph.md) — Advanced graph updates
+  - [publication-bundles.md](references/publication-bundles.md) — Native HTML project dependencies
   - [publishing.md](references/publishing.md) — Sync, identity and conflict recovery
   - [publishing-annotations.md](references/publishing-annotations.md) — Read and reply to comments
   - [publishing-datasets.md](references/publishing-datasets.md) — Publish datasets and media

@@ -39,3 +39,6 @@ Every body element has a persistent id for its lifetime. Move a node with the sa
 The Helmet script runs in the document as an ES module: it binds the declared names from `page` as Solid signals (`signal('$name')`, `query`, `mutation`) and libraries by npm name or https URL, and reaches other hosts only through `proxy(url)` from `page`, to hosts the Helmet declares with `csp-connect` and the reader allows. Account APIs, cookies and the app's storage stay out of reach.
 
 See [authentication](publishing-auth.md) for how afbin signs in. Full replacement, metadata and folder settings are fields of the file you push.
+
+
+For native HTML projects with local dependencies, read [publication bundles](publication-bundles.md).

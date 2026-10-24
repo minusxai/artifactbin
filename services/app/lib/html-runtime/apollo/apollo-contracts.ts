@@ -143,7 +143,7 @@ export interface RemotePort {
 
 export interface ClientOptions {
   /** The page's `data-af-name`s. */
-  backends: readonly string[];
+  backends: readonly string[] | (() => readonly string[]);
   state: StatePort;
   /** Omitted when the page links no backends. */
   remote?: RemotePort;

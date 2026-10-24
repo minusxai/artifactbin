@@ -81,3 +81,23 @@ describe('fast project environment boundary', () => {
     expect(classifyFastGraph({inputs:{'services/app/model.test.ts':{imports:[]}}}).eligible).toBe(true);
   });
 });
+
+describe('reviewed CSS parser dispatch', () => {
+  const grammarFiles = ['node/Feature.js', 'node/FeatureRange.js', 'node/Ratio.js', 'scope/default.js', 'atrule/import.js'].map(name => `node_modules/css-tree/lib/syntax/${name}`);
+  it('admits CSS grammar functions and the two internal AST dispatch sites', () => {
+    for (const file of grammarFiles) expect(auditFastSource('this.Function(this.readSequence, this.scope.Value)', file)).toEqual([]);
+    expect(auditFastSource('this[name]()', 'node_modules/css-tree/lib/parser/create.js')).toEqual([]);
+    expect(auditFastSource('iterators[node.type](node, context, walkNode, walkReducer)', 'node_modules/css-tree/lib/walker/create.js')).toEqual([]);
+  });
+  it('keeps executable constructors, ambient capabilities and unreviewed dispatch forbidden', () => {
+    for (const source of ['Function("return 1")', 'new Function("return 1")', 'globalThis.Function("return 1")', 'other.Function()', 'new this.Function()', 'fetch(url)', 'this.Function(fetch(url))']) {
+      for (const file of grammarFiles) expect(auditFastSource(source, file)).not.toEqual([]);
+    }
+    expect(auditFastSource('this.Function()', 'services/app/parser.ts')).not.toEqual([]);
+    expect(auditFastSource('this[other]()', 'node_modules/css-tree/lib/parser/create.js')).not.toEqual([]);
+    expect(auditFastSource('this[name](argument)', 'node_modules/css-tree/lib/parser/create.js')).not.toEqual([]);
+    expect(auditFastSource('iterators[node.type](url)', 'node_modules/css-tree/lib/walker/create.js')).not.toEqual([]);
+    expect(auditFastSource('globalThis[capability]()', 'node_modules/css-tree/lib/walker/create.js')).not.toEqual([]);
+    expect(auditFastSource('iterators[node.type](node, context, walkNode, walkReducer)', 'services/app/walker.ts')).not.toEqual([]);
+  });
+});

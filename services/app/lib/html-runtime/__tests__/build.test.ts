@@ -50,7 +50,7 @@ it('boots standalone static pages without loading reader code and maps portable 
   const blobs:string[]=[];let imports:Record<string,string>|undefined;
   const blocks:Record<string,string>={runtime:JSON.stringify({pageId:'p',revision:'1',backends:[],offline}),...(offline?{reader:JSON.stringify(assets.reader),apollo:JSON.stringify(assets.apollo)}:{})};
   const win={};const location={href:'https://page.example/report',pathname:'/report'};
-  const document={querySelector(selector:string){const name=/data-af="([^"]+)"/.exec(selector)?.[1];return name&&blocks[name]?{textContent:blocks[name]}:null;},createElement(){return {type:'',textContent:''};},currentScript:{src:'',after(node:{textContent:string}){imports=JSON.parse(node.textContent).imports;}}};
+  const document={readyState:'loading',addEventListener(){},documentElement:{hasAttribute(){return false;}},querySelector(selector:string){const name=/data-af="([^"]+)"/.exec(selector)?.[1];return name&&blocks[name]?{textContent:blocks[name]}:null;},createElement(){return {type:'',textContent:''};},currentScript:{src:'',after(node:{textContent:string}){imports=JSON.parse(node.textContent).imports;}}};
   const LocalURL=class extends URL {static createObjectURL(blob:Blob){const value=URL.createObjectURL(blob);blobs.push(value);return value;}};
   try {
    runInNewContext(assets.core,{document,location,window:Object.assign(win,{parent:win}),URL:LocalURL,Blob});
@@ -59,4 +59,15 @@ it('boots standalone static pages without loading reader code and maps portable 
    if(offline){expect(await (await fetch(imports!['@afbin/reader']!)).text()).toBe(assets.reader);expect(await (await fetch(imports!['@afbin/apollo']!)).text()).toBe(assets.apollo);}
   }finally{for(const url of blobs)URL.revokeObjectURL(url);}
  }
+});
+it('ships shared offline chrome within explicit code and style byte budgets',async()=>{
+ const assets=await buildHtmlAssets();
+ expect(assets.chrome).toContain('data-af-local-chrome');
+ expect(gzipSync(assets.core).byteLength).toBeLessThan(10*1024);
+ expect(gzipSync(assets.reader).byteLength).toBeLessThan(20*1024);
+ expect(gzipSync(assets.chrome!).byteLength).toBeLessThan(180*1024);
+ const html=downloadableHtml({html:'<html><body>Offline</body></html>',...assets,config:{pageId:'local',revision:'local',backends:[]}});
+ expect(JSON.parse(/data-af="chrome">([^<]*)<\/script>/.exec(html)![1]!)).toBe(assets.chrome);
+ expect(JSON.parse(/data-af="portable-engine">([^<]*)<\/script>/.exec(html)![1]!)).toBe(assets.portableEngine);
+ expect(assets.core).toContain('@afbin/portable');
 });

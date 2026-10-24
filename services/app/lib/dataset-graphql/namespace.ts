@@ -1,5 +1,4 @@
 import {DATASET_GRAPHQL_SDL,datasetCellFromWire,type DatasetCellValue,type DatasetGraphql,type DatasetReadRequest,type DatasetQueryRequest,type DatasetRowChange,type DatasetWriteRequest,type HtmlDatasetLink,type HtmlJson,type PageNamespaceSource,type PageResolverFieldCall} from '@artifactbin/contracts';
-import type {AccessActor} from '@/lib/accounts';
 export const datasetNamespaceSources=(bindings:readonly HtmlDatasetLink[]):PageNamespaceSource[]=>bindings.map(binding=>({name:binding.name,fileId:binding.datasetId,version:binding.mode==='pinned'?binding.revision:'live',typeDefs:DATASET_GRAPHQL_SDL}));
 const object=(value:unknown):Record<string,unknown>=>{if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('invalid_dataset_input');return value as Record<string,unknown>;};
 const string=(value:unknown)=>{if(typeof value!=='string'||!value)throw new Error('invalid_dataset_input');return value;};
@@ -8,7 +7,7 @@ const cell=(value:unknown)=>{const parsed=datasetCellFromWire(object(value) as u
 const cells=(value:unknown)=>array(value).map(value=>{const c=object(value);return {columnId:string(c.columnId),value:cell(c.value)};});
 function wire(value:DatasetCellValue){const slot={STRING:'string',NUMBER:'number',BOOLEAN:'boolean',JSON:'json'}[value.type];return {type:value.type,[slot]:value.value};}
 /** Actor comes from the trusted HTTP resolver, never from resolver principal data or page arguments. */
-export function createDatasetNamespaceInvoker(actor:AccessActor,bindings:readonly HtmlDatasetLink[],service:DatasetGraphql<AccessActor>){
+export function createDatasetNamespaceInvoker<A>(actor:A,bindings:readonly HtmlDatasetLink[],service:DatasetGraphql<A>){
  return async(call:PageResolverFieldCall):Promise<HtmlJson>=>{
   const binding=bindings.find(b=>b.name===call.namespace);
   if(!binding||binding.datasetId!==call.fileId||(binding.mode==='pinned'?binding.revision:'live')!==call.version)throw new Error('dataset_binding_changed');

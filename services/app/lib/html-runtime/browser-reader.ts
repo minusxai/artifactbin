@@ -1,3 +1,4 @@
+import { createLocalDatasetTransport } from './browser-local-datasets';
 import { createHtmlSelectionActions } from './selection-actions';
 import {createHtmlCommentViewSession} from '../html-bridge/comment-view-session';
 import type {HtmlCommentViewCommand} from '../html-bridge/comment-view-contract';
@@ -9,15 +10,26 @@ import type {HtmlRuntimeConfig} from './contract';
 import {RemoteUnreachable,type RemotePort} from './apollo/apollo-contracts';
 declare const __AF_RUNTIME_CONFIG__:HtmlRuntimeConfig&{offline?:boolean};
 export const config=__AF_RUNTIME_CONFIG__;
+function sourceNamespaces(document:Document):{names:string[];bindings:Record<string,string>}{
+ const names:string[]=[],bindings:Record<string,string>={};
+ for(const link of document.querySelectorAll('link[data-af-name]')){
+  const rel=(link.getAttribute('rel')??'').split(/\s+/),name=link.getAttribute('data-af-name')??'';
+  if(!rel.some(value=>value==='af-backend'||value==='af-dataset')||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||name.startsWith('__')||names.includes(name))continue;
+  names.push(name);const id=/^ref:([A-Za-z0-9_-]+)$/.exec(link.getAttribute('href')??'')?.[1];if(id)bindings[name]=id;
+ }
+ return {names,bindings};
+}
+if(!config.backends.length)config.backends=sourceNamespaces(document).names;
+const preview=config.localPreview?createLocalDatasetTransport({privatePreview:document.documentElement.hasAttribute('data-af-private-preview'),endpoint:config.localPreview.endpoint},location,fetch):undefined;
 export const remote: RemotePort = {
-  online: () => !config.offline && !!config.appOrigin && window.parent !== window,
+  online: () => preview?.online()===true || !config.offline && !!config.appOrigin && window.parent !== window,
   execute: async () => { throw new RemoteUnreachable('Remote relay has not attached'); },
 };
 const invalidationListeners = new Set<(names: readonly string[]) => void>();
 /** An invalidation contains names, never rows. Authors explicitly query again; watchQuery stays local-only. */
 export function onBackendChange(listener: (names: readonly string[]) => void): { unsubscribe(): void } { invalidationListeners.add(listener); return { unsubscribe: () => { invalidationListeners.delete(listener); } }; }
 import type { FrameBridgeAttach, FrameBridgeFramePayload, FrameBridgeParentPayload } from '../story-runtime/contract';
-interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach: FrameBridgeAttach }
+interface FrameBridgeStartOptions { win: Window; post: (payload: FrameBridgeFramePayload) => void; attach?: FrameBridgeAttach }
 interface FrameBridgeSession { receive(payload: FrameBridgeParentPayload): void; dispose(): void }
 import {observeHtmlDom} from '../html-bridge/observe';
 import { htmlSelection } from '../html-bridge/selection';
@@ -25,6 +37,7 @@ import { revealHtmlAnnotation, createHtmlAnnotationPainter, type HtmlAnnotationP
 let relay: ((request: Parameters<RemotePort['execute']>[0]) => ReturnType<RemotePort['execute']>) | null = null;
 const relayWaiters = new Set<() => void>();
 remote.execute = async (request) => {
+  if(preview?.online())return preview.execute(request);
   if (!relay) await new Promise<void>((resolve, reject) => {
     const ready = () => { clearTimeout(timer); relayWaiters.delete(ready); resolve(); };
     const timer = setTimeout(() => { relayWaiters.delete(ready); reject(new RemoteUnreachable('Page connection did not attach')); }, 3000);
@@ -138,4 +151,15 @@ export function startFrameBridge({ win, post }: FrameBridgeStartOptions): FrameB
       win.removeEventListener('resize', layout);
     },
   };
+}
+
+/** Downloads attach only a credential-free document transport; no source upload occurs. */
+export async function startPortableDocument(win:Window=window,publishOrigin?:string):Promise<()=>void> {
+ const name='@afbin/portable';const {startPortableSession}=await import(name) as typeof import('./portable-session');
+ let connected=false;
+ let execute:Parameters<Parameters<typeof startPortableSession>[0]['online']>[1];
+ const originalOnline=remote.online,originalExecute=remote.execute;
+ remote.online=()=>connected||originalOnline();
+ remote.execute=request=>connected&&execute?execute(request) as ReturnType<RemotePort['execute']>:originalExecute(request);
+ return startPortableSession({win,publishOrigin,adoptIdentity(identity,source){config.pageId=identity.artifactId;config.revision=identity.baseRevision;const parsed=new DOMParser().parseFromString(source,'text/html'),declarations=sourceNamespaces(parsed);config.backends=declarations.names;config.bindings=declarations.bindings;},attach:post=>startFrameBridge({win,post}),online(value,request){connected=value;execute=request;}});
 }

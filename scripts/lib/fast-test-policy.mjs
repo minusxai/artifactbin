@@ -23,6 +23,7 @@ export function partitionFastTests(full, enrolled) {
 /** Reject ambient service/process capabilities and unresolved runtime module loads. */
 export function auditFastSource(source, file) {
   const reasons = [];
+  const normalizedFile = file.replaceAll('\\', '/');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const forbidden = new Set(['fetch', 'WebSocket', 'Worker', 'SharedWorker', 'setTimeout', 'setInterval', 'eval', 'Function', 'importActual', 'importMock']);
   function visit(node) {
@@ -40,7 +41,14 @@ export function auditFastSource(source, file) {
         && ts.isIdentifier(expression.expression.expression)
         && expression.expression.expression.text === 'ports'
         && expression.expression.name.text === 'clock';
-      if (forbidden.has(name) && !injectedPresenceClock) reasons.push(`${file}: ambient ${name}`);
+      // CSSTree's Function is a CSS grammar production, not JavaScript's
+      // executable constructor. Keep this to its reviewed parser receivers.
+      const cssGrammarFunction = ts.isCallExpression(node)
+        && /(?:^|\/)node_modules\/css-tree\/lib\/syntax\/(?:node\/(?:Feature|FeatureRange|Ratio)|scope\/default|atrule\/import)\.js$/.test(normalizedFile)
+        && ts.isPropertyAccessExpression(expression)
+        && expression.expression.kind === ts.SyntaxKind.ThisKeyword
+        && name === 'Function';
+      if (forbidden.has(name) && !injectedPresenceClock && !cssGrammarFunction) reasons.push(`${file}: ambient ${name}`);
       if ((expression.kind === ts.SyntaxKind.ImportKeyword || name === 'require') && (!node.arguments?.[0] || !ts.isStringLiteral(node.arguments[0]))) reasons.push(`${file}: computed module load`);
       // graphql-js's default field resolver calls a field supplied by the caller.
       // Keep the exception to this exact reviewed dispatcher, not arbitrary package calls.
@@ -56,7 +64,24 @@ export function auditFastSource(source, file) {
         && ts.isPropertyAccessExpression(expression.argumentExpression)
         && ts.isIdentifier(expression.argumentExpression.expression) && expression.argumentExpression.expression.text === 'Symbol'
         && expression.argumentExpression.name.text === 'asyncIterator';
-      if (ts.isElementAccessExpression(expression) && !graphqlFieldDispatch && !graphqlIteratorDispatch) reasons.push(`${file}: computed callable capability`);
+      // The parser selects one grammar production; the walker selects one
+      // generated AST-node iterator. Neither dispatcher owns service ports.
+      const cssParserDispatch = ts.isCallExpression(node)
+        && /(?:^|\/)node_modules\/css-tree\/lib\/parser\/create\.js$/.test(normalizedFile)
+        && ts.isElementAccessExpression(expression)
+        && expression.expression.kind === ts.SyntaxKind.ThisKeyword
+        && ts.isIdentifier(expression.argumentExpression) && expression.argumentExpression.text === 'name'
+        && node.arguments.length === 0;
+      const cssWalkerDispatch = ts.isCallExpression(node)
+        && /(?:^|\/)node_modules\/css-tree\/lib\/walker\/create\.js$/.test(normalizedFile)
+        && ts.isElementAccessExpression(expression)
+        && ts.isIdentifier(expression.expression) && expression.expression.text === 'iterators'
+        && ts.isPropertyAccessExpression(expression.argumentExpression)
+        && ts.isIdentifier(expression.argumentExpression.expression) && expression.argumentExpression.expression.text === 'node'
+        && expression.argumentExpression.name.text === 'type'
+        && node.arguments.length === 4
+        && node.arguments.every((argument, index) => ts.isIdentifier(argument) && argument.text === ['node', 'context', 'walkNode', 'walkReducer'][index]);
+      if (ts.isElementAccessExpression(expression) && !graphqlFieldDispatch && !graphqlIteratorDispatch && !cssParserDispatch && !cssWalkerDispatch) reasons.push(`${file}: computed callable capability`);
     }
     ts.forEachChild(node, visit);
   }

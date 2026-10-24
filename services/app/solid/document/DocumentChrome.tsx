@@ -45,6 +45,8 @@ export interface DocumentChromeProps {
   comments: Accessor<number>;
   archived?: { version: number; head: number } | null;
   canFork: boolean;
+  /** A local shell has no remote actions until its scoped connection is approved. */
+  remoteAvailable?: boolean;
   owner: boolean;
   install?: boolean;
   visibility?: Visibility;
@@ -65,7 +67,7 @@ export interface DocumentChromeProps {
 export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const [like, setLike] = createSignal(props.like);
   const [follow, setFollow] = createSignal(props.follow ?? null);
-  const reading = () => !props.archived;
+  const reading = () => !props.archived && props.remoteAvailable !== false;
   const toLogin = (intent: 'like' | 'follow') => window.location.assign(loginHref(window.location, intent));
 
   const toggleLike = async () => {
@@ -134,7 +136,7 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
 
   const compactActions = () => <>
     <Show when={reading()}><DocumentCommentAction count={props.comments()} onClick={props.onComment} /></Show>
-    <Suspense fallback={<Button variant="ghost" size="bar" icon disabled aria-label="Loading artifact actions"><Ellipsis size={20} stroke-width={1.5} /></Button>}><CompactMenu page={props} like={like} follow={follow} onLike={toggleLike} onFollow={toggleFollow} /></Suspense>
+    <Show when={props.remoteAvailable !== false}><Suspense fallback={<Button variant="ghost" size="bar" icon disabled aria-label="Loading artifact actions"><Ellipsis size={20} stroke-width={1.5} /></Button>}><CompactMenu page={props} like={like} follow={follow} onLike={toggleLike} onFollow={toggleFollow} /></Suspense></Show>
   </>;
 
   return <PageChrome compactContext={<Show when={props.archived}>{at =>

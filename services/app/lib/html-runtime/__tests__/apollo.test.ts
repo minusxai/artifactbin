@@ -62,3 +62,12 @@ describe('HTML page client', () => {
     expect(() => client.watchQuery({ query: gql`{ inventory { count } }` })).toThrow();
   });
 });
+
+it('adopts newly published backend declarations without replacing private viewer state or the client',async()=>{
+ let names:readonly string[]=[];const sent:unknown[]=[];
+ const client=createClient({backends:()=>names,state:createLocalStore({filter:'mine'}),remote:{online:()=>true,execute:async request=>{sent.push(request);return {data:{orders:{count:2}}};}}});
+ expect((await client.query({query:gql`{ filter orders { count } }`})).data).toEqual({filter:'mine',orders:null});
+ names=['orders'];
+ expect((await client.query({query:gql`{ filter orders { count } }`})).data).toEqual({filter:'mine',orders:{count:2}});
+ expect(sent).toHaveLength(1);
+});

@@ -1,3 +1,4 @@
+import {serveBundleAsset} from '@/lib/html-publication-bundle';
 /**
  * `GET /a/<id>/assets?u=<url>` — one document's FIRST-REQUEST asset import.
  *
@@ -42,7 +43,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const reply=(body:unknown,status:number)=>json(body,status,headers);
   const missing=()=>new Response('not found',{status:404,headers});
   const url = params.get('u');
-  if (!url) return reply({ error: 'missing_url' }, 400);
+  if (!url&&!params.has('dependency')) return reply({ error: 'missing_url' }, 400);
 
   // The uniform 404 — an unreachable id and an unreadable one are the same
   // answer, before any fetch, exactly as every other read of a document is.
@@ -57,6 +58,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const admitted = actor.tokenId===artifact.token_id || (await canReadArtifact(artifact, actor)) || verifyExportKey(artifact.id, key ?? undefined);
   if (!admitted) return missing();
 
+  if(params.has('dependency')){
+    if(!['GET','HEAD'].includes(request.method)||params.getAll('dependency').length!==1||params.getAll('revision').length>1||params.has('u')||managed)return missing();
+    const dependency=params.get('dependency');
+    return dependency?await serveBundleAsset(request,actor,id,dependency)??missing():missing();
+  }
+  if(!url)return reply({error:'missing_url'},400);
   const kind = params.get('kind') ?? 'image';
   const wantsJson = (request.headers.get('accept') ?? '').includes('application/json');
   if (managed && (!wantsJson || params.getAll('kind').length !== 1 || !WEB_ASSET_KINDS.includes(kind as WebAssetKind))) return reply({error:'invalid_asset_kind'},400);
@@ -100,3 +107,5 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     throw error;
   }
 }
+
+export const HEAD=GET;

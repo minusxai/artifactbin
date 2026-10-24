@@ -70,6 +70,7 @@
     "clsx": "2.1.1",
     "css-tree": "3.2.1",
     "d3-format": "3.1.2",
+    "es-module-lexer": "2.3.2",
     "esbuild": "0.28.2",
     "graphql": "16.11.0",
     "harfbuzzjs": "1.6.2",

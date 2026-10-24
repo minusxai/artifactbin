@@ -77,3 +77,5 @@ export * from './html-page';
 export * from './html-annotation';
 export * from './page-operation';
 export * from './dataset-graphql';
+
+export type {PortableIdentity} from './portable-document';
