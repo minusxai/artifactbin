@@ -82,27 +82,13 @@ async function openRail(page) {
   await page.getByLabel('Annotation sidebar', { exact: true }).waitFor();
 }
 async function comment(page, frame, selector, body) {
-  // Static HTML can paint before the trusted frame door grants comment capability.
-  // As in the original gate, repeat the real gesture until that capability arrives.
+  // Static HTML can paint before the parent grants comment capability. Keep
+  // this native selection live while that grant arrives, then choose once.
   const field = page.getByLabel('Annotation comment', { exact: true });
-  const opened = await until(
-    async () => {
-      if (await field.isVisible().catch(() => false)) return true;
-      await frame
-        .locator(selector)
-        .click({ clickCount: 3, position: { x: 12, y: 12 } });
-      await frame
-        .locator(selector)
-        .click({ button: 'right', position: { x: 12, y: 12 } });
-      const choice = frame.locator('[data-mx-selection-action="annotate"]');
-      if (await choice.isVisible().catch(() => false)) await choice.click();
-      return field.isVisible().catch(() => false);
-    },
-    (value) => value === true,
-    15000,
-  );
-  if (!opened)
-    throw new Error('Native right-click did not open the authorized composer');
+  await frame.locator(selector).click({ clickCount: 3, position: { x: 12, y: 12 } });
+  await frame.locator(selector).click({ button: 'right', position: { x: 12, y: 12 } });
+  await frame.locator('[data-mx-selection-action="annotate"]').click({ timeout: 15000 });
+  await field.waitFor({ state: 'visible', timeout: 15000 });
   if (body === 'Check the Q3 sheet') {
     const dialog = page.getByRole('dialog', { name: 'Annotation composer' }),
       handle = dialog.getByRole('button', { name: 'Move comment box' });

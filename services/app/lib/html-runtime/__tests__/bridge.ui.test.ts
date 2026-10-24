@@ -1,15 +1,19 @@
 import type {HtmlNodeAnchor} from '@artifactbin/contracts';
 import { afterEach, expect, it, vi } from 'vitest';
-afterEach(() => { document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.resetModules(); });
+const bridges: Array<{dispose(): void}> = [];
+afterEach(() => { for (const bridge of bridges.splice(0)) bridge.dispose(); vi.unstubAllGlobals(); window.getSelection()?.removeAllRanges(); document.body.innerHTML = ''; vi.restoreAllMocks(); vi.resetModules(); });
 it('uses original frame RPC with explicit HTML anchors and never exposes credentials', async () => {
   vi.stubGlobal('__AF_RUNTIME_CONFIG__', { pageId: 'p1', revision: '3', backends: ['orders'], appOrigin: 'https://platform.example' });
   const runtime = await import('../browser-client');
   const events: Array<{ kind: string; [key: string]: unknown }> = [];
-  const bridge = runtime.startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '3', source: null } });
   document.body.innerHTML = '<p data-af-id="n1">Hello</p>';
+  const bridge = runtime.startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '3', source: null } });
+  bridges.push(bridge);
   bridge.receive({ kind: 'send', command: { type: 'mx:selection-actions', edit: false, annotate: true } });
   const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
   document.querySelector('p')!.dispatchEvent(menu);
+  expect(events.filter(item => item.kind === 'event')).toHaveLength(0);
+  (document.querySelector('[data-mx-selection-action="annotate"]') as HTMLElement).click();
   const action = events.find((item) => item.kind === 'event')?.event as { action: string; selection: { anchor: unknown }; nonce: string };
   expect(action.action).toBe('annotate');
   expect(action.selection.anchor).toEqual({ kind: 'html-node', v: 1, revision: '3', nodeId: 'n1', quote: '' });
@@ -28,6 +32,7 @@ it('relays remote queries and emits explicit invalidation names without overwrit
   const query = runtime.client.query({ query: runtime.gql`{ orders { total } }` });
   expect(events).toHaveLength(0);
   const bridge = runtime.startFrameBridge({ win: actualWindow, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '3', source: null } });
+  bridges.push(bridge);
   await Promise.resolve();
   const fetch = events.find((event) => event.kind === 'fetch')!;
   expect(fetch.path).toBe('/api/artifacts/p1/graphql');
@@ -49,6 +54,7 @@ it('uses original select controls for block picks, breadcrumbs and escape', asyn
   const { startFrameBridge } = await import('../browser-client');
   const events: Array<{ kind: string; [key: string]: unknown }> = [];
   const bridge = startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '3', source: null } });
+  bridges.push(bridge);
   document.body.innerHTML = '<main data-af-id="n1"><p data-af-id="n2">words</p></main>';
   bridge.receive({ kind: 'send', command: { type: 'mx:annotations', mode: 'on', pins: [], openId: null, hoverId: null, canComment: true, pick: 'select' } });
   expect(document.documentElement.style.cursor).toBe('crosshair');
@@ -68,6 +74,7 @@ it('opens on HTTP runner and offline origins without the secure-context randomUU
   const { startFrameBridge } = await import('../browser-client');
   const events: Array<{ kind: string; [key: string]: unknown }> = [];
   const bridge = startFrameBridge({ win: window, post: (event) => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '1', source: null } });
+  bridges.push(bridge);
   expect(events[0]?.nonce).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   bridge.dispose();
 });
@@ -77,8 +84,10 @@ it('captures scoped dynamic IDs without hijacking ordinary clicks on annotated t
  document.body.innerHTML='<ul data-af-id="tasks"><li data-af-id="task:123">Finish review</li></ul><ul data-af-id="other"><li data-af-id="task:123">Other task</li></ul>';
  const events:Array<{kind:string;[key:string]:unknown}>=[];
  const bridge=startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'p1',nodes:[],editId:'1',source:null}});
+  bridges.push(bridge);
  bridge.receive({kind:'send',command:{type:'mx:selection-actions',edit:false,annotate:true}});
  document.querySelector('li')!.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}));
+ (document.querySelector('[data-mx-selection-action="annotate"]') as HTMLElement).click();
  const captured=events.map(item=>item.event as {selection?:{anchor:unknown}}).find(event=>event?.selection)?.selection?.anchor;
  expect(captured).toMatchObject({nodeId:'task:123',ancestorId:'tasks',revision:'1'});
  bridge.receive({kind:'send',command:{type:'mx:annotations',mode:'on',pins:[{id:'c1',path:'task:123',anchor:captured as HtmlNodeAnchor}],openId:null,hoverId:null,canComment:true}});
@@ -97,6 +106,7 @@ it('batches authored DOM changes, ignores its own overlay and detaches observati
  vi.spyOn(window,'cancelAnimationFrame').mockImplementation(id=>{frames.delete(id);});
  const {startFrameBridge}=await import('../browser-client');const events:Array<{kind:string;[key:string]:unknown}>=[];
  const bridge=startFrameBridge({win:window,post:event=>events.push(event),attach:{kind:'attach',id:'p1',nodes:[],editId:'1',source:null}});
+  bridges.push(bridge);
  bridge.receive({kind:'send',command:{type:'mx:annotations',mode:'on',pins:[{id:'c1',path:'task:123',anchor:{kind:'html-node',v:1,revision:'1',nodeId:'task:123',ancestorId:'tasks',quote:''}}],openId:null,hoverId:null}});
  await Promise.resolve();expect(frames.size).toBe(0);
  document.querySelector('li')!.remove();document.querySelector('ul')!.append(document.createElement('li'));
@@ -116,6 +126,7 @@ it('installs app link navigation in the native bridge without hijacking handled 
  const parent={postMessage:(data:unknown)=>posted.push(data)};
  const win=new Proxy(readerWindow,{get:(target,key)=>key==='parent'?parent:key==='top'?{location:{href:''}}:key==='location'?window.location:typeof Reflect.get(target,key,target)==='function'?Reflect.get(target,key,target).bind(target):Reflect.get(target,key,target)});
  const bridge=runtime.startFrameBridge({win,post:()=>{},attach:{kind:'attach',id:'p1',nodes:[],editId:'1',source:null}});
+  bridges.push(bridge);
  doc.body.innerHTML='<a href="https://platform.example/a/other">Other</a><a href="#section">Local</a><a download href="https://platform.example/file">Download</a><a href="https://platform.example/handled">Handled</a>';
  const event=new MouseEvent('click',{bubbles:true,cancelable:true,composed:true});doc.querySelector('a')!.dispatchEvent(event);
  expect(event.defaultPrevented).toBe(true);expect(posted).toContainEqual({type:'mx:navigate',href:'/a/other'});
@@ -131,6 +142,7 @@ it('keeps area drags separate from native text selection and restores normal sel
   vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, width: 200, height: 100, top: 0, left: 0, right: 200, bottom: 100, toJSON() {} });
   const events: Array<{ kind: string; [key: string]: unknown }> = [];
   const bridge = startFrameBridge({ win: window, post: event => events.push(event), attach: { kind: 'attach', id: 'p1', nodes: [], editId: '3', source: null } });
+  bridges.push(bridge);
   bridge.receive({ kind: 'send', command: { type: 'mx:annotations', canComment: true, pick: 'area' } });
   const selectText = () => { const range = document.createRange(); range.selectNodeContents(paragraph); window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range); document.dispatchEvent(new Event('selectionchange')); };
   const selections = () => events.map(item => item.event as {type?: string; selection?: {kind: string; anchor: {quote: string; range?: unknown}; range?: unknown}}).filter(event => event?.type === 'mx:selection');

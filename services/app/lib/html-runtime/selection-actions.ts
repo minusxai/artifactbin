@@ -184,8 +184,10 @@ export function createHtmlSelectionActions({
   return {
     ownsOverlay,
     update(value) {
+      const granted = value && !enabled;
       enabled = value;
       if (!enabled) hide();
+      else if (granted) changed();
     },
     dispose() {
       hide();

@@ -255,6 +255,7 @@ const frame = documentLocator(stranger);
 await frame.locator('#claim').waitFor({ timeout: 15000 });
 await frame.locator('#claim').click({ clickCount: 3 });
 await frame.locator('#claim').click({ button: 'right' });
+await frame.locator('[data-mx-selection-action="annotate"]').click();
 check(
   (await stranger.locator('[aria-label="Edit selected text"]').count()) === 0,
   'a native selection offers commenting without source editing',

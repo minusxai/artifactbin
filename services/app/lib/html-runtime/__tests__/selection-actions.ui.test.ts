@@ -178,3 +178,21 @@ it("uses the focused keyboard context target without stealing focus for a text b
   expect(button.tabIndex).toBe(0);button.focus();button.click();
   expect(chosen).toEqual(['annotate']);
 });
+
+it('keeps paragraph-boundary selections actionable after native selectionchange and scrolling', () => {
+  const chosen=setup(); const paragraph=document.querySelector('p')!;
+  const range=document.createRange();range.setStart(paragraph.firstChild!,0);range.setEnd(document.body,1);
+  window.getSelection()!.addRange(range);
+  paragraph.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}));
+  document.dispatchEvent(new Event('selectionchange'));
+  window.dispatchEvent(new Event('scroll'));
+  expect(document.querySelector<HTMLElement>('[role="toolbar"]')?.hidden).toBe(false);
+  (document.querySelector('[data-mx-selection-action="annotate"]') as HTMLElement).click();
+  expect(chosen).toEqual(['annotate']);
+});
+it('shows a live selection when the parent grants actions after the selection event', () => {
+  setup();actions!.update(false);select();
+  expect(document.querySelector<HTMLElement>('[role="toolbar"]')?.hidden).toBe(true);
+  actions!.update(true);
+  expect(document.querySelector<HTMLElement>('[role="toolbar"]')?.hidden).toBe(false);
+});
