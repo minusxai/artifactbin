@@ -87,6 +87,6 @@ it('opens publication with cryptographic bytes when randomUUID is unavailable, a
     const nonce = new URLSearchParams(new URL(vi.mocked(b.win.open).mock.calls[0]![0] as string).hash.slice(1)).get('af_nonce');
     expect(nonce).toMatch(/^[a-f0-9-]{36}$/); control.dispose();
     vi.stubGlobal('crypto', undefined);
-    expect(() => publishLocalDocument({ win: b.win, platformOrigin: 'https://example.test', onPublished: vi.fn() })).toThrow(/Secure browser randomness/);
+    expect(() => publishLocalDocument({ win: b.win, platformOrigin: 'https://example.test', onPublished: vi.fn() })).toThrow('Web Crypto required');
   } finally { vi.unstubAllGlobals(); }
 });

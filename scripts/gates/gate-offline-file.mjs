@@ -40,7 +40,7 @@ const source = `<!doctype html><html><head><title>Portable native page</title>
 <script src="/af/v1/core.js"></script></head><body>
 <h1 class="status">Portable native page</h1><output id="count">Starting</output>
 <button id="increment">Increment locally</button><button id="shared">Change shared job</button><output id="outcome"></output>
-<svg viewBox="0 0 10 10" width="40" height="40"><circle cx="5" cy="5" r="4" fill="#145a28"></circle></svg>
+<svg id="portable-author-svg" viewBox="0 0 10 10" width="40" height="40"><circle cx="5" cy="5" r="4" fill="#145a28"></circle></svg>
 <img alt="Portable pixel" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
 <script type="module">
 import {client,gql} from '@afbin/apollo';
@@ -77,7 +77,7 @@ async function reading(engineName, browser) {
         await expect(page.getByRole('heading', { name: 'Portable native page' })).toBeVisible();
         await expect(page.locator('h1')).toHaveCSS('color', 'rgb(20, 90, 40)');
         await expect.poll(() => page.getByAltText('Portable pixel').evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
-        await expect(page.locator('svg circle')).toHaveAttribute('r', '4');
+        await expect(page.locator('#portable-author-svg circle')).toHaveAttribute('r', '4');
       });
       await step('private local state remains interactive while shared mutations are explicitly offline', async () => {
         await expect(page.locator('#count')).toHaveText('3');

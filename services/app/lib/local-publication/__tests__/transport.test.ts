@@ -39,7 +39,7 @@ it('creates retry keys from strong bytes without randomUUID and rejects unavaila
     expect(localPublicationRequest(body()).key).toMatch(/^[a-f0-9-]{36}$/);
     expect(bytes).toHaveBeenCalled();
     vi.stubGlobal('crypto', undefined);
-    expect(() => localPublicationRequest(body())).toThrow(/Secure browser randomness/);
+    expect(() => localPublicationRequest(body())).toThrow('Web Crypto required');
   } finally { vi.unstubAllGlobals(); }
 });
 
