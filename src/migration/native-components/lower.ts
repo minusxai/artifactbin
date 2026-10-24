@@ -1,0 +1,208 @@
+/** Pure offline lowering only. Typed analysis and admitted receipts are supplied
+ * by owners; no source fetch, compiler execution, destination write or evaluation. */
+import { NATIVE_COMPONENT_TARGET, NATIVE_SEMANTIC_CSS, nativeComponentRule, type NativeAttributeKind } from './component-map.ts';
+import type { NativeJson, NativeTypedAnalysis, RetainedJsxNode } from './analyze-contracts.ts';
+export interface NativeLowerIdentityBinding {
+  sourceNode: string;
+  retainedStart: number;
+  retainedEnd: number;
+  afId: string;
+  analysisSha256: string;
+  proofSha256: string;
+}
+export interface NativeLowerUrlReceipt { source: string; target: string; sha256: string }
+export interface NativeLowerFormattedReceipt {
+  sourceNode: string;
+  analysisSha256: string;
+  formatterSha256: string;
+  /** Exact admitted formatter output; never recompute with a guessed locale/default. */
+  text: string;
+}
+export interface NativeLowerInput {
+  analysis: NativeTypedAnalysis;
+  targetRevision: string;
+  identityBindings: readonly NativeLowerIdentityBinding[];
+  reservedIdentities?: readonly { afId: string; sourceNode: string }[];
+  urls?: readonly NativeLowerUrlReceipt[];
+  formattedValues?: readonly NativeLowerFormattedReceipt[];
+  /** Receipt for the authored class/style closure, not permission to fetch CSS. */
+  authoredStyleSha256?: string;
+}
+export type NativeLowerRequirementKind = 'query'|'mutation'|'value'|'import'|'notification'|'condition'|'loop'|'expression'|'binding'|'button-action'|'script'|'iframe'|'chart'|'table-column'|'person'|'auth'|'format'|'resource'|'style'|'head';
+export interface NativeLowerRequirement {
+  kind: NativeLowerRequirementKind;
+  sourceNode: string;
+  tag?: string;
+  attribute?: string;
+  detail: string;
+  /** Original typed input is retained, never replaced with a static placeholder. */
+  node?: RetainedJsxNode;
+  declaration?: NativeJson;
+}
+export interface NativeLowerBlocker { code: string; sourceNode: string; tag?: string; attribute?: string; detail: string }
+export interface NativeLowerOutput {
+  status: 'complete'|'requires-adapter'|'blocked';
+  /** Null until every operation/identity/resource requirement is admitted. */
+  html: string|null;
+  css: string;
+  modules: readonly { name: string; register: string; targetRevision: string }[];
+  /** Adapter emits these as ordinary author-owned module assignments, not globals. */
+  assignments: readonly { afId: string; property: string; value: NativeJson }[];
+  identities: readonly { sourceNode: string; afId?: string; kind: 'element'|'text'|'nonvisual' }[];
+  requirements: readonly NativeLowerRequirement[];
+  blockers: readonly NativeLowerBlocker[];
+}
+const escape = (value: unknown): string => String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const digest = (value: unknown): value is string => typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
+const afId = (value: string): boolean => /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value);
+const htmlTags = new Set('a abbr address article aside b bdi bdo blockquote br button caption cite code col colgroup dd del details dfn dialog div dl dt em figcaption figure footer h1 h2 h3 h4 h5 h6 header hgroup hr i img input kbd label legend li main mark menu nav ol optgroup option output p picture pre progress q rp rt ruby s samp section select small source span strong sub summary sup table tbody td textarea tfoot th thead time tr u ul var video audio track wbr fieldset form'.split(' '));
+const voidTags = new Set('br col hr img input source track wbr'.split(' '));
+const common = new Set('id class className title role lang dir tabIndex hidden inert slot'.split(' '));
+const nativeHtml = new Set('href src alt width height type name value checked selected disabled required readOnly multiple placeholder rows cols min max step minLength maxLength htmlFor for colSpan rowSpan scope open controls loop muted preload loading decoding target rel download dateTime start reversed autoComplete autoFocus'.split(' '));
+const booleanAttrs = new Set('hidden inert disabled checked selected required readonly multiple open controls loop muted reversed autofocus'.split(' '));
+const aliases: Readonly<Record<string,string>> = {className:'class',tabIndex:'tabindex',readOnly:'readonly',autoFocus:'autofocus',minLength:'minlength',maxLength:'maxlength',autoComplete:'autocomplete',htmlFor:'for',colSpan:'colspan',rowSpan:'rowspan',dateTime:'datetime',defaultOpen:'default-open',defaultValue:'default-value',defaultChecked:'default-checked',rowKey:'row-key'};
+const declarationTags: Readonly<Record<string,NativeLowerRequirementKind>> = {Query:'query',Mutation:'mutation',Value:'value',Import:'import',Notification:'notification'};
+const referenceProps = new Set('value checked data options open spread angle flow userId'.split(' '));
+function validAttribute(value: NativeJson, kind: NativeAttributeKind): boolean {
+ if(Array.isArray(kind)) return typeof value==='string' && kind.includes(value);
+ if(kind==='number') return typeof value==='number' && Number.isFinite(value);
+ return typeof value===kind;
+}
+function safeUrl(value: string): boolean {
+ if(/[\u0000-\u0020\u007f\\]/.test(value)||value.startsWith('//'))return false;
+ if(value.startsWith('./')||value.startsWith('#')||value.startsWith('/'))return !value.split('/').includes('..');
+ try {const url=new URL(value);return ['https:','http:','mailto:'].includes(url.protocol)&&!url.username&&!url.password;}catch{return false;}
+}
+function validProperty(tag:string,name:string,value:NativeJson):boolean {
+ const scalar=(v:NativeJson):boolean=>v===null||['string','boolean','number'].includes(typeof v);
+ if(name==='options')return Array.isArray(value)&&value.every(v=>scalar(v)&&(tag==='Segmented'||v!==null)||v!==null&&!Array.isArray(v)&&typeof v==='object'&&'value'in v&&scalar(v.value)&&typeof v.label==='string'&&(tag==='Segmented'||v.value!==null));
+ if(tag==='Dialog'||tag==='Switch')return typeof value==='boolean';
+ if(tag==='Input'||tag==='Textarea')return value===null||typeof value==='string'||typeof value==='number';
+ if(tag==='Slider'||tag==='Progress')return value===null||typeof value==='number'&&Number.isFinite(value);
+ if(tag==='DatePicker')return value===null||typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
+ if(tag==='Segmented')return scalar(value);
+ if(tag==='Select')return scalar(value)||Array.isArray(value)&&value.every(v=>v!==null&&scalar(v));
+ // Complex table parsers are deliberately delegated rather than silently normalizing malformed input.
+ if(tag==='DataTable')return name==='data'&&value!==null&&!Array.isArray(value)&&typeof value==='object'&&Array.isArray(value.rows)&&Array.isArray(value.columns)&&value.rows.every(v=>v!==null&&!Array.isArray(v)&&typeof v==='object')&&value.columns.every(v=>v!==null&&!Array.isArray(v)&&typeof v==='object'&&typeof v.name==='string');
+ return false;
+}
+export function lowerNativeComponents(input: NativeLowerInput): NativeLowerOutput {
+ const blockers: NativeLowerBlocker[]=[],requirements: NativeLowerRequirement[]=[],assignments: Array<{afId:string;property:string;value:NativeJson}>=[],identities: Array<{sourceNode:string;afId?:string;kind:'element'|'text'|'nonvisual'}>=[];
+ const modules=new Map<string,{name:string;register:string;targetRevision:string}>();
+ const usedAf=new Map<string,string>(),usedDom=new Set<string>(),usedBindings=new Set<NativeLowerIdentityBinding>();
+ const spans=new Set(input.analysis.sourceSpans.map(span=>span.sourceNode));
+ const block=(code:string,node:RetainedJsxNode,detail:string,attribute?:string)=>blockers.push({code,sourceNode:node.graphKey,tag:node.type==='element'?node.tag:undefined,attribute,detail});
+ const require=(kind:NativeLowerRequirementKind,node:RetainedJsxNode,detail:string,attribute?:string)=>requirements.push({kind,sourceNode:node.graphKey,tag:node.type==='element'?node.tag:undefined,attribute,detail,node});
+ if(input.targetRevision!==NATIVE_COMPONENT_TARGET)blockers.push({code:'target-contract-mismatch',sourceNode:'$root',detail:'Native interfaces must match the reviewed target revision'});
+ if(!digest(input.analysis.analysisSha256)||!digest(input.analysis.compilerSourceSha256))blockers.push({code:'analysis-proof-required',sourceNode:'$root',detail:'Typed analysis/compiler digests are required'});
+ for(const [collection,kind] of [['imports','import'],['values','value'],['queries','query'],['mutations','mutation'],['notifications','notification']] as const)for(const declaration of input.analysis.flow[collection]??[])requirements.push({kind,sourceNode:'$flow',detail:'Typed declaration requires its admitted operation adapter',declaration});
+ const binding=(node:RetainedJsxNode):NativeLowerIdentityBinding|undefined=>{
+  const candidates=input.identityBindings.filter(value=>value.sourceNode===node.graphKey&&value.retainedStart===node.start&&value.retainedEnd===node.end);
+  const value=candidates[0];
+  if(candidates.length!==1||!value||value.analysisSha256!==input.analysis.analysisSha256||!digest(value.proofSha256)||!afId(value.afId)||!spans.has(node.graphKey)){block('identity-proof-required',node,'One exact, digest-bound source-to-annotation identity proof is required');return;}
+  if(usedBindings.has(value)){block('ambiguous-source-identity',node,'A proved identity cannot name multiple emitted nodes');return;}
+  usedBindings.add(value);
+  if(usedAf.has(value.afId)||input.reservedIdentities?.some(old=>old.afId===value.afId&&old.sourceNode!==node.graphKey)){block('identity-reuse',node,'Annotation identity collides with another or historical owner');return;}
+  usedAf.set(value.afId,node.graphKey);identities.push({sourceNode:node.graphKey,afId:value.afId,kind:'element'});return value;
+ };
+ const walk=(node:RetainedJsxNode,ancestors:readonly string[]=[],depth=0):string=>{
+  if(depth>128){block('tree-depth-limit',node,'Typed tree exceeds the bounded lowering depth');return '';}
+  if(!spans.has(node.graphKey)){block('source-association-required',node,'Typed node has no exact recovered source association');return '';}
+  if(node.type==='text'){identities.push({sourceNode:node.graphKey,kind:'text'});return escape(node.value);}
+  if(node.type==='expression'){
+   identities.push({sourceNode:node.graphKey,kind:'nonvisual'});
+   if(!node.value.static){require('expression',node,'Admit and emit the typed expression through an author-owned adapter');return '';}
+   const value=node.value.json;
+   if(value===null||typeof value==='boolean')return '';
+   if(typeof value==='string'||typeof value==='number')return escape(value);
+   block('unsupported-expression-literal',node,'Array/object expression children require explicit semantic admission');return '';
+  }
+  if(node.control){
+   const control=node.control;
+   if(control&&typeof control==='object'&&!Array.isArray(control)&&control.kind==='fragment'){
+    identities.push({sourceNode:node.graphKey,kind:'nonvisual'});return node.children.map(child=>walk(child,ancestors,depth+1)).join('');
+   }
+   require('condition',node,'Preserve the complete typed conditional and keyed branch identity plan');return '';
+  }
+  if(declarationTags[node.tag]){require(declarationTags[node.tag]!,node,'Nonvisual declarations need admitted operation adapters');return '';}
+  if(node.tag==='title'||node.tag==='meta'||node.tag==='link'){require('head',node,'Authored metadata requires explicit head admission');return '';}
+  if(node.tag==='style'){require('style',node,'Authored stylesheet requires exact CSS closure admission');return '';}
+  if(node.tag==='Helmet'){require('head',node,'Authored head content must be separately admitted and retained');for(const child of node.children)walk(child,ancestors,depth+1);return '';}
+  const operation: Readonly<Record<string,NativeLowerRequirementKind>>={For:'loop',Question:'chart',Chart:'chart',Column:'table-column',Script:'script',script:'script',Iframe:'iframe',iframe:'iframe',SignIn:'auth'};
+  if(operation[node.tag]){require(operation[node.tag]!,node,'This typed shape requires its native operation/program adapter');return '';}
+  const rule=nativeComponentRule(node.tag);
+  if(!rule&&!htmlTags.has(node.tag)){block('unsupported-component',node,'No reviewed semantic/native mapping exists for this tag');return '';}
+  if(rule?.parent&&!rule.parent.some(parent=>ancestors.includes(parent)))block('compound-parent-required',node,'Native compound part requires its owning component');
+  const proof=binding(node),tag=rule?.htmlTag??node.tag;
+  const values: Record<string,NativeJson>=Object.create(null),seen=new Set<string>();
+  for(const attribute of node.attributes){
+   if(seen.has(attribute.name)){block('duplicate-attribute',node,'Repeated source attributes are ambiguous',attribute.name);continue;}seen.add(attribute.name);
+   if(!attribute.value.static){require('binding',node,'Typed dynamic attribute requires an admitted binding',attribute.name);continue;}
+   values[attribute.name]=attribute.value.json;
+  }
+  const attrs: Record<string,string>=Object.create(null),styles: string[]=[];
+  if(proof)attrs['data-af-id']=proof.afId;
+  if(rule?.generatedClass)attrs.class=rule.generatedClass;
+  if(node.tag==='Grid'||node.tag==='GridItem')require('style',node,'Preserve original positioned/flow geometry and responsive CSS using an admitted layout adapter; see retained story-ui/grid-layout.ts');
+  if(node.tag==='Alert')attrs.role='alert';
+  if(node.tag==='TableHead')attrs.scope='col';
+  let formatted: string|undefined;
+  if(node.tag==='Number'||node.tag==='Cell'){
+   const receipt=input.formattedValues?.find(value=>value.sourceNode===node.graphKey&&value.analysisSha256===input.analysis.analysisSha256&&digest(value.formatterSha256));
+   if(receipt)formatted=escape(receipt.text);else require('format',node,'Exact admitted legacy formatter output is required, including default formatting');
+  }
+  for(const [name,value]of Object.entries(values)){
+   if(name==='data-af-id'){if(!proof||value!==proof.afId)block('annotation-identity-mismatch',node,'Authored annotation ID must agree with its proof',name);continue;}
+   if(/^on/i.test(name)){require('script',node,'Authored handler needs explicit program admission',name);continue;}
+   if(name==='run'||name==='set'||name==='args'){require('button-action',node,'Preserve action parameters, authority, affected-count/reset and commit semantics',name);continue;}
+   if(node.tag==='User'&&name==='userId'){require('person',node,'Resolve the exact actor/person binding through an admitted identity adapter',name);continue;}
+   if(referenceProps.has(name)&&typeof value==='string'&&/^\$/.test(value)){require('binding',node,'Legacy reference is an explicit typed binding, never a literal native value',name);continue;}
+   if((node.tag==='Number'||node.tag==='Cell')&&['value','data','fmt','format','prefix','suffix','col','row','fallback'].includes(name))continue;
+   if(name==='style'||name==='className'||name==='class'){
+    if(!digest(input.authoredStyleSha256)){require('style',node,'Authored class/style dependency closure requires a pinned CSS admission receipt',name);continue;}
+    if(name==='style'){require('style',node,'Style-object semantic translation requires a separately admitted CSS declaration adapter',name);continue;}
+    if(typeof value!=='string'){block('invalid-attribute',node,'Class names must be literal text',name);continue;}
+    attrs.class=[attrs.class,value].filter(Boolean).join(' ');continue;
+   }
+   if((node.tag==='Grid'&&['cols','rowHeight','mode','gap'].includes(name))||(node.tag==='GridItem'&&['x','y','w','h','minHeight','colSpan','rowSpan'].includes(name)))continue;
+   if(name==='variant'&&rule?.kind==='semantic'){require('style',node,'Semantic variant requires its original token/style translation',name);continue;}
+   if(name==='href'||name==='src'||name==='poster'){
+    if(typeof value!=='string'){block('invalid-url',node,'URL attributes require literal strings',name);continue;}
+    if(value.startsWith('#')){attrs[name]=value;continue;}
+    const receipt=input.urls?.find(url=>url.source===value&&digest(url.sha256));
+    if(!receipt){require('resource',node,'Resolve URL/resource against exact revision receipts before output',name);continue;}
+    if(!safeUrl(receipt.target)){block('unsafe-url-target',node,'Admitted URL still contains unsafe protocol, credentials or path traversal',name);continue;}
+    attrs[name]=receipt.target;continue;
+   }
+   if(name==='id'){
+    if(typeof value!=='string'||!value){block('invalid-dom-id',node,'Authored DOM ID must be nonempty literal text',name);continue;}
+    if(usedDom.has(value))block('duplicate-dom-id',node,'Authored DOM IDs collide; repair requires an explicit identity/IDREF plan',name);
+    usedDom.add(value);attrs.id=value;continue;
+   }
+   const generic=common.has(name)||/^aria-[a-z-]+$/.test(name)||/^data-[a-z0-9_-]+$/.test(name)||(!rule&&nativeHtml.has(name));
+   if(node.tag==='DataTable'&&['columns','sort','metrics'].includes(name)){require('table-column',node,'Admit the exact table parser semantics for column/sort/metric specifications',name);continue;}
+   if(rule?.properties?.includes(name)){
+    if(!validProperty(node.tag,name,value)){block('unsupported-property-shape',node,'Property shape is not admitted by the pinned native setter contract',name);continue;}
+    if(proof)assignments.push({afId:proof.afId,property:name,value});continue;
+   }
+   if(node.tag==='DataTable'&&name==='height'&&typeof value==='string'){require('style',node,'Legacy CSS table height requires exact parse/translation admission',name);continue;}
+   const kind=rule?.attributes?.[name];
+   if(!generic&&(!kind||!validAttribute(value,kind))){block('unsupported-attribute',node,'Property is absent from or incompatible with the pinned native/semantic contract',name);continue;}
+   if(value!==null&&typeof value==='object'){block('invalid-attribute',node,'Object/array values require an explicit native property assignment',name);continue;}
+   const target=aliases[name]??name;
+   if(kind==='boolean'||booleanAttrs.has(target)){if(value===true)attrs[target]='';else if(value!==false&&value!==null)block('invalid-attribute',node,'Boolean attributes require exact boolean literals',name);continue;}
+   if(value!==null)attrs[target]=String(value);
+  }
+  if(styles.length)attrs.style=styles.join(';');
+  if(rule?.module)modules.set(rule.module,{name:rule.module,register:rule.register!,targetRevision:NATIVE_COMPONENT_TARGET});
+  if(node.tag==='DataTable'&&node.children.some(child=>child.type==='element'&&child.tag==='Column'))require('table-column',node,'Preserve typed column templates/actions and stable row identity through the table adapter');
+  if(node.tag==='User'&&!seen.has('userId')&&!seen.has('fallback'))require('person',node,'A user element requires an explicit person or fallback binding');
+  const children=formatted??node.children.map(child=>walk(child,[...ancestors,node.tag],depth+1)).join('');
+  if(voidTags.has(tag)&&node.children.length)block('void-element-children',node,'Void HTML cannot retain authored children');
+  const attributes=Object.entries(attrs).map(([name,value])=>` ${name}="${escape(value)}"`).join('');
+  return `<${tag}${attributes}>${voidTags.has(tag)?'':children+`</${tag}>`}`;
+ };
+ const html=input.analysis.nodes.map(node=>walk(node)).join('');
+ const status=blockers.length?'blocked':requirements.length?'requires-adapter':'complete';
+ return {status,html:status==='complete'?html:null,css:modules.size||html?NATIVE_SEMANTIC_CSS:'',modules:[...modules.values()].sort((a,b)=>a.name.localeCompare(b.name)),assignments,identities,requirements,blockers};
+}
