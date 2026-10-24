@@ -8,18 +8,17 @@ import {pageOperationKind} from '@/lib/page-operations';
 import {pageGraphql} from '@/lib/page-graphql';
 import {currentRequest,runWithRequest} from '@/lib/platform/request-context';
 import {createConnectionRegistry,validLinkedDocument} from './registry';
-import {LocalConnectionError,type SourceObservation} from './contracts';
+import {LocalConnectionError,type SourceObservation,type ConnectionStatus} from './contracts';
 const approved=new WeakSet<Request>();
 const registry=createConnectionRegistry({random:()=>randomBytes(32).toString('base64url'),async inspect(identity,previous){
  const request=currentRequest();if(!request||identity.platformOrigin!==baseUrl(request))throw new LocalConnectionError('invalid_identity');
  const authenticated=previous?.authenticated??approved.has(request);
  const actor=authenticated?await requestOrSessionActor(request,{revalidate:true}):ANONYMOUS_ACTOR;
  let page;try{page=await readHtmlPage(actor,identity.artifactId);}catch{throw new LocalConnectionError(actor.userId||actor.tokenId?'unavailable':'signin_required');}
- if(page.revision!==identity.baseRevision||createHash('sha256').update(page.html).digest('hex')!==identity.sourceDigest)throw new LocalConnectionError('stale');
  const row=await getArtifactHeaderById(identity.artifactId);if(!row)throw new LocalConnectionError('unavailable');
  const role=await effectiveRole(row,actor);if(role==='none')throw new LocalConnectionError('unavailable');
  // Include identity attributes that can affect admission; never forward this key to local files.
- return {identity,role,authenticated,actor:JSON.stringify(actor)};
+ return {identity:{...identity,baseRevision:page.revision,sourceDigest:createHash('sha256').update(page.html).digest('hex')},role,authenticated,actor:JSON.stringify(actor)};
 }});
 const refusal=(error:unknown):Response=>{
  const code=error instanceof LocalConnectionError?error.code:'unavailable';
@@ -82,5 +81,15 @@ export async function observeLocalSource(request:Request):Promise<Response>{
    const observation:SourceObservation={remoteDigest:createHash('sha256').update(current.html).digest('hex'),remoteRevision:current.revision};
    return json(observation,200,{'Cache-Control':'no-store'});
   }catch(error){if(error instanceof LocalConnectionError)throw error;throw new LocalConnectionError(authenticated?'unavailable':'signin_required');}
+ }catch(error){return refusal(error);}});
+}
+
+/** Idle grant validation observes current ACL/account/head without minting new authority. */
+export async function localConnectionStatus(request:Request,artifactId:string):Promise<Response>{
+ if(!sameOrigin(request))return json({error:'forbidden'},403);
+ return runWithRequest(request,async()=>{try{
+  const result=await registry.status(request.headers.get('X-Af-Local-Capability')??'',artifactId);
+  const status:ConnectionStatus={compatible:result.compatible,role:result.admission.role,remoteDigest:result.admission.identity.sourceDigest,remoteRevision:result.admission.identity.baseRevision};
+  return json(status,200,{'Cache-Control':'no-store'});
  }catch(error){return refusal(error);}});
 }

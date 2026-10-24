@@ -26,3 +26,20 @@ describe('document scoped connection authority',()=>{
   changed=false;await registry.grant(identity);now=9;await registry.authorize('cap',identity.artifactId);now=10;await expect(registry.authorize('cap',identity.artifactId)).rejects.toMatchObject({code:'revoked'});
  });
 });
+it('observes changed heads without retaining write authority and refuses changed account or role metadata',async()=>{
+ let revision='2',actor='alice',role='writer',next=0;
+ const registry=createConnectionRegistry({random:()=>String(++next),inspect:async input=>({identity:{...input,baseRevision:revision},actor,role})});
+ const first=await registry.grant(identity);revision='3';const observed=await registry.status(first.capability,identity.artifactId);expect(observed.compatible).toBe(false);expect(observed.admission.identity.baseRevision).toBe('3');
+ await expect(registry.authorize(first.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});
+ revision='2';const second=await registry.grant(identity);actor='bob';revision='3';await expect(registry.status(second.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});
+ actor='alice';revision='2';const third=await registry.grant(identity);role='viewer';await expect(registry.status(third.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});
+});
+it('renews only live compatible leases for the original actor and never revives an expired grant',async()=>{
+ let now=0,actor='alice',revision='2',advanceDuringInspection=false,next=0;
+ const registry=createConnectionRegistry({now:()=>now,ttl:10,random:()=>String(++next),inspect:async input=>{if(advanceDuringInspection)now++;return {identity:{...input,baseRevision:revision},actor,role:'writer'};}});
+ const active=await registry.grant(identity);now=9;expect((await registry.status(active.capability,identity.artifactId)).compatible).toBe(true);
+ now=18;await registry.authorize(active.capability,identity.artifactId);now=19;await expect(registry.status(active.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});
+ now=20;const boundary=await registry.grant(identity);now=29;advanceDuringInspection=true;await expect(registry.status(boundary.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});advanceDuringInspection=false;
+ now=40;const changed=await registry.grant(identity);now=49;actor='bob';await expect(registry.status(changed.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});actor='alice';await expect(registry.status(changed.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});
+ now=60;const source=await registry.grant(identity);now=69;revision='3';expect((await registry.status(source.capability,identity.artifactId)).compatible).toBe(false);await expect(registry.authorize(source.capability,identity.artifactId)).rejects.toMatchObject({code:'revoked'});
+});

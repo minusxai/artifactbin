@@ -1,3 +1,4 @@
+import {startConnectionMonitor} from './monitor';
 import {validLinkedDocument} from './registry';
 import type {LinkedDocument,LocalConnectionState,SourceObservation} from './contracts';
 export interface LocalBrokerOptions {
@@ -15,11 +16,12 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
  const source=win.parent;
  if(params.get('auth-return')==='1'){win.opener?.postMessage({kind:'af:local-authenticated',nonce},win.location.origin);return {post(){},authorize(){},retry(){},signIn(){},disconnect(){},resize(){},dispose(){}};}
  let port:MessagePort|undefined,identity:LinkedDocument|undefined,capability:string|undefined,disposed=false,connected=false,generation=0,authorized=false,sessionCheck=false,loginCompleted=false,observe=false;
+ let monitor:ReturnType<typeof startConnectionMonitor>|undefined;
  let popup:Window|null=null,authNonce='',authTimer:ReturnType<typeof setTimeout>|undefined;
  const credentials=():RequestCredentials=>authorized||sessionCheck?'same-origin':'omit';
  const controllers=new Set<AbortController>(),calls=new Set<number>(),seen=new Set<number>();
  const state=(value:LocalConnectionState,role?:string)=>{if(disposed)return;connected=value==='connected';options.onState(value);port?.postMessage({kind:'state',state:value,...(role?{role}:{})});};
- const revoke=()=>{const cap=capability;capability=undefined;authorized=false;connected=false;generation++;for(const controller of controllers)controller.abort();controllers.clear();calls.clear();if(cap)void win.fetch('/api/local-connection',{method:'DELETE',credentials:credentials(),headers:{'Content-Type':'application/json','X-Af-Local-Capability':cap},keepalive:true}).catch(()=>{});};
+ const revoke=()=>{monitor?.dispose();monitor=undefined;const cap=capability;capability=undefined;authorized=false;connected=false;generation++;for(const controller of controllers)controller.abort();controllers.clear();calls.clear();if(cap)void win.fetch('/api/local-connection',{method:'DELETE',credentials:credentials(),headers:{'Content-Type':'application/json','X-Af-Local-Capability':cap},keepalive:true}).catch(()=>{});};
  const receive=async(event:MessageEvent)=>{
   if(event.source===popup&&popup&&event.origin===win.location.origin&&event.data?.kind==='af:local-authenticated'&&event.data.nonce===authNonce){
    clearTimeout(authTimer);popup.close();popup=null;loginCompleted=true;sessionCheck=true;void connect();return;
@@ -67,12 +69,36 @@ export function installLocalConnectionBroker(options:LocalBrokerOptions):LocalCo
    if(!response.ok){state(response.status===409?'stale':response.status===401?(loginCompleted?'blocked':'signin-required'):response.status===403?'permission-required':'unavailable');return;}
    if(typeof value.capability!=='string'||typeof value.role!=='string'){state('blocked');return;}
    capability=value.capability;state('connected',value.role);options.onConnected?.({identity:identity!,role:value.role});
+   const activeCapability=capability!,activeIdentity=identity!,activeRole=value.role;
+   monitor?.dispose();monitor=startConnectionMonitor({foreground:()=>win.document.visibilityState!=='hidden',
+    async poll(signal){
+     const response=await win.fetch(`/api/local-connection/${encodeURIComponent(activeIdentity.artifactId)}/status`,{method:'GET',credentials:credentials(),signal,headers:{'X-Af-Local-Capability':activeCapability}});
+     if(!response.ok)throw Object.assign(Error('connection_unavailable'),{status:response.status});
+     const status=await response.json();
+     if(typeof status.compatible!=='boolean'||typeof status.role!=='string'||typeof status.remoteDigest!=='string'||!/^[a-f0-9]{64}$/.test(status.remoteDigest)||typeof status.remoteRevision!=='string'||!/^[1-9]\d*$/.test(status.remoteRevision))throw Error('invalid_connection_status');
+     return status;
+    },
+    onStatus(status){
+     if(disposed||epoch!==generation||capability!==activeCapability)return;
+     const evidence:SourceObservation={remoteDigest:status.remoteDigest,remoteRevision:status.remoteRevision};
+     if(!status.compatible||status.remoteDigest!==activeIdentity.sourceDigest||status.remoteRevision!==activeIdentity.baseRevision){
+      options.onSourceObservation?.(evidence);port?.postMessage({kind:'source-observation',...evidence});revoke();state('stale');
+     }else if(status.role!==activeRole){revoke();state('permission-required');}
+    },
+    onFailure(error){
+     if(disposed||epoch!==generation||capability!==activeCapability)return;
+     const status=error&&typeof error==='object'&&'status' in error?error.status:undefined;
+     revoke();state(status===401||status===403||status===410?'signin-required':status===404?'unavailable':'blocked');
+    },
+   });
   }catch{if(!disposed&&generation===epoch)state('blocked');}finally{controllers.delete(controller);}
  };
  win.addEventListener('message',receive);
  const announce=()=>{if(!disposed&&nonce&&source&&source!==win)source.postMessage({kind:'af:local-ready',nonce},'*');};
  const ready=setInterval(announce,250);announce();
- const dispose=()=>{if(disposed)return;revoke();popup?.close();popup=null;clearTimeout(authTimer);disposed=true;clearInterval(ready);port?.close();win.removeEventListener('message',receive);win.removeEventListener('pagehide',dispose);};
+ const dispose=()=>{if(disposed)return;revoke();popup?.close();popup=null;clearTimeout(authTimer);disposed=true;clearInterval(ready);port?.close();win.removeEventListener('message',receive);win.removeEventListener('pagehide',dispose);win.removeEventListener('focus',wake);win.document.removeEventListener('visibilitychange',wake);};
+ const wake=()=>monitor?.wake();
+ win.addEventListener('focus',wake);win.document.addEventListener('visibilitychange',wake);
  win.addEventListener('pagehide',dispose);
  return {retry(){if(!connected){revoke();void connect();}},signIn(){
   if(disposed||!identity)return;popup?.close();authNonce=win.crypto.randomUUID();

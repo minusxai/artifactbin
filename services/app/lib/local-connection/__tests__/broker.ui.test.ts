@@ -63,3 +63,15 @@ it('reports readable remote evidence for a stale base without connecting or send
  await vi.waitFor(()=>expect(states.at(-1)).toBe('stale'));expect(evidence).toHaveBeenCalledExactlyOnceWith(observation);
  expect(port.postMessage).toHaveBeenCalledWith({kind:'source-observation',...observation});expect(states).not.toContain('connected');expect(fetch.mock.calls[1]![1]).toMatchObject({credentials:'omit'});broker.dispose();
 });
+it('observes an idle remote head change and clears authority without changing the local source',async()=>{
+ vi.useFakeTimers();history.replaceState(null,'','/#nonce=test-nonce');
+ const changed={compatible:false,role:'viewer',remoteDigest:'b'.repeat(64),remoteRevision:'2'};
+ const fetch=vi.fn().mockResolvedValueOnce({ok:true,json:async()=>({capability:'guest-secret',role:'viewer'})}).mockResolvedValueOnce({ok:true,json:async()=>changed}).mockResolvedValue({ok:true,json:async()=>({})});vi.stubGlobal('fetch',fetch);
+ const states:string[]=[];const broker=installLocalConnectionBroker({win:window,onState:s=>states.push(s)}),port=fakePort();
+ try{
+  window.dispatchEvent(new MessageEvent('message',{origin:'null',source:window,data:{kind:'af:local-bind',nonce:'test-nonce',identity:identity()},ports:[port]}));await vi.advanceTimersByTimeAsync(0);expect(states.at(-1)).toBe('connected');
+  await vi.advanceTimersByTimeAsync(15_000);expect(states.at(-1)).toBe('stale');
+  expect(port.postMessage).toHaveBeenCalledWith({kind:'source-observation',remoteDigest:changed.remoteDigest,remoteRevision:'2'});
+  const calls=fetch.mock.calls.length;await port.onmessage?.({data:{kind:'operation',call:1,operation:{query:'mutation { tasks { add } }'}}} as MessageEvent);expect(fetch).toHaveBeenCalledTimes(calls);
+ }finally{broker.dispose();vi.useRealTimers();}
+});

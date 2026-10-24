@@ -60,3 +60,13 @@ it('observes stale source metadata without granting operations or leaking privat
  const stranger=await mintAccountToken('local-observation-stranger');
  const revoked=await observe(request('/api/local-connection/observe-source',{method:'POST',token:stranger.token,json:{identity,authorizePrivate:true}}));expect(revoked.status).toBe(404);expect(await revoked.json()).not.toHaveProperty('remoteRevision');
 });
+it('validates idle grants against current source and original account without exposing metadata after account switch',async()=>{
+ const {GET:status}=await import('@/app/api/local-connection/[id]/status/route');
+ const owner=await mintAccountToken('idle-owner'),stranger=await mintAccountToken('idle-stranger');const made=await publish(request('/api/artifacts',{method:'POST',token:owner.token,json:{visibility:'public',html:'<html><body>Idle</body></html>'}}));const {id}=await made.json();
+ const page=await readHtmlPage({userId:owner.userId,tokenId:null,email:owner.email,documentEditor:false},id);const identity={platformOrigin:'http://localhost:3000',artifactId:id,baseRevision:page.revision,sourceDigest:createHash('sha256').update(page.html).digest('hex')};
+ const open=async(account:boolean)=>{const res=await grant(request('/api/local-connection',{method:'POST',token:owner.token,json:{identity,authorizePrivate:account}}));expect(res.status).toBe(200);return (await res.json()).capability;};
+ const inspect=(cap:string,token=owner.token)=>{const req=request(`/api/local-connection/${id}/status`,{token});req.headers.set('X-Af-Local-Capability',cap);return status(req,{params:Promise.resolve({id})});};
+ const account=await open(true),guest=await open(false);const switched=await inspect(account,stranger.token);expect(switched.status).toBe(410);expect(await switched.json()).not.toHaveProperty('remoteDigest');
+ await(await harness.db()).query('UPDATE artifacts SET version=version+1 WHERE id=$1',[id]);
+ const changed=await inspect(guest);expect(changed.status).toBe(200);expect(await changed.json()).toMatchObject({compatible:false,remoteRevision:'2'});expect((await inspect(guest)).status).toBe(410);
+});

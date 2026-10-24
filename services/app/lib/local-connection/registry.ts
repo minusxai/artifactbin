@@ -33,6 +33,17 @@ export function createConnectionRegistry(options:ConnectionAuthority):Connection
     return current;
    }catch(error){grants.delete(capability);throw error;}
   },
+  async status(capability,artifactId){
+   sweep();const entry=grants.get(capability);
+   if(!entry||entry.admission.identity.artifactId!==artifactId)throw new LocalConnectionError('revoked');
+   try{
+    const current=await options.inspect({...entry.admission.identity},entry.admission);
+    if(grants.get(capability)!==entry||entry.expires<=now()||current.actor!==entry.admission.actor||current.role!==entry.admission.role)throw new LocalConnectionError('revoked');
+    const compatible=sameIdentity(current.identity,entry.admission.identity);
+    if(!compatible)grants.delete(capability);else entry.expires=now()+ttl;
+    return {admission:current,compatible};
+   }catch(error){grants.delete(capability);throw error;}
+  },
   revoke(capability){grants.delete(capability);},
  };
 }
