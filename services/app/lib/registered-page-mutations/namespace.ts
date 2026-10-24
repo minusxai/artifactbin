@@ -3,7 +3,7 @@ import type {MutationContext,MutationProgram,RegisteredMutationPlan,RegisteredMu
 import {validateMutationProgram} from './model';
 export function registeredMutationSchema(program:MutationProgram):string {
  validateMutationProgram(program);
- const fields=Object.entries(program.values).map(([name,spec])=>`${name}:${spec.type==='number'?'Float':spec.type==='boolean'?'Boolean':'String'}${spec.nullable?'':'!'}`);
+ const fields=Object.entries(program.values).map(([name,spec])=>`${name}:${spec.type==='number'?'Float':spec.type==='boolean'?'Boolean':'String'}${spec.nullable?'':'!'}${Object.hasOwn(spec,'default')?` = ${JSON.stringify(spec.default)}`:''}`);
  return `${fields.length?`input Values {${fields.join(' ')}}`:''} type Outcome {requestId:String! outcome:String! revision:String affected:Int reset:[String!]!} type Mutation {run(requestId:String!${fields.length?',values:Values!':''}):Outcome!}`;
 }
 export function registeredMutationDescriptor(namespace:string,program:MutationProgram){

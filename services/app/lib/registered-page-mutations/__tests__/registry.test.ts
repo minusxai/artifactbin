@@ -20,3 +20,16 @@ it('public typed descriptor executes through the real page GraphQL composer and 
  const result=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_1234567890',values:{body:'Hello'}}},caller:{pageId:'page',subject:'viewer',role:'VIEWER'},invoke,signal:new AbortController().signal});
  expect(result.errors).toBeUndefined();expect(result.extensions?.outcomes).toEqual({'actions.run':'rejected'});expect(result.data).toMatchObject({actions:{run:{outcome:'rejected',reset:[]}}});
 });
+
+it('GraphQL applies immutable scalar defaults when defaulted non-null inputs are omitted',async()=>{
+ const {composePageSchema,executePageOperation}=await import('@/lib/page-operations');
+ const body='Quoted "text"\nsecond line';
+ const defaulted:MutationProgram={...program,values:{body:{type:'string',nullable:false,parameter:'body',default:body},count:{type:'number',nullable:false,parameter:'count',default:0},enabled:{type:'boolean',nullable:false,parameter:'enabled',default:false},optional:{type:'string',nullable:true,parameter:'optional',default:null}}};
+ const descriptor=registeredMutationDescriptor('actions',defaulted);
+ const schema=composePageSchema([{name:'actions',fileId:'backend',version:'v1',typeDefs:registeredMutationSchema(defaulted)}]);
+ let calls=0;
+ const result=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_1234567890',values:{}}},caller:{pageId:'page',subject:'viewer',role:'VIEWER'},invoke:async call=>{calls++;expect(call.args.values).toEqual({body,count:0,enabled:false,optional:null});return {requestId:'request_1234567890',outcome:'committed',revision:'2',affected:1,reset:[]};},signal:new AbortController().signal});
+ expect(result.errors).toBeUndefined();expect(calls).toBe(1);expect(result.data).toMatchObject({actions:{run:{outcome:'committed'}}});
+ const invalid=await executePageOperation({schema,request:{query:descriptor.document,variables:{requestId:'request_1234567890',values:{body:null}}},caller:{pageId:'page',subject:'viewer',role:'VIEWER'},invoke:async()=>{calls++;return null;},signal:new AbortController().signal});
+ expect(invalid.errors?.length).toBeGreaterThan(0);expect(calls).toBe(1);
+});
