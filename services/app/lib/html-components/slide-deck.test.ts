@@ -24,9 +24,17 @@ describe('native slide deck',()=>{
     deck.index=1;expect(deck.index).toBe(1);expect(slides[1]!.scrollIntoView).toHaveBeenCalled();deck.removeAttribute('index');deck.index=undefined;deck.addEventListener('af-change',event=>event.preventDefault());deck.querySelector<HTMLButtonElement>('[aria-label="Previous slide"]')!.click();expect(deck.index).toBe(1);
   });
   it('honors defaults, empty decks, boundaries and dynamic slide insertion/removal',async()=>{
-    const {deck,slides,next}=fixture('default-index="1"');expect(deck.index).toBe(1);expect(next.disabled).toBe(true);slides[0]!.remove();await tick();expect(deck.index).toBe(0);expect(deck.querySelector('[data-af-deck-count]')?.textContent).toBe('1 / 1');
+    const {deck,slides,next}=fixture('default-index="1"');expect(deck.index).toBe(1);expect(next.disabled).toBe(false);slides[0]!.remove();await tick();expect(deck.index).toBe(0);expect(deck.querySelector('[data-af-deck-count]')?.textContent).toBe('1 / 1');
     slides[1]!.remove();await tick();expect(deck.index).toBe(-1);expect(deck.querySelector('[data-af-deck-count]')?.textContent).toBe('0 / 0');expect(next.disabled).toBe(true);
     const slide=document.createElement('af-slide');slide.textContent='New';deck.append(slide);await tick();expect(deck.index).toBe(0);expect(deck.querySelectorAll('nav button')).toHaveLength(1);
+  });
+  it('keeps paging controls enabled at the ends and clamps instead of wrapping',()=>{
+    const {deck,slides,previous,next}=fixture();
+    expect(previous.disabled).toBe(false);expect(next.disabled).toBe(false);
+    previous.click();expect(deck.index).toBe(0);expect(slides[1]!.scrollIntoView).not.toHaveBeenCalled();
+    next.click();expect(deck.index).toBe(1);
+    expect(previous.disabled).toBe(false);expect(next.disabled).toBe(false);
+    next.click();expect(deck.index).toBe(1);expect(slides[0]!.scrollIntoView).not.toHaveBeenCalled();
   });
   it('scopes keyboard navigation to one deck and ignores editable/control/modifier keys',()=>{
     const first=fixture(),second=fixture();first.deck.focus();first.deck.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));expect(first.deck.index).toBe(1);expect(second.deck.index).toBe(0);
