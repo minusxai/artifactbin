@@ -26,7 +26,7 @@ import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
+import { GATE_SPECS, CI_ISOLATED_GATES, CI_SHARD_OPTIONS, checkManifest, gateNamesOnDisk, specFor, browsersFor, shardWeight, shouldRetryAlone } from './gates.manifest.mjs';
 import { runGateProcess } from './gates.process.mjs';
 import { resolveServers, runSecret, serversFor } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
@@ -286,9 +286,10 @@ async function runSet(gates, workers) {
    * both directions — no red for a lost race, no green that quietly swallowed
    * a genuine flake.
    */
-  if (setFailed.length > 0 && workers.length > 1) {
-    console.log(`\n──────── retrying ${setFailed.length} gate(s) alone ────────`);
-    for (const name of [...setFailed]) {
+  const retryable=setFailed.filter(name=>shouldRetryAlone(specFor(name), workers.length));
+  if (retryable.length > 0) {
+    console.log(`\n──────── retrying ${retryable.length} gate(s) alone ────────`);
+    for (const name of retryable) {
       const gate = gates.find((g) => g.name === name);
       const spec = specFor(gate.name);
       const { ok, output, seconds } = await run(gate, workers[0], spec.timeoutMs);
