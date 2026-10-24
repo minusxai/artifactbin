@@ -198,11 +198,23 @@ it("allows multiple source aliases to reuse one exact verified account and never
     };
     input.plan.createUsers = [];
     input.plan.tokens = [];
+    if(alias==='source_account'){
+      await expect(importNativeIdentities(db,resign(input))).rejects.toThrow('native_identity_auth_missing');
+      expect((await db.query('SELECT * FROM auth."user"')).rows).toHaveLength(0);
+      expect((await db.query('SELECT * FROM native_identity_imports')).rows).toHaveLength(0);
+      const companion={id:'other_auth_id',email:source.email!,name:'Existing authentication profile',provisionedAt:input.revokedAt};
+      await db.transaction(tx=>provisionNativeIdentityAuthCompanion(tx,companion));
+      await expect(importNativeIdentities(db,resign(input))).rejects.toThrow('native_identity_auth_collision');
+      await db.query('DELETE FROM auth."user"');
+      await db.transaction(tx=>provisionNativeIdentityAuthCompanion(tx,{...companion,id:'existing_account'}));
+      await db.query('UPDATE auth."user" SET "emailVerified"=true');
+    }
     expect(await importNativeIdentities(db, resign(input))).toMatchObject({
       reusedUsers: 1,
     });
   }
   expect((await db.query("SELECT * FROM users")).rows).toHaveLength(1);
+  expect((await db.query('SELECT id,name,"emailVerified" FROM auth."user"')).rows).toEqual([{id:'existing_account',name:'Existing authentication profile',emailVerified:true}]);
   expect((await db.query("SELECT * FROM tokens")).rows).toHaveLength(0);
   expect(
     (await db.query("SELECT * FROM native_identity_imports")).rows,

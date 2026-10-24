@@ -103,7 +103,7 @@ export async function writeNativeIdentities(
         ? proof.targets.get(mapping.targetId)!
         : input.plan.createUsers.find((u) => u.sourceId === mapping.sourceId)!;
     const expectedSha = nativeIdentityDigest(storedUser(expected));
-    const authCompanion=mapping.action==='create-preserved'&&expected.kind==='account'&&expected.email?{id:mapping.targetId,email:expected.email,name:expected.name??null,provisionedAt:input.revokedAt}:undefined;
+    const authCompanion=expected.kind==='account'&&expected.email?{id:mapping.targetId,email:expected.email,name:expected.name??null,provisionedAt:input.revokedAt}:undefined;
     if (prior) {
       verifyLedger(prior, mapping);
       if (
@@ -154,7 +154,7 @@ export async function writeNativeIdentities(
         throw Error("native_identity_create_verification_failed");
       result.createdUsers++;
     }
-    if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion);
+    if(authCompanion)await provisionNativeIdentityAuthCompanion(tx,authCompanion,mapping.action==='reuse-verified-email'?'verify-existing':'create-or-preserve');
     await save("user", mapping, expectedSha, {
       sourceUser: storedUser(proof.users.get(mapping.sourceId)!),
     });
