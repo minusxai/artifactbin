@@ -12,6 +12,11 @@ function htmlAnchorElements(doc:Document,nodeId:string,ancestorId?:string):Eleme
  const scope=ancestors ? ancestors.length===1 ? [...ancestors[0]!.querySelectorAll('[data-af-id]')] : [] : nodes;
  return scope.filter(node=>node.getAttribute('data-af-id')===nodeId);
 }
+/** Reveal only a unique target within its persisted scope. Stale anchors stay missing. */
+export function revealHtmlAnnotation(doc:Document,pin:HtmlAnnotationPaint['pins'][number]):void {
+ const matches=htmlAnchorElements(doc,pin.anchor?.nodeId??pin.nodeId??pin.path,pin.anchor?.ancestorId);
+ if(matches.length===1)matches[0]?.scrollIntoView?.({block:'nearest'});
+}
 /** Paint in an inert overlay: authored DOM/text and the viewer's native selection stay intact. */
 export function createHtmlAnnotationPainter(doc: Document) {
   const overlay = doc.createElement('div');

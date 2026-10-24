@@ -28,6 +28,7 @@ it('keeps a whole paragraph quote when the native range ends at its parent bound
  document.body.innerHTML='<section data-af-id="section"><p data-af-id="figure">Revenue grew 40% in Q3.</p><p>Next paragraph</p></section>';
  const section=document.querySelector('section')!,paragraph=document.querySelector('p')!;
  const range=document.createRange();range.setStart(paragraph.firstChild!,0);range.setEnd(section,1);window.getSelection()!.addRange(range);
+ expect(htmlSelection(window,undefined,'1',['section','figure'])?.anchor.nodeId).toBe('figure');
  const selection=htmlSelection(window,paragraph,'1',['section','figure']);
  expect(selection?.anchor).toMatchObject({nodeId:'figure',quote:'Revenue grew 40% in Q3.',range:{start:0,end:23,length:23}});
  // Normalizing platform capture never rewrites the viewer's native selection.

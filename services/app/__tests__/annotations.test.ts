@@ -73,6 +73,28 @@ const headEditId = async (token: string, id: string) => {
 };
 
 describe('creating (browser door, owner only)', () => {
+  it('admits link readers to comments while preserving private and mutation boundaries', async () => {
+    const { doc, actor } = await publish();
+    expect((await annotate(doc.id, actor, { anchor: nativeAnchor('intro'), edit_id: doc.edit_id, body: 'Existing conversation' })).status).toBe(201);
+    const stranger = await mintToken('agent');
+    const reader = { credential: 'session' as const, userId: stranger.userId!, email: stranger.email!, emailVerified: true };
+    const list = () => myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`), params({ id: doc.id }));
+    expect((await list()).status).toBe(404);
+    for (const visibility of ['unlisted', 'public']) {
+      await (await getDb()).query('UPDATE artifacts SET visibility=$2 WHERE id=$1', [doc.id, visibility]);
+      const response = await list();
+      expect(response.status).toBe(200);
+      expect((await response.json()).annotations[0].thread[0].body).toBe('Existing conversation');
+      const accountRead = await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { actor: reader }), params({ id: doc.id }));
+      expect(accountRead.status).toBe(200);
+      expect((await annotate(doc.id, reader, { anchor: nativeAnchor('intro'), edit_id: doc.edit_id, body: 'Denied account write' })).status).toBe(404);
+      const guestWrite = await myCreateAnnotationRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', json: { anchor: nativeAnchor('intro'), edit_id: doc.edit_id, body: 'Denied' } }), params({ id: doc.id }));
+      expect(guestWrite.status).toBe(401);
+    }
+    await (await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1", [doc.id]);
+    expect((await list()).status).toBe(404);
+  });
+
   it('persists optional review context through create and fresh list; old comments remain context-free', async () => {
     const { doc, actor } = await publish();
     const view_state = { v: 2, state: { $: { screen: 'payment' }, 'aBcD:value': 'billing', 'eFgH:open': false } };
@@ -472,4 +494,16 @@ it('keeps native source responses separate from the dedicated account-scoped com
  const read=await getArtifactRoute(request(`/api/artifacts/${doc.id}`,{token:t.token}),params({id:doc.id}));expect(read.status).toBe(200);
  expect(await read.json()).not.toHaveProperty('annotations');
  const comments=await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`,{token:t.token}),params({id:doc.id}));expect(comments.status).toBe(200);expect((await comments.json()).annotations).toHaveLength(1);
+});
+
+it('admits an empty comment list without reading page content', async()=>{
+ const {doc,actor}=await publish();
+ const db=await getDb();const query=vi.spyOn(db,'query');
+ try {
+  const response=await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`,{actor}),params({id:doc.id}));
+  expect(response.status).toBe(200);expect((await response.json()).annotations).toEqual([]);
+  const artifactReads=query.mock.calls.map(call=>String(call[0])).filter(sql=>/^\s*SELECT/i.test(sql)&&/FROM artifacts\b/i.test(sql));
+  expect(artifactReads.length).toBeGreaterThan(0);
+  for(const sql of artifactReads){const projection=sql.split(/FROM artifacts/i)[0]!;expect(projection).not.toMatch(/SELECT\s+\*|\bsource\b|\bdocument\b/i);}
+ } finally {query.mockRestore();}
 });

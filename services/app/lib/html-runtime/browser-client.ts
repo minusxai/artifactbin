@@ -1,3 +1,5 @@
+import {createHtmlCommentView} from './comment-view';
+import {installHtmlCommentView} from '../html-bridge/comment-view-session';
 import {createClient,gql,readStateFragment} from './apollo/client';
 import {createViewerState} from './viewer-state';
 import type {StoreReceipt} from './apollo/apollo-contracts';
@@ -17,3 +19,14 @@ const state = createViewerState({
   ...(navigator.locks ? { lock: (work: () => Promise<StoreReceipt>) => navigator.locks.request(key, work) } : {}),
 });
 export const client=createClient({backends:config.backends??[],state,remote});
+
+// Authors explicitly choose UI fields suitable for sharing beside a comment.
+const viewBlock=document.querySelector('[data-af="state"][data-af-comment-fields][data-af-comment-version]');
+if(viewBlock) {
+ try {
+  const fields:unknown=JSON.parse(viewBlock.getAttribute('data-af-comment-fields')!);
+  if(!Array.isArray(fields)||fields.some(key=>typeof key!=='string'))throw new Error('Invalid fields');
+  installHtmlCommentView(document,createHtmlCommentView({state,backends:config.backends??[],declaration:{version:viewBlock.getAttribute('data-af-comment-version')!,fields}}));
+ }catch { installHtmlCommentView(document,{capture(){throw new Error('Invalid comment view declaration');},async restore(){throw new Error('Invalid comment view declaration');}}); }
+}
+else installHtmlCommentView(document,undefined);

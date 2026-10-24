@@ -32,7 +32,7 @@ import {
   issuePagesTicket, ownerUsername, sessionActor,
 } from '@/lib/accounts';
 import { loadDatasetRows } from '@/lib/datasets/dataset-store';
-import {ARTIFACT_FORMATS, type ArtifactFormat, canAnnotate, CARD_RENDER_GENERATION} from '@artifactbin/contracts';
+import {ARTIFACT_FORMATS, type ArtifactFormat, CARD_RENDER_GENERATION} from '@artifactbin/contracts';
 import {getGroupById} from '@/lib/groups';
 import { canonicalArtifactPath } from '@/lib/http/urls';
 import { accountWorkspaceFor } from '@/lib/workspace/dashboard';
@@ -252,7 +252,7 @@ async function answerArtifactPage(request: Request, id: string, options: Artifac
     count('like', artifact.id),
     artifact.user_id && artifact.user_id !== viewerId && viewerId ? has(viewerId, 'follow', artifact.user_id) : Promise.resolve(false),
     artifact.user_id && artifact.user_id !== viewerId ? count('follow', artifact.user_id) : Promise.resolve(0),
-    canAnnotate(role) && isDoc ? countOpenAnnotations(artifact.id) : Promise.resolve(0),
+    isDoc ? countOpenAnnotations(artifact.id) : Promise.resolve(0),
     artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : (artifact.format === 'viz' ? artifact.source ?? '' : '')),
   ] as const);
   // Awaited below; a failure of the preparation first must not leave this one unobserved.

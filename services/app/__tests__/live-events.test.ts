@@ -207,13 +207,9 @@ describe('subscription lifecycle', () => {
 });
 
 /**
- * ANNOTATIONS ARE LIVE FOR ANNOTATORS. The events stream serves readers too,
- * and the named `annotations` frame is sent only on connections that can
- * annotate (owner, editor or commenter; a third subscription beside
- * the document and its datasets, on the annotations' own NOTIFY channel).
- * An owner connection gets one at CONNECT (self-syncing stream: the first
- * frame is current state) and one per change; an anonymous reader of the
- * same public document NEVER sees the event name at all.
+ * Annotation wakeups follow the document's read ACL. They carry no conversation
+ * content; each reader fetches the independently authorized comment listing.
+ * A reader gets one at connect and one per change while admission remains valid.
  */
 describe('GET /a/<id>/events — the annotations frame', () => {
   /** One persistent reader over the stream; `next(count)` may be called repeatedly. */
@@ -323,7 +319,7 @@ describe('GET /a/<id>/events — the annotations frame', () => {
     reader.close();
   });
 
-  it('an anonymous reader of the same public document never sees the event', async () => {
+  it('an anonymous reader of a public document receives comment wakeups', async () => {
     const { doc, actor } = await annotationSetup();
     const res = await eventsRoute(
       request(`/a/${doc.id}/events`),
@@ -333,9 +329,9 @@ describe('GET /a/<id>/events — the annotations frame', () => {
     const reader = sseStream(res.body!);
 
     await annotate(doc.id, actor, doc.edit_id);
-    // Give any (wrong) frame a moment to arrive; only the document frame may exist.
+    // Public conversation reads and wakeups share document admission.
     const seen = await reader.next(3, 1200);
-    expect(seen.some((e) => e.event === STORY_ANNOTATIONS_EVENT)).toBe(false);
+    expect(seen.some((e) => e.event === STORY_ANNOTATIONS_EVENT)).toBe(true);
     expect(seen.length).toBeGreaterThan(0); // the stream itself is alive (opening document frame)
     reader.close();
   });

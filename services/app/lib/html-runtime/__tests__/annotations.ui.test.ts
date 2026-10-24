@@ -49,3 +49,13 @@ it('keeps resolved history geometry without painting until explicitly inspected'
  expect(painter.paint(input)[0]?.status).toBe('exact');expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(0);
  painter.paint({...input,pins:[{...pin,layoutOnly:false}]});expect(document.querySelector('[data-af="annotation-overlay"]')!.children.length).toBe(1);painter.dispose();
 });
+
+import { revealHtmlAnnotation } from '../../html-bridge/annotations';
+it('reveals only a unique scoped target and leaves stale anchors missing', () => {
+ document.body.innerHTML='<section data-af-id="scope"><p data-af-id="target">inside</p></section><p data-af-id="target">outside</p>';
+ const inside=document.querySelector('section p')!,outside=document.querySelector('body > p')!;
+ const reveal=vi.fn();Object.defineProperty(inside,'scrollIntoView',{value:reveal});Object.defineProperty(outside,'scrollIntoView',{value:vi.fn()});
+ const pin={id:'thread',path:'target',anchor:{kind:'html-node' as const,v:1 as const,revision:'1',nodeId:'target',ancestorId:'scope',quote:''}};
+ revealHtmlAnnotation(document,pin);expect(reveal).toHaveBeenCalledOnce();
+ inside.remove();revealHtmlAnnotation(document,pin);expect(outside.scrollIntoView).not.toHaveBeenCalled();
+});

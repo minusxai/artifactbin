@@ -54,7 +54,7 @@ interface LiveArtifactOptions {
   onData?: (event: ArtifactDataEvent) => void;
   /** Native HTML reloads its server bootstrap on publication; it never fetches a JSX frame. */
   onPublication?: (version: number) => void;
-  /** The ANNOTATIONS on this document changed (owner-credentialed connections only). */
+  /** The ANNOTATIONS on this readable document changed. */
   onAnnotations?: (annotations: AnnotationWire[]) => void;
   /** Where the stream picks up (ServedResults.since), read when the stream opens. */
   since?: string;
@@ -180,7 +180,7 @@ export function createLiveArtifact(options: LiveArtifactOptions): Accessor<Artif
               if (!Array.isArray(frame.datasets) || frame.datasets.length === 0) return;
               options.onData?.(frame);
             },
-            // Annotations are a PING too: the owner's page refetches the list.
+            // Annotations are a PING too: the reader refetches the authorized list.
             onAnnotations: () => {
               if (!options.onAnnotations) return;
               annotationsRequest?.abort();

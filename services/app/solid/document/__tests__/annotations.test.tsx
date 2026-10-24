@@ -23,6 +23,29 @@ beforeEach(installAnnotationFetch);
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('AnnotationLayer', () => {
+  it('lets a read-only viewer open existing conversations without mutation controls', async () => {
+    const view = layer({ railOpen: true, canCreateComment: false, onSignIn: vi.fn() });
+    await screen.findByText('is this right?');
+    await fireEvent.click(view.container.querySelector('[data-thread-id="ann_1"] button[aria-label="Open annotation thread"]')!);
+    await screen.findByText('one more thought');
+    expect(screen.queryByRole('button', { name: 'Resolve annotation' })).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Screenshot' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Sign in to comment' })).toBeTruthy();
+    expect(view.runtime.posts().some(post => post.type === 'mx:pick' && post.enabled)).toBe(false);
+    expect(view.runtime.posts().filter(post => post.type === 'mx:annotations').at(-1)).toMatchObject({canComment:false});
+  });
+
+  it('removes comment tools when an existing commenter loses mutation permission', async () => {
+    const view = layer({ railOpen: true, canCreateComment: true });
+    await screen.findByRole('button', { name: 'Select' });
+    view.set({ railOpen: true, canCreateComment: false });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Select' })).toBeNull());
+    expect(screen.queryByLabelText('Select tool active')).toBeNull();
+    expect(await screen.findByText('is this right?')).toBeTruthy();
+  });
+
   it('opens a mention notification on the thread containing its reply', async () => {
     window.history.replaceState(null, '', '/a/example?thread=ann_2');
     try {

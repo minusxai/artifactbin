@@ -27,6 +27,12 @@ State in `data-af="state"` initializes each viewer’s private browser state. Ke
 
 The reader starts immediately. The client engine loads on the first `@afbin/apollo` import; await that import before using it. A raw authored file can use the core from an absolute server URL for local preview: without a hosted runtime context, only private local state is available. A downloaded page embeds the engine and works without fetching code.
 
+## Contents
+
+- [Dynamic elements and comments](#dynamic-elements-and-comments)
+- [Saved comment views](#saved-comment-views)
+- [Local mutations](#local-mutations)
+
 ## Dynamic elements and comments
 
 The server numbers elements present in saved HTML; preserve those returned `data-af-id` values. It cannot number elements your script creates later. Give each such element a stable identity derived from an immutable record ID and its role, not an array index, display text, sort order or a fresh random value on every render:
@@ -44,6 +50,21 @@ document.querySelector('#jobs').append(item);
 Keep the `#jobs` container in saved HTML so publication gives it a persistent source identity. Re-rendering the same logical job keeps its IDs, including after sorting or filtering. Use distinct prefixes for different lists and roles; avoid duplicate IDs. Never reuse a deleted job’s IDs for a new job, or borrow an existing source element’s identity.
 
 When someone comments on a runtime-created element, the platform captures its identity and scopes it to the nearest persisted source ancestor automatically. The comment contract may include `ancestorId`; page authors do not construct anchors or call an anchor-registration API. Keep dynamic content under its intended saved container. Missing targets or missing/duplicate scopes do not fall back to matching text elsewhere; a comment must not silently move to another record.
+
+## Saved comment views
+
+Local state stays private unless the author explicitly declares fields suitable for sharing with a comment. Add both attributes to the existing state block:
+
+```html
+<script type="application/json" data-af="state"
+  data-af-comment-version="navigation-v1" data-af-comment-fields='["screen","tab"]'>
+{"screen":"home","tab":"overview","draft":""}
+</script>
+```
+
+Only the named top-level fields are attached to comments; never declare drafts, tokens, personal information or backend namespaces. Lists must contain unique simple field names. Every field must exist. The version must match exactly when restored: change it when view-field meanings change. Saved views use bounded JSON (32 KiB total); incompatible or invalid snapshots show a restoration message without changing state. Pages without a declaration keep target-only comments.
+
+Opening a thread or pressing its restore button applies the saved fields through the private local store, before target layout. Closing the thread returns fields still equal to the restored values to the viewer's previous values; later deliberate changes are retained. The return snapshot stays in this viewer's frame. Backend data and mutations are never captured or replayed. This is saved comment context, not live sharing or following another reader's local state. Target identity rules still apply if the restored screen no longer contains that element.
 
 ## Local mutations
 

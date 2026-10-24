@@ -1,4 +1,5 @@
 import type { HtmlNodeAnchor } from '@artifactbin/contracts';
+import { withHtmlCommentView } from './comment-view-session';
 import { captureHtmlRange } from './range';
 import type { StoryEditSelection } from '../edit-protocol';
 const elementOf = (node: Node | null): Element | null => node?.nodeType === 1 ? node as Element : node?.parentElement ?? null;
@@ -7,7 +8,7 @@ const htmlNode = (node: Node | null): Element | null => elementOf(node)?.closest
 export function htmlSelection(win: Window, target?: Node | null, revision = '', savedNodeIds?: readonly string[]): (StoryEditSelection & { anchor: HtmlNodeAnchor }) | null {
   const selected = win.getSelection();
   let range = selected?.rangeCount ? selected.getRangeAt(0) : null;
-  let node = htmlNode(target ?? range?.commonAncestorContainer ?? null);
+  let node = htmlNode(target ?? range?.startContainer ?? null);
   if (!node) return null;
   const quoteText=selected?.toString().replace(/\s+/g,' ').trim() ?? '';
   if(range && !range.collapsed && quoteText && range.intersectsNode(node)){
@@ -41,6 +42,6 @@ export function htmlSelection(win: Window, target?: Node | null, revision = '', 
     ancestors.unshift({ path: parentId, tag: parent.tagName.toLowerCase(), hint: '' });
     parent = htmlNode(parent.parentElement);
   }
-  return { anchor: { kind: 'html-node', v: 1, revision, nodeId: id, ...(ancestorId ? {ancestorId} : {}), quote: quote ?? '', ...(range && quote ? { range: captureHtmlRange(node, range) } : {}) }, kind: quote ? 'text' : 'element', path: id, nodeId: id, tag: node.tagName.toLowerCase(), className: node.getAttribute('class') ?? '', style: node.getAttribute('style') ?? '', ancestors,
-    rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, ...(quote ? { quote } : {}) };
+  return withHtmlCommentView<StoryEditSelection & {anchor:HtmlNodeAnchor}>(win.document, { anchor: { kind: 'html-node', v: 1, revision, nodeId: id, ...(ancestorId ? {ancestorId} : {}), quote: quote ?? '', ...(range && quote ? { range: captureHtmlRange(node, range) } : {}) }, kind: quote ? 'text' : 'element', path: id, nodeId: id, tag: node.tagName.toLowerCase(), className: node.getAttribute('class') ?? '', style: node.getAttribute('style') ?? '', ancestors,
+    rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, ...(quote ? { quote } : {}) });
 }
