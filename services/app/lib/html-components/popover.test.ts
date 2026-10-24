@@ -11,9 +11,19 @@ function fixture(attrs = '') {
 }
 it('retains authored state and links native trigger and dialog labels without wrapper tab stops', () => {
  const {root,trigger,content} = fixture(); const input = content.querySelector('input')!;
- trigger.click(); expect(root.open).toBe(true); expect(content.hidden).toBe(false); expect(document.activeElement).toBe(input);
+ trigger.focus(); trigger.click(); expect(root.open).toBe(true); expect(content.hidden).toBe(false); expect(document.activeElement).toBe(trigger);
  expect(trigger.parentElement!.hasAttribute('tabindex')).toBe(false); expect(trigger.getAttribute('aria-controls')).toBe(content.id); expect(content.getAttribute('aria-labelledby')).toBe(root.querySelector('af-popover-title')!.id);
+ input.focus(); expect(document.activeElement).toBe(input);
  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})); expect(root.open).toBe(false); expect(document.activeElement).toBe(trigger); expect(input.value).toBe('retained'); expect(content.dataset.afId).toBe('kept');
+});
+it('keeps keyboard-open focus on the trigger and allows focus into content before Escape restores it', () => {
+ const host = document.createElement('div'); host.innerHTML = '<af-popover><af-popover-trigger>Open</af-popover-trigger><af-popover-content><button>First action</button></af-popover-content></af-popover>'; document.body.append(host);
+ const root = host.querySelector<AfPopover>('af-popover')!; const trigger = host.querySelector<HTMLElement>('af-popover-trigger')!; const action = host.querySelector<HTMLButtonElement>('button')!;
+ trigger.focus(); trigger.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+ expect(root.open).toBe(true); expect(document.activeElement).toBe(trigger);
+ action.focus(); expect(root.open).toBe(true); expect(document.activeElement).toBe(action);
+ action.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+ expect(root.open).toBe(false); expect(document.activeElement).toBe(trigger);
 });
 it('waits for author-controlled state and supports canceled intent', () => {
  const {root,trigger,content} = fixture('open'); trigger.click(); expect(content.hidden).toBe(false);
@@ -36,7 +46,7 @@ it('preserves disabled native children and removes obsolete generated label link
  root.querySelector('af-popover-title')!.remove(); await tick(); expect(content.hasAttribute('aria-labelledby')).toBe(false); expect(content.getAttribute('aria-label')).toBe('Open');
 });
 it('restores focus when a controlled author closes and registers once', () => {
- const {root,trigger,content} = fixture('open'); expect(content.contains(document.activeElement)).toBe(true);
+ const {root,trigger,content} = fixture('open'); content.querySelector('input')!.focus(); expect(content.contains(document.activeElement)).toBe(true);
  root.open = false; expect(document.activeElement).toBe(trigger); registerPopover(); expect(document.querySelectorAll('style[data-af-popover-styles]')).toHaveLength(1);
 });
 it('dismisses a nested tooltip before its containing popover', () => {
@@ -50,11 +60,11 @@ it('moves semantics when a native trigger is added after initial connection', as
  wrapper.append(trigger); await tick(); expect(wrapper.hasAttribute('tabindex')).toBe(false); expect(wrapper.hasAttribute('role')).toBe(false);
  root.remove();
 });
-it('dismisses on Tab focus leaving, preserves outside focus, and focuses replacement content', async () => {
- const {root,trigger,content} = fixture(); trigger.click();
+it('dismisses on Tab focus leaving, preserves outside focus, and restores the trigger when content is replaced', async () => {
+ const {root,trigger,content} = fixture(); trigger.focus(); trigger.click();
  const outside = document.createElement('button'); document.body.append(outside); outside.focus(); expect(root.open).toBe(false); expect(document.activeElement).toBe(outside);
  trigger.click(); const next = document.createElement('af-popover-content'); next.innerHTML = '<input aria-label="Replacement">'; content.replaceWith(next); await tick();
- expect(next.contains(document.activeElement)).toBe(true); expect(root.open).toBe(true);
+ expect(root.open).toBe(true); expect(document.activeElement).toBe(trigger);
 });
 it('requests dismissal when the trigger becomes disabled, while controlled visibility waits for the author', async () => {
  const a = fixture(); a.trigger.click(); a.trigger.disabled = true; await tick(); expect(a.root.open).toBe(false);
