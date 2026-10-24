@@ -1,3 +1,4 @@
+import {verifyNativeReaderTemplate,renderNativeReaderTemplate} from './reader-template.ts';
 import {verifyNativeAuthorProgram} from './author-programs.ts';
 import {verifyNativeChartMapping} from './chart-mapping.ts';
 /** Pure offline assembly: no registration, network, source evaluation or destination writes. */
@@ -30,6 +31,8 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  if(input.coreUrl!=='/af/v1/core.js'&&(!safeUrl(input.coreUrl)||new URL(input.coreUrl).pathname!=='/af/v1/core.js'))block('core-url');
  if(input.style&&(hash(input.style.css)!==input.style.sha256||input.style.sourceSha256!==input.analysis.sourceSha256||/<\/style/i.test(input.style.css)))block('style-closure-proof');
  if(input.style&&(input.style.htmlAttributes||input.style.storyWrapper)&&input.style.rootSha256!==nativeDigest({sourceSha256:input.style.sourceSha256,htmlAttributes:input.style.htmlAttributes,storyWrapper:input.style.storyWrapper}))block('style-root-proof');
+ const reader=input.readerTemplate;
+ if(reader&&!verifyNativeReaderTemplate({analysis:input.analysis,identity:input.identity,sourceRecordSha256:reader.sourceRecordSha256,template:reader.template,chrome:reader.chrome},reader))block('reader-template-proof');
  const nodes:RetainedJsxNode[]=[];
  const collect=(node:RetainedJsxNode)=>{nodes.push(node);if(node.type==='element')node.children.forEach(collect);};input.analysis.nodes.forEach(collect);
  for(const program of input.authorPrograms??[]){
@@ -126,7 +129,8 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  }
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};
  const assignments=lowered.assignments.map(a=>`document.querySelector('[data-af-id="${a.afId}"]')[${json(a.property)}]=${json(a.value)};`).join('\n');
- const authorJs=registrations+'\n'+chartMounts+'\n'+assignments+'\n'+emitted.authorJs+'\n'+(input.authorPrograms??[]).map(program=>program.authorJs).join('\n');
+ const readerOutput=reader?renderNativeReaderTemplate(reader,lowered.html):null;
+ const authorJs=(readerOutput?readerOutput.authorJs+'\n':'')+registrations+'\n'+chartMounts+'\n'+assignments+'\n'+emitted.authorJs+'\n'+(input.authorPrograms??[]).map(program=>program.authorJs).join('\n');
  if(/<\/script/i.test(authorJs)){block('author-script-end-tag');return {status:'blocked',html:null,bindingTargets:targets,blockers};}
  for(const backend of input.backends)if(!/^[A-Za-z_]\w*$/.test(backend.namespace)||!safeUrl(backend.url))block('backend-link');
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};
@@ -137,8 +141,9 @@ export function assembleNativePage(input:NativeAssemblyInput):NativeAssemblyResu
  const wrapperAttributes=attributes(wrapper?.attributes??{});
  if(wrapper&&wrapper.tag!=='div')block('story-wrapper');
  if(blockers.length)return {status:'blocked',html:null,bindingTargets:targets,blockers};
- const story=wrapper?`<div${wrapperAttributes}>${lowered.html}</div>`:lowered.html;
- const html=`<!DOCTYPE html><html${htmlAttributes}><head><script src="${escape(input.coreUrl)}"></script>${links}<style>${lowered.css}</style><style>${input.style?.css??''}</style>${lowered.headHtml}</head><body>${story}<script type="application/json" data-af="state">${json(emitted.localDefaults)}</script><script type="module">${authorJs}</script></body></html>`;
+ const content=readerOutput?.html??lowered.html;
+ const story=wrapper?`<div${wrapperAttributes}>${content}</div>`:content;
+ const html=`<!DOCTYPE html><html${htmlAttributes}><head><script src="${escape(input.coreUrl)}"></script>${links}<style>${lowered.css}</style><style>${input.style?.css??''}</style>${readerOutput?`<style>${readerOutput.css}</style>`:''}${lowered.headHtml}</head><body>${story}<script type="application/json" data-af="state">${json(emitted.localDefaults)}</script><script type="module">${authorJs}</script></body></html>`;
  if(Buffer.byteLength(html)>6000000){block('page-size');return {status:'blocked',html:null,bindingTargets:targets,blockers};}
  return {status:'complete',files,html,htmlSha256:hash(html),bindingTargets:targets,blockers:[]};
 }

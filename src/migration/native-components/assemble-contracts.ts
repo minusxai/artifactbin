@@ -1,3 +1,4 @@
+import type {NativeReaderTemplateReceipt} from './reader-template-contracts.ts';
 import type { NativeAuthorProgramReceipt } from './author-program-contracts.ts';
 import type {NativeChartMapping,NativeChartAdapter} from './chart-contracts.ts';
 import type { NativeTypedAnalysis } from './analyze-contracts.ts';
@@ -31,6 +32,7 @@ export interface NativeAssemblyBackend {
 export interface NativeAssemblyModule {name:string;register:string;specifier:string;sha256:string}
 export interface NativeAssemblyFile {path:string;bytes:Uint8Array;sha256:string}
 export interface NativeAssemblyInput {
+ readerTemplate?:NativeReaderTemplateReceipt;
  authorPrograms?: readonly NativeAuthorProgramReceipt[];
  chartMappings?:readonly NativeChartMapping[];
  chartAdapter?:NativeChartAdapter;

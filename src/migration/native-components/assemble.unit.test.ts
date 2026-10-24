@@ -115,3 +115,14 @@ test('mapped charts cannot emit an undeclared or stale adapter import',async()=>
  input.chartAdapter={specifier:'https://example.invalid/adapter.js',sha256:'a'.repeat(64),dependencies:[]};result=assembleNativePage(input);assert.equal(result.status,'blocked');assert.ok(result.blockers.some(b=>b.code==='chart-adapter-file-proof'));
  (input.chartMappings[0]!.props as Record<string,NativeJson>).viz={kind:'other'};result=assembleNativePage(input);assert.equal(result.status,'blocked');assert.ok(result.blockers.some(b=>b.code==='chart-mapping-proof'));
 });
+
+test('reader-template proof is consumed in assembly and rejects a stale template decision',async()=>{
+ const {prepareNativeReaderTemplate}=await import('./reader-template.ts');
+ const input=fixture();
+ input.readerTemplate=prepareNativeReaderTemplate({analysis:input.analysis,identity:input.identity,sourceRecordSha256:'a'.repeat(64),template:'doc',chrome:true});
+ const result=assembleNativePage(input);assert.equal(result.status,'complete');if(result.status!=='complete')return;
+ assert.match(result.html,/<nav class="mx-outline" aria-label="Contents" hidden>/);
+ assert.match(result.html,/class="mx-doc mx-doc--document"/);
+ input.readerTemplate.template='plan';
+ const stale=assembleNativePage(input);assert.equal(stale.status,'blocked');assert.ok(stale.blockers.some(b=>b.code==='reader-template-proof'));
+});
