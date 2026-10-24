@@ -166,3 +166,25 @@ it('retains the complete dataset update wire reply including affected dependents
  const retry=await send();expect(retry.status).toBe(first.status);expect(await retry.json()).toEqual(receipt);
  const db=await harness.db();expect((await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[dataset.id])).rows[0]?.version).toBe(2);
 });
+
+it('serves admitted module and font bytes to opaque runners without granting private or unrelated assets',async()=>{
+ const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
+ const owner=await mintAccountToken('bundle-opaque-cors'),stranger=await mintAccountToken('bundle-opaque-stranger');
+ const publish=async(visibility:'unlisted'|'private',key:string)=>{
+  const response=await POST(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':key},json:{visibility,html:'<script type="module" src="./main.js"></script><link rel="stylesheet" href="./main.css">',publicationBundle:{entryPath:'index.html',files:[file('main.js','export const ready=true;','text/javascript'),file('main.css','@font-face{font-family:Fixture;src:url(./face.woff2)}','text/css'),file('face.woff2','wOF2fixture','font/woff2')]}}}));
+  const saved=await response.json();expect(response.status,JSON.stringify(saved)).toBe(201);return saved;
+ };
+ const publicPage=await publish('unlisted','bundle_opaque_public_01'),privatePage=await publish('private','bundle_opaque_private_01');
+ const load=(page:{id:string},receipt:{id:string;revision:string},origin:string,token?:string)=>assetGet(request(`/a/${page.id}/assets?dependency=${receipt.id}&revision=${receipt.revision}`,{token,headers:{Origin:origin}}),{params:Promise.resolve({id:page.id})});
+ for(const receipt of publicPage.dependencyReceipts){
+  const response=await load(publicPage,receipt,'null');expect(response.status).toBe(200);expect(response.headers.get('access-control-allow-origin')).toBe('*');expect(response.headers.has('access-control-allow-credentials')).toBe(false);
+  expect(response.headers.get('cache-control')).toBe('no-store');expect(response.headers.get('x-content-type-options')).toBe('nosniff');expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
+  if(receipt.path==='main.js'){expect(response.headers.get('content-type')).toBe('text/javascript');expect(await response.text()).toBe('export const ready=true;');}
+  if(receipt.path==='face.woff2'){expect(response.headers.get('content-type')).toBe('font/woff2');expect(await response.text()).toBe('wOF2fixture');}
+ }
+ for(const receipt of privatePage.dependencyReceipts){
+  for(const token of [undefined,stranger.token]){const denied=await load(privatePage,receipt,'https://foreign.example',token);expect(denied.status).toBe(404);expect(denied.headers.has('access-control-allow-origin')).toBe(false);}
+  const ownerResponse=await load(privatePage,receipt,'null',owner.token);expect(ownerResponse.status).toBe(200);expect(ownerResponse.headers.get('access-control-allow-origin')).toBe('*');
+  const unrelated=await load(publicPage,receipt,'null',owner.token);expect(unrelated.status).toBe(404);expect(unrelated.headers.has('access-control-allow-origin')).toBe(false);
+ }
+});

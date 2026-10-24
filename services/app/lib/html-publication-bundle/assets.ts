@@ -25,7 +25,9 @@ export async function serveBundleAsset(request:Request,actor:AccessActor,pageId:
  const askedRevision=new URL(request.url).searchParams.get('revision');
  const receipt=admitted.receipts.find(item=>item.kind==='asset'&&item.id===dependencyId&&(!askedRevision||item.revision===askedRevision));if(!receipt)return null;
  const asset=await assetVersion(admitted.delegator,receipt);if(!asset)return null;
- const response=await serveStoredFile(request,asset),contentType=response.headers.get('content-type')??'';
+ // Opaque /raw runners need CORS for admitted modules and fonts; admission
+ // above remains the authority, and no credentialed wildcard is granted.
+ const response=await serveStoredFile(request,asset,true),contentType=response.headers.get('content-type')??'';
  if(response.ok&&request.method!=='HEAD'&&['text/css','text/javascript','application/javascript'].includes(contentType)&&new URL(request.url).searchParams.has('version'))return new Response(pinPublicationAssetUrls(await response.text(),pageId,admitted.version,contentType),{status:response.status,headers:response.headers});
  return response;
 }
