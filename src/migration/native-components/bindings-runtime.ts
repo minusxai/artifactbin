@@ -2,7 +2,9 @@
  * runtime extension, source evaluation, network authority or shared-state cache. */
 export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,document,plan,evaluate,normalizeTimestamp){
  let disposed=false,values={},tables={},localSub,failed=false;
- const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),cleanups=[],pending=new Map(),controls=new WeakMap();
+ const subscriptions=new Map(),conditions=new WeakMap(),loops=new WeakMap(),actions=new WeakMap(),pending=new Map(),controls=new WeakMap();
+ const rootScope={active:true,cleanups:new Set()},scopes=new Set([rootScope]);
+ const disposeScope=scope=>{if(!scope.active)return;scope.active=false;for(const cleanup of scope.cleanups)cleanup();scope.cleanups.clear();scopes.delete(scope);};
  const own=(record,key)=>record&&Object.hasOwn(record,key)?record[key]??null:null;
  const at=(record,path)=>path.reduce((value,key)=>own(value,key),record);
  const doc=source=>gql([source]);
@@ -29,8 +31,8 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   return table.rows.map(row=>{if(!Array.isArray(row.cells)||row.cells.length!==table.columns.length)throw Error('Invalid registered row');const record=Object.create(null);row.cells.forEach((cell,index)=>{const column=table.columns[index],key=column.type==='number'?'number':column.type==='boolean'?'boolean':'text';if(!cell||typeof cell.isNull!=='boolean'||!cell.isNull&&(typeof cell[key]!==({number:'number',boolean:'boolean',text:'string'})[key]||typeof cell[key]==='number'&&!Number.isFinite(cell[key])))throw Error('Invalid registered cell');record[column.name]=cell.isNull?null:cell[key];});return record;});
  }
  function render(root=document,row,context,skip){
-  const ids=context?.ids??{};
-  if(disposed||failed)return;
+  const ids=context?.ids??{},scope=context?.scope??rootScope;
+  if(disposed||failed||!scope.active)return;
   for(const target of plan.targets){if(target.sourceNode===skip)continue;const host=lookup(root,ids[target.afId]||target.afId);if(!host)continue;
    if(target.kind==='text'){const value=read(target.expression,row);host.textContent=typeof value==='string'||typeof value==='number'?String(value):'';}
    if(target.kind==='property'){
@@ -38,7 +40,7 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
     if(binding?.multiple){try{projection=projection===null?[]:JSON.parse(projection);if(!Array.isArray(projection))throw Error();}catch{error('Invalid multiple selection');projection=[];}}
     host[target.property]=projection;
     if(binding){let bound=controls.get(host);if(!bound){bound=new Set();controls.set(host,bound);}if(!bound.has(target.property)){bound.add(target.property);
-     const change=async event=>{if(disposed||failed||host.disabled||host.getAttribute('readonly')!==null||host.getAttribute('read-only')!==null||event.target!==host)return;
+     const change=async event=>{if(disposed||failed||!scope.active||host.disabled||host.getAttribute('readonly')!==null||host.getAttribute('read-only')!==null||event.target!==host)return;
       try{let raw=binding.source==='detail.value'?event.detail?.value:binding.source==='target.checked'?host.checked:host.value,value;
        if(!binding.multiple&&!scalar(raw))throw Error('Invalid control value');
        if(binding.multiple){if(!Array.isArray(raw)||raw.some(item=>!scalar(item)||item===null))throw Error('Invalid multiple selection');value=JSON.stringify(raw.map(String));}
@@ -49,9 +51,9 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
        else if(binding.scalarType==='timestamp'){try{value=normalizeTimestamp(String(raw));}catch{value=null;}}
        else{if(!scalar(raw))throw Error('Invalid control value');value=String(raw);}
        if(!scalar(value)||value!==null&&typeof value!==plan.valueTypes[binding.valueName])throw Error('Invalid control value');
-       await client.updateQuery({query:doc(plan.localQuery)},data=>disposed?data:({...data,[binding.valueName]:value}));
+       await client.updateQuery({query:doc(plan.localQuery)},data=>disposed||!scope.active?data:({...data,[binding.valueName]:value}));
       }catch(cause){event.preventDefault?.();error(cause.message);}
-     };host.addEventListener(binding.event,change);cleanups.push(()=>host.removeEventListener(binding.event,change));
+     };host.addEventListener(binding.event,change);scope.cleanups.add(()=>host.removeEventListener(binding.event,change));
     }}
    }
    if(target.kind==='condition'){
@@ -62,24 +64,24 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
     const rows=read(target.expression,row)??[],durable=target.identity.keyBy!==null;if(!Array.isArray(rows)||rows.length>10000)throw Error('Repeat source must be bounded rows');
     let state=loops.get(host);if(!state){state=new Map();loops.set(host,state);}const keys=new Set(),desired=[];
     for(const [index,entry]of rows.entries()){const key=durable?own(entry,target.identity.keyBy):index;if(!(typeof key==='number'&&Number.isFinite(key)||typeof key==='string'&&key.length<=256&&!/[\u0000-\u001f]/.test(key)))throw Error('Missing stable row key');const encoded=JSON.stringify([typeof key,key]);if(keys.has(encoded))throw Error('Duplicate stable row key');keys.add(encoded);desired.push({entry,key,encoded});}
-    for(const [key,item]of state)if(!keys.has(key))item.host.remove();
-    for(const {entry,key,encoded}of desired){let item=state.get(encoded);if(!item){const wrapper=document.createElement('span');wrapper.setAttribute('style','display:contents');const mapping={};for(const sourceId of target.identity.templateIds)mapping[sourceId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],sourceId]));const domMapping={},domBindings={};for(const entry of target.identity.domIds||[]){domBindings[entry.domId]=entry.templateAfId;domMapping[entry.domId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],entry.domId]));}const rowContext={ids:mapping,domIds:domMapping,domBindings,durable};wrapper.append(...clone(target.templateId,rowContext));item={host:wrapper,context:rowContext};state.set(encoded,item);}host.append(item.host);render(item.host,entry,item.context);}
+    for(const [key,item]of state)if(!keys.has(key)){disposeScope(item.context.scope);item.host.remove();state.delete(key);}
+    for(const {entry,key,encoded}of desired){let item=state.get(encoded);if(!item){const wrapper=document.createElement('span');wrapper.setAttribute('style','display:contents');const mapping={};for(const sourceId of target.identity.templateIds)mapping[sourceId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],sourceId]));const domMapping={},domBindings={};for(const entry of target.identity.domIds||[]){domBindings[entry.domId]=entry.templateAfId;domMapping[entry.domId]='mx-instance-'+encodeURIComponent(JSON.stringify([['repeat',target.identity.owner,durable?typeof key:'index',key],entry.domId]));}const rowScope={active:true,cleanups:new Set()};scopes.add(rowScope);const rowContext={ids:mapping,domIds:domMapping,domBindings,durable,scope:rowScope};wrapper.append(...clone(target.templateId,rowContext));item={host:wrapper,context:rowContext};state.set(encoded,item);}host.append(item.host);render(item.host,entry,item.context);}
 
    }
    if(target.kind==='action'){
     const existing=actions.get(host);if(existing){existing.row=row;continue;}const action={row};actions.set(host,action);
-    const click=async()=>{if(disposed||failed||host.disabled||action.busy)return;action.busy=true;host.disabled=true;try{
-     if(target.set){const patch={};for(const [name,expr]of Object.entries(target.set)){const value=read(expr,action.row);if(!scalar(value)||!plan.valueTypes[name]||value!==null&&typeof value!==plan.valueTypes[name])throw Error('Invalid local action value');patch[name]=value;}await client.updateQuery({query:doc(plan.localQuery)},data=>disposed?data:({...data,...patch}));}
-     if(disposed)return;
-     if(target.run){const mutation=plan.mutations.find(item=>item.name===target.run);let request=pending.get(host);if(!request){const snapshot={};for(const field of mutation.values)snapshot[field.name]=own(values,field.name);request={requestId:crypto.randomUUID(),values:snapshot};pending.set(host,request);}const result=await client.mutate({mutation:doc(mutation.document),variables:request});if(disposed)return;
+    const click=async()=>{if(disposed||failed||!scope.active||host.disabled||action.busy)return;action.busy=true;host.disabled=true;try{
+     if(target.set){const patch={};for(const [name,expr]of Object.entries(target.set)){const value=read(expr,action.row);if(!scalar(value)||!plan.valueTypes[name]||value!==null&&typeof value!==plan.valueTypes[name])throw Error('Invalid local action value');patch[name]=value;}await client.updateQuery({query:doc(plan.localQuery)},data=>disposed||!scope.active?data:({...data,...patch}));}
+     if(disposed||!scope.active)return;
+     if(target.run){const mutation=plan.mutations.find(item=>item.name===target.run);let request=pending.get(host);if(!request){const snapshot={};for(const field of mutation.values)snapshot[field.name]=own(values,field.name);request={requestId:crypto.randomUUID(),values:snapshot};pending.set(host,request);}const result=await client.mutate({mutation:doc(mutation.document),variables:request});if(disposed||!scope.active)return;
       if(result.errors?.length)throw Error('Mutation failed; local values were retained');const receipt=at(result.data,mutation.outcomePath);if(!receipt||receipt.requestId!==request.requestId||!['committed','rejected','unknown'].includes(receipt.outcome))throw Error('Mutation outcome unavailable; local values were retained');
       if(receipt.outcome==='unknown')throw Error('Mutation outcome unknown; retry keeps the original request');pending.delete(host);
       if(receipt.outcome==='rejected')throw Error('Mutation rejected; local values were retained');
       if(!Array.isArray(receipt.reset)||JSON.stringify([...receipt.reset].sort())!==JSON.stringify([...mutation.reset].sort()))throw Error('Unadmitted mutation reset');
-      if(receipt.reset.length)await client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed)return data;const next={...data};for(const name of receipt.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;});
+      if(receipt.reset.length)await client.updateQuery({query:doc(plan.localQuery)},data=>{if(disposed||!scope.active)return data;const next={...data};for(const name of receipt.reset)if(Object.is(data[name],request.values[name]))next[name]=plan.defaults[name];return next;});
      }
-    }catch(cause){error(cause.message);}finally{action.busy=false;host.disabled=false;if(!disposed)render();}};
-    host.addEventListener('click',click);cleanups.push(()=>host.removeEventListener('click',click));
+    }catch(cause){error(cause.message);}finally{action.busy=false;host.disabled=false;if(!disposed&&scope.active)render();}};
+    host.addEventListener('click',click);scope.cleanups.add(()=>{host.removeEventListener('click',click);pending.delete(host);});
    }
   }
  }
@@ -94,5 +96,5 @@ export const NATIVE_BINDINGS_RUNTIME = String.raw`function install(client,gql,do
   }catch(cause){failed=true;stopQueries();error(cause.message);}
  }
  if(plan.localQuery)localSub=client.watchQuery({query:doc(plan.localQuery)}).subscribe(result=>{if(disposed)return;values=result.data;refresh();});else refresh();
- return ()=>{if(disposed)return;disposed=true;localSub?.unsubscribe();stopQueries();for(const cleanup of cleanups)cleanup();};
+ return ()=>{if(disposed)return;disposed=true;localSub?.unsubscribe();stopQueries();for(const scope of scopes)disposeScope(scope);};
 }`;
