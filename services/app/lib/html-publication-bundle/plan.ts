@@ -21,6 +21,7 @@ function resolve(value:string,owner:string):string|null{
 function links(source:string,css:boolean,js=false):Link[]{
  if(js)return parseImports(source)[0].flatMap(item=>{
   if(item.d===-2)return [];
+  if(item.n==='@afbin/apollo'||item.n==='@afbin/reader')return [];
   if(item.n===undefined)throw Error('Computed module imports require an explicit absolute remote URL');
   if(!item.n.startsWith('.')&&!item.n.startsWith('/')&&!/^[a-z][a-z\d+.-]*:/i.test(item.n))throw Error('Bare module imports require an import map or absolute remote URL');
   return [{start:item.s+(item.d>=0?1:0),end:item.e-(item.d>=0?1:0),value:item.n,kind:'asset' as const}];
@@ -86,9 +87,26 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle):Bund
   const bytes=Buffer.from(file.base64,'base64');if(bytes.toString('base64')!==file.base64||bytes.length>MAX_FILE||(total+=bytes.length)>MAX_BYTES)throw Error('Bundle byte limit exceeded');
   if(typeof file.contentType!=='string'||file.contentType.length>128)throw Error('Invalid bundle content type');files.set(name,{bytes,contentType:fileContentType(name)??file.contentType});
  }
+ const backendSources:Record<string,string>={},backends:Array<{name:string;path:string;bytes:number}>=[],backendPaths=new Set<string>(),backendEdits:Array<{start:number;end:number}>=[];
+ const backendDocument=parse(html,{sourceCodeLocationInfo:true});
+ const findBackends=(node:DefaultTreeAdapterMap['node']):void=>{
+  if('tagName'in node&&node.tagName==='link'&&node.attrs.some(attr=>attr.name==='rel'&&attr.value.split(/\s+/).includes('af-backend'))){
+   const href=node.attrs.find(attr=>attr.name==='href')?.value,name=node.attrs.find(attr=>attr.name==='data-af-name')?.value;
+   const local=href&&resolve(href,entryPath);
+   if(local){
+    if(!name||!/^[_A-Za-z][_0-9A-Za-z]*$/.test(name)||backendSources[name]!==undefined)throw Error('Invalid or duplicate backend namespace');
+    const file=files.get(local);if(!file)throw Error('Unresolved local dependencies: '+local);
+    backendSources[name]=file.bytes.toString('utf8');backends.push({name,path:local,bytes:file.bytes.byteLength});backendPaths.add(local);
+    const location=node.sourceCodeLocation?.attrs?.href;if(location)backendEdits.push({start:location.startOffset,end:location.endOffset});
+   }
+  }
+  if('childNodes'in node)for(const child of node.childNodes)findBackends(child);
+ };findBackends(backendDocument);
+ for(const edit of backendEdits.sort((a,b)=>b.start-a.start))html=html.slice(0,edit.start)+html.slice(edit.end);
  const ordered:BundleDependency[]=[],visiting=new Set<string>(),visited=new Map<string,'asset'|'dataset'>(),missing=new Set<string>();
  const dependencies=(source:string,owner:string,css=false)=>links(source,css,/^(?:text|application)\/javascript$/.test(files.get(owner)?.contentType??'')).flatMap(link=>{const name=resolve(link.value,owner);return name?[{...link,path:name}]:[];});
  const visit=(name:string,kind:'asset'|'dataset')=>{
+  if(backendPaths.has(name))throw Error('Backend files cannot also be uploaded assets: '+name);
   if(visiting.has(name))throw Error('Dependency cycle: '+name);
   if(visited.has(name)){if(visited.get(name)!==kind)throw Error('Conflicting dependency kind: '+name);return;}
   const file=files.get(name);if(!file){if(!bundle.mappings?.[name])missing.add(name);return;}
@@ -98,9 +116,9 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle):Bund
  };
  for(const dep of dependencies(html,entryPath))visit(dep.path,dep.kind);
  // Explicit manifest entries also admit dependencies used dynamically by scripts.
- for(const name of files.keys())if(name!==entryPath&&!visited.has(name))visit(name,'asset');
+ for(const name of files.keys())if(name!==entryPath&&!backendPaths.has(name)&&!visited.has(name))visit(name,'asset');
  if(missing.size)throw Error('Unresolved local dependencies: '+[...missing].sort().join(', '));
- return {html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
+ return {backendSources,backends,html,entryPath,dependencies:ordered,rewrite(source,owner,addresses){
   const edits=dependencies(source,owner,files.get(owner)?.contentType==='text/css');let result=source;
   for(const edit of edits.sort((a,b)=>b.start-a.start)){const address=addresses.get(edit.path);if(!address)throw Error('Unresolved local dependency: '+edit.path);const suffix=edit.kind==='asset'?(edit.value.match(/[?#].*$/)?.[0]??''):'';const target=address+(suffix.startsWith('?')&&address.includes('?')?'&'+suffix.slice(1):suffix);const escaped=owner===entryPath?target.replaceAll('&','&amp;').replaceAll('"','&quot;'):target;result=result.slice(0,edit.start)+escaped+result.slice(edit.end);}return result;
  }};
@@ -108,7 +126,7 @@ export function planPublicationBundle(html:string,bundle:PublicationBundle):Bund
 /** Read-only preview: the final publication repeats this validation before reserving IDs. */
 export function inspectPublicationBundle(html:string,bundle:PublicationBundle){
  const plan=planPublicationBundle(html,bundle);
- return {entryPath:plan.entryPath,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{files:99,fileBytes:4_000_000,totalBytes:16_000_000}};
+ return {entryPath:plan.entryPath,backends:plan.backends,dependencies:plan.dependencies.map(({path,kind,contentType,bytes,dependencies})=>({path,kind,contentType,bytes:bytes.byteLength,dependencies})),reusedPaths:Object.keys(bundle.mappings??{}),limits:{files:99,fileBytes:4_000_000,totalBytes:16_000_000}};
 }
 /** Pin hosted dependency reads to the immutable parent version, including nested stylesheet/module URLs. */
 export function pinPublicationAssetUrls(source:string,pageId:string,version:number,contentType='text/html'):string{

@@ -34,10 +34,10 @@ The HTTP `publicationBundle` field contains `entryPath`, `files` with `path`,
 `contentType`, and canonical padded `base64`, and optional `mappings`. A mapping
 contains `kind` (`asset` or `dataset`), `id`, observed `revision`, and the returned
 `sha256` when local bytes are retained; the server
-checks ownership, kind and current revision and derives its own URL. Mappings
-reuse content; they never overwrite a dataset. If mapped local bytes change, publication refuses
-until you update that dependency separately with its own conditional write. Update that dataset separately
-with its own observed version/state before changing its mapping revision.
+checks ownership, kind and current revision and derives its own URL. Mappings reuse unchanged content. Changed local files update the same resource ID
+conditionally against the mapping revision and state; datasets keep their own
+revision. A concurrent remote change returns a conflict instead of overwriting it.
+Keep returned path receipts, including state and revision, for the next update.
 
 The send helper saves `REQUEST.json.receipt.json` with the returned path mapping,
 including partial-success receipts. Keep the saved request and idempotency key. Dependencies use actor-owned reserved
@@ -47,3 +47,17 @@ kinds, IDs and revisions. Retry the identical saved request after an uncertain
 result; it reuses completed dependencies. For later conditional page updates,
 retain the path mapping, use `PUT` with the existing page ID and observed version
 and state, and choose a new idempotency key. The local author HTML stays portable.
+
+
+### Scoped private dependency access
+
+A page’s immutable dependency admission delegates access through its scoped
+asset door. Every read checks the current page ACL and the current page owner’s
+permission to read the admitted child. Sharing the page later works without
+changing the child’s direct private URL or ACL. Removing someone’s independent
+child grant does not remove their page-delegated grant while they can still read
+the page. Remove the page grant, remove the binding in a new page version, or
+revoke the current owner’s child access to revoke that scoped access. Ownership
+transfer uses the new current owner’s permissions, never source-supplied identity.
+Local `af-backend` links select named TypeScript files into the existing atomic
+`backendSources` publication; backend files are never uploaded as public assets.

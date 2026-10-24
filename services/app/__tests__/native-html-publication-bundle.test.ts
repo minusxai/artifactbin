@@ -20,18 +20,19 @@ it('publishes dependencies first, replays without duplicates, and returns the du
  const row=(await db.query<{source:string}>('SELECT source FROM artifacts WHERE id=$1',[saved.id])).rows[0];expect(row?.source).toContain('href="ref:');expect(row?.source).toContain('/assets?dependency=');expect(row?.source).not.toContain('./assets');
 });
 
-it('reuses observed mappings for conditional updates and refuses changed local dataset bytes',async()=>{
+it('conditionally updates changed CSS and dataset dependencies in place and exposes stale revisions',async()=>{
  const actor=await mintAccountToken('bundle-update');
- const html='<link rel="af-dataset" data-af-name="tasks" href="./tasks.csv"><h1>One</h1>';
- const source=file('tasks.csv','name,value\nA,1\n','text/csv');
- const create=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_update_create_01'},json:{html,publicationBundle:{entryPath:'index.html',files:[source]}}}));const saved=await create.json();expect(create.status).toBe(201);
- const params={params:Promise.resolve({id:saved.id})};
- const head=await (await GET(request('/api/artifacts/'+saved.id,{token:actor.token}),params)).json();
+ const html='<link rel="af-dataset" data-af-name="tasks" href="./tasks.csv"><link rel="stylesheet" href="./main.css"><h1>One</h1>';
+ const sources=[file('tasks.csv','name,value\nA,1\n','text/csv'),file('main.css','body{color:red}','text/css')];
+ const create=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_update_create_01'},json:{html,publicationBundle:{entryPath:'index.html',files:sources}}}));const saved=await create.json();expect(create.status).toBe(201);
+ const params={params:Promise.resolve({id:saved.id})};const head=await (await GET(request('/api/artifacts/'+saved.id,{token:actor.token}),params)).json();
  const mapping=Object.fromEntries(saved.dependencyReceipts.map(({path,...entry}:{path:string})=>[path,entry]));
- const body={html:html.replace('One','Two'),expectedVersion:head.version,expectedState:head.state,publicationBundle:{entryPath:'index.html',files:[source],mappings:mapping}};
- const changed=await PUT(request('/api/artifacts/'+saved.id,{method:'PUT',token:actor.token,headers:{'Idempotency-Key':'bundle_update_changed_01'},json:{...body,publicationBundle:{...body.publicationBundle,files:[file('tasks.csv','name,value\nB,2\n','text/csv')]}}}),params);expect(changed.status).toBe(409);
- const update=await PUT(request('/api/artifacts/'+saved.id,{method:'PUT',token:actor.token,headers:{'Idempotency-Key':'bundle_update_success_01'},json:body}),params);const receipt=await update.json();expect(update.status,JSON.stringify(receipt)).toBe(200);expect(receipt.dependencyReceipts).toHaveLength(1);
- const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(2);
+ const body={html:html.replace('One','Two'),expectedVersion:head.version,expectedState:head.state,publicationBundle:{entryPath:'index.html',files:[file('tasks.csv','name,value\nB,2\n','text/csv'),file('main.css','body{color:blue}','text/css')],mappings:mapping}};
+ const response=await PUT(request('/api/artifacts/'+saved.id,{method:'PUT',token:actor.token,headers:{'Idempotency-Key':'bundle_update_success_01'},json:body}),params);const receipt=await response.json();expect(response.status,JSON.stringify(receipt)).toBe(200);
+ expect(receipt.dependencyReceipts.map((entry:{id:string})=>entry.id).sort()).toEqual(saved.dependencyReceipts.map((entry:{id:string})=>entry.id).sort());expect(receipt.dependencyReceipts.every((entry:{revision:string})=>entry.revision==='2')).toBe(true);
+ const next=await (await GET(request('/api/artifacts/'+saved.id,{token:actor.token}),params)).json();
+ const conflict=await PUT(request('/api/artifacts/'+saved.id,{method:'PUT',token:actor.token,headers:{'Idempotency-Key':'bundle_update_stale_01'},json:{...body,expectedVersion:next.version,expectedState:next.state}}),params);expect(conflict.status).toBe(409);expect((await conflict.json()).details.join(' ')).toContain('version_conflict');
+ const db=await harness.db();expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(3);
 });
 it('returns partial receipts and retries the same dependency creations without duplicates',async()=>{
  const actor=await mintAccountToken('bundle-partial');
@@ -67,7 +68,7 @@ it('serves private nested CSS/JS/image dependencies through the page session and
  const readerPage=await app.request(self+'/?_pt='+readerTicket);expect(readerPage.status).toBe(200);const readerCookie=/__Host-afbin_pages=([^;]+)/.exec(readerPage.headers.get('set-cookie')??'')?.[1];
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+readerCookie}})).status).toBe(200);
  const db=await harness.db();await db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[dependency.id]);
- expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+readerCookie}})).status).toBe(404);
+ expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+readerCookie}})).status).toBe(200);
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+cookie}})).status).toBe(200);
  await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[saved.id]);
  expect((await app.request(url,{headers:{cookie:'__Host-afbin_pages='+cookie}})).status).toBe(404);
@@ -113,4 +114,44 @@ it('serves existing actor-owned image and PDF mappings through admitted dependen
  const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_media_mappings_01'},json:{html:'<img src="./image.svg"><object data="./paper.pdf"></object>',publicationBundle:{entryPath:'index.html',files:[],mappings:{'image.svg':{kind:'asset',id:imageAsset.id,revision:'1'},'paper.pdf':{kind:'asset',id:pdfAsset.id,revision:'1'}}}}}));const saved=await response.json();expect(response.status,JSON.stringify(saved)).toBe(201);
  const params={params:Promise.resolve({id:saved.id})};
  for(const id of [imageAsset.id,pdfAsset.id]){const bytes=await assetGet(request(`/a/${saved.id}/assets?dependency=${id}&revision=1`,{token:actor.token}),params);expect(bytes.status).toBe(200);expect(bytes.headers.get('x-content-type-options')).toBe('nosniff');expect((await bytes.arrayBuffer()).byteLength).toBeGreaterThan(0);}
+});
+it('keeps partial dependency-update receipts and never increments an already-updated dataset on retry',async()=>{
+ const actor=await mintAccountToken('bundle-partial-update');const html='<link rel="af-dataset" data-af-name="tasks" href="./a.csv"><img src="./bad.txt">';
+ const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_partial_change_create'},json:{html,publicationBundle:{entryPath:'index.html',files:[file('a.csv','name,value\nA,1\n','text/csv'),file('bad.txt','before','text/plain')]}}}));const saved=await created.json();expect(created.status).toBe(201);
+ const params={params:Promise.resolve({id:saved.id})};const head=await (await GET(request('/api/artifacts/'+saved.id,{token:actor.token}),params)).json();
+ const dataset=saved.dependencyReceipts.find((receipt:{path:string})=>receipt.path==='a.csv'),asset=saved.dependencyReceipts.find((receipt:{path:string})=>receipt.path==='bad.txt');
+ const body={html:html.replace('bad.txt','bad.exe'),expectedVersion:head.version,expectedState:head.state,publicationBundle:{entryPath:'index.html',files:[file('a.csv','name,value\nB,2\n','text/csv'),file('bad.exe','after','application/octet-stream')],mappings:{'a.csv':dataset,'bad.exe':asset}}};
+ const send=()=>PUT(request('/api/artifacts/'+saved.id,{method:'PUT',token:actor.token,headers:{'Idempotency-Key':'bundle_partial_change_update'},json:body}),params);
+ const response=await send();const receipt=await response.json();expect(response.status,JSON.stringify(receipt)).toBe(409);expect(receipt.dependencyReceipts).toMatchObject([{id:dataset.id,revision:'2'}]);
+ expect(await (await send()).json()).toEqual(receipt);
+ const db=await harness.db();expect((await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[dataset.id])).rows[0]?.version).toBe(2);expect((await db.query<{version:number}>('SELECT version FROM artifacts WHERE id=$1',[saved.id])).rows[0]?.version).toBe(1);
+});
+it('publishes selected local backend files atomically with the page rather than as assets',async()=>{
+ const {setServices}=await import('@/lib/platform');setServices({runner:{start:async()=>({runId:'backend-schema-test'}),getRun:async()=>({runId:'backend-schema-test',status:'completed',output:{typeDefs:'type Query { count:Int! }'},receipt:null}),events:async()=>({events:[],nextSequence:0,hasMore:false}),cancel:async()=>{}}});
+ try{
+ const actor=await mintAccountToken('bundle-local-backend');const source='export const typeDefs="type Query { count:Int! }"; export default {count:()=>1};';
+ const response=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_local_backend_create'},json:{html:'<link rel="af-backend" data-af-name="jobs" href="./api.ts"><h1>Jobs</h1>',publicationBundle:{entryPath:'index.html',files:[file('api.ts',source,'text/typescript')]}}}));const saved=await response.json();expect(response.status,JSON.stringify(saved)).toBe(201);
+ const db=await harness.db();const page=(await db.query<{source:string;meta:{htmlLinks:Array<{kind:string;name:string}>}}>('SELECT source,meta FROM artifacts WHERE id=$1',[saved.id])).rows[0]!;expect(page.source).not.toContain('href="./api.ts"');expect(page.meta.htmlLinks).toMatchObject([{kind:'backend',name:'jobs'}]);expect((await db.query<{n:number}>('SELECT count(*)::int n FROM artifacts')).rows[0]?.n).toBe(1);
+ }finally{setServices({});}
+});
+it('delegates private dependencies when the page is shared later and revokes with page or owner authority',async()=>{
+ const {createUser}=await import('@/lib/accounts');const {updateSharingFor,transferArtifact}=await import('@/lib/artifacts');const {createGroup}=await import('@/lib/groups');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');const {GET:rawGet}=await import('@/app/a/[id]/raw/route');
+ const user=await createUser({email:'mxmx_test_bundle_late_share_owner@example.com'}),reader=await createUser({email:'mxmx_test_bundle_late_share_reader@example.com'});const owner=await mintAccountToken('bundle-late-share',user.id);
+ const ownerActor={credential:'session' as const,userId:user.id,email:user.email!,emailVerified:true},readerActor={credential:'session' as const,userId:reader.id,email:reader.email!,emailVerified:true};
+ const {testIdentity}=await import('./harness');const ownerIdentity=testIdentity('session',{userId:user.id,email:user.email});
+ const created=await POST(request('/api/artifacts',{method:'POST',token:owner.token,headers:{'Idempotency-Key':'bundle_late_share_create'},json:{visibility:'private',html:'<img src="./logo.svg">',publicationBundle:{entryPath:'index.html',files:[file('logo.svg','<svg/>','image/svg+xml')]}}}));const saved=await created.json();expect(created.status).toBe(201);const child=saved.dependencyReceipts[0];const params={params:Promise.resolve({id:saved.id})};const url=`/a/${saved.id}/assets?dependency=${child.id}&revision=1&version=1`;
+ const read=(actor:typeof readerActor)=>assetGet(request(url,{actor}),params);
+ expect((await read(readerActor)).status).toBe(404);await updateSharingFor(ownerIdentity,saved.id,{shares:[{email:reader.email!,role:'viewer'}]});expect((await read(readerActor)).status).toBe(200);
+ expect((await rawGet(request('/a/'+child.id+'/raw',{actor:readerActor}),{params:Promise.resolve({id:child.id})})).status).toBe(404);
+ await updateSharingFor(ownerIdentity,saved.id,{shares:[]});expect((await read(readerActor)).status).toBe(404);expect((await read(ownerActor)).status).toBe(200);
+ const group=await createGroup(user.id,{handle:'bundle-new-owner',name:'New owner'});await transferArtifact(ownerIdentity,saved.id,{type:'group',id:group.id});expect((await read(ownerActor)).status).toBe(404);
+ await transferArtifact(ownerIdentity,child.id,{type:'group',id:group.id});expect((await read(ownerActor)).status).toBe(200);
+ const db=await harness.db();await db.query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[child.id]);expect((await read(ownerActor)).status).toBe(404);
+});
+it('supports group membership granted after private bundle publication without broadening direct child URLs',async()=>{
+ const {createUser}=await import('@/lib/accounts');const {createGroup,setGroupMember,removeGroupMember}=await import('@/lib/groups');const {GET:assetGet}=await import('@/app/a/[id]/assets/route');
+ const user=await createUser({email:'mxmx_test_bundle_group_owner@example.com'}),member=await createUser({email:'mxmx_test_bundle_group_member@example.com'});const actor=await mintAccountToken('bundle-group-share',user.id);const group=await createGroup(user.id,{handle:'bundle-group-access',name:'Bundle access'});
+ const created=await POST(request('/api/artifacts',{method:'POST',token:actor.token,headers:{'Idempotency-Key':'bundle_group_share_create'},json:{visibility:'private',destination:{type:'group',id:group.id},html:'<img src="./logo.svg">',publicationBundle:{entryPath:'index.html',files:[file('logo.svg','<svg/>','image/svg+xml')]}}}));const saved=await created.json();expect(created.status,JSON.stringify(saved)).toBe(201);const child=saved.dependencyReceipts[0],params={params:Promise.resolve({id:saved.id})};
+ const read=()=>assetGet(request(`/a/${saved.id}/assets?dependency=${child.id}&revision=1`,{actor:{credential:'session',userId:member.id,email:member.email!,emailVerified:true}}),params);
+ expect((await read()).status).toBe(404);await setGroupMember(user.id,group.id,member.id,'viewer');expect((await read()).status).toBe(200);await removeGroupMember(user.id,group.id,member.id);expect((await read()).status).toBe(404);
 });

@@ -35,3 +35,12 @@ it('pins parent versions once and preserves fragments in HTML, CSS and modules',
  expect(pinPublicationAssetUrls(`body{background:url("${url}")}`,'PAGE12',2,'text/css')).toContain('revision=1&version=2#icon');
  expect(pinPublicationAssetUrls(`import "${url}"`,'PAGE12',2,'text/javascript')).toContain('revision=1&version=2#icon');
 });
+it('keeps core-provided author runtime imports in self-contained native pages',()=>{
+ const html='<script type="module">import {client,gql} from "@afbin/apollo"; console.log(client,gql);</script>';
+ expect(planPublicationBundle(html,{entryPath:'index.html',files:[]}).dependencies).toEqual([]);
+});
+it('resolves local backend TypeScript into the native atomic backend source contract',()=>{
+ const source='export const typeDefs="type Query { count:Int! }"; export default {count:()=>1};';
+ const plan=planPublicationBundle('<link rel="af-backend" data-af-name="jobs" href="./api.ts">',{entryPath:'index.html',files:[file('api.ts',source,'text/typescript')]});
+ expect(plan.backendSources).toEqual({jobs:source});expect(plan.backends).toEqual([{name:'jobs',path:'api.ts',bytes:Buffer.byteLength(source)}]);expect(plan.dependencies).toEqual([]);expect(plan.html).not.toContain('api.ts');expect(plan.html).toContain('data-af-name="jobs"');
+});
