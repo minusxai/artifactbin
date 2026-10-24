@@ -92,3 +92,9 @@ it('requests the parent viewport for controls and comments, then restores bar pl
  await waitFor(()=>expect(broker.resize).toHaveBeenLastCalledWith({mode:'viewport'}));
  fireEvent.click(screen.getByRole('button',{name:'Comment'}));await waitFor(()=>expect(broker.resize).toHaveBeenLastCalledWith(76));
 });
+it('makes only the mounted local broker backdrop transparent and restores prior page backgrounds',()=>{
+ document.documentElement.style.setProperty('background','rgb(1, 2, 3)','important');document.body.style.setProperty('background','linear-gradient(red, blue)');
+ const html=document.documentElement.style.getPropertyValue('background'),body=document.body.style.getPropertyValue('background');
+ const view=mount();expect(document.documentElement.style.getPropertyValue('background')).toBe('transparent');expect(document.body.style.getPropertyValue('background')).toBe('transparent');expect(document.body.style.getPropertyPriority('background')).toBe('important');
+ view.unmount();expect(document.documentElement.style.getPropertyValue('background')).toBe(html);expect(document.documentElement.style.getPropertyPriority('background')).toBe('important');expect(document.body.style.getPropertyValue('background')).toBe(body);expect(document.body.style.getPropertyPriority('background')).toBe('');document.documentElement.style.removeProperty('background');document.body.style.removeProperty('background');
+});

@@ -42,6 +42,9 @@ export function LocalDocumentPage(){
  const hosted=()=>identity()?`${identity()!.platformOrigin}/a/${encodeURIComponent(identity()!.artifactId)}`:null;
  const openHosted=()=>{const url=hosted();if(url)window.open(url,'_blank','noopener');};
  onMount(()=>{
+  // The broker iframe overlays the author page; only its chrome and panels paint a surface.
+  const backgrounds=[document.documentElement,document.body].map(element=>{const saved=Array.from(element.style).filter(name=>name==='background'||name.startsWith('background-')).map(name=>({name,value:element.style.getPropertyValue(name),priority:element.style.getPropertyPriority(name)}));element.style.setProperty('background','transparent','important');return()=>{element.style.removeProperty('background');for(const item of saved)element.style.setProperty(item.name,item.value,item.priority);};});
+  onCleanup(()=>backgrounds.forEach(restore=>restore()));
   broker=installLocalConnectionBroker({win:window,onState(next){if(next!=='connected'){setNonce(null);runtimeRef.current?.dispose();runtimeRef.current=null;}setState(next);},onIdentity:setIdentity,onSourceObservation(observation){const current=identity();setRemoteChanged(Boolean(current&&observation.remoteDigest!==current.sourceDigest));},onConnected(value){
    setIdentity(value.identity);
    const controller:StoryController={nonce:'local',send(command){broker!.post({kind:'frame',payload:{kind:'send',command}});},update(){},invalidate(datasets){controller.send({type:'mx:data',datasets});},subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},getViewportRect(){return new DOMRect(0,0,window.innerWidth,window.innerHeight);},dispose(){listeners.clear();}};
