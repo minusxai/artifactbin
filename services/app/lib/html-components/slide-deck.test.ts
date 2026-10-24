@@ -72,12 +72,14 @@ describe('native slide deck',()=>{
   it('labels slides by title and retains passive vector previews without copied identity',async()=>{
     const {deck,slides}=fixture();expect(slides[0]!.getAttribute('aria-label')).toBe('Opening');slides[0]!.insertAdjacentHTML('beforeend','<svg id="chart" viewBox="0 0 20 20"><path data-af-id="curve" d="M0 0L20 20" stroke="blue"></path></svg>');await tick();const path=deck.querySelector('nav svg path');expect(path?.getAttribute('d')).toBe('M0 0L20 20');expect(path?.hasAttribute('data-af-id')).toBe(false);expect(deck.querySelector('nav [id]')).toBeNull();
   });
-  it('carries computed slide and heading presentation into safe passive thumbnails',()=>{
-    const {deck,slides}=fixture();const sourceHeading=slides[0]!.querySelector('h1')!;
+  it('keeps passive thumbnails on the retained canvas and applies slide heading styles without computed geometry',()=>{
+    const {deck}=fixture();
     const thumbnail=deck.querySelector<HTMLElement>('[data-af-deck-preview] > div > div')!;
-    const thumbnailHeading=thumbnail.querySelector<HTMLElement>('h1')!;
-    expect(thumbnail.style.getPropertyValue('display')).toBe(getComputedStyle(slides[0]!).display);
-    expect(thumbnailHeading.style.getPropertyValue('font-size')).toBe(getComputedStyle(sourceHeading).fontSize);
+    const css=document.querySelector<HTMLStyleElement>('style[data-af-slide-deck-styles]')!.textContent!;
+    expect(thumbnail.hasAttribute('data-af-preview-slide')).toBe(true);
+    expect(css).toContain('af-slide-deck [data-af-deck-preview] [data-af-preview-slide]{display:flex;position:relative;box-sizing:border-box;flex-direction:column;width:100%;min-width:0;min-height:100%;padding:24px');
+    expect(css).toContain('background:var(--background,Canvas);pointer-events:none');
+    expect(css).toContain('af-slide-deck [data-af-deck-preview] [data-af-preview-slide] :is(h1,h2,h3,h4,h5,h6){font-family:var(--font-display,inherit);font-size:clamp(2rem,5vw,2.5rem)');
   });
   it('keeps the rail focus and authored slide nodes while thumbnails refresh',async()=>{
     const {deck,slides}=fixture();const row=deck.querySelector<HTMLButtonElement>('nav button')!;row.focus();slides[0]!.querySelector('h1')!.textContent='Changed';await tick();expect(document.activeElement).toBe(row);expect(deck.querySelector('nav button')).toBe(row);expect(slides[0]!.id).toBe('original');
