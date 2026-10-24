@@ -15,6 +15,8 @@ import { createSignal, Show, type Accessor, type JSX } from 'solid-js';
 import Heart from 'lucide-solid/icons/heart';
 import GitFork from 'lucide-solid/icons/git-fork';
 import Download from 'lucide-solid/icons/download';
+import Ellipsis from 'lucide-solid/icons/ellipsis';
+import { REPO_URL } from '@/lib/serving/repo';
 import ChevronRight from 'lucide-solid/icons/chevron-right';
 import { loginHref } from '@/lib/http/login-href';
 import { artifactAppPath } from '@/lib/serving/artifact-pwa';
@@ -23,6 +25,7 @@ import type { Visibility } from '@artifactbin/contracts';
 import { PageChrome, type Panel } from '../components/PageChrome';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../ui/Tooltip';
+import { Menu, type MenuEntry } from '../ui/Menu';
 import { DocumentTitle } from '../components/PageBar';
 import { DocumentCommentAction } from './DocumentBarActions';
 import { Avatar } from '../ui/Avatar';
@@ -89,8 +92,8 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
   const byline = <>
     <Show when={username()}>{(handle) => <>
       <ChevronRight size={14} class="shrink-0 text-faint" aria-hidden="true" />
-      <a href={`/@${handle()}`} aria-label={`View @${handle()}'s profile`} class="flex shrink-0 items-center gap-1.5 text-muted no-underline hover:text-accent">
-        <Show when={props.author?.id}>{(authorId) => <Avatar image={props.author?.image ?? null} initial={handle()} userId={authorId()} size={20} />}</Show>@{handle()}
+      <a href={`/@${handle()}`} aria-label={`View @${handle()}'s profile`} class="flex min-w-0 items-center gap-1.5 text-muted no-underline hover:text-accent">
+        <Show when={props.author?.id}>{(authorId) => <Avatar image={props.author?.image ?? null} initial={handle()} userId={authorId()} size={20} />}</Show><span class="truncate">@{handle()}</span>
       </a>
       <Show when={follow()}>{(state) => (
         <Button variant="secondary" size="sm" aria-label={`${state().following ? 'Unfollow' : 'Follow'} @${handle()}`} aria-pressed={state().following} onClick={() => void toggleFollow()}>
@@ -135,6 +138,31 @@ export function DocumentChrome(props: DocumentChromeProps): JSX.Element {
     </Show>
   </>;
 
-  return <PageChrome label="Artifact controls" title={props.title()} byline={byline} actions={actions} controls={props.controls}
+  const compactItems = (): MenuEntry[] => {
+    const items: MenuEntry[] = [];
+    const handle = username();
+    if (handle) {
+      items.push({ label: `View @${handle}'s profile`, text: `@${handle}`, href: `/@${handle}` });
+      const state = follow();
+      if (state) items.push({ label: `${state.following ? 'Unfollow' : 'Follow'} @${handle}`, text: state.following ? 'Unfollow author' : 'Follow author', onSelect: () => void toggleFollow() });
+    }
+    if (reading()) {
+      items.push({ label: like().liked ? 'Unlike' : 'Like', text: `${like().liked ? 'Unlike' : 'Like'}${like().count ? ` · ${like().count}` : ''}`, onSelect: () => void toggleLike() });
+      if (props.canFork) items.push({ label: 'Fork artifact', text: 'Fork artifact', onSelect: props.onFork });
+      if (props.install) items.push({ label: 'Install app', text: 'Install app', href: `${artifactAppPath(props.id)}?install=1` });
+      if (props.owner) items.push({ label: 'Share', text: 'Share', onSelect: props.onShare });
+      if (props.membership) items.push({ label: membershipLabel(), text: props.membership === 'joined' ? 'View people' : props.membership === 'pending' ? 'View pending request' : 'Join artifact', onSelect: props.onMembership });
+    }
+    if (props.archived) items.push({ label: archivedBanner(props.archived.version, props.archived.head), text: archivedBanner(props.archived.version, props.archived.head), disabled: true });
+    items.push({ label: 'Star artifactbin on GitHub', text: 'Star artifactbin on GitHub', href: REPO_URL, target: '_blank' });
+    return items;
+  };
+  const compactActions = () => <>
+    <Show when={reading()}><DocumentCommentAction count={props.comments()} onClick={props.onComment} /></Show>
+    <Menu label="Artifact actions" items={compactItems()} trigger={attrs =>
+      <Button {...attrs} variant="ghost" size="bar" icon aria-label="More artifact actions"><Ellipsis size={20} stroke-width={1.5} /></Button>} />
+  </>;
+
+  return <PageChrome compactActions={compactActions} label="Artifact controls" title={props.title()} byline={byline} actions={actions} controls={props.controls}
     panel={props.panel} setPanel={props.setPanel} mode={props.mode} onMode={props.onMode} star />;
 }
