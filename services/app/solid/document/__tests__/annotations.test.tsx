@@ -23,6 +23,12 @@ beforeEach(installAnnotationFetch);
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('AnnotationLayer', () => {
+  it('offers creation instructions in an empty rail only when the viewer can create comments',async()=>{
+    knobs.open=[];const view=layer({railOpen:true,canCreateComment:false});
+    await screen.findByText('no open comments',{exact:true});expect(screen.queryByText(/select text in the document, or pick a block, to leave one/)).toBeNull();
+    view.set({railOpen:true,canCreateComment:true});await screen.findByText('no open comments — select text in the document, or pick a block, to leave one');
+    view.set({railOpen:true,canCreateComment:false});await screen.findByText('no open comments',{exact:true});
+  });
   it('keeps a local read-only rail and its Close action below both platform chrome rows',async()=>{
     const close=vi.fn();layer({railOpen:true,topOffset:76,canCreateComment:false,onRailOpenChange:close});
     await screen.findByText('is this right?');const rail=screen.getByRole('complementary',{name:'Annotation sidebar'});expect(rail.style.top).toBe('76px');

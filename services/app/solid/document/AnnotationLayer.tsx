@@ -1013,7 +1013,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
           onClose={() => props.onRailOpenChange(false)} header={railHeader()}>
           <div ref={threadsRoot} class="contents">
             <Show when={annotations().length === 0 && !selection()}>
-              <p class="p-2 font-mono text-xs text-muted">no open comments — select text in the document, or pick a block, to leave one</p>
+              <p class="p-2 font-mono text-xs text-muted">{mayCreate()?'no open comments — select text in the document, or pick a block, to leave one':'no open comments'}</p>
             </Show>
             <For each={openIds()}>{(id) => (
               <Show when={openRow(id)}>{(row) => (
