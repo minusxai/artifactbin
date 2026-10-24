@@ -327,3 +327,17 @@ it("snapshots caller values before waiting for registry I/O", async () => {
   release(structuredClone(plan));
   expect(await run).toMatchObject({ total: { rows: [{ amount: 2 }] } });
 });
+
+it('exposes only the authenticated target viewer identity through the readonly registered namespace',async()=>{
+ const {registeredQueryInvoker,registeredViewerDescriptor}=await import('../namespace');
+ const page={pageId:'page',version:1,revision:'1',html:'',nextNodeId:1,links:[]};
+ const context={pageId:'page',pageVersion:1,backendId:'backend',backendVersion:'one',sourceSha256:'a'.repeat(64),subject:'target-viewer'};
+ let evaluated=false;
+ const invoke=registeredQueryInvoker(page,context,async()=>{evaluated=true;return {};});
+ const call={operation:'query' as const,field:'viewer',principal:{tenant:'page',subject:'target-viewer'},fileId:'backend',version:'one',args:{id:'forged-source-user'},signal:new AbortController().signal,namespace:'queries'};
+ expect(await invoke(call)).toEqual({id:'target-viewer'});expect(evaluated).toBe(false);
+ expect(await registeredQueryInvoker(page,{...context,subject:null},async()=>({}))({...call,principal:{tenant:'page',subject:null}})).toEqual({id:null});
+ await expect(invoke({...call,operation:'mutation'})).rejects.toThrow('registered_query_unavailable');
+ await expect(invoke({...call,principal:{tenant:'page',subject:'forged'}})).rejects.toThrow('registered_query_unavailable');
+ expect(registeredViewerDescriptor('queries')).toMatchObject({namespace:'queries',identity:'target-subject-v1',responsePath:['queries','viewer','id']});
+});
