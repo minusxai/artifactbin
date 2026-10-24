@@ -57,7 +57,7 @@ export default {
         // Native HTML core bundles this module by URL; its exports are the author ABI.
         'lib/html-runtime/{browser-client,build.server,index}.ts',
         // Public custom-element API, bundled by build-html-components.
-        'lib/html-components/{tabs,tab-navigation,button,switch,progress}.ts',
+        'lib/html-components/{tabs,tab-navigation,button,switch,progress,collapsible,dialog,slider}.ts',
         'lib/libraries/*.js', 'web/solid-entry.tsx', 'web/shell.css',
         // Server bundle workers (scripts/build/build-server.mjs).
         'lib/runner/runtime.ts',

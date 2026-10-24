@@ -40,10 +40,13 @@ var AfButton = class extends HTMLElement {
     else this.setAttribute("label", value);
   }
   connectedCallback() {
-    if (Object.prototype.hasOwnProperty.call(this, "disabled")) {
-      const disabled = this.disabled;
-      delete this.disabled;
-      this.disabled = disabled;
+    const properties = this;
+    for (const property of ["type", "disabled", "busy", "variant", "size", "label"]) {
+      if (Object.prototype.hasOwnProperty.call(this, property)) {
+        const value = properties[property];
+        delete properties[property];
+        properties[property] = value;
+      }
     }
     if (!this.nativeButton) {
       const button = this.ownerDocument.createElement("button");
@@ -91,7 +94,7 @@ function isSize(value) {
   return value === "default" || value === "xs" || value === "sm" || value === "lg" || value === "icon" || value === "icon-xs" || value === "icon-sm" || value === "icon-lg";
 }
 var buttonStyles = `
-af-button{display:contents}
+af-button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle}
 af-button>button{box-sizing:border-box;display:inline-flex;flex-shrink:0;align-items:center;justify-content:center;gap:.5rem;border:1px solid transparent;border-radius:var(--radius-md,.375rem);font-family:inherit;font-size:.875rem;font-weight:500;line-height:1.25rem;white-space:nowrap;cursor:pointer;transition:all .15s;outline:none;color:var(--primary-foreground,#fff);background:var(--primary,#171717)}
 af-button>button:focus-visible{border-color:var(--ring,#737373);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring,#737373) 50%,transparent)}
 af-button>button:disabled{pointer-events:none;opacity:.5;cursor:default}
@@ -114,7 +117,7 @@ af-button>button[data-size=icon-xs]{width:1.5rem;height:1.5rem;padding:0;border-
 af-button>button[data-size=icon-sm]{width:2rem;height:2rem;padding:0}
 af-button>button[data-size=icon-lg]{width:2.5rem;height:2.5rem;padding:0}
 af-button>button>svg{pointer-events:none;flex-shrink:0;width:1rem;height:1rem}
-`;
+ `;
 function registerButton(registry = customElements, document = globalThis.document) {
   if (!document.querySelector("style[data-af-button-styles]")) {
     const style = document.createElement("style");
