@@ -80,6 +80,44 @@ export async function verifyNativeCanonicalDatasets(
     };
     const heads = exported.heads?.filter((row) => row.id === dataset.sourceId);
     if (heads?.length !== 1) throw Error("native_catalog_source_head");
+    if (!source.relations)
+      throw Error("native_catalog_source_relations_required");
+    const relationBytes = await source.relations(dataset);
+    if (nativeCatalogBytes(relationBytes) !== dataset.relationsSha256)
+      throw Error("native_catalog_source_relations_digest");
+    const relations = JSON.parse(relationBytes.toString("utf8")) as {
+      heads: { id: string; version: number; updated_at: string }[];
+      artifact_shares: { artifact_id: string; email: string; role: string }[];
+    };
+    const relationHeads = relations.heads?.filter(
+      (row) => row.id === dataset.sourceId,
+    );
+    if (
+      relationHeads?.length !== 1 ||
+      relationHeads[0]!.version !== dataset.currentVersion ||
+      iso(relationHeads[0]!.updated_at) !== iso(heads[0]!.updated_at) ||
+      !Array.isArray(relations.artifact_shares)
+    )
+      throw Error("native_catalog_source_relations_head");
+    const normalizeShares = (
+      shares: readonly { email: string; role: string }[],
+    ) =>
+      shares
+        .map((row) => ({
+          email: row.email.trim().toLowerCase(),
+          role: row.role,
+        }))
+        .sort((a, b) => (a.email < b.email ? -1 : a.email > b.email ? 1 : 0));
+    if (
+      nativeCatalogDigest(
+        normalizeShares(
+          relations.artifact_shares.filter(
+            (row) => row.artifact_id === dataset.sourceId,
+          ),
+        ),
+      ) !== nativeCatalogDigest(normalizeShares(dataset.authority.shares))
+    )
+      throw Error("native_catalog_source_shares");
     const head = heads[0]!,
       versions = new Map<number, Record<string, unknown>>();
     for (const row of exported.versions ?? [])
@@ -165,7 +203,14 @@ export async function canonicalNativeObjectSource(
   root: string,
   ledgerPath: string,
   datasetReceipts: Readonly<
-    Record<string, { path: string; sha256: string }>
+    Record<
+      string,
+      {
+        path: string;
+        sha256: string;
+        relations: { path: string; sha256: string };
+      }
+    >
   > = {},
 ): Promise<{
   source: NativeCatalogObjectSource;
@@ -221,6 +266,15 @@ export async function canonicalNativeObjectSource(
           nativeCatalogBytes(bytes) !== row.sha256
         )
           throw Error("native_catalog_source_object_digest");
+        return bytes;
+      },
+      async relations(dataset) {
+        const receipt = datasetReceipts[dataset.sourceId]?.relations;
+        if (!receipt || receipt.sha256 !== dataset.relationsSha256)
+          throw Error("native_catalog_source_relations_receipt");
+        const bytes = await read(receipt.path, base);
+        if (nativeCatalogBytes(bytes) !== receipt.sha256)
+          throw Error("native_catalog_source_relations_digest");
         return bytes;
       },
       async dataset(dataset) {

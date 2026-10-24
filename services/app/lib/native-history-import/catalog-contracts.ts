@@ -21,6 +21,7 @@ export interface NativeCatalogVersion {
   actorTokenId: string | null;
 }
 export interface NativeCatalogDataset {
+  relationsSha256: string;
   sourceId: string;
   targetId: string;
   sourceSha256: string;
@@ -87,6 +88,7 @@ export interface NativeImmutableObjectSink {
 }
 export interface NativeCatalogObjectSource {
   objectManifestSha256: string;
+  relations?(dataset: NativeCatalogDataset): Promise<Buffer>;
   read(object: NativeCatalogObject): Promise<Buffer>;
   /** Raw canonical head/archive export bytes, checked before any staging. */ dataset?(
     dataset: NativeCatalogDataset,

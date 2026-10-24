@@ -111,6 +111,12 @@ async function fixture() {
     rawBytes = Buffer.from(
       JSON.stringify({ heads: [rawHead], versions: [rawOld] }),
     );
+  const relationBytes = Buffer.from(
+    JSON.stringify({
+      heads: [{ id: dataId, version: 3, updated_at: t1 }],
+      artifact_shares: [],
+    }),
+  );
   const versions: NativeCatalogVersion[] = [rawOld, rawHead].map((row) => ({
     version: row.version,
     sourceSha256: nativeCatalogDigest(row),
@@ -186,6 +192,7 @@ async function fixture() {
         sourceId: dataId,
         targetId: dataId,
         sourceSha256: nativeCatalogBytes(rawBytes),
+        relationsSha256: nativeCatalogBytes(relationBytes),
         currentVersion: 3,
         expectedVersions: [1, 3],
         versions,
@@ -219,6 +226,7 @@ async function fixture() {
       read: async (object: { objectKey: string }) =>
         blobs.get(object.objectKey)!,
       dataset: async () => rawBytes,
+      relations: async () => relationBytes,
     },
     staged = await stageNativeCatalog(projection, source, sink),
     history: NativeHistoryImport = {
@@ -442,6 +450,55 @@ it("rejects a mismatched registered import atomically instead of granting an und
         ])
       ).rows,
     ).toEqual([]);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+it("requires digest-bound canonical share closure and the matching collected dataset head", async () => {
+  const f = await fixture();
+  try {
+    const p = structuredClone(f.projection);
+    p.datasets[0]!.authority.shares = [
+      { email: "viewer@example.test", role: "viewer" },
+    ];
+    const { sha256, ...payload } = p;
+    p.sha256 = nativeCatalogDigest(payload);
+    await expect(stageNativeCatalog(p, f.source, f.sink)).rejects.toThrow(
+      /source_shares/,
+    );
+    await expect(
+      stageNativeCatalog(
+        f.projection,
+        { ...f.source, relations: undefined },
+        f.sink,
+      ),
+    ).rejects.toThrow(/relations_required/);
+    await expect(
+      stageNativeCatalog(
+        f.projection,
+        { ...f.source, relations: async () => Buffer.from("{}") },
+        f.sink,
+      ),
+    ).rejects.toThrow(/relations_digest/);
+    const staleBytes = Buffer.from(
+        JSON.stringify({
+          heads: [
+            { id: f.dataId, version: 2, updated_at: "2020-01-01T00:00:00Z" },
+          ],
+          artifact_shares: [],
+        }),
+      ),
+      stale = structuredClone(f.projection);
+    stale.datasets[0]!.relationsSha256 = nativeCatalogBytes(staleBytes);
+    const { sha256: old, ...stalePayload } = stale;
+    stale.sha256 = nativeCatalogDigest(stalePayload);
+    await expect(
+      stageNativeCatalog(
+        stale,
+        { ...f.source, relations: async () => staleBytes },
+        f.sink,
+      ),
+    ).rejects.toThrow(/relations_head/);
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }

@@ -81,6 +81,7 @@ export function validateNativeCatalogProjection(p: NativeCatalogProjection) {
       !/^[A-Za-z0-9]{6,128}$/.test(dataset.targetId) ||
       !dataset.sourceId ||
       !validHash(dataset.sourceSha256) ||
+      !validHash(dataset.relationsSha256) ||
       ids.has(dataset.targetId) ||
       !versions.length ||
       nativeCatalogDigest(labels) !==
