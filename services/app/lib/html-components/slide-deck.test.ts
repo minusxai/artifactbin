@@ -58,6 +58,16 @@ describe('native slide deck',()=>{
   it('exits only its own pending fullscreen after disconnect/reconnect',async()=>{
     const {deck}=fixture();let full:Element|null=null;Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>full});let resolve!:()=>void;deck.requestFullscreen=vi.fn(()=>new Promise<void>(done=>{resolve=done;}));document.exitFullscreen=vi.fn(async()=>{full=null;document.dispatchEvent(new Event('fullscreenchange'));});const present=deck.querySelector<HTMLButtonElement>('[aria-label="Present"]')!;present.click();deck.remove();document.body.append(deck);expect(present.disabled).toBe(true);full=deck;resolve();await tick();await tick();expect(document.exitFullscreen).toHaveBeenCalledOnce();expect(present.disabled).toBe(false);
   });
+  it('captures the opener before native disabled-button blur during fullscreen transitions',async()=>{
+    const {deck}=fixture();const present=deck.querySelector<HTMLButtonElement>('[aria-label="Present"]')!;
+    let full:Element|null=null;Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>full});
+    deck.requestFullscreen=vi.fn(async()=>{full=deck;document.dispatchEvent(new Event('fullscreenchange'));});
+    document.exitFullscreen=vi.fn(async()=>{full=null;document.dispatchEvent(new Event('fullscreenchange'));});
+    const disabledSetter=Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype,'disabled')!.set!;
+    vi.spyOn(present,'disabled','set').mockImplementation(value=>{disabledSetter.call(present,value);if(value && document.activeElement===present)deck.focus();});
+    present.focus();present.click();await tick();expect(present.disabled).toBe(false);
+    present.focus();present.click();await tick();expect(document.activeElement).toBe(present);
+  });
   it('tracks fullscreen label/exit focus and detaches listeners on remove/reconnect',async()=>{
     const {deck,next}=fixture();const present=deck.querySelector<HTMLButtonElement>('[aria-label="Present"]')!;let full:Element|null=null;Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>full});deck.requestFullscreen=vi.fn(async()=>{full=deck;document.dispatchEvent(new Event('fullscreenchange'));});document.exitFullscreen=vi.fn(async()=>{full=null;document.dispatchEvent(new Event('fullscreenchange'));});present.focus();const restoreStates:boolean[]=[];const focus=present.focus.bind(present);vi.spyOn(present,'focus').mockImplementation(()=>{restoreStates.push(present.disabled);focus();});present.click();await tick();expect(present.getAttribute('aria-label')).toBe('Exit presentation');present.click();await tick();expect(document.activeElement).toBe(present);expect(present.getAttribute('aria-label')).toBe('Present');expect(restoreStates).toEqual([false]);
     deck.remove();next.click();expect(deck.index).toBe(0);document.body.append(deck);next.click();expect(deck.index).toBe(1);
